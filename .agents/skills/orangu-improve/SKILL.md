@@ -78,3 +78,5 @@ For `--verify`, require status `applied` and scope exactly `session`. Repo recor
 Resolve the skill-written verification receipt to a trusted absolute path, then run `orangu suggest --set '<id>' verified --verification '<verification-path>' --json --quiet`.
 
 Only report verified when the CLI returns status `verified`. If resolution, time ordering, or comparison fails, leave status `applied`. A proposal or application never verifies itself.
+
+After the requested work is complete, briefly offer `$orangu-feedback` with the matching context once. Never launch it unless the user accepts.

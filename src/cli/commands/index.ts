@@ -6,10 +6,12 @@ import { cmdEstimate } from './estimate.js'
 import { cmdEvidence } from './evidence.js'
 import { cmdHarness } from './harness.js'
 import { cmdSuggest } from './suggest.js'
+import { cmdFeedback } from './feedback.js'
 
 export type CommandFn = (positionals: string[], flags: Record<string, string | boolean>) => Promise<void>
 
 export const EXTRA_COMMANDS: Record<string, CommandFn> = {
+  feedback: cmdFeedback,
   evidence: cmdEvidence,
   estimate: cmdEstimate,
   harness: cmdHarness,
@@ -17,6 +19,7 @@ export const EXTRA_COMMANDS: Record<string, CommandFn> = {
 }
 
 export const EXTRA_HELP: string[] = [
+  '  orangu feedback              private localhost beta-feedback form  (--context session|repo|global|report|app [--port <n>] [--no-open])',
   '  orangu evidence <input>       bounded redacted findings + catalog matches for a session/.jsonl or current Orangu JSON  ([--scope repo|global] [--limit <n>] [--estimate] [--json])',
   '  orangu estimate [<session>|repo|global]  size what an LLM would read: bytes and ≈tokens             (--suggestion <id> [--receipt <token>] | --rule <r> --session <a,b>, --depth quick|standard|deep)',
   '  orangu harness               what your config declares vs what your sessions did: skills/MCP/agents/hooks used|idle|undeclared, in tokens  ([--json] [--cwd <dir>] [--root <dir>] [--global] [--limit <n>] [-o|--out <file>] [--no-redact] [--strip-paths] [--jobs <n>] [--no-cache] [--quiet])',

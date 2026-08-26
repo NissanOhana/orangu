@@ -28,6 +28,7 @@ node dist/orangu.js report
 | `orangu list` | List discoverable supported sessions |
 | `orangu watch [selector]` | Refresh one report while its session grows |
 | `orangu serve` | Run the local app on `127.0.0.1` |
+| `orangu feedback` | Open the isolated localhost beta-feedback form |
 | `orangu repo` | Aggregate supported sessions for the current repository |
 | `orangu global` | Aggregate supported sessions across configured roots |
 | `orangu evidence <input>` | Emit the bounded, always-redacted skill handoff |
@@ -52,6 +53,12 @@ The file report and localhost app render the same session evidence:
 - Suggestions: catalog matches, proposals, application receipts, host handoffs, and scope-aware verification state.
 
 The browser never starts an agent or marks a proposal applied. It only copies a command for explicit use in Claude Code or Codex.
+
+## Beta feedback
+
+Run `orangu feedback --context session|repo|global|report|app` or use the **Beta feedback** launcher in the localhost app. The standalone command does not discover a session or attach report data. Feedback stays in the browser until you review the exact title, body, and generic diagnostics and explicitly open GitHub's issue composer.
+
+See [beta feedback](feedback.md) for the privacy boundary, consent flow, and oversized-report fallback.
 
 ## Shareable output
 

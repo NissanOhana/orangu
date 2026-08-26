@@ -1,0 +1,68 @@
+name: Beta feedback
+description: Tell us what felt broken, confusing, slow, missing, or unexpectedly good.
+title: "[beta feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying the beta. Share only what you intend to make public. Do not attach transcripts, report files, secrets, or private paths.
+  - type: input
+    id: summary
+    attributes:
+      label: Short summary
+      placeholder: What should we improve first?
+    validations:
+      required: true
+  - type: dropdown
+    id: category
+    attributes:
+      label: Category
+      options:
+        - Bug
+        - Confusing experience
+        - Missing capability
+        - Performance
+        - Delight
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: Your experience
+      description: Be blunt. What happened and why was it frustrating or useful?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      description: Use generic steps; omit private data.
+  - type: dropdown
+    id: context
+    attributes:
+      label: Where were you?
+      options:
+        - Session review
+        - Repository aggregate
+        - Global aggregate
+        - Offline report
+        - Localhost app
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Generic diagnostics
+      description: Optional. Orangu version, Node major, OS family, architecture, and surface only.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy review
+      options:
+        - label: I reviewed this issue and removed transcripts, secrets, private paths, identifiers, and anything else I do not want to publish.
+          required: true

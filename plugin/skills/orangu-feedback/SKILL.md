@@ -1,0 +1,29 @@
+---
+name: orangu-feedback
+description: Collect candid beta feedback about Orangu after work involving Claude Code, Cowork, or Desktop by opening a private localhost form with an exact user-reviewed GitHub preview. Use when the user wants to report a bug, confusion, missing behavior, rough experience, or praise, or accepts an end-of-work feedback offer.
+allowed-tools: Bash(orangu feedback:*), Bash(node *orangu.cli.mjs feedback*)
+---
+
+# orangu-feedback
+
+Help the user send candid, actionable beta feedback without attaching their work.
+
+## Privacy boundary
+
+Never read, open, summarize, quote, or attach a `.jsonl` transcript, Orangu report, session id, repository or filesystem path, command, environment value, error text, or stack trace. Do not call `gh`, a GitHub API, `curl`, or another network tool. Do not put the user's rant or other feedback text in command arguments, terminal history, or skill output.
+
+The localhost form is the only collection surface. It constructs a preview from text the user types there plus the displayed generic allowlist: Orangu version, Node major, OS family, architecture, context, and `localhost` surface. Opening the reviewed GitHub composer sends that exact prefill to GitHub; GitHub provides the separate final Submit action.
+
+## Launch
+
+Choose exactly one context from `session`, `repo`, `global`, `report`, or `app`. Ask before launching localhost unless the user explicitly invoked feedback or already accepted the offer. Then run only:
+
+`orangu feedback --context <context>`
+
+If `orangu` is unavailable, use the bundled CLI:
+
+`node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" feedback --context <context>`
+
+Pass no other content. Tell the user that the process stays open until Ctrl-C, their draft remains on localhost until they review it, and the explicit send button opens a GitHub prefill. If the prefill is too large for a reliable URL, the form preserves the complete Markdown for copying and opens a blank issue; nothing is silently truncated.
+
+Do not claim feedback was sent merely because the local form or composer opened. It is sent only after the user completes GitHub's submission.

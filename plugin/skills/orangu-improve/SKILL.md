@@ -101,6 +101,8 @@ Return a short ranked report containing: what happened, evidence, the proposed c
 
 Say plainly that nothing was applied.
 
+After the requested work is complete, briefly offer `/orangu:feedback` with the matching context once. Never launch it unless the user accepts.
+
 ## 6. Verify only with later evidence
 
 For `--verify`, require the record to be `applied` and its scope to be exactly `session`. Repo verification must stop at `applied` until Orangu has a real fresh-cohort comparator; global scope cannot be applied or verified. Run the canonical evidence command on the later input. Require settled, non-partial later evidence from the same canonical workspace identity; Orangu accepts only immutable main/sidecar/metadata manifests quiet for at least 30 minutes. The baseline timeline must end before application, the later timeline must start after application and every baseline, and ids must not overlap. Treat this as a settled snapshot, not provider-confirmed completion.

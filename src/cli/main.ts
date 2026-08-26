@@ -13,7 +13,6 @@
 import { writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
-import { spawn } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { parseArgs, flagStr, flagBool } from './args.js'
 import { candidatesForPrefix, claudeRoots, findLatestSession, listSessions, resolveSession, type SessionRef } from '../discover/discover.js'
@@ -32,9 +31,8 @@ import type { ServeOptions } from '../serve/types.js'
 import { MASCOT_ASCII } from '../report/client/mascot.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { emitAnalysisJson } from './json-out.js'
-
-declare const __ORANGU_VERSION__: string
-const VERSION = typeof __ORANGU_VERSION__ !== 'undefined' ? __ORANGU_VERSION__ : '0.0.0-dev'
+import { openInBrowser } from './open-browser.js'
+import { VERSION } from '../version.js'
 
 const C = {
   dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
@@ -46,6 +44,10 @@ const C = {
 }
 const isTTY = process.stdout.isTTY
 const paint = (fn: (s: string) => string, s: string) => (isTTY ? fn(s) : s)
+
+function offerBetaFeedback(context: 'session' | 'repo' | 'global' | 'report'): void {
+  process.stderr.write(paint(C.dim, `  beta: rant about the experience → orangu feedback --context ${context}\n`))
+}
 
 function redactOptions(flags: Record<string, string | boolean>): RedactOptions | false {
   if (flagBool(flags, 'no-redact')) return false
@@ -102,17 +104,6 @@ function outPath(flags: Record<string, string | boolean>, id: string, ext = 'htm
   return join(tmpdir(), `orangu-${id.slice(0, 8)}.${ext}`)
 }
 
-function openInBrowser(path: string): void {
-  const cmd = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'cmd' : 'xdg-open'
-  const args = process.platform === 'win32' ? ['/c', 'start', '', path] : [path]
-  try {
-    const child = spawn(cmd, args, { detached: true, stdio: 'ignore' })
-    child.unref()
-  } catch {
-    /* headless; the path is printed anyway */
-  }
-}
-
 // ---------- commands ----------
 async function cmdReport(sel: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
   const ref = await selectSession(sel, flags)
@@ -128,6 +119,7 @@ async function cmdReport(sel: string | undefined, flags: Record<string, string |
   process.stderr.write(paint(C.g, '✓ ') + `report written to ${path}` + (redaction ? paint(C.dim, ` (${redaction.applied} redactions)`) : '') + '\n')
   if (!flagBool(flags, 'no-open') && (flagBool(flags, 'open') || isTTY)) openInBrowser(path)
   process.stdout.write(path + '\n')
+  if (!flagBool(flags, 'quiet')) offerBetaFeedback('report')
 }
 
 async function cmdAnalyze(sel: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
@@ -139,6 +131,7 @@ async function cmdAnalyze(sel: string | undefined, flags: Record<string, string 
     return
   }
   printAnalysisSummary(analysis)
+  if (!flagBool(flags, 'quiet')) offerBetaFeedback('session')
   thresholdExit(analysis, flags)
 }
 
@@ -267,13 +260,17 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   if (outFile) {
     await writeFile(resolve(outFile), JSON.stringify(agg, null, 2))
     process.stderr.write(paint(C.g, '✓ ') + `aggregate written to ${resolve(outFile)}\n`)
-    if (!flagBool(flags, 'json')) return
+    if (!flagBool(flags, 'json')) {
+      if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
+      return
+    }
   }
   if (flagBool(flags, 'json')) {
     process.stdout.write(JSON.stringify(agg, null, flagBool(flags, 'quiet') ? 0 : 2) + '\n')
     return
   }
   printAggregate(agg)
+  if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
 }
 
 function printAggregate(a: ReturnType<typeof aggregate>): void {

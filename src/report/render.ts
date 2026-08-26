@@ -15,6 +15,7 @@ import type { AppCapabilities } from '../model/app-data.js'
 import { APP_DATA_VERSION, type AppData, type SessionSummaryRow } from '../model/app-data.js'
 import { badgeFor } from '../serve/badge.js'
 import { redactAnalysis, type RedactOptions, type RedactionReport } from '../redact/redact.js'
+import type { FeedbackBootstrap } from '../feedback/diagnostics.js'
 
 export interface RenderOptions {
   redact?: RedactOptions | false
@@ -151,11 +152,13 @@ export interface ShellOptions {
   capabilities: AppCapabilities
   /** tailed-session cap for the fleet header ("watching X of N", policy) */
   maxLive: number
+  /** Generic, explicitly allowlisted facts shown in the beta feedback preview. */
+  feedback: FeedbackBootstrap
 }
 
 /** The served app shell (GET /): no embedded AppData. The client fetches /api/app and listens on /events. */
 export function renderShell(o: ShellOptions): string {
-  const boot = { maxLive: o.maxLive, capabilities: o.capabilities, version: o.version }
+  const boot = { maxLive: o.maxLive, capabilities: o.capabilities, version: o.version, feedback: o.feedback }
   return `<!doctype html>
 <html lang="en">
 <head>

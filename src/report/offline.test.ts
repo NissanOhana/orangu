@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { renderReport } from './render.js'
-import { CLIENT_JS } from './generated/client-bundle.js'
+import { CLIENT_JS, CLIENT_JS_SERVE } from './generated/client-bundle.js'
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 
 const CHECKS: Array<[RegExp, string]> = [
@@ -53,6 +53,8 @@ describe('offline report', () => {
     expect(/EventSource/.test(CLIENT_JS), 'EventSource').toBe(false)
     expect(/XMLHttpRequest/.test(CLIENT_JS), 'XMLHttpRequest').toBe(false)
     expect(/new\s+WebSocket/.test(CLIENT_JS), 'WebSocket').toBe(false)
+    expect(CLIENT_JS).not.toContain('github.com/NissanOhana/orangu/issues/new')
+    expect(CLIENT_JS_SERVE).toContain('github.com/NissanOhana/orangu/issues/new')
   })
 
   it('client JS never says "finished" (possibly-live honesty) and stays inside its size ratchet', () => {
@@ -61,5 +63,6 @@ describe('offline report', () => {
     // policy/policy, plus Suggest kickoff + Live fleet) and lands at ~68 KB after a dedicated shrink pass.
     // Recorded as a deviation in the B2 report; this ratchet may only go DOWN.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(70 * 1024)
+    expect(CLIENT_JS.length).toBe(71_630)
   })
 })

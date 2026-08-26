@@ -406,3 +406,18 @@ svg { display: block; max-width: 100%; }
   .card, .kpi, details { break-inside: avoid; }
   body { font-size: 11px; }
 }
+
+/* beta feedback (interactive only in the localhost serve bundle) */
+.feedback label { display: block; font-size: 12.5px; font-weight: 650; color: var(--ink2); margin: 12px 0; }
+.feedback input:not([type="checkbox"]), .feedback select, .feedback textarea { display: block; width: 100%; margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg1); color: var(--ink1); padding: 9px 10px; font: inherit; font-weight: 400; resize: vertical; }
+.feedback-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(150px, 1fr); gap: 12px; }
+.feedback-preview { max-height: 280px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg2); color: var(--ink1); font: 12px/1.5 var(--mono); }
+.feedback-check { display: flex !important; align-items: flex-start; gap: 8px; font-weight: 500 !important; }
+.feedback-check input { margin-top: 2px; }
+#fb-fallback { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+@media (max-width: 640px) { .feedback-grid { grid-template-columns: 1fr; } }
+.feedback-root { display: block; overflow-y: auto; }
+.feedback-shell { width: min(900px, 100%); margin: 0 auto; padding: 28px 24px 64px; }
+.feedback-shell .page-head { justify-content: space-between; }
+.feedback-launch { position: fixed; z-index: 80; right: 18px; bottom: 18px; border: 1px solid var(--border2); border-radius: 999px; padding: 8px 13px; background: var(--surface); color: var(--accent-ink); box-shadow: 0 5px 20px color-mix(in srgb, var(--ink1) 14%, transparent); font-size: 12.5px; font-weight: 700; }
+.feedback-launch:hover { text-decoration: none; background: var(--accent-weak); }

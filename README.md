@@ -31,6 +31,9 @@ npx orangu serve
 # inspect recurring patterns
 npx orangu repo
 npx orangu global
+
+# send reviewed beta feedback from localhost
+npx orangu feedback --context app
 ```
 
 Orangu reads supported session files already on your machine. It does not require an SDK, proxy, account, instrumentation, upload, or telemetry.
@@ -57,25 +60,28 @@ A proposal is not an application, and a later comparison is not causal proof. Se
 /orangu:improve latest
 /orangu:apply sg_0123456789ab
 /orangu:improve --verify sg_0123456789ab later-session-id
+/orangu:feedback
 ```
 
 ### Codex
 
-Copy `.agents/skills/orangu-improve` and `.agents/skills/orangu-apply` into the target repository's `.agents/skills/` directory, put `orangu` on `PATH`, then run:
+Copy `.agents/skills/orangu-improve`, `.agents/skills/orangu-apply`, and `.agents/skills/orangu-feedback` into the target repository's `.agents/skills/` directory, put `orangu` on `PATH`, then run:
 
 ```text
 $orangu-improve latest
 $orangu-apply sg_0123456789ab
 $orangu-improve --verify sg_0123456789ab later-session-id
+$orangu-feedback
 ```
 
-Both hosts use the same evidence and artifact contracts. Codex is an improvement-skill host; Orangu does not currently ingest Codex transcripts.
+Both hosts use the same evidence and artifact contracts. Codex is an improvement-skill host; Orangu does not currently ingest Codex transcripts. The feedback skill passes only a context enum into a localhost form; see [the beta feedback privacy contract](docs/feedback.md).
 
 ## Privacy and support
 
 - Generated reports are self-contained and use a zero-network Content Security Policy.
 - Redaction is on by default. Prompt and result text are omitted unless explicitly requested.
 - `orangu serve` binds to `127.0.0.1`; browser actions copy commands and never launch an agent.
+- Feedback remains on localhost until the user reviews the exact title and body and explicitly opens GitHub's issue composer; sessions and reports are never attached.
 - Optional skill research uses generic feature terms only and never sends local evidence, paths, project names, prompts, or proposal text in queries.
 - Unknown transcript records are counted and shown in Coverage instead of crashing the analysis.
 
@@ -91,6 +97,7 @@ Read the [privacy model](docs/PRIVACY.md), [supported limits](docs/USAGE.md#supp
 | [Architecture](docs/ARCHITECTURE.md) | Pipeline, modules, build, and correctness gates |
 | [Data contracts](docs/DATA-CONTRACTS.md) | Analysis, evidence, app, proposal, and receipt shapes |
 | [Design system](docs/DESIGN.md) | Visual tokens, interaction rules, and accessibility |
+| [Beta feedback](docs/feedback.md) | Localhost intake, exact-review consent, and GitHub handoff |
 | [Contributing](CONTRIBUTING.md) | Development workflow and project layout |
 
 ## Develop

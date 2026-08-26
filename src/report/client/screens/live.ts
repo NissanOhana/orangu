@@ -14,6 +14,7 @@ import { mascotBox } from '../components/mascot-box.js'
 import { ganttRow } from '../charts.js'
 import { badgeCopy, liveFeed } from '../derive.js'
 import { shortId } from '../nav.js'
+import type { FeedbackBootstrap } from '../../../feedback/diagnostics.js'
 
 const FEED_MAX = 50
 const LANES = 12
@@ -21,7 +22,7 @@ const LANES = 12
 declare global {
   interface Window {
     /** serve shell bootstrap (renderShell): fleet header facts */
-    __ORANGU_SERVE__?: { maxLive: number; version?: string }
+    __ORANGU_SERVE__?: { maxLive: number; version?: string; feedback?: FeedbackBootstrap }
     /**
      * Fleet screen renderer (serve-ui.ts): the fleet exists only in serve mode (file mode
      * always has exactly one session), so its bytes live in the serve bundle (policy ratchet).
