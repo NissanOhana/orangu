@@ -44,8 +44,8 @@ describe('plugin packaging', () => {
     const m = readJson('.claude-plugin/marketplace.json')
     expect(m.plugins.some((x: { name: string; source: string }) => x.name === 'orangu' && x.source === './plugin')).toBe(true)
   })
-  it('ships the six intended skills, each with valid frontmatter', () => {
-    const skills = ['orangu-analyze', 'orangu-apply', 'orangu-improve', 'orangu-mega', 'orangu-watch', 'orangu-suggest']
+  it('ships the seven intended skills, each with valid frontmatter', () => {
+    const skills = ['orangu-analyze', 'orangu-apply', 'orangu-feedback', 'orangu-improve', 'orangu-mega', 'orangu-watch', 'orangu-suggest']
     expect(readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()).toEqual([...skills].sort())
     for (const s of skills) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
@@ -532,7 +532,7 @@ describe('plugin packaging', () => {
   })
 
   it('ships mirrored Codex skills with valid interface metadata', () => {
-    for (const name of ['orangu-improve', 'orangu-apply']) {
+    for (const name of ['orangu-improve', 'orangu-apply', 'orangu-feedback']) {
       const skill = readText(`.agents/skills/${name}/SKILL.md`)
       const yaml = readText(`.agents/skills/${name}/agents/openai.yaml`)
       expect(skill).toMatch(new RegExp(`name:\\s*${name}`))

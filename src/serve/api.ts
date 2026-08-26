@@ -11,6 +11,7 @@ import type { Analysis } from '../model/analysis.js'
 import { APP_DATA_VERSION, type AppCapabilities, type AppData, type SessionSummaryRow, type SuggestionViewRecord } from '../model/app-data.js'
 import { redactAnalysis, redactValue } from '../redact/redact.js'
 import { renderShell } from '../report/render.js'
+import { feedbackBootstrap } from '../feedback/diagnostics.js'
 import type { SuggestionRecord } from '../suggest/types.js'
 import { isTrustedComputedVerification } from '../suggest/verification-policy.js'
 import { HTML_ANTI_FRAMING_HEADERS } from './http-security.js'
@@ -237,7 +238,7 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
       method: 'GET',
       path: '/',
       handler: async (_m, _req, res) => {
-        const html = renderShell({ version: ctx.opts.version, capabilities: capabilitiesOf(ctx), maxLive })
+        const html = renderShell({ version: ctx.opts.version, capabilities: capabilitiesOf(ctx), maxLive, feedback: feedbackBootstrap(ctx.opts.version) })
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', ...HTML_ANTI_FRAMING_HEADERS })
         res.end(html)
       },

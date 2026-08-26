@@ -123,3 +123,5 @@ Return the ranked plan and proposal paths. For each item state:
 - effort, risk, and the exact next-run check.
 
 End with what was not recommended and why. For each repo proposal, give the explicit next action `/orangu:apply <id>` and state that it must remain `applied` until a real fresh-cohort comparator exists. For every global proposal, say review only: global apply and verification are not supported. Say plainly that mega did not edit the target repository. A proposal is not applied or verified.
+
+After the requested review is complete, briefly offer `/orangu:feedback` with the matching repo or global context once. Never launch it unless the user accepts.

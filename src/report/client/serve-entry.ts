@@ -5,9 +5,15 @@
 import { mountApp } from './app.js'
 import { remoteSource } from './data-remote.js'
 import { serveUi } from './serve-ui.js'
+import { isFeedbackLocation, mountFeedback, mountFeedbackLauncher } from './feedback-ui.js'
 
 function boot(): void {
-  void mountApp(remoteSource(), serveUi)
+  const feedbackAtBoot = isFeedbackLocation()
+  if (feedbackAtBoot) mountFeedback()
+  else void mountApp(remoteSource(), serveUi).then(mountFeedbackLauncher)
+  window.addEventListener('hashchange', () => {
+    if (isFeedbackLocation() !== feedbackAtBoot) location.reload()
+  })
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot)
 else boot()

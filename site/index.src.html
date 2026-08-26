@@ -456,7 +456,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
       <div class="card install-card"><h3>Inspect a session</h3><p>No global install. Finds the latest supported session and opens its report.</p><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
       <div class="card install-card"><h3>Keep the local app open</h3><p>Use report, analyze, repo, global, serve, and watch without sending session data away.</p><div class="cmd-sm"><span class="p">$</span> npm i -g orangu <button data-cmd="npm i -g orangu">copy</button></div></div>
       <div class="card install-card"><h3>Add the Claude Code plugin</h3><p>Install after you have seen the evidence. The report copies a chat handoff; <code>/orangu:improve</code> drafts and <code>/orangu:apply</code> applies session/repo proposals explicitly.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div></div>
-      <div class="card install-card"><h3>Use the Codex repo skills</h3><p>Vendor this repository's <code>.agents/skills/orangu-improve</code> and <code>orangu-apply</code> directories into the target repo. Use <code>$orangu-apply</code> only for a reviewed session/repo proposal.</p><div class="cmd-sm">$orangu-improve latest <button data-cmd="$orangu-improve latest">copy</button></div></div>
+      <div class="card install-card"><h3>Use the Codex repo skills</h3><p>Vendor this repository's <code>.agents/skills/orangu-improve</code>, <code>orangu-apply</code>, and <code>orangu-feedback</code> directories into the target repo. Use <code>$orangu-apply</code> only for a reviewed session/repo proposal.</p><div class="cmd-sm">$orangu-improve latest <button data-cmd="$orangu-improve latest">copy</button></div></div>
     </div>
     <div class="sub">
       <h3>One improvement workflow, explicit stages</h3>
@@ -467,6 +467,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
         <div class="skill"><b>orangu-analyze</b><div>Explain one supported session or a chosen aggregate from redacted evidence.</div></div>
         <div class="skill"><b>orangu-mega</b><div>Review recurring repo or global patterns as a separately requested deep pass.</div></div>
         <div class="skill"><b>orangu-watch</b><div>Keep a local report refreshed while a supported session is running.</div></div>
+        <div class="skill"><b>orangu-feedback</b><div>Rant through a private localhost form and review the exact GitHub prefill.</div></div>
         <div class="skill"><b>orangu-suggest</b><div>Compatibility alias for older links; forwards the exact request to orangu-improve.</div></div>
       </div>
     </div>

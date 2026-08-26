@@ -148,16 +148,18 @@ describe('renderReport', () => {
 
 describe('renderShell (serve app shell)', () => {
   it('has a CSP with connect-src self, the serve bootstrap, and no embedded AppData', () => {
-    const html = renderShell({ version: '0.0.0-test', capabilities: { live: true, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false }, maxLive: 8 })
+    const html = renderShell({ version: '0.0.0-test', capabilities: { live: true, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false }, maxLive: 8, feedback: { version: '0.0.0-test', nodeMajor: '22', osFamily: 'Linux', arch: 'x64', surface: 'localhost' } })
     expect(html).toContain("connect-src 'self'")
     expect(html).toContain('__ORANGU_SERVE__')
     expect(html).toContain('"maxLive":8')
+    const boot = JSON.parse(/window\.__ORANGU_SERVE__=(.*?);<\/script>/.exec(html)?.[1] ?? '{}')
+    expect(boot.feedback).toEqual({ version: '0.0.0-test', nodeMajor: '22', osFamily: 'Linux', arch: 'x64', surface: 'localhost' })
     expect(html).not.toContain('id="orangu-data"')
     expect(html).not.toContain('fonts.googleapis')
   })
 
   it('carries the same marked current-brand image as the file report', () => {
-    const html = renderShell({ version: '0.0.0-test', capabilities: { live: true, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false }, maxLive: 8 })
+    const html = renderShell({ version: '0.0.0-test', capabilities: { live: true, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false }, maxLive: 8, feedback: { version: '0.0.0-test', nodeMajor: '22', osFamily: 'Linux', arch: 'x64', surface: 'localhost' } })
     const head = html.slice(0, html.indexOf('</head>'))
     expect(head).toContain('rel="icon"')
     expect(head).toContain(`l.id="${BRAND_ICON_ID}"`)

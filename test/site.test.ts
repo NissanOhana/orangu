@@ -608,6 +608,7 @@ describe('site/index.src.html (authored landing source)', () => {
       'orangu-analyze',
       'orangu-mega',
       'orangu-watch',
+      'orangu-feedback',
       'orangu-suggest',
     ])
     expect(listed.map((match) => match[1]).sort()).toEqual(dirs)

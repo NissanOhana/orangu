@@ -31,6 +31,8 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     // Hard-assert the suggest-layer verbs here because suggest.e2e.test.ts skips when they are
     // missing, so this unconditional test is the guard that keeps the registry wired and documented
     for (const f of ['orangu estimate', 'orangu harness', 'orangu suggest', '--slim']) expect(h).toContain(f)
+    expect(h).toContain('orangu feedback')
+    expect(h).toContain('--context session|repo|global|report|app')
     expect(h.toLowerCase()).toContain('no network calls')
   })
 
@@ -95,6 +97,23 @@ syncBuiltinESMExports()
     expect(r.stdout).toContain('orangu-data')
   })
 
+  it('offers beta feedback only on human, non-quiet command paths', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-feedback-offer-')))
+    const base = ['analyze', home.liveId, '--root', home.configDir, '--no-cache']
+    const human = spawnSync('node', [CLI, ...base], { encoding: 'utf8' })
+    expect(human.status, human.stderr).toBe(0)
+    expect(human.stderr).toContain('orangu feedback --context session')
+
+    const machine = spawnSync('node', [CLI, ...base, '--json'], { encoding: 'utf8' })
+    expect(machine.status, machine.stderr).toBe(0)
+    expect(() => JSON.parse(machine.stdout)).not.toThrow()
+    expect(machine.stderr).not.toContain('orangu feedback')
+
+    const quiet = spawnSync('node', [CLI, ...base, '--quiet'], { encoding: 'utf8' })
+    expect(quiet.status, quiet.stderr).toBe(0)
+    expect(quiet.stderr).not.toContain('orangu feedback')
+  })
+
   // The CI-gate flags, end to end on the built binary. A gate that silently stops gating is the
   // failure mode here: `--max-cost` was renamed to `--max-tokens`, and because the arg parser ignores
   // unknown flags, every pipeline still passing `--max-cost 5` would have exited 0 forever.
@@ -155,6 +174,52 @@ syncBuiltinESMExports()
       await gone
     }
   }, 30_000)
+
+  it('feedback uses an empty loopback app even when the configured session root is populated, and dies on SIGTERM', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-feedback-')))
+    const child = spawn('node', [CLI, 'feedback', '--context', 'report', '--port', '0', '--no-open'], {
+      env: { ...process.env, CLAUDE_CONFIG_DIR: home.configDir, ORANGU_NO_CACHE: '1' },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    })
+    let err = ''
+    const url = await new Promise<string>((resolve, reject) => {
+      const to = setTimeout(() => reject(new Error('feedback never printed its deep link\n' + err)), 15_000)
+      child.stderr.on('data', (c: Buffer) => {
+        err += c.toString('utf8')
+        const m = /http:\/\/127\.0\.0\.1:\d+\/#feedback\?context=report/.exec(err)
+        if (m) {
+          clearTimeout(to)
+          resolve(m[0])
+        }
+      })
+      child.on('exit', () => reject(new Error('feedback exited early\n' + err)))
+    })
+    try {
+      const base = url.slice(0, url.indexOf('/#'))
+      expect(await (await fetch(base + '/api/sessions')).json()).toEqual([])
+      const html = await (await fetch(base + '/')).text()
+      expect(html).toContain('__ORANGU_SERVE__')
+      expect(html).not.toContain(home.liveId)
+    } finally {
+      const gone = new Promise<number | null>((resolve) => child.once('exit', resolve))
+      child.kill('SIGTERM')
+      expect(await gone).toBe(0)
+    }
+    expect(err).toContain('no sessions attached')
+    expect(err).toContain('stopped')
+  }, 30_000)
+
+  it('feedback rejects text positionals and invalid contexts before starting a server', () => {
+    for (const args of [
+      ['feedback', 'my private rant', '--no-open'],
+      ['feedback', '--context', 'private-session-id', '--no-open'],
+    ]) {
+      const result = spawnSync('node', [CLI, ...args], { encoding: 'utf8' })
+      expect(result.status).not.toBe(0)
+      expect(result.stderr).toMatch(/usage: orangu feedback|--context must be one of/)
+      expect(result.stderr).not.toContain('http://127.0.0.1:')
+    }
+  })
 
   it('watch tails a session and rewrites the HTML report when the transcript grows', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-watch-'))
