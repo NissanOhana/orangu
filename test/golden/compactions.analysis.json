@@ -1,0 +1,755 @@
+{
+  "schemaVersion": "2",
+  "generator": {
+    "name": "orangu",
+    "version": "golden",
+    "generatedAt": 0,
+    "modelCatalogUpdatedAt": "2026-08-14"
+  },
+  "session": {
+    "id": "cccccccc-0000-4000-8000-000000000003",
+    "title": "Long refactor session",
+    "source": "claude-code",
+    "path": "(memory)",
+    "subagentPaths": [],
+    "cwd": "/Users/test/Code/demo",
+    "gitBranches": [
+      "main"
+    ],
+    "clientVersions": [
+      "2.1.226"
+    ],
+    "entrypoints": [
+      "cli"
+    ],
+    "permissionModes": [],
+    "models": [
+      {
+        "id": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "family": "opus",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      }
+    ],
+    "effortLevels": [
+      "high"
+    ],
+    "startedAt": 1786888800000,
+    "endedAt": 1786888826600,
+    "live": false
+  },
+  "summary": {
+    "turns": 3,
+    "humanTurns": 3,
+    "messages": 20,
+    "assistantMessages": 12,
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "agents": 0,
+    "skills": 0,
+    "compactions": 2,
+    "wallMs": 26600,
+    "activeMs": 26600,
+    "humanWaitMs": 0,
+    "tokens": {
+      "input": 53,
+      "output": 3140,
+      "cacheRead": 996000,
+      "cacheWrite": 210000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 210000,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 1209193,
+    "contextPeak": 175005,
+    "cacheHitRatio": 0.8258,
+    "outcomes": {
+      "prLinks": [],
+      "gitCommits": 0,
+      "testRuns": 0,
+      "testRunsFailed": 0,
+      "buildRuns": 0,
+      "buildRunsFailed": 0,
+      "filesRead": 0,
+      "filesEdited": 0,
+      "filesWritten": 0,
+      "webLookups": 0
+    },
+    "topInsightIds": [
+      "compactions-1",
+      "preamble-weight-2",
+      "cache-ttl-churn-3"
+    ],
+    "narrative": "In “Long refactor session”, the human made 3 requests over 27s; the agent was busy for 27s of that. It made 0 tool calls, and processed 1.21M tokens. No commits, PRs or test runs were detected. Biggest things to look at: 2 context compactions (peak 175.0k of 1.00M); Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills).",
+    "ending": "unknown"
+  },
+  "turns": [
+    {
+      "index": 0,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "Long refactor session",
+      "promptChars": 21,
+      "startTs": 1786888800000,
+      "endTs": 1786888812500,
+      "durationMs": 12500,
+      "firstResponseMs": 2000,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "toolMs": 0,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 30,
+        "output": 1800,
+        "cacheRead": 555000,
+        "cacheWrite": 120000,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 120000,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 676830,
+      "contextEnd": 175005,
+      "insightIds": [
+        "compactions-1",
+        "preamble-weight-2"
+      ],
+      "activity": ""
+    },
+    {
+      "index": 1,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "Continue the refactor",
+      "promptChars": 21,
+      "startTs": 1786888812500,
+      "endTs": 1786888825400,
+      "durationMs": 12900,
+      "firstResponseMs": 2500,
+      "humanGapMs": 0,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "toolMs": 0,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 20,
+        "output": 1250,
+        "cacheRead": 420000,
+        "cacheWrite": 90000,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 90000,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 511270,
+      "contextEnd": 162004,
+      "insightIds": [
+        "compactions-1"
+      ],
+      "activity": ""
+    },
+    {
+      "index": 2,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "Wrap up",
+      "promptChars": 7,
+      "startTs": 1786888825400,
+      "endTs": 1786888826600,
+      "durationMs": 1200,
+      "reportedDurationMs": 4000,
+      "firstResponseMs": 1200,
+      "humanGapMs": 0,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "toolMs": 0,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 3,
+        "output": 90,
+        "cacheRead": 21000,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 21093,
+      "contextEnd": 21003,
+      "insightIds": [],
+      "activity": ""
+    }
+  ],
+  "tools": {
+    "byName": [],
+    "byCategory": [],
+    "errorGroups": [],
+    "slowest": [],
+    "largestResults": [],
+    "parallelism": {
+      "groups": 0,
+      "parallelGroups": 0,
+      "maxGroupSize": 1,
+      "parallelCallShare": 0
+    },
+    "calls": []
+  },
+  "agents": {
+    "runs": [],
+    "totals": {
+      "count": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0
+      },
+      "totalTokens": 0,
+      "durationMs": 0,
+      "toolCalls": 0
+    },
+    "byType": [],
+    "byModel": [],
+    "maxDepth": 0,
+    "concurrentMs": 0,
+    "maxConcurrency": 0,
+    "mainThreadShare": {
+      "tokens": 1
+    }
+  },
+  "skills": {
+    "invocations": [],
+    "byName": []
+  },
+  "hooks": {
+    "runs": 0,
+    "errors": 0,
+    "totalMs": 0,
+    "byCommand": [],
+    "events": []
+  },
+  "context": {
+    "series": [
+      {
+        "messageUuid": "u0000000-0005-4000-8000-000000000005",
+        "turnIndex": 0,
+        "ts": 1786888802000,
+        "model": "claude-opus-5",
+        "contextSize": 50005,
+        "input": 5,
+        "cacheRead": 30000,
+        "cacheWrite": 20000,
+        "cacheWrite1h": 20000,
+        "output": 300
+      },
+      {
+        "messageUuid": "u0000000-0008-4000-8000-000000000008",
+        "turnIndex": 0,
+        "ts": 1786888804000,
+        "model": "claude-opus-5",
+        "contextSize": 75005,
+        "input": 5,
+        "cacheRead": 55000,
+        "cacheWrite": 20000,
+        "cacheWrite1h": 20000,
+        "output": 300
+      },
+      {
+        "messageUuid": "u0000000-000b-4000-8000-00000000000b",
+        "turnIndex": 0,
+        "ts": 1786888806000,
+        "model": "claude-opus-5",
+        "contextSize": 100005,
+        "input": 5,
+        "cacheRead": 80000,
+        "cacheWrite": 20000,
+        "cacheWrite1h": 20000,
+        "output": 300
+      },
+      {
+        "messageUuid": "u0000000-000e-4000-8000-00000000000e",
+        "turnIndex": 0,
+        "ts": 1786888808000,
+        "model": "claude-opus-5",
+        "contextSize": 125005,
+        "input": 5,
+        "cacheRead": 105000,
+        "cacheWrite": 20000,
+        "cacheWrite1h": 20000,
+        "output": 300
+      },
+      {
+        "messageUuid": "u0000000-0011-4000-8000-000000000011",
+        "turnIndex": 0,
+        "ts": 1786888810000,
+        "model": "claude-opus-5",
+        "contextSize": 150005,
+        "input": 5,
+        "cacheRead": 130000,
+        "cacheWrite": 20000,
+        "cacheWrite1h": 20000,
+        "output": 300
+      },
+      {
+        "messageUuid": "u0000000-0014-4000-8000-000000000014",
+        "turnIndex": 0,
+        "ts": 1786888812000,
+        "model": "claude-opus-5",
+        "contextSize": 175005,
+        "input": 5,
+        "cacheRead": 155000,
+        "cacheWrite": 20000,
+        "cacheWrite1h": 20000,
+        "output": 300
+      },
+      {
+        "messageUuid": "u0000000-001b-4000-8000-00000000001b",
+        "turnIndex": 1,
+        "ts": 1786888815000,
+        "model": "claude-opus-5",
+        "contextSize": 42004,
+        "input": 4,
+        "cacheRead": 24000,
+        "cacheWrite": 18000,
+        "cacheWrite1h": 18000,
+        "output": 250
+      },
+      {
+        "messageUuid": "u0000000-001e-4000-8000-00000000001e",
+        "turnIndex": 1,
+        "ts": 1786888817500,
+        "model": "claude-opus-5",
+        "contextSize": 72004,
+        "input": 4,
+        "cacheRead": 54000,
+        "cacheWrite": 18000,
+        "cacheWrite1h": 18000,
+        "output": 250
+      },
+      {
+        "messageUuid": "u0000000-0021-4000-8000-000000000021",
+        "turnIndex": 1,
+        "ts": 1786888820000,
+        "model": "claude-opus-5",
+        "contextSize": 102004,
+        "input": 4,
+        "cacheRead": 84000,
+        "cacheWrite": 18000,
+        "cacheWrite1h": 18000,
+        "output": 250
+      },
+      {
+        "messageUuid": "u0000000-0024-4000-8000-000000000024",
+        "turnIndex": 1,
+        "ts": 1786888822500,
+        "model": "claude-opus-5",
+        "contextSize": 132004,
+        "input": 4,
+        "cacheRead": 114000,
+        "cacheWrite": 18000,
+        "cacheWrite1h": 18000,
+        "output": 250
+      },
+      {
+        "messageUuid": "u0000000-0027-4000-8000-000000000027",
+        "turnIndex": 1,
+        "ts": 1786888825000,
+        "model": "claude-opus-5",
+        "contextSize": 162004,
+        "input": 4,
+        "cacheRead": 144000,
+        "cacheWrite": 18000,
+        "cacheWrite1h": 18000,
+        "output": 250
+      },
+      {
+        "messageUuid": "u0000000-002e-4000-8000-00000000002e",
+        "turnIndex": 2,
+        "ts": 1786888826600,
+        "model": "claude-opus-5",
+        "contextSize": 21003,
+        "input": 3,
+        "cacheRead": 21000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 90
+      }
+    ],
+    "cacheMisses": [],
+    "compactions": [
+      {
+        "ts": 1786888812500,
+        "turnIndex": 0,
+        "trigger": "auto",
+        "contextBefore": 165000,
+        "contextAfter": 22000
+      },
+      {
+        "ts": 1786888825400,
+        "turnIndex": 1,
+        "trigger": "manual",
+        "contextBefore": 172000,
+        "contextAfter": 19000
+      }
+    ],
+    "peak": 175005,
+    "baseline": 50005,
+    "final": 21003,
+    "contextWindow": 1000000,
+    "cacheHitRatio": 0.8258,
+    "cacheWrite1hShare": 1,
+    "reReadMultiplier": 5.69,
+    "totalCacheRead": 996000,
+    "totalCacheWrite": 210000,
+    "totalFreshInput": 53,
+    "totalOutput": 3140,
+    "requestsPerCompaction": [
+      6,
+      5,
+      1
+    ]
+  },
+  "tokens": {
+    "total": {
+      "input": 53,
+      "output": 3140,
+      "cacheRead": 996000,
+      "cacheWrite": 210000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 210000,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 1209193,
+    "byModel": [
+      {
+        "model": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "tokens": {
+          "input": 53,
+          "output": 3140,
+          "cacheRead": 996000,
+          "cacheWrite": 210000,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 210000,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 1209193,
+        "estimatedMatch": false,
+        "requests": 12
+      }
+    ],
+    "byKind": {
+      "input": 53,
+      "output": 3140,
+      "cacheRead": 996000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 210000
+    },
+    "mainThread": 1209193,
+    "agents": 0,
+    "byTurn": [
+      {
+        "turnIndex": 0,
+        "tokens": 676830,
+        "cumulativeTokens": 676830
+      },
+      {
+        "turnIndex": 1,
+        "tokens": 511270,
+        "cumulativeTokens": 1188100
+      },
+      {
+        "turnIndex": 2,
+        "tokens": 21093,
+        "cumulativeTokens": 1209193
+      }
+    ],
+    "byToolCategory": [
+      {
+        "category": "no-tool (text/thinking)",
+        "tokens": 1209193
+      }
+    ],
+    "serverToolRequests": {
+      "webSearch": 0,
+      "webFetch": 0
+    },
+    "hiddenIterations": {
+      "count": 0,
+      "tokens": 0
+    }
+  },
+  "time": {
+    "wallMs": 26600,
+    "activeMs": 26600,
+    "humanWaitMs": 0,
+    "toolMs": 0,
+    "agentMs": 0,
+    "modelMs": 26600,
+    "longestTurns": [
+      {
+        "turnIndex": 1,
+        "durationMs": 12900,
+        "preview": "Continue the refactor"
+      },
+      {
+        "turnIndex": 0,
+        "durationMs": 12500,
+        "preview": "Long refactor session"
+      },
+      {
+        "turnIndex": 2,
+        "durationMs": 1200,
+        "preview": "Wrap up"
+      }
+    ],
+    "longestGaps": [
+      {
+        "turnIndex": 1,
+        "gapMs": 0
+      },
+      {
+        "turnIndex": 2,
+        "gapMs": 0
+      }
+    ],
+    "firstResponse": {
+      "p50": 2000,
+      "p95": 2500,
+      "max": 2500
+    },
+    "hooksMs": 0
+  },
+  "files": {
+    "files": [],
+    "mostReRead": [],
+    "totalDistinct": 0,
+    "editedThenReverted": 0
+  },
+  "quality": {
+    "signals": [
+      {
+        "id": "tests",
+        "label": "Test runs",
+        "value": "none",
+        "tone": "unknown",
+        "detail": "no test command detected",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "builds",
+        "label": "Build / typecheck / lint runs",
+        "value": "none",
+        "tone": "unknown",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "commits",
+        "label": "Git commits",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "prs",
+        "label": "Pull requests",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "tool-error-rate",
+        "label": "Tool error rate",
+        "value": "0%",
+        "tone": "good",
+        "detail": "0 of 0 tool calls errored"
+      },
+      {
+        "id": "corrections",
+        "label": "User corrections",
+        "value": 0,
+        "tone": "good",
+        "detail": "prompts that read as \"no / wrong / again / revert\"",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "interruptions",
+        "label": "Interruptions",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "api-errors",
+        "label": "API errors",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "rework",
+        "label": "Files edited 4+ times",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "reverts",
+        "label": "Edit-then-revert pairs",
+        "value": 0,
+        "tone": "good"
+      }
+    ],
+    "testRuns": [],
+    "buildRuns": [],
+    "gitCommits": [],
+    "userCorrections": [],
+    "interruptions": 0,
+    "apiErrors": 0,
+    "toolErrorRate": 0,
+    "reworkFiles": 0
+  },
+  "insights": [
+    {
+      "id": "compactions-1",
+      "ruleId": "compactions",
+      "severity": "medium",
+      "axis": "context",
+      "title": "2 context compactions (peak 175.0k of 1.00M)",
+      "detail": "turn 0 at 165.0k → 22.0k; turn 1 at 172.0k → 19.0k",
+      "recommendation": "Every compaction throws away working memory and the agent re-derives it (extra reads, repeated commands). Split long efforts into sessions with a written handover, keep tool outputs small, push exploration into subagents, and compact deliberately at a milestone rather than letting auto-compact hit mid-task.",
+      "evidence": {
+        "compactions": [
+          {
+            "ts": 1786888812500,
+            "turnIndex": 0,
+            "trigger": "auto",
+            "contextBefore": 165000,
+            "contextAfter": 22000
+          },
+          {
+            "ts": 1786888825400,
+            "turnIndex": 1,
+            "trigger": "manual",
+            "contextBefore": 172000,
+            "contextAfter": 19000
+          }
+        ],
+        "requestsPerSegment": [
+          6,
+          5,
+          1
+        ]
+      },
+      "turnIndexes": [
+        0,
+        1
+      ],
+      "personas": [
+        "developer",
+        "anyone"
+      ]
+    },
+    {
+      "id": "preamble-weight-2",
+      "ruleId": "preamble-weight",
+      "severity": "low",
+      "axis": "tokens",
+      "title": "Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills)",
+      "detail": "12 requests × 50.0k ≈ 600.1k cache-read tokens just to carry the preamble",
+      "recommendation": "The baseline is small per request (it is re-read from cache, not re-sent) but it multiplies by every request. Trim CLAUDE.md to rules that bind, defer long docs to on-demand reads, prune MCP servers and skills you do not use in this repo, and check for large SessionStart hook output.",
+      "evidence": {
+        "baselineTokens": 50005,
+        "requests": 12,
+        "carriedTokens": 600060
+      },
+      "turnIndexes": [
+        0
+      ],
+      "savings": {
+        "tokens": 180018,
+        "estimated": true
+      },
+      "personas": [
+        "developer",
+        "lead"
+      ]
+    },
+    {
+      "id": "cache-ttl-churn-3",
+      "ruleId": "cache-ttl-churn",
+      "severity": "info",
+      "axis": "tokens",
+      "title": "100% of the 210.0k tokens written to cache went to the 1-hour tier",
+      "detail": "210.0k on the 1h tier vs 0 on the 5m tier; median gap between turns 0ms",
+      "recommendation": "Claude Code can hold your context in the cache for 5 minutes or for 1 hour. Both write the same tokens, so this changes nothing about your usage. But when your turns come faster than every 5 minutes, the short tier keeps the cache just as warm. Nothing to change in the transcript; this is a harness setting worth knowing about.",
+      "evidence": {
+        "cacheWrite1hTokens": 210000,
+        "cacheWrite5mTokens": 0,
+        "cacheWrites": 210000,
+        "cacheWrite1hShareOfWrites": 1,
+        "medianTurnGapMs": 0,
+        "quickCadence": false
+      },
+      "turnIndexes": [],
+      "personas": [
+        "lead",
+        "pm",
+        "developer"
+      ]
+    }
+  ],
+  "events": [],
+  "parse": {
+    "totalLines": 20,
+    "badLines": 0,
+    "recordCounts": {
+      "user": 5,
+      "assistant": 12,
+      "system": 3
+    },
+    "unknownRecordTypes": {},
+    "unknownBlockTypes": {},
+    "attachmentTypes": {},
+    "attachmentBytes": {},
+    "systemSubtypes": {
+      "compact_boundary": 2,
+      "turn_duration": 1
+    },
+    "warnings": [],
+    "parseMs": 0,
+    "bytes": 0,
+    "reconciliation": {
+      "usageEventsTotal": 1209193,
+      "turnsPlusAgentsTotal": 1209193,
+      "matchesWithinPct": 0,
+      "ok": true
+    }
+  }
+}

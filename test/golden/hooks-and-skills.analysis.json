@@ -1,0 +1,724 @@
+{
+  "schemaVersion": "2",
+  "generator": {
+    "name": "orangu",
+    "version": "golden",
+    "generatedAt": 0,
+    "modelCatalogUpdatedAt": "2026-08-14"
+  },
+  "session": {
+    "id": "eeeeeeee-0000-4000-8000-000000000005",
+    "title": "Use the changelog skill to draft notes",
+    "source": "claude-code",
+    "path": "(memory)",
+    "subagentPaths": [],
+    "cwd": "/Users/test/Code/demo",
+    "gitBranches": [
+      "main"
+    ],
+    "clientVersions": [
+      "2.1.226"
+    ],
+    "entrypoints": [
+      "cli"
+    ],
+    "permissionModes": [],
+    "models": [
+      {
+        "id": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "family": "opus",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      }
+    ],
+    "effortLevels": [
+      "high"
+    ],
+    "startedAt": 1787050800000,
+    "endedAt": 1787050829900,
+    "live": false
+  },
+  "summary": {
+    "turns": 2,
+    "humanTurns": 1,
+    "messages": 11,
+    "assistantMessages": 4,
+    "toolCalls": 2,
+    "toolErrors": 0,
+    "agents": 0,
+    "skills": 2,
+    "compactions": 0,
+    "wallMs": 29900,
+    "activeMs": 9900,
+    "humanWaitMs": 20000,
+    "tokens": {
+      "input": 15,
+      "output": 230,
+      "cacheRead": 28800,
+      "cacheWrite": 0,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 29045,
+    "contextPeak": 7403,
+    "cacheHitRatio": 0.9995,
+    "outcomes": {
+      "prLinks": [],
+      "gitCommits": 0,
+      "testRuns": 0,
+      "testRunsFailed": 0,
+      "buildRuns": 0,
+      "buildRunsFailed": 0,
+      "filesRead": 0,
+      "filesEdited": 0,
+      "filesWritten": 0,
+      "webLookups": 0
+    },
+    "topInsightIds": [
+      "hook-errors-1"
+    ],
+    "narrative": "In “Use the changelog skill to draft notes”, the human made 1 request (2 turns incl. commands/automation) over 30s; the agent was busy for 9.9s of that. It made 2 tool calls, used 2 skill/command invocations, and processed 29.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 1 hook error.",
+    "ending": "unknown"
+  },
+  "turns": [
+    {
+      "index": 0,
+      "kind": "command",
+      "isCommand": true,
+      "commandName": "/deploy",
+      "promptPreview": "<command-name>/deploy</command-name><command-message>deploy</command-message><command-args>staging</command-args>",
+      "promptChars": 113,
+      "startTs": 1787050800000,
+      "endTs": 1787050808900,
+      "durationMs": 8900,
+      "reportedDurationMs": 10000,
+      "firstResponseMs": 900,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 1,
+      "toolErrors": 0,
+      "toolMs": 8000,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 8,
+        "output": 100,
+        "cacheRead": 14100,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 14208,
+      "contextEnd": 7103,
+      "insightIds": [],
+      "activity": "Bash"
+    },
+    {
+      "index": 1,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "Use the changelog skill to draft notes",
+      "promptChars": 38,
+      "startTs": 1787050828900,
+      "endTs": 1787050829900,
+      "durationMs": 1000,
+      "reportedDurationMs": 3000,
+      "firstResponseMs": 700,
+      "humanGapMs": 20000,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 1,
+      "toolErrors": 0,
+      "toolMs": 300,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 7,
+        "output": 130,
+        "cacheRead": 14700,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 14837,
+      "contextEnd": 7403,
+      "insightIds": [],
+      "activity": "Skill"
+    }
+  ],
+  "tools": {
+    "byName": [
+      {
+        "name": "Bash",
+        "category": "exec",
+        "count": 1,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 8000,
+        "avgMs": 8000,
+        "p95Ms": 8000,
+        "maxMs": 8000,
+        "resultBytesTotal": 19,
+        "resultBytesMax": 19,
+        "inputBytesTotal": 64,
+        "parallelShare": 0,
+        "mainCount": 1,
+        "agentCount": 0
+      },
+      {
+        "name": "Skill",
+        "category": "skill",
+        "count": 1,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 300,
+        "avgMs": 300,
+        "p95Ms": 300,
+        "maxMs": 300,
+        "resultBytesTotal": 22,
+        "resultBytesMax": 22,
+        "inputBytesTotal": 35,
+        "parallelShare": 0,
+        "mainCount": 1,
+        "agentCount": 0
+      }
+    ],
+    "byCategory": [
+      {
+        "category": "exec",
+        "count": 1,
+        "totalMs": 8000,
+        "errors": 0
+      },
+      {
+        "category": "skill",
+        "count": 1,
+        "totalMs": 300,
+        "errors": 0
+      }
+    ],
+    "errorGroups": [],
+    "slowest": [
+      {
+        "toolUseId": "toolu_00000000000000000008",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Deploy",
+        "turnIndex": 0,
+        "startTs": 1787050800900,
+        "durationMs": 8000,
+        "resultBytes": 19,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000h",
+        "name": "Skill",
+        "category": "skill",
+        "summary": "Skill changelog v0.2",
+        "turnIndex": 1,
+        "startTs": 1787050829600,
+        "durationMs": 300,
+        "resultBytes": 22,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "largestResults": [
+      {
+        "toolUseId": "toolu_0000000000000000000h",
+        "name": "Skill",
+        "category": "skill",
+        "summary": "Skill changelog v0.2",
+        "turnIndex": 1,
+        "startTs": 1787050829600,
+        "durationMs": 300,
+        "resultBytes": 22,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000008",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Deploy",
+        "turnIndex": 0,
+        "startTs": 1787050800900,
+        "durationMs": 8000,
+        "resultBytes": 19,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "parallelism": {
+      "groups": 2,
+      "parallelGroups": 0,
+      "maxGroupSize": 1,
+      "parallelCallShare": 0
+    },
+    "calls": [
+      {
+        "toolUseId": "toolu_00000000000000000008",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Deploy",
+        "turnIndex": 0,
+        "startTs": 1787050800900,
+        "durationMs": 8000,
+        "resultBytes": 19,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000h",
+        "name": "Skill",
+        "category": "skill",
+        "summary": "Skill changelog v0.2",
+        "turnIndex": 1,
+        "startTs": 1787050829600,
+        "durationMs": 300,
+        "resultBytes": 22,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ]
+  },
+  "agents": {
+    "runs": [],
+    "totals": {
+      "count": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0
+      },
+      "totalTokens": 0,
+      "durationMs": 0,
+      "toolCalls": 0
+    },
+    "byType": [],
+    "byModel": [],
+    "maxDepth": 0,
+    "concurrentMs": 0,
+    "maxConcurrency": 0,
+    "mainThreadShare": {
+      "tokens": 1
+    }
+  },
+  "skills": {
+    "invocations": [
+      {
+        "name": "/deploy",
+        "via": "command",
+        "turnIndex": 0,
+        "ts": 1787050800000,
+        "args": "<command-message>deploy</command-message><command-args>staging</command-args>"
+      },
+      {
+        "name": "changelog",
+        "via": "tool",
+        "turnIndex": 1,
+        "ts": 1787050829600,
+        "args": "v0.2"
+      }
+    ],
+    "byName": [
+      {
+        "name": "/deploy",
+        "count": 1,
+        "via": [
+          "command"
+        ],
+        "turnIndexes": [
+          0
+        ]
+      },
+      {
+        "name": "changelog",
+        "count": 1,
+        "via": [
+          "tool"
+        ],
+        "turnIndexes": [
+          1
+        ]
+      }
+    ]
+  },
+  "hooks": {
+    "runs": 3,
+    "errors": 1,
+    "totalMs": 200,
+    "byCommand": [
+      {
+        "command": "notify.sh",
+        "count": 1,
+        "totalMs": 200,
+        "errors": 0,
+        "hookEvent": "Stop"
+      },
+      {
+        "command": "SessionStart:startup",
+        "count": 1,
+        "totalMs": 0,
+        "errors": 0,
+        "hookEvent": "SessionStart"
+      },
+      {
+        "command": "lint-gate.sh",
+        "count": 1,
+        "totalMs": 0,
+        "errors": 1,
+        "hookEvent": "Stop"
+      }
+    ],
+    "events": [
+      {
+        "hookEvent": "SessionStart",
+        "count": 1
+      },
+      {
+        "hookEvent": "Stop",
+        "count": 2
+      }
+    ]
+  },
+  "context": {
+    "series": [
+      {
+        "messageUuid": "u0000000-0007-4000-8000-000000000007",
+        "turnIndex": 0,
+        "ts": 1787050800900,
+        "model": "claude-opus-5",
+        "contextSize": 7005,
+        "input": 5,
+        "cacheRead": 7000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 60
+      },
+      {
+        "messageUuid": "u0000000-000b-4000-8000-00000000000b",
+        "turnIndex": 0,
+        "ts": 1787050800900,
+        "model": "claude-opus-5",
+        "contextSize": 7103,
+        "input": 3,
+        "cacheRead": 7100,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 40
+      },
+      {
+        "messageUuid": "u0000000-0014-4000-8000-000000000014",
+        "turnIndex": 1,
+        "ts": 1787050829600,
+        "model": "claude-opus-5",
+        "contextSize": 7304,
+        "input": 4,
+        "cacheRead": 7300,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 50
+      },
+      {
+        "messageUuid": "u0000000-0018-4000-8000-000000000018",
+        "turnIndex": 1,
+        "ts": 1787050829900,
+        "model": "claude-opus-5",
+        "contextSize": 7403,
+        "input": 3,
+        "cacheRead": 7400,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 80
+      }
+    ],
+    "cacheMisses": [],
+    "compactions": [],
+    "peak": 7403,
+    "baseline": 7005,
+    "final": 7403,
+    "contextWindow": 1000000,
+    "cacheHitRatio": 0.9995,
+    "cacheWrite1hShare": 0,
+    "reReadMultiplier": 3.89,
+    "totalCacheRead": 28800,
+    "totalCacheWrite": 0,
+    "totalFreshInput": 15,
+    "totalOutput": 230,
+    "requestsPerCompaction": []
+  },
+  "tokens": {
+    "total": {
+      "input": 15,
+      "output": 230,
+      "cacheRead": 28800,
+      "cacheWrite": 0,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 29045,
+    "byModel": [
+      {
+        "model": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "tokens": {
+          "input": 15,
+          "output": 230,
+          "cacheRead": 28800,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 29045,
+        "estimatedMatch": false,
+        "requests": 4
+      }
+    ],
+    "byKind": {
+      "input": 15,
+      "output": 230,
+      "cacheRead": 28800,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0
+    },
+    "mainThread": 29045,
+    "agents": 0,
+    "byTurn": [
+      {
+        "turnIndex": 0,
+        "tokens": 14208,
+        "cumulativeTokens": 14208
+      },
+      {
+        "turnIndex": 1,
+        "tokens": 14837,
+        "cumulativeTokens": 29045
+      }
+    ],
+    "byToolCategory": [
+      {
+        "category": "no-tool (text/thinking)",
+        "tokens": 14548
+      },
+      {
+        "category": "skill",
+        "tokens": 7354
+      },
+      {
+        "category": "exec",
+        "tokens": 7143
+      }
+    ],
+    "serverToolRequests": {
+      "webSearch": 0,
+      "webFetch": 0
+    },
+    "hiddenIterations": {
+      "count": 0,
+      "tokens": 0
+    }
+  },
+  "time": {
+    "wallMs": 29900,
+    "activeMs": 9900,
+    "humanWaitMs": 20000,
+    "toolMs": 8300,
+    "agentMs": 0,
+    "modelMs": 1600,
+    "longestTurns": [
+      {
+        "turnIndex": 0,
+        "durationMs": 8900,
+        "preview": "<command-name>/deploy</command-name><command-message>deploy</command-message><command-args>staging</command-args>"
+      },
+      {
+        "turnIndex": 1,
+        "durationMs": 1000,
+        "preview": "Use the changelog skill to draft notes"
+      }
+    ],
+    "longestGaps": [
+      {
+        "turnIndex": 1,
+        "gapMs": 20000
+      }
+    ],
+    "firstResponse": {
+      "p50": 700,
+      "p95": 900,
+      "max": 900
+    },
+    "hooksMs": 200
+  },
+  "files": {
+    "files": [],
+    "mostReRead": [],
+    "totalDistinct": 0,
+    "editedThenReverted": 0
+  },
+  "quality": {
+    "signals": [
+      {
+        "id": "tests",
+        "label": "Test runs",
+        "value": "none",
+        "tone": "unknown",
+        "detail": "no test command detected",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "builds",
+        "label": "Build / typecheck / lint runs",
+        "value": "none",
+        "tone": "unknown",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "commits",
+        "label": "Git commits",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "prs",
+        "label": "Pull requests",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "tool-error-rate",
+        "label": "Tool error rate",
+        "value": "0%",
+        "tone": "good",
+        "detail": "0 of 2 tool calls errored"
+      },
+      {
+        "id": "corrections",
+        "label": "User corrections",
+        "value": 0,
+        "tone": "good",
+        "detail": "prompts that read as \"no / wrong / again / revert\"",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "interruptions",
+        "label": "Interruptions",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "api-errors",
+        "label": "API errors",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "rework",
+        "label": "Files edited 4+ times",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "reverts",
+        "label": "Edit-then-revert pairs",
+        "value": 0,
+        "tone": "good"
+      }
+    ],
+    "testRuns": [],
+    "buildRuns": [],
+    "gitCommits": [],
+    "userCorrections": [],
+    "interruptions": 0,
+    "apiErrors": 0,
+    "toolErrorRate": 0,
+    "reworkFiles": 0
+  },
+  "insights": [
+    {
+      "id": "hook-errors-1",
+      "ruleId": "hook-errors",
+      "severity": "low",
+      "axis": "quality",
+      "title": "1 hook error",
+      "detail": "lint-gate.sh ×1",
+      "recommendation": "Failing hooks add noise to every turn and can block continuation. Fix or remove them in settings.json.",
+      "evidence": {
+        "byCommand": [
+          {
+            "command": "lint-gate.sh",
+            "count": 1,
+            "totalMs": 0,
+            "errors": 1,
+            "hookEvent": "Stop"
+          }
+        ]
+      },
+      "turnIndexes": [],
+      "personas": [
+        "developer"
+      ]
+    }
+  ],
+  "events": [],
+  "parse": {
+    "totalLines": 12,
+    "badLines": 0,
+    "recordCounts": {
+      "attachment": 1,
+      "user": 4,
+      "assistant": 4,
+      "system": 3
+    },
+    "unknownRecordTypes": {},
+    "unknownBlockTypes": {},
+    "attachmentTypes": {
+      "hook_success": 1
+    },
+    "attachmentBytes": {
+      "hook_success": 169
+    },
+    "systemSubtypes": {
+      "stop_hook_summary": 1,
+      "turn_duration": 2
+    },
+    "warnings": [],
+    "parseMs": 0,
+    "bytes": 0,
+    "reconciliation": {
+      "usageEventsTotal": 29045,
+      "turnsPlusAgentsTotal": 29045,
+      "matchesWithinPct": 0,
+      "ok": true
+    }
+  }
+}

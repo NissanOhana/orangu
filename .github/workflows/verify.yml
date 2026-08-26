@@ -1,0 +1,59 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic:
+    name: Deterministic suite (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20.19.0', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+      - run: node scripts/assert-offline.mjs --file site/sample.html
+      - run: node scripts/assert-offline.mjs --site
+      - run: npm audit --audit-level=high
+      - name: Install and run the packed CLI
+        if: matrix.node == '22'
+        run: |
+          package_dir="$(mktemp -d)"
+          install_dir="$(mktemp -d)"
+          npm pack --pack-destination "$package_dir"
+          npm install --prefix "$install_dir" "$package_dir"/orangu-*.tgz
+          "$install_dir"/node_modules/.bin/orangu --version
+
+  browser:
+    name: Browser suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx --no-install playwright install --with-deps chromium
+      - run: npm run test:browser
+      - name: Retain browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

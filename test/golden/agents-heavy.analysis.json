@@ -1,0 +1,1690 @@
+{
+  "schemaVersion": "2",
+  "generator": {
+    "name": "orangu",
+    "version": "golden",
+    "generatedAt": 0,
+    "modelCatalogUpdatedAt": "2026-08-14"
+  },
+  "session": {
+    "id": "bbbbbbbb-0000-4000-8000-000000000002",
+    "title": "Fan out: review, test, docs — in parallel",
+    "source": "claude-code",
+    "path": "(memory)",
+    "subagentPaths": [],
+    "cwd": "/Users/test/Code/demo",
+    "gitBranches": [
+      "main"
+    ],
+    "clientVersions": [
+      "2.1.226"
+    ],
+    "entrypoints": [
+      "cli"
+    ],
+    "permissionModes": [],
+    "models": [
+      {
+        "id": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "family": "opus",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      },
+      {
+        "id": "claude-sonnet-5",
+        "displayName": "Claude Sonnet 5",
+        "family": "sonnet",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      },
+      {
+        "id": "claude-haiku-4-5-20251001",
+        "displayName": "Claude Haiku 4.5",
+        "family": "haiku",
+        "estimatedMatch": false,
+        "contextWindow": 200000
+      }
+    ],
+    "effortLevels": [
+      "high"
+    ],
+    "startedAt": 1786784400000,
+    "endedAt": 1786784408550,
+    "live": false
+  },
+  "summary": {
+    "turns": 1,
+    "humanTurns": 1,
+    "messages": 42,
+    "assistantMessages": 21,
+    "toolCalls": 11,
+    "toolErrors": 0,
+    "agents": 8,
+    "skills": 0,
+    "compactions": 0,
+    "wallMs": 8550,
+    "activeMs": 8550,
+    "humanWaitMs": 0,
+    "tokens": {
+      "input": 11802,
+      "output": 980,
+      "cacheRead": 338206,
+      "cacheWrite": 0,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 350988,
+    "contextPeak": 8803,
+    "cacheHitRatio": 0.9663,
+    "outcomes": {
+      "prLinks": [],
+      "gitCommits": 0,
+      "testRuns": 0,
+      "testRunsFailed": 0,
+      "buildRuns": 0,
+      "buildRunsFailed": 0,
+      "filesRead": 3,
+      "filesEdited": 0,
+      "filesWritten": 0,
+      "webLookups": 0
+    },
+    "topInsightIds": [
+      "idle-agents-2",
+      "fanout-opportunity-3",
+      "agent-fanout-1"
+    ],
+    "narrative": "In “Fan out: review, test, docs — in parallel”, the human made 1 request over 8.6s; the agent was busy for 8.6s of that. It made 11 tool calls, ran 8 subagents, and processed 351.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 5 subagents did no tool calls; 5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait.",
+    "ending": "unknown"
+  },
+  "turns": [
+    {
+      "index": 0,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "Fan out: review, test, docs — in parallel",
+      "promptChars": 41,
+      "startTs": 1786784400000,
+      "endTs": 1786784408550,
+      "durationMs": 8550,
+      "reportedDurationMs": 9000,
+      "firstResponseMs": 1000,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 8,
+      "toolErrors": 0,
+      "toolMs": 7500,
+      "agents": [
+        "par0000000000000",
+        "par1000000000000",
+        "par2000000000000",
+        "seq0000000000000",
+        "seq1000000000000",
+        "seq2000000000000",
+        "seq3000000000000"
+      ],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 37,
+        "output": 535,
+        "cacheRead": 58206,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 350988,
+      "contextEnd": 8803,
+      "insightIds": [
+        "fanout-opportunity-3",
+        "agent-fanout-1"
+      ],
+      "activity": "Agent×8"
+    }
+  ],
+  "tools": {
+    "byName": [
+      {
+        "name": "Agent",
+        "category": "agent",
+        "count": 8,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 7500,
+        "avgMs": 938,
+        "p95Ms": 2850,
+        "maxMs": 2850,
+        "resultBytesTotal": 44,
+        "resultBytesMax": 18,
+        "inputBytesTotal": 695,
+        "parallelShare": 0.375,
+        "mainCount": 8,
+        "agentCount": 0
+      },
+      {
+        "name": "Read",
+        "category": "read",
+        "count": 3,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 300,
+        "avgMs": 100,
+        "p95Ms": 100,
+        "maxMs": 100,
+        "resultBytesTotal": 21,
+        "resultBytesMax": 7,
+        "inputBytesTotal": 141,
+        "parallelShare": 0,
+        "mainCount": 0,
+        "agentCount": 3
+      }
+    ],
+    "byCategory": [
+      {
+        "category": "agent",
+        "count": 8,
+        "totalMs": 7500,
+        "errors": 0
+      },
+      {
+        "category": "read",
+        "count": 3,
+        "totalMs": 300,
+        "errors": 0
+      }
+    ],
+    "errorGroups": [],
+    "slowest": [
+      {
+        "toolUseId": "toolu_00000000000000000005",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 2 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 2850,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_00000000000000000004",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 1 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 1900,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_00000000000000000003",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 0 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 950,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_0000000000000000002j",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent teammate review",
+        "turnIndex": 0,
+        "startTs": 1786784407450,
+        "durationMs": 600,
+        "resultBytes": 18,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001f",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 0 (test-writer)",
+        "turnIndex": 0,
+        "startTs": 1786784403850,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001p",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 1 (code-reviewer)",
+        "turnIndex": 0,
+        "startTs": 1786784404750,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001z",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 2 (test-writer)",
+        "turnIndex": 0,
+        "startTs": 1786784405650,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000029",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 3 (code-reviewer)",
+        "turnIndex": 0,
+        "startTs": 1786784406550,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000e",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f0.ts",
+        "turnIndex": 0,
+        "agentId": "par0000000000000",
+        "startTs": 1786784401700,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000s",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f1.ts",
+        "turnIndex": 0,
+        "agentId": "par1000000000000",
+        "startTs": 1786784402650,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "largestResults": [
+      {
+        "toolUseId": "toolu_0000000000000000002j",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent teammate review",
+        "turnIndex": 0,
+        "startTs": 1786784407450,
+        "durationMs": 600,
+        "resultBytes": 18,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000e",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f0.ts",
+        "turnIndex": 0,
+        "agentId": "par0000000000000",
+        "startTs": 1786784401700,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000s",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f1.ts",
+        "turnIndex": 0,
+        "agentId": "par1000000000000",
+        "startTs": 1786784402650,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000016",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f2.ts",
+        "turnIndex": 0,
+        "agentId": "par2000000000000",
+        "startTs": 1786784403600,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000003",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 0 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 950,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_00000000000000000004",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 1 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 1900,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_00000000000000000005",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 2 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 2850,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001f",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 0 (test-writer)",
+        "turnIndex": 0,
+        "startTs": 1786784403850,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001p",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 1 (code-reviewer)",
+        "turnIndex": 0,
+        "startTs": 1786784404750,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001z",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 2 (test-writer)",
+        "turnIndex": 0,
+        "startTs": 1786784405650,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "parallelism": {
+      "groups": 9,
+      "parallelGroups": 1,
+      "maxGroupSize": 3,
+      "parallelCallShare": 0.273
+    },
+    "calls": [
+      {
+        "toolUseId": "toolu_00000000000000000003",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 0 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 950,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_00000000000000000004",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 1 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 1900,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_00000000000000000005",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent task 2 (general-purpose)",
+        "turnIndex": 0,
+        "startTs": 1786784401000,
+        "durationMs": 2850,
+        "resultBytes": 6,
+        "isError": false,
+        "parallelGroupSize": 3
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000e",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f0.ts",
+        "turnIndex": 0,
+        "agentId": "par0000000000000",
+        "startTs": 1786784401700,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000s",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f1.ts",
+        "turnIndex": 0,
+        "agentId": "par1000000000000",
+        "startTs": 1786784402650,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000016",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/f2.ts",
+        "turnIndex": 0,
+        "agentId": "par2000000000000",
+        "startTs": 1786784403600,
+        "durationMs": 100,
+        "resultBytes": 7,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001f",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 0 (test-writer)",
+        "turnIndex": 0,
+        "startTs": 1786784403850,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001p",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 1 (code-reviewer)",
+        "turnIndex": 0,
+        "startTs": 1786784404750,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000001z",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 2 (test-writer)",
+        "turnIndex": 0,
+        "startTs": 1786784405650,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000029",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent seq 3 (code-reviewer)",
+        "turnIndex": 0,
+        "startTs": 1786784406550,
+        "durationMs": 300,
+        "resultBytes": 2,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000002j",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent teammate review",
+        "turnIndex": 0,
+        "startTs": 1786784407450,
+        "durationMs": 600,
+        "resultBytes": 18,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ]
+  },
+  "agents": {
+    "runs": [
+      {
+        "agentId": "par0000000000000",
+        "agentType": "general-purpose",
+        "description": "task 0",
+        "model": "claude-sonnet-5",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_00000000000000000003",
+        "turnIndex": 0,
+        "startTs": 1786784401200,
+        "endTs": 1786784401950,
+        "durationMs": 750,
+        "messageCount": 4,
+        "toolCallCount": 1,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 2850,
+          "output": 95,
+          "cacheRead": 60000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 62945,
+        "reportedTotalTokens": 2000,
+        "reportedDurationMs": 950,
+        "status": "completed",
+        "hasTranscript": true
+      },
+      {
+        "agentId": "par1000000000000",
+        "agentType": "general-purpose",
+        "description": "task 1",
+        "model": "claude-sonnet-5",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_00000000000000000004",
+        "turnIndex": 0,
+        "startTs": 1786784402150,
+        "endTs": 1786784402900,
+        "durationMs": 750,
+        "messageCount": 4,
+        "toolCallCount": 1,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 2853,
+          "output": 95,
+          "cacheRead": 60000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 62948,
+        "reportedTotalTokens": 2001,
+        "reportedDurationMs": 950,
+        "status": "completed",
+        "hasTranscript": true
+      },
+      {
+        "agentId": "par2000000000000",
+        "agentType": "general-purpose",
+        "description": "task 2",
+        "model": "claude-sonnet-5",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_00000000000000000005",
+        "turnIndex": 0,
+        "startTs": 1786784403100,
+        "endTs": 1786784403850,
+        "durationMs": 750,
+        "messageCount": 4,
+        "toolCallCount": 1,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 2856,
+          "output": 95,
+          "cacheRead": 60000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 62951,
+        "reportedTotalTokens": 2002,
+        "reportedDurationMs": 950,
+        "status": "completed",
+        "hasTranscript": true
+      },
+      {
+        "agentId": "seq0000000000000",
+        "agentType": "test-writer",
+        "description": "seq 0",
+        "model": "claude-haiku-4-5-20251001",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_0000000000000000001f",
+        "turnIndex": 0,
+        "startTs": 1786784403850,
+        "endTs": 1786784404650,
+        "durationMs": 800,
+        "messageCount": 2,
+        "toolCallCount": 0,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 700,
+          "output": 35,
+          "cacheRead": 20000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 20735,
+        "reportedTotalTokens": 3000,
+        "reportedDurationMs": 1200,
+        "status": "completed",
+        "hasTranscript": true
+      },
+      {
+        "agentId": "seq1000000000000",
+        "agentType": "code-reviewer",
+        "description": "seq 1",
+        "model": "claude-haiku-4-5-20251001",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_0000000000000000001p",
+        "turnIndex": 0,
+        "startTs": 1786784404750,
+        "endTs": 1786784405550,
+        "durationMs": 800,
+        "messageCount": 2,
+        "toolCallCount": 0,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 701,
+          "output": 35,
+          "cacheRead": 20000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 20736,
+        "reportedTotalTokens": 3001,
+        "reportedDurationMs": 1201,
+        "status": "completed",
+        "hasTranscript": true
+      },
+      {
+        "agentId": "seq2000000000000",
+        "agentType": "test-writer",
+        "description": "seq 2",
+        "model": "claude-haiku-4-5-20251001",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_0000000000000000001z",
+        "turnIndex": 0,
+        "startTs": 1786784405650,
+        "endTs": 1786784406450,
+        "durationMs": 800,
+        "messageCount": 2,
+        "toolCallCount": 0,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 702,
+          "output": 35,
+          "cacheRead": 20000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 20737,
+        "reportedTotalTokens": 3002,
+        "reportedDurationMs": 1202,
+        "status": "completed",
+        "hasTranscript": true
+      },
+      {
+        "agentId": "seq3000000000000",
+        "name": "teammate-rev",
+        "agentType": "code-reviewer",
+        "description": "seq 3",
+        "model": "claude-haiku-4-5-20251001",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_00000000000000000029",
+        "turnIndex": 0,
+        "startTs": 1786784406550,
+        "endTs": 1786784407350,
+        "durationMs": 800,
+        "messageCount": 2,
+        "toolCallCount": 0,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 703,
+          "output": 35,
+          "cacheRead": 20000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 20738,
+        "reportedTotalTokens": 3003,
+        "reportedDurationMs": 1203,
+        "status": "completed",
+        "hasTranscript": true
+      },
+      {
+        "agentId": "orphanworkflow00",
+        "model": "claude-haiku-4-5-20251001",
+        "spawnDepth": 0,
+        "startTs": 1786784408150,
+        "endTs": 1786784408450,
+        "durationMs": 300,
+        "messageCount": 2,
+        "toolCallCount": 0,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 400,
+          "output": 20,
+          "cacheRead": 20000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 20420,
+        "hasTranscript": true
+      }
+    ],
+    "totals": {
+      "count": 8,
+      "tokens": {
+        "input": 11765,
+        "output": 445,
+        "cacheRead": 280000,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 292210,
+      "durationMs": 5750,
+      "toolCalls": 3
+    },
+    "byType": [
+      {
+        "agentType": "general-purpose",
+        "count": 3,
+        "tokens": 188844,
+        "avgDurationMs": 750
+      },
+      {
+        "agentType": "code-reviewer",
+        "count": 2,
+        "tokens": 41474,
+        "avgDurationMs": 800
+      },
+      {
+        "agentType": "test-writer",
+        "count": 2,
+        "tokens": 41472,
+        "avgDurationMs": 800
+      },
+      {
+        "agentType": "unknown",
+        "count": 1,
+        "tokens": 20420,
+        "avgDurationMs": 300
+      }
+    ],
+    "byModel": [
+      {
+        "model": "claude-sonnet-5",
+        "count": 3,
+        "tokens": 188844
+      },
+      {
+        "model": "claude-haiku-4-5-20251001",
+        "count": 5,
+        "tokens": 103366
+      }
+    ],
+    "maxDepth": 0,
+    "concurrentMs": 5750,
+    "maxConcurrency": 1,
+    "mainThreadShare": {
+      "tokens": 0.1675
+    }
+  },
+  "skills": {
+    "invocations": [],
+    "byName": []
+  },
+  "hooks": {
+    "runs": 0,
+    "errors": 0,
+    "totalMs": 0,
+    "byCommand": [],
+    "events": []
+  },
+  "context": {
+    "series": [
+      {
+        "messageUuid": "u0000000-0008-4000-8000-000000000008",
+        "turnIndex": 0,
+        "ts": 1786784401000,
+        "model": "claude-opus-5",
+        "contextSize": 8010,
+        "input": 10,
+        "cacheRead": 8000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 200
+      },
+      {
+        "messageUuid": "u0000000-000d-4000-8000-00000000000d",
+        "turnIndex": 0,
+        "agentId": "par0000000000000",
+        "ts": 1786784401700,
+        "model": "claude-sonnet-5",
+        "contextSize": 20900,
+        "input": 900,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 40
+      },
+      {
+        "messageUuid": "u0000000-0011-4000-8000-000000000011",
+        "turnIndex": 0,
+        "agentId": "par0000000000000",
+        "ts": 1786784401700,
+        "model": "claude-opus-5",
+        "contextSize": 20950,
+        "input": 950,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 30
+      },
+      {
+        "messageUuid": "u0000000-0015-4000-8000-000000000015",
+        "turnIndex": 0,
+        "agentId": "par0000000000000",
+        "ts": 1786784401800,
+        "model": "claude-sonnet-5",
+        "contextSize": 21000,
+        "input": 1000,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 25
+      },
+      {
+        "messageUuid": "u0000000-001b-4000-8000-00000000001b",
+        "turnIndex": 0,
+        "agentId": "par1000000000000",
+        "ts": 1786784402650,
+        "model": "claude-sonnet-5",
+        "contextSize": 20901,
+        "input": 901,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 40
+      },
+      {
+        "messageUuid": "u0000000-001f-4000-8000-00000000001f",
+        "turnIndex": 0,
+        "agentId": "par1000000000000",
+        "ts": 1786784402650,
+        "model": "claude-opus-5",
+        "contextSize": 20951,
+        "input": 951,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 30
+      },
+      {
+        "messageUuid": "u0000000-0023-4000-8000-000000000023",
+        "turnIndex": 0,
+        "agentId": "par1000000000000",
+        "ts": 1786784402750,
+        "model": "claude-sonnet-5",
+        "contextSize": 21001,
+        "input": 1001,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 25
+      },
+      {
+        "messageUuid": "u0000000-0029-4000-8000-000000000029",
+        "turnIndex": 0,
+        "agentId": "par2000000000000",
+        "ts": 1786784403600,
+        "model": "claude-sonnet-5",
+        "contextSize": 20902,
+        "input": 902,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 40
+      },
+      {
+        "messageUuid": "u0000000-002d-4000-8000-00000000002d",
+        "turnIndex": 0,
+        "agentId": "par2000000000000",
+        "ts": 1786784403600,
+        "model": "claude-opus-5",
+        "contextSize": 20952,
+        "input": 952,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 30
+      },
+      {
+        "messageUuid": "u0000000-0031-4000-8000-000000000031",
+        "turnIndex": 0,
+        "agentId": "par2000000000000",
+        "ts": 1786784403700,
+        "model": "claude-sonnet-5",
+        "contextSize": 21002,
+        "input": 1002,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 25
+      },
+      {
+        "messageUuid": "u0000000-0036-4000-8000-000000000036",
+        "turnIndex": 0,
+        "ts": 1786784403850,
+        "model": "claude-opus-5",
+        "contextSize": 8205,
+        "input": 5,
+        "cacheRead": 8200,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 60
+      },
+      {
+        "messageUuid": "u0000000-003c-4000-8000-00000000003c",
+        "turnIndex": 0,
+        "agentId": "seq0000000000000",
+        "ts": 1786784404650,
+        "model": "claude-haiku-4-5-20251001",
+        "contextSize": 20700,
+        "input": 700,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 35
+      },
+      {
+        "messageUuid": "u0000000-0040-4000-8000-000000000040",
+        "turnIndex": 0,
+        "ts": 1786784404750,
+        "model": "claude-opus-5",
+        "contextSize": 8206,
+        "input": 5,
+        "cacheRead": 8201,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 60
+      },
+      {
+        "messageUuid": "u0000000-0046-4000-8000-000000000046",
+        "turnIndex": 0,
+        "agentId": "seq1000000000000",
+        "ts": 1786784405550,
+        "model": "claude-haiku-4-5-20251001",
+        "contextSize": 20701,
+        "input": 701,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 35
+      },
+      {
+        "messageUuid": "u0000000-004a-4000-8000-00000000004a",
+        "turnIndex": 0,
+        "ts": 1786784405650,
+        "model": "claude-opus-5",
+        "contextSize": 8207,
+        "input": 5,
+        "cacheRead": 8202,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 60
+      },
+      {
+        "messageUuid": "u0000000-0050-4000-8000-000000000050",
+        "turnIndex": 0,
+        "agentId": "seq2000000000000",
+        "ts": 1786784406450,
+        "model": "claude-haiku-4-5-20251001",
+        "contextSize": 20702,
+        "input": 702,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 35
+      },
+      {
+        "messageUuid": "u0000000-0054-4000-8000-000000000054",
+        "turnIndex": 0,
+        "ts": 1786784406550,
+        "model": "claude-opus-5",
+        "contextSize": 8208,
+        "input": 5,
+        "cacheRead": 8203,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 60
+      },
+      {
+        "messageUuid": "u0000000-005a-4000-8000-00000000005a",
+        "turnIndex": 0,
+        "agentId": "seq3000000000000",
+        "ts": 1786784407350,
+        "model": "claude-haiku-4-5-20251001",
+        "contextSize": 20703,
+        "input": 703,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 35
+      },
+      {
+        "messageUuid": "u0000000-005e-4000-8000-00000000005e",
+        "turnIndex": 0,
+        "ts": 1786784407450,
+        "model": "claude-opus-5",
+        "contextSize": 8604,
+        "input": 4,
+        "cacheRead": 8600,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 45
+      },
+      {
+        "messageUuid": "u0000000-0064-4000-8000-000000000064",
+        "turnIndex": 0,
+        "agentId": "orphanworkflow00",
+        "ts": 1786784408450,
+        "model": "claude-haiku-4-5-20251001",
+        "contextSize": 20400,
+        "input": 400,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 20
+      },
+      {
+        "messageUuid": "u0000000-0067-4000-8000-000000000067",
+        "turnIndex": 0,
+        "ts": 1786784408550,
+        "model": "claude-opus-5",
+        "contextSize": 8803,
+        "input": 3,
+        "cacheRead": 8800,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 50
+      }
+    ],
+    "cacheMisses": [],
+    "compactions": [],
+    "peak": 8803,
+    "baseline": 8010,
+    "final": 8803,
+    "contextWindow": 1000000,
+    "cacheHitRatio": 0.9663,
+    "cacheWrite1hShare": 0,
+    "reReadMultiplier": 38.42,
+    "totalCacheRead": 338206,
+    "totalCacheWrite": 0,
+    "totalFreshInput": 11802,
+    "totalOutput": 980,
+    "requestsPerCompaction": []
+  },
+  "tokens": {
+    "total": {
+      "input": 11802,
+      "output": 980,
+      "cacheRead": 338206,
+      "cacheWrite": 0,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 350988,
+    "byModel": [
+      {
+        "model": "claude-sonnet-5",
+        "displayName": "Claude Sonnet 5",
+        "tokens": {
+          "input": 5706,
+          "output": 195,
+          "cacheRead": 120000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 125901,
+        "estimatedMatch": false,
+        "requests": 6
+      },
+      {
+        "model": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "tokens": {
+          "input": 2890,
+          "output": 625,
+          "cacheRead": 118206,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 121721,
+        "estimatedMatch": false,
+        "requests": 10
+      },
+      {
+        "model": "claude-haiku-4-5-20251001",
+        "displayName": "Claude Haiku 4.5",
+        "tokens": {
+          "input": 3206,
+          "output": 160,
+          "cacheRead": 100000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 103366,
+        "estimatedMatch": false,
+        "requests": 5
+      }
+    ],
+    "byKind": {
+      "input": 11802,
+      "output": 980,
+      "cacheRead": 338206,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0
+    },
+    "mainThread": 58778,
+    "agents": 292210,
+    "byTurn": [
+      {
+        "turnIndex": 0,
+        "tokens": 350988,
+        "cumulativeTokens": 350988
+      }
+    ],
+    "byToolCategory": [
+      {
+        "category": "no-tool (text/thinking)",
+        "tokens": 238120
+      },
+      {
+        "category": "read",
+        "tokens": 62943
+      },
+      {
+        "category": "agent",
+        "tokens": 41715
+      },
+      {
+        "category": "mixed",
+        "tokens": 8210
+      }
+    ],
+    "serverToolRequests": {
+      "webSearch": 0,
+      "webFetch": 0
+    },
+    "hiddenIterations": {
+      "count": 0,
+      "tokens": 0
+    }
+  },
+  "time": {
+    "wallMs": 8550,
+    "activeMs": 8550,
+    "humanWaitMs": 0,
+    "toolMs": 0,
+    "agentMs": 5750,
+    "modelMs": 2800,
+    "longestTurns": [
+      {
+        "turnIndex": 0,
+        "durationMs": 8550,
+        "preview": "Fan out: review, test, docs — in parallel"
+      }
+    ],
+    "longestGaps": [],
+    "firstResponse": {
+      "p50": 1000,
+      "p95": 1000,
+      "max": 1000
+    },
+    "hooksMs": 0
+  },
+  "files": {
+    "files": [
+      {
+        "path": "src/f0.ts",
+        "reads": 1,
+        "edits": 0,
+        "writes": 0,
+        "bytesRead": 7,
+        "turnIndexes": [
+          0
+        ],
+        "agentReads": 1,
+        "redundantReads": 0
+      },
+      {
+        "path": "src/f1.ts",
+        "reads": 1,
+        "edits": 0,
+        "writes": 0,
+        "bytesRead": 7,
+        "turnIndexes": [
+          0
+        ],
+        "agentReads": 1,
+        "redundantReads": 0
+      },
+      {
+        "path": "src/f2.ts",
+        "reads": 1,
+        "edits": 0,
+        "writes": 0,
+        "bytesRead": 7,
+        "turnIndexes": [
+          0
+        ],
+        "agentReads": 1,
+        "redundantReads": 0
+      }
+    ],
+    "mostReRead": [],
+    "totalDistinct": 3,
+    "editedThenReverted": 0
+  },
+  "quality": {
+    "signals": [
+      {
+        "id": "tests",
+        "label": "Test runs",
+        "value": "none",
+        "tone": "unknown",
+        "detail": "no test command detected",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "builds",
+        "label": "Build / typecheck / lint runs",
+        "value": "none",
+        "tone": "unknown",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "commits",
+        "label": "Git commits",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "prs",
+        "label": "Pull requests",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "tool-error-rate",
+        "label": "Tool error rate",
+        "value": "0%",
+        "tone": "good",
+        "detail": "0 of 11 tool calls errored"
+      },
+      {
+        "id": "corrections",
+        "label": "User corrections",
+        "value": 0,
+        "tone": "good",
+        "detail": "prompts that read as \"no / wrong / again / revert\"",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "interruptions",
+        "label": "Interruptions",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "api-errors",
+        "label": "API errors",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "rework",
+        "label": "Files edited 4+ times",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "reverts",
+        "label": "Edit-then-revert pairs",
+        "value": 0,
+        "tone": "good"
+      }
+    ],
+    "testRuns": [],
+    "buildRuns": [],
+    "gitCommits": [],
+    "userCorrections": [],
+    "interruptions": 0,
+    "apiErrors": 0,
+    "toolErrorRate": 0,
+    "reworkFiles": 0
+  },
+  "insights": [
+    {
+      "id": "idle-agents-2",
+      "ruleId": "idle-agents",
+      "severity": "low",
+      "axis": "tokens",
+      "title": "5 subagents did no tool calls",
+      "detail": "test-writer, code-reviewer, test-writer, code-reviewer, orphanworkflow00",
+      "recommendation": "An agent that only answers from its prompt could have been a plain model call in the main thread; or its brief was too thin to act on. Give agents concrete files/commands to act on.",
+      "evidence": {
+        "agents": [
+          {
+            "agentId": "seq0000000000000",
+            "type": "test-writer",
+            "tokens": {
+              "input": 700,
+              "output": 35,
+              "cacheRead": 20000,
+              "cacheWrite": 0,
+              "cacheWrite5m": 0,
+              "cacheWrite1h": 0,
+              "webSearchRequests": 0,
+              "webFetchRequests": 0,
+              "serviceTier": "standard"
+            }
+          },
+          {
+            "agentId": "seq1000000000000",
+            "type": "code-reviewer",
+            "tokens": {
+              "input": 701,
+              "output": 35,
+              "cacheRead": 20000,
+              "cacheWrite": 0,
+              "cacheWrite5m": 0,
+              "cacheWrite1h": 0,
+              "webSearchRequests": 0,
+              "webFetchRequests": 0,
+              "serviceTier": "standard"
+            }
+          },
+          {
+            "agentId": "seq2000000000000",
+            "type": "test-writer",
+            "tokens": {
+              "input": 702,
+              "output": 35,
+              "cacheRead": 20000,
+              "cacheWrite": 0,
+              "cacheWrite5m": 0,
+              "cacheWrite1h": 0,
+              "webSearchRequests": 0,
+              "webFetchRequests": 0,
+              "serviceTier": "standard"
+            }
+          },
+          {
+            "agentId": "seq3000000000000",
+            "type": "code-reviewer",
+            "tokens": {
+              "input": 703,
+              "output": 35,
+              "cacheRead": 20000,
+              "cacheWrite": 0,
+              "cacheWrite5m": 0,
+              "cacheWrite1h": 0,
+              "webSearchRequests": 0,
+              "webFetchRequests": 0,
+              "serviceTier": "standard"
+            }
+          },
+          {
+            "agentId": "orphanworkflow00",
+            "tokens": {
+              "input": 400,
+              "output": 20,
+              "cacheRead": 20000,
+              "cacheWrite": 0,
+              "cacheWrite5m": 0,
+              "cacheWrite1h": 0,
+              "webSearchRequests": 0,
+              "webFetchRequests": 0,
+              "serviceTier": "standard"
+            }
+          }
+        ]
+      },
+      "turnIndexes": [],
+      "personas": [
+        "developer"
+      ]
+    },
+    {
+      "id": "fanout-opportunity-3",
+      "ruleId": "fanout-opportunity",
+      "severity": "low",
+      "axis": "time",
+      "title": "5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait",
+      "detail": "turn 0: 5 serial spawns (test-writer, code-reviewer, test-writer, code-reviewer, agent), 1.8s serial vs 600ms longest",
+      "recommendation": "Independent subagents can be spawned in one message (parallel tool calls) or with run_in_background. The wall-clock time becomes the longest run instead of the sum. Keep serial spawning for agents that consume an earlier agent’s result.",
+      "evidence": {
+        "runs": [
+          {
+            "turnIndex": 0,
+            "agents": [
+              {
+                "type": "test-writer",
+                "promptChars": 17,
+                "durationMs": 300
+              },
+              {
+                "type": "code-reviewer",
+                "promptChars": 17,
+                "durationMs": 300
+              },
+              {
+                "type": "test-writer",
+                "promptChars": 17,
+                "durationMs": 300
+              },
+              {
+                "type": "code-reviewer",
+                "promptChars": 17,
+                "durationMs": 300
+              },
+              {
+                "type": "",
+                "promptChars": 18,
+                "durationMs": 600
+              }
+            ],
+            "serialMs": 1800,
+            "longestMs": 600
+          }
+        ],
+        "heuristic": "independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching"
+      },
+      "turnIndexes": [
+        0
+      ],
+      "savings": {
+        "ms": 1200,
+        "estimated": true
+      },
+      "personas": [
+        "developer",
+        "lead"
+      ]
+    },
+    {
+      "id": "agent-fanout-1",
+      "ruleId": "agent-fanout",
+      "severity": "info",
+      "axis": "tokens",
+      "title": "8 subagent runs = 83% of the session's tokens (292.2k), max 1 in parallel",
+      "detail": "general-purpose ×3 188.8k; code-reviewer ×2 41.5k; test-writer ×2 41.5k; unknown ×1 20.4k",
+      "recommendation": "Subagents keep exploration out of your main context and can run in parallel; they are worth it when the returned summary is much smaller than what they read. Watch for agents that re-read what the parent already knew, and for agents whose brief makes them read far more than they report back.",
+      "evidence": {
+        "byType": [
+          {
+            "agentType": "general-purpose",
+            "count": 3,
+            "tokens": 188844,
+            "avgDurationMs": 750
+          },
+          {
+            "agentType": "code-reviewer",
+            "count": 2,
+            "tokens": 41474,
+            "avgDurationMs": 800
+          },
+          {
+            "agentType": "test-writer",
+            "count": 2,
+            "tokens": 41472,
+            "avgDurationMs": 800
+          },
+          {
+            "agentType": "unknown",
+            "count": 1,
+            "tokens": 20420,
+            "avgDurationMs": 300
+          }
+        ],
+        "byModel": [
+          {
+            "model": "claude-sonnet-5",
+            "count": 3,
+            "tokens": 188844
+          },
+          {
+            "model": "claude-haiku-4-5-20251001",
+            "count": 5,
+            "tokens": 103366
+          }
+        ],
+        "concurrentMs": 5750,
+        "maxConcurrency": 1
+      },
+      "turnIndexes": [
+        0
+      ],
+      "personas": [
+        "developer",
+        "lead"
+      ]
+    }
+  ],
+  "events": [],
+  "parse": {
+    "totalLines": 42,
+    "badLines": 0,
+    "recordCounts": {
+      "user": 20,
+      "assistant": 21,
+      "system": 1
+    },
+    "unknownRecordTypes": {},
+    "unknownBlockTypes": {},
+    "attachmentTypes": {},
+    "attachmentBytes": {},
+    "systemSubtypes": {
+      "turn_duration": 1
+    },
+    "warnings": [],
+    "parseMs": 0,
+    "bytes": 0,
+    "reconciliation": {
+      "usageEventsTotal": 350988,
+      "turnsPlusAgentsTotal": 350988,
+      "matchesWithinPct": 0,
+      "ok": true
+    }
+  }
+}

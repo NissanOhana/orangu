@@ -1,0 +1,15 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "orangu",
+  "description": "Observe supported Claude sessions locally, then improve the next outcome.",
+  "owner": { "name": "Nissan Ohana" },
+  "plugins": [
+    {
+      "name": "orangu",
+      "description": "Observe Claude Code, Cowork, and Desktop sessions with deterministic local evidence, then use optional skills to draft changes, apply session/repo proposals explicitly, and verify session-scope changes against later evidence. No account, instrumentation, or report upload.",
+      "author": { "name": "Nissan Ohana" },
+      "category": "productivity",
+      "source": "./plugin"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+{
+  "catalogVersion": 1,
+  "updatedAt": "2026-08-23",
+  "note": "Claude Code feature → detectable signal → finding it addresses. Same entry shape as catalog.json; /orangu:improve may refresh from the changelog online, adding candidates with verifiedAt null. All URLs from the public docs",
+  "entries": [
+    {
+      "id": "feat-output-styles",
+      "changeClass": "instruction",
+      "pattern": { "ruleId": "output-burst" },
+      "feature": "output styles",
+      "url": null,
+      "verifiedAt": "2026-08-23",
+      "note": "An output style is part of the system prompt (cached in the prefix, survives compaction, per the public docs). A style that constrains verbosity addresses repeated ≥8k-token output bursts; output tokens are the ones the model has to generate one at a time."
+    },
+    {
+      "id": "feat-context-fork",
+      "changeClass": "skill-create",
+      "pattern": { "ruleId": "skill-token-weight" },
+      "feature": "skill frontmatter context: fork",
+      "url": "https://code.claude.com/docs/en/skills.md",
+      "verifiedAt": "2026-08-23",
+      "note": "context: fork (+ agent, background) runs a skill in a subagent instead of the main thread; fork subagents inherit the conversation and reuse the prompt cache, so a heavy skill stops inflating the main context. Addresses a skill whose per-invocation token weight is a multiple of the median turn."
+    },
+    {
+      "id": "feat-effort-frontmatter",
+      "changeClass": "workflow-config",
+      "pattern": { "ruleId": "thinking-on-mechanical" },
+      "feature": "effort frontmatter (low|medium|high|xhigh|max)",
+      "url": "https://code.claude.com/docs/en/skills.md",
+      "verifiedAt": "2026-08-23",
+      "note": "Skills, agents, and --effort accept an effort level; set it low for mechanical steps where thinking tokens are being spent on single-tool requests. Each effort level has its own cache for the same model, so set it per agent/skill rather than toggling mid-session."
+    },
+    {
+      "id": "feat-background-agents",
+      "changeClass": "subagent-agent",
+      "pattern": { "ruleId": "slow-tool" },
+      "feature": "run_in_background (Bash) / background agents",
+      "url": "https://code.claude.com/docs/en/sub-agents.md",
+      "verifiedAt": "2026-08-23",
+      "note": "Long-running commands can run detached (Bash run_in_background) and agents can carry background frontmatter, so a slow tool stops blocking the turn. Addresses tools with p95 over 30 s that the session waits on serially."
+    },
+    {
+      "id": "feat-workflows",
+      "changeClass": "workflow-config",
+      "pattern": { "ruleId": "deep-fanout" },
+      "feature": "dynamic workflows",
+      "url": "https://code.claude.com/docs/en/workflows.md",
+      "verifiedAt": "2026-08-23",
+      "note": "Agent trees three levels deep are leaner to run and easier to reason about as a declared workflow: wf_ runs are first-class, with per-run artifacts stored under the session directory, instead of ad-hoc nested spawns."
+    },
+    {
+      "id": "feat-skills-over-pasted-prompts",
+      "changeClass": "skill-create",
+      "pattern": { "ruleId": "repeated-commands" },
+      "feature": "skills (vs pasted prompts)",
+      "url": "https://code.claude.com/docs/en/skills.md",
+      "verifiedAt": "2026-08-23",
+      "note": "A procedure re-typed every session belongs in a skill: description-gated loading keeps it out of context until needed, bundled scripts execute without entering context at all, and invoked bodies survive compaction (capped 5k tokens each, per the public docs)."
+    },
+    {
+      "id": "feat-hooks-verification",
+      "changeClass": "hook",
+      "pattern": { "ruleId": "unverified-edits" },
+      "feature": "hooks (PostToolUse verification)",
+      "url": "https://code.claude.com/docs/en/hooks.md",
+      "verifiedAt": "2026-08-23",
+      "note": "A PostToolUse hook can run the project's test/build gate automatically after edits (hooks run as code, not context), addressing sessions that end with edited files and no test or build run."
+    }
+  ]
+}

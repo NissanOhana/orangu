@@ -1,0 +1,40 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.octocode/
+*.log
+.DS_Store
+
+# local credentials and package authentication
+.env
+.env.*
+!.env.example
+.npmrc
+*.key
+*.pem
+
+# local agent and browser tooling
+/.claude/
+/.codex/
+/.cursor/
+/.playwright-mcp/
+/.probe/
+/.worktrees/
+
+# private working notes and research
+/AGENTS.md
+/CLAUDE.md
+/HANDOVER.md
+/PROGRESS.md
+/docs/plans/
+/docs/research/
+/docs/runs/
+/design/import/
+/scratch/
+
+# never commit real session data
+/private/
+/fixtures/real/
+/.orangu-cache/

@@ -1,0 +1,160 @@
+{
+  "catalogVersion": 1,
+  "updatedAt": "2026-08-23",
+  "note": "L2 curated catalog. Deterministic match, curated content. Every entry is offline-verifiable from this repo's research docs; URLs only from the public docs Research-found additions at suggest time are candidates: verifiedAt null.",
+  "entries": [
+    {
+      "id": "cli-pdf-extract",
+      "changeClass": "script-cli",
+      "pattern": { "signal": "file-ext:.pdf" },
+      "tool": "pdftotext / pdfplumber",
+      "url": null,
+      "verifiedAt": "2026-08-23",
+      "note": "Extract PDF text with a CLI before it enters context: pdftotext for plain text, pdfplumber when tables matter (one default, not a menu, per the public docs)."
+    },
+    {
+      "id": "cli-jq",
+      "changeClass": "script-cli",
+      "pattern": { "signal": "file-ext:.json" },
+      "tool": "jq",
+      "url": null,
+      "verifiedAt": "2026-08-23",
+      "note": "Slice large JSON at the source (jq '.field', jq -r) instead of reading the whole file into context; same pipe-through guidance as the public docs (head/grep/jq)."
+    },
+    {
+      "id": "cli-ripgrep",
+      "changeClass": "script-cli",
+      "pattern": { "signal": "bash-search-loop" },
+      "tool": "ripgrep (rg)",
+      "url": null,
+      "verifiedAt": "2026-08-23",
+      "note": "Repeated grep/find loops over a tree are what ripgrep is for: it is fast, gitignore-aware, and produces bounded text evidence that a later proposal can verify."
+    },
+    {
+      "id": "cli-ast-grep",
+      "changeClass": "script-cli",
+      "pattern": { "signal": "bash-search-loop" },
+      "tool": "ast-grep",
+      "url": null,
+      "verifiedAt": "2026-08-23",
+      "note": "When the repeated search is structural (find every call site / pattern in code, not a string), ast-grep matches the syntax tree instead of text."
+    },
+    {
+      "id": "script-xlsx-extract",
+      "changeClass": "script-cli",
+      "pattern": { "signal": "file-ext:.xlsx" },
+      "tool": "in-repo extraction script",
+      "url": null,
+      "verifiedAt": "2026-08-23",
+      "note": "Spreadsheet content should never be pasted into context: commit a small script that extracts the needed sheet/cells once and re-run it, so the session reads a short text result."
+    },
+    {
+      "id": "cache-tools-changed",
+      "changeClass": "mcp",
+      "pattern": { "signal": "cache-miss:tools_changed" },
+      "feature": "stable tool prefix (MCP pruning / deferred tools)",
+      "url": "https://code.claude.com/docs/en/prompt-caching.md",
+      "verifiedAt": "2026-08-23",
+      "note": "cache_miss_reason tools_changed: the tool-definition block heads the cached prefix, so an MCP server connecting, reconnecting, or loading tools mid-session re-writes the whole context into the cache instead of reading it back. Load MCP servers at session start and prune churn-prone ones; deferred MCP tools (the default) do not disturb the cached prefix."
+    },
+    {
+      "id": "cache-system-changed",
+      "changeClass": "hook",
+      "pattern": { "signal": "cache-miss:system_changed" },
+      "feature": "system-prompt stability (hook output stability)",
+      "url": "https://code.claude.com/docs/en/prompt-caching.md",
+      "verifiedAt": "2026-08-23",
+      "note": "cache_miss_reason system_changed: the system prompt (core instructions, tool definitions, output style) should only change when the loaded tool set changes or the client upgrades. Hook-injected content that varies run-to-run re-writes the prefix. Keep hook additionalContext byte-stable (no timestamps or counters)."
+    },
+    {
+      "id": "cache-messages-changed",
+      "changeClass": "workflow-config",
+      "pattern": { "signal": "cache-miss:messages_changed" },
+      "feature": "prompt-prefix stability",
+      "url": "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+      "verifiedAt": "2026-08-23",
+      "note": "cache_miss_reason messages_changed: the API caches by exact prefix match, ordered tools → system → messages, so a rewritten or interleaved earlier message invalidates everything after it. Avoid resuming one session in two terminals (messages interleave into one transcript) and avoid mid-session model/effort switches. Both are part of the cache key."
+    },
+    {
+      "id": "fix-reread-files",
+      "changeClass": "instruction",
+      "pattern": { "ruleId": "reread-files" },
+      "feature": "read-once discipline + auto memory",
+      "url": "https://code.claude.com/docs/en/memory.md",
+      "verifiedAt": "2026-08-23",
+      "note": "A file already in context does not need re-reading. Each redundant read is sent again as fresh input and then carried in every later request. Keep durable facts in auto memory / CLAUDE.md instead of re-deriving them, and use offset/limit reads on big files."
+    },
+    {
+      "id": "script-repeated-commands",
+      "changeClass": "script-cli",
+      "pattern": { "ruleId": "repeated-commands" },
+      "tool": "committed script",
+      "url": "https://code.claude.com/docs/en/skills.md",
+      "verifiedAt": "2026-08-23",
+      "note": "A deterministic command sequence re-typed 4+ times belongs in a committed script (repo scripts/ or a skill's bundled script; bundled scripts execute without ever entering context, per the public docs). One script call replaces the whole repeated block."
+    },
+    {
+      "id": "parallel-sequential-reads",
+      "changeClass": "subagent-agent",
+      "pattern": { "ruleId": "sequential-reads" },
+      "feature": "parallel tool calls / subagent fan-out",
+      "url": "https://code.claude.com/docs/en/agents.md",
+      "verifiedAt": "2026-08-23",
+      "note": "Independent reads and searches can be issued as one parallel batch in a single message, or fanned out to subagents whose contexts are discarded; serial single-call turns pay a full model round-trip each."
+    },
+    {
+      "id": "trim-preamble",
+      "changeClass": "instruction",
+      "pattern": { "ruleId": "preamble-weight" },
+      "feature": "CLAUDE.md trim",
+      "url": "https://code.claude.com/docs/en/memory.md",
+      "verifiedAt": "2026-08-23",
+      "note": "The baseline preamble (system prompt + tool definitions + CLAUDE.md + memory) is re-sent with every request for the whole session. Trim sections that never change an outcome; move rarely-needed procedure into skills that load on demand."
+    },
+    {
+      "id": "prune-mcp-servers",
+      "changeClass": "mcp",
+      "pattern": { "ruleId": "mcp-definition-weight" },
+      "feature": "MCP server pruning",
+      "url": "https://code.claude.com/docs/en/mcp.md",
+      "verifiedAt": "2026-08-23",
+      "note": "MCP servers whose tools are listed but never called still add their definition tokens to every main-thread request. Remove or scope idle servers; deferred tools stay out of the cached prefix until fetched."
+    },
+    {
+      "id": "cache-warm-cadence",
+      "changeClass": "workflow-config",
+      "pattern": { "ruleId": "low-cache-hit" },
+      "feature": "prompt-cache TTL awareness (the cache cliff)",
+      "url": "https://code.claude.com/docs/en/prompt-caching.md",
+      "verifiedAt": "2026-08-23",
+      "note": "After a long idle gap, a large resumed context can require a fresh cache write. Batch related work while context is reusable, or start a focused session after a long break; verify the effect from the next run rather than assuming a saving."
+    },
+    {
+      "id": "extract-binary-attachments",
+      "changeClass": "script-cli",
+      "pattern": { "ruleId": "binary-attachments" },
+      "tool": "text extraction before attaching",
+      "url": null,
+      "verifiedAt": "2026-08-23",
+      "note": "Base64 attachments are carried in context at their full token weight. Extract the text or table with a CLI first (pdftotext/pdfplumber for PDFs, an in-repo script for spreadsheets) and attach the extraction instead."
+    },
+    {
+      "id": "discover-existing-skill",
+      "changeClass": "skill-discover",
+      "pattern": { "ruleId": "harness:skill-discover" },
+      "skill": "skills.sh candidate discovery",
+      "url": "https://skills.sh/",
+      "verifiedAt": "2026-08-25",
+      "note": "For a recurring, broadly reusable capability, evaluate an existing skill before creating one. Propose a specific skills.sh or `npx skills find <query>` search for the user to run; compare source reputation, repository evidence, and install count, but never install or fetch from the deterministic catalog runtime. Every discovered skill remains a candidate until reviewed."
+    },
+    {
+      "id": "package-related-extensions",
+      "changeClass": "plugin",
+      "pattern": { "ruleId": "harness:plugin" },
+      "feature": "plugin packaging for related extensions",
+      "url": "https://code.claude.com/docs/en/plugins",
+      "verifiedAt": "2026-08-25",
+      "note": "When repo or global evidence shows several related skills, agents, hooks, or MCP definitions must travel together, a plugin can package that set. A heavy skill alone is not enough evidence: confirm the related surfaces in the harness inventory before proposing packaging."
+    }
+  ]
+}

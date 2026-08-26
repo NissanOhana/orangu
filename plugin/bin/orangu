@@ -1,0 +1,12 @@
+#!/usr/bin/env node
+// orangu plugin launcher — runs the bundled, offline CLI. No network, no npx.
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
+import { existsSync } from 'node:fs'
+const here = dirname(fileURLToPath(import.meta.url))
+const cli = join(here, 'orangu.cli.mjs')
+if (!existsSync(cli)) {
+  process.stderr.write('orangu: bundled CLI missing. Reinstall the plugin, or run `npm i -g orangu`.\n')
+  process.exit(1)
+}
+await import(cli)

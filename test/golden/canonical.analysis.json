@@ -1,0 +1,1123 @@
+{
+  "schemaVersion": "2",
+  "generator": {
+    "name": "orangu",
+    "version": "golden",
+    "generatedAt": 0,
+    "modelCatalogUpdatedAt": "2026-08-14"
+  },
+  "session": {
+    "id": "aaaaaaaa-0000-4000-8000-000000000001",
+    "title": "Fix foo test",
+    "source": "claude-code",
+    "path": "(memory)",
+    "subagentPaths": [],
+    "cwd": "/Users/test/Code/demo",
+    "gitBranches": [
+      "main"
+    ],
+    "clientVersions": [
+      "2.1.226"
+    ],
+    "entrypoints": [
+      "cli"
+    ],
+    "permissionModes": [
+      "default"
+    ],
+    "models": [
+      {
+        "id": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "family": "opus",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      },
+      {
+        "id": "claude-sonnet-5",
+        "displayName": "Claude Sonnet 5",
+        "family": "sonnet",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      }
+    ],
+    "effortLevels": [
+      "high"
+    ],
+    "startedAt": 1786701600000,
+    "endedAt": 1786701733460,
+    "live": false
+  },
+  "summary": {
+    "turns": 2,
+    "humanTurns": 2,
+    "messages": 23,
+    "assistantMessages": 11,
+    "toolCalls": 6,
+    "toolErrors": 1,
+    "agents": 1,
+    "skills": 0,
+    "compactions": 0,
+    "wallMs": 133460,
+    "activeMs": 13460,
+    "humanWaitMs": 120000,
+    "tokens": {
+      "input": 15618,
+      "output": 835,
+      "cacheRead": 149550,
+      "cacheWrite": 13730,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 13730,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 179733,
+    "contextPeak": 13732,
+    "cacheHitRatio": 0.836,
+    "outcomes": {
+      "prLinks": [],
+      "gitCommits": 0,
+      "testRuns": 2,
+      "testRunsFailed": 1,
+      "buildRuns": 0,
+      "buildRunsFailed": 0,
+      "filesRead": 1,
+      "filesEdited": 1,
+      "filesWritten": 0,
+      "webLookups": 0
+    },
+    "topInsightIds": [
+      "tool-errors-1",
+      "agent-fanout-2"
+    ],
+    "narrative": "In “Fix foo test”, the human made 2 requests over 2m 13s; the agent was busy for 13s of that. It made 6 tool calls (1 failed), ran 1 subagent, and processed 179.7k tokens. Visible outcomes: 1 file changed, 2 test runs (1 failed). Biggest things to look at: 1 tool errors (16.7% of 6 calls); 1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel.",
+    "ending": "clean"
+  },
+  "turns": [
+    {
+      "index": 0,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "Fix the failing test in src/foo.ts",
+      "promptChars": 34,
+      "startTs": 1786701600000,
+      "endTs": 1786701610010,
+      "durationMs": 10010,
+      "reportedDurationMs": 11000,
+      "firstResponseMs": 1500,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 4,
+      "toolErrors": 1,
+      "toolMs": 8310,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 14,
+        "output": 315,
+        "cacheRead": 62750,
+        "cacheWrite": 13150,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 13150,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 76229,
+      "contextEnd": 13152,
+      "insightIds": [
+        "tool-errors-1"
+      ],
+      "activity": "Bash×2 Read Edit"
+    },
+    {
+      "index": 1,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "Now review the diff with a subagent",
+      "promptChars": 35,
+      "startTs": 1786701730010,
+      "endTs": 1786701733460,
+      "durationMs": 3450,
+      "reportedDurationMs": 6000,
+      "firstResponseMs": 900,
+      "humanGapMs": 120000,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 1,
+      "toolErrors": 0,
+      "toolMs": 2550,
+      "agents": [
+        "a1b2c3d4e5f60718"
+      ],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 4,
+        "output": 110,
+        "cacheRead": 26800,
+        "cacheWrite": 580,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 580,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 103504,
+      "contextEnd": 13732,
+      "insightIds": [
+        "agent-fanout-2"
+      ],
+      "activity": "Agent"
+    }
+  ],
+  "tools": {
+    "byName": [
+      {
+        "name": "Bash",
+        "category": "exec",
+        "count": 3,
+        "errors": 1,
+        "unresolved": 0,
+        "totalMs": 8250,
+        "avgMs": 2750,
+        "p95Ms": 4200,
+        "maxMs": 4200,
+        "resultBytesTotal": 81,
+        "resultBytesMax": 29,
+        "inputBytesTotal": 118,
+        "parallelShare": 0,
+        "mainCount": 2,
+        "agentCount": 1
+      },
+      {
+        "name": "Read",
+        "category": "read",
+        "count": 1,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 120,
+        "avgMs": 120,
+        "p95Ms": 120,
+        "maxMs": 120,
+        "resultBytesTotal": 33,
+        "resultBytesMax": 33,
+        "inputBytesTotal": 48,
+        "parallelShare": 0,
+        "mainCount": 1,
+        "agentCount": 0
+      },
+      {
+        "name": "Edit",
+        "category": "edit",
+        "count": 1,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 90,
+        "avgMs": 90,
+        "p95Ms": 90,
+        "maxMs": 90,
+        "resultBytesTotal": 26,
+        "resultBytesMax": 26,
+        "inputBytesTotal": 102,
+        "parallelShare": 0,
+        "mainCount": 1,
+        "agentCount": 0
+      },
+      {
+        "name": "Agent",
+        "category": "agent",
+        "count": 1,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 2550,
+        "avgMs": 2550,
+        "p95Ms": 2550,
+        "maxMs": 2550,
+        "resultBytesTotal": 4,
+        "resultBytesMax": 4,
+        "inputBytesTotal": 88,
+        "parallelShare": 0,
+        "mainCount": 1,
+        "agentCount": 0
+      }
+    ],
+    "byCategory": [
+      {
+        "category": "exec",
+        "count": 3,
+        "totalMs": 8250,
+        "errors": 1
+      },
+      {
+        "category": "read",
+        "count": 1,
+        "totalMs": 120,
+        "errors": 0
+      },
+      {
+        "category": "edit",
+        "count": 1,
+        "totalMs": 90,
+        "errors": 0
+      },
+      {
+        "category": "agent",
+        "count": 1,
+        "totalMs": 2550,
+        "errors": 0
+      }
+    ],
+    "errorGroups": [
+      {
+        "name": "Bash",
+        "signature": "fail src<path> <n> failed",
+        "count": 1,
+        "sampleTurnIndex": 0,
+        "sampleHint": "FAIL src/foo.test.ts 1 failed"
+      }
+    ],
+    "slowest": [
+      {
+        "toolUseId": "toolu_0000000000000000000d",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Run tests",
+        "turnIndex": 0,
+        "startTs": 1786701601820,
+        "durationMs": 4200,
+        "resultBytes": 29,
+        "isError": true,
+        "errorHint": "FAIL src/foo.test.ts 1 failed",
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000n",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Run tests",
+        "turnIndex": 0,
+        "startTs": 1786701606110,
+        "durationMs": 3900,
+        "resultBytes": 29,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000010",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent Review diff (code-reviewer)",
+        "turnIndex": 1,
+        "startTs": 1786701730910,
+        "durationMs": 2550,
+        "resultBytes": 4,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000019",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash git diff",
+        "turnIndex": 0,
+        "agentId": "a1b2c3d4e5f60718",
+        "startTs": 1786701733210,
+        "durationMs": 150,
+        "resultBytes": 23,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000008",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/foo.ts",
+        "turnIndex": 0,
+        "startTs": 1786701601700,
+        "durationMs": 120,
+        "resultBytes": 33,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000i",
+        "name": "Edit",
+        "category": "edit",
+        "summary": "Edit src/foo.ts",
+        "turnIndex": 0,
+        "startTs": 1786701606020,
+        "durationMs": 90,
+        "resultBytes": 26,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "largestResults": [
+      {
+        "toolUseId": "toolu_00000000000000000008",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/foo.ts",
+        "turnIndex": 0,
+        "startTs": 1786701601700,
+        "durationMs": 120,
+        "resultBytes": 33,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000d",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Run tests",
+        "turnIndex": 0,
+        "startTs": 1786701601820,
+        "durationMs": 4200,
+        "resultBytes": 29,
+        "isError": true,
+        "errorHint": "FAIL src/foo.test.ts 1 failed",
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000n",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Run tests",
+        "turnIndex": 0,
+        "startTs": 1786701606110,
+        "durationMs": 3900,
+        "resultBytes": 29,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000i",
+        "name": "Edit",
+        "category": "edit",
+        "summary": "Edit src/foo.ts",
+        "turnIndex": 0,
+        "startTs": 1786701606020,
+        "durationMs": 90,
+        "resultBytes": 26,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000019",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash git diff",
+        "turnIndex": 0,
+        "agentId": "a1b2c3d4e5f60718",
+        "startTs": 1786701733210,
+        "durationMs": 150,
+        "resultBytes": 23,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000010",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent Review diff (code-reviewer)",
+        "turnIndex": 1,
+        "startTs": 1786701730910,
+        "durationMs": 2550,
+        "resultBytes": 4,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "parallelism": {
+      "groups": 6,
+      "parallelGroups": 0,
+      "maxGroupSize": 1,
+      "parallelCallShare": 0
+    },
+    "calls": [
+      {
+        "toolUseId": "toolu_00000000000000000008",
+        "name": "Read",
+        "category": "read",
+        "summary": "Read src/foo.ts",
+        "turnIndex": 0,
+        "startTs": 1786701601700,
+        "durationMs": 120,
+        "resultBytes": 33,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000d",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Run tests",
+        "turnIndex": 0,
+        "startTs": 1786701601820,
+        "durationMs": 4200,
+        "resultBytes": 29,
+        "isError": true,
+        "errorHint": "FAIL src/foo.test.ts 1 failed",
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000i",
+        "name": "Edit",
+        "category": "edit",
+        "summary": "Edit src/foo.ts",
+        "turnIndex": 0,
+        "startTs": 1786701606020,
+        "durationMs": 90,
+        "resultBytes": 26,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_0000000000000000000n",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash Run tests",
+        "turnIndex": 0,
+        "startTs": 1786701606110,
+        "durationMs": 3900,
+        "resultBytes": 29,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000010",
+        "name": "Agent",
+        "category": "agent",
+        "summary": "Agent Review diff (code-reviewer)",
+        "turnIndex": 1,
+        "startTs": 1786701730910,
+        "durationMs": 2550,
+        "resultBytes": 4,
+        "isError": false,
+        "parallelGroupSize": 1
+      },
+      {
+        "toolUseId": "toolu_00000000000000000019",
+        "name": "Bash",
+        "category": "exec",
+        "summary": "Bash git diff",
+        "turnIndex": 0,
+        "agentId": "a1b2c3d4e5f60718",
+        "startTs": 1786701733210,
+        "durationMs": 150,
+        "resultBytes": 23,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ]
+  },
+  "agents": {
+    "runs": [
+      {
+        "agentId": "a1b2c3d4e5f60718",
+        "agentType": "code-reviewer",
+        "description": "Review diff",
+        "model": "claude-sonnet-5",
+        "spawnDepth": 0,
+        "spawnedByToolUseId": "toolu_00000000000000000010",
+        "turnIndex": 1,
+        "startTs": 1786701731210,
+        "endTs": 1786701733460,
+        "durationMs": 2250,
+        "messageCount": 4,
+        "toolCallCount": 1,
+        "toolErrors": 0,
+        "tokens": {
+          "input": 15600,
+          "output": 410,
+          "cacheRead": 60000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 76010,
+        "reportedTotalTokens": 16010,
+        "reportedDurationMs": 2550,
+        "status": "completed",
+        "hasTranscript": true
+      }
+    ],
+    "totals": {
+      "count": 1,
+      "tokens": {
+        "input": 15600,
+        "output": 410,
+        "cacheRead": 60000,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 76010,
+      "durationMs": 2250,
+      "toolCalls": 1
+    },
+    "byType": [
+      {
+        "agentType": "code-reviewer",
+        "count": 1,
+        "tokens": 76010,
+        "avgDurationMs": 2250
+      }
+    ],
+    "byModel": [
+      {
+        "model": "claude-sonnet-5",
+        "count": 1,
+        "tokens": 76010
+      }
+    ],
+    "maxDepth": 0,
+    "concurrentMs": 2250,
+    "maxConcurrency": 1,
+    "mainThreadShare": {
+      "tokens": 0.5771
+    }
+  },
+  "skills": {
+    "invocations": [],
+    "byName": []
+  },
+  "hooks": {
+    "runs": 2,
+    "errors": 0,
+    "totalMs": 300,
+    "byCommand": [
+      {
+        "command": "afplay done.mp3",
+        "count": 1,
+        "totalMs": 300,
+        "errors": 0,
+        "hookEvent": "Stop"
+      },
+      {
+        "command": "SessionStart:startup",
+        "count": 1,
+        "totalMs": 0,
+        "errors": 0,
+        "hookEvent": "SessionStart"
+      }
+    ],
+    "events": [
+      {
+        "hookEvent": "SessionStart",
+        "count": 1
+      },
+      {
+        "hookEvent": "Stop",
+        "count": 1
+      }
+    ]
+  },
+  "context": {
+    "series": [
+      {
+        "messageUuid": "u0000000-0007-4000-8000-000000000007",
+        "turnIndex": 0,
+        "ts": 1786701601500,
+        "model": "claude-opus-5",
+        "contextSize": 12004,
+        "input": 4,
+        "cacheRead": 0,
+        "cacheWrite": 12000,
+        "cacheWrite1h": 12000,
+        "output": 40
+      },
+      {
+        "messageUuid": "u0000000-000b-4000-8000-00000000000b",
+        "turnIndex": 0,
+        "ts": 1786701601700,
+        "model": "claude-opus-5",
+        "contextSize": 12302,
+        "input": 2,
+        "cacheRead": 12000,
+        "cacheWrite": 300,
+        "cacheWrite1h": 300,
+        "output": 60
+      },
+      {
+        "messageUuid": "u0000000-0010-4000-8000-000000000010",
+        "turnIndex": 0,
+        "ts": 1786701601820,
+        "model": "claude-opus-5",
+        "contextSize": 12502,
+        "input": 2,
+        "cacheRead": 12300,
+        "cacheWrite": 200,
+        "cacheWrite1h": 200,
+        "output": 55
+      },
+      {
+        "messageUuid": "u0000000-0015-4000-8000-000000000015",
+        "turnIndex": 0,
+        "ts": 1786701606020,
+        "model": "claude-opus-5",
+        "contextSize": 12902,
+        "input": 2,
+        "cacheRead": 12500,
+        "cacheWrite": 400,
+        "cacheWrite1h": 400,
+        "output": 80
+      },
+      {
+        "messageUuid": "u0000000-001a-4000-8000-00000000001a",
+        "turnIndex": 0,
+        "ts": 1786701606110,
+        "model": "claude-opus-5",
+        "contextSize": 13052,
+        "input": 2,
+        "cacheRead": 12900,
+        "cacheWrite": 150,
+        "cacheWrite1h": 150,
+        "output": 50
+      },
+      {
+        "messageUuid": "u0000000-001e-4000-8000-00000000001e",
+        "turnIndex": 0,
+        "ts": 1786701610010,
+        "model": "claude-opus-5",
+        "contextSize": 13152,
+        "input": 2,
+        "cacheRead": 13050,
+        "cacheWrite": 100,
+        "cacheWrite1h": 100,
+        "output": 30
+      },
+      {
+        "messageUuid": "u0000000-0027-4000-8000-000000000027",
+        "turnIndex": 1,
+        "ts": 1786701730910,
+        "model": "claude-opus-5",
+        "contextSize": 13652,
+        "input": 2,
+        "cacheRead": 13150,
+        "cacheWrite": 500,
+        "cacheWrite1h": 500,
+        "output": 90
+      },
+      {
+        "messageUuid": "u0000000-002c-4000-8000-00000000002c",
+        "turnIndex": 0,
+        "agentId": "a1b2c3d4e5f60718",
+        "ts": 1786701733210,
+        "model": "claude-sonnet-5",
+        "contextSize": 25000,
+        "input": 5000,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 200
+      },
+      {
+        "messageUuid": "u0000000-0030-4000-8000-000000000030",
+        "turnIndex": 0,
+        "agentId": "a1b2c3d4e5f60718",
+        "ts": 1786701733210,
+        "model": "claude-opus-5",
+        "contextSize": 25200,
+        "input": 5200,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 150
+      },
+      {
+        "messageUuid": "u0000000-0034-4000-8000-000000000034",
+        "turnIndex": 0,
+        "agentId": "a1b2c3d4e5f60718",
+        "ts": 1786701733360,
+        "model": "claude-sonnet-5",
+        "contextSize": 25400,
+        "input": 5400,
+        "cacheRead": 20000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 60
+      },
+      {
+        "messageUuid": "u0000000-0038-4000-8000-000000000038",
+        "turnIndex": 1,
+        "ts": 1786701733460,
+        "model": "claude-opus-5",
+        "contextSize": 13732,
+        "input": 2,
+        "cacheRead": 13650,
+        "cacheWrite": 80,
+        "cacheWrite1h": 80,
+        "output": 20
+      }
+    ],
+    "cacheMisses": [],
+    "compactions": [],
+    "peak": 13732,
+    "baseline": 12004,
+    "final": 13732,
+    "contextWindow": 1000000,
+    "cacheHitRatio": 0.836,
+    "cacheWrite1hShare": 1,
+    "reReadMultiplier": 10.89,
+    "totalCacheRead": 149550,
+    "totalCacheWrite": 13730,
+    "totalFreshInput": 15618,
+    "totalOutput": 835,
+    "requestsPerCompaction": []
+  },
+  "tokens": {
+    "total": {
+      "input": 15618,
+      "output": 835,
+      "cacheRead": 149550,
+      "cacheWrite": 13730,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 13730,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 179733,
+    "byModel": [
+      {
+        "model": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "tokens": {
+          "input": 5218,
+          "output": 575,
+          "cacheRead": 109550,
+          "cacheWrite": 13730,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 13730,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 129073,
+        "estimatedMatch": false,
+        "requests": 9
+      },
+      {
+        "model": "claude-sonnet-5",
+        "displayName": "Claude Sonnet 5",
+        "tokens": {
+          "input": 10400,
+          "output": 260,
+          "cacheRead": 40000,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 50660,
+        "estimatedMatch": false,
+        "requests": 2
+      }
+    ],
+    "byKind": {
+      "input": 15618,
+      "output": 835,
+      "cacheRead": 149550,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 13730
+    },
+    "mainThread": 103723,
+    "agents": 76010,
+    "byTurn": [
+      {
+        "turnIndex": 0,
+        "tokens": 76229,
+        "cumulativeTokens": 76229
+      },
+      {
+        "turnIndex": 1,
+        "tokens": 103504,
+        "cumulativeTokens": 179733
+      }
+    ],
+    "byToolCategory": [
+      {
+        "category": "no-tool (text/thinking)",
+        "tokens": 89638
+      },
+      {
+        "category": "exec",
+        "tokens": 51009
+      },
+      {
+        "category": "agent",
+        "tokens": 13742
+      },
+      {
+        "category": "edit",
+        "tokens": 12982
+      },
+      {
+        "category": "read",
+        "tokens": 12362
+      }
+    ],
+    "serverToolRequests": {
+      "webSearch": 0,
+      "webFetch": 0
+    },
+    "hiddenIterations": {
+      "count": 0,
+      "tokens": 0
+    }
+  },
+  "time": {
+    "wallMs": 133460,
+    "activeMs": 13460,
+    "humanWaitMs": 120000,
+    "toolMs": 8310,
+    "agentMs": 2250,
+    "modelMs": 2900,
+    "longestTurns": [
+      {
+        "turnIndex": 0,
+        "durationMs": 10010,
+        "preview": "Fix the failing test in src/foo.ts"
+      },
+      {
+        "turnIndex": 1,
+        "durationMs": 3450,
+        "preview": "Now review the diff with a subagent"
+      }
+    ],
+    "longestGaps": [
+      {
+        "turnIndex": 1,
+        "gapMs": 120000
+      }
+    ],
+    "firstResponse": {
+      "p50": 900,
+      "p95": 1500,
+      "max": 1500
+    },
+    "hooksMs": 300
+  },
+  "files": {
+    "files": [
+      {
+        "path": "src/foo.ts",
+        "reads": 1,
+        "edits": 1,
+        "writes": 0,
+        "bytesRead": 33,
+        "turnIndexes": [
+          0
+        ],
+        "agentReads": 0,
+        "redundantReads": 0
+      }
+    ],
+    "mostReRead": [],
+    "totalDistinct": 1,
+    "editedThenReverted": 0
+  },
+  "quality": {
+    "signals": [
+      {
+        "id": "tests",
+        "label": "Test runs",
+        "value": "2 (1 passed)",
+        "tone": "good",
+        "detail": "last run passed",
+        "evidenceTurnIndexes": [
+          0
+        ]
+      },
+      {
+        "id": "builds",
+        "label": "Build / typecheck / lint runs",
+        "value": "none",
+        "tone": "unknown",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "commits",
+        "label": "Git commits",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "prs",
+        "label": "Pull requests",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "tool-error-rate",
+        "label": "Tool error rate",
+        "value": "16.7%",
+        "tone": "bad",
+        "detail": "1 of 6 tool calls errored"
+      },
+      {
+        "id": "corrections",
+        "label": "User corrections",
+        "value": 0,
+        "tone": "good",
+        "detail": "prompts that read as \"no / wrong / again / revert\"",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "interruptions",
+        "label": "Interruptions",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "api-errors",
+        "label": "API errors",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "rework",
+        "label": "Files edited 4+ times",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "reverts",
+        "label": "Edit-then-revert pairs",
+        "value": 0,
+        "tone": "good"
+      }
+    ],
+    "testRuns": [
+      {
+        "turnIndex": 0,
+        "command": "npm test",
+        "ok": false
+      },
+      {
+        "turnIndex": 0,
+        "command": "npm test",
+        "ok": true
+      }
+    ],
+    "buildRuns": [],
+    "gitCommits": [],
+    "userCorrections": [],
+    "interruptions": 0,
+    "apiErrors": 0,
+    "toolErrorRate": 0.1667,
+    "reworkFiles": 0
+  },
+  "insights": [
+    {
+      "id": "tool-errors-1",
+      "ruleId": "tool-errors",
+      "severity": "medium",
+      "axis": "quality",
+      "title": "1 tool errors (16.7% of 6 calls)",
+      "detail": "most in Bash",
+      "recommendation": "A recurring error signature is an environment or instruction problem, not bad luck: fix the root cause once (missing dependency, wrong path, permission, flaky command) or add the correct invocation to CLAUDE.md so the agent stops rediscovering it. Each failed call still burns its output tokens plus a retry turn.",
+      "evidence": {
+        "errorRate": 0.1667,
+        "groups": []
+      },
+      "turnIndexes": [
+        0
+      ],
+      "savings": {
+        "tokens": 7,
+        "estimated": true
+      },
+      "personas": [
+        "developer",
+        "qa"
+      ]
+    },
+    {
+      "id": "agent-fanout-2",
+      "ruleId": "agent-fanout",
+      "severity": "info",
+      "axis": "tokens",
+      "title": "1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel",
+      "detail": "code-reviewer ×1 76.0k",
+      "recommendation": "Subagents keep exploration out of your main context and can run in parallel; they are worth it when the returned summary is much smaller than what they read. Watch for agents that re-read what the parent already knew, and for agents whose brief makes them read far more than they report back.",
+      "evidence": {
+        "byType": [
+          {
+            "agentType": "code-reviewer",
+            "count": 1,
+            "tokens": 76010,
+            "avgDurationMs": 2250
+          }
+        ],
+        "byModel": [
+          {
+            "model": "claude-sonnet-5",
+            "count": 1,
+            "tokens": 76010
+          }
+        ],
+        "concurrentMs": 2250,
+        "maxConcurrency": 1
+      },
+      "turnIndexes": [
+        1
+      ],
+      "personas": [
+        "developer",
+        "lead"
+      ]
+    }
+  ],
+  "events": [],
+  "parse": {
+    "totalLines": 27,
+    "badLines": 0,
+    "recordCounts": {
+      "mode": 1,
+      "permission-mode": 1,
+      "attachment": 1,
+      "user": 9,
+      "assistant": 11,
+      "system": 3,
+      "custom-title": 1
+    },
+    "unknownRecordTypes": {},
+    "unknownBlockTypes": {},
+    "attachmentTypes": {
+      "hook_success": 1
+    },
+    "attachmentBytes": {
+      "hook_success": 160
+    },
+    "systemSubtypes": {
+      "stop_hook_summary": 1,
+      "turn_duration": 2
+    },
+    "warnings": [],
+    "parseMs": 0,
+    "bytes": 0,
+    "reconciliation": {
+      "usageEventsTotal": 179733,
+      "turnsPlusAgentsTotal": 179733,
+      "matchesWithinPct": 0,
+      "ok": true
+    }
+  }
+}

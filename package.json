@@ -1,0 +1,69 @@
+{
+  "name": "orangu",
+  "version": "0.5.0",
+  "description": "Observe supported Claude Code, Cowork, and Desktop sessions, then improve the next outcome with deterministic local evidence and Claude Code or Codex skills.",
+  "license": "MIT",
+  "author": "Nissan Ohana",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "orangu": "dist/orangu.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude",
+    "claude-code",
+    "codex",
+    "agent-skills",
+    "observability",
+    "agent-improvement",
+    "sessions",
+    "jsonl",
+    "tokens",
+    "agents",
+    "cli",
+    "report"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NissanOhana/orangu.git"
+  },
+  "homepage": "https://nissanohana.github.io/orangu/",
+  "bugs": {
+    "url": "https://github.com/NissanOhana/orangu/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "dev": "node scripts/build.mjs && node dist/orangu.js",
+    "golden:update": "node --import tsx scripts/golden-update.ts",
+    "bench": "node --import tsx scripts/bench-local.ts",
+    "verify:generated": "node scripts/assert-generated.mjs",
+    "verify:public": "node scripts/assert-public-tree.mjs",
+    "test:browser": "npm run build && playwright test",
+    "verify": "npm run verify:public && npm run verify:generated && npm run typecheck && npm test && npm run build && node dist/orangu.js --version",
+    "verify:release": "npm run verify && node scripts/assert-offline.mjs --file site/sample.html && node scripts/assert-offline.mjs --site && npm run test:browser",
+    "prepublishOnly": "npm run verify:release",
+    "build:sample": "node --import tsx scripts/build-sample.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.12",
+    "typescript": "^5.6.0",
+    "vitest": "^4.1.11"
+  }
+}

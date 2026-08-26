@@ -1,0 +1,674 @@
+{
+  "schemaVersion": "2",
+  "generatedAt": 0,
+  "scope": "golden",
+  "sessionCount": 7,
+  "totals": {
+    "tokens": 1865779,
+    "toolCalls": 23,
+    "toolErrors": 3,
+    "agents": 9,
+    "turns": 13,
+    "humanTurns": 12,
+    "wallMs": 301180,
+    "activeMs": 126180,
+    "compactions": 2,
+    "prs": 0,
+    "commits": 0
+  },
+  "averages": {
+    "tokensPerSession": 266540,
+    "tokensPerHumanTurn": 155482,
+    "toolErrorRate": 0.1304,
+    "cacheHitRatio": 0.9228,
+    "agentsPerSession": 1.29,
+    "contextPeak": 34866
+  },
+  "byModel": [
+    {
+      "key": "Claude Opus 5",
+      "count": 7,
+      "tokens": 1585852,
+      "extra": {}
+    },
+    {
+      "key": "Claude Sonnet 5",
+      "count": 2,
+      "tokens": 176561,
+      "extra": {}
+    },
+    {
+      "key": "Claude Haiku 4.5",
+      "count": 1,
+      "tokens": 103366,
+      "extra": {}
+    }
+  ],
+  "byProject": [
+    {
+      "key": "/Users/test/Code/demo",
+      "count": 7,
+      "tokens": 1865779,
+      "extra": {
+        "sessions": 7,
+        "errors": 3
+      }
+    }
+  ],
+  "byTool": [
+    {
+      "key": "Agent",
+      "count": 2,
+      "tokens": 0,
+      "extra": {
+        "calls": 9,
+        "errors": 0
+      }
+    },
+    {
+      "key": "Bash",
+      "count": 3,
+      "tokens": 0,
+      "extra": {
+        "calls": 6,
+        "errors": 3
+      }
+    },
+    {
+      "key": "Read",
+      "count": 2,
+      "tokens": 0,
+      "extra": {
+        "calls": 4,
+        "errors": 0
+      }
+    },
+    {
+      "key": "Edit",
+      "count": 2,
+      "tokens": 0,
+      "extra": {
+        "calls": 2,
+        "errors": 0
+      }
+    },
+    {
+      "key": "Skill",
+      "count": 1,
+      "tokens": 0,
+      "extra": {
+        "calls": 1,
+        "errors": 0
+      }
+    },
+    {
+      "key": "Write",
+      "count": 1,
+      "tokens": 0,
+      "extra": {
+        "calls": 1,
+        "errors": 0
+      }
+    }
+  ],
+  "byAgentType": [
+    {
+      "key": "general-purpose",
+      "count": 1,
+      "tokens": 188844,
+      "extra": {
+        "runs": 3
+      }
+    },
+    {
+      "key": "code-reviewer",
+      "count": 2,
+      "tokens": 117484,
+      "extra": {
+        "runs": 3
+      }
+    },
+    {
+      "key": "test-writer",
+      "count": 1,
+      "tokens": 41472,
+      "extra": {
+        "runs": 2
+      }
+    },
+    {
+      "key": "unknown",
+      "count": 1,
+      "tokens": 20420,
+      "extra": {
+        "runs": 1
+      }
+    }
+  ],
+  "bySkill": [
+    {
+      "key": "/deploy",
+      "count": 1,
+      "tokens": 0,
+      "extra": {
+        "uses": 1
+      }
+    },
+    {
+      "key": "changelog",
+      "count": 1,
+      "tokens": 0,
+      "extra": {
+        "uses": 1
+      }
+    }
+  ],
+  "topReReadFiles": [],
+  "recurringErrors": [],
+  "crossFindings": [
+    {
+      "ruleId": "unverified-edits",
+      "title": "The last test run failed and the session ended",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "quality",
+      "severity": "high",
+      "exampleSessionIds": [
+        "dddddddd-0000-4000-8000-000000000004"
+      ]
+    },
+    {
+      "ruleId": "tool-errors",
+      "title": "N tool errors (N of N calls)",
+      "sessions": 2,
+      "totalSavingsTokens": 24,
+      "totalSavingsMs": 0,
+      "axis": "quality",
+      "severity": "medium",
+      "exampleSessionIds": [
+        "aaaaaaaa-0000-4000-8000-000000000001",
+        "dddddddd-0000-4000-8000-000000000004"
+      ]
+    },
+    {
+      "ruleId": "compactions",
+      "title": "N context compactions (peak N of N)",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "context",
+      "severity": "medium",
+      "exampleSessionIds": [
+        "cccccccc-0000-4000-8000-000000000003"
+      ]
+    },
+    {
+      "ruleId": "preamble-weight",
+      "title": "Every request starts from a N-token baseline (system prompt, tools, CLAUDE.md, skills)",
+      "sessions": 1,
+      "totalSavingsTokens": 180018,
+      "totalSavingsMs": 0,
+      "axis": "tokens",
+      "severity": "low",
+      "exampleSessionIds": [
+        "cccccccc-0000-4000-8000-000000000003"
+      ]
+    },
+    {
+      "ruleId": "api-errors",
+      "title": "N API error / retries",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "time",
+      "severity": "low",
+      "exampleSessionIds": [
+        "dddddddd-0000-4000-8000-000000000004"
+      ]
+    },
+    {
+      "ruleId": "fanout-opportunity",
+      "title": "N subagents ran one-after-another in N run with no visible dependency; a parallel fan-out would cut the wait",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 1200,
+      "axis": "time",
+      "severity": "low",
+      "exampleSessionIds": [
+        "bbbbbbbb-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "ruleId": "hook-errors",
+      "title": "N hook error",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "quality",
+      "severity": "low",
+      "exampleSessionIds": [
+        "eeeeeeee-0000-4000-8000-000000000005"
+      ]
+    },
+    {
+      "ruleId": "idle-agents",
+      "title": "N subagents did no tool calls",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "tokens",
+      "severity": "low",
+      "exampleSessionIds": [
+        "bbbbbbbb-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "ruleId": "agent-fanout",
+      "title": "N subagent run = N of the session's tokens (N), max N in parallel",
+      "sessions": 2,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "tokens",
+      "severity": "info",
+      "exampleSessionIds": [
+        "aaaaaaaa-0000-4000-8000-000000000001",
+        "bbbbbbbb-0000-4000-8000-000000000002"
+      ]
+    },
+    {
+      "ruleId": "cache-ttl-churn",
+      "title": "N of the N tokens written to cache went to the N-hour tier",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "tokens",
+      "severity": "info",
+      "exampleSessionIds": [
+        "cccccccc-0000-4000-8000-000000000003"
+      ]
+    },
+    {
+      "ruleId": "time-budget",
+      "title": "N of the Nm Ns active time went to tool execution",
+      "sessions": 1,
+      "totalSavingsTokens": 0,
+      "totalSavingsMs": 0,
+      "axis": "time",
+      "severity": "info",
+      "exampleSessionIds": [
+        "dddddddd-0000-4000-8000-000000000004"
+      ]
+    }
+  ],
+  "sessions": [
+    {
+      "id": "cccccccc-0000-4000-8000-000000000003",
+      "title": "Long refactor session",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786888800000,
+      "wallMs": 26600,
+      "activeMs": 26600,
+      "turns": 3,
+      "humanTurns": 3,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 1209193,
+      "contextPeak": 175005,
+      "cacheHitRatio": 0.8258,
+      "compactions": 2,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "compactions"
+    },
+    {
+      "id": "bbbbbbbb-0000-4000-8000-000000000002",
+      "title": "Fan out: review, test, docs — in parallel",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786784400000,
+      "wallMs": 8550,
+      "activeMs": 8550,
+      "turns": 1,
+      "humanTurns": 1,
+      "toolCalls": 11,
+      "toolErrors": 0,
+      "agents": 8,
+      "tokens": 350988,
+      "contextPeak": 8803,
+      "cacheHitRatio": 0.9663,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "idle-agents"
+    },
+    {
+      "id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "title": "Fix foo test",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786701600000,
+      "wallMs": 133460,
+      "activeMs": 13460,
+      "turns": 2,
+      "humanTurns": 2,
+      "toolCalls": 6,
+      "toolErrors": 1,
+      "agents": 1,
+      "tokens": 179733,
+      "contextPeak": 13732,
+      "cacheHitRatio": 0.836,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "tool-errors"
+    },
+    {
+      "id": "dddddddd-0000-4000-8000-000000000004",
+      "title": "Run the flaky suite",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786955400000,
+      "wallMs": 100080,
+      "activeMs": 65080,
+      "turns": 3,
+      "humanTurns": 3,
+      "toolCalls": 3,
+      "toolErrors": 2,
+      "agents": 0,
+      "tokens": 57222,
+      "contextPeak": 9902,
+      "cacheHitRatio": 0.9997,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 1,
+      "topInsightRuleId": "tool-errors"
+    },
+    {
+      "id": "eeeeeeee-0000-4000-8000-000000000005",
+      "title": "Use the changelog skill to draft notes",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1787050800000,
+      "wallMs": 29900,
+      "activeMs": 9900,
+      "turns": 2,
+      "humanTurns": 1,
+      "toolCalls": 2,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 29045,
+      "contextPeak": 7403,
+      "cacheHitRatio": 0.9995,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "hook-errors"
+    },
+    {
+      "id": "abababab-0000-4000-8000-000000000007",
+      "title": "What does this repo do?",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1787220900000,
+      "wallMs": 1400,
+      "activeMs": 1400,
+      "turns": 1,
+      "humanTurns": 1,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 24152,
+      "contextPeak": 24012,
+      "cacheHitRatio": 0.8329,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0
+    },
+    {
+      "id": "ffffffff-0000-4000-8000-000000000006",
+      "title": "My key is sk-ant-api03-FAKEFAKEFAKEFAKE and my mail is dev@example.com — wire the client",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1787157900000,
+      "wallMs": 1190,
+      "activeMs": 1190,
+      "turns": 1,
+      "humanTurns": 1,
+      "toolCalls": 1,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 15446,
+      "contextPeak": 5202,
+      "cacheHitRatio": 0.9993,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0
+    }
+  ],
+  "topSessions": [
+    {
+      "id": "cccccccc-0000-4000-8000-000000000003",
+      "title": "Long refactor session",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786888800000,
+      "wallMs": 26600,
+      "activeMs": 26600,
+      "turns": 3,
+      "humanTurns": 3,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 1209193,
+      "contextPeak": 175005,
+      "cacheHitRatio": 0.8258,
+      "compactions": 2,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "compactions"
+    },
+    {
+      "id": "bbbbbbbb-0000-4000-8000-000000000002",
+      "title": "Fan out: review, test, docs — in parallel",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786784400000,
+      "wallMs": 8550,
+      "activeMs": 8550,
+      "turns": 1,
+      "humanTurns": 1,
+      "toolCalls": 11,
+      "toolErrors": 0,
+      "agents": 8,
+      "tokens": 350988,
+      "contextPeak": 8803,
+      "cacheHitRatio": 0.9663,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "idle-agents"
+    },
+    {
+      "id": "aaaaaaaa-0000-4000-8000-000000000001",
+      "title": "Fix foo test",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786701600000,
+      "wallMs": 133460,
+      "activeMs": 13460,
+      "turns": 2,
+      "humanTurns": 2,
+      "toolCalls": 6,
+      "toolErrors": 1,
+      "agents": 1,
+      "tokens": 179733,
+      "contextPeak": 13732,
+      "cacheHitRatio": 0.836,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "tool-errors"
+    },
+    {
+      "id": "dddddddd-0000-4000-8000-000000000004",
+      "title": "Run the flaky suite",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1786955400000,
+      "wallMs": 100080,
+      "activeMs": 65080,
+      "turns": 3,
+      "humanTurns": 3,
+      "toolCalls": 3,
+      "toolErrors": 2,
+      "agents": 0,
+      "tokens": 57222,
+      "contextPeak": 9902,
+      "cacheHitRatio": 0.9997,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 1,
+      "topInsightRuleId": "tool-errors"
+    },
+    {
+      "id": "eeeeeeee-0000-4000-8000-000000000005",
+      "title": "Use the changelog skill to draft notes",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1787050800000,
+      "wallMs": 29900,
+      "activeMs": 9900,
+      "turns": 2,
+      "humanTurns": 1,
+      "toolCalls": 2,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 29045,
+      "contextPeak": 7403,
+      "cacheHitRatio": 0.9995,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0,
+      "topInsightRuleId": "hook-errors"
+    },
+    {
+      "id": "abababab-0000-4000-8000-000000000007",
+      "title": "What does this repo do?",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1787220900000,
+      "wallMs": 1400,
+      "activeMs": 1400,
+      "turns": 1,
+      "humanTurns": 1,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 24152,
+      "contextPeak": 24012,
+      "cacheHitRatio": 0.8329,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0
+    },
+    {
+      "id": "ffffffff-0000-4000-8000-000000000006",
+      "title": "My key is sk-ant-api03-FAKEFAKEFAKEFAKE and my mail is dev@example.com — wire the client",
+      "project": "/Users/test/Code/demo",
+      "source": "claude-code",
+      "startedAt": 1787157900000,
+      "wallMs": 1190,
+      "activeMs": 1190,
+      "turns": 1,
+      "humanTurns": 1,
+      "toolCalls": 1,
+      "toolErrors": 0,
+      "agents": 0,
+      "tokens": 15446,
+      "contextPeak": 5202,
+      "cacheHitRatio": 0.9993,
+      "compactions": 0,
+      "prs": 0,
+      "commits": 0,
+      "interruptions": 0
+    }
+  ],
+  "byWeek": [
+    {
+      "weekStartUtc": 1780272000000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1780876800000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1781481600000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1782086400000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1782691200000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1783296000000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1783900800000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1784505600000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1785110400000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1785715200000,
+      "tokens": 0,
+      "sessions": 0
+    },
+    {
+      "weekStartUtc": 1786320000000,
+      "tokens": 1739914,
+      "sessions": 3
+    },
+    {
+      "weekStartUtc": 1786924800000,
+      "tokens": 125865,
+      "sessions": 4
+    }
+  ]
+}

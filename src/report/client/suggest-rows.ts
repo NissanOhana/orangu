@@ -1,0 +1,171 @@
+/**
+ * Pure row selection for the Suggest screen.
+ * No DOM, no clock, so node-testable. Session scope renders the selected session's insights; repo/global
+ * render the aggregate's crossFindings ranked severity-first (the SAME comparator the aggregate uses,
+ * so the screen and the JSON never disagree). Finding conversion preserves the evidence used for IDs.
+ */
+import type { Analysis, Insight } from '../../model/analysis.js'
+import { compareCrossFindings, type Aggregate } from '../../analyze/aggregate.js'
+import type { Finding, SuggestionProposal, SuggestionRecord, SuggestionScope } from '../../suggest/types.js'
+import { normalizeSessionIds, sessionCohortFingerprint } from '../../suggest/id.js'
+
+export const SAVED_PROPOSAL_LIMIT = 12
+export const PROPOSAL_LIST_LIMIT = 6
+
+const nonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
+
+/** Runtime guard for append-only records: legacy proposals omit v and structured fields. */
+export function hasValidProposal(record: SuggestionRecord): record is SuggestionRecord & { proposal: SuggestionProposal } {
+  const p = record.proposal as unknown as Record<string, unknown> | undefined
+  return !!p && /^sg_[0-9a-f]{12}$/.test(record.id) && Array.isArray(record.sessionIds) && record.sessionIds.length > 0 && record.sessionIds.every(nonEmptyString) &&
+    nonEmptyString(p['title']) && nonEmptyString(p['change']) && /^[SML]$/.test(String(p['effort'])) && nonEmptyString(p['proposalPath']) && (p['v'] ?? 1) === 1
+}
+
+export interface PlanRow {
+  ruleId: string
+  title: string
+  detail: string
+  /** insights carry one; crossFindings do not, so the screen omits the Fix box */
+  recommendation?: string
+  savings?: Insight['savings']
+  /** kickoff evidence sessions: the selected session, or the finding's examples */
+  sessionIds: string[]
+  insightId?: string
+  /** repo/global identity derived from every session in the active aggregate. */
+  cohortFingerprint?: string
+  /** repo/global: how many sessions the finding recurs in */
+  sessions?: number
+}
+
+/** Privacy stripping can blank generated insight copy; identity and UX still require a safe title. */
+export function titleForRule(ruleId: string): string {
+  const words = ruleId.trim().replace(/[-_]+/g, ' ') || 'finding'
+  return words[0]!.toUpperCase() + words.slice(1)
+}
+
+function safeCopy(ruleId: string, title: string, detail: string): { title: string; detail: string } {
+  const fallback = titleForRule(ruleId)
+  return {
+    title: title.trim() || fallback,
+    detail: detail.trim() || `The deterministic ${fallback.toLowerCase()} rule matched this evidence.`,
+  }
+}
+
+export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: Aggregate | null | undefined): PlanRow[] {
+  if (scope === 'session') {
+    const ids = a ? [a.session.id] : []
+    return (a?.insights ?? []).map((i) => {
+      const copy = safeCopy(i.ruleId, i.title, i.detail)
+      return {
+        ruleId: i.ruleId,
+        ...copy,
+        recommendation: i.recommendation,
+        savings: i.savings,
+        sessionIds: ids,
+        insightId: i.id,
+      }
+    })
+  }
+  const cohortFingerprint = agg ? sessionCohortFingerprint(agg.sessions.map((session) => session.id)) : undefined
+  return [...(agg?.crossFindings ?? [])]
+    .sort(compareCrossFindings)
+    .map((f) => {
+      const copy = safeCopy(f.ruleId, f.title, `Recurs in ${f.sessions} session${f.sessions === 1 ? '' : 's'}.`)
+      return {
+        ruleId: f.ruleId,
+        ...copy,
+        savings: { ...(f.totalSavingsTokens ? { tokens: f.totalSavingsTokens } : {}), ...(f.totalSavingsMs ? { ms: f.totalSavingsMs } : {}), estimated: true },
+        sessionIds: f.exampleSessionIds,
+        sessions: f.sessions,
+        ...(cohortFingerprint ? { cohortFingerprint } : {}),
+      }
+    })
+}
+
+/** Recoverable = sums over the rows actually shown; repo/global scopes use cross-session findings. */
+export function recoverableFrom(rows: PlanRow[]): { tokens: number; ms: number } {
+  let tokens = 0
+  let ms = 0
+  for (const r of rows) {
+    tokens += r.savings?.tokens ?? 0
+    ms += r.savings?.ms ?? 0
+  }
+  return { tokens, ms }
+}
+
+export function findingForRow(row: PlanRow, scope: SuggestionScope): Finding {
+  return {
+    ruleId: row.ruleId,
+    title: row.title,
+    scope,
+    sessionIds: row.sessionIds,
+    ...(row.insightId ? { insightId: row.insightId } : {}),
+    ...(row.cohortFingerprint ? { cohortFingerprint: row.cohortFingerprint } : {}),
+    evidence: {
+      estimated: row.savings?.estimated ?? true,
+      sessions: row.sessions ?? 1,
+      ...(row.savings?.tokens !== undefined ? { savingsTokens: row.savings.tokens } : {}),
+      ...(row.savings?.ms !== undefined ? { savingsMs: row.savings.ms } : {}),
+    },
+  }
+}
+
+export function megaCommand(scope: 'repo' | 'global'): string {
+  return `claude "/orangu:mega --scope ${scope}"`
+}
+
+/** Persisted workflow failures survive SSE re-renders as actionable row copy. */
+export function kickoffFailureMessage(record: SuggestionRecord | undefined): string {
+  if (record?.status !== 'failed') return ''
+  const detail = record.kickoff?.error?.trim()
+  return detail ? `Improvement workflow failed: ${detail}` : 'Improvement workflow failed. Copy the command to inspect it in Claude Code.'
+}
+
+/**
+ * Status record for a plan row: prefer the exact canonical v2 identity (or an explicit migrated
+ * legacy ID). The readable-field fallback is deliberately limited to v1 records.
+ */
+export function recordForRow<T extends SuggestionRecord>(records: T[], row: PlanRow, scope: SuggestionScope, suggestionId: string): T | undefined {
+  let best: T | undefined
+  const sessions = normalizeSessionIds(row.sessionIds).join('\n')
+  for (const record of records) {
+    if (!Array.isArray(record.sessionIds) || !record.sessionIds.every((id) => typeof id === 'string')) continue
+    const exact = record.id === suggestionId || (Array.isArray(record.legacyIds) && record.legacyIds.includes(suggestionId))
+    const legacy = record.v === 1 && record.ruleId === row.ruleId && record.scope === scope &&
+      normalizeSessionIds(record.sessionIds).join('\n') === sessions && (!row.insightId || !record.insightId || row.insightId === record.insightId)
+    if (!exact && !legacy) continue
+    if (!best || record.statusAt > best.statusAt) best = record
+  }
+  return best
+}
+
+function identityKeys(record: SuggestionRecord): string[] {
+  return [record.id, ...(Array.isArray(record.legacyIds) ? record.legacyIds : []), record.proposal?.proposalPath].filter(nonEmptyString)
+}
+
+/**
+ * Serve-only inbox selection. Session scope is exact; aggregate scopes require evidence overlap.
+ * Mapped rows and migrated/path duplicates are removed before the hard display cap.
+ */
+export function savedProposalRecords<T extends SuggestionRecord>(
+  records: T[],
+  scope: SuggestionScope,
+  selectedSessionId: string | undefined,
+  aggregateSessionIds: string[],
+  mappedRecords: T[],
+): T[] {
+  const activeIds = new Set(scope === 'session' ? (selectedSessionId ? [selectedSessionId] : []) : aggregateSessionIds)
+  if (!activeIds.size) return []
+  const seen = new Set(mappedRecords.flatMap(identityKeys))
+  const result: T[] = []
+  const newest = [...records].sort((a, b) => b.statusAt - a.statusAt)
+  for (const record of newest) {
+    if (record.scope !== scope || !hasValidProposal(record) || !record.sessionIds.some((id) => activeIds.has(id))) continue
+    const keys = identityKeys(record)
+    if (keys.some((key) => seen.has(key))) continue
+    keys.forEach((key) => seen.add(key))
+    result.push(record)
+    if (result.length === SAVED_PROPOSAL_LIMIT) break
+  }
+  return result
+}

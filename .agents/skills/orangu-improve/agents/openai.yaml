@@ -1,0 +1,7 @@
+interface:
+  display_name: "Orangu Improve"
+  short_description: "Turn local session evidence into proposals"
+  default_prompt: "Use $orangu-improve to analyze bounded Orangu evidence and draft a scope-appropriate reviewable proposal without editing the project."
+
+policy:
+  allow_implicit_invocation: true

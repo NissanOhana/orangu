@@ -1,0 +1,21 @@
+{
+  "name": "orangu",
+  "description": "Observe supported Claude Code, Cowork, and Desktop sessions with deterministic local evidence, then draft changes, apply session/repo proposals explicitly, and verify session-scope changes against later evidence.",
+  "version": "0.5.0",
+  "author": {
+    "name": "Nissan Ohana"
+  },
+  "homepage": "https://github.com/NissanOhana/orangu",
+  "license": "MIT",
+  "keywords": [
+    "observability",
+    "sessions",
+    "tokens",
+    "analytics",
+    "claude-code",
+    "cowork",
+    "desktop",
+    "codex",
+    "improvement"
+  ]
+}

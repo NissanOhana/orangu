@@ -1,0 +1,16 @@
+{
+  "$comment": "Documentation URLs that catalog/features entries may cite. Every entry url must appear here verbatim (offline-verifiability rule); add a URL only after opening it.",
+  "urls": [
+    "https://code.claude.com/docs/en/agents.md",
+    "https://code.claude.com/docs/en/hooks.md",
+    "https://code.claude.com/docs/en/mcp.md",
+    "https://code.claude.com/docs/en/memory.md",
+    "https://code.claude.com/docs/en/prompt-caching.md",
+    "https://code.claude.com/docs/en/plugins",
+    "https://code.claude.com/docs/en/skills.md",
+    "https://code.claude.com/docs/en/sub-agents.md",
+    "https://code.claude.com/docs/en/workflows.md",
+    "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
+    "https://skills.sh/"
+  ]
+}

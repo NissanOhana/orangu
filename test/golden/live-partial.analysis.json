@@ -1,0 +1,505 @@
+{
+  "schemaVersion": "2",
+  "generator": {
+    "name": "orangu",
+    "version": "golden",
+    "generatedAt": 0,
+    "modelCatalogUpdatedAt": "2026-08-14"
+  },
+  "session": {
+    "id": "ffffffff-0000-4000-8000-000000000006",
+    "title": "My key is sk-ant-api03-FAKEFAKEFAKEFAKE and my mail is dev@example.com — wire the client",
+    "source": "claude-code",
+    "path": "(memory)",
+    "subagentPaths": [],
+    "cwd": "/Users/test/Code/demo",
+    "gitBranches": [
+      "main"
+    ],
+    "clientVersions": [
+      "2.1.226"
+    ],
+    "entrypoints": [
+      "cli"
+    ],
+    "permissionModes": [],
+    "models": [
+      {
+        "id": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "family": "opus",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      }
+    ],
+    "effortLevels": [
+      "high"
+    ],
+    "startedAt": 1787157900000,
+    "endedAt": 1787157901190,
+    "live": true
+  },
+  "summary": {
+    "turns": 1,
+    "humanTurns": 1,
+    "messages": 5,
+    "assistantMessages": 3,
+    "toolCalls": 1,
+    "toolErrors": 0,
+    "agents": 0,
+    "skills": 0,
+    "compactions": 0,
+    "wallMs": 1190,
+    "activeMs": 1190,
+    "humanWaitMs": 0,
+    "tokens": {
+      "input": 11,
+      "output": 135,
+      "cacheRead": 15300,
+      "cacheWrite": 0,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 15446,
+    "contextPeak": 5202,
+    "cacheHitRatio": 0.9993,
+    "outcomes": {
+      "prLinks": [],
+      "gitCommits": 0,
+      "testRuns": 0,
+      "testRunsFailed": 0,
+      "buildRuns": 0,
+      "buildRunsFailed": 0,
+      "filesRead": 0,
+      "filesEdited": 0,
+      "filesWritten": 1,
+      "webLookups": 0
+    },
+    "topInsightIds": [],
+    "narrative": "In “My key is sk-ant-api03-FAKEFAKEFAKEFAKE and my mail is dev@example.com — wire th”, the human made 1 request over 1.2s; the agent was busy for 1.2s of that. It made 1 tool calls, and processed 15.4k tokens. Visible outcomes: 1 file changed.",
+    "ending": "unknown"
+  },
+  "turns": [
+    {
+      "index": 0,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "My key is sk-ant-api03-FAKEFAKEFAKEFAKE and my mail is dev@example.com — wire the client",
+      "promptChars": 88,
+      "startTs": 1787157900000,
+      "endTs": 1787157901190,
+      "durationMs": 1190,
+      "firstResponseMs": 1100,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 1,
+      "toolErrors": 0,
+      "toolMs": 90,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 11,
+        "output": 135,
+        "cacheRead": 15300,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 15446,
+      "contextEnd": 5202,
+      "insightIds": [],
+      "activity": "Write"
+    }
+  ],
+  "tools": {
+    "byName": [
+      {
+        "name": "Write",
+        "category": "write",
+        "count": 1,
+        "errors": 0,
+        "unresolved": 0,
+        "totalMs": 90,
+        "avgMs": 90,
+        "p95Ms": 90,
+        "maxMs": 90,
+        "resultBytesTotal": 12,
+        "resultBytesMax": 12,
+        "inputBytesTotal": 87,
+        "parallelShare": 0,
+        "mainCount": 1,
+        "agentCount": 0
+      }
+    ],
+    "byCategory": [
+      {
+        "category": "write",
+        "count": 1,
+        "totalMs": 90,
+        "errors": 0
+      }
+    ],
+    "errorGroups": [],
+    "slowest": [
+      {
+        "toolUseId": "toolu_00000000000000000006",
+        "name": "Write",
+        "category": "write",
+        "summary": "Write src/client.ts",
+        "turnIndex": 0,
+        "startTs": 1787157901100,
+        "durationMs": 90,
+        "resultBytes": 12,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "largestResults": [
+      {
+        "toolUseId": "toolu_00000000000000000006",
+        "name": "Write",
+        "category": "write",
+        "summary": "Write src/client.ts",
+        "turnIndex": 0,
+        "startTs": 1787157901100,
+        "durationMs": 90,
+        "resultBytes": 12,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ],
+    "parallelism": {
+      "groups": 1,
+      "parallelGroups": 0,
+      "maxGroupSize": 1,
+      "parallelCallShare": 0
+    },
+    "calls": [
+      {
+        "toolUseId": "toolu_00000000000000000006",
+        "name": "Write",
+        "category": "write",
+        "summary": "Write src/client.ts",
+        "turnIndex": 0,
+        "startTs": 1787157901100,
+        "durationMs": 90,
+        "resultBytes": 12,
+        "isError": false,
+        "parallelGroupSize": 1
+      }
+    ]
+  },
+  "agents": {
+    "runs": [],
+    "totals": {
+      "count": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0
+      },
+      "totalTokens": 0,
+      "durationMs": 0,
+      "toolCalls": 0
+    },
+    "byType": [],
+    "byModel": [],
+    "maxDepth": 0,
+    "concurrentMs": 0,
+    "maxConcurrency": 0,
+    "mainThreadShare": {
+      "tokens": 1
+    }
+  },
+  "skills": {
+    "invocations": [],
+    "byName": []
+  },
+  "hooks": {
+    "runs": 0,
+    "errors": 0,
+    "totalMs": 0,
+    "byCommand": [],
+    "events": []
+  },
+  "context": {
+    "series": [
+      {
+        "messageUuid": "u0000000-0005-4000-8000-000000000005",
+        "turnIndex": 0,
+        "ts": 1787157901100,
+        "model": "claude-opus-5",
+        "contextSize": 5006,
+        "input": 6,
+        "cacheRead": 5000,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 70
+      },
+      {
+        "messageUuid": "u0000000-0009-4000-8000-000000000009",
+        "turnIndex": 0,
+        "ts": 1787157901100,
+        "model": "claude-opus-5",
+        "contextSize": 5103,
+        "input": 3,
+        "cacheRead": 5100,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 45
+      },
+      {
+        "messageUuid": "u0000000-000d-4000-8000-00000000000d",
+        "turnIndex": 0,
+        "ts": 1787157901190,
+        "model": "claude-opus-5",
+        "contextSize": 5202,
+        "input": 2,
+        "cacheRead": 5200,
+        "cacheWrite": 0,
+        "cacheWrite1h": 0,
+        "output": 20
+      }
+    ],
+    "cacheMisses": [],
+    "compactions": [],
+    "peak": 5202,
+    "baseline": 5006,
+    "final": 5202,
+    "contextWindow": 1000000,
+    "cacheHitRatio": 0.9993,
+    "cacheWrite1hShare": 0,
+    "reReadMultiplier": 2.94,
+    "totalCacheRead": 15300,
+    "totalCacheWrite": 0,
+    "totalFreshInput": 11,
+    "totalOutput": 135,
+    "requestsPerCompaction": []
+  },
+  "tokens": {
+    "total": {
+      "input": 11,
+      "output": 135,
+      "cacheRead": 15300,
+      "cacheWrite": 0,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 15446,
+    "byModel": [
+      {
+        "model": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "tokens": {
+          "input": 11,
+          "output": 135,
+          "cacheRead": 15300,
+          "cacheWrite": 0,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 0,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 15446,
+        "estimatedMatch": false,
+        "requests": 3
+      }
+    ],
+    "byKind": {
+      "input": 11,
+      "output": 135,
+      "cacheRead": 15300,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 0
+    },
+    "mainThread": 15446,
+    "agents": 0,
+    "byTurn": [
+      {
+        "turnIndex": 0,
+        "tokens": 15446,
+        "cumulativeTokens": 15446
+      }
+    ],
+    "byToolCategory": [
+      {
+        "category": "no-tool (text/thinking)",
+        "tokens": 10298
+      },
+      {
+        "category": "write",
+        "tokens": 5148
+      }
+    ],
+    "serverToolRequests": {
+      "webSearch": 0,
+      "webFetch": 0
+    },
+    "hiddenIterations": {
+      "count": 0,
+      "tokens": 0
+    }
+  },
+  "time": {
+    "wallMs": 1190,
+    "activeMs": 1190,
+    "humanWaitMs": 0,
+    "toolMs": 90,
+    "agentMs": 0,
+    "modelMs": 1100,
+    "longestTurns": [
+      {
+        "turnIndex": 0,
+        "durationMs": 1190,
+        "preview": "My key is sk-ant-api03-FAKEFAKEFAKEFAKE and my mail is dev@example.com — wire the client"
+      }
+    ],
+    "longestGaps": [],
+    "firstResponse": {
+      "p50": 1100,
+      "p95": 1100,
+      "max": 1100
+    },
+    "hooksMs": 0
+  },
+  "files": {
+    "files": [
+      {
+        "path": "src/client.ts",
+        "reads": 0,
+        "edits": 0,
+        "writes": 1,
+        "bytesRead": 0,
+        "turnIndexes": [
+          0
+        ],
+        "agentReads": 0,
+        "redundantReads": 0
+      }
+    ],
+    "mostReRead": [],
+    "totalDistinct": 1,
+    "editedThenReverted": 0
+  },
+  "quality": {
+    "signals": [
+      {
+        "id": "tests",
+        "label": "Test runs",
+        "value": "none",
+        "tone": "unknown",
+        "detail": "no test command detected",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "builds",
+        "label": "Build / typecheck / lint runs",
+        "value": "none",
+        "tone": "unknown",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "commits",
+        "label": "Git commits",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "prs",
+        "label": "Pull requests",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "tool-error-rate",
+        "label": "Tool error rate",
+        "value": "0%",
+        "tone": "good",
+        "detail": "0 of 1 tool calls errored"
+      },
+      {
+        "id": "corrections",
+        "label": "User corrections",
+        "value": 0,
+        "tone": "good",
+        "detail": "prompts that read as \"no / wrong / again / revert\"",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "interruptions",
+        "label": "Interruptions",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "api-errors",
+        "label": "API errors",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "rework",
+        "label": "Files edited 4+ times",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "reverts",
+        "label": "Edit-then-revert pairs",
+        "value": 0,
+        "tone": "good"
+      }
+    ],
+    "testRuns": [],
+    "buildRuns": [],
+    "gitCommits": [],
+    "userCorrections": [],
+    "interruptions": 0,
+    "apiErrors": 0,
+    "toolErrorRate": 0,
+    "reworkFiles": 0
+  },
+  "insights": [],
+  "events": [],
+  "parse": {
+    "totalLines": 5,
+    "badLines": 0,
+    "recordCounts": {
+      "user": 2,
+      "assistant": 3
+    },
+    "unknownRecordTypes": {},
+    "unknownBlockTypes": {},
+    "attachmentTypes": {},
+    "attachmentBytes": {},
+    "systemSubtypes": {},
+    "warnings": [],
+    "parseMs": 0,
+    "bytes": 0,
+    "reconciliation": {
+      "usageEventsTotal": 15446,
+      "turnsPlusAgentsTotal": 15446,
+      "matchesWithinPct": 0,
+      "ok": true
+    }
+  }
+}

@@ -1,0 +1,426 @@
+{
+  "$comment": "orangu model catalog: display names, families, context windows and id-resolution rules for every model orangu has seen. Tokens are the only metric orangu reports; this file carries no rates of any kind.",
+  "schemaVersion": 2,
+  "updatedAt": "2026-08-14",
+  "models": {
+    "claude-fable-5": {
+      "displayName": "Claude Fable 5",
+      "family": "fable",
+      "status": "active",
+      "releaseDate": "2026-06-09",
+      "releaseDateConfidence": "verified",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "opus-4-7",
+      "verified": true
+    },
+    "claude-mythos-5": {
+      "displayName": "Claude Mythos 5",
+      "family": "mythos",
+      "status": "active-limited",
+      "releaseDate": "2026-06-09",
+      "releaseDateConfidence": "verified",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "opus-4-7",
+      "verified": true
+    },
+    "claude-mythos-preview": {
+      "displayName": "Claude Mythos Preview",
+      "family": "mythos",
+      "status": "deprecated",
+      "releaseDate": null,
+      "releaseDateConfidence": "unknown",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "opus-4-7",
+      "verified": false
+    },
+    "claude-opus-5": {
+      "displayName": "Claude Opus 5",
+      "family": "opus",
+      "status": "active",
+      "releaseDate": "2026-07-24",
+      "releaseDateConfidence": "verified",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "opus-4-7",
+      "verified": true
+    },
+    "claude-opus-4-8": {
+      "displayName": "Claude Opus 4.8",
+      "family": "opus",
+      "status": "active-legacy",
+      "releaseDate": "2026-05-28",
+      "releaseDateConfidence": "derived",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "opus-4-7",
+      "verified": true
+    },
+    "claude-opus-4-7": {
+      "displayName": "Claude Opus 4.7",
+      "family": "opus",
+      "status": "active-legacy",
+      "releaseDate": "2026-04-16",
+      "releaseDateConfidence": "derived",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "opus-4-7",
+      "verified": true,
+      "note": "First model on the newer tokenizer (~30% more tokens for the same text). speed:fast returns an error."
+    },
+    "claude-opus-4-6": {
+      "displayName": "Claude Opus 4.6",
+      "family": "opus",
+      "status": "active-legacy",
+      "releaseDate": "2026-02-05",
+      "releaseDateConfidence": "derived",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-opus-4-5-20251101": {
+      "displayName": "Claude Opus 4.5",
+      "family": "opus",
+      "status": "active-legacy",
+      "releaseDate": "2025-11-01",
+      "releaseDateConfidence": "verified",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-opus-4-1-20250805": {
+      "displayName": "Claude Opus 4.1",
+      "family": "opus",
+      "status": "retired",
+      "retiredOn": "2026-08-05",
+      "releaseDate": "2025-08-05",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-opus-4-20250514": {
+      "displayName": "Claude Opus 4",
+      "family": "opus",
+      "status": "retired",
+      "retiredOn": "2026-06-15",
+      "releaseDate": "2025-05-14",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 32000,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-sonnet-5": {
+      "displayName": "Claude Sonnet 5",
+      "family": "sonnet",
+      "status": "active",
+      "releaseDate": "2026-06-30",
+      "releaseDateConfidence": "derived",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "opus-4-7",
+      "verified": true
+    },
+    "claude-sonnet-4-6": {
+      "displayName": "Claude Sonnet 4.6",
+      "family": "sonnet",
+      "status": "active-legacy",
+      "releaseDate": "2026-02-17",
+      "releaseDateConfidence": "derived",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-sonnet-4-5-20250929": {
+      "displayName": "Claude Sonnet 4.5",
+      "family": "sonnet",
+      "status": "active-legacy",
+      "releaseDate": "2025-09-29",
+      "releaseDateConfidence": "verified",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-sonnet-4-20250514": {
+      "displayName": "Claude Sonnet 4",
+      "family": "sonnet",
+      "status": "retired",
+      "retiredOn": "2026-06-15",
+      "releaseDate": "2025-05-14",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-haiku-4-5-20251001": {
+      "displayName": "Claude Haiku 4.5",
+      "family": "haiku",
+      "status": "active",
+      "releaseDate": "2025-10-01",
+      "releaseDateConfidence": "verified",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-3-5-haiku-20241022": {
+      "displayName": "Claude Haiku 3.5",
+      "family": "haiku",
+      "status": "retired",
+      "retiredOn": "2026-02-19",
+      "releaseDate": "2024-10-22",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": true
+    },
+    "claude-3-7-sonnet-20250219": {
+      "displayName": "Claude Sonnet 3.7",
+      "family": "sonnet",
+      "status": "retired",
+      "retiredOn": "2026-02-19",
+      "releaseDate": "2025-02-19",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false
+    },
+    "claude-3-5-sonnet-20241022": {
+      "displayName": "Claude Sonnet 3.5 (v2)",
+      "family": "sonnet",
+      "status": "retired",
+      "retiredOn": "2025-10-28",
+      "releaseDate": "2024-10-22",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false
+    },
+    "claude-3-5-sonnet-20240620": {
+      "displayName": "Claude Sonnet 3.5 (v1)",
+      "family": "sonnet",
+      "status": "retired",
+      "retiredOn": "2025-10-28",
+      "releaseDate": "2024-06-20",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 8192,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false,
+      "note": "NOT on any live Anthropic page. Historical value, unverified."
+    },
+    "claude-3-opus-20240229": {
+      "displayName": "Claude Opus 3",
+      "family": "opus",
+      "status": "retired",
+      "retiredOn": "2026-01-05",
+      "releaseDate": "2024-02-29",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false,
+      "note": "NOT on any live Anthropic page. Historical value, unverified."
+    },
+    "claude-3-sonnet-20240229": {
+      "displayName": "Claude Sonnet 3",
+      "family": "sonnet",
+      "status": "retired",
+      "retiredOn": "2025-07-21",
+      "releaseDate": "2024-02-29",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false,
+      "note": "NOT on any live Anthropic page. Historical value, unverified."
+    },
+    "claude-3-haiku-20240307": {
+      "displayName": "Claude Haiku 3",
+      "family": "haiku",
+      "status": "retired",
+      "retiredOn": "2026-04-20",
+      "releaseDate": "2024-03-07",
+      "releaseDateConfidence": "derived-from-id",
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false,
+      "note": "NOT on any live Anthropic page. Historical value, unverified."
+    },
+    "claude-2.1": {
+      "displayName": "Claude 2.1",
+      "family": "legacy",
+      "status": "retired",
+      "retiredOn": "2025-07-21",
+      "releaseDate": "2023-11-21",
+      "releaseDateConfidence": "unverified",
+      "contextWindow": 200000,
+      "maxOutputTokens": 4096,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false,
+      "note": "NOT on any live Anthropic page. Historical value, unverified. Prompt caching never existed for this model - cache fields are derived placeholders only."
+    },
+    "claude-2.0": {
+      "displayName": "Claude 2.0",
+      "family": "legacy",
+      "status": "retired",
+      "retiredOn": "2025-07-21",
+      "releaseDate": "2023-07-11",
+      "releaseDateConfidence": "unverified",
+      "contextWindow": 100000,
+      "maxOutputTokens": 4096,
+      "maxOutputTokensVerified": false,
+      "tokenizer": "legacy",
+      "verified": false,
+      "note": "NOT on any live Anthropic page. Historical value, unverified."
+    }
+  },
+  "aliases": {
+    "claude-opus-4-5": "claude-opus-4-5-20251101",
+    "claude-opus-4-1": "claude-opus-4-1-20250805",
+    "claude-opus-4-0": "claude-opus-4-20250514",
+    "claude-opus-4": "claude-opus-4-20250514",
+    "claude-sonnet-4-5": "claude-sonnet-4-5-20250929",
+    "claude-sonnet-4-0": "claude-sonnet-4-20250514",
+    "claude-sonnet-4": "claude-sonnet-4-20250514",
+    "claude-haiku-4-5": "claude-haiku-4-5-20251001",
+    "claude-3-7-sonnet-latest": "claude-3-7-sonnet-20250219",
+    "claude-3-5-sonnet-latest": "claude-3-5-sonnet-20241022",
+    "claude-3-5-haiku-latest": "claude-3-5-haiku-20241022",
+    "claude-3-opus-latest": "claude-3-opus-20240229"
+  },
+  "unstableAliases": {
+    "opus": "claude-opus-5",
+    "sonnet": "claude-sonnet-5",
+    "haiku": "claude-haiku-4-5-20251001",
+    "opusplan": "claude-opus-5",
+    "default": "claude-sonnet-5",
+    "$comment": "Bare tier names emitted by the Claude Code UI/config and by Task/Agent tool inputs (input.model), NOT by the API. They resolve to whatever the CLI default for that tier was on the day the session ran, so any model attribution derived from them MUST be flagged estimatedMatch:true."
+  },
+  "nonModelSentinels": {
+    "<synthetic>": {
+      "reason": "Claude Code-generated local message (API error notices, interrupt notices, hook output). Its usage object is all zeros with service_tier/speed/inference_geo null."
+    },
+    "$comment": "Values that appear in the `model` position but are not real models. They are excluded from per-model rollups; their usage is counted as reported."
+  },
+  "idNormalization": {
+    "$comment": "Apply these rewrites in order before alias/exact lookup.",
+    "steps": [
+      {
+        "step": 1,
+        "rule": "lowercase and trim"
+      },
+      {
+        "step": 2,
+        "rule": "strip cross-region inference-profile prefixes",
+        "regex": "^(us|eu|apac|global|us-gov)\\.",
+        "example": "us.anthropic.claude-sonnet-4-5-20250929-v1:0 -> anthropic.claude-sonnet-4-5-20250929-v1:0"
+      },
+      {
+        "step": 3,
+        "rule": "strip provider prefix",
+        "regex": "^anthropic\\.",
+        "example": "anthropic.claude-opus-5 -> claude-opus-5"
+      },
+      {
+        "step": 4,
+        "rule": "strip Bedrock version suffix",
+        "regex": "-v\\d+:\\d+$",
+        "example": "claude-haiku-4-5-20251001-v1:0 -> claude-haiku-4-5-20251001"
+      },
+      {
+        "step": 5,
+        "rule": "strip trailing bare :N",
+        "regex": ":\\d+$"
+      },
+      {
+        "step": 6,
+        "rule": "Vertex date separator",
+        "regex": "@(\\d{8})$ -> -$1",
+        "example": "claude-opus-4-5@20251101 -> claude-opus-4-5-20251101"
+      },
+      {
+        "step": 7,
+        "rule": "strip Claude Code context tag and record it",
+        "regex": "\\[(1m|200k|\\d+k)\\]$",
+        "example": "claude-opus-5[1m] -> claude-opus-5"
+      },
+      {
+        "step": 8,
+        "rule": "strip -fast suffix and set speed=fast",
+        "regex": "-fast$",
+        "example": "claude-opus-4-6-fast -> claude-opus-4-6"
+      },
+      {
+        "step": 9,
+        "rule": "exact lookup in models, then aliases, then unstableAliases (mark estimated), then dated-to-dateless prefix match, then fallbackByFamily (mark estimated)"
+      }
+    ]
+  },
+  "fallbackByFamily": {
+    "order": [
+      "mythos",
+      "fable",
+      "opus",
+      "sonnet",
+      "haiku",
+      "unknown"
+    ],
+    "mythos": {
+      "match": "mythos",
+      "useModel": "claude-mythos-5",
+      "estimated": true
+    },
+    "fable": {
+      "match": "fable",
+      "useModel": "claude-fable-5",
+      "estimated": true
+    },
+    "opus": {
+      "match": "opus",
+      "useModel": "claude-opus-5",
+      "estimated": true
+    },
+    "sonnet": {
+      "match": "sonnet",
+      "useModel": "claude-sonnet-5",
+      "estimated": true
+    },
+    "haiku": {
+      "match": "haiku",
+      "useModel": "claude-haiku-4-5-20251001",
+      "estimated": true
+    },
+    "unknown": {
+      "match": ".*",
+      "useModel": null,
+      "estimated": true,
+      "behavior": "Do NOT invent an identity. Keep the raw id as the display name, leave contextWindow undefined, set estimatedMatch=true, and count the tokens exactly as reported."
+    },
+    "$comment": "Last resort for a model id orangu has never seen. Match the FIRST pattern that hits against the normalized id. A match found this way MUST be tagged estimatedMatch:true and surfaced as an approximation, never as a fact."
+  }
+}

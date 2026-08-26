@@ -1,0 +1,404 @@
+{
+  "schemaVersion": "2",
+  "generator": {
+    "name": "orangu",
+    "version": "golden",
+    "generatedAt": 0,
+    "modelCatalogUpdatedAt": "2026-08-14"
+  },
+  "session": {
+    "id": "abababab-0000-4000-8000-000000000007",
+    "title": "What does this repo do?",
+    "source": "claude-code",
+    "path": "(memory)",
+    "subagentPaths": [],
+    "cwd": "/Users/test/Code/demo",
+    "gitBranches": [
+      "main"
+    ],
+    "clientVersions": [
+      "2.1.226"
+    ],
+    "entrypoints": [
+      "cli"
+    ],
+    "permissionModes": [],
+    "models": [
+      {
+        "id": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "family": "opus",
+        "estimatedMatch": false,
+        "contextWindow": 1000000
+      }
+    ],
+    "effortLevels": [
+      "high"
+    ],
+    "startedAt": 1787220900000,
+    "endedAt": 1787220901400,
+    "live": false
+  },
+  "summary": {
+    "turns": 1,
+    "humanTurns": 1,
+    "messages": 3,
+    "assistantMessages": 1,
+    "toolCalls": 0,
+    "toolErrors": 0,
+    "agents": 0,
+    "skills": 0,
+    "compactions": 0,
+    "wallMs": 1400,
+    "activeMs": 1400,
+    "humanWaitMs": 0,
+    "tokens": {
+      "input": 12,
+      "output": 140,
+      "cacheRead": 20000,
+      "cacheWrite": 4000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 4000,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 24152,
+    "contextPeak": 24012,
+    "cacheHitRatio": 0.8329,
+    "outcomes": {
+      "prLinks": [],
+      "gitCommits": 0,
+      "testRuns": 0,
+      "testRunsFailed": 0,
+      "buildRuns": 0,
+      "buildRunsFailed": 0,
+      "filesRead": 0,
+      "filesEdited": 0,
+      "filesWritten": 0,
+      "webLookups": 0
+    },
+    "topInsightIds": [],
+    "narrative": "In “What does this repo do?”, the human made 1 request over 1.4s; the agent was busy for 1.4s of that. It made 0 tool calls, and processed 24.2k tokens. No commits, PRs or test runs were detected.",
+    "ending": "unknown"
+  },
+  "turns": [
+    {
+      "index": 0,
+      "kind": "human",
+      "isCommand": false,
+      "promptPreview": "What does this repo do?",
+      "promptChars": 23,
+      "startTs": 1787220900000,
+      "endTs": 1787220901400,
+      "durationMs": 1400,
+      "reportedDurationMs": 1500,
+      "firstResponseMs": 1400,
+      "autoContinuations": 0,
+      "interrupted": false,
+      "toolCalls": 0,
+      "toolErrors": 0,
+      "toolMs": 0,
+      "agents": [],
+      "models": [
+        "claude-opus-5"
+      ],
+      "tokens": {
+        "input": 12,
+        "output": 140,
+        "cacheRead": 20000,
+        "cacheWrite": 4000,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 4000,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0,
+        "serviceTier": "standard"
+      },
+      "totalTokens": 24152,
+      "contextEnd": 24012,
+      "insightIds": [],
+      "activity": ""
+    }
+  ],
+  "tools": {
+    "byName": [],
+    "byCategory": [],
+    "errorGroups": [],
+    "slowest": [],
+    "largestResults": [],
+    "parallelism": {
+      "groups": 0,
+      "parallelGroups": 0,
+      "maxGroupSize": 1,
+      "parallelCallShare": 0
+    },
+    "calls": []
+  },
+  "agents": {
+    "runs": [],
+    "totals": {
+      "count": 0,
+      "tokens": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cacheWrite5m": 0,
+        "cacheWrite1h": 0,
+        "webSearchRequests": 0,
+        "webFetchRequests": 0
+      },
+      "totalTokens": 0,
+      "durationMs": 0,
+      "toolCalls": 0
+    },
+    "byType": [],
+    "byModel": [],
+    "maxDepth": 0,
+    "concurrentMs": 0,
+    "maxConcurrency": 0,
+    "mainThreadShare": {
+      "tokens": 1
+    }
+  },
+  "skills": {
+    "invocations": [],
+    "byName": []
+  },
+  "hooks": {
+    "runs": 0,
+    "errors": 0,
+    "totalMs": 0,
+    "byCommand": [],
+    "events": []
+  },
+  "context": {
+    "series": [
+      {
+        "messageUuid": "u0000000-0005-4000-8000-000000000005",
+        "turnIndex": 0,
+        "ts": 1787220901400,
+        "model": "claude-opus-5",
+        "contextSize": 24012,
+        "input": 12,
+        "cacheRead": 20000,
+        "cacheWrite": 4000,
+        "cacheWrite1h": 4000,
+        "output": 140
+      }
+    ],
+    "cacheMisses": [],
+    "compactions": [],
+    "peak": 24012,
+    "baseline": 24012,
+    "final": 24012,
+    "contextWindow": 1000000,
+    "cacheHitRatio": 0.8329,
+    "cacheWrite1hShare": 1,
+    "reReadMultiplier": 0.83,
+    "totalCacheRead": 20000,
+    "totalCacheWrite": 4000,
+    "totalFreshInput": 12,
+    "totalOutput": 140,
+    "requestsPerCompaction": []
+  },
+  "tokens": {
+    "total": {
+      "input": 12,
+      "output": 140,
+      "cacheRead": 20000,
+      "cacheWrite": 4000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 4000,
+      "webSearchRequests": 0,
+      "webFetchRequests": 0,
+      "serviceTier": "standard"
+    },
+    "totalTokens": 24152,
+    "byModel": [
+      {
+        "model": "claude-opus-5",
+        "displayName": "Claude Opus 5",
+        "tokens": {
+          "input": 12,
+          "output": 140,
+          "cacheRead": 20000,
+          "cacheWrite": 4000,
+          "cacheWrite5m": 0,
+          "cacheWrite1h": 4000,
+          "webSearchRequests": 0,
+          "webFetchRequests": 0,
+          "serviceTier": "standard"
+        },
+        "totalTokens": 24152,
+        "estimatedMatch": false,
+        "requests": 1
+      }
+    ],
+    "byKind": {
+      "input": 12,
+      "output": 140,
+      "cacheRead": 20000,
+      "cacheWrite5m": 0,
+      "cacheWrite1h": 4000
+    },
+    "mainThread": 24152,
+    "agents": 0,
+    "byTurn": [
+      {
+        "turnIndex": 0,
+        "tokens": 24152,
+        "cumulativeTokens": 24152
+      }
+    ],
+    "byToolCategory": [
+      {
+        "category": "no-tool (text/thinking)",
+        "tokens": 24152
+      }
+    ],
+    "serverToolRequests": {
+      "webSearch": 0,
+      "webFetch": 0
+    },
+    "hiddenIterations": {
+      "count": 0,
+      "tokens": 0
+    }
+  },
+  "time": {
+    "wallMs": 1400,
+    "activeMs": 1400,
+    "humanWaitMs": 0,
+    "toolMs": 0,
+    "agentMs": 0,
+    "modelMs": 1400,
+    "longestTurns": [
+      {
+        "turnIndex": 0,
+        "durationMs": 1400,
+        "preview": "What does this repo do?"
+      }
+    ],
+    "longestGaps": [],
+    "firstResponse": {
+      "p50": 1400,
+      "p95": 1400,
+      "max": 1400
+    },
+    "hooksMs": 0
+  },
+  "files": {
+    "files": [],
+    "mostReRead": [],
+    "totalDistinct": 0,
+    "editedThenReverted": 0
+  },
+  "quality": {
+    "signals": [
+      {
+        "id": "tests",
+        "label": "Test runs",
+        "value": "none",
+        "tone": "unknown",
+        "detail": "no test command detected",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "builds",
+        "label": "Build / typecheck / lint runs",
+        "value": "none",
+        "tone": "unknown",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "commits",
+        "label": "Git commits",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "prs",
+        "label": "Pull requests",
+        "value": 0,
+        "tone": "neutral",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "tool-error-rate",
+        "label": "Tool error rate",
+        "value": "0%",
+        "tone": "good",
+        "detail": "0 of 0 tool calls errored"
+      },
+      {
+        "id": "corrections",
+        "label": "User corrections",
+        "value": 0,
+        "tone": "good",
+        "detail": "prompts that read as \"no / wrong / again / revert\"",
+        "evidenceTurnIndexes": []
+      },
+      {
+        "id": "interruptions",
+        "label": "Interruptions",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "api-errors",
+        "label": "API errors",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "rework",
+        "label": "Files edited 4+ times",
+        "value": 0,
+        "tone": "good"
+      },
+      {
+        "id": "reverts",
+        "label": "Edit-then-revert pairs",
+        "value": 0,
+        "tone": "good"
+      }
+    ],
+    "testRuns": [],
+    "buildRuns": [],
+    "gitCommits": [],
+    "userCorrections": [],
+    "interruptions": 0,
+    "apiErrors": 0,
+    "toolErrorRate": 0,
+    "reworkFiles": 0
+  },
+  "insights": [],
+  "events": [],
+  "parse": {
+    "totalLines": 3,
+    "badLines": 0,
+    "recordCounts": {
+      "user": 1,
+      "assistant": 1,
+      "system": 1
+    },
+    "unknownRecordTypes": {},
+    "unknownBlockTypes": {},
+    "attachmentTypes": {},
+    "attachmentBytes": {},
+    "systemSubtypes": {
+      "turn_duration": 1
+    },
+    "warnings": [],
+    "parseMs": 0,
+    "bytes": 0,
+    "reconciliation": {
+      "usageEventsTotal": 24152,
+      "turnsPlusAgentsTotal": 24152,
+      "matchesWithinPct": 0,
+      "ok": true
+    }
+  }
+}

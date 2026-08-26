@@ -1,0 +1,61 @@
+# Deploys the single-file landing page in site/ to GitHub Pages.
+#
+# Pages source must be set to "GitHub Actions" (build_type=workflow), not the
+# legacy branch/folder mode. Nothing is built here: site/index.html is already
+# self-contained, so the job uploads site/ as-is and deploys that artifact.
+
+name: Deploy landing page to GitHub Pages
+
+on:
+  workflow_dispatch:
+
+# Least privilege: the deploy step needs pages + an OIDC token; nothing writes to contents.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time. Do not cancel an in-flight deploy — let it finish,
+# then the newest queued run deploys on top.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify committed site artifacts
+        run: npm run verify:generated
+
+      - name: Verify landing network policy
+        run: node scripts/assert-offline.mjs --site
+
+      - name: Upload site/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
