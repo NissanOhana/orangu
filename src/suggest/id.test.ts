@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { decodeFinding, encodeFinding, kickoffCommand, kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, sha1Hex, suggestionId, suggestionIdV2, suggestionKey } from './id.js'
+import { decodeFinding, encodeFinding, isSuggestionId, kickoffCommand, kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, sha1Hex, suggestionId, suggestionIdV2, suggestionKey } from './id.js'
 import type { Finding, SuggestionRecord } from './types.js'
 
 describe('sha1Hex', () => {
@@ -131,5 +131,13 @@ describe('kickoffCommand', () => {
     expect(decodeFinding(token!).finding).toMatchObject({ title: 'Exact title', insightId: 'i-1', evidence: { estimated: false, savingsMs: 456 } })
     expect(commands.claude).toBe(command)
     expect(commands.codex).toBe(`$orangu-improve sg_abc --finding ${token}`)
+  })
+})
+
+describe('isSuggestionId', () => {
+  it('accepts only canonical copy-safe ids', () => {
+    expect(isSuggestionId('sg_0123456789ab')).toBe(true)
+    expect(isSuggestionId('sg_0123456789AB')).toBe(false)
+    expect(isSuggestionId('$(untrusted)')).toBe(false)
   })
 })

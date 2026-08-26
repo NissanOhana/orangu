@@ -2,7 +2,7 @@
 
 This reference describes Orangu's current JSON surfaces. Integrations must use fields that exist in these contracts. Breaking changes require the owning schema version to change.
 
-The complete current `Analysis` and `SlimAnalysis` reference lives at [`plugin/skills/orangu-analyze/references/json-shape.md`](../plugin/skills/orangu-analyze/references/json-shape.md). The TypeScript definitions remain the source of truth.
+The complete current `Analysis` and `SlimAnalysis` reference lives at [`plugin/skills/analyze/references/json-shape.md`](../plugin/skills/analyze/references/json-shape.md). The TypeScript definitions remain the source of truth.
 
 ## Analysis and Aggregate
 
@@ -193,7 +193,7 @@ New proposals from `orangu-improve` and `orangu-mega` have two files under `~/.o
 - `<id>.md`: human-readable review;
 - `<id>.json`: versioned machine-readable manifest.
 
-The live writing contract is [`plugin/skills/orangu-improve/references/artifact-contract.md`](../plugin/skills/orangu-improve/references/artifact-contract.md). The manifest contains:
+The live writing contract is [`plugin/skills/improve/references/artifact-contract.md`](../plugin/skills/improve/references/artifact-contract.md). The manifest contains:
 
 ```ts
 SuggestionProposal = {
@@ -232,7 +232,7 @@ Legacy Markdown-only proposals remain readable for compatibility but cannot sati
 
 ## Application receipt
 
-Under its required skill contract, `orangu-apply` writes `<id>.applied.json` only after the reviewed change and required local checks succeed. The live contract is [`plugin/skills/orangu-apply/references/application-contract.md`](../plugin/skills/orangu-apply/references/application-contract.md).
+Under its required skill contract, `orangu-apply` writes `<id>.applied.json` only after the reviewed change and required local checks succeed. The live contract is [`plugin/skills/apply/references/application-contract.md`](../plugin/skills/apply/references/application-contract.md).
 
 Before reading or editing project files, both host skills run `orangu suggest --show <id> --for-apply --json --quiet`. This deterministic preflight must bind a session/repo structured proposal to the current repository; plain `--show` is not an apply authorization. Global scope always fails apply eligibility.
 

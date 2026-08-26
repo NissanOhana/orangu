@@ -6,6 +6,9 @@ import { fileURLToPath } from 'node:url'
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const generated = [
   'plugin/bin/orangu.cli.mjs',
+  'plugins/orangu/bin/orangu.cli.mjs',
+  'plugins/orangu/assets/icon.png',
+  'plugins/orangu/assets/logo.png',
   'src/report/generated/client-bundle.ts',
   'site/index.html',
   'site/sample.html',

@@ -134,6 +134,11 @@ export function suggestionId(source: SuggestionSource, ruleId: string, sessionId
   return 'sg_' + sha1Hex(source + '|' + ruleId + '|' + ids.join(',')).slice(0, 12)
 }
 
+/** True only for canonical v1/v2 suggestion ids safe to persist and copy into host commands. */
+export function isSuggestionId(value: unknown): value is string {
+  return typeof value === 'string' && /^sg_[0-9a-f]{12}$/.test(value)
+}
+
 function base64UrlEncode(bytes: Uint8Array): string {
   return btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join('')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }

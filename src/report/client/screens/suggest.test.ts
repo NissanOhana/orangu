@@ -67,6 +67,31 @@ function context(mode: AppData['mode'], suggestions: SuggestionViewRecord[]): Ct
 }
 
 describe('renderSuggest proposal UX', () => {
+  it('renders a persisted localhost kickoff handoff after an SSE tree replacement', () => {
+    const row = planRows('session', analysis, undefined)[0]!
+    const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
+    const record: SuggestionViewRecord = {
+      id,
+      v: 2,
+      createdAt: 1,
+      source: 'report',
+      scope: 'session',
+      sessionIds: [analysis.session.id],
+      ruleId: row.ruleId,
+      title: row.title,
+      insightId: row.insightId,
+      evidence: { estimated: true },
+      status: 'new',
+      statusAt: 1,
+    }
+
+    renderSuggest(context('serve', [record]))
+
+    expect(markup).toContain('<div class="sg-handoffs">')
+    expect(markup).toContain(`data-copy="claude &quot;/orangu:improve ${id}&quot;"`)
+    expect(markup).toContain(`data-copy="$orangu-improve ${id}"`)
+  })
+
   it('uses proposal-only draft language and renders every structured field escaped', () => {
     const row = planRows('session', analysis, undefined)[0]!
     const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))

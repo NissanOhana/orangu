@@ -49,7 +49,7 @@ orangu ships deterministic rules; each finding carries an `axis`, `severity`, `r
 - **topReReadFiles**: files read across many sessions. These are candidates to summarize, cache, or restructure (a CLAUDE.md read hundreds of times is a signal to trim it)
 - **topSessions**: the heaviest runs, by tokens
 
-The aggregate JSON also has `schemaVersion` and is the input the **orangu-mega** skill reasons over.
+The aggregate JSON also has `schemaVersion` and is the input the **`/orangu:mega`** skill reasons over.
 
 ## Plain-language vocabulary
 

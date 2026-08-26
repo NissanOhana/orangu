@@ -1,10 +1,10 @@
 ---
-name: orangu-apply
+name: apply
 description: Apply one reviewed session- or repo-scope Orangu proposal to the current repository, run local checks, save a structured application receipt, and update its Orangu status. Use only when someone explicitly runs /orangu:apply with a proposed suggestion id. Global proposals are review-only. This skill does not browse, discover plugins, delegate, or claim later verification.
 allowed-tools: Bash, Read, Edit, Write
 ---
 
-# orangu-apply
+# /orangu:apply
 
 Apply exactly one reviewed proposal. This is an explicit mutation step, separate from analysis and research. Never browse, call MCP, install packages or skills, delegate, or treat “applied” as “verified.”
 

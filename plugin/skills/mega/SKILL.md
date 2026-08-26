@@ -1,12 +1,12 @@
 ---
-name: orangu-mega
+name: mega
 description: Propose systemic harness improvements from recurring patterns across a repository or supported Claude Code, Cowork, and Desktop sessions on the machine. Use when someone asks why the same outcome keeps recurring, wants a repo or global harness review, or wants evidence-backed changes across instruction files, scripts, hooks, skills, agents, MCP servers, plugins, and workflow configuration. Repo proposals may later be applied explicitly; global proposals are review-only. Do not use for observing or diagnosing only one session.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**)
 ---
 
-# orangu-mega
+# /orangu:mega
 
-Review recurring repo or global evidence, compare it with the configured harness, and write a ranked set of proposals. This is systemic improvement work. One-session observation belongs to `orangu-analyze`; one bounded finding belongs to `orangu-improve`.
+Review recurring repo or global evidence, compare it with the configured harness, and write a ranked set of proposals. This is systemic improvement work. One-session observation belongs to `/orangu:analyze`; one bounded finding belongs to `/orangu:improve`.
 
 Run stages 0 through 5 in order. Deterministic CLI output owns all measurements. Optional analysts interpret that evidence. Nothing applies a harness change automatically.
 
@@ -98,7 +98,7 @@ The researcher is the plugin's only network-capable agent. Hand it only uncovere
 
 Dedupe items that name the same change and preserve every independent evidence anchor. Prefer the smallest change that addresses the recurring pattern. Rank by supported expected effect relative to S, M, or L effort; do not manufacture a token or millisecond value for a quality-only change.
 
-Read [the shared proposal artifact contract](../orangu-improve/references/artifact-contract.md) before writing. Mega proposals use the same structured artifacts as `orangu-improve`: repo artifacts may be apply-compatible, while global artifacts are review-only. Markdown-only proposals are legacy input and must not be created here.
+Read [the shared proposal artifact contract](../improve/references/artifact-contract.md) before writing. Mega proposals use the same structured artifacts as `/orangu:improve`: repo artifacts may be apply-compatible, while global artifacts are review-only. Markdown-only proposals are legacy input and must not be created here.
 
 For every retained record:
 

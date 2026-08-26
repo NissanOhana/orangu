@@ -44,27 +44,30 @@ describe('plugin packaging', () => {
     const m = readJson('.claude-plugin/marketplace.json')
     expect(m.plugins.some((x: { name: string; source: string }) => x.name === 'orangu' && x.source === './plugin')).toBe(true)
   })
-  it('ships the seven intended skills, each with valid frontmatter', () => {
-    const skills = ['orangu-analyze', 'orangu-apply', 'orangu-feedback', 'orangu-improve', 'orangu-mega', 'orangu-watch', 'orangu-suggest']
+  it('ships the seven intended /orangu:* commands with valid frontmatter', () => {
+    const skills = ['analyze', 'apply', 'feedback', 'improve', 'mega', 'watch', 'suggest']
+    const namespace = readJson('plugin/.claude-plugin/plugin.json').name
     expect(readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()).toEqual([...skills].sort())
     for (const s of skills) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const fm = /^---\n([\s\S]*?)\n---/.exec(md)
       expect(fm, `${s} has frontmatter`).toBeTruthy()
       const block = fm![1]!
+      expect(`/${namespace}:${s}`).toBe(`/orangu:${s}`)
+      expect(block).not.toContain(`name: orangu-${s}`)
       expect(block).toMatch(new RegExp(`name:\\s*${s}`))
       // description present, single line, under the 1536 truncation budget
       const desc = /description:\s*(.+)/.exec(block)?.[1] ?? ''
       expect(desc.length).toBeGreaterThan(40)
       expect(desc.length).toBeLessThan(1536)
-      if (s !== 'orangu-apply') {
+      if (s !== 'apply') {
         for (const source of ['Claude Code', 'Cowork', 'Desktop']) expect(desc, `${s} names supported ${source} sources`).toContain(source)
       }
       if (md.includes('.jsonl')) expect(md.toLowerCase(), `${s} forbids direct transcript reads`).toMatch(/never (?:read|open)[^\n]*\.jsonl/)
     }
   })
   it('the analyze skill forbids reading jsonl transcripts directly', () => {
-    const md = readFileSync(join(root, 'plugin/skills/orangu-analyze/SKILL.md'), 'utf8')
+    const md = readFileSync(join(root, 'plugin/skills/analyze/SKILL.md'), 'utf8')
     expect(md.toLowerCase()).toContain('never read')
     expect(md).toContain('.jsonl')
   })
@@ -73,7 +76,7 @@ describe('plugin packaging', () => {
     expect(existsSync(join(root, 'plugin/optional-hooks'))).toBe(false)
   })
   it('improve and mega declare proposal-only writes with no edit grant', () => {
-    for (const s of ['orangu-improve', 'orangu-mega']) {
+    for (const s of ['improve', 'mega']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const fm = /^---\n([\s\S]*?)\n---/.exec(md)!
       const allowed = /allowed-tools:\s*(.+)/.exec(fm[1]!)?.[1] ?? ''
@@ -93,7 +96,7 @@ describe('plugin packaging', () => {
   })
   it('improve uses the canonical evidence estimate and interactive read gate', () => {
     for (const [name, path] of [
-      ['Claude', 'plugin/skills/orangu-improve/SKILL.md'],
+      ['Claude', 'plugin/skills/improve/SKILL.md'],
       ['Codex', '.agents/skills/orangu-improve/SKILL.md'],
     ] as const) {
       const md = readText(path)
@@ -106,16 +109,16 @@ describe('plugin packaging', () => {
     }
   })
   it('improve never applies and records both proposal artifacts', () => {
-    const md = readFileSync(join(root, 'plugin/skills/orangu-improve/SKILL.md'), 'utf8')
+    const md = readFileSync(join(root, 'plugin/skills/improve/SKILL.md'), 'utf8')
     expect(md).toContain('~/.orangu/proposals/')
     expect(md).toContain("--set '<id>' proposed --proposal '<proposal-path>'")
     expect(md).toContain('--manifest')
     expect(md.toLowerCase()).toMatch(/never edit the target repository|never edit the target project/)
-    expect(existsSync(join(root, 'plugin/skills/orangu-improve/references/artifact-contract.md'))).toBe(true)
+    expect(existsSync(join(root, 'plugin/skills/improve/references/artifact-contract.md'))).toBe(true)
   })
   it('mega records scope-appropriate structured proposals without applying them', () => {
-    const md = readText('plugin/skills/orangu-mega/SKILL.md')
-    expect(md).toContain('../orangu-improve/references/artifact-contract.md')
+    const md = readText('plugin/skills/mega/SKILL.md')
+    expect(md).toContain('../improve/references/artifact-contract.md')
     expect(md).toContain('~/.orangu/proposals/<id>.md')
     expect(md).toContain('~/.orangu/proposals/<id>.json')
     expect(md).toContain("--set '<id>' kicked-off")
@@ -130,7 +133,7 @@ describe('plugin packaging', () => {
     expect(md).toMatch(/mega did not edit the target repository/i)
   })
   it('improve is catalog-first and preserves honest research provenance', () => {
-    const md = readFileSync(join(root, 'plugin/skills/orangu-improve/SKILL.md'), 'utf8')
+    const md = readFileSync(join(root, 'plugin/skills/improve/SKILL.md'), 'utf8')
     expect(md).toMatch(/catalog matches before going online/i)
     expect(md).toContain('catalog: <id>')
     expect(md).toContain('kind: "research"')
@@ -138,28 +141,28 @@ describe('plugin packaging', () => {
     expect(md).toMatch(/never install a skill or plugin/i)
   })
   it('analyze documents --slim, default redaction, and ends with the improve offer', () => {
-    const md = readFileSync(join(root, 'plugin/skills/orangu-analyze/SKILL.md'), 'utf8')
+    const md = readFileSync(join(root, 'plugin/skills/analyze/SKILL.md'), 'utf8')
     expect(md).toContain('--slim')
     expect(md).toContain('redacted by default')
     expect(md).toContain('/orangu:improve')
     expect(md).toContain('orangu estimate')
-    const shape = readFileSync(join(root, 'plugin/skills/orangu-analyze/references/json-shape.md'), 'utf8')
+    const shape = readFileSync(join(root, 'plugin/skills/analyze/references/json-shape.md'), 'utf8')
     expect(shape).toContain('SlimAnalysis')
   })
   it('watch points multi-session monitoring at orangu serve', () => {
-    const md = readFileSync(join(root, 'plugin/skills/orangu-watch/SKILL.md'), 'utf8')
+    const md = readFileSync(join(root, 'plugin/skills/watch/SKILL.md'), 'utf8')
     expect(md).toContain('orangu serve')
     expect(md.toLowerCase()).toMatch(/multi-session|multiple (?:live )?sessions|several sessions|every session/)
   })
   it('mega scopes --limit to the per-session axis', () => {
-    const md = readFileSync(join(root, 'plugin/skills/orangu-mega/SKILL.md'), 'utf8')
+    const md = readFileSync(join(root, 'plugin/skills/mega/SKILL.md'), 'utf8')
     expect(md).toContain('how many sessions are scanned')
   })
 
   it('keeps session diagnosis distinct from recurring repo/global improvement work', () => {
-    const analyze = readText('plugin/skills/orangu-analyze/SKILL.md')
-    const improve = readText('plugin/skills/orangu-improve/SKILL.md')
-    const mega = readText('plugin/skills/orangu-mega/SKILL.md')
+    const analyze = readText('plugin/skills/analyze/SKILL.md')
+    const improve = readText('plugin/skills/improve/SKILL.md')
+    const mega = readText('plugin/skills/mega/SKILL.md')
     expect(analyze).toMatch(/One session, observe and diagnose/)
     expect(analyze).toMatch(/Repository, find recurring patterns/)
     expect(improve).toContain('one session diagnosis')
@@ -180,9 +183,9 @@ describe('plugin packaging', () => {
     expect(new Set(allEntries().map((entry) => entry.changeClass))).toEqual(new Set(ids))
 
     for (const path of [
-      'plugin/skills/orangu-improve/SKILL.md',
-      'plugin/skills/orangu-mega/SKILL.md',
-      'plugin/skills/orangu-improve/references/artifact-contract.md',
+      'plugin/skills/improve/SKILL.md',
+      'plugin/skills/mega/SKILL.md',
+      'plugin/skills/improve/references/artifact-contract.md',
     ]) {
       const text = readText(path)
       for (const id of ids) expect(text, `${path} covers ${id}`).toContain(id)
@@ -194,8 +197,8 @@ describe('plugin packaging', () => {
   })
 
   it('suggestion-id handoff is estimated interactively and accepts no server receipt', () => {
-    const improve = readText('plugin/skills/orangu-improve/SKILL.md')
-    const alias = readText('plugin/skills/orangu-suggest/SKILL.md')
+    const improve = readText('plugin/skills/improve/SKILL.md')
+    const alias = readText('plugin/skills/suggest/SKILL.md')
     expect(improve).toContain("orangu estimate --suggestion '<id>' --json --quiet")
     expect(improve).not.toContain('--receipt')
     expect(improve).not.toContain('confirmationReceipt')
@@ -203,7 +206,7 @@ describe('plugin packaging', () => {
   })
 
   it('mega keeps two independent interactive estimate gates outside receipt kickoff', () => {
-    const mega = readText('plugin/skills/orangu-mega/SKILL.md')
+    const mega = readText('plugin/skills/mega/SKILL.md')
     expect(mega).toContain('orangu estimate harness --json')
     expect(mega).toContain("orangu estimate repo --cwd '<dir>' --json")
     expect(mega).toContain('orangu estimate global --json')
@@ -214,7 +217,7 @@ describe('plugin packaging', () => {
   })
 
   it('mega binds every manual aggregate suggestion to canonical evidence and the full cohort', () => {
-    const mega = readText('plugin/skills/orangu-mega/SKILL.md')
+    const mega = readText('plugin/skills/mega/SKILL.md')
     for (const scope of ['repo', 'global']) {
       expect(mega).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --estimate --quiet`)
       expect(mega).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --quiet > '<tmp>/evidence.json'`)
@@ -226,11 +229,11 @@ describe('plugin packaging', () => {
   })
 
   it('external skill discovery stays user-run, candidate-only, and install-free', () => {
-    const improve = readText('plugin/skills/orangu-improve/SKILL.md')
-    const mega = readText('plugin/skills/orangu-mega/SKILL.md')
+    const improve = readText('plugin/skills/improve/SKILL.md')
+    const mega = readText('plugin/skills/mega/SKILL.md')
     const researcher = readText('plugin/agents/harness-researcher.md')
-    const policy = readText('plugin/skills/orangu-mega/references/research-sources.md')
-    const proposal = readText('plugin/skills/orangu-suggest/references/proposal-format.md')
+    const policy = readText('plugin/skills/mega/references/research-sources.md')
+    const proposal = readText('plugin/skills/suggest/references/proposal-format.md')
     for (const [path, text] of [
       ['orangu-mega', mega], ['harness-researcher', researcher], ['research policy', policy],
     ] as const) {
@@ -249,11 +252,11 @@ describe('plugin packaging', () => {
 
   it('keeps every online research path free of local evidence and identifiers', () => {
     const surfaces = [
-      ['Claude improve', readText('plugin/skills/orangu-improve/SKILL.md')],
+      ['Claude improve', readText('plugin/skills/improve/SKILL.md')],
       ['Codex improve', readText('.agents/skills/orangu-improve/SKILL.md')],
-      ['mega', readText('plugin/skills/orangu-mega/SKILL.md')],
+      ['mega', readText('plugin/skills/mega/SKILL.md')],
       ['mega researcher', readText('plugin/agents/harness-researcher.md')],
-      ['mega research policy', readText('plugin/skills/orangu-mega/references/research-sources.md')],
+      ['mega research policy', readText('plugin/skills/mega/references/research-sources.md')],
     ] as const
     for (const [name, text] of surfaces) {
       expect(text, `${name} uses generic network terms`).toMatch(/generic feature(?: and|\/) change-class terms/i)
@@ -267,7 +270,7 @@ describe('plugin packaging', () => {
 
   it('proposal files require evidence, effect, risk, and a deterministic verification', () => {
     for (const [name, path] of [
-      ['Claude', 'plugin/skills/orangu-improve/references/artifact-contract.md'],
+      ['Claude', 'plugin/skills/improve/references/artifact-contract.md'],
       ['Codex', '.agents/skills/orangu-improve/references/artifact-contract.md'],
     ] as const) {
       const format = readText(path)
@@ -298,7 +301,7 @@ describe('plugin packaging', () => {
 
   it('enforces the conservative lifecycle by scope in both hosts and mega', () => {
     for (const [name, path] of [
-      ['Claude improve', 'plugin/skills/orangu-improve/SKILL.md'],
+      ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
     ] as const) {
       const text = readText(path)
@@ -308,14 +311,14 @@ describe('plugin packaging', () => {
       expect(text, `${name} refuses global apply/verify`).toMatch(/global[^\n]*(?:never|cannot)[^\n]*(?:apply|applied)[^\n]*(?:verif|verified)|global[^\n]*(?:apply|applied)[^\n]*(?:verif|verified)[^\n]*(?:unsupported|cannot)/i)
     }
 
-    for (const path of ['plugin/skills/orangu-apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md']) {
+    for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md']) {
       const text = readText(path)
       expect(text, `${path} rejects global`).toMatch(/global proposals?[^\n]*proposal-only[^\n]*never be applied/i)
       expect(text, `${path} keeps repo applied`).toMatch(/repo scope[^\n]*no fresh-cohort comparator[^\n]*cannot become `verified`/i)
       expect(text, `${path} permits session later verification`).toMatch(/session scope[^\n]*later verification/i)
     }
 
-    const mega = readText('plugin/skills/orangu-mega/SKILL.md')
+    const mega = readText('plugin/skills/mega/SKILL.md')
     expect(mega).toMatch(/repo scope[^\n]*apply[^\n]*cannot become `verified`/i)
     expect(mega).toMatch(/global scope[^\n]*proposal-only[^\n]*never be applied or verified/i)
     expect(mega).toMatch(/global apply and verification are not supported/i)
@@ -323,9 +326,9 @@ describe('plugin packaging', () => {
 
   it('preflights proposal eligibility and keeps undiscovered artifacts chat-only', () => {
     for (const [name, path] of [
-      ['Claude improve', 'plugin/skills/orangu-improve/SKILL.md'],
+      ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
-      ['mega', 'plugin/skills/orangu-mega/SKILL.md'],
+      ['mega', 'plugin/skills/mega/SKILL.md'],
     ] as const) {
       const text = readText(path)
       const command = "orangu suggest --show '<id>' --for-proposal --json --quiet"
@@ -339,10 +342,10 @@ describe('plugin packaging', () => {
 
   it('treats shell substitutions as inert data in improve, mega, and apply', () => {
     for (const [name, path] of [
-      ['Claude improve', 'plugin/skills/orangu-improve/SKILL.md'],
+      ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
-      ['mega', 'plugin/skills/orangu-mega/SKILL.md'],
-      ['Claude apply', 'plugin/skills/orangu-apply/SKILL.md'],
+      ['mega', 'plugin/skills/mega/SKILL.md'],
+      ['Claude apply', 'plugin/skills/apply/SKILL.md'],
       ['Codex apply', '.agents/skills/orangu-apply/SKILL.md'],
     ] as const) {
       const text = readText(path)
@@ -366,9 +369,9 @@ describe('plugin packaging', () => {
 
   it('treats all evidence text as prompt-injection data across skills and agents', () => {
     for (const [name, path] of [
-      ['Claude improve', 'plugin/skills/orangu-improve/SKILL.md'],
+      ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
-      ['mega', 'plugin/skills/orangu-mega/SKILL.md'],
+      ['mega', 'plugin/skills/mega/SKILL.md'],
       ['PM analyst', 'plugin/agents/harness-pm-analyst.md'],
       ['DevEx analyst', 'plugin/agents/harness-devex-analyst.md'],
       ['researcher', 'plugin/agents/harness-researcher.md'],
@@ -440,7 +443,7 @@ describe('plugin packaging', () => {
   // `budget` and `spend` are deliberately NOT in the vocabulary: the researcher uses both for WEB
   // CALLS per run. Pinned so a future widening does not break honest English for no honesty gain.
   it('keeps the researcher\'s web-call budget language, which is a request count and not money', () => {
-    for (const f of ['plugin/agents/harness-researcher.md', 'plugin/skills/orangu-mega/references/research-sources.md']) {
+    for (const f of ['plugin/agents/harness-researcher.md', 'plugin/skills/mega/references/research-sources.md']) {
       const text = readFileSync(join(root, f), 'utf8')
       expect(moneyHits(text), `${f} must stay money-free`).toEqual([])
       expect(/\bbudget\b|\bspend\b/i.test(text), `${f} still speaks of a web-call budget`).toBe(true)
@@ -483,19 +486,19 @@ describe('plugin packaging', () => {
   it('only the explicit research surfaces hold network tools; localhost never launches them', () => {
     const networked = AGENTS.filter((a) => fmList(agentBlock(a), 'tools').some((t) => t === 'WebSearch' || t === 'WebFetch'))
     expect(networked, 'exactly one agent may reach the network').toEqual(['harness-researcher'])
-    for (const s of ['orangu-analyze', 'orangu-apply', 'orangu-mega', 'orangu-watch', 'orangu-suggest']) {
+    for (const s of ['analyze', 'apply', 'mega', 'watch', 'suggest']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const allowed = /^allowed-tools:\s*(.+)$/m.exec(md)?.[1] ?? ''
       expect(allowed, `${s} grants no network tool`).not.toMatch(/WebSearch|WebFetch/)
     }
-    const improve = readFileSync(join(root, 'plugin/skills/orangu-improve/SKILL.md'), 'utf8')
+    const improve = readFileSync(join(root, 'plugin/skills/improve/SKILL.md'), 'utf8')
     expect(/^allowed-tools:.*WebSearch.*WebFetch$/m.test(improve)).toBe(true)
     expect(readText('src/serve/kickoff.ts')).not.toMatch(/child_process|--allowedTools|--tools/)
   })
 
   it('keeps analysis, application, and later verification as separate claims', () => {
-    const improve = readText('plugin/skills/orangu-improve/SKILL.md')
-    const apply = readText('plugin/skills/orangu-apply/SKILL.md')
+    const improve = readText('plugin/skills/improve/SKILL.md')
+    const apply = readText('plugin/skills/apply/SKILL.md')
     expect(improve).toContain('Never edit the target repository')
     expect(improve).toContain("--set '<id>' verified --verification")
     expect(apply).toContain('status is exactly `proposed`')
@@ -506,7 +509,7 @@ describe('plugin packaging', () => {
 
   it('apply performs repository binding before any read or edit and records an attestation', () => {
     for (const [name, skillPath, contractPath] of [
-      ['Claude', 'plugin/skills/orangu-apply/SKILL.md', 'plugin/skills/orangu-apply/references/application-contract.md'],
+      ['Claude', 'plugin/skills/apply/SKILL.md', 'plugin/skills/apply/references/application-contract.md'],
       ['Codex', '.agents/skills/orangu-apply/SKILL.md', '.agents/skills/orangu-apply/references/application-contract.md'],
     ] as const) {
       const skill = readText(skillPath)
@@ -551,7 +554,7 @@ describe('plugin packaging', () => {
   })
 
   it('mega runs the staged pipeline', () => {
-    const md = readFileSync(join(root, 'plugin/skills/orangu-mega/SKILL.md'), 'utf8')
+    const md = readFileSync(join(root, 'plugin/skills/mega/SKILL.md'), 'utf8')
     const literals = [
       'orangu estimate harness', "orangu harness --cwd '<dir>' --out '<tmp>/harness.json'",
       "orangu harness --global --out '<tmp>/harness.json'",
@@ -565,7 +568,7 @@ describe('plugin packaging', () => {
   })
 
   it('the research source list is honest', () => {
-    const rel = 'plugin/skills/orangu-mega/references/research-sources.md'
+    const rel = 'plugin/skills/mega/references/research-sources.md'
     expect(existsSync(join(root, rel))).toBe(true)
     const md = readFileSync(join(root, rel), 'utf8')
     for (const tier of ['Tier 1', 'Tier 2', 'Tier 3']) expect(md, `names ${tier}`).toContain(tier)

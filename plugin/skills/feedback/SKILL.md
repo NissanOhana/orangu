@@ -1,10 +1,10 @@
 ---
-name: orangu-feedback
-description: Collect candid beta feedback about Orangu after work involving Claude Code, Cowork, or Desktop by opening a private localhost form with an exact user-reviewed GitHub preview. Use when the user wants to report a bug, confusion, missing behavior, rough experience, or praise, or accepts an end-of-work feedback offer.
+name: feedback
+description: Collect candid beta feedback about Orangu after work involving Claude Code, Cowork, or Desktop by opening a private localhost form with an exact user-reviewed GitHub preview. Use for /orangu:feedback when the user wants to report a bug, confusion, missing behavior, rough experience, or praise, or accepts an end-of-work feedback offer.
 allowed-tools: Bash(orangu feedback:*), Bash(node *orangu.cli.mjs feedback*)
 ---
 
-# orangu-feedback
+# /orangu:feedback
 
 Help the user send candid, actionable beta feedback without attaching their work.
 

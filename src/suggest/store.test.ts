@@ -140,6 +140,7 @@ describe('SuggestionStore', () => {
   it('skips corrupt lines and keeps going', async () => {
     const { record } = await store.upsertNew(finding(), 'report')
     appendFileSync(join(home, 'suggestions.jsonl'), '{ this is not json\n')
+    appendFileSync(join(home, 'suggestions.jsonl'), JSON.stringify({ ...record, id: '$(untrusted)', status: 'new' }) + '\n')
     await store.transition(record.id, 'kicked-off')
     const all = await store.all()
     expect(all).toHaveLength(1)

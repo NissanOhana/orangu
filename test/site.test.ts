@@ -578,21 +578,24 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(text).not.toMatch(/\b(?:apply|verify) (?:a )?global (?:proposal|change)\b/i)
   })
 
-  it('states the bounded evidence inputs and honest host boundary', () => {
+  it('states the bounded evidence inputs without vendor-command comparisons', () => {
     const trust = src.match(/<section id="trust"[\s\S]*?<\/section>/)?.[0] ?? ''
     for (const input of ['orangu evidence', 'Analysis', 'SlimAnalysis', 'Aggregate']) expect(trust).toContain(input)
-    expect(trust).toContain('up to 200 unseen sessions per run')
-    expect(trust).toContain('does not document a historical-session insights command')
-    expect(trust).toContain('without claiming Codex transcript parsing')
+    expect(trust).toContain('How Orangu turns local evidence into improvement')
+    expect(trust).not.toContain('Claude Code /insights')
+    expect(trust).not.toContain('Codex commands')
+    expect(trust).not.toContain('historical-session insights command')
   })
 
   it('stages inspection, sample, and plugin activation as distinct actions', () => {
     expect(src).toContain('Inspect a session')
     expect(src).toContain('See the observe-to-proposal sample')
     expect(src).toContain('Add the Claude Code plugin')
-    expect(src).toContain('Use the Codex repo skills')
+    expect(src).toContain('Add the Codex plugin')
     expect(src).toContain('/plugin marketplace add NissanOhana/orangu')
     expect(src).toContain('/plugin install orangu')
+    expect(src).toContain('codex plugin marketplace add NissanOhana/orangu')
+    expect(src).toContain('codex plugin add orangu@orangu')
     expect(src).toContain('/orangu:improve')
     expect(src).toContain('/orangu:apply')
     expect(src).toContain('$orangu-improve')
@@ -600,20 +603,20 @@ describe('site/index.src.html (authored landing source)', () => {
   })
 
   it('makes improve and apply primary while retaining the suggest compatibility alias', () => {
-    const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => dir.startsWith('orangu-')).sort()
-    const listed = [...src.matchAll(/<div class="skill"><b>([a-z-]+)<\/b><div>([^<]+)<\/div><\/div>/g)]
+    const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => existsSync(join(root, 'plugin/skills', dir, 'SKILL.md'))).sort()
+    const listed = [...src.matchAll(/<div class="skill"><b>\/orangu:([a-z-]+)<\/b><div>([^<]+)<\/div><\/div>/g)]
     expect(listed.map((match) => match[1])).toEqual([
-      'orangu-improve',
-      'orangu-apply',
-      'orangu-analyze',
-      'orangu-mega',
-      'orangu-watch',
-      'orangu-feedback',
-      'orangu-suggest',
+      'improve',
+      'apply',
+      'analyze',
+      'mega',
+      'watch',
+      'feedback',
+      'suggest',
     ])
     expect(listed.map((match) => match[1]).sort()).toEqual(dirs)
     expect(listed.at(-1)?.[2]).toContain('Compatibility alias')
-    expect(listed.at(-1)?.[2]).toContain('forwards the exact request to orangu-improve')
+    expect(listed.at(-1)?.[2]).toContain('forwards the exact request to /orangu:improve')
   })
 
   it('keeps accessible interactions and ships none of the design-canvas runtime', () => {
@@ -691,7 +694,7 @@ describe('site/index.html (generated landing)', () => {
   })
 
   it('references only approved public origins', () => {
-    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'code.claude.com', 'learn.chatgpt.com'])
+    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com'])
     const urls = html.match(/https?:\/\/[^\s"'<>)]+/g) ?? []
     expect(urls.length).toBeGreaterThan(0)
     for (const url of urls) expect(allowed.has(new URL(url).host), `disallowed origin: ${url}`).toBe(true)
