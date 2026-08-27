@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
+import { SessionBuilder } from '../../test/fixtures/session-builder.js'
 
 async function until(cond: () => boolean, ms: number, what: string): Promise<void> {
   const t0 = Date.now()
@@ -98,6 +99,104 @@ syncBuiltinESMExports()
     expect(r.status, r.stderr).toBe(0)
     expect(r.stdout).toContain("default-src 'none'")
     expect(r.stdout).toContain('orangu-data')
+  })
+
+  it('writes report artifacts privately and rejects a symlink output target', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-private-report-'))
+    const home = await makeFixtureHome(dir)
+    const out = join(dir, 'report.html')
+    run(['report', home.sessions[0]!.path, '--out', out, '--no-open', '--no-cache', '--quiet'])
+    expect(readFileSync(out, 'utf8')).toContain('orangu-data')
+    if (process.platform !== 'win32') expect(statSync(out).mode & 0o777).toBe(0o600)
+
+    if (process.platform !== 'win32') {
+      const outside = join(dir, 'outside.html')
+      const linked = join(dir, 'linked-report.html')
+      writeFileSync(outside, 'outside')
+      symlinkSync(outside, linked)
+      const rejected = spawnSync(
+        'node',
+        [CLI, 'report', home.sessions[0]!.path, '--out', linked, '--no-open', '--no-cache', '--quiet'],
+        { encoding: 'utf8' },
+      )
+      expect(rejected.status).not.toBe(0)
+      expect(rejected.stderr).toMatch(/symbolic link|changed during access/)
+      expect(lstatSync(linked).isSymbolicLink()).toBe(true)
+      expect(readFileSync(outside, 'utf8')).toBe('outside')
+    }
+  })
+
+  it('redacts aggregate stdout and --out by default while preserving --no-redact', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-private-aggregate-'))
+    const home = await makeFixtureHome(dir)
+    const base = ['global', '--root', home.configDir, '--limit', '1', '--jobs', '1', '--no-cache', '--quiet']
+    const secret = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
+    const secretPath = `/Users/test/Code/demo/private/${secret}.ts`
+    const builder = new SessionBuilder({ sessionId: home.liveId })
+    builder.userPrompt(`My key is ${secret}`)
+    for (let i = 0; i < 3; i++) builder.toolCall('Read', { file_path: secretPath }, `read ${i}`)
+    await writeFile(home.sessions[0]!.path, builder.toJsonl())
+
+    const stdout = run([...base, '--json'])
+    const defaultJson = JSON.parse(stdout) as {
+      byProject: Array<{ key: string }>
+      sessions: Array<{ project?: string }>
+      topSessions: Array<{ project?: string }>
+    }
+    expect(stdout).not.toContain(secret)
+    expect(stdout).toContain('‹anthropic-key›')
+    expect(stdout).not.toContain('Users-test-Code')
+    expect(defaultJson.byProject[0]?.key).toBe('demo')
+    expect(defaultJson.sessions[0]?.project).toBe('demo')
+    expect(defaultJson.topSessions[0]?.project).toBe('demo')
+
+    const human = run(base)
+    expect(human).not.toContain(secret)
+    expect(human).not.toContain('Users-test-Code')
+    expect(human).toContain('My key is ‹anthropic-key›')
+    expect(human).toContain('private/‹anthropic-key›.ts')
+    const strippedHuman = run([...base, '--strip-paths'])
+    expect(strippedHuman).not.toContain(secret)
+    expect(strippedHuman).toContain('private/‹anthropic-key›.ts')
+
+    const out = join(dir, 'aggregate.json')
+    expect(run([...base, '--out', out])).toBe('')
+    const written = readFileSync(out, 'utf8')
+    expect(written).not.toContain(secret)
+    expect(written).toContain('‹anthropic-key›')
+    expect(written).not.toContain('Users-test-Code')
+    expect((JSON.parse(written) as typeof defaultJson).byProject[0]?.key).toBe('demo')
+    expect(written.endsWith('\n')).toBe(false)
+    if (process.platform !== 'win32') expect(statSync(out).mode & 0o777).toBe(0o600)
+
+    const strippedStdout = run([...base, '--json', '--strip-paths'])
+    const stripped = JSON.parse(strippedStdout) as {
+      byProject: Array<{ key: string }>
+      sessions: Array<{ project?: string }>
+      topSessions: Array<{ project?: string }>
+      topReReadFiles: Array<{ path: string }>
+    }
+    expect(strippedStdout).not.toContain(secret)
+    expect(stripped.byProject[0]?.key).toBe('demo')
+    expect(stripped.sessions[0]?.project).toBe('demo')
+    expect(stripped.topSessions[0]?.project).toBe('demo')
+    expect(stripped.topReReadFiles[0]?.path).toBe('private/‹anthropic-key›.ts')
+
+    const strippedOut = join(dir, 'aggregate-stripped.json')
+    expect(run([...base, '--out', strippedOut, '--strip-paths'])).toBe('')
+    const strippedFileText = readFileSync(strippedOut, 'utf8')
+    const strippedFile = JSON.parse(strippedFileText) as typeof stripped
+    expect(strippedFileText).not.toContain(secret)
+    expect(strippedFile.byProject[0]?.key).toBe('demo')
+    expect(strippedFile.sessions[0]?.project).toBe('demo')
+    expect(strippedFile.topSessions[0]?.project).toBe('demo')
+
+    const rawHuman = run([...base, '--no-redact'])
+    expect(rawHuman).toContain(secret)
+    expect(rawHuman).toContain(`private/${secret}.ts`)
+    const rawJson = run([...base, '--json', '--no-redact', '--strip-paths'])
+    expect(rawJson).toContain(secret)
+    expect(rawJson).toContain('-Users-test-Code-demo')
   })
 
   it('offers beta feedback only on human, non-quiet command paths', async () => {
@@ -288,11 +387,13 @@ syncBuiltinESMExports()
     const gone = new Promise((r) => child.on('exit', r))
     try {
       await until(() => existsSync(out) && readFileSync(out, 'utf8').includes('orangu-data'), 15_000, 'the initial report\n' + err)
+      if (process.platform !== 'win32') expect(statSync(out).mode & 0o777).toBe(0o600)
       const before = readFileSync(out, 'utf8')
       expect(before).not.toContain('WATCH-E2E-NEW-TURN')
       expect(before).toContain('"watch":true')
       await appendTurn(home.sessions[0]!.path, home.liveId, 'WATCH-E2E-NEW-TURN please')
       await until(() => readFileSync(out, 'utf8').includes('WATCH-E2E-NEW-TURN'), 15_000, 'the refreshed report\n' + err)
+      if (process.platform !== 'win32') expect(statSync(out).mode & 0o777).toBe(0o600)
     } finally {
       child.kill('SIGINT')
       await gone

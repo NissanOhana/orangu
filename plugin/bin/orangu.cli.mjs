@@ -1,6 +1,5 @@
 // src/cli/main.ts
-import { writeFile as writeFile3 } from "node:fs/promises";
-import { basename as basename9, join as join9, resolve as resolve9 } from "node:path";
+import { basename as basename9, join as join9, resolve as resolve10 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -1821,7 +1820,7 @@ function walk(obj2, opts) {
         continue;
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === "string" && (v.includes("/") || v.includes("\\"))) {
-        out[k] = basename3(v);
+        out[k] = scrubOne(basename3(v), opts);
         continue;
       }
       out[k] = typeof v === "string" ? scrubOne(v, opts) : walk(v, opts);
@@ -5989,7 +5988,6 @@ async function analyzeAllPooled(refs, o) {
 // src/cli/watch.ts
 import { watch as fsWatch } from "node:fs";
 import { stat as stat3 } from "node:fs/promises";
-import { writeFile } from "node:fs/promises";
 
 // src/serve/tail.ts
 import { constants as constants6 } from "node:fs";
@@ -6216,6 +6214,72 @@ function sessionFromTail(st) {
   });
 }
 
+// src/cli/private-output.ts
+import { constants as constants7 } from "node:fs";
+import { lstat as lstat6, open as open7 } from "node:fs/promises";
+import { resolve as resolve5 } from "node:path";
+var PRIVATE_FILE_MODE2 = 384;
+var PrivateOutputError = class extends Error {
+  name = "PrivateOutputError";
+};
+function sameInode2(a, b) {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+function assertSafeOutput(stat9, path) {
+  if (!stat9.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
+  if (stat9.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
+}
+async function assertPathStillNamesHandle(path, opened) {
+  const current = await lstat6(path, { bigint: true });
+  if (current.isSymbolicLink() || !current.isFile() || !sameInode2(current, opened)) {
+    throw new PrivateOutputError(`private output target changed during access: ${path}`);
+  }
+}
+async function openOutput(path) {
+  const baseFlags = constants7.O_WRONLY | (constants7.O_NOFOLLOW ?? 0) | (constants7.O_NONBLOCK ?? 0);
+  try {
+    return await open7(path, baseFlags | constants7.O_CREAT | constants7.O_EXCL, PRIVATE_FILE_MODE2);
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+  try {
+    return await open7(path, baseFlags);
+  } catch (error) {
+    if (error.code === "ELOOP") {
+      throw new PrivateOutputError(`private output target must not be a symbolic link: ${path}`);
+    }
+    throw error;
+  }
+}
+async function writePrivateOutput(path, data) {
+  const outputPath = resolve5(path);
+  try {
+    const handle = await openOutput(outputPath);
+    try {
+      const opened = await handle.stat({ bigint: true });
+      assertSafeOutput(opened, outputPath);
+      await assertPathStillNamesHandle(outputPath, opened);
+      if (process.platform !== "win32") await handle.chmod(PRIVATE_FILE_MODE2);
+      const secured = await handle.stat({ bigint: true });
+      assertSafeOutput(secured, outputPath);
+      if (process.platform !== "win32" && Number(secured.mode & 0o777n) !== PRIVATE_FILE_MODE2) {
+        throw new PrivateOutputError(`private output permissions could not be secured: ${outputPath}`);
+      }
+      await assertPathStillNamesHandle(outputPath, secured);
+      await handle.truncate(0);
+      await handle.writeFile(data);
+      const written = await handle.stat({ bigint: true });
+      assertSafeOutput(written, outputPath);
+      await assertPathStillNamesHandle(outputPath, written);
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    if (error instanceof PrivateOutputError) throw error;
+    throw new PrivateOutputError(`private output could not be written safely: ${outputPath}`);
+  }
+}
+
 // src/cli/watch.ts
 async function watchSession(ref, flags, deps) {
   const path = deps.outPath(ref.sessionId);
@@ -6240,13 +6304,14 @@ async function watchSession(ref, flags, deps) {
         const session = await sessionFromTail(st);
         const analysis = analyzeSession(session, { version: deps.version, now: Date.now() });
         const { html } = renderReport(analysis, { watch: true, redact: flagBool(flags, "no-redact") ? false : { scrub: true, stripText: !flagBool(flags, "include-text") } });
-        await writeFile(path, html);
+        await writePrivateOutput(path, html);
         renders++;
         const s = analysis.summary;
         process.stderr.write(
           `\r\x1B[2K\x1B[38;5;209m\u25CF\x1B[0m watching ${ref.sessionId.slice(0, 8)} \xB7 ${s.turns} turns \xB7 ${s.toolCalls} tools \xB7 ${fmtTokens(s.totalTokens)} tok \xB7 ctx ${fmtTokens(s.contextPeak)} \xB7 ${fmtMs(s.wallMs)}  \x1B[2m(render #${renders})\x1B[0m`
         );
-      } catch {
+      } catch (error) {
+        if (error instanceof PrivateOutputError) throw error;
         dirty = true;
         break;
       }
@@ -8393,9 +8458,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve10, reject) => {
+  await new Promise((resolve11, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve10);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve11);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -8412,7 +8477,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve10) => server.close(() => resolve10()));
+      await new Promise((resolve11) => server.close(() => resolve11()));
     }
   };
 }
@@ -8531,9 +8596,8 @@ function verifyConfirmationReceipt(o) {
 }
 
 // src/cli/commands/harness.ts
-import { writeFile as writeFile2 } from "node:fs/promises";
 import { homedir as homedir3 } from "node:os";
-import { basename as basename7, resolve as resolve5 } from "node:path";
+import { basename as basename7, resolve as resolve6 } from "node:path";
 
 // src/harness/collect.ts
 import { readdir, readFile as readFile2, stat as stat6 } from "node:fs/promises";
@@ -9411,7 +9475,7 @@ var kb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
 async function runHarness(flags) {
   const isGlobal = flagBool(flags, "global");
   const configArg = flagStr(flags, "root", "r");
-  const cwd = flags["cwd"] ? resolve5(String(flags["cwd"])) : process.cwd();
+  const cwd = flags["cwd"] ? resolve6(String(flags["cwd"])) : process.cwd();
   let refs;
   let roots;
   let scopeLabel;
@@ -9467,8 +9531,8 @@ async function cmdHarness(_positionals, flags) {
   const report = await runHarness(flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writeFile2(resolve5(outFile), JSON.stringify(report, null, 2));
-    process.stderr.write(paint(C.g, "\u2713 ") + `harness written to ${resolve5(outFile)}
+    await writePrivateOutput(resolve6(outFile), JSON.stringify(report, null, 2));
+    process.stderr.write(paint(C.g, "\u2713 ") + `harness written to ${resolve6(outFile)}
 `);
     if (!flagBool(flags, "json")) return;
   }
@@ -9662,7 +9726,7 @@ function printEstimate(est, label) {
 }
 
 // src/cli/commands/evidence.ts
-import { extname, resolve as resolve6 } from "node:path";
+import { extname, resolve as resolve7 } from "node:path";
 
 // src/suggest/evidence.ts
 var EVIDENCE_SCHEMA_VERSION = "1";
@@ -10114,7 +10178,7 @@ async function resolveEvidenceSession(selector, flags) {
   throw new Error(`No session matches "${selector}". Try: orangu list`);
 }
 async function bundleFromJsonFile(path, options) {
-  const absolute = resolve6(path);
+  const absolute = resolve7(path);
   const text2 = await readStableTextFile(absolute, MAX_EVIDENCE_ARTIFACT_BYTES, "evidence JSON");
   return parseEvidenceArtifact(text2, options);
 }
@@ -10144,9 +10208,9 @@ async function cmdEvidence(positionals, flags) {
 import { realpath as realpath7, stat as stat8 } from "node:fs/promises";
 
 // src/suggest/artifacts.ts
-import { constants as constants7 } from "node:fs";
-import { chmod as chmod2, lstat as lstat6, open as open7, realpath as realpath5, stat as stat7 } from "node:fs/promises";
-import { basename as basename8, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve7 } from "node:path";
+import { constants as constants8 } from "node:fs";
+import { chmod as chmod2, lstat as lstat7, open as open8, realpath as realpath5, stat as stat7 } from "node:fs/promises";
+import { basename as basename8, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
 var MAX_FILES = 64;
@@ -10218,8 +10282,8 @@ function sameArtifactSnapshot(a, b) {
   return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 }
 async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
-  const root = resolve7(proposalsDir);
-  const candidate = resolve7(path);
+  const root = resolve8(proposalsDir);
+  const candidate = resolve8(path);
   if (!inside(root, candidate) || basename8(candidate) !== expectedName) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
@@ -10227,7 +10291,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   let stat9;
   try {
     ;
-    [rootStat, stat9] = await Promise.all([lstat6(root, { bigint: true }), lstat6(candidate, { bigint: true })]);
+    [rootStat, stat9] = await Promise.all([lstat7(root, { bigint: true }), lstat7(candidate, { bigint: true })]);
   } catch {
     throw artifactError(`${expectedName} does not exist`);
   }
@@ -10240,7 +10304,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   const initial = artifactSnapshot(stat9);
   let handle;
   try {
-    handle = await open7(realCandidate, constants7.O_RDONLY | (constants7.O_NOFOLLOW ?? 0));
+    handle = await open8(realCandidate, constants8.O_RDONLY | (constants8.O_NOFOLLOW ?? 0));
   } catch {
     throw artifactError(`${expectedName} changed before it was read`);
   }
@@ -10252,7 +10316,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     if (process.platform !== "win32") await handle.chmod(384);
     const [secured, securedPath, securedReal] = await Promise.all([
       handle.stat({ bigint: true }),
-      lstat6(candidate, { bigint: true }),
+      lstat7(candidate, { bigint: true }),
       realpath5(candidate)
     ]);
     if (securedPath.isSymbolicLink() || securedReal !== realCandidate || !sameArtifactSnapshot(artifactSnapshot(secured), artifactSnapshot(securedPath))) {
@@ -10268,7 +10332,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     }
     const [after, pathAfter, realAfter] = await Promise.all([
       handle.stat({ bigint: true }),
-      lstat6(candidate, { bigint: true }),
+      lstat7(candidate, { bigint: true }),
       realpath5(candidate)
     ]);
     if (offset !== buffer.length || pathAfter.isSymbolicLink() || realAfter !== realCandidate || !sameArtifactSnapshot(expected, artifactSnapshot(after)) || !sameArtifactSnapshot(expected, artifactSnapshot(pathAfter))) {
@@ -10574,7 +10638,7 @@ function compareMetric(before, after, comparison) {
 
 // src/adapters/claude-code/discovered-analysis.ts
 import { realpath as realpath6 } from "node:fs/promises";
-import { isAbsolute as isAbsolute6, resolve as resolve8 } from "node:path";
+import { isAbsolute as isAbsolute6, resolve as resolve9 } from "node:path";
 var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
 var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
 async function discoveredInventory() {
@@ -10588,7 +10652,7 @@ async function discoveredInventory() {
       const canonical = await realpath6(ref.path);
       const prior = byCanonicalPath.get(canonical);
       if (prior === void 0) byCanonicalPath.set(canonical, ref);
-      else if (prior !== null && resolve8(prior.path) !== resolve8(ref.path)) byCanonicalPath.set(canonical, null);
+      else if (prior !== null && resolve9(prior.path) !== resolve9(ref.path)) byCanonicalPath.set(canonical, null);
     } catch {
     }
   }
@@ -10603,7 +10667,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
     let canonical;
     try {
-      canonical = await realpath6(isAbsolute6(value) ? value : resolve8(process.cwd(), value));
+      canonical = await realpath6(isAbsolute6(value) ? value : resolve9(process.cwd(), value));
     } catch {
       return void 0;
     }
@@ -10612,7 +10676,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else {
     return void 0;
   }
-  const unique = new Map(matches.map((ref) => [resolve8(ref.path), ref]));
+  const unique = new Map(matches.map((ref) => [resolve9(ref.path), ref]));
   return unique.size === 1 ? [...unique.values()][0] : void 0;
 }
 function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSION_BYTES, options = {}) {
@@ -10982,12 +11046,12 @@ async function cmdFeedback(positionals, flags) {
   loopback only \xB7 no sessions attached \xB7 ctrl-c stops
 `);
   if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve10) => {
+  await new Promise((resolve11) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve10);
+      void server.close().finally(resolve11);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
@@ -11022,6 +11086,39 @@ function renderAnalysisJson(a, flags) {
 }
 function emitAnalysisJson(a, flags) {
   process.stdout.write(renderAnalysisJson(a, flags));
+}
+function encodedProjectLeaf(value) {
+  let inMarker = false;
+  for (let i = value.length - 1; i >= 0; i--) {
+    if (value[i] === "\u203A") inMarker = true;
+    else if (value[i] === "\u2039") inMarker = false;
+    else if (value[i] === "-" && !inMarker) return value.slice(i + 1) || "project";
+  }
+  return value;
+}
+function sanitizeAggregateProjectIdentities(a, stripPaths) {
+  const shorten = (value) => {
+    if (value.startsWith("-") || /^[A-Za-z]--/.test(value)) return encodedProjectLeaf(value);
+    if (stripPaths && (value.includes("/") || value.includes("\\"))) return value.split(/[\\/]/).filter(Boolean).at(-1) ?? "project";
+    return value;
+  };
+  const row = (value) => value.project === void 0 ? value : { ...value, project: shorten(value.project) };
+  return {
+    ...a,
+    byProject: a.byProject.map((value) => ({ ...value, key: shorten(value.key) })),
+    sessions: a.sessions.map(row),
+    topSessions: a.topSessions.map(row)
+  };
+}
+function prepareAggregateForOutput(a, flags) {
+  if (flagBool(flags, "no-redact")) return a;
+  const stripPaths = flagBool(flags, "strip-paths");
+  const redacted2 = redactValue(a, { scrub: true, stripPaths });
+  return sanitizeAggregateProjectIdentities(redacted2, stripPaths);
+}
+function renderPreparedAggregateJson(a, flags, options = {}) {
+  const body = JSON.stringify(a, null, options.pretty ?? !flagBool(flags, "quiet") ? 2 : 0);
+  return body + (options.trailingNewline ?? true ? "\n" : "");
 }
 
 // src/cli/main.ts
@@ -11086,7 +11183,7 @@ async function analyzeRef(ref, flags, cache2) {
 }
 function outPath(flags, id, ext = "html") {
   const out = flagStr(flags, "o", "out");
-  if (out) return resolve9(out);
+  if (out) return resolve10(out);
   return join9(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
@@ -11100,7 +11197,7 @@ async function cmdReport(sel, flags) {
     return;
   }
   const path = outPath(flags, ref.sessionId);
-  await writeFile3(path, html);
+  await writePrivateOutput(path, html);
   process.stderr.write(paint2(C2.g, "\u2713 ") + `report written to ${path}` + (redaction ? paint2(C2.dim, ` (${redaction.applied} redactions)`) : "") + "\n");
   if (!flagBool(flags, "no-open") && (flagBool(flags, "open") || isTTY)) openInBrowser(path);
   process.stdout.write(path + "\n");
@@ -11207,7 +11304,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${roots.length} roots)`;
   } else {
-    const cwd = selOrPath ? resolve9(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve10(selOrPath) : process.cwd();
     refs = await listSessions({ cwd });
     scopeLabel = `repo ${basename9(cwd)}`;
   }
@@ -11245,10 +11342,11 @@ async function cmdAggregate(scope, selOrPath, flags) {
   }
   const agg = aggregate(analyses, scopeLabel, Date.now());
   if (failed) agg.scope += ` (${failed} unreadable skipped)`;
+  const outputAggregate = prepareAggregateForOutput(agg, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writeFile3(resolve9(outFile), JSON.stringify(agg, null, 2));
-    process.stderr.write(paint2(C2.g, "\u2713 ") + `aggregate written to ${resolve9(outFile)}
+    await writePrivateOutput(resolve10(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    process.stderr.write(paint2(C2.g, "\u2713 ") + `aggregate written to ${resolve10(outFile)}
 `);
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
@@ -11256,10 +11354,10 @@ async function cmdAggregate(scope, selOrPath, flags) {
     }
   }
   if (flagBool(flags, "json")) {
-    process.stdout.write(JSON.stringify(agg, null, flagBool(flags, "quiet") ? 0 : 2) + "\n");
+    process.stdout.write(renderPreparedAggregateJson(outputAggregate, flags));
     return;
   }
-  printAggregate(agg);
+  printAggregate(outputAggregate);
   if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
 }
 function printAggregate(a) {

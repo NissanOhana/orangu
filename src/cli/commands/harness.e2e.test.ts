@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -178,6 +178,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'schemaVersion', 'scope'])
     expect(raw).toContain('\n  ') // pretty-printed with 2 spaces, like cmdAggregate
     expect(raw).not.toContain('$')
+    if (process.platform !== 'win32') expect(statSync(dest).mode & 0o777).toBe(0o600)
   })
 
   it('--out with -o writes the same file, and --out plus --json also prints to stdout', async () => {

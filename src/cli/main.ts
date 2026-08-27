@@ -10,7 +10,6 @@
  *
  * Session selector: a session id, a unique id prefix, a path to a .jsonl, or "latest" (default).
  */
-import { writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -30,7 +29,8 @@ import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
 import { MASCOT_ASCII } from '../report/client/mascot.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
-import { emitAnalysisJson } from './json-out.js'
+import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
+import { writePrivateOutput } from './private-output.js'
 import { openInBrowser } from './open-browser.js'
 import { VERSION } from '../version.js'
 
@@ -115,7 +115,7 @@ async function cmdReport(sel: string | undefined, flags: Record<string, string |
     return
   }
   const path = outPath(flags, ref.sessionId)
-  await writeFile(path, html)
+  await writePrivateOutput(path, html)
   process.stderr.write(paint(C.g, '✓ ') + `report written to ${path}` + (redaction ? paint(C.dim, ` (${redaction.applied} redactions)`) : '') + '\n')
   if (!flagBool(flags, 'no-open') && (flagBool(flags, 'open') || isTTY)) openInBrowser(path)
   process.stdout.write(path + '\n')
@@ -256,9 +256,10 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   }
   const agg = aggregate(analyses, scopeLabel, Date.now())
   if (failed) agg.scope += ` (${failed} unreadable skipped)`
+  const outputAggregate = prepareAggregateForOutput(agg, flags)
   const outFile = flagStr(flags, 'o', 'out')
   if (outFile) {
-    await writeFile(resolve(outFile), JSON.stringify(agg, null, 2))
+    await writePrivateOutput(resolve(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }))
     process.stderr.write(paint(C.g, '✓ ') + `aggregate written to ${resolve(outFile)}\n`)
     if (!flagBool(flags, 'json')) {
       if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
@@ -266,10 +267,10 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
     }
   }
   if (flagBool(flags, 'json')) {
-    process.stdout.write(JSON.stringify(agg, null, flagBool(flags, 'quiet') ? 0 : 2) + '\n')
+    process.stdout.write(renderPreparedAggregateJson(outputAggregate, flags))
     return
   }
-  printAggregate(agg)
+  printAggregate(outputAggregate)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
 }
 

@@ -214,4 +214,13 @@ describe('redactValue', () => {
     expect(out.path).toBe('~/proj/a.jsonl')
     expect(out.title).toContain('‹email›')
   })
+
+  it('scrubs a secret-bearing basename after stripping a path', () => {
+    const secret = 'sk-ant-api03-abc123def456ghi789'
+    const path = `/home/tester/private/${secret}.jsonl`
+    const out = redactValue({ path }, { stripPaths: true, home: '' })
+    expect(out.path).toBe('private/‹anthropic-key›.jsonl')
+    expect(out.path).not.toContain(secret)
+    expect(redactValue({ path }, { scrub: false, stripPaths: true, home: '' }).path).toContain(secret)
+  })
 })

@@ -260,7 +260,8 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
         continue
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === 'string' && (v.includes('/') || v.includes('\\'))) {
-        out[k] = basename(v)
+        // Shortening must not skip the normal secret scrub: a basename can itself be a credential.
+        out[k] = scrubOne(basename(v), opts)
         continue
       }
       out[k] = typeof v === 'string' ? scrubOne(v, opts) : walk(v, opts)

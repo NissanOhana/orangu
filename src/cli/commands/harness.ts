@@ -11,7 +11,6 @@
  *   orangu harness [--json] [--cwd <dir>] [--root <dir>] [--global] [--limit <n>]
  *                  [-o|--out <file>] [--no-redact] [--strip-paths] [--jobs <n>] [--no-cache] [--quiet]
  */
-import { writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { basename, resolve } from 'node:path'
 import { claudeRoots, defaultConfigDir, listSessions, type SessionRef } from '../../discover/discover.js'
@@ -24,6 +23,7 @@ import type { HarnessReport } from '../../harness/types.js'
 import { redactValue } from '../../redact/redact.js'
 import { flagBool, flagStr } from '../args.js'
 import type { Analysis } from '../../model/analysis.js'
+import { writePrivateOutput } from '../private-output.js'
 
 declare const __ORANGU_VERSION__: string
 const VERSION = typeof __ORANGU_VERSION__ !== 'undefined' ? __ORANGU_VERSION__ : '0.0.0-dev'
@@ -117,7 +117,7 @@ export async function cmdHarness(_positionals: string[], flags: Record<string, s
   // skill materialise the digest with `orangu harness --out <tmp>/harness.json` without it entering context.
   const outFile = flagStr(flags, 'o', 'out')
   if (outFile) {
-    await writeFile(resolve(outFile), JSON.stringify(report, null, 2))
+    await writePrivateOutput(resolve(outFile), JSON.stringify(report, null, 2))
     process.stderr.write(paint(C.g, '✓ ') + `harness written to ${resolve(outFile)}\n`)
     if (!flagBool(flags, 'json')) return
   }

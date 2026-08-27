@@ -6,7 +6,6 @@
  */
 import { watch as fsWatch } from 'node:fs'
 import { stat } from 'node:fs/promises'
-import { writeFile } from 'node:fs/promises'
 import { discoverSubagentFiles } from '../adapters/claude-code/parse.js'
 import { newTailState, tailOnce, sessionFromTail } from '../serve/tail.js'
 import { analyzeSession } from '../analyze/analyze.js'
@@ -14,6 +13,7 @@ import { renderReport } from '../report/render.js'
 import { fmtMs, fmtTokens } from '../analyze/util.js'
 import type { SessionRef } from '../discover/discover.js'
 import { flagBool } from './args.js'
+import { PrivateOutputError, writePrivateOutput } from './private-output.js'
 
 export interface WatchDeps {
   version: string
@@ -45,13 +45,15 @@ export async function watchSession(ref: SessionRef, flags: Record<string, string
         const session = await sessionFromTail(st)
         const analysis = analyzeSession(session, { version: deps.version, now: Date.now() })
         const { html } = renderReport(analysis, { watch: true, redact: flagBool(flags, 'no-redact') ? false : { scrub: true, stripText: !flagBool(flags, 'include-text') } })
-        await writeFile(path, html)
+        await writePrivateOutput(path, html)
         renders++
         const s = analysis.summary
         process.stderr.write(
           `\r\x1b[2K\x1b[38;5;209m●\x1b[0m watching ${ref.sessionId.slice(0, 8)} · ${s.turns} turns · ${s.toolCalls} tools · ${fmtTokens(s.totalTokens)} tok · ctx ${fmtTokens(s.contextPeak)} · ${fmtMs(s.wallMs)}  \x1b[2m(render #${renders})\x1b[0m`,
         )
-      } catch {
+      } catch (error) {
+        // Parsing can race a transcript append and is retryable. An unsafe output path is not.
+        if (error instanceof PrivateOutputError) throw error
         /* file may be mid-write; retry on the next change */
         dirty = true
         break
