@@ -8,7 +8,9 @@ const pages = new Map([
   ['/', join(root, 'site', 'index.html')],
   ['/index.html', join(root, 'site', 'index.html')],
   ['/sample.html', join(root, 'site', 'sample.html')],
+  ['/assets/report-overview.png', join(root, 'site', 'assets', 'report-overview.png')],
 ])
+const contentType = (file) => (file.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8')
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname
@@ -18,7 +20,7 @@ const server = createServer((req, res) => {
     res.end('not found')
     return
   }
-  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' })
+  res.writeHead(200, { 'content-type': contentType(file), 'cache-control': 'no-store' })
   res.end(readFileSync(file))
 })
 

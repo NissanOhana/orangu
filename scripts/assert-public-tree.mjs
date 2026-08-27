@@ -86,6 +86,8 @@ const binaryDigests = new Map([
   ['design/brand/mascot-main-transparent.png', '91be2625136579826ff0f650a249f7924243bbf7e0e1e5c759b581fd060870fb'],
   ['plugins/orangu/assets/icon.png', '3be627a8e18dfd2d1f3d26dbfc224f15f9c1c563cbdddb73a587f031d2328cba'],
   ['plugins/orangu/assets/logo.png', '91be2625136579826ff0f650a249f7924243bbf7e0e1e5c759b581fd060870fb'],
+  // regenerate with `node scripts/site-screenshot.mjs` and paste the printed digest
+  ['site/assets/report-overview.png', '548a948f87f4f2e320580b2208b2caefc4c9f72e419beb6e51b532c1e1a2b693'],
 ])
 
 const binaryExtensions = new Set(['.7z', '.avi', '.bin', '.bmp', '.dmg', '.doc', '.docx', '.gif', '.gz', '.ico', '.jpeg', '.jpg', '.mov', '.mp3', '.mp4', '.pdf', '.png', '.tar', '.tgz', '.wasm', '.webp', '.xls', '.xlsx', '.zip'])
