@@ -1,11 +1,14 @@
-/** Context & tokens (Detailed-only panel, policy/policy): context curve, token composition, where the tokens went. */
+/**
+ * Context & tokens (Detailed-only): one headline sentence from three measured facts, the context
+ * curve and "Where the tokens went" at full weight, the other charts under "More charts" (A5).
+ */
 import type { Ctx } from '../app.js'
 import { catColor, esc, pct, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { degradedBanner } from '../components/banner.js'
 import { emptyHero } from '../components/empty.js'
-import { compactionMarkers } from '../derive.js'
+import { compactionMarkers, contextHeadline } from '../derive.js'
 import { lineChart, proportionRows, stackedArea, stackedBar } from '../charts.js'
 import { card } from '../components/card.js'
 
@@ -41,20 +44,24 @@ export function renderContext(ctx: Ctx): HTMLElement {
     co.byTurn.map((t) => t.cumulativeTokens),
     { color: 'var(--accent-ink)', fmtY: tok },
   )
+  const more = [
+    card('Token composition per request', `<div class="scroll-x">${stack}</div><div class="legend">${['read', 'edit', 'write', 'agent'].map((c, i) => `<span><i class="sw" style="background:var(--cat-${c})"></i>${['cache read', 'cache write', 'fresh input', 'output'][i]}</span>`).join('')}</div>`, 'mb16'),
+    card('By model', `${byModel}<p class="small muted" style="margin-top:8px">Main thread ${esc(tok(co.mainThread))} · agents ${esc(tok(co.agents))}</p>`, 'mb16'),
+    card('Cumulative tokens over turns', `<div class="scroll-x">${cum}</div>`),
+  ].join('')
   return h(`<section>
     ${degradedBanner(a, ctx.audience)}
+    <p class="ctx-lead">${esc(contextHeadline(a))}</p>
     <div class="kpis">
       ${kpi('Peak context', tok(c.peak), c.contextWindow ? pct(c.peak / c.contextWindow) + ' of ' + tok(c.contextWindow) : '')}
       ${kpi('Cache hit ratio', pct(c.cacheHitRatio, 1), 'context re-read rather than re-sent')}
-      ${kpi('Re-read multiplier', c.reReadMultiplier.toFixed(1) + '×', 'context carried ÷ peak')}
-      ${kpi('1h-cache writes', pct(c.cacheWrite1hShare), 'of cache writes (the long TTL tier)')}
-      ${kpi('Boot baseline', tok(c.baseline), 'system+tools+CLAUDE.md, every request')}
+      ${kpi('Context re-read', c.reReadMultiplier.toFixed(1) + '×', 'context carried ÷ peak')}
+      ${kpi('Long-lived cache writes', pct(c.cacheWrite1hShare), 'of cache writes (the 1h tier)')}
+      ${kpi('Fixed weight per request', tok(c.baseline), 'system + tools + CLAUDE.md, every request')}
       ${kpi('Compactions', String(c.compactions.length), c.compactions.length ? 'context was reset' : 'none')}
     </div>
     ${card('Context size over the session', `<div class="scroll-x">${ctxLine}</div><div class="legend"><span>Each point is one API request; dashed lines are compactions.</span></div>`, 'mb16')}
-    ${card('Token composition per request', `<div class="scroll-x">${stack}</div><div class="legend">${['read', 'edit', 'write', 'agent'].map((c, i) => `<span><i class="sw" style="background:var(--cat-${c})"></i>${['cache read', 'cache write', 'fresh input', 'output'][i]}</span>`).join('')}</div>`, 'mb16')}
     ${card(`Where the tokens went · ${esc(tok(co.totalTokens))} total`, `${stackedBar(byKind, { height: 22 })}<div class="legend">${byKind.filter((b) => b.value > 0).map((b) => `<span><i class="sw" style="background:${b.color}"></i>${esc(b.label)}</span>`).join('')}</div>${serverTools ? `<div class="smt8">${serverTools} server-tool request${serverTools === 1 ? '' : 's'} (web search/fetch), counted per request, not in tokens</div>` : ''}`, 'mb16')}
-    ${card('By model', `${byModel}<p class="small muted" style="margin-top:8px">Main thread ${esc(tok(co.mainThread))} · agents ${esc(tok(co.agents))}</p>`, 'mb16')}
-    ${card('Cumulative tokens over turns', `<div class="scroll-x">${cum}</div>`)}
+    <details class="more-charts"><summary><span class="chev" aria-hidden="true">▸</span>More charts · composition per request, by model, cumulative</summary><div class="mt8">${more}</div></details>
   </section>`)
 }

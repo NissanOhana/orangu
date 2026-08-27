@@ -213,7 +213,7 @@ describe('renderSuggest proposal UX', () => {
     renderSuggest(context('file', []))
     expect(markup).toContain('aria-label="Hand off to Claude Code"')
     expect(markup).toContain('Copy improve command')
-    expect(markup).toContain('Paste it in Claude Code in <span class="mono">~/Code/demo</span>.')
+    expect(markup).toContain('<span>Paste it in Claude Code in <span class="mono">~/Code/demo</span>.</span>')
     expect(markup).toContain('open orangu serve to review it')
     expect(markup).toContain('/plugin marketplace add NissanOhana/orangu')
     expect(markup).toContain('/plugin install orangu')

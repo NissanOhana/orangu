@@ -21,6 +21,7 @@ import {
   insightLink,
   outcomeBits,
   compactionMarkers,
+  contextHeadline,
 } from './derive.js'
 import type { Analysis, QualitySignal, Summary, TurnAnalysis } from '../../model/analysis.js'
 
@@ -335,5 +336,17 @@ describe('compactionMarkers', () => {
       { x: 2, label: 'compaction @turn 5' },
     ])
     expect(compactionMarkers([{ turnIndex: 1 }], [])).toEqual([{ x: 0, label: 'compaction @turn 1' }])
+  })
+})
+
+describe('contextHeadline (A5)', () => {
+  const base = { summary: summary({ totalTokens: 100_000, contextPeak: 75_000, cacheHitRatio: 0.97 }), context: { contextWindow: 100_000 }, tokens: { agents: 58_000 } }
+  it('joins the three measured clauses', () => {
+    expect(contextHeadline(base as never)).toBe('Context grew to 75% of the window; 97% of tokens were cache reads; 58% went to subagents.')
+  })
+  it('drops every clause whose input is missing, down to a designed empty sentence', () => {
+    expect(contextHeadline({ ...base, context: {} } as never)).toBe('97% of tokens were cache reads; 58% went to subagents.')
+    expect(contextHeadline({ ...base, tokens: { agents: 0 } } as never)).toBe('Context grew to 75% of the window; 97% of tokens were cache reads.')
+    expect(contextHeadline({ summary: summary({ totalTokens: 0 }), context: {}, tokens: { agents: 0 } } as never)).toBe('No token usage was recorded for this session.')
   })
 })

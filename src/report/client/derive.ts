@@ -133,6 +133,23 @@ export function recoverableLine(sum: { tokens: number; ms: number }, findings: n
   return `${what} recoverable across ${findings} finding${findings === 1 ? '' : 's'}`
 }
 
+/**
+ * The Context screen's one-sentence takeaway from three measured facts. Each clause appears only
+ * when its input exists (no context window: no share of it; no subagent tokens: no third clause),
+ * so a thin session gets a shorter true sentence, never a placeholder or NaN.
+ */
+export function contextHeadline(a: Pick<Analysis, 'summary' | 'context' | 'tokens'>): string {
+  const s = a.summary
+  const c = a.context
+  const parts: string[] = []
+  if (c.contextWindow && s.contextPeak) parts.push(`context grew to ${pct(s.contextPeak / c.contextWindow)} of the window`)
+  if (s.totalTokens) parts.push(`${pct(s.cacheHitRatio)} of tokens were cache reads`)
+  if (s.totalTokens && a.tokens.agents) parts.push(`${pct(a.tokens.agents / s.totalTokens)} went to subagents`)
+  if (!parts.length) return 'No token usage was recorded for this session.'
+  const line = parts.join('; ')
+  return line[0]!.toUpperCase() + line.slice(1) + '.'
+}
+
 /** Overview Quality axis headline from the quality signals (deterministic word map, no score). */
 export function qualityHeadline(signals: QualitySignal[]): string {
   const tests = signals.find((s) => s.id === 'tests')

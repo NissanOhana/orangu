@@ -304,6 +304,8 @@ svg { display: block; max-width: 100%; }
 .steps > li::before { content: counter(step); width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border2); display: grid; place-items: center; font: 700 11px var(--mono); color: var(--ink3); flex: none; }
 .sg-install > summary { cursor: pointer; font-size: 13px; color: var(--ink2); display: flex; align-items: center; gap: 8px; }
 .mt8 { margin-top: 8px; }
+.ctx-lead { font-size: 16px; line-height: 1.5; color: var(--ink1); margin: 0 0 14px; max-width: 760px; }
+.more-charts > summary { cursor: pointer; font-size: 13px; color: var(--ink2); display: flex; align-items: center; gap: 8px; padding: 6px 0; }
 .sg-hero { min-width: 220px; }
 .sg-sub { font-size: 13px; color: var(--ink2); margin-top: 2px; }
 .sg-foot { margin: 14px 0 0; }

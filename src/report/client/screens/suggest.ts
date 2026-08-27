@@ -137,8 +137,8 @@ function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: Sugges
       </div>
       <ol class="steps" aria-label="Hand off to Claude Code">
         <li><button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
-        <li>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</li>
-        <li>${stepThree(ctx.data.mode)}</li>
+        <li><span>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</span></li>
+        <li><span>${stepThree(ctx.data.mode)}</span></li>
       </ol>
       <div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
       <div class="kick-msg small muted" aria-live="polite">${esc(failure)}</div>
@@ -171,10 +171,10 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
     : []
   const heroSub = plainSentence(
     scope === 'session'
-      ? 'Diagnose one finding and draft one bounded proposal. Verify its evidence in a later run before calling it an improvement.'
+      ? 'One finding, one bounded proposal. Verify it on a later run before calling it an improvement.'
       : scope === 'repo'
-        ? 'Use recurring repo patterns for larger harness changes. Apply only after review; a fresh cohort comparison remains separate.'
-        : 'Use recurring global patterns to draft larger harness proposals. Global suggestions are proposal-only.',
+        ? 'Recurring repo patterns for larger harness changes. Apply only after review.'
+        : 'Recurring global patterns. Global suggestions are proposal-only.',
     ctx.audience,
   )
 
@@ -185,15 +185,15 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
   // the taxonomy is shown on demand, under the first-time note, never as a header before any proposal exists
   const types = CHANGE_CLASS_LABELS.map((label) => `<span class="sigchip">${esc(label)}</span>`).join('')
   const install = boundRows.length
-    ? `<details class="card pad mb16 sg-install"><summary><span class="chev" aria-hidden="true">▸</span>First time? Install the orangu plugin in Claude Code</summary><div class="mt8">${commandBlock(PLUGIN_INSTALL, '>')}<p class="small muted" style="margin:8px 0 0">Two commands typed inside Claude Code, once. After that every improve command above works. A proposal changes exactly one of:</p><div class="chiprow mt8">${types}</div></div></details>`
+    ? `<details class="card pad mb16 sg-install"><summary><span class="chev" aria-hidden="true">▸</span>First time? Install the orangu plugin in Claude Code</summary><div class="mt8">${commandBlock(PLUGIN_INSTALL, '>')}<p class="small muted" style="margin:8px 0 0">Typed inside Claude Code, once. A proposal changes one of:</p><div class="chiprow mt8">${types}</div></div></details>`
     : ''
   const mega = scope === 'session' || !agg ? '' : (ctx.megaReview?.(scope) ?? '')
 
-  const foot = scope === 'session'
-    ? 'Local evidence and catalog matches stay deterministic. Optional AI drafts one bounded proposal. Only a later same-workspace session can verify its reviewed checks.'
+  const foot = 'Evidence and catalog matches stay deterministic; optional AI drafts the proposal. ' + (scope === 'session'
+    ? 'Only a later same-workspace session can verify it.'
     : scope === 'repo'
-      ? 'Repo evidence and catalog matches stay deterministic. Applied means the reviewed files changed; it is not a cohort-wide verification.'
-      : 'Global evidence and catalog matches stay deterministic. Global suggestions remain proposals and never receive an apply handoff.'
+      ? 'Applied means the reviewed files changed, not a cohort-wide verification.'
+      : 'Global suggestions stay proposals and never get an apply handoff.')
 
   const el = h(`<section>
     <div class="hero">
