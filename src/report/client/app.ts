@@ -6,7 +6,7 @@ import type { Analysis } from '../../model/analysis.js'
 import type { AppData } from '../../model/app-data.js'
 import type { DataSource } from './data.js'
 import type { ServeEvent } from '../../serve/types.js'
-import { defaultScreen, liveRows, navFor, parseHash, writeHash, shortId, type RouteState } from './nav.js'
+import { cleanHash, defaultScreen, liveRows, navFor, parseHash, writeHash, shortId, type RouteState } from './nav.js'
 import { badgeCopy, mergeOpenIds } from './derive.js'
 import { esc, num } from './format.js'
 import { mascotSvg } from './mascot.js'
@@ -89,13 +89,13 @@ function screenSub(ctx: Ctx): string {
     case 'tools':
       return a ? plainSentence(`${a.summary.toolCalls} tool calls · ${a.tools.byName.length} tools`, aud) : ''
     case 'repo':
-      return ctx.data.aggregates.repo ? `${ctx.data.aggregates.repo.sessionCount} sessions · recurring evidence in ${ctx.data.aggregates.repo.scope}` : 'recurring evidence in this repository'
+      return `${ctx.data.aggregates.repo ? ctx.data.aggregates.repo.sessionCount + ' sessions · ' : ''}recurring evidence in this repository`
     case 'global':
-      return ctx.data.aggregates.global ? `${ctx.data.aggregates.global.sessionCount} sessions · recurring evidence across this machine` : 'recurring evidence across supported sessions'
+      return `${ctx.data.aggregates.global ? ctx.data.aggregates.global.sessionCount + ' sessions · ' : ''}recurring evidence across this machine`
     case 'harness':
-      return 'what your config declares vs what your sessions used, in tokens'
+      return 'declared vs used, in tokens'
     case 'suggest':
-      return ctx.state.scope === 'repo' || ctx.state.scope === 'global' ? 'recurring patterns · bounded proposals · whole-harness review' : 'one finding · one bounded proposal · verify on the next run'
+      return ctx.state.scope === 'repo' || ctx.state.scope === 'global' ? 'recurring patterns · bounded proposals · whole-harness review' : 'one finding · one bounded proposal'
     case 'agents':
       return a ? `${a.agents.runs.length} runs · up to ${a.agents.maxConcurrency} parallel` : ''
     case 'context':
@@ -235,7 +235,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
       .map(
         (g) => `<div class="navgroup"><div class="navgroup-label">${esc(g.label)}</div>${g.items
           .map((it) => {
-            const target = writeHash({ ...state, screen: it.screen, s: it.s ?? state.s, turn: undefined, tool: undefined, cat: undefined, agent: undefined, errorsOnly: undefined, filter: undefined })
+            const target = cleanHash(state, { screen: it.screen, s: it.s ?? state.s, scope: state.scope })
             const active = state.screen === it.screen && (it.s === undefined || it.s === state.s)
             const dot = it.dot ? `<span class="ldot${it.dot === 'hollow' ? ' hollow' : it.dot === 'ended' ? ' done' : ''}"${it.dot === 'pulse' ? ' data-pulse="1"' : ''} aria-hidden="true"></span><span class="vh">${it.dot === 'pulse' ? 'live' : it.dot === 'hollow' ? 'quiet' : 'ended'}</span>` : ''
             return `<a class="navitem" href="${esc(target)}"${active ? ' aria-current="page"' : ''}>${dot}${esc(it.label)}${it.hint ? `<span class="hint">${esc(it.hint)}</span>` : ''}</a>`

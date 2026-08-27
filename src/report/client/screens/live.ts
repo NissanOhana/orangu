@@ -55,16 +55,16 @@ const DOTS = {
 }
 
 /** static banner copy per state: [dot, title, sub]; live/stalled titles and the ended sub are dynamic */
-const LIVE_ROW: [string, string, string] = [DOTS.pulse, '', 'The report refreshes itself as the transcript grows. Nothing is sent anywhere.']
+const LIVE_ROW: [string, string, string] = [DOTS.pulse, '', 'Refreshes as the transcript grows. Nothing leaves this machine.']
 const BANNER: Record<LiveState, [string, string, string]> = {
   connecting: [DOTS.static, 'Connecting to orangu serve…', 'Waiting for the first event.'],
   live: LIVE_ROW,
   empty: LIVE_ROW,
-  stalled: [DOTS.hollow, '', 'No transcript growth lately. It may be waiting on you.'],
+  stalled: [DOTS.hollow, '', 'No transcript growth lately; it may be waiting on you.'],
   ended: [DOTS.good, 'Session ended · final numbers', ''],
   reconnecting: [DOTS.hollow, 'Connection lost · retrying', 'The page reconnects on its own.'],
-  file: [DOTS.static, 'Watching via orangu watch', 'This file is rewritten on every change. Reload to refresh.'],
-  snapshot: [DOTS.static, 'Static snapshot', 'This file does not update. Run orangu watch to follow the session live.'],
+  file: [DOTS.static, 'Watching via orangu watch', 'Rewritten on every change; reload to refresh.'],
+  snapshot: [DOTS.static, 'Static snapshot', 'This file does not update; orangu watch follows the session live.'],
 }
 
 export function bannerFor(state: LiveState, row: SessionSummaryRow | undefined, a: Analysis | undefined): string {
@@ -126,7 +126,7 @@ function sessionView(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis |
     )
     .join('')
   const emptyFeed =
-    state === 'connecting' ? '<div class="feedrow muted">Waiting for the first event…</div>' : '<div class="feedrow muted">No tool calls yet. The first prompt is being answered.</div>'
+    state === 'connecting' ? '<div class="feedrow muted">Waiting for the first event…</div>' : '<div class="feedrow muted">No tool calls yet.</div>'
   const footBits: string[] = []
   if (row) footBits.push(`streaming from …/${shortId(row.id)}.jsonl`)
   if (state === 'ended') footBits.push('transcript closed')

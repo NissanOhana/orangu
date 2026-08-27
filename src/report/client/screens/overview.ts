@@ -16,23 +16,12 @@ import { mascotSvg } from '../mascot.js'
 import { lineChart } from '../charts.js'
 import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, recoverableLine, timeAxis } from '../derive.js'
 import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
-import { writeHash, type RouteState } from '../nav.js'
+import { cleanHash, type RouteState } from '../nav.js'
 import { plainSentence } from '../strings.js'
 
-/** A link into this run's own screens: clears every aggregate/filter key so the target starts clean. */
+/** A link into this run's own screens: every aggregate/filter key cleared so the target starts clean. */
 function href(ctx: Ctx, a: Analysis, next: Partial<RouteState>): string {
-  return writeHash({
-    ...ctx.state,
-    s: ctx.state.s ?? a.session.id,
-    scope: undefined,
-    tool: undefined,
-    cat: undefined,
-    agent: undefined,
-    turn: undefined,
-    errorsOnly: undefined,
-    filter: undefined,
-    ...next,
-  })
+  return cleanHash(ctx.state, { s: ctx.state.s ?? a.session.id, ...next })
 }
 
 function outcome(a: Analysis, audience: Ctx['audience']): string {

@@ -130,7 +130,7 @@ export function renderTimeline(ctx: Ctx): HTMLElement {
     ? `<div class="card pad" style="background:var(--bg2);text-align:center"><p class="muted" style="margin:0 0 10px">No turns match · ${esc(cur === 'all' ? 'these filters' : cur)}</p><button class="btn-sm" data-clearall="1">Clear filters</button></div>`
     : ''
   const foot = !showAll ? `<div class="pagefoot">showing ${shown.length} of ${visible.length} turns · <button data-showall="1">show all</button></div>` : ''
-  const caption = plainSentence('expand a turn to inspect every parent and subagent tool call · the URL is the saved view', ctx.audience)
+  const caption = plainSentence('expand a turn for every parent and subagent call · the URL is the saved view', ctx.audience)
 
   const el = h(`<section>
     ${degradedBanner(a, ctx.audience)}

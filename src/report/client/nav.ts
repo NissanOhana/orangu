@@ -136,6 +136,11 @@ export function parseHash(raw: string): RouteState {
   return st
 }
 
+/** A link into another screen with every aggregate/filter key cleared, so the target starts clean. */
+export function cleanHash(st: RouteState, next: Partial<RouteState>): string {
+  return writeHash({ ...st, scope: undefined, tool: undefined, cat: undefined, agent: undefined, turn: undefined, errorsOnly: undefined, filter: undefined, ...next })
+}
+
 /** Serialise a RouteState to a hash string. Never emits `density` (dead control, removed). */
 export function writeHash(st: RouteState): string {
   const q: string[] = []
