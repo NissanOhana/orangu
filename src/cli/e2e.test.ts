@@ -26,7 +26,7 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     const h = run(['--help'])
     expect(h).toContain('orangu report')
     expect(h).toContain('orangu serve')
-    for (const f of ['--port', '--open', '--include-text', '--max-live']) expect(h).toContain(f)
+    for (const f of ['--port', '--open', '--include-text', '--no-include-text', '--max-live']) expect(h).toContain(f)
     expect(h).not.toContain('--allow-claude')
     // Hard-assert the suggest-layer verbs here because suggest.e2e.test.ts skips when they are
     // missing, so this unconditional test is the guard that keeps the registry wired and documented
@@ -145,9 +145,9 @@ syncBuiltinESMExports()
     })
   })
 
-  it('serve binds 127.0.0.1, answers /api/sessions on a fixture root, and dies on SIGINT', async () => {
+  async function spawnServe(extra: string[]): Promise<{ child: import('node:child_process').ChildProcess; url: string }> {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-serve-')))
-    const child = spawn('node', [CLI, 'serve', '--port', '0', '--no-open', '--root', home.configDir], {
+    const child = spawn('node', [CLI, 'serve', '--port', '0', '--no-open', '--root', home.configDir, ...extra], {
       env: { ...process.env, ORANGU_NO_CACHE: '1' },
       stdio: ['ignore', 'ignore', 'pipe'],
     })
@@ -164,14 +164,35 @@ syncBuiltinESMExports()
       })
       child.on('exit', () => reject(new Error('serve exited early\n' + err)))
     })
+    return { child, url }
+  }
+  async function stopServe(child: import('node:child_process').ChildProcess): Promise<void> {
+    const gone = new Promise((r) => child.on('exit', r))
+    child.kill('SIGINT')
+    await gone
+  }
+
+  it('serve binds 127.0.0.1, answers /api/sessions on a fixture root, keeps text by default, and dies on SIGINT', async () => {
+    const { child, url } = await spawnServe([])
     try {
       const rows = (await (await fetch(url + '/api/sessions')).json()) as Array<{ badge: string }>
       expect(rows.length).toBeGreaterThanOrEqual(2)
       expect(rows.every((r) => ['live', 'idle', 'ended'].includes(r.badge))).toBe(true)
+      // loopback only: the operator's own transcript is shown to the operator by default
+      const app = (await (await fetch(url + '/api/app')).json()) as { capabilities: { includeText: boolean } }
+      expect(app.capabilities.includeText).toBe(true)
     } finally {
-      const gone = new Promise((r) => child.on('exit', r))
-      child.kill('SIGINT')
-      await gone
+      await stopServe(child)
+    }
+  }, 30_000)
+
+  it('serve --no-include-text opts out of transcript text', async () => {
+    const { child, url } = await spawnServe(['--no-include-text'])
+    try {
+      const app = (await (await fetch(url + '/api/app')).json()) as { capabilities: { includeText: boolean } }
+      expect(app.capabilities.includeText).toBe(false)
+    } finally {
+      await stopServe(child)
     }
   }, 30_000)
 

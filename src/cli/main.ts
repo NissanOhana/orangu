@@ -317,7 +317,8 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
     port,
     // policy: open by default when TTY; --no-open suppresses
     open: !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || Boolean(isTTY)),
-    includeText: flagBool(flags, 'include-text'),
+    // loopback only (127.0.0.1): the operator sees their own transcript by default; --no-include-text opts out
+    includeText: !flagBool(flags, 'no-include-text'),
     configDir: roots ? undefined : configArg,
     roots,
     cwd: flagStr(flags, 'cwd'),
@@ -355,7 +356,7 @@ ${paint(C.b, 'usage')}
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report
   orangu serve                 local live viewer for EVERY session: fleet, SSE, aggregates
-                               (--port <n> · --open/--no-open · --include-text · --max-live <n> · --global · --cwd <dir>)${EXTRA_HELP.map((l) => '\n' + l).join('')}
+                               (--port <n> · --open/--no-open · --no-include-text · --max-live <n> · --global · --cwd <dir>)${EXTRA_HELP.map((l) => '\n' + l).join('')}
 
 ${paint(C.b, 'session')}   a session id, a unique id prefix, a path to a .jsonl, or "latest" (default)
 
@@ -367,6 +368,7 @@ ${paint(C.b, 'flags')}
   --no-redact            keep secrets/paths in the report and --json (default: redacted)
   --slim                 with analyze --json: the slim projection LLM consumers read
   --include-text         keep prompt/result previews (default: stripped from shareable output)
+  --no-include-text      serve only: hide prompt/result previews (serve keeps them by default, loopback only)
   --strip-paths          reduce absolute paths to basenames (home prefix is already ~ by default)
   --global               scan all roots incl. Cowork/Desktop
   --root <dir>           override the Claude config dir

@@ -15,6 +15,7 @@ const BOOL_FLAGS = new Set([
   'no-redact',
   'redact',
   'include-text',
+  'no-include-text',
   'strip-paths',
   'quiet',
   'watch',

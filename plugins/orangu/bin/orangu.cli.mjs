@@ -13,6 +13,7 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "no-redact",
   "redact",
   "include-text",
+  "no-include-text",
   "strip-paths",
   "quiet",
   "watch",
@@ -11304,7 +11305,8 @@ async function cmdServe(flags) {
     port,
     // policy: open by default when TTY; --no-open suppresses
     open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || Boolean(isTTY)),
-    includeText: flagBool(flags, "include-text"),
+    // loopback only (127.0.0.1): the operator sees their own transcript by default; --no-include-text opts out
+    includeText: !flagBool(flags, "no-include-text"),
     configDir: roots ? void 0 : configArg,
     roots,
     cwd: flagStr(flags, "cwd"),
@@ -11342,7 +11344,7 @@ ${paint2(C2.b, "usage")}
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report
   orangu serve                 local live viewer for EVERY session: fleet, SSE, aggregates
-                               (--port <n> \xB7 --open/--no-open \xB7 --include-text \xB7 --max-live <n> \xB7 --global \xB7 --cwd <dir>)${EXTRA_HELP.map((l) => "\n" + l).join("")}
+                               (--port <n> \xB7 --open/--no-open \xB7 --no-include-text \xB7 --max-live <n> \xB7 --global \xB7 --cwd <dir>)${EXTRA_HELP.map((l) => "\n" + l).join("")}
 
 ${paint2(C2.b, "session")}   a session id, a unique id prefix, a path to a .jsonl, or "latest" (default)
 
@@ -11354,6 +11356,7 @@ ${paint2(C2.b, "flags")}
   --no-redact            keep secrets/paths in the report and --json (default: redacted)
   --slim                 with analyze --json: the slim projection LLM consumers read
   --include-text         keep prompt/result previews (default: stripped from shareable output)
+  --no-include-text      serve only: hide prompt/result previews (serve keeps them by default, loopback only)
   --strip-paths          reduce absolute paths to basenames (home prefix is already ~ by default)
   --global               scan all roots incl. Cowork/Desktop
   --root <dir>           override the Claude config dir
