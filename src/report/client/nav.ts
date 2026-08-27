@@ -2,7 +2,7 @@
  * Pure nav + route model for the app client. No DOM access; unit-tested in node.
  * The hash is the saved view: #<screen>?s=&scope=&tool=&cat=&agent=&turn=&err=1&filter=&audience=&theme=
  */
-import type { AppData } from '../../model/app-data.js'
+import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 
 export interface NavItem {
   /** dom id suffix + aria key */
@@ -53,17 +53,30 @@ export function shortId(id: string): string {
   return id.slice(0, 8)
 }
 
+/**
+ * The live sessions every surface counts from (sidebar, header, fleet gate, alt+arrow cycling):
+ * a plain `orangu report` is a snapshot, so only a watch-generated file (or serve) has a real one.
+ */
+export function liveRows(data: AppData): SessionSummaryRow[] {
+  if (data.mode === 'file' && !data.capabilities.watch) return []
+  return data.sessions.filter((r) => r.badge === 'live')
+}
+
+/** Where an empty hash lands: the fleet when serve has more than one live session, else this session's Overview. */
+export function defaultScreen(data: AppData): ScreenId {
+  return data.mode === 'serve' && liveRows(data).length > 1 ? 'live' : 'overview'
+}
+
 /** The sidebar model. Data-driven: groups always exist; empty Live group means "hide it". */
 export function navFor(data: AppData, state: RouteState): NavGroup[] {
   const audience = state.audience === 'plain' ? 'plain' : 'dev'
-  // a plain `orangu report` is a snapshot: only a watch-generated file (or serve) has a real live session
-  const liveRows = data.mode === 'file' && !data.capabilities.watch ? [] : data.sessions.filter((r) => r.badge === 'live')
+  const live = liveRows(data)
   const liveItems: NavItem[] = []
-  if (liveRows.length > 1) liveItems.push({ id: 'live-all', label: `All live · ${liveRows.length}`, screen: 'live', dot: 'pulse' })
-  for (const r of liveRows)
+  if (live.length > 1) liveItems.push({ id: 'live-all', label: `All live · ${live.length}`, screen: 'live', dot: 'pulse' })
+  for (const r of live)
     liveItems.push({
       id: 'live-' + r.id,
-      label: liveRows.length > 1 ? `${shortId(r.id)} · ${r.projectSlug}` : `Watch · ${shortId(r.id)}`,
+      label: live.length > 1 ? `${shortId(r.id)} · ${r.projectSlug}` : `Watch · ${shortId(r.id)}`,
       screen: 'live',
       s: r.id,
       dot: 'pulse',

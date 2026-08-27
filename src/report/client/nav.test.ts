@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { NAV_GROUPS, SCREEN_IDS, navFor, parseHash, writeHash, type RouteState } from './nav.js'
+import { NAV_GROUPS, SCREEN_IDS, defaultScreen, liveRows, navFor, parseHash, writeHash, type RouteState } from './nav.js'
 import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 
 function row(over: Partial<SessionSummaryRow> = {}): SessionSummaryRow {
@@ -74,6 +74,36 @@ describe('nav model', () => {
     const g = navFor(d, { screen: 'live' }).find((g) => g.id === 'live')!
     expect(g.items[0]!.label).toBe('All live · 2')
     expect(g.items).toHaveLength(3)
+  })
+})
+
+// A7: one live array, one count. Every surface (sidebar, header, fleet gate, alt+arrow) reads liveRows().
+describe('liveRows / defaultScreen', () => {
+  const three = [row({ id: 'aaaa1111-x', badge: 'live' }), row({ id: 'bbbb2222-y', badge: 'live' }), row({ id: 'cccc3333-z', badge: 'live' }), row({ id: 'dddd4444-w', badge: 'idle' })]
+
+  it('is the same array the sidebar counts from', () => {
+    const d = appData({ mode: 'serve', sessions: three })
+    expect(liveRows(d).map((r) => r.id)).toEqual(['aaaa1111-x', 'bbbb2222-y', 'cccc3333-z'])
+    const g = navFor(d, { screen: 'live' }).find((g) => g.id === 'live')!
+    expect(g.items[0]!.label).toBe(`All live · ${liveRows(d).length}`)
+    expect(g.items).toHaveLength(liveRows(d).length + 1)
+  })
+
+  it('is empty in a plain file report (the Track 0 guard) and real for a watch-generated one', () => {
+    const snapshot = appData({ sessions: [row({ badge: 'live', ageMs: 1000 })] })
+    expect(liveRows(snapshot)).toEqual([])
+    expect(navFor(snapshot, { screen: 'overview' }).find((g) => g.id === 'live')!.items).toEqual([])
+    const watched = appData({ sessions: [row({ badge: 'live', ageMs: 1000 })], capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: false, watch: true } })
+    expect(liveRows(watched)).toHaveLength(1)
+  })
+
+  it('lands an empty hash on the fleet only when serve has more than one live session', () => {
+    expect(defaultScreen(appData({ mode: 'serve', sessions: three }))).toBe('live')
+    expect(defaultScreen(appData({ mode: 'serve', sessions: [three[0]!, three[3]!] }))).toBe('overview')
+    expect(defaultScreen(appData({ sessions: three }))).toBe('overview')
+    // parseHash itself is unchanged: an explicit #overview stays overview, an empty hash still parses to overview
+    expect(parseHash('#overview').screen).toBe('overview')
+    expect(parseHash('').screen).toBe('overview')
   })
 })
 

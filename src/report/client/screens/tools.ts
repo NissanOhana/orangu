@@ -1,4 +1,4 @@
-/** Tools & calls (§2.5): category bar + legend, tool table, recurring errors + across-sessions card. */
+/** Tools & calls (§2.5): category bar + legend, tool table, recurring errors. Across-session patterns live on Repo/Global. */
 import type { Ctx } from '../app.js'
 import { CAT_LABEL, catColor, esc, ms, num, pct, bytes } from '../format.js'
 import { h } from '../dom.js'
@@ -63,11 +63,6 @@ export function renderTools(ctx: Ctx): HTMLElement {
         .join('')
     : `<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>`
 
-  const acrossBody =
-    ctx.data.mode === 'file' && !ctx.data.aggregates.repo
-      ? `<p style="margin:0 0 10px;font-size:13px;color:var(--ink2)">Run <span class="mono" style="font-size:12px">orangu serve</span> to see whether these errors recur across sessions.</p><button class="btn-sm" aria-disabled="true" title="across-session data needs orangu serve">Open Repo view →</button>`
-      : `<p style="margin:0 0 10px;font-size:13px;color:var(--ink2)">A recurring error is an environment problem, not bad luck.</p><a class="btn-sm" href="#repo" style="display:inline-block">Open Repo view →</a>`
-
   const el = h(`<section>
     ${degradedBanner(a, ctx.audience)}
     <div class="card pad mb16">
@@ -80,10 +75,7 @@ export function renderTools(ctx: Ctx): HTMLElement {
       <table class="grid"><thead>${head}</thead><tbody id="toolbody">${toolRows(t.byName.slice(0, SHOW))}</tbody></table>
       ${more}
     </div>
-    <div class="two-up">
-      <div class="card pad"><div class="card-title">Recurring errors in this session</div>${errCard}</div>
-      <div class="card pad" style="background:var(--bg2)"><div class="card-title">Seen across sessions</div>${acrossBody}</div>
-    </div>
+    <div class="card pad"><div class="card-title">Recurring errors in this session</div>${errCard}</div>
   </section>`)
   const wire = (root: ParentNode): void => {
     if (ctx.audience === 'plain') root.querySelectorAll('.p95col').forEach((c) => c.remove())

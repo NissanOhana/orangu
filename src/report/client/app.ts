@@ -6,7 +6,7 @@ import type { Analysis } from '../../model/analysis.js'
 import type { AppData } from '../../model/app-data.js'
 import type { DataSource } from './data.js'
 import type { ServeEvent } from '../../serve/types.js'
-import { navFor, parseHash, writeHash, shortId, type RouteState } from './nav.js'
+import { defaultScreen, liveRows, navFor, parseHash, writeHash, shortId, type RouteState } from './nav.js'
 import { badgeCopy, mergeOpenIds } from './derive.js'
 import { esc, num } from './format.js'
 import { mascotSvg } from './mascot.js'
@@ -72,7 +72,7 @@ function screenSub(ctx: Ctx): string {
   const aud = ctx.audience
   switch (ctx.state.screen) {
     case 'live': {
-      const live = ctx.data.sessions.filter((r) => r.badge === 'live')
+      const live = liveRows(ctx.data)
       if (live.length > 1) return `${live.length} running sessions · ${live.reduce((n, r) => n + (r.agentsRunning ?? 0), 0)} agents active`
       const row = ctx.data.sessions.find((r) => r.id === (ctx.state.s ?? ctx.data.selectedId))
       return row ? `${shortId(row.id)} · ${badgeCopy(row)}` : ''
@@ -151,8 +151,15 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
   }
   const d = data
 
-  let state = parseHash(location.hash)
-  if (!state.s) state.s = d.selectedId
+  // an empty hash lands on the fleet when several sessions are live (serve), else on Overview;
+  // parseHash itself is unchanged, so every explicit hash keeps its meaning
+  const routeFor = (hash: string): RouteState => {
+    const st = parseHash(hash)
+    if (!hash.replace(/^#/, '')) st.screen = defaultScreen(d)
+    if (!st.s) st.s = d.selectedId
+    return st
+  }
+  let state = routeFor(location.hash)
 
   const analysisFor = async (id: string | undefined): Promise<Analysis | undefined> => {
     if (!id) return d.session
@@ -226,7 +233,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
           .join('')}</div>`,
       )
       .join('')
-    const liveN = d.sessions.filter((r) => r.badge === 'live').length
+    const liveN = liveRows(d).length
     const foot =
       d.mode === 'serve'
         ? 'Served from 127.0.0.1<br/>nothing leaves this machine.' + (liveN > 1 ? '<br/>alt+↑↓ switch session' : '')
@@ -338,8 +345,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
   }
 
   window.addEventListener('hashchange', () => {
-    state = parseHash(location.hash)
-    if (!state.s) state.s = d.selectedId
+    state = routeFor(location.hash)
     void render()
   })
 
@@ -347,7 +353,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
   window.addEventListener('keydown', (e) => {
     if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
     if (state.screen !== 'live') return
-    const live = d.sessions.filter((r) => r.badge === 'live')
+    const live = liveRows(d)
     if (live.length < 2) return
     const i = live.findIndex((r) => r.id === state.s)
     const next = live[(i + (e.key === 'ArrowDown' ? 1 : live.length - 1)) % live.length]!

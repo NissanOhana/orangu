@@ -14,7 +14,7 @@ import { emptyHero } from '../components/empty.js'
 import { mascotBox } from '../components/mascot-box.js'
 import { ganttRow } from '../charts.js'
 import { badgeCopy, liveFeed } from '../derive.js'
-import { shortId } from '../nav.js'
+import { liveRows, shortId } from '../nav.js'
 import type { FeedbackBootstrap } from '../../../feedback/diagnostics.js'
 
 const FEED_MAX = 50
@@ -147,7 +147,7 @@ function sessionView(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis |
 }
 
 export function renderLive(ctx: Ctx): HTMLElement {
-  const live = ctx.data.sessions.filter((r) => r.badge === 'live')
+  const live = liveRows(ctx.data)
   const explicitS = /[?&]s=/.test(location.hash)
   // the fleet is serve-only: file mode carries one session, so the renderer lives in
   // serve-ui.ts (serve bundle) and reaches this shared screen through the window seam

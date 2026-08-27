@@ -41,6 +41,27 @@ test('localhost fixture is readable at the release viewport and theme', async ({
   expect(errors).toEqual([])
 })
 
+// A7: serve opens on the fleet when more than one session is live and the URL carries no hash;
+// the explicit #overview?s= deep link above is unchanged.
+test('localhost with no hash lands on the fleet when several sessions are live', async ({ page }) => {
+  const errors = runtimeErrors(page)
+  await page.route('**/api/app**', async (route) => {
+    const response = await route.fetch()
+    const body = await response.json() as { sessions: Array<{ badge: string; ageMs: number }> }
+    for (const row of body.sessions) {
+      row.badge = 'live'
+      row.ageMs = 1000
+    }
+    await route.fulfill({ response, json: body })
+  })
+  await page.goto(`${APP}/`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Live' })).toBeVisible()
+  await expect(page.locator('.fleetcard')).toHaveCount(3)
+  await expect(page.locator('.page-head .sub')).toContainText('3 running sessions')
+  await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'All live · 3' })).toBeVisible()
+  expect(errors).toEqual([])
+})
+
 test('localhost creates only a copy handoff and never offers automatic model launch', async ({ page, context }) => {
   const errors = runtimeErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
