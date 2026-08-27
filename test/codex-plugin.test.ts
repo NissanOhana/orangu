@@ -67,9 +67,21 @@ describe('Codex plugin packaging', () => {
       expect(skill, `${name} drops allowed-tools`).not.toContain('allowed-tools')
       expect(skill, `${name} drops the Claude plugin root`).not.toContain('${CLAUDE_PLUGIN_ROOT}')
       expect(skill, `${name} has no Claude slash command`).not.toMatch(/\/orangu:/)
-      expect(skill, `${name} routes with Codex names`).toContain('$orangu-')
+      // routes to another mirrored skill keep the Codex name; feedback routes only to the CLI and carries none
+      const self = name.replace('orangu-', '')
+      const others = ['improve', 'apply', 'feedback'].filter((other) => other !== self)
+      if (new RegExp(`/orangu:(${others.join('|')})\\b`).test(readText(`plugin/skills/${self}/SKILL.md`)))
+        expect(skill, `${name} routes with Codex names`).toContain('$orangu-')
+      // Codex ships only these three skills: a pointer to an unmirrored skill must name the CLI verb,
+      // never a `$orangu-<n>` the host cannot resolve
+      expect(skill, `${name} routes to no unmirrored Codex skill`).not.toMatch(/\$orangu-(analyze|harness)\b/)
       expect(skill).toMatch(new RegExp(`^# ${name}$`, 'm'))
     }
+    expect(readText('plugins/orangu/skills/orangu-feedback/SKILL.md')).toContain('Not for anything about a session: the `orangu analyze` command.')
+    expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('Not for a repo or global harness review: the `orangu harness` command.')
+    expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('belongs to `orangu harness`.')
+    for (const path of filesUnder('plugins/orangu/skills').filter((p) => p.endsWith('.md')))
+      expect(readText(path), `${path} routes to no unmirrored Codex skill`).not.toMatch(/\$orangu-(analyze|harness)\b/)
   })
 
   it('generates the mirror from plugin/skills instead of hand-writing it', () => {

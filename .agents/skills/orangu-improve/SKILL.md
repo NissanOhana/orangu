@@ -1,13 +1,13 @@
 ---
 name: orangu-improve
-description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Use when the user runs $orangu-improve, pastes a suggestion id from a report, asks what to change after one session, or wants an applied session change verified against a later run. Never edits the target repository. Not for applying a proposal: $orangu-apply. Not for a repo or global harness review: $orangu-harness.
+description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Use when the user runs $orangu-improve, pastes a suggestion id from a report, asks what to change after one session, or wants an applied session change verified against a later run. Never edits the target repository. Not for applying a proposal: $orangu-apply. Not for a repo or global harness review: the `orangu harness` command.
 ---
 
 # orangu-improve
 
 Evidence comes from supported Claude Code, Cowork, or Desktop sessions, or from current Orangu Analysis, SlimAnalysis, or Aggregate JSON.
 
-Turn local evidence into a reviewable proposal, not an automatic claim of improvement: Orangu measures, you interpret and write structured artifacts. Never edit the target repository in this skill. This is the place for one session diagnosis and a report hand-off; recurring repo/global improvement belongs to `$orangu-harness`.
+Turn local evidence into a reviewable proposal, not an automatic claim of improvement: Orangu measures, you interpret and write structured artifacts. Never edit the target repository in this skill. This is the place for one session diagnosis and a report hand-off; recurring repo/global improvement belongs to `orangu harness`.
 
 Read [the artifact contract](references/artifact-contract.md) before writing any proposal or verification receipt.
 

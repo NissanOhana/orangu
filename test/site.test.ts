@@ -607,8 +607,6 @@ describe('site/index.src.html (authored landing source)', () => {
   it('ships exactly the five plugin skills the site will list', () => {
     const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => existsSync(join(root, 'plugin/skills', dir, 'SKILL.md'))).sort()
     expect(dirs).toEqual(['analyze', 'apply', 'feedback', 'harness', 'improve'])
-    // TODO(Track C, C1/C2): restore `expect(listed.map(m => m[1]).sort()).toEqual(dirs)` once the site body is rebuilt.
-    // const listed = [...src.matchAll(/<div class="skill"><b>\/orangu:([a-z-]+)<\/b><div>([^<]+)<\/div><\/div>/g)]
   })
 
   it('keeps accessible interactions and ships none of the design-canvas runtime', () => {

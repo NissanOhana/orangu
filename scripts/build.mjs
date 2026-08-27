@@ -98,9 +98,17 @@ const CLAUDE_FALLBACK = 'If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_
 const CODEX_FALLBACK = 'If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`: try `../../bin/orangu.cli.mjs` for an installed plugin, then `../../../dist/orangu.js` for a source checkout, and run the first file that exists with Node.js 20 or newer. Never fetch a package to continue.'
 const CODEX_TARGETS = [join(root, '.agents/skills'), join(codexPluginRoot, 'skills')]
 
+// Codex ships no skill for these; a Claude skill that routes to them routes a Codex user to the CLI verb
+// of the same name instead of to a `$orangu-<n>` that does not exist in that host.
+const CODEX_CLI_VERBS = CLAUDE_SKILLS.filter((name) => !CODEX_SKILLS.includes(name))
+
 function codexNames(text) {
   let out = text
-  for (const name of CLAUDE_SKILLS) out = out.replaceAll(`/orangu:${name}`, `$orangu-${name}`)
+  for (const name of CODEX_SKILLS) out = out.replaceAll(`/orangu:${name}`, `$orangu-${name}`)
+  for (const name of CODEX_CLI_VERBS) {
+    out = out.replaceAll(`\`/orangu:${name}\``, `\`orangu ${name}\``)
+    out = out.replaceAll(`/orangu:${name}`, `the \`orangu ${name}\` command`)
+  }
   return out
 }
 

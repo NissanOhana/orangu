@@ -1,6 +1,6 @@
 ---
 name: orangu-feedback
-description: Send candid beta feedback about Orangu itself through a private localhost form with an exact user-reviewed GitHub preview. Use when the user wants to report a bug, confusion, missing behavior, rough experience, or praise about Orangu, or accepts an end-of-work feedback offer. Not for anything about a session: $orangu-analyze.
+description: Send candid beta feedback about Orangu itself through a private localhost form with an exact user-reviewed GitHub preview. Use when the user wants to report a bug, confusion, missing behavior, rough experience, or praise about Orangu, or accepts an end-of-work feedback offer. Not for anything about a session: the `orangu analyze` command.
 ---
 
 # orangu-feedback
