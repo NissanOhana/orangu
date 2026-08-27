@@ -140,6 +140,7 @@ interface ArtifactSnapshot {
   dev: bigint
   ino: bigint
   mode: bigint
+  nlink: bigint
   size: bigint
   mtimeNs: bigint
   ctimeNs: bigint
@@ -150,6 +151,7 @@ function artifactSnapshot(stat: BigIntStats): ArtifactSnapshot {
     dev: stat.dev,
     ino: stat.ino,
     mode: stat.mode,
+    nlink: stat.nlink,
     size: stat.size,
     mtimeNs: stat.mtimeNs,
     ctimeNs: stat.ctimeNs,
@@ -157,7 +159,7 @@ function artifactSnapshot(stat: BigIntStats): ArtifactSnapshot {
 }
 
 function sameArtifactSnapshot(a: ArtifactSnapshot, b: ArtifactSnapshot): boolean {
-  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs
+  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs
 }
 
 async function readArtifact(proposalsDir: string, path: string, expectedName: string, maxBytes: number): Promise<{ path: string; body: string }> {
@@ -175,6 +177,7 @@ async function readArtifact(proposalsDir: string, path: string, expectedName: st
   }
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw artifactError(`proposals directory must be a regular directory`)
   if (!stat.isFile() || stat.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`)
+  if (stat.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`)
   if (stat.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`)
   if (process.platform !== 'win32') await chmod(root, 0o700)
   const [realRoot, realCandidate] = await Promise.all([realpath(root), realpath(candidate)])
@@ -188,7 +191,7 @@ async function readArtifact(proposalsDir: string, path: string, expectedName: st
   }
   try {
     const before = await handle.stat({ bigint: true })
-    if (!before.isFile() || !sameArtifactSnapshot(initial, artifactSnapshot(before))) {
+    if (!before.isFile() || before.nlink !== 1n || !sameArtifactSnapshot(initial, artifactSnapshot(before))) {
       throw artifactError(`${expectedName} changed before it was read`)
     }
     if (process.platform !== 'win32') await handle.chmod(0o600)
@@ -197,7 +200,13 @@ async function readArtifact(proposalsDir: string, path: string, expectedName: st
       lstat(candidate, { bigint: true }),
       realpath(candidate),
     ])
-    if (securedPath.isSymbolicLink() || securedReal !== realCandidate || !sameArtifactSnapshot(artifactSnapshot(secured), artifactSnapshot(securedPath))) {
+    if (
+      secured.nlink !== 1n ||
+      securedPath.nlink !== 1n ||
+      securedPath.isSymbolicLink() ||
+      securedReal !== realCandidate ||
+      !sameArtifactSnapshot(artifactSnapshot(secured), artifactSnapshot(securedPath))
+    ) {
       throw artifactError(`${expectedName} changed before it was read`)
     }
     const expected = artifactSnapshot(secured)
@@ -215,6 +224,8 @@ async function readArtifact(proposalsDir: string, path: string, expectedName: st
     ])
     if (
       offset !== buffer.length ||
+      after.nlink !== 1n ||
+      pathAfter.nlink !== 1n ||
       pathAfter.isSymbolicLink() ||
       realAfter !== realCandidate ||
       !sameArtifactSnapshot(expected, artifactSnapshot(after)) ||

@@ -211,12 +211,12 @@ function strippedCountMap(value: unknown, opts: WalkOpts): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return walk(value, opts)
   const source = value as Record<string, unknown>
   if (!opts.stripText) {
-    const out: Record<string, unknown> = {}
+    const out = new Map<string, unknown>()
     for (const [key, count] of Object.entries(source)) {
       const publicKey = scrubOne(key, opts)
-      out[publicKey] = typeof count === 'number' ? (Number(out[publicKey]) || 0) + count : walk(count, opts)
+      out.set(publicKey, typeof count === 'number' ? (Number(out.get(publicKey)) || 0) + count : walk(count, opts))
     }
-    return out
+    return Object.fromEntries(out)
   }
   const total = Object.values(source).reduce<number>((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
   return total ? { [STRIPPED_KEY]: total } : {}
@@ -226,7 +226,7 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
   if (typeof obj === 'string') return scrubOne(obj, opts)
   if (Array.isArray(obj)) return obj.map((x) => walk(x, opts))
   if (obj && typeof obj === 'object') {
-    const out: Record<string, unknown> = {}
+    const out = new Map<string, unknown>()
     const source = obj as Record<string, unknown>
     const unknownRecordTypes = source['unknownRecordTypes']
     const unknownRecordKeys =
@@ -235,38 +235,39 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
         : undefined
     for (const [k, v] of Object.entries(source)) {
       if (UNKNOWN_COUNT_MAP_KEYS.has(k)) {
-        out[k] = strippedCountMap(v, opts)
+        out.set(k, strippedCountMap(v, opts))
         continue
       }
       if (k === 'recordCounts' && v && typeof v === 'object' && !Array.isArray(v)) {
-        const counts: Record<string, unknown> = {}
+        const counts = new Map<string, unknown>()
         for (const [recordType, count] of Object.entries(v as Record<string, unknown>)) {
           if (opts.stripText && unknownRecordKeys?.has(recordType)) continue
-          counts[scrubOne(recordType, opts)] = walk(count, opts)
+          const publicKey = scrubOne(recordType, opts)
+          counts.set(publicKey, typeof count === 'number' ? (Number(counts.get(publicKey)) || 0) + count : walk(count, opts))
         }
-        out[k] = counts
+        out.set(k, Object.fromEntries(counts))
         continue
       }
       if (opts.stripText && PRIVATE_STRING_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out[k] = []
+        out.set(k, [])
         continue
       }
       if (opts.stripText && typeof v === 'string' && stripsText(k, source)) {
-        out[k] = ''
+        out.set(k, '')
         continue
       }
       if (opts.stripText && k === 'narrative' && typeof v === 'string') {
-        out[k] = scrubOne(v.replace(NARRATIVE_TITLE_RE, 'In this session, '), opts)
+        out.set(k, scrubOne(v.replace(NARRATIVE_TITLE_RE, 'In this session, '), opts))
         continue
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === 'string' && (v.includes('/') || v.includes('\\'))) {
         // Shortening must not skip the normal secret scrub: a basename can itself be a credential.
-        out[k] = scrubOne(basename(v), opts)
+        out.set(k, scrubOne(basename(v), opts))
         continue
       }
-      out[k] = typeof v === 'string' ? scrubOne(v, opts) : walk(v, opts)
+      out.set(k, typeof v === 'string' ? scrubOne(v, opts) : walk(v, opts))
     }
-    return out
+    return Object.fromEntries(out)
   }
   return obj
 }

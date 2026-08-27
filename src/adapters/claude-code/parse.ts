@@ -120,7 +120,17 @@ function textOfContent(content: unknown): string {
   return parts.join('\n')
 }
 
-function parseBlocks(content: unknown, keepText: boolean, unknownBlockTypes: Record<string, number>): Block[] {
+type CountMap = Map<string, number>
+
+function addCount(counts: CountMap, key: string, amount = 1): void {
+  counts.set(key, (counts.get(key) ?? 0) + amount)
+}
+
+function countRecord(counts: CountMap): Record<string, number> {
+  return Object.fromEntries(counts)
+}
+
+function parseBlocks(content: unknown, keepText: boolean, unknownBlockTypes: CountMap): Block[] {
   if (typeof content === 'string') return [{ kind: 'text', text: keepText ? content : '' }]
   const a = arr(content)
   if (!a) return []
@@ -166,7 +176,7 @@ function parseBlocks(content: unknown, keepText: boolean, unknownBlockTypes: Rec
         break
       }
       default:
-        unknownBlockTypes[t] = (unknownBlockTypes[t] ?? 0) + 1
+        addCount(unknownBlockTypes, t)
         out.push({ kind: 'other', rawType: t, bytes: bytesOf(b) })
     }
   }
@@ -275,9 +285,9 @@ interface PendingTool {
 }
 
 function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t0: number): Session {
-  const recordCounts: Record<string, number> = {}
-  const unknownRecordTypes: Record<string, number> = {}
-  const unknownBlockTypes: Record<string, number> = {}
+  const recordCounts: CountMap = new Map()
+  const unknownRecordTypes: CountMap = new Map()
+  const unknownBlockTypes: CountMap = new Map()
   const warnings = new Map<string, ParseWarning>()
   const warn = (code: string, message: string, line?: number) => {
     const w = warnings.get(code)
@@ -316,10 +326,10 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
     possiblyLive: false,
     truncatedReads: 0,
   }
-  const attachmentTypes: Record<string, number> = {}
-  const attachmentBytes: Record<string, number> = {}
-  const systemSubtypes: Record<string, number> = {}
-  const queueOperations: Record<string, number> = {}
+  const attachmentTypes: CountMap = new Map()
+  const attachmentBytes: CountMap = new Map()
+  const systemSubtypes: CountMap = new Map()
+  const queueOperations: CountMap = new Map()
   let enqueueHuman = 0
   let enqueueNotification = 0
   const deferredToolNames = new Set<string>()
@@ -370,8 +380,8 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
       const r = f.records[ri] as JsonObject
       const line = f.lineNumbers?.[ri] ?? ri + 1
       const type = str(r['type']) ?? 'unknown'
-      recordCounts[type] = (recordCounts[type] ?? 0) + 1
-      if (!KNOWN_TYPES.has(type)) unknownRecordTypes[type] = (unknownRecordTypes[type] ?? 0) + 1
+      addCount(recordCounts, type)
+      if (!KNOWN_TYPES.has(type)) addCount(unknownRecordTypes, type)
 
       const sid = str(r['sessionId'])
       if (sid) seenSessionIds.add(sid)
@@ -433,8 +443,8 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
       if (type === 'attachment') {
         const a = obj(r['attachment'])
         const at = str(a?.['type']) ?? 'unknown'
-        attachmentTypes[at] = (attachmentTypes[at] ?? 0) + 1
-        attachmentBytes[at] = (attachmentBytes[at] ?? 0) + bytesOf(a)
+        addCount(attachmentTypes, at)
+        addCount(attachmentBytes, at, bytesOf(a))
         if (at.startsWith('hook')) {
           // a hook_success attachment is a context-injection notice with no timing; the authoritative,
           // timed Stop-hook records come from the stop_hook_summary system record. Only record non-Stop
@@ -460,7 +470,7 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
       }
       if (type === 'queue-operation') {
         const op = str(r['operation']) ?? 'unknown'
-        queueOperations[op] = (queueOperations[op] ?? 0) + 1
+        addCount(queueOperations, op)
         if (op === 'enqueue') {
           const content = str(r['content']) ?? ''
           const isNotification = NOTIFICATION_ENQUEUE_RE.test(content)
@@ -617,7 +627,7 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
       }
       if (type === 'system') {
         const sub = msg.systemSubtype
-        systemSubtypes[sub ?? 'unknown'] = (systemSubtypes[sub ?? 'unknown'] ?? 0) + 1
+        addCount(systemSubtypes, sub ?? 'unknown')
         if (sub === 'compact_boundary') {
           const cm = obj(r['compactMetadata'])
           const ev: CompactionEvent = {
@@ -930,7 +940,7 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
   if (!meta.sessionId) meta.sessionId = basename(mainPath, '.jsonl')
   if (files[0]?.trailingPartial) meta.possiblyLive = true
   if (seenSessionIds.size > 1) warn('multiple_session_ids', `records reference ${seenSessionIds.size} distinct sessionIds (resumed/forked session)`)
-  if (Object.keys(queueOperations).length) meta.queueOperations = queueOperations
+  if (queueOperations.size) meta.queueOperations = countRecord(queueOperations)
   if (enqueueHuman || enqueueNotification) meta.enqueueKinds = { human: enqueueHuman, notification: enqueueNotification }
   if (deferredToolNames.size) meta.deferredToolNames = [...deferredToolNames].sort()
   meta.projectSlug = mainPath !== '(memory)' ? basename(dirname(mainPath)) : undefined
@@ -939,12 +949,12 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
   const parseReport: ParseReport = {
     totalLines: files.reduce((a, f) => a + f.totalLines, 0),
     badLines: files.reduce((a, f) => a + f.badLines, 0),
-    recordCounts,
-    unknownRecordTypes,
-    unknownBlockTypes,
-    attachmentTypes,
-    attachmentBytes,
-    systemSubtypes,
+    recordCounts: countRecord(recordCounts),
+    unknownRecordTypes: countRecord(unknownRecordTypes),
+    unknownBlockTypes: countRecord(unknownBlockTypes),
+    attachmentTypes: countRecord(attachmentTypes),
+    attachmentBytes: countRecord(attachmentBytes),
+    systemSubtypes: countRecord(systemSubtypes),
     warnings: [...warnings.values()],
     parseMs: Date.now() - t0,
     bytes: files.reduce((a, f) => a + f.bytes, 0),

@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = (path: string) => readFileSync(join(root, path), 'utf8')
 const pkg = JSON.parse(read('package.json')) as { scripts: Record<string, string>; devDependencies: Record<string, string> }
+const actionPins = {
+  'actions/checkout': { sha: '3d3c42e5aac5ba805825da76410c181273ba90b1', version: 'v7' },
+  'actions/setup-node': { sha: '820762786026740c76f36085b0efc47a31fe5020', version: 'v7' },
+  'actions/upload-artifact': { sha: '043fb46d1a93c77aae656e7c1c64a875d1fc6a0a', version: 'v7' },
+  'actions/upload-pages-artifact': { sha: 'fc324d3547104276b827a68afc52ff2a11cc49c9', version: 'v5' },
+  'actions/deploy-pages': { sha: 'cd2ce8fcbc39b97be8ca5fce6e763baed58fa128', version: 'v5' },
+} as const
 
 describe('release automation', () => {
   it('pins every tool used by release scripts', () => {
@@ -43,6 +50,39 @@ describe('release automation', () => {
     expect(workflow).toContain('Install and run the packed CLI')
     expect(workflow).toContain('npm pack --pack-destination')
     expect(workflow).toContain('node_modules/.bin/orangu --version')
+    expect(workflow).toContain('permissions:\n  contents: read')
+  })
+
+  it('allowlists exact third-party action identities and official SHAs in every workflow', () => {
+    const workflows = readdirSync(join(root, '.github/workflows'))
+      .filter((name) => /\.ya?ml$/.test(name))
+      .sort()
+    expect(workflows).not.toHaveLength(0)
+
+    const seen = new Set<string>()
+    for (const name of workflows) {
+      const workflow = read(`.github/workflows/${name}`)
+      const actions = workflow
+        .split(/\r?\n/)
+        .filter((line) => !/^\s*#/.test(line) && /\buses\s*:/.test(line))
+        .map((line) => {
+          const match = /^\s*(?:-\s+)?uses\s*:\s*([^#\s]+)(?:\s+#\s*(\S+))?\s*$/.exec(line)
+          expect(match, `${name}: action use must be a single reviewable scalar: ${line.trim()}`).not.toBeNull()
+          return { ref: match![1]!, version: match![2] }
+        })
+        .filter(({ ref }) => !ref.startsWith('./'))
+      for (const action of actions) {
+        const separator = action.ref.lastIndexOf('@')
+        const identity = action.ref.slice(0, separator)
+        const ref = action.ref.slice(separator + 1)
+        expect(Object.hasOwn(actionPins, identity), `${name}: unallowlisted action ${identity}`).toBe(true)
+        const expected = actionPins[identity as keyof typeof actionPins]
+        expect(ref, `${name}: ${identity} must use its reviewed SHA`).toBe(expected.sha)
+        expect(action.version, `${name}: ${identity} must retain a readable version comment`).toBe(expected.version)
+        seen.add(identity)
+      }
+    }
+    expect([...seen].sort()).toEqual(Object.keys(actionPins).sort())
   })
 
   it('deploys Pages manually or automatically for main site changes only', () => {

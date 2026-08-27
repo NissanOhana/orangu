@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { chmodSync, mkdirSync, mkdtempSync, realpathSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
@@ -116,6 +116,23 @@ describe('suggestion lifecycle artifact validation', () => {
     writeFileSync(outsideMarkdown, '# outside\n', 'utf8')
     symlinkSync(outsideMarkdown, markdown)
     await expect(loadProposalArtifacts(proposals, id, markdown, undefined, workspace)).rejects.toThrow(/non-symlink/)
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects hard-linked artifacts without changing the outside inode', async () => {
+    const markdown = join(proposals, `${id}.md`)
+    unlinkSync(markdown)
+    const outside = join(root, 'outside-hardlink.md')
+    writeFileSync(outside, '# Outside bytes stay unchanged\n', 'utf8')
+    chmodSync(outside, 0o644)
+    linkSync(outside, markdown)
+    const before = readFileSync(outside)
+    const beforeMode = statSync(outside).mode & 0o777
+
+    await expect(loadProposalArtifacts(proposals, id, markdown, undefined, workspace)).rejects.toThrow(/exactly one hard link/)
+
+    expect(readFileSync(outside)).toEqual(before)
+    expect(statSync(outside).mode & 0o777).toBe(beforeMode)
+    expect(statSync(outside).nlink).toBe(2)
   })
 
   it('rejects unsafe target files and unverifiable source URLs', async () => {

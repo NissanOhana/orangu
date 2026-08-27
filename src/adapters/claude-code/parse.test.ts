@@ -74,6 +74,40 @@ describe('parseClaudeCodeSession (canonical fixture)', () => {
     expect(s.turns.length).toBe(1)
   })
 
+  it('counts prototype-like record, block, attachment, queue, and system keys numerically', async () => {
+    const hostile = ['constructor', 'toString', '__proto__']
+    const records = [
+      ...hostile.map((type) => ({ type })),
+      ...hostile.map((type) => ({ type: 'attachment', attachment: { type, payload: 'x' } })),
+      ...hostile.map((operation) => ({ type: 'queue-operation', operation })),
+      ...hostile.map((subtype) => ({ type: 'system', subtype, content: '' })),
+      {
+        type: 'assistant',
+        message: { role: 'assistant', content: hostile.map((type) => ({ type, payload: 'x' })) },
+      },
+    ]
+
+    const s = await parseClaudeCodeSession({ records, noSidecar: true })
+    const maps = [
+      s.parseReport.recordCounts,
+      s.parseReport.unknownRecordTypes,
+      s.parseReport.unknownBlockTypes,
+      s.parseReport.attachmentTypes,
+      s.meta.queueOperations!,
+      s.parseReport.systemSubtypes,
+    ]
+    for (const counts of maps) {
+      for (const key of hostile) {
+        expect(Object.hasOwn(counts, key), `${key} is an own count`).toBe(true)
+        expect(counts[key], `${key} stays numeric`).toBe(1)
+      }
+      expect(Object.getPrototypeOf(counts)).toBe(Object.prototype)
+    }
+    expect(JSON.parse(JSON.stringify(s.parseReport.unknownRecordTypes))).toEqual(
+      Object.fromEntries(hostile.map((key) => [key, 1])),
+    )
+  })
+
   it('detects slash commands, compaction summaries, interruptions and API errors', async () => {
     const b = new SessionBuilder()
     b.userPrompt('<command-name>/review</command-name>\n<command-message>review</command-message>\n<command-args>PR 12</command-args>')

@@ -1,10 +1,67 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { appendFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, utimesSync } from 'node:fs'
+import { spawn, type ChildProcess } from 'node:child_process'
+import {
+  appendFileSync,
+  chmodSync,
+  existsSync,
+  linkSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  truncateSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SuggestionStore } from './store.js'
 import { suggestionId, suggestionIdV2, suggestionKey } from './id.js'
 import type { Finding, SuggestionApplicationReceipt, SuggestionProposal, SuggestionRecord } from './types.js'
+
+interface StoreWorkerMessage {
+  type: string
+  ok?: boolean
+  error?: string
+}
+
+function waitForWorkerMessage(child: ChildProcess, type: string, timeoutMs = 8_000): Promise<StoreWorkerMessage> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error(`timed out waiting for child message ${type}`))
+    }, timeoutMs)
+    const onMessage = (value: unknown): void => {
+      if (!value || typeof value !== 'object' || (value as StoreWorkerMessage).type !== type) return
+      cleanup()
+      resolve(value as StoreWorkerMessage)
+    }
+    const onError = (error: Error): void => {
+      cleanup()
+      reject(error)
+    }
+    const onExit = (code: number | null, signal: NodeJS.Signals | null): void => {
+      cleanup()
+      reject(new Error(`child exited before ${type}: ${code ?? signal ?? 'unknown'}`))
+    }
+    const cleanup = (): void => {
+      clearTimeout(timer)
+      child.off('message', onMessage)
+      child.off('error', onError)
+      child.off('exit', onExit)
+    }
+    child.on('message', onMessage)
+    child.on('error', onError)
+    child.on('exit', onExit)
+  })
+}
+
+function waitForWorkerExit(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
+  return new Promise((resolve) => child.once('exit', () => resolve()))
+}
 
 const finding = (over: Partial<Finding> = {}): Finding => ({
   ruleId: 'reread-files',
@@ -103,6 +160,22 @@ describe('SuggestionStore', () => {
     expect(current!.proposal?.effort).toBe('S')
   })
 
+  it('separates an unterminated crash-tail before appending and replays the next transition', async () => {
+    const { record } = await store.upsertNew(finding(), 'report')
+    appendFileSync(store.path, '{"crash_partial":')
+
+    const kicked = await store.transition(record.id, 'kicked-off')
+    expect(kicked.status).toBe('kicked-off')
+    const lines = readFileSync(store.path, 'utf8').trimEnd().split('\n')
+    expect(lines).toHaveLength(3)
+    expect(lines[1]).toBe('{"crash_partial":')
+    expect(JSON.parse(lines[0]!).status).toBe('new')
+    expect(JSON.parse(lines[2]!).status).toBe('kicked-off')
+
+    const fresh = new SuggestionStore({ home, now: () => 9_000 })
+    await expect(fresh.get(record.id)).resolves.toMatchObject({ status: 'kicked-off' })
+  })
+
   it('re-click refreshes a new finding but preserves a lifecycle transition timestamp', async () => {
     const first = await store.upsertNew(finding(), 'report')
     const refreshedFinding = finding({ title: 'Updated live finding', evidence: { estimated: true, sessions: 4, live: true } })
@@ -145,6 +218,14 @@ describe('SuggestionStore', () => {
     const all = await store.all()
     expect(all).toHaveLength(1)
     expect(all[0]!.status).toBe('kicked-off')
+  })
+
+  it('skips structurally malformed records before indexing legacy ids', async () => {
+    const { record } = await store.upsertNew(finding(), 'report')
+    appendFileSync(store.path, JSON.stringify({ ...record, legacyIds: 1, statusAt: record.statusAt + 1 }) + '\n')
+
+    await expect(store.all()).resolves.toEqual([record])
+    await expect(store.transition(record.id, 'kicked-off')).resolves.toMatchObject({ status: 'kicked-off' })
   })
 
   it('upsertNew honours only the matching legacy report id (file-mode kickoff parity)', async () => {
@@ -362,6 +443,102 @@ describe('SuggestionStore', () => {
     expect(statSync(store.path).mode & 0o777).toBe(0o600)
   })
 
+  it.skipIf(process.platform === 'win32')('rejects a symlinked state root without changing its target', async () => {
+    const container = mkdtempSync(join(tmpdir(), 'orangu-store-root-link-'))
+    const outside = join(container, 'outside')
+    const linkedHome = join(container, 'linked-home')
+    mkdirSync(outside, { mode: 0o755 })
+    chmodSync(outside, 0o755)
+    const marker = join(outside, 'keep.txt')
+    writeFileSync(marker, 'outside bytes stay unchanged')
+    symlinkSync(outside, linkedHome, 'dir')
+    const before = readFileSync(marker)
+    const beforeMode = statSync(outside).mode & 0o777
+
+    const linked = new SuggestionStore({ home: linkedHome })
+    await expect(linked.upsertNew(finding(), 'report')).rejects.toThrow(/suggestion store directory must be a real directory/)
+
+    expect(readFileSync(marker)).toEqual(before)
+    expect(statSync(outside).mode & 0o777).toBe(beforeMode)
+    expect(existsSync(join(outside, 'suggestions.jsonl'))).toBe(false)
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects a symlinked JSONL without changing its target bytes or mode', async () => {
+    const outsideDir = mkdtempSync(join(tmpdir(), 'orangu-store-file-link-'))
+    const outside = join(outsideDir, 'outside.jsonl')
+    writeFileSync(outside, 'outside bytes stay unchanged\n')
+    chmodSync(outside, 0o644)
+    symlinkSync(outside, store.path)
+    const before = readFileSync(outside)
+    const beforeMode = statSync(outside).mode & 0o777
+
+    await expect(store.upsertNew(finding(), 'report')).rejects.toThrow(/suggestion store must not be a symbolic link/)
+
+    expect(readFileSync(outside)).toEqual(before)
+    expect(statSync(outside).mode & 0o777).toBe(beforeMode)
+    expect(lstatSync(store.path).isSymbolicLink()).toBe(true)
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects a hard-linked JSONL without changing its target bytes or mode', async () => {
+    const outsideDir = mkdtempSync(join(tmpdir(), 'orangu-store-file-hardlink-'))
+    const outside = join(outsideDir, 'outside.jsonl')
+    writeFileSync(outside, 'outside hard-link bytes stay unchanged\n')
+    chmodSync(outside, 0o644)
+    linkSync(outside, store.path)
+    const before = readFileSync(outside)
+    const beforeMode = statSync(outside).mode & 0o777
+
+    await expect(store.upsertNew(finding(), 'report')).rejects.toThrow(/suggestion store must have exactly one hard link/)
+
+    expect(readFileSync(outside)).toEqual(before)
+    expect(statSync(outside).mode & 0o777).toBe(beforeMode)
+    expect(statSync(outside).nlink).toBe(2)
+  })
+
+  it.skipIf(process.platform === 'win32')('rejects a symlinked lock without changing its target', async () => {
+    const outside = mkdtempSync(join(tmpdir(), 'orangu-store-lock-link-'))
+    const marker = join(outside, 'keep.txt')
+    writeFileSync(marker, 'outside lock bytes stay unchanged')
+    chmodSync(outside, 0o755)
+    const lock = `${store.path}.lock`
+    symlinkSync(outside, lock, 'dir')
+    const before = readFileSync(marker)
+    const beforeMode = statSync(outside).mode & 0o777
+
+    await expect(store.upsertNew(finding(), 'report')).rejects.toThrow(/suggestion store lock must be a real directory/)
+
+    expect(readFileSync(marker)).toEqual(before)
+    expect(statSync(outside).mode & 0o777).toBe(beforeMode)
+    expect(lstatSync(lock).isSymbolicLink()).toBe(true)
+  })
+
+  it('rejects a non-regular or oversized suggestion store instead of replaying it', async () => {
+    mkdirSync(store.path)
+    await expect(store.all()).rejects.toThrow(/suggestion store must be a regular file/)
+
+    const lockHome = mkdtempSync(join(tmpdir(), 'orangu-store-lock-file-'))
+    const lockStore = new SuggestionStore({ home: lockHome })
+    writeFileSync(`${lockStore.path}.lock`, 'not a directory')
+    await expect(lockStore.upsertNew(finding(), 'report')).rejects.toThrow(/suggestion store lock must be a real directory/)
+
+    const otherHome = mkdtempSync(join(tmpdir(), 'orangu-store-oversized-'))
+    const oversized = new SuggestionStore({ home: otherHome })
+    writeFileSync(oversized.path, '')
+    truncateSync(oversized.path, 64 * 1024 * 1024 + 1)
+    await expect(oversized.all()).rejects.toThrow(/suggestion store exceeds 67108864 bytes/)
+
+    const tooManyLinesHome = mkdtempSync(join(tmpdir(), 'orangu-store-lines-'))
+    const tooManyLines = new SuggestionStore({ home: tooManyLinesHome })
+    writeFileSync(tooManyLines.path, Buffer.alloc(100_001, 0x0a))
+    await expect(tooManyLines.all()).rejects.toThrow(/suggestion store exceeds 100000 lines/)
+
+    const longRecordHome = mkdtempSync(join(tmpdir(), 'orangu-store-record-'))
+    const longRecord = new SuggestionStore({ home: longRecordHome })
+    writeFileSync(longRecord.path, '')
+    truncateSync(longRecord.path, 4 * 1024 * 1024 + 1)
+    await expect(longRecord.all()).rejects.toThrow(/suggestion store record exceeds 4194304 bytes/)
+  })
+
   it('enforces lifecycle artifacts and rejects unrelated patch fields inside the lock', async () => {
     const { record } = await store.upsertNew(finding(), 'report')
     await store.transition(record.id, 'kicked-off')
@@ -562,4 +739,97 @@ describe('SuggestionStore write serialization', () => {
     expect(rec.status).toBe('kicked-off')
     expect(existsSync(lock)).toBe(false) // released after the write
   })
+
+  it('does not break a live stale lock and refuses a paused writer after ownership loss', async () => {
+    const moduleUrl = new URL('./store.ts', import.meta.url).href
+    const sharedFinding = JSON.stringify(finding())
+    const pausedScript = `
+      import { SuggestionStore } from ${JSON.stringify(moduleUrl)}
+      const store = new SuggestionStore({ home: ${JSON.stringify(home)}, now: () => 2_000 })
+      const acquire = store.acquireLock.bind(store)
+      store.acquireLock = async () => {
+        const guard = await acquire()
+        process.send?.({ type: 'locked' })
+        await new Promise((resolve) => process.once('message', resolve))
+        return guard
+      }
+      try {
+        await store.upsertNew(${sharedFinding}, 'report')
+        process.send?.({ type: 'result', ok: true })
+      } catch (error) {
+        process.send?.({ type: 'result', ok: false, error: error instanceof Error ? error.message : String(error) })
+      } finally {
+        process.disconnect?.()
+      }
+    `
+    const contenderScript = `
+      import { SuggestionStore } from ${JSON.stringify(moduleUrl)}
+      const store = new SuggestionStore({ home: ${JSON.stringify(home)}, now: () => 3_000 })
+      const acquire = store.acquireLock.bind(store)
+      store.acquireLock = async () => {
+        const guard = await acquire()
+        process.send?.({ type: 'acquired' })
+        await new Promise((resolve) => process.once('message', resolve))
+        return guard
+      }
+      process.send?.({ type: 'started' })
+      try {
+        await store.upsertNew(${sharedFinding}, 'report')
+        process.send?.({ type: 'result', ok: true })
+      } catch (error) {
+        process.send?.({ type: 'result', ok: false, error: error instanceof Error ? error.message : String(error) })
+      } finally {
+        process.disconnect?.()
+      }
+    `
+    const spawnWorker = (script: string): ChildProcess => spawn(
+      process.execPath,
+      ['--import', 'tsx', '--input-type=module', '--eval', script],
+      { cwd: process.cwd(), stdio: ['ignore', 'ignore', 'pipe', 'ipc'] },
+    )
+
+    const paused = spawnWorker(pausedScript)
+    let contender: ChildProcess | undefined
+    try {
+      const pausedResult = waitForWorkerMessage(paused, 'result')
+      await waitForWorkerMessage(paused, 'locked')
+      const lock = `${store.path}.lock`
+      const ownerPath = join(lock, 'owner.json')
+      const old = new Date(Date.now() - 60_000)
+      utimesSync(lock, old, old)
+
+      contender = spawnWorker(contenderScript)
+      const contenderAcquired = waitForWorkerMessage(contender, 'acquired')
+      const contenderResult = waitForWorkerMessage(contender, 'result')
+      await waitForWorkerMessage(contender, 'started')
+      let contenderAcquiredEarly = false
+      void contenderAcquired.then(
+        () => { contenderAcquiredEarly = true },
+        () => { contenderAcquiredEarly = true },
+      )
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      expect(contenderAcquiredEarly).toBe(false)
+      expect(existsSync(store.path)).toBe(false)
+
+      const owner = JSON.parse(readFileSync(ownerPath, 'utf8')) as { v: number; pid: number; createdAt: number }
+      expect(owner.pid).toBe(paused.pid)
+      writeFileSync(ownerPath, `${JSON.stringify({ ...owner, token: '0'.repeat(64) })}\n`)
+      paused.send?.('continue')
+
+      await expect(pausedResult).resolves.toMatchObject({ ok: false, error: expect.stringMatching(/lock ownership lost/) })
+      await waitForWorkerExit(paused)
+      await expect(contenderAcquired).resolves.toMatchObject({ type: 'acquired' })
+      expect(existsSync(store.path)).toBe(false)
+      contender.send?.('continue')
+      await expect(contenderResult).resolves.toMatchObject({ ok: true })
+      await waitForWorkerExit(contender)
+
+      const records = await new SuggestionStore({ home }).all()
+      expect(records).toHaveLength(1)
+      expect(records[0]).toMatchObject({ status: 'new', createdAt: 3_000 })
+    } finally {
+      if (paused.exitCode === null && paused.signalCode === null) paused.kill('SIGKILL')
+      if (contender && contender.exitCode === null && contender.signalCode === null) contender.kill('SIGKILL')
+    }
+  }, 12_000)
 })

@@ -12,6 +12,43 @@ describe('scrubStr', () => {
   })
 })
 
+describe('redactValue count maps', () => {
+  it('preserves prototype-like keys as own numeric properties', () => {
+    const hostile = Object.fromEntries([
+      ['constructor', 1],
+      ['toString', 2],
+      ['__proto__', 3],
+    ]) as Record<string, number>
+    const value = {
+      recordCounts: hostile,
+      unknownRecordTypes: hostile,
+      unknownBlockTypes: hostile,
+      attachmentTypes: hostile,
+      attachmentBytes: hostile,
+      systemSubtypes: hostile,
+      queueOperations: hostile,
+    }
+
+    const redacted = redactValue(value, { scrub: false })
+    for (const counts of Object.values(redacted)) {
+      expect(Object.hasOwn(counts, '__proto__')).toBe(true)
+      expect(counts['constructor']).toBe(1)
+      expect(counts['toString']).toBe(2)
+      expect(counts['__proto__']).toBe(3)
+      expect(Object.getPrototypeOf(counts)).toBe(Object.prototype)
+    }
+    expect(JSON.stringify(redacted)).toContain('"__proto__":3')
+  })
+
+  it('sums recordCounts keys that collide after scrubbing', () => {
+    const redacted = redactValue(
+      { recordCounts: { 'first@example.com': 2, 'second@example.com': 3 } },
+      { scrub: true },
+    )
+    expect(redacted.recordCounts).toEqual({ '‹email›': 5 })
+  })
+})
+
 describe('redactAnalysis', () => {
   const MARKER = 'private-purple-ferret-9073'
   const mk = (): Analysis =>

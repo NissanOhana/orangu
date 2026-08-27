@@ -265,14 +265,14 @@ var MAX_EVIDENCE_META_BYTES = 1 * 1024 * 1024;
 var MAX_EVIDENCE_SESSION_RECORDS = DEFAULT_MAX_JSONL_RECORDS;
 var MAX_EVIDENCE_SIDECAR_ENTRIES = 2048;
 var MAX_EVIDENCE_SIDECAR_DEPTH = 4;
-function snapshotOf(stat9) {
+function snapshotOf(stat8) {
   return {
-    dev: stat9.dev,
-    ino: stat9.ino,
-    mode: stat9.mode,
-    size: stat9.size,
-    mtimeNs: stat9.mtimeNs,
-    ctimeNs: stat9.ctimeNs
+    dev: stat8.dev,
+    ino: stat8.ino,
+    mode: stat8.mode,
+    size: stat8.size,
+    mtimeNs: stat8.mtimeNs,
+    ctimeNs: stat8.ctimeNs
   };
 }
 function sameSnapshot(a, b) {
@@ -391,9 +391,9 @@ async function discoverEvidenceSidecars(main2) {
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
       const path = join(canonicalDir, entry.name);
-      const stat9 = await lstat(path, { bigint: true });
-      if (stat9.isSymbolicLink()) throw new Error(`session input must not include symbolic links: ${path}`);
-      if (stat9.isDirectory()) {
+      const stat8 = await lstat(path, { bigint: true });
+      if (stat8.isSymbolicLink()) throw new Error(`session input must not include symbolic links: ${path}`);
+      if (stat8.isDirectory()) {
         if (depth >= MAX_EVIDENCE_SIDECAR_DEPTH) {
           throw new Error(`session sidecar traversal exceeds ${MAX_EVIDENCE_SIDECAR_DEPTH} levels`);
         }
@@ -1775,12 +1775,12 @@ function strippedCountMap(value, opts) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return walk(value, opts);
   const source = value;
   if (!opts.stripText) {
-    const out = {};
+    const out = /* @__PURE__ */ new Map();
     for (const [key, count] of Object.entries(source)) {
       const publicKey = scrubOne(key, opts);
-      out[publicKey] = typeof count === "number" ? (Number(out[publicKey]) || 0) + count : walk(count, opts);
+      out.set(publicKey, typeof count === "number" ? (Number(out.get(publicKey)) || 0) + count : walk(count, opts));
     }
-    return out;
+    return Object.fromEntries(out);
   }
   const total = Object.values(source).reduce((sum2, count) => sum2 + (typeof count === "number" ? count : 0), 0);
   return total ? { [STRIPPED_KEY]: total } : {};
@@ -1789,43 +1789,44 @@ function walk(obj2, opts) {
   if (typeof obj2 === "string") return scrubOne(obj2, opts);
   if (Array.isArray(obj2)) return obj2.map((x) => walk(x, opts));
   if (obj2 && typeof obj2 === "object") {
-    const out = {};
+    const out = /* @__PURE__ */ new Map();
     const source = obj2;
     const unknownRecordTypes = source["unknownRecordTypes"];
     const unknownRecordKeys = unknownRecordTypes && typeof unknownRecordTypes === "object" && !Array.isArray(unknownRecordTypes) ? new Set(Object.keys(unknownRecordTypes)) : void 0;
     for (const [k, v] of Object.entries(source)) {
       if (UNKNOWN_COUNT_MAP_KEYS.has(k)) {
-        out[k] = strippedCountMap(v, opts);
+        out.set(k, strippedCountMap(v, opts));
         continue;
       }
       if (k === "recordCounts" && v && typeof v === "object" && !Array.isArray(v)) {
-        const counts = {};
+        const counts = /* @__PURE__ */ new Map();
         for (const [recordType, count] of Object.entries(v)) {
           if (opts.stripText && unknownRecordKeys?.has(recordType)) continue;
-          counts[scrubOne(recordType, opts)] = walk(count, opts);
+          const publicKey = scrubOne(recordType, opts);
+          counts.set(publicKey, typeof count === "number" ? (Number(counts.get(publicKey)) || 0) + count : walk(count, opts));
         }
-        out[k] = counts;
+        out.set(k, Object.fromEntries(counts));
         continue;
       }
       if (opts.stripText && PRIVATE_STRING_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out[k] = [];
+        out.set(k, []);
         continue;
       }
       if (opts.stripText && typeof v === "string" && stripsText(k, source)) {
-        out[k] = "";
+        out.set(k, "");
         continue;
       }
       if (opts.stripText && k === "narrative" && typeof v === "string") {
-        out[k] = scrubOne(v.replace(NARRATIVE_TITLE_RE, "In this session, "), opts);
+        out.set(k, scrubOne(v.replace(NARRATIVE_TITLE_RE, "In this session, "), opts));
         continue;
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === "string" && (v.includes("/") || v.includes("\\"))) {
-        out[k] = scrubOne(basename3(v), opts);
+        out.set(k, scrubOne(basename3(v), opts));
         continue;
       }
-      out[k] = typeof v === "string" ? scrubOne(v, opts) : walk(v, opts);
+      out.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
     }
-    return out;
+    return Object.fromEntries(out);
   }
   return obj2;
 }
@@ -2114,6 +2115,12 @@ function textOfContent(content) {
   }
   return parts.join("\n");
 }
+function addCount(counts, key, amount = 1) {
+  counts.set(key, (counts.get(key) ?? 0) + amount);
+}
+function countRecord(counts) {
+  return Object.fromEntries(counts);
+}
 function parseBlocks(content, keepText, unknownBlockTypes) {
   if (typeof content === "string") return [{ kind: "text", text: keepText ? content : "" }];
   const a = arr(content);
@@ -2160,7 +2167,7 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
         break;
       }
       default:
-        unknownBlockTypes[t] = (unknownBlockTypes[t] ?? 0) + 1;
+        addCount(unknownBlockTypes, t);
         out.push({ kind: "other", rawType: t, bytes: bytesOf(b) });
     }
   }
@@ -2245,9 +2252,9 @@ async function parseClaudeCodeSession(input) {
   return buildSession(files2, mainPath, keepText, t0);
 }
 function buildSession(files2, mainPath, keepText, t0) {
-  const recordCounts = {};
-  const unknownRecordTypes = {};
-  const unknownBlockTypes = {};
+  const recordCounts = /* @__PURE__ */ new Map();
+  const unknownRecordTypes = /* @__PURE__ */ new Map();
+  const unknownBlockTypes = /* @__PURE__ */ new Map();
   const warnings = /* @__PURE__ */ new Map();
   const warn = (code, message, line) => {
     const w = warnings.get(code);
@@ -2301,10 +2308,10 @@ function buildSession(files2, mainPath, keepText, t0) {
     possiblyLive: false,
     truncatedReads: 0
   };
-  const attachmentTypes = {};
-  const attachmentBytes = {};
-  const systemSubtypes = {};
-  const queueOperations = {};
+  const attachmentTypes = /* @__PURE__ */ new Map();
+  const attachmentBytes = /* @__PURE__ */ new Map();
+  const systemSubtypes = /* @__PURE__ */ new Map();
+  const queueOperations = /* @__PURE__ */ new Map();
   let enqueueHuman = 0;
   let enqueueNotification = 0;
   const deferredToolNames = /* @__PURE__ */ new Set();
@@ -2347,8 +2354,8 @@ function buildSession(files2, mainPath, keepText, t0) {
       const r = f.records[ri];
       const line = f.lineNumbers?.[ri] ?? ri + 1;
       const type = str(r["type"]) ?? "unknown";
-      recordCounts[type] = (recordCounts[type] ?? 0) + 1;
-      if (!KNOWN_TYPES.has(type)) unknownRecordTypes[type] = (unknownRecordTypes[type] ?? 0) + 1;
+      addCount(recordCounts, type);
+      if (!KNOWN_TYPES.has(type)) addCount(unknownRecordTypes, type);
       const sid = str(r["sessionId"]);
       if (sid) seenSessionIds.add(sid);
       if (!meta.sessionId && sid && !isSub) meta.sessionId = sid;
@@ -2404,8 +2411,8 @@ function buildSession(files2, mainPath, keepText, t0) {
       if (type === "attachment") {
         const a = obj(r["attachment"]);
         const at = str(a?.["type"]) ?? "unknown";
-        attachmentTypes[at] = (attachmentTypes[at] ?? 0) + 1;
-        attachmentBytes[at] = (attachmentBytes[at] ?? 0) + bytesOf(a);
+        addCount(attachmentTypes, at);
+        addCount(attachmentBytes, at, bytesOf(a));
         if (at.startsWith("hook")) {
           const he = str(a?.["hookEvent"]);
           if (he && he !== "Stop") {
@@ -2428,7 +2435,7 @@ function buildSession(files2, mainPath, keepText, t0) {
       }
       if (type === "queue-operation") {
         const op = str(r["operation"]) ?? "unknown";
-        queueOperations[op] = (queueOperations[op] ?? 0) + 1;
+        addCount(queueOperations, op);
         if (op === "enqueue") {
           const content2 = str(r["content"]) ?? "";
           const isNotification = NOTIFICATION_ENQUEUE_RE.test(content2);
@@ -2577,7 +2584,7 @@ function buildSession(files2, mainPath, keepText, t0) {
       }
       if (type === "system") {
         const sub = msg.systemSubtype;
-        systemSubtypes[sub ?? "unknown"] = (systemSubtypes[sub ?? "unknown"] ?? 0) + 1;
+        addCount(systemSubtypes, sub ?? "unknown");
         if (sub === "compact_boundary") {
           const cm = obj(r["compactMetadata"]);
           const ev = {
@@ -2861,7 +2868,7 @@ function buildSession(files2, mainPath, keepText, t0) {
   if (!meta.sessionId) meta.sessionId = basename4(mainPath, ".jsonl");
   if (files2[0]?.trailingPartial) meta.possiblyLive = true;
   if (seenSessionIds.size > 1) warn("multiple_session_ids", `records reference ${seenSessionIds.size} distinct sessionIds (resumed/forked session)`);
-  if (Object.keys(queueOperations).length) meta.queueOperations = queueOperations;
+  if (queueOperations.size) meta.queueOperations = countRecord(queueOperations);
   if (enqueueHuman || enqueueNotification) meta.enqueueKinds = { human: enqueueHuman, notification: enqueueNotification };
   if (deferredToolNames.size) meta.deferredToolNames = [...deferredToolNames].sort();
   meta.projectSlug = mainPath !== "(memory)" ? basename4(dirname3(mainPath)) : void 0;
@@ -2869,12 +2876,12 @@ function buildSession(files2, mainPath, keepText, t0) {
   const parseReport = {
     totalLines: files2.reduce((a, f) => a + f.totalLines, 0),
     badLines: files2.reduce((a, f) => a + f.badLines, 0),
-    recordCounts,
-    unknownRecordTypes,
-    unknownBlockTypes,
-    attachmentTypes,
-    attachmentBytes,
-    systemSubtypes,
+    recordCounts: countRecord(recordCounts),
+    unknownRecordTypes: countRecord(unknownRecordTypes),
+    unknownBlockTypes: countRecord(unknownBlockTypes),
+    attachmentTypes: countRecord(attachmentTypes),
+    attachmentBytes: countRecord(attachmentBytes),
+    systemSubtypes: countRecord(systemSubtypes),
     warnings: [...warnings.values()],
     parseMs: Date.now() - t0,
     bytes: files2.reduce((a, f) => a + f.bytes, 0)
@@ -5645,8 +5652,8 @@ function oranguHome(env = process.env) {
 import { constants as constants4 } from "node:fs";
 import { lstat as lstat3, open as open4, realpath as realpath3 } from "node:fs/promises";
 import { resolve as resolve3 } from "node:path";
-function snapshot(stat9) {
-  return { dev: stat9.dev, ino: stat9.ino, mode: stat9.mode, size: stat9.size, mtimeNs: stat9.mtimeNs, ctimeNs: stat9.ctimeNs };
+function snapshot(stat8) {
+  return { dev: stat8.dev, ino: stat8.ino, mode: stat8.mode, size: stat8.size, mtimeNs: stat8.mtimeNs, ctimeNs: stat8.ctimeNs };
 }
 function same(a, b) {
   return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
@@ -5719,8 +5726,8 @@ var SIMPLE_SEGMENT = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
 function sameInode(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function modeBits(stat9) {
-  return Number(stat9.mode & 0o777n);
+function modeBits(stat8) {
+  return Number(stat8.mode & 0o777n);
 }
 async function ensurePrivateDirectory(path) {
   await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
@@ -6226,9 +6233,9 @@ var PrivateOutputError = class extends Error {
 function sameInode2(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function assertSafeOutput(stat9, path) {
-  if (!stat9.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
-  if (stat9.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
+function assertSafeOutput(stat8, path) {
+  if (!stat8.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
+  if (stat8.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
 }
 async function assertPathStillNamesHandle(path, opened) {
   const current = await lstat6(path, { bigint: true });
@@ -6357,12 +6364,14 @@ async function watchSession(ref, flags, deps) {
 }
 
 // src/serve/server.ts
-import { randomBytes as randomBytes2, timingSafeEqual } from "node:crypto";
+import { randomBytes as randomBytes3, timingSafeEqual } from "node:crypto";
 import { createServer } from "node:http";
 import { cpus as cpus2 } from "node:os";
 
 // src/suggest/store.ts
-import { appendFile, chmod, mkdir as mkdir2, readFile, rm, stat as stat4 } from "node:fs/promises";
+import { randomBytes as randomBytes2 } from "node:crypto";
+import { constants as constants8 } from "node:fs";
+import { lstat as lstat7, mkdir as mkdir2, open as open8, realpath as realpath5, rmdir, unlink as unlink2 } from "node:fs/promises";
 import { dirname as dirname4, isAbsolute as isAbsolute4, join as join5 } from "node:path";
 
 // src/suggest/change-classes.ts
@@ -7104,6 +7113,288 @@ function isTrustedComputedVerification(record2) {
 // src/suggest/store.ts
 var LOCK_STALE_MS = 1e4;
 var LOCK_TIMEOUT_MS = 5e3;
+var MAX_SUGGESTION_STORE_BYTES = 64 * 1024 * 1024;
+var MAX_SUGGESTION_RECORD_BYTES = 4 * 1024 * 1024;
+var MAX_SUGGESTION_STORE_LINES = 1e5;
+var LOCK_OWNER_FILE = "owner.json";
+var MAX_LOCK_OWNER_BYTES = 1024;
+var PRIVATE_DIRECTORY_MODE2 = 448;
+var PRIVATE_FILE_MODE3 = 384;
+function errno(error) {
+  return error.code;
+}
+function sameInode3(a, b) {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+function modeBits2(stat8) {
+  return Number(stat8.mode & 0o777n);
+}
+function fileSnapshot(stat8) {
+  return {
+    dev: stat8.dev,
+    ino: stat8.ino,
+    mode: stat8.mode,
+    nlink: stat8.nlink,
+    size: stat8.size,
+    mtimeNs: stat8.mtimeNs,
+    ctimeNs: stat8.ctimeNs
+  };
+}
+function sameFileSnapshot(a, b) {
+  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
+}
+async function securePrivateDirectory(path, label) {
+  const requested = await lstat7(path, { bigint: true });
+  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`${label} must be a real directory: ${path}`);
+  const handle = await open8(path, constants8.O_RDONLY | (constants8.O_DIRECTORY ?? 0) | (constants8.O_NOFOLLOW ?? 0));
+  try {
+    const before = await handle.stat({ bigint: true });
+    if (!before.isDirectory() || !sameInode3(requested, before)) throw new Error(`${label} changed while opening: ${path}`);
+    if (process.platform !== "win32" && modeBits2(before) !== PRIVATE_DIRECTORY_MODE2) await handle.chmod(PRIVATE_DIRECTORY_MODE2);
+    const [after, requestedAfter, canonicalPath] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat7(path, { bigint: true }),
+      realpath5(path)
+    ]);
+    if (!after.isDirectory() || requestedAfter.isSymbolicLink() || !requestedAfter.isDirectory() || !sameInode3(after, requestedAfter) || process.platform !== "win32" && (modeBits2(after) !== PRIVATE_DIRECTORY_MODE2 || modeBits2(requestedAfter) !== PRIVATE_DIRECTORY_MODE2)) {
+      throw new Error(`${label} changed while securing: ${path}`);
+    }
+    return { path, canonicalPath, dev: after.dev, ino: after.ino };
+  } finally {
+    await handle.close();
+  }
+}
+async function ensurePrivateDirectory2(path, label) {
+  await mkdir2(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE2 });
+  return securePrivateDirectory(path, label);
+}
+async function secureExistingPrivateDirectory(path, label) {
+  try {
+    return await securePrivateDirectory(path, label);
+  } catch (error) {
+    if (errno(error) === "ENOENT") return void 0;
+    throw error;
+  }
+}
+async function assertPrivateDirectoriesStable2(directories) {
+  await Promise.all(directories.map(async (expected) => {
+    const [current, canonicalPath] = await Promise.all([lstat7(expected.path, { bigint: true }), realpath5(expected.path)]);
+    if (current.isSymbolicLink() || !current.isDirectory() || current.dev !== expected.dev || current.ino !== expected.ino || canonicalPath !== expected.canonicalPath || process.platform !== "win32" && modeBits2(current) !== PRIVATE_DIRECTORY_MODE2) {
+      throw new Error(`suggestion store directory changed during access: ${expected.path}`);
+    }
+  }));
+}
+function validLockOwner(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const owner = value;
+  return owner.v === 1 && typeof owner.pid === "number" && Number.isSafeInteger(owner.pid) && owner.pid > 0 && typeof owner.token === "string" && /^[0-9a-f]{64}$/.test(owner.token) && typeof owner.createdAt === "number" && Number.isFinite(owner.createdAt);
+}
+async function createLockOwner(lock, token) {
+  const path = join5(lock.path, LOCK_OWNER_FILE);
+  const bytes = Buffer.from(`${JSON.stringify({ v: 1, pid: process.pid, token, createdAt: Date.now() })}
+`, "utf8");
+  await assertPrivateDirectoriesStable2([lock]);
+  const handle = await open8(
+    path,
+    constants8.O_WRONLY | constants8.O_CREAT | constants8.O_EXCL | (constants8.O_NOFOLLOW ?? 0),
+    PRIVATE_FILE_MODE3
+  );
+  try {
+    await handle.writeFile(bytes);
+    if (process.platform !== "win32") await handle.chmod(PRIVATE_FILE_MODE3);
+    const [opened, requested] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2([lock]);
+    if (!opened.isFile() || opened.nlink !== 1n || requested.isSymbolicLink() || !requested.isFile() || requested.nlink !== 1n || opened.size !== BigInt(bytes.byteLength) || !sameFileSnapshot(fileSnapshot(opened), fileSnapshot(requested)) || process.platform !== "win32" && (modeBits2(opened) !== PRIVATE_FILE_MODE3 || modeBits2(requested) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store lock owner changed while creating: ${path}`);
+    }
+    return { path, snapshot: fileSnapshot(opened) };
+  } finally {
+    await handle.close();
+  }
+}
+async function inspectLockOwner(lock) {
+  const path = join5(lock.path, LOCK_OWNER_FILE);
+  let requested;
+  try {
+    requested = await lstat7(path, { bigint: true });
+  } catch (error) {
+    if (errno(error) === "ENOENT") return void 0;
+    throw error;
+  }
+  if (requested.isSymbolicLink() || !requested.isFile()) throw new Error(`suggestion store lock owner must be a regular, non-symlink file: ${path}`);
+  if (requested.nlink !== 1n) throw new Error(`suggestion store lock owner must have exactly one hard link: ${path}`);
+  if (requested.size > BigInt(MAX_LOCK_OWNER_BYTES)) throw new Error(`suggestion store lock owner exceeds ${MAX_LOCK_OWNER_BYTES} bytes: ${path}`);
+  await assertPrivateDirectoriesStable2([lock]);
+  const handle = await open8(path, constants8.O_RDONLY | (constants8.O_NOFOLLOW ?? 0));
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || opened.size > BigInt(MAX_LOCK_OWNER_BYTES) || !sameFileSnapshot(fileSnapshot(requested), fileSnapshot(opened))) {
+      throw new Error(`suggestion store lock owner changed while opening: ${path}`);
+    }
+    const expected = fileSnapshot(opened);
+    const bytes = Buffer.allocUnsafe(Number(opened.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesRead === 0) break;
+      offset += result.bytesRead;
+    }
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2([lock]);
+    if (offset !== bytes.length || after.nlink !== 1n || pathAfter.isSymbolicLink() || !pathAfter.isFile() || pathAfter.nlink !== 1n || !sameFileSnapshot(expected, fileSnapshot(after)) || !sameFileSnapshot(expected, fileSnapshot(pathAfter))) {
+      throw new Error(`suggestion store lock owner changed while reading: ${path}`);
+    }
+    let value;
+    try {
+      value = JSON.parse(bytes.toString("utf8"));
+    } catch (error) {
+      void error;
+    }
+    return {
+      identity: { path, snapshot: expected },
+      ...validLockOwner(value) ? { owner: value } : {}
+    };
+  } finally {
+    await handle.close();
+  }
+}
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return errno(error) === "EPERM";
+  }
+}
+async function assertLockOwned(guard) {
+  await assertPrivateDirectoriesStable2([guard.parent, guard.lock]);
+  const inspected = await inspectLockOwner(guard.lock);
+  if (!inspected?.owner || !sameFileSnapshot(guard.owner.snapshot, inspected.identity.snapshot) || inspected.owner.pid !== guard.pid || inspected.owner.token !== guard.token) {
+    throw new Error(`suggestion store lock ownership lost: ${guard.lock.path}`);
+  }
+}
+async function unlinkExactPrivateFile(identity, label) {
+  const current = await lstat7(identity.path, { bigint: true });
+  if (current.isSymbolicLink() || !current.isFile() || current.nlink !== 1n || !sameFileSnapshot(identity.snapshot, fileSnapshot(current))) {
+    throw new Error(`${label} changed before removal: ${identity.path}`);
+  }
+  await unlink2(identity.path);
+}
+async function breakStaleSuggestionLock(parent, lock, inspected) {
+  if (inspected?.owner && processIsAlive(inspected.owner.pid)) return false;
+  await assertPrivateDirectoriesStable2([parent, lock]);
+  if (inspected) await unlinkExactPrivateFile(inspected.identity, "suggestion store lock owner");
+  await assertPrivateDirectoriesStable2([parent, lock]);
+  await rmdir(lock.path);
+  await assertPrivateDirectoriesStable2([parent]);
+  return true;
+}
+async function readPrivateSuggestionStore(path, directories) {
+  let requested;
+  try {
+    requested = await lstat7(path, { bigint: true });
+  } catch (error) {
+    if (errno(error) === "ENOENT") return void 0;
+    throw error;
+  }
+  if (requested.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`);
+  if (!requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`);
+  if (requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`);
+  if (requested.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+    throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`);
+  }
+  await assertPrivateDirectoriesStable2(directories);
+  const handle = await open8(path, constants8.O_RDONLY | (constants8.O_NOFOLLOW ?? 0));
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || !sameInode3(requested, opened) || opened.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+      throw new Error(`suggestion store changed while opening: ${path}`);
+    }
+    if (process.platform !== "win32" && modeBits2(opened) !== PRIVATE_FILE_MODE3) await handle.chmod(PRIVATE_FILE_MODE3);
+    const [secured, requestedAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
+    if (!secured.isFile() || requestedAfter.isSymbolicLink() || !requestedAfter.isFile() || secured.nlink !== 1n || requestedAfter.nlink !== 1n || !sameInode3(secured, requestedAfter) || secured.size > BigInt(MAX_SUGGESTION_STORE_BYTES) || process.platform !== "win32" && (modeBits2(secured) !== PRIVATE_FILE_MODE3 || modeBits2(requestedAfter) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store changed while securing: ${path}`);
+    }
+    const expected = fileSnapshot(secured);
+    const buffer = Buffer.allocUnsafe(Number(secured.size));
+    let offset = 0;
+    while (offset < buffer.length) {
+      const result = await handle.read(buffer, offset, buffer.length - offset, offset);
+      if (result.bytesRead === 0) break;
+      offset += result.bytesRead;
+    }
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2(directories);
+    if (offset !== buffer.length || pathAfter.isSymbolicLink() || !pathAfter.isFile() || after.nlink !== 1n || pathAfter.nlink !== 1n || !sameFileSnapshot(expected, fileSnapshot(after)) || !sameFileSnapshot(expected, fileSnapshot(pathAfter))) {
+      throw new Error(`suggestion store changed while reading: ${path}`);
+    }
+    return buffer;
+  } finally {
+    await handle.close();
+  }
+}
+async function appendPrivateSuggestionRecord(path, record2, directories, assertOwnership) {
+  const recordBytes = Buffer.from(`${JSON.stringify(record2)}
+`, "utf8");
+  if (recordBytes.byteLength - 1 > MAX_SUGGESTION_RECORD_BYTES) {
+    throw new Error(`suggestion record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes`);
+  }
+  let requested;
+  try {
+    requested = await lstat7(path, { bigint: true });
+  } catch (error) {
+    if (errno(error) !== "ENOENT") throw error;
+  }
+  if (requested?.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`);
+  if (requested && !requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`);
+  if (requested && requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`);
+  await assertPrivateDirectoriesStable2(directories);
+  const createFlags = requested ? 0 : constants8.O_CREAT | constants8.O_EXCL;
+  const handle = await open8(
+    path,
+    constants8.O_RDWR | constants8.O_APPEND | createFlags | (constants8.O_NOFOLLOW ?? 0),
+    PRIVATE_FILE_MODE3
+  );
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || requested && !sameInode3(requested, opened)) {
+      throw new Error(`suggestion store changed while opening: ${path}`);
+    }
+    if (process.platform !== "win32" && modeBits2(opened) !== PRIVATE_FILE_MODE3) await handle.chmod(PRIVATE_FILE_MODE3);
+    const [secured, pathBeforeWrite] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
+    if (!secured.isFile() || pathBeforeWrite.isSymbolicLink() || !pathBeforeWrite.isFile() || secured.nlink !== 1n || pathBeforeWrite.nlink !== 1n || !sameInode3(secured, pathBeforeWrite) || process.platform !== "win32" && (modeBits2(secured) !== PRIVATE_FILE_MODE3 || modeBits2(pathBeforeWrite) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store changed before append: ${path}`);
+    }
+    let needsSeparator = false;
+    if (secured.size > 0n) {
+      const tail = Buffer.allocUnsafe(1);
+      const result = await handle.read(tail, 0, 1, Number(secured.size - 1n));
+      if (result.bytesRead !== 1) throw new Error(`suggestion store changed while inspecting its tail: ${path}`);
+      needsSeparator = tail[0] !== 10;
+    }
+    const bytes = needsSeparator ? Buffer.concat([Buffer.from("\n"), recordBytes]) : recordBytes;
+    if (secured.size + BigInt(bytes.byteLength) > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+      throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`);
+    }
+    const beforeWrite = fileSnapshot(secured);
+    const [tailAfter, pathAfterTail] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
+    if (pathAfterTail.isSymbolicLink() || !pathAfterTail.isFile() || tailAfter.nlink !== 1n || pathAfterTail.nlink !== 1n || !sameFileSnapshot(beforeWrite, fileSnapshot(tailAfter)) || !sameFileSnapshot(beforeWrite, fileSnapshot(pathAfterTail))) {
+      throw new Error(`suggestion store changed while inspecting its tail: ${path}`);
+    }
+    const expectedSize = secured.size + BigInt(bytes.byteLength);
+    await assertPrivateDirectoriesStable2(directories);
+    await assertOwnership();
+    await handle.writeFile(bytes);
+    await assertOwnership();
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2(directories);
+    if (!after.isFile() || pathAfter.isSymbolicLink() || !pathAfter.isFile() || after.nlink !== 1n || pathAfter.nlink !== 1n || !sameInode3(after, pathAfter) || after.size !== expectedSize || pathAfter.size !== expectedSize || process.platform !== "win32" && (modeBits2(after) !== PRIVATE_FILE_MODE3 || modeBits2(pathAfter) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store changed during append: ${path}`);
+    }
+  } finally {
+    await handle.close();
+  }
+}
 var PATCH_FIELDS = ["proposal", "application", "verificationReceipt", "kickoff", "effect"];
 var ALLOWED_PATCH_FIELDS = {
   new: [],
@@ -7135,6 +7426,23 @@ function safeReviewedFile(value) {
 function hasUniqueReviewedFiles(files2) {
   const keys = files2.map((file) => reviewedPathKey(file));
   return keys.every((key) => key !== void 0) && new Set(keys).size === keys.length;
+}
+function stringArray(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+function isPersistedSuggestionRecord(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record2 = value;
+  if (typeof record2.id !== "string" || !isSuggestionId(record2.id) || record2.v !== 1 && record2.v !== 2 || typeof record2.createdAt !== "number" || !Number.isFinite(record2.createdAt) || record2.source !== "report" && record2.source !== "skill" || record2.scope !== "session" && record2.scope !== "repo" && record2.scope !== "global" || !stringArray(record2.sessionIds) || !nonEmptyString(record2.ruleId) || typeof record2.title !== "string" || !record2.evidence || typeof record2.evidence !== "object" || Array.isArray(record2.evidence) || typeof record2.status !== "string" || !Object.hasOwn(TRANSITIONS, record2.status) || typeof record2.statusAt !== "number" || !Number.isFinite(record2.statusAt) || record2.legacyIds !== void 0 && (!stringArray(record2.legacyIds) || !record2.legacyIds.every(isSuggestionId)) || record2.insightId !== void 0 && typeof record2.insightId !== "string" || record2.cohortFingerprint !== void 0 && typeof record2.cohortFingerprint !== "string") {
+    return false;
+  }
+  if (record2.v === 2) {
+    const key = record2.key;
+    if (!key || typeof key !== "object" || key.v !== 2 || key.source !== "report" && key.source !== "skill" || key.scope !== "session" && key.scope !== "repo" && key.scope !== "global" || !nonEmptyString(key.ruleId) || !stringArray(key.sessionIds) || key.insightId !== void 0 && typeof key.insightId !== "string" || key.cohortFingerprint !== void 0 && typeof key.cohortFingerprint !== "string") {
+      return false;
+    }
+  }
+  return true;
 }
 function assertProposal(value, to) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError(to, "proposal is required");
@@ -7245,43 +7553,73 @@ var SuggestionStore = class {
   get lockPath() {
     return this.path + ".lock";
   }
-  /** cross-process advisory lock: an atomic mkdir beside the jsonl, stale locks broken by mtime */
+  /** Atomic directory lock with token/PID ownership; only dead stale owners may be broken. */
   async acquireLock() {
-    await this.ensurePrivateDir(dirname4(this.path));
+    const parent = await ensurePrivateDirectory2(dirname4(this.path), "suggestion store directory");
     const t0 = Date.now();
+    const token = randomBytes2(32).toString("hex");
     for (; ; ) {
+      let created = false;
       try {
-        await mkdir2(this.lockPath, { mode: 448 });
-        return;
-      } catch {
+        await mkdir2(this.lockPath, { mode: PRIVATE_DIRECTORY_MODE2 });
+        created = true;
+      } catch (error) {
+        if (errno(error) !== "EEXIST") throw error;
       }
-      try {
-        const st = await stat4(this.lockPath);
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          await rm(this.lockPath, { recursive: true, force: true });
-          continue;
+      if (created) {
+        let lock;
+        let guard;
+        try {
+          lock = await securePrivateDirectory(this.lockPath, "suggestion store lock");
+          const owner = await createLockOwner(lock, token);
+          guard = { parent, lock, owner, pid: process.pid, token };
+          await assertLockOwned(guard);
+          return guard;
+        } catch (error) {
+          if (guard) await this.releaseLock(guard);
+          throw error;
         }
-      } catch {
-        continue;
+      }
+      let held;
+      try {
+        held = await secureExistingPrivateDirectory(this.lockPath, "suggestion store lock");
+        if (!held) continue;
+        const st = await lstat7(this.lockPath);
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          await assertPrivateDirectoriesStable2([parent, held]);
+          const inspected = await inspectLockOwner(held);
+          if (await breakStaleSuggestionLock(parent, held, inspected)) continue;
+        }
+      } catch (error) {
+        if (errno(error) === "ENOENT") continue;
+        throw error;
       }
       if (Date.now() - t0 > LOCK_TIMEOUT_MS) throw new Error(`suggestion store lock timed out: ${this.lockPath}`);
       await new Promise((r) => setTimeout(r, 15));
     }
   }
-  async releaseLock() {
+  async releaseLock(guard) {
     try {
-      await rm(this.lockPath, { recursive: true, force: true });
-    } catch {
+      await assertLockOwned(guard);
+      await unlinkExactPrivateFile(guard.owner, "suggestion store lock owner");
+      await assertPrivateDirectoriesStable2([guard.parent, guard.lock]);
+      await rmdir(this.lockPath);
+      await assertPrivateDirectoriesStable2([guard.parent]);
+    } catch (error) {
+      void error;
     }
   }
   /** every mutation = in-process queue → cross-process lock → replay+validate+append inside */
   serialized(fn) {
     const run = async () => {
-      await this.acquireLock();
+      const guard = await this.acquireLock();
       try {
-        return await fn();
+        await assertLockOwned(guard);
+        const result = await fn(guard);
+        await assertLockOwned(guard);
+        return result;
       } finally {
-        await this.releaseLock();
+        await this.releaseLock(guard);
       }
     };
     const p = this.chain.then(run, run);
@@ -7296,30 +7634,40 @@ var SuggestionStore = class {
    * A migrated v2 record is also indexed by each legacy id so old links and CLI
    * commands keep resolving without duplicating it in `all()`.
    */
-  async replay() {
+  async replay(parent) {
     const canonical = /* @__PURE__ */ new Map();
-    let text2;
-    if (process.platform !== "win32") {
-      await Promise.all([this.hardenExistingDir(dirname4(this.path)), this.hardenExistingDir(this.proposalsDir)]);
-      try {
-        await chmod(this.path, 384);
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
+    const root = parent ?? await secureExistingPrivateDirectory(dirname4(this.path), "suggestion store directory");
+    if (!root) return canonical;
+    await assertPrivateDirectoriesStable2([root]);
+    const proposals = await secureExistingPrivateDirectory(this.proposalsDir, "suggestion proposals directory");
+    const directories = proposals ? [root, proposals] : [root];
+    const bytes = await readPrivateSuggestionStore(this.path, directories);
+    if (bytes === void 0) return canonical;
+    let offset = 0;
+    let lines = 0;
+    while (offset < bytes.length) {
+      lines++;
+      if (lines > MAX_SUGGESTION_STORE_LINES) {
+        throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_LINES} lines: ${this.path}`);
       }
-    }
-    try {
-      text2 = await readFile(this.path, "utf8");
-    } catch {
-      return canonical;
-    }
-    for (const line of text2.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      try {
-        const rec = JSON.parse(trimmed);
-        if (rec && typeof rec === "object" && isSuggestionId(rec.id) && typeof rec.status === "string") canonical.set(rec.id, rec);
-      } catch {
+      const newline = bytes.indexOf(10, offset);
+      const end = newline === -1 ? bytes.length : newline;
+      if (end - offset > MAX_SUGGESTION_RECORD_BYTES) {
+        throw new Error(`suggestion store record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes: ${this.path}`);
       }
+      if (end > offset) {
+        const trimmed = bytes.toString("utf8", offset, end).trim();
+        if (trimmed) {
+          try {
+            const rec = JSON.parse(trimmed);
+            if (isPersistedSuggestionRecord(rec)) canonical.set(rec.id, rec);
+          } catch (error) {
+            void error;
+          }
+        }
+      }
+      if (newline === -1) break;
+      offset = newline + 1;
     }
     const byId = new Map(canonical);
     for (const rec of canonical.values()) {
@@ -7329,33 +7677,16 @@ var SuggestionStore = class {
     }
     return byId;
   }
-  async append(rec) {
-    await this.ensurePrivateDir(dirname4(this.path));
-    await this.ensurePrivateDir(this.proposalsDir);
-    if (process.platform !== "win32") {
-      try {
-        await chmod(this.path, 384);
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
-    }
-    await appendFile(this.path, JSON.stringify(rec) + "\n", { encoding: "utf8", mode: 384 });
-    if (process.platform !== "win32") await chmod(this.path, 384);
-  }
-  async ensurePrivateDir(path) {
-    await mkdir2(path, { recursive: true, mode: 448 });
-    if (process.platform !== "win32") await chmod(path, 448);
-  }
-  async hardenExistingDir(path) {
-    try {
-      await chmod(path, 448);
-    } catch (error) {
-      if (error.code !== "ENOENT") throw error;
-    }
+  async append(rec, guard) {
+    await assertLockOwned(guard);
+    const parent = guard.parent;
+    const proposals = await ensurePrivateDirectory2(this.proposalsDir, "suggestion proposals directory");
+    await appendPrivateSuggestionRecord(this.path, rec, [parent, proposals], () => assertLockOwned(guard));
   }
   async all() {
     const unique = /* @__PURE__ */ new Map();
-    for (const rec of (await this.replay()).values()) unique.set(rec.id, rec);
+    const records = await this.replay();
+    for (const rec of records.values()) unique.set(rec.id, rec);
     return [...unique.values()].sort((a, b) => b.statusAt - a.statusAt);
   }
   async get(id) {
@@ -7367,9 +7698,9 @@ var SuggestionStore = class {
    * id must hash to the canonical identity or the exact legacy report identity.
    */
   async upsertNew(f, source, explicitId) {
-    return this.serialized(() => this.upsertNewLocked(f, source, explicitId));
+    return this.serialized((guard) => this.upsertNewLocked(f, source, explicitId, guard));
   }
-  async upsertNewLocked(f, source, explicitId) {
+  async upsertNewLocked(f, source, explicitId, guard) {
     assertSafeFindingIdentity(f);
     const key = suggestionKey(f, source);
     const canonicalId = suggestionIdV2(key);
@@ -7379,7 +7710,7 @@ var SuggestionStore = class {
       throw new Error(`suggestion id identity mismatch: expected ${canonicalId}${acceptsLegacyId ? ` or legacy ${legacyId}` : ""}, got ${explicitId}`);
     }
     const id = explicitId ?? canonicalId;
-    const records = await this.replay();
+    const records = await this.replay(guard.parent);
     const existing = records.get(id);
     const ts2 = this.now();
     if (existing) {
@@ -7388,7 +7719,7 @@ var SuggestionStore = class {
       }
       if (existing.status !== "new") return { record: existing, created: false };
       const refreshed = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts2 };
-      await this.append(refreshed);
+      await this.append(refreshed, guard);
       return { record: refreshed, created: false };
     }
     if (id === canonicalId && !f.cohortFingerprint) {
@@ -7413,7 +7744,7 @@ var SuggestionStore = class {
           // applied timestamp because later verification is ordered against it.
           statusAt: Number.isFinite(legacy.statusAt) && legacy.statusAt > 0 ? legacy.statusAt : ts2
         };
-        await this.append(migrated);
+        await this.append(migrated, guard);
         return { record: migrated, created: false };
       }
     }
@@ -7434,14 +7765,14 @@ var SuggestionStore = class {
       status: "new",
       statusAt: ts2
     };
-    await this.append(record2);
+    await this.append(record2, guard);
     return { record: record2, created: true };
   }
   async transition(id, to, patch) {
-    return this.serialized(() => this.transitionLocked(id, to, patch));
+    return this.serialized((guard) => this.transitionLocked(id, to, guard, patch));
   }
-  async transitionLocked(id, to, patch) {
-    const current = (await this.replay()).get(id);
+  async transitionLocked(id, to, guard, patch) {
+    const current = (await this.replay(guard.parent)).get(id);
     if (!current) throw new Error(`suggestion ${id} not found in ${this.path}`);
     const allowed = TRANSITIONS[current.status] ?? [];
     if (!allowed.includes(to)) {
@@ -7455,7 +7786,7 @@ var SuggestionStore = class {
       status: to,
       statusAt: this.now()
     };
-    await this.append(next);
+    await this.append(next, guard);
     return next;
   }
 };
@@ -7495,7 +7826,7 @@ var HTML_ANTI_FRAMING_HEADERS = {
 
 // src/serve/registry.ts
 import { watch as fsWatch2 } from "node:fs";
-import { stat as stat5 } from "node:fs/promises";
+import { stat as stat4 } from "node:fs/promises";
 import { join as join6 } from "node:path";
 var DEFAULT_MAX_LIVE = 8;
 var LAST_EVENTS_MAX = 5;
@@ -7604,7 +7935,7 @@ var Registry = class {
     for (const [id, w] of this.watched) {
       if (!w.tail) continue;
       try {
-        const st = await stat5(w.ref.path);
+        const st = await stat4(w.ref.path);
         if (st.size !== w.ref.sizeBytes || st.mtimeMs !== w.ref.mtimeMs) {
           w.ref.sizeBytes = st.size;
           w.ref.mtimeMs = st.mtimeMs;
@@ -7711,7 +8042,7 @@ var Registry = class {
   async tickInner(w) {
     if (!w.tail) return;
     try {
-      const st = await stat5(w.ref.path);
+      const st = await stat4(w.ref.path);
       w.ref.sizeBytes = st.size;
       w.ref.mtimeMs = st.mtimeMs;
     } catch {
@@ -8299,7 +8630,7 @@ var CAPABILITY_BYTES = 32;
 var CAPABILITY_PATH_PREFIX = "/_orangu/";
 var CAPABILITY_RE = /^[A-Za-z0-9_-]{43}$/;
 function makeCapability(injected) {
-  const capability = injected ?? randomBytes2(CAPABILITY_BYTES).toString("base64url");
+  const capability = injected ?? randomBytes3(CAPABILITY_BYTES).toString("base64url");
   if (!CAPABILITY_RE.test(capability)) throw new Error("serve capability must be a 32-byte base64url token");
   return capability;
 }
@@ -8640,7 +8971,7 @@ import { homedir as homedir3 } from "node:os";
 import { basename as basename7, resolve as resolve6 } from "node:path";
 
 // src/harness/collect.ts
-import { readdir, readFile as readFile2, stat as stat6 } from "node:fs/promises";
+import { readdir, readFile, stat as stat5 } from "node:fs/promises";
 import { basename as basename5, join as join7 } from "node:path";
 var DEFAULT_MAX_FILE_BYTES = 1e6;
 var MAX_WALK_DEPTH = 6;
@@ -8668,7 +8999,7 @@ function mark(ctx, path, reason) {
 async function readText(ctx, path) {
   let size;
   try {
-    const st = await stat6(path);
+    const st = await stat5(path);
     if (!st.isFile()) return null;
     size = st.size;
   } catch (e) {
@@ -8681,7 +9012,7 @@ async function readText(ctx, path) {
     return null;
   }
   try {
-    const text2 = await readFile2(path, "utf8");
+    const text2 = await readFile(path, "utf8");
     ctx.filesRead++;
     ctx.bytesRead += size;
     return text2;
@@ -8728,7 +9059,7 @@ async function walkMarkdown(ctx, dir, depth = 0) {
 }
 async function isDir(path) {
   try {
-    return (await stat6(path)).isDirectory();
+    return (await stat5(path)).isDirectory();
   } catch {
     return false;
   }
@@ -8983,7 +9314,7 @@ async function collectInventory(opts) {
   for (const root of opts.roots) {
     if (!await isDir(root)) {
       try {
-        await stat6(root);
+        await stat5(root);
         mark(ctx, root, "other");
       } catch (e) {
         mark(ctx, root, reasonOf(e));
@@ -10245,11 +10576,11 @@ async function cmdEvidence(positionals, flags) {
 }
 
 // src/cli/commands/suggest.ts
-import { realpath as realpath7, stat as stat8 } from "node:fs/promises";
+import { realpath as realpath8, stat as stat7 } from "node:fs/promises";
 
 // src/suggest/artifacts.ts
-import { constants as constants8 } from "node:fs";
-import { chmod as chmod2, lstat as lstat7, open as open8, realpath as realpath5, stat as stat7 } from "node:fs/promises";
+import { constants as constants9 } from "node:fs";
+import { chmod, lstat as lstat8, open as open9, realpath as realpath6, stat as stat6 } from "node:fs/promises";
 import { basename as basename8, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
@@ -10308,18 +10639,19 @@ function inside(root, candidate) {
   const rel = relative3(root, candidate);
   return rel === "" || !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && rel !== ".." && !isAbsolute5(rel);
 }
-function artifactSnapshot(stat9) {
+function artifactSnapshot(stat8) {
   return {
-    dev: stat9.dev,
-    ino: stat9.ino,
-    mode: stat9.mode,
-    size: stat9.size,
-    mtimeNs: stat9.mtimeNs,
-    ctimeNs: stat9.ctimeNs
+    dev: stat8.dev,
+    ino: stat8.ino,
+    mode: stat8.mode,
+    nlink: stat8.nlink,
+    size: stat8.size,
+    mtimeNs: stat8.mtimeNs,
+    ctimeNs: stat8.ctimeNs
   };
 }
 function sameArtifactSnapshot(a, b) {
-  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
+  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 }
 async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   const root = resolve8(proposalsDir);
@@ -10328,38 +10660,39 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
   let rootStat;
-  let stat9;
+  let stat8;
   try {
     ;
-    [rootStat, stat9] = await Promise.all([lstat7(root, { bigint: true }), lstat7(candidate, { bigint: true })]);
+    [rootStat, stat8] = await Promise.all([lstat8(root, { bigint: true }), lstat8(candidate, { bigint: true })]);
   } catch {
     throw artifactError(`${expectedName} does not exist`);
   }
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw artifactError(`proposals directory must be a regular directory`);
-  if (!stat9.isFile() || stat9.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`);
-  if (stat9.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
-  if (process.platform !== "win32") await chmod2(root, 448);
-  const [realRoot, realCandidate] = await Promise.all([realpath5(root), realpath5(candidate)]);
+  if (!stat8.isFile() || stat8.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`);
+  if (stat8.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`);
+  if (stat8.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
+  if (process.platform !== "win32") await chmod(root, 448);
+  const [realRoot, realCandidate] = await Promise.all([realpath6(root), realpath6(candidate)]);
   if (!inside(realRoot, realCandidate)) throw artifactError(`${expectedName} resolves outside ${realRoot}`);
-  const initial = artifactSnapshot(stat9);
+  const initial = artifactSnapshot(stat8);
   let handle;
   try {
-    handle = await open8(realCandidate, constants8.O_RDONLY | (constants8.O_NOFOLLOW ?? 0));
+    handle = await open9(realCandidate, constants9.O_RDONLY | (constants9.O_NOFOLLOW ?? 0));
   } catch {
     throw artifactError(`${expectedName} changed before it was read`);
   }
   try {
     const before = await handle.stat({ bigint: true });
-    if (!before.isFile() || !sameArtifactSnapshot(initial, artifactSnapshot(before))) {
+    if (!before.isFile() || before.nlink !== 1n || !sameArtifactSnapshot(initial, artifactSnapshot(before))) {
       throw artifactError(`${expectedName} changed before it was read`);
     }
     if (process.platform !== "win32") await handle.chmod(384);
     const [secured, securedPath, securedReal] = await Promise.all([
       handle.stat({ bigint: true }),
-      lstat7(candidate, { bigint: true }),
-      realpath5(candidate)
+      lstat8(candidate, { bigint: true }),
+      realpath6(candidate)
     ]);
-    if (securedPath.isSymbolicLink() || securedReal !== realCandidate || !sameArtifactSnapshot(artifactSnapshot(secured), artifactSnapshot(securedPath))) {
+    if (secured.nlink !== 1n || securedPath.nlink !== 1n || securedPath.isSymbolicLink() || securedReal !== realCandidate || !sameArtifactSnapshot(artifactSnapshot(secured), artifactSnapshot(securedPath))) {
       throw artifactError(`${expectedName} changed before it was read`);
     }
     const expected = artifactSnapshot(secured);
@@ -10372,10 +10705,10 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     }
     const [after, pathAfter, realAfter] = await Promise.all([
       handle.stat({ bigint: true }),
-      lstat7(candidate, { bigint: true }),
-      realpath5(candidate)
+      lstat8(candidate, { bigint: true }),
+      realpath6(candidate)
     ]);
-    if (offset !== buffer.length || pathAfter.isSymbolicLink() || realAfter !== realCandidate || !sameArtifactSnapshot(expected, artifactSnapshot(after)) || !sameArtifactSnapshot(expected, artifactSnapshot(pathAfter))) {
+    if (offset !== buffer.length || after.nlink !== 1n || pathAfter.nlink !== 1n || pathAfter.isSymbolicLink() || realAfter !== realCandidate || !sameArtifactSnapshot(expected, artifactSnapshot(after)) || !sameArtifactSnapshot(expected, artifactSnapshot(pathAfter))) {
       throw artifactError(`${expectedName} changed while it was being read`);
     }
     return { path: candidate, body: buffer.toString("utf8") };
@@ -10614,7 +10947,7 @@ async function resolveAnalyses(selectors, label, workspaceCwd, loadAnalysis) {
     let analysisCwd;
     try {
       if (typeof analysis.session.cwd !== "string" || !isAbsolute5(analysis.session.cwd)) throw new Error("missing cwd");
-      analysisCwd = await realpath5(analysis.session.cwd);
+      analysisCwd = await realpath6(analysis.session.cwd);
     } catch {
       throw artifactError(`${label}[${index}] has no resolvable workspace cwd`);
     }
@@ -10639,8 +10972,8 @@ async function canonicalWorkspace(value) {
     if (!value || typeof value.cwd !== "string" || !isAbsolute5(value.cwd) || !/^\d+$/.test(value.device) || !/^\d+$/.test(value.inode)) {
       throw new Error("invalid identity");
     }
-    const cwd = await realpath5(value.cwd);
-    const current = await stat7(cwd, { bigint: true });
+    const cwd = await realpath6(value.cwd);
+    const current = await stat6(cwd, { bigint: true });
     if (!current.isDirectory() || cwd !== value.cwd || String(current.dev) !== value.device || String(current.ino) !== value.inode) {
       throw new Error("identity mismatch");
     }
@@ -10677,7 +11010,7 @@ function compareMetric(before, after, comparison) {
 }
 
 // src/adapters/claude-code/discovered-analysis.ts
-import { realpath as realpath6 } from "node:fs/promises";
+import { realpath as realpath7 } from "node:fs/promises";
 import { isAbsolute as isAbsolute6, resolve as resolve9 } from "node:path";
 var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
 var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
@@ -10689,7 +11022,7 @@ async function discoveredInventory() {
   const byCanonicalPath = /* @__PURE__ */ new Map();
   for (const ref of refs) {
     try {
-      const canonical = await realpath6(ref.path);
+      const canonical = await realpath7(ref.path);
       const prior = byCanonicalPath.get(canonical);
       if (prior === void 0) byCanonicalPath.set(canonical, ref);
       else if (prior !== null && resolve9(prior.path) !== resolve9(ref.path)) byCanonicalPath.set(canonical, null);
@@ -10707,7 +11040,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
     let canonical;
     try {
-      canonical = await realpath6(isAbsolute6(value) ? value : resolve9(process.cwd(), value));
+      canonical = await realpath7(isAbsolute6(value) ? value : resolve9(process.cwd(), value));
     } catch {
       return void 0;
     }
@@ -10751,8 +11084,8 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
 
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
-  const cwd = await realpath7(process.cwd());
-  const info = await stat8(cwd, { bigint: true });
+  const cwd = await realpath8(process.cwd());
+  const info = await stat7(cwd, { bigint: true });
   if (!info.isDirectory()) throw new Error(`current workspace is not a directory: ${cwd}`);
   return { cwd, device: String(info.dev), inode: String(info.ino) };
 }
@@ -10768,7 +11101,7 @@ async function assertEvidenceWorkspace(rec, workspace) {
     if (!cwd) throw new Error(`suggestion ${rec.id} evidence session ${selector} has no workspace identity`);
     let canonical;
     try {
-      canonical = await realpath7(cwd);
+      canonical = await realpath8(cwd);
     } catch {
       throw new Error(`suggestion ${rec.id} evidence workspace no longer exists: ${cwd}`);
     }

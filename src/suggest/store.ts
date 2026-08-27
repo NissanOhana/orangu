@@ -10,7 +10,9 @@
  * mutation holds a zero-dep advisory lock (a `suggestions.jsonl.lock` directory, since mkdir is atomic,
  * with a stale-lock timeout) and re-replays + re-validates INSIDE the lock before appending.
  */
-import { appendFile, chmod, mkdir, readFile, rm, stat } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
+import { constants, type BigIntStats } from 'node:fs'
+import { lstat, mkdir, open, realpath, rmdir, unlink } from 'node:fs/promises'
 import { dirname, isAbsolute, join } from 'node:path'
 import { oranguHome } from '../util/home.js'
 import { redactValue } from '../redact/redact.js'
@@ -43,6 +45,457 @@ import {
 const LOCK_STALE_MS = 10_000
 /** give up acquiring after this long; a mutation is a few fs calls, never seconds */
 const LOCK_TIMEOUT_MS = 5_000
+/** Bound whole-log allocation and prevent appending a record the next replay cannot read. */
+const MAX_SUGGESTION_STORE_BYTES = 64 * 1024 * 1024
+/** Bound per-record decoding/JSON work and total replay iterations independently of file bytes. */
+const MAX_SUGGESTION_RECORD_BYTES = 4 * 1024 * 1024
+const MAX_SUGGESTION_STORE_LINES = 100_000
+const LOCK_OWNER_FILE = 'owner.json'
+const MAX_LOCK_OWNER_BYTES = 1024
+const PRIVATE_DIRECTORY_MODE = 0o700
+const PRIVATE_FILE_MODE = 0o600
+
+interface PrivateDirectoryIdentity {
+  path: string
+  canonicalPath: string
+  dev: bigint
+  ino: bigint
+}
+
+interface PrivateFileSnapshot {
+  dev: bigint
+  ino: bigint
+  mode: bigint
+  nlink: bigint
+  size: bigint
+  mtimeNs: bigint
+  ctimeNs: bigint
+}
+
+interface SuggestionStoreLock {
+  parent: PrivateDirectoryIdentity
+  lock: PrivateDirectoryIdentity
+  owner: PrivateFileIdentity
+  pid: number
+  token: string
+}
+
+interface PrivateFileIdentity {
+  path: string
+  snapshot: PrivateFileSnapshot
+}
+
+interface LockOwnerRecord {
+  v: 1
+  pid: number
+  token: string
+  createdAt: number
+}
+
+interface InspectedLockOwner {
+  identity: PrivateFileIdentity
+  owner?: LockOwnerRecord
+}
+
+function errno(error: unknown): string | undefined {
+  return (error as NodeJS.ErrnoException).code
+}
+
+function sameInode(a: BigIntStats, b: BigIntStats): boolean {
+  return a.dev === b.dev && a.ino === b.ino
+}
+
+function modeBits(stat: BigIntStats): number {
+  return Number(stat.mode & 0o777n)
+}
+
+function fileSnapshot(stat: BigIntStats): PrivateFileSnapshot {
+  return {
+    dev: stat.dev,
+    ino: stat.ino,
+    mode: stat.mode,
+    nlink: stat.nlink,
+    size: stat.size,
+    mtimeNs: stat.mtimeNs,
+    ctimeNs: stat.ctimeNs,
+  }
+}
+
+function sameFileSnapshot(a: PrivateFileSnapshot, b: PrivateFileSnapshot): boolean {
+  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs
+}
+
+async function securePrivateDirectory(path: string, label: string): Promise<PrivateDirectoryIdentity> {
+  const requested = await lstat(path, { bigint: true })
+  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`${label} must be a real directory: ${path}`)
+
+  const handle = await open(path, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0))
+  try {
+    const before = await handle.stat({ bigint: true })
+    if (!before.isDirectory() || !sameInode(requested, before)) throw new Error(`${label} changed while opening: ${path}`)
+    if (process.platform !== 'win32' && modeBits(before) !== PRIVATE_DIRECTORY_MODE) await handle.chmod(PRIVATE_DIRECTORY_MODE)
+    const [after, requestedAfter, canonicalPath] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat(path, { bigint: true }),
+      realpath(path),
+    ])
+    if (
+      !after.isDirectory() ||
+      requestedAfter.isSymbolicLink() ||
+      !requestedAfter.isDirectory() ||
+      !sameInode(after, requestedAfter) ||
+      (process.platform !== 'win32' && (modeBits(after) !== PRIVATE_DIRECTORY_MODE || modeBits(requestedAfter) !== PRIVATE_DIRECTORY_MODE))
+    ) {
+      throw new Error(`${label} changed while securing: ${path}`)
+    }
+    return { path, canonicalPath, dev: after.dev, ino: after.ino }
+  } finally {
+    await handle.close()
+  }
+}
+
+async function ensurePrivateDirectory(path: string, label: string): Promise<PrivateDirectoryIdentity> {
+  await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE })
+  return securePrivateDirectory(path, label)
+}
+
+async function secureExistingPrivateDirectory(path: string, label: string): Promise<PrivateDirectoryIdentity | undefined> {
+  try {
+    return await securePrivateDirectory(path, label)
+  } catch (error) {
+    if (errno(error) === 'ENOENT') return undefined
+    throw error
+  }
+}
+
+async function assertPrivateDirectoriesStable(directories: PrivateDirectoryIdentity[]): Promise<void> {
+  await Promise.all(directories.map(async (expected) => {
+    const [current, canonicalPath] = await Promise.all([lstat(expected.path, { bigint: true }), realpath(expected.path)])
+    if (
+      current.isSymbolicLink() ||
+      !current.isDirectory() ||
+      current.dev !== expected.dev ||
+      current.ino !== expected.ino ||
+      canonicalPath !== expected.canonicalPath ||
+      (process.platform !== 'win32' && modeBits(current) !== PRIVATE_DIRECTORY_MODE)
+    ) {
+      throw new Error(`suggestion store directory changed during access: ${expected.path}`)
+    }
+  }))
+}
+
+function validLockOwner(value: unknown): value is LockOwnerRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const owner = value as Partial<LockOwnerRecord>
+  return (
+    owner.v === 1 &&
+    typeof owner.pid === 'number' &&
+    Number.isSafeInteger(owner.pid) &&
+    owner.pid > 0 &&
+    typeof owner.token === 'string' &&
+    /^[0-9a-f]{64}$/.test(owner.token) &&
+    typeof owner.createdAt === 'number' &&
+    Number.isFinite(owner.createdAt)
+  )
+}
+
+async function createLockOwner(lock: PrivateDirectoryIdentity, token: string): Promise<PrivateFileIdentity> {
+  const path = join(lock.path, LOCK_OWNER_FILE)
+  const bytes = Buffer.from(`${JSON.stringify({ v: 1, pid: process.pid, token, createdAt: Date.now() })}\n`, 'utf8')
+  await assertPrivateDirectoriesStable([lock])
+  const handle = await open(
+    path,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | (constants.O_NOFOLLOW ?? 0),
+    PRIVATE_FILE_MODE,
+  )
+  try {
+    await handle.writeFile(bytes)
+    if (process.platform !== 'win32') await handle.chmod(PRIVATE_FILE_MODE)
+    const [opened, requested] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })])
+    await assertPrivateDirectoriesStable([lock])
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1n ||
+      requested.isSymbolicLink() ||
+      !requested.isFile() ||
+      requested.nlink !== 1n ||
+      opened.size !== BigInt(bytes.byteLength) ||
+      !sameFileSnapshot(fileSnapshot(opened), fileSnapshot(requested)) ||
+      (process.platform !== 'win32' && (modeBits(opened) !== PRIVATE_FILE_MODE || modeBits(requested) !== PRIVATE_FILE_MODE))
+    ) {
+      throw new Error(`suggestion store lock owner changed while creating: ${path}`)
+    }
+    return { path, snapshot: fileSnapshot(opened) }
+  } finally {
+    await handle.close()
+  }
+}
+
+async function inspectLockOwner(lock: PrivateDirectoryIdentity): Promise<InspectedLockOwner | undefined> {
+  const path = join(lock.path, LOCK_OWNER_FILE)
+  let requested: BigIntStats
+  try {
+    requested = await lstat(path, { bigint: true })
+  } catch (error) {
+    if (errno(error) === 'ENOENT') return undefined
+    throw error
+  }
+  if (requested.isSymbolicLink() || !requested.isFile()) throw new Error(`suggestion store lock owner must be a regular, non-symlink file: ${path}`)
+  if (requested.nlink !== 1n) throw new Error(`suggestion store lock owner must have exactly one hard link: ${path}`)
+  if (requested.size > BigInt(MAX_LOCK_OWNER_BYTES)) throw new Error(`suggestion store lock owner exceeds ${MAX_LOCK_OWNER_BYTES} bytes: ${path}`)
+
+  await assertPrivateDirectoriesStable([lock])
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (
+      !opened.isFile() ||
+      opened.nlink !== 1n ||
+      opened.size > BigInt(MAX_LOCK_OWNER_BYTES) ||
+      !sameFileSnapshot(fileSnapshot(requested), fileSnapshot(opened))
+    ) {
+      throw new Error(`suggestion store lock owner changed while opening: ${path}`)
+    }
+    const expected = fileSnapshot(opened)
+    const bytes = Buffer.allocUnsafe(Number(opened.size))
+    let offset = 0
+    while (offset < bytes.length) {
+      const result = await handle.read(bytes, offset, bytes.length - offset, offset)
+      if (result.bytesRead === 0) break
+      offset += result.bytesRead
+    }
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })])
+    await assertPrivateDirectoriesStable([lock])
+    if (
+      offset !== bytes.length ||
+      after.nlink !== 1n ||
+      pathAfter.isSymbolicLink() ||
+      !pathAfter.isFile() ||
+      pathAfter.nlink !== 1n ||
+      !sameFileSnapshot(expected, fileSnapshot(after)) ||
+      !sameFileSnapshot(expected, fileSnapshot(pathAfter))
+    ) {
+      throw new Error(`suggestion store lock owner changed while reading: ${path}`)
+    }
+    let value: unknown
+    try {
+      value = JSON.parse(bytes.toString('utf8'))
+    } catch (error) {
+      void error
+    }
+    return {
+      identity: { path, snapshot: expected },
+      ...(validLockOwner(value) ? { owner: value } : {}),
+    }
+  } finally {
+    await handle.close()
+  }
+}
+
+function processIsAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return errno(error) === 'EPERM'
+  }
+}
+
+async function assertLockOwned(guard: SuggestionStoreLock): Promise<void> {
+  await assertPrivateDirectoriesStable([guard.parent, guard.lock])
+  const inspected = await inspectLockOwner(guard.lock)
+  if (
+    !inspected?.owner ||
+    !sameFileSnapshot(guard.owner.snapshot, inspected.identity.snapshot) ||
+    inspected.owner.pid !== guard.pid ||
+    inspected.owner.token !== guard.token
+  ) {
+    throw new Error(`suggestion store lock ownership lost: ${guard.lock.path}`)
+  }
+}
+
+async function unlinkExactPrivateFile(identity: PrivateFileIdentity, label: string): Promise<void> {
+  const current = await lstat(identity.path, { bigint: true })
+  if (
+    current.isSymbolicLink() ||
+    !current.isFile() ||
+    current.nlink !== 1n ||
+    !sameFileSnapshot(identity.snapshot, fileSnapshot(current))
+  ) {
+    throw new Error(`${label} changed before removal: ${identity.path}`)
+  }
+  await unlink(identity.path)
+}
+
+async function breakStaleSuggestionLock(
+  parent: PrivateDirectoryIdentity,
+  lock: PrivateDirectoryIdentity,
+  inspected: InspectedLockOwner | undefined,
+): Promise<boolean> {
+  if (inspected?.owner && processIsAlive(inspected.owner.pid)) return false
+  await assertPrivateDirectoriesStable([parent, lock])
+  if (inspected) await unlinkExactPrivateFile(inspected.identity, 'suggestion store lock owner')
+  await assertPrivateDirectoriesStable([parent, lock])
+  await rmdir(lock.path)
+  await assertPrivateDirectoriesStable([parent])
+  return true
+}
+
+async function readPrivateSuggestionStore(path: string, directories: PrivateDirectoryIdentity[]): Promise<Buffer | undefined> {
+  let requested: BigIntStats
+  try {
+    requested = await lstat(path, { bigint: true })
+  } catch (error) {
+    if (errno(error) === 'ENOENT') return undefined
+    throw error
+  }
+  if (requested.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`)
+  if (!requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`)
+  if (requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`)
+  if (requested.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+    throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`)
+  }
+
+  await assertPrivateDirectoriesStable(directories)
+  const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || opened.nlink !== 1n || !sameInode(requested, opened) || opened.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+      throw new Error(`suggestion store changed while opening: ${path}`)
+    }
+    if (process.platform !== 'win32' && modeBits(opened) !== PRIVATE_FILE_MODE) await handle.chmod(PRIVATE_FILE_MODE)
+    const [secured, requestedAfter] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })])
+    if (
+      !secured.isFile() ||
+      requestedAfter.isSymbolicLink() ||
+      !requestedAfter.isFile() ||
+      secured.nlink !== 1n ||
+      requestedAfter.nlink !== 1n ||
+      !sameInode(secured, requestedAfter) ||
+      secured.size > BigInt(MAX_SUGGESTION_STORE_BYTES) ||
+      (process.platform !== 'win32' && (modeBits(secured) !== PRIVATE_FILE_MODE || modeBits(requestedAfter) !== PRIVATE_FILE_MODE))
+    ) {
+      throw new Error(`suggestion store changed while securing: ${path}`)
+    }
+    const expected = fileSnapshot(secured)
+    const buffer = Buffer.allocUnsafe(Number(secured.size))
+    let offset = 0
+    while (offset < buffer.length) {
+      const result = await handle.read(buffer, offset, buffer.length - offset, offset)
+      if (result.bytesRead === 0) break
+      offset += result.bytesRead
+    }
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })])
+    await assertPrivateDirectoriesStable(directories)
+    if (
+      offset !== buffer.length ||
+      pathAfter.isSymbolicLink() ||
+      !pathAfter.isFile() ||
+      after.nlink !== 1n ||
+      pathAfter.nlink !== 1n ||
+      !sameFileSnapshot(expected, fileSnapshot(after)) ||
+      !sameFileSnapshot(expected, fileSnapshot(pathAfter))
+    ) {
+      throw new Error(`suggestion store changed while reading: ${path}`)
+    }
+    return buffer
+  } finally {
+    await handle.close()
+  }
+}
+
+async function appendPrivateSuggestionRecord(
+  path: string,
+  record: SuggestionRecord,
+  directories: PrivateDirectoryIdentity[],
+  assertOwnership: () => Promise<void>,
+): Promise<void> {
+  const recordBytes = Buffer.from(`${JSON.stringify(record)}\n`, 'utf8')
+  if (recordBytes.byteLength - 1 > MAX_SUGGESTION_RECORD_BYTES) {
+    throw new Error(`suggestion record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes`)
+  }
+  let requested: BigIntStats | undefined
+  try {
+    requested = await lstat(path, { bigint: true })
+  } catch (error) {
+    if (errno(error) !== 'ENOENT') throw error
+  }
+  if (requested?.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`)
+  if (requested && !requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`)
+  if (requested && requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`)
+
+  await assertPrivateDirectoriesStable(directories)
+  const createFlags = requested ? 0 : constants.O_CREAT | constants.O_EXCL
+  const handle = await open(
+    path,
+    constants.O_RDWR | constants.O_APPEND | createFlags | (constants.O_NOFOLLOW ?? 0),
+    PRIVATE_FILE_MODE,
+  )
+  try {
+    const opened = await handle.stat({ bigint: true })
+    if (!opened.isFile() || opened.nlink !== 1n || (requested && !sameInode(requested, opened))) {
+      throw new Error(`suggestion store changed while opening: ${path}`)
+    }
+    if (process.platform !== 'win32' && modeBits(opened) !== PRIVATE_FILE_MODE) await handle.chmod(PRIVATE_FILE_MODE)
+    const [secured, pathBeforeWrite] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })])
+    if (
+      !secured.isFile() ||
+      pathBeforeWrite.isSymbolicLink() ||
+      !pathBeforeWrite.isFile() ||
+      secured.nlink !== 1n ||
+      pathBeforeWrite.nlink !== 1n ||
+      !sameInode(secured, pathBeforeWrite) ||
+      (process.platform !== 'win32' && (modeBits(secured) !== PRIVATE_FILE_MODE || modeBits(pathBeforeWrite) !== PRIVATE_FILE_MODE))
+    ) {
+      throw new Error(`suggestion store changed before append: ${path}`)
+    }
+    let needsSeparator = false
+    if (secured.size > 0n) {
+      const tail = Buffer.allocUnsafe(1)
+      const result = await handle.read(tail, 0, 1, Number(secured.size - 1n))
+      if (result.bytesRead !== 1) throw new Error(`suggestion store changed while inspecting its tail: ${path}`)
+      needsSeparator = tail[0] !== 0x0a
+    }
+    const bytes = needsSeparator ? Buffer.concat([Buffer.from('\n'), recordBytes]) : recordBytes
+    if (secured.size + BigInt(bytes.byteLength) > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+      throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`)
+    }
+    const beforeWrite = fileSnapshot(secured)
+    const [tailAfter, pathAfterTail] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })])
+    if (
+      pathAfterTail.isSymbolicLink() ||
+      !pathAfterTail.isFile() ||
+      tailAfter.nlink !== 1n ||
+      pathAfterTail.nlink !== 1n ||
+      !sameFileSnapshot(beforeWrite, fileSnapshot(tailAfter)) ||
+      !sameFileSnapshot(beforeWrite, fileSnapshot(pathAfterTail))
+    ) {
+      throw new Error(`suggestion store changed while inspecting its tail: ${path}`)
+    }
+    const expectedSize = secured.size + BigInt(bytes.byteLength)
+    await assertPrivateDirectoriesStable(directories)
+    await assertOwnership()
+    await handle.writeFile(bytes)
+    await assertOwnership()
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat(path, { bigint: true })])
+    await assertPrivateDirectoriesStable(directories)
+    if (
+      !after.isFile() ||
+      pathAfter.isSymbolicLink() ||
+      !pathAfter.isFile() ||
+      after.nlink !== 1n ||
+      pathAfter.nlink !== 1n ||
+      !sameInode(after, pathAfter) ||
+      after.size !== expectedSize ||
+      pathAfter.size !== expectedSize ||
+      (process.platform !== 'win32' && (modeBits(after) !== PRIVATE_FILE_MODE || modeBits(pathAfter) !== PRIVATE_FILE_MODE))
+    ) {
+      throw new Error(`suggestion store changed during append: ${path}`)
+    }
+  } finally {
+    await handle.close()
+  }
+}
 
 type TransitionPatch = Partial<Pick<SuggestionRecord, 'proposal' | 'application' | 'verificationReceipt' | 'kickoff' | 'effect'>>
 type PatchField = keyof TransitionPatch
@@ -91,6 +544,56 @@ function safeReviewedFile(value: unknown): value is string {
 function hasUniqueReviewedFiles(files: string[]): boolean {
   const keys = files.map((file) => reviewedPathKey(file))
   return keys.every((key): key is string => key !== undefined) && new Set(keys).size === keys.length
+}
+
+function stringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === 'string')
+}
+
+function isPersistedSuggestionRecord(value: unknown): value is SuggestionRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Partial<SuggestionRecord>
+  if (
+    typeof record.id !== 'string' ||
+    !isSuggestionId(record.id) ||
+    (record.v !== 1 && record.v !== 2) ||
+    typeof record.createdAt !== 'number' ||
+    !Number.isFinite(record.createdAt) ||
+    (record.source !== 'report' && record.source !== 'skill') ||
+    (record.scope !== 'session' && record.scope !== 'repo' && record.scope !== 'global') ||
+    !stringArray(record.sessionIds) ||
+    !nonEmptyString(record.ruleId) ||
+    typeof record.title !== 'string' ||
+    !record.evidence ||
+    typeof record.evidence !== 'object' ||
+    Array.isArray(record.evidence) ||
+    typeof record.status !== 'string' ||
+    !Object.hasOwn(TRANSITIONS, record.status) ||
+    typeof record.statusAt !== 'number' ||
+    !Number.isFinite(record.statusAt) ||
+    (record.legacyIds !== undefined && (!stringArray(record.legacyIds) || !record.legacyIds.every(isSuggestionId))) ||
+    (record.insightId !== undefined && typeof record.insightId !== 'string') ||
+    (record.cohortFingerprint !== undefined && typeof record.cohortFingerprint !== 'string')
+  ) {
+    return false
+  }
+  if (record.v === 2) {
+    const key = record.key
+    if (
+      !key ||
+      typeof key !== 'object' ||
+      key.v !== 2 ||
+      (key.source !== 'report' && key.source !== 'skill') ||
+      (key.scope !== 'session' && key.scope !== 'repo' && key.scope !== 'global') ||
+      !nonEmptyString(key.ruleId) ||
+      !stringArray(key.sessionIds) ||
+      (key.insightId !== undefined && typeof key.insightId !== 'string') ||
+      (key.cohortFingerprint !== undefined && typeof key.cohortFingerprint !== 'string')
+    ) {
+      return false
+    }
+  }
+  return true
 }
 
 function assertProposal(value: unknown, to: SuggestionStatus): asserts value is SuggestionProposal {
@@ -293,47 +796,76 @@ export class SuggestionStore implements SuggestionStoreLike {
     return this.path + '.lock'
   }
 
-  /** cross-process advisory lock: an atomic mkdir beside the jsonl, stale locks broken by mtime */
-  private async acquireLock(): Promise<void> {
-    await this.ensurePrivateDir(dirname(this.path))
+  /** Atomic directory lock with token/PID ownership; only dead stale owners may be broken. */
+  private async acquireLock(): Promise<SuggestionStoreLock> {
+    const parent = await ensurePrivateDirectory(dirname(this.path), 'suggestion store directory')
     const t0 = Date.now()
+    const token = randomBytes(32).toString('hex')
     for (;;) {
+      let created = false
       try {
-        await mkdir(this.lockPath, { mode: 0o700 })
-        return
-      } catch {
-        /* held; check staleness below */
+        await mkdir(this.lockPath, { mode: PRIVATE_DIRECTORY_MODE })
+        created = true
+      } catch (error) {
+        if (errno(error) !== 'EEXIST') throw error
       }
-      try {
-        const st = await stat(this.lockPath)
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          await rm(this.lockPath, { recursive: true, force: true })
-          continue
+      if (created) {
+        let lock: PrivateDirectoryIdentity | undefined
+        let guard: SuggestionStoreLock | undefined
+        try {
+          lock = await securePrivateDirectory(this.lockPath, 'suggestion store lock')
+          const owner = await createLockOwner(lock, token)
+          guard = { parent, lock, owner, pid: process.pid, token }
+          await assertLockOwned(guard)
+          return guard
+        } catch (error) {
+          if (guard) await this.releaseLock(guard)
+          throw error
         }
-      } catch {
-        continue // vanished between attempts; retry immediately
+      }
+      let held: PrivateDirectoryIdentity | undefined
+      try {
+        held = await secureExistingPrivateDirectory(this.lockPath, 'suggestion store lock')
+        if (!held) continue
+        const st = await lstat(this.lockPath)
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          await assertPrivateDirectoriesStable([parent, held])
+          const inspected = await inspectLockOwner(held)
+          if (await breakStaleSuggestionLock(parent, held, inspected)) continue
+        }
+      } catch (error) {
+        if (errno(error) === 'ENOENT') continue
+        throw error
       }
       if (Date.now() - t0 > LOCK_TIMEOUT_MS) throw new Error(`suggestion store lock timed out: ${this.lockPath}`)
       await new Promise((r) => setTimeout(r, 15))
     }
   }
 
-  private async releaseLock(): Promise<void> {
+  private async releaseLock(guard: SuggestionStoreLock): Promise<void> {
     try {
-      await rm(this.lockPath, { recursive: true, force: true })
-    } catch {
-      /* nothing to release */
+      await assertLockOwned(guard)
+      await unlinkExactPrivateFile(guard.owner, 'suggestion store lock owner')
+      await assertPrivateDirectoriesStable([guard.parent, guard.lock])
+      await rmdir(this.lockPath)
+      await assertPrivateDirectoriesStable([guard.parent])
+    } catch (error) {
+      void error
+      // A vanished or replaced path is not ours to remove; a real leftover becomes stale.
     }
   }
 
   /** every mutation = in-process queue → cross-process lock → replay+validate+append inside */
-  private serialized<T>(fn: () => Promise<T>): Promise<T> {
+  private serialized<T>(fn: (guard: SuggestionStoreLock) => Promise<T>): Promise<T> {
     const run = async (): Promise<T> => {
-      await this.acquireLock()
+      const guard = await this.acquireLock()
       try {
-        return await fn()
+        await assertLockOwned(guard)
+        const result = await fn(guard)
+        await assertLockOwned(guard)
+        return result
       } finally {
-        await this.releaseLock()
+        await this.releaseLock(guard)
       }
     }
     const p = this.chain.then(run, run)
@@ -349,31 +881,41 @@ export class SuggestionStore implements SuggestionStoreLike {
    * A migrated v2 record is also indexed by each legacy id so old links and CLI
    * commands keep resolving without duplicating it in `all()`.
    */
-  private async replay(): Promise<Map<string, SuggestionRecord>> {
+  private async replay(parent?: PrivateDirectoryIdentity): Promise<Map<string, SuggestionRecord>> {
     const canonical = new Map<string, SuggestionRecord>()
-    let text: string
-    if (process.platform !== 'win32') {
-      await Promise.all([this.hardenExistingDir(dirname(this.path)), this.hardenExistingDir(this.proposalsDir)])
-      try {
-        await chmod(this.path, 0o600)
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    const root = parent ?? await secureExistingPrivateDirectory(dirname(this.path), 'suggestion store directory')
+    if (!root) return canonical
+    await assertPrivateDirectoriesStable([root])
+    const proposals = await secureExistingPrivateDirectory(this.proposalsDir, 'suggestion proposals directory')
+    const directories = proposals ? [root, proposals] : [root]
+    const bytes = await readPrivateSuggestionStore(this.path, directories)
+    if (bytes === undefined) return canonical
+    let offset = 0
+    let lines = 0
+    while (offset < bytes.length) {
+      lines++
+      if (lines > MAX_SUGGESTION_STORE_LINES) {
+        throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_LINES} lines: ${this.path}`)
       }
-    }
-    try {
-      text = await readFile(this.path, 'utf8')
-    } catch {
-      return canonical
-    }
-    for (const line of text.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      try {
-        const rec = JSON.parse(trimmed) as SuggestionRecord
-        if (rec && typeof rec === 'object' && isSuggestionId(rec.id) && typeof rec.status === 'string') canonical.set(rec.id, rec)
-      } catch {
-        /* corrupt line: skip, keep going */
+      const newline = bytes.indexOf(0x0a, offset)
+      const end = newline === -1 ? bytes.length : newline
+      if (end - offset > MAX_SUGGESTION_RECORD_BYTES) {
+        throw new Error(`suggestion store record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes: ${this.path}`)
       }
+      if (end > offset) {
+        const trimmed = bytes.toString('utf8', offset, end).trim()
+        if (trimmed) {
+          try {
+            const rec: unknown = JSON.parse(trimmed)
+            if (isPersistedSuggestionRecord(rec)) canonical.set(rec.id, rec)
+          } catch (error) {
+            void error
+            /* corrupt line: skip, keep going */
+          }
+        }
+      }
+      if (newline === -1) break
+      offset = newline + 1
     }
     const byId = new Map(canonical)
     for (const rec of canonical.values()) {
@@ -384,37 +926,17 @@ export class SuggestionStore implements SuggestionStoreLike {
     return byId
   }
 
-  private async append(rec: SuggestionRecord): Promise<void> {
-    await this.ensurePrivateDir(dirname(this.path))
-    await this.ensurePrivateDir(this.proposalsDir)
-    if (process.platform !== 'win32') {
-      try {
-        await chmod(this.path, 0o600)
-      } catch (error) {
-        // The first append creates the file with the private mode below.
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      }
-    }
-    await appendFile(this.path, JSON.stringify(rec) + '\n', { encoding: 'utf8', mode: 0o600 })
-    if (process.platform !== 'win32') await chmod(this.path, 0o600)
-  }
-
-  private async ensurePrivateDir(path: string): Promise<void> {
-    await mkdir(path, { recursive: true, mode: 0o700 })
-    if (process.platform !== 'win32') await chmod(path, 0o700)
-  }
-
-  private async hardenExistingDir(path: string): Promise<void> {
-    try {
-      await chmod(path, 0o700)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-    }
+  private async append(rec: SuggestionRecord, guard: SuggestionStoreLock): Promise<void> {
+    await assertLockOwned(guard)
+    const parent = guard.parent
+    const proposals = await ensurePrivateDirectory(this.proposalsDir, 'suggestion proposals directory')
+    await appendPrivateSuggestionRecord(this.path, rec, [parent, proposals], () => assertLockOwned(guard))
   }
 
   async all(): Promise<SuggestionRecord[]> {
     const unique = new Map<string, SuggestionRecord>()
-    for (const rec of (await this.replay()).values()) unique.set(rec.id, rec)
+    const records = await this.replay()
+    for (const rec of records.values()) unique.set(rec.id, rec)
     return [...unique.values()].sort((a, b) => b.statusAt - a.statusAt)
   }
 
@@ -428,10 +950,15 @@ export class SuggestionStore implements SuggestionStoreLike {
    * id must hash to the canonical identity or the exact legacy report identity.
    */
   async upsertNew(f: Finding, source: SuggestionSource, explicitId?: string): Promise<{ record: SuggestionRecord; created: boolean }> {
-    return this.serialized(() => this.upsertNewLocked(f, source, explicitId))
+    return this.serialized((guard) => this.upsertNewLocked(f, source, explicitId, guard))
   }
 
-  private async upsertNewLocked(f: Finding, source: SuggestionSource, explicitId?: string): Promise<{ record: SuggestionRecord; created: boolean }> {
+  private async upsertNewLocked(
+    f: Finding,
+    source: SuggestionSource,
+    explicitId: string | undefined,
+    guard: SuggestionStoreLock,
+  ): Promise<{ record: SuggestionRecord; created: boolean }> {
     assertSafeFindingIdentity(f)
     const key = suggestionKey(f, source)
     const canonicalId = suggestionIdV2(key)
@@ -441,7 +968,7 @@ export class SuggestionStore implements SuggestionStoreLike {
       throw new Error(`suggestion id identity mismatch: expected ${canonicalId}${acceptsLegacyId ? ` or legacy ${legacyId}` : ''}, got ${explicitId}`)
     }
     const id = explicitId ?? canonicalId
-    const records = await this.replay()
+    const records = await this.replay(guard.parent)
     const existing = records.get(id)
     const ts = this.now()
     if (existing) {
@@ -453,7 +980,7 @@ export class SuggestionStore implements SuggestionStoreLike {
       // applied timestamp, so a repeated handoff must not move it forward.
       if (existing.status !== 'new') return { record: existing, created: false }
       const refreshed: SuggestionRecord = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts }
-      await this.append(refreshed)
+      await this.append(refreshed, guard)
       return { record: refreshed, created: false }
     }
 
@@ -482,7 +1009,7 @@ export class SuggestionStore implements SuggestionStoreLike {
           // applied timestamp because later verification is ordered against it.
           statusAt: Number.isFinite(legacy.statusAt) && legacy.statusAt > 0 ? legacy.statusAt : ts,
         }
-        await this.append(migrated)
+        await this.append(migrated, guard)
         return { record: migrated, created: false }
       }
     }
@@ -504,7 +1031,7 @@ export class SuggestionStore implements SuggestionStoreLike {
       status: 'new',
       statusAt: ts,
     }
-    await this.append(record)
+    await this.append(record, guard)
     return { record, created: true }
   }
 
@@ -513,16 +1040,17 @@ export class SuggestionStore implements SuggestionStoreLike {
     to: SuggestionStatus,
     patch?: TransitionPatch,
   ): Promise<SuggestionRecord> {
-    return this.serialized(() => this.transitionLocked(id, to, patch))
+    return this.serialized((guard) => this.transitionLocked(id, to, guard, patch))
   }
 
   private async transitionLocked(
     id: string,
     to: SuggestionStatus,
+    guard: SuggestionStoreLock,
     patch?: TransitionPatch,
   ): Promise<SuggestionRecord> {
     // replayed INSIDE the lock: another writer's append since our caller last looked is now visible
-    const current = (await this.replay()).get(id)
+    const current = (await this.replay(guard.parent)).get(id)
     if (!current) throw new Error(`suggestion ${id} not found in ${this.path}`)
     const allowed = TRANSITIONS[current.status] ?? []
     if (!allowed.includes(to)) {
@@ -536,7 +1064,7 @@ export class SuggestionStore implements SuggestionStoreLike {
       status: to,
       statusAt: this.now(),
     }
-    await this.append(next)
+    await this.append(next, guard)
     return next
   }
 }
