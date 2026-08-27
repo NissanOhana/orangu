@@ -12,4 +12,4 @@ Five Claude Code skills; each owns one job and routes the rest onward.
 
 Skills read `orangu` CLI output, never a `.jsonl` transcript, and size each read first. Units: tokens, milliseconds, effort.
 
-The build generates the Codex mirrors of `improve`, `apply`, and `feedback` (`$orangu-<name>` under `plugins/orangu/skills/` and `.agents/skills/`) from this directory; edit here, not there. A route to `analyze` or `harness`, which Codex does not ship, becomes the CLI verb (`orangu analyze`, `orangu harness`) in the mirror.
+The build generates Codex mirrors of `improve`, `apply`, `feedback` (`$orangu-<name>` under `plugins/orangu/skills/` and `.agents/skills/`); `analyze`/`harness` pointers become CLI verbs. Edit here, not there.
