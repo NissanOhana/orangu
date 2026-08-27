@@ -1,10 +1,12 @@
 ---
 name: harness
-description: Propose systemic harness improvements from recurring patterns across a repository or supported Claude Code, Cowork, and Desktop sessions on the machine. Use when someone asks why the same outcome keeps recurring, wants a repo or global harness review, or wants evidence-backed changes across instruction files, scripts, hooks, skills, agents, MCP servers, plugins, and workflow configuration. Repo proposals may later be applied explicitly; global proposals are review-only. Do not use for observing or diagnosing only one session.
+description: Review what your harness declares against what your sessions actually used, across one repository or every session on the machine, and propose ranked changes to instruction files, hooks, skills, agents, MCP servers, plugins, and workflow config. Use when the user asks why the same problem keeps recurring, wants a repo or global harness review, or asks what to change in their setup. Not for one session: /orangu:analyze. Not for one finding: /orangu:improve.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**)
 ---
 
 # /orangu:harness
+
+Evidence: supported Claude Code, Cowork, or Desktop sessions under the configured roots, plus the harness configuration those sessions ran with.
 
 `orangu harness` is the deterministic half of this review; run it first.
 

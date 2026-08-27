@@ -60,9 +60,10 @@ describe('plugin packaging', () => {
       const desc = /description:\s*(.+)/.exec(block)?.[1] ?? ''
       expect(desc.length).toBeGreaterThan(40)
       expect(desc.length).toBeLessThan(1536)
-      if (s !== 'apply') {
-        for (const source of ['Claude Code', 'Cowork', 'Desktop']) expect(desc, `${s} names supported ${source} sources`).toContain(source)
-      }
+      // the host support matrix lives in the body (one line under the H1), never in the resident description
+      expect(desc, `${s} description carries no host boilerplate`).not.toContain('Cowork')
+      const body = md.slice(fm![0].length)
+      for (const source of ['Claude Code', 'Cowork', 'Desktop']) expect(body, `${s} body names supported ${source} sources`).toContain(source)
       if (md.includes('.jsonl')) expect(md.toLowerCase(), `${s} forbids direct transcript reads`).toMatch(/never (?:read|open)[^\n]*\.jsonl/)
     }
   })
@@ -564,6 +565,30 @@ describe('plugin packaging', () => {
     for (const literal of literals) expect(md, `harness names ${literal}`).toContain(literal)
     const stages = [...md.matchAll(/^## (\d)\. /gm)].map((m) => m[1])
     expect(stages, 'six numbered stages, in order').toEqual(['0', '1', '2', '3', '4', '5'])
+  })
+
+  it('every description routes away from a sibling and opens with its own job', () => {
+    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve']
+    const descriptions = new Map<string, string>()
+    for (const s of skills) {
+      const md = readText(`plugin/skills/${s}/SKILL.md`)
+      const desc = /description:\s*(.+)/.exec(md)?.[1] ?? ''
+      descriptions.set(s, desc)
+      const routes = [...desc.matchAll(/\/orangu:([a-z]+)/g)].map((m) => m[1]).filter((name) => name !== s)
+      expect(routes.length, `${s} points at least one job at a sibling`).toBeGreaterThan(0)
+      for (const r of routes) expect(skills, `${s} routes to a shipped skill: ${r}`).toContain(r)
+      expect(desc, `${s} says what it is not for`).toMatch(/Not for /)
+    }
+    const openings = [...descriptions.values()].map((d) => d.split(/\s+/).slice(0, 8).join(' '))
+    expect(new Set(openings).size, 'no two descriptions open the same way').toBe(skills.length)
+  })
+
+  it('plugin/skills/README.md catalogs exactly the shipped skills', () => {
+    const readme = readText('plugin/skills/README.md')
+    const dirs = readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()
+    const rows = [...readme.matchAll(/^\| `\/orangu:([a-z]+)`/gm)].map((m) => m[1]).sort()
+    expect(rows).toEqual(dirs)
+    expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 200 words').toBeLessThan(200)
   })
 
   it('the research source list is honest', () => {

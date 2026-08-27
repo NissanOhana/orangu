@@ -1,12 +1,14 @@
 ---
 name: improve
-description: Analyze a supported Claude Code, Cowork, or Desktop JSONL session or current Orangu Analysis, SlimAnalysis, or Aggregate output; combine bounded deterministic evidence with optional current research; report suggestions in chat and save scope-appropriate Orangu proposals. Use for /orangu:improve, a report handoff, one session diagnosis, recurring repo/global improvement, or session-scope later verification. This skill never edits the target project.
+description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Use when the user runs /orangu:improve, pastes a suggestion id from a report, asks what to change after one session, or wants an applied session change verified against a later run. Never edits the target repository. Not for applying a proposal: /orangu:apply. Not for a repo or global harness review: /orangu:harness.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read, Write(~/.orangu/proposals/**), WebSearch, WebFetch
 ---
 
 # /orangu:improve
 
-Turn local evidence into a reviewable proposal, not an automatic claim of improvement. Orangu owns parsing, redaction, counts, identities, and deterministic catalog matches. You interpret that bounded output, optionally research uncovered options, and write structured artifacts. Never edit the target repository in this skill.
+Evidence comes from supported Claude Code, Cowork, or Desktop sessions, or from current Orangu Analysis, SlimAnalysis, or Aggregate JSON.
+
+Turn local evidence into a reviewable proposal, not an automatic claim of improvement. Orangu owns parsing, redaction, counts, identities, and deterministic catalog matches. You interpret that bounded output, optionally research uncovered options, and write structured artifacts. Never edit the target repository in this skill. This is the place for one session diagnosis and a report handoff; recurring repo/global improvement across a whole harness belongs to `/orangu:harness`.
 
 Read [the artifact contract](references/artifact-contract.md) before writing any proposal or verification receipt.
 

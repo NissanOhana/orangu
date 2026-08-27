@@ -1,10 +1,12 @@
 ---
 name: analyze
-description: Explain what happened in a supported Claude Code, Cowork, or Desktop session using local deterministic evidence. Use when someone asks to review a run, trace its steps and outcome, diagnose an error or retry, understand time or token use, open a visual report, or compare recurring patterns across a repository or supported sessions on the machine. For a concrete change proposal, hand one finding to /orangu:improve; for a whole repo or global improvement plan, use /orangu:harness.
+description: Explain what happened in one session, finished or still running, from local deterministic evidence. Use when the user asks to review a run, trace what the agent did and why it ended where it did, diagnose an error or retry, see where time or tokens went, open a visual report, or keep a report refreshed while a session runs. Not for a change proposal: /orangu:improve. Not for a repo or global harness review: /orangu:harness.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read
 ---
 
 # /orangu:analyze
+
+Input: one supported Claude Code, Cowork, or Desktop session on this machine (or a repo or global aggregate of them).
 
 Use the bundled CLI to observe a supported session and explain its outcome. The CLI owns parsing, redaction, counts, evidence, matching, and ranking. You translate that deterministic output for the user. Do not turn the analysis itself into a claim that a change worked.
 
