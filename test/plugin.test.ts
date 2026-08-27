@@ -529,7 +529,7 @@ describe('plugin packaging', () => {
     expect(apply).not.toMatch(/WebSearch|WebFetch|Agent|Task|mcp__/)
   })
 
-  it('apply performs repository binding before any read or edit and records an attestation', () => {
+  it('apply performs repository binding before any read or edit and records a skill-authored receipt', () => {
     for (const [name, skillPath, contractPath] of [
       ['Claude', 'plugin/skills/apply/SKILL.md', 'plugin/skills/apply/references/application-contract.md'],
       ['Codex', '.agents/skills/orangu-apply/SKILL.md', '.agents/skills/orangu-apply/references/application-contract.md'],
@@ -543,7 +543,7 @@ describe('plugin packaging', () => {
       expect(skill, `${name} apply stops on failed binding`).toMatch(/stop immediately unless this repository-binding preflight succeeds/i)
       expect(skill.indexOf(command), `${name} preflight precedes contract reads`).toBeLessThan(skill.indexOf('application contract'))
       for (const text of [skill, contract]) {
-        expect(text, `${name} labels the receipt as attestation`).toContain('skill-authored attestation')
+        expect(text, `${name} labels the receipt as skill-authored`).toMatch(/receipt is (?:your )?skill-authored/)
         expect(text, `${name} does not claim diff inspection`).toMatch(/does not inspect the working-tree diff/i)
         expect(text, `${name} keeps confinement as a skill requirement`).toMatch(/required|requirements/)
       }

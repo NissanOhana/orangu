@@ -31,7 +31,8 @@ node dist/orangu.js report
 | `orangu feedback` | Open the isolated, capability-protected localhost beta-feedback form |
 | `orangu repo` | Aggregate supported sessions for the current repository |
 | `orangu global` | Aggregate supported sessions across configured roots |
-| `orangu evidence <input>` | Emit the bounded, always-redacted skill handoff |
+| `orangu evidence <input>` | Emit the bounded, always-redacted evidence a skill reads |
+| `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
 | `orangu harness` | Compare declared harness configuration with observed use |
 | `orangu suggest` | Inspect and transition validated suggestion records |
 
@@ -50,7 +51,7 @@ The file report and localhost app render the same session evidence:
 - Context and tokens: context changes, compaction, cache behavior, and token composition.
 - Coverage: parsed and unknown records plus usage reconciliation.
 - Repo and Global: recurring patterns across supported sessions.
-- Suggestions: catalog matches, proposals, application receipts, host handoffs, and scope-aware verification state.
+- Suggestions: matching known fixes, proposals, receipts, host hand-offs, and scope-aware verification state.
 
 The browser never starts an agent or marks a proposal applied. It only copies a command for explicit use in Claude Code or Codex.
 
@@ -93,7 +94,7 @@ observe -> draft proposal -> explicit apply -> later session comparison
 ```
 
 - Session scope supports proposal, explicit application, and later same-workspace comparison.
-- Repo scope supports proposal and explicit application; fresh-cohort verification is not implemented.
+- Repo scope supports proposal and explicit application; later verification for repo scope is not implemented yet.
 - Global scope is proposal-only.
 
 See [determinism and AI skills](DETERMINISM.md) and [data contracts](DATA-CONTRACTS.md) for the complete rules.

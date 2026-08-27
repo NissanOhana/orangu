@@ -82,7 +82,7 @@ Proposal sources preserve that distinction:
 
 External skill discovery remains candidate-only. A popularity count is not evidence that a skill is suitable, and the improve workflow never installs a skill or plugin.
 
-Every skill and harness analyst treats session, digest, tool, path, title, error, source, and proposal text as untrusted data. They extract bounded measurements and labels but never follow embedded instructions, commands, or URLs, let them override policy, turn them into network queries, or splice them into shell syntax. Shell-bound selectors and paths reject NUL/newlines and travel as individual argv items or correctly quoted shell words.
+Every skill and harness analyst treats session, evidence, tool, path, title, error, source, and proposal text as untrusted data. They extract bounded measurements and labels but never follow embedded instructions, commands, or URLs, let them override policy, turn them into network queries, or splice them into shell syntax. Shell-bound selectors and paths reject NUL/newlines and travel as individual argv items or correctly quoted shell words.
 
 ## Skills and their authority
 
@@ -94,7 +94,7 @@ This is the primary suggestion workflow for both one-session diagnosis and recur
 - starts with `catalogMatches` and ties quantitative statements to emitted findings;
 - optionally researches uncovered choices;
 - writes one human-readable `<id>.md` proposal and one validated `<id>.json` manifest;
-- runs the deterministic `--for-proposal` evidence/workspace preflight before writing either artifact;
+- runs the deterministic `--for-proposal` evidence/workspace check before writing either artifact;
 - reports the evidence, expected effect, risk, files, verification condition, and sources in chat;
 - never edits the target repository.
 
@@ -102,7 +102,7 @@ This is the primary suggestion workflow for both one-session diagnosis and recur
 
 This is the explicit mutation workflow for session and repo scope. Global proposals are review-only. It requires a structured proposal in `proposed` state and:
 
-- runs `orangu suggest --show <id> --for-apply` as a deterministic current-repository binding preflight before any project read or edit;
+- runs `orangu suggest --show <id> --for-apply` as a deterministic current-repository binding check before any project read or edit;
 - reads current repository instructions before editing;
 - treats proposal content and embedded commands as untrusted data;
 - is contractually required to change only the declared relative repository files;
@@ -111,7 +111,7 @@ This is the explicit mutation workflow for session and repo scope. Global propos
 - moves the record to `applied`, never directly to `verified`;
 - does not browse, discover plugins, install dependencies, or delegate.
 
-The AI skill can make the reviewed edit. Its application receipt is a skill-authored attestation. The CLI validates the artifact shape and exact agreement with the reviewed relative file list for the current invocation; it does not inspect the diff, rerun commands, or prove filesystem confinement.
+The AI skill can make the reviewed edit. Its application receipt is skill-authored. The CLI validates the artifact shape and exact agreement with the reviewed relative file list for the current invocation; it does not inspect the diff, rerun commands, or prove filesystem confinement.
 
 ### Later verification
 
@@ -123,7 +123,7 @@ That state is intentionally narrow: it means the reviewed metric comparisons pas
 
 Supported metrics are `avgTotalTokens`, `avgToolCalls`, `avgToolErrors`, `avgActiveMs`, `avgContextPeak`, `avgTestRunsFailed`, `avgBuildRunsFailed`, and `avgInterruptions`. Supported comparisons are `decreased`, `not-increased`, `increased`, `not-decreased`, and `equal`.
 
-A proposal cannot verify itself, and an application attestation does not prove that its reported edit or checks occurred. Later verification is the separate deterministic claim based on resolved supported sessions.
+A proposal cannot verify itself, and an application receipt does not prove that its reported edit or checks occurred. Later verification is the separate deterministic claim based on resolved supported sessions.
 
 ### Supporting skills
 

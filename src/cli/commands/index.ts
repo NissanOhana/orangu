@@ -19,9 +19,43 @@ export const EXTRA_COMMANDS: Record<string, CommandFn> = {
 }
 
 export const EXTRA_HELP: string[] = [
-  '  orangu feedback              private localhost beta-feedback form  (--context session|repo|global|report|app [--port <n>] [--no-open])',
-  '  orangu evidence <input>       bounded redacted findings + catalog matches for a session/.jsonl or current Orangu JSON  ([--scope repo|global] [--limit <n>] [--estimate] [--json])',
-  '  orangu estimate [<session>|repo|global]  size what an LLM would read: bytes and ≈tokens             (--suggestion <id> [--receipt <token>] | --rule <r> --session <a,b>, --depth quick|standard|deep)',
-  '  orangu harness               what your config declares vs what your sessions did: skills/MCP/agents/hooks used|idle|undeclared, in tokens  ([--json] [--cwd <dir>] [--root <dir>] [--global] [--limit <n>] [-o|--out <file>] [--no-redact] [--strip-paths] [--jobs <n>] [--no-cache] [--quiet])',
-  '  orangu suggest               suggestion records in ~/.orangu  ([<sg_id>] --finding <token> | [<sg_id>] --rule <r> --scope <s> --session <a,b> [--cohort <16hex override; derived when omitted>] | --show <id> [--for-proposal|--for-apply] | --set <id> <status> [--proposal <path>] [--manifest <path>] [--application <path>] [--verification <path>] | --list)',
+  // Each entry may span lines (main.ts joins entries with '\n'); keep every line <= 80 columns.
+  [
+    '  orangu feedback              private localhost beta-feedback form',
+    '                                 (--context session|repo|global|report|app',
+    '                                  [--port <n>] [--no-open])',
+  ].join('\n'),
+  [
+    '  orangu evidence <input>      bounded, redacted findings + matching known fixes',
+    '                               for a session/.jsonl or current Orangu JSON',
+    '                                 ([--scope repo|global] [--limit <n>]',
+    '                                  [--estimate] [--json])',
+  ].join('\n'),
+  [
+    '  orangu estimate [<session>|repo|global|harness]',
+    '                               size what a skill would read: bytes and ~tokens',
+    '                                 (--suggestion <id>',
+    '                                  | --rule <r> --session <a,b>,',
+    '                                  --depth quick|standard|deep)',
+  ].join('\n'),
+  [
+    '  orangu harness               what your config declares vs what your sessions',
+    '                               used: skills/MCP/agents/hooks',
+    '                               used|idle|undeclared, in tokens',
+    '                                 ([--json] [--cwd <dir>] [--root <dir>]',
+    '                                  [--global] [--limit <n>] [-o|--out <file>]',
+    '                                  [--no-redact] [--strip-paths] [--jobs <n>]',
+    '                                  [--no-cache] [--quiet])',
+  ].join('\n'),
+  [
+    '  orangu suggest               suggestion records in ~/.orangu',
+    '                                 ([<sg_id>] --finding <token>',
+    '                                  | [<sg_id>] --rule <r> --scope <s>',
+    '                                    --session <a,b>',
+    '                                  | --show <id> [--for-proposal|--for-apply]',
+    '                                  | --set <id> <status> [--proposal <path>]',
+    '                                    [--manifest <path>] [--application <path>]',
+    '                                    [--verification <path>]',
+    '                                  | --list)',
+  ].join('\n'),
 ]

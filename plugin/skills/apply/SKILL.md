@@ -16,7 +16,7 @@ Require exactly one id matching `^sg_[0-9a-f]{12}$`. Treat every id, path, selec
 
 Before any project read or edit, run `orangu suggest --show '<id>' --for-apply --json --quiet`; if Orangu is unavailable, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest --show '<id>' --for-apply --json --quiet`. Stop immediately unless this repository-binding preflight succeeds. Never use plain `--show` for an apply operation.
 
-Only after the preflight succeeds, read [the application contract](references/application-contract.md) and the returned proposal.
+Only after that check succeeds, read [the application contract](references/application-contract.md) and the returned proposal.
 
 Stop unless all are true:
 
@@ -44,6 +44,6 @@ After all named checks pass, derive a trusted absolute `<application-path>` unde
 
 `orangu suggest --set '<id>' applied --application '<application-path>' --json --quiet`
 
-The receipt is your skill-authored attestation. Orangu validates its shape and that its relative file list exactly matches the reviewed manifest for this invocation; it does not inspect the working-tree diff, independently run the checks, or prove filesystem confinement. Following the declared-file boundary and reporting checks truthfully remain requirements of this skill contract.
+The receipt is skill-authored: Orangu validates its shape and that its relative file list exactly matches the reviewed manifest for this invocation; it does not inspect the working-tree diff, independently run the checks, or prove filesystem confinement. Following the declared-file boundary and reporting checks truthfully remain requirements of this skill contract.
 
 Return the changed files, check results, and receipt path. For session scope, include the later verification instruction and say: applied locally, not yet verified on a later run. For repo scope, say: applied locally; Orangu has no fresh-cohort comparator yet, so this record cannot become `verified`. Never offer verification for global scope.

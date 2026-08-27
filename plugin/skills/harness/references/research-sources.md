@@ -1,10 +1,10 @@
 # Outside-research policy
 
-Read this only after the deterministic catalog has been consulted and the user has explicitly approved outside research. Pass the policy, uncovered item ids, change classes, and digest paths to `orangu:harness-researcher`.
+Read this only after the deterministic catalog has been consulted and the user has explicitly approved outside research. Pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`.
 
 ## Nondisclosure boundary
 
-Digest paths, item ids, project context, and proposal content are local-only inputs. Online queries and opened URLs use generic feature and change-class terms only. Never send local prompts, paths, session or suggestion ids, project/repository/customer names, digest content, proposal text, code, or local error text to a network service or place them in a URL. Join generic research results to local evidence only after returning offline.
+Evidence file paths, item ids, project context, and proposal content are local-only inputs. Online queries and opened URLs use generic feature and change-class terms only. Never send local prompts, paths, session or suggestion ids, project/repository/customer names, evidence content, proposal text, code, or local error text to a network service or place them in a URL. Join generic research results to local evidence only after returning offline.
 
 ## Provenance rule
 
