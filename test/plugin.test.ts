@@ -44,8 +44,8 @@ describe('plugin packaging', () => {
     const m = readJson('.claude-plugin/marketplace.json')
     expect(m.plugins.some((x: { name: string; source: string }) => x.name === 'orangu' && x.source === './plugin')).toBe(true)
   })
-  it('ships the seven intended /orangu:* commands with valid frontmatter', () => {
-    const skills = ['analyze', 'apply', 'feedback', 'improve', 'mega', 'watch', 'suggest']
+  it('ships the five intended /orangu:* commands with valid frontmatter', () => {
+    const skills = ['analyze', 'apply', 'feedback', 'improve', 'mega']
     const namespace = readJson('plugin/.claude-plugin/plugin.json').name
     expect(readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()).toEqual([...skills].sort())
     for (const s of skills) {
@@ -149,8 +149,9 @@ describe('plugin packaging', () => {
     const shape = readFileSync(join(root, 'plugin/skills/analyze/references/json-shape.md'), 'utf8')
     expect(shape).toContain('SlimAnalysis')
   })
-  it('watch points multi-session monitoring at orangu serve', () => {
-    const md = readFileSync(join(root, 'plugin/skills/watch/SKILL.md'), 'utf8')
+  it('analyze carries the live-session branch: orangu watch for one, orangu serve for several', () => {
+    const md = readFileSync(join(root, 'plugin/skills/analyze/SKILL.md'), 'utf8')
+    expect(md).toContain('orangu watch')
     expect(md).toContain('orangu serve')
     expect(md.toLowerCase()).toMatch(/multi-session|multiple (?:live )?sessions|several sessions|every session/)
   })
@@ -198,11 +199,9 @@ describe('plugin packaging', () => {
 
   it('suggestion-id handoff is estimated interactively and accepts no server receipt', () => {
     const improve = readText('plugin/skills/improve/SKILL.md')
-    const alias = readText('plugin/skills/suggest/SKILL.md')
     expect(improve).toContain("orangu estimate --suggestion '<id>' --json --quiet")
     expect(improve).not.toContain('--receipt')
     expect(improve).not.toContain('confirmationReceipt')
-    expect(alias).not.toMatch(/confirmation receipt/i)
   })
 
   it('mega keeps two independent interactive estimate gates outside receipt kickoff', () => {
@@ -233,7 +232,6 @@ describe('plugin packaging', () => {
     const mega = readText('plugin/skills/mega/SKILL.md')
     const researcher = readText('plugin/agents/harness-researcher.md')
     const policy = readText('plugin/skills/mega/references/research-sources.md')
-    const proposal = readText('plugin/skills/suggest/references/proposal-format.md')
     for (const [path, text] of [
       ['orangu-mega', mega], ['harness-researcher', researcher], ['research policy', policy],
     ] as const) {
@@ -245,9 +243,10 @@ describe('plugin packaging', () => {
     expect(improve).toContain('skills.sh')
     expect(improve).toMatch(/never install a skill or plugin/i)
     expect(`${mega}\n${researcher}\n${policy}`).toContain('skills.sh')
-    expect(proposal).toContain('Candidate review')
-    expect(proposal).toContain('repository evidence')
-    expect(proposal).toContain('install count')
+    // the candidate-review policy used to live in the retired suggest alias; it is pinned on the research policy now
+    expect(policy).toContain('Candidate review')
+    expect(policy).toContain('repository evidence')
+    expect(policy).toContain('install count')
   })
 
   it('keeps every online research path free of local evidence and identifiers', () => {
@@ -430,7 +429,7 @@ describe('plugin packaging', () => {
   // instruction design and free of the words being banned.
   it('the whole plugin talks tokens and effort, never money', () => {
     const surfaces = pluginPublicCopy()
-    expect(surfaces.length, 'plugin and marketplace public surfaces').toBeGreaterThanOrEqual(14)
+    expect(surfaces.length, 'plugin and marketplace public surfaces').toBeGreaterThanOrEqual(15)
     for (const surface of surfaces) {
       // ${…} substitutions are the plugin's own variables, not money
       const text = surface.text.replace(/\$\{[^}]*\}/g, '')
@@ -486,7 +485,7 @@ describe('plugin packaging', () => {
   it('only the explicit research surfaces hold network tools; localhost never launches them', () => {
     const networked = AGENTS.filter((a) => fmList(agentBlock(a), 'tools').some((t) => t === 'WebSearch' || t === 'WebFetch'))
     expect(networked, 'exactly one agent may reach the network').toEqual(['harness-researcher'])
-    for (const s of ['analyze', 'apply', 'mega', 'watch', 'suggest']) {
+    for (const s of ['analyze', 'apply', 'mega']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const allowed = /^allowed-tools:\s*(.+)$/m.exec(md)?.[1] ?? ''
       expect(allowed, `${s} grants no network tool`).not.toMatch(/WebSearch|WebFetch/)

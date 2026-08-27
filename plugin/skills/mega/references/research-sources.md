@@ -24,6 +24,8 @@ Use maintained source repositories and focused directories for a named missing c
 
 Do not run `npx skills find`, do not install anything, and do not present a search result as an endorsed change. Return a user-run query or install command only as part of candidate review.
 
+For `skill-discover`, a proposal carries a **Candidate review** section with the user-run search query, source, install count as observed by the user, repository evidence, and `verifiedAt: null`. Never claim installation.
+
 ## Tier 3: practitioner evidence
 
 **Budget: at most 3 web calls.**

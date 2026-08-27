@@ -20,6 +20,7 @@ Use the bundled CLI to observe a supported session and explain its outcome. The 
 - **Supported sessions on this machine, find recurring patterns:** `orangu global --json`
 - **Find the right session:** `orangu list`; add `--global` to include supported Cowork and Desktop sources.
 - **Open a self-contained report:** `orangu report <session>`; add `--out <file>` when the destination matters.
+- **Live session, keep one report current:** `orangu watch [<session>]` is a foreground command that refreshes one self-contained report as the transcript grows until Ctrl-C; tell the user how to interrupt it. For several sessions at once, run `orangu serve` and open its loopback URL. Watching observes; it never turns a partial run into a claim that a change worked.
 
 JSON is redacted by default. Use `--no-redact` only after the user explicitly requests unredacted output on their machine. See `references/json-shape.md` for the contract and `references/reading-the-report.md` only when a field needs interpretation.
 

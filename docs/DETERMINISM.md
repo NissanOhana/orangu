@@ -98,8 +98,6 @@ This is the primary suggestion workflow for both one-session diagnosis and recur
 - reports the evidence, expected effect, risk, files, verification condition, and sources in chat;
 - never edits the target repository.
 
-`/orangu:suggest` is retained only as a Claude Code compatibility alias. It forwards the exact request to `/orangu:improve` and does not create the former Markdown-only artifact.
-
 ### `orangu-apply`
 
 This is the explicit mutation workflow for session and repo scope. Global proposals are review-only. It requires a structured proposal in `proposed` state and:
@@ -131,11 +129,11 @@ A proposal cannot verify itself, and an application attestation does not prove t
 
 - `/orangu:analyze` translates one supported session or aggregate without designing or applying a change.
 - `/orangu:mega` is a separately requested deep review for repo or global scope. It remains catalog-first and saves the same structured Markdown plus manifest pair as `/orangu:improve`. Repo proposals may later be applied explicitly; global proposals remain review-only.
-- `/orangu:watch` keeps the deterministic report refreshed and performs no model reasoning of its own.
+- Live observation is a CLI concern: `orangu watch` refreshes one report and `orangu serve` follows several sessions; neither performs model reasoning of its own.
 
 ## Claude Code and Codex parity
 
-The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:mega`, `/orangu:watch`, `/orangu:feedback`, and the `/orangu:suggest` compatibility alias. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI; `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts.
+The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:mega`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI; `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule. Host parity does not imply transcript parity: the local adapter still supports only the named Claude Code, Cowork, and Desktop session formats.
 
