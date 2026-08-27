@@ -74,8 +74,13 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: SITE })
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Observe the run. Improve the next outcome.')
-  await expect(page.locator('.hero .hero-lead')).toContainText('Claude Code, Cowork, and Desktop sessions')
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Turn your AI history into actionable insights.')
+  await expect(page.locator('.hero .hero-lead')).toHaveText("Orangu reads your local AI sessions so you don't have to guess what went right (or wrong).")
+  await expect(page.locator('.hero-journey .hero-step')).toHaveText([
+    'Inspect: Dive deep into steps and tool calls from a single run.',
+    'Discover: Spot recurring patterns across your whole repository.',
+    'Improve: Use real evidence to build smarter, faster workflows.',
+  ])
   await expect(page.getByRole('button', { name: /Inspect a session/ }).first()).toBeVisible()
   await expect(page.getByRole('link', { name: /See the observe-to-proposal sample/ })).toBeVisible()
   const sampleLinks = page.locator('a[href="sample.html"]')
@@ -178,7 +183,7 @@ test('wide landing keeps a two-line hero and the visual beside the copy above th
       const tops = [...new Set(rects.map((rect) => Math.round(rect.top)))]
       return { text: span.textContent?.trim(), lines: tops.length, top: Math.min(...tops), right: Math.max(...rects.map((rect) => rect.right)) }
     })
-    const textSelectors = ['.eyebrow', '.hero-lead', '.hero-copy > .fine']
+    const textSelectors = ['.eyebrow', '.hero-lead', '.hero-journey li', '.hero-copy > .fine']
     const contentRights = textSelectors.flatMap((selector) => {
       const element = document.querySelector(selector)
       return element ? lineRects(element).map((rect) => rect.right) : []
@@ -205,7 +210,7 @@ test('wide landing keeps a two-line hero and the visual beside the copy above th
     }
   })
 
-  expect(geometry.spans.map(({ text }) => text)).toEqual(['Observe the run.', 'Improve the next outcome.'])
+  expect(geometry.spans.map(({ text }) => text)).toEqual(['Turn your AI history', 'into actionable insights.'])
   expect(geometry.spans.map(({ lines }) => lines)).toEqual([1, 1])
   expect(geometry.spans[1]!.top).toBeGreaterThan(geometry.spans[0]!.top)
   // The canvas intentionally has transparent space around the drawing, so compare

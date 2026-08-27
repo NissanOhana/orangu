@@ -72,11 +72,11 @@ function applyHandoffs(record: SuggestionRecord): string {
     !Array.isArray(proposal.files) ||
     proposal.files.length === 0
   ) return ''
-  return `<div class="sg-handoffs" aria-label="Apply handoffs"><div class="small muted">Copy only. Nothing runs here.</div><div class="sg-hand"><span>Claude</span>${commandBlock(`claude "/orangu:apply ${record.id}"`)}</div><div class="sg-hand"><span>Codex</span>${commandBlock(`$orangu-apply ${record.id}`)}</div></div>`
+  return `<div class="sg-handoffs" aria-label="Apply handoff"><div class="small muted">Copy only. Nothing runs here.</div><div class="sg-hand"><span>Claude</span>${commandBlock(`claude "/orangu:apply ${record.id}"`)}</div></div>`
 }
 
-function improveHandoffs(commands: { claude: string; codex: string }): string {
-  return `<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${commandBlock(commands.claude)}</div><div class="sg-hand"><span>Codex</span>${commandBlock(commands.codex)}</div></div>`
+function improveHandoffs(commands: { claude: string }): string {
+  return `<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${commandBlock(commands.claude)}</div></div>`
 }
 
 function proposalDetails(record: SuggestionViewRecord | undefined): string {
@@ -207,7 +207,7 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
         const request = { mode: 'copy' as const, suggestionId: sid, finding: row.finding }
         const action = ctx.ds.kickoff(request).then((result) =>
           result.ok
-            ? { kind: 'copied' as const, message: 'Claude copied. Codex is below.', response: result.response }
+            ? { kind: 'copied' as const, message: 'Claude command copied.', response: result.response }
             : { kind: 'error' as const, message: result.message, ...(result.response ? { response: result.response } : {}) },
         )
         void action.then((result) => {

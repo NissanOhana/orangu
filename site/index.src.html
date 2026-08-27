@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>orangu: observe the run, improve the next outcome</title>
-<meta name="description" content="orangu turns supported Claude Code, Cowork, and Desktop sessions into local evidence, reviewable proposals, explicit session/repo changes, and session-scope later verification."/>
-<meta property="og:title" content="orangu: observe the run, improve the next outcome"/>
-<meta property="og:description" content="Observe each tool call, draft an evidence-backed change, apply session/repo proposals explicitly, and verify session changes later."/>
+<title>orangu: turn your AI history into actionable insights</title>
+<meta name="description" content="Orangu reads your local AI sessions so you can inspect a run, discover repository-wide patterns, and improve workflows with real evidence."/>
+<meta property="og:title" content="orangu: turn your AI history into actionable insights"/>
+<meta property="og:description" content="Inspect individual runs, discover recurring repository patterns, and improve AI workflows using evidence from your local session history."/>
 <link rel="icon" type="image/png" sizes="32x32" href="{{favicon:32}}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{favicon:180}}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,7 +43,7 @@ code{font-family:var(--mono);font-size:.94em}
 .hero-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:36px;align-items:center}
 .hero-copy{min-width:0}
 @media (min-width:900px){
-  .hero{padding:clamp(36px,4vw,60px) 0 clamp(24px,3vw,40px)}
+  .hero{padding:clamp(32px,3.4vw,48px) 0 clamp(16px,1.75vw,24px)}
   .hero .wrap{max-width:1320px}
   .hero-grid{grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr);grid-template-areas:"copy viz" "term viz";column-gap:12px;row-gap:0;align-items:start}
   .hero-copy{grid-area:copy}
@@ -61,7 +61,14 @@ code{font-family:var(--mono);font-size:.94em}
 @media (max-width:640px){.hero qtc-triad{height:min(96vw,440px)}}
 .eyebrow{font-size:15px;color:var(--ink3);margin-bottom:18px}
 h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,76px);line-height:1.0;letter-spacing:-0.03em;text-wrap:balance}
-.hero-lead{font-size:clamp(17px,1.6vw,19px);line-height:1.55;color:var(--ink2);max-width:620px;margin:24px 0 30px}
+.hero-lead{font-size:clamp(17px,1.6vw,19px);line-height:1.55;color:var(--ink2);max-width:620px;margin:24px 0 20px}
+.hero-journey{position:relative;display:grid;gap:0;max-width:660px;margin:0 0 28px;padding:0 0 0 24px;list-style:none}
+.hero-journey::before{content:"";position:absolute;left:6px;top:17px;bottom:17px;width:2px;border-radius:2px;background:linear-gradient(var(--border2),var(--accent),var(--border2))}
+.hero-step{position:relative;display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:baseline;padding:8px 0;color:var(--ink2);font-size:14.5px;line-height:1.45}
+.hero-step::before{content:"";position:absolute;left:-23px;top:14px;width:10px;height:10px;border:2px solid var(--accent);border-radius:50%;background:var(--bg);box-shadow:0 0 0 4px var(--bg)}
+.hero-step:last-child::before{background:var(--accent)}
+.hero-step strong{font-family:var(--title);font-size:15px;color:var(--ink1)}
+@media (max-width:640px){.hero{padding-top:32px}.hero h1{font-size:clamp(40px,11vw,46px);line-height:1.02}.hero-lead{margin:18px 0 14px}.hero-journey{margin-bottom:22px}.hero-step{grid-template-columns:1fr;gap:1px;padding:7px 0}.hero-step::before{top:13px}}
 .cta-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .cmd{display:inline-flex;align-items:center;gap:10px;background:var(--cmd);color:var(--cmd-ink);font-family:var(--mono);font-size:15px;padding:13px 18px;border-radius:10px;border:1px solid var(--border2)}
 .cmd .p{color:var(--accent)}
@@ -78,7 +85,7 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .fine{font-size:13px;color:var(--ink3);margin:16px 0 0}
 .triad-cap{text-align:center;font-size:13px;color:var(--ink3);margin:6px 0 0}
 /* illustrative terminal output, styled like the command boxes */
-.term-wrap{min-width:0;max-width:780px;margin-top:clamp(28px,4vw,48px)}
+.term-wrap{min-width:0;max-width:780px;margin-top:clamp(22px,2.5vw,32px)}
 .term{background:var(--cmd);color:var(--cmd-ink);border:1px solid var(--border2);border-radius:12px;padding:18px 22px;font-family:var(--mono);font-size:14px;line-height:1.75;overflow-x:auto}
 .term pre{margin:0;font:inherit;white-space:pre}
 .term .p,.term .dot{color:var(--accent)}
@@ -279,8 +286,13 @@ footer .legal{margin:0;font-size:12.5px}
     <div class="hero-grid">
       <div class="hero-copy">
         <div class="eyebrow">{ Local · offline reports · no instrumentation }</div>
-        <h1><span>Observe the run.</span> <span>Improve the next outcome.</span></h1>
-        <p class="hero-lead">orangu reads supported Claude Code, Cowork, and Desktop sessions already on your machine. Inspect the steps and tool calls in one run, then use recurring evidence across a repo or all sessions to improve what happens next.</p>
+        <h1><span>Turn your AI history</span> <span>into actionable insights.</span></h1>
+        <p class="hero-lead">Orangu reads your local AI sessions so you don't have to guess what went right (or wrong).</p>
+        <ol class="hero-journey" aria-label="From AI history to better workflows">
+          <li class="hero-step"><strong>Inspect:</strong> <span>Dive deep into steps and tool calls from a single run.</span></li>
+          <li class="hero-step"><strong>Discover:</strong> <span>Spot recurring patterns across your whole repository.</span></li>
+          <li class="hero-step"><strong>Improve:</strong> <span>Use real evidence to build smarter, faster workflows.</span></li>
+        </ol>
         <div class="cta-row">
           <button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Inspect a session</span><span class="sep">·</span>npx orangu report</button>
           <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See the observe-to-proposal sample (opens in a new tab)">See the observe-to-proposal sample ↗</a>
@@ -368,7 +380,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
             <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic preflight check with explicit pass and fail output. <code>orangu-improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored check attestation. Orangu validates its shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Codex apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic preflight check with explicit pass and fail output. <code>orangu-improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored check attestation. Orangu validates its shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
             </div>
             <p class="demo-note">Local code measures and matches. An optional skill drafts. The browser only copies a handoff. A verified session comparison means its reviewed metrics passed on selected later evidence; it is not a causal or overall-quality claim.</p>
           </div>
