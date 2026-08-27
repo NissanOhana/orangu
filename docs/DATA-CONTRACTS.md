@@ -103,6 +103,8 @@ EvidenceEstimate = {
 
 The estimate serializes the same canonical bundle; it is not a different depth or sample.
 
+`orangu estimate <session> --json` sizes the same bundle and emits `Estimate` (`bytes`, `approxTokens`, `sessions`, `files`, `overThreshold`) plus `skipped: { selector, reason }[]`, the selectors that could not be projected; they add nothing to `bytes`. When nothing could be projected the command fails, as `orangu evidence --estimate` does on the same input, instead of reporting a clean 0. `estimate harness` sizes one report and omits `skipped`.
+
 ## AppData v1
 
 `AppData` is the single payload rendered by the browser. File mode embeds it in `#orangu-data`; serve mode returns it from `GET /api/app`. Additive changes are allowed within v1.

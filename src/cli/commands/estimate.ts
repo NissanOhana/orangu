@@ -19,7 +19,7 @@ import { claudeRoots, resolveSession, findLatestSession, listSessions } from '..
 import { prevalidateEvidenceSession, readEvidenceSessionManifest } from '../../adapters/claude-code/evidence-input.js'
 import { parseClaudeCodeSession } from '../../adapters/claude-code/parse.js'
 import { analyzeSession } from '../../analyze/analyze.js'
-import { estimateFor, type SizeProjection } from '../../suggest/estimate.js'
+import { estimateFor, type AnalysisLoad, type SizeProjection } from '../../suggest/estimate.js'
 import { CONFIRMATION_PUBLIC_KEY_ENV, verifyConfirmationReceipt } from '../../suggest/receipt.js'
 import { slimAnalysis } from '../../suggest/slim.js'
 import { SuggestionStore } from '../../suggest/store.js'
@@ -38,22 +38,36 @@ const slimBytes: SizeProjection = (a) => Buffer.byteLength(JSON.stringify(slimAn
  * bundleFromSession), so an estimate is byte-identical to `evidence --estimate`. `suggest --show`
  * passes the real version and clock because its output is shown, not sized.
  */
-export async function loadAnalysisBySelector(
+export async function loadAnalysisResult(
   sel: string,
   analyzeOptions: { version: string; now: number } = { version: 'evidence', now: 0 },
-): Promise<Analysis | undefined> {
+): Promise<AnalysisLoad> {
+  const value = sel.trim()
+  const pathSelector = value.endsWith('.jsonl') || value.includes('/') || value.includes('\\')
+  let ref
   try {
-    const value = sel.trim()
-    const pathSelector = value.endsWith('.jsonl') || value.includes('/') || value.includes('\\')
-    const ref = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() })
-    if (!ref) return undefined
+    ref = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() })
+  } catch (err) {
+    return { ok: false, reason: `session lookup failed: ${(err as Error).message}` }
+  }
+  if (!ref) return { ok: false, reason: 'no such session' }
+  try {
     const manifest = await prevalidateEvidenceSession(ref.path)
     const loaded = await readEvidenceSessionManifest(manifest)
     const session = await parseClaudeCodeSession(loaded.parseInput)
-    return analyzeSession(session, analyzeOptions)
-  } catch {
-    return undefined
+    return { ok: true, analysis: analyzeSession(session, analyzeOptions) }
+  } catch (err) {
+    return { ok: false, reason: (err as Error).message }
   }
+}
+
+/** `loadAnalysisResult` collapsed to the analysis; callers that only need presence (suggest --show). */
+export async function loadAnalysisBySelector(
+  sel: string,
+  analyzeOptions?: { version: string; now: number },
+): Promise<Analysis | undefined> {
+  const loaded = await loadAnalysisResult(sel, analyzeOptions)
+  return loaded.ok ? loaded.analysis : undefined
 }
 
 async function targetSessionIds(positionals: string[], flags: Record<string, string | boolean>): Promise<string[]> {
@@ -115,7 +129,12 @@ export async function cmdEstimate(positionals: string[], flags: Record<string, s
   }
 
   const ids = await targetSessionIds(positionals, flags)
-  const est: Estimate = await estimateFor(ids, (id) => loadAnalysisBySelector(id), slim ? slimBytes : undefined)
+  const est: Estimate = await estimateFor(ids, (id) => loadAnalysisResult(id), slim ? slimBytes : undefined)
+  // Nothing sized means the gate has no answer. Fail the way `orangu evidence --estimate` fails on the
+  // same input, so the two gates never disagree; a clean 0 would read as "small enough".
+  if (est.sessions === 0 && est.skipped && est.skipped.length > 0) {
+    throw new Error(`no session could be projected:\n${est.skipped.map((s) => `  ${s.selector}: ${s.reason}`).join('\n')}`)
+  }
 
   const confirmationReceipt: ConfirmationReceiptResult | undefined =
     receiptToken && receiptRecord
@@ -155,6 +174,10 @@ function printEstimate(est: Estimate, label: string): void {
     w(`  ⚠ over the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate. Ask the user before reading this into an LLM`)
   } else {
     w(`  under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate, small enough to read`)
+  }
+  if (est.skipped && est.skipped.length > 0) {
+    w(`  ⚠ ${est.skipped.length} session${est.skipped.length === 1 ? '' : 's'} could not be projected and ${est.skipped.length === 1 ? 'is' : 'are'} not counted above:`)
+    for (const s of est.skipped) w(`      ${s.selector}: ${s.reason}`)
   }
   w('')
 }

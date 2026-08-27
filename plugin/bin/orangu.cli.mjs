@@ -9283,15 +9283,20 @@ async function estimateFor(sessionIds, load, size = evidenceBytes) {
   let bytes = 0;
   let sessions = 0;
   let files2 = 0;
+  const skipped = [];
   for (const id of sessionIds) {
-    const a = await load(id);
-    if (!a) continue;
+    const loaded = await load(id);
+    if (!loaded.ok) {
+      skipped.push({ selector: id, reason: loaded.reason });
+      continue;
+    }
+    const a = loaded.analysis;
     sessions++;
     files2 += 1 + a.session.subagentPaths.length;
     bytes += size(a);
   }
   const approxTokens3 = Math.ceil(bytes / 4);
-  return { bytes, approxTokens: approxTokens3, sessions, files: files2, overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD };
+  return { bytes, approxTokens: approxTokens3, sessions, files: files2, overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD, skipped };
 }
 
 // src/suggest/receipt.ts
@@ -10395,19 +10400,28 @@ function printHarness(r) {
 // src/cli/commands/estimate.ts
 var DEPTH_RETIRED = "orangu estimate has one canonical projection (the evidence bundle); --depth was retired. Use --slim to size an `analyze --json --slim` read.";
 var slimBytes = (a) => Buffer.byteLength(JSON.stringify(slimAnalysis(a)));
-async function loadAnalysisBySelector(sel, analyzeOptions = { version: "evidence", now: 0 }) {
+async function loadAnalysisResult(sel, analyzeOptions = { version: "evidence", now: 0 }) {
+  const value = sel.trim();
+  const pathSelector = value.endsWith(".jsonl") || value.includes("/") || value.includes("\\");
+  let ref;
   try {
-    const value = sel.trim();
-    const pathSelector = value.endsWith(".jsonl") || value.includes("/") || value.includes("\\");
-    const ref = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() });
-    if (!ref) return void 0;
+    ref = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() });
+  } catch (err) {
+    return { ok: false, reason: `session lookup failed: ${err.message}` };
+  }
+  if (!ref) return { ok: false, reason: "no such session" };
+  try {
     const manifest = await prevalidateEvidenceSession(ref.path);
     const loaded = await readEvidenceSessionManifest(manifest);
     const session = await parseClaudeCodeSession(loaded.parseInput);
-    return analyzeSession(session, analyzeOptions);
-  } catch {
-    return void 0;
+    return { ok: true, analysis: analyzeSession(session, analyzeOptions) };
+  } catch (err) {
+    return { ok: false, reason: err.message };
   }
+}
+async function loadAnalysisBySelector(sel, analyzeOptions) {
+  const loaded = await loadAnalysisResult(sel, analyzeOptions);
+  return loaded.ok ? loaded.analysis : void 0;
 }
 async function targetSessionIds(positionals, flags) {
   const suggestionId2 = flagStr(flags, "suggestion");
@@ -10460,7 +10474,11 @@ async function cmdEstimate(positionals, flags) {
     if (!receiptRecord) throw new Error(`suggestion ${suggestionSelector} not found (see: orangu suggest --list)`);
   }
   const ids = await targetSessionIds(positionals, flags);
-  const est = await estimateFor(ids, (id) => loadAnalysisBySelector(id), slim ? slimBytes : void 0);
+  const est = await estimateFor(ids, (id) => loadAnalysisResult(id), slim ? slimBytes : void 0);
+  if (est.sessions === 0 && est.skipped && est.skipped.length > 0) {
+    throw new Error(`no session could be projected:
+${est.skipped.map((s) => `  ${s.selector}: ${s.reason}`).join("\n")}`);
+  }
   const confirmationReceipt = receiptToken && receiptRecord ? verifyConfirmationReceipt({
     token: receiptToken,
     record: receiptRecord,
@@ -10494,6 +10512,10 @@ function printEstimate(est, label) {
     w(`  \u26A0 over the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString("en-US")}-token gate. Ask the user before reading this into an LLM`);
   } else {
     w(`  under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString("en-US")}-token gate, small enough to read`);
+  }
+  if (est.skipped && est.skipped.length > 0) {
+    w(`  \u26A0 ${est.skipped.length} session${est.skipped.length === 1 ? "" : "s"} could not be projected and ${est.skipped.length === 1 ? "is" : "are"} not counted above:`);
+    for (const s of est.skipped) w(`      ${s.selector}: ${s.reason}`);
   }
   w("");
 }
@@ -11439,7 +11461,7 @@ var EXTRA_HELP = [
   [
     "  orangu estimate [<session>|repo|global|harness]",
     "                               size what a skill would read: bytes and ~tokens",
-    "                                 (--suggestion <id>",
+    "                                 (--suggestion <id> [--receipt <token>]",
     "                                  | --rule <r> --session <a,b>;",
     "                                  --slim sizes an analyze --json --slim read)"
   ].join("\n"),

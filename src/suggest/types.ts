@@ -186,6 +186,16 @@ export interface Estimate {
   sessions: number
   files: number
   overThreshold: boolean
+  /**
+   * Session selectors that could not be projected (no such session, or the transcript could not be
+   * loaded), with the reason. They contribute nothing to `bytes`, so `overThreshold` speaks only for
+   * the sessions counted. Present for session projections; `estimate harness` sizes one report and omits it.
+   */
+  skipped?: SkippedSession[]
+}
+export interface SkippedSession {
+  selector: string
+  reason: string
 }
 /** ≈ 20 KB of slim JSON (≈ 4 bytes / token) */
 export const ESTIMATE_TOKEN_THRESHOLD = 5000

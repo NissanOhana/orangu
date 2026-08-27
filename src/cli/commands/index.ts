@@ -34,7 +34,7 @@ export const EXTRA_HELP: string[] = [
   [
     '  orangu estimate [<session>|repo|global|harness]',
     '                               size what a skill would read: bytes and ~tokens',
-    '                                 (--suggestion <id>',
+    '                                 (--suggestion <id> [--receipt <token>]',
     '                                  | --rule <r> --session <a,b>;',
     '                                  --slim sizes an analyze --json --slim read)',
   ].join('\n'),

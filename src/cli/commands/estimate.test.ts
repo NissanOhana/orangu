@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js'
@@ -54,6 +54,36 @@ describe('orangu estimate (in-process)', () => {
     expect(est.bytes).toBe(evidence.bytes)
     expect(est.approxTokens).toBe(evidence.approxTokens)
     expect(est.overThreshold).toBe(evidence.overThreshold)
+  })
+
+  it('a session it cannot project is an error, never "0 sessions, small enough to read"', async () => {
+    // the one input where the two gates could still disagree: `evidence --estimate` errors on it.
+    // A symlink resolves as a session but fails evidence prevalidation (adapter: no symbolic links);
+    // a directory resolves to nothing. Both branches of the loader must surface, not size 0.
+    const linked = join(mkdtempSync(join(tmpdir(), 'orangu-linked-')), 'aaaaaaaa-0000-4000-8000-00000000dead.jsonl')
+    symlinkSync(fixturePath, linked)
+    await expect(cmdEvidence([linked], { estimate: true, json: true })).rejects.toThrow(/symbolic links/)
+    await expect(cmdEstimate([linked], { json: true })).rejects.toThrow(/no session could be projected[\s\S]*symbolic links/)
+    expect(stdout()).toBe('')
+    const missing = join(mkdtempSync(join(tmpdir(), 'orangu-missing-')), 'aaaaaaaa-0000-4000-8000-00000000beef.jsonl')
+    mkdirSync(missing)
+    await expect(cmdEvidence([missing], { estimate: true, json: true })).rejects.toThrow(/No session matches/)
+    await expect(cmdEstimate([missing], { json: true })).rejects.toThrow(/no session could be projected[\s\S]*no such session/)
+  })
+
+  it('names the sessions it skipped beside the ones it sized', async () => {
+    const missing = join(mkdtempSync(join(tmpdir(), 'orangu-missing-')), 'aaaaaaaa-0000-4000-8000-00000000beef.jsonl')
+    mkdirSync(missing)
+    await cmdEstimate([], { session: `${fixturePath},${missing}`, json: true })
+    const est = JSON.parse(stdout())
+    expect(est.sessions).toBe(1)
+    expect(est.bytes).toBeGreaterThan(0)
+    expect(est.skipped).toHaveLength(1)
+    expect(est.skipped[0].selector).toBe(missing)
+    out = []
+    await cmdEstimate([], { session: `${fixturePath},${missing}` })
+    expect(stdout()).toContain('1 session could not be projected')
+    expect(stdout()).toContain(missing)
   })
 
   it('--slim sizes the larger `analyze --json --slim` read and says so', async () => {
