@@ -1702,13 +1702,10 @@ var TEXT_KEYS = /* @__PURE__ */ new Set([
   "inputSummary",
   "resultPreview",
   "preview",
-  "narrative",
   "detail",
   "sampleHint",
   "title",
-  "signature",
   "label",
-  "recommendation",
   "description",
   "args",
   "command",
@@ -1745,6 +1742,29 @@ function scrubOne(s, opts) {
 function isAgentRecord(obj2) {
   if ("toolUseId" in obj2 || "category" in obj2) return false;
   return "spawnDepth" in obj2 && ("agentId" in obj2 || "hasTranscript" in obj2) || "agentId" in obj2 && ("agentType" in obj2 || "status" in obj2) && ("toolErrors" in obj2 || "tokens" in obj2);
+}
+function isRuleRecord(obj2) {
+  return "ruleId" in obj2 && "severity" in obj2 && "axis" in obj2;
+}
+function isQualitySignal(obj2) {
+  return "tone" in obj2 && "value" in obj2 && !("ruleId" in obj2);
+}
+function isEventRecord(obj2) {
+  return "kind" in obj2 && "turnIndex" in obj2 && "label" in obj2;
+}
+function stripsText(key, source) {
+  switch (key) {
+    case "name":
+      return isAgentRecord(source);
+    case "title":
+      return !isRuleRecord(source);
+    case "label":
+      return !isQualitySignal(source) && !isEventRecord(source);
+    case "detail":
+      return !isRuleRecord(source) && !isQualitySignal(source);
+    default:
+      return TEXT_KEYS.has(key);
+  }
 }
 function strippedCountMap(value, opts) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return walk(value, opts);
@@ -1786,7 +1806,7 @@ function walk(obj2, opts) {
         out[k] = [];
         continue;
       }
-      if (opts.stripText && typeof v === "string" && (TEXT_KEYS.has(k) || k === "name" && isAgentRecord(source))) {
+      if (opts.stripText && typeof v === "string" && stripsText(k, source)) {
         out[k] = "";
         continue;
       }

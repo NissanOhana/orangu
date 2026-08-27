@@ -29,12 +29,13 @@ describe('redactAnalysis', () => {
   })
   it('can strip text and paths', () => {
     const { analysis } = redactAnalysis(mk(), { stripText: true, stripPaths: true })
-    expect(analysis.summary.narrative).toBe('')
+    expect(analysis.turns[0]!.promptPreview).toBe('')
     expect(analysis.session.path).toBe('proj/a.jsonl')
   })
 
-  it('strips every transcript-authored Analysis string while preserving structural identifiers', () => {
-    const a = {
+  const GENERATED = 'rule-authored-copy-4412'
+  const full = (): Analysis =>
+    ({
       schemaVersion: '2',
       generator: { name: 'orangu', version: 'test', generatedAt: 0, modelCatalogUpdatedAt: '2026-01-01' },
       session: {
@@ -51,11 +52,11 @@ describe('redactAnalysis', () => {
         effortLevels: ['high'],
         live: false,
       },
-      summary: { narrative: MARKER, outcomes: { prLinks: [{ label: MARKER, url: `https://example.test/${MARKER}`, turnIndex: 0 }] } },
+      summary: { narrative: GENERATED, outcomes: { prLinks: [{ label: MARKER, url: `https://example.test/${MARKER}`, turnIndex: 0 }] } },
       turns: [{ commandName: MARKER, promptPreview: MARKER, kind: 'human', agents: [], models: ['claude-test'], activity: 'Bash×1' }],
       tools: {
         byName: [{ name: 'Bash', category: 'exec' }],
-        errorGroups: [{ name: 'Bash', signature: MARKER, sampleHint: MARKER }],
+        errorGroups: [{ name: 'Bash', signature: GENERATED, sampleHint: MARKER }],
         calls: [{ toolUseId: 'tool-1', name: 'Bash', category: 'exec', summary: MARKER, errorHint: MARKER }],
       },
       agents: {
@@ -70,14 +71,14 @@ describe('redactAnalysis', () => {
       time: { longestTurns: [{ preview: MARKER }] },
       files: { files: [{ path: '/tmp/file.ts' }], mostReRead: [] },
       quality: {
-        signals: [{ id: 'tests', label: MARKER, value: 'none', tone: 'unknown', detail: MARKER }],
+        signals: [{ id: 'tests', label: GENERATED, value: 'none', tone: 'unknown', detail: GENERATED }],
         testRuns: [{ turnIndex: 0, command: MARKER, ok: false }],
         buildRuns: [{ turnIndex: 0, command: MARKER, ok: false }],
         gitCommits: [{ turnIndex: 0, ok: true, message: MARKER }],
         userCorrections: [{ turnIndex: 0, preview: MARKER }],
       },
-      insights: [{ id: 'insight-1', ruleId: 'rule-1', severity: 'low', axis: 'quality', title: MARKER, detail: MARKER, recommendation: MARKER, evidence: { command: MARKER, template: MARKER, sample: MARKER, failedAgent: { agentId: 'agent-1', agentType: 'code-reviewer', name: MARKER, status: 'failed', toolErrors: 1, tokens: 10 } }, turnIndexes: [], personas: ['anyone'] }],
-      events: [{ kind: 'other', turnIndex: 0, label: MARKER, detail: MARKER }],
+      insights: [{ id: 'insight-1', ruleId: 'rule-1', severity: 'low', axis: 'quality', title: GENERATED, detail: GENERATED, recommendation: GENERATED, evidence: { command: MARKER, template: MARKER, sample: MARKER, failedAgent: { agentId: 'agent-1', agentType: 'code-reviewer', name: MARKER, status: 'failed', toolErrors: 1, tokens: 10 } }, turnIndexes: [], personas: ['anyone'] }],
+      events: [{ kind: 'other', turnIndex: 0, label: GENERATED, detail: MARKER }],
       parse: {
         recordCounts: { user: 1, [MARKER]: 2 },
         unknownRecordTypes: { [MARKER]: 2 },
@@ -87,8 +88,10 @@ describe('redactAnalysis', () => {
         systemSubtypes: { [MARKER]: 5 },
         warnings: [{ code: 'bad_line', message: MARKER, count: 1 }],
       },
-    } as unknown as Analysis
+    }) as unknown as Analysis
 
+  it('strips every transcript-authored Analysis string while preserving structural identifiers', () => {
+    const a = full()
     const stripped = redactAnalysis(a, { stripText: true, home: '' }).analysis
     const json = JSON.stringify(stripped)
     expect(json).not.toContain(MARKER)
@@ -112,6 +115,39 @@ describe('redactAnalysis', () => {
     expect(JSON.stringify(included)).toContain(MARKER)
     expect(included.tools.calls[0]!.name).toBe('Bash')
     expect(included.skills.invocations[0]!.name).toBe('orangu-improve')
+  })
+
+  it('keeps rule-generated copy under stripText while transcript-authored strings are still blanked', () => {
+    const out = redactAnalysis(full(), { stripText: true, home: '' }).analysis
+    // orangu's own rules wrote these: they survive
+    expect(out.insights[0]!.title).toBe(GENERATED)
+    expect(out.insights[0]!.detail).toBe(GENERATED)
+    expect(out.insights[0]!.recommendation).toBe(GENERATED)
+    expect(out.summary.narrative).toBe(GENERATED)
+    expect(out.quality.signals[0]!.label).toBe(GENERATED)
+    expect(out.quality.signals[0]!.detail).toBe(GENERATED)
+    expect(out.events[0]!.label).toBe(GENERATED)
+    expect(out.tools.errorGroups[0]!.signature).toBe(GENERATED)
+    // the transcript wrote these: they are gone
+    expect(out.session.title).toBe('')
+    expect(out.turns[0]!.promptPreview).toBe('')
+    expect(out.turns[0]!.commandName).toBe('')
+    expect(out.tools.calls[0]!.summary).toBe('')
+    expect(out.tools.calls[0]!.errorHint).toBe('')
+    expect(out.tools.errorGroups[0]!.sampleHint).toBe('')
+    expect(out.agents.runs[0]!.description).toBe('')
+    expect(out.quality.gitCommits[0]!.message).toBe('')
+    expect(out.events[0]!.detail).toBe('')
+    expect((out.insights[0]!.evidence as { command: string }).command).toBe('')
+    expect(JSON.stringify(out)).not.toContain(MARKER)
+  })
+
+  it('still scrubs a secret planted in generated copy', () => {
+    const a = full()
+    a.insights[0]!.title = 'see sk-ant-api03-FAKEFAKEFAKEFAKEFAKE for details'
+    const out = redactAnalysis(a, { stripText: true, home: '' }).analysis
+    expect(out.insights[0]!.title).toContain('‹anthropic-key›')
+    expect(JSON.stringify(out)).not.toContain('sk-ant-api03-FAKEFAKEFAKEFAKEFAKE')
   })
 
   it('rewrites the home-directory prefix to ~ by default', () => {

@@ -18,6 +18,8 @@ import { SessionBuilder } from '../../test/fixtures/session-builder.js'
 /** the secret makeFixtureHome plants in the live session's first prompt (= its title) */
 const SECRET = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
 const ARBITRARY_MARKER = 'private-purple-ferret-9073'
+/** copy orangu's own rules wrote; the default strip keeps it, the scrubber still runs over it */
+const GENERATED = 'rule-authored-copy-4412'
 const MARKER_SECRET = 'sk-ant-api03-PRIVATEPURPLEFERRET9073'
 
 const BADGES = new Set(['live', 'idle', 'ended'])
@@ -81,9 +83,10 @@ async function syntheticAnalysis(id: string, cwd: string): Promise<Analysis> {
 const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
   const a = analyzeSession(session, options)
   const text = `${ARBITRARY_MARKER} ${MARKER_SECRET}`
+  const generated = `${GENERATED} ${MARKER_SECRET}`
   a.session.title = text
   a.session.gitBranches = [text]
-  a.summary.narrative = text
+  a.summary.narrative = generated
   a.summary.outcomes.prLinks.push({ label: text, url: `https://example.test/${ARBITRARY_MARKER}`, turnIndex: 0 })
   if (a.turns[0]) {
     a.turns[0].commandName = text
@@ -94,7 +97,7 @@ const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
     call.summary = text
     call.errorHint = text
   }
-  a.tools.errorGroups.push({ name: 'Bash', signature: text, count: 1, sampleTurnIndex: 0, sampleHint: text })
+  a.tools.errorGroups.push({ name: 'Bash', signature: generated, count: 1, sampleTurnIndex: 0, sampleHint: text })
   a.agents.runs.push({
     agentId: 'agent-private-marker',
     name: text,
@@ -125,14 +128,14 @@ const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
     ruleId: 'private-marker-rule',
     severity: 'low',
     axis: 'quality',
-    title: text,
-    detail: text,
-    recommendation: text,
+    title: generated,
+    detail: generated,
+    recommendation: generated,
     evidence: { command: text, template: text, sample: text },
     turnIndexes: [0],
     personas: ['anyone'],
   })
-  a.events.push({ kind: 'other', turnIndex: 0, label: text, detail: text })
+  a.events.push({ kind: 'other', turnIndex: 0, label: generated, detail: text })
   a.parse.recordCounts[ARBITRARY_MARKER] = 1
   a.parse.unknownRecordTypes[ARBITRARY_MARKER] = 1
   a.parse.unknownBlockTypes[ARBITRARY_MARKER] = 1
@@ -558,6 +561,8 @@ describe('serve redaction: the planted secret never leaves the process', () => {
         expect(surface).not.toContain(ARBITRARY_MARKER)
         expect(surface).not.toContain(MARKER_SECRET)
       }
+      // Rule-generated copy (finding titles, the narrative) survives the default strip.
+      expect(surfaces[1]).toContain(GENERATED)
       // Tool, skill, and agent-type identifiers are structural UI data, not prose.
       expect(surfaces[1]).toContain('Write')
       expect(surfaces[1]).toContain('orangu-improve')

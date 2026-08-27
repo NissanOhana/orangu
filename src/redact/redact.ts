@@ -3,6 +3,9 @@
  * (only previews and summaries survive). This module scrubs those short strings for obvious secrets and PII
  * before they ever reach a report, and can strip previews entirely for a maximally private artifact.
  *
+ * `stripText` removes prose the transcript authored; it never removes copy orangu's own rules generated.
+ * Where a key name is used by both (`title`, `label`, `detail`) the containing record's shape decides.
+ *
  * Redaction is DEFAULT-ON for any shareable output. It only ever removes information; it never adds.
  */
 import type { Analysis } from '../model/analysis.js'
@@ -84,7 +87,11 @@ function homeRegExp(home: string): RegExp | null {
 /**
  * String fields whose values can contain transcript-authored prose.  Keep this
  * list about semantics, not spelling alone: `name` is deliberately handled by
- * `isAgentRecord` below so structural tool/skill/model names remain useful.
+ * `isAgentRecord` below so structural tool/skill/model names remain useful, and
+ * `title` / `label` / `detail` are decided per record shape by `stripsText`
+ * (rule-generated copy keeps them; transcript-derived records lose them).
+ * `narrative`, `recommendation` and `signature` are only ever generated copy and
+ * are therefore not listed.
  */
 const TEXT_KEYS = new Set([
   'promptPreview',
@@ -92,13 +99,10 @@ const TEXT_KEYS = new Set([
   'inputSummary',
   'resultPreview',
   'preview',
-  'narrative',
   'detail',
   'sampleHint',
   'title',
-  'signature',
   'label',
-  'recommendation',
   'description',
   'args',
   'command',
@@ -153,6 +157,37 @@ function isAgentRecord(obj: Record<string, unknown>): boolean {
   )
 }
 
+/** Insight (analysis.ts) and CrossFinding (aggregate.ts): copy written by an orangu rule, never by the transcript. */
+function isRuleRecord(obj: Record<string, unknown>): boolean {
+  return 'ruleId' in obj && 'severity' in obj && 'axis' in obj
+}
+
+/** QualitySignal: a rule-generated chip (label + detail) with a tone and a value. */
+function isQualitySignal(obj: Record<string, unknown>): boolean {
+  return 'tone' in obj && 'value' in obj && !('ruleId' in obj)
+}
+
+/** Analysis.events[]: the label is rule-generated; the detail is a transcript preview and stays stripped. */
+function isEventRecord(obj: Record<string, unknown>): boolean {
+  return 'kind' in obj && 'turnIndex' in obj && 'label' in obj
+}
+
+/** Does `stripText` blank this string field, given the record it sits in? */
+function stripsText(key: string, source: Record<string, unknown>): boolean {
+  switch (key) {
+    case 'name':
+      return isAgentRecord(source)
+    case 'title':
+      return !isRuleRecord(source)
+    case 'label':
+      return !isQualitySignal(source) && !isEventRecord(source)
+    case 'detail':
+      return !isRuleRecord(source) && !isQualitySignal(source)
+    default:
+      return TEXT_KEYS.has(key)
+  }
+}
+
 function strippedCountMap(value: unknown, opts: WalkOpts): unknown {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return walk(value, opts)
   const source = value as Record<string, unknown>
@@ -197,7 +232,7 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
         out[k] = []
         continue
       }
-      if (opts.stripText && typeof v === 'string' && (TEXT_KEYS.has(k) || (k === 'name' && isAgentRecord(source)))) {
+      if (opts.stripText && typeof v === 'string' && stripsText(k, source)) {
         out[k] = ''
         continue
       }
