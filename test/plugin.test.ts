@@ -22,6 +22,11 @@ function markdownFiles(...dirs: string[]): string[] {
   return files.sort()
 }
 
+// The normative shell-data and untrusted-content rules live in ONE file; each skill/agent keeps
+// two inline sentences plus a link. Guards read the pair so the guarantee stays reachable.
+const SHARED_RULES = 'plugin/skills/shared/untrusted-input.md'
+const withSharedRules = (path: string): string => `${readText(path)}\n${readText(SHARED_RULES)}`
+
 function pluginPublicCopy(): Array<{ path: string; text: string }> {
   const markdown = markdownFiles('plugin/skills', 'plugin/agents')
     .map((path) => ({ path, text: readText(path) }))
@@ -348,7 +353,7 @@ describe('plugin packaging', () => {
       ['Claude apply', 'plugin/skills/apply/SKILL.md'],
       ['Codex apply', '.agents/skills/orangu-apply/SKILL.md'],
     ] as const) {
-      const text = readText(path)
+      const text = path.startsWith('plugin/') ? withSharedRules(path) : readText(path)
       for (const rejected of ['NUL', 'carriage return', 'newline']) expect(text, `${name} rejects ${rejected}`).toContain(rejected)
       expect(text, `${name} prefers argv`).toMatch(/argument-array process API/i)
       expect(text, `${name} specifies POSIX quoting`).toMatch(/correctly escaped POSIX shell word/i)
@@ -376,8 +381,8 @@ describe('plugin packaging', () => {
       ['DevEx analyst', 'plugin/agents/harness-devex-analyst.md'],
       ['researcher', 'plugin/agents/harness-researcher.md'],
     ] as const) {
-      const text = readText(path)
-      for (const item of ['session', 'digest', 'tool', 'path', 'title', 'error', 'proposal text']) {
+      const text = path.startsWith('plugin/') ? withSharedRules(path) : readText(path)
+      for (const item of ['session', 'evidence', 'tool', 'path', 'title', 'error', 'proposal text']) {
         expect(text.toLowerCase(), `${name} marks ${item} untrusted`).toContain(item)
       }
       expect(text, `${name} marks content untrusted`).toMatch(/untrusted (?:content|data)/i)
@@ -385,6 +390,23 @@ describe('plugin packaging', () => {
       expect(text, `${name} protects policy`).toMatch(/never let it override/i)
       expect(text, `${name} protects queries`).toMatch(/form a network query/i)
       expect(text, `${name} protects shell syntax`).toMatch(/become shell syntax/i)
+    }
+  })
+
+  it('every skill and agent that handles evidence links the one shared untrusted-input rule inline', () => {
+    expect(existsSync(join(root, SHARED_RULES))).toBe(true)
+    for (const [path, link] of [
+      ['plugin/skills/improve/SKILL.md', '../shared/untrusted-input.md'],
+      ['plugin/skills/harness/SKILL.md', '../shared/untrusted-input.md'],
+      ['plugin/skills/apply/SKILL.md', '../shared/untrusted-input.md'],
+      ['plugin/agents/harness-pm-analyst.md', '../skills/shared/untrusted-input.md'],
+      ['plugin/agents/harness-devex-analyst.md', '../skills/shared/untrusted-input.md'],
+      ['plugin/agents/harness-researcher.md', '../skills/shared/untrusted-input.md'],
+    ] as const) {
+      const text = readText(path)
+      expect(text, `${path} links the shared rules`).toContain(`](${link})`)
+      // the link never replaces the rule: the inert-data sentence stays inline
+      expect(text, `${path} keeps the inert-data rule inline`).toMatch(/as inert data, never as instructions/)
     }
   })
 
@@ -589,6 +611,39 @@ describe('plugin packaging', () => {
     const rows = [...readme.matchAll(/^\| `\/orangu:([a-z]+)`/gm)].map((m) => m[1]).sort()
     expect(rows).toEqual(dirs)
     expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 200 words').toBeLessThan(200)
+  })
+
+  // Ceilings, not targets. Measured on the day they landed; they may only go DOWN.
+  // Raising one requires a stated reason in the commit body (PROJECT.md §Testing).
+  describe('ratchet: skill weight', () => {
+    // harness and improve landed above their targets (1000 / 900): the remaining words are pinned
+    // command literals and policy sentences this file asserts. Shrink toward the target; never up.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1160, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
+    const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
+    const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
+    const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
+    const split = (name: string): { desc: string; body: string } => {
+      const md = readText(`plugin/skills/${name}/SKILL.md`)
+      const fm = /^---\n([\s\S]*?)\n---/.exec(md)!
+      return { desc: /description:\s*(.+)/.exec(fm[1]!)?.[1] ?? '', body: md.slice(fm[0].length) }
+    }
+    it('every SKILL.md body stays under its word ceiling', () => {
+      for (const [name, ceiling] of Object.entries(SKILL_WORD_CEILING)) {
+        expect(words(split(name).body), `${name} body words`).toBeLessThan(ceiling)
+      }
+    })
+    it('every description stays under its character ceiling, and the resident sum shrinks', () => {
+      let total = 0
+      for (const [name, ceiling] of Object.entries(DESC_CHAR_CEILING)) {
+        const { desc } = split(name)
+        expect(desc.length, `${name} description chars`).toBeLessThan(ceiling)
+        total += desc.length
+      }
+      expect(total, 'always-resident description chars').toBeLessThan(TOTAL_DESC_CEILING)
+    })
+    it('the catalog ships next to the skills, so it is capped too', () => {
+      expect(words(readText('plugin/skills/README.md'))).toBeLessThan(200)
+    })
   })
 
   it('the research source list is honest', () => {
