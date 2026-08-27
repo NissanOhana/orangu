@@ -590,19 +590,18 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(trust).not.toContain('historical-session insights command')
   })
 
-  it('stages inspection, sample, and plugin activation as distinct actions', () => {
-    expect(src).toContain('Inspect a session')
-    expect(src).toContain('See the observe-to-proposal sample')
-    expect(src).toContain('Add the Claude Code plugin')
-    expect(src).toContain('Add the Codex plugin')
-    expect(src).toContain('/plugin marketplace add NissanOhana/orangu')
-    expect(src).toContain('/plugin install orangu')
-    expect(src).toContain('codex plugin marketplace add NissanOhana/orangu')
-    expect(src).toContain('codex plugin add orangu@orangu')
-    expect(src).toContain('/orangu:improve')
-    expect(src).toContain('/orangu:apply')
-    expect(src).toContain('$orangu-improve')
-    expect(src).toContain('$orangu-apply')
+  it('stages inspection and Claude plugin activation in the install section', () => {
+    const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
+    expect(install.match(/class="card install-card"/g) ?? []).toHaveLength(3)
+    expect(install).toContain('Inspect a session')
+    expect(install).toContain('Add the Claude Code plugin')
+    expect(install).toContain('/plugin marketplace add NissanOhana/orangu')
+    expect(install).toContain('/plugin install orangu')
+    expect(install).toContain('Claude Code and Codex skills share the same scope-aware proposal')
+    expect(install).not.toContain('Add the Codex plugin')
+    expect(install).not.toContain('codex plugin marketplace add')
+    expect(install).not.toContain('codex plugin add')
+    expect(install).not.toContain('$orangu-')
   })
 
   it('makes improve and apply primary while retaining the suggest compatibility alias', () => {
