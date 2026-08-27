@@ -80,8 +80,11 @@ describe('Codex plugin packaging', () => {
     expect(readText('plugins/orangu/skills/orangu-feedback/SKILL.md')).toContain('Not for anything about a session: the `orangu analyze` command.')
     expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('Not for a repo or global harness review: the `orangu harness` command.')
     expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('belongs to `orangu harness`.')
-    for (const path of filesUnder('plugins/orangu/skills').filter((p) => p.endsWith('.md')))
+    for (const path of filesUnder('plugins/orangu/skills').filter((p) => p.endsWith('.md'))) {
       expect(readText(path), `${path} routes to no unmirrored Codex skill`).not.toMatch(/\$orangu-(analyze|harness)\b/)
+      // the CLI-verb rewrite must never nest one code span inside another (`the `orangu harness` command`)
+      expect(readText(path), `${path} has no nested backticks`).not.toMatch(/`[^`\n]*`[^`\n]*` command|`the `/)
+    }
   })
 
   it('generates the mirror from plugin/skills instead of hand-writing it', () => {

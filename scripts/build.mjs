@@ -106,7 +106,9 @@ function codexNames(text) {
   let out = text
   for (const name of CODEX_SKILLS) out = out.replaceAll(`/orangu:${name}`, `$orangu-${name}`)
   for (const name of CODEX_CLI_VERBS) {
-    out = out.replaceAll(`\`/orangu:${name}\``, `\`orangu ${name}\``)
+    // a backticked command keeps its backticks around the WHOLE span, arguments included, so
+    // `/orangu:harness --scope repo` becomes `orangu harness --scope repo` and never nests backticks
+    out = out.replace(new RegExp('`/orangu:' + name + '([^`\\n]*)`', 'g'), '`orangu ' + name + '$1`')
     out = out.replaceAll(`/orangu:${name}`, `the \`orangu ${name}\` command`)
   }
   return out
@@ -120,6 +122,9 @@ function codexSkill(name, claude) {
     .filter((line) => !line.startsWith('allowed-tools:'))
     .map((line) => (line === `name: ${name}` ? `name: orangu-${name}` : line))
   if (!frontmatter.includes(`name: orangu-${name}`)) throw new Error(`codex mirror: ${name} frontmatter has no matching name:`)
+  // the allowed-tools drop is line-based: a block-sequence value (`allowed-tools:` + `  - Bash` lines) would
+  // leave orphan items behind with the key gone. Skills use the single-line form; stop the build otherwise.
+  if (frontmatter.some((line) => /^\s+-\s/.test(line))) throw new Error(`codex mirror: ${name} uses a block allowed-tools list; write it on one line`)
   let body = claude.slice(end + 5)
   if (!body.includes(`# /orangu:${name}`)) throw new Error(`codex mirror: ${name} body has no # /orangu:${name} heading`)
   body = body.replace(`# /orangu:${name}`, `# orangu-${name}`)
