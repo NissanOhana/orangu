@@ -30,7 +30,7 @@ You run coding agents for hours. The transcript on disk is the only record of wh
 | that a skill or MCP server is installed | whether it ever fired, and what it weighs in context |
 | nothing about repetition | the same file read again and again, and the same context re-read in every request |
 
-One real number, from the session in the [landing page screenshot](https://nissanohana.github.io/orangu/): 34.9M of the 37.0M tokens the model processed were cache reads, one 223k-token context read again 156 times over. Tokens are the only usage metric orangu has, because they are the only one the transcript records.
+One real number, from one local session: 34.9M of the 37.0M tokens the model processed were cache reads, one 223k-token context read again 156 times over. Tokens are the only usage metric orangu has, because they are the only one the transcript records.
 
 ccusage counts your token usage. orangu tells you what to change.
 

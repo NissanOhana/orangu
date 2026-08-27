@@ -1,11 +1,21 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { APP_URL } from './app-url.js'
 
 const SITE = 'http://127.0.0.1:4173'
-const APP = APP_URL
+const APP = 'http://127.0.0.1:4174'
 const SESSION = 'aaaaaaaa-0000-4000-8000-000000000001'
 const EXPECTED_BRAND_SOURCE = `data:image/png;base64,${readFileSync(new URL('../../design/brand/mascot-96.png', import.meta.url)).toString('base64')}`
+const CHANGE_CLASSES = [
+  'Instruction files',
+  'Scripts and CLIs',
+  'Hooks',
+  'Skills to create',
+  'Skills to discover',
+  'Subagents and agents',
+  'MCP servers',
+  'Plugins',
+  'Workflow and configuration',
+]
 
 function runtimeErrors(page: Page): string[] {
   const errors: string[] = []
@@ -72,32 +82,85 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
     'Improve: Use real evidence to build smarter, faster workflows.',
   ])
   await expect(page.getByRole('button', { name: /Inspect a session/ }).first()).toBeVisible()
-  await expect(page.getByRole('link', { name: /See a real report/ }).first()).toBeVisible()
+  await expect(page.getByRole('link', { name: /See the observe-to-proposal sample/ })).toBeVisible()
   const sampleLinks = page.locator('a[href="sample.html"]')
-  await expect(sampleLinks).toHaveCount(3)
+  await expect(sampleLinks).toHaveCount(2)
   for (const sampleLink of await sampleLinks.all()) {
     await expect(sampleLink).toHaveAttribute('target', '_blank')
     await expect(sampleLink).toHaveAttribute('rel', /(?:^|\s)noopener(?:\s|$)/)
   }
 
-  const what = page.getByRole('link', { name: 'What it does' })
-  await what.focus()
-  await expect(what).toBeFocused()
+  const jobs = page.getByRole('link', { name: 'Two jobs' })
+  await jobs.focus()
+  await expect(jobs).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(/#what$/)
+  await expect(page).toHaveURL(/#jobs$/)
 
   await page.getByRole('button', { name: /Inspect a session/ }).first().click()
   await expect(page.getByRole('button', { name: /Copied/ }).first()).toBeVisible()
 
-  // the hero visual is the real report screenshot; a missing static-server route would fail this
-  const heroShot = page.locator('.hero-viz img')
-  await expect(heroShot).toBeVisible()
-  expect(await heroShot.evaluate((element: HTMLImageElement) => element.naturalWidth)).toBeGreaterThan(0)
-  await expect(page.locator('qtc-triad')).toHaveAttribute('role', 'img')
+  const demo = page.locator('#appdemo')
+  const motion = demo.locator('#demoMotion')
+  await expect(motion).toHaveAccessibleName('Pause automatic preview')
+  await motion.click()
+  await expect(motion).toHaveAccessibleName('Play automatic preview')
+  const suggestions = demo.locator('.demo-view[data-demo-view="suggest"]')
+  await expect(demo.locator('.demo-view.on')).toHaveCount(1)
+  await expect(suggestions).toHaveClass(/\bon\b/)
+  await expect(demo.getByRole('tab', { name: 'Suggestions' })).toHaveAttribute('aria-selected', 'true')
+  await expect(suggestions.locator('.demo-proposal')).toContainText('Proposal.')
+  await expect(suggestions.locator('.demo-proposal')).toContainText('deterministic preflight check')
+  await expect(suggestions.locator('.demo-verify')).toContainText('Next-run verification.')
+  await expect(suggestions.locator('.demo-verify')).toContainText('average failed test runs decreased')
+  await expect(suggestions.locator('.demo-verify')).toContainText('without increasing tool errors')
+  expect(await suggestions.locator('.demo-types span').allTextContents()).toEqual(CHANGE_CLASSES)
+
+  await demo.getByRole('tab', { name: 'Overview' }).click()
+  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'overview')
+  await expect(demo.getByText('Understand the run. Improve what happens next.')).toBeVisible()
+  await demo.getByRole('tab', { name: 'Timeline' }).click()
+  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'timeline')
+  await expect(demo.getByText('error result stays on this call')).toBeVisible()
+  await demo.getByRole('tab', { name: 'Tools & calls' }).click()
+  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'tools')
+  await expect(demo.getByText('Usage · errors · latency')).toBeVisible()
+  await demo.getByRole('tab', { name: 'Tools & calls' }).focus()
+  await page.keyboard.press('End')
+  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'suggest')
+  await expect(demo.getByRole('tab', { name: 'Suggestions' })).toBeFocused()
+  await expect(demo.getByRole('tab', { name: 'Suggestions' })).toHaveAttribute('aria-selected', 'true')
   await expectNoHorizontalOverflow(page)
   await expect(page.locator('qtc-triad canvas')).toHaveCount(1)
   expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(info.project.name.endsWith('dark'))
   expect(errors).toEqual([])
+})
+
+test('landing preview cycles while visible and becomes static for reduced motion', async ({ browser }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'one deterministic animation lifecycle is sufficient')
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'no-preference' })
+  const page = await context.newPage()
+  const errors = runtimeErrors(page)
+  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
+  await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
+  await page.goto(`${SITE}/#demo`, { waitUntil: 'domcontentloaded' })
+  const demo = page.locator('#appdemo')
+  await demo.scrollIntoViewIfNeeded()
+  await expect(demo.getByRole('tab', { name: 'Suggestions' })).toHaveAttribute('aria-selected', 'true')
+  const focusedBefore = await page.evaluate(() => document.activeElement?.tagName)
+  await expect.poll(() => demo.locator('[role="tab"][aria-selected="true"]').textContent(), { timeout: 5_500 }).toBe('Overview')
+  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe(focusedBefore)
+
+  const motion = demo.locator('#demoMotion')
+  await expect(motion).toHaveAccessibleName('Pause automatic preview')
+  await motion.click()
+  const pausedView = await demo.locator('[role="tab"][aria-selected="true"]').textContent()
+  await page.waitForTimeout(3_900)
+  await expect(demo.locator('[role="tab"][aria-selected="true"]')).toHaveText(pausedView ?? '')
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await expect(demo.getByRole('button', { name: /Automatic preview disabled by reduced motion preference/ })).toBeDisabled()
+  expect(errors).toEqual([])
+  await context.close()
 })
 
 test('wide landing keeps a two-line hero and the visual beside the copy above the fold', async ({ page }, info) => {
@@ -120,7 +183,7 @@ test('wide landing keeps a two-line hero and the visual beside the copy above th
       const tops = [...new Set(rects.map((rect) => Math.round(rect.top)))]
       return { text: span.textContent?.trim(), lines: tops.length, top: Math.min(...tops), right: Math.max(...rects.map((rect) => rect.right)) }
     })
-    const textSelectors = ['.hero-lead', '.hero-journey li', '.hero-copy > .fine']
+    const textSelectors = ['.eyebrow', '.hero-lead', '.hero-journey li', '.hero-copy > .fine']
     const contentRights = textSelectors.flatMap((selector) => {
       const element = document.querySelector(selector)
       return element ? lineRects(element).map((rect) => rect.right) : []
@@ -132,9 +195,9 @@ test('wide landing keeps a two-line hero and the visual beside the copy above th
       ),
     )
     const copy = document.querySelector<HTMLElement>('.hero-copy')!.getBoundingClientRect()
-    const visual = document.querySelector<HTMLElement>('.hero-viz .hero-shot')!.getBoundingClientRect()
+    const visual = document.querySelector<HTMLCanvasElement>('.hero-viz canvas')!.getBoundingClientRect()
     const hero = document.querySelector<HTMLElement>('.hero')!.getBoundingClientRect()
-    const jobs = document.querySelector<HTMLElement>('#what')!.getBoundingClientRect()
+    const jobs = document.querySelector<HTMLElement>('#jobs')!.getBoundingClientRect()
     const copyRight = Math.max(...contentRights)
     return {
       spans: spanLines,
@@ -150,11 +213,10 @@ test('wide landing keeps a two-line hero and the visual beside the copy above th
   expect(geometry.spans.map(({ text }) => text)).toEqual(['Turn your AI history', 'into actionable insights.'])
   expect(geometry.spans.map(({ lines }) => lines)).toEqual([1, 1])
   expect(geometry.spans[1]!.top).toBeGreaterThan(geometry.spans[0]!.top)
-  // Compare the screenshot frame's centre with the copy edge: beside the copy, not below it, and
-  // not pushed to the far edge. The old canvas had transparent margins that pulled its centre in;
-  // a framed screenshot has none, so the ceiling is 25% of the viewport instead of 20%.
+  // The canvas intentionally has transparent space around the drawing, so compare
+  // its visual centre with the copy edge instead of treating the canvas box as ink.
   expect(geometry.visualCenterOffset, JSON.stringify(geometry)).toBeGreaterThan(0)
-  expect(geometry.visualCenterOffset, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewportWidth * 0.25)
+  expect(geometry.visualCenterOffset, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewportWidth * 0.2)
   expect(geometry.verticalOverlap, JSON.stringify(geometry)).toBeGreaterThan(0)
   expect(geometry.heroHeight, JSON.stringify(geometry)).toBeLessThan(geometry.viewportHeight * 0.9)
   expect(geometry.jobsTop, JSON.stringify(geometry)).toBeLessThan(geometry.viewportHeight)
