@@ -395,6 +395,8 @@ svg { display: block; max-width: 100%; }
   .saved-proposal-body { padding-left: 0; }
   .sg-hand { grid-template-columns: 1fr; }
   .sg-hand .cmd { width: 100%; }
+  .navwrap { flex-wrap: wrap; overflow-x: visible; }
+  .navgroup { flex-wrap: wrap; }
 }
 
 @media print {

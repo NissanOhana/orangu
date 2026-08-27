@@ -59,10 +59,12 @@ describe('offline report', () => {
 
   it('client JS never says "finished" (possibly-live honesty) and stays inside its size ratchet', () => {
     expect(CLIENT_JS.includes('finished'), 'the string "finished"').toBe(false)
-    // the design B2 budgeted ≤ 60 KB for 7 screens; the shipped client renders 10 (three Developer panels,
-    // policy/policy, plus Suggest kickoff + Live fleet) and lands at ~68 KB after a dedicated shrink pass.
-    // Recorded as a deviation in the B2 report; this ratchet may only go DOWN.
-    expect(CLIENT_JS.length).toBeLessThanOrEqual(70 * 1024)
-    expect(CLIENT_JS.length).toBe(71_537)
+    // Budget history: design B2 budgeted 60 KB for 7 screens; the shipped client renders 10 and landed at 68 KB
+    // after a shrink pass; 2026-08-27 Track 0 raised the cap to 72 KB to pay for four honesty fixes (B-tier token
+    // formatting, the redaction placeholder note, the watch-gated Live banner, the outcome headline). Track A (A1)
+    // removes the 6-tile KPI grid, the 10 signal chips and 5 of the "Follow the evidence" cards and MUST bring this
+    // back under 70 KB; the cap may only go DOWN from there.
+    expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
+    expect(CLIENT_JS.length).toBe(71_786)
   })
 })

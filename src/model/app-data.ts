@@ -13,6 +13,8 @@ export interface SuggestionViewRecord extends SuggestionRecord {
 }
 
 export const APP_DATA_VERSION = '1' as const
+/** Placeholder the redactor substitutes for a stripped count-map key. Rendered as a hidden-count note, never as data. */
+export const STRIPPED_KEY = '\u2039stripped\u203a'
 export type AppMode = 'file' | 'serve'
 /** policy: live < 5 min · idle 5–30 min · ended > 30 min, from the transcript's mtime */
 export type LiveBadge = 'live' | 'idle' | 'ended'

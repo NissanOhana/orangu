@@ -1,5 +1,6 @@
 /** Coverage (Detailed-only panel, policy/policy): reconciliation, unknown types, hooks/skills, raw explorer, about. */
 import type { Ctx } from '../app.js'
+import { STRIPPED_KEY } from '../../../model/app-data.js'
 import { CAT_LABEL, esc, ms, num, ts } from '../format.js'
 import { h } from '../dom.js'
 import { emptyHero } from '../components/empty.js'
@@ -10,7 +11,12 @@ export function renderCoverage(ctx: Ctx): HTMLElement {
   if (!a) return h(`<section>${emptyHero({ title: 'No session selected.' })}</section>`)
   const p = a.parse
   const rec = p.reconciliation
-  const unknown = Object.keys(p.unknownRecordTypes).length
+  const unknownEntries = Object.entries(p.unknownRecordTypes).filter(([k]) => k !== STRIPPED_KEY)
+  const hiddenByRedaction = p.unknownRecordTypes[STRIPPED_KEY] ?? 0
+  const unknown = unknownEntries.length
+  const hiddenNote = hiddenByRedaction
+    ? `<div class="small muted">${hiddenByRedaction} record type name${hiddenByRedaction === 1 ? '' : 's'} hidden by redaction. Re-run with --include-text to see them.</div>`
+    : ''
   const skillRows = a.skills.byName.length
     ? `<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${a.skills.byName
         .map((s) => `<span class="sigchip">${esc(s.name)} <span class="muted">×${s.count} ${esc(s.via.join('/'))}</span></span>`)
@@ -44,7 +50,7 @@ export function renderCoverage(ctx: Ctx): HTMLElement {
         </ul>
       </div>
     </div>
-    ${unknown ? `<div class="card pad mt16"><div class="card-title">Unrecognized records (counted, not dropped)</div><div class="pill-row">${Object.entries(p.unknownRecordTypes).map(([k, v]) => `<span class="pill">${esc(k)} ×${v}</span>`).join('')}</div></div>` : ''}
+    ${unknown || hiddenByRedaction ? `<div class="card pad mt16"><div class="card-title">Unrecognized records (counted, not dropped)</div>${unknown ? `<div class="pill-row">${unknownEntries.map(([k, v]) => `<span class="pill">${esc(k)} ×${v}</span>`).join('')}</div>` : ''}${hiddenNote}</div>` : ''}
     ${skillRows}
     ${hooks}
     <div class="card pad mt16">

@@ -9,6 +9,7 @@
  * Redaction is DEFAULT-ON for any shareable output. It only ever removes information; it never adds.
  */
 import type { Analysis } from '../model/analysis.js'
+import { STRIPPED_KEY } from '../model/app-data.js'
 
 export interface RedactOptions {
   /** mask secrets/emails/keys inside previews and summaries (default true) */
@@ -200,7 +201,7 @@ function strippedCountMap(value: unknown, opts: WalkOpts): unknown {
     return out
   }
   const total = Object.values(source).reduce<number>((sum, count) => sum + (typeof count === 'number' ? count : 0), 0)
-  return total ? { '‹stripped›': total } : {}
+  return total ? { [STRIPPED_KEY]: total } : {}
 }
 
 function walk(obj: unknown, opts: WalkOpts): unknown {
