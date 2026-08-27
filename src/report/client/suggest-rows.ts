@@ -5,7 +5,7 @@
  * so the screen and the JSON never disagree). Finding conversion preserves the evidence used for IDs.
  */
 import type { Analysis, Insight } from '../../model/analysis.js'
-import { compareCrossFindings, type Aggregate } from '../../analyze/aggregate.js'
+import { compareCrossFindings, type Aggregate, type CrossFinding } from '../../analyze/aggregate.js'
 import type { Finding, SuggestionProposal, SuggestionRecord, SuggestionScope } from '../../suggest/types.js'
 import { normalizeSessionIds, sessionCohortFingerprint } from '../../suggest/id.js'
 
@@ -51,6 +51,16 @@ function safeCopy(ruleId: string, title: string, detail: string): { title: strin
   }
 }
 
+/**
+ * Cross-session savings shown to a person are the bounded figure (median per session × sessions,
+ * aggregate.ts); an older cached aggregate without the field falls back to the raw sum.
+ */
+export function boundedSavings(f: Pick<CrossFinding, 'totalSavingsTokens' | 'totalSavingsMs'> & Partial<Pick<CrossFinding, 'boundedSavingsTokens' | 'boundedSavingsMs'>>): NonNullable<Insight['savings']> {
+  const tokens = f.boundedSavingsTokens ?? f.totalSavingsTokens
+  const ms = f.boundedSavingsMs ?? f.totalSavingsMs
+  return { ...(tokens ? { tokens } : {}), ...(ms ? { ms } : {}), estimated: true }
+}
+
 export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: Aggregate | null | undefined): PlanRow[] {
   if (scope === 'session') {
     const ids = a ? [a.session.id] : []
@@ -74,7 +84,7 @@ export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: A
       return {
         ruleId: f.ruleId,
         ...copy,
-        savings: { ...(f.totalSavingsTokens ? { tokens: f.totalSavingsTokens } : {}), ...(f.totalSavingsMs ? { ms: f.totalSavingsMs } : {}), estimated: true },
+        savings: boundedSavings(f),
         sessionIds: f.exampleSessionIds,
         sessions: f.sessions,
         ...(cohortFingerprint ? { cohortFingerprint } : {}),

@@ -6,6 +6,7 @@ import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { emptyHero, emptyNote } from '../components/empty.js'
 import { savingsText } from '../components/finding.js'
+import { boundedSavings } from '../suggest-rows.js'
 
 export function aggregateEmpty(scope: 'repo' | 'global'): string {
   return emptyHero({
@@ -41,7 +42,7 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
         .slice(0, 8)
         .map(
           (f) =>
-            `<div class="rrow"><span class="pill">${esc(f.ruleId)}</span><span class="grow">${esc(f.title)}</span><span class="mono small muted">${f.sessions} sessions</span><span class="saveval">${esc(savingsText({ tokens: f.totalSavingsTokens || undefined, ms: f.totalSavingsMs || undefined, estimated: true }))}</span></div>`,
+            `<div class="rrow"><span class="pill">${esc(f.ruleId)}</span><span class="grow">${esc(f.title)}</span><span class="mono small muted">${f.sessions} sessions</span><span class="saveval">${esc(savingsText(boundedSavings(f)))}</span></div>`,
         )
         .join('')
     : emptyNote(g.sessionCount < 2 ? 'Patterns appear from 2 sessions on.' : `No recurring findings across ${g.sessionCount} sessions.`)

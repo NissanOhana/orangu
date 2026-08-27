@@ -291,7 +291,8 @@ function printAggregate(a: ReturnType<typeof aggregate>): void {
   }
   if (a.crossFindings.length) {
     process.stdout.write('\n' + paint(C.b, '  recurring findings (across sessions)\n'))
-    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(C.o, (f.totalSavingsTokens ? '~' + fmtTokens(f.totalSavingsTokens) : '–').padStart(8))}  ${f.title}  ${paint(C.dim, '(' + f.sessions + ' sessions)')}\n`)
+    // The bounded figure (median per session × sessions) so one outlier session cannot inflate the claim.
+    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(C.o, (f.boundedSavingsTokens ? '~' + fmtTokens(f.boundedSavingsTokens) : '–').padStart(8))}  ${f.title}  ${paint(C.dim, '(' + f.sessions + ' sessions)')}\n`)
   }
   if (a.recurringErrors.length) {
     process.stdout.write('\n' + paint(C.b, '  recurring tool errors (environment problems)\n'))

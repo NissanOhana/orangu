@@ -81,3 +81,36 @@ describe('aggregate additive fields (byWeek, whatIf, interruptions)', () => {
     expect(aggregate([], 'empty', 0).byWeek).toEqual([])
   })
 })
+
+describe('crossFindings bounded savings (A6)', () => {
+  async function claiming(tokensPerSession: number[], msPerSession: number[] = []) {
+    const base = analyzeSession(await parseClaudeCodeSession({ records: buildCanonicalSession().toRecords(), noSidecar: true }), { version: 't', now: 0 })
+    const analyses = tokensPerSession.map((tokens, i) => ({
+      ...base,
+      session: { ...base.session, id: `sess-${i}` },
+      insights: [{ ...base.insights[0]!, id: `ins-${i}`, ruleId: 'one-rule', savings: { tokens, ms: msPerSession[i] ?? 0, estimated: true } }],
+    }))
+    return aggregate(analyses, 'repo test', 0).crossFindings.find((f) => f.ruleId === 'one-rule')!
+  }
+  it('keeps the raw sum and adds a median-bounded figure (median × sessions)', async () => {
+    const f = await claiming([10, 10, 1000], [5, 5, 500])
+    expect(f.totalSavingsTokens).toBe(1020)
+    expect(f.boundedSavingsTokens).toBe(30)
+    expect(f.totalSavingsMs).toBe(510)
+    expect(f.boundedSavingsMs).toBe(15)
+  })
+  it('bounded equals total for a single session and for an even cohort', async () => {
+    const one = await claiming([42])
+    expect(one.boundedSavingsTokens).toBe(42)
+    expect(one.boundedSavingsTokens).toBe(one.totalSavingsTokens)
+    const two = await claiming([10, 30])
+    expect(two.totalSavingsTokens).toBe(40)
+    expect(two.boundedSavingsTokens).toBe(40)
+  })
+  it('never exceeds the raw sum', async () => {
+    const f = await claiming([100, 1, 1, 1])
+    expect(f.totalSavingsTokens).toBe(103)
+    expect(f.boundedSavingsTokens).toBeLessThanOrEqual(f.totalSavingsTokens)
+    expect(f.boundedSavingsTokens).toBe(4)
+  })
+})

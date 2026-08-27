@@ -12,6 +12,7 @@ import {
   findingForRow,
   hasValidProposal,
   kickoffFailureMessage,
+  boundedSavings,
   harnessCommand,
   planRows,
   recoverableFrom,
@@ -95,6 +96,12 @@ describe('planRows', () => {
     expect(suggestionIdV2(suggestionKey(findingForRow(first, 'repo'), 'report'))).not.toBe(
       suggestionIdV2(suggestionKey(findingForRow(grown, 'repo'), 'report')),
     )
+  })
+  it('repo/global rows show the bounded cross-session savings, falling back to the raw sum for an older aggregate', () => {
+    const bounded = { ...agg, crossFindings: [{ ...agg.crossFindings[1]!, boundedSavingsTokens: 2500, boundedSavingsMs: 5000 }] } as unknown as Aggregate
+    expect(planRows('repo', analysis, bounded)[0]!.savings).toEqual({ tokens: 2500, ms: 5000, estimated: true })
+    expect(boundedSavings({ totalSavingsTokens: 9000, totalSavingsMs: 0 })).toEqual({ tokens: 9000, estimated: true })
+    expect(boundedSavings({ totalSavingsTokens: 9000, totalSavingsMs: 0, boundedSavingsTokens: 0, boundedSavingsMs: 0 })).toEqual({ estimated: true })
   })
   it('repo/global scope without an aggregate yields no rows (designed empty state)', () => {
     expect(planRows('global', analysis, undefined)).toEqual([])

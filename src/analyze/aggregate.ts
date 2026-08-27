@@ -57,6 +57,14 @@ export function compareCrossFindings(a: CrossFinding, b: CrossFinding): number {
   )
 }
 
+/** Median of a list (the mean of the two middle values for an even count); 0 for an empty list. */
+function median(values: number[]): number {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = sorted.length >> 1
+  return sorted.length % 2 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2
+}
+
 const WEEK_MS = 7 * 86_400_000
 const DAY_MS = 86_400_000
 /** Monday 00:00 UTC of the ISO week containing `ts` */
@@ -100,6 +108,13 @@ export interface CrossFinding {
   sessions: number
   totalSavingsTokens: number
   totalSavingsMs: number
+  /**
+   * The same claim bounded to median(per-session claim) × sessions, so one outlier session cannot
+   * inflate a cross-session figure. Additive (v2 unchanged); ≤ the raw sum; equal to it for a
+   * single session.
+   */
+  boundedSavingsTokens: number
+  boundedSavingsMs: number
   axis: string
   severity: string
   exampleSessionIds: string[]
@@ -167,7 +182,9 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
   const bySkill = new Map<string, RollupItem>()
   const reReadFiles = new Map<string, { sessions: Set<string>; totalReads: number }>()
   const errorSigs = new Map<string, { tool: string; sessions: Set<string>; total: number }>()
-  const findings = new Map<string, CrossFinding>()
+  const findings = new Map<string, Omit<CrossFinding, 'boundedSavingsTokens' | 'boundedSavingsMs'>>()
+  /** per-rule, per-session claims: the bounded figure is median × sessions */
+  const perSessionSavings = new Map<string, { tokens: number[]; ms: number[] }>()
   const rows: SessionRow[] = []
   const t = { tokens: 0, toolCalls: 0, toolErrors: 0, agents: 0, turns: 0, humanTurns: 0, wallMs: 0, activeMs: 0, compactions: 0, prs: 0, commits: 0 }
   let cacheRatioSum = 0
@@ -217,6 +234,10 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
       f.totalSavingsMs += ins.savings?.ms ?? 0
       if (f.exampleSessionIds.length < 5) f.exampleSessionIds.push(sid)
       findings.set(ins.ruleId, f)
+      const per = perSessionSavings.get(ins.ruleId) ?? { tokens: [], ms: [] }
+      per.tokens.push(ins.savings?.tokens ?? 0)
+      per.ms.push(ins.savings?.ms ?? 0)
+      perSessionSavings.set(ins.ruleId, per)
     }
     rows.push({
       id: sid,
@@ -273,7 +294,16 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
       .sort((a, b) => b.sessions - a.sessions || b.total - a.total)
       .slice(0, 20),
     crossFindings: [...findings.values()]
-      .map((f) => ({ ...f, totalSavingsTokens: round(f.totalSavingsTokens, 0), totalSavingsMs: round(f.totalSavingsMs, 0) }))
+      .map((f) => {
+        const per = perSessionSavings.get(f.ruleId) ?? { tokens: [], ms: [] }
+        return {
+          ...f,
+          totalSavingsTokens: round(f.totalSavingsTokens, 0),
+          totalSavingsMs: round(f.totalSavingsMs, 0),
+          boundedSavingsTokens: round(Math.min(f.totalSavingsTokens, median(per.tokens) * f.sessions), 0),
+          boundedSavingsMs: round(Math.min(f.totalSavingsMs, median(per.ms) * f.sessions), 0),
+        }
+      })
       .sort(compareCrossFindings),
     sessions: rows,
     topSessions: rows.slice(0, 15),

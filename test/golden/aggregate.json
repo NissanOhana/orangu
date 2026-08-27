@@ -176,7 +176,9 @@
       "severity": "high",
       "exampleSessionIds": [
         "dddddddd-0000-4000-8000-000000000004"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "tool-errors",
@@ -189,7 +191,9 @@
       "exampleSessionIds": [
         "aaaaaaaa-0000-4000-8000-000000000001",
         "dddddddd-0000-4000-8000-000000000004"
-      ]
+      ],
+      "boundedSavingsTokens": 24,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "compactions",
@@ -201,7 +205,9 @@
       "severity": "medium",
       "exampleSessionIds": [
         "cccccccc-0000-4000-8000-000000000003"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "preamble-weight",
@@ -213,7 +219,9 @@
       "severity": "low",
       "exampleSessionIds": [
         "cccccccc-0000-4000-8000-000000000003"
-      ]
+      ],
+      "boundedSavingsTokens": 180018,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "api-errors",
@@ -225,7 +233,9 @@
       "severity": "low",
       "exampleSessionIds": [
         "dddddddd-0000-4000-8000-000000000004"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "fanout-opportunity",
@@ -237,7 +247,9 @@
       "severity": "low",
       "exampleSessionIds": [
         "bbbbbbbb-0000-4000-8000-000000000002"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 1200
     },
     {
       "ruleId": "hook-errors",
@@ -249,7 +261,9 @@
       "severity": "low",
       "exampleSessionIds": [
         "eeeeeeee-0000-4000-8000-000000000005"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "idle-agents",
@@ -261,7 +275,9 @@
       "severity": "low",
       "exampleSessionIds": [
         "bbbbbbbb-0000-4000-8000-000000000002"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "agent-fanout",
@@ -274,7 +290,9 @@
       "exampleSessionIds": [
         "aaaaaaaa-0000-4000-8000-000000000001",
         "bbbbbbbb-0000-4000-8000-000000000002"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "cache-ttl-churn",
@@ -286,7 +304,9 @@
       "severity": "info",
       "exampleSessionIds": [
         "cccccccc-0000-4000-8000-000000000003"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     },
     {
       "ruleId": "time-budget",
@@ -298,7 +318,9 @@
       "severity": "info",
       "exampleSessionIds": [
         "dddddddd-0000-4000-8000-000000000004"
-      ]
+      ],
+      "boundedSavingsTokens": 0,
+      "boundedSavingsMs": 0
     }
   ],
   "sessions": [

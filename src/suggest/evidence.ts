@@ -329,10 +329,13 @@ function validateCrossFinding(value: unknown, index: number): ValidatedCrossFind
   }
   const totalSavingsTokens = finiteNonNegative(value['totalSavingsTokens'], `Aggregate.crossFindings[${index}].totalSavingsTokens`)
   const totalSavingsMs = finiteNonNegative(value['totalSavingsMs'], `Aggregate.crossFindings[${index}].totalSavingsMs`)
+  // Additive (aggregate v2): older JSON omits the bounded figures; the raw sum is the honest fallback.
+  const boundedSavingsTokens = value['boundedSavingsTokens'] === undefined ? totalSavingsTokens : finiteNonNegative(value['boundedSavingsTokens'], `Aggregate.crossFindings[${index}].boundedSavingsTokens`)
+  const boundedSavingsMs = value['boundedSavingsMs'] === undefined ? totalSavingsMs : finiteNonNegative(value['boundedSavingsMs'], `Aggregate.crossFindings[${index}].boundedSavingsMs`)
   const axis = insightAxis(value['axis'], `Aggregate.crossFindings[${index}].axis`)
   const severity = insightSeverity(value['severity'], `Aggregate.crossFindings[${index}].severity`)
   const exampleSessionIds = validateSessionIds(value['exampleSessionIds'], `Aggregate.crossFindings[${index}].exampleSessionIds`)
-  return { ruleId, title, sessions, totalSavingsTokens, totalSavingsMs, axis, severity, exampleSessionIds }
+  return { ruleId, title, sessions, totalSavingsTokens, totalSavingsMs, boundedSavingsTokens, boundedSavingsMs, axis, severity, exampleSessionIds }
 }
 
 function validateAggregate(value: Record<string, unknown>): ValidatedAggregate {
