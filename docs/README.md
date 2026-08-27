@@ -14,7 +14,7 @@ Everything committed here is public product or contributor documentation. Local 
 - [Architecture](ARCHITECTURE.md): pipeline, module ownership, build, and correctness gates.
 - [Data contracts](DATA-CONTRACTS.md): Analysis, EvidenceBundle, AppData, suggestion, proposal, application, and verification shapes.
 - [Design system](DESIGN.md): visual tokens, interaction rules, accessibility, and brand assets.
-- [Claude Code analysis shape](../plugin/skills/orangu-analyze/references/json-shape.md): field-level Analysis and Aggregate reference.
+- [Claude Code analysis shape](../plugin/skills/analyze/references/json-shape.md): field-level Analysis and Aggregate reference.
 
 ## Contribute and report issues
 
@@ -22,4 +22,4 @@ Everything committed here is public product or contributor documentation. Local 
 - [Beta feedback issue form](../.github/ISSUE_TEMPLATE/beta-feedback.yml): the public fallback intake fields and privacy acknowledgement.
 - [Security](../SECURITY.md): private vulnerability reporting and safe transcript handling.
 
-The shipped workflow instructions live under [`plugin/skills/`](../plugin/skills/) for Claude Code and [`.agents/skills/`](../.agents/skills/) for Codex. They are executable product surfaces, not maintainer prompts.
+The shipped workflow instructions live under [`plugin/skills/`](../plugin/skills/) for Claude Code and [`plugins/orangu/`](../plugins/orangu/) for the installable Codex plugin. [`.agents/skills/`](../.agents/skills/) contains byte-identical Codex source-checkout mirrors. They are executable product surfaces, not maintainer prompts.

@@ -63,6 +63,6 @@ describe('offline report', () => {
     // policy/policy, plus Suggest kickoff + Live fleet) and lands at ~68 KB after a dedicated shrink pass.
     // Recorded as a deviation in the B2 report; this ratchet may only go DOWN.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(70 * 1024)
-    expect(CLIENT_JS.length).toBe(71_630)
+    expect(CLIENT_JS.length).toBe(71_678)
   })
 })

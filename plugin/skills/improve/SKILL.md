@@ -1,10 +1,10 @@
 ---
-name: orangu-improve
+name: improve
 description: Analyze a supported Claude Code, Cowork, or Desktop JSONL session or current Orangu Analysis, SlimAnalysis, or Aggregate output; combine bounded deterministic evidence with optional current research; report suggestions in chat and save scope-appropriate Orangu proposals. Use for /orangu:improve, a report handoff, one session diagnosis, recurring repo/global improvement, or session-scope later verification. This skill never edits the target project.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read, Write(~/.orangu/proposals/**), WebSearch, WebFetch
 ---
 
-# orangu-improve
+# /orangu:improve
 
 Turn local evidence into a reviewable proposal, not an automatic claim of improvement. Orangu owns parsing, redaction, counts, identities, and deterministic catalog matches. You interpret that bounded output, optionally research uncovered options, and write structured artifacts. Never edit the target repository in this skill.
 

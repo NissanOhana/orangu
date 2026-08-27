@@ -1,0 +1,41 @@
+{
+  "name": "orangu",
+  "version": "0.5.0",
+  "description": "Turn supported local session evidence into reviewable proposals and explicit changes, with private reviewed feedback.",
+  "author": {
+    "name": "Nissan Ohana",
+    "url": "https://github.com/NissanOhana"
+  },
+  "homepage": "https://nissanohana.github.io/orangu/",
+  "repository": "https://github.com/NissanOhana/orangu",
+  "license": "MIT",
+  "keywords": [
+    "agent-skills",
+    "observability",
+    "session-analysis",
+    "improvement",
+    "feedback"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Orangu",
+    "shortDescription": "Improve agent outcomes from local evidence.",
+    "longDescription": "Orangu bundles its own skills for turning deterministic local session evidence into a reviewable proposal, applying an explicitly approved session or repository change with local checks, and opening a private localhost feedback form.",
+    "developerName": "Nissan Ohana",
+    "category": "Productivity",
+    "capabilities": [
+      "Analyze",
+      "Write"
+    ],
+    "websiteURL": "https://nissanohana.github.io/orangu/",
+    "privacyPolicyURL": "https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md",
+    "defaultPrompt": [
+      "Analyze my latest supported session and suggest one evidence-backed improvement.",
+      "Apply a reviewed Orangu proposal and run the repository checks.",
+      "Open Orangu's private localhost feedback form after asking me first."
+    ],
+    "brandColor": "#BD4F2C",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/logo.png"
+  }
+}

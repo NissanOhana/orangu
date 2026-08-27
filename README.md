@@ -65,7 +65,14 @@ A proposal is not an application, and a later comparison is not causal proof. Se
 
 ### Codex
 
-Copy `.agents/skills/orangu-improve`, `.agents/skills/orangu-apply`, and `.agents/skills/orangu-feedback` into the target repository's `.agents/skills/` directory, put `orangu` on `PATH`, then run:
+Install the Orangu marketplace and its skills-only plugin:
+
+```text
+codex plugin marketplace add NissanOhana/orangu
+codex plugin add orangu@orangu
+```
+
+The plugin bundles Orangu's own `orangu-improve`, `orangu-apply`, and `orangu-feedback` skills, the offline CLI, and the product logo. In a new Codex thread, run:
 
 ```text
 $orangu-improve latest

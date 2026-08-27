@@ -1,7 +1,7 @@
 // Build: (1) bundle the report client (browser) into a JS string module, (2) bundle the CLI (node) into dist/orangu.js.
 // Zero runtime dependencies: everything is inlined.
 import { build } from 'esbuild'
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { copyFileSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -79,9 +79,18 @@ await build({
   legalComments: 'none',
 })
 
-console.log('built dist/orangu.js + plugin/bin/orangu.cli.mjs (client bundle %d bytes, css %d bytes)', clientJs.length, clientCss.length)
+// 4) Codex plugin bundle. The installable plugin owns the same offline CLI and brand assets as
+// the Claude plugin and landing page; no package fetch is required when a skill invokes it.
+const codexPluginRoot = join(root, 'plugins/orangu')
+mkdirSync(join(codexPluginRoot, 'bin'), { recursive: true })
+mkdirSync(join(codexPluginRoot, 'assets'), { recursive: true })
+copyFileSync(join(pluginBin, 'orangu.cli.mjs'), join(codexPluginRoot, 'bin/orangu.cli.mjs'))
+copyFileSync(join(root, 'design/brand/favicon-64.png'), join(codexPluginRoot, 'assets/icon.png'))
+copyFileSync(join(root, 'design/brand/mascot-main-transparent.png'), join(codexPluginRoot, 'assets/logo.png'))
 
-// 4) landing site (opt-in: `node scripts/build.mjs --site`).
+console.log('built CLI + Claude/Codex plugin bundles (client bundle %d bytes, css %d bytes)', clientJs.length, clientCss.length)
+
+// 5) landing site (opt-in: `node scripts/build.mjs --site`).
 // site/index.html is generated from site/index.src.html and committed; regenerate after editing the source,
 // tokens.css, the design/brand assets, or the package.json version.
 // The 3D triad is authored inline in index.src.html.

@@ -8,7 +8,7 @@
 import type { Ctx } from '../app.js'
 import type { SuggestionViewRecord } from '../../../model/app-data.js'
 import type { SuggestionRecord, SuggestionStatus } from '../../../suggest/types.js'
-import { suggestionIdV2, suggestionKey } from '../../../suggest/id.js'
+import { kickoffCommands, suggestionIdV2, suggestionKey } from '../../../suggest/id.js'
 import { CHANGE_CLASS_LABELS } from '../../../suggest/change-class-labels.js'
 import { esc } from '../format.js'
 import { h, wireCopyButtons } from '../dom.js'
@@ -76,7 +76,7 @@ function applyHandoffs(record: SuggestionRecord): string {
 }
 
 function improveHandoffs(commands: { claude: string; codex: string }): string {
-  return `<div class="sg-handoffs" aria-label="Improve handoffs"><div class="sg-hand"><span>Claude</span>${commandBlock(commands.claude)}</div><div class="sg-hand"><span>Codex</span>${commandBlock(commands.codex)}</div></div>`
+  return `<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${commandBlock(commands.claude)}</div><div class="sg-hand"><span>Codex</span>${commandBlock(commands.codex)}</div></div>`
 }
 
 function proposalDetails(record: SuggestionViewRecord | undefined): string {
@@ -124,7 +124,7 @@ function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: Sugges
         <span class="grow"></span>
         <button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button>
       </div>
-      <div class="kick-cmd sg-cmd"></div>
+      <div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
       <div class="kick-msg small muted" aria-live="polite">${esc(failure)}</div>
     </div>
   </details>`

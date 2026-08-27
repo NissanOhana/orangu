@@ -1,0 +1,7 @@
+interface:
+  display_name: "Orangu Apply"
+  short_description: "Apply a reviewed session/repo proposal"
+  default_prompt: "Use $orangu-apply to implement one reviewed session/repo proposal, run local checks, and record application without claiming later verification."
+
+policy:
+  allow_implicit_invocation: false

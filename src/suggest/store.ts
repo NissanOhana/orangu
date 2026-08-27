@@ -15,7 +15,7 @@ import { dirname, isAbsolute, join } from 'node:path'
 import { oranguHome } from '../util/home.js'
 import { redactValue } from '../redact/redact.js'
 import { isChangeClass } from './change-classes.js'
-import { normalizeSessionIds, suggestionId, suggestionIdV2, suggestionKey } from './id.js'
+import { isSuggestionId, normalizeSessionIds, suggestionId, suggestionIdV2, suggestionKey } from './id.js'
 import { canonicalReviewedPath, reviewedPathKey, reviewedPathViolation } from './reviewed-path.js'
 import { proposalSourcesAreCanonical } from './source-provenance.js'
 import {
@@ -370,7 +370,7 @@ export class SuggestionStore implements SuggestionStoreLike {
       if (!trimmed) continue
       try {
         const rec = JSON.parse(trimmed) as SuggestionRecord
-        if (rec && typeof rec === 'object' && typeof rec.id === 'string' && typeof rec.status === 'string') canonical.set(rec.id, rec)
+        if (rec && typeof rec === 'object' && isSuggestionId(rec.id) && typeof rec.status === 'string') canonical.set(rec.id, rec)
       } catch {
         /* corrupt line: skip, keep going */
       }
@@ -378,7 +378,7 @@ export class SuggestionStore implements SuggestionStoreLike {
     const byId = new Map(canonical)
     for (const rec of canonical.values()) {
       for (const legacyId of rec.legacyIds ?? []) {
-        if (typeof legacyId === 'string' && legacyId) byId.set(legacyId, rec)
+        if (isSuggestionId(legacyId)) byId.set(legacyId, rec)
       }
     }
     return byId

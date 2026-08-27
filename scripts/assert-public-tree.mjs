@@ -84,6 +84,8 @@ const binaryDigests = new Map([
   ['design/brand/mascot-96.png', 'fdfa669b261ee9e61e2178d573f7c982502b1009c6cfed35713fc99dbfb77549'],
   ['design/brand/mascot-main-320.png', 'e856607480b137ffc8dcf2a547549de4826edec68f2658748aeaaa2f8a626508'],
   ['design/brand/mascot-main-transparent.png', '91be2625136579826ff0f650a249f7924243bbf7e0e1e5c759b581fd060870fb'],
+  ['plugins/orangu/assets/icon.png', '3be627a8e18dfd2d1f3d26dbfc224f15f9c1c563cbdddb73a587f031d2328cba'],
+  ['plugins/orangu/assets/logo.png', '91be2625136579826ff0f650a249f7924243bbf7e0e1e5c759b581fd060870fb'],
 ])
 
 const binaryExtensions = new Set(['.7z', '.avi', '.bin', '.bmp', '.dmg', '.doc', '.docx', '.gif', '.gz', '.ico', '.jpeg', '.jpg', '.mov', '.mp3', '.mp4', '.pdf', '.png', '.tar', '.tgz', '.wasm', '.webp', '.xls', '.xlsx', '.zip'])

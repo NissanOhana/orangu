@@ -1,10 +1,10 @@
 ---
-name: orangu-analyze
-description: Explain what happened in a supported Claude Code, Cowork, or Desktop session using local deterministic evidence. Use when someone asks to review a run, trace its steps and outcome, diagnose an error or retry, understand time or token use, open a visual report, or compare recurring patterns across a repository or supported sessions on the machine. For a concrete change proposal, hand one finding to orangu-improve; for a whole repo or global improvement plan, use orangu-mega.
+name: analyze
+description: Explain what happened in a supported Claude Code, Cowork, or Desktop session using local deterministic evidence. Use when someone asks to review a run, trace its steps and outcome, diagnose an error or retry, understand time or token use, open a visual report, or compare recurring patterns across a repository or supported sessions on the machine. For a concrete change proposal, hand one finding to /orangu:improve; for a whole repo or global improvement plan, use /orangu:mega.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read
 ---
 
-# orangu-analyze
+# /orangu:analyze
 
 Use the bundled CLI to observe a supported session and explain its outcome. The CLI owns parsing, redaction, counts, evidence, matching, and ranking. You translate that deterministic output for the user. Do not turn the analysis itself into a claim that a change worked.
 
@@ -37,7 +37,7 @@ Analysis observes and diagnoses. It does not edit a harness or write a proposal.
 
 - For one bounded finding, create or reuse its suggestion record with `orangu suggest --rule <ruleId> --scope <session|repo|global> --session <id[,id...]>`, then offer the printed `/orangu:improve <id>` command.
 - Quote `orangu estimate --suggestion <id>` before the deeper read.
-- Use `orangu-mega --scope repo|global` only for a separately requested whole-harness review of recurring patterns.
+- Use `/orangu:mega --scope repo|global` only for a separately requested whole-harness review of recurring patterns.
 
 Session proposals may be applied explicitly and become verified only after Orangu passes their reviewed checks against a later supported session. Repo proposals may be applied but remain `applied` until a real fresh-cohort comparator exists; global proposals are review-only. Never describe a proposal as applied, verified, or improved beyond the evidence its scope supports.
 
