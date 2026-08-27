@@ -79,7 +79,7 @@
       "webLookups": 0
     },
     "topInsightIds": [],
-    "narrative": "In “What does this repo do?”, the human made 1 request over 1.4s; the agent was busy for 1.4s of that. It made 0 tool calls, and processed 24.2k tokens. No commits, PRs or test runs were detected.",
+    "narrative": "In this session, the human made 1 request over 1.4s; the agent was busy for 1.4s of that. It made 0 tool calls, and processed 24.2k tokens. No commits, PRs or test runs were detected.",
     "ending": "unknown"
   },
   "turns": [

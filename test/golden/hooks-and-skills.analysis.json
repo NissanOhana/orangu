@@ -81,7 +81,7 @@
     "topInsightIds": [
       "hook-errors-1"
     ],
-    "narrative": "In “Use the changelog skill to draft notes”, the human made 1 request (2 turns incl. commands/automation) over 30s; the agent was busy for 9.9s of that. It made 2 tool calls, used 2 skill/command invocations, and processed 29.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 1 hook error.",
+    "narrative": "In this session, the human made 1 request (2 turns incl. commands/automation) over 30s; the agent was busy for 9.9s of that. It made 2 tool calls, used 2 skill/command invocations, and processed 29.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 1 hook error.",
     "ending": "unknown"
   },
   "turns": [

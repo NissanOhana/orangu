@@ -83,7 +83,7 @@
       "unverified-edits-3",
       "api-errors-2"
     ],
-    "narrative": "In “Run the flaky suite”, the human made 3 requests over 1m 40s; the agent was busy for 1m 5s of that. It made 3 tool calls (2 failed), and processed 57.2k tokens. Visible outcomes: 1 file changed, 2 test runs (2 failed). Biggest things to look at: 2 tool errors (66.7% of 3 calls); The last test run failed and the session ended.",
+    "narrative": "In this session, the human made 3 requests over 1m 40s; the agent was busy for 1m 5s of that. It made 3 tool calls (2 failed), and processed 57.2k tokens. Visible outcomes: 1 file changed, 2 test runs (2 failed). Biggest things to look at: 2 tool errors (66.7% of 3 calls); The last test run failed and the session ended.",
     "ending": "failing"
   },
   "turns": [

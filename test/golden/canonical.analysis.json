@@ -91,7 +91,7 @@
       "tool-errors-1",
       "agent-fanout-2"
     ],
-    "narrative": "In “Fix foo test”, the human made 2 requests over 2m 13s; the agent was busy for 13s of that. It made 6 tool calls (1 failed), ran 1 subagent, and processed 179.7k tokens. Visible outcomes: 1 file changed, 2 test runs (1 failed). Biggest things to look at: 1 tool errors (16.7% of 6 calls); 1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel.",
+    "narrative": "In this session, the human made 2 requests over 2m 13s; the agent was busy for 13s of that. It made 6 tool calls (1 failed), ran 1 subagent, and processed 179.7k tokens. Visible outcomes: 1 file changed, 2 test runs (1 failed). Biggest things to look at: 1 tool errors (16.7% of 6 calls); 1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel.",
     "ending": "clean"
   },
   "turns": [

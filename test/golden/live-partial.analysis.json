@@ -79,7 +79,7 @@
       "webLookups": 0
     },
     "topInsightIds": [],
-    "narrative": "In “My key is sk-ant-api03-FAKEFAKEFAKEFAKE and my mail is dev@example.com — wire th”, the human made 1 request over 1.2s; the agent was busy for 1.2s of that. It made 1 tool calls, and processed 15.4k tokens. Visible outcomes: 1 file changed.",
+    "narrative": "In this session, the human made 1 request over 1.2s; the agent was busy for 1.2s of that. It made 1 tool calls, and processed 15.4k tokens. Visible outcomes: 1 file changed.",
     "ending": "unknown"
   },
   "turns": [

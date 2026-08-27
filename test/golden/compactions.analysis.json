@@ -83,7 +83,7 @@
       "preamble-weight-2",
       "cache-ttl-churn-3"
     ],
-    "narrative": "In “Long refactor session”, the human made 3 requests over 27s; the agent was busy for 27s of that. It made 0 tool calls, and processed 1.21M tokens. No commits, PRs or test runs were detected. Biggest things to look at: 2 context compactions (peak 175.0k of 1.00M); Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills).",
+    "narrative": "In this session, the human made 3 requests over 27s; the agent was busy for 27s of that. It made 0 tool calls, and processed 1.21M tokens. No commits, PRs or test runs were detected. Biggest things to look at: 2 context compactions (peak 175.0k of 1.00M); Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills).",
     "ending": "unknown"
   },
   "turns": [

@@ -90,7 +90,8 @@ function homeRegExp(home: string): RegExp | null {
  * list about semantics, not spelling alone: `name` is deliberately handled by
  * `isAgentRecord` below so structural tool/skill/model names remain useful, and
  * `title` / `label` / `detail` are decided per record shape by `stripsText`
- * (rule-generated copy keeps them; transcript-derived records lose them).
+ * (rule-generated copy keeps them; transcript-derived records lose them,
+ * including `Insight.detail`, which embeds raw commands and prompt previews).
  * `narrative`, `recommendation` and `signature` are only ever generated copy and
  * are therefore not listed.
  */
@@ -158,7 +159,10 @@ function isAgentRecord(obj: Record<string, unknown>): boolean {
   )
 }
 
-/** Insight (analysis.ts) and CrossFinding (aggregate.ts): copy written by an orangu rule, never by the transcript. */
+/**
+ * Insight (analysis.ts) and CrossFinding (aggregate.ts). Their `title` and `recommendation` are copy written by an
+ * orangu rule; their `detail` quotes transcript strings (commands, prompt previews, tool inputs) and stays stripped.
+ */
 function isRuleRecord(obj: Record<string, unknown>): boolean {
   return 'ruleId' in obj && 'severity' in obj && 'axis' in obj
 }
@@ -183,7 +187,9 @@ function stripsText(key: string, source: Record<string, unknown>): boolean {
     case 'label':
       return !isQualitySignal(source) && !isEventRecord(source)
     case 'detail':
-      return !isRuleRecord(source) && !isQualitySignal(source)
+      // Insight/CrossFinding.detail interpolates raw commands, prompt previews and tool inputs
+      // (src/analyze/insights.ts); only the QualitySignal chip's detail is literal rule copy.
+      return !isQualitySignal(source)
     default:
       return TEXT_KEYS.has(key)
   }

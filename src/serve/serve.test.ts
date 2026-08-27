@@ -129,7 +129,7 @@ const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
     severity: 'low',
     axis: 'quality',
     title: generated,
-    detail: generated,
+    detail: text,
     recommendation: generated,
     evidence: { command: text, template: text, sample: text },
     turnIndexes: [0],

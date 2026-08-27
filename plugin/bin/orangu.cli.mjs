@@ -1765,7 +1765,7 @@ function stripsText(key, source) {
     case "label":
       return !isQualitySignal(source) && !isEventRecord(source);
     case "detail":
-      return !isRuleRecord(source) && !isQualitySignal(source);
+      return !isQualitySignal(source);
     default:
       return TEXT_KEYS.has(key);
   }
@@ -5559,7 +5559,7 @@ function analyzeSession(s, opts = {}) {
     narrative: "",
     ending: sessionEnding(s, quality)
   };
-  summary.narrative = narrative(s, summary, insights.slice(0, 2).map((i) => i.title));
+  summary.narrative = narrative(summary, insights.slice(0, 2).map((i) => i.title));
   const usageEventsTotal = usageTotal(tokens);
   const turnsPlusAgents = usageTotal(s.turns.reduce((u, t) => addUsage(u, t.usage), emptyUsage())) + usageTotal(agents.totals.tokens);
   const diffPct = usageEventsTotal ? Math.abs(usageEventsTotal - turnsPlusAgents) / usageEventsTotal * 100 : 0;
@@ -5608,10 +5608,9 @@ function sessionEnding(s, quality) {
   if (!lastRun) return "unknown";
   return lastRun.ok ? "clean" : "failing";
 }
-function narrative(s, sum2, top) {
+function narrative(sum2, top) {
   const parts = [];
-  const what = s.meta.title ? `\u201C${s.meta.title.slice(0, 80)}\u201D` : "this session";
-  parts.push(`In ${what}, the human made ${sum2.humanTurns} request${sum2.humanTurns === 1 ? "" : "s"}${sum2.turns > sum2.humanTurns ? ` (${sum2.turns} turns incl. commands/automation)` : ""} over ${sum2.wallMs ? fmtMs(sum2.wallMs) : "an unknown span"}; the agent was busy for ${fmtMs(sum2.activeMs)} of that.`);
+  parts.push(`In this session, the human made ${sum2.humanTurns} request${sum2.humanTurns === 1 ? "" : "s"}${sum2.turns > sum2.humanTurns ? ` (${sum2.turns} turns incl. commands/automation)` : ""} over ${sum2.wallMs ? fmtMs(sum2.wallMs) : "an unknown span"}; the agent was busy for ${fmtMs(sum2.activeMs)} of that.`);
   parts.push(`It made ${sum2.toolCalls} tool calls${sum2.toolErrors ? ` (${sum2.toolErrors} failed)` : ""}${sum2.agents ? `, ran ${sum2.agents} subagent${sum2.agents > 1 ? "s" : ""}` : ""}${sum2.skills ? `, used ${sum2.skills} skill/command invocation${sum2.skills > 1 ? "s" : ""}` : ""}, and processed ${fmtTokens(usageTotal(sum2.tokens))} tokens.`);
   const o = sum2.outcomes;
   const outs = [];

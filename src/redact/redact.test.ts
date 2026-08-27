@@ -77,7 +77,7 @@ describe('redactAnalysis', () => {
         gitCommits: [{ turnIndex: 0, ok: true, message: MARKER }],
         userCorrections: [{ turnIndex: 0, preview: MARKER }],
       },
-      insights: [{ id: 'insight-1', ruleId: 'rule-1', severity: 'low', axis: 'quality', title: GENERATED, detail: GENERATED, recommendation: GENERATED, evidence: { command: MARKER, template: MARKER, sample: MARKER, failedAgent: { agentId: 'agent-1', agentType: 'code-reviewer', name: MARKER, status: 'failed', toolErrors: 1, tokens: 10 } }, turnIndexes: [], personas: ['anyone'] }],
+      insights: [{ id: 'insight-1', ruleId: 'rule-1', severity: 'low', axis: 'quality', title: GENERATED, detail: MARKER, recommendation: GENERATED, evidence: { command: MARKER, template: MARKER, sample: MARKER, failedAgent: { agentId: 'agent-1', agentType: 'code-reviewer', name: MARKER, status: 'failed', toolErrors: 1, tokens: 10 } }, turnIndexes: [], personas: ['anyone'] }],
       events: [{ kind: 'other', turnIndex: 0, label: GENERATED, detail: MARKER }],
       parse: {
         recordCounts: { user: 1, [MARKER]: 2 },
@@ -121,7 +121,8 @@ describe('redactAnalysis', () => {
     const out = redactAnalysis(full(), { stripText: true, home: '' }).analysis
     // orangu's own rules wrote these: they survive
     expect(out.insights[0]!.title).toBe(GENERATED)
-    expect(out.insights[0]!.detail).toBe(GENERATED)
+    // Insight.detail interpolates raw commands/previews (insights.ts) and is therefore not rescued.
+    expect(out.insights[0]!.detail).toBe('')
     expect(out.insights[0]!.recommendation).toBe(GENERATED)
     expect(out.summary.narrative).toBe(GENERATED)
     expect(out.quality.signals[0]!.label).toBe(GENERATED)
