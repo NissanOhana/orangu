@@ -134,6 +134,20 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
   expect(errors).toEqual([])
 })
 
+// A8: the harness reaches the app. The fixture home declares no config, so the designed empty state shows.
+test('localhost #harness renders the harness view and the Overview carries its card', async ({ page }) => {
+  const errors = runtimeErrors(page)
+  await page.goto(`${APP}/#harness?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Harness' })).toBeVisible()
+  await expect(page.getByText('No harness config found under the scanned roots.')).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('[data-copy="orangu harness"]')).toBeVisible()
+  await page.goto(`${APP}/#overview?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('a.harness-card[href="#harness"]')).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'Harness' })).toBeVisible()
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  expect(errors).toEqual([])
+})
+
 test('repo whole-harness review is copy-only and never posts a kickoff', async ({ page, context }) => {
   const errors = runtimeErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })

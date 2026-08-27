@@ -2,7 +2,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import { execFile } from 'node:child_process'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { get as httpGet } from 'node:http'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { startServe, matchRoute, rejectCrossSiteBrowserGet, rejectUntrustedMutation, type ServeDeps, type ServeHandle } from './server.js'
 import { aggregateRegistryFingerprint, MAX_AGGREGATE_CONCURRENCY, MAX_AGGREGATE_JOBS, MAX_REPO_CWD_BYTES } from './api.js'
@@ -219,6 +219,7 @@ describe('orangu serve (in-process e2e)', () => {
       (base: string) => fetch(base + '/'),
       (base: string) => fetch(base + '/favicon.ico'),
       (base: string) => fetch(base + '/api/sessions'),
+      (base: string) => fetch(base + '/api/harness'),
       (base: string) => fetch(base + `/export/${home.liveId}.html`),
       (base: string) => fetch(base + '/events'),
       (base: string) => fetch(base + '/api/kickoff', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }),
@@ -284,6 +285,25 @@ describe('orangu serve (in-process e2e)', () => {
     const text = await r.text()
     expect(text).not.toContain('sk-ant-api03-FAKEFAKEFAKEFAKE')
     expect((await fetch(url + '/api/session/nope')).status).toBe(404)
+  })
+
+  // A8: the harness report reaches the app through the same capability-gated, lazy, redacted path
+  it('/api/harness answers 202 {progress} then the redacted HarnessReport, never an absolute home path', async () => {
+    const { url } = await boot()
+    const first = await fetch(url + '/api/harness')
+    expect([200, 202]).toContain(first.status)
+    if (first.status === 202) expect(((await first.json()) as { progress: unknown }).progress).toBeDefined()
+    const report = await pollUntil(async () => {
+      const r = await fetch(url + '/api/harness')
+      return r.status === 200 ? ((await r.json()) as { schemaVersion: string; scope: { sessionsScanned: number; roots: string[] }; crosswalk: { injectedListings: unknown[] }; notes: string[] }) : undefined
+    })
+    expect(report.schemaVersion).toBe('1')
+    expect(report.scope.sessionsScanned).toBe(3)
+    expect(Array.isArray(report.crosswalk.injectedListings)).toBe(true)
+    const text = JSON.stringify(report)
+    expect(text).not.toContain(homedir())
+    expect(text).not.toContain(SECRET)
+    expect(text).not.toMatch(/"cost"|"usd"|"price"/i)
   })
 
   it('/api/repo and /api/global answer 202 {progress} then the Aggregate', async () => {

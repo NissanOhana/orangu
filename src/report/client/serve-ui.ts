@@ -17,6 +17,8 @@ import { badgeCopy, fleetFeed } from './derive.js'
 import { harnessCommand } from './suggest-rows.js'
 import { renderRepo } from './screens/repo.js'
 import { renderGlobal } from './screens/global.js'
+import { harnessCardHtml, renderHarness } from './screens/harness.js'
+import type { HarnessReport } from '../../harness/types.js'
 
 /** UX §4.1: "Last 50 rows overall": the per-session ring (≤ 5) bounds it well below this in practice. */
 const FLEET_FEED_MAX = 50
@@ -169,4 +171,39 @@ export function megaReview(scope: 'repo' | 'global'): string {
   return `<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Review major ${scope} improvements separately.</div><p class="narrative">This interactive command reviews the wider harness. It is copy-only here, creates no row status, and keeps its estimate gates inside /orangu:harness.</p><div class="kickrow"><span class="mono125 grow">${esc(command)}</span><button type="button" class="btn-sm" data-copy="${esc(command)}">Copy whole-harness review</button></div></div>`
 }
 
-export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview }
+// the harness report is fetched once per page (the server refreshes it on registry changes)
+let harnessReport: HarnessReport | null | undefined
+let harnessInFlight = false
+
+/** kicks the /api/harness fetch; true while it is in flight (the screen renders aggScreen meanwhile) */
+function ensureHarness(ds: DataSource, onLoaded: () => void): boolean {
+  if (harnessReport !== undefined) return false
+  if (!harnessInFlight) {
+    harnessInFlight = true
+    void ds
+      .harness()
+      .then((r) => {
+        harnessReport = r
+        onLoaded()
+      })
+      .catch(() => {
+        harnessReport = null
+      })
+      .finally(() => {
+        harnessInFlight = false
+      })
+  }
+  return harnessInFlight
+}
+
+function harnessView(ctx: Ctx): HTMLElement {
+  return renderHarness(ctx, harnessReport ?? null)
+}
+
+/** the Overview card: '' until the report is here (and the fetch is kicked so a re-render fills it) */
+function harnessCard(ds: DataSource, onLoaded: () => void): string {
+  ensureHarness(ds, onLoaded)
+  return harnessReport ? harnessCardHtml(harnessReport) : ''
+}
+
+export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview, ensureHarness, harnessView, harnessCard }

@@ -36,8 +36,16 @@ describe('nav model', () => {
     expect(NAV_GROUPS.map((g) => g.label)).toEqual(['Live', 'Observe this session', 'Recurring patterns', 'Improve the next run'])
   })
 
-  it('has the ten screen ids', () => {
-    expect(SCREEN_IDS).toEqual(['live', 'overview', 'timeline', 'tools', 'agents', 'context', 'coverage', 'repo', 'global', 'suggest'])
+  it('has the eleven screen ids', () => {
+    expect(SCREEN_IDS).toEqual(['live', 'overview', 'timeline', 'tools', 'agents', 'context', 'coverage', 'repo', 'global', 'harness', 'suggest'])
+  })
+
+  it('lists Harness under Recurring patterns, serve-only like Repo and Global', () => {
+    const file = navFor(appData(), { screen: 'overview' }).find((g) => g.id === 'across')!.items.find((i) => i.screen === 'harness')!
+    expect(file.hint).toBe('needs orangu serve')
+    const serve = navFor(appData({ mode: 'serve' }), { screen: 'overview' }).find((g) => g.id === 'across')!.items.find((i) => i.screen === 'harness')!
+    expect(serve.hint).toBeUndefined()
+    expect(parseHash('#harness').screen).toBe('harness')
   })
 
   it('Plain language hides the three detailed-only items while retaining dev as the protocol value', () => {

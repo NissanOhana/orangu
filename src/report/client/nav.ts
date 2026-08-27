@@ -31,7 +31,7 @@ export const NAV_GROUPS: ReadonlyArray<{ id: NavGroup['id']; label: string }> = 
   { id: 'improve', label: 'Improve the next run' },
 ]
 
-export const SCREEN_IDS = ['live', 'overview', 'timeline', 'tools', 'agents', 'context', 'coverage', 'repo', 'global', 'suggest'] as const
+export const SCREEN_IDS = ['live', 'overview', 'timeline', 'tools', 'agents', 'context', 'coverage', 'repo', 'global', 'harness', 'suggest'] as const
 
 export type ScreenId = (typeof SCREEN_IDS)[number]
 
@@ -99,6 +99,7 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
   const acrossItems: NavItem[] = [
     { id: 'repo', label: repoN !== undefined ? `Repo · ${repoN} sessions` : 'Repo', screen: 'repo', hint: repoN === undefined ? needsServe : undefined },
     { id: 'global', label: 'Global · all time', screen: 'global', hint: globalN === undefined ? needsServe : undefined },
+    { id: 'harness', label: 'Harness', screen: 'harness', hint: needsServe },
   ]
 
   return [

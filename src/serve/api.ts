@@ -6,7 +6,12 @@
  * Aggregates below before they are served. Kickoff and export routes live in routes-extra.ts.
  */
 import type { ServerResponse } from 'node:http'
+import { homedir } from 'node:os'
 import { aggregate, type Aggregate } from '../analyze/aggregate.js'
+import { defaultConfigDir } from '../discover/discover.js'
+import { collectInventory } from '../harness/collect.js'
+import { buildHarnessReport } from '../harness/report.js'
+import type { HarnessReport } from '../harness/types.js'
 import type { Analysis } from '../model/analysis.js'
 import { APP_DATA_VERSION, type AppCapabilities, type AppData, type SessionSummaryRow, type SuggestionViewRecord } from '../model/app-data.js'
 import { redactAnalysis, redactValue } from '../redact/redact.js'
@@ -209,8 +214,68 @@ class AggregateRunner {
   }
 }
 
+/**
+ * GET /api/harness: what the config declares vs what the registry's sessions did. Lazy (never on
+ * boot), one job, fingerprinted on the registry like the aggregates; 202 {progress} while the
+ * crosswalk computes. Reuses registry.analysis() (no re-scan) and, like every aggregate, passes
+ * the result through redactValue before it can leave the process. `runHarness` (the CLI verb) is
+ * deliberately not reused: it re-lists and re-analyzes every session.
+ */
+class HarnessRunner {
+  private result: HarnessReport | undefined
+  private fingerprint = ''
+  private computedAt = 0
+  private computing = false
+  private done = 0
+  private total = 0
+  constructor(private ctx: ServeContext) {}
+
+  async handle(res: ServerResponse): Promise<void> {
+    const fp = aggregateRegistryFingerprint(this.ctx.registry.list())
+    if (!this.computing && (!this.result || (this.fingerprint !== fp && Date.now() - this.computedAt > 30_000))) {
+      this.computing = true
+      void this.compute(fp)
+        .catch(() => {})
+        .finally(() => {
+          this.computing = false
+        })
+    }
+    if (this.result) return json(res, 200, this.result)
+    return json(res, 202, { progress: { done: this.done, total: this.total } })
+  }
+
+  private async compute(fp: string): Promise<void> {
+    const rows = this.ctx.registry.list()
+    this.total = rows.length
+    this.done = 0
+    const analyses: Analysis[] = []
+    let unreadable = 0
+    for (const row of rows) {
+      const a = await this.ctx.registry.analysis(row.id)
+      this.done++
+      if (a) analyses.push(a)
+      else unreadable++
+    }
+    const home = homedir()
+    const cwd = this.ctx.opts.cwd ?? process.cwd()
+    const roots = this.ctx.opts.roots ?? [this.ctx.opts.configDir ?? defaultConfigDir()]
+    const now = this.ctx.now()
+    const inventory = await collectInventory({ cwd, roots, home })
+    const report = buildHarnessReport(inventory, analyses, aggregate(analyses, 'serve', now), {
+      version: this.ctx.opts.version,
+      now,
+      scope: { cwd, roots, global: !!this.ctx.opts.roots, limit: rows.length, sessionsUnreadable: unreadable, home },
+    })
+    // computed from raw analyses and config paths: scrub before it leaves the process (api.ts discipline)
+    this.result = redactValue(report, { scrub: true, home })
+    this.fingerprint = fp
+    this.computedAt = Date.now()
+  }
+}
+
 export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
   const aggs = new AggregateRunner(ctx)
+  const harness = new HarnessRunner(ctx)
   const maxLive = ctx.opts.maxLive ?? DEFAULT_MAX_LIVE
 
   const appData = async (s: string | undefined): Promise<AppData> => {
@@ -275,6 +340,11 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
       method: 'GET',
       path: '/api/global',
       handler: async (_m, _req, res) => aggs.handle(res, 'global', undefined),
+    },
+    {
+      method: 'GET',
+      path: '/api/harness',
+      handler: async (_m, _req, res) => harness.handle(res),
     },
     {
       method: 'GET',

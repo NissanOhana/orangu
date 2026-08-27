@@ -5,6 +5,7 @@
  */
 import type { Analysis } from '../../model/analysis.js'
 import type { Aggregate } from '../../analyze/aggregate.js'
+import type { HarnessReport } from '../../harness/types.js'
 import type { AppData, SuggestionViewRecord } from '../../model/app-data.js'
 import type { KickoffRequest, KickoffResponse, SuggestionStatus } from '../../suggest/types.js'
 import type { ServeEvent } from '../../serve/types.js'
@@ -26,6 +27,17 @@ async function getJson<T>(url: string): Promise<{ status: number; body: T | null
     return { status: r.status, body: (await r.json()) as T }
   } catch {
     return { status: 0, body: null }
+  }
+}
+
+/** 202 {progress} is polled until the 200 body arrives (aggregates and the harness report compute lazily). */
+async function pollJson<T>(url: string): Promise<T | null> {
+  const t0 = Date.now()
+  for (;;) {
+    const { status, body } = await getJson<T>(url)
+    if (status === 200 && body) return body
+    if (status !== 202 || Date.now() - t0 > AGG_TIMEOUT_MS) return null
+    await new Promise((r) => setTimeout(r, AGG_POLL_MS))
   }
 }
 
@@ -76,14 +88,10 @@ export function remoteSource(base = ''): DataSource {
       return p
     },
     async aggregate(scope, cwd) {
-      const url = scope === 'repo' ? base + '/api/repo' + (cwd ? `?cwd=${encodeURIComponent(cwd)}` : '') : base + '/api/global'
-      const t0 = Date.now()
-      for (;;) {
-        const { status, body } = await getJson<Aggregate>(url)
-        if (status === 200 && body) return body
-        if (status !== 202 || Date.now() - t0 > AGG_TIMEOUT_MS) return null
-        await new Promise((r) => setTimeout(r, AGG_POLL_MS))
-      }
+      return pollJson<Aggregate>(scope === 'repo' ? base + '/api/repo' + (cwd ? `?cwd=${encodeURIComponent(cwd)}` : '') : base + '/api/global')
+    },
+    async harness() {
+      return pollJson<HarnessReport>(base + '/api/harness')
     },
     async suggestions() {
       const { body } = await getJson<SuggestionViewRecord[]>(base + '/api/suggestions')

@@ -94,6 +94,7 @@ function detailedBody(ctx: Ctx, a: Analysis): string {
   const recoverable = recoverableLine(recoverableFrom(planRows('session', a, undefined)), a.insights.length)
   return `${triptych(a)}${topFinding(ctx, a, top[0])}
     <div class="two-up mb16">${contextSpark(a)}${whereNext(ctx, a)}</div>
+    ${ctx.harnessCard?.() ?? ''}
     ${rest ? `<h3 style="margin:4px 0 10px">More findings</h3>${recoverable ? `<p class="recoverable"><a href="${esc(href(ctx, a, { screen: 'suggest' }))}">${esc(recoverable)} →</a></p>` : ''}${rest}` : ''}`
 }
 

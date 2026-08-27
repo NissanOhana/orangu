@@ -29,6 +29,7 @@ import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
 import { MASCOT_ASCII } from '../report/client/mascot.js'
 import { PLUGIN_INSTALL, commandForInsight } from '../report/client/suggest-rows.js'
+import { outcomeHeadline } from '../report/client/derive.js'
 import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
@@ -160,6 +161,22 @@ async function cmdAnalyze(sel: string | undefined, flags: Record<string, string 
   printNextStep(analysis, flags)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback('session')
   thresholdExit(analysis, flags)
+}
+
+/**
+ * `orangu` with no verb: the loop in one screen. Analyze the latest session and print the true
+ * sentence (the same outcomeHeadline the report leads with), the top finding and the exact next
+ * command. `orangu --help` / `orangu help` are untouched; no sessions -> the usual error, not help.
+ */
+async function cmdBrief(flags: Record<string, string | boolean>): Promise<void> {
+  const ref = await selectSession(undefined, flags)
+  const analysis = await analyzeRef(ref, flags)
+  const s = analysis.summary
+  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, analysis.session.title || analysis.session.id.slice(0, 12)) + '\n')
+  process.stdout.write(paint(C.dim, `  latest session · ${analysis.session.id.slice(0, 8)} · ${s.turns} turns · ${fmtTokens(s.totalTokens)} tokens · ${fmtMs(s.activeMs)} active\n\n`))
+  process.stdout.write('  ' + outcomeHeadline(s) + '\n\n')
+  for (const line of nextStepLines(analysis)) process.stdout.write(line + '\n')
+  process.stderr.write(paint(C.dim, `\n  orangu report for the full picture · orangu --help for every command\n`))
 }
 
 /** Flags that were removed but would otherwise be ignored in silence, turning a CI gate into a no-op. */
@@ -426,8 +443,14 @@ async function main(): Promise<void> {
     process.stdout.write(VERSION + '\n')
     return
   }
-  if (!command || flagBool(flags, 'help') || command === 'help') {
+  if (flagBool(flags, 'help') || command === 'help') {
     printHelp()
+    return
+  }
+  // no verb: the loop in one screen (--json has no verb to serialise, so it keeps printing help)
+  if (!command) {
+    if (flagBool(flags, 'json')) printHelp()
+    else await cmdBrief(flags)
     return
   }
   const sel = positionals[0]

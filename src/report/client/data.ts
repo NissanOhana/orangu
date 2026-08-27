@@ -5,6 +5,7 @@
  */
 import type { Analysis } from '../../model/analysis.js'
 import type { Aggregate } from '../../analyze/aggregate.js'
+import type { HarnessReport } from '../../harness/types.js'
 import type { AppData, AppMode, SuggestionViewRecord } from '../../model/app-data.js'
 import type { KickoffRequest, KickoffResponse, SuggestionRecord, SuggestionStatus } from '../../suggest/types.js'
 import type { ServeEvent } from '../../serve/types.js'
@@ -22,6 +23,8 @@ export interface DataSource {
   session(id: string): Promise<Analysis | null>
   /** file: null (designed empty state, policy); serve: on demand */
   aggregate(scope: 'repo' | 'global', cwd?: string): Promise<Aggregate | null>
+  /** file: null (the screen needs orangu serve); serve: on demand, polled while it computes */
+  harness(): Promise<HarnessReport | null>
   suggestions(): Promise<SuggestionViewRecord[]>
   /** file: local copy-text only; serve: POST kickoff */
   kickoff(req: KickoffRequest): Promise<KickoffResult>
@@ -69,6 +72,9 @@ export function embeddedSource(): DataSource {
       return d?.session && d.session.session.id === id ? d.session : null
     },
     async aggregate() {
+      return null
+    },
+    async harness() {
       return null
     },
     async suggestions() {

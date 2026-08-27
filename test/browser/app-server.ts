@@ -11,6 +11,10 @@ await mkdir(fixtureRepo, { recursive: true })
 const fixture = await makeFixtureHome(join(temp, 'claude'), { cwd: fixtureRepo })
 const appHome = join(temp, 'orangu-home')
 process.env['ORANGU_HOME'] = appHome
+// the harness route reads ~/.claude.json and the repo's .claude/: keep both synthetic (never the real home)
+const fakeHome = join(temp, 'home')
+await mkdir(fakeHome, { recursive: true })
+process.env['HOME'] = fakeHome
 
 const server = await startServe(
   {
@@ -18,6 +22,7 @@ const server = await startServe(
     open: false,
     includeText: true,
     configDir: fixture.configDir,
+    cwd: fixtureRepo,
     noCache: true,
     version: 'browser-test',
   },

@@ -23,6 +23,7 @@ node dist/orangu.js report
 
 | Command | Purpose |
 |---|---|
+| `orangu` (no verb) | Analyze the latest session and print the one next step |
 | `orangu report [selector]` | Write and open one self-contained session report |
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |

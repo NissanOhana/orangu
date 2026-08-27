@@ -247,6 +247,34 @@ syncBuiltinESMExports()
     expect(run(['list', '--root', home.configDir])).toContain('orangu harness')
   })
 
+  // A8: `orangu` with no verb runs the loop on the latest session; --help stays the help screen.
+  it('bare orangu analyzes the latest session and prints the sentence and the next command; --help is unchanged', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-bare-')))
+    const bare = spawnSync('node', [CLI, '--root', home.configDir, '--no-cache'], { encoding: 'utf8' })
+    expect(bare.status, bare.stderr).toBe(0)
+    expect(bare.stdout).toContain('latest session')
+    expect(bare.stdout).toMatch(/top finding:|no findings: this session ran clean/)
+    expect(bare.stdout).toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12} --finding |ran clean/)
+    expect(bare.stdout).not.toContain('usage')
+    expect(bare.stderr).toContain('orangu --help for every command')
+    // the sentence is the report's outcome headline, never a canned line
+    expect(bare.stdout).toMatch(/commit|test run|file|request|Stopped by you|nothing committed/)
+
+    const help = run(['--help'])
+    expect(help).toContain('usage')
+    expect(help).not.toContain('top finding')
+    expect(help).not.toContain('latest session ·')
+    expect(run(['help'])).toBe(help)
+    // --json with no verb has nothing to serialise: it keeps printing help
+    expect(run(['--json'])).toBe(help)
+
+    const empty = await mkdtemp(join(tmpdir(), 'orangu-cli-bare-empty-'))
+    const none = spawnSync('node', [CLI, '--root', empty, '--no-cache'], { encoding: 'utf8' })
+    expect(none.status).toBe(1)
+    expect(none.stderr).toContain('No sessions found')
+    expect(none.stderr).not.toContain('at ')
+  })
+
   // The CI-gate flags, end to end on the built binary. A gate that silently stops gating is the
   // failure mode here: `--max-cost` was renamed to `--max-tokens`, and because the arg parser ignores
   // unknown flags, every pipeline still passing `--max-cost 5` would have exited 0 forever.

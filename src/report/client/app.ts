@@ -35,6 +35,8 @@ export interface Ctx {
   aggLoading?: boolean
   /** serve-only whole-harness CTA; aggregate screens are unavailable in file mode */
   megaReview?: (scope: 'repo' | 'global') => string
+  /** serve-only Overview card from the harness report ('' until it has loaded; kicks the fetch) */
+  harnessCard?: () => string
   go(next: Partial<RouteState>, opts?: { push?: boolean }): void
 }
 
@@ -58,6 +60,7 @@ const TITLES: Record<string, string> = {
   tools: 'Tools & calls',
   repo: 'Repo',
   global: 'Global',
+  harness: 'Harness',
   suggest: 'Improve the next outcome',
   agents: 'Agents',
   context: 'Context & tokens',
@@ -89,6 +92,8 @@ function screenSub(ctx: Ctx): string {
       return ctx.data.aggregates.repo ? `${ctx.data.aggregates.repo.sessionCount} sessions · recurring evidence in ${ctx.data.aggregates.repo.scope}` : 'recurring evidence in this repository'
     case 'global':
       return ctx.data.aggregates.global ? `${ctx.data.aggregates.global.sessionCount} sessions · recurring evidence across this machine` : 'recurring evidence across supported sessions'
+    case 'harness':
+      return 'what your config declares vs what your sessions used, in tokens'
     case 'suggest':
       return ctx.state.scope === 'repo' || ctx.state.scope === 'global' ? 'recurring patterns · bounded proposals · whole-harness review' : 'one finding · one bounded proposal · verify on the next run'
     case 'agents':
@@ -113,6 +118,10 @@ export interface ServeUi {
   /** repo/global rendering is serve-only; file mode keeps only the small local-viewer empty state */
   aggregateView(ctx: Ctx): HTMLElement
   megaReview(scope: 'repo' | 'global'): string
+  /** kicks the harness fetch the #harness screen (or the Overview card) needs; true while in flight */
+  ensureHarness(ds: DataSource, onLoaded: () => void): boolean
+  harnessView(ctx: Ctx): HTMLElement
+  harnessCard(ds: DataSource, onLoaded: () => void): string
 }
 
 /** Refresh persisted suggestion state after an SSE transition without erasing the last good view. */
@@ -198,8 +207,9 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     state,
     audience: state.audience === 'plain' ? 'plain' : 'dev',
     conn,
-    aggLoading: serveUi ? serveUi.ensureAggregate(d, ds, state, scheduleRender) : false,
+    aggLoading: serveUi ? (state.screen === 'harness' ? serveUi.ensureHarness(ds, scheduleRender) : serveUi.ensureAggregate(d, ds, state, scheduleRender)) : false,
     megaReview: serveUi?.megaReview,
+    harnessCard: serveUi ? () => serveUi.harnessCard(ds, scheduleRender) : undefined,
     go,
   })
 
@@ -303,12 +313,12 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     const ctx = await ctxFor()
     document.title = 'orangu · ' + (ctx.a?.session.title || shortId(state.s ?? '') || 'report')
     const renderer = SCREENS[state.screen] ?? renderOverview
-    const aggregateScope = state.screen === 'repo' || state.screen === 'global' ? state.screen : undefined
+    const aggregateScope = state.screen === 'repo' || state.screen === 'global' || state.screen === 'harness' ? state.screen : undefined
     const screenEl =
       ctx.aggLoading && serveUi
         ? serveUi.aggScreen()
         : aggregateScope
-          ? (serveUi?.aggregateView(ctx) ?? h(`<section>${aggregateEmpty(aggregateScope)}</section>`))
+          ? (serveUi ? (aggregateScope === 'harness' ? serveUi.harnessView(ctx) : serveUi.aggregateView(ctx)) : h(`<section>${aggregateEmpty(aggregateScope)}</section>`))
           : renderer(ctx)
     screenEl.classList.add('screen')
     screenEl.id = 'screen-' + state.screen

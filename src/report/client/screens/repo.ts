@@ -8,10 +8,11 @@ import { emptyHero, emptyNote } from '../components/empty.js'
 import { savingsText } from '../components/finding.js'
 import { boundedSavings } from '../suggest-rows.js'
 
-export function aggregateEmpty(scope: 'repo' | 'global'): string {
+export function aggregateEmpty(scope: 'repo' | 'global' | 'harness'): string {
+  const what = scope === 'repo' ? 'analyse this repository' : scope === 'global' ? 'analyse everything on this machine' : 'compare your Claude Code config with what your sessions used'
   return emptyHero({
     title: `Across-session views need orangu serve`,
-    hint: `This single-file report carries one session. Start the local viewer to analyse ${scope === 'repo' ? 'this repository' : 'everything on this machine'}. Nothing leaves your machine.`,
+    hint: `This single-file report carries one session. Start the local viewer to ${what}. Nothing leaves your machine.`,
     command: 'orangu serve',
   })
 }
