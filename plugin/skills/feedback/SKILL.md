@@ -22,9 +22,7 @@ Choose exactly one context from `session`, `repo`, `global`, `report`, or `app`.
 
 `orangu feedback --context <context>`
 
-If `orangu` is unavailable, use the bundled CLI:
-
-`node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" feedback --context <context>`
+If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs"` with the same arguments.
 
 Pass no other content. Tell the user that the process stays open until Ctrl-C, their draft remains on localhost until they review it, and the explicit send button opens a GitHub prefill. If the prefill is too large for a reliable URL, the form preserves the complete Markdown for copying and opens a blank issue; nothing is silently truncated.
 

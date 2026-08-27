@@ -1,7 +1,7 @@
 // Build: (1) bundle the report client (browser) into a JS string module, (2) bundle the CLI (node) into dist/orangu.js.
 // Zero runtime dependencies: everything is inlined.
 import { build } from 'esbuild'
-import { copyFileSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
+import { copyFileSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -87,6 +87,69 @@ mkdirSync(join(codexPluginRoot, 'assets'), { recursive: true })
 copyFileSync(join(pluginBin, 'orangu.cli.mjs'), join(codexPluginRoot, 'bin/orangu.cli.mjs'))
 copyFileSync(join(root, 'design/brand/favicon-64.png'), join(codexPluginRoot, 'assets/icon.png'))
 copyFileSync(join(root, 'design/brand/mascot-main-transparent.png'), join(codexPluginRoot, 'assets/logo.png'))
+
+// 4b) Codex skill mirror. plugin/skills/<n>/ is the single source of truth; the Codex copies under
+// plugins/orangu/skills/ (installable) and .agents/skills/ (repo-discovered) are GENERATED from it.
+// The only hand-written Codex inputs are plugin/codex/<n>/openai.yaml. Every rule below is
+// deterministic and fails closed: a skill that cannot be transformed stops the build.
+const CODEX_SKILLS = ['improve', 'apply', 'feedback']
+const CLAUDE_SKILLS = ['analyze', 'improve', 'apply', 'harness', 'feedback']
+const CLAUDE_FALLBACK = 'If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs"` with the same arguments.'
+const CODEX_FALLBACK = 'If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`: try `../../bin/orangu.cli.mjs` for an installed plugin, then `../../../dist/orangu.js` for a source checkout, and run the first file that exists with Node.js 20 or newer. Never fetch a package to continue.'
+const CODEX_TARGETS = [join(root, '.agents/skills'), join(codexPluginRoot, 'skills')]
+
+function codexNames(text) {
+  let out = text
+  for (const name of CLAUDE_SKILLS) out = out.replaceAll(`/orangu:${name}`, `$orangu-${name}`)
+  return out
+}
+
+function codexSkill(name, claude) {
+  if (!claude.startsWith('---\n')) throw new Error(`codex mirror: ${name} has no frontmatter`)
+  const end = claude.indexOf('\n---\n', 4)
+  if (end === -1) throw new Error(`codex mirror: ${name} has an unterminated frontmatter block`)
+  const frontmatter = claude.slice(4, end).split('\n')
+    .filter((line) => !line.startsWith('allowed-tools:'))
+    .map((line) => (line === `name: ${name}` ? `name: orangu-${name}` : line))
+  if (!frontmatter.includes(`name: orangu-${name}`)) throw new Error(`codex mirror: ${name} frontmatter has no matching name:`)
+  let body = claude.slice(end + 5)
+  if (!body.includes(`# /orangu:${name}`)) throw new Error(`codex mirror: ${name} body has no # /orangu:${name} heading`)
+  body = body.replace(`# /orangu:${name}`, `# orangu-${name}`)
+  if (!body.includes(CLAUDE_FALLBACK)) throw new Error(`codex mirror: ${name} lacks the canonical CLI fallback sentence`)
+  body = body.replaceAll(CLAUDE_FALLBACK, CODEX_FALLBACK)
+  const out = `---\n${codexNames(frontmatter.join('\n'))}\n---\n${codexNames(body)}`
+  if (out.includes('${CLAUDE_PLUGIN_ROOT}')) throw new Error(`codex mirror: ${name} still references CLAUDE_PLUGIN_ROOT after the transform`)
+  if (/\/orangu:/.test(out)) throw new Error(`codex mirror: ${name} still contains a Claude slash command after the transform`)
+  return out
+}
+
+function mirrorDir(src, dst) {
+  mkdirSync(dst, { recursive: true })
+  for (const entry of readdirSync(src).sort()) {
+    const from = join(src, entry)
+    const to = join(dst, entry)
+    if (statSync(from).isDirectory()) mirrorDir(from, to)
+    else if (entry.endsWith('.md')) {
+      const text = codexNames(readFileSync(from, 'utf8'))
+      if (text.includes('${CLAUDE_PLUGIN_ROOT}')) throw new Error(`codex mirror: ${from} references CLAUDE_PLUGIN_ROOT`)
+      writeFileSync(to, text)
+    } else copyFileSync(from, to)
+  }
+}
+
+for (const target of CODEX_TARGETS) {
+  for (const dir of [...CODEX_SKILLS.map((n) => `orangu-${n}`), 'shared']) rmSync(join(target, dir), { recursive: true, force: true })
+  mirrorDir(join(root, 'plugin/skills/shared'), join(target, 'shared'))
+  for (const name of CODEX_SKILLS) {
+    const srcDir = join(root, `plugin/skills/${name}`)
+    const dstDir = join(target, `orangu-${name}`)
+    mkdirSync(dstDir, { recursive: true })
+    writeFileSync(join(dstDir, 'SKILL.md'), codexSkill(name, readFileSync(join(srcDir, 'SKILL.md'), 'utf8')))
+    if (existsSync(join(srcDir, 'references'))) mirrorDir(join(srcDir, 'references'), join(dstDir, 'references'))
+    mkdirSync(join(dstDir, 'agents'), { recursive: true })
+    copyFileSync(join(root, `plugin/codex/${name}/openai.yaml`), join(dstDir, 'agents/openai.yaml'))
+  }
+}
 
 console.log('built CLI + Claude/Codex plugin bundles (client bundle %d bytes, css %d bytes)', clientJs.length, clientCss.length)
 

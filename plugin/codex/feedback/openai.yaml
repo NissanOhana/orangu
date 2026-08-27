@@ -1,0 +1,7 @@
+interface:
+  display_name: "Orangu Feedback"
+  short_description: "Rant safely through a reviewed localhost form"
+  default_prompt: "Use $orangu-feedback to ask before opening Orangu's private localhost beta-feedback form and pass only the selected context."
+
+policy:
+  allow_implicit_invocation: true

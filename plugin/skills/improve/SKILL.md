@@ -16,7 +16,7 @@ Read [the artifact contract](references/artifact-contract.md) before writing any
 
 Accept exactly one of: `<suggestion-id> [handoff flags]` from the report or localhost app; `<session-id|latest|path.jsonl|analysis.json>` for one session or current Analysis/SlimAnalysis JSON; `<aggregate.json> --scope repo|global` for current Aggregate JSON; or `--verify <suggestion-id> <later-input>` to compare an applied session-scope change with later evidence.
 
-Never open or parse a `.jsonl` transcript yourself; pass it to `orangu evidence`. If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs"` with the same arguments; if neither works, report the blocker and stop.
+Never open or parse a `.jsonl` transcript yourself; pass it to `orangu evidence`. If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs"` with the same arguments. If neither works, report the blocker and stop.
 
 Every accepted input can be diagnosed in chat. Persist only within the lifecycle boundary of its scope:
 
@@ -58,7 +58,7 @@ Do not write a proposal when evidence is missing, already addressed, or too weak
 
 ## 5. Report in chat
 
-Return a short ranked report: what happened, evidence, the proposed change, expected outcome, risks, how to verify later, sources, the saved proposal id and path, and the next action: `/orangu:apply <id>` in Claude Code or `$orangu-apply <id>` in Codex for session/repo proposals; review only for global. Say plainly that nothing was applied. Then briefly offer `/orangu:feedback` once; never launch it unless the user accepts.
+Return a short ranked report: what happened, evidence, the proposed change, expected outcome, risks, how to verify later, sources, the saved proposal id and path, and the next action: `/orangu:apply <id>` for session/repo proposals; review only for global. Say plainly that nothing was applied. Then briefly offer `/orangu:feedback` once; never launch it unless the user accepts.
 
 ## 6. Verify only with later evidence
 

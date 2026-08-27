@@ -133,7 +133,7 @@ A proposal cannot verify itself, and an application receipt does not prove that 
 
 ## Claude Code and Codex parity
 
-The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:harness`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI; `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts.
+The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:harness`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI; `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts. Both mirrors are generated from `plugin/skills/` by `scripts/build.mjs`, so one edit updates every host; `npm run verify` fails when a mirror is stale.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule. Host parity does not imply transcript parity: the local adapter still supports only the named Claude Code, Cowork, and Desktop session formats.
 

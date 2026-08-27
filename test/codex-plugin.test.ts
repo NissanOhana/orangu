@@ -63,6 +63,33 @@ describe('Codex plugin packaging', () => {
       expect(skill).toContain('../../bin/orangu.cli.mjs')
       expect(skill).not.toContain('Claude Code /insights')
       expect(skill).not.toContain('Codex commands')
+      // Codex has no allowed-tools key, no plugin root variable, and no slash commands
+      expect(skill, `${name} drops allowed-tools`).not.toContain('allowed-tools')
+      expect(skill, `${name} drops the Claude plugin root`).not.toContain('${CLAUDE_PLUGIN_ROOT}')
+      expect(skill, `${name} has no Claude slash command`).not.toMatch(/\/orangu:/)
+      expect(skill, `${name} routes with Codex names`).toContain('$orangu-')
+      expect(skill).toMatch(new RegExp(`^# ${name}$`, 'm'))
+    }
+  })
+
+  it('generates the mirror from plugin/skills instead of hand-writing it', () => {
+    // The invariant that matters: every non-frontmatter line of the Claude skill that carries no
+    // host-specific token appears verbatim in the mirror, so prose edits are one-file edits.
+    for (const name of ['improve', 'apply', 'feedback']) {
+      const claude = readText(`plugin/skills/${name}/SKILL.md`)
+      const codex = readText(`plugins/orangu/skills/orangu-${name}/SKILL.md`)
+      const body = claude.split('\n---\n', 2)[1] ?? ''
+      const lines = body.split('\n').filter((line) => line.trim() !== '' && !line.includes('/orangu:') && !line.includes('CLAUDE_PLUGIN_ROOT'))
+      expect(lines.length).toBeGreaterThan(5)
+      for (const line of lines) expect(codex, `orangu-${name} keeps: ${line.slice(0, 60)}`).toContain(line)
+      // the Codex-only inputs live beside the source, not in the generated tree
+      expect(existsSync(join(root, `plugin/codex/${name}/openai.yaml`))).toBe(true)
+      expect(readText(`plugins/orangu/skills/orangu-${name}/agents/openai.yaml`)).toBe(readText(`plugin/codex/${name}/openai.yaml`))
+    }
+    // references and the shared rules ride along so relative links resolve in both hosts
+    for (const ref of ['orangu-improve/references/artifact-contract.md', 'orangu-apply/references/application-contract.md', 'shared/untrusted-input.md']) {
+      expect(existsSync(join(root, 'plugins/orangu/skills', ref)), ref).toBe(true)
+      expect(readText(`plugins/orangu/skills/${ref}`)).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
     }
   })
 

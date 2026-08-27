@@ -22,4 +22,4 @@ Everything committed here is public product or contributor documentation. Local 
 - [Beta feedback issue form](../.github/ISSUE_TEMPLATE/beta-feedback.yml): the public fallback intake fields and privacy acknowledgement.
 - [Security](../SECURITY.md): private vulnerability reporting and safe transcript handling.
 
-The shipped workflow instructions live under [`plugin/skills/`](../plugin/skills/) for Claude Code and [`plugins/orangu/`](../plugins/orangu/) for the installable Codex plugin. [`.agents/skills/`](../.agents/skills/) contains byte-identical Codex source-checkout mirrors. They are executable product surfaces, not maintainer prompts.
+The shipped workflow instructions live under [`plugin/skills/`](../plugin/skills/) for Claude Code and [`plugins/orangu/`](../plugins/orangu/) for the installable Codex plugin. [`.agents/skills/`](../.agents/skills/) contains byte-identical Codex source-checkout mirrors; both Codex trees are generated from `plugin/skills/` by the build. They are executable product surfaces, not maintainer prompts.

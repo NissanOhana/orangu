@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
 import { CHANGE_CLASS_DEFINITIONS } from '../src/suggest/change-classes.js'
 import { allEntries } from '../src/suggest/catalog.js'
@@ -25,7 +25,14 @@ function markdownFiles(...dirs: string[]): string[] {
 // The normative shell-data and untrusted-content rules live in ONE file; each skill/agent keeps
 // two inline sentences plus a link. Guards read the pair so the guarantee stays reachable.
 const SHARED_RULES = 'plugin/skills/shared/untrusted-input.md'
-const withSharedRules = (path: string): string => `${readText(path)}\n${readText(SHARED_RULES)}`
+// every skill and agent links the shared rules from its own tree (plugin/skills, plugin/agents, or a
+// generated Codex mirror); follow that link so the guarantee is checked where the model would read it
+const withSharedRules = (path: string): string => {
+  const text = readText(path)
+  const link = /\]\(([^)]*untrusted-input\.md)\)/.exec(text)?.[1]
+  if (!link) throw new Error(`${path} does not link the shared untrusted-input rules`)
+  return `${text}\n${readText(join(dirname(path), link))}`
+}
 
 function pluginPublicCopy(): Array<{ path: string; text: string }> {
   const markdown = markdownFiles('plugin/skills', 'plugin/agents')
@@ -353,7 +360,7 @@ describe('plugin packaging', () => {
       ['Claude apply', 'plugin/skills/apply/SKILL.md'],
       ['Codex apply', '.agents/skills/orangu-apply/SKILL.md'],
     ] as const) {
-      const text = path.startsWith('plugin/') ? withSharedRules(path) : readText(path)
+      const text = withSharedRules(path)
       for (const rejected of ['NUL', 'carriage return', 'newline']) expect(text, `${name} rejects ${rejected}`).toContain(rejected)
       expect(text, `${name} prefers argv`).toMatch(/argument-array process API/i)
       expect(text, `${name} specifies POSIX quoting`).toMatch(/correctly escaped POSIX shell word/i)
@@ -381,7 +388,7 @@ describe('plugin packaging', () => {
       ['DevEx analyst', 'plugin/agents/harness-devex-analyst.md'],
       ['researcher', 'plugin/agents/harness-researcher.md'],
     ] as const) {
-      const text = path.startsWith('plugin/') ? withSharedRules(path) : readText(path)
+      const text = withSharedRules(path)
       for (const item of ['session', 'evidence', 'tool', 'path', 'title', 'error', 'proposal text']) {
         expect(text.toLowerCase(), `${name} marks ${item} untrusted`).toContain(item)
       }
