@@ -45,10 +45,11 @@ describe('release automation', () => {
     expect(workflow).toContain('node_modules/.bin/orangu --version')
   })
 
-  it('keeps Pages deployment manual and main-only', () => {
+  it('deploys Pages manually or automatically for main site changes only', () => {
     const pages = read('.github/workflows/pages.yml')
-    expect(pages).toMatch(/\non:\n\s+workflow_dispatch:/)
-    expect(pages).not.toMatch(/\n\s+push:/)
+    expect(pages).toMatch(/\non:\n  workflow_dispatch:\n  push:/)
+    const push = /\n  push:\n([\s\S]*?)\n\n# Least privilege/.exec(pages)?.[1]
+    expect(push).toBe("    branches: [main]\n    paths:\n      - 'site/**'\n      - '.github/workflows/pages.yml'")
     expect(pages).toContain("if: github.ref == 'refs/heads/main'")
     expect(pages).toContain('npm run verify:generated')
     expect(pages).toContain('node scripts/assert-offline.mjs --site')

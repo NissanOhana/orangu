@@ -8,6 +8,11 @@ name: Deploy landing page to GitHub Pages
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/pages.yml'
 
 # Least privilege: the deploy step needs pages + an OIDC token; nothing writes to contents.
 permissions:
