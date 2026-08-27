@@ -11,6 +11,8 @@ const generated = [
   'plugins/orangu/assets/logo.png',
   'src/report/generated/client-bundle.ts',
   'site/index.html',
+  'site/llms.txt',
+  'site/llms-full.txt',
   'site/sample.html',
 ]
 const before = new Map(generated.map((path) => [path, readFileSync(join(root, path))]))

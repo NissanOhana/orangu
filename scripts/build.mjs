@@ -94,8 +94,6 @@ console.log('built CLI + Claude/Codex plugin bundles (client bundle %d bytes, cs
 // site/index.html is generated from site/index.src.html and committed; regenerate after editing the source,
 // tokens.css, the design/brand assets, or the package.json version.
 // The 3D triad is authored inline in index.src.html.
-if (process.argv.includes('--site')) buildSite()
-
 function buildSite() {
   const src = readFileSync(join(root, 'site/index.src.html'), 'utf8')
   const pngUri = p => `data:image/png;base64,${readFileSync(join(root, p)).toString('base64')}`
@@ -112,4 +110,44 @@ function buildSite() {
     throw new Error(`buildSite: unresolved placeholder ${left}`)
   writeFileSync(join(root, 'site/index.html'), out)
   console.log('built site/index.html (%d KB)', Math.round(out.length / 1024))
+}
+
+// 6) llms.txt + llms-full.txt (part of --site). site/llms.txt is authored in site/llms.src.txt;
+// site/llms-full.txt concatenates three public docs verbatim with relative links made absolute.
+// The source list is hard-coded on purpose: nothing under docs/research, docs/plans, docs/runs or
+// docs/handoff (gitignored private paths) may ever be globbed into a published file.
+const LLMS_FULL_SOURCES = ['README.md', 'docs/USAGE.md', 'docs/DETERMINISM.md']
+const GITHUB_BLOB = 'https://github.com/NissanOhana/orangu/blob/main/'
+
+function absolutizeLinks(markdown, sourcePath) {
+  const dir = sourcePath.includes('/') ? sourcePath.slice(0, sourcePath.lastIndexOf('/') + 1) : ''
+  return markdown.replace(/\]\(((?!https?:|#|mailto:)[^)\s]+)\)/g, (_, target) => {
+    const [path, hash = ''] = target.split('#')
+    const segments = (dir + path).split('/')
+    const resolved = []
+    for (const seg of segments) {
+      if (seg === '..') resolved.pop()
+      else if (seg !== '.' && seg !== '') resolved.push(seg)
+    }
+    return `](${GITHUB_BLOB}${resolved.join('/')}${hash ? `#${hash}` : ''})`
+  })
+}
+
+function buildLlmsTxt() {
+  const llms = readFileSync(join(root, 'site/llms.src.txt'), 'utf8').replaceAll('{{version}}', pkg.version)
+  for (const left of llms.match(/\{\{[^}]+\}\}/g) ?? []) throw new Error(`buildLlmsTxt: unresolved placeholder ${left}`)
+  writeFileSync(join(root, 'site/llms.txt'), llms)
+  const full =
+    `# orangu llms-full.txt\n\n` +
+    `orangu ${pkg.version}. This file concatenates ${LLMS_FULL_SOURCES.join(', ')} from the repository, verbatim, ` +
+    `with relative links rewritten to ${GITHUB_BLOB}. The short index is llms.txt.\n` +
+    LLMS_FULL_SOURCES.map((path) => `\n\n---\n\n# ${path}\n\n${absolutizeLinks(readFileSync(join(root, path), 'utf8').trim(), path)}\n`).join('')
+  for (const left of full.match(/\{\{[^}]+\}\}/g) ?? []) throw new Error(`buildLlmsTxt: unresolved placeholder ${left}`)
+  writeFileSync(join(root, 'site/llms-full.txt'), full)
+  console.log('built site/llms.txt (%d KB) + site/llms-full.txt (%d KB)', Math.round(llms.length / 1024), Math.round(full.length / 1024))
+}
+
+if (process.argv.includes('--site')) {
+  buildSite()
+  buildLlmsTxt()
 }

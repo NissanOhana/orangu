@@ -1,0 +1,50 @@
+# orangu
+
+> Local, offline, deterministic observability for coding-agent sessions (Claude Code, Cowork and
+> Desktop). orangu 0.5.0 reads the `.jsonl` transcripts already on your disk and turns them into a
+> self-contained HTML report, a stable JSON API, cross-session aggregates, and a harness crosswalk
+> (what your config declares vs what your sessions actually used). Optional Claude Code skills turn
+> that evidence into reviewable proposals and receipts. The loop is observe -> see -> improve.
+
+Concretely, you can:
+
+- `npx orangu report` : build and open a self-contained HTML report for the latest session (`orangu report <id>` for another one).
+- `npx orangu serve` : a loopback (127.0.0.1) live viewer over every local session.
+- `npx orangu repo` / `npx orangu global` : aggregate every session for one repository, or everywhere.
+- `npx orangu harness` : declared skills, MCP servers, agents and hooks vs what sessions used or left idle, in tokens.
+- `npx orangu analyze <id> --json` : the full analysis object (`--slim` for the projection LLM consumers read).
+- `npx orangu list` / `watch` / `evidence` / `estimate` / `suggest` / `feedback` : listing, live-tail, bounded evidence for skills, sizing what an LLM would read, suggestion records, and a localhost feedback form.
+- In Claude Code, after `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`: `/orangu:analyze`, `/orangu:improve latest`, `/orangu:apply <sg_id>`, `/orangu:harness`, `/orangu:feedback`.
+
+Facts an LLM should not get wrong:
+
+- Tokens only. orangu never converts tokens into any other unit: no rates, no spend estimate, nothing with a symbol in front of it. Input, cache-read, cache-write and output tokens are its only usage metric because they are the only one the transcript records.
+- No model in the measurement path. Parsing, redaction, counting, reconciliation, matching and ranking are plain code; the same transcript in gives byte-identical analysis out.
+- Reports make zero network requests and ship `default-src 'none'`. Nothing is uploaded; there is no account, proxy, instrumentation, or telemetry.
+- Redaction is on by default. Prompt and result text are omitted from shareable output unless `--include-text` is requested.
+- Skills read `orangu ... --json` / `orangu evidence`, never the raw `.jsonl`.
+- Proposals are never auto-applied. `/orangu:apply` runs only on an explicitly reviewed session or repo proposal; global (whole-harness) proposals are review-only.
+- Quality, time and tokens are reported as separate axes. There is no composite score.
+- It reads history retroactively: every session already on disk is analyzable the minute it is installed.
+
+## Docs
+
+- [README](https://github.com/NissanOhana/orangu/blob/main/README.md): what it is, quick start, design principles, positioning.
+- [Usage](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md): every command, report and app surfaces, supported inputs and limits.
+- [Determinism and skill authority](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md): which layer owns evidence, proposals, application and verification.
+- [Privacy](https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md): what stays local, what redaction removes, what to check before sharing.
+- [Data contracts](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md): Analysis, evidence, proposal and receipt shapes.
+- [Architecture](https://github.com/NissanOhana/orangu/blob/main/docs/ARCHITECTURE.md): pipeline, modules, build and correctness gates.
+- [Skills](https://github.com/NissanOhana/orangu/tree/main/plugin/skills): the shipped Claude Code skill instructions.
+
+## Getting started
+
+- Requires Node.js 20 or newer. Zero runtime dependencies.
+- `npx orangu report` inspects the latest local session; `npx orangu serve` follows all of them live.
+- Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`.
+- [Sample report](https://nissanohana.github.io/orangu/sample.html): a synthetic, deterministic report you can open without installing anything.
+
+## Optional
+
+- [llms-full.txt](https://nissanohana.github.io/orangu/llms-full.txt): README, usage and determinism docs concatenated (under 40 KB).
+- [npm package](https://www.npmjs.com/package/orangu) and [GitHub repository](https://github.com/NissanOhana/orangu) (MIT).

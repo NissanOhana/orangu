@@ -1,7 +1,7 @@
 // Offline gate.
 //   node scripts/assert-offline.mjs                 render the latest session via dist/orangu.js and check it
 //   node scripts/assert-offline.mjs --file <html>   check an already-rendered report file
-//   node scripts/assert-offline.mjs --site          check site/index.html (fonts + explicit documentation/repository links allowed)
+//   node scripts/assert-offline.mjs --site          check site/index.html + site/llms*.txt (fonts + explicit documentation/repository links allowed)
 // Report checks exclude the embedded `#orangu-data` JSON block: data (e.g. outcomes.prLinks) may cite
 // https:// URLs as text — the page itself must still make zero requests.
 import { execFileSync } from 'node:child_process'
@@ -24,11 +24,14 @@ if (args.includes('--site')) {
     'code.claude.com',
     'learn.chatgpt.com',
   ])
-  for (const url of html.match(/https?:\/\/[^\s"'<>)]+/g) ?? []) {
-    let host = ''
-    try { host = new URL(url).host } catch { /* not a real URL */ }
-    if (!allowedHosts.has(host)) fail('disallowed origin', url)
+  const checkHosts = (text, label) => {
+    for (const url of text.match(/https?:\/\/[^\s"'<>)]+/g) ?? []) {
+      let host = ''
+      try { host = new URL(url).host } catch { /* not a real URL */ }
+      if (!allowedHosts.has(host)) fail(`disallowed origin (${label})`, url)
+    }
   }
+  checkHosts(html, path)
   for (const [re, label] of [
     [/\bfetch\s*\(/, 'fetch()'],
     [/XMLHttpRequest/, 'XMLHttpRequest'],
@@ -39,8 +42,24 @@ if (args.includes('--site')) {
     const m = html.match(re)
     if (m) fail(label, m[0])
   }
+  // llms.txt + llms-full.txt are plain text for fetching agents: same host allowlist (plus the
+  // Pages host and npm, which they link as text), and never any markup that could load anything.
+  const textHosts = new Set([...allowedHosts, 'raw.githubusercontent.com', 'nissanohana.github.io', 'www.npmjs.com'])
+  for (const txt of ['site/llms.txt', 'site/llms-full.txt']) {
+    if (!existsSync(txt)) { fail('missing generated file', txt); continue }
+    const text = readFileSync(txt, 'utf8')
+    for (const url of text.match(/https?:\/\/[^\s"'<>)]+/g) ?? []) {
+      let host = ''
+      try { host = new URL(url).host } catch { /* not a real URL */ }
+      if (!textHosts.has(host)) fail(`disallowed origin (${txt})`, url)
+    }
+    for (const [re, label] of [[/<script/i, 'script tag'], [/<iframe/i, 'iframe'], [/<link\b/i, 'link tag']]) {
+      const m = text.match(re)
+      if (m) fail(`${label} in ${txt}`, m[0])
+    }
+  }
   if (bad) process.exit(1)
-  console.log('offline OK (site): only allowlisted font, repository, and official documentation origins, %d KB', Math.round(html.length / 1024))
+  console.log('offline OK (site): only allowlisted font, repository, and official documentation origins, %d KB (+ llms.txt, llms-full.txt)', Math.round(html.length / 1024))
   process.exit(0)
 }
 
