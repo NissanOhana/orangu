@@ -76,7 +76,8 @@ function contextSpark(a: Analysis): string {
 
 function whereNext(ctx: Ctx, a: Analysis): string {
   const s = a.summary
-  const n = a.insights.length
+  // the same rows the Suggest screen renders, so the count here equals the rows there
+  const n = planRows('session', a, undefined).length
   const links = [
     { screen: 'timeline', label: s.toolErrors ? `Timeline · ${num(s.toolErrors)} error${s.toolErrors === 1 ? '' : 's'} only` : `Timeline · ${num(s.turns)} turns`, state: s.toolErrors ? { errorsOnly: true } : {} },
     { screen: 'tools', label: `Tools · ${num(s.toolCalls)} calls, ${num(s.toolErrors)} errors`, state: {} },

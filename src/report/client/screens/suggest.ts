@@ -1,9 +1,10 @@
 /**
- * Suggest (§5): hero + scope chips + plan items with the kickoff row: "handled by" skill pill,
- * status chip and a copy-only improve handoff. The report never launches a model process.
+ * Suggest (§5): hero + scope chips + plan items. Each row is one finding with its severity dot, its
+ * savings as a share of the session, the evidence, the fix, and the handoff explained as three steps:
+ * copy the improve command → paste it in Claude Code in this workspace → the proposal appears under
+ * Saved proposals. The report never launches a model process; copying a string queues nothing.
  * Rows per scope come from suggest-rows.ts (pure): session = this session's insights; repo/global =
  * the aggregate's crossFindings. Status chips prefer canonical v2 identity and retain v1 fallback.
- * File mode: copy sets a local `queued` chip.
  */
 import type { Ctx } from '../app.js'
 import type { SuggestionViewRecord } from '../../../model/app-data.js'
@@ -15,8 +16,8 @@ import { h, wireCopyButtons } from '../dom.js'
 import { chip } from '../components/chips.js'
 import { commandBlock } from '../components/command.js'
 import { emptyHero } from '../components/empty.js'
-import { savingsText } from '../components/finding.js'
 import { mascotBox } from '../components/mascot-box.js'
+import { savingsShare } from '../derive.js'
 import {
   PROPOSAL_LIST_LIMIT,
   findingForRow,
@@ -29,7 +30,10 @@ import {
 } from '../suggest-rows.js'
 import { plainSentence } from '../strings.js'
 
-type ChipState = Exclude<SuggestionStatus, 'kicked-off' | 'rejected'> | 'queued' | 'running' | 'dismissed'
+type ChipState = Exclude<SuggestionStatus, 'kicked-off' | 'rejected'> | 'running' | 'dismissed'
+
+/** The one-time plugin install, typed inside Claude Code (not a shell command). */
+export const PLUGIN_INSTALL = '/plugin marketplace add NissanOhana/orangu · /plugin install orangu'
 
 const trustedVerification = (record: SuggestionViewRecord | undefined): boolean => record?.verificationTrusted === true
 
@@ -79,6 +83,7 @@ function improveHandoffs(commands: { claude: string }): string {
   return `<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${commandBlock(commands.claude)}</div></div>`
 }
 
+/** A change class is shown only where one exists: on the proposal that carries it. */
 function proposalDetails(record: SuggestionViewRecord | undefined): string {
   if (!record || !hasValidProposal(record)) return ''
   const proposal = record.proposal
@@ -96,22 +101,32 @@ function savedProposalItem(record: SuggestionViewRecord): string {
   return `<details class="saved-proposal" id="saved-${esc(record.id)}"><summary><span class="chev" aria-hidden="true">▸</span><b>${esc(boundedText(record.proposal?.title))}</b>${statusChip(chipState(record.status), '', trustedVerification(record))}</summary><div class="saved-proposal-body">${proposalDetails(record)}</div></details>`
 }
 
-function savedProposalInbox(records: SuggestionViewRecord[]): string {
-  if (!records.length) return ''
-  return `<section class="sg-inbox card pad mb16" aria-label="Saved proposals"><div class="sg-inbox-head"><div class="card-title">Saved proposals · ${records.length}</div><span class="eyebrow">Localhost only</span></div>${records.map(savedProposalItem).join('')}</section>`
+/** Serve only: the inbox is the persisted store, so a file report never renders it, not even empty. */
+function savedProposalInbox(records: SuggestionViewRecord[], mode: Ctx['data']['mode']): string {
+  if (mode !== 'serve') return ''
+  const body = records.length
+    ? records.map(savedProposalItem).join('')
+    : '<p class="small muted" style="margin:0">Nothing yet. A proposal drafted by /orangu:improve for this scope lands here.</p>'
+  return `<section class="sg-inbox card pad mb16" aria-label="Saved proposals"><div class="sg-inbox-head"><div class="card-title">Saved proposals · ${records.length}</div><span class="eyebrow">Localhost only</span></div>${body}</section>`
+}
+
+/** Where the proposal shows up after step 2: in the inbox below (serve) or in orangu serve (file). */
+function stepThree(mode: Ctx['data']['mode']): string {
+  return mode === 'serve' ? 'The proposal appears below under Saved proposals.' : 'The proposal is saved under ~/.orangu; open orangu serve to review it.'
 }
 
 function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: SuggestionViewRecord | undefined): string {
   const aud = ctx.audience
-  const impact = savingsText(row.savings)
-  const effort = rec?.proposal?.effort ?? '–'
+  const share = savingsShare(row.savings, ctx.state.scope === undefined || ctx.state.scope === 'session' ? ctx.a?.summary.totalTokens : undefined, row.ruleId)
+  const effort = rec?.proposal?.effort
   const state = chipState(rec?.status)
   const failure = kickoffFailureMessage(rec)
+  const cwd = ctx.a?.session.cwd
   const examples = row.sessionIds
     .map((id) => (ctx.data.mode === 'serve' ? `<a class="exch" href="#overview?s=${esc(id)}">${esc(id.slice(0, 8))}</a>` : `<span class="exch">${esc(id.slice(0, 8))}</span>`))
     .join('')
   return `<details class="finding" data-sid="${esc(sid)}" data-rule="${esc(row.ruleId)}">
-    <summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span><b class="sg-t">${esc(plainSentence(row.title, aud))}</b>${impact ? `<span class="fsave sg-save">${esc(impact)}</span>` : ''}<span class="pill">effort ${esc(effort)}</span></summary>
+    <summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span>${row.severity ? `<span class="sev ${esc(row.severity)}" title="${esc(row.severity)}"></span>` : ''}<b class="sg-t">${esc(plainSentence(row.title, aud))}</b>${share ? `<span class="fsave sg-save" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${effort ? `<span class="pill">effort ${esc(effort)}</span>` : ''}</summary>
     <div class="fbody sg-body">
       <div class="sg-ev"><b>Evidence.</b> ${esc(plainSentence(row.detail, aud))} ${aud === 'plain' ? '' : `<span class="pill">${esc(row.ruleId)}</span>`}</div>
       ${row.recommendation ? `<div class="rec sg-fix"><b>Fix.</b> ${esc(plainSentence(row.recommendation, aud))}</div>` : ''}
@@ -121,9 +136,12 @@ function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: Sugges
         <span class="mono115">handled by</span>
         <span class="pill">orangu:improve</span>
         ${statusChip(state, failure, trustedVerification(rec))}
-        <span class="grow"></span>
-        <button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button>
       </div>
+      <ol class="steps" aria-label="Hand off to Claude Code">
+        <li><button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
+        <li>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</li>
+        <li>${stepThree(ctx.data.mode)}</li>
+      </ol>
       <div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
       <div class="kick-msg small muted" aria-live="polite">${esc(failure)}</div>
     </div>
@@ -166,7 +184,11 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
     ? boundRows.map((r, i) => planItem(ctx, r.row, i + 1, r.sid, r.record)).join('')
     : emptyHero({ title: 'Nothing to improve was found', hint: 'Ran clean. Re-run after your next session.' })
 
+  // the taxonomy is shown on demand, under the first-time note, never as a header before any proposal exists
   const types = CHANGE_CLASS_LABELS.map((label) => `<span class="sigchip">${esc(label)}</span>`).join('')
+  const install = boundRows.length
+    ? `<details class="card pad mb16 sg-install"><summary><span class="chev" aria-hidden="true">▸</span>First time? Install the orangu plugin in Claude Code</summary><div class="mt8">${commandBlock(PLUGIN_INSTALL, '>')}<p class="small muted" style="margin:8px 0 0">Two commands typed inside Claude Code, once. After that every improve command above works. A proposal changes exactly one of:</p><div class="chiprow mt8">${types}</div></div></details>`
+    : ''
   const mega = scope === 'session' || !agg ? '' : (ctx.megaReview?.(scope) ?? '')
 
   const foot = scope === 'session'
@@ -180,10 +202,9 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
       ${mascotBox(48)}
       <div class="grow sg-hero"><div class="herotitle">Improvement plan</div><div class="sg-sub">${esc(heroSub)}</div></div>
     </div>
-    <div class="card pad mb16"><div class="card-title">Measured → matched → proposed</div><p class="narrative">Local evidence and catalog matches narrow the change class. Optional AI drafts a reviewable proposal.</p><div class="chiprow mt16">${types}</div></div>
     <div class="chiprow">${scopeChips}</div>
-    ${scope !== 'session' && !agg ? emptyHero({ title: 'This scope needs orangu serve', command: 'orangu serve' }) : items}
-    ${savedProposalInbox(saved)}
+    ${scope !== 'session' && !agg ? emptyHero({ title: 'This scope needs orangu serve', command: 'orangu serve' }) : items + install}
+    ${savedProposalInbox(saved, ctx.data.mode)}
     ${mega}
     <p class="small muted sg-foot">${foot}</p>
   </section>`)
@@ -195,6 +216,7 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
       ctx.go({ scope: s === 'session' ? undefined : s })
     }),
   )
+  const cwd = a?.session.cwd
   const wireAction = (selector: string): void => {
     el.querySelectorAll<HTMLButtonElement>(selector).forEach((button) =>
       button.addEventListener('click', () => {
@@ -207,11 +229,12 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
         const request = { mode: 'copy' as const, suggestionId: sid, finding: row.finding }
         const action = ctx.ds.kickoff(request).then((result) =>
           result.ok
-            ? { kind: 'copied' as const, message: 'Claude command copied.', response: result.response }
+            ? { kind: 'copied' as const, message: `Claude command copied. Paste it in Claude Code${cwd ? ` in ${cwd}` : ''}.`, response: result.response }
             : { kind: 'error' as const, message: result.message, ...(result.response ? { response: result.response } : {}) },
         )
         void action.then((result) => {
           button.removeAttribute('aria-busy')
+          // the aria-live line is the only confirmation: copying a string queues nothing, so no chip changes
           message.textContent = result.message
           if ('response' in result && result.response?.commands) {
             const box = item.querySelector<HTMLElement>('.kick-cmd')!
@@ -219,8 +242,6 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
             wireCopyButtons(box)
             if (result.kind === 'copied') box.querySelector<HTMLButtonElement>('[data-copy]')?.click()
           }
-          const state = result.kind === 'copied' ? 'queued' : undefined
-          if (state) item.querySelector('.status-chip')!.outerHTML = statusChip(state)
         })
       }),
     )

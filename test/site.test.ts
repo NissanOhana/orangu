@@ -799,8 +799,10 @@ describe('site/sample.html (published sample report)', () => {
       ['try', 'brain', 'iac'].join(''),
       ['d3d3', 'adfd'].join(''),
     ]
+    // the public plugin marketplace slug (README "Install the plugin") is the one place the owner's handle may appear
+    const scanned = sample.replace(/NissanOhana\/orangu/g, '').toLowerCase()
     for (const marker of ['private-user', 'private-project', privatePath, 'private-host', 'real-session-marker', ...knownPrivateMarkers])
-      expect(sample.toLowerCase(), `leak: ${marker}`).not.toContain(marker.toLowerCase())
+      expect(scanned, `leak: ${marker}`).not.toContain(marker.toLowerCase())
     expect(sample).toContain('5a91c73e')
   })
 })

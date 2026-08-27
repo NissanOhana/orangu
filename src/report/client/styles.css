@@ -299,6 +299,11 @@ svg { display: block; max-width: 100%; }
 .sg-body { padding-left: 56px; }
 .sg-save { font-weight: 700; }
 .sg-cmd { margin-top: 8px; }
+.steps { list-style: none; counter-reset: step; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--ink2); }
+.steps > li { display: flex; align-items: center; gap: 10px; counter-increment: step; }
+.steps > li::before { content: counter(step); width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--border2); display: grid; place-items: center; font: 700 11px var(--mono); color: var(--ink3); flex: none; }
+.sg-install > summary { cursor: pointer; font-size: 13px; color: var(--ink2); display: flex; align-items: center; gap: 8px; }
+.mt8 { margin-top: 8px; }
 .sg-hero { min-width: 220px; }
 .sg-sub { font-size: 13px; color: var(--ink2); margin-top: 2px; }
 .sg-foot { margin: 14px 0 0; }
@@ -321,7 +326,6 @@ svg { display: block; max-width: 100%; }
 .saved-proposal-body { min-width: 0; padding: 0 2px 12px 21px; }
 .status-chip { font-family: var(--mono); font-size: 11.5px; border-radius: 999px; padding: 3px 10px; border: 1px solid var(--border); }
 .status-chip[data-status="new"] { color: var(--ink3); }
-.status-chip[data-status="queued"] { color: var(--warn); }
 .status-chip[data-status="running"] { color: var(--ink1); background: var(--accent-weak); }
 .status-chip[data-status="proposed"] { color: var(--good); }
 .status-chip[data-status="applied"] { color: var(--good); background: color-mix(in srgb, var(--good) 15%, transparent); }

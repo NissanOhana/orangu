@@ -25,8 +25,9 @@ afterEach(() => {
 })
 
 const analysis = {
-  session: { id: 'session-selected' },
-  insights: [{ id: 'ins-1', ruleId: 'reread-files', title: 'Re-read files', detail: 'Read twice', recommendation: 'Cache it' }],
+  session: { id: 'session-selected', cwd: '~/Code/demo' },
+  summary: { totalTokens: 100_000 },
+  insights: [{ id: 'ins-1', ruleId: 'reread-files', severity: 'medium', title: 'Re-read files', detail: 'Read twice', recommendation: 'Cache it', savings: { tokens: 25_000, estimated: true } }],
 } as unknown as Analysis
 
 function proposalRecord(id: string, over: Partial<SuggestionViewRecord> = {}): SuggestionViewRecord {
@@ -198,6 +199,43 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).not.toContain('Localhost only')
     expect(markup).not.toContain('Saved proposals')
     expect(markup).not.toContain('$orangu-apply')
+  })
+
+  // A4: the screen explains its own handoff instead of ending at a bare button.
+  it('renders the empty inbox on localhost so the third step has somewhere to point', () => {
+    renderSuggest(context('serve', []))
+    expect(markup).toContain('Saved proposals · 0')
+    expect(markup).toContain('Nothing yet.')
+    expect(markup).toContain('The proposal appears below under Saved proposals.')
+  })
+
+  it('walks the handoff in three steps with the workspace, and offers the one-time plugin install', () => {
+    renderSuggest(context('file', []))
+    expect(markup).toContain('aria-label="Hand off to Claude Code"')
+    expect(markup).toContain('Copy improve command')
+    expect(markup).toContain('Paste it in Claude Code in <span class="mono">~/Code/demo</span>.')
+    expect(markup).toContain('open orangu serve to review it')
+    expect(markup).toContain('/plugin marketplace add NissanOhana/orangu')
+    expect(markup).toContain('/plugin install orangu')
+    expect(markup).toContain('<span class="p" aria-hidden="true">&gt;</span>')
+  })
+
+  it('shows a severity dot and the savings as a share of the session; no taxonomy chips, no "effort –", no queued chip', () => {
+    renderSuggest(context('file', []))
+    expect(markup).toContain('<span class="sev medium" title="medium"></span>')
+    expect(markup).toContain('~25% of this session')
+    expect(markup).toContain('title="≈25.0k tokens of the 100k this session measured; estimated by rule reread-files"')
+    // the taxonomy no longer leads the screen; it sits under the collapsed first-time note
+    expect(markup).not.toContain('Measured → matched → proposed')
+    expect(markup.indexOf('sigchip')).toBeGreaterThan(markup.indexOf('sg-install'))
+    expect(markup).not.toContain('effort –')
+    expect(markup).not.toContain('queued')
+    // the change class still shows where one exists: on a proposal
+    const row = planRows('session', analysis, undefined)[0]!
+    const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
+    renderSuggest(context('serve', [proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId })]))
+    expect(markup).toContain('<span class="pill">instruction</span>')
+    expect(markup).toContain('<span class="pill">effort S</span>')
   })
 
   it('does not offer apply for an unstructured legacy proposal', () => {

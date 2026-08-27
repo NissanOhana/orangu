@@ -35,6 +35,8 @@ export interface PlanRow {
   cohortFingerprint?: string
   /** repo/global: how many sessions the finding recurs in */
   sessions?: number
+  /** the rule's severity (insights and crossFindings both carry one); renders as the row's dot */
+  severity?: string
 }
 
 /** Privacy stripping can blank generated insight copy; identity and UX still require a safe title. */
@@ -71,6 +73,7 @@ export function planRowForInsight(i: Insight, sessionId: string | undefined): Pl
     savings: i.savings,
     sessionIds: sessionId ? [sessionId] : [],
     insightId: i.id,
+    severity: i.severity,
   }
 }
 
@@ -87,6 +90,7 @@ export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: A
         savings: boundedSavings(f),
         sessionIds: f.exampleSessionIds,
         sessions: f.sessions,
+        severity: f.severity,
         ...(cohortFingerprint ? { cohortFingerprint } : {}),
       }
     })
