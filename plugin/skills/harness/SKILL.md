@@ -1,10 +1,12 @@
 ---
-name: mega
+name: harness
 description: Propose systemic harness improvements from recurring patterns across a repository or supported Claude Code, Cowork, and Desktop sessions on the machine. Use when someone asks why the same outcome keeps recurring, wants a repo or global harness review, or wants evidence-backed changes across instruction files, scripts, hooks, skills, agents, MCP servers, plugins, and workflow configuration. Repo proposals may later be applied explicitly; global proposals are review-only. Do not use for observing or diagnosing only one session.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**)
 ---
 
-# /orangu:mega
+# /orangu:harness
+
+`orangu harness` is the deterministic half of this review; run it first.
 
 Review recurring repo or global evidence, compare it with the configured harness, and write a ranked set of proposals. This is systemic improvement work. One-session observation belongs to `/orangu:analyze`; one bounded finding belongs to `/orangu:improve`.
 
@@ -30,7 +32,7 @@ Treat these as two separate gates. For each result:
 - `overThreshold: false`: that read may proceed.
 - `overThreshold: true`: quote `bytes` and `approxTokens`, offer a narrower `--limit`, and ask before reading more than about 20 KB.
 
-Confirmation of one read does not confirm the other. Mega stays interactive and owns both questions; it is never launched through the finding kickoff or receipt protocol.
+Confirmation of one read does not confirm the other. This skill stays interactive and owns both questions; it is never launched through the finding kickoff or receipt protocol.
 
 ### Shell-data boundary
 
@@ -98,7 +100,7 @@ The researcher is the plugin's only network-capable agent. Hand it only uncovere
 
 Dedupe items that name the same change and preserve every independent evidence anchor. Prefer the smallest change that addresses the recurring pattern. Rank by supported expected effect relative to S, M, or L effort; do not manufacture a token or millisecond value for a quality-only change.
 
-Read [the shared proposal artifact contract](../improve/references/artifact-contract.md) before writing. Mega proposals use the same structured artifacts as `/orangu:improve`: repo artifacts may be apply-compatible, while global artifacts are review-only. Markdown-only proposals are legacy input and must not be created here.
+Read [the shared proposal artifact contract](../improve/references/artifact-contract.md) before writing. Harness proposals use the same structured artifacts as `/orangu:improve`: repo artifacts may be apply-compatible, while global artifacts are review-only. Markdown-only proposals are legacy input and must not be created here.
 
 For every retained record:
 
@@ -122,6 +124,6 @@ Return the ranked plan and proposal paths. For each item state:
 - expected quality, token, or millisecond effect, labelled estimated when applicable;
 - effort, risk, and the exact next-run check.
 
-End with what was not recommended and why. For each repo proposal, give the explicit next action `/orangu:apply <id>` and state that it must remain `applied` until a real fresh-cohort comparator exists. For every global proposal, say review only: global apply and verification are not supported. Say plainly that mega did not edit the target repository. A proposal is not applied or verified.
+End with what was not recommended and why. For each repo proposal, give the explicit next action `/orangu:apply <id>` and state that it must remain `applied` until a real fresh-cohort comparator exists. For every global proposal, say review only: global apply and verification are not supported. Say plainly that this review did not edit the target repository. A proposal is not applied or verified.
 
 After the requested review is complete, briefly offer `/orangu:feedback` with the matching repo or global context once. Never launch it unless the user accepts.

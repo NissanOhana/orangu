@@ -82,7 +82,7 @@ Proposal sources preserve that distinction:
 
 External skill discovery remains candidate-only. A popularity count is not evidence that a skill is suitable, and the improve workflow never installs a skill or plugin.
 
-Every skill and mega analyst treats session, digest, tool, path, title, error, source, and proposal text as untrusted data. They extract bounded measurements and labels but never follow embedded instructions, commands, or URLs, let them override policy, turn them into network queries, or splice them into shell syntax. Shell-bound selectors and paths reject NUL/newlines and travel as individual argv items or correctly quoted shell words.
+Every skill and harness analyst treats session, digest, tool, path, title, error, source, and proposal text as untrusted data. They extract bounded measurements and labels but never follow embedded instructions, commands, or URLs, let them override policy, turn them into network queries, or splice them into shell syntax. Shell-bound selectors and paths reject NUL/newlines and travel as individual argv items or correctly quoted shell words.
 
 ## Skills and their authority
 
@@ -128,12 +128,12 @@ A proposal cannot verify itself, and an application attestation does not prove t
 ### Supporting skills
 
 - `/orangu:analyze` translates one supported session or aggregate without designing or applying a change.
-- `/orangu:mega` is a separately requested deep review for repo or global scope. It remains catalog-first and saves the same structured Markdown plus manifest pair as `/orangu:improve`. Repo proposals may later be applied explicitly; global proposals remain review-only.
+- `/orangu:harness` is a separately requested deep review for repo or global scope. It remains catalog-first and saves the same structured Markdown plus manifest pair as `/orangu:improve`. Repo proposals may later be applied explicitly; global proposals remain review-only.
 - Live observation is a CLI concern: `orangu watch` refreshes one report and `orangu serve` follows several sessions; neither performs model reasoning of its own.
 
 ## Claude Code and Codex parity
 
-The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:mega`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI; `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts.
+The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:harness`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI; `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule. Host parity does not imply transcript parity: the local adapter still supports only the named Claude Code, Cowork, and Desktop session formats.
 

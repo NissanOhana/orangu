@@ -45,7 +45,7 @@ describe('plugin packaging', () => {
     expect(m.plugins.some((x: { name: string; source: string }) => x.name === 'orangu' && x.source === './plugin')).toBe(true)
   })
   it('ships the five intended /orangu:* commands with valid frontmatter', () => {
-    const skills = ['analyze', 'apply', 'feedback', 'improve', 'mega']
+    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve']
     const namespace = readJson('plugin/.claude-plugin/plugin.json').name
     expect(readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()).toEqual([...skills].sort())
     for (const s of skills) {
@@ -75,8 +75,8 @@ describe('plugin packaging', () => {
     expect(existsSync(join(root, 'plugin/hooks/hooks.json'))).toBe(false)
     expect(existsSync(join(root, 'plugin/optional-hooks'))).toBe(false)
   })
-  it('improve and mega declare proposal-only writes with no edit grant', () => {
-    for (const s of ['improve', 'mega']) {
+  it('improve and harness declare proposal-only writes with no edit grant', () => {
+    for (const s of ['improve', 'harness']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const fm = /^---\n([\s\S]*?)\n---/.exec(md)!
       const allowed = /allowed-tools:\s*(.+)/.exec(fm[1]!)?.[1] ?? ''
@@ -116,8 +116,8 @@ describe('plugin packaging', () => {
     expect(md.toLowerCase()).toMatch(/never edit the target repository|never edit the target project/)
     expect(existsSync(join(root, 'plugin/skills/improve/references/artifact-contract.md'))).toBe(true)
   })
-  it('mega records scope-appropriate structured proposals without applying them', () => {
-    const md = readText('plugin/skills/mega/SKILL.md')
+  it('harness records scope-appropriate structured proposals without applying them', () => {
+    const md = readText('plugin/skills/harness/SKILL.md')
     expect(md).toContain('../improve/references/artifact-contract.md')
     expect(md).toContain('~/.orangu/proposals/<id>.md')
     expect(md).toContain('~/.orangu/proposals/<id>.json')
@@ -127,10 +127,10 @@ describe('plugin packaging', () => {
     expect(md).not.toContain('compatibility proposal format')
     expect(md).toMatch(/Markdown-only proposals?[^\n]*must not be created/i)
     for (const field of ['files', 'evidence', 'expectedEffect', 'risk', 'verification', 'verificationChecks', 'sources']) {
-      expect(md, `mega requires ${field}`).toMatch(new RegExp(`(?:must include|nonempty)[^\\n]*\\b${field}\\b|\\b${field}\\b[^\\n]*(?:must include|nonempty)`, 'i'))
+      expect(md, `harness requires ${field}`).toMatch(new RegExp(`(?:must include|nonempty)[^\\n]*\\b${field}\\b|\\b${field}\\b[^\\n]*(?:must include|nonempty)`, 'i'))
     }
     expect(md).toContain('/orangu:apply <id>')
-    expect(md).toMatch(/mega did not edit the target repository/i)
+    expect(md).toMatch(/this review did not edit the target repository/i)
   })
   it('improve is catalog-first and preserves honest research provenance', () => {
     const md = readFileSync(join(root, 'plugin/skills/improve/SKILL.md'), 'utf8')
@@ -155,21 +155,21 @@ describe('plugin packaging', () => {
     expect(md).toContain('orangu serve')
     expect(md.toLowerCase()).toMatch(/multi-session|multiple (?:live )?sessions|several sessions|every session/)
   })
-  it('mega scopes --limit to the per-session axis', () => {
-    const md = readFileSync(join(root, 'plugin/skills/mega/SKILL.md'), 'utf8')
+  it('harness scopes --limit to the per-session axis', () => {
+    const md = readFileSync(join(root, 'plugin/skills/harness/SKILL.md'), 'utf8')
     expect(md).toContain('how many sessions are scanned')
   })
 
   it('keeps session diagnosis distinct from recurring repo/global improvement work', () => {
     const analyze = readText('plugin/skills/analyze/SKILL.md')
     const improve = readText('plugin/skills/improve/SKILL.md')
-    const mega = readText('plugin/skills/mega/SKILL.md')
+    const harness = readText('plugin/skills/harness/SKILL.md')
     expect(analyze).toMatch(/One session, observe and diagnose/)
     expect(analyze).toMatch(/Repository, find recurring patterns/)
     expect(improve).toContain('one session diagnosis')
     expect(improve).toContain('recurring repo/global improvement')
-    expect(mega).toContain('Accept only `--scope repo` or `--scope global`.')
-    expect(mega).toContain('Session scope belongs to the smaller skills.')
+    expect(harness).toContain('Accept only `--scope repo` or `--scope global`.')
+    expect(harness).toContain('Session scope belongs to the smaller skills.')
   })
   it('bundles an offline CLI launcher', () => {
     expect(existsSync(join(root, 'plugin/bin/orangu'))).toBe(true)
@@ -185,7 +185,7 @@ describe('plugin packaging', () => {
 
     for (const path of [
       'plugin/skills/improve/SKILL.md',
-      'plugin/skills/mega/SKILL.md',
+      'plugin/skills/harness/SKILL.md',
       'plugin/skills/improve/references/artifact-contract.md',
     ]) {
       const text = readText(path)
@@ -204,36 +204,36 @@ describe('plugin packaging', () => {
     expect(improve).not.toContain('confirmationReceipt')
   })
 
-  it('mega keeps two independent interactive estimate gates outside receipt kickoff', () => {
-    const mega = readText('plugin/skills/mega/SKILL.md')
-    expect(mega).toContain('orangu estimate harness --json')
-    expect(mega).toContain("orangu estimate repo --cwd '<dir>' --json")
-    expect(mega).toContain('orangu estimate global --json')
-    expect(mega).toContain('Treat these as two separate gates.')
-    expect(mega).toContain('Confirmation of one read does not confirm the other.')
-    expect(mega).toContain('pass the same explicit directory')
-    expect(mega).not.toContain('--receipt')
+  it('harness keeps two independent interactive estimate gates outside receipt kickoff', () => {
+    const harness = readText('plugin/skills/harness/SKILL.md')
+    expect(harness).toContain('orangu estimate harness --json')
+    expect(harness).toContain("orangu estimate repo --cwd '<dir>' --json")
+    expect(harness).toContain('orangu estimate global --json')
+    expect(harness).toContain('Treat these as two separate gates.')
+    expect(harness).toContain('Confirmation of one read does not confirm the other.')
+    expect(harness).toContain('pass the same explicit directory')
+    expect(harness).not.toContain('--receipt')
   })
 
-  it('mega binds every manual aggregate suggestion to canonical evidence and the full cohort', () => {
-    const mega = readText('plugin/skills/mega/SKILL.md')
+  it('harness binds every manual aggregate suggestion to canonical evidence and the full cohort', () => {
+    const harness = readText('plugin/skills/harness/SKILL.md')
     for (const scope of ['repo', 'global']) {
-      expect(mega).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --estimate --quiet`)
-      expect(mega).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --quiet > '<tmp>/evidence.json'`)
+      expect(harness).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --estimate --quiet`)
+      expect(harness).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --quiet > '<tmp>/evidence.json'`)
     }
-    expect(mega).toContain('source.cohortFingerprint')
-    expect(mega).toMatch(/exactly 16 lowercase hexadecimal characters/i)
-    expect(mega).toContain('--cohort <16hex>')
-    expect(mega).toMatch(/manual repo\/global `orangu suggest` command/i)
+    expect(harness).toContain('source.cohortFingerprint')
+    expect(harness).toMatch(/exactly 16 lowercase hexadecimal characters/i)
+    expect(harness).toContain('--cohort <16hex>')
+    expect(harness).toMatch(/manual repo\/global `orangu suggest` command/i)
   })
 
   it('external skill discovery stays user-run, candidate-only, and install-free', () => {
     const improve = readText('plugin/skills/improve/SKILL.md')
-    const mega = readText('plugin/skills/mega/SKILL.md')
+    const harness = readText('plugin/skills/harness/SKILL.md')
     const researcher = readText('plugin/agents/harness-researcher.md')
-    const policy = readText('plugin/skills/mega/references/research-sources.md')
+    const policy = readText('plugin/skills/harness/references/research-sources.md')
     for (const [path, text] of [
-      ['orangu-mega', mega], ['harness-researcher', researcher], ['research policy', policy],
+      ['orangu-harness', harness], ['harness-researcher', researcher], ['research policy', policy],
     ] as const) {
       expect(text, `${path} names the discovery command`).toContain('npx skills find')
       expect(text, `${path} forbids running the discovery command`).toMatch(/(?:do not|never) runs? `?npx skills find/i)
@@ -242,7 +242,7 @@ describe('plugin packaging', () => {
     }
     expect(improve).toContain('skills.sh')
     expect(improve).toMatch(/never install a skill or plugin/i)
-    expect(`${mega}\n${researcher}\n${policy}`).toContain('skills.sh')
+    expect(`${harness}\n${researcher}\n${policy}`).toContain('skills.sh')
     // the candidate-review policy used to live in the retired suggest alias; it is pinned on the research policy now
     expect(policy).toContain('Candidate review')
     expect(policy).toContain('repository evidence')
@@ -253,9 +253,9 @@ describe('plugin packaging', () => {
     const surfaces = [
       ['Claude improve', readText('plugin/skills/improve/SKILL.md')],
       ['Codex improve', readText('.agents/skills/orangu-improve/SKILL.md')],
-      ['mega', readText('plugin/skills/mega/SKILL.md')],
-      ['mega researcher', readText('plugin/agents/harness-researcher.md')],
-      ['mega research policy', readText('plugin/skills/mega/references/research-sources.md')],
+      ['harness', readText('plugin/skills/harness/SKILL.md')],
+      ['harness researcher', readText('plugin/agents/harness-researcher.md')],
+      ['harness research policy', readText('plugin/skills/harness/references/research-sources.md')],
     ] as const
     for (const [name, text] of surfaces) {
       expect(text, `${name} uses generic network terms`).toMatch(/generic feature(?: and|\/) change-class terms/i)
@@ -298,7 +298,7 @@ describe('plugin packaging', () => {
     }
   })
 
-  it('enforces the conservative lifecycle by scope in both hosts and mega', () => {
+  it('enforces the conservative lifecycle by scope in both hosts and harness', () => {
     for (const [name, path] of [
       ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
@@ -317,17 +317,17 @@ describe('plugin packaging', () => {
       expect(text, `${path} permits session later verification`).toMatch(/session scope[^\n]*later verification/i)
     }
 
-    const mega = readText('plugin/skills/mega/SKILL.md')
-    expect(mega).toMatch(/repo scope[^\n]*apply[^\n]*cannot become `verified`/i)
-    expect(mega).toMatch(/global scope[^\n]*proposal-only[^\n]*never be applied or verified/i)
-    expect(mega).toMatch(/global apply and verification are not supported/i)
+    const harness = readText('plugin/skills/harness/SKILL.md')
+    expect(harness).toMatch(/repo scope[^\n]*apply[^\n]*cannot become `verified`/i)
+    expect(harness).toMatch(/global scope[^\n]*proposal-only[^\n]*never be applied or verified/i)
+    expect(harness).toMatch(/global apply and verification are not supported/i)
   })
 
   it('preflights proposal eligibility and keeps undiscovered artifacts chat-only', () => {
     for (const [name, path] of [
       ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
-      ['mega', 'plugin/skills/mega/SKILL.md'],
+      ['harness', 'plugin/skills/harness/SKILL.md'],
     ] as const) {
       const text = readText(path)
       const command = "orangu suggest --show '<id>' --for-proposal --json --quiet"
@@ -339,11 +339,11 @@ describe('plugin packaging', () => {
     }
   })
 
-  it('treats shell substitutions as inert data in improve, mega, and apply', () => {
+  it('treats shell substitutions as inert data in improve, harness, and apply', () => {
     for (const [name, path] of [
       ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
-      ['mega', 'plugin/skills/mega/SKILL.md'],
+      ['harness', 'plugin/skills/harness/SKILL.md'],
       ['Claude apply', 'plugin/skills/apply/SKILL.md'],
       ['Codex apply', '.agents/skills/orangu-apply/SKILL.md'],
     ] as const) {
@@ -370,7 +370,7 @@ describe('plugin packaging', () => {
     for (const [name, path] of [
       ['Claude improve', 'plugin/skills/improve/SKILL.md'],
       ['Codex improve', '.agents/skills/orangu-improve/SKILL.md'],
-      ['mega', 'plugin/skills/mega/SKILL.md'],
+      ['harness', 'plugin/skills/harness/SKILL.md'],
       ['PM analyst', 'plugin/agents/harness-pm-analyst.md'],
       ['DevEx analyst', 'plugin/agents/harness-devex-analyst.md'],
       ['researcher', 'plugin/agents/harness-researcher.md'],
@@ -442,7 +442,7 @@ describe('plugin packaging', () => {
   // `budget` and `spend` are deliberately NOT in the vocabulary: the researcher uses both for WEB
   // CALLS per run. Pinned so a future widening does not break honest English for no honesty gain.
   it('keeps the researcher\'s web-call budget language, which is a request count and not money', () => {
-    for (const f of ['plugin/agents/harness-researcher.md', 'plugin/skills/mega/references/research-sources.md']) {
+    for (const f of ['plugin/agents/harness-researcher.md', 'plugin/skills/harness/references/research-sources.md']) {
       const text = readFileSync(join(root, f), 'utf8')
       expect(moneyHits(text), `${f} must stay money-free`).toEqual([])
       expect(/\bbudget\b|\bspend\b/i.test(text), `${f} still speaks of a web-call budget`).toBe(true)
@@ -485,7 +485,7 @@ describe('plugin packaging', () => {
   it('only the explicit research surfaces hold network tools; localhost never launches them', () => {
     const networked = AGENTS.filter((a) => fmList(agentBlock(a), 'tools').some((t) => t === 'WebSearch' || t === 'WebFetch'))
     expect(networked, 'exactly one agent may reach the network').toEqual(['harness-researcher'])
-    for (const s of ['analyze', 'apply', 'mega']) {
+    for (const s of ['analyze', 'apply', 'harness']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const allowed = /^allowed-tools:\s*(.+)$/m.exec(md)?.[1] ?? ''
       expect(allowed, `${s} grants no network tool`).not.toMatch(/WebSearch|WebFetch/)
@@ -552,8 +552,8 @@ describe('plugin packaging', () => {
     expect(Object.keys(readJson('plugin/.claude-plugin/plugin.json'))).not.toContain('agents')
   })
 
-  it('mega runs the staged pipeline', () => {
-    const md = readFileSync(join(root, 'plugin/skills/mega/SKILL.md'), 'utf8')
+  it('harness runs the staged pipeline', () => {
+    const md = readFileSync(join(root, 'plugin/skills/harness/SKILL.md'), 'utf8')
     const literals = [
       'orangu estimate harness', "orangu harness --cwd '<dir>' --out '<tmp>/harness.json'",
       "orangu harness --global --out '<tmp>/harness.json'",
@@ -561,13 +561,13 @@ describe('plugin packaging', () => {
       'free:', 'how many sessions are scanned', 'orangu estimate',
       'consult its catalog before any outside research', 'catalog: <id>', '`verifiedAt: null`',
     ]
-    for (const literal of literals) expect(md, `mega names ${literal}`).toContain(literal)
+    for (const literal of literals) expect(md, `harness names ${literal}`).toContain(literal)
     const stages = [...md.matchAll(/^## (\d)\. /gm)].map((m) => m[1])
     expect(stages, 'six numbered stages, in order').toEqual(['0', '1', '2', '3', '4', '5'])
   })
 
   it('the research source list is honest', () => {
-    const rel = 'plugin/skills/mega/references/research-sources.md'
+    const rel = 'plugin/skills/harness/references/research-sources.md'
     expect(existsSync(join(root, rel))).toBe(true)
     const md = readFileSync(join(root, rel), 'utf8')
     for (const tier of ['Tier 1', 'Tier 2', 'Tier 3']) expect(md, `names ${tier}`).toContain(tier)

@@ -188,7 +188,7 @@ Session verification additionally requires later same-workspace evidence. Repo h
 
 ## Proposal artifacts
 
-New proposals from `orangu-improve` and `orangu-mega` have two files under `~/.orangu/proposals/`:
+New proposals from `orangu-improve` and `orangu-harness` have two files under `~/.orangu/proposals/`:
 
 - `<id>.md`: human-readable review;
 - `<id>.json`: versioned machine-readable manifest.
@@ -226,7 +226,7 @@ SuggestionProposal = {
 
 Project files are a nonempty set of relative paths and may not escape the target repository or include `.git`. `verificationChecks` contains 1-32 unique supported metric/comparison pairs. The skill supplies those reviewed pairs; the CLI later requires the verification intent to match them exactly. `workspace` is captured by Orangu when it accepts the structured proposal, not supplied by the manifest. Catalog labels must name a real shipped entry exactly as `catalog: <id>`; Orangu derives its URL/date from the catalog and rejects conflicting supplied metadata. Research requires a direct HTTPS URL and a non-null checked `YYYY-MM-DD` date. Inference carries neither URL nor date. A candidate with `verifiedAt: null` is not valid persisted proposal provenance.
 
-Every `orangu-mega` manifest includes its rank, at least one reviewed relative project file, and at least one honest catalog, research, or inference source. Mega passes both artifact paths with `--proposal` and `--manifest`; it never applies the change itself. A repo mega proposal may later be applied explicitly. A global mega proposal is review-only.
+Every `orangu-harness` manifest includes its rank, at least one reviewed relative project file, and at least one honest catalog, research, or inference source. The harness skill passes both artifact paths with `--proposal` and `--manifest`; it never applies the change itself. A repo harness proposal may later be applied explicitly. A global harness proposal is review-only.
 
 Legacy Markdown-only proposals remain readable for compatibility but cannot satisfy the new structured apply workflow.
 
