@@ -35,8 +35,8 @@ export const EXTRA_HELP: string[] = [
     '  orangu estimate [<session>|repo|global|harness]',
     '                               size what a skill would read: bytes and ~tokens',
     '                                 (--suggestion <id>',
-    '                                  | --rule <r> --session <a,b>,',
-    '                                  --depth quick|standard|deep)',
+    '                                  | --rule <r> --session <a,b>;',
+    '                                  --slim sizes an analyze --json --slim read)',
   ].join('\n'),
   [
     '  orangu harness               what your config declares vs what your sessions',

@@ -1,11 +1,14 @@
 /**
  * `orangu estimate`: the gate that runs BEFORE any LLM-facing read.
- * Prints how many bytes / ≈tokens the slim projection of the target sessions would put into a model's
- * context. Never reads a transcript into anything; it only sizes. Tokens are the whole answer: the
- * gate exists so nobody feeds a multi-MB analysis to a model by accident, and a token count is what
- * that decision turns on.
+ * Prints how many bytes / ≈tokens the target sessions would put into a model's context. Never reads
+ * a transcript into anything; it only sizes. Tokens are the whole answer: the gate exists so nobody
+ * feeds a multi-MB analysis to a model by accident, and a token count is what that decision turns on.
  *
- *   orangu estimate [<session>] [--depth quick|standard|deep] [--json]
+ * One canonical projection: the evidence bundle, byte-identical to `orangu evidence <session> --estimate`
+ * (same analysis inputs, clock-free). `--slim` sizes the one other read that still exists,
+ * `orangu analyze --json --slim`. `--depth` was retired.
+ *
+ *   orangu estimate [<session>] [--slim] [--json]
  *   orangu estimate --suggestion <id> [--json]
  *   orangu estimate --rule <r> --session <a,b> [--json]
  *   orangu estimate harness [--cwd <dir>] [--root <dir>] [--global] [--limit <n>] [--json]
@@ -16,7 +19,7 @@ import { claudeRoots, resolveSession, findLatestSession, listSessions } from '..
 import { prevalidateEvidenceSession, readEvidenceSessionManifest } from '../../adapters/claude-code/evidence-input.js'
 import { parseClaudeCodeSession } from '../../adapters/claude-code/parse.js'
 import { analyzeSession } from '../../analyze/analyze.js'
-import { estimateFor } from '../../suggest/estimate.js'
+import { estimateFor, type SizeProjection } from '../../suggest/estimate.js'
 import { CONFIRMATION_PUBLIC_KEY_ENV, verifyConfirmationReceipt } from '../../suggest/receipt.js'
 import { slimAnalysis } from '../../suggest/slim.js'
 import { SuggestionStore } from '../../suggest/store.js'
@@ -25,19 +28,20 @@ import { flagBool, flagStr } from '../args.js'
 import { runHarness } from './harness.js'
 import type { Analysis } from '../../model/analysis.js'
 
-declare const __ORANGU_VERSION__: string
-const VERSION = typeof __ORANGU_VERSION__ !== 'undefined' ? __ORANGU_VERSION__ : '0.0.0-dev'
+const DEPTH_RETIRED = 'orangu estimate has one canonical projection (the evidence bundle); --depth was retired. Use --slim to size an `analyze --json --slim` read.'
 
-export type Depth = 'quick' | 'standard' | 'deep'
+/** the `analyze --json --slim` read; the default projection is the evidence bundle (see suggest/estimate.ts) */
+const slimBytes: SizeProjection = (a) => Buffer.byteLength(JSON.stringify(slimAnalysis(a)))
 
-/** what each depth would feed the model: summary+insights only / the slim projection / the full Analysis */
-export function depthBytes(a: Analysis, depth: Depth): number {
-  if (depth === 'quick') return Buffer.byteLength(JSON.stringify({ session: a.session, summary: a.summary, insights: a.insights }))
-  if (depth === 'deep') return Buffer.byteLength(JSON.stringify(a))
-  return Buffer.byteLength(JSON.stringify(slimAnalysis(a)))
-}
-
-export async function loadAnalysisBySelector(sel: string): Promise<Analysis | undefined> {
+/**
+ * `analyzeOptions` defaults to the clock-free values `orangu evidence` uses (evidence.ts
+ * bundleFromSession), so an estimate is byte-identical to `evidence --estimate`. `suggest --show`
+ * passes the real version and clock because its output is shown, not sized.
+ */
+export async function loadAnalysisBySelector(
+  sel: string,
+  analyzeOptions: { version: string; now: number } = { version: 'evidence', now: 0 },
+): Promise<Analysis | undefined> {
   try {
     const value = sel.trim()
     const pathSelector = value.endsWith('.jsonl') || value.includes('/') || value.includes('\\')
@@ -46,7 +50,7 @@ export async function loadAnalysisBySelector(sel: string): Promise<Analysis | un
     const manifest = await prevalidateEvidenceSession(ref.path)
     const loaded = await readEvidenceSessionManifest(manifest)
     const session = await parseClaudeCodeSession(loaded.parseInput)
-    return analyzeSession(session, { version: VERSION, now: Date.now() })
+    return analyzeSession(session, analyzeOptions)
   } catch {
     return undefined
   }
@@ -68,7 +72,8 @@ async function targetSessionIds(positionals: string[], flags: Record<string, str
   if (positionals[0] === 'repo') {
     return (await listSessions({ cwd: flagStr(flags, 'cwd') ?? process.cwd() })).map((r) => r.path)
   }
-  if (positionals[0]) return [positionals[0]]
+  // `latest` is the documented default selector; resolve it like an absent selector does
+  if (positionals[0] && positionals[0] !== 'latest') return [positionals[0]]
   const latest = await findLatestSession({})
   if (!latest) throw new Error('No sessions found. Try: orangu list')
   return [latest.path]
@@ -77,9 +82,8 @@ async function targetSessionIds(positionals: string[], flags: Record<string, str
 const fmtKb = (bytes: number) => (bytes / 1024).toFixed(1) + ' KB'
 
 export async function cmdEstimate(positionals: string[], flags: Record<string, string | boolean>): Promise<void> {
-  const depthRaw = flagStr(flags, 'depth') ?? 'standard'
-  if (!['quick', 'standard', 'deep'].includes(depthRaw)) throw new Error(`--depth must be quick|standard|deep, got "${depthRaw}"`)
-  const depth = depthRaw as Depth
+  if (flags['depth'] !== undefined) throw new Error(DEPTH_RETIRED)
+  const slim = flagBool(flags, 'slim')
 
   // `estimate harness` sizes the harness report itself rather than a session projection.
   if (positionals[0] === 'harness') {
@@ -111,19 +115,7 @@ export async function cmdEstimate(positionals: string[], flags: Record<string, s
   }
 
   const ids = await targetSessionIds(positionals, flags)
-  const loaded: Analysis[] = []
-  const load = async (id: string) => {
-    const a = await loadAnalysisBySelector(id)
-    if (a) loaded.push(a)
-    return a
-  }
-  let est: Estimate = await estimateFor(ids, load)
-  if (depth !== 'standard') {
-    // same sessions, different projection size; sessions/files counts stay
-    const bytes = loaded.reduce((sum, a) => sum + depthBytes(a, depth), 0)
-    const approxTokens = Math.ceil(bytes / 4)
-    est = { ...est, bytes, approxTokens, overThreshold: approxTokens > ESTIMATE_TOKEN_THRESHOLD }
-  }
+  const est: Estimate = await estimateFor(ids, (id) => loadAnalysisBySelector(id), slim ? slimBytes : undefined)
 
   const confirmationReceipt: ConfirmationReceiptResult | undefined =
     receiptToken && receiptRecord
@@ -142,7 +134,7 @@ export async function cmdEstimate(positionals: string[], flags: Record<string, s
     return
   }
 
-  printEstimate(est, depth)
+  printEstimate(est, slim ? 'slim' : 'evidence')
   if (confirmationReceipt) {
     process.stdout.write(
       confirmationReceipt.valid

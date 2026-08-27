@@ -11,6 +11,7 @@ describe('EXTRA_HELP', () => {
   })
   it('hides internal nouns from the user-facing help', () => {
     const text = EXTRA_HELP.join('\n')
-    expect(text).not.toMatch(/cohort|catalog|preflight|projection|\bL[123]\b|fresh-cohort|slim/i)
+    // `--slim` is a real flag on estimate/analyze and may be named; the bare noun may not
+    expect(text).not.toMatch(/cohort|catalog|preflight|projection|\bL[123]\b|fresh-cohort|(?<!-)slim/i)
   })
 })

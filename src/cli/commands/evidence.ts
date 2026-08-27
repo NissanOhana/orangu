@@ -91,7 +91,7 @@ export async function cmdEvidence(positionals: string[], flags: Record<string, s
     throw new Error('usage: orangu evidence <session|latest|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate]')
   }
   if (flagBool(flags, 'no-redact')) throw new Error('evidence output is always redacted; --no-redact is not supported')
-  if (flags['depth'] !== undefined) throw new Error('orangu evidence has one canonical bounded projection; --depth is only supported by orangu estimate')
+  if (flags['depth'] !== undefined) throw new Error('orangu evidence has one canonical bounded projection; --depth is not supported')
   const input = positionals[0]
   if (input === undefined) throw new Error('evidence input is required')
   const options: ProjectEvidenceOptions = { limit: requestedLimit(flags), scope: aggregateScope(flags) }

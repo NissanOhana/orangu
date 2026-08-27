@@ -3,7 +3,7 @@ import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 import { estimateFor } from './estimate.js'
-import { slimAnalysis } from './slim.js'
+import { projectEvidence } from './evidence.js'
 import { ESTIMATE_TOKEN_THRESHOLD } from './types.js'
 import type { Analysis } from '../model/analysis.js'
 
@@ -13,10 +13,10 @@ async function canonicalAnalysis(): Promise<Analysis> {
 }
 
 describe('estimateFor', () => {
-  it('bytes = slim JSON size; approxTokens = ceil(bytes/4); counts sessions and files', async () => {
+  it('bytes = evidence bundle JSON size; approxTokens = ceil(bytes/4); counts sessions and files', async () => {
     const a = await canonicalAnalysis()
     const est = await estimateFor(['x'], async () => a)
-    const expectBytes = Buffer.byteLength(JSON.stringify(slimAnalysis(a)))
+    const expectBytes = Buffer.byteLength(JSON.stringify(projectEvidence(a)))
     expect(est.bytes).toBe(expectBytes)
     expect(est.approxTokens).toBe(Math.ceil(expectBytes / 4))
     expect(est.sessions).toBe(1)
@@ -28,16 +28,17 @@ describe('estimateFor', () => {
     const a = await canonicalAnalysis()
     const est = await estimateFor(['x', 'missing', 'y'], async (id) => (id === 'missing' ? undefined : a))
     expect(est.sessions).toBe(2)
-    expect(est.bytes).toBe(2 * Buffer.byteLength(JSON.stringify(slimAnalysis(a))))
+    expect(est.bytes).toBe(2 * Buffer.byteLength(JSON.stringify(projectEvidence(a))))
   })
 
   it('flags overThreshold above ~20 KB (5,000 tokens)', async () => {
-    // inflate one slim-visible field past the threshold
-    const inflated = async (): Promise<Analysis> => ({
-      ...(await canonicalAnalysis()),
-      insights: [{ id: 'i', ruleId: 'r', severity: 'low', axis: 'tokens', title: 'x'.repeat(25_000), detail: '', recommendation: '', evidence: {}, turnIndexes: [], personas: [] }],
-    }) as Analysis
-    const est = await estimateFor(['a'], inflated)
+    // projectEvidence clamps titles and finding counts, so one inflated field cannot cross the
+    // gate; repetition can. Assert the arithmetic instead of assuming it.
+    const a = await canonicalAnalysis()
+    const one = Buffer.byteLength(JSON.stringify(projectEvidence(a)))
+    const n = Math.ceil((ESTIMATE_TOKEN_THRESHOLD * 4) / one) + 1
+    const est = await estimateFor(Array.from({ length: n }, (_, i) => `s${i}`), async () => a)
+    expect(est.bytes).toBe(n * one)
     expect(est.approxTokens).toBeGreaterThan(ESTIMATE_TOKEN_THRESHOLD)
     expect(est.overThreshold).toBe(true)
   })

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js'
 import { cmdEstimate } from './estimate.js'
+import { cmdEvidence } from './evidence.js'
 import { runHarness } from './harness.js'
 import { cmdSuggest } from './suggest.js'
 import { CONFIRMATION_PUBLIC_KEY_ENV, generateConfirmationKeyPair, issueConfirmationReceipt } from '../../suggest/receipt.js'
@@ -44,21 +45,38 @@ describe('orangu estimate (in-process)', () => {
     expect(est.files).toBeGreaterThanOrEqual(1)
   })
 
-  it('depth quick ≤ standard ≤ deep', async () => {
-    await cmdEstimate([fixturePath], { json: true, depth: 'quick' })
-    const quick = JSON.parse(stdout())
-    out = []
+  it('sizes exactly what `orangu evidence --estimate` sizes: the same bytes for the same session', async () => {
     await cmdEstimate([fixturePath], { json: true })
-    const standard = JSON.parse(stdout())
+    const est = JSON.parse(stdout())
     out = []
-    await cmdEstimate([fixturePath], { json: true, depth: 'deep' })
-    const deep = JSON.parse(stdout())
-    expect(quick.bytes).toBeLessThanOrEqual(standard.bytes)
-    expect(standard.bytes).toBeLessThanOrEqual(deep.bytes)
+    await cmdEvidence([fixturePath], { estimate: true, json: true })
+    const evidence = JSON.parse(stdout())
+    expect(est.bytes).toBe(evidence.bytes)
+    expect(est.approxTokens).toBe(evidence.approxTokens)
+    expect(est.overThreshold).toBe(evidence.overThreshold)
   })
 
-  it('rejects an unknown depth', async () => {
-    await expect(cmdEstimate([fixturePath], { depth: 'ultra' })).rejects.toThrow(/--depth/)
+  it('--slim sizes the larger `analyze --json --slim` read and says so', async () => {
+    await cmdEstimate([fixturePath], { json: true })
+    const evidence = JSON.parse(stdout())
+    out = []
+    await cmdEstimate([fixturePath], { json: true, slim: true })
+    const slim = JSON.parse(stdout())
+    expect(slim.sessions).toBe(evidence.sessions)
+    expect(slim.files).toBe(evidence.files)
+    expect(slim.bytes).not.toBe(evidence.bytes)
+    expect(slim.approxTokens).toBe(Math.ceil(slim.bytes / 4))
+    out = []
+    await cmdEstimate([fixturePath], { slim: true })
+    expect(stdout()).toContain('estimate (slim)')
+    out = []
+    await cmdEstimate([fixturePath], {})
+    expect(stdout()).toContain('estimate (evidence)')
+  })
+
+  it('rejects --depth with the retirement message', async () => {
+    await expect(cmdEstimate([fixturePath], { depth: 'quick' })).rejects.toThrow(/--depth was retired/)
+    await expect(cmdEstimate([fixturePath], { depth: 'ultra' })).rejects.toThrow(/one canonical projection/)
   })
 
   it('--suggestion <id> sizes the record\'s evidence sessions', async () => {
@@ -230,6 +248,20 @@ describe('orangu estimate (in-process)', () => {
       await cmdEstimate(['global'], { json: true })
       const est = JSON.parse(stdout())
       expect(est.sessions).toBeGreaterThan(1) // all fixture sessions, not "global" as an id
+    } finally {
+      delete process.env['CLAUDE_CONFIG_DIR']
+    }
+  })
+
+  it("'estimate latest' resolves the newest session instead of sizing nothing", async () => {
+    const { makeFixtureHome } = await import('../../../test/fixtures/home.js')
+    const fh = await makeFixtureHome(mkdtempSync(join(tmpdir(), 'orangu-latest-est-')))
+    process.env['CLAUDE_CONFIG_DIR'] = fh.configDir
+    try {
+      await cmdEstimate(['latest'], { json: true })
+      const est = JSON.parse(stdout())
+      expect(est.sessions).toBe(1)
+      expect(est.bytes).toBeGreaterThan(0)
     } finally {
       delete process.env['CLAUDE_CONFIG_DIR']
     }

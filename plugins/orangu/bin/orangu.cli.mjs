@@ -8860,35 +8860,426 @@ var MASCOT_ASCII = String.raw`
  |  \___/()o  see what your agent did
   \_______/`;
 
-// src/suggest/slim.ts
-function slimAnalysis(a) {
+// src/suggest/evidence.ts
+var EVIDENCE_SCHEMA_VERSION = "1";
+var DEFAULT_EVIDENCE_LIMIT = 12;
+var MAX_EVIDENCE_LIMIT = 50;
+var MAX_EVIDENCE_ARTIFACT_BYTES = 8 * 1024 * 1024;
+var MAX_EVIDENCE_OUTPUT_BYTES = 256 * 1024;
+var MAX_EVIDENCE_INPUT_FINDINGS = 500;
+var MAX_EVIDENCE_INPUT_SESSIONS = 1e3;
+var MAX_RULE_ID_CHARS = 128;
+var MAX_INSIGHT_ID_CHARS = 256;
+var MAX_SESSION_ID_CHARS = 2048;
+var MAX_TITLE_CHARS = 1e3;
+var MAX_INPUT_TEXT_CHARS = 16384;
+var MAX_OUTPUT_DETAIL_CHARS = 2e3;
+var MAX_OUTPUT_CATALOG_TEXT_CHARS = 1e3;
+var MAX_TURN_INDEXES = 500;
+var MAX_SESSION_IDS_PER_FINDING = 50;
+var MAX_CATALOG_MATCHES_PER_FINDING = 16;
+var MAX_EVIDENCE_VALUE_ITEMS = 500;
+var MAX_EVIDENCE_VALUE_NODES = 5e3;
+var MAX_EVIDENCE_VALUE_DEPTH = 8;
+var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]*$/;
+function isRecord(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+function boundedString(value, label, max, allowEmpty = false) {
+  if (typeof value !== "string" || !allowEmpty && !value.trim()) throw new Error(`${label} must be a non-empty string`);
+  if (value.length > max) throw new Error(`${label} exceeds ${max} characters`);
+  return value;
+}
+function boundedId(value, label, max) {
+  const id = boundedString(value, label, max);
+  if (!SAFE_ID.test(id)) throw new Error(`${label} contains unsupported characters`);
+  if (redactValue(id, { scrub: true }) !== id) throw new Error(`${label} contains sensitive material`);
+  return id;
+}
+function finiteNonNegative(value, label) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error(`${label} must be a finite non-negative number`);
+  return value;
+}
+function insightAxis(value, label) {
+  if (value === "quality" || value === "time" || value === "tokens" || value === "context") return value;
+  throw new Error(`${label} is unsupported`);
+}
+function insightSeverity(value, label) {
+  if (value === "info" || value === "low" || value === "medium" || value === "high") return value;
+  throw new Error(`${label} is unsupported`);
+}
+function insightPersona(value, label) {
+  if (value === "developer" || value === "lead" || value === "pm" || value === "qa" || value === "anyone") return value;
+  throw new Error(`${label} is unsupported`);
+}
+function boundedArray(value, label, max) {
+  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
+  if (value.length > max) throw new Error(`${label} exceeds ${max} items`);
+  return value;
+}
+function requireRecords(value, keys, label) {
+  for (const key of keys) if (!isRecord(value[key])) throw new Error(`${label}.${key} must be an object`);
+}
+function requireArrays(value, keys, label) {
+  for (const key of keys) if (!Array.isArray(value[key])) throw new Error(`${label}.${key} must be an array`);
+}
+function validateBoundedValue(value, label, state = { nodes: 0, seen: /* @__PURE__ */ new WeakSet() }, depth = 0) {
+  state.nodes++;
+  if (state.nodes > MAX_EVIDENCE_VALUE_NODES) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_NODES} values`);
+  if (depth > MAX_EVIDENCE_VALUE_DEPTH) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_DEPTH} levels`);
+  if (typeof value === "string") {
+    boundedString(value, label, MAX_INPUT_TEXT_CHARS, true);
+    return;
+  }
+  if (value == null || typeof value === "boolean" || value === void 0) return;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error(`${label} must contain only finite numbers`);
+    return;
+  }
+  if (typeof value !== "object") throw new Error(`${label} contains an unsupported value`);
+  if (state.seen.has(value)) throw new Error(`${label} must not contain cycles`);
+  state.seen.add(value);
+  if (Array.isArray(value)) {
+    if (value.length > MAX_EVIDENCE_VALUE_ITEMS) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_ITEMS} items`);
+    for (let i = 0; i < value.length; i++) validateBoundedValue(value[i], `${label}[${i}]`, state, depth + 1);
+  } else {
+    const entries = Object.entries(value);
+    if (entries.length > MAX_EVIDENCE_VALUE_ITEMS) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_ITEMS} fields`);
+    for (const [key, item] of entries) validateBoundedValue(item, `${label}.${key}`, state, depth + 1);
+  }
+  state.seen.delete(value);
+}
+function validateSessionIds(value, label) {
+  const raw = boundedArray(value, label, MAX_SESSION_IDS_PER_FINDING);
+  if (!raw.length) throw new Error(`${label} must not be empty`);
+  return normalizeSessionIds(raw.map((id, index) => boundedId(id, `${label}[${index}]`, MAX_SESSION_ID_CHARS)));
+}
+function validateInsight(value, index) {
+  if (!isRecord(value)) throw new Error(`insights[${index}] must be an object`);
+  const id = boundedId(value["id"], `insights[${index}].id`, MAX_INSIGHT_ID_CHARS);
+  const ruleId = boundedId(value["ruleId"], `insights[${index}].ruleId`, MAX_RULE_ID_CHARS);
+  const title = boundedString(value["title"], `insights[${index}].title`, MAX_TITLE_CHARS, true);
+  const detail = boundedString(value["detail"], `insights[${index}].detail`, MAX_INPUT_TEXT_CHARS, true);
+  const recommendation = boundedString(value["recommendation"], `insights[${index}].recommendation`, MAX_INPUT_TEXT_CHARS, true);
+  const axis = insightAxis(value["axis"], `insights[${index}].axis`);
+  const severity = insightSeverity(value["severity"], `insights[${index}].severity`);
+  const evidence = value["evidence"];
+  if (!isRecord(evidence)) throw new Error(`insights[${index}].evidence must be an object`);
+  validateBoundedValue(evidence, `insights[${index}].evidence`);
+  const rawTurns = boundedArray(value["turnIndexes"], `insights[${index}].turnIndexes`, MAX_TURN_INDEXES);
+  const turnIndexes = [];
+  for (let i = 0; i < rawTurns.length; i++) {
+    const turn = rawTurns[i];
+    if (typeof turn !== "number" || !Number.isInteger(turn) || turn < 0) throw new Error(`insights[${index}].turnIndexes[${i}] must be a non-negative integer`);
+    turnIndexes.push(turn);
+  }
+  const rawPersonas = boundedArray(value["personas"], `insights[${index}].personas`, 32);
+  const personas = rawPersonas.map((persona, personaIndex) => insightPersona(persona, `insights[${index}].personas[${personaIndex}]`));
+  let savings;
+  const rawSavings = value["savings"];
+  if (rawSavings !== void 0) {
+    if (!isRecord(rawSavings) || typeof rawSavings["estimated"] !== "boolean") {
+      throw new Error(`insights[${index}].savings must include estimated`);
+    }
+    savings = {
+      estimated: rawSavings["estimated"],
+      ...rawSavings["tokens"] !== void 0 ? { tokens: finiteNonNegative(rawSavings["tokens"], `insights[${index}].savings.tokens`) } : {},
+      ...rawSavings["ms"] !== void 0 ? { ms: finiteNonNegative(rawSavings["ms"], `insights[${index}].savings.ms`) } : {}
+    };
+  }
+  return { id, ruleId, title, detail, recommendation, axis, severity, evidence, turnIndexes, ...savings ? { savings } : {}, personas };
+}
+function matchableFiles(value) {
+  const files2 = value["files"];
+  if (!isRecord(files2)) throw new Error("Analysis.files must be an object");
+  const raw = boundedArray(files2["mostReRead"], "Analysis.files.mostReRead", MAX_EVIDENCE_VALUE_ITEMS);
   return {
-    schemaVersion: a.schemaVersion,
-    generator: a.generator,
-    slim: true,
-    session: a.session,
-    summary: a.summary,
-    insights: a.insights,
-    tools: { byName: a.tools.byName, errorGroups: a.tools.errorGroups },
-    files: { mostReRead: a.files.mostReRead },
-    tokens: { total: a.tokens.total, totalTokens: a.tokens.totalTokens, byModel: a.tokens.byModel, byKind: a.tokens.byKind },
-    agents: { totals: a.agents.totals, byType: a.agents.byType },
-    context: {
-      peak: a.context.peak,
-      baseline: a.context.baseline,
-      final: a.context.final,
-      contextWindow: a.context.contextWindow,
-      cacheHitRatio: a.context.cacheHitRatio,
-      reReadMultiplier: a.context.reReadMultiplier,
-      compactions: a.context.compactions
+    mostReRead: raw.map((item, index) => {
+      if (!isRecord(item)) throw new Error(`Analysis.files.mostReRead[${index}] must be an object`);
+      const path = item["path"];
+      return path === void 0 ? {} : { path: boundedString(path, `Analysis.files.mostReRead[${index}].path`, MAX_INPUT_TEXT_CHARS) };
+    })
+  };
+}
+function matchableContext(value) {
+  const context = value["context"];
+  if (!isRecord(context)) throw new Error("Analysis.context must be an object");
+  const misses = context["cacheMisses"];
+  if (misses === void 0) return {};
+  const raw = boundedArray(misses, "Analysis.context.cacheMisses", MAX_EVIDENCE_VALUE_ITEMS);
+  return {
+    cacheMisses: raw.map((item, index) => {
+      if (!isRecord(item)) throw new Error(`Analysis.context.cacheMisses[${index}] must be an object`);
+      const type = item["type"];
+      return type === void 0 ? {} : { type: boundedString(type, `Analysis.context.cacheMisses[${index}].type`, MAX_RULE_ID_CHARS) };
+    })
+  };
+}
+function validateAnalysis(value) {
+  if (value["schemaVersion"] !== ANALYSIS_SCHEMA_VERSION) {
+    throw new Error(`Analysis schemaVersion must be current (${ANALYSIS_SCHEMA_VERSION})`);
+  }
+  if (!isRecord(value["generator"]) || value["generator"]["name"] !== "orangu") throw new Error('Analysis.generator.name must be "orangu"');
+  if (!isRecord(value["session"])) throw new Error("Analysis.session must be an object");
+  const sessionId = boundedId(value["session"]["id"], "Analysis.session.id", MAX_SESSION_ID_CHARS);
+  const insights = boundedArray(value["insights"], "Analysis.insights", MAX_EVIDENCE_INPUT_FINDINGS);
+  const validatedInsights = insights.map(validateInsight);
+  const slim = value["slim"] === true;
+  if (slim) {
+    requireRecords(value, ["summary", "tools", "files", "tokens", "agents", "context", "quality", "parse"], "SlimAnalysis");
+  } else {
+    if (value["slim"] !== void 0) throw new Error("Analysis.slim must be absent; use true for SlimAnalysis");
+    requireRecords(value, ["summary", "tools", "files", "agents", "skills", "hooks", "context", "tokens", "time", "quality", "parse"], "Analysis");
+    requireArrays(value, ["turns", "events"], "Analysis");
+  }
+  return {
+    kind: slim ? "slim-analysis" : "analysis",
+    value: {
+      schemaVersion: ANALYSIS_SCHEMA_VERSION,
+      session: { id: sessionId },
+      insights: validatedInsights,
+      files: matchableFiles(value),
+      context: matchableContext(value)
+    }
+  };
+}
+function validateCrossFinding(value, index) {
+  if (!isRecord(value)) throw new Error(`Aggregate.crossFindings[${index}] must be an object`);
+  const ruleId = boundedId(value["ruleId"], `Aggregate.crossFindings[${index}].ruleId`, MAX_RULE_ID_CHARS);
+  const title = boundedString(value["title"], `Aggregate.crossFindings[${index}].title`, MAX_TITLE_CHARS, true);
+  const sessions = finiteNonNegative(value["sessions"], `Aggregate.crossFindings[${index}].sessions`);
+  if (!Number.isInteger(sessions) || sessions < 1 || sessions > MAX_EVIDENCE_INPUT_SESSIONS) {
+    throw new Error(`Aggregate.crossFindings[${index}].sessions is out of range`);
+  }
+  const totalSavingsTokens = finiteNonNegative(value["totalSavingsTokens"], `Aggregate.crossFindings[${index}].totalSavingsTokens`);
+  const totalSavingsMs = finiteNonNegative(value["totalSavingsMs"], `Aggregate.crossFindings[${index}].totalSavingsMs`);
+  const axis = insightAxis(value["axis"], `Aggregate.crossFindings[${index}].axis`);
+  const severity = insightSeverity(value["severity"], `Aggregate.crossFindings[${index}].severity`);
+  const exampleSessionIds = validateSessionIds(value["exampleSessionIds"], `Aggregate.crossFindings[${index}].exampleSessionIds`);
+  return { ruleId, title, sessions, totalSavingsTokens, totalSavingsMs, axis, severity, exampleSessionIds };
+}
+function validateAggregate(value) {
+  if (value["schemaVersion"] !== AGGREGATE_SCHEMA_VERSION) {
+    throw new Error(`Aggregate schemaVersion must be current (${AGGREGATE_SCHEMA_VERSION})`);
+  }
+  boundedString(value["scope"], "Aggregate.scope", MAX_INPUT_TEXT_CHARS, true);
+  finiteNonNegative(value["generatedAt"], "Aggregate.generatedAt");
+  const sessionCount = finiteNonNegative(value["sessionCount"], "Aggregate.sessionCount");
+  if (!Number.isInteger(sessionCount) || sessionCount > MAX_EVIDENCE_INPUT_SESSIONS) throw new Error("Aggregate.sessionCount is out of range");
+  requireRecords(value, ["totals", "averages"], "Aggregate");
+  requireArrays(value, ["sessions", "topSessions", "byWeek"], "Aggregate");
+  const sessions = boundedArray(value["sessions"], "Aggregate.sessions", MAX_EVIDENCE_INPUT_SESSIONS);
+  if (sessions.length !== sessionCount) throw new Error("Aggregate.sessionCount must equal Aggregate.sessions.length");
+  for (let i = 0; i < sessions.length; i++) {
+    const session = sessions[i];
+    if (!isRecord(session)) throw new Error(`Aggregate.sessions[${i}] must be an object`);
+    boundedId(session["id"], `Aggregate.sessions[${i}].id`, MAX_SESSION_ID_CHARS);
+  }
+  const sessionIds = normalizeSessionIds(sessions.map((session) => session["id"]));
+  if (sessionIds.length !== sessions.length) throw new Error("Aggregate.sessions ids must be distinct");
+  const findings = boundedArray(value["crossFindings"], "Aggregate.crossFindings", MAX_EVIDENCE_INPUT_FINDINGS).map(validateCrossFinding);
+  const cohort = new Set(sessionIds);
+  for (let index = 0; index < findings.length; index++) {
+    const finding = findings[index];
+    if (finding.sessions > sessionCount) {
+      throw new Error(`Aggregate.crossFindings[${index}].sessions must not exceed Aggregate.sessionCount`);
+    }
+    if (finding.exampleSessionIds.length > finding.sessions) {
+      throw new Error(`Aggregate.crossFindings[${index}].exampleSessionIds must not exceed its recurrence count`);
+    }
+    if (finding.exampleSessionIds.some((id) => !cohort.has(id))) {
+      throw new Error(`Aggregate.crossFindings[${index}].exampleSessionIds must belong to Aggregate.sessions`);
+    }
+  }
+  return {
+    kind: "aggregate",
+    value: { schemaVersion: AGGREGATE_SCHEMA_VERSION, sessionCount, sessionIds, crossFindings: findings }
+  };
+}
+function validateInput(value) {
+  if (!isRecord(value)) throw new Error("evidence input must be a JSON object");
+  if (Array.isArray(value["crossFindings"])) return validateAggregate(value);
+  if (Array.isArray(value["insights"])) return validateAnalysis(value);
+  throw new Error("input is not a current Orangu Analysis, SlimAnalysis, or Aggregate");
+}
+function outputText(value, max) {
+  const redacted2 = redactValue(value, { scrub: true });
+  return redacted2.length <= max ? redacted2 : redacted2.slice(0, Math.max(0, max - 1)) + "\u2026";
+}
+function titleForRule(ruleId) {
+  const words2 = ruleId.trim().replace(/[-_]+/g, " ") || "finding";
+  return words2.charAt(0).toUpperCase() + words2.slice(1);
+}
+function safeTitle(ruleId, title) {
+  return outputText(title, MAX_TITLE_CHARS).trim() || titleForRule(ruleId);
+}
+function findingFromInsight(insight, sessionId) {
+  return {
+    ruleId: insight.ruleId,
+    title: safeTitle(insight.ruleId, insight.title),
+    scope: "session",
+    sessionIds: normalizeSessionIds([sessionId]),
+    insightId: insight.id,
+    evidence: {
+      estimated: insight.savings?.estimated ?? true,
+      sessions: 1,
+      ...insight.savings?.tokens !== void 0 ? { savingsTokens: insight.savings.tokens } : {},
+      ...insight.savings?.ms !== void 0 ? { savingsMs: insight.savings.ms } : {}
+    }
+  };
+}
+function findingFromCrossFinding(finding, scope, cohortFingerprint) {
+  return {
+    ruleId: finding.ruleId,
+    title: safeTitle(finding.ruleId, finding.title),
+    scope,
+    cohortFingerprint,
+    sessionIds: validateSessionIds(finding.exampleSessionIds, `Aggregate.crossFindings.${finding.ruleId}.exampleSessionIds`),
+    evidence: {
+      estimated: true,
+      sessions: finding.sessions,
+      ...finding.totalSavingsTokens ? { savingsTokens: finding.totalSavingsTokens } : {},
+      ...finding.totalSavingsMs ? { savingsMs: finding.totalSavingsMs } : {}
+    }
+  };
+}
+function rowsFromAnalysis(a) {
+  return a.insights.map((insight) => ({
+    finding: findingFromInsight(insight, a.session.id),
+    axis: insight.axis,
+    severity: insight.severity,
+    detail: outputText(insight.detail, MAX_OUTPUT_DETAIL_CHARS),
+    recommendation: outputText(insight.recommendation, MAX_OUTPUT_DETAIL_CHARS),
+    turnIndexes: [...insight.turnIndexes],
+    catalogMatches: matchRule(insight.ruleId, [a]).slice(0, MAX_CATALOG_MATCHES_PER_FINDING)
+  }));
+}
+function rowsFromAggregate(a, scope) {
+  const cohortFingerprint = sessionCohortFingerprint(a.sessionIds);
+  return [...a.crossFindings].sort(compareCrossFindings).map((finding) => ({
+    finding: findingFromCrossFinding(finding, scope, cohortFingerprint),
+    axis: finding.axis,
+    severity: finding.severity,
+    detail: `Recurs in ${finding.sessions} session${finding.sessions === 1 ? "" : "s"}.`,
+    catalogMatches: matchRule(finding.ruleId).slice(0, MAX_CATALOG_MATCHES_PER_FINDING)
+  }));
+}
+function catalogOutput(suggestionId2, match) {
+  const entry = match.entry;
+  return {
+    suggestionId: suggestionId2,
+    id: entry.id,
+    changeClass: entry.changeClass,
+    ...entry.tool !== void 0 ? { tool: entry.tool } : {},
+    ...entry.skill !== void 0 ? { skill: entry.skill } : {},
+    ...entry.feature !== void 0 ? { feature: entry.feature } : {},
+    url: entry.url,
+    verifiedAt: entry.verifiedAt,
+    note: outputText(entry.note, MAX_OUTPUT_CATALOG_TEXT_CHARS),
+    evidence: outputText(match.evidence, MAX_OUTPUT_CATALOG_TEXT_CHARS)
+  };
+}
+function utf8Bytes(value) {
+  return new TextEncoder().encode(value).byteLength;
+}
+function evidenceLimit(limit) {
+  if (limit === void 0) return DEFAULT_EVIDENCE_LIMIT;
+  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVIDENCE_LIMIT) {
+    throw new Error(`--limit must be an integer from 1 to ${MAX_EVIDENCE_LIMIT}`);
+  }
+  return limit;
+}
+function projectEvidence(value, options = {}) {
+  const input = validateInput(value);
+  const limit = evidenceLimit(options.limit);
+  if (input.kind === "aggregate" && options.scope === void 0) throw new Error("Aggregate evidence requires explicit --scope repo|global");
+  if (input.kind !== "aggregate" && options.scope !== void 0) throw new Error("--scope is only valid for Aggregate evidence");
+  let scope = "session";
+  let rows;
+  if (input.kind === "aggregate") {
+    const aggregateScope2 = options.scope;
+    if (aggregateScope2 === void 0) throw new Error("Aggregate evidence requires explicit --scope repo|global");
+    scope = aggregateScope2;
+    rows = rowsFromAggregate(input.value, aggregateScope2);
+  } else {
+    rows = rowsFromAnalysis(input.value);
+  }
+  const seen = /* @__PURE__ */ new Set();
+  for (const row of rows) {
+    const id = suggestionIdV2(suggestionKey(row.finding, "report"));
+    if (seen.has(id)) throw new Error(`duplicate canonical suggestion identity ${id}`);
+    seen.add(id);
+  }
+  const sessions = input.kind === "aggregate" ? input.value.sessionCount : 1;
+  const bundle = {
+    schemaVersion: EVIDENCE_SCHEMA_VERSION,
+    source: {
+      kind: input.kind,
+      schemaVersion: input.value.schemaVersion,
+      scope,
+      sessions,
+      ...input.kind === "aggregate" ? { cohortFingerprint: sessionCohortFingerprint(input.value.sessionIds) } : {}
     },
-    quality: { signals: a.quality.signals },
-    parse: { reconciliation: a.parse.reconciliation }
+    totalFindings: rows.length,
+    selectedFindings: 0,
+    truncated: rows.length > 0,
+    catalogMatches: [],
+    findings: []
+  };
+  for (const row of rows.slice(0, limit)) {
+    const suggestionId2 = suggestionIdV2(suggestionKey(row.finding, "report"));
+    const matches = row.catalogMatches.map((match) => catalogOutput(suggestionId2, match));
+    const finding = {
+      suggestionId: suggestionId2,
+      findingToken: encodeFinding(row.finding, "report"),
+      finding: row.finding,
+      axis: row.axis,
+      severity: row.severity,
+      detail: row.detail,
+      ...row.recommendation !== void 0 ? { recommendation: row.recommendation } : {},
+      ...row.turnIndexes !== void 0 ? { turnIndexes: row.turnIndexes } : {},
+      catalogMatchIds: matches.map((match) => match.id)
+    };
+    const catalogStart = bundle.catalogMatches.length;
+    bundle.catalogMatches.push(...matches);
+    bundle.findings.push(finding);
+    bundle.selectedFindings = bundle.findings.length;
+    bundle.truncated = bundle.selectedFindings < rows.length;
+    if (utf8Bytes(JSON.stringify(bundle)) > MAX_EVIDENCE_OUTPUT_BYTES) {
+      bundle.catalogMatches.splice(catalogStart);
+      bundle.findings.pop();
+      bundle.selectedFindings = bundle.findings.length;
+      bundle.truncated = true;
+      break;
+    }
+  }
+  return bundle;
+}
+function parseEvidenceArtifact(text2, options = {}) {
+  const bytes = utf8Bytes(text2);
+  if (bytes > MAX_EVIDENCE_ARTIFACT_BYTES) throw new Error(`evidence artifact exceeds ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes`);
+  let value;
+  try {
+    value = JSON.parse(text2);
+  } catch (error) {
+    throw new Error(`invalid evidence JSON: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return projectEvidence(value, options);
+}
+function estimateEvidence(bundle) {
+  const bytes = utf8Bytes(JSON.stringify(bundle));
+  const approxTokens3 = Math.ceil(bytes / 4);
+  return {
+    bytes,
+    approxTokens: approxTokens3,
+    thresholdTokens: ESTIMATE_TOKEN_THRESHOLD,
+    overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD
   };
 }
 
 // src/suggest/estimate.ts
-async function estimateFor(sessionIds, load) {
+var evidenceBytes = (a) => Buffer.byteLength(JSON.stringify(projectEvidence(a)));
+async function estimateFor(sessionIds, load, size = evidenceBytes) {
   let bytes = 0;
   let sessions = 0;
   let files2 = 0;
@@ -8897,7 +9288,7 @@ async function estimateFor(sessionIds, load) {
     if (!a) continue;
     sessions++;
     files2 += 1 + a.session.subagentPaths.length;
-    bytes += Buffer.byteLength(JSON.stringify(slimAnalysis(a)));
+    bytes += size(a);
   }
   const approxTokens3 = Math.ceil(bytes / 4);
   return { bytes, approxTokens: approxTokens3, sessions, files: files2, overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD };
@@ -8964,6 +9355,33 @@ function verifyConfirmationReceipt(o) {
   if (claims.estimateHash !== estimateHash(o.estimate)) return invalid("receipt estimate does not match");
   if (!o.estimate.overThreshold) return invalid("fresh estimate is no longer over threshold");
   return { valid: true, expiresAt: claims.expiresAt };
+}
+
+// src/suggest/slim.ts
+function slimAnalysis(a) {
+  return {
+    schemaVersion: a.schemaVersion,
+    generator: a.generator,
+    slim: true,
+    session: a.session,
+    summary: a.summary,
+    insights: a.insights,
+    tools: { byName: a.tools.byName, errorGroups: a.tools.errorGroups },
+    files: { mostReRead: a.files.mostReRead },
+    tokens: { total: a.tokens.total, totalTokens: a.tokens.totalTokens, byModel: a.tokens.byModel, byKind: a.tokens.byKind },
+    agents: { totals: a.agents.totals, byType: a.agents.byType },
+    context: {
+      peak: a.context.peak,
+      baseline: a.context.baseline,
+      final: a.context.final,
+      contextWindow: a.context.contextWindow,
+      cacheHitRatio: a.context.cacheHitRatio,
+      reReadMultiplier: a.context.reReadMultiplier,
+      compactions: a.context.compactions
+    },
+    quality: { signals: a.quality.signals },
+    parse: { reconciliation: a.parse.reconciliation }
+  };
 }
 
 // src/cli/commands/harness.ts
@@ -9975,13 +10393,9 @@ function printHarness(r) {
 }
 
 // src/cli/commands/estimate.ts
-var VERSION2 = true ? "0.5.0" : "0.0.0-dev";
-function depthBytes(a, depth) {
-  if (depth === "quick") return Buffer.byteLength(JSON.stringify({ session: a.session, summary: a.summary, insights: a.insights }));
-  if (depth === "deep") return Buffer.byteLength(JSON.stringify(a));
-  return Buffer.byteLength(JSON.stringify(slimAnalysis(a)));
-}
-async function loadAnalysisBySelector(sel) {
+var DEPTH_RETIRED = "orangu estimate has one canonical projection (the evidence bundle); --depth was retired. Use --slim to size an `analyze --json --slim` read.";
+var slimBytes = (a) => Buffer.byteLength(JSON.stringify(slimAnalysis(a)));
+async function loadAnalysisBySelector(sel, analyzeOptions = { version: "evidence", now: 0 }) {
   try {
     const value = sel.trim();
     const pathSelector = value.endsWith(".jsonl") || value.includes("/") || value.includes("\\");
@@ -9990,7 +10404,7 @@ async function loadAnalysisBySelector(sel) {
     const manifest = await prevalidateEvidenceSession(ref.path);
     const loaded = await readEvidenceSessionManifest(manifest);
     const session = await parseClaudeCodeSession(loaded.parseInput);
-    return analyzeSession(session, { version: VERSION2, now: Date.now() });
+    return analyzeSession(session, analyzeOptions);
   } catch {
     return void 0;
   }
@@ -10010,16 +10424,15 @@ async function targetSessionIds(positionals, flags) {
   if (positionals[0] === "repo") {
     return (await listSessions({ cwd: flagStr(flags, "cwd") ?? process.cwd() })).map((r) => r.path);
   }
-  if (positionals[0]) return [positionals[0]];
+  if (positionals[0] && positionals[0] !== "latest") return [positionals[0]];
   const latest = await findLatestSession({});
   if (!latest) throw new Error("No sessions found. Try: orangu list");
   return [latest.path];
 }
 var fmtKb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
 async function cmdEstimate(positionals, flags) {
-  const depthRaw = flagStr(flags, "depth") ?? "standard";
-  if (!["quick", "standard", "deep"].includes(depthRaw)) throw new Error(`--depth must be quick|standard|deep, got "${depthRaw}"`);
-  const depth = depthRaw;
+  if (flags["depth"] !== void 0) throw new Error(DEPTH_RETIRED);
+  const slim = flagBool(flags, "slim");
   if (positionals[0] === "harness") {
     const report = await runHarness({ ...flags, quiet: true });
     const bytes = Buffer.byteLength(JSON.stringify(report));
@@ -10047,18 +10460,7 @@ async function cmdEstimate(positionals, flags) {
     if (!receiptRecord) throw new Error(`suggestion ${suggestionSelector} not found (see: orangu suggest --list)`);
   }
   const ids = await targetSessionIds(positionals, flags);
-  const loaded = [];
-  const load = async (id) => {
-    const a = await loadAnalysisBySelector(id);
-    if (a) loaded.push(a);
-    return a;
-  };
-  let est = await estimateFor(ids, load);
-  if (depth !== "standard") {
-    const bytes = loaded.reduce((sum2, a) => sum2 + depthBytes(a, depth), 0);
-    const approxTokens3 = Math.ceil(bytes / 4);
-    est = { ...est, bytes, approxTokens: approxTokens3, overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD };
-  }
+  const est = await estimateFor(ids, (id) => loadAnalysisBySelector(id), slim ? slimBytes : void 0);
   const confirmationReceipt = receiptToken && receiptRecord ? verifyConfirmationReceipt({
     token: receiptToken,
     record: receiptRecord,
@@ -10071,7 +10473,7 @@ async function cmdEstimate(positionals, flags) {
     process.stdout.write(JSON.stringify(result, null, flagBool(flags, "quiet") ? 0 : 2) + "\n");
     return;
   }
-  printEstimate(est, depth);
+  printEstimate(est, slim ? "slim" : "evidence");
   if (confirmationReceipt) {
     process.stdout.write(
       confirmationReceipt.valid ? `  confirmation receipt valid until ${new Date(confirmationReceipt.expiresAt).toISOString()}
@@ -10098,425 +10500,6 @@ function printEstimate(est, label) {
 
 // src/cli/commands/evidence.ts
 import { extname, resolve as resolve7 } from "node:path";
-
-// src/suggest/evidence.ts
-var EVIDENCE_SCHEMA_VERSION = "1";
-var DEFAULT_EVIDENCE_LIMIT = 12;
-var MAX_EVIDENCE_LIMIT = 50;
-var MAX_EVIDENCE_ARTIFACT_BYTES = 8 * 1024 * 1024;
-var MAX_EVIDENCE_OUTPUT_BYTES = 256 * 1024;
-var MAX_EVIDENCE_INPUT_FINDINGS = 500;
-var MAX_EVIDENCE_INPUT_SESSIONS = 1e3;
-var MAX_RULE_ID_CHARS = 128;
-var MAX_INSIGHT_ID_CHARS = 256;
-var MAX_SESSION_ID_CHARS = 2048;
-var MAX_TITLE_CHARS = 1e3;
-var MAX_INPUT_TEXT_CHARS = 16384;
-var MAX_OUTPUT_DETAIL_CHARS = 2e3;
-var MAX_OUTPUT_CATALOG_TEXT_CHARS = 1e3;
-var MAX_TURN_INDEXES = 500;
-var MAX_SESSION_IDS_PER_FINDING = 50;
-var MAX_CATALOG_MATCHES_PER_FINDING = 16;
-var MAX_EVIDENCE_VALUE_ITEMS = 500;
-var MAX_EVIDENCE_VALUE_NODES = 5e3;
-var MAX_EVIDENCE_VALUE_DEPTH = 8;
-var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]*$/;
-function isRecord(value) {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-function boundedString(value, label, max, allowEmpty = false) {
-  if (typeof value !== "string" || !allowEmpty && !value.trim()) throw new Error(`${label} must be a non-empty string`);
-  if (value.length > max) throw new Error(`${label} exceeds ${max} characters`);
-  return value;
-}
-function boundedId(value, label, max) {
-  const id = boundedString(value, label, max);
-  if (!SAFE_ID.test(id)) throw new Error(`${label} contains unsupported characters`);
-  if (redactValue(id, { scrub: true }) !== id) throw new Error(`${label} contains sensitive material`);
-  return id;
-}
-function finiteNonNegative(value, label) {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error(`${label} must be a finite non-negative number`);
-  return value;
-}
-function insightAxis(value, label) {
-  if (value === "quality" || value === "time" || value === "tokens" || value === "context") return value;
-  throw new Error(`${label} is unsupported`);
-}
-function insightSeverity(value, label) {
-  if (value === "info" || value === "low" || value === "medium" || value === "high") return value;
-  throw new Error(`${label} is unsupported`);
-}
-function insightPersona(value, label) {
-  if (value === "developer" || value === "lead" || value === "pm" || value === "qa" || value === "anyone") return value;
-  throw new Error(`${label} is unsupported`);
-}
-function boundedArray(value, label, max) {
-  if (!Array.isArray(value)) throw new Error(`${label} must be an array`);
-  if (value.length > max) throw new Error(`${label} exceeds ${max} items`);
-  return value;
-}
-function requireRecords(value, keys, label) {
-  for (const key of keys) if (!isRecord(value[key])) throw new Error(`${label}.${key} must be an object`);
-}
-function requireArrays(value, keys, label) {
-  for (const key of keys) if (!Array.isArray(value[key])) throw new Error(`${label}.${key} must be an array`);
-}
-function validateBoundedValue(value, label, state = { nodes: 0, seen: /* @__PURE__ */ new WeakSet() }, depth = 0) {
-  state.nodes++;
-  if (state.nodes > MAX_EVIDENCE_VALUE_NODES) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_NODES} values`);
-  if (depth > MAX_EVIDENCE_VALUE_DEPTH) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_DEPTH} levels`);
-  if (typeof value === "string") {
-    boundedString(value, label, MAX_INPUT_TEXT_CHARS, true);
-    return;
-  }
-  if (value == null || typeof value === "boolean" || value === void 0) return;
-  if (typeof value === "number") {
-    if (!Number.isFinite(value)) throw new Error(`${label} must contain only finite numbers`);
-    return;
-  }
-  if (typeof value !== "object") throw new Error(`${label} contains an unsupported value`);
-  if (state.seen.has(value)) throw new Error(`${label} must not contain cycles`);
-  state.seen.add(value);
-  if (Array.isArray(value)) {
-    if (value.length > MAX_EVIDENCE_VALUE_ITEMS) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_ITEMS} items`);
-    for (let i = 0; i < value.length; i++) validateBoundedValue(value[i], `${label}[${i}]`, state, depth + 1);
-  } else {
-    const entries = Object.entries(value);
-    if (entries.length > MAX_EVIDENCE_VALUE_ITEMS) throw new Error(`${label} exceeds ${MAX_EVIDENCE_VALUE_ITEMS} fields`);
-    for (const [key, item] of entries) validateBoundedValue(item, `${label}.${key}`, state, depth + 1);
-  }
-  state.seen.delete(value);
-}
-function validateSessionIds(value, label) {
-  const raw = boundedArray(value, label, MAX_SESSION_IDS_PER_FINDING);
-  if (!raw.length) throw new Error(`${label} must not be empty`);
-  return normalizeSessionIds(raw.map((id, index) => boundedId(id, `${label}[${index}]`, MAX_SESSION_ID_CHARS)));
-}
-function validateInsight(value, index) {
-  if (!isRecord(value)) throw new Error(`insights[${index}] must be an object`);
-  const id = boundedId(value["id"], `insights[${index}].id`, MAX_INSIGHT_ID_CHARS);
-  const ruleId = boundedId(value["ruleId"], `insights[${index}].ruleId`, MAX_RULE_ID_CHARS);
-  const title = boundedString(value["title"], `insights[${index}].title`, MAX_TITLE_CHARS, true);
-  const detail = boundedString(value["detail"], `insights[${index}].detail`, MAX_INPUT_TEXT_CHARS, true);
-  const recommendation = boundedString(value["recommendation"], `insights[${index}].recommendation`, MAX_INPUT_TEXT_CHARS, true);
-  const axis = insightAxis(value["axis"], `insights[${index}].axis`);
-  const severity = insightSeverity(value["severity"], `insights[${index}].severity`);
-  const evidence = value["evidence"];
-  if (!isRecord(evidence)) throw new Error(`insights[${index}].evidence must be an object`);
-  validateBoundedValue(evidence, `insights[${index}].evidence`);
-  const rawTurns = boundedArray(value["turnIndexes"], `insights[${index}].turnIndexes`, MAX_TURN_INDEXES);
-  const turnIndexes = [];
-  for (let i = 0; i < rawTurns.length; i++) {
-    const turn = rawTurns[i];
-    if (typeof turn !== "number" || !Number.isInteger(turn) || turn < 0) throw new Error(`insights[${index}].turnIndexes[${i}] must be a non-negative integer`);
-    turnIndexes.push(turn);
-  }
-  const rawPersonas = boundedArray(value["personas"], `insights[${index}].personas`, 32);
-  const personas = rawPersonas.map((persona, personaIndex) => insightPersona(persona, `insights[${index}].personas[${personaIndex}]`));
-  let savings;
-  const rawSavings = value["savings"];
-  if (rawSavings !== void 0) {
-    if (!isRecord(rawSavings) || typeof rawSavings["estimated"] !== "boolean") {
-      throw new Error(`insights[${index}].savings must include estimated`);
-    }
-    savings = {
-      estimated: rawSavings["estimated"],
-      ...rawSavings["tokens"] !== void 0 ? { tokens: finiteNonNegative(rawSavings["tokens"], `insights[${index}].savings.tokens`) } : {},
-      ...rawSavings["ms"] !== void 0 ? { ms: finiteNonNegative(rawSavings["ms"], `insights[${index}].savings.ms`) } : {}
-    };
-  }
-  return { id, ruleId, title, detail, recommendation, axis, severity, evidence, turnIndexes, ...savings ? { savings } : {}, personas };
-}
-function matchableFiles(value) {
-  const files2 = value["files"];
-  if (!isRecord(files2)) throw new Error("Analysis.files must be an object");
-  const raw = boundedArray(files2["mostReRead"], "Analysis.files.mostReRead", MAX_EVIDENCE_VALUE_ITEMS);
-  return {
-    mostReRead: raw.map((item, index) => {
-      if (!isRecord(item)) throw new Error(`Analysis.files.mostReRead[${index}] must be an object`);
-      const path = item["path"];
-      return path === void 0 ? {} : { path: boundedString(path, `Analysis.files.mostReRead[${index}].path`, MAX_INPUT_TEXT_CHARS) };
-    })
-  };
-}
-function matchableContext(value) {
-  const context = value["context"];
-  if (!isRecord(context)) throw new Error("Analysis.context must be an object");
-  const misses = context["cacheMisses"];
-  if (misses === void 0) return {};
-  const raw = boundedArray(misses, "Analysis.context.cacheMisses", MAX_EVIDENCE_VALUE_ITEMS);
-  return {
-    cacheMisses: raw.map((item, index) => {
-      if (!isRecord(item)) throw new Error(`Analysis.context.cacheMisses[${index}] must be an object`);
-      const type = item["type"];
-      return type === void 0 ? {} : { type: boundedString(type, `Analysis.context.cacheMisses[${index}].type`, MAX_RULE_ID_CHARS) };
-    })
-  };
-}
-function validateAnalysis(value) {
-  if (value["schemaVersion"] !== ANALYSIS_SCHEMA_VERSION) {
-    throw new Error(`Analysis schemaVersion must be current (${ANALYSIS_SCHEMA_VERSION})`);
-  }
-  if (!isRecord(value["generator"]) || value["generator"]["name"] !== "orangu") throw new Error('Analysis.generator.name must be "orangu"');
-  if (!isRecord(value["session"])) throw new Error("Analysis.session must be an object");
-  const sessionId = boundedId(value["session"]["id"], "Analysis.session.id", MAX_SESSION_ID_CHARS);
-  const insights = boundedArray(value["insights"], "Analysis.insights", MAX_EVIDENCE_INPUT_FINDINGS);
-  const validatedInsights = insights.map(validateInsight);
-  const slim = value["slim"] === true;
-  if (slim) {
-    requireRecords(value, ["summary", "tools", "files", "tokens", "agents", "context", "quality", "parse"], "SlimAnalysis");
-  } else {
-    if (value["slim"] !== void 0) throw new Error("Analysis.slim must be absent; use true for SlimAnalysis");
-    requireRecords(value, ["summary", "tools", "files", "agents", "skills", "hooks", "context", "tokens", "time", "quality", "parse"], "Analysis");
-    requireArrays(value, ["turns", "events"], "Analysis");
-  }
-  return {
-    kind: slim ? "slim-analysis" : "analysis",
-    value: {
-      schemaVersion: ANALYSIS_SCHEMA_VERSION,
-      session: { id: sessionId },
-      insights: validatedInsights,
-      files: matchableFiles(value),
-      context: matchableContext(value)
-    }
-  };
-}
-function validateCrossFinding(value, index) {
-  if (!isRecord(value)) throw new Error(`Aggregate.crossFindings[${index}] must be an object`);
-  const ruleId = boundedId(value["ruleId"], `Aggregate.crossFindings[${index}].ruleId`, MAX_RULE_ID_CHARS);
-  const title = boundedString(value["title"], `Aggregate.crossFindings[${index}].title`, MAX_TITLE_CHARS, true);
-  const sessions = finiteNonNegative(value["sessions"], `Aggregate.crossFindings[${index}].sessions`);
-  if (!Number.isInteger(sessions) || sessions < 1 || sessions > MAX_EVIDENCE_INPUT_SESSIONS) {
-    throw new Error(`Aggregate.crossFindings[${index}].sessions is out of range`);
-  }
-  const totalSavingsTokens = finiteNonNegative(value["totalSavingsTokens"], `Aggregate.crossFindings[${index}].totalSavingsTokens`);
-  const totalSavingsMs = finiteNonNegative(value["totalSavingsMs"], `Aggregate.crossFindings[${index}].totalSavingsMs`);
-  const axis = insightAxis(value["axis"], `Aggregate.crossFindings[${index}].axis`);
-  const severity = insightSeverity(value["severity"], `Aggregate.crossFindings[${index}].severity`);
-  const exampleSessionIds = validateSessionIds(value["exampleSessionIds"], `Aggregate.crossFindings[${index}].exampleSessionIds`);
-  return { ruleId, title, sessions, totalSavingsTokens, totalSavingsMs, axis, severity, exampleSessionIds };
-}
-function validateAggregate(value) {
-  if (value["schemaVersion"] !== AGGREGATE_SCHEMA_VERSION) {
-    throw new Error(`Aggregate schemaVersion must be current (${AGGREGATE_SCHEMA_VERSION})`);
-  }
-  boundedString(value["scope"], "Aggregate.scope", MAX_INPUT_TEXT_CHARS, true);
-  finiteNonNegative(value["generatedAt"], "Aggregate.generatedAt");
-  const sessionCount = finiteNonNegative(value["sessionCount"], "Aggregate.sessionCount");
-  if (!Number.isInteger(sessionCount) || sessionCount > MAX_EVIDENCE_INPUT_SESSIONS) throw new Error("Aggregate.sessionCount is out of range");
-  requireRecords(value, ["totals", "averages"], "Aggregate");
-  requireArrays(value, ["sessions", "topSessions", "byWeek"], "Aggregate");
-  const sessions = boundedArray(value["sessions"], "Aggregate.sessions", MAX_EVIDENCE_INPUT_SESSIONS);
-  if (sessions.length !== sessionCount) throw new Error("Aggregate.sessionCount must equal Aggregate.sessions.length");
-  for (let i = 0; i < sessions.length; i++) {
-    const session = sessions[i];
-    if (!isRecord(session)) throw new Error(`Aggregate.sessions[${i}] must be an object`);
-    boundedId(session["id"], `Aggregate.sessions[${i}].id`, MAX_SESSION_ID_CHARS);
-  }
-  const sessionIds = normalizeSessionIds(sessions.map((session) => session["id"]));
-  if (sessionIds.length !== sessions.length) throw new Error("Aggregate.sessions ids must be distinct");
-  const findings = boundedArray(value["crossFindings"], "Aggregate.crossFindings", MAX_EVIDENCE_INPUT_FINDINGS).map(validateCrossFinding);
-  const cohort = new Set(sessionIds);
-  for (let index = 0; index < findings.length; index++) {
-    const finding = findings[index];
-    if (finding.sessions > sessionCount) {
-      throw new Error(`Aggregate.crossFindings[${index}].sessions must not exceed Aggregate.sessionCount`);
-    }
-    if (finding.exampleSessionIds.length > finding.sessions) {
-      throw new Error(`Aggregate.crossFindings[${index}].exampleSessionIds must not exceed its recurrence count`);
-    }
-    if (finding.exampleSessionIds.some((id) => !cohort.has(id))) {
-      throw new Error(`Aggregate.crossFindings[${index}].exampleSessionIds must belong to Aggregate.sessions`);
-    }
-  }
-  return {
-    kind: "aggregate",
-    value: { schemaVersion: AGGREGATE_SCHEMA_VERSION, sessionCount, sessionIds, crossFindings: findings }
-  };
-}
-function validateInput(value) {
-  if (!isRecord(value)) throw new Error("evidence input must be a JSON object");
-  if (Array.isArray(value["crossFindings"])) return validateAggregate(value);
-  if (Array.isArray(value["insights"])) return validateAnalysis(value);
-  throw new Error("input is not a current Orangu Analysis, SlimAnalysis, or Aggregate");
-}
-function outputText(value, max) {
-  const redacted2 = redactValue(value, { scrub: true });
-  return redacted2.length <= max ? redacted2 : redacted2.slice(0, Math.max(0, max - 1)) + "\u2026";
-}
-function titleForRule(ruleId) {
-  const words2 = ruleId.trim().replace(/[-_]+/g, " ") || "finding";
-  return words2.charAt(0).toUpperCase() + words2.slice(1);
-}
-function safeTitle(ruleId, title) {
-  return outputText(title, MAX_TITLE_CHARS).trim() || titleForRule(ruleId);
-}
-function findingFromInsight(insight, sessionId) {
-  return {
-    ruleId: insight.ruleId,
-    title: safeTitle(insight.ruleId, insight.title),
-    scope: "session",
-    sessionIds: normalizeSessionIds([sessionId]),
-    insightId: insight.id,
-    evidence: {
-      estimated: insight.savings?.estimated ?? true,
-      sessions: 1,
-      ...insight.savings?.tokens !== void 0 ? { savingsTokens: insight.savings.tokens } : {},
-      ...insight.savings?.ms !== void 0 ? { savingsMs: insight.savings.ms } : {}
-    }
-  };
-}
-function findingFromCrossFinding(finding, scope, cohortFingerprint) {
-  return {
-    ruleId: finding.ruleId,
-    title: safeTitle(finding.ruleId, finding.title),
-    scope,
-    cohortFingerprint,
-    sessionIds: validateSessionIds(finding.exampleSessionIds, `Aggregate.crossFindings.${finding.ruleId}.exampleSessionIds`),
-    evidence: {
-      estimated: true,
-      sessions: finding.sessions,
-      ...finding.totalSavingsTokens ? { savingsTokens: finding.totalSavingsTokens } : {},
-      ...finding.totalSavingsMs ? { savingsMs: finding.totalSavingsMs } : {}
-    }
-  };
-}
-function rowsFromAnalysis(a) {
-  return a.insights.map((insight) => ({
-    finding: findingFromInsight(insight, a.session.id),
-    axis: insight.axis,
-    severity: insight.severity,
-    detail: outputText(insight.detail, MAX_OUTPUT_DETAIL_CHARS),
-    recommendation: outputText(insight.recommendation, MAX_OUTPUT_DETAIL_CHARS),
-    turnIndexes: [...insight.turnIndexes],
-    catalogMatches: matchRule(insight.ruleId, [a]).slice(0, MAX_CATALOG_MATCHES_PER_FINDING)
-  }));
-}
-function rowsFromAggregate(a, scope) {
-  const cohortFingerprint = sessionCohortFingerprint(a.sessionIds);
-  return [...a.crossFindings].sort(compareCrossFindings).map((finding) => ({
-    finding: findingFromCrossFinding(finding, scope, cohortFingerprint),
-    axis: finding.axis,
-    severity: finding.severity,
-    detail: `Recurs in ${finding.sessions} session${finding.sessions === 1 ? "" : "s"}.`,
-    catalogMatches: matchRule(finding.ruleId).slice(0, MAX_CATALOG_MATCHES_PER_FINDING)
-  }));
-}
-function catalogOutput(suggestionId2, match) {
-  const entry = match.entry;
-  return {
-    suggestionId: suggestionId2,
-    id: entry.id,
-    changeClass: entry.changeClass,
-    ...entry.tool !== void 0 ? { tool: entry.tool } : {},
-    ...entry.skill !== void 0 ? { skill: entry.skill } : {},
-    ...entry.feature !== void 0 ? { feature: entry.feature } : {},
-    url: entry.url,
-    verifiedAt: entry.verifiedAt,
-    note: outputText(entry.note, MAX_OUTPUT_CATALOG_TEXT_CHARS),
-    evidence: outputText(match.evidence, MAX_OUTPUT_CATALOG_TEXT_CHARS)
-  };
-}
-function utf8Bytes(value) {
-  return new TextEncoder().encode(value).byteLength;
-}
-function evidenceLimit(limit) {
-  if (limit === void 0) return DEFAULT_EVIDENCE_LIMIT;
-  if (!Number.isInteger(limit) || limit < 1 || limit > MAX_EVIDENCE_LIMIT) {
-    throw new Error(`--limit must be an integer from 1 to ${MAX_EVIDENCE_LIMIT}`);
-  }
-  return limit;
-}
-function projectEvidence(value, options = {}) {
-  const input = validateInput(value);
-  const limit = evidenceLimit(options.limit);
-  if (input.kind === "aggregate" && options.scope === void 0) throw new Error("Aggregate evidence requires explicit --scope repo|global");
-  if (input.kind !== "aggregate" && options.scope !== void 0) throw new Error("--scope is only valid for Aggregate evidence");
-  let scope = "session";
-  let rows;
-  if (input.kind === "aggregate") {
-    const aggregateScope2 = options.scope;
-    if (aggregateScope2 === void 0) throw new Error("Aggregate evidence requires explicit --scope repo|global");
-    scope = aggregateScope2;
-    rows = rowsFromAggregate(input.value, aggregateScope2);
-  } else {
-    rows = rowsFromAnalysis(input.value);
-  }
-  const seen = /* @__PURE__ */ new Set();
-  for (const row of rows) {
-    const id = suggestionIdV2(suggestionKey(row.finding, "report"));
-    if (seen.has(id)) throw new Error(`duplicate canonical suggestion identity ${id}`);
-    seen.add(id);
-  }
-  const sessions = input.kind === "aggregate" ? input.value.sessionCount : 1;
-  const bundle = {
-    schemaVersion: EVIDENCE_SCHEMA_VERSION,
-    source: {
-      kind: input.kind,
-      schemaVersion: input.value.schemaVersion,
-      scope,
-      sessions,
-      ...input.kind === "aggregate" ? { cohortFingerprint: sessionCohortFingerprint(input.value.sessionIds) } : {}
-    },
-    totalFindings: rows.length,
-    selectedFindings: 0,
-    truncated: rows.length > 0,
-    catalogMatches: [],
-    findings: []
-  };
-  for (const row of rows.slice(0, limit)) {
-    const suggestionId2 = suggestionIdV2(suggestionKey(row.finding, "report"));
-    const matches = row.catalogMatches.map((match) => catalogOutput(suggestionId2, match));
-    const finding = {
-      suggestionId: suggestionId2,
-      findingToken: encodeFinding(row.finding, "report"),
-      finding: row.finding,
-      axis: row.axis,
-      severity: row.severity,
-      detail: row.detail,
-      ...row.recommendation !== void 0 ? { recommendation: row.recommendation } : {},
-      ...row.turnIndexes !== void 0 ? { turnIndexes: row.turnIndexes } : {},
-      catalogMatchIds: matches.map((match) => match.id)
-    };
-    const catalogStart = bundle.catalogMatches.length;
-    bundle.catalogMatches.push(...matches);
-    bundle.findings.push(finding);
-    bundle.selectedFindings = bundle.findings.length;
-    bundle.truncated = bundle.selectedFindings < rows.length;
-    if (utf8Bytes(JSON.stringify(bundle)) > MAX_EVIDENCE_OUTPUT_BYTES) {
-      bundle.catalogMatches.splice(catalogStart);
-      bundle.findings.pop();
-      bundle.selectedFindings = bundle.findings.length;
-      bundle.truncated = true;
-      break;
-    }
-  }
-  return bundle;
-}
-function parseEvidenceArtifact(text2, options = {}) {
-  const bytes = utf8Bytes(text2);
-  if (bytes > MAX_EVIDENCE_ARTIFACT_BYTES) throw new Error(`evidence artifact exceeds ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes`);
-  let value;
-  try {
-    value = JSON.parse(text2);
-  } catch (error) {
-    throw new Error(`invalid evidence JSON: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  return projectEvidence(value, options);
-}
-function estimateEvidence(bundle) {
-  const bytes = utf8Bytes(JSON.stringify(bundle));
-  const approxTokens3 = Math.ceil(bytes / 4);
-  return {
-    bytes,
-    approxTokens: approxTokens3,
-    thresholdTokens: ESTIMATE_TOKEN_THRESHOLD,
-    overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD
-  };
-}
-
-// src/cli/commands/evidence.ts
 function aggregateScope(flags) {
   const raw = flags["scope"];
   if (raw === void 0) return void 0;
@@ -10566,7 +10549,7 @@ async function cmdEvidence(positionals, flags) {
     throw new Error("usage: orangu evidence <session|latest|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate]");
   }
   if (flagBool(flags, "no-redact")) throw new Error("evidence output is always redacted; --no-redact is not supported");
-  if (flags["depth"] !== void 0) throw new Error("orangu evidence has one canonical bounded projection; --depth is only supported by orangu estimate");
+  if (flags["depth"] !== void 0) throw new Error("orangu evidence has one canonical bounded projection; --depth is not supported");
   const input = positionals[0];
   if (input === void 0) throw new Error("evidence input is required");
   const options = { limit: requestedLimit(flags), scope: aggregateScope(flags) };
@@ -11082,6 +11065,9 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
   };
 }
 
+// src/version.ts
+var VERSION2 = true ? "0.5.0" : "0.0.0-dev";
+
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
   const cwd = await realpath8(process.cwd());
@@ -11191,7 +11177,7 @@ async function cmdShow(store, id, flags) {
   const sessions = [];
   const missing = [];
   for (const sel of rec.sessionIds) {
-    const a = await loadAnalysisBySelector(sel);
+    const a = await loadAnalysisBySelector(sel, { version: VERSION2, now: Date.now() });
     if (!a) {
       missing.push(sel);
       continue;
@@ -11356,9 +11342,6 @@ function isFeedbackContext(value) {
   return typeof value === "string" && FEEDBACK_CONTEXTS.includes(value);
 }
 
-// src/version.ts
-var VERSION3 = true ? "0.5.0" : "0.0.0-dev";
-
 // src/cli/commands/feedback.ts
 var EmptySuggestionStore = class {
   async all() {
@@ -11409,7 +11392,7 @@ async function cmdFeedback(positionals, flags) {
       includeText: false,
       configDir: emptyConfigDir,
       noCache: true,
-      version: VERSION3,
+      version: VERSION2,
       maxLive: 1
     },
     { cache: null, quiet: true, store: new EmptySuggestionStore() }
@@ -11457,8 +11440,8 @@ var EXTRA_HELP = [
     "  orangu estimate [<session>|repo|global|harness]",
     "                               size what a skill would read: bytes and ~tokens",
     "                                 (--suggestion <id>",
-    "                                  | --rule <r> --session <a,b>,",
-    "                                  --depth quick|standard|deep)"
+    "                                  | --rule <r> --session <a,b>;",
+    "                                  --slim sizes an analyze --json --slim read)"
   ].join("\n"),
   [
     "  orangu harness               what your config declares vs what your sessions",
@@ -11574,7 +11557,7 @@ function fail(msg) {
 function makeCache(flags) {
   const disabled = flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1";
   if (disabled) return null;
-  return new AnalysisCache({ version: VERSION3 });
+  return new AnalysisCache({ version: VERSION2 });
 }
 function printCacheStats(cache2, flags) {
   if (!cache2 || flagBool(flags, "quiet")) return;
@@ -11584,7 +11567,7 @@ function printCacheStats(cache2, flags) {
 }
 async function analyzeRef(ref, flags, cache2) {
   const c = cache2 !== void 0 ? cache2 : makeCache(flags);
-  const analysis = await analyzeRefCached(ref, { cache: c, version: VERSION3, now: Date.now() });
+  const analysis = await analyzeRefCached(ref, { cache: c, version: VERSION2, now: Date.now() });
   if (cache2 === void 0) printCacheStats(c, flags);
   return analysis;
 }
@@ -11727,7 +11710,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
   let failed = 0;
   if (jobsN > 1 && use.length > 1 && bundledEntry) {
     const cacheEnabled = !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1");
-    const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION3, now: Date.now(), cacheEnabled });
+    const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION2, now: Date.now(), cacheEnabled });
     analyses = r.analyses;
     failed = r.failed;
     if (!flagBool(flags, "quiet")) {
@@ -11827,7 +11810,7 @@ async function cmdServe(flags) {
     roots,
     cwd: flagStr(flags, "cwd"),
     noCache: flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1",
-    version: VERSION3,
+    version: VERSION2,
     maxLive: maxLiveStr !== void 0 ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : void 0
   };
   if (requestedAutomaticLaunch) process.stderr.write("  --allow-claude is retired: the report now provides copy-only Claude/Codex handoffs.\n");
@@ -11849,7 +11832,7 @@ async function cmdServe(flags) {
 }
 function printHelp() {
   process.stdout.write(`${isTTY ? MASCOT_ASCII + "\n" : ""}
-${paint2(C2.b, "orangu")} v${VERSION3}: observe the run, then improve the next outcome.
+${paint2(C2.b, "orangu")} v${VERSION2}: observe the run, then improve the next outcome.
 Deterministic observability for Claude Code sessions. The CLI makes no network calls.
 
 ${paint2(C2.b, "usage")}
@@ -11893,7 +11876,7 @@ async function main() {
     flags["no-cache"] = true;
   }
   if (flagBool(flags, "version")) {
-    process.stdout.write(VERSION3 + "\n");
+    process.stdout.write(VERSION2 + "\n");
     return;
   }
   if (!command || flagBool(flags, "help") || command === "help") {
@@ -11918,7 +11901,7 @@ async function main() {
       return cmdAggregate("global", sel, flags);
     case "watch": {
       const ref = await selectSession(sel, flags);
-      return watchSession(ref, flags, { version: VERSION3, openInBrowser, outPath: (id) => outPath(flags, id) });
+      return watchSession(ref, flags, { version: VERSION2, openInBrowser, outPath: (id) => outPath(flags, id) });
     }
     case "serve":
       return cmdServe(flags);

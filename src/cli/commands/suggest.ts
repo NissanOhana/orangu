@@ -36,6 +36,7 @@ import {
 import { createDiscoveredClaudeAnalysisLoader } from '../../adapters/claude-code/discovered-analysis.js'
 import { flagBool, flagStr } from '../args.js'
 import { loadAnalysisBySelector } from './estimate.js'
+import { VERSION } from '../../version.js'
 
 async function currentWorkspaceIdentity(): Promise<{ cwd: string; device: string; inode: string }> {
   const cwd = await realpath(process.cwd())
@@ -173,7 +174,7 @@ async function cmdShow(store: SuggestionStore, id: string, flags: Record<string,
   const sessions: SlimAnalysis[] = []
   const missing: string[] = []
   for (const sel of rec.sessionIds) {
-    const a = await loadAnalysisBySelector(sel)
+    const a = await loadAnalysisBySelector(sel, { version: VERSION, now: Date.now() })
     if (!a) {
       missing.push(sel)
       continue
