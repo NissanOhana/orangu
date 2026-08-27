@@ -19,6 +19,12 @@ const srcPath = join(root, 'site/index.src.html')
 const outPath = join(root, 'site/index.html')
 const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 const b64 = (path: string) => readFileSync(join(root, path)).toString('base64')
+/** Distinct rule ids in src/analyze/insights.ts, the same recovery src/suggest/catalog.test.ts uses. */
+const ruleIdCount = () => {
+  const ids = new Set<string>()
+  for (const m of readFileSync(join(root, 'src/analyze/insights.ts'), 'utf8').matchAll(/ruleId:\s*['"]([a-z0-9-]+)['"]/g)) ids.add(m[1]!)
+  return ids.size
+}
 
 const htmlText = (html: string) =>
   html
@@ -179,6 +185,9 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(text).toContain('orangu reads it for you.')
     expect(text).toContain('Plain code, no model.')
     expect(text).toContain('no network, no clock')
+    // the rule count is the product's coverage number; it must track the live registry
+    expect(text).toContain(`against ${ruleIdCount()} deterministic rules`)
+    expect(readFileSync(join(root, 'README.md'), 'utf8')).toContain(`against ${ruleIdCount()} deterministic rules`)
     expect(text).toContain('The goal is not a score.')
     expect(text).toContain('better outcomes with less time and fewer tokens')
     // the hides/shows table (peers P0-1): what the session says vs what orangu shows
@@ -188,7 +197,7 @@ describe('site/index.src.html (authored landing source)', () => {
       ['that a skill is installed', 'whether it ever fired, and what it weighs in context'],
       ['nothing about repetition', 'the same file read again and again, and the same context re-read on every request'],
     ] as const) {
-      expect(text, `hides column: ${hides}`).toContain(hides.replace(/"/g, '"'))
+      expect(text, `hides column: ${hides}`).toContain(hides)
       expect(text, `shows column: ${shows}`).toContain(shows)
     }
     // the triad shrinks to a captioned figure; it is not the hero visual
@@ -529,6 +538,11 @@ describe('site/assets (published proof image)', () => {
     expect(script).toContain('--strip-paths')
     expect(script).toContain("colorScheme: 'light'")
     expect(script).toContain("reducedMotion: 'reduce'")
+    // the project-slug mask is the only guard keeping the home path out of the PNG: it must assert
+    expect(script).toContain("console.error('project-slug mask failed:'")
+    expect(script).toContain("console.error('private path visible in the capture:'")
+    expect(script.match(/process\.exit\(1\)/g)?.length ?? 0).toBeGreaterThanOrEqual(4)
+    expect(script).toContain("['rev-parse', '--git-common-dir']")
     expect(pkg.scripts.verify).not.toContain('site-screenshot')
     for (const workflow of readdirSync(join(root, '.github/workflows')))
       expect(readFileSync(join(root, '.github/workflows', workflow), 'utf8')).not.toContain('site-screenshot')

@@ -14,7 +14,10 @@
 //   3. opens #overview at 1280 wide, light theme, reduced motion (freezes animation so reruns compare),
 //   4. hides the illustrative-sample note if present, replaces the sidebar's project slug (the local
 //      folder name, which embeds the home directory and is not covered by --strip-paths) with
-//      --project (default: the repository's basename), and screenshots the viewport,
+//      --project (default: the repository's basename, via `git rev-parse --git-common-dir`, so a
+//      worktree checkout still labels the capture "orangu"), and screenshots the viewport. The mask
+//      ASSERTS: if the sidebar selector or the slug pattern is not found, or the home directory's
+//      basename is still legible anywhere in the page text, the script exits 1 and writes nothing.
 //   5. writes the PNG and prints its byte size + sha256 so the digest can be pasted into
 //      scripts/assert-public-tree.mjs (`binaryDigests`).
 //
@@ -23,7 +26,7 @@ import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
-import { tmpdir } from 'node:os'
+import { homedir, tmpdir } from 'node:os'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -37,7 +40,16 @@ const session = flag('--session', 'latest')
 const out = resolve(root, flag('--out', 'site/assets/report-overview.png'))
 const prerendered = flag('--html', '')
 const height = Number(flag('--height', '900'))
-const projectLabel = flag('--project', basename(root))
+const repoName = (() => {
+  // In a worktree `root` is `.worktrees/<track>`; the shared git dir names the real repository.
+  try {
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8' }).trim()
+    return basename(dirname(resolve(root, common)))
+  } catch {
+    return basename(root)
+  }
+})()
+const projectLabel = flag('--project', repoName)
 const width = 1280
 
 const cli = join(root, 'dist/orangu.js')
@@ -84,12 +96,30 @@ try {
   page.on('pageerror', (err) => errors.push(String(err)))
   await page.goto(url, { waitUntil: 'load' })
   await page.waitForSelector('main.main .overview-hero', { timeout: 30_000 })
-  await page.evaluate((label) => {
+  // The project slug (parse.ts derives it from cwd: `-Users-<home>-Code-orangu`) has no slash, so
+  // --strip-paths leaves it alone; this mask is the only thing keeping the home path out of the PNG.
+  // It must fail loudly, never silently, when the report markup moves.
+  const masked = await page.evaluate((label) => {
     for (const note of document.querySelectorAll('.sample-note')) note.remove()
-    const sid = document.querySelector('.sesscard .sid')
-    if (sid) sid.textContent = (sid.textContent ?? '').replace(/ · .*$/, ` · ${label}`)
     document.documentElement.setAttribute('data-theme', 'light')
+    const sid = document.querySelector('.sesscard .sid')
+    if (!sid) return { ok: false, why: 'selector .sesscard .sid not found (report markup changed?)' }
+    const before = sid.textContent ?? ''
+    const after = before.replace(/ · .*$/, ` · ${label}`)
+    if (after === before) return { ok: false, why: `slug pattern did not match: ${JSON.stringify(before)}` }
+    sid.textContent = after
+    return { ok: true, text: document.body.innerText }
   }, projectLabel)
+  if (!masked.ok) {
+    console.error('project-slug mask failed:', masked.why)
+    process.exit(1)
+  }
+  const home = basename(homedir())
+  const leak = masked.text.match(new RegExp(`-[A-Za-z]+-${home}-|${home}`, 'i'))
+  if (leak) {
+    console.error('private path visible in the capture:', leak[0])
+    process.exit(1)
+  }
   await page.waitForTimeout(250)
   if (errors.length) {
     console.error('console errors while rendering the report:\n' + errors.join('\n'))

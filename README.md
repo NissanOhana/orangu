@@ -41,10 +41,12 @@ Node.js 20 or newer. Zero runtime dependencies. More commands, inputs, and limit
 
 ## The improve loop
 
-1. **Observe.** orangu parses, redacts, counts, reconciles, matches, and ranks locally. No model is involved.
+1. **Observe.** orangu parses, redacts, counts, reconciles, matches, and ranks locally against 44 deterministic rules. No model is involved.
 2. **See.** The report shows what happened: quality, time, and tokens as separate axes, with the evidence behind each finding.
 3. **Propose.** `/orangu:improve` explains one finding's bounded evidence and drafts a structured proposal. It never edits your project.
 4. **Apply, with a receipt.** `/orangu:apply` applies one explicitly reviewed proposal and records what changed and which checks ran.
+
+Every proposal lands in one of nine change classes: instruction files, scripts and CLIs, hooks, skills to create, skills to discover, subagents and agents, MCP servers, plugins, or workflow and configuration ([data contracts](docs/DATA-CONTRACTS.md)).
 
 One run can be fixed and re-checked against a later session from the same workspace. Repo-wide changes are applied on request. Whole-harness (global) changes stay review-only. A proposal is not an application, and a later comparison is not causal proof; the full boundary is in [determinism and skill authority](docs/DETERMINISM.md).
 
