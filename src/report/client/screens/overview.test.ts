@@ -5,6 +5,7 @@ import type { AppData } from '../../../model/app-data.js'
 import { buildCanonicalSession } from '../../../../test/fixtures/session-builder.js'
 import type { Ctx } from '../app.js'
 import { renderOverview } from './overview.js'
+import { ms } from '../format.js'
 
 let markup = ''
 
@@ -46,23 +47,63 @@ async function context(options: { audience?: Ctx['audience']; mode?: AppData['mo
   return { data, a: analysis, ds: {} as Ctx['ds'], state, audience, go: vi.fn() }
 }
 
-describe('renderOverview capabilities', () => {
-  it('uses the large shared mascot and canonical links for every available serve/developer view', async () => {
+describe('renderOverview (A1: what happened · what matters · what next)', () => {
+  // Rewritten with the Overview rewrite: the five "Follow the evidence" cards and the 6-tile KPI grid are
+  // gone; "Where to look next" is three text links with the same hash hygiene the cards had.
+  it('links the three next steps canonically, clearing aggregate and filter keys, and drops the card grid', async () => {
     const ctx = await context({ mode: 'serve', dirtyRoute: true })
     renderOverview(ctx)
 
     expect(markup).toContain('class="hero overview-hero"')
-    expect(markup).toContain('width="96" height="96"')
-    for (const screen of ['timeline', 'tools', 'agents', 'context', 'suggest']) {
-      expect(markup).toContain(`data-capability="${screen}"`)
+    expect(markup).toContain('class="overview-brand"')
+    expect(markup.match(/class="herotitle"/g)?.length).toBe(1)
+    expect(markup).not.toContain('class="kpis"')
+    expect(markup).not.toContain('data-capability=')
+    expect(markup).toContain('aria-label="Where to look next"')
+    for (const screen of ['tools', 'suggest']) {
+      expect(markup).toContain(`data-screen="${screen}"`)
       expect(markup).toContain(`href="#${screen}?s=${ctx.state.s}&amp;audience=dev&amp;theme=dark"`)
     }
-    for (const stale of ['scope=', 'tool=', 'cat=', 'agent=', 'turn=', 'err=', 'filter=']) expect(markup).not.toContain(stale)
-    expect(markup).toContain(`${ctx.a!.summary.turns} turns`)
+    expect(markup).toContain('data-screen="timeline"')
+    for (const stale of ['scope=', 'cat=', 'agent=', 'filter=']) expect(markup).not.toContain(stale)
     expect(markup).toContain(`${ctx.a!.summary.toolCalls} calls`)
-    expect(markup).toContain(`${ctx.a!.agents.runs.length} runs`)
-    expect(markup).toContain('aria-label="Explore this run"')
-    expect(markup).toContain('Evidence is traceable; optional proposals stay reviewable.')
+    expect(markup).toContain(`${ctx.a!.insights.length} finding`)
+  })
+
+  it('puts ACTIVE time on the Time axis, wall and waiting in its note, and folds the signal chips into Quality', async () => {
+    const ctx = await context()
+    renderOverview(ctx)
+    const s = ctx.a!.summary
+    expect(markup).toContain(`<div class="aname">Time ↓</div><div class="aval">${ms(s.activeMs)}</div>`)
+    expect(markup).toContain('waiting for you')
+    expect(markup).not.toContain('NaN')
+    expect(markup).toContain('<details class="signals"><summary>')
+    expect(markup).toContain('class="sigchip"')
+  })
+
+  it('hoists the top finding as an open card with its fix, share, evidence link and improve command', async () => {
+    const ctx = await context()
+    renderOverview(ctx)
+    const top = ctx.a!.insights.find((i) => i.id === ctx.a!.summary.topInsightIds[0])!
+    expect(markup).toContain('The one thing to improve')
+    expect(markup).toContain('<details class="finding top" open>')
+    expect(markup).toContain(top.title)
+    expect(markup).toContain('title="≈')
+    expect(markup).toContain('/orangu:improve sg_')
+    expect(markup).toMatch(/See the [^<]+ →/)
+    expect(markup).toContain('href="#timeline?')
+  })
+
+  it('renders the context sparkline from the Context chart, and a caption alone when there is no series', async () => {
+    const ctx = await context()
+    renderOverview(ctx)
+    expect(markup).toContain('<div class="spark"><svg')
+    expect(markup).toMatch(/peak \d+% of the window · \d+ compactions?/)
+    ctx.a!.context.series = []
+    renderOverview(ctx)
+    expect(markup).not.toContain('<div class="spark">')
+    expect(markup).not.toContain('<svg')
+    expect(markup).toContain('peak ')
   })
 
   it('headlines the hero from the counted outcomes, never from the ending enum', async () => {
@@ -74,15 +115,22 @@ describe('renderOverview capabilities', () => {
     expect(hero).toContain(ctx.a!.summary.outcomes.testRuns ? 'test' : 'request')
   })
 
-  it('matches the existing file/plain navigation policy and preserves the audience in links', async () => {
+  // A3b: Plain mode removes panels (no axes, no chips, no sparkline) and keeps the same top-finding card.
+  it('Plain mode is the sentence, the "What happened here" table, the same top-finding card and the links', async () => {
     const ctx = await context({ audience: 'plain', mode: 'file' })
     renderOverview(ctx)
 
-    expect(markup).not.toContain('data-capability="agents"')
-    expect(markup).not.toContain('data-capability="context"')
+    expect(markup).toContain('What happened here')
+    expect(markup).toContain('The one thing to improve')
+    expect(markup).toContain('<details class="finding top" open>')
+    expect(markup).toContain('class="cmd"')
+    expect(markup).not.toContain('class="triptych"')
+    expect(markup).not.toContain('sigchip')
+    expect(markup).not.toContain('class="spark"')
     for (const screen of ['timeline', 'tools', 'suggest']) {
-      expect(markup).toContain(`data-capability="${screen}"`)
-      expect(markup).toContain(`href="#${screen}?s=${ctx.a!.session.id}&amp;audience=plain"`)
+      expect(markup).toContain(`data-screen="${screen}"`)
+      expect(markup).toContain(`href="#${screen}?`)
+      expect(markup).toContain(`s=${ctx.a!.session.id}&amp;audience=plain`)
     }
     // A3: one vocabulary; Plain mode keeps the word tokens and invents no nouns
     expect(markup).toContain('tokens')
@@ -102,13 +150,13 @@ describe('renderOverview capabilities', () => {
     expect(markup).toContain('title="≈')
   })
 
-  it('omits the Agents entry when the selected analysis has no agent runs', async () => {
+  it('designs the clean-session state instead of an empty card', async () => {
     const ctx = await context()
-    ctx.a!.agents.runs = []
-    ctx.a!.summary.agents = 0
+    ctx.a!.insights = []
+    ctx.a!.summary.topInsightIds = []
     renderOverview(ctx)
-
-    expect(markup).not.toContain('data-capability="agents"')
-    expect(markup).toContain('data-capability="context"')
+    expect(markup).toContain('Nothing stood out. This session ran clean.')
+    expect(markup).toContain('Suggestions · nothing to improve')
+    expect(markup).not.toContain('recoverable across')
   })
 })

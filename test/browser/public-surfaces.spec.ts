@@ -288,7 +288,7 @@ test('generated sample and served app use the same embedded raster brand', async
   expect(errors).toEqual([])
 })
 
-test('generated sample and localhost overview capability cards navigate to real app screens', async ({ page }, info) => {
+test('generated sample and localhost overview "where to look next" links navigate to real app screens', async ({ page }, info) => {
   test.skip(info.project.name !== 'wide-light', 'one deterministic capability-navigation contract is sufficient')
   const errors = runtimeErrors(page)
   const surfaces = [
@@ -299,7 +299,7 @@ test('generated sample and localhost overview capability cards navigate to real 
     for (const [screen, heading] of [['timeline', 'Timeline'], ['tools', 'Tools & calls'], ['suggest', 'Improve the next outcome']] as const) {
       await page.goto(surface.overview, { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
-      const capability = page.locator(`.cap-card[data-capability="${screen}"]`)
+      const capability = page.locator(`.where-next a[data-screen="${screen}"]`)
       await expect(capability).toBeVisible()
       await expect(capability).toHaveAttribute('href', new RegExp(`^#${screen}\\?s=.+audience=plain`))
       await capability.focus()

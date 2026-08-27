@@ -17,24 +17,29 @@ export interface FindingOpts {
   command?: string
   /** the session's total tokens, so the savings pill can be a share of it */
   sessionTotalTokens?: number
+  /** the hoisted top-finding card: rendered open, with an evidence deep link */
+  open?: boolean
+  link?: { href: string; label: string }
 }
 
 export function findingHtml(ins: Insight, audience: Audience, opts: FindingOpts = {}): string {
   const share = savingsShare(ins.savings, opts.sessionTotalTokens, ins.ruleId)
   const pill = audience === 'plain' ? '' : `<span class="pill">${esc(ins.ruleId)}</span>`
+  // the evidence link (top card) replaces the turns button; never both
   const turnsBtn =
-    ins.turnIndexes.length && audience !== 'plain'
+    ins.turnIndexes.length && audience !== 'plain' && !opts.link
       ? `<div style="margin-top:10px"><button class="btn-sm" data-turns="${esc(ins.turnIndexes.join(','))}">Show ${ins.turnIndexes.length} turn${ins.turnIndexes.length > 1 ? 's' : ''} →</button></div>`
       : ''
   // Under the default redaction Insight.detail is '' (transcript-derived copy); never render an empty <p>.
   const detail = ins.detail ? `<p>${esc(plainSentence(ins.detail, audience))}</p>` : ''
   const cmd = opts.command ? `<div class="fcmd"><div class="eyebrow">Draft a proposal</div>${commandBlock(opts.command)}</div>` : ''
-  return `<details class="finding">
+  const link = opts.link ? `<div style="margin-top:10px"><a class="btn-sm" href="${esc(opts.link.href)}">${esc(opts.link.label)}</a></div>` : ''
+  return `<details class="finding${opts.open ? ' top' : ''}"${opts.open ? ' open' : ''}>
     <summary><span class="chev" aria-hidden="true">▸</span><span class="sev ${esc(ins.severity)}" title="${esc(ins.severity)}"></span><b>${esc(plainSentence(ins.title, audience))}</b>${share ? `<span class="fsave" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${pill}</summary>
     <div class="fbody">
       ${detail}
       <div class="rec">${esc(plainSentence(ins.recommendation, audience))}</div>
-      ${turnsBtn}
+      ${link}${turnsBtn}
       ${cmd}
     </div>
   </details>`

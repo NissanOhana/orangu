@@ -5,6 +5,7 @@ import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { degradedBanner } from '../components/banner.js'
 import { emptyHero } from '../components/empty.js'
+import { compactionMarkers } from '../derive.js'
 import { lineChart, proportionRows, stackedArea, stackedBar } from '../charts.js'
 import { card } from '../components/card.js'
 
@@ -13,10 +14,7 @@ export function renderContext(ctx: Ctx): HTMLElement {
   if (!a) return h(`<section>${emptyHero({ title: 'No session selected.' })}</section>`)
   const c = a.context
   const main = c.series.filter((p) => !p.agentId)
-  const compMarkers = c.compactions.map((cp) => {
-    const near = main.findIndex((p) => p.ts !== undefined && cp.ts !== undefined && p.ts >= cp.ts)
-    return { x: near < 0 ? Math.max(0, main.length - 1) : near, label: 'compaction @turn ' + cp.turnIndex }
-  })
+  const compMarkers = compactionMarkers(c.compactions, main)
   const ctxLine = lineChart(
     main.map((p) => p.contextSize),
     { threshold: c.contextWindow ? { y: c.contextWindow, label: 'window ' + tok(c.contextWindow) } : undefined, markers: compMarkers, yMax: c.contextWindow, fmtY: tok },

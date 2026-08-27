@@ -21,9 +21,11 @@ export function chip(label: string, o: ChipOpts = {}): string {
   return `<button type="button" class="${cls}"${dis}${o.title ? ` title="${esc(o.title)}"` : ''}${data}>${esc(label)}${x}</button>`
 }
 
-/** One pill per quality signal; zero-valued signals STAY visible. */
+/** One pill per quality signal, folded under a native <details> (keyboard for free); zero-valued signals STAY visible. */
 export function signalChips(signals: QualitySignal[]): string {
-  return `<div class="chiprow" style="margin-bottom:16px">${signals
+  if (!signals.length) return ''
+  const chips = signals
     .map((s) => `<span class="sigchip">${esc(s.label)} <b class="${esc(s.tone)}"${s.detail ? ` title="${esc(s.detail)}"` : ''}>${esc(String(s.value))}</b></span>`)
-    .join('')}</div>`
+    .join('')
+  return `<details class="signals"><summary>${signals.length} signals</summary><div class="chiprow">${chips}</div></details>`
 }

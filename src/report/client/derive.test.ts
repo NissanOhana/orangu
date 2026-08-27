@@ -17,6 +17,10 @@ import {
   savingsShare,
   savingsText,
   recoverableLine,
+  timeAxis,
+  insightLink,
+  outcomeBits,
+  compactionMarkers,
 } from './derive.js'
 import type { Analysis, QualitySignal, Summary, TurnAnalysis } from '../../model/analysis.js'
 
@@ -290,5 +294,46 @@ describe('recoverableLine', () => {
     expect(recoverableLine({ tokens: 0, ms: 65_000 }, 2)).toBe('≈1m 5s recoverable across 2 findings')
     expect(recoverableLine({ tokens: 0, ms: 0 }, 3)).toBe('')
     expect(recoverableLine({ tokens: 10, ms: 0 }, 0)).toBe('')
+  })
+})
+
+describe('timeAxis (A1: the Time axis is ACTIVE time)', () => {
+  it('leads with active time and notes wall and waiting', () => {
+    expect(timeAxis(summary({ activeMs: 2_078_000, wallMs: 3_132_000, humanWaitMs: 257_000 }))).toEqual({ value: '34m 38s', note: 'over 52m 12s wall · 4m 17s waiting for you' })
+  })
+  it('never puts NaN or a dash in the big slot for a single-message session', () => {
+    const t = timeAxis(summary({ activeMs: 0, humanWaitMs: 0 }))
+    expect(t).toEqual({ value: '0ms', note: 'single-message session' })
+    expect(t.value).not.toContain('NaN')
+  })
+})
+
+describe('outcomeBits', () => {
+  it('is the same wording the headline uses (test RUNS, not tests)', () => {
+    const s = summary({ outcomes: { gitCommits: 2, testRuns: 3 } })
+    expect(outcomeBits(s)).toEqual(['2 commits', '3 test runs green'])
+    expect(outcomeHeadline(s)).toBe('2 commits · 3 test runs green')
+    expect(outcomeBits(summary())).toEqual([])
+  })
+})
+
+describe('insightLink', () => {
+  it('names the tool from evidence.calls or evidence.tools, else the first turn, else nothing', () => {
+    expect(insightLink({ evidence: { calls: [{ tool: 'Bash' }] }, turnIndexes: [4] })).toEqual({ tool: 'Bash' })
+    expect(insightLink({ evidence: { calls: [{ name: 'Read', count: 3 }] }, turnIndexes: [] })).toEqual({ tool: 'Read' })
+    expect(insightLink({ evidence: { tools: [{ name: 'WebFetch' }] }, turnIndexes: [] })).toEqual({ tool: 'WebFetch' })
+    expect(insightLink({ evidence: { files: [] }, turnIndexes: [7, 9] })).toEqual({ turn: 7 })
+    expect(insightLink({ evidence: {}, turnIndexes: [] })).toBeUndefined()
+  })
+})
+
+describe('compactionMarkers', () => {
+  it('marks the first main-thread point at or after each compaction, clamping to the last point', () => {
+    const main = [{ ts: 10 }, { ts: 20 }, { ts: 30 }]
+    expect(compactionMarkers([{ ts: 15, turnIndex: 2 }, { ts: 99, turnIndex: 5 }], main)).toEqual([
+      { x: 1, label: 'compaction @turn 2' },
+      { x: 2, label: 'compaction @turn 5' },
+    ])
+    expect(compactionMarkers([{ turnIndex: 1 }], [])).toEqual([{ x: 0, label: 'compaction @turn 1' }])
   })
 })

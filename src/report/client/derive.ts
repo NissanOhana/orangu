@@ -38,8 +38,17 @@ const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n =
  * passing build from a passing test run).
  */
 export function outcomeHeadline(s: Summary): string {
-  const o = s.outcomes
   if (s.ending === 'interrupted') return `Stopped by you after ${plural(s.turns, 'turn')}`
+  const parts = outcomeBits(s)
+  if (parts.length) return parts.join(' · ')
+  const requests = plural(s.humanTurns, 'request')
+  if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural(s.agents, 'subagent') + ', ' : ''}nothing committed`
+  return `${requests}, no tool calls recorded`
+}
+
+/** The counted outcomes as phrases ("2 commits", "3 test runs green"); the headline and the Quality axis share them. */
+export function outcomeBits(s: Summary): string[] {
+  const o = s.outcomes
   const parts: string[] = []
   if (o.prLinks.length) parts.push(plural(o.prLinks.length, 'PR'))
   if (o.gitCommits) parts.push(plural(o.gitCommits, 'commit'))
@@ -47,10 +56,40 @@ export function outcomeHeadline(s: Summary): string {
   if (changed) parts.push(plural(changed, 'file') + ' changed')
   if (o.buildRunsFailed) parts.push(`${o.buildRunsFailed} of ${plural(o.buildRuns, 'build run')} failed`)
   if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed` : `${plural(o.testRuns, 'test run')} green`)
-  if (parts.length) return parts.join(' · ')
-  const requests = plural(s.humanTurns, 'request')
-  if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural(s.agents, 'subagent') + ', ' : ''}nothing committed`
-  return `${requests}, no tool calls recorded`
+  return parts
+}
+
+/**
+ * The Time axis: the big number is ACTIVE time (the assistant working), the note puts it against the
+ * wall clock and the time spent waiting for the human. A single-message session has no wall clock;
+ * the value is still a real duration, never NaN or a dash.
+ */
+export function timeAxis(s: Summary): { value: string; note: string } {
+  return {
+    value: ms(s.activeMs),
+    note: s.wallMs !== undefined ? `over ${ms(s.wallMs)} wall · ${ms(s.humanWaitMs)} waiting for you` : 'single-message session',
+  }
+}
+
+/**
+ * Where a finding's evidence lives: the tool it names (evidence.calls[].tool|name or evidence.tools[].name)
+ * or its first turn. Undefined when it names neither, so the screen renders no link.
+ */
+export function insightLink(ins: Pick<Insight, 'evidence' | 'turnIndexes'>): { tool?: string; turn?: number } | undefined {
+  const ev = ins.evidence as { calls?: Array<{ tool?: string; name?: string }>; tools?: Array<{ name?: string }> }
+  const first = ev.calls?.[0]
+  const tool = first?.tool ?? first?.name ?? ev.tools?.[0]?.name
+  if (typeof tool === 'string' && tool) return { tool }
+  if (ins.turnIndexes.length) return { turn: ins.turnIndexes[0]! }
+  return undefined
+}
+
+/** Chart x-markers for compactions: the index of the first main-thread point at or after each compaction. */
+export function compactionMarkers(compactions: Array<{ ts?: number; turnIndex: number }>, main: Array<{ ts?: number }>): Array<{ x: number; label: string }> {
+  return compactions.map((cp) => {
+    const near = main.findIndex((p) => p.ts !== undefined && cp.ts !== undefined && p.ts >= cp.ts)
+    return { x: near < 0 ? Math.max(0, main.length - 1) : near, label: 'compaction @turn ' + cp.turnIndex }
+  })
 }
 
 /** The absolute savings claim, tokens first: "save ~1.4k tokens" / "save ~2m 5s"; '' when nothing is claimed. */

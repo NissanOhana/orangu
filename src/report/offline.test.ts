@@ -65,6 +65,6 @@ describe('offline report', () => {
     // removes the 6-tile KPI grid, the 10 signal chips and 5 of the "Follow the evidence" cards and MUST bring this
     // back under 70 KB; the cap may only go DOWN from there.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
-    expect(CLIENT_JS.length).toBe(72_911)
+    expect(CLIENT_JS.length).toBe(72_108)
   })
 })

@@ -1,57 +1,29 @@
-/** Overview: outcome and quality evidence first, with time and tokens as supporting constraints. */
+/**
+ * Overview: what happened (one true sentence from the counted outcomes), what matters (three axes with
+ * a verdict word, the top finding as a card with its fix, evidence link and improve command), what next
+ * (three text links). Detailed adds the context sparkline and the other top findings; Plain removes
+ * panels instead of renaming nouns (A1, A3b). One code path renders the top-finding card for both.
+ */
 import type { Ctx } from '../app.js'
-import type { Analysis } from '../../../model/analysis.js'
+import type { Analysis, Insight } from '../../../model/analysis.js'
 import { esc, ms, num, pct, tok } from '../format.js'
 import { h } from '../dom.js'
 import { degradedBanner } from '../components/banner.js'
 import { signalChips } from '../components/chips.js'
-import { findingHtml, savingsText } from '../components/finding.js'
+import { findingHtml } from '../components/finding.js'
 import { emptyHero } from '../components/empty.js'
 import { mascotSvg } from '../mascot.js'
-import { endingWord, outcomeHeadline, qualityHeadline, recoverableLine } from '../derive.js'
+import { lineChart } from '../charts.js'
+import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, recoverableLine, timeAxis } from '../derive.js'
 import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
-import { writeHash } from '../nav.js'
+import { writeHash, type RouteState } from '../nav.js'
 import { plainSentence } from '../strings.js'
 
-type CapabilityScreen = 'timeline' | 'tools' | 'agents' | 'context' | 'suggest'
-
-interface Capability {
-  screen: CapabilityScreen
-  mode: string
-  title: string
-  metric: string
-  detail: string
-}
-
-function triptych(a: Analysis): string {
-  const s = a.summary
-  const q = qualityHeadline(a.quality.signals)
-  const bits: string[] = []
-  if (s.outcomes.prLinks.length) bits.push(`${s.outcomes.prLinks.length} PR`)
-  if (s.outcomes.gitCommits) bits.push(`${s.outcomes.gitCommits} commits`)
-  if (s.outcomes.testRuns) bits.push(`${s.outcomes.testRuns - s.outcomes.testRunsFailed} tests green`)
-  const qNote = bits.join(' · ') || 'no commits, PRs or test runs detected'
-  const tVal = s.wallMs !== undefined ? ms(s.wallMs) : '–'
-  const tNote = s.wallMs !== undefined ? `${ms(s.activeMs)} active · ${ms(s.humanWaitMs)} waiting on you` : 'single-message session'
-  const kNote = s.totalTokens ? `${pct(s.cacheHitRatio)} read from cache · ${tok(a.tokens.byKind.output)} generated` : 'no usage recorded'
-  return `<div class="triptych">
-    <div class="axis q"><div class="aname">Quality ↑</div><div class="aval">${esc(q)}</div><div class="anote">${esc(qNote)}</div></div>
-    <div class="axis t"><div class="aname">Time ↓</div><div class="aval">${esc(tVal)}</div><div class="anote">${esc(tNote)}</div></div>
-    <div class="axis c"><div class="aname">Tokens ↓</div><div class="aval">${esc(tok(s.totalTokens))}</div><div class="anote">${esc(kNote)}</div></div>
-  </div>`
-}
-
-function outcome(a: Analysis, audience: Ctx['audience']): string {
-  return `<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${mascotSvg(96)}</span><div class="grow overview-copy"><div class="eyebrow">Observed outcome</div><div class="herotitle">${esc(outcomeHeadline(a.summary))}</div><div class="sg-sub">${esc(plainSentence(a.summary.narrative, audience))}</div><div class="overview-loop"><span>Observe</span><i aria-hidden="true">→</i><span>inspect evidence</span><i aria-hidden="true">→</i><span>improve the next run</span></div></div></div>${signalChips(a.quality.signals)}`
-}
-
-function capabilityHref(ctx: Ctx, a: Analysis, screen: CapabilityScreen): string {
+/** A link into this run's own screens: clears every aggregate/filter key so the target starts clean. */
+function href(ctx: Ctx, a: Analysis, next: Partial<RouteState>): string {
   return writeHash({
     ...ctx.state,
-    screen,
     s: ctx.state.s ?? a.session.id,
-    // These cards explicitly explore the selected run, even when Overview was
-    // reached from a repo/global aggregate route.
     scope: undefined,
     tool: undefined,
     cat: undefined,
@@ -59,117 +31,96 @@ function capabilityHref(ctx: Ctx, a: Analysis, screen: CapabilityScreen): string
     turn: undefined,
     errorsOnly: undefined,
     filter: undefined,
+    ...next,
   })
 }
 
-function capabilityNav(ctx: Ctx, a: Analysis): string {
+function outcome(a: Analysis, audience: Ctx['audience']): string {
+  return `<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${mascotSvg(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${esc(outcomeHeadline(a.summary))}</div><div class="sg-sub">${esc(plainSentence(a.summary.narrative, audience))}</div></div></div>`
+}
+
+function triptych(a: Analysis): string {
   const s = a.summary
-  // Session-scope Suggestions renders one row per Analysis insight.
-  const suggestionCount = a.insights.length
-  const contextMetric = a.context.contextWindow
-    ? `${pct(s.contextPeak / a.context.contextWindow)} peak`
-    : `${tok(s.contextPeak)} peak`
-  const capabilities: Capability[] = [
-    {
-      screen: 'timeline',
-      mode: 'Observe',
-      title: 'Timeline',
-      metric: `${num(s.turns)} turns`,
-      detail: plainSentence('Follow every turn, tool call, result, and error in sequence.', ctx.audience),
-    },
-    {
-      screen: 'tools',
-      mode: 'Inspect',
-      title: 'Tools & calls',
-      metric: `${num(s.toolCalls)} calls · ${num(a.tools.byName.length)} tools`,
-      detail: plainSentence(`See which tools ran, how long they took, and where ${s.toolErrors} errors occurred.`, ctx.audience),
-    },
+  const qNote = outcomeBits(s).join(' · ') || 'no commits, PRs or test runs detected'
+  const t = timeAxis(s)
+  const kNote = s.totalTokens ? `${pct(s.cacheHitRatio)} read from cache · ${tok(a.tokens.byKind.output)} generated` : 'no usage recorded'
+  return `<div class="triptych">
+    <div class="axis q"><div class="aname">Quality ↑</div><div class="aval">${esc(qualityHeadline(a.quality.signals))}</div><div class="anote">${esc(qNote)}</div>${signalChips(a.quality.signals)}</div>
+    <div class="axis t"><div class="aname">Time ↓</div><div class="aval">${esc(t.value)}</div><div class="anote">${esc(t.note)}</div></div>
+    <div class="axis c"><div class="aname">Tokens ↓</div><div class="aval">${esc(tok(s.totalTokens))}</div><div class="anote">${esc(kNote)}</div></div>
+  </div>`
+}
+
+/** The top finding, hoisted: title, fix, savings as a share of the session, the evidence link, the improve command. */
+function topFinding(ctx: Ctx, a: Analysis, ins: Insight | undefined): string {
+  if (!ins)
+    return `<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">Nothing stood out. This session ran clean.</span></div>`
+  const at = insightLink(ins)
+  const link = at?.tool
+    ? { href: href(ctx, a, { screen: 'timeline', tool: at.tool }), label: `See the ${at.tool} calls →` }
+    : at
+      ? { href: href(ctx, a, { screen: 'timeline', turn: at.turn }), label: `See the ${ins.turnIndexes.length} turn${ins.turnIndexes.length === 1 ? '' : 's'} →` }
+      : undefined
+  return `<div class="eyebrow mb6">The one thing to improve</div>${findingHtml(ins, ctx.audience, { command: commandForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, ...(link ? { link } : {}) })}`
+}
+
+/** 60 px context sparkline (the Context screen's chart, reused); a caption alone when there is no series. */
+function contextSpark(a: Analysis): string {
+  const c = a.context
+  const main = c.series.filter((p) => !p.agentId)
+  const peak = c.contextWindow ? `peak ${pct(a.summary.contextPeak / c.contextWindow)} of the window` : `peak ${tok(a.summary.contextPeak)}`
+  const caption = `${peak} · ${a.summary.compactions} compaction${a.summary.compactions === 1 ? '' : 's'}`
+  const svg = main.length ? `<div class="spark">${lineChart(main.map((p) => p.contextSize), { width: 320, height: 60, markers: compactionMarkers(c.compactions, main), yMax: c.contextWindow })}</div>` : ''
+  return `<div class="card pad"><div class="card-title">Context</div>${svg}<div class="small muted">${esc(caption)}</div></div>`
+}
+
+function whereNext(ctx: Ctx, a: Analysis): string {
+  const s = a.summary
+  const n = a.insights.length
+  const links = [
+    { screen: 'timeline', label: s.toolErrors ? `Timeline · ${num(s.toolErrors)} error${s.toolErrors === 1 ? '' : 's'} only` : `Timeline · ${num(s.turns)} turns`, state: s.toolErrors ? { errorsOnly: true } : {} },
+    { screen: 'tools', label: `Tools · ${num(s.toolCalls)} calls, ${num(s.toolErrors)} errors`, state: {} },
+    { screen: 'suggest', label: n ? `Suggestions · ${num(n)} finding${n === 1 ? '' : 's'}` : 'Suggestions · nothing to improve', state: {} },
   ]
-  if (ctx.audience === 'dev' && a.agents.runs.length)
-    capabilities.push({
-      screen: 'agents',
-      mode: 'Trace',
-      title: 'Agents',
-      metric: `${num(a.agents.runs.length)} runs · ${num(a.agents.maxConcurrency)} max parallel`,
-      detail: 'Follow delegated work and connect each agent run to its parent turn.',
-    })
-  if (ctx.audience === 'dev')
-    capabilities.push({
-      screen: 'context',
-      mode: 'Understand',
-      title: 'Context & tokens',
-      metric: contextMetric,
-      detail: `Inspect context growth, ${num(s.compactions)} compactions, cache use, and token flow.`,
-    })
-  capabilities.push({
-    screen: 'suggest',
-    mode: 'Improve',
-    title: 'Suggestions',
-    metric: suggestionCount ? `${num(suggestionCount)} finding${suggestionCount === 1 ? '' : 's'}` : 'No findings',
-    detail: suggestionCount
-      ? 'Review deterministic evidence and bounded proposals for the next run.'
-      : 'This session ran clean; review the evidence or return after the next run.',
-  })
-  const cards = capabilities
-    .map(
-      (capability) => `<a class="cap-card" data-capability="${capability.screen}" href="${esc(capabilityHref(ctx, a, capability.screen))}">
-        <span class="cap-top"><span class="cap-mark" aria-hidden="true"></span><span class="cap-mode">${esc(capability.mode)}</span><span class="cap-arrow" aria-hidden="true">↗</span></span>
-        <span class="cap-title">${esc(capability.title)}</span><span class="cap-metric">${esc(plainSentence(capability.metric, ctx.audience))}</span>
-        <span class="cap-copy">${esc(plainSentence(capability.detail, ctx.audience))}</span>
-      </a>`,
-    )
-    .join('')
-  return `<div class="cap-section"><div class="cap-head"><div><div class="eyebrow">Explore this run</div><h2>Follow the evidence</h2></div><p>The report stays local. Evidence is traceable; optional proposals stay reviewable.</p></div><nav class="cap-grid" aria-label="Explore this run">${cards}</nav></div>`
+  return `<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${links
+    .map((l) => `<a data-screen="${l.screen}" href="${esc(href(ctx, a, { screen: l.screen, ...l.state }))}">${esc(plainSentence(l.label, ctx.audience))} →</a>`)
+    .join('')}</nav>`
 }
 
 function detailedBody(ctx: Ctx, a: Analysis): string {
-  const s = a.summary
-  const top = s.topInsightIds.map((id) => a.insights.find((i) => i.id === id)).filter((i): i is NonNullable<typeof i> => !!i)
-  const findings = top.length
-    ? top.map((i) => findingHtml(i, 'dev', { command: commandForInsight(i, a.session.id), sessionTotalTokens: s.totalTokens })).join('')
-    : `<div class="card pad" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">No findings. This session ran clean.</span></div>`
+  const top = a.summary.topInsightIds.map((id) => a.insights.find((i) => i.id === id)).filter((i): i is Insight => !!i)
+  const rest = top.slice(1).map((i) => findingHtml(i, 'dev', { command: commandForInsight(i, a.session.id), sessionTotalTokens: a.summary.totalTokens })).join('')
   const recoverable = recoverableLine(recoverableFrom(planRows('session', a, undefined)), a.insights.length)
-  return `<h3 style="margin:4px 0 10px">Top findings</h3>
-    ${recoverable ? `<p class="recoverable"><a href="${esc(capabilityHref(ctx, a, 'suggest'))}">${esc(recoverable)} →</a></p>` : ''}
-    ${findings}`
+  return `${triptych(a)}${topFinding(ctx, a, top[0])}
+    <div class="two-up mb16">${contextSpark(a)}${whereNext(ctx, a)}</div>
+    ${rest ? `<h3 style="margin:4px 0 10px">More findings</h3>${recoverable ? `<p class="recoverable"><a href="${esc(href(ctx, a, { screen: 'suggest' }))}">${esc(recoverable)} →</a></p>` : ''}${rest}` : ''}`
 }
 
-function plainBody(a: Analysis): string {
+function plainBody(ctx: Ctx, a: Analysis): string {
   const s = a.summary
-  const o = s.outcomes
-  const produced: string[] = []
-  if (o.prLinks.length) produced.push(`${o.prLinks.length} pull request${o.prLinks.length > 1 ? 's' : ''}`)
-  if (o.gitCommits) produced.push(`${o.gitCommits} commits`)
-  if (o.filesEdited + o.filesWritten) produced.push(`${o.filesEdited + o.filesWritten} files changed`)
-  if (o.testRuns) produced.push(`${o.testRuns - o.testRunsFailed} test runs passing`)
   const goal = a.turns.find((t) => t.kind === 'human')?.promptPreview.slice(0, 140)
   const goalText = goal || (a.session.title ? a.session.title : '(prompt text not included in this report)')
   const firstSentence = (s.narrative.split(/(?<=\.)\s/)[0] ?? s.narrative).trim()
   const effort = `${tok(s.totalTokens)} tokens · ${ms(s.wallMs)}, of which ${ms(s.humanWaitMs)} needed your attention`
-  const one = a.insights[0]
-  const oneBody = one
-    ? `<p style="margin:0;font-size:14px;color:var(--ink2)">${esc(plainSentence(one.recommendation, 'plain'))}${one.savings ? ` <b>Would ${esc(savingsText(one.savings))} on a session like this.</b>` : ''}</p>`
-    : '<p style="margin:0;font-size:14px;color:var(--ink2)">Nothing stood out. This session ran cleanly.</p>'
+  const one = a.insights.find((i) => i.id === s.topInsightIds[0]) ?? a.insights[0]
   return `<div class="card mb16" style="overflow:hidden">
       <div class="card-head">${mascotSvg(22)}What happened here</div>
       <div class="plaingrid">
         <div class="k">Goal</div><div>${esc(goalText)}</div>
         <div class="k">What happened</div><div>${esc(plainSentence(firstSentence, 'plain'))}</div>
-        <div class="k">What it produced</div><div>${esc(produced.join(' · ') || 'no tracked outputs')}</div>
+        <div class="k">What it produced</div><div>${esc(outcomeBits(s).join(' · ') || 'no tracked outputs')}</div>
         <div class="k">How it ended</div><div>${esc(endingWord(s.ending))}</div>
         <div class="k">Tokens &amp; time</div><div>${esc(effort)}</div>
       </div>
     </div>
-    <div class="card pad mb16">
-      <div class="card-title">The one thing to improve</div>
-      ${oneBody}
-    </div>`
+    ${topFinding(ctx, a, one)}
+    ${whereNext(ctx, a)}`
 }
 
 export function renderOverview(ctx: Ctx): HTMLElement {
   const a = ctx.a
   if (!a)
     return h(`<section>${emptyHero({ title: 'No session selected.', hint: 'Pick a session from the sidebar.' })}</section>`)
-  const body = ctx.audience === 'plain' ? plainBody(a) : detailedBody(ctx, a)
-  return h(`<section>${degradedBanner(a, ctx.audience)}${outcome(a, ctx.audience)}${triptych(a)}${capabilityNav(ctx, a)}${body}</section>`)
+  const body = ctx.audience === 'plain' ? plainBody(ctx, a) : detailedBody(ctx, a)
+  return h(`<section>${degradedBanner(a, ctx.audience)}${outcome(a, ctx.audience)}${body}</section>`)
 }
