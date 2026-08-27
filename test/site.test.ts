@@ -110,22 +110,25 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(src).not.toContain('data-adview')
   })
 
-  it('makes both product jobs and supported sources clear in the first viewport', () => {
+  it('turns local AI history into a clear inspect, discover, improve journey in the first viewport', () => {
     const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(htmlText(hero)).toContain('Observe the run. Improve the next outcome.')
-    expect(hero).toContain('Claude Code, Cowork, and Desktop sessions')
+    expect(htmlText(hero)).toContain('Turn your AI history into actionable insights.')
+    expect(hero).toContain("Orangu reads your local AI sessions so you don't have to guess what went right (or wrong).")
+    expect(hero).toContain('Inspect:</strong> <span>Dive deep into steps and tool calls from a single run.')
+    expect(hero).toContain('Discover:</strong> <span>Spot recurring patterns across your whole repository.')
+    expect(hero).toContain('Improve:</strong> <span>Use real evidence to build smarter, faster workflows.')
     expect(hero).toContain('Inspect a session')
     expect(hero).toContain('npx orangu report')
     expect(hero).toContain('href="sample.html"')
     expect(hero).toContain('See the observe-to-proposal sample')
   })
 
-  it('authors the desktop outcome title as two lines and closes the hero gap', () => {
+  it('authors the desktop insights title as two balanced lines and closes the hero gap', () => {
     const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
     const heading = hero.match(/<h1>([\s\S]*?)<\/h1>/)?.[1] ?? ''
     expect([...heading.matchAll(/<span>([^<]+)<\/span>/g)].map((match) => match[1])).toEqual([
-      'Observe the run.',
-      'Improve the next outcome.',
+      'Turn your AI history',
+      'into actionable insights.',
     ])
     expect(src).toContain('@media (min-width:1024px){.hero h1 span{display:block;white-space:nowrap}}')
     expect(src).toContain('grid-template-areas:"copy viz" "term viz"')
@@ -199,9 +202,9 @@ describe('site/index.src.html (authored landing source)', () => {
       '<b>Explicit apply.</b>',
       'handled by orangu:improve',
       'Claude apply',
-      'Codex apply',
       'Orangu resolves a later session from the same workspace',
     ]) expect(demo).toContain(copy)
+    expect(demo).not.toContain('Codex apply')
     expect(demo).not.toContain('Run locally')
   })
 

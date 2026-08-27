@@ -89,7 +89,8 @@ describe('renderSuggest proposal UX', () => {
 
     expect(markup).toContain('<div class="sg-handoffs">')
     expect(markup).toContain(`data-copy="claude &quot;/orangu:improve ${id}&quot;"`)
-    expect(markup).toContain(`data-copy="$orangu-improve ${id}"`)
+    expect(markup).not.toContain(`data-copy="$orangu-improve ${id}"`)
+    expect(markup).not.toContain('<span>Codex</span>')
   })
 
   it('uses proposal-only draft language and renders every structured field escaped', () => {
@@ -132,7 +133,8 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).not.toContain('<li>seven</li>')
     expect(markup).not.toContain('<script>')
     expect(markup).toContain(`data-copy="claude &quot;/orangu:apply ${id}&quot;"`)
-    expect(markup).toContain(`data-copy="$orangu-apply ${id}"`)
+    expect(markup).not.toContain(`data-copy="$orangu-apply ${id}"`)
+    expect(markup).not.toContain('<span>Codex</span>')
     expect(markup).toContain('Copy only. Nothing runs here.')
   })
 
