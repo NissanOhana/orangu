@@ -28,6 +28,7 @@ import { flagBool, flagStr } from '../args.js'
 import { runHarness } from './harness.js'
 import type { Analysis } from '../../model/analysis.js'
 
+const SLIM_HARNESS = '--slim sizes a session projection; orangu estimate harness sizes the harness report'
 const DEPTH_RETIRED = 'orangu estimate has one canonical projection (the evidence bundle); --depth was retired. Use --slim to size an `analyze --json --slim` read.'
 
 /** the `analyze --json --slim` read; the default projection is the evidence bundle (see suggest/estimate.ts) */
@@ -87,7 +88,12 @@ async function targetSessionIds(positionals: string[], flags: Record<string, str
     return (await listSessions({ cwd: flagStr(flags, 'cwd') ?? process.cwd() })).map((r) => r.path)
   }
   // `latest` is the documented default selector; resolve it like an absent selector does
-  if (positionals[0] && positionals[0] !== 'latest') return [positionals[0]]
+  if (positionals.length > 0) {
+    const sel = (positionals[0] ?? '').trim()
+    // an empty selector must not fall through to `latest`: that is a silent answer about the wrong session
+    if (!sel) throw new Error('session selector is empty')
+    if (sel !== 'latest') return [sel]
+  }
   const latest = await findLatestSession({})
   if (!latest) throw new Error('No sessions found. Try: orangu list')
   return [latest.path]
@@ -101,6 +107,7 @@ export async function cmdEstimate(positionals: string[], flags: Record<string, s
 
   // `estimate harness` sizes the harness report itself rather than a session projection.
   if (positionals[0] === 'harness') {
+    if (slim) throw new Error(SLIM_HARNESS)
     const report = await runHarness({ ...flags, quiet: true })
     const bytes = Buffer.byteLength(JSON.stringify(report))
     const approxTokens = Math.ceil(bytes / 4)

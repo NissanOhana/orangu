@@ -10398,6 +10398,7 @@ function printHarness(r) {
 }
 
 // src/cli/commands/estimate.ts
+var SLIM_HARNESS = "--slim sizes a session projection; orangu estimate harness sizes the harness report";
 var DEPTH_RETIRED = "orangu estimate has one canonical projection (the evidence bundle); --depth was retired. Use --slim to size an `analyze --json --slim` read.";
 var slimBytes = (a) => Buffer.byteLength(JSON.stringify(slimAnalysis(a)));
 async function loadAnalysisResult(sel, analyzeOptions = { version: "evidence", now: 0 }) {
@@ -10438,7 +10439,11 @@ async function targetSessionIds(positionals, flags) {
   if (positionals[0] === "repo") {
     return (await listSessions({ cwd: flagStr(flags, "cwd") ?? process.cwd() })).map((r) => r.path);
   }
-  if (positionals[0] && positionals[0] !== "latest") return [positionals[0]];
+  if (positionals.length > 0) {
+    const sel = (positionals[0] ?? "").trim();
+    if (!sel) throw new Error("session selector is empty");
+    if (sel !== "latest") return [sel];
+  }
   const latest = await findLatestSession({});
   if (!latest) throw new Error("No sessions found. Try: orangu list");
   return [latest.path];
@@ -10448,6 +10453,7 @@ async function cmdEstimate(positionals, flags) {
   if (flags["depth"] !== void 0) throw new Error(DEPTH_RETIRED);
   const slim = flagBool(flags, "slim");
   if (positionals[0] === "harness") {
+    if (slim) throw new Error(SLIM_HARNESS);
     const report = await runHarness({ ...flags, quiet: true });
     const bytes = Buffer.byteLength(JSON.stringify(report));
     const approxTokens3 = Math.ceil(bytes / 4);

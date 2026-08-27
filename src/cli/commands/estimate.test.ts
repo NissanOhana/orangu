@@ -109,6 +109,13 @@ describe('orangu estimate (in-process)', () => {
     await expect(cmdEstimate([fixturePath], { depth: 'ultra' })).rejects.toThrow(/one canonical projection/)
   })
 
+  it('an empty selector is an error, never a silent `latest`', async () => {
+    // `""` is falsy, so a truthiness guard would size the newest session and report it as the answer
+    await expect(cmdEstimate([''], { json: true })).rejects.toThrow(/session selector is empty/)
+    await expect(cmdEstimate(['   '], { json: true })).rejects.toThrow(/session selector is empty/)
+    expect(stdout()).toBe('')
+  })
+
   it('--suggestion <id> sizes the record\'s evidence sessions', async () => {
     await cmdSuggest([], { rule: 'reread-files', scope: 'session', session: fixturePath, json: true })
     const id = JSON.parse(stdout()).record.id
@@ -255,6 +262,13 @@ describe('orangu estimate (in-process)', () => {
       expect(report.inventory.usageCounters).toBeUndefined()
       expect(report.inventory.totals.filesRead).toBe(1)
       expect(Buffer.byteLength(JSON.stringify(report))).toBe(est.bytes)
+    })
+  })
+
+  it("'estimate harness' rejects --slim instead of silently sizing the harness report", async () => {
+    await withSyntheticHome(async (repo) => {
+      await expect(cmdEstimate(['harness'], { slim: true, json: true, cwd: repo, quiet: true })).rejects.toThrow(/--slim sizes a session projection/)
+      expect(stdout()).toBe('')
     })
   })
 
