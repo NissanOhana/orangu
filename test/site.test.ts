@@ -98,8 +98,8 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(src).not.toMatch(/\bfps\b/i)
   })
 
-  it('sizes the hero triad from CSS and uses shared color tokens only', () => {
-    expect(src).toContain('.hero qtc-triad{display:block;height:clamp(440px,44vw,620px)}')
+  it('sizes the triad figure from CSS and uses shared color tokens only', () => {
+    expect(src).toContain('.triad-fig qtc-triad{display:block;height:clamp(220px,26vw,300px)}')
     expect(src).not.toMatch(/<qtc-triad[^>]*style=/)
     const hexes = src.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []
     expect(hexes, `hand-duplicated palette: ${hexes.join(' ')}`).toHaveLength(0)
@@ -123,10 +123,15 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(hero).toContain('Inspect a session')
     expect(hero).toContain('npx orangu report')
     expect(hero).toContain('href="sample.html"')
-    expect(hero).toContain('See the observe-to-proposal sample')
+    expect(hero).toContain('See a real report')
+    // the read-only promise sits directly under the command (owner direction)
+    expect(hero).toContain('Read-only. It reads the session files already on your disk and writes one HTML file. No proxy, no account, no telemetry.')
+    // the eyebrow line was removed on owner direction
+    expect(src).not.toContain('class="eyebrow"')
+    expect(src).not.toContain('{ Local · offline reports · no instrumentation }')
   })
 
-  it('authors the desktop insights title as two balanced lines and closes the hero gap', () => {
+  it('authors the desktop insights title as two balanced lines beside the report screenshot', () => {
     const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
     const heading = hero.match(/<h1>([\s\S]*?)<\/h1>/)?.[1] ?? ''
     expect([...heading.matchAll(/<span>([^<]+)<\/span>/g)].map((match) => match[1])).toEqual([
@@ -134,14 +139,15 @@ describe('site/index.src.html (authored landing source)', () => {
       'into actionable insights.',
     ])
     expect(src).toContain('@media (min-width:1024px){.hero h1 span{display:block;white-space:nowrap}}')
-    expect(src).toContain('grid-template-areas:"copy viz" "term viz"')
-    expect(src).toContain('.hero-viz{grid-area:viz;align-self:center;margin-left:-40px}')
-    expect(hero.indexOf('class="term-wrap"')).toBeGreaterThan(hero.indexOf('class="hero-viz"'))
+    expect(src).toContain('.hero-grid{grid-template-columns:minmax(0,1.08fr) minmax(360px,.92fr);column-gap:40px;align-items:center}')
+    // the hero visual is the real report screenshot, referenced relatively (site/ deploys as-is)
+    expect(hero).toContain('<figure class="hero-shot"><img src="assets/report-overview.png"')
+    expect(src).not.toContain('term-wrap')
   })
 
   it('opens every report-sample action in a new tab without opener access', () => {
     const sampleLinks = [...src.matchAll(/<a\b[^>]*href="sample\.html"[^>]*>/g)].map((match) => match[0])
-    expect(sampleLinks).toHaveLength(2)
+    expect(sampleLinks).toHaveLength(3)
     for (const link of sampleLinks) {
       expect(link).toContain('target="_blank"')
       expect(link).toMatch(/rel="[^"]*\bnoopener\b[^"]*"/)
@@ -149,348 +155,139 @@ describe('site/index.src.html (authored landing source)', () => {
     }
   })
 
-  it('uses a live, outcome-led information hierarchy', () => {
-    for (const id of ['jobs', 'demo', 'improve', 'scenarios', 'trust', 'install'])
-      expect(src, `missing section #${id}`).toContain(`<section id="${id}"`)
-    const nav = src.match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? ''
-    for (const [, id] of nav.matchAll(/href="#([^"]+)"/g))
-      expect(src, `dead nav anchor #${id}`).toContain(`id="${id}"`)
-    expect(src).toContain('Observe one session')
-    expect(src).toContain('Improve repeated work')
-    expect(src).toMatch(/<code>repo<\/code>[\s\S]*?<code>global<\/code>/)
-  })
-
-  it('shows the complete session observe-to-verified sequence in order', () => {
-    const demo = src.match(/<section id="demo"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const steps = ['Tool call', 'Local evidence', 'Recurring pattern', 'Draft proposal', 'Explicit apply', 'Next-run verification']
+  it('tells the story in six blocks, in order, with a wired nav', () => {
+    const order = ['<section class="hero"', '<section id="what"', '<section id="report"', '<section id="fixes"', '<section id="privacy"', '<section id="install"']
     let last = -1
-    for (const step of steps) {
-      const at = demo.indexOf(step)
-      expect(at, `missing or out-of-order demo step: ${step}`).toBeGreaterThan(last)
+    for (const marker of order) {
+      const at = src.indexOf(marker)
+      expect(at, `missing or out-of-order block: ${marker}`).toBeGreaterThan(last)
       last = at
     }
-    expect(demo).toContain('Observe locally. Draft from evidence. Use only the lifecycle the scope supports.')
-    expect(demo).toContain('Open the full sample report')
+    const nav = src.match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? ''
+    for (const [label, id] of [['What it does', 'what'], ['See a report', 'report'], ['Fixes', 'fixes'], ['Privacy', 'privacy'], ['Install', 'install']])
+      expect(nav).toContain(`<a href="#${id}">${label}</a>`)
+    expect(nav).toContain('https://github.com/NissanOhana/orangu/blob/main/docs/README.md')
+    for (const [, id] of src.matchAll(/href="#([^"]+)"/g))
+      expect(src, `dead anchor #${id}`).toContain(`id="${id}"`)
   })
 
-  it('shows the current Suggestions experience first', () => {
-    const demo = src.match(/<div class="appdemo" id="appdemo">[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(demo).toContain('class="demo-body"')
-    expect(demo).toContain('class="demo-rail"')
-    const suggestionTab = demo.match(/<button\b[^>]*data-demo-view="suggest"[^>]*>/)?.[0] ?? ''
-    expect(suggestionTab).toContain('aria-current="page"')
-    expect(suggestionTab).toContain('aria-selected="true"')
-    expect(suggestionTab).toContain('tabindex="0"')
-    expect(suggestionTab).toContain('class="on"')
-    const suggestionPanel = demo.match(/<div\b[^>]*data-demo-view="suggest"[^>]*>/)?.[0] ?? ''
-    expect(suggestionPanel).toContain('class="demo-view on"')
-    expect(suggestionPanel).not.toContain(' hidden')
-    for (const scope of ['This session', 'Repo', 'Global']) expect(demo).toContain(`>${scope}<`)
-    expect(demo).toContain('Session: proposed → applied → verified · Repo: proposed → applied · Global: proposed')
-    for (const changeClass of [
-      'Instruction files',
-      'Scripts and CLIs',
-      'Hooks',
-      'Skills to create',
-      'Skills to discover',
-      'Subagents and agents',
-      'MCP servers',
-      'Plugins',
-      'Workflow and configuration',
-    ]) expect(demo, `missing preview change class: ${changeClass}`).toContain(changeClass)
-    for (const copy of [
-      '<b>Evidence.</b>',
-      '<b>Proposal.</b>',
-      '<b>Next-run verification.</b>',
-      '<b>Explicit apply.</b>',
-      'handled by orangu:improve',
-      'Claude apply',
-      'Orangu resolves a later session from the same workspace',
-    ]) expect(demo).toContain(copy)
-    expect(demo).not.toContain('Codex apply')
-    expect(demo).not.toContain('Run locally')
+  it('tells the situation, the mechanism, and the goal, then proves it with the hides-shows table and the triad figure', () => {
+    const what = src.match(/<section id="what"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const text = htmlText(what)
+    expect(text).toContain('You run coding agents for hours.')
+    expect(text).toContain('the only record of what happened')
+    expect(text).toContain('orangu reads it for you.')
+    expect(text).toContain('Plain code, no model.')
+    expect(text).toContain('no network, no clock')
+    expect(text).toContain('The goal is not a score.')
+    expect(text).toContain('better outcomes with less time and fewer tokens')
+    // the hides/shows table (peers P0-1): what the session says vs what orangu shows
+    for (const [hides, shows] of [
+      ['"compacted"', 'which turns filled the context window, and with what'],
+      ["a subagent's final answer", 'its full tree: tools, tokens, time, errors'],
+      ['that a skill is installed', 'whether it ever fired, and what it weighs in context'],
+      ['nothing about repetition', 'the same file read again and again, and the same context re-read on every request'],
+    ] as const) {
+      expect(text, `hides column: ${hides}`).toContain(hides.replace(/"/g, '"'))
+      expect(text, `shows column: ${shows}`).toContain(shows)
+    }
+    // the triad shrinks to a captioned figure; it is not the hero visual
+    const figure = what.match(/<figure class="triad-fig">[\s\S]*?<\/figure>/)?.[0] ?? ''
+    expect(figure).toContain('<qtc-triad role="img" aria-label="Quality up, Time down, Tokens down: the three axes orangu measures. Never a single score."')
+    expect(figure).toContain('<figcaption class="triad-cap">Quality ↑ × Time ↓ × Tokens ↓ · the three axes orangu measures. Never a single score.</figcaption>')
   })
 
-  it('previews the real overview, timeline, and tools-and-calls capabilities', () => {
-    const demo = src.match(/<div class="appdemo" id="appdemo">[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(demo).not.toContain('data-demo-view="evidence"')
-    for (const tab of ['Overview', 'Timeline', 'Tools &amp; calls', 'Suggestions'])
-      expect(demo, `missing preview tab: ${tab}`).toContain(`>${tab}<`)
-    for (const view of ['overview', 'timeline', 'tools', 'suggest'])
-      expect(demo, `missing preview view: ${view}`).toContain(`data-demo-view="${view}"`)
-    expect(demo).toContain('role="tablist"')
-    expect(demo).not.toContain('aria-live=')
-    for (const view of ['overview', 'timeline', 'tools', 'suggest']) {
-      const tab = demo.match(new RegExp(`<button\\b[^>]*id="demo-tab-${view}"[^>]*>`))?.[0] ?? ''
-      expect(tab).toContain('role="tab"')
-      expect(tab).toContain(`aria-controls="demo-panel-${view}"`)
-      const panel = demo.match(new RegExp(`<div\\b[^>]*id="demo-panel-${view}"[^>]*>`))?.[0] ?? ''
-      expect(panel).toContain('role="tabpanel"')
-      expect(panel).toContain(`aria-labelledby="demo-tab-${view}"`)
-      if (view !== 'suggest') expect(panel).toContain(' hidden')
-    }
-    expect(demo).toContain('id="demoMotion"')
-    expect(demo).toContain('Automatic preview is static')
-
-    for (const capability of [
-      'Every tool call',
-      'Parent + subagents',
-      'one ordered session timeline',
-      'verify session changes on a later run',
-    ]) expect(demo, `missing truthful overview capability: ${capability}`).toContain(capability)
-
-    for (const timelineEvidence of [
-      'Illustrative session timeline',
-      'Tool calls in order',
-      'main',
-      'agent-1',
-      'error result stays on this call',
-      'actor identity',
-    ]) expect(demo, `missing timeline evidence: ${timelineEvidence}`).toContain(timelineEvidence)
-
-    for (const toolEvidence of [
-      'Usage · errors · latency',
-      'avg / p95',
-      'Recurring error',
-      'Counts, errors, and latency come from parsed tool calls.',
-    ]) expect(demo, `missing tools-and-calls evidence: ${toolEvidence}`).toContain(toolEvidence)
+  it('proves the product with the report screenshot and one tokens-only number', () => {
+    const report = src.match(/<section id="report"[\s\S]*?<\/section>/)?.[0] ?? ''
+    expect(report).toContain('<img src="assets/report-overview.png"')
+    const caption = report.match(/<figcaption>([\s\S]*?)<\/figcaption>/)?.[1] ?? ''
+    // shape, not exact values: Wave 3 regenerates the screenshot and the caption together
+    expect(htmlText(caption)).toMatch(/\d+(?:\.\d+)?M of the \d+(?:\.\d+)?M tokens/)
+    expect(caption).toContain('cache reads')
+    expect(report).toContain('See a real report')
+    expect(htmlText(report)).toContain('The published sample uses synthetic input, so nothing private ships.')
   })
 
-  it('wires accessible manual preview navigation and visibility-aware autoplay', () => {
-    const scripts = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    const interaction = scripts.map((match) => match[1] ?? '').find((code) => code.includes("getElementById('appdemo')")) ?? ''
-    expect(interaction).toContain("querySelectorAll('.demo-rail [data-demo-view]')")
-    expect(interaction).toContain("querySelectorAll('.demo-main [data-demo-view]')")
-    expect(interaction).toContain('Array.prototype.map.call(buttons')
-    expect(interaction).toContain("window.matchMedia('(prefers-reduced-motion: reduce)')")
-    expect(interaction).toContain("document.addEventListener('visibilitychange', scheduleCycle)")
-    expect(interaction).toContain("new window.IntersectionObserver")
-    expect(interaction).toContain('entry.intersectionRatio >= 0.35')
-    expect(interaction).not.toContain('visible = true')
-    expect(interaction).toContain("button.setAttribute('aria-selected', String(active))")
-    expect(interaction).toContain("button.setAttribute('tabindex', active ? '0' : '-1')")
-    expect(interaction).toContain('view.hidden = !active')
-    for (const key of ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'])
-      expect(interaction).toContain(`event.key === '${key}'`)
-    expect(interaction).toContain("motionButton.textContent = userPaused ? 'Play' : 'Pause'")
-
-    type MockEvent = { key?: string; relatedTarget?: unknown; preventDefault?: () => void }
-    type Handler = (event?: MockEvent) => void
-    type DemoNode = {
-      attrs: Map<string, string>
-      classes: Set<string>
-      hidden: boolean
-      focusCount: number
-      click?: () => void
-      handlers: Map<string, Handler>
-      classList: { toggle: (name: string, active: boolean) => void }
-      focus: () => void
-      getAttribute: (name: string) => string | null
-      setAttribute: (name: string, value: string) => void
-      removeAttribute: (name: string) => void
-      addEventListener: (type: string, fn: Handler) => void
-    }
-    const node = (name: string, active = false): DemoNode => {
-      const attrs = new Map<string, string>([
-        ['data-demo-view', name],
-        ['aria-selected', String(active)],
-        ['tabindex', active ? '0' : '-1'],
-      ])
-      if (active) attrs.set('aria-current', 'page')
-      const classes = new Set(active ? ['on'] : [])
-      const handlers = new Map<string, Handler>()
-      const target: DemoNode = {
-        attrs,
-        classes,
-        hidden: !active,
-        focusCount: 0,
-        handlers,
-        classList: { toggle: (className, on) => { if (on) classes.add(className); else classes.delete(className) } },
-        focus: () => { target.focusCount++ },
-        getAttribute: (key) => attrs.get(key) ?? null,
-        setAttribute: (key, value) => { attrs.set(key, value) },
-        removeAttribute: (key) => { attrs.delete(key) },
-        addEventListener: (type, fn) => {
-          handlers.set(type, fn)
-          if (type === 'click') target.click = fn
-        },
-      }
-      return target
-    }
-    const buttons = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const views = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const demoHandlers = new Map<string, Handler>()
-    const demo = {
-      querySelectorAll: (selector: string) => selector.includes('.demo-rail') ? buttons : views,
-      addEventListener: (type: string, fn: Handler) => demoHandlers.set(type, fn),
-      contains: () => false,
-    }
-    const motionAttrs = new Map<string, string>()
-    const motionButtonHandlers = new Map<string, Handler>()
-    const motionButton = {
-      disabled: true,
-      textContent: 'Static',
-      setAttribute: (key: string, value: string) => motionAttrs.set(key, value),
-      addEventListener: (type: string, fn: Handler) => motionButtonHandlers.set(type, fn),
-    }
-    const documentHandlers = new Map<string, Handler>()
-    const document = {
-      hidden: false,
-      getElementById: (id: string) => id === 'appdemo' ? demo : id === 'demoMotion' ? motionButton : null,
-      addEventListener: (type: string, fn: Handler) => documentHandlers.set(type, fn),
-    }
-    const motionHandlers = new Map<string, Handler>()
-    const motion = {
-      matches: false,
-      addEventListener: (type: string, fn: Handler) => motionHandlers.set(type, fn),
-    }
-    let timerId = 0
-    let maxTimers = 0
-    const timers = new Map<number, () => void>()
-    let observerCallback: (entries: Array<{ isIntersecting: boolean; intersectionRatio: number }>) => void = () => {}
-    const window = {
-      matchMedia: () => motion,
-      setTimeout: (fn: () => void) => {
-        const id = ++timerId
-        timers.set(id, fn)
-        maxTimers = Math.max(maxTimers, timers.size)
-        return id
-      },
-      clearTimeout: (id: number) => timers.delete(id),
-      IntersectionObserver: class {
-        constructor(callback: (entries: Array<{ isIntersecting: boolean; intersectionRatio: number }>) => void) {
-          observerCallback = callback
-        }
-        observe(): void { observerCallback([{ isIntersecting: true, intersectionRatio: 0.5 }]) }
-      },
-    }
-
-    runInNewContext(interaction, { document, window })
-    expect(motionButton.disabled).toBe(false)
-    expect(motionButton.textContent).toBe('Pause')
-    expect(buttons[3]!.classes.has('on')).toBe(true)
-    expect(buttons[3]!.attrs.get('aria-current')).toBe('page')
-    expect(timers.size).toBe(1)
-    expect(maxTimers).toBe(1)
-
-    observerCallback([{ isIntersecting: false, intersectionRatio: 0 }])
-    expect(timers.size).toBe(0)
-    observerCallback([{ isIntersecting: true, intersectionRatio: 0.35 }])
-    expect(timers.size).toBe(1)
-
-    demoHandlers.get('pointerenter')!()
-    expect(timers.size).toBe(0)
-    demoHandlers.get('pointerleave')!()
-    expect(timers.size).toBe(1)
-
-    const autoplay = [...timers.values()][0]!
-    timers.clear()
-    autoplay()
-    expect(buttons[0]!.classes.has('on')).toBe(true)
-    expect(buttons[0]!.attrs.get('aria-current')).toBe('page')
-    expect(buttons[3]!.classes.has('on')).toBe(false)
-    expect(buttons[3]!.attrs.has('aria-current')).toBe(false)
-    expect(views[0]!.classes.has('on')).toBe(true)
-    expect(views[0]!.hidden).toBe(false)
-    expect(views[3]!.classes.has('on')).toBe(false)
-    expect(views[3]!.hidden).toBe(true)
-    expect(buttons.every((button) => button.focusCount === 0)).toBe(true)
-
-    document.hidden = true
-    documentHandlers.get('visibilitychange')!()
-    expect(timers.size).toBe(0)
-    document.hidden = false
-    documentHandlers.get('visibilitychange')!()
-    expect(timers.size).toBe(1)
-
-    motion.matches = true
-    motionHandlers.get('change')!()
-    expect(timers.size).toBe(0)
-    expect(motionButton.disabled).toBe(true)
-    expect(motionButton.textContent).toBe('Motion off')
-    motion.matches = false
-    motionHandlers.get('change')!()
-    expect(timers.size).toBe(1)
-    expect(motionButton.disabled).toBe(false)
-
-    buttons[2]!.click!()
-    expect(buttons[2]!.classes.has('on')).toBe(true)
-    expect(buttons[2]!.attrs.get('aria-current')).toBe('page')
-    expect(views[2]!.classes.has('on')).toBe(true)
-    expect(timers.size).toBe(0)
-    expect(motionButton.textContent).toBe('Play')
-    documentHandlers.get('visibilitychange')!()
-    expect(timers.size).toBe(0)
-
-    let prevented = false
-    buttons[2]!.handlers.get('keydown')!({ key: 'Home', preventDefault: () => { prevented = true } })
-    expect(prevented).toBe(true)
-    expect(buttons[0]!.classes.has('on')).toBe(true)
-    expect(buttons[0]!.attrs.get('tabindex')).toBe('0')
-    expect(buttons[2]!.attrs.get('tabindex')).toBe('-1')
-    expect(buttons[0]!.focusCount).toBe(1)
-    expect(timers.size).toBe(0)
-
-    motionButtonHandlers.get('click')!()
-    expect(motionButton.textContent).toBe('Pause')
-    expect(timers.size).toBe(1)
-    const resumedAutoplay = [...timers.values()][0]!
-    timers.clear()
-    resumedAutoplay()
-    expect(buttons[1]!.classes.has('on')).toBe(true)
-    expect(buttons[0]!.focusCount).toBe(1)
-    expect(maxTimers).toBe(1)
-
-    motionButtonHandlers.get('click')!()
-    expect(motionButton.textContent).toBe('Play')
-    expect(timers.size).toBe(0)
-
-    const staticButtons = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const staticViews = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const staticDemo = {
-      querySelectorAll: (selector: string) => selector.includes('.demo-rail') ? staticButtons : staticViews,
-      addEventListener: () => {},
-      contains: () => false,
-    }
-    const staticMotionAttrs = new Map<string, string>()
-    const staticMotionButton = {
-      disabled: false,
-      textContent: '',
-      setAttribute: (key: string, value: string) => staticMotionAttrs.set(key, value),
-      addEventListener: () => {},
-    }
-    const staticDocument = {
-      hidden: false,
-      getElementById: (id: string) => id === 'appdemo' ? staticDemo : id === 'demoMotion' ? staticMotionButton : null,
-      addEventListener: () => {},
-    }
-    const staticTimers = new Map<number, () => void>()
-    const staticWindow = {
-      matchMedia: () => ({ matches: false, addEventListener: () => {} }),
-      setTimeout: (fn: () => void) => { staticTimers.set(1, fn); return 1 },
-      clearTimeout: (id: number) => staticTimers.delete(id),
-    }
-    runInNewContext(interaction, { document: staticDocument, window: staticWindow })
-    expect(staticMotionButton.disabled).toBe(true)
-    expect(staticMotionButton.textContent).toBe('Static')
-    expect(staticMotionAttrs.get('aria-label')).toBe('Automatic preview unavailable in this browser')
-    expect(staticTimers.size).toBe(0)
+  it('walks the improve loop in four steps and states the session-repo-global rule exactly once', () => {
+    const fixes = src.match(/<section id="fixes"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const steps = [...fixes.matchAll(/<li><h3>([^<]+)<\/h3>/g)].map((match) => match[1])
+    expect(steps).toEqual(['Observe', 'See', 'Propose', 'Apply, with a receipt'])
+    expect(fixes).toContain('<code>npx orangu report</code>')
+    expect(fixes).toContain('<code>/orangu:improve</code>')
+    expect(fixes).toContain('It never edits your project.')
+    expect(fixes).toContain('<code>/orangu:apply</code>')
+    expect(fixes).toContain('records what changed and which checks ran')
+    // the scope rule appears exactly once on the whole page (site-audit D8)
+    const rule = 'One run can be fixed and re-checked against a later session from the same workspace. Repo-wide changes are applied on request. Whole-harness changes stay review-only.'
+    expect(src.split(rule)).toHaveLength(2)
+    expect(fixes).toContain('A later comparison is evidence, not proof of cause.')
+    const text = htmlText(src)
+    expect(text).not.toMatch(/\bglobal\b[^.]{0,80}\b(?:can|may) be (?:applied|verified)\b/i)
+    expect(text).not.toMatch(/\b(?:apply|verify) (?:a )?global (?:proposal|change)\b/i)
   })
 
-  it('shows the full change-class breadth', () => {
-    const improve = src.match(/<section id="improve"[\s\S]*?<\/section>/)?.[0] ?? ''
-    for (const changeClass of [
-      'Instruction files',
-      'Scripts and CLIs',
-      'Hooks',
-      'Skills to create',
-      'Skills to discover',
-      'Subagents and agents',
-      'MCP servers',
-      'Plugins',
-      'Workflow and configuration',
-    ]) expect(improve, `missing change class: ${changeClass}`).toContain(changeClass)
-    expect(improve).toContain('class="change-grid"')
+  it('backs every privacy claim with a resolving document link', () => {
+    const privacy = src.match(/<section id="privacy"[\s\S]*?<\/section>/)?.[0] ?? ''
+    expect(privacy).toContain("default-src 'none'")
+    expect(privacy).toContain('127.0.0.1')
+    expect(privacy).toContain('--strip-paths')
+    expect(privacy).toContain('Your whole history is analyzable the minute orangu is')
+    for (const doc of ['docs/PRIVACY.md', 'docs/DETERMINISM.md', 'SECURITY.md']) {
+      expect(privacy, `missing link to ${doc}`).toContain(`https://github.com/NissanOhana/orangu/blob/main/${doc}`)
+      expect(existsSync(join(root, doc)), `${doc} must exist`).toBe(true)
+    }
+    expect(htmlText(privacy)).toContain('(This page loads Google Fonts; generated reports load nothing.)')
+  })
+
+  it('installs npx-first and names only improve and apply, each a shipped skill', () => {
+    const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
+    expect(install.match(/class="card install-card"/g) ?? []).toHaveLength(2)
+    expect(install.indexOf('npx orangu report')).toBeLessThan(install.indexOf('/plugin marketplace add'))
+    expect(install).toContain('/plugin marketplace add NissanOhana/orangu')
+    expect(install).toContain('/plugin install orangu')
+    expect(install).toContain('https://github.com/NissanOhana/orangu/tree/main/plugin/skills')
+    // subset, not equality: Track B owns plugin/skills and renames in parallel
+    const named = [...new Set([...htmlText(src).matchAll(/\/orangu:([a-z-]+)/g)].map((match) => match[1] ?? ''))]
+    expect(named.sort()).toEqual(['apply', 'improve'])
+    for (const skill of named)
+      expect(existsSync(join(root, 'plugin/skills', skill, 'SKILL.md')), `unshipped skill on the page: ${skill}`).toBe(true)
+    expect(install).not.toContain('Add the Codex plugin')
+    expect(install).not.toContain('codex plugin marketplace add')
+    expect(install).not.toContain('codex plugin add')
+    expect(install).not.toContain('$orangu-')
+  })
+
+  it('addresses machines from the footer', () => {
+    const footer = src.match(/<footer[\s\S]*?<\/footer>/)?.[0] ?? ''
+    expect(footer).toContain('are you an LLM? Read <a href="llms.txt">/llms.txt</a>')
+    expect(footer).toContain('https://www.npmjs.com/package/orangu')
+    expect(footer).toContain('https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md')
+    expect(footer).toContain('MIT © Nissan Ohana')
+    expect(footer).toContain('orangu is not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.')
+  })
+
+  it('keeps the story inside the word and vocabulary budget', () => {
+    const body = src.slice(src.indexOf('<body>'))
+    const words = htmlText(body).trim().split(/\s+/)
+    expect(words.length, 'the page must stay a story, not a feature list').toBeLessThanOrEqual(800)
+    expect(words.length, 'the page must still tell the whole story').toBeGreaterThanOrEqual(550)
+    const banned = [
+      /\bscopes?\b/i, /\blifecycles?\b/i, /\battestations?\b/i, /\bchange class(?:es)?\b/i, /\bcatalogs?\b/i,
+      /\bcrosswalks?\b/i, /\bmanifests?\b/i, /\bcohorts?\b/i, /\bslim\b/i, /\bdigests?\b/i,
+      /\bbounded evidence\b/i, /\bobserve-to-proposal\b/i, /\bSlimAnalysis\b/, /\bAggregate\b/,
+    ]
+    const text = htmlText(body)
+    for (const jargon of banned) expect(text, `jargon on the landing page: ${jargon}`).not.toMatch(jargon)
+  })
+
+  it('declares the social preview from the published screenshot', () => {
+    const head = src.slice(0, src.indexOf('</head>'))
+    expect(head).toContain('<meta property="og:image" content="https://nissanohana.github.io/orangu/assets/report-overview.png"/>')
+    expect(head).toContain('<meta name="twitter:image" content="https://nissanohana.github.io/orangu/assets/report-overview.png"/>')
+    expect(head).toContain('<meta name="twitter:card" content="summary_large_image"/>')
+    expect(head).toContain('<meta property="og:url" content="https://nissanohana.github.io/orangu/"/>')
+    // the in-page references stay relative: pages.yml deploys site/ as-is
+    expect(src).not.toMatch(/<img[^>]+src="https?:/)
   })
 
   it('keeps the primary command and full-sample actions wired', async () => {
@@ -498,9 +295,6 @@ describe('site/index.src.html (authored landing source)', () => {
       /<button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied">/g,
     ) ?? []
     expect(primaryButtons, 'hero and final command buttons').toHaveLength(2)
-    const demo = src.match(/<section id="demo"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(demo).toContain('<a class="ghost" href="sample.html" target="_blank" rel="noopener"')
-
     const scripts = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)]
     const interactions = scripts.at(-1)?.[1] ?? ''
     expect(interactions).toContain("closest('button[data-cmd]')")
@@ -553,83 +347,13 @@ describe('site/index.src.html (authored landing source)', () => {
     await exerciseCopy(false)
   })
 
-  it('uses work scenarios instead of profession cards', () => {
-    const scenarios = src.match(/<section id="scenarios"[\s\S]*?<\/section>/)?.[0] ?? ''
-    for (const title of ['Review delegated work', 'Diagnose a rough outcome', 'Improve a repeated workflow'])
-      expect(scenarios).toContain(title)
-    for (const profession of ['Developers', 'Engineers', 'Teachers', 'Product managers', 'Everyone else'])
-      expect(scenarios).not.toContain(`<h3>${profession}</h3>`)
-    expect(src).not.toContain('class="card role"')
-  })
-
-  it('presents deterministic evidence, optional interpretation, and explicitly attested application as collaborators', () => {
-    const trust = src.match(/<section id="trust"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(trust).toContain('Bounded local evidence')
-    expect(trust).toContain('Optional AI interpretation')
-    expect(trust).toContain('Explicit reviewed changes')
-    expect(trust).toContain('attestation shape and file list')
-    expect(trust).not.toContain('edits the declared repository files')
-    expect(trust).toContain('No instrumentation')
-    expect(trust).toContain('no upload')
-    expect(trust).not.toMatch(/\b(?:versus|vs\.)\b/i)
-  })
-
-  it('states the conservative lifecycle without broadening repo or global authority', () => {
-    const text = htmlText(src)
-    expect(text).toContain('Session: proposed -> applied -> verified · Repo: proposed -> applied · Global: proposed')
-    expect(text).toContain('repo may be applied explicitly. global is proposal-only.')
-    expect(text).toContain('Session can propose, apply, and verify; repo can propose and apply; global stays proposal-only.')
-    expect(text).toContain('session-scope later verification')
-    expect(text).not.toMatch(/\bglobal\b[^.]{0,80}\b(?:can|may) be (?:applied|verified)\b/i)
-    expect(text).not.toMatch(/\b(?:apply|verify) (?:a )?global (?:proposal|change)\b/i)
-  })
-
-  it('states the bounded evidence inputs without vendor-command comparisons', () => {
-    const trust = src.match(/<section id="trust"[\s\S]*?<\/section>/)?.[0] ?? ''
-    for (const input of ['orangu evidence', 'Analysis', 'SlimAnalysis', 'Aggregate']) expect(trust).toContain(input)
-    expect(trust).toContain('How Orangu turns local evidence into improvement')
-    expect(trust).not.toContain('Claude Code /insights')
-    expect(trust).not.toContain('Codex commands')
-    expect(trust).not.toContain('historical-session insights command')
-  })
-
-  it('stages inspection and Claude plugin activation in the install section', () => {
-    const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(install.match(/class="card install-card"/g) ?? []).toHaveLength(3)
-    expect(install).toContain('Inspect a session')
-    expect(install).toContain('Add the Claude Code plugin')
-    expect(install).toContain('/plugin marketplace add NissanOhana/orangu')
-    expect(install).toContain('/plugin install orangu')
-    expect(install).toContain('Claude Code and Codex skills share the same scope-aware proposal')
-    expect(install).not.toContain('Add the Codex plugin')
-    expect(install).not.toContain('codex plugin marketplace add')
-    expect(install).not.toContain('codex plugin add')
-    expect(install).not.toContain('$orangu-')
-  })
-
-  it('makes improve and apply primary while retaining the suggest compatibility alias', () => {
-    const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => existsSync(join(root, 'plugin/skills', dir, 'SKILL.md'))).sort()
-    const listed = [...src.matchAll(/<div class="skill"><b>\/orangu:([a-z-]+)<\/b><div>([^<]+)<\/div><\/div>/g)]
-    expect(listed.map((match) => match[1])).toEqual([
-      'improve',
-      'apply',
-      'analyze',
-      'mega',
-      'watch',
-      'feedback',
-      'suggest',
-    ])
-    expect(listed.map((match) => match[1]).sort()).toEqual(dirs)
-    expect(listed.at(-1)?.[2]).toContain('Compatibility alias')
-    expect(listed.at(-1)?.[2]).toContain('forwards the exact request to /orangu:improve')
-  })
-
   it('keeps accessible interactions and ships none of the design-canvas runtime', () => {
     expect(src).toContain(':focus-visible')
     expect(src).toContain('prefers-reduced-motion')
     expect(src).toContain('aria-live="polite"')
     for (const bad of ['support.js', 'DCLogic', 'sc-for', 'sc-if', '{{ copyAny }}', '{{ toggleTheme }}'])
       expect(src, `must not contain ${bad}`).not.toContain(bad)
+    expect(src).not.toContain('class="card role"')
   })
 
   it('avoids AI-marketing cliches and keeps American spelling', () => {
@@ -699,7 +423,7 @@ describe('site/index.html (generated landing)', () => {
   })
 
   it('references only approved public origins', () => {
-    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com'])
+    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'nissanohana.github.io', 'www.npmjs.com'])
     const urls = html.match(/https?:\/\/[^\s"'<>)]+/g) ?? []
     expect(urls.length).toBeGreaterThan(0)
     for (const url of urls) expect(allowed.has(new URL(url).host), `disallowed origin: ${url}`).toBe(true)
@@ -821,6 +545,14 @@ describe('site/sample.html (published sample report)', () => {
     expect(/https?:\/\/(?!localhost|127\.0\.0\.1)/.test(sample.slice(sample.indexOf('</head>')))).toBe(false)
     expect(currencyHits(sample)).toEqual([])
     expect(moneyHits(sample)).toEqual([])
+  })
+
+  it('tells a no-script reader what the page is, without any URL', () => {
+    const noscript = sample.match(/<noscript>([\s\S]*?)<\/noscript>/)?.[1] ?? ''
+    expect(noscript).toContain('Enable JavaScript for this page to read it.')
+    expect(noscript).not.toMatch(/https?:/)
+    expect(noscript).not.toContain('\u2014')
+    expect(sample.indexOf('<noscript>')).toBeGreaterThan(sample.indexOf('<div id="app" class="app"></div>'))
   })
 
   it('uses synthetic fixture data only', () => {

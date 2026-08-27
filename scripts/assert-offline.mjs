@@ -23,6 +23,10 @@ if (args.includes('--site')) {
     'github.com',
     'code.claude.com',
     'learn.chatgpt.com',
+    // og:image/twitter:image metadata for link unfurlers; the page makes no request to it
+    'nissanohana.github.io',
+    // the footer's package link; a plain <a>, never fetched by the page
+    'www.npmjs.com',
   ])
   const checkHosts = (text, label) => {
     for (const url of text.match(/https?:\/\/[^\s"'<>)]+/g) ?? []) {

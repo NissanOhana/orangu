@@ -4,9 +4,16 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>orangu: turn your AI history into actionable insights</title>
-<meta name="description" content="Orangu reads your local AI sessions so you can inspect a run, discover repository-wide patterns, and improve workflows with real evidence."/>
+<meta name="description" content="orangu reads the Claude Code sessions already on your disk and shows what went right or wrong: outcome, timeline, tool calls, subagents, context, tokens. Local, deterministic, nothing leaves the machine."/>
+<meta property="og:type" content="website"/>
+<meta property="og:url" content="https://nissanohana.github.io/orangu/"/>
 <meta property="og:title" content="orangu: turn your AI history into actionable insights"/>
-<meta property="og:description" content="Inspect individual runs, discover recurring repository patterns, and improve AI workflows using evidence from your local session history."/>
+<meta property="og:description" content="Local, deterministic observability for the coding-agent sessions already on your disk. Observe the run, see the evidence, improve the next outcome."/>
+<meta property="og:image" content="https://nissanohana.github.io/orangu/assets/report-overview.png"/>
+<meta property="og:image:width" content="1280"/>
+<meta property="og:image:height" content="900"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="https://nissanohana.github.io/orangu/assets/report-overview.png"/>
 <link rel="icon" type="image/png" sizes="32x32" href="{{favicon:32}}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{favicon:180}}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -45,21 +52,16 @@ code{font-family:var(--mono);font-size:.94em}
 @media (min-width:900px){
   .hero{padding:clamp(32px,3.4vw,48px) 0 clamp(16px,1.75vw,24px)}
   .hero .wrap{max-width:1320px}
-  .hero-grid{grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr);grid-template-areas:"copy viz" "term viz";column-gap:12px;row-gap:0;align-items:start}
-  .hero-copy{grid-area:copy}
-  .hero-viz{grid-area:viz;align-self:center;margin-left:-40px}
-  .hero .term-wrap{grid-area:term}
+  .hero-grid{grid-template-columns:minmax(0,1.08fr) minmax(360px,.92fr);column-gap:40px;align-items:center}
   .hero h1{font-size:clamp(48px,4.4vw,64px)}
 }
 @media (min-width:1024px){.hero h1 span{display:block;white-space:nowrap}}
-@media (min-width:1200px){
-  .hero-grid{grid-template-columns:minmax(0,1.14fr) minmax(0,.86fr);column-gap:0}
-  .hero-viz{margin-left:-72px}
-}
+@media (min-width:1200px){.hero-grid{column-gap:56px}}
 .hero-viz{min-width:0}
-.hero qtc-triad{display:block;height:clamp(440px,44vw,620px)}
-@media (max-width:640px){.hero qtc-triad{height:min(96vw,440px)}}
-.eyebrow{font-size:15px;color:var(--ink3);margin-bottom:18px}
+/* the hero visual: a zoomed crop of the report screenshot, framed like a window */
+.hero-shot{margin:0;border:1px solid var(--border);border-radius:14px;overflow:hidden;aspect-ratio:5/4;background:var(--surface);box-shadow:0 1px 3px rgba(26,26,24,.05),0 18px 48px rgba(26,26,24,.08)}
+.hero-shot img{display:block;width:168%;height:auto;max-width:none;margin-left:-30%}
+@media (max-width:899px){.hero-shot{aspect-ratio:16/10}.hero-shot img{width:150%;margin-left:-27%}}
 h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,76px);line-height:1.0;letter-spacing:-0.03em;text-wrap:balance}
 .hero-lead{font-size:clamp(17px,1.6vw,19px);line-height:1.55;color:var(--ink2);max-width:620px;margin:24px 0 20px}
 .hero-journey{position:relative;display:grid;gap:0;max-width:660px;margin:0 0 28px;padding:0 0 0 24px;list-style:none}
@@ -83,198 +85,81 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .cmd-sm button{margin-left:auto;background:transparent;border:0;color:var(--ink3);cursor:pointer;font-size:11.5px;min-height:28px}
 .ghost{display:inline-flex;align-items:center;padding:13px 18px;border:1px solid var(--border2);border-radius:10px;font-size:14px;font-weight:600;color:var(--ink1)}
 .fine{font-size:13px;color:var(--ink3);margin:16px 0 0}
-.triad-cap{text-align:center;font-size:13px;color:var(--ink3);margin:6px 0 0}
-/* illustrative terminal output, styled like the command boxes */
-.term-wrap{min-width:0;max-width:780px;margin-top:clamp(22px,2.5vw,32px)}
-.term{background:var(--cmd);color:var(--cmd-ink);border:1px solid var(--border2);border-radius:12px;padding:18px 22px;font-family:var(--mono);font-size:14px;line-height:1.75;overflow-x:auto}
-.term pre{margin:0;font:inherit;white-space:pre}
-.term .p,.term .dot{color:var(--accent)}
-.term-wrap .fine{margin-top:10px}
-@media (max-width:640px){.term{font-size:12.5px;padding:14px 16px}}
-
-/* app demo: an interactive report window for the current observe-to-proposal flow */
-.appdemo{border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(26,26,24,.05),0 16px 44px rgba(26,26,24,.06);background:var(--surface);margin:0 0 22px}
-.demo-bar{display:flex;gap:6px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
-.demo-bar i{width:10px;height:10px;border-radius:50%}
-.demo-bar .d1{background:var(--bad)}.demo-bar .d2{background:var(--warn)}.demo-bar .d3{background:var(--good)}
-.demo-bar>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--ink3);margin-left:8px;font-family:var(--mono)}
-.demo-motion{margin-left:auto;min-height:32px;padding:5px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--ink2);font:600 11px var(--sans);cursor:pointer;white-space:nowrap}
-.demo-motion:disabled{cursor:default;color:var(--ink3);opacity:.75}
-.demo-body{display:grid;grid-template-columns:minmax(140px,178px) 1fr;min-height:382px}
-.demo-rail{border-right:1px solid var(--border);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
-.demo-rail button{appearance:none;min-height:40px;border:0;background:transparent;text-align:left;font:inherit;font-size:13px;color:var(--ink3);padding:7px 10px;border-radius:8px;cursor:pointer}
-.demo-rail button.on{color:var(--accent-ink);font-weight:700;background:var(--accent-weak)}
-.demo-rail button:focus-visible{outline:2px solid var(--accent-ink);outline-offset:1px}
-.demo-rail .dim{font-size:13px;color:var(--ink3);opacity:.55;padding:7px 10px}
-.demo-main{padding:18px 20px;position:relative;min-width:0;min-height:382px}
-.demo-view{min-width:0}
-.demo-view[hidden]{display:none}
-.demo-view.on{animation:demo-in .35s ease}
-@keyframes demo-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.demo-view.on{animation:none}}
-.demo-overview-hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;padding:16px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(135deg,var(--accent-weak),var(--surface));margin-bottom:12px}
-.demo-pulse{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--surface);border:1px solid var(--border2);box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 12%,transparent);font:700 22px var(--title);color:var(--accent-ink)}
-.demo-overview-hero em{display:block;font:700 10.5px var(--mono);font-style:normal;letter-spacing:.07em;text-transform:uppercase;color:var(--accent-ink)}
-.demo-overview-hero strong{display:block;margin-top:2px;font:700 clamp(18px,2vw,22px) var(--title);line-height:1.15}
-.demo-overview-hero p{margin:4px 0 0;font-size:12.5px;color:var(--ink2)}
-.demo-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
-.demo-kpi{border:1px solid var(--border);border-radius:10px;padding:12px 14px}
-.demo-kpi em{display:block;font-style:normal;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
-.demo-kpi b{display:block;font-family:var(--title);font-size:18px;line-height:1.2;font-weight:700;margin-top:3px;overflow-wrap:anywhere}
-.demo-kpi b.accent{color:var(--accent-ink)}
-.demo-kpi span{font-size:12px;color:var(--ink3)}
-.demo-line{font-size:13px;color:var(--ink2)}
-.demo-view-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
-.demo-view-head>div{min-width:0;flex:1}
-.demo-view-head em{display:block;font:700 10.5px var(--mono);font-style:normal;text-transform:uppercase;letter-spacing:.06em;color:var(--accent-ink)}
-.demo-view-head b{display:block;font:700 17px var(--title);line-height:1.2;margin-top:2px}
-.demo-timeline{display:grid;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg2)}
-.demo-event{display:grid;grid-template-columns:48px 64px 10px minmax(0,1fr) max-content;gap:8px;align-items:center;padding:9px 11px;border-bottom:1px solid var(--border);font-size:12px;min-width:0}
-.demo-event:last-child{border-bottom:0}
-.demo-time,.demo-actor,.demo-latency{font-family:var(--mono);color:var(--ink3);white-space:nowrap}
-.demo-actor{border:1px solid var(--border);border-radius:999px;text-align:center;padding:2px 6px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis}
-.demo-event-mark{width:8px;height:8px;border-radius:50%;background:var(--accent)}
-.demo-event-mark.good{background:var(--good)}
-.demo-event-mark.bad{background:var(--bad)}
-.demo-event-copy{min-width:0}
-.demo-event-copy b{display:block;font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.demo-event-copy small{display:block;color:var(--ink3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.demo-tools{display:grid;gap:7px}
-.demo-tool-row{display:grid;grid-template-columns:minmax(76px,100px) minmax(100px,1fr) max-content minmax(108px,max-content);gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg2);min-width:0}
-.demo-tool-name b{display:block;font:700 12.5px var(--mono)}
-.demo-tool-name small{display:block;color:var(--ink3);font-size:10.5px}
-.demo-tool-use{display:flex;align-items:center;gap:8px;min-width:0}
-.demo-tool-use .trk{height:8px;min-width:36px;flex:1;border-radius:999px;background:var(--surface);overflow:hidden}
-.demo-tool-use .trk i{display:block;height:100%;background:var(--accent);border-radius:999px}
-.demo-tool-use span,.demo-tool-error{font:11px var(--mono);color:var(--ink3);white-space:nowrap}
-.demo-tool-error.bad{color:var(--bad);font-weight:700}
-.demo-tool-latency{font:11px var(--mono);color:var(--ink2);white-space:nowrap}
-.demo-tool-latency small{color:var(--ink3)}
-.demo-error-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px;padding:8px 10px;border-radius:8px;background:var(--accent-weak);font-size:11.5px;color:var(--ink2)}
-.demo-error-line b{color:var(--bad)}
-.demo-error-line code{overflow-wrap:anywhere}
-.demo-sug{display:grid;gap:10px}
-.demo-card{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 14px;background:var(--bg2)}
-.demo-card .h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-.demo-card .rid{font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);font-weight:700}
-.demo-card .sev{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3)}
-.demo-card .state{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--accent-ink);white-space:nowrap}
-.demo-card p{margin:4px 0 0;font-size:13px;color:var(--ink2)}
-.demo-card .demo-cat{margin-top:6px;font-size:12px;color:var(--ink3)}
-.demo-card .demo-cat b{color:var(--accent-ink)}
-.demo-scope{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
-.demo-scope span{border:1px solid var(--border);border-radius:999px;padding:4px 9px;font-size:11.5px;color:var(--ink3)}
-.demo-scope span.on{background:var(--accent-weak);border-color:var(--border2);color:var(--accent-ink);font-weight:700}
-.demo-types{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 10px}
-.demo-types span{border:1px solid var(--border);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--ink3);background:var(--surface)}
-.demo-evidence,.demo-proposal,.demo-verify{margin-top:7px;font-size:12.5px;color:var(--ink2)}
-.demo-proposal{padding:8px 10px;border-radius:7px;background:var(--accent-weak)}
-.demo-kick{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
-.demo-kick .handled{font-family:var(--mono);font-size:11px;color:var(--ink3)}
-.demo-status{font-family:var(--mono);font-size:10.5px;color:var(--accent-ink);border:1px solid var(--border2);border-radius:999px;padding:2px 7px}
-.demo-grow{flex:1}
-.demo-btn{appearance:none;border:1px solid var(--border2);background:var(--surface);color:var(--ink2);border-radius:7px;padding:5px 8px;font:600 11px var(--sans)}
-.demo-btn:disabled{opacity:.72}
-.demo-note{font-size:12.5px;color:var(--ink3);margin:10px 0 0}
-@media (max-width:700px){
-  .demo-tool-row{grid-template-columns:72px minmax(0,1fr) max-content}
-  .demo-tool-latency{grid-column:2/4;white-space:normal}
-}
-@media (max-width:560px){
-  .demo-body{grid-template-columns:1fr}
-  .demo-rail{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--border)}
-  .demo-rail button{min-height:44px;padding:7px 9px}
-  .demo-motion{min-height:44px}
-  .demo-main{min-height:570px;padding:14px}
-  .demo-overview-hero{grid-template-columns:1fr}
-  .demo-pulse{width:40px;height:40px}
-  .demo-event{grid-template-columns:42px 52px 8px minmax(0,1fr)}
-  .demo-latency{grid-column:4}
-}
 .sec{padding:clamp(24px,4vw,48px) 0}
 .panel{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:clamp(28px,4vw,48px)}
 .kicker{color:var(--accent-ink);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
 h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px,3.6vw,40px);letter-spacing:-0.02em;line-height:1.1}
 .sec-lead{color:var(--ink2);font-size:17px;max-width:760px;margin:0 0 28px}
 .grid{display:grid;gap:16px}
-.g280{grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr))}
 .g300{grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))}
-.g260{grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px}
 .card h3{margin:0 0 6px;font-family:var(--title);font-weight:700;font-size:19px}
 .card p{color:var(--ink2);font-size:14.5px;margin:0}
-.card.role{display:flex;flex-direction:column}
-.role-art{display:block;height:104px;width:auto;max-width:120px;object-fit:contain;object-position:left bottom;margin:-4px 0 12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.18))}
-.icon-tile{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--accent-weak);color:var(--accent-ink);margin-bottom:12px}
-.icon-tile svg{width:22px;height:22px;display:block}
-.sub{margin-top:28px;padding-top:24px;border-top:1px solid var(--border)}
-.sub h3{margin:0 0 4px;font-family:var(--title);font-weight:700;font-size:19px}
-.sub-lead{color:var(--ink2);font-size:14.5px;margin:0 0 18px}
-.story{display:flex;flex-direction:column;gap:8px}
-.story .tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--ink3)}
-.story h3{margin:0;font-size:20px}
-.story p{flex:1}
-.story .foot{border-top:1px solid var(--border);padding-top:10px;font-family:var(--mono);font-size:13px;color:var(--accent-ink)}
-.why h3{font-size:18px}
-.why p{font-size:14px}
-.postnote{color:var(--ink3);font-size:14px;margin:18px 0 0}
-.verbs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
-.verb{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--ink2)}
-.verb b{font-family:var(--mono);color:var(--ink1)}
-.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px}
-.skill{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)}
-.skill b{display:block;font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--accent-ink);margin-bottom:4px}
-.skill div{font-size:13.5px;color:var(--ink2)}
+.goal{max-width:760px;margin:18px 0 0;font-size:17px;color:var(--ink1)}
+.goal b{font-family:var(--title)}
+/* the hides/shows table */
+.shows{width:100%;border-collapse:collapse;margin:28px 0 0;font-size:14.5px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
+.shows th,.shows td{text-align:left;vertical-align:top;padding:12px 16px;border-bottom:1px solid var(--border)}
+.shows th{font-family:var(--title);font-size:13px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink3);background:var(--bg2)}
+.shows tr:last-child td{border-bottom:0}
+.shows td:first-child{color:var(--ink3);width:38%}
+.shows td:last-child{color:var(--ink1)}
+.shows-wrap{overflow-x:auto}
+/* the three axes, as a small captioned figure (it is not the hero visual) */
+.triad-fig{margin:28px auto 0;max-width:460px}
+.triad-fig qtc-triad{display:block;height:clamp(220px,26vw,300px)}
+.triad-cap{text-align:center;font-size:13px;color:var(--ink3);margin:6px 0 0}
+/* the full-width report screenshot */
+.shot{margin:0}
+.shot img{display:block;width:100%;height:auto;border:1px solid var(--border);border-radius:14px;box-shadow:0 1px 3px rgba(26,26,24,.05),0 18px 48px rgba(26,26,24,.08)}
+.shot figcaption{margin:14px auto 0;max-width:760px;text-align:center;font-size:15px;color:var(--ink2)}
+.shot figcaption b{color:var(--accent-ink);font-family:var(--title)}
+.report-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;margin:24px 0 0}
+.report-row p{margin:0;font-size:13.5px;color:var(--ink3)}
+/* the improve loop, four numbered steps */
+.steps{counter-reset:step;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:16px;list-style:none;margin:0;padding:0}
+.steps li{counter-increment:step;position:relative;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 22px 22px 66px;min-width:0}
+.steps li::before{content:counter(step);position:absolute;left:20px;top:20px;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--bg);font:700 15px var(--title)}
+.steps h3{margin:0 0 6px;font-family:var(--title);font-weight:700;font-size:19px}
+.steps p{margin:0;color:var(--ink2);font-size:14.5px}
+.steps code{color:var(--accent-ink);font-weight:700}
+.rule{max-width:760px;margin:24px 0 0;font-size:15px;color:var(--ink2)}
+.rule b{color:var(--ink1);font-family:var(--title)}
+/* privacy */
+.priv{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:16px;margin-bottom:22px}
+.priv .card p code{color:var(--accent-ink)}
+.doclinks{display:flex;gap:10px 24px;flex-wrap:wrap;font-size:14px;font-weight:600}
+.postnote{color:var(--ink3);font-size:13.5px;margin:14px 0 0}
+/* install */
 .install-card p{margin:0 0 14px;font-size:14px}
 .install-card h3{margin:0 0 4px;font-size:18px}
-.install-card .m{font-family:var(--mono);font-size:13px}
 .cmd-stack{margin-bottom:8px}
-.cta{text-align:center;background:linear-gradient(135deg,var(--accent-weak),var(--surface));border:1px solid var(--border);border-radius:20px;padding:clamp(36px,5vw,56px) 24px}
+.cta{text-align:center;background:linear-gradient(135deg,var(--accent-weak),var(--surface));border:1px solid var(--border);border-radius:20px;padding:clamp(36px,5vw,56px) 24px;margin-top:28px}
 .cta h2{margin:10px 0 8px;font-size:clamp(28px,3.6vw,38px)}
 .cta .sub{margin:0 auto 22px;padding:0;border:0;color:var(--ink2);font-size:17px;max-width:520px}
 .mascot-box{display:flex;align-items:flex-end;justify-content:center;width:160px;height:160px;margin:0 auto}
 .mascot-box img{display:block;width:100%;height:100%;object-fit:contain;object-position:bottom}
-.who{max-width:560px;margin:26px auto 0;padding-top:20px;border-top:1px solid var(--border);font-size:14px;color:var(--ink2)}
-.job{position:relative;overflow:hidden}
-.job .scope{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);margin-bottom:10px}
-.job .result{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--ink3)}
-.demo-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--border);background:var(--bg2)}
-.demo-actions p{margin:0 auto 0 0;color:var(--ink3);font-size:13px}
-.change-card{padding:18px}
-.change-card h3{font-size:16px;margin:0 0 4px}
-.change-card p{font-size:13.5px}
-.change-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.compare{display:grid;gap:0;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
-.compare-row{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:18px;padding:14px 18px;border-bottom:1px solid var(--border)}
-.compare-row:last-child{border-bottom:0}
-.compare-row b{font-family:var(--title)}
-.compare-row span{color:var(--ink2);font-size:14px}
-.scope-ladder{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:12px}
-.scope-card{border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--surface)}
-.scope-card code{color:var(--accent-ink);font-weight:700}
-.scope-card h3{margin:8px 0 4px;font-family:var(--title);font-size:18px}
-.scope-card p{margin:0;color:var(--ink2);font-size:14px}
-@media (max-width:800px){.change-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:560px){.change-grid{grid-template-columns:1fr}.compare-row{grid-template-columns:1fr;gap:4px}.demo-step{grid-template-columns:34px minmax(0,1fr)}}
 footer{border-top:1px solid var(--border);padding:32px 28px;text-align:center;color:var(--ink3);font-size:13px}
 footer p{margin:0 0 6px}
 footer .legal{margin:0;font-size:12.5px}
+footer .machines{margin-bottom:10px}
 </style>
 </head>
 <body>
 
-<div class="ann">v{{version}} · open source, MIT · built for supported Claude sessions</div>
+<div class="ann">v{{version}} · open source, MIT · for Claude Code, Cowork, and Desktop sessions on your machine</div>
 
 <header class="hdr">
   <div class="wrap">
     <img class="logo" src="{{mascot:logo}}" width="36" height="36" alt="">
     <span class="brand">orangu</span>
     <nav aria-label="Site">
-      <a href="#jobs">Two jobs</a>
-      <a href="#demo">See the loop</a>
-      <a href="#improve">What can change</a>
-      <a href="#trust">Why local</a>
+      <a href="#what">What it does</a>
+      <a href="#report">See a report</a>
+      <a href="#fixes">Fixes</a>
+      <a href="#privacy">Privacy</a>
       <a href="#install">Install</a>
+      <a href="https://github.com/NissanOhana/orangu/blob/main/docs/README.md">Docs</a>
       <a href="https://github.com/NissanOhana/orangu">GitHub ↗</a>
       <button class="btn-theme" id="themeBtn" aria-label="switch to dark theme">◐ <span id="themeLabel">system</span></button>
     </nav>
@@ -285,7 +170,6 @@ footer .legal{margin:0;font-size:12.5px}
   <div class="wrap">
     <div class="hero-grid">
       <div class="hero-copy">
-        <div class="eyebrow">{ Local · offline reports · no instrumentation }</div>
         <h1><span>Turn your AI history</span> <span>into actionable insights.</span></h1>
         <p class="hero-lead">Orangu reads your local AI sessions so you don't have to guess what went right (or wrong).</p>
         <ol class="hero-journey" aria-label="From AI history to better workflows">
@@ -295,345 +179,117 @@ footer .legal{margin:0;font-size:12.5px}
         </ol>
         <div class="cta-row">
           <button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Inspect a session</span><span class="sep">·</span>npx orangu report</button>
-          <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See the observe-to-proposal sample (opens in a new tab)">See the observe-to-proposal sample ↗</a>
+          <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See a real report (opens in a new tab)">See a real report ↗</a>
         </div>
-        <p class="fine">The report observes locally. <code>orangu-improve</code> drafts; <code>orangu-apply</code> changes session/repo files only when invoked.</p>
+        <p class="fine">Read-only. It reads the session files already on your disk and writes one HTML file. No proxy, no account, no telemetry.</p>
       </div>
       <div class="hero-viz">
-        <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink"></qtc-triad>
-      </div>
-      <div class="term-wrap">
-        <div class="term" aria-label="orangu workflow"><pre><span class="p">$</span> npx orangu report
-one session  →  steps, tool calls, errors, outcome evidence
-repo/global  →  recurring patterns worth a larger change
-improve skill  →  a structured proposal you review
-scope policy →  session: apply + verify · repo: apply · global: review</pre></div>
-        <p class="fine">Start with observation. Draft from bounded evidence, then use the authority supported by that scope.</p>
+        <figure class="hero-shot"><img src="assets/report-overview.png" width="1280" height="900" alt="The Overview page of an orangu report: the observed outcome of a session, its quality, time, and token tiles, and the evidence to follow." loading="eager" decoding="async"></figure>
       </div>
     </div>
   </div>
 </section>
 
-<section id="jobs" class="sec">
+<section id="what" class="sec">
   <div class="wrap">
-    <div class="kicker">Two jobs, one evidence trail</div>
-    <h2>Diagnose one run. Improve repeated work.</h2>
-    <p class="sec-lead">A session explains what happened. Repo and global views show which patterns deserve a change to the way future work runs.</p>
-    <div class="grid g300">
-      <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a run.</div></div>
-      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result"><code>repo</code> may be applied explicitly. <code>global</code> is proposal-only.</div></div>
+    <div class="kicker">What it does</div>
+    <h2>The transcript is the only record. Nobody reads it.</h2>
+    <p class="sec-lead">You run coding agents for hours. Every tool call, retry, subagent, and re-read of the same file lands in a transcript on your disk: the only record of what happened, and unreadable at any useful speed. orangu reads it for you.</p>
+    <p class="goal"><b>Plain code, no model.</b> orangu parses, counts, reconciles, and ranks; no network, no clock. The same session gives the same answer every time. One report per run: the outcome, the timeline, every tool call and subagent, where the context filled up, where the tokens went.</p>
+    <p class="goal"><b>The goal is not a score.</b> It is better outcomes with less time and fewer tokens, and knowing which change moved which one. Nothing leaves your machine to find out.</p>
+    <div class="shows-wrap">
+      <table class="shows">
+        <thead><tr><th scope="col">What the session tells you</th><th scope="col">What orangu shows</th></tr></thead>
+        <tbody>
+          <tr><td>"compacted"</td><td>which turns filled the context window, and with what</td></tr>
+          <tr><td>a subagent's final answer</td><td>its full tree: tools, tokens, time, errors</td></tr>
+          <tr><td>that a skill is installed</td><td>whether it ever fired, and what it weighs in context</td></tr>
+          <tr><td>nothing about repetition</td><td>the same file read again and again, and the same context re-read on every request</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <figure class="triad-fig">
+      <qtc-triad role="img" aria-label="Quality up, Time down, Tokens down: the three axes orangu measures. Never a single score." ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink"></qtc-triad>
+      <figcaption class="triad-cap">Quality ↑ × Time ↓ × Tokens ↓ · the three axes orangu measures. Never a single score.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="report" class="sec">
+  <div class="wrap">
+    <div class="kicker">See a report</div>
+    <h2>One page per run, on your machine.</h2>
+    <p class="sec-lead">The Overview of a session from this repository, building orangu itself. A report is one HTML file that makes no network requests: keep it, open it anywhere, hand it to a teammate.</p>
+    <figure class="shot">
+      <img src="assets/report-overview.png" width="1280" height="900" alt="An orangu report Overview: the observed outcome, chips for test runs, commits, and tool error rate, the quality, time, and tokens tiles, and cards for the timeline, tools and calls, agents, context and tokens, and suggestions." loading="lazy" decoding="async">
+      <figcaption>In this run, <b>34.9M of the 37.0M tokens</b> the model processed were cache reads: one 223k-token context, read again 156 times over.</figcaption>
+    </figure>
+    <div class="report-row">
+      <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See a real report (opens in a new tab)">See a real report ↗</a>
+      <p>The published sample uses synthetic input, so nothing private ships.</p>
     </div>
   </div>
 </section>
 
-<section id="demo" class="sec">
+<section id="fixes" class="sec">
   <div class="wrap">
-    <div class="kicker">The observe-to-proposal sample</div>
-    <h2>Follow evidence from one step to the next run.</h2>
-    <p class="sec-lead">This illustrative flow shows what each layer owns. It is not a measured customer result.</p>
-    <div class="appdemo" id="appdemo">
-      <div class="demo-bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>orangu report · illustrative supported session</span><button class="demo-motion" id="demoMotion" type="button" aria-pressed="true" aria-label="Automatic preview is static" disabled>Static</button></div>
-      <div class="demo-body">
-        <nav class="demo-rail" role="tablist" aria-label="Report sections in the example">
-          <button id="demo-tab-overview" type="button" role="tab" aria-controls="demo-panel-overview" aria-selected="false" tabindex="-1" data-demo-view="overview">Overview</button>
-          <button id="demo-tab-timeline" type="button" role="tab" aria-controls="demo-panel-timeline" aria-selected="false" tabindex="-1" data-demo-view="timeline">Timeline</button>
-          <button id="demo-tab-tools" type="button" role="tab" aria-controls="demo-panel-tools" aria-selected="false" tabindex="-1" data-demo-view="tools">Tools &amp; calls</button>
-          <button id="demo-tab-suggest" type="button" role="tab" aria-controls="demo-panel-suggest" aria-selected="true" tabindex="0" data-demo-view="suggest" aria-current="page" class="on">Suggestions</button>
-          <span class="dim">Repo / Global</span>
-        </nav>
-        <div class="demo-main">
-          <div class="demo-view" id="demo-panel-overview" data-demo-view="overview" role="tabpanel" aria-labelledby="demo-tab-overview" hidden>
-            <div class="demo-overview-hero">
-              <div class="demo-pulse" aria-hidden="true">↗</div>
-              <div><em>One local evidence trail</em><strong>Understand the run. Improve what happens next.</strong><p>Outcome evidence stays connected to steps, parent and subagent work, time, tokens, context, and tool results.</p></div>
-            </div>
-            <div class="demo-kpis">
-              <div class="demo-kpi"><em>Observe</em><b class="accent">Every tool call</b><span>input, result, error, and duration</span></div>
-              <div class="demo-kpi"><em>Connect</em><b>Parent + subagents</b><span>one ordered session timeline</span></div>
-              <div class="demo-kpi"><em>Improve</em><b>Review proposals</b><span>verify session changes on a later run</span></div>
-            </div>
-            <div class="demo-line">Session scope diagnoses one run. Repo and global scopes find recurring patterns worth a larger harness change.</div>
-          </div>
-          <div class="demo-view" id="demo-panel-timeline" data-demo-view="timeline" role="tabpanel" aria-labelledby="demo-tab-timeline" hidden>
-            <div class="demo-view-head"><div><em>Tool calls in order</em><b>Follow the parent and delegated work step by step.</b></div><span class="demo-status">local</span></div>
-            <div class="demo-timeline" aria-label="Illustrative session timeline">
-              <div class="demo-event"><span class="demo-time">00:14</span><span class="demo-actor">main</span><span class="demo-event-mark good"></span><span class="demo-event-copy"><b>Read · checkout.ts</b><small>result attached · 18 KB</small></span><span class="demo-latency">42 ms</span></div>
-              <div class="demo-event"><span class="demo-time">00:18</span><span class="demo-actor">agent-1</span><span class="demo-event-mark"></span><span class="demo-event-copy"><b>Grep · rate limit</b><small>delegated search · 7 matches</small></span><span class="demo-latency">86 ms</span></div>
-              <div class="demo-event"><span class="demo-time">00:24</span><span class="demo-actor">agent-1</span><span class="demo-event-mark bad"></span><span class="demo-event-copy"><b>Bash · npm test</b><small>error result stays on this call</small></span><span class="demo-latency">3.2 s</span></div>
-              <div class="demo-event"><span class="demo-time">00:31</span><span class="demo-actor">main</span><span class="demo-event-mark good"></span><span class="demo-event-copy"><b>Edit · checkout.ts</b><small>next action keeps its own result</small></span><span class="demo-latency">21 ms</span></div>
-            </div>
-            <p class="demo-note">Tool call input, output, error state, duration, and actor identity stay attached to the action that produced them.</p>
-          </div>
-          <div class="demo-view" id="demo-panel-tools" data-demo-view="tools" role="tabpanel" aria-labelledby="demo-tab-tools" hidden>
-            <div class="demo-view-head"><div><em>Usage · errors · latency</em><b>See where tool time went and what failed.</b></div><span class="demo-status">23 calls</span></div>
-            <div class="demo-tools" aria-label="Illustrative tool usage">
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Bash</b><small>execution</small></span><span class="demo-tool-use"><span class="trk"><i style="width:100%"></i></span><span>9 calls</span></span><span class="demo-tool-error bad">1 error</span><span class="demo-tool-latency"><small>avg / p95</small> 680 ms / 3.2 s</span></div>
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Read</b><small>files</small></span><span class="demo-tool-use"><span class="trk"><i style="width:78%"></i></span><span>7 calls</span></span><span class="demo-tool-error">0 errors</span><span class="demo-tool-latency"><small>avg / p95</small> 34 ms / 61 ms</span></div>
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Grep</b><small>search</small></span><span class="demo-tool-use"><span class="trk"><i style="width:44%"></i></span><span>4 calls</span></span><span class="demo-tool-error">0 errors</span><span class="demo-tool-latency"><small>avg / p95</small> 57 ms / 86 ms</span></div>
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Edit</b><small>changes</small></span><span class="demo-tool-use"><span class="trk"><i style="width:33%"></i></span><span>3 calls</span></span><span class="demo-tool-error">0 errors</span><span class="demo-tool-latency"><small>avg / p95</small> 18 ms / 21 ms</span></div>
-            </div>
-            <div class="demo-error-line"><b>Recurring error</b><code>test command exited 1</code><span>1 occurrence in this illustrative session</span></div>
-            <p class="demo-note"><b>Local evidence.</b> Counts, errors, and latency come from parsed tool calls. <b>Recurring pattern.</b> Repo and global scopes compare the same evidence shape across sessions.</p>
-          </div>
-          <div class="demo-view on" id="demo-panel-suggest" data-demo-view="suggest" role="tabpanel" aria-labelledby="demo-tab-suggest">
-            <div class="demo-scope"><span class="on">This session</span><span>Repo</span><span>Global</span></div>
-            <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied · Global: proposed</b></div>
-            <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
-            <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic preflight check with explicit pass and fail output. <code>orangu-improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored check attestation. Orangu validates its shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
-            </div>
-            <p class="demo-note">Local code measures and matches. An optional skill drafts. The browser only copies a handoff. A verified session comparison means its reviewed metrics passed on selected later evidence; it is not a causal or overall-quality claim.</p>
-          </div>
-        </div>
-      </div>
-      <div class="demo-actions"><p>Observe locally. Draft from evidence. Use only the lifecycle the scope supports.</p><a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="Open the full sample report (opens in a new tab)">Open the full sample report ↗</a></div>
-    </div>
+    <div class="kicker">Fixes</div>
+    <h2>From a finding to a change you can trace back.</h2>
+    <p class="sec-lead">Most tools stop at the chart. orangu carries a finding through to a change in your setup, with a receipt, so the next run can be checked against this one.</p>
+    <ol class="steps">
+      <li><h3>Observe</h3><p><code>npx orangu report</code> reads the run and ranks what it finds. No model is involved.</p></li>
+      <li><h3>See</h3><p>Open a finding. It shows the turns, the calls, and the numbers behind it.</p></li>
+      <li><h3>Propose</h3><p><code>/orangu:improve</code> reads that evidence and drafts one proposal: a line in CLAUDE.md, a hook, a skill, a script. It never edits your project.</p></li>
+      <li><h3>Apply, with a receipt</h3><p><code>/orangu:apply</code> applies the proposal you reviewed and records what changed and which checks ran.</p></li>
+    </ol>
+    <p class="rule"><b>How far a change may go.</b> One run can be fixed and re-checked against a later session from the same workspace. Repo-wide changes are applied on request. Whole-harness changes stay review-only. A later comparison is evidence, not proof of cause.</p>
   </div>
 </section>
 
-<section id="improve" class="sec">
-  <div class="wrap">
-    <div class="kicker">Change the right layer</div>
-    <h2>A suggestion should name what needs to change.</h2>
-    <p class="sec-lead">Deterministic matches narrow the options. <code>orangu-improve</code> drafts the smallest useful change for review; <code>orangu-apply</code> performs reviewed session/repo changes only when invoked.</p>
-    <div class="change-grid">
-      <div class="card change-card"><h3>Instruction files</h3><p>Persistent project guidance and conventions.</p></div>
-      <div class="card change-card"><h3>Scripts and CLIs</h3><p>Repeatable actions with checkable output.</p></div>
-      <div class="card change-card"><h3>Hooks</h3><p>Guaranteed actions at lifecycle boundaries.</p></div>
-      <div class="card change-card"><h3>Skills to create</h3><p>Reusable knowledge and workflows for your setup.</p></div>
-      <div class="card change-card"><h3>Skills to discover</h3><p>Existing capabilities to evaluate before installing.</p></div>
-      <div class="card change-card"><h3>Subagents and agents</h3><p>Isolated or specialized work with clear ownership.</p></div>
-      <div class="card change-card"><h3>MCP servers</h3><p>External tools and data the work actually needs.</p></div>
-      <div class="card change-card"><h3>Plugins</h3><p>A reusable package of related extensions.</p></div>
-      <div class="card change-card"><h3>Workflow and configuration</h3><p>How work is sequenced, checked, and repeated.</p></div>
-    </div>
-  </div>
-</section>
-
-<section id="scenarios" class="sec">
-  <div class="wrap">
-    <div class="kicker">Built around work, not job titles</div>
-    <h2>Use the same evidence at the level you need.</h2>
-    <p class="sec-lead">Detailed and plain-language views describe the same supported session. Choose the level of detail that fits the task.</p>
-    <div class="grid g300">
-      <div class="card"><h3>Review delegated work</h3><p>See the steps taken, the tools used, what completed, and which evidence supports the result.</p></div>
-      <div class="card"><h3>Diagnose a rough outcome</h3><p>Trace errors, retries, context pressure, and unfinished work back to the moment they appeared.</p></div>
-      <div class="card"><h3>Improve a repeated workflow</h3><p>Use recurring repo or global patterns to propose a script, skill, hook, instruction, tool, agent, plugin, or configuration change.</p></div>
-    </div>
-  </div>
-</section>
-
-<section id="trust" class="sec">
+<section id="privacy" class="sec">
   <div class="wrap">
     <div class="panel">
-      <div class="kicker">One system, clear ownership</div>
-      <h2>Local evidence first. Optional interpretation on top.</h2>
-      <p class="sec-lead">No instrumentation, no account, no upload, and no telemetry are required to inspect supported sessions already on disk.</p>
-      <div class="grid g300" style="margin-bottom:22px">
-        <div class="card"><h3>Bounded local evidence</h3><p><code>orangu evidence</code> accepts a supported session or current Orangu Analysis, SlimAnalysis, or Aggregate output. It redacts, bounds, matches, and ranks without a model or network request.</p></div>
-        <div class="card"><h3>Optional AI interpretation</h3><p><code>orangu-improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
-        <div class="card"><h3>Explicit reviewed changes</h3><p><code>orangu-apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the attestation shape and file list. Session-only later evidence owns the current verification claim.</p></div>
+      <div class="kicker">Privacy</div>
+      <h2>Nothing leaves the machine.</h2>
+      <div class="priv">
+        <div class="card"><h3>Zero network</h3><p>Every report ships <code>default-src 'none'</code> and makes no request. <code>orangu serve</code> listens on <code>127.0.0.1</code>.</p></div>
+        <div class="card"><h3>Redacted by default</h3><p>Secrets are scrubbed and prompt text left out unless you ask. Add <code>--strip-paths</code> before you share.</p></div>
+        <div class="card"><h3>Nothing during the session</h3><p>No proxy, no hook, no SDK, nothing to install before the run. Your whole history is analyzable the minute orangu is, not just sessions started after it.</p></div>
       </div>
-      <div class="compare" aria-label="How Orangu turns local evidence into improvement">
-        <div class="compare-row"><b>Raw transcripts</b><span>Contain the record, but leave the reading and synthesis to you.</span></div>
-        <div class="compare-row"><b>Local usage counters</b><span>Summarize usage across time and sources.</span></div>
-        <div class="compare-row"><b>Instrumented trace platforms</b><span>Capture applications that have been wired to send traces and evaluations.</span></div>
-        <div class="compare-row"><b>orangu</b><span>Connects supported local evidence to a reviewable draft, explicit session/repo application, and session-scope later verification.</span></div>
+      <div class="doclinks">
+        <a href="https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md">Privacy model ↗</a>
+        <a href="https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md">Determinism ↗</a>
+        <a href="https://github.com/NissanOhana/orangu/blob/main/SECURITY.md">Security policy ↗</a>
       </div>
-    </div>
-  </div>
-</section>
-
-<section id="scope" class="sec">
-  <div class="wrap">
-    <div class="kicker">Choose the scope of the decision</div>
-    <h2>One run for diagnosis. More runs for larger changes.</h2>
-    <p class="sec-lead">Scope controls the question, not the honesty of the evidence.</p>
-    <div class="scope-ladder">
-      <div class="scope-card"><code>session</code><h3>What happened here?</h3><p>Inspect the run and draft one bounded proposal from one finding.</p></div>
-      <div class="scope-card"><code>repo</code><h3>What keeps happening here?</h3><p>Connect recurring project patterns to example sessions and a focused change.</p></div>
-      <div class="scope-card"><code>global</code><h3>What should change in the harness?</h3><p>Review patterns across supported sessions and start a separately labeled whole-harness analysis.</p></div>
+      <p class="postnote">(This page loads Google Fonts; generated reports load nothing.)</p>
     </div>
   </div>
 </section>
 
 <section id="install" class="sec">
   <div class="wrap">
-    <div class="kicker">Start with observation</div>
-    <h2>Inspect first. Add improvement when you want it.</h2>
-    <p class="sec-lead">The CLI creates the local evidence. Claude Code and Codex skills share the same scope-aware proposal, application, and session-verification contracts.</p>
+    <div class="kicker">Install</div>
+    <h2>Start with the run in front of you.</h2>
+    <p class="sec-lead">Node.js 20 or newer. Zero runtime dependencies. The plugin is optional and comes second.</p>
     <div class="grid g300">
-      <div class="card install-card"><h3>Inspect a session</h3><p>No global install. Finds the latest supported session and opens its report.</p><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
-      <div class="card install-card"><h3>Keep the local app open</h3><p>Use report, analyze, repo, global, serve, and watch without sending session data away.</p><div class="cmd-sm"><span class="p">$</span> npm i -g orangu <button data-cmd="npm i -g orangu">copy</button></div></div>
-      <div class="card install-card"><h3>Add the Claude Code plugin</h3><p>Install after you have seen the evidence. The report copies a chat handoff; <code>/orangu:improve</code> drafts and <code>/orangu:apply</code> applies session/repo proposals explicitly.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div></div>
+      <div class="card install-card"><h3>Inspect a session</h3><p>No install. Opens a report of your latest session.</p><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
+      <div class="card install-card"><h3>Add the Claude Code plugin</h3><p><code>/orangu:improve</code> drafts, <code>/orangu:apply</code> applies, and <a href="https://github.com/NissanOhana/orangu/tree/main/plugin/skills">three more skills</a> read the same local evidence.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div></div>
     </div>
-    <div class="sub">
-      <h3>One improvement workflow, explicit stages</h3>
-      <p class="sub-lead">Measurement stays in the local CLI. Session can propose, apply, and verify; repo can propose and apply; global stays proposal-only.</p>
-      <div class="skills">
-        <div class="skill"><b>/orangu:improve</b><div>Primary catalog-first workflow: interpret bounded evidence, optionally research, and save a structured draft without editing the project.</div></div>
-        <div class="skill"><b>/orangu:apply</b><div>Explicitly apply one reviewed session/repo draft, run local checks, and record the application without claiming later verification.</div></div>
-        <div class="skill"><b>/orangu:analyze</b><div>Explain one supported session or a chosen aggregate from redacted evidence.</div></div>
-        <div class="skill"><b>/orangu:mega</b><div>Review recurring repo or global patterns as a separately requested deep pass.</div></div>
-        <div class="skill"><b>/orangu:watch</b><div>Keep a local report refreshed while a supported session is running.</div></div>
-        <div class="skill"><b>/orangu:feedback</b><div>Rant through a private localhost form and review the exact GitHub prefill.</div></div>
-        <div class="skill"><b>/orangu:suggest</b><div>Compatibility alias for older links; forwards the exact request to /orangu:improve.</div></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section class="sec">
-  <div class="wrap">
     <div class="cta">
       <span class="mascot-box"><img src="{{mascot:main}}" width="160" height="160" alt="orangu, the orangutan mascot"></span>
-      <h2>Start with the run in front of you.</h2>
-      <p class="sub">Inspect it locally, then decide whether the next outcome needs a proposal.</p>
+      <h2>Your last session is already on disk.</h2>
+      <p class="sub">Read it, then decide whether the next one needs a change.</p>
       <button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Inspect a session</span><span class="sep">·</span>npx orangu report</button>
-      <p class="who">Supported today: Claude Code, Cowork, and Desktop sessions stored on your machine.</p>
     </div>
   </div>
 </section>
 
 <footer>
+  <p class="machines">Humans: <a href="sample.html" target="_blank" rel="noopener" aria-label="the sample report (opens in a new tab)">sample report</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/docs/README.md">docs</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md">privacy</a> · <a href="https://www.npmjs.com/package/orangu">npm</a> · <a href="https://github.com/NissanOhana/orangu">GitHub</a>. Machines: are you an LLM? Read <a href="llms.txt">/llms.txt</a>.</p>
   <p>MIT © Nissan Ohana · the mascot is CC0, put orangu on a sticker · <a href="https://github.com/NissanOhana/orangu">github.com/NissanOhana/orangu</a></p>
   <p class="legal">orangu is not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.</p>
 </footer>
 
-<script>
-(function () {
-  var demo = document.getElementById('appdemo')
-  if (!demo) return
-  var buttons = demo.querySelectorAll('.demo-rail [data-demo-view]')
-  var views = demo.querySelectorAll('.demo-main [data-demo-view]')
-  var motionButton = document.getElementById('demoMotion')
-  if (!motionButton) return
-  var order = Array.prototype.map.call(buttons, function (button) { return button.getAttribute('data-demo-view') })
-  var current = 'suggest'
-  var visible = false
-  var transientPaused = false
-  var userPaused = false
-  var timer = null
-  var motion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false }
-  var observerSupported = 'IntersectionObserver' in window
-
-  function clearCycle() {
-    if (timer === null) return
-    window.clearTimeout(timer)
-    timer = null
-  }
-
-  function syncMotionControl() {
-    if (motion.matches) {
-      motionButton.disabled = true
-      motionButton.textContent = 'Motion off'
-      motionButton.setAttribute('aria-pressed', 'true')
-      motionButton.setAttribute('aria-label', 'Automatic preview disabled by reduced motion preference')
-      return
-    }
-    if (!observerSupported) {
-      motionButton.disabled = true
-      motionButton.textContent = 'Static'
-      motionButton.setAttribute('aria-pressed', 'true')
-      motionButton.setAttribute('aria-label', 'Automatic preview unavailable in this browser')
-      return
-    }
-    motionButton.disabled = false
-    motionButton.textContent = userPaused ? 'Play' : 'Pause'
-    motionButton.setAttribute('aria-pressed', String(userPaused))
-    motionButton.setAttribute('aria-label', userPaused ? 'Play automatic preview' : 'Pause automatic preview')
-  }
-
-  function scheduleCycle() {
-    clearCycle()
-    if (userPaused || transientPaused || !visible || document.hidden || motion.matches || !observerSupported) return
-    timer = window.setTimeout(function () {
-      timer = null
-      show(order[(order.indexOf(current) + 1) % order.length])
-      scheduleCycle()
-    }, 3600)
-  }
-
-  function show(name) {
-    if (order.indexOf(name) < 0) return
-    current = name
-    buttons.forEach(function (button) {
-      var active = button.getAttribute('data-demo-view') === name
-      button.classList.toggle('on', active)
-      button.setAttribute('aria-selected', String(active))
-      button.setAttribute('tabindex', active ? '0' : '-1')
-      if (active) button.setAttribute('aria-current', 'page')
-      else button.removeAttribute('aria-current')
-    })
-    views.forEach(function (view) {
-      var active = view.getAttribute('data-demo-view') === name
-      view.classList.toggle('on', active)
-      view.hidden = !active
-    })
-  }
-
-  function setUserPaused(value) {
-    userPaused = value
-    syncMotionControl()
-    scheduleCycle()
-  }
-
-  function pauseCycle() {
-    transientPaused = true
-    clearCycle()
-  }
-
-  function resumeCycle() {
-    transientPaused = false
-    scheduleCycle()
-  }
-
-  buttons.forEach(function (button, index) {
-    button.addEventListener('click', function () {
-      setUserPaused(true)
-      show(button.getAttribute('data-demo-view'))
-    })
-    button.addEventListener('keydown', function (event) {
-      var next = -1
-      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % buttons.length
-      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index + buttons.length - 1) % buttons.length
-      else if (event.key === 'Home') next = 0
-      else if (event.key === 'End') next = buttons.length - 1
-      if (next < 0) return
-      event.preventDefault()
-      setUserPaused(true)
-      show(buttons[next].getAttribute('data-demo-view'))
-      buttons[next].focus()
-    })
-  })
-  demo.addEventListener('pointerenter', pauseCycle)
-  demo.addEventListener('pointerleave', resumeCycle)
-  demo.addEventListener('focusin', pauseCycle)
-  demo.addEventListener('focusout', function (event) {
-    if (!event.relatedTarget || !demo.contains(event.relatedTarget)) resumeCycle()
-  })
-  motionButton.addEventListener('click', function () {
-    if (motion.matches || !observerSupported) return
-    transientPaused = false
-    setUserPaused(!userPaused)
-  })
-  document.addEventListener('visibilitychange', scheduleCycle)
-  function motionChanged() {
-    syncMotionControl()
-    scheduleCycle()
-  }
-  if (motion.addEventListener) motion.addEventListener('change', motionChanged)
-  else if (motion.addListener) motion.addListener(motionChanged)
-
-  syncMotionControl()
-  if (observerSupported) {
-    new window.IntersectionObserver(function (entries) {
-      visible = entries.some(function (entry) { return entry.isIntersecting && entry.intersectionRatio >= 0.35 })
-      scheduleCycle()
-    }, { threshold: [0, 0.35] }).observe(demo)
-  }
-})()
-</script>
 <script>
 /* qtc-triad: the Quality/Time/Tokens space on a 2D canvas, with zero dependencies.
    Perspective depth, far-first painter sorting, depth-based size and alpha, a slow

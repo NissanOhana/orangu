@@ -9,8 +9,11 @@ const pages = new Map([
   ['/index.html', join(root, 'site', 'index.html')],
   ['/sample.html', join(root, 'site', 'sample.html')],
   ['/assets/report-overview.png', join(root, 'site', 'assets', 'report-overview.png')],
+  ['/llms.txt', join(root, 'site', 'llms.txt')],
+  ['/llms-full.txt', join(root, 'site', 'llms-full.txt')],
 ])
-const contentType = (file) => (file.endsWith('.png') ? 'image/png' : 'text/html; charset=utf-8')
+const contentType = (file) =>
+  file.endsWith('.png') ? 'image/png' : file.endsWith('.txt') ? 'text/plain; charset=utf-8' : 'text/html; charset=utf-8'
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname
