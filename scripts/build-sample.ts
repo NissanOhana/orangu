@@ -149,7 +149,15 @@ async function main(): Promise<void> {
   const analysis = analyzeSession(session, { version: 'sample', now: NOW })
   analysis.generator.generatedAt = NOW
   analysis.parse.parseMs = 0
-  const { html } = renderReport(analysis, { title: 'orangu · sample report', illustrative: true })
+  const rendered = renderReport(analysis, { title: 'orangu · sample report', illustrative: true })
+  // The published sample only: a user's own report is opened by its author in a browser they
+  // control, so the no-script line belongs to the public artifact, not to every report.
+  const mount = '<div id="app" class="app"></div>'
+  if (!rendered.html.includes(mount)) throw new Error('build-sample: report mount point not found')
+  const html = rendered.html.replace(
+    mount,
+    `${mount}<noscript><p style="max-width:640px;margin:48px auto;padding:0 24px;font-family:system-ui,sans-serif">This sample report is rendered by a script that ships inside this one file. Nothing is fetched from anywhere. Enable JavaScript for this page to read it.</p></noscript>`,
+  )
   const out = join(ROOT, 'site/sample.html')
   writeFileSync(out, html)
   const kb = Math.round(html.length / 1024)
