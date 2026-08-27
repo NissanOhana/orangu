@@ -25,6 +25,12 @@ export interface ServeOptions {
   port?: number
   open: boolean
   includeText: boolean
+  /**
+   * Whether the /export/:id.html download keeps transcript previews. Independent of `includeText`:
+   * the viewer is loopback-only, but the exported file is a shareable artifact and stays redacted
+   * unless the operator passes --include-text. Default false.
+   */
+  exportIncludeText?: boolean
   configDir?: string
   roots?: string[]
   cwd?: string

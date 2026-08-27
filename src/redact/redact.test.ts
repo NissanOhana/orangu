@@ -78,7 +78,7 @@ describe('redactAnalysis', () => {
         userCorrections: [{ turnIndex: 0, preview: MARKER }],
       },
       insights: [{ id: 'insight-1', ruleId: 'rule-1', severity: 'low', axis: 'quality', title: GENERATED, detail: MARKER, recommendation: GENERATED, evidence: { command: MARKER, template: MARKER, sample: MARKER, failedAgent: { agentId: 'agent-1', agentType: 'code-reviewer', name: MARKER, status: 'failed', toolErrors: 1, tokens: 10 } }, turnIndexes: [], personas: ['anyone'] }],
-      events: [{ kind: 'other', turnIndex: 0, label: GENERATED, detail: MARKER }],
+      events: [{ kind: 'interrupt', turnIndex: 0, label: GENERATED, detail: MARKER }],
       parse: {
         recordCounts: { user: 1, [MARKER]: 2 },
         unknownRecordTypes: { [MARKER]: 2 },
@@ -155,6 +155,20 @@ describe('redactAnalysis', () => {
     expect(out.events[0]!.detail).toBe('')
     expect((out.insights[0]!.evidence as { command: string }).command).toBe('')
     expect(JSON.stringify(out)).not.toContain(MARKER)
+  })
+
+  it('keeps event labels only for kinds the adapter labels from a fixed string', () => {
+    const a = full()
+    a.events = [
+      { kind: 'interrupt', turnIndex: 0, label: GENERATED },
+      // parse.ts passes cronKind / the system subtype / the attachment type through as these labels
+      { kind: 'scheduled_fire', turnIndex: 0, label: MARKER },
+      { kind: 'api_error', turnIndex: 0, label: MARKER },
+      { kind: 'other', turnIndex: 0, label: MARKER },
+    ]
+    const out = redactAnalysis(a, { stripText: true, home: '' }).analysis
+    expect(out.events.map((e) => e.label)).toEqual([GENERATED, '', '', ''])
+    expect(redactAnalysis(a, { stripText: false, home: '' }).analysis.events[1]!.label).toBe(MARKER)
   })
 
   it('still scrubs a secret planted in generated copy', () => {

@@ -578,7 +578,7 @@ describe('serve redaction: the planted secret never leaves the process', () => {
   })
 
   it('--include-text retains arbitrary transcript strings but still scrubs recognized secrets', async () => {
-    const { home, url } = await bootWith({ includeText: true }, { analyze: analyzeWithPrivateMarker })
+    const { home, url } = await bootWith({ includeText: true, exportIncludeText: true }, { analyze: analyzeWithPrivateMarker })
     await srv!.registry.settle()
     const fetchAgg = (path: string): Promise<string> =>
       pollUntil(async () => {

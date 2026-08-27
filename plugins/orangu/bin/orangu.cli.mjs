@@ -1754,8 +1754,9 @@ function isRuleRecord(obj2) {
 function isQualitySignal(obj2) {
   return "tone" in obj2 && "value" in obj2 && !("ruleId" in obj2);
 }
-function isEventRecord(obj2) {
-  return "kind" in obj2 && "turnIndex" in obj2 && "label" in obj2;
+var SAFE_EVENT_KINDS = /* @__PURE__ */ new Set(["interrupt", "pr_link", "plan_mode", "model_fallback", "permission_prompt", "away_summary"]);
+function isSafeEventRecord(obj2) {
+  return "kind" in obj2 && "turnIndex" in obj2 && "label" in obj2 && SAFE_EVENT_KINDS.has(String(obj2["kind"]));
 }
 function stripsText(key, source) {
   switch (key) {
@@ -1764,7 +1765,7 @@ function stripsText(key, source) {
     case "title":
       return !isRuleRecord(source);
     case "label":
-      return !isQualitySignal(source) && !isEventRecord(source);
+      return !isQualitySignal(source) && !isSafeEventRecord(source);
     case "detail":
       return !isQualitySignal(source);
     default:
@@ -7984,7 +7985,7 @@ var exportRoutes = (ctx) => [
         res.end(JSON.stringify({ error: `unknown session: ${id}` }));
         return;
       }
-      const { html } = ctx.renderReport(analysis, { redact: { scrub: true, stripText: !ctx.opts.includeText } });
+      const { html } = ctx.renderReport(analysis, { redact: { scrub: true, stripText: !ctx.opts.exportIncludeText } });
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Disposition": `attachment; filename="orangu-${id}.html"`,
@@ -11315,6 +11316,8 @@ async function cmdServe(flags) {
     open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || Boolean(isTTY)),
     // loopback only (127.0.0.1): the operator sees their own transcript by default; --no-include-text opts out
     includeText: !flagBool(flags, "no-include-text"),
+    // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
+    exportIncludeText: flagBool(flags, "include-text"),
     configDir: roots ? void 0 : configArg,
     roots,
     cwd: flagStr(flags, "cwd"),
@@ -11363,8 +11366,8 @@ ${paint2(C2.b, "flags")}
   --open / --no-open     open (or don't) the report in a browser
   --no-redact            keep secrets/paths in the report and --json (default: redacted)
   --slim                 with analyze --json: the slim projection LLM consumers read
-  --include-text         keep prompt/result previews (default: stripped from shareable output)
-  --no-include-text      serve only: hide prompt/result previews (serve keeps them by default, loopback only)
+  --include-text         keep prompt/result previews in report/analyze/watch output and in serve's exported HTML (default: stripped)
+  --no-include-text      serve only: hide prompt/result previews in the loopback viewer too (serve shows them by default)
   --strip-paths          reduce absolute paths to basenames (home prefix is already ~ by default)
   --global               scan all roots incl. Cowork/Desktop
   --root <dir>           override the Claude config dir

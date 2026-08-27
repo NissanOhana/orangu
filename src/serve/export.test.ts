@@ -109,11 +109,12 @@ describe('GET /export/:id.html', () => {
     expect(mask(state.body)).toBe(mask(direct))
   })
 
-  it('honours --include-text (text kept when the server was started with it)', async () => {
+  it('honours --include-text (exportIncludeText) and ignores the viewer-only includeText', async () => {
     const a = await goldenAnalysis(GOLDEN_FIXTURES.find((f) => f.name === 'canonical')!)
     a.session.title = `${MARKER} sk-ant-api03-EXPORTMARKER9073`
-    const ctx = makeCtx(new Map([[a.session.id, a]]), { includeText: true })
-    const stripped = await get(findRoute(makeCtx(new Map([[a.session.id, a]]))), a.session.id)
+    const ctx = makeCtx(new Map([[a.session.id, a]]), { includeText: true, exportIncludeText: true })
+    // the viewer default (includeText: true, the cmdServe default) must not leak into the shareable download
+    const stripped = await get(findRoute(makeCtx(new Map([[a.session.id, a]]), { includeText: true })), a.session.id)
     const kept = await get(findRoute(ctx), a.session.id)
     expect(kept.body.length).toBeGreaterThan(stripped.body.length)
     expect(stripped.body).not.toContain(MARKER)

@@ -27,6 +27,9 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     expect(h).toContain('orangu report')
     expect(h).toContain('orangu serve')
     for (const f of ['--port', '--open', '--include-text', '--no-include-text', '--max-live']) expect(h).toContain(f)
+    // --include-text governs shareable output (report/watch and serve's export); --no-include-text is the viewer opt-out
+    expect(h).toContain("in serve's exported HTML")
+    expect(h).toContain('hide prompt/result previews in the loopback viewer')
     expect(h).not.toContain('--allow-claude')
     // Hard-assert the suggest-layer verbs here because suggest.e2e.test.ts skips when they are
     // missing, so this unconditional test is the guard that keeps the registry wired and documented
@@ -195,6 +198,35 @@ syncBuiltinESMExports()
       await stopServe(child)
     }
   }, 30_000)
+
+  it('serve keeps the Export HTML download redacted by default and un-redacts it only with --include-text', async () => {
+    // the fixture's live session opens with this prompt (test/fixtures/home.ts); it must not leave the machine unasked
+    const PROMPT_TAIL = 'wire the client'
+    const dflt = await spawnServe([])
+    try {
+      const rows = (await (await fetch(dflt.url + '/api/sessions')).json()) as Array<{ id: string }>
+      const id = rows.find((r) => r.id.startsWith('11111111'))!.id
+      const res = await fetch(`${dflt.url}/export/${id}.html`)
+      expect(res.headers.get('content-disposition')).toContain('attachment')
+      const html = await res.text()
+      expect(html).not.toContain(PROMPT_TAIL)
+      // the viewer itself still keeps text by default
+      const app = (await (await fetch(dflt.url + '/api/app')).json()) as { capabilities: { includeText: boolean } }
+      expect(app.capabilities.includeText).toBe(true)
+    } finally {
+      await stopServe(dflt.child)
+    }
+    const opted = await spawnServe(['--include-text'])
+    try {
+      const rows = (await (await fetch(opted.url + '/api/sessions')).json()) as Array<{ id: string }>
+      const id = rows.find((r) => r.id.startsWith('11111111'))!.id
+      const html = await (await fetch(`${opted.url}/export/${id}.html`)).text()
+      expect(html).toContain(PROMPT_TAIL)
+      expect(html).not.toContain('sk-ant-api03-FAKEFAKEFAKEFAKE') // scrub stays on even when text is included
+    } finally {
+      await stopServe(opted.child)
+    }
+  }, 60_000)
 
   it('feedback uses an empty loopback app even when the configured session root is populated, and dies on SIGTERM', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-feedback-')))

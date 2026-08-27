@@ -178,9 +178,15 @@ function isQualitySignal(obj: Record<string, unknown>): boolean {
   return 'tone' in obj && 'value' in obj && !('ruleId' in obj)
 }
 
-/** Analysis.events[]: the label is rule-generated; the detail is a transcript preview and stays stripped. */
-function isEventRecord(obj: Record<string, unknown>): boolean {
-  return 'kind' in obj && 'turnIndex' in obj && 'label' in obj
+/**
+ * Analysis.events[] kinds whose label the adapter always sets from a fixed string (parse.ts). 'scheduled_fire',
+ * 'api_error' and 'other' pass raw transcript fields through as the label (cronKind, the system subtype, the
+ * attachment type), the same undocumented keys the Coverage count maps collapse to ‹stripped›, so they stay
+ * stripped. The detail is a transcript preview for every kind and is always stripped.
+ */
+const SAFE_EVENT_KINDS = new Set(['interrupt', 'pr_link', 'plan_mode', 'model_fallback', 'permission_prompt', 'away_summary'])
+function isSafeEventRecord(obj: Record<string, unknown>): boolean {
+  return 'kind' in obj && 'turnIndex' in obj && 'label' in obj && SAFE_EVENT_KINDS.has(String(obj['kind']))
 }
 
 /** Does `stripText` blank this string field, given the record it sits in? */
@@ -191,7 +197,7 @@ function stripsText(key: string, source: Record<string, unknown>): boolean {
     case 'title':
       return !isRuleRecord(source)
     case 'label':
-      return !isQualitySignal(source) && !isEventRecord(source)
+      return !isQualitySignal(source) && !isSafeEventRecord(source)
     case 'detail':
       // Insight/CrossFinding.detail interpolates raw commands, prompt previews and tool inputs
       // (src/analyze/insights.ts); only the QualitySignal chip's detail is literal rule copy.
