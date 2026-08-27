@@ -25,6 +25,8 @@ export interface AppCapabilities {
   kickoffRun: boolean
   exportHtml: boolean
   includeText: boolean
+  /** file mode only: this HTML is rewritten by a running `orangu watch`, so the Live screen is real. */
+  watch?: boolean
 }
 
 /** One entry of a session's recent-events ring for the fleet feed; redacted server-side. */

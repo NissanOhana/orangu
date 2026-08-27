@@ -56,7 +56,8 @@ export function shortId(id: string): string {
 /** The sidebar model. Data-driven: groups always exist; empty Live group means "hide it". */
 export function navFor(data: AppData, state: RouteState): NavGroup[] {
   const audience = state.audience === 'plain' ? 'plain' : 'dev'
-  const liveRows = data.sessions.filter((r) => r.badge === 'live')
+  // a plain `orangu report` is a snapshot: only a watch-generated file (or serve) has a real live session
+  const liveRows = data.mode === 'file' && !data.capabilities.watch ? [] : data.sessions.filter((r) => r.badge === 'live')
   const liveItems: NavItem[] = []
   if (liveRows.length > 1) liveItems.push({ id: 'live-all', label: `All live · ${liveRows.length}`, screen: 'live', dot: 'pulse' })
   for (const r of liveRows)

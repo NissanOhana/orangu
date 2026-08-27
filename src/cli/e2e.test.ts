@@ -258,6 +258,7 @@ syncBuiltinESMExports()
       await until(() => existsSync(out) && readFileSync(out, 'utf8').includes('orangu-data'), 15_000, 'the initial report\n' + err)
       const before = readFileSync(out, 'utf8')
       expect(before).not.toContain('WATCH-E2E-NEW-TURN')
+      expect(before).toContain('"watch":true')
       await appendTurn(home.sessions[0]!.path, home.liveId, 'WATCH-E2E-NEW-TURN please')
       await until(() => readFileSync(out, 'utf8').includes('WATCH-E2E-NEW-TURN'), 15_000, 'the refreshed report\n' + err)
     } finally {

@@ -50,17 +50,27 @@ describe('nav model', () => {
     for (const hidden of ['agents', 'context', 'coverage']) expect(plainIds).not.toContain(hidden)
   })
 
+  it('hides the Live group in a plain file-mode report even when the row badge says live', () => {
+    const snapshot = navFor(appData({ sessions: [row({ badge: 'live', ageMs: 1000 })] }), { screen: 'overview' })
+    expect(snapshot.find((g) => g.id === 'live')!.items).toEqual([])
+    const watched = navFor(
+      appData({ sessions: [row({ badge: 'live', ageMs: 1000 })], capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: false, watch: true } }),
+      { screen: 'overview' },
+    )
+    expect(watched.find((g) => g.id === 'live')!.items).toHaveLength(1)
+  })
+
   it('hides the Live group when no session is live and shows it when one is', () => {
     const none = navFor(appData(), { screen: 'overview' })
     expect(none.find((g) => g.id === 'live')!.items).toHaveLength(0)
-    const live = navFor(appData({ sessions: [row({ badge: 'live', ageMs: 1000 })] }), { screen: 'overview' })
+    const live = navFor(appData({ mode: 'serve', sessions: [row({ badge: 'live', ageMs: 1000 })] }), { screen: 'overview' })
     const g = live.find((g) => g.id === 'live')!
     expect(g.items).toHaveLength(1)
     expect(g.items[0]!.label).toContain('Watch')
   })
 
   it('adds an "All live · N" item when more than one session is live', () => {
-    const d = appData({ sessions: [row({ id: 'aaaa1111-x', badge: 'live' }), row({ id: 'bbbb2222-y', badge: 'live' })] })
+    const d = appData({ mode: 'serve', sessions: [row({ id: 'aaaa1111-x', badge: 'live' }), row({ id: 'bbbb2222-y', badge: 'live' })] })
     const g = navFor(d, { screen: 'live' }).find((g) => g.id === 'live')!
     expect(g.items[0]!.label).toBe('All live · 2')
     expect(g.items).toHaveLength(3)

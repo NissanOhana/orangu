@@ -44,7 +44,7 @@ export async function watchSession(ref: SessionRef, flags: Record<string, string
         await tailOnce(st, ref)
         const session = await sessionFromTail(st)
         const analysis = analyzeSession(session, { version: deps.version, now: Date.now() })
-        const { html } = renderReport(analysis, { redact: flagBool(flags, 'no-redact') ? false : { scrub: true, stripText: !flagBool(flags, 'include-text') } })
+        const { html } = renderReport(analysis, { watch: true, redact: flagBool(flags, 'no-redact') ? false : { scrub: true, stripText: !flagBool(flags, 'include-text') } })
         await writeFile(path, html)
         renders++
         const s = analysis.summary

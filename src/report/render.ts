@@ -23,6 +23,8 @@ export interface RenderOptions {
   title?: string
   /** mark a generated public demo as synthetic in every rendered screen */
   illustrative?: boolean
+  /** set only by `orangu watch`: the file is rewritten as the transcript grows, so the Live screen is honest */
+  watch?: boolean
 }
 
 export interface RenderResult {
@@ -102,7 +104,7 @@ export function renderReport(analysis: Analysis, options: RenderOptions = {}): R
     version: BUILD_VERSION,
     generatedAt: now,
     ...(options.illustrative ? { illustrative: true } : {}),
-    capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: !stripText },
+    capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: !stripText, ...(options.watch ? { watch: true } : {}) },
     selectedId: data.session.id,
     session: data,
     sessions: [rowFromAnalysis(data, now)],

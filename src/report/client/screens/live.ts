@@ -1,6 +1,7 @@
 /**
  * Live (§2.1, §4): session view (banner → KPIs → context → agents swimlane → feed) and the fleet
- * (N live sessions). In file mode the page is a static snapshot ("Watching via orangu watch"); the
+ * (N live sessions). In file mode the page is a static snapshot: "Watching via orangu watch" only when
+ * `capabilities.watch` says a running watch rewrites the file, otherwise a plain snapshot banner; the
  * serve states (connecting/reconnecting) arrive with the remote source in Wave C via the same states.
  */
 import type { Ctx } from '../app.js'
@@ -31,14 +32,14 @@ declare global {
   }
 }
 
-type LiveState = 'connecting' | 'live' | 'stalled' | 'ended' | 'reconnecting' | 'file' | 'empty'
+export type LiveState = 'connecting' | 'live' | 'stalled' | 'ended' | 'reconnecting' | 'file' | 'snapshot' | 'empty'
 
-function liveStateFor(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis | undefined): LiveState {
+export function liveStateFor(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis | undefined): LiveState {
   if (!row) return 'connecting'
   if (ctx.conn === 'reconnecting') return 'reconnecting'
   if (row.badge === 'ended') return 'ended'
   if (a && a.summary.toolCalls === 0) return 'empty'
-  if (ctx.data.mode === 'file') return 'file'
+  if (ctx.data.mode === 'file') return ctx.data.capabilities.watch ? 'file' : 'snapshot'
   if (row.badge === 'idle') return 'stalled'
   return 'live'
 }
@@ -63,10 +64,11 @@ const BANNER: Record<LiveState, [string, string, string]> = {
   ended: [DOTS.good, 'Session ended · final numbers', ''],
   reconnecting: [DOTS.hollow, 'Connection lost · retrying', 'The page reconnects on its own.'],
   file: [DOTS.static, 'Watching via orangu watch', 'This file is rewritten on every change. Reload to refresh.'],
+  snapshot: [DOTS.static, 'Static snapshot', 'This file does not update. Run orangu watch to follow the session live.'],
 }
 
-function bannerFor(state: LiveState, row: SessionSummaryRow | undefined, a: Analysis | undefined): string {
-  const turnRight = a ? `turn <b style="color:var(--ink1)">${a.summary.turns}</b>${state === 'ended' ? '' : ' in progress'}` : ''
+export function bannerFor(state: LiveState, row: SessionSummaryRow | undefined, a: Analysis | undefined): string {
+  const turnRight = a ? `turn <b style="color:var(--ink1)">${a.summary.turns}</b>${state === 'ended' || state === 'snapshot' ? '' : ' in progress'}` : ''
   const [d, t, s] = BANNER[state]
   let title = t
   let sub = s

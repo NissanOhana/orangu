@@ -82,6 +82,16 @@ describe('renderReport', () => {
     expect(data.illustrative).toBeUndefined()
   })
 
+  it('marks the file as watch-generated only when watch asks for it', async () => {
+    const b = buildCanonicalSession()
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    const a = analyzeSession(s, { version: 'test', now: 0 })
+    const { html } = renderReport(a, { watch: true })
+    const dataStart = html.indexOf('id="orangu-data">') + 'id="orangu-data">'.length
+    const data = JSON.parse(html.slice(dataStart, html.indexOf('</script>', dataStart)))
+    expect(data.capabilities.watch).toBe(true)
+  })
+
   it('carries an explicit illustrative marker only when the renderer requests it', async () => {
     const b = buildCanonicalSession()
     const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
