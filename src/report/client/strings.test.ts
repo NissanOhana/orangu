@@ -3,14 +3,22 @@ import { currencyHits, moneyHits } from '../../../test/money-vocabulary.js'
 import { PLAIN_TERMS, term, plainSentence } from './strings.js'
 
 describe('plain-language vocabulary', () => {
-  it('maps detailed terms to plain words', () => {
-    expect(term('turn', 'plain')).toBe('exchange')
-    expect(term('turns', 'plain')).toBe('exchanges')
-    expect(term('subagent', 'plain')).toBe('helper')
-    expect(term('tool call', 'plain')).toBe('step')
+  it('maps only mechanism terms to plain words', () => {
     expect(term('compaction', 'plain')).toBe('memory refresh')
     expect(term('context window', 'plain')).toBe('working memory')
-    expect(term('tokens', 'plain')).toBe('work units')
+    expect(term('cache read', 'plain')).toBe('reused context')
+  })
+
+  // A3: one vocabulary. "tokens" is the word in both audiences; turns, tool calls and subagents keep
+  // their names. Plain mode removes panels instead of swapping nouns.
+  it('keeps tokens, turns, tool calls and subagents as they are in Plain mode', () => {
+    for (const w of ['tokens', 'turn', 'turns', 'tool call', 'tool calls', 'tool errors', 'subagent', 'subagents', 'agents']) expect(term(w, 'plain')).toBe(w)
+    expect(plainSentence('3 turns · 12 tool calls · 40k tokens · 2 subagents', 'plain')).toBe('3 turns · 12 tool calls · 40k tokens · 2 subagents')
+  })
+
+  it('never invents a noun (ratchet)', () => {
+    const invented = ['work units', 'work unit', 'helpers', 'helper', 'exchanges', 'exchange', 'steps', 'step']
+    for (const v of Object.values(PLAIN_TERMS)) for (const bad of invented) expect(v, `PLAIN_TERMS value "${v}"`).not.toBe(bad)
   })
 
   it('is the identity in the Detailed view', () => {
@@ -35,7 +43,7 @@ describe('plain-language vocabulary', () => {
   })
 
   it('rewrites a whole sentence in plain audience', () => {
-    expect(plainSentence('3 turns used the context window', 'plain')).toBe('3 exchanges used the working memory')
+    expect(plainSentence('3 turns used the context window', 'plain')).toBe('3 turns used the working memory')
     expect(plainSentence('3 turns used the context window', 'dev')).toBe('3 turns used the context window')
   })
 })

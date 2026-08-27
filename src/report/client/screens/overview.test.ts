@@ -84,8 +84,9 @@ describe('renderOverview capabilities', () => {
       expect(markup).toContain(`data-capability="${screen}"`)
       expect(markup).toContain(`href="#${screen}?s=${ctx.a!.session.id}&amp;audience=plain"`)
     }
-    expect(markup).toContain('steps')
-    expect(markup).toContain('exchanges')
+    // A3: one vocabulary; Plain mode keeps the word tokens and invents no nouns
+    expect(markup).toContain('tokens')
+    for (const invented of ['work units', 'exchanges', 'helpers']) expect(markup).not.toContain(invented)
   })
 
   it('omits the Agents entry when the selected analysis has no agent runs', async () => {

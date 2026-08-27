@@ -1,6 +1,10 @@
 /**
  * Plain-language vocabulary. Applied wherever a string is rendered:
  * the Plain language view avoids implementation jargon; Detailed is the identity map.
+ *
+ * One vocabulary: the word is "tokens" in both audiences (the only usage metric orangu has), and
+ * turns, tool calls and subagents keep their names. Plain mode removes panels, it does not rename
+ * nouns (A3). Only terms that name a mechanism a non-developer cannot be expected to know are mapped.
  */
 export type Audience = 'dev' | 'plain'
 
@@ -12,17 +16,8 @@ export const PLAIN_TERMS: Record<string, string> = {
   'cache writes': 'saved context',
   'cache write': 'saved context',
   'cache hits': 'reused context',
-  'tool calls': 'steps',
-  'tool call': 'step',
-  'tool errors': 'failed steps',
   compactions: 'memory refreshes',
   compaction: 'memory refresh',
-  subagents: 'helpers',
-  subagent: 'helper',
-  agents: 'helpers',
-  tokens: 'work units',
-  turns: 'exchanges',
-  turn: 'exchange',
 }
 
 /** Translate one term for the audience. */
