@@ -216,6 +216,37 @@ syncBuiltinESMExports()
     expect(quiet.stderr).not.toContain('orangu feedback')
   })
 
+  // A9: after report/analyze the terminal names the next step (the top finding's improve command,
+  // the same sg_ identity the report shows) before the beta offer; never under --quiet or --json.
+  it('names the next step before the beta offer, and stays silent under --quiet and --json', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-next-step-')))
+    const base = ['report', home.endedId, '--root', home.configDir, '--no-open', '--no-cache']
+    const human = spawnSync('node', [CLI, ...base], { encoding: 'utf8' })
+    expect(human.status, human.stderr).toBe(0)
+    const next = human.stderr.indexOf('next step:')
+    const offer = human.stderr.indexOf('orangu feedback --context report')
+    expect(next).toBeGreaterThan(-1)
+    expect(offer).toBeGreaterThan(next)
+    expect(human.stderr).toContain('top finding:')
+    expect(human.stderr).toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12} --finding /)
+    expect(human.stderr).toContain('/plugin install orangu')
+    expect(human.stdout.trim().endsWith('.html')).toBe(true)
+
+    const quiet = spawnSync('node', [CLI, ...base, '--quiet'], { encoding: 'utf8' })
+    expect(quiet.status, quiet.stderr).toBe(0)
+    expect(quiet.stderr).not.toContain('next step')
+
+    const analyze = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache'], { encoding: 'utf8' })
+    expect(analyze.status, analyze.stderr).toBe(0)
+    expect(analyze.stderr.indexOf('next step:')).toBeLessThan(analyze.stderr.indexOf('orangu feedback --context session'))
+    const machine = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache', '--json'], { encoding: 'utf8' })
+    expect(machine.status, machine.stderr).toBe(0)
+    expect(machine.stderr).not.toContain('next step')
+    expect(machine.stdout).not.toContain('next step')
+
+    expect(run(['list', '--root', home.configDir])).toContain('orangu harness')
+  })
+
   // The CI-gate flags, end to end on the built binary. A gate that silently stops gating is the
   // failure mode here: `--max-cost` was renamed to `--max-tokens`, and because the arg parser ignores
   // unknown flags, every pipeline still passing `--max-cost 5` would have exited 0 forever.

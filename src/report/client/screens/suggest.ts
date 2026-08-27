@@ -19,6 +19,7 @@ import { emptyHero } from '../components/empty.js'
 import { mascotBox } from '../components/mascot-box.js'
 import { savingsShare } from '../derive.js'
 import {
+  PLUGIN_INSTALL,
   PROPOSAL_LIST_LIMIT,
   findingForRow,
   hasValidProposal,
@@ -31,9 +32,6 @@ import {
 import { plainSentence } from '../strings.js'
 
 type ChipState = Exclude<SuggestionStatus, 'kicked-off' | 'rejected'> | 'running' | 'dismissed'
-
-/** The one-time plugin install, typed inside Claude Code (not a shell command). */
-export const PLUGIN_INSTALL = '/plugin marketplace add NissanOhana/orangu · /plugin install orangu'
 
 const trustedVerification = (record: SuggestionViewRecord | undefined): boolean => record?.verificationTrusted === true
 

@@ -12,6 +12,9 @@ import { kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, suggest
 export const SAVED_PROPOSAL_LIMIT = 12
 export const PROPOSAL_LIST_LIMIT = 6
 
+/** The one-time plugin install, typed inside Claude Code (not a shell command); the report and the CLI print the same line. */
+export const PLUGIN_INSTALL = '/plugin marketplace add NissanOhana/orangu · /plugin install orangu'
+
 const nonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
 
 /** Runtime guard for append-only records: legacy proposals omit v and structured fields. */

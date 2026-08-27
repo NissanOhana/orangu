@@ -28,6 +28,8 @@ import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
 import { MASCOT_ASCII } from '../report/client/mascot.js'
+import { PLUGIN_INSTALL, commandForInsight } from '../report/client/suggest-rows.js'
+import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
@@ -47,6 +49,28 @@ const paint = (fn: (s: string) => string, s: string) => (isTTY ? fn(s) : s)
 
 function offerBetaFeedback(context: 'session' | 'repo' | 'global' | 'report'): void {
   process.stderr.write(paint(C.dim, `  beta: rant about the experience → orangu feedback --context ${context}\n`))
+}
+
+/**
+ * The next step after a session was analyzed: the top finding and the exact improve command the
+ * report shows for it (same PlanRow -> sg_ id -> `--finding` handoff, so the terminal and the
+ * report name the same proposal). A clean session says so and names no command.
+ */
+function nextStepLines(a: Analysis): string[] {
+  const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0]
+  if (!top) return ['  no findings: this session ran clean']
+  return [
+    `  top finding:  ${top.title}`,
+    `  next step:    ${commandForInsight(top, a.session.id)}`,
+    `  needs the plugin once, inside Claude Code: ${PLUGIN_INSTALL}`,
+  ]
+}
+
+/** stderr, human paths only: silenced by --quiet and by --json (PROJECT.md §Logging contract). */
+function printNextStep(a: Analysis, flags: Record<string, string | boolean>): void {
+  if (flagBool(flags, 'quiet') || flagBool(flags, 'json')) return
+  const [first, ...rest] = nextStepLines(a)
+  process.stderr.write(paint(C.b, first!) + '\n' + rest.map((l) => l + '\n').join(''))
 }
 
 function redactOptions(flags: Record<string, string | boolean>): RedactOptions | false {
@@ -119,6 +143,8 @@ async function cmdReport(sel: string | undefined, flags: Record<string, string |
   process.stderr.write(paint(C.g, '✓ ') + `report written to ${path}` + (redaction ? paint(C.dim, ` (${redaction.applied} redactions)`) : '') + '\n')
   if (!flagBool(flags, 'no-open') && (flagBool(flags, 'open') || isTTY)) openInBrowser(path)
   process.stdout.write(path + '\n')
+  // the next step comes first; the beta offer is the last line, never the most prominent one
+  printNextStep(analysis, flags)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback('report')
 }
 
@@ -131,6 +157,7 @@ async function cmdAnalyze(sel: string | undefined, flags: Record<string, string 
     return
   }
   printAnalysisSummary(analysis)
+  printNextStep(analysis, flags)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback('session')
   thresholdExit(analysis, flags)
 }
@@ -209,7 +236,7 @@ async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
       `  ${paint(C.o, s.sessionId.slice(0, 8))}  ${paint(C.dim, when)}  ${(s.sizeBytes / 1e6).toFixed(1).padStart(5)}MB  ${s.hasSidecarDir ? paint(C.dim, '⛓ ' + s.subagentFiles.length) : '    '}  ${basename(s.projectSlug)}\n`,
     )
   }
-  process.stdout.write(paint(C.dim, `\n  orangu report <id>   ·   orangu analyze <id>\n`))
+  process.stdout.write(paint(C.dim, `\n  orangu report <id>   ·   orangu analyze <id>   ·   orangu harness\n`))
 }
 
 async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
