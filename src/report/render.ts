@@ -158,7 +158,7 @@ export interface ShellOptions {
   feedback: FeedbackBootstrap
 }
 
-/** The served app shell (GET /): no embedded AppData. The client fetches /api/app and listens on /events. */
+/** The served app shell (logical GET /): no embedded AppData. The client uses the authenticated base path. */
 export function renderShell(o: ShellOptions): string {
   const boot = { maxLive: o.maxLive, capabilities: o.capabilities, version: o.version, feedback: o.feedback }
   return `<!doctype html>
@@ -166,6 +166,7 @@ export function renderShell(o: ShellOptions): string {
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="referrer" content="no-referrer"/>
 <meta http-equiv="Content-Security-Policy" content="${CSP_SERVE}"/>
 <meta name="generator" content="orangu ${escapeHtml(o.version)}"/>
 <meta name="robots" content="noindex"/>

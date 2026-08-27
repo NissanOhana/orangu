@@ -6,7 +6,7 @@ Session transcripts may contain source code, secrets, customer data, prompts, pa
 
 - `orangu report` writes one self-contained HTML file with a zero-network Content Security Policy.
 - `orangu watch` rewrites the same local file as a session grows.
-- `orangu serve` binds to `127.0.0.1` and serves the same redacted data to the local browser.
+- `orangu serve` binds to `127.0.0.1` and requires a fresh process capability embedded in the launched URL before serving HTML, API data, exports, mutations, or events. Treat that URL as private while the process is running.
 - Orangu has no telemetry and does not require an account.
 - Browser suggestion actions are copy-only. The server does not launch a model process.
 

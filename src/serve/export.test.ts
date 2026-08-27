@@ -88,6 +88,7 @@ describe('GET /export/:id.html', () => {
     expect(state.headers['Content-Disposition']).toBe(`attachment; filename="orangu-${a.session.id}.html"`)
     expect(state.headers['Content-Security-Policy']).toContain("frame-ancestors 'none'")
     expect(state.headers['X-Frame-Options']).toBe('DENY')
+    expect(state.headers['Referrer-Policy']).toBe('no-referrer')
 
     // offline: the assert-offline body scan must be clean
     const body = state.body.slice(state.body.indexOf('</head>')).replace(/<script type="application\/json" id="orangu-data">[\s\S]*?<\/script>/, '')

@@ -1,8 +1,9 @@
 /**
- * orangu serve: zero-dependency node:http server, 127.0.0.1 ONLY (loopback is the auth,
- * §API). Routes = coreRoutes (api.ts) + extraRoutes . Logging contract: at most one stderr line
- * per request, never transcript content.
+ * orangu serve: zero-dependency node:http server, 127.0.0.1 ONLY with a per-process
+ * capability path. Routes = coreRoutes (api.ts) + extraRoutes. Logging contract: at most one
+ * stderr line per request, never transcript content or the capability.
  */
+import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { cpus } from 'node:os'
 import { AnalysisCache } from '../cache/index.js'
@@ -17,6 +18,9 @@ import { SuggestionWatcher } from './suggestion-watcher.js'
 import type { Route, ServeContext, ServeOptions } from './types.js'
 
 const BODY_LIMIT = 1 << 20 // 1 MB
+const CAPABILITY_BYTES = 32
+const CAPABILITY_PATH_PREFIX = '/_orangu/'
+const CAPABILITY_RE = /^[A-Za-z0-9_-]{43}$/
 
 export interface ServeDeps {
   now?: () => number
@@ -33,6 +37,8 @@ export interface ServeDeps {
   quiet?: boolean
   /** cross-process suggestion JSONL poll interval override (tests) */
   suggestionPollMs?: number
+  /** deterministic capability override for integration/browser tests; production callers omit it */
+  capability?: string
 }
 
 export interface ServeHandle {
@@ -47,6 +53,34 @@ export interface ServeHandle {
 interface Matched {
   route: Route
   params: Record<string, string>
+}
+
+function makeCapability(injected?: string): string {
+  const capability = injected ?? randomBytes(CAPABILITY_BYTES).toString('base64url')
+  if (!CAPABILITY_RE.test(capability)) throw new Error('serve capability must be a 32-byte base64url token')
+  return capability
+}
+
+function capabilityMatches(presented: string, expected: string): boolean {
+  const actual = Buffer.from(presented)
+  const wanted = Buffer.from(expected)
+  return actual.length === wanted.length && timingSafeEqual(actual, wanted)
+}
+
+/** Authenticate the first private path segment and return the existing logical route path. */
+function authenticatedRoutePath(pathname: string, capability: string): string | undefined {
+  if (!pathname.startsWith(CAPABILITY_PATH_PREFIX)) return undefined
+  const remainder = pathname.slice(CAPABILITY_PATH_PREFIX.length)
+  const slash = remainder.indexOf('/')
+  const presented = slash < 0 ? remainder : remainder.slice(0, slash)
+  if (!capabilityMatches(presented, capability)) return undefined
+  if (slash < 0 || slash === remainder.length - 1) return '/'
+  return remainder.slice(slash)
+}
+
+function rejectCapability(res: ServerResponse): void {
+  res.writeHead(403, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+  res.end('{"error":"serve capability required"}')
 }
 
 /** ':name' segments, with an optional literal suffix (':id.html'). */
@@ -165,6 +199,8 @@ export function rejectCrossSiteBrowserGet(req: Pick<IncomingMessage, 'headers'>)
 }
 
 export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Promise<ServeHandle> {
+  const capability = makeCapability(deps.capability)
+  const authenticatedBasePath = CAPABILITY_PATH_PREFIX + capability
   const now = deps.now ?? Date.now
   const cache = deps.cache !== undefined ? deps.cache : opts.noCache ? null : new AnalysisCache({ version: opts.version })
   const store = deps.store ?? new SuggestionStore()
@@ -190,10 +226,30 @@ export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Prom
   const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     let logPath = '[malformed request path]'
     if (!deps.quiet) res.on('finish', () => process.stderr.write(`${req.method} ${logPath} ${res.statusCode}\n`))
+    res.setHeader('Referrer-Policy', 'no-referrer')
     const hostRejection = rejectUntrustedHost(req)
     if (hostRejection) {
       res.writeHead(hostRejection.status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
       res.end(JSON.stringify({ error: hostRejection.error }))
+      return
+    }
+    let url: URL
+    let routePath: string
+    let m: Matched | undefined
+    try {
+      url = new URL(req.url ?? '/', 'http://127.0.0.1')
+      const authenticated = authenticatedRoutePath(url.pathname, capability)
+      if (authenticated === undefined) {
+        logPath = '[unauthorized]'
+        rejectCapability(res)
+        return
+      }
+      routePath = authenticated
+      logPath = routePath
+      m = matchRoute(routes, req.method ?? 'GET', routePath)
+    } catch {
+      res.writeHead(400, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
+      res.end('{"error":"malformed request path"}')
       return
     }
     if (req.method === 'GET') {
@@ -203,17 +259,6 @@ export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Prom
         res.end(JSON.stringify({ error: readRejection.error }))
         return
       }
-    }
-    let url: URL
-    let m: Matched | undefined
-    try {
-      url = new URL(req.url ?? '/', 'http://127.0.0.1')
-      logPath = url.pathname
-      m = matchRoute(routes, req.method ?? 'GET', url.pathname)
-    } catch {
-      res.writeHead(400, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })
-      res.end('{"error":"malformed request path"}')
-      return
     }
     if (!m) {
       res.writeHead(404, { 'content-type': 'application/json' })
@@ -257,7 +302,7 @@ export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Prom
   await suggestionWatcher.start()
 
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: `http://127.0.0.1:${port}${authenticatedBasePath}`,
     port,
     registry,
     hub,

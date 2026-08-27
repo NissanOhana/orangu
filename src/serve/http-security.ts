@@ -2,4 +2,5 @@
 export const HTML_ANTI_FRAMING_HEADERS = {
   'Content-Security-Policy': "frame-ancestors 'none'",
   'X-Frame-Options': 'DENY',
+  'Referrer-Policy': 'no-referrer',
 } as const

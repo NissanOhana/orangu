@@ -69,7 +69,7 @@ export async function cmdFeedback(positionals: string[], flags: Record<string, s
     { cache: null, quiet: true, store: new EmptySuggestionStore() },
   )
   const url = `${server.url}/#feedback?context=${encodeURIComponent(context)}`
-  process.stderr.write(`orangu feedback (beta) · ${url}\n  loopback only · no sessions attached · ctrl-c stops\n`)
+  process.stderr.write(`orangu feedback (beta) · ${url}\n  loopback + private capability · no sessions attached · ctrl-c stops\n`)
   if (!flagBool(flags, 'no-open')) openInBrowser(url)
 
   await new Promise<void>((resolve) => {

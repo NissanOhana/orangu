@@ -1,8 +1,9 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
+import { APP_URL } from './app-url.js'
 
 const SITE = 'http://127.0.0.1:4173'
-const APP = 'http://127.0.0.1:4174'
+const APP = APP_URL
 const SESSION = 'aaaaaaaa-0000-4000-8000-000000000001'
 const EXPECTED_BRAND_SOURCE = `data:image/png;base64,${readFileSync(new URL('../../design/brand/mascot-96.png', import.meta.url)).toString('base64')}`
 

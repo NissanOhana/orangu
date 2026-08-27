@@ -83,7 +83,7 @@ orangu is not a proxy, an SDK, a hook you install before the session, or a model
 ## Design principles
 
 - **No model in the measurement path.** Counting, reconciling, and ranking are plain code; skills only interpret the result.
-- **Zero network from reports.** Every report ships `default-src 'none'` and makes no request. `serve` binds to `127.0.0.1`.
+- **Zero network from reports.** Every report ships `default-src 'none'` and makes no request. `serve` binds to `127.0.0.1` and places every route behind a fresh process capability in its launched URL.
 - **Redacted by default.** Secrets are scrubbed and prompt text is omitted unless you ask with `--include-text`.
 - **Same transcript in, byte-identical analysis out.** No clock, no randomness, no network in the analyzer.
 - **Components, never a composite score.** Quality, time, and tokens stay separate. Never a leaderboard of people.
@@ -165,8 +165,8 @@ node dist/orangu.js report
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |
 | `orangu watch [selector]` | Refresh one report while its session grows |
-| `orangu serve` | Run the local app on `127.0.0.1` |
-| `orangu feedback` | Open the isolated localhost beta-feedback form |
+| `orangu serve` | Run the capability-protected local app on `127.0.0.1` |
+| `orangu feedback` | Open the isolated, capability-protected localhost beta-feedback form |
 | `orangu repo` | Aggregate supported sessions for the current repository |
 | `orangu global` | Aggregate supported sessions across configured roots |
 | `orangu evidence <input>` | Emit the bounded, always-redacted skill handoff |
@@ -285,7 +285,7 @@ The following paths make no model call and no network request:
 - **Estimate gate:** `orangu evidence <input> --estimate --quiet` reports the byte length and approximate token count of the exact canonical projection the skill would read. Evidence has one projection; `--depth` does not apply.
 - **Artifact validation:** `src/suggest/artifacts.ts` accepts only bounded, versioned, regular non-symlink files under the Orangu proposals directory. It validates relative target-path shapes, source provenance, the shape and reviewed-file agreement of a skill-authored application attestation, and a session-verification intent before a lifecycle transition. It does not inspect a repository diff or independently execute attested checks. Verification receipt pairs must exactly match the proposal's reviewed `verificationChecks`; Orangu generates check labels and the summary, resolves configured-root sessions in the proposal's canonical workspace, computes approved metrics, and refuses a comparison that does not pass.
 - **Suggestion state:** `src/suggest/store.ts` keeps append-only records under the Orangu data directory and enforces legal state transitions. A successful current verifier stamps `verificationTrust: "computed-v1"`; readable legacy verified records without that marker are not current computed verification.
-- **Reports and app:** the self-contained report remains offline. `serve` binds to `127.0.0.1`, and its suggestion controls only copy chat commands.
+- **Reports and app:** the self-contained report remains offline. `serve` binds to `127.0.0.1`, protects every route with a fresh process capability, and its suggestion controls only copy chat commands. This transport randomness does not enter analysis output.
 
 `orangu evidence` accepts exactly these input families:
 

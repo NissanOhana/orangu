@@ -1,34 +1,35 @@
-import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { startServe } from '../../src/serve/server.js'
 import { makeFixtureHome } from '../fixtures/home.js'
+import { BROWSER_CAPABILITY } from './app-url.js'
 
-const root = process.cwd()
 const temp = await mkdtemp(join(tmpdir(), 'orangu-browser-'))
 const fixtureRepo = join(temp, 'repo')
 await mkdir(fixtureRepo, { recursive: true })
 const fixture = await makeFixtureHome(join(temp, 'claude'), { cwd: fixtureRepo })
 const appHome = join(temp, 'orangu-home')
-const cli = join(root, 'dist', 'orangu.js')
+process.env['ORANGU_HOME'] = appHome
 
-const child = spawn(
-  process.execPath,
-  [cli, 'serve', '--port', '4174', '--no-open', '--root', fixture.configDir],
+const server = await startServe(
   {
-    env: {
-      ...process.env,
-      ORANGU_HOME: appHome,
-      ORANGU_NO_CACHE: '1',
-    },
-    stdio: 'inherit',
+    port: 4174,
+    open: false,
+    includeText: true,
+    configDir: fixture.configDir,
+    noCache: true,
+    version: 'browser-test',
   },
+  { capability: BROWSER_CAPABILITY },
 )
 
-const stop = (signal: NodeJS.Signals) => {
-  child.kill(signal)
+let stopping = false
+const stop = (): void => {
+  if (stopping) return
+  stopping = true
+  void server.close().finally(() => process.exit(0))
 }
-process.on('SIGINT', () => stop('SIGINT'))
-process.on('SIGTERM', () => stop('SIGTERM'))
-child.on('exit', (code) => process.exit(code ?? 0))
+process.on('SIGINT', stop)
+process.on('SIGTERM', stop)
 await new Promise(() => {})

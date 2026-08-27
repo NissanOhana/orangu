@@ -318,7 +318,7 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
     port,
     // policy: open by default when TTY; --no-open suppresses
     open: !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || Boolean(isTTY)),
-    // loopback only (127.0.0.1): the operator sees their own transcript by default; --no-include-text opts out
+    // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
     includeText: !flagBool(flags, 'no-include-text'),
     // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
     exportIncludeText: flagBool(flags, 'include-text'),
@@ -334,7 +334,7 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
   process.stderr.write(
     paint(C.o, paint(C.b, 'orangu serve')) +
       ` · ${srv.url}\n` +
-      paint(C.dim, `  loopback only · model handoff: copy-only · watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions · ctrl-c stops\n`),
+      paint(C.dim, `  loopback + private capability · model handoff: copy-only · watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions · ctrl-c stops\n`),
   )
   if (opts.open) openInBrowser(srv.url)
   process.on('SIGINT', () => {

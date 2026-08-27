@@ -258,7 +258,7 @@ syncBuiltinESMExports()
       const to = setTimeout(() => reject(new Error('serve never printed its URL\n' + err)), 15_000)
       child.stderr.on('data', (c: Buffer) => {
         err += c.toString('utf8')
-        const m = /http:\/\/127\.0\.0\.1:\d+/.exec(err)
+        const m = /http:\/\/127\.0\.0\.1:\d+\/_orangu\/[A-Za-z0-9_-]{43}/.exec(err)
         if (m) {
           clearTimeout(to)
           resolve(m[0])
@@ -338,7 +338,7 @@ syncBuiltinESMExports()
       const to = setTimeout(() => reject(new Error('feedback never printed its deep link\n' + err)), 15_000)
       child.stderr.on('data', (c: Buffer) => {
         err += c.toString('utf8')
-        const m = /http:\/\/127\.0\.0\.1:\d+\/#feedback\?context=report/.exec(err)
+        const m = /http:\/\/127\.0\.0\.1:\d+\/_orangu\/[A-Za-z0-9_-]{43}\/#feedback\?context=report/.exec(err)
         if (m) {
           clearTimeout(to)
           resolve(m[0])

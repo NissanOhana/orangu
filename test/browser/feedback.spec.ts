@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
+import { APP_URL } from './app-url.js'
 
-const APP = 'http://127.0.0.1:4174/'
+const APP = APP_URL + '/'
 
 async function captureWindowOpen(page: import('@playwright/test').Page): Promise<void> {
   await page.addInitScript(() => {

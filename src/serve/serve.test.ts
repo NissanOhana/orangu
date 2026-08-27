@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { execFile } from 'node:child_process'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { get as httpGet } from 'node:http'
@@ -149,8 +149,9 @@ const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
 
 async function getRawPath(url: string, path: string): Promise<{ status: number; headers: import('node:http').IncomingHttpHeaders; body: string }> {
   const target = new URL(url)
+  const basePath = target.pathname.endsWith('/') ? target.pathname.slice(0, -1) : target.pathname
   return new Promise((resolve, reject) => {
-    const request = httpGet({ hostname: target.hostname, port: target.port, path, headers: { host: target.host } }, (response) => {
+    const request = httpGet({ hostname: target.hostname, port: target.port, path: basePath + path, headers: { host: target.host } }, (response) => {
       const chunks: Buffer[] = []
       response.on('data', (chunk: Buffer) => chunks.push(chunk))
       response.on('end', () => resolve({ status: response.statusCode ?? 0, headers: response.headers, body: Buffer.concat(chunks).toString('utf8') }))
@@ -183,14 +184,77 @@ async function runSourceCli(args: string[], home: string): Promise<string> {
 describe('orangu serve (in-process e2e)', () => {
   it('listens on 127.0.0.1 and serves the app shell with a connect-src CSP', async () => {
     const { url } = await boot()
-    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/)
+    expect(url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/_orangu\/[A-Za-z0-9_-]{43}$/)
     const response = await fetch(url + '/')
     expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'")
     expect(response.headers.get('x-frame-options')).toBe('DENY')
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer')
     const html = await response.text()
     expect(html).toContain("connect-src 'self'")
+    expect(html).toContain('<meta name="referrer" content="no-referrer"/>')
     expect(html).toContain('__ORANGU_SERVE__')
     expect(html).not.toContain('orangu-data') // no embedded AppData in the shell
+  })
+
+  it('requires the per-process capability before HTML, assets, API, mutations, exports, and SSE', async () => {
+    let listCalls = 0
+    const registry = {
+      list: () => {
+        listCalls++
+        return []
+      },
+      analysis: async () => {
+        throw new Error('unauthorized request reached registry.analysis')
+      },
+      pin: () => {},
+      start: async () => {},
+      stop: async () => {},
+    } as unknown as NonNullable<ServeDeps['registry']>
+    const { home, url } = await bootWith({}, { registry })
+    const authenticated = new URL(url)
+    const token = authenticated.pathname.split('/').at(-1)!
+    const wrongToken = (token[0] === 'A' ? 'B' : 'A') + token.slice(1)
+    const bases = [authenticated.origin, `${authenticated.origin}/_orangu/${wrongToken}`]
+    const requests = [
+      (base: string) => fetch(base + '/'),
+      (base: string) => fetch(base + '/favicon.ico'),
+      (base: string) => fetch(base + '/api/sessions'),
+      (base: string) => fetch(base + `/export/${home.liveId}.html`),
+      (base: string) => fetch(base + '/events'),
+      (base: string) => fetch(base + '/api/kickoff', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }),
+    ]
+    for (const base of bases) {
+      for (const request of requests) {
+        const response = await request(base)
+        expect(response.status).toBe(403)
+        expect(response.headers.get('cache-control')).toBe('no-store')
+        expect(response.headers.get('referrer-policy')).toBe('no-referrer')
+        expect(await response.json()).toEqual({ error: 'serve capability required' })
+      }
+    }
+    expect(listCalls).toBe(0)
+    expect(srv!.hub.size()).toBe(0)
+    expect((await fetch(url + '/api/sessions')).status).toBe(200)
+    expect(listCalls).toBe(1)
+  })
+
+  it('logs only logical route names, never the capability', async () => {
+    const writes: string[] = []
+    const write = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: string | Uint8Array) => {
+      writes.push(String(chunk))
+      return true
+    }) as typeof process.stderr.write)
+    try {
+      const { url } = await bootWith({}, { quiet: false })
+      await fetch(url + '/api/sessions')
+      await fetch(new URL(url).origin + '/api/sessions')
+      const logged = writes.join('')
+      expect(logged).toContain('GET /api/sessions 200')
+      expect(logged).toContain('GET [unauthorized] 403')
+      expect(logged).not.toContain(new URL(url).pathname)
+    } finally {
+      write.mockRestore()
+    }
   })
 
   it('/api/sessions lists the fixture sessions with live/idle/ended badges', async () => {
@@ -364,7 +428,7 @@ describe('orangu serve (in-process e2e)', () => {
       expect(response.headers['cache-control']).toBe('no-store')
       expect(response.body).toBe('{"error":"cross-site browser GET blocked"}')
     }
-    const sameOrigin = await getWithHeaders(target, { origin: url, 'sec-fetch-site': 'same-origin' })
+    const sameOrigin = await getWithHeaders(target, { origin: new URL(url).origin, 'sec-fetch-site': 'same-origin' })
     expect([200, 202]).toContain(sameOrigin.status)
     expect([200, 202]).toContain((await fetch(target)).status)
   })

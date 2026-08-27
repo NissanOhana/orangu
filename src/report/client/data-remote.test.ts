@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { KickoffRequest, KickoffResponse, SuggestionRecord } from '../../suggest/types.js'
-import { remoteSource } from './data-remote.js'
+import { remoteBasePath, remoteSource } from './data-remote.js'
 
 const request: KickoffRequest = {
   mode: 'copy',
@@ -29,6 +29,11 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 afterEach(() => vi.unstubAllGlobals())
 
 describe('remote kickoff transport', () => {
+  it('derives an appendable authenticated base from the served shell path', () => {
+    expect(remoteBasePath('/_orangu/token')).toBe('/_orangu/token')
+    expect(remoteBasePath('/_orangu/token/')).toBe('/_orangu/token')
+  })
+
   it('returns a successful copy handoff', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(response())))
     const result = await remoteSource('/local').kickoff(request)

@@ -1,6 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
+import { APP_URL } from './app-url.js'
 
-const APP = 'http://127.0.0.1:4174'
+const APP = APP_URL
+const APP_ORIGIN = new URL(APP).origin
 const SESSION = 'aaaaaaaa-0000-4000-8000-000000000001'
 
 function runtimeErrors(page: Page): string[] {
@@ -40,9 +42,9 @@ test('localhost fixture is readable at the release viewport and theme', async ({
 
 test('localhost creates only a copy handoff and never offers automatic model launch', async ({ page, context }) => {
   const errors = runtimeErrors(page)
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP })
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   const row = await openFirstSuggestion(page)
-  const posted = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/kickoff')
+  const posted = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/api/kickoff'))
   await row.getByRole('button', { name: 'Copy improve command' }).click()
   const request = await posted
   expect(request.postDataJSON()).toMatchObject({ mode: 'copy' })
@@ -86,7 +88,7 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
     body['suggestions'] = records
     await route.fulfill({ response, json: body })
   })
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP })
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   await page.goto(`${APP}/#suggest?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
 
   const inbox = page.locator('.sg-inbox')
@@ -112,10 +114,10 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
 
 test('repo whole-harness review is copy-only and never posts a kickoff', async ({ page, context }) => {
   const errors = runtimeErrors(page)
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP })
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   let kickoffPosts = 0
   page.on('request', (request) => {
-    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/kickoff') kickoffPosts++
+    if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/api/kickoff')) kickoffPosts++
   })
   await page.goto(`${APP}/#suggest?s=${SESSION}&scope=repo`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Whole-harness review')).toBeVisible({ timeout: 20_000 })

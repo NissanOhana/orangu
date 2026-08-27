@@ -27,8 +27,8 @@ node dist/orangu.js report
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |
 | `orangu watch [selector]` | Refresh one report while its session grows |
-| `orangu serve` | Run the local app on `127.0.0.1` |
-| `orangu feedback` | Open the isolated localhost beta-feedback form |
+| `orangu serve` | Run the capability-protected local app on `127.0.0.1` |
+| `orangu feedback` | Open the isolated, capability-protected localhost beta-feedback form |
 | `orangu repo` | Aggregate supported sessions for the current repository |
 | `orangu global` | Aggregate supported sessions across configured roots |
 | `orangu evidence <input>` | Emit the bounded, always-redacted skill handoff |

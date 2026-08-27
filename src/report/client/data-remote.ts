@@ -14,6 +14,11 @@ const SESSION_THROTTLE_MS = 2_000
 const AGG_POLL_MS = 800
 const AGG_TIMEOUT_MS = 120_000
 
+/** The served shell lives at the capability base; trim only its optional trailing slash. */
+export function remoteBasePath(pathname: string): string {
+  return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
+}
+
 async function getJson<T>(url: string): Promise<{ status: number; body: T | null }> {
   try {
     const r = await fetch(url, { headers: { accept: 'application/json' } })

@@ -1,6 +1,6 @@
 # Beta feedback
 
-Run `orangu feedback --context session|repo|global|report|app` to open the beta feedback form on `127.0.0.1`. The regular `orangu serve` app also exposes a **Beta feedback** launcher.
+Run `orangu feedback --context session|repo|global|report|app` to open the beta feedback form on `127.0.0.1`. Its launched URL contains a fresh process capability and should remain private while the command runs. The regular `orangu serve` app also exposes a **Beta feedback** launcher.
 
 The standalone command deliberately starts with an empty, process-specific session root and an in-memory empty suggestion store. It does not discover or attach a session, repository aggregate, global aggregate, or report. Feedback text is entered in the browser, not in CLI arguments or terminal history.
 

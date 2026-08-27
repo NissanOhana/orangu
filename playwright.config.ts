@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test'
+import { APP_URL } from './test/browser/app-url.js'
 
 export default defineConfig({
   testDir: './test/browser',
@@ -23,7 +24,7 @@ export default defineConfig({
     },
     {
       command: 'node --import tsx test/browser/app-server.ts',
-      url: 'http://127.0.0.1:4174/api/sessions',
+      url: APP_URL + '/api/sessions',
       reuseExistingServer: false,
       timeout: 60_000,
     },

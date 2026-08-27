@@ -3,14 +3,14 @@
  * esbuild entry so the single-file report bundle provably contains no network API text.
  */
 import { mountApp } from './app.js'
-import { remoteSource } from './data-remote.js'
+import { remoteBasePath, remoteSource } from './data-remote.js'
 import { serveUi } from './serve-ui.js'
 import { isFeedbackLocation, mountFeedback, mountFeedbackLauncher } from './feedback-ui.js'
 
 function boot(): void {
   const feedbackAtBoot = isFeedbackLocation()
   if (feedbackAtBoot) mountFeedback()
-  else void mountApp(remoteSource(), serveUi).then(mountFeedbackLauncher)
+  else void mountApp(remoteSource(remoteBasePath(location.pathname)), serveUi).then(mountFeedbackLauncher)
   window.addEventListener('hashchange', () => {
     if (isFeedbackLocation() !== feedbackAtBoot) location.reload()
   })

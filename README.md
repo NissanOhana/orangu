@@ -74,7 +74,7 @@ orangu is not a proxy, an SDK, a hook you install before the session, or a model
 ## Design principles
 
 - **No model in the measurement path.** Counting, reconciling, and ranking are plain code; skills only interpret the result.
-- **Zero network from reports.** Every report ships `default-src 'none'` and makes no request. `serve` binds to `127.0.0.1`.
+- **Zero network from reports.** Every report ships `default-src 'none'` and makes no request. `serve` binds to `127.0.0.1` and places every route behind a fresh process capability in its launched URL.
 - **Redacted by default.** Secrets are scrubbed and prompt text is omitted unless you ask with `--include-text`.
 - **Same transcript in, byte-identical analysis out.** No clock, no randomness, no network in the analyzer.
 - **Components, never a composite score.** Quality, time, and tokens stay separate. Never a leaderboard of people.
