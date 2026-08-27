@@ -89,6 +89,19 @@ describe('renderOverview capabilities', () => {
     for (const invented of ['work units', 'exchanges', 'helpers']) expect(markup).not.toContain(invented)
   })
 
+  it('gives every top finding its exact improve command and never renders an empty detail paragraph (A2)', async () => {
+    const ctx = await context()
+    for (const i of ctx.a!.insights) i.detail = ''
+    expect(ctx.a!.summary.topInsightIds.length).toBeGreaterThan(0)
+    renderOverview(ctx)
+    expect(markup).toContain('class="cmd"')
+    expect(markup).toContain('/orangu:improve sg_')
+    expect(markup).toContain('Draft a proposal')
+    expect(markup).not.toContain('<p></p>')
+    expect(markup).toContain('recoverable across')
+    expect(markup).toContain('title="≈')
+  })
+
   it('omits the Agents entry when the selected analysis has no agent runs', async () => {
     const ctx = await context()
     ctx.a!.agents.runs = []

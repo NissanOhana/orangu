@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Analysis } from '../../model/analysis.js'
 import type { Aggregate } from '../../analyze/aggregate.js'
+import { embeddedSource } from './data.js'
 import type { SuggestionRecord } from '../../suggest/types.js'
 import { suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import {
@@ -13,6 +14,7 @@ import {
   hasValidProposal,
   kickoffFailureMessage,
   boundedSavings,
+  commandForInsight,
   harnessCommand,
   planRows,
   recoverableFrom,
@@ -105,6 +107,19 @@ describe('planRows', () => {
   })
   it('repo/global scope without an aggregate yields no rows (designed empty state)', () => {
     expect(planRows('global', analysis, undefined)).toEqual([])
+  })
+})
+
+describe('commandForInsight', () => {
+  it('is byte-identical to the command the Suggest screen copies for the same insight', async () => {
+    const row = planRows('session', analysis, undefined)[0]!
+    const finding = findingForRow(row, 'session')
+    const sid = suggestionIdV2(suggestionKey(finding, 'report'))
+    const viaSuggest = await embeddedSource().kickoff({ mode: 'copy', suggestionId: sid, finding })
+    expect(viaSuggest.ok).toBe(true)
+    const cmd = commandForInsight(analysis.insights[0]!, analysis.session.id)
+    expect(cmd).toBe(viaSuggest.ok ? viaSuggest.response.commands.claude : '')
+    expect(cmd).toMatch(/^claude "\/orangu:improve sg_[0-9a-f]{12} --finding [A-Za-z0-9_-]+"$/)
   })
 })
 

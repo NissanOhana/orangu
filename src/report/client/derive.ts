@@ -2,10 +2,11 @@
  * Pure derivations the screens render from. No DOM, no clock: everything comes from the
  * Analysis/Aggregate data or the row the server computed. Unit-tested in node.
  */
-import type { Analysis, QualitySignal, SessionEnding, Summary, ToolCallView, TurnAnalysis } from '../../model/analysis.js'
+import type { Analysis, Insight, QualitySignal, SessionEnding, Summary, ToolCallView, TurnAnalysis } from '../../model/analysis.js'
 import type { LiveBadge, RowEventView, SessionSummaryRow } from '../../model/app-data.js'
 export type { RowEventView }
 import type { WeekBucket } from '../../analyze/aggregate.js'
+import { ms, pct, tok } from './format.js'
 
 /** Plain sentence for "How it ended". The word "finished" must never appear. */
 const ENDING: Partial<Record<SessionEnding, string>> = {
@@ -50,6 +51,47 @@ export function outcomeHeadline(s: Summary): string {
   const requests = plural(s.humanTurns, 'request')
   if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural(s.agents, 'subagent') + ', ' : ''}nothing committed`
   return `${requests}, no tool calls recorded`
+}
+
+/** The absolute savings claim, tokens first: "save ~1.4k tokens" / "save ~2m 5s"; '' when nothing is claimed. */
+export function savingsText(s: Insight['savings']): string {
+  if (!s) return ''
+  const est = s.estimated ? '~' : ''
+  if (s.tokens) return `save ${est}${tok(s.tokens)} tokens`
+  if (s.ms) return `save ${est}${ms(s.ms)}`
+  return ''
+}
+
+export interface SavingsShare {
+  /** the pill text: a share of the session when it fits inside it, else the absolute claim */
+  text: string
+  /** the honest basis sentence for the title tooltip (never a per-rule formula table) */
+  title: string
+}
+
+/**
+ * A finding's savings bounded to the session it was measured in: "~38% of this session" when the
+ * session total is known and the claim is not larger than it, else the absolute figure. The title
+ * states the basis and which rule estimated or measured it.
+ */
+export function savingsShare(s: Insight['savings'], sessionTotalTokens: number | undefined, ruleId: string): SavingsShare | undefined {
+  if (!s || (!s.tokens && !s.ms)) return undefined
+  const how = `${s.estimated ? 'estimated' : 'measured'} by rule ${ruleId}`
+  if (s.tokens && sessionTotalTokens && s.tokens <= sessionTotalTokens) {
+    const share = s.tokens / sessionTotalTokens
+    return {
+      text: share < 0.005 ? 'under 1% of this session' : `~${pct(share)} of this session`,
+      title: `≈${tok(s.tokens)} tokens of the ${tok(sessionTotalTokens)} this session measured; ${how}`,
+    }
+  }
+  return { text: savingsText(s), title: s.tokens ? `≈${tok(s.tokens)} tokens; ${how}` : `≈${ms(s.ms)}; ${how}` }
+}
+
+/** "≈2.1M tokens recoverable across 7 findings" from the rows actually shown; '' when nothing is claimed. */
+export function recoverableLine(sum: { tokens: number; ms: number }, findings: number): string {
+  if (!findings || (!sum.tokens && !sum.ms)) return ''
+  const what = sum.tokens ? `≈${tok(sum.tokens)} tokens` : `≈${ms(sum.ms)}`
+  return `${what} recoverable across ${findings} finding${findings === 1 ? '' : 's'}`
 }
 
 /** Overview Quality axis headline from the quality signals (deterministic word map, no score). */

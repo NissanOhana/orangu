@@ -147,6 +147,9 @@ details.finding > summary b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .fbody { padding: 0 16px 14px; font-size: 13.5px; color: var(--ink2); }
 .fbody p { margin: 0 0 8px; }
 .rec { border-left: 2px solid var(--accent); padding: 6px 12px; background: var(--bg2); border-radius: 0 8px 8px 0; color: var(--ink1); }
+.fcmd { margin-top: 12px; }
+.fcmd .eyebrow { margin-bottom: 6px; }
+.recoverable { margin: 0 0 10px; font-size: 13px; color: var(--ink2); }
 
 /* timeline turns */
 details.turn { border: 1px solid var(--border); border-radius: 10px; background: var(--surface); margin-bottom: 6px; }

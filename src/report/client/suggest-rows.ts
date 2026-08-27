@@ -7,7 +7,7 @@
 import type { Analysis, Insight } from '../../model/analysis.js'
 import { compareCrossFindings, type Aggregate, type CrossFinding } from '../../analyze/aggregate.js'
 import type { Finding, SuggestionProposal, SuggestionRecord, SuggestionScope } from '../../suggest/types.js'
-import { normalizeSessionIds, sessionCohortFingerprint } from '../../suggest/id.js'
+import { kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 
 export const SAVED_PROPOSAL_LIMIT = 12
 export const PROPOSAL_LIST_LIMIT = 6
@@ -61,21 +61,21 @@ export function boundedSavings(f: Pick<CrossFinding, 'totalSavingsTokens' | 'tot
   return { ...(tokens ? { tokens } : {}), ...(ms ? { ms } : {}), estimated: true }
 }
 
-export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: Aggregate | null | undefined): PlanRow[] {
-  if (scope === 'session') {
-    const ids = a ? [a.session.id] : []
-    return (a?.insights ?? []).map((i) => {
-      const copy = safeCopy(i.ruleId, i.title, i.detail)
-      return {
-        ruleId: i.ruleId,
-        ...copy,
-        recommendation: i.recommendation,
-        savings: i.savings,
-        sessionIds: ids,
-        insightId: i.id,
-      }
-    })
+/** One session-scope plan row per insight: the identity every surface (Suggest, Overview, CLI) shares. */
+export function planRowForInsight(i: Insight, sessionId: string | undefined): PlanRow {
+  const copy = safeCopy(i.ruleId, i.title, i.detail)
+  return {
+    ruleId: i.ruleId,
+    ...copy,
+    recommendation: i.recommendation,
+    savings: i.savings,
+    sessionIds: sessionId ? [sessionId] : [],
+    insightId: i.id,
   }
+}
+
+export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: Aggregate | null | undefined): PlanRow[] {
+  if (scope === 'session') return (a?.insights ?? []).map((i) => planRowForInsight(i, a?.session.id))
   const cohortFingerprint = agg ? sessionCohortFingerprint(agg.sessions.map((session) => session.id)) : undefined
   return [...(agg?.crossFindings ?? [])]
     .sort(compareCrossFindings)
@@ -90,6 +90,17 @@ export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: A
         ...(cohortFingerprint ? { cohortFingerprint } : {}),
       }
     })
+}
+
+/**
+ * The exact improve handoff for one insight, on any screen: the same PlanRow -> Finding -> sg_ id path
+ * the Suggest screen walks, and the self-contained `--finding` form file-mode kickoff emits (it needs
+ * no persisted record, so it is valid from a file report and from localhost alike).
+ */
+export function commandForInsight(i: Insight, sessionId: string): string {
+  const finding = findingForRow(planRowForInsight(i, sessionId), 'session')
+  const key = suggestionKey(finding, 'report')
+  return kickoffCommands({ id: suggestionIdV2(key), ...finding, sessionIds: key.sessionIds, source: 'report' }, 'file').claude
 }
 
 /** Recoverable = sums over the rows actually shown; repo/global scopes use cross-session findings. */

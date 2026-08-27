@@ -14,6 +14,9 @@ import {
   topTokenThreshold,
   mergeOpenIds,
   fleetFeed,
+  savingsShare,
+  savingsText,
+  recoverableLine,
 } from './derive.js'
 import type { Analysis, QualitySignal, Summary, TurnAnalysis } from '../../model/analysis.js'
 
@@ -249,5 +252,43 @@ describe('fleetFeed', () => {
     // undefined ts sorts last (an event with no timestamp is "newest unknown")
     const undef = fleetFeed([{ id: 'a', lastEvents: [ev(undefined, 'x'), ev(100, 'y')] }], 10)
     expect(undef.map((f) => f.name)).toEqual(['y', 'x'])
+  })
+})
+
+describe('savingsShare (A6b: a bounded, explained savings pill)', () => {
+  it('is a share of the session when the total is known and the claim fits inside it', () => {
+    const r = savingsShare({ tokens: 1_380_000, estimated: true }, 3_910_000, 'oversized-tool-results')!
+    expect(r.text).toBe('~35% of this session')
+    expect(r.title).toBe('≈1.38M tokens of the 3.91M this session measured; estimated by rule oversized-tool-results')
+  })
+  it('never exceeds 100%: a claim larger than the session falls back to the absolute figure', () => {
+    const r = savingsShare({ tokens: 5000, estimated: true }, 4000, 'r')!
+    expect(r.text).toBe('save ~5.0k tokens')
+    expect(r.title).toBe('≈5.0k tokens; estimated by rule r')
+  })
+  it('falls back to the absolute figure when the session total is unknown or zero', () => {
+    expect(savingsShare({ tokens: 500, estimated: false }, 0, 'r')!.text).toBe('save 500 tokens')
+    expect(savingsShare({ tokens: 500, estimated: false }, undefined, 'r')!.title).toBe('≈500 tokens; measured by rule r')
+  })
+  it('rounds a tiny share to "under 1%" and words a time-only claim in time', () => {
+    expect(savingsShare({ tokens: 10, estimated: true }, 1_000_000, 'r')!.text).toBe('under 1% of this session')
+    const t = savingsShare({ ms: 125_000, estimated: true }, 1_000_000, 'slow-tools')!
+    expect(t.text).toBe('save ~2m 5s')
+    expect(t.title).toBe('≈2m 5s; estimated by rule slow-tools')
+  })
+  it('is undefined when nothing is claimed', () => {
+    expect(savingsShare(undefined, 100, 'r')).toBeUndefined()
+    expect(savingsShare({ estimated: true }, 100, 'r')).toBeUndefined()
+    expect(savingsText(undefined)).toBe('')
+  })
+})
+
+describe('recoverableLine', () => {
+  it('words the sum over the rows shown, and is empty when nothing is claimed', () => {
+    expect(recoverableLine({ tokens: 2_100_000, ms: 0 }, 7)).toBe('≈2.10M tokens recoverable across 7 findings')
+    expect(recoverableLine({ tokens: 900, ms: 5000 }, 1)).toBe('≈900 tokens recoverable across 1 finding')
+    expect(recoverableLine({ tokens: 0, ms: 65_000 }, 2)).toBe('≈1m 5s recoverable across 2 findings')
+    expect(recoverableLine({ tokens: 0, ms: 0 }, 3)).toBe('')
+    expect(recoverableLine({ tokens: 10, ms: 0 }, 0)).toBe('')
   })
 })

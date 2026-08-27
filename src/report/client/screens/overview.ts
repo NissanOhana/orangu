@@ -3,13 +3,13 @@ import type { Ctx } from '../app.js'
 import type { Analysis } from '../../../model/analysis.js'
 import { esc, ms, num, pct, tok } from '../format.js'
 import { h } from '../dom.js'
-import { kpi } from '../components/kpi.js'
 import { degradedBanner } from '../components/banner.js'
 import { signalChips } from '../components/chips.js'
 import { findingHtml, savingsText } from '../components/finding.js'
 import { emptyHero } from '../components/empty.js'
 import { mascotSvg } from '../mascot.js'
-import { endingWord, outcomeHeadline, qualityHeadline } from '../derive.js'
+import { endingWord, outcomeHeadline, qualityHeadline, recoverableLine } from '../derive.js'
+import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
 import { writeHash } from '../nav.js'
 import { plainSentence } from '../strings.js'
 
@@ -122,27 +122,15 @@ function capabilityNav(ctx: Ctx, a: Analysis): string {
   return `<div class="cap-section"><div class="cap-head"><div><div class="eyebrow">Explore this run</div><h2>Follow the evidence</h2></div><p>The report stays local. Evidence is traceable; optional proposals stay reviewable.</p></div><nav class="cap-grid" aria-label="Explore this run">${cards}</nav></div>`
 }
 
-function detailedBody(a: Analysis): string {
+function detailedBody(ctx: Ctx, a: Analysis): string {
   const s = a.summary
-  const errRate = s.toolCalls ? s.toolErrors / s.toolCalls : 0
-  const skills = a.skills.byName
-  const viaTool = skills.filter((x) => x.via.includes('tool')).length
-  const viaCmd = skills.filter((x) => x.via.includes('command')).length
-  const comp0 = a.context.compactions[0]
-  const kpis = [
-    kpi('Turns', String(s.turns), s.humanTurns + ' human'),
-    kpi('Tool calls', num(s.toolCalls), s.toolErrors ? `${s.toolErrors} errors · ${pct(errRate, 1)}` : 'no errors', { badHint: s.toolErrors > 0 }),
-    kpi('Subagents', String(s.agents), a.agents.maxConcurrency > 1 ? `up to ${a.agents.maxConcurrency} parallel` : a.agents.runs.some((r) => !r.hasTranscript) ? `${a.agents.runs.filter((r) => !r.hasTranscript).length} summary-only` : ''),
-    kpi('Skills / commands', String(s.skills), s.skills ? `${viaTool} skills · ${viaCmd} commands` : ''),
-    kpi('Context peak', tok(s.contextPeak), a.context.contextWindow ? `${pct(s.contextPeak / a.context.contextWindow)} of ${tok(a.context.contextWindow)} window` : ''),
-    kpi('Compactions', String(s.compactions), comp0 ? `at turn ${comp0.turnIndex}${comp0.contextBefore && comp0.contextAfter ? ` · ${tok(comp0.contextBefore)} → ${tok(comp0.contextAfter)}` : ''}` : 'none'),
-  ].join('')
-  const top = a.summary.topInsightIds.map((id) => a.insights.find((i) => i.id === id)).filter((i): i is NonNullable<typeof i> => !!i)
+  const top = s.topInsightIds.map((id) => a.insights.find((i) => i.id === id)).filter((i): i is NonNullable<typeof i> => !!i)
   const findings = top.length
-    ? top.map((i) => findingHtml(i, 'dev')).join('')
+    ? top.map((i) => findingHtml(i, 'dev', { command: commandForInsight(i, a.session.id), sessionTotalTokens: s.totalTokens })).join('')
     : `<div class="card pad" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">No findings. This session ran clean.</span></div>`
-  return `<div class="kpis">${kpis}</div>
-    <h3 style="margin:4px 0 10px">Top findings</h3>
+  const recoverable = recoverableLine(recoverableFrom(planRows('session', a, undefined)), a.insights.length)
+  return `<h3 style="margin:4px 0 10px">Top findings</h3>
+    ${recoverable ? `<p class="recoverable"><a href="${esc(capabilityHref(ctx, a, 'suggest'))}">${esc(recoverable)} →</a></p>` : ''}
     ${findings}`
 }
 
@@ -182,6 +170,6 @@ export function renderOverview(ctx: Ctx): HTMLElement {
   const a = ctx.a
   if (!a)
     return h(`<section>${emptyHero({ title: 'No session selected.', hint: 'Pick a session from the sidebar.' })}</section>`)
-  const body = ctx.audience === 'plain' ? plainBody(a) : detailedBody(a)
+  const body = ctx.audience === 'plain' ? plainBody(a) : detailedBody(ctx, a)
   return h(`<section>${degradedBanner(a, ctx.audience)}${outcome(a, ctx.audience)}${triptych(a)}${capabilityNav(ctx, a)}${body}</section>`)
 }
