@@ -25,8 +25,11 @@ const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n =
  *
  * | condition                                              | headline                                              |
  * | ending === 'interrupted'                               | Stopped by you after N turn(s)                        |
- * | any PR, commit, test run or edited/written file        | non-zero parts joined with " · ", tests as             |
- * |                                                        | "N tests green" or "F of N test runs failed"          |
+ * | any PR, commit, test run, failed build run or          | non-zero parts joined with " · "; a red build run is   |
+ * | edited/written file                                    | named before the test clause ("F of N build runs      |
+ * |                                                        | failed"); tests as "N test runs green" or "F of N     |
+ * |                                                        | test runs failed" (runs are command invocations, not  |
+ * |                                                        | test cases)                                           |
  * | else toolCalls > 0                                     | N request(s), M subagent(s), nothing committed        |
  * | else                                                   | N request(s), no tool calls recorded                  |
  *
@@ -41,7 +44,8 @@ export function outcomeHeadline(s: Summary): string {
   if (o.gitCommits) parts.push(plural(o.gitCommits, 'commit'))
   const changed = o.filesEdited + o.filesWritten
   if (changed) parts.push(plural(changed, 'file') + ' changed')
-  if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed` : `${plural(o.testRuns - o.testRunsFailed, 'test')} green`)
+  if (o.buildRunsFailed) parts.push(`${o.buildRunsFailed} of ${plural(o.buildRuns, 'build run')} failed`)
+  if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed` : `${plural(o.testRuns, 'test run')} green`)
   if (parts.length) return parts.join(' · ')
   const requests = plural(s.humanTurns, 'request')
   if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural(s.agents, 'subagent') + ', ' : ''}nothing committed`

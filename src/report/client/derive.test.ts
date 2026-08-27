@@ -48,11 +48,14 @@ describe('outcomeHeadline', () => {
     expect(out.toLowerCase()).not.toContain('test')
   })
   it('joins shipped work with a middle dot and reports green tests', () => {
-    expect(outcomeHeadline(summary({ ending: 'clean', outcomes: { gitCommits: 41, testRuns: 126, testRunsFailed: 0 } }))).toBe('41 commits · 126 tests green')
+    expect(outcomeHeadline(summary({ ending: 'clean', outcomes: { gitCommits: 41, testRuns: 126, testRunsFailed: 0 } }))).toBe('41 commits · 126 test runs green')
     expect(outcomeHeadline(summary({ outcomes: { prLinks: [{ label: 'x', turnIndex: 0 }], filesEdited: 2, filesWritten: 1 } }))).toBe('1 PR · 3 files changed')
     expect(outcomeHeadline(summary({ outcomes: { testRuns: 3, testRunsFailed: 1 } }))).toBe('1 of 3 test runs failed')
     expect(outcomeHeadline(summary({ outcomes: { testRuns: 1, testRunsFailed: 1 } }))).toBe('1 of 1 test run failed')
-    expect(outcomeHeadline(summary({ outcomes: { gitCommits: 1, testRuns: 1 } }))).toBe('1 commit · 1 test green')
+    // a red build is never buried behind green tests (sessionEnding derives 'failing' from tests ∪ builds)
+    expect(outcomeHeadline(summary({ ending: 'failing', outcomes: { filesEdited: 3, testRuns: 2, testRunsFailed: 0, buildRuns: 1, buildRunsFailed: 1 } }))).toBe('3 files changed · 1 of 1 build run failed · 2 test runs green')
+    expect(outcomeHeadline(summary({ ending: 'failing', outcomes: { buildRuns: 2, buildRunsFailed: 1 } }))).toBe('1 of 2 build runs failed')
+    expect(outcomeHeadline(summary({ outcomes: { gitCommits: 1, testRuns: 1 } }))).toBe('1 commit · 1 test run green')
   })
   it('names an interruption first, whatever else happened', () => {
     expect(outcomeHeadline(summary({ ending: 'interrupted', turns: 7, outcomes: { gitCommits: 2 } }))).toBe('Stopped by you after 7 turns')

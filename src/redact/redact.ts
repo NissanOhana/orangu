@@ -118,6 +118,12 @@ const TEXT_KEYS = new Set([
   'sample',
 ])
 const PATH_KEYS = new Set(['path', 'cwd', 'transcriptPath', 'file'])
+/**
+ * summary.narrative is generated copy except for its opening clause, where the analyzer quotes the session
+ * title (the first user prompt, src/analyze/analyze.ts narrative()). The default strip rewrites only that
+ * clause so the rest of the sentence survives without touching the analyzer or the golden corpus.
+ */
+const NARRATIVE_TITLE_RE = /^In “[\s\S]*?”, (?=the human made )/
 const PRIVATE_STRING_ARRAY_KEYS = new Set(['gitBranches'])
 const UNKNOWN_COUNT_MAP_KEYS = new Set([
   'unknownRecordTypes',
@@ -241,6 +247,10 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
       }
       if (opts.stripText && typeof v === 'string' && stripsText(k, source)) {
         out[k] = ''
+        continue
+      }
+      if (opts.stripText && k === 'narrative' && typeof v === 'string') {
+        out[k] = scrubOne(v.replace(NARRATIVE_TITLE_RE, 'In this session, '), opts)
         continue
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === 'string' && (v.includes('/') || v.includes('\\'))) {

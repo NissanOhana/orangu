@@ -97,7 +97,7 @@
       "fanout-opportunity-3",
       "agent-fanout-1"
     ],
-    "narrative": "In this session, the human made 1 request over 8.6s; the agent was busy for 8.6s of that. It made 11 tool calls, ran 8 subagents, and processed 351.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 5 subagents did no tool calls; 5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait.",
+    "narrative": "In “Fan out: review, test, docs — in parallel”, the human made 1 request over 8.6s; the agent was busy for 8.6s of that. It made 11 tool calls, ran 8 subagents, and processed 351.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 5 subagents did no tool calls; 5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait.",
     "ending": "unknown"
   },
   "turns": [

@@ -117,6 +117,20 @@ describe('redactAnalysis', () => {
     expect(included.skills.invocations[0]!.name).toBe('orangu-improve')
   })
 
+  it('blanks only the quoted session title inside summary.narrative under stripText', () => {
+    const a = full()
+    const tail = 'the human made 3 requests over 2m; the agent was busy for 1m of that. It made 4 tool calls.'
+    a.summary.narrative = `In “${MARKER} with a ”stray” quote”, ${tail}`
+    const out = redactAnalysis(a, { stripText: true, home: '' }).analysis
+    expect(out.summary.narrative).toBe(`In this session, ${tail}`)
+    expect(out.summary.narrative).not.toContain(MARKER)
+    // without stripText the title stays quoted verbatim
+    expect(redactAnalysis(a, { stripText: false, home: '' }).analysis.summary.narrative).toContain(`In “${MARKER}`)
+    // an analyzer narrative with no title ("In this session, …") is passed through unchanged
+    a.summary.narrative = `In this session, ${tail}`
+    expect(redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative).toBe(`In this session, ${tail}`)
+  })
+
   it('keeps rule-generated copy under stripText while transcript-authored strings are still blanked', () => {
     const out = redactAnalysis(full(), { stripText: true, home: '' }).analysis
     // orangu's own rules wrote these: they survive

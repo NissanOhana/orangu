@@ -15,7 +15,7 @@ export function renderCoverage(ctx: Ctx): HTMLElement {
   const hiddenByRedaction = p.unknownRecordTypes[STRIPPED_KEY] ?? 0
   const unknown = unknownEntries.length
   const hiddenNote = hiddenByRedaction
-    ? `<div class="small muted">${hiddenByRedaction} record type name${hiddenByRedaction === 1 ? '' : 's'} hidden by redaction. Re-run with --include-text to see them.</div>`
+    ? `<div class="small muted">${hiddenByRedaction} unrecognized record${hiddenByRedaction === 1 ? '' : 's'} were counted; their type names are hidden by redaction. Re-run with --include-text to see them.</div>`
     : ''
   const skillRows = a.skills.byName.length
     ? `<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${a.skills.byName
@@ -26,7 +26,7 @@ export function renderCoverage(ctx: Ctx): HTMLElement {
     ? `<div class="card pad mt16"><div class="card-title">Hooks</div><p class="small muted" style="margin:0">${a.hooks.runs} hook runs · ${a.hooks.errors} errors · ${esc(ms(a.hooks.totalMs))} total</p></div>`
     : ''
   const el = h(`<section>
-    ${banner(rec.ok ? 'info' : 'warn', `<strong>Parse coverage:</strong>&nbsp;${esc(num(p.totalLines))} records, ${p.badLines} unreadable, ${unknown} unrecognized record type${unknown === 1 ? '' : 's'}. Token totals reconcile to within ${esc(rec.matchesWithinPct.toFixed(2))}% ${rec.ok ? '✓' : '(review)'}.`)}
+    ${banner(rec.ok ? 'info' : 'warn', `<strong>Parse coverage:</strong>&nbsp;${esc(num(p.totalLines))} records, ${p.badLines} unreadable, ${unknown} unrecognized record type${unknown === 1 ? '' : 's'}${hiddenByRedaction ? ` (+${hiddenByRedaction} record${hiddenByRedaction === 1 ? '' : 's'} with redacted type names)` : ''}. Token totals reconcile to within ${esc(rec.matchesWithinPct.toFixed(2))}% ${rec.ok ? '✓' : '(review)'}.`)}
     <div class="two-up">
       <div class="card pad"><div class="card-title">Session</div>
         <table class="grid"><tbody>

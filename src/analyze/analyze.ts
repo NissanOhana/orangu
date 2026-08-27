@@ -141,7 +141,7 @@ export function analyzeSession(s: Session, opts: AnalyzeOptions = {}): Analysis 
     narrative: '',
     ending: sessionEnding(s, quality),
   }
-  summary.narrative = narrative(summary, insights.slice(0, 2).map((i) => i.title))
+  summary.narrative = narrative(s, summary, insights.slice(0, 2).map((i) => i.title))
 
   // ---- reconciliation ----
   const usageEventsTotal = usageTotal(tokens)
@@ -200,10 +200,10 @@ function sessionEnding(s: Session, quality: QualityAnalysis): SessionEnding {
   return lastRun.ok ? 'clean' : 'failing'
 }
 
-/** Generated copy only: never quotes the session title (the first prompt), so it survives the default redaction. */
-function narrative(sum: Summary, top: string[]): string {
+function narrative(s: Session, sum: Summary, top: string[]): string {
   const parts: string[] = []
-  parts.push(`In this session, the human made ${sum.humanTurns} request${sum.humanTurns === 1 ? '' : 's'}${sum.turns > sum.humanTurns ? ` (${sum.turns} turns incl. commands/automation)` : ''} over ${sum.wallMs ? fmtMs(sum.wallMs) : 'an unknown span'}; the agent was busy for ${fmtMs(sum.activeMs)} of that.`)
+  const what = s.meta.title ? `“${s.meta.title.slice(0, 80)}”` : 'this session'
+  parts.push(`In ${what}, the human made ${sum.humanTurns} request${sum.humanTurns === 1 ? '' : 's'}${sum.turns > sum.humanTurns ? ` (${sum.turns} turns incl. commands/automation)` : ''} over ${sum.wallMs ? fmtMs(sum.wallMs) : 'an unknown span'}; the agent was busy for ${fmtMs(sum.activeMs)} of that.`)
   parts.push(`It made ${sum.toolCalls} tool calls${sum.toolErrors ? ` (${sum.toolErrors} failed)` : ''}${sum.agents ? `, ran ${sum.agents} subagent${sum.agents > 1 ? 's' : ''}` : ''}${sum.skills ? `, used ${sum.skills} skill/command invocation${sum.skills > 1 ? 's' : ''}` : ''}, and processed ${fmtTokens(usageTotal(sum.tokens))} tokens.`)
   const o = sum.outcomes
   const outs: string[] = []
