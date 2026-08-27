@@ -2,19 +2,50 @@
  * Pure derivations the screens render from. No DOM, no clock: everything comes from the
  * Analysis/Aggregate data or the row the server computed. Unit-tested in node.
  */
-import type { Analysis, QualitySignal, SessionEnding, ToolCallView, TurnAnalysis } from '../../model/analysis.js'
+import type { Analysis, QualitySignal, SessionEnding, Summary, ToolCallView, TurnAnalysis } from '../../model/analysis.js'
 import type { LiveBadge, RowEventView, SessionSummaryRow } from '../../model/app-data.js'
 export type { RowEventView }
 import type { WeekBucket } from '../../analyze/aggregate.js'
 
 /** Plain sentence for "How it ended". The word "finished" must never appear. */
 const ENDING: Partial<Record<SessionEnding, string>> = {
-  clean: 'Cleanly: the last test run was green',
+  clean: 'The last check it ran passed',
   interrupted: 'You stopped it',
   failing: 'The last test run was failing',
 }
 export function endingWord(ending: SessionEnding): string {
   return ENDING[ending] ?? 'The agent completed its last task'
+}
+
+const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n === 1 ? one : many}`
+
+/**
+ * Overview headline: what THIS session did, from the outcomes the analyzer counted.
+ * Deterministic, no clock, no LLM. Precedence: interrupted > shipped work > effort > nothing.
+ *
+ * | condition                                              | headline                                              |
+ * | ending === 'interrupted'                               | Stopped by you after N turn(s)                        |
+ * | any PR, commit, test run or edited/written file        | non-zero parts joined with " · ", tests as             |
+ * |                                                        | "N tests green" or "F of N test runs failed"          |
+ * | else toolCalls > 0                                     | N request(s), M subagent(s), nothing committed        |
+ * | else                                                   | N request(s), no tool calls recorded                  |
+ *
+ * A test run is never named unless outcomes.testRuns > 0 (the `ending` enum alone cannot tell a
+ * passing build from a passing test run).
+ */
+export function outcomeHeadline(s: Summary): string {
+  const o = s.outcomes
+  if (s.ending === 'interrupted') return `Stopped by you after ${plural(s.turns, 'turn')}`
+  const parts: string[] = []
+  if (o.prLinks.length) parts.push(plural(o.prLinks.length, 'PR'))
+  if (o.gitCommits) parts.push(plural(o.gitCommits, 'commit'))
+  const changed = o.filesEdited + o.filesWritten
+  if (changed) parts.push(plural(changed, 'file') + ' changed')
+  if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed` : `${plural(o.testRuns - o.testRunsFailed, 'test')} green`)
+  if (parts.length) return parts.join(' · ')
+  const requests = plural(s.humanTurns, 'request')
+  if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural(s.agents, 'subagent') + ', ' : ''}nothing committed`
+  return `${requests}, no tool calls recorded`
 }
 
 /** Overview Quality axis headline from the quality signals (deterministic word map, no score). */

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   endingWord,
+  outcomeHeadline,
   qualityHeadline,
   callsForTurn,
   catMixForTurn,
@@ -14,7 +15,7 @@ import {
   mergeOpenIds,
   fleetFeed,
 } from './derive.js'
-import type { Analysis, QualitySignal, TurnAnalysis } from '../../model/analysis.js'
+import type { Analysis, QualitySignal, Summary, TurnAnalysis } from '../../model/analysis.js'
 
 function sig(id: string, tone: QualitySignal['tone'], value: number | string = 1): QualitySignal {
   return { id, label: id, value, tone }
@@ -22,10 +23,51 @@ function sig(id: string, tone: QualitySignal['tone'], value: number | string = 1
 
 describe('endingWord', () => {
   it('maps the four endings to plain sentences and never says "finished"', () => {
-    expect(endingWord('clean')).toContain('Cleanly')
+    expect(endingWord('clean')).toBe('The last check it ran passed')
+    expect(endingWord('clean').toLowerCase()).not.toContain('test')
     expect(endingWord('interrupted')).toBe('You stopped it')
     expect(endingWord('failing')).toContain('failing')
     expect(endingWord('unknown').toLowerCase()).not.toContain('finished')
+  })
+})
+
+function summary(over: Partial<Omit<Summary, 'outcomes'>> & { outcomes?: Partial<Summary['outcomes']> } = {}): Summary {
+  const { outcomes, ...rest } = over
+  return {
+    turns: 0, humanTurns: 0, toolCalls: 0, agents: 0, ending: 'unknown',
+    ...rest,
+    outcomes: { prLinks: [], gitCommits: 0, testRuns: 0, testRunsFailed: 0, buildRuns: 0, buildRunsFailed: 0, filesRead: 0, filesEdited: 0, filesWritten: 0, webLookups: 0, ...outcomes },
+  } as Summary
+}
+
+describe('outcomeHeadline', () => {
+  it('never names a test run when only a build run passed (the F2 contradiction)', () => {
+    const s = summary({ ending: 'clean', outcomes: { testRuns: 0, buildRuns: 1 }, toolCalls: 41, humanTurns: 1, agents: 4 })
+    const out = outcomeHeadline(s)
+    expect(out).toBe('1 request, 4 subagents, nothing committed')
+    expect(out.toLowerCase()).not.toContain('test')
+  })
+  it('joins shipped work with a middle dot and reports green tests', () => {
+    expect(outcomeHeadline(summary({ ending: 'clean', outcomes: { gitCommits: 41, testRuns: 126, testRunsFailed: 0 } }))).toBe('41 commits · 126 tests green')
+    expect(outcomeHeadline(summary({ outcomes: { prLinks: [{ label: 'x', turnIndex: 0 }], filesEdited: 2, filesWritten: 1 } }))).toBe('1 PR · 3 files changed')
+    expect(outcomeHeadline(summary({ outcomes: { testRuns: 3, testRunsFailed: 1 } }))).toBe('1 of 3 test runs failed')
+    expect(outcomeHeadline(summary({ outcomes: { testRuns: 1, testRunsFailed: 1 } }))).toBe('1 of 1 test run failed')
+    expect(outcomeHeadline(summary({ outcomes: { gitCommits: 1, testRuns: 1 } }))).toBe('1 commit · 1 test green')
+  })
+  it('names an interruption first, whatever else happened', () => {
+    expect(outcomeHeadline(summary({ ending: 'interrupted', turns: 7, outcomes: { gitCommits: 2 } }))).toBe('Stopped by you after 7 turns')
+    expect(outcomeHeadline(summary({ ending: 'interrupted', turns: 1 }))).toBe('Stopped by you after 1 turn')
+  })
+  it('describes effort without subagents, and a session with no tool calls', () => {
+    expect(outcomeHeadline(summary({ toolCalls: 5, humanTurns: 3 }))).toBe('3 requests, nothing committed')
+    expect(outcomeHeadline(summary({ humanTurns: 2 }))).toBe('2 requests, no tool calls recorded')
+  })
+  it('is pure and safe on an all-zero session', () => {
+    const zero = summary()
+    const out = outcomeHeadline(zero)
+    expect(out).toBe(outcomeHeadline(zero))
+    expect(out).not.toMatch(/NaN|undefined|finished|—/)
+    expect(out).toBe('0 requests, no tool calls recorded')
   })
 })
 

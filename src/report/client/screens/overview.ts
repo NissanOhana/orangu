@@ -9,7 +9,7 @@ import { signalChips } from '../components/chips.js'
 import { findingHtml, savingsText } from '../components/finding.js'
 import { emptyHero } from '../components/empty.js'
 import { mascotSvg } from '../mascot.js'
-import { endingWord, qualityHeadline } from '../derive.js'
+import { endingWord, outcomeHeadline, qualityHeadline } from '../derive.js'
 import { writeHash } from '../nav.js'
 import { plainSentence } from '../strings.js'
 
@@ -42,7 +42,7 @@ function triptych(a: Analysis): string {
 }
 
 function outcome(a: Analysis, audience: Ctx['audience']): string {
-  return `<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${mascotSvg(96)}</span><div class="grow overview-copy"><div class="eyebrow">Observed outcome</div><div class="herotitle">${esc(endingWord(a.summary.ending))}</div><div class="sg-sub">${esc(plainSentence(a.summary.narrative, audience))}</div><div class="overview-loop"><span>Observe</span><i aria-hidden="true">→</i><span>inspect evidence</span><i aria-hidden="true">→</i><span>improve the next run</span></div></div></div>${signalChips(a.quality.signals)}`
+  return `<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${mascotSvg(96)}</span><div class="grow overview-copy"><div class="eyebrow">Observed outcome</div><div class="herotitle">${esc(outcomeHeadline(a.summary))}</div><div class="sg-sub">${esc(plainSentence(a.summary.narrative, audience))}</div><div class="overview-loop"><span>Observe</span><i aria-hidden="true">→</i><span>inspect evidence</span><i aria-hidden="true">→</i><span>improve the next run</span></div></div></div>${signalChips(a.quality.signals)}`
 }
 
 function capabilityHref(ctx: Ctx, a: Analysis, screen: CapabilityScreen): string {

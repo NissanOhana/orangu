@@ -65,6 +65,15 @@ describe('renderOverview capabilities', () => {
     expect(markup).toContain('Evidence is traceable; optional proposals stay reviewable.')
   })
 
+  it('headlines the hero from the counted outcomes, never from the ending enum', async () => {
+    const ctx = await context()
+    renderOverview(ctx)
+    const hero = /<div class="herotitle">([^<]*)<\/div>/.exec(markup)?.[1] ?? ''
+    expect(hero).not.toContain('Cleanly')
+    expect(hero.length).toBeGreaterThan(0)
+    expect(hero).toContain(ctx.a!.summary.outcomes.testRuns ? 'test' : 'request')
+  })
+
   it('matches the existing file/plain navigation policy and preserves the audience in links', async () => {
     const ctx = await context({ audience: 'plain', mode: 'file' })
     renderOverview(ctx)
