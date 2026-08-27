@@ -121,7 +121,7 @@ test('repo whole-harness review is copy-only and never posts a kickoff', async (
   })
   await page.goto(`${APP}/#suggest?s=${SESSION}&scope=repo`, { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Whole-harness review')).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByText('claude "/orangu:mega --scope repo"')).toBeVisible()
+  await expect(page.getByText('claude "/orangu:harness --scope repo"')).toBeVisible()
   await page.getByRole('button', { name: 'Copy whole-harness review' }).click()
   await expect(page.getByRole('button', { name: 'Copied' })).toBeVisible()
   expect(kickoffPosts).toBe(0)

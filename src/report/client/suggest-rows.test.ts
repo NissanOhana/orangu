@@ -12,7 +12,7 @@ import {
   findingForRow,
   hasValidProposal,
   kickoffFailureMessage,
-  megaCommand,
+  harnessCommand,
   planRows,
   recoverableFrom,
   recordForRow,
@@ -150,8 +150,8 @@ describe('finding identity and status', () => {
   })
 
   it('keeps whole-harness actions exact and scope-specific', () => {
-    expect(megaCommand('repo')).toBe('claude "/orangu:mega --scope repo"')
-    expect(megaCommand('global')).toBe('claude "/orangu:mega --scope global"')
+    expect(harnessCommand('repo')).toBe('claude "/orangu:harness --scope repo"')
+    expect(harnessCommand('global')).toBe('claude "/orangu:harness --scope global"')
   })
 
   it('keeps a persisted workflow failure visible after an SSE rerender', () => {

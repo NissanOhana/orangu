@@ -604,9 +604,13 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(install).not.toContain('$orangu-')
   })
 
-  it('ships exactly the five plugin skills the site will list', () => {
+  it('lists the five shipped skills', () => {
+    const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const listed = [...install.matchAll(/<div class="skill"><b>\/orangu:([a-z-]+)<\/b>/g)].map((m) => m[1])
+    expect(listed).toEqual(['improve', 'apply', 'analyze', 'harness', 'feedback'])
+    for (const retired of ['/orangu:mega', '/orangu:watch', '/orangu:suggest']) expect(src).not.toContain(retired)
     const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => existsSync(join(root, 'plugin/skills', dir, 'SKILL.md'))).sort()
-    expect(dirs).toEqual(['analyze', 'apply', 'feedback', 'harness', 'improve'])
+    expect(dirs).toEqual([...listed].sort())
   })
 
   it('keeps accessible interactions and ships none of the design-canvas runtime', () => {

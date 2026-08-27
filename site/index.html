@@ -475,13 +475,11 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
       <h3>One improvement workflow, explicit stages</h3>
       <p class="sub-lead">Measurement stays in the local CLI. Session can propose, apply, and verify; repo can propose and apply; global stays proposal-only.</p>
       <div class="skills">
-        <div class="skill"><b>/orangu:improve</b><div>Primary catalog-first workflow: interpret bounded evidence, optionally research, and save a structured draft without editing the project.</div></div>
-        <div class="skill"><b>/orangu:apply</b><div>Explicitly apply one reviewed session/repo draft, run local checks, and record the application without claiming later verification.</div></div>
-        <div class="skill"><b>/orangu:analyze</b><div>Explain one supported session or a chosen aggregate from redacted evidence.</div></div>
-        <div class="skill"><b>/orangu:mega</b><div>Review recurring repo or global patterns as a separately requested deep pass.</div></div>
-        <div class="skill"><b>/orangu:watch</b><div>Keep a local report refreshed while a supported session is running.</div></div>
-        <div class="skill"><b>/orangu:feedback</b><div>Rant through a private localhost form and review the exact GitHub prefill.</div></div>
-        <div class="skill"><b>/orangu:suggest</b><div>Compatibility alias for older links; forwards the exact request to /orangu:improve.</div></div>
+        <div class="skill"><b>/orangu:improve</b><div>Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Never edits the target repository.</div></div>
+        <div class="skill"><b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository, run its own checks, and record a receipt. Global proposals are review-only.</div></div>
+        <div class="skill"><b>/orangu:analyze</b><div>Explain what happened in one session, finished or still running, from local deterministic evidence, and keep a report refreshed while a session runs.</div></div>
+        <div class="skill"><b>/orangu:harness</b><div>Review what your harness declares against what your sessions actually used, across one repository or every session on the machine, and propose ranked changes.</div></div>
+        <div class="skill"><b>/orangu:feedback</b><div>Send candid beta feedback about Orangu itself through a private localhost form with an exact user-reviewed GitHub preview.</div></div>
       </div>
     </div>
   </div>

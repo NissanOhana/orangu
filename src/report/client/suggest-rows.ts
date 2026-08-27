@@ -110,8 +110,8 @@ export function findingForRow(row: PlanRow, scope: SuggestionScope): Finding {
   }
 }
 
-export function megaCommand(scope: 'repo' | 'global'): string {
-  return `claude "/orangu:mega --scope ${scope}"`
+export function harnessCommand(scope: 'repo' | 'global'): string {
+  return `claude "/orangu:harness --scope ${scope}"`
 }
 
 /** Persisted workflow failures survive SSE re-renders as actionable row copy. */

@@ -14,7 +14,7 @@ import { h } from './dom.js'
 import { mascotSvg } from './mascot.js'
 import { shortId } from './nav.js'
 import { badgeCopy, fleetFeed } from './derive.js'
-import { megaCommand } from './suggest-rows.js'
+import { harnessCommand } from './suggest-rows.js'
 import { renderRepo } from './screens/repo.js'
 import { renderGlobal } from './screens/global.js'
 
@@ -165,8 +165,8 @@ function aggregateView(ctx: Ctx): HTMLElement {
 }
 
 export function megaReview(scope: 'repo' | 'global'): string {
-  const command = megaCommand(scope)
-  return `<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Review major ${scope} improvements separately.</div><p class="narrative">This interactive command reviews the wider harness. It is copy-only here, creates no row status, and keeps its estimate gates inside orangu-mega.</p><div class="kickrow"><span class="mono125 grow">${esc(command)}</span><button type="button" class="btn-sm" data-copy="${esc(command)}">Copy whole-harness review</button></div></div>`
+  const command = harnessCommand(scope)
+  return `<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Review major ${scope} improvements separately.</div><p class="narrative">This interactive command reviews the wider harness. It is copy-only here, creates no row status, and keeps its estimate gates inside /orangu:harness.</p><div class="kickrow"><span class="mono125 grow">${esc(command)}</span><button type="button" class="btn-sm" data-copy="${esc(command)}">Copy whole-harness review</button></div></div>`
 }
 
 export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview }
