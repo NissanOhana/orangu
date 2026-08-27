@@ -15,93 +15,94 @@ orangu 0.5.0. This file concatenates README.md, docs/USAGE.md, docs/DETERMINISM.
 
 **Observe the run. Improve the next outcome.**
 
-Local observability for supported Claude Code, Cowork, and Desktop sessions, with optional Claude Code and Codex skills that turn bounded evidence into reviewable changes.
+Local, offline, deterministic observability for Claude Code, Cowork, and Desktop sessions, with optional Claude Code skills that turn the evidence into reviewable changes.
 
-[See the sample](https://nissanohana.github.io/orangu/sample.html) · [Read the docs](https://github.com/NissanOhana/orangu/blob/main/docs/README.md) · [Contribute](https://github.com/NissanOhana/orangu/blob/main/CONTRIBUTING.md)
+[sample report](https://nissanohana.github.io/orangu/sample.html) · [docs](https://github.com/NissanOhana/orangu/blob/main/docs/README.md) · [npm](https://www.npmjs.com/package/orangu) · `npx orangu report`
 
 </div>
 
-## What Orangu does
+You run coding agents for hours. The transcript on disk is the only record of what they did, and nobody reads it. orangu does, and shows you:
 
-- **Observe one session.** Inspect turns, tool calls, subagents, errors, context, time, tokens, and available outcome evidence in one local report.
-- **Improve repeated work.** Find recurring repo or global patterns, then review suggestions for instructions, scripts, hooks, skills, agents, MCP servers, plugins, or workflow configuration.
+| What the session does not tell you | What orangu shows |
+|---|---|
+| "compacted" | which turns filled the context window, and with what |
+| a subagent's final answer | its full tree: tools, tokens, time, errors |
+| that a skill or MCP server is installed | whether it ever fired, and what it weighs in context |
+| nothing about repetition | the same file read again and again, and the same context re-read in every request |
 
-Session scope is diagnostic. Repo and global scopes reveal recurring patterns that may justify a larger change.
+One real number, from the session in the [landing page screenshot](https://nissanohana.github.io/orangu/): 34.9M of the 37.0M tokens the model processed were cache reads, one 223k-token context read again 156 times over. Tokens are the only usage metric orangu has, because they are the only one the transcript records.
+
+ccusage counts your token usage. orangu tells you what to change.
 
 ## Quick start
 
+**Read-only.** orangu reads the session files already on your disk and writes one HTML file. No SDK, proxy, account, instrumentation, upload, or telemetry. Your whole history is analyzable the minute it is installed, not just sessions started after it.
+
 ```bash
-# inspect the latest supported session and open its report
-npx orangu report
-
-# follow local sessions in the browser
-npx orangu serve
-
-# inspect recurring patterns
-npx orangu repo
-npx orangu global
-
-# send reviewed beta feedback from localhost
-npx orangu feedback --context app
+npx orangu report          # latest session -> self-contained HTML report, opened in your browser
+npx orangu serve           # live loopback viewer over every local session
+npx orangu repo            # recurring patterns across this repository's sessions
+npx orangu global          # ... across every session on the machine
+npx orangu harness         # what your config declares vs what your sessions used, in tokens
 ```
 
-Orangu reads supported session files already on your machine. It does not require an SDK, proxy, account, instrumentation, upload, or telemetry.
+Node.js 20 or newer. Zero runtime dependencies. More commands, inputs, and limits are in the [usage guide](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md).
 
-More commands and input formats are in the [usage guide](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md).
+## The improve loop
 
-## From evidence to a change
+1. **Observe.** orangu parses, redacts, counts, reconciles, matches, and ranks locally. No model is involved.
+2. **See.** The report shows what happened: quality, time, and tokens as separate axes, with the evidence behind each finding.
+3. **Propose.** `/orangu:improve` explains one finding's bounded evidence and drafts a structured proposal. It never edits your project.
+4. **Apply, with a receipt.** `/orangu:apply` applies one explicitly reviewed proposal and records what changed and which checks ran.
 
-1. Orangu parses, redacts, counts, reconciles, matches, and ranks locally.
-2. `orangu-improve` explains the bounded evidence and drafts a structured proposal. It does not edit the target project.
-3. `orangu-apply` applies one explicitly reviewed session or repo proposal and records what changed and which checks ran.
-4. Session-scope changes can later be compared with a settled supported session from the same workspace. Repo changes remain applied until a fresh-cohort comparator exists; global proposals are review-only.
+One run can be fixed and re-checked against a later session from the same workspace. Repo-wide changes are applied on request. Whole-harness (global) changes stay review-only. A proposal is not an application, and a later comparison is not causal proof; the full boundary is in [determinism and skill authority](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md).
 
-A proposal is not an application, and a later comparison is not causal proof. See [determinism and skill authority](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md) for the complete boundary.
-
-## Improvement skills
-
-### Claude Code
+## Skills
 
 ```text
 /plugin marketplace add NissanOhana/orangu
 /plugin install orangu
-
-/orangu:improve latest
-/orangu:apply sg_0123456789ab
-/orangu:improve --verify sg_0123456789ab later-session-id
-/orangu:feedback
 ```
 
-### Codex
+| Skill | What it does |
+|---|---|
+| `/orangu:analyze` | Explain one session, a repo, or every session on the machine from local evidence |
+| `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
+| `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
+| `/orangu:harness` | Review the whole harness: CLAUDE.md, skills, agents, hooks, MCP, in tokens |
+| `/orangu:feedback` | Send reviewed beta feedback from a localhost form |
 
-Install the Orangu marketplace and its skills-only plugin:
+Skills read `orangu ... --json` and `orangu evidence`, never the raw `.jsonl`, and every one shows a token estimate before reading more than it should. The shipped instructions live in [`plugin/skills/`](https://github.com/NissanOhana/orangu/blob/main/plugin/skills). Codex is also an improvement-skill host: `codex plugin marketplace add NissanOhana/orangu` then `codex plugin add orangu@orangu` installs `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback`; orangu does not ingest Codex transcripts.
 
-```text
-codex plugin marketplace add NissanOhana/orangu
-codex plugin add orangu@orangu
-```
+## Not a wrapper
 
-The plugin bundles Orangu's own `orangu-improve`, `orangu-apply`, and `orangu-feedback` skills, the offline CLI, and the product logo. In a new Codex thread, run:
+orangu is not a proxy, an SDK, a hook you install before the session, or a model that summarizes your transcript. It is a parser plus a rule set over the `.jsonl` files Claude Code already writes. Nothing runs during your session, nothing is sent anywhere, and the measurement never asks a model what it thinks.
 
-```text
-$orangu-improve latest
-$orangu-apply sg_0123456789ab
-$orangu-improve --verify sg_0123456789ab later-session-id
-$orangu-feedback
-```
+## Design principles
 
-Both hosts use the same evidence and artifact contracts. Codex is an improvement-skill host; Orangu does not currently ingest Codex transcripts. The feedback skill passes only a context enum into a localhost form; see [the beta feedback privacy contract](https://github.com/NissanOhana/orangu/blob/main/docs/feedback.md).
+- **No model in the measurement path.** Counting, reconciling, and ranking are plain code; skills only interpret the result.
+- **Zero network from reports.** Every report ships `default-src 'none'` and makes no request. `serve` binds to `127.0.0.1`.
+- **Redacted by default.** Secrets are scrubbed and prompt text is omitted unless you ask with `--include-text`.
+- **Same transcript in, byte-identical analysis out.** No clock, no randomness, no network in the analyzer.
+- **Components, never a composite score.** Quality, time, and tokens stay separate. Never a leaderboard of people.
+- **Tokens only.** Input, cache-read, cache-write, and output tokens; nothing converted into any other unit.
+
+## Where it sits
+
+| | |
+|---|---|
+| Raw transcripts | Contain the record, but leave the reading and synthesis to you. |
+| Usage counters (ccusage and friends) | Sum tokens across time and sources. |
+| Instrumented trace platforms | Capture applications that have been wired to send traces and evaluations. |
+| orangu | Reads the transcript you already have, explains it, and turns findings into reviewed changes with receipts. |
 
 ## Privacy and support
 
-- Generated reports are self-contained and use a zero-network Content Security Policy.
-- Redaction is on by default. Prompt and result text are omitted unless explicitly requested.
-- `orangu serve` binds to `127.0.0.1`; browser actions copy commands and never launch an agent.
-- Feedback remains on localhost until the user reviews the exact title and body and explicitly opens GitHub's issue composer; sessions and reports are never attached.
-- Optional skill research uses generic feature terms only and never sends local evidence, paths, project names, prompts, or proposal text in queries.
+- Redaction is on by default; add `--strip-paths` before sharing a report, and review every export first.
 - Unknown transcript records are counted and shown in Coverage instead of crashing the analysis.
+- Feedback stays on localhost until you review the exact title and body and open GitHub's issue composer yourself.
 
-Read the [privacy model](https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md), [supported limits](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md#supported-inputs-and-limits), and [security policy](https://github.com/NissanOhana/orangu/blob/main/SECURITY.md) before sharing a report or JSON export.
+Read the [privacy model](https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md), [supported limits](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md#supported-inputs-and-limits), and [security policy](https://github.com/NissanOhana/orangu/blob/main/SECURITY.md) before sharing a report or JSON export. Are you an LLM? Read [llms.txt](https://nissanohana.github.io/orangu/llms.txt).
 
 ## Documentation
 
@@ -112,20 +113,15 @@ Read the [privacy model](https://github.com/NissanOhana/orangu/blob/main/docs/PR
 | [Determinism](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md) | Local evidence, AI-skill authority, and lifecycle rules |
 | [Architecture](https://github.com/NissanOhana/orangu/blob/main/docs/ARCHITECTURE.md) | Pipeline, modules, build, and correctness gates |
 | [Data contracts](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md) | Analysis, evidence, app, proposal, and receipt shapes |
-| [Design system](https://github.com/NissanOhana/orangu/blob/main/docs/DESIGN.md) | Visual tokens, interaction rules, and accessibility |
 | [Beta feedback](https://github.com/NissanOhana/orangu/blob/main/docs/feedback.md) | Localhost intake, exact-review consent, and GitHub handoff |
 | [Contributing](https://github.com/NissanOhana/orangu/blob/main/CONTRIBUTING.md) | Development workflow and project layout |
 
 ## Develop
 
 ```bash
-git clone https://github.com/NissanOhana/orangu
-cd orangu
-npm ci
-npm run verify:release
+git clone https://github.com/NissanOhana/orangu && cd orangu
+npm ci && npm run verify:release
 ```
-
-Orangu requires Node.js 20 or newer. The shipped CLI has no runtime dependencies.
 
 ## License
 

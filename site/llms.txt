@@ -18,7 +18,7 @@ Concretely, you can:
 
 Facts an LLM should not get wrong:
 
-- Tokens only. orangu never converts tokens into any other unit: no rates, no spend estimate, nothing with a symbol in front of it. Input, cache-read, cache-write and output tokens are its only usage metric because they are the only one the transcript records.
+- Tokens only. orangu never converts tokens into any other unit: no rates, no estimates in another unit, nothing with a symbol in front of it. Input, cache-read, cache-write and output tokens are its only usage metric because they are the only one the transcript records.
 - No model in the measurement path. Parsing, redaction, counting, reconciliation, matching and ranking are plain code; the same transcript in gives byte-identical analysis out.
 - Reports make zero network requests and ship `default-src 'none'`. Nothing is uploaded; there is no account, proxy, instrumentation, or telemetry.
 - Redaction is on by default. Prompt and result text are omitted from shareable output unless `--include-text` is requested.

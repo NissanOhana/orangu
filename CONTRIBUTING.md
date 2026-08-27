@@ -22,7 +22,7 @@ Thanks for helping make agent sessions easier to inspect and improve.
 - `src/cli/`: command routing and output.
 - `plugin/`: Claude Code plugin and bundled offline CLI.
 - `.agents/skills/`: Codex improvement and application skills.
-- `site/`: authored and generated public landing and sample.
+- `site/`: authored landing source (`index.src.html`, `llms.src.txt`), the generated `index.html`, `llms.txt`, `llms-full.txt`, `sample.html`, and `assets/` (the report screenshot).
 - `docs/`: public user and technical documentation.
 
 Read [the architecture](docs/ARCHITECTURE.md), [determinism boundary](docs/DETERMINISM.md), and [data contracts](docs/DATA-CONTRACTS.md) before changing a public surface.
@@ -39,7 +39,8 @@ npm run test:browser
 - Parser and analyzer tests use synthetic `SessionBuilder` fixtures, never real transcripts.
 - `npm run verify:generated` checks the bundled client, plugin CLI, landing, and sample.
 - `node scripts/assert-offline.mjs --file site/sample.html` checks the report network boundary.
-- `node scripts/assert-offline.mjs --site` checks the landing's allowlisted network policy.
+- `node scripts/assert-offline.mjs --site` checks the landing's allowlisted network policy, including `llms.txt` and `llms-full.txt`.
+- `node scripts/site-screenshot.mjs` regenerates `site/assets/report-overview.png` from a local session (developer-only, needs Playwright Chromium); paste the printed digest into `scripts/assert-public-tree.mjs` and read the image before committing.
 - `npm run verify:public` rejects private working directories, personal paths or emails, internal process artifacts, and broken local documentation links in the tracked tree.
 - Intentional analysis changes must regenerate `test/golden/` in the same commit and explain the expected diff.
 
