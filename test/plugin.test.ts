@@ -168,6 +168,19 @@ describe('plugin packaging', () => {
     expect(md).toContain('orangu serve')
     expect(md.toLowerCase()).toMatch(/multi-session|multiple (?:live )?sessions|several sessions|every session/)
   })
+  it('analyze opens the report for the session Claude Code is running in, with a placeholder fallback', () => {
+    const md = readFileSync(join(root, 'plugin/skills/analyze/SKILL.md'), 'utf8')
+    const desc = /description:\s*(.+)/.exec(md)?.[1] ?? ''
+    expect(desc).toContain('open the report for the session running right now')
+    // `current` resolves inside the CLI (env id > pid record > cwd guess); the documented
+    // ${CLAUDE_SESSION_ID} substitution is the independent second path on older Claude Code
+    expect(md).toContain('`orangu report current --open`')
+    expect(md).toContain('`orangu report ${CLAUDE_SESSION_ID} --open`')
+    expect(md).toMatch(/`latest`, or `current`/)
+    // the picker is not offered: the Bash tool has no TTY, where pick is just a numbered list
+    expect(md).not.toContain('orangu pick')
+    expect(readText('plugin/skills/README.md')).toContain('`current`')
+  })
   it('harness scopes --limit to the per-session axis', () => {
     const md = readFileSync(join(root, 'plugin/skills/harness/SKILL.md'), 'utf8')
     expect(md).toContain('how many sessions are scanned')

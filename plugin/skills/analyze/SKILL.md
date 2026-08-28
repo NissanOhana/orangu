@@ -1,6 +1,6 @@
 ---
 name: analyze
-description: Explain what happened in one session, finished or still running, from local deterministic evidence. Use when the user asks to review a run, trace what the agent did and why it ended where it did, diagnose an error or retry, see where time or tokens went, open a visual report, or keep a report refreshed while a session runs. Not for a change proposal: /orangu:improve. Not for a repo or global harness review: /orangu:harness.
+description: Explain what happened in one session, finished or still running, from local deterministic evidence. Use when the user asks to review a run, trace what the agent did and why it ended where it did, diagnose an error or retry, see where time or tokens went, open a visual report, open the report for the session running right now, or keep a report refreshed while a session runs. Not for a change proposal: /orangu:improve. Not for a repo or global harness review: /orangu:harness.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read
 ---
 
@@ -17,12 +17,13 @@ Use the bundled CLI to observe a supported session and explain its outcome. The 
 ## Choose the scope
 
 - **One session, observe and diagnose:** `orangu analyze <session> --json --slim`
-  `<session>` may be a supported session id, unique prefix, transcript path, or `latest`. Prefer `--slim`; it omits the large event and turn arrays. Size that read first with `orangu estimate <session> --slim`; it sizes exactly this read and nothing else.
+  `<session>` may be a supported session id, unique prefix, transcript path, `latest`, or `current`. Prefer `--slim`; it omits the large event and turn arrays. Size that read first with `orangu estimate <session> --slim`; it sizes exactly this read and nothing else.
 - **One session, bounded findings for a hand-off:** `orangu evidence '<session>' --quiet`. Its gate is `orangu evidence '<session>' --estimate --quiet`; use the gate that matches the read you are about to make.
 - **Repository, find recurring patterns:** `orangu repo [<path>] --json`
 - **Supported sessions on this machine, find recurring patterns:** `orangu global --json`
 - **Find the right session:** `orangu list`; add `--global` to include supported Cowork and Desktop sources.
 - **Open a self-contained report:** `orangu report <session>`; add `--out <file>` when the destination matters.
+- **This session, open its report:** `orangu report current --open` resolves the session Claude Code is running in; the transcript is written asynchronously, so the report can lag the last turn. If `current` cannot resolve, run `orangu report ${CLAUDE_SESSION_ID} --open`.
 - **Live session, keep one report current:** `orangu watch [<session>]` is a foreground command that refreshes one self-contained report as the transcript grows until Ctrl-C; tell the user how to interrupt it. For several sessions at once, run `orangu serve` and open its loopback URL. Watching observes; it never turns a partial run into a claim that a change worked.
 
 JSON is redacted by default. Use `--no-redact` only after the user explicitly requests unredacted output on their machine. See `references/json-shape.md` for the contract and `references/reading-the-report.md` only when a field needs interpretation.
