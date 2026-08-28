@@ -87,7 +87,6 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .cmd-sm button{margin-left:auto;background:transparent;border:0;color:var(--ink3);cursor:pointer;font-size:11.5px;min-height:28px}
 .ghost{display:inline-flex;align-items:center;padding:13px 18px;border:1px solid var(--border2);border-radius:10px;font-size:14px;font-weight:600;color:var(--ink1)}
 .fine{font-size:13px;color:var(--ink3);margin:16px 0 0}
-.triad-cap{text-align:center;font-size:13px;color:var(--ink3);margin:6px 0 0}
 /* illustrative terminal output, styled like the command boxes */
 .term-wrap{min-width:0;max-width:780px;margin-top:clamp(22px,2.5vw,32px)}
 .term{background:var(--cmd);color:var(--cmd-ink);border:1px solid var(--border2);border-radius:12px;padding:18px 22px;font-family:var(--mono);font-size:14px;line-height:1.75;overflow-x:auto}
@@ -225,7 +224,8 @@ h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px
 .verbs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
 .verb{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--ink2)}
 .verb b{font-family:var(--mono);color:var(--ink1)}
-.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:12px}
+.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px}
+@media (min-width:1000px){.skills{grid-template-columns:repeat(5,1fr)}}
 .skill{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)}
 .skill b{display:block;font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--accent-ink);margin-bottom:4px}
 .skill div{font-size:13.5px;color:var(--ink2)}
@@ -300,11 +300,9 @@ footer .legal{margin:0;font-size:12.5px}
           <button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Inspect a session</span><span class="sep">·</span>npx orangu report</button>
           <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See the observe-to-proposal sample (opens in a new tab)">See the observe-to-proposal sample ↗</a>
         </div>
-        <p class="fine">The report observes locally. <code>/orangu:improve</code> drafts; <code>/orangu:apply</code> changes session/repo files only when invoked.</p>
       </div>
       <div class="hero-viz">
         <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink" role="img" aria-label="The three axes orangu measures: quality up, time down, tokens down. Never a single score."></qtc-triad>
-        <p class="triad-cap">Quality ↑ × Time ↓ × Tokens ↓: the three axes orangu measures. Never a single score.</p>
       </div>
       <div class="term-wrap">
         <div class="term" aria-label="orangu workflow"><pre><span class="p">$</span> npx orangu report
@@ -312,7 +310,6 @@ one session  →  steps, tool calls, errors, outcome evidence
 repo/global  →  recurring patterns worth a larger change
 improve skill  →  a structured proposal you review
 scope policy →  session: apply + verify · repo: apply · global: review</pre></div>
-        <p class="fine">Start with observation. Draft from bounded evidence, then use the authority supported by that scope.</p>
       </div>
     </div>
   </div>
