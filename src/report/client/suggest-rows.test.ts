@@ -54,7 +54,9 @@ describe('planRows', () => {
     const row = planRows('session', redacted, undefined)[0]!
     expect(titleForRule('tool-errors')).toBe('Tool errors')
     expect(row.title).toBe('Reread files')
-    expect(row.detail).toBe('The deterministic reread files rule matched this evidence.')
+    // the copy admits what redaction removed and names the escape hatch; it never claims evidence it cannot show
+    expect(row.detail).toContain('hidden by redaction')
+    expect(row.detail).toContain('--include-text')
     expect(findingForRow(row, 'session').title).toBe('Reread files')
   })
 

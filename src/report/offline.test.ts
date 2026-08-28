@@ -69,7 +69,10 @@ describe('offline report', () => {
     // cannot close the gap (the Overview sparkline is 143 B, the Suggest taxonomy chips 295 B, and the taxonomy
     // is pinned into the app by test/plugin.test.ts). Reaching 71,680 B needs a screen-level cut, which is a
     // product decision, not a polish trim. The cap stays at 72 KB and may only go DOWN; the pin is exact.
+    // 2026-08-27 final fix pass: +287 B inside the cap for two honesty fixes (the Plain "What happened"
+    // sentence no longer cuts at "incl." with an open parenthesis: leadSentence; the redacted Suggest row
+    // says its details are hidden and names --include-text instead of asserting evidence it cannot show).
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
-    expect(CLIENT_JS.length).toBe(72920)
+    expect(CLIENT_JS.length).toBe(73207)
   })
 })

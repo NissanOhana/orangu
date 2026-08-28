@@ -20,7 +20,7 @@ import { lineChart } from '../charts.js'
 import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, recoverableLine, timeAxis } from '../derive.js'
 import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
 import { cleanHash, type RouteState } from '../nav.js'
-import { plainSentence } from '../strings.js'
+import { leadSentence, plainSentence } from '../strings.js'
 
 /** A link into this run's own screens: every aggregate/filter key cleared so the target starts clean. */
 function href(ctx: Ctx, a: Analysis, next: Partial<RouteState>): string {
@@ -94,7 +94,7 @@ function plainBody(ctx: Ctx, a: Analysis): string {
   const s = a.summary
   const goal = a.turns.find((t) => t.kind === 'human')?.promptPreview.slice(0, 140)
   const goalText = goal || (a.session.title ? a.session.title : '(prompt text not included in this report)')
-  const firstSentence = (s.narrative.split(/(?<=\.)\s/)[0] ?? s.narrative).trim()
+  const firstSentence = leadSentence(s.narrative)
   const effort = `${tok(s.totalTokens)} tokens · ${ms(s.wallMs)}, of which ${ms(s.humanWaitMs)} needed your attention`
   const one = a.insights.find((i) => i.id === s.topInsightIds[0]) ?? a.insights[0]
   return `<div class="card mb16" style="overflow:hidden">

@@ -49,11 +49,17 @@ export function titleForRule(ruleId: string): string {
   return words[0]!.toUpperCase() + words.slice(1)
 }
 
+/**
+ * Default redaction blanks Insight.detail because it quotes commands and result previews
+ * (src/redact/redact.ts). The fallback says so and names the way back, like Coverage does for
+ * hidden record types, instead of asserting that evidence exists where none is shown.
+ */
+export const DETAIL_HIDDEN_BY_REDACTION = 'Details hidden by redaction (they quote commands and result previews); re-run with --include-text to see them.'
+
 function safeCopy(ruleId: string, title: string, detail: string): { title: string; detail: string } {
-  const fallback = titleForRule(ruleId)
   return {
-    title: title.trim() || fallback,
-    detail: detail.trim() || `The deterministic ${fallback.toLowerCase()} rule matched this evidence.`,
+    title: title.trim() || titleForRule(ruleId),
+    detail: detail.trim() || DETAIL_HIDDEN_BY_REDACTION,
   }
 }
 

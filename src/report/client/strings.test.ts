@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { currencyHits, moneyHits } from '../../../test/money-vocabulary.js'
-import { PLAIN_TERMS, term, plainSentence } from './strings.js'
+import { PLAIN_TERMS, term, plainSentence, leadSentence } from './strings.js'
 
 describe('plain-language vocabulary', () => {
   it('maps only mechanism terms to plain words', () => {
@@ -45,5 +45,27 @@ describe('plain-language vocabulary', () => {
   it('rewrites a whole sentence in plain audience', () => {
     expect(plainSentence('3 turns used the context window', 'plain')).toBe('3 turns used the working memory')
     expect(plainSentence('3 turns used the context window', 'dev')).toBe('3 turns used the context window')
+  })
+})
+
+// The Plain "What happened" line is the narrative's first sentence. Splitting on the first ". " cut
+// "made 19 requests (26 turns incl. commands/automation) over 34h 59m; ..." at "incl." with an open
+// parenthesis (the common case: every session with automation turns).
+describe('leadSentence', () => {
+  const narrative =
+    'In this session, the human made 19 requests (26 turns incl. commands/automation) over 34h 59m; the agent was busy for 3h 39m of that. It made 800 tool calls (8 failed), ran 14 subagents, and processed 1.2M tokens. Visible outcomes: 108 commits.'
+  it('keeps a parenthetical abbreviation inside the sentence', () => {
+    expect(leadSentence(narrative)).toBe(
+      'In this session, the human made 19 requests (26 turns incl. commands/automation) over 34h 59m; the agent was busy for 3h 39m of that.',
+    )
+  })
+  it('still cuts at the first real sentence end', () => {
+    expect(leadSentence('It made 3 tool calls. Visible outcomes: 1 commit.')).toBe('It made 3 tool calls.')
+    expect(leadSentence('No commits, PRs or test runs were detected.')).toBe('No commits, PRs or test runs were detected.')
+  })
+  it('never ends on an abbreviation outside parentheses, and returns the whole text without an acceptable cut', () => {
+    expect(leadSentence('Read 4 files incl. tests. Then stopped.')).toBe('Read 4 files incl. tests.')
+    expect(leadSentence('one sentence without a period')).toBe('one sentence without a period')
+    expect(leadSentence('  spaced  ')).toBe('spaced')
   })
 })
