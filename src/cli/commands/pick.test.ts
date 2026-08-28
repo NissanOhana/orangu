@@ -162,8 +162,13 @@ describe('cmdPick', () => {
     expect(rows[0]).toMatchObject({ running: true, project: 'demo' })
     expect(json.stderr.text).toBe('')
   })
-  it('no sessions: throws the same message as the other verbs (exit 1 through main)', async () => {
+  it('no sessions: throws the same message as the other verbs (exit 1 through main); --json still prints []', async () => {
     const empty = await mkdtemp(join(tmpdir(), 'orangu-pick-empty-'))
-    await expect(cmdPick({ root: empty }, deps())).rejects.toThrow(/No sessions found/)
+    const plain = deps()
+    await expect(cmdPick({ root: empty }, plain)).rejects.toThrow(/No sessions found/)
+    expect(plain.stdout.text).toBe('')
+    const json = deps()
+    await expect(cmdPick({ root: empty, json: true }, json)).rejects.toThrow(/No sessions found/)
+    expect(json.stdout.text).toBe('[]\n')
   })
 })

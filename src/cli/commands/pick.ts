@@ -99,11 +99,10 @@ export async function gatherPickRows(
 export async function cmdPick(flags: Record<string, string | boolean>, deps: PickDeps): Promise<void> {
   const now = deps.now ?? Date.now()
   const { rows, counts } = await gatherPickRows(flags, { now, ...(deps.isAlive ? { isAlive: deps.isAlive } : {}) })
+  // --json is a contract: the array is always printed, `[]` included; an empty chooser still exits 1
+  if (flagBool(flags, 'json')) deps.stdout.write(JSON.stringify(rows, null, 2) + '\n')
   if (!rows.length) throw new Error('No sessions found. Is Claude Code installed? Try: orangu list')
-  if (flagBool(flags, 'json')) {
-    deps.stdout.write(JSON.stringify(rows, null, 2) + '\n')
-    return
-  }
+  if (flagBool(flags, 'json')) return
   if (!interactivePrecondition(deps.stdin, deps.stdout, deps.env, flags)) {
     deps.stdout.write(pickList(deps.out, rows, counts, now).join('\n') + '\n')
     return

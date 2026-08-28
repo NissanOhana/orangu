@@ -181,7 +181,7 @@ node dist/orangu.js report
 
 A session selector can be `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`: the session Claude Code is running orangu from, resolved from the Claude Code environment and never guessed silently (a cwd-based guess says so; outside Claude Code it is an error). `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`); giving both the positional and the flag with different values is an error.
 
-`orangu pick` lists sessions running first (title, project, age, size), moves with the arrow keys, `j`/`k`, or a digit, opens the chosen report on Enter, and cancels on `q`, Esc, or Ctrl-C with the terminal restored. Without a terminal, in CI, or with `--plain` it prints a numbered list and the `orangu report <id>` hint; `--json` prints the array.
+`orangu pick` lists sessions running first (title, project, age, size), moves with the arrow keys, `j`/`k`, or a digit, opens the chosen report on Enter, and cancels on `q`, Esc, or Ctrl-C with the terminal restored. Without a terminal, in CI, or with `--plain` it prints a numbered list and the `orangu report <id>` hint; `--json` prints the array (`[]` on an empty home, still exiting 1 because the chooser had nothing to choose).
 
 Use `orangu --help` for flags and output controls.
 

@@ -6637,7 +6637,7 @@ function detectCaps(stream, env = process.env, opts = {}) {
 function supportsHyperlinks(stream, env, ci = ciSet(env)) {
   const force = env["FORCE_HYPERLINK"];
   if (force !== void 0) return !(force === "0" || force === "false" || force === "");
-  if (!stream.isTTY || ci || env["TEAMCITY_VERSION"]) return false;
+  if (!stream.isTTY || ci || env["TERM"] === "dumb" || env["TEAMCITY_VERSION"]) return false;
   if (env["WT_SESSION"]) return true;
   if (/^(screen|tmux)/.test(env["TERM"] ?? "")) return false;
   const prog = env["TERM_PROGRAM"];
@@ -7591,9 +7591,9 @@ function nextStepLines(caps, step) {
     const reason = truncate(step.storeNote, valueBudget(caps) - head.length - tail.length, caps);
     lines.push(row(caps, "store", head + reason + tail, { style: "warn", raw: true }));
   }
-  if (step.next) lines.push(row(caps, "next", step.next, { raw: Boolean(step.storeNote) }));
+  if (step.next) lines.push(row(caps, "next", step.next, { raw: true }));
   const [add, install] = PLUGIN_INSTALL.split(" \xB7 ");
-  lines.push(row(caps, "plugin", add ?? PLUGIN_INSTALL));
+  lines.push(row(caps, "plugin", add ?? PLUGIN_INSTALL, { raw: true }));
   if (install) {
     const note = "(once, inside Claude Code)";
     const fits = install.length + 4 + note.length <= valueBudget(caps);
@@ -12566,11 +12566,9 @@ async function gatherPickRows(flags, deps = {}) {
 async function cmdPick(flags, deps) {
   const now = deps.now ?? Date.now();
   const { rows, counts } = await gatherPickRows(flags, { now, ...deps.isAlive ? { isAlive: deps.isAlive } : {} });
+  if (flagBool(flags, "json")) deps.stdout.write(JSON.stringify(rows, null, 2) + "\n");
   if (!rows.length) throw new Error("No sessions found. Is Claude Code installed? Try: orangu list");
-  if (flagBool(flags, "json")) {
-    deps.stdout.write(JSON.stringify(rows, null, 2) + "\n");
-    return;
-  }
+  if (flagBool(flags, "json")) return;
   if (!interactivePrecondition(deps.stdin, deps.stdout, deps.env, flags)) {
     deps.stdout.write(pickList(deps.out, rows, counts, now).join("\n") + "\n");
     return;

@@ -473,6 +473,12 @@ syncBuiltinESMExports()
     const none = spawnSync('node', [CLI, 'pick', '--root', empty], { encoding: 'utf8', input: '', timeout: 15_000 })
     expect(none.status).toBe(1)
     expect(none.stderr).toMatch(/^error: No sessions found/m)
+    expect(none.stdout).toBe('')
+    // --json is a contract: a machine consumer gets the empty array on stdout, the exit 1 stays
+    const noneJson = spawnSync('node', [CLI, 'pick', '--root', empty, '--json'], { encoding: 'utf8', input: '', timeout: 15_000 })
+    expect(noneJson.status).toBe(1)
+    expect(noneJson.stdout).toBe('[]\n')
+    expect(noneJson.stderr).toMatch(/^error: No sessions found/m)
   })
 
   it('bare orangu analyzes the latest session and prints the sentence and the next command; --help is unchanged', async () => {
