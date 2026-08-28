@@ -229,11 +229,47 @@ export function fileLink(absPath: string, caps: Pick<Caps, 'hyperlinks'>, host =
   return `\x1b]8;;${uri}\x1b\\${absPath}\x1b]8;;\x1b\\`
 }
 
-// ---------- line rewriting and the spinner ----------
+// ---------- cursor control and key decoding (used by select.ts; the escapes live here) ----------
 
 const HIDE_CURSOR = '\x1b[?25l'
 const SHOW_CURSOR = '\x1b[?25h'
 const CLEAR_LINE = '\r\x1b[2K'
+
+/** Cursor and erase sequences for an inline redraw (never the alternate screen). */
+export const CURSOR = {
+  hide: HIDE_CURSOR,
+  show: SHOW_CURSOR,
+  /** move up n lines (nothing for n <= 0) */
+  up: (n: number): string => (n > 0 ? `\x1b[${n}A` : ''),
+  /** erase from the cursor to the end of the screen */
+  eraseDown: '\x1b[0J',
+  /** carriage return */
+  home: '\r',
+} as const
+
+export type Key = 'up' | 'down' | 'home' | 'end' | 'pageup' | 'pagedown' | 'enter' | 'escape' | 'quit' | 'cancel' | 'digit' | 'other'
+
+/**
+ * Decode one raw-mode stdin chunk into the keys the picker knows. A terminal delivers a whole
+ * escape sequence in one chunk, so a chunk that is exactly ESC is the Escape key (no readline
+ * timeout). In raw mode Ctrl-C arrives as the byte 0x03, not as SIGINT.
+ */
+export function decodeKey(chunk: string): { key: Key; digit?: number } {
+  if (chunk === '\x03') return { key: 'cancel' }
+  if (chunk === '\x1b') return { key: 'escape' }
+  if (chunk === '\r' || chunk === '\n') return { key: 'enter' }
+  if (chunk === 'q' || chunk === 'Q' || chunk === '\x04') return { key: 'quit' }
+  if (chunk === 'j' || chunk === '\x1b[B' || chunk === '\x1bOB') return { key: 'down' }
+  if (chunk === 'k' || chunk === '\x1b[A' || chunk === '\x1bOA') return { key: 'up' }
+  if (chunk === 'g' || chunk === '\x1b[H' || chunk === '\x1bOH' || chunk === '\x1b[1~') return { key: 'home' }
+  if (chunk === 'G' || chunk === '\x1b[F' || chunk === '\x1bOF' || chunk === '\x1b[4~') return { key: 'end' }
+  if (chunk === '\x1b[5~') return { key: 'pageup' }
+  if (chunk === '\x1b[6~') return { key: 'pagedown' }
+  if (/^[1-9]$/.test(chunk)) return { key: 'digit', digit: Number(chunk) }
+  return { key: 'other' }
+}
+
+// ---------- line rewriting and the spinner ----------
 
 export interface WritableLike {
   write(chunk: string): unknown

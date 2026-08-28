@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 import { EventEmitter } from 'node:events'
 import {
+  CURSOR,
   MACHINE_CAPS,
+  decodeKey,
   detectCaps,
   displayWidth,
   fileLink,
@@ -306,5 +308,44 @@ describe('rewriteLine', () => {
     const b = sink()
     rewriteLine(b.stream, { animate: false }, 'status')
     expect(b.out).toEqual(['status\n'])
+  })
+})
+
+describe('decodeKey', () => {
+  it('maps the picker keys and treats anything else as other', () => {
+    const table: Array<[string, ReturnType<typeof decodeKey>]> = [
+      ['\x03', { key: 'cancel' }],
+      ['\x1b', { key: 'escape' }],
+      ['\r', { key: 'enter' }],
+      ['\n', { key: 'enter' }],
+      ['q', { key: 'quit' }],
+      ['Q', { key: 'quit' }],
+      ['\x04', { key: 'quit' }],
+      ['j', { key: 'down' }],
+      ['\x1b[B', { key: 'down' }],
+      ['\x1bOB', { key: 'down' }],
+      ['k', { key: 'up' }],
+      ['\x1b[A', { key: 'up' }],
+      ['\x1bOA', { key: 'up' }],
+      ['g', { key: 'home' }],
+      ['\x1b[H', { key: 'home' }],
+      ['G', { key: 'end' }],
+      ['\x1b[F', { key: 'end' }],
+      ['\x1b[5~', { key: 'pageup' }],
+      ['\x1b[6~', { key: 'pagedown' }],
+      ['1', { key: 'digit', digit: 1 }],
+      ['9', { key: 'digit', digit: 9 }],
+      ['0', { key: 'other' }],
+      ['x', { key: 'other' }],
+      ['\x1b[Z', { key: 'other' }],
+      ['jj', { key: 'other' }],
+      ['', { key: 'other' }],
+    ]
+    for (const [chunk, want] of table) expect(decodeKey(chunk), JSON.stringify(chunk)).toEqual(want)
+  })
+  it('CURSOR.up is empty for zero and never negative', () => {
+    expect(CURSOR.up(0)).toBe('')
+    expect(CURSOR.up(-2)).toBe('')
+    expect(CURSOR.up(3)).toBe('\x1b[3A')
   })
 })
