@@ -162,10 +162,12 @@ function printHarness(r: HarnessReport): void {
   line('idle MCP', idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : 'none: every configured server was called')
   if (idleMcp.length) w(paint(C.dim, '    ' + idleMcp.slice(0, 8).map((m) => m.name).join(', ')))
 
+  // the same four row kinds src/harness/report.ts counts in the "rows marked undeclared" note
   const undeclared = [
     ...x.skills.filter((s) => s.status === 'undeclared').map((s) => 'skill ' + s.name),
     ...x.mcpServers.filter((m) => m.status === 'undeclared').map((m) => 'mcp ' + m.name),
     ...x.agents.filter((a) => a.status === 'undeclared').map((a) => 'agent ' + a.name),
+    ...x.hooks.filter((h) => h.status === 'undeclared').map((h) => 'hook ' + h.commandBasename),
   ]
   line('undeclared', undeclared.length ? `${undeclared.length} observed but not in the config read` : 'none')
   if (undeclared.length) w(paint(C.dim, '    ' + undeclared.slice(0, 8).join(', ')))

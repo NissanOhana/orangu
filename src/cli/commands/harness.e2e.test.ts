@@ -37,6 +37,8 @@ async function makeHarnessFixture(): Promise<Fixture> {
   b.userPrompt('use the skill')
   b.toolCall('Skill', { skill: 'fires-often' }, 'ok')
   b.toolCall('mcp__octocode__githubSearchCode', { q: 'x' }, 'ok')
+  // a hook that ran but is in no config the collector reads: an `undeclared` hook row
+  b.stopHookSummary([{ command: '/opt/tools/rogue-hook.sh --quiet', durationMs: 12 }])
   b.turnDuration(3000, 5)
   await writeFile(join(configDir, 'projects', '-Users-test-Code-demo', '99999999-0000-4000-8000-00000000cccc.jsonl'), b.toJsonl())
 
@@ -153,6 +155,13 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(out).toContain('idle skills')
     expect(out).toContain('undeclared')
     expect(out).toContain('hooks (configured / runs / errors / mean ms)')
+    // one count for "undeclared": the headline row lists hooks like the note below it counts them
+    const headline = /undeclared\s+(\d+) observed but not in the config read/.exec(out)
+    const note = /(\d+) rows? marked undeclared/.exec(out)
+    expect(headline, 'headline undeclared count').not.toBeNull()
+    expect(note, 'undeclared note').not.toBeNull()
+    expect(headline![1]).toBe(note![1])
+    expect(out).toContain('hook rogue-hook.sh')
     expect(out).toContain('add --json for the machine-readable inventory + crosswalk')
   })
 
