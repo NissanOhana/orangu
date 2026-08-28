@@ -64,6 +64,19 @@ describe('claudeRoots', () => {
     expect(await claudeRoots(undefined, homeDir, {})).toEqual([claudeCode, localSession])
   })
 
+  it('an explicit --root replaces the automatic roots instead of widening them', async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'orangu-roots-explicit-'))
+    mkdirSync(join(homeDir, '.claude', 'projects'), { recursive: true })
+    const one = mkdtempSync(join(tmpdir(), 'orangu-root-one-'))
+    const two = mkdtempSync(join(tmpdir(), 'orangu-root-two-'))
+    const env = { ORANGU_CLAUDE_ROOTS: mkdtempSync(join(tmpdir(), 'orangu-root-env-')) }
+    // one root, several roots, and whitespace/duplicates: only what was named, in order, once
+    expect(await claudeRoots(one, homeDir, env)).toEqual([one])
+    expect(await claudeRoots(`${one}, ${two},${one}`, homeDir, env)).toEqual([one, two])
+    // an empty explicit value is no override
+    expect(await claudeRoots(' , ', homeDir, {})).toEqual([join(homeDir, '.claude')])
+  })
+
   it('does not enroll Cowork roots through symlinked local-session ancestors', async () => {
     const homeDir = mkdtempSync(join(tmpdir(), 'orangu-roots-link-'))
     const base = join(homeDir, 'Library', 'Application Support', 'Claude', 'local-agent-mode-sessions')

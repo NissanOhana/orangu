@@ -701,7 +701,11 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
   const add = (p) => {
     if (p && p.trim() && !roots.includes(p)) roots.push(p);
   };
-  if (explicit) explicit.split(",").forEach((r) => add(r.trim()));
+  if (explicit) {
+    explicit.split(",").forEach((r) => add(r.trim()));
+    if (roots.length) return roots;
+  }
+  ;
   (env["ORANGU_CLAUDE_ROOTS"] ?? "").split(",").forEach((r) => add(r.trim()));
   (env["CLAUDE_CONFIG_DIR"] ?? "").split(",").forEach((r) => add(r.trim()));
   add(join2(homeDir, ".claude"));
@@ -12223,7 +12227,7 @@ ${paint2(C2.b, "flags")}
   --no-include-text      serve only: hide prompt/result previews in the loopback viewer too (serve shows them by default)
   --strip-paths          reduce absolute paths to basenames (home prefix is already ~ by default)
   --global               scan all roots incl. Cowork/Desktop
-  --root <dir>           override the Claude config dir
+  --root <dir>           scan only this Claude config dir (comma-separated; replaces ~/.claude)
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache (or ORANGU_NO_CACHE=1)
   --jobs <n>             worker threads for repo/global scans (default: CPUs - 1; 1 = sequential)

@@ -58,6 +58,8 @@ export function defaultConfigDir(): string {
  * All Claude config roots to scan, in order:
  * ORANGU_CLAUDE_ROOTS (comma-separated), then CLAUDE_CONFIG_DIR, then ~/.claude, then ~/.config/claude,
  * then Cowork/Desktop local session roots under Library/Application Support/Claude/local-agent-mode-sessions.
+ * An explicit root (`--root <dir>[,<dir>]`) REPLACES that list: it never widens to the home roots, so
+ * `global --root <fixture>` cannot pull the user's live sessions into a scan that named another directory.
  * Each root is a dir that contains a projects subtree. De-duplicated, unreadable roots skipped.
  */
 export async function claudeRoots(
@@ -70,7 +72,10 @@ export async function claudeRoots(
   const add = (p?: string) => {
     if (p && p.trim() && !roots.includes(p)) roots.push(p)
   }
-  if (explicit) explicit.split(',').forEach((r) => add(r.trim()))
+  if (explicit) {
+    explicit.split(',').forEach((r) => add(r.trim()))
+    if (roots.length) return roots
+  }
   ;(env['ORANGU_CLAUDE_ROOTS'] ?? '').split(',').forEach((r) => add(r.trim()))
   ;(env['CLAUDE_CONFIG_DIR'] ?? '').split(',').forEach((r) => add(r.trim()))
   add(join(homeDir, '.claude'))

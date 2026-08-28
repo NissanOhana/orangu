@@ -217,9 +217,9 @@ describe('orangu estimate (in-process)', () => {
    * probes `join(home, '.claude.json')`. `os.homedir()` honours `$HOME` on POSIX and `%USERPROFILE%`
    * on win32, so both are set to keep the test hermetic.
    *
-   * These cases also stay REPO-scoped: `claudeRoots()` unconditionally appends `~/.claude`, so an in-process
-   * `--global` would walk the user's configured sessions. The global path is covered hermetically by the built-CLI e2e,
-   * which overrides HOME in the child process (src/cli/commands/harness.e2e.test.ts).
+   * These cases also stay REPO-scoped: without an explicit `--root`, `claudeRoots()` walks `~/.claude`, so an
+   * in-process `--global` would reach the user's configured sessions. The global path is covered hermetically by
+   * the built-CLI e2e, which overrides HOME in the child process (src/cli/commands/harness.e2e.test.ts).
    */
   async function withSyntheticHome<T>(fn: (repo: string) => Promise<T>): Promise<T> {
     const cfg = mkdtempSync(join(tmpdir(), 'orangu-harness-cfg-'))
