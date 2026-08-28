@@ -33,6 +33,8 @@ const BOOL_FLAGS = new Set([
   'estimate',
   'for-proposal',
   'for-apply',
+  'verbose',
+  'no-color',
 ])
 
 /**

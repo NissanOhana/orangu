@@ -112,7 +112,7 @@ describe('ratchet: no em-dash on product surfaces', () => {
  */
 describe('ratchet: raw ANSI escapes live only in src/cli/tty.ts', () => {
   // baseline at the ratchet's birth; the CLI UX pass drives it to [] and it never grows
-  const BASELINE = ['src/cli/commands/harness.ts', 'src/cli/main.ts', 'src/cli/watch.ts']
+  const BASELINE = ['src/cli/commands/harness.ts', 'src/cli/watch.ts']
   it('no file under src/ outside the baseline contains an escape literal', () => {
     const hits: string[] = []
     for (const f of walk(join(ROOT, 'src'))) {

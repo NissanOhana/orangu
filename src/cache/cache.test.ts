@@ -387,14 +387,14 @@ describe('worker pool e2e via the built CLI', () => {
       new Promise<{ stdout: string; stderr: string }>((res, rej) =>
         execFile(
           'node',
-          [dist, 'global', '--json', '--root', cfg, ...extra],
+          [dist, 'global', '--json', '--verbose', '--root', cfg, ...extra],
           { maxBuffer: 1 << 28, env: { ...process.env, HOME: cfg, ORANGU_HOME: home, ORANGU_NO_CACHE: '1', ORANGU_CLAUDE_ROOTS: cfg, CLAUDE_CONFIG_DIR: cfg, ...envExtra } },
           (err, stdout, stderr) => (err ? rej(err) : res({ stdout, stderr })),
         ),
       )
     const seq = await run(['--jobs', '1'], {})
     const pooled = await run(['--jobs', '3'], {})
-    expect(pooled.stderr).toMatch(/jobs: 3/)
+    expect(pooled.stderr).toMatch(/jobs {5}3/)
     expect(seq.stderr).not.toMatch(/jobs:/)
     const norm = (s: string) => {
       const a = JSON.parse(s) as { generatedAt?: number; sessions?: unknown }
@@ -422,9 +422,10 @@ describe('cache e2e via the built CLI', () => {
     // stderr of a second spawn: capture via piped stderr
     const { execFile } = await import('node:child_process')
     const second: { stdout: string; stderr: string } = await new Promise((res, rej) => {
-      execFile('node', [dist, 'analyze', jsonl, '--json'], { env, maxBuffer: 1 << 28 }, (err, stdout, stderr) => (err ? rej(err) : res({ stdout, stderr })))
+      execFile('node', [dist, 'analyze', jsonl, '--json', '--verbose'], { env, maxBuffer: 1 << 28 }, (err, stdout, stderr) => (err ? rej(err) : res({ stdout, stderr })))
     })
-    expect(second.stderr).toMatch(/cache: 1 hits?, 0 miss/)
+    // the cache diagnostic is --verbose only (stderr); --json stdout is untouched by it
+    expect(second.stderr).toMatch(/cache {4}1 hits?, 0 miss/)
     const norm = (s: string) => JSON.parse(s) as Analysis
     const a = norm(first)
     const b = norm(second.stdout)

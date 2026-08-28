@@ -39,7 +39,7 @@ export async function persistNextStep(a: Analysis, redact: RedactOptions | false
     const reason = (e instanceof Error ? e.message : String(e)).split('\n')[0] ?? 'unknown error'
     return {
       finding: title,
-      storeNote: `unavailable: ${reason}; long form follows`,
+      storeNote: reason,
       next: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: 'report' }, 'file').claude,
     }
   }

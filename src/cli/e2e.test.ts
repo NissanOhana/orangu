@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, lstatSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -17,7 +17,13 @@ async function until(cond: () => boolean, ms: number, what: string): Promise<voi
 }
 
 const CLI = join(process.cwd(), 'dist', 'orangu.js')
+// report / analyze / bare orangu persist the top finding as a suggestion record: every spawn below
+// inherits this hermetic ORANGU_HOME so the suite never writes into the developer's real ~/.orangu
+process.env['ORANGU_HOME'] = mkdtempSync(join(tmpdir(), 'orangu-cli-home-'))
 const run = (args: string[]) => execFileSync('node', [CLI, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+/** any CSI/OSC escape, carriage return (spinner frame) or BEL */
+const ESCAPES = /[\x1b\r\x07]/
+const stripEscapes = (s: string) => s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
 
 describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
   it('--version prints the version', () => {
@@ -236,45 +242,120 @@ syncBuiltinESMExports()
     expect(quiet.stderr).not.toContain('orangu feedback')
   })
 
-  // A9: after report/analyze the terminal names the next step (the top finding's improve command,
-  // the same sg_ identity the report shows) before the beta offer; never under --quiet or --json.
-  it('names the next step before the beta offer, and stays silent under --quiet and --json', async () => {
+  // A9 (F4): after report/analyze the terminal names the next step as the SHORT improve command,
+  // because the record is persisted through the suggestion store at report time; never a base64
+  // payload; never under --quiet or --json. Replaces the assertions that pinned the payload line
+  // (stated cause: the owner's "no base64 in the terminal, ever").
+  it('persists the top finding and prints the short improve command; silent under --quiet and --json', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-next-step-')))
+    const oranguHome = await mkdtemp(join(tmpdir(), 'orangu-cli-next-step-home-'))
+    const env = { ...process.env, ORANGU_HOME: oranguHome }
     const base = ['report', home.endedId, '--root', home.configDir, '--no-open', '--no-cache']
-    const human = spawnSync('node', [CLI, ...base], { encoding: 'utf8' })
+    const human = spawnSync('node', [CLI, ...base], { encoding: 'utf8', env })
     expect(human.status, human.stderr).toBe(0)
-    const next = human.stderr.indexOf('next step:')
-    const offer = human.stderr.indexOf('orangu feedback --context report')
-    expect(next).toBeGreaterThan(-1)
-    expect(offer).toBeGreaterThan(next)
-    expect(human.stderr).toContain('top finding:')
-    // the bare sg_ id is a label (no record exists for it yet); only the --finding form is runnable
-    expect(human.stderr).toMatch(/next step: {4}\/orangu:improve on sg_[0-9a-f]{12} \(copy-ready command below\)/)
-    expect(human.stderr).not.toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12}"/)
-    expect(human.stderr).toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12} --finding /)
-    expect(human.stderr).toContain('/plugin install orangu')
+    // stdout is the path and nothing else
     expect(human.stdout.trim().endsWith('.html')).toBe(true)
-    // the footer is laid out for an 80-column terminal: only the copy-ready `--finding` payload (one
-    // token a paste must carry whole) may run longer, and it is the last line before the beta offer
-    const footer = human.stderr.slice(next, human.stderr.lastIndexOf('\n', offer)).split('\n').filter(Boolean)
-    const wide = footer.filter((l) => l.length > 80)
-    expect(wide.map((l) => l.slice(0, 40))).toEqual([expect.stringContaining('claude "/orangu:improve sg_')])
-    expect(wide[0]).toContain(' --finding ')
-    expect(footer.at(-1)).toBe(wide[0])
+    expect(human.stdout.trim().split('\n')).toHaveLength(1)
+    const lines = human.stderr.split('\n').filter(Boolean)
+    expect(lines[0]).toMatch(/^  ✓ analyzed \d+\.\d MB in \d+(\.\d)?m?s( · \d+ redactions?)?$/)
+    expect(lines[1]).toBe('  report   ' + human.stdout.trim())
+    const finding = lines.findIndex((l) => l.startsWith('  finding  '))
+    const next = lines.findIndex((l) => l.startsWith('  next     '))
+    const beta = lines.findIndex((l) => l === '  beta     orangu feedback --context report')
+    expect(finding).toBeGreaterThan(1)
+    expect(next).toBe(finding + 1)
+    expect(beta).toBe(lines.length - 1)
+    expect(lines[next]).toMatch(/^  next {5}claude "\/orangu:improve sg_[0-9a-f]{12}"$/)
+    expect(human.stderr).not.toContain(' --finding ')
+    expect(human.stderr).not.toMatch(/[A-Za-z0-9_-]{80,}/)
+    expect(human.stderr).toContain('  plugin   /plugin marketplace add NissanOhana/orangu')
+    expect(human.stderr).toContain('/plugin install orangu')
+    for (const l of lines) expect(l.length, l).toBeLessThanOrEqual(80)
+    // a pipe: no escapes at all, no spinner frame
+    expect(human.stdout + human.stderr).not.toMatch(ESCAPES)
+    // the record exists in the store, once, under the id the command names
+    const id = /sg_[0-9a-f]{12}/.exec(lines[next]!)![0]
+    const storeFile = join(oranguHome, 'suggestions.jsonl')
+    const records = () => readFileSync(storeFile, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as { id: string; sessionIds: string[]; source: string })
+    expect(records()).toHaveLength(1)
+    expect(records()[0]).toMatchObject({ id, sessionIds: [home.endedId], source: 'report' })
+    // running it again appends nothing
+    const again = spawnSync('node', [CLI, ...base], { encoding: 'utf8', env })
+    expect(again.status, again.stderr).toBe(0)
+    expect(records()).toHaveLength(1)
 
-    const quiet = spawnSync('node', [CLI, ...base, '--quiet'], { encoding: 'utf8' })
+    const quiet = spawnSync('node', [CLI, ...base, '--quiet'], { encoding: 'utf8', env })
     expect(quiet.status, quiet.stderr).toBe(0)
-    expect(quiet.stderr).not.toContain('next step')
+    expect(quiet.stderr).toBe('')
+    expect(quiet.stdout.trim().endsWith('.html')).toBe(true)
 
-    const analyze = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache'], { encoding: 'utf8' })
+    const analyze = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache'], { encoding: 'utf8', env })
     expect(analyze.status, analyze.stderr).toBe(0)
-    expect(analyze.stderr.indexOf('next step:')).toBeLessThan(analyze.stderr.indexOf('orangu feedback --context session'))
-    const machine = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache', '--json'], { encoding: 'utf8' })
+    expect(analyze.stderr).toMatch(/^  ✓ analyzed /)
+    expect(analyze.stderr.indexOf('  next     claude "/orangu:improve sg_')).toBeLessThan(analyze.stderr.indexOf('orangu feedback --context session'))
+    expect(analyze.stderr).not.toContain(' --finding ')
+    expect(analyze.stdout).toContain('  quality  ')
+    expect(analyze.stdout).toContain('  findings')
+    for (const l of (analyze.stdout + analyze.stderr).split('\n')) expect(l.length, l).toBeLessThanOrEqual(80)
+    expect(records()).toHaveLength(1)
+    const machine = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache', '--json'], { encoding: 'utf8', env })
     expect(machine.status, machine.stderr).toBe(0)
-    expect(machine.stderr).not.toContain('next step')
-    expect(machine.stdout).not.toContain('next step')
+    expect(machine.stderr).toBe('')
+    expect(machine.stdout).not.toContain('next ')
 
     expect(run(['list', '--root', home.configDir])).toContain('orangu harness')
+  })
+
+  // The store is written on the user's machine; when it cannot be, the footer says so and falls back
+  // to the self-contained long form (the single line allowed past 80 columns), still exiting 0.
+  it('falls back to the long form, and says why, when the store is unwritable', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-store-ro-')))
+    // the store repairs the mode of a directory it owns, so a chmod'd dir is not unwritable; a
+    // regular file where the home directory should be is, on every platform
+    const notADir = join(await mkdtemp(join(tmpdir(), 'orangu-cli-store-ro-home-')), 'orangu-home')
+    writeFileSync(notADir, 'not a directory')
+    const r = spawnSync('node', [CLI, 'report', home.endedId, '--root', home.configDir, '--no-open', '--no-cache'], { encoding: 'utf8', env: { ...process.env, ORANGU_HOME: notADir } })
+    expect(r.status, r.stderr).toBe(0)
+    expect(r.stderr).toMatch(/^  store {4}unavailable: .+; long form follows$/m)
+    expect(r.stderr).toMatch(/^  next {5}claude "\/orangu:improve sg_[0-9a-f]{12} --finding [A-Za-z0-9_-]+"$/m)
+    const wide = r.stderr.split('\n').filter((l) => l.length > 80)
+    expect(wide).toHaveLength(1)
+    expect(wide[0]).toContain(' --finding ')
+  })
+
+  // --json and --quiet are machine contracts: no colour, no spinner frame, no link, whatever the
+  // environment claims; the human path honours NO_COLOR and stays plain on a pipe.
+  it('keeps --json and --quiet byte-clean under FORCE_COLOR and a linking terminal', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-byte-clean-')))
+    const loud = { ...process.env, FORCE_COLOR: '3', FORCE_HYPERLINK: '1', TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.5.0' }
+    delete (loud as Record<string, string | undefined>)['NO_COLOR']
+    const root = ['--root', home.configDir, '--no-cache']
+    for (const args of [
+      ['report', home.endedId, ...root, '--no-open', '--json'],
+      ['analyze', home.endedId, ...root, '--json'],
+      ['list', ...root, '--json'],
+      ['report', home.endedId, ...root, '--no-open', '--quiet'],
+      ['analyze', home.endedId, ...root, '--quiet'],
+      [...root, '--quiet'],
+    ]) {
+      const r = spawnSync('node', [CLI, ...args], { encoding: 'utf8', env: loud })
+      expect(r.status, args.join(' ') + '\n' + r.stderr).toBe(0)
+      expect(r.stdout + r.stderr, args.join(' ')).not.toMatch(ESCAPES)
+      if (args.includes('--quiet')) expect(r.stderr, args.join(' ')).toBe('')
+    }
+    // FORCE_COLOR paints the human path even on a pipe; NO_COLOR wins over it
+    const painted = spawnSync('node', [CLI, 'analyze', home.endedId, ...root], { encoding: 'utf8', env: loud })
+    expect(painted.stdout).toContain('\x1b[')
+    expect(painted.stderr).not.toContain('\r')
+    for (const l of stripEscapes(painted.stdout + painted.stderr).split('\n')) expect(l.length, l).toBeLessThanOrEqual(80)
+    const plain = spawnSync('node', [CLI, 'analyze', home.endedId, ...root], { encoding: 'utf8', env: { ...loud, NO_COLOR: '1' } })
+    expect(plain.stdout + plain.stderr).not.toMatch(ESCAPES)
+    const noColor = spawnSync('node', [CLI, 'analyze', home.endedId, ...root, '--no-color'], { encoding: 'utf8', env: loud })
+    expect(noColor.stdout + noColor.stderr).not.toMatch(ESCAPES)
+    // --verbose is the only way to see the cache diagnostic, on stderr
+    const verbose = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--verbose'], { encoding: 'utf8' })
+    expect(verbose.stderr).toMatch(/^  cache {4}\d+ hits, \d+ miss/m)
+    expect(painted.stderr).not.toContain('cache')
   })
 
   // A8: `orangu` with no verb runs the loop on the latest session; --help stays the help screen.
@@ -282,7 +363,7 @@ syncBuiltinESMExports()
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-bare-')))
     const bare = spawnSync('node', [CLI, '--root', home.configDir, '--no-cache'], { encoding: 'utf8' })
     expect(bare.status, bare.stderr).toBe(0)
-    expect(bare.stdout).toContain('latest session')
+    expect(bare.stdout).toMatch(/^ {8}latest · [0-9a-f]{8} · \d+ turns/m)
     // the latest fixture session's title carries a planted key: scrubbed like `analyze --json`, kept with --no-redact
     expect(bare.stdout).not.toContain('sk-ant-api03-FAKEFAKEFAKEFAKE')
     expect(bare.stdout).toContain('My key is ‹anthropic-key›')
@@ -291,8 +372,11 @@ syncBuiltinESMExports()
     const human = spawnSync('node', [CLI, 'analyze', home.liveId, '--root', home.configDir, '--no-cache'], { encoding: 'utf8' })
     expect(human.stdout).not.toContain('sk-ant-api03-FAKEFAKEFAKEFAKE')
     expect(human.stdout).toContain('My key is ‹anthropic-key›')
-    expect(bare.stdout).toMatch(/top finding:|no findings: this session ran clean/)
-    expect(bare.stdout).toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12} --finding |ran clean/)
+    expect(bare.stdout).toMatch(/^  finding {2}/m)
+    expect(bare.stdout).toMatch(/^  next {5}claude "\/orangu:improve sg_[0-9a-f]{12}"$|ran clean/m)
+    expect(bare.stdout).not.toContain(' --finding ')
+    expect(bare.stdout + bare.stderr).not.toMatch(ESCAPES)
+    for (const l of bare.stdout.split('\n')) expect(l.length, l).toBeLessThanOrEqual(80)
     expect(bare.stdout).not.toContain('usage')
     expect(bare.stdout).toContain('orangu --help for every command')
     // the sentence is the report's outcome headline, never a canned line
@@ -301,14 +385,15 @@ syncBuiltinESMExports()
     const quiet = spawnSync('node', [CLI, '--root', home.configDir, '--no-cache', '--quiet'], { encoding: 'utf8' })
     expect(quiet.status, quiet.stderr).toBe(0)
     expect(quiet.stderr).not.toContain('orangu --help for every command')
-    expect(quiet.stdout).toContain('latest session')
-    expect(quiet.stdout).toMatch(/top finding:|no findings: this session ran clean/)
+    expect(quiet.stdout).toMatch(/^ {8}latest · /m)
+    expect(quiet.stdout).toMatch(/^  finding {2}/m)
+    expect(quiet.stderr).toBe('')
 
     const help = run(['--help'])
     expect(help).toContain('usage')
     expect(help).toMatch(/usage\n  orangu {2,}analyze the latest session; print the next step\n  orangu report/)
     expect(help).not.toContain('top finding')
-    expect(help).not.toContain('latest session ·')
+    expect(help).not.toContain('        latest ·')
     expect(run(['help'])).toBe(help)
     // --json with no verb has nothing to serialise: it keeps printing help
     expect(run(['--json'])).toBe(help)

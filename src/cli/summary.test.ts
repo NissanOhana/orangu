@@ -49,7 +49,7 @@ const VARIANTS: Array<[string, Caps]> = [
 const STEP: NextStep = { finding: 'Subagent results re-read in full', next: 'claude "/orangu:improve sg_42794f4ccd0b"' }
 const FALLBACK: NextStep = {
   finding: 'Subagent results re-read in full',
-  storeNote: 'unavailable: EACCES: permission denied, mkdir; long form follows',
+  storeNote: 'EACCES: permission denied, mkdir',
   next: 'claude "/orangu:improve sg_42794f4ccd0b --finding ' + 'eyJ'.repeat(160) + '"',
 }
 
@@ -101,6 +101,9 @@ describe('summary renderers fit the layout', () => {
   it('the store fallback is the single line allowed past 80 columns, and it says why', () => {
     const lines = nextStepLines(capsAt(80), FALLBACK).map(stripAnsi)
     expect(lines[1]).toBe('  store    unavailable: EACCES: permission denied, mkdir; long form follows')
+    const long = nextStepLines(capsAt(80), { ...FALLBACK, storeNote: 'EEXIST: file already exists, mkdir ' + '/x'.repeat(40) }).map(stripAnsi)
+    expect(long[1]).toMatch(/^  store {4}unavailable: EEXIST.*…; long form follows$/)
+    expect(displayWidth(long[1]!)).toBe(80)
     expect(lines[2]).toContain(' --finding ')
     expect(displayWidth(lines[2]!)).toBeGreaterThan(80)
     for (const l of lines.filter((_, i) => i !== 2)) expect(displayWidth(l)).toBeLessThanOrEqual(80)
@@ -173,7 +176,7 @@ describe('persistNextStep', () => {
     const step = await persistNextStep(a, false, {
       store: () => ({ upsertNew: async () => { throw new Error('EACCES: permission denied, mkdir\nmore') } }) as never,
     })
-    expect(step.storeNote).toBe('unavailable: EACCES: permission denied, mkdir; long form follows')
+    expect(step.storeNote).toBe('EACCES: permission denied, mkdir')
     expect(step.next).toMatch(/^claude "\/orangu:improve sg_[0-9a-f]{12} --finding [A-Za-z0-9_-]+"$/)
   })
 

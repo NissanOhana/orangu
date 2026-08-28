@@ -21,15 +21,16 @@ import { aggregate } from '../analyze/aggregate.js'
 import { renderReport } from '../report/render.js'
 import { AnalysisCache, analyzeRefCached } from '../cache/index.js'
 import { analyzeAllPooled, defaultJobs, isPoolWorker, runPoolWorker } from '../cache/pool.js'
-import { fmtMs, fmtTokens } from '../analyze/util.js'
+import { fmtTokens } from '../analyze/util.js'
 import { redactValue, type RedactOptions } from '../redact/redact.js'
 import { watchSession } from './watch.js'
+import { MACHINE_CAPS, detectCaps, paint, spinner, type Caps, type Spinner } from './tty.js'
+import { analysisBlock, betaLine, briefBlock, doneLine, fmtBytes, listRows, nextStepLines, reportFooter, row, type NextStep } from './summary.js'
+import { persistNextStep } from './next-step.js'
 import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
 import { MASCOT_ASCII } from '../report/client/mascot.js'
-import { PLUGIN_INSTALL, handoffForInsight } from '../report/client/suggest-rows.js'
-import { outcomeHeadline } from '../report/client/derive.js'
 import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { plural } from '../harness/report.js'
@@ -38,53 +39,33 @@ import { writePrivateOutput } from './private-output.js'
 import { openInBrowser } from './open-browser.js'
 import { VERSION } from '../version.js'
 
-const C = {
-  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
-  b: (s: string) => `\x1b[1m${s}\x1b[0m`,
-  o: (s: string) => `\x1b[38;5;209m${s}\x1b[0m`,
-  g: (s: string) => `\x1b[32m${s}\x1b[0m`,
-  r: (s: string) => `\x1b[31m${s}\x1b[0m`,
-  y: (s: string) => `\x1b[33m${s}\x1b[0m`,
+/**
+ * Capabilities per stream, decided once in main(): stdout carries the answer, stderr the progress and
+ * hints, and `orangu report 2>log` must not paint the log. --json / --quiet / --no-color set
+ * `machine`, which beats every environment variable (no spinner frame may reach a 2>&1 capture).
+ */
+let out: Caps = MACHINE_CAPS
+let err: Caps = MACHINE_CAPS
+/** the spinner currently drawing on stderr, so an error message never lands on a frame */
+let progress: Spinner | undefined
+
+function detectStreams(flags: Record<string, string | boolean>): void {
+  const machine = flagBool(flags, 'json') || flagBool(flags, 'quiet') || flagBool(flags, 'no-color')
+  out = detectCaps(process.stdout, process.env, { machine })
+  err = detectCaps(process.stderr, process.env, { machine })
 }
-const isTTY = process.stdout.isTTY
-const paint = (fn: (s: string) => string, s: string) => (isTTY ? fn(s) : s)
 
 function offerBetaFeedback(context: 'session' | 'repo' | 'global' | 'report'): void {
-  process.stderr.write(paint(C.dim, `  beta: rant about the experience → orangu feedback --context ${context}\n`))
+  process.stderr.write(betaLine(err, context) + '\n')
 }
-
-/** Terminal width the footer is laid out for; the copy-ready payload line is the one exception. */
-const FOOTER_COLUMNS = 80
 
 /**
- * The next step after a session was analyzed: the top finding and the improve command the report
- * shows for it (same PlanRow -> sg_ id -> `--finding` handoff, so the terminal and the report name
- * the same proposal). Every line fits FOOTER_COLUMNS except the last: the `--finding` payload is
- * one token that a paste has to carry whole (the CLI persists no record for a bare sg_ id, so the
- * id alone is a label, never printed as a runnable command), so it stands alone, labelled, after
- * the readable lines. A clean session says so and names no command.
+ * The next step after a session was analyzed: the top finding persisted as a suggestion record and
+ * the short improve command for it (src/cli/next-step.ts). Called only where the footer is printed,
+ * so --json and --quiet reads stay side-effect free.
  */
-function nextStepLines(a: Analysis): string[] {
-  const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0]
-  if (!top) return ['  no findings: this session ran clean']
-  const { id, command } = handoffForInsight(top, a.session.id)
-  const label = '  top finding:  '
-  const title = top.title.length > FOOTER_COLUMNS - label.length ? top.title.slice(0, FOOTER_COLUMNS - label.length - 1) + '…' : top.title
-  return [
-    `${label}${title}`,
-    `  next step:    /orangu:improve on ${id} (copy-ready command below)`,
-    '  needs the plugin once, inside Claude Code:',
-    `    ${PLUGIN_INSTALL}`,
-    '  copy-ready:   the same command with its evidence attached; paste this one',
-    `    ${command}`,
-  ]
-}
-
-/** stderr, human paths only: silenced by --quiet and by --json (PROJECT.md §Logging contract). */
-function printNextStep(a: Analysis, flags: Record<string, string | boolean>): void {
-  if (flagBool(flags, 'quiet') || flagBool(flags, 'json')) return
-  const [first, ...rest] = nextStepLines(a)
-  process.stderr.write(paint(C.b, first!) + '\n' + rest.map((l) => l + '\n').join(''))
+function nextStep(a: Analysis, flags: Record<string, string | boolean>): Promise<NextStep> {
+  return persistNextStep(a, redactOptions(flags))
 }
 
 function redactOptions(flags: Record<string, string | boolean>): RedactOptions | false {
@@ -124,7 +105,8 @@ async function selectSession(sel: string | undefined, flags: Record<string, stri
 }
 
 function fail(msg: string): never {
-  process.stderr.write(paint(C.r, 'error: ') + msg + '\n')
+  progress?.pause()
+  process.stderr.write(paint(err, 'bad', 'error: ') + msg + '\n')
   process.exit(1)
 }
 
@@ -134,10 +116,11 @@ function makeCache(flags: Record<string, string | boolean>): AnalysisCache | nul
   return new AnalysisCache({ version: VERSION })
 }
 
+/** A diagnostic, not an answer: --verbose only, dim, stderr (also under --json, whose stdout stays the contract). */
 function printCacheStats(cache: AnalysisCache | null, flags: Record<string, string | boolean>): void {
-  if (!cache || flagBool(flags, 'quiet')) return
+  if (!cache || !flagBool(flags, 'verbose') || flagBool(flags, 'quiet')) return
   const s = cache.stats()
-  process.stderr.write(paint(C.dim, `cache: ${s.hits} hits, ${s.misses} misses\n`))
+  process.stderr.write(row(err, 'cache', `${s.hits} hits, ${s.misses} misses`, { style: 'dim' }) + '\n')
 }
 
 async function analyzeRef(ref: SessionRef, flags: Record<string, string | boolean>, cache?: AnalysisCache | null) {
@@ -147,6 +130,22 @@ async function analyzeRef(ref: SessionRef, flags: Record<string, string | boolea
   return analysis
 }
 
+/** Analyze one session behind the stderr spinner (silent on a pipe); the caller prints the check line. */
+async function analyzeWithProgress(ref: SessionRef, flags: Record<string, string | boolean>): Promise<{ analysis: Analysis; elapsedMs: number }> {
+  const quiet = flagBool(flags, 'quiet') || flagBool(flags, 'json')
+  const t0 = performance.now()
+  const sp = spinner(err)
+  progress = sp
+  if (!quiet) sp.start(`analyzing ${ref.sessionId.slice(0, 8)} ${fmtBytes(ref.sizeBytes)}`)
+  try {
+    const analysis = await analyzeRef(ref, flags)
+    return { analysis, elapsedMs: performance.now() - t0 }
+  } finally {
+    sp.stop()
+    progress = undefined
+  }
+}
+
 function outPath(flags: Record<string, string | boolean>, id: string, ext = 'html'): string {
   const out = flagStr(flags, 'o', 'out')
   if (out) return resolve(out)
@@ -154,10 +153,13 @@ function outPath(flags: Record<string, string | boolean>, id: string, ext = 'htm
 }
 
 // ---------- commands ----------
+/**
+ * stdout is the path and nothing else (a piping contract: `orangu report | xargs open`); the whole
+ * human footer goes to stderr. Under --quiet stderr is silent; --stdout writes the HTML instead.
+ */
 async function cmdReport(sel: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
   const ref = await selectSession(sel, flags)
-  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzing ${ref.sessionId} (${(ref.sizeBytes / 1e6).toFixed(1)} MB)…\n`))
-  const analysis = await analyzeRef(ref, flags)
+  const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags)
   const { html, redaction } = renderReport(analysis, { redact: redactOptions(flags) })
   if (flagBool(flags, 'stdout')) {
     process.stdout.write(html)
@@ -165,26 +167,32 @@ async function cmdReport(sel: string | undefined, flags: Record<string, string |
   }
   const path = outPath(flags, ref.sessionId)
   await writePrivateOutput(path, html)
-  process.stderr.write(paint(C.g, '✓ ') + `report written to ${path}` + (redaction ? paint(C.dim, ` (${redaction.applied} redactions)`) : '') + '\n')
-  if (!flagBool(flags, 'no-open') && (flagBool(flags, 'open') || isTTY)) openInBrowser(path)
+  const opened = !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || out.tty)
+  if (opened) openInBrowser(path)
   process.stdout.write(path + '\n')
-  // the next step comes first; the beta offer is the last line, never the most prominent one
-  printNextStep(analysis, flags)
-  if (!flagBool(flags, 'quiet')) offerBetaFeedback('report')
+  if (!flagBool(flags, 'quiet')) {
+    process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + '\n')
+    const step = await nextStep(analysis, flags)
+    process.stderr.write(reportFooter(err, { path, opened, step }).join('\n') + '\n')
+  }
   thresholdExit(analysis, flags)
 }
 
 async function cmdAnalyze(sel: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
   const ref = await selectSession(sel, flags)
-  const analysis = await analyzeRef(ref, flags)
+  const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags)
   if (flagBool(flags, 'json')) {
     emitAnalysisJson(analysis, flags)
     thresholdExit(analysis, flags)
     return
   }
-  printAnalysisSummary(analysis, flags)
-  printNextStep(analysis, flags)
-  if (!flagBool(flags, 'quiet')) offerBetaFeedback('session')
+  process.stdout.write(analysisBlock(out, analysis, displayTitle(analysis, flags)).join('\n') + '\n')
+  if (!flagBool(flags, 'quiet')) {
+    process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs }) + '\n')
+    const step = await nextStep(analysis, flags)
+    process.stderr.write(nextStepLines(err, step).join('\n') + '\n')
+    offerBetaFeedback('session')
+  }
   thresholdExit(analysis, flags)
 }
 
@@ -195,14 +203,11 @@ async function cmdAnalyze(sel: string | undefined, flags: Record<string, string 
  */
 async function cmdBrief(flags: Record<string, string | boolean>): Promise<void> {
   const ref = await selectSession(undefined, flags)
-  const analysis = await analyzeRef(ref, flags)
-  const s = analysis.summary
-  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, displayTitle(analysis, flags)) + '\n')
-  process.stdout.write(paint(C.dim, `  latest session · ${analysis.session.id.slice(0, 8)} · ${s.turns} turns · ${fmtTokens(s.totalTokens)} tokens · ${fmtMs(s.activeMs)} active\n\n`))
-  process.stdout.write('  ' + outcomeHeadline(s) + '\n\n')
-  for (const line of nextStepLines(analysis)) process.stdout.write(line + '\n')
-  // part of the loop's own output (so `orangu > out.txt` keeps it); --quiet still silences it
-  if (!flagBool(flags, 'quiet')) process.stdout.write(paint(C.dim, `\n  orangu report for the full picture · orangu --help for every command\n`))
+  const { analysis } = await analyzeWithProgress(ref, flags)
+  // the next step is part of the loop's own output (so `orangu > out.txt` keeps it); --quiet keeps
+  // the answer and drops the trailing hint
+  const step = await nextStep(analysis, flags)
+  process.stdout.write(briefBlock(out, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, 'quiet') }).join('\n') + '\n')
   thresholdExit(analysis, flags)
 }
 
@@ -237,47 +242,14 @@ function thresholdExit(analysis: ReturnType<typeof analyzeSession>, flags: Recor
   if (maxTokensStr !== undefined && Number.isNaN(Number(maxTokensStr))) fail(`--max-tokens must be a number, got "${maxTokensStr}"`)
   const maxTokens = Number(maxTokensStr)
   if (maxTokensStr !== undefined && !Number.isNaN(maxTokens) && analysis.summary.totalTokens > maxTokens) {
-    process.stderr.write(paint(C.r, `FAIL: ${fmtTokens(analysis.summary.totalTokens)} tokens > --max-tokens ${fmtTokens(maxTokens)}\n`))
+    process.stderr.write(paint(err, 'bad', `FAIL: ${fmtTokens(analysis.summary.totalTokens)} tokens > --max-tokens ${fmtTokens(maxTokens)}`) + '\n')
     bad = true
   }
   if (flagBool(flags, 'fail-on-hook-errors') && analysis.hooks.errors > 0) {
-    process.stderr.write(paint(C.r, `FAIL: ${analysis.hooks.errors} hook errors\n`))
+    process.stderr.write(paint(err, 'bad', `FAIL: ${analysis.hooks.errors} hook errors`) + '\n')
     bad = true
   }
   if (bad) process.exit(2)
-}
-
-function printAnalysisSummary(a: ReturnType<typeof analyzeSession>, flags: Record<string, string | boolean>): void {
-  const s = a.summary
-  const line = (label: string, val: string) => process.stdout.write('  ' + label.padEnd(18) + val + '\n')
-  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, displayTitle(a, flags)) + '\n')
-  process.stdout.write(paint(C.dim, `  ${a.session.source} · ${a.session.id}\n\n`))
-  line('quality', qualityLine(a))
-  line('time', `${fmtMs(s.wallMs)} wall · ${fmtMs(s.activeMs)} active · ${fmtMs(s.humanWaitMs)} waiting`)
-  line('tokens', `${fmtTokens(s.totalTokens)} · ${(s.cacheHitRatio * 100).toFixed(0)}% cache · ${fmtTokens(a.tokens.byKind.output)} output`)
-  line('turns', `${s.turns} (${s.humanTurns} human)`)
-  line('tools', `${s.toolCalls} calls · ${s.toolErrors} errors`)
-  if (s.agents) line('agents', `${s.agents} runs · ${(a.agents.maxConcurrency)} max parallel · ${fmtTokens(a.tokens.agents)} tokens`)
-  line('context', `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? ' of ' + fmtTokens(a.context.contextWindow) : ''} · ${s.compactions} compactions`)
-  process.stdout.write('\n' + paint(C.b, '  findings') + '\n')
-  if (!a.insights.length) process.stdout.write(paint(C.g, '    clean: no findings\n'))
-  for (const ins of a.insights.slice(0, 6)) {
-    const mark = ins.severity === 'high' ? paint(C.r, '●') : ins.severity === 'medium' ? paint(C.y, '●') : paint(C.dim, '●')
-    const save = ins.savings?.tokens ? paint(C.o, `  save ~${fmtTokens(ins.savings.tokens)} tokens`) : ins.savings?.ms ? paint(C.o, `  save ~${fmtMs(ins.savings.ms)}`) : ''
-    process.stdout.write(`    ${mark} ${ins.title}${save}\n`)
-  }
-  process.stdout.write('\n' + paint(C.dim, `  run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report\n`))
-  if (!a.parse.reconciliation.ok) process.stdout.write(paint(C.y, `  ⚠ token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%\n`))
-}
-
-function qualityLine(a: ReturnType<typeof analyzeSession>): string {
-  const o = a.summary.outcomes
-  const bits: string[] = []
-  if (o.prLinks.length) bits.push(`${o.prLinks.length} PR`)
-  if (o.gitCommits) bits.push(`${o.gitCommits} commits`)
-  if (o.testRuns) bits.push(`${o.testRuns} test runs${o.testRunsFailed ? ' (' + o.testRunsFailed + ' failed)' : ''}`)
-  if (o.filesEdited + o.filesWritten) bits.push(`${o.filesEdited + o.filesWritten} files changed`)
-  return bits.join(' · ') || 'no commits/PRs/tests detected'
 }
 
 async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
@@ -291,15 +263,7 @@ async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
     process.stdout.write(JSON.stringify(rows, null, 2) + '\n')
     return
   }
-  process.stdout.write(paint(C.b, `\n${plural(all.length, 'session')}${flagBool(flags, 'global') ? ' (all roots)' : ''}\n\n`))
-  for (const s of rows) {
-    const when = new Date(s.mtimeMs).toISOString().slice(0, 16).replace('T', ' ')
-    process.stdout.write(
-      `  ${paint(C.o, s.sessionId.slice(0, 8))}  ${paint(C.dim, when)}  ${(s.sizeBytes / 1e6).toFixed(1).padStart(5)}MB  ${s.hasSidecarDir ? paint(C.dim, '⛓ ' + s.subagentFiles.length) : '    '}  ${basename(s.projectSlug)}\n`,
-    )
-  }
-  if (!all.length) process.stdout.write(paint(C.dim, `  No sessions found. Is Claude Code installed? A transcript path also works: orangu report <path.jsonl>\n`))
-  else process.stdout.write(paint(C.dim, `\n  orangu report <id>   ·   orangu analyze <id>   ·   orangu harness\n`))
+  process.stdout.write(listRows(out, rows, { total: all.length, global: flagBool(flags, 'global') }).join('\n') + '\n')
 }
 
 async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
@@ -319,7 +283,11 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   if (!refs.length) fail(`No sessions found for ${scopeLabel}.`)
   const max = Number(flagStr(flags, 'limit') ?? (scope === 'global' ? '500' : '200'))
   const use = refs.slice(0, Number.isNaN(max) ? refs.length : max)
-  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzing ${plural(use.length, 'session')}…\n`))
+  const quiet = flagBool(flags, 'quiet') || flagBool(flags, 'json')
+  const t0 = performance.now()
+  const sp = spinner(err)
+  progress = sp
+  if (!quiet) sp.start(`analyzing ${plural(use.length, 'session')}`)
   const jobsStr = flagStr(flags, 'jobs', 'j')
   const jobsN = jobsStr !== undefined ? Math.max(1, Math.floor(Number(jobsStr)) || 1) : defaultJobs()
   // the pool re-loads the CLI bundle as its worker entry, so it only runs from the built file
@@ -331,9 +299,11 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
     const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION, now: Date.now(), cacheEnabled })
     analyses = r.analyses
     failed = r.failed
-    if (!flagBool(flags, 'quiet')) {
-      process.stderr.write(paint(C.dim, `jobs: ${jobsN}\n`))
-      if (cacheEnabled) process.stderr.write(paint(C.dim, `cache: ${r.hits} hits, ${r.misses} misses\n`))
+    sp.stop(quiet ? undefined : doneLine(err, { sizeBytes: use.reduce((n, ref) => n + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }))
+    progress = undefined
+    if (!flagBool(flags, 'quiet') && flagBool(flags, 'verbose')) {
+      process.stderr.write(row(err, 'jobs', String(jobsN), { style: 'dim' }) + '\n')
+      if (cacheEnabled) process.stderr.write(row(err, 'cache', `${r.hits} hits, ${r.misses} misses`, { style: 'dim' }) + '\n')
     }
   } else {
     const cache = makeCache(flags)
@@ -344,6 +314,8 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
         failed++
       }
     }
+    sp.stop(quiet ? undefined : doneLine(err, { sizeBytes: use.reduce((n, ref) => n + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }))
+    progress = undefined
     printCacheStats(cache, flags)
   }
   const agg = aggregate(analyses, scopeLabel, Date.now())
@@ -352,7 +324,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   const outFile = flagStr(flags, 'o', 'out')
   if (outFile) {
     await writePrivateOutput(resolve(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }))
-    process.stderr.write(paint(C.g, '✓ ') + `aggregate written to ${resolve(outFile)}\n`)
+    if (!quiet) process.stderr.write(row(err, 'written', resolve(outFile)) + '\n')
     if (!flagBool(flags, 'json')) {
       if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
       return
@@ -367,8 +339,8 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
 }
 
 function printAggregate(a: ReturnType<typeof aggregate>): void {
-  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, a.scope) + '\n')
-  process.stdout.write(paint(C.dim, `  ${plural(a.sessionCount, 'session')}\n\n`))
+  process.stdout.write('\n' + paint(out, ['bold', 'accent'], 'orangu') + '  ' + paint(out, 'bold', a.scope) + '\n')
+  process.stdout.write(paint(out, 'dim', `  ${plural(a.sessionCount, 'session')}\n\n`))
   const line = (l: string, v: string) => process.stdout.write('  ' + l.padEnd(20) + v + '\n')
   line('total tokens', fmtTokens(a.totals.tokens))
   line('tool calls', `${a.totals.toolCalls} (${a.totals.toolErrors} errors, ${(a.averages.toolErrorRate * 100).toFixed(1)}%)`)
@@ -378,16 +350,16 @@ function printAggregate(a: ReturnType<typeof aggregate>): void {
   line('tokens / human turn', fmtTokens(a.averages.tokensPerHumanTurn))
   line('cache hit ratio', (a.averages.cacheHitRatio * 100).toFixed(1) + '%')
   if (a.byModel.length) {
-    process.stdout.write('\n' + paint(C.b, '  tokens by model\n'))
+    process.stdout.write('\n' + paint(out, 'bold', '  tokens by model\n'))
     for (const m of a.byModel.slice(0, 6)) process.stdout.write(`    ${m.key.padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${m.count} session${m.count === 1 ? '' : 's'}\n`)
   }
   if (a.crossFindings.length) {
-    process.stdout.write('\n' + paint(C.b, '  recurring findings (across sessions)\n'))
+    process.stdout.write('\n' + paint(out, 'bold', '  recurring findings (across sessions)\n'))
     // The bounded figure (median per session × sessions) so one outlier session cannot inflate the claim.
-    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(C.o, (f.boundedSavingsTokens ? '~' + fmtTokens(f.boundedSavingsTokens) : '–').padStart(8))}  ${f.title}  ${paint(C.dim, '(' + plural(f.sessions, 'session') + ')')}\n`)
+    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(out, 'accent', (f.boundedSavingsTokens ? '~' + fmtTokens(f.boundedSavingsTokens) : '–').padStart(8))}  ${f.title}  ${paint(out, 'dim', '(' + plural(f.sessions, 'session') + ')')}\n`)
   }
   if (a.recurringErrors.length) {
-    process.stdout.write('\n' + paint(C.b, '  recurring tool errors (environment problems)\n'))
+    process.stdout.write('\n' + paint(out, 'bold', '  recurring tool errors (environment problems)\n'))
     // Under the default strip every signature is blank, so N identical rows would say nothing: collapse per tool.
     const hidden = new Map<string, { total: number; groups: number; sessions: number }>()
     for (const e of a.recurringErrors) {
@@ -398,16 +370,16 @@ function printAggregate(a: ReturnType<typeof aggregate>): void {
       h.sessions = Math.max(h.sessions, e.sessions)
       hidden.set(e.tool, h)
     }
-    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) process.stdout.write(`    ${paint(C.r, String(e.total).padStart(4))}×  ${e.tool}: ${e.signature}  ${paint(C.dim, '(' + plural(e.sessions, 'session') + ')')}\n`)
-    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(C.r, String(h.total).padStart(4))}×  ${tool}: ${plural(h.groups, 'recurring signature')}, text hidden; use --include-text  ${paint(C.dim, '(' + plural(h.sessions, 'session') + ')')}\n`)
+    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) process.stdout.write(`    ${paint(out, 'bad', String(e.total).padStart(4))}×  ${e.tool}: ${e.signature}  ${paint(out, 'dim', '(' + plural(e.sessions, 'session') + ')')}\n`)
+    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out, 'bad', String(h.total).padStart(4))}×  ${tool}: ${plural(h.groups, 'recurring signature')}, text hidden; use --include-text  ${paint(out, 'dim', '(' + plural(h.sessions, 'session') + ')')}\n`)
   }
   if (a.topReReadFiles.length) {
-    process.stdout.write('\n' + paint(C.b, '  most re-read files (context weight)\n'))
-    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(C.dim, '(' + plural(f.sessions, 'session') + ')')}\n`)
+    process.stdout.write('\n' + paint(out, 'bold', '  most re-read files (context weight)\n'))
+    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(out, 'dim', '(' + plural(f.sessions, 'session') + ')')}\n`)
   }
-  process.stdout.write('\n' + paint(C.b, '  heaviest sessions (by tokens)\n'))
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(C.dim, s.title ? s.title.slice(0, 50) : '(title hidden; use --include-text)')}\n`)
-  process.stdout.write(paint(C.dim, `\n  add --json for the full machine-readable aggregate\n`))
+  process.stdout.write('\n' + paint(out, 'bold', '  heaviest sessions (by tokens)\n'))
+  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, 'dim', s.title ? s.title.slice(0, 50) : '(title hidden; use --include-text)')}\n`)
+  process.stdout.write(paint(out, 'dim', `\n  add --json for the full machine-readable aggregate\n`))
 }
 
 async function cmdServe(flags: Record<string, string | boolean>): Promise<void> {
@@ -421,7 +393,7 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
   const opts: ServeOptions = {
     port,
     // policy: open by default when TTY; --no-open suppresses
-    open: !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || Boolean(isTTY)),
+    open: !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || out.tty),
     // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
     includeText: !flagBool(flags, 'no-include-text'),
     // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
@@ -436,9 +408,9 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
   if (requestedAutomaticLaunch) process.stderr.write('  --allow-claude is retired: the report now provides copy-only Claude/Codex handoffs.\n')
   const srv = await startServe(opts)
   process.stderr.write(
-    paint(C.o, paint(C.b, 'orangu serve')) +
+    paint(err, ['bold', 'accent'], 'orangu serve') +
       ` · ${srv.url}\n` +
-      paint(C.dim, `  loopback + private capability · model handoff: copy-only · watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions · ctrl-c stops\n`),
+      paint(err, 'dim', `  loopback + private capability · model handoff: copy-only · watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions · ctrl-c stops\n`),
   )
   if (opts.open) openInBrowser(srv.url)
   process.on('SIGINT', () => {
@@ -451,11 +423,11 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
 }
 
 function printHelp(): void {
-  process.stdout.write(`${isTTY ? MASCOT_ASCII + '\n' : ''}
-${paint(C.b, 'orangu')} v${VERSION}: observe the run, then improve the next outcome.
+  process.stdout.write(`${out.tty ? MASCOT_ASCII + '\n' : ''}
+${paint(out, 'bold', 'orangu')} v${VERSION}: observe the run, then improve the next outcome.
 Deterministic observability for Claude Code sessions. No network calls.
 
-${paint(C.b, 'usage')}
+${paint(out, 'bold', 'usage')}
   orangu                       analyze the latest session; print the next step
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
@@ -467,9 +439,9 @@ ${paint(C.b, 'usage')}
                                --port <n> · --open/--no-open · --max-live <n>
                                --no-include-text · --global · --cwd <dir>${EXTRA_HELP.map((l) => '\n' + l).join('')}
 
-${paint(C.b, 'session')}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
+${paint(out, 'bold', 'session')}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
 
-${paint(C.b, 'flags')}
+${paint(out, 'bold', 'flags')}
   -o, --out <file>       write the report/JSON here (default: temp dir)
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
@@ -484,12 +456,15 @@ ${paint(C.b, 'flags')}
   --root <dir>           scan only this Claude config dir (comma-separated list)
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
+  --verbose              also print the cache diagnostic (stderr)
+  --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
+                         are honoured; ORANGU_NO_ANIMATION=1 stops the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
   --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
-${paint(C.dim, 'privacy: generated locally, zero network requests, secrets redacted by default.')}
+${paint(out, 'dim', 'privacy: generated locally, zero network requests, secrets redacted by default.')}
 `)
 }
 
@@ -501,6 +476,7 @@ async function main(): Promise<void> {
     positionals.push(flags['no-cache'] as string)
     flags['no-cache'] = true
   }
+  detectStreams(flags)
   if (flagBool(flags, 'version')) {
     process.stdout.write(VERSION + '\n')
     return

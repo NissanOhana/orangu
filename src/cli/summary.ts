@@ -75,7 +75,7 @@ export interface NextStep {
   finding?: string
   /** the short `claude "/orangu:improve sg_…"` command, or the long form when the store failed */
   next?: string
-  /** why the store could not be written; the long form follows on the next row */
+  /** why the store could not be written (one line); the long form follows on the next row */
   storeNote?: string
 }
 
@@ -83,7 +83,13 @@ export interface NextStep {
 export function nextStepLines(caps: Caps, step: NextStep): string[] {
   if (!step.finding) return [row(caps, 'finding', 'none: this session ran clean', { style: 'good' })]
   const lines = [row(caps, 'finding', step.finding, { style: 'bold' })]
-  if (step.storeNote) lines.push(row(caps, 'store', step.storeNote, { style: 'warn' }))
+  if (step.storeNote) {
+    // the reason is cut, never the promise that the long form follows
+    const head = 'unavailable: '
+    const tail = '; long form follows'
+    const reason = truncate(step.storeNote, valueBudget(caps) - head.length - tail.length, caps)
+    lines.push(row(caps, 'store', head + reason + tail, { style: 'warn', raw: true }))
+  }
   if (step.next) lines.push(row(caps, 'next', step.next, { raw: Boolean(step.storeNote) }))
   const [add, install] = PLUGIN_INSTALL.split(' · ')
   lines.push(row(caps, 'plugin', add ?? PLUGIN_INSTALL))

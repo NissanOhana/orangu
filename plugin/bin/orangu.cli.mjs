@@ -1,5 +1,5 @@
 // src/cli/main.ts
-import { basename as basename9, join as join9, resolve as resolve10 } from "node:path";
+import { basename as basename10, join as join9, resolve as resolve10 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -29,7 +29,9 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "allow-claude",
   "estimate",
   "for-proposal",
-  "for-apply"
+  "for-apply",
+  "verbose",
+  "no-color"
 ]);
 var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   ...BOOL_FLAGS,
@@ -737,7 +739,7 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
     }
   }
   const seen = /* @__PURE__ */ new Set();
-  const out = [];
+  const out2 = [];
   for (const r of roots) {
     if (!existsSync(join2(r, "projects"))) continue;
     let real = r;
@@ -747,9 +749,9 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
     }
     if (seen.has(real)) continue;
     seen.add(real);
-    out.push(r);
+    out2.push(r);
   }
-  return out;
+  return out2;
 }
 function projectSlug(cwd) {
   return cwd.replace(/[^A-Za-z0-9-]/g, "-");
@@ -888,7 +890,7 @@ async function sessionRefFor(projectPath, file, projectsRoot, entryBudget) {
 async function projectDirsForCwd(root, cwd, entryBudget) {
   const exact = join2(root, projectSlug(cwd));
   if (existsSync(exact)) return [exact];
-  const out = [];
+  const out2 = [];
   for (const name of await safeReaddir(root, entryBudget)) {
     const p = join2(root, name);
     try {
@@ -901,9 +903,9 @@ async function projectDirsForCwd(root, cwd, entryBudget) {
     const f = files2[0];
     if (!f) continue;
     const c = await peekCwd(join2(p, f));
-    if (c === cwd) out.push(p);
+    if (c === cwd) out2.push(p);
   }
-  return out;
+  return out2;
 }
 async function peekCwd(path) {
   let handle;
@@ -959,7 +961,7 @@ async function listSessionsWithBudget(opts, budget, entryBudget) {
   const root = await canonicalProjectsRoot(configDir);
   if (!root) return [];
   const dirs = opts.cwd ? await projectDirsForCwd(root, resolve2(opts.cwd), entryBudget) : (await safeReaddir(root, entryBudget)).map((n2) => join2(root, n2));
-  const out = [];
+  const out2 = [];
   for (const d of dirs) {
     let st;
     try {
@@ -973,11 +975,11 @@ async function listSessionsWithBudget(opts, budget, entryBudget) {
       if (budget.remaining <= 0) throw new Error(`session discovery exceeds ${budget.limit} sessions`);
       budget.remaining--;
       const ref = await sessionRefFor(d, f, root, entryBudget);
-      if (ref) out.push(ref);
+      if (ref) out2.push(ref);
     }
   }
-  out.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return out;
+  out2.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return out2;
 }
 async function resolveSession(ref, opts = {}) {
   const r = ref.trim();
@@ -1114,17 +1116,17 @@ function byWeekOf(sessions, weeks = 12) {
   if (latest === void 0) return [];
   const lastWeek = isoWeekStartUtc(latest);
   const firstWeek = lastWeek - (weeks - 1) * WEEK_MS;
-  const out = [];
-  for (let i = 0; i < weeks; i++) out.push({ weekStartUtc: firstWeek + i * WEEK_MS, tokens: 0, sessions: 0 });
+  const out2 = [];
+  for (let i = 0; i < weeks; i++) out2.push({ weekStartUtc: firstWeek + i * WEEK_MS, tokens: 0, sessions: 0 });
   for (const s of sessions) {
     if (s.startedAt === void 0) continue;
     const idx = Math.floor((isoWeekStartUtc(s.startedAt) - firstWeek) / WEEK_MS);
-    const b = out[idx];
+    const b = out2[idx];
     if (!b) continue;
     b.tokens += s.tokens;
     b.sessions++;
   }
-  return out;
+  return out2;
 }
 var EXAMPLE_SESSIONS = 5;
 function titlePatternOf(title) {
@@ -1760,14 +1762,14 @@ var PATTERNS = [
 ];
 var counter = 0;
 function scrubStr(s) {
-  let out = s;
+  let out2 = s;
   for (const [re, rep] of PATTERNS) {
-    out = out.replace(re, () => {
+    out2 = out2.replace(re, () => {
       counter++;
       return rep;
     });
   }
-  return out;
+  return out2;
 }
 function basename3(p) {
   return p.split(/[\\/]/).filter(Boolean).at(-1) ?? p;
@@ -1844,15 +1846,15 @@ var UNKNOWN_COUNT_MAP_KEYS = /* @__PURE__ */ new Set([
 ]);
 function scrubOne(s, opts) {
   if (!opts.scrub) return s;
-  let out = scrubStr(s);
+  let out2 = scrubStr(s);
   for (const re of [opts.homeRe, opts.homeSlugRe]) {
     if (!re) continue;
-    out = out.replace(re, () => {
+    out2 = out2.replace(re, () => {
       counter++;
       return "~";
     });
   }
-  return out;
+  return out2;
 }
 function isAgentRecord(obj2) {
   if ("toolUseId" in obj2 || "category" in obj2) return false;
@@ -1886,12 +1888,12 @@ function strippedCountMap(value, opts) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return walk(value, opts);
   const source = value;
   if (!opts.stripText) {
-    const out = /* @__PURE__ */ new Map();
+    const out2 = /* @__PURE__ */ new Map();
     for (const [key, count] of Object.entries(source)) {
       const publicKey = scrubOne(key, opts);
-      out.set(publicKey, typeof count === "number" ? (Number(out.get(publicKey)) || 0) + count : walk(count, opts));
+      out2.set(publicKey, typeof count === "number" ? (Number(out2.get(publicKey)) || 0) + count : walk(count, opts));
     }
-    return Object.fromEntries(out);
+    return Object.fromEntries(out2);
   }
   const total = Object.values(source).reduce((sum2, count) => sum2 + (typeof count === "number" ? count : 0), 0);
   return total ? { [STRIPPED_KEY]: total } : {};
@@ -1900,13 +1902,13 @@ function walk(obj2, opts) {
   if (typeof obj2 === "string") return scrubOne(obj2, opts);
   if (Array.isArray(obj2)) return obj2.map((x) => walk(x, opts));
   if (obj2 && typeof obj2 === "object") {
-    const out = /* @__PURE__ */ new Map();
+    const out2 = /* @__PURE__ */ new Map();
     const source = obj2;
     const unknownRecordTypes = source["unknownRecordTypes"];
     const unknownRecordKeys = unknownRecordTypes && typeof unknownRecordTypes === "object" && !Array.isArray(unknownRecordTypes) ? new Set(Object.keys(unknownRecordTypes)) : void 0;
     for (const [k, v] of Object.entries(source)) {
       if (UNKNOWN_COUNT_MAP_KEYS.has(k)) {
-        out.set(k, strippedCountMap(v, opts));
+        out2.set(k, strippedCountMap(v, opts));
         continue;
       }
       if (k === "recordCounts" && v && typeof v === "object" && !Array.isArray(v)) {
@@ -1916,49 +1918,49 @@ function walk(obj2, opts) {
           const publicKey = scrubOne(recordType, opts);
           counts.set(publicKey, typeof count === "number" ? (Number(counts.get(publicKey)) || 0) + count : walk(count, opts));
         }
-        out.set(k, Object.fromEntries(counts));
+        out2.set(k, Object.fromEntries(counts));
         continue;
       }
       if (opts.stripText && PRIVATE_STRING_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out.set(k, []);
+        out2.set(k, []);
         continue;
       }
       if (opts.stripText && typeof v === "string" && stripsText(k, source)) {
-        out.set(k, "");
+        out2.set(k, "");
         continue;
       }
       if (opts.stripText && k === "narrative" && typeof v === "string") {
-        out.set(k, scrubOne(v.replace(NARRATIVE_TITLE_RE, "In this session, "), opts));
+        out2.set(k, scrubOne(v.replace(NARRATIVE_TITLE_RE, "In this session, "), opts));
         continue;
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === "string" && (v.includes("/") || v.includes("\\"))) {
-        out.set(k, scrubOne(basename3(v), opts));
+        out2.set(k, scrubOne(basename3(v), opts));
         continue;
       }
       if (opts.stripPaths && PATH_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out.set(k, v.map((x) => typeof x === "string" ? scrubOne(basename3(x), opts) : walk(x, opts)));
+        out2.set(k, v.map((x) => typeof x === "string" ? scrubOne(basename3(x), opts) : walk(x, opts)));
         continue;
       }
       if (PROJECT_KEYS.has(k) && typeof v === "string") {
-        out.set(k, projectIdentity(v, opts));
+        out2.set(k, projectIdentity(v, opts));
         continue;
       }
       if (k === "byProject" && Array.isArray(v)) {
-        out.set(
+        out2.set(
           k,
           v.map((item) => {
-            const row = walk(item, opts);
-            if (row && typeof row === "object" && !Array.isArray(row) && typeof row.key === "string") {
-              return { ...row, key: projectIdentity(item.key, opts) };
+            const row2 = walk(item, opts);
+            if (row2 && typeof row2 === "object" && !Array.isArray(row2) && typeof row2.key === "string") {
+              return { ...row2, key: projectIdentity(item.key, opts) };
             }
-            return row;
+            return row2;
           })
         );
         continue;
       }
-      out.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
+      out2.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
     }
-    return Object.fromEntries(out);
+    return Object.fromEntries(out2);
   }
   return obj2;
 }
@@ -2259,29 +2261,29 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
   if (typeof content === "string") return [{ kind: "text", text: keepText ? content : "" }];
   const a = arr(content);
   if (!a) return [];
-  const out = [];
+  const out2 = [];
   for (const raw of a) {
     const b = obj(raw);
     if (!b) continue;
     const t = str(b["type"]) ?? "other";
     switch (t) {
       case "text":
-        out.push({ kind: "text", text: keepText ? str(b["text"]) ?? "" : "" });
+        out2.push({ kind: "text", text: keepText ? str(b["text"]) ?? "" : "" });
         break;
       case "thinking": {
         const th = str(b["thinking"]) ?? "";
-        out.push({ kind: "thinking", chars: th.length, text: keepText ? th : void 0 });
+        out2.push({ kind: "thinking", chars: th.length, text: keepText ? th : void 0 });
         break;
       }
       case "redacted_thinking":
-        out.push({ kind: "redacted_thinking", rawType: t, bytes: bytesOf(b["data"]) });
+        out2.push({ kind: "redacted_thinking", rawType: t, bytes: bytesOf(b["data"]) });
         break;
       case "tool_use":
-        out.push({ kind: "tool_use", toolUseId: str(b["id"]) ?? "", name: str(b["name"]) ?? "unknown", input: b["input"] });
+        out2.push({ kind: "tool_use", toolUseId: str(b["id"]) ?? "", name: str(b["name"]) ?? "unknown", input: b["input"] });
         break;
       case "tool_result": {
         const c = b["content"];
-        out.push({
+        out2.push({
           kind: "tool_result",
           toolUseId: str(b["tool_use_id"]) ?? "",
           text: textOfContent(c),
@@ -2292,20 +2294,20 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
       }
       case "image":
       case "document":
-        out.push({ kind: t, rawType: t, bytes: bytesOf(b["source"]) });
+        out2.push({ kind: t, rawType: t, bytes: bytesOf(b["source"]) });
         break;
       case "fallback": {
         const from = obj(b["from"]);
         const to = obj(b["to"]);
-        out.push({ kind: "other", rawType: "fallback", bytes: 0, note: `model fallback ${str(from?.["model"]) ?? "?"} \u2192 ${str(to?.["model"]) ?? "?"}` });
+        out2.push({ kind: "other", rawType: "fallback", bytes: 0, note: `model fallback ${str(from?.["model"]) ?? "?"} \u2192 ${str(to?.["model"]) ?? "?"}` });
         break;
       }
       default:
         addCount(unknownBlockTypes, t);
-        out.push({ kind: "other", rawType: t, bytes: bytesOf(b) });
+        out2.push({ kind: "other", rawType: t, bytes: bytesOf(b) });
     }
   }
-  return out;
+  return out2;
 }
 var COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/;
 var COMMAND_ARGS_RE = /<command-args>\s*([^<]*?)\s*<\/command-args>/;
@@ -3524,9 +3526,9 @@ function resolveModel(rawId) {
   const hit = cache.get(raw);
   if (hit) return hit;
   const { id, tags } = normalizeModelId(raw);
-  let out;
+  let out2;
   if (raw in T.nonModelSentinels || id in T.nonModelSentinels) {
-    out = { rawId: raw, normalizedId: id, displayName: raw, family: "none", estimatedMatch: false, synthetic: true, tags };
+    out2 = { rawId: raw, normalizedId: id, displayName: raw, family: "none", estimatedMatch: false, synthetic: true, tags };
   } else {
     let catalogId;
     let estimatedMatch = false;
@@ -3554,7 +3556,7 @@ function resolveModel(rawId) {
     }
     const entry = catalogId ? T.models[catalogId] : void 0;
     const unverified = entry ? entry.verified === false : false;
-    out = {
+    out2 = {
       rawId: raw,
       normalizedId: id,
       catalogId,
@@ -3566,8 +3568,8 @@ function resolveModel(rawId) {
       tags
     };
   }
-  cache.set(raw, out);
-  return out;
+  cache.set(raw, out2);
+  return out2;
 }
 function guessFamily(id) {
   for (const f of ["mythos", "fable", "opus", "sonnet", "haiku"]) if (id.includes(f)) return f;
@@ -4246,16 +4248,16 @@ function resetInsightIds() {
   seq = 0;
 }
 var rereadFiles = (ctx) => {
-  const out = [];
+  const out2 = [];
   const rr = ctx.files.mostReRead.filter((f) => f.redundantReads >= 2);
-  if (!rr.length) return out;
+  if (!rr.length) return out2;
   const top = rr.slice(0, 5);
   const wastedBytes = top.reduce((a, f) => a + f.bytesRead / Math.max(1, f.reads) * f.redundantReads, 0);
   const wastedTokens = Math.round(wastedBytes / BYTES_PER_TOKEN);
   const laterRequests = Math.max(1, ctx.context.series.filter((p) => !p.agentId).length / 2);
   const carriedTokens = capSavings(ctx, Math.round(wastedTokens + wastedTokens * laterRequests));
   const totalReReads = rr.reduce((a, f) => a + f.redundantReads, 0);
-  out.push(
+  out2.push(
     mk({
       ruleId: "reread-files",
       severity: totalReReads >= 10 ? "high" : totalReReads >= 5 ? "medium" : "low",
@@ -4269,7 +4271,7 @@ var rereadFiles = (ctx) => {
       personas: ["developer", "lead"]
     })
   );
-  return out;
+  return out2;
 };
 var repeatedCommands = (ctx) => {
   const counts = /* @__PURE__ */ new Map();
@@ -4300,14 +4302,14 @@ var repeatedCommands = (ctx) => {
   ];
 };
 var toolErrors = (ctx) => {
-  const out = [];
+  const out2 = [];
   const total = ctx.s.toolCalls.length;
   const errs = ctx.s.toolCalls.filter((c) => c.isError);
-  if (!errs.length) return out;
+  if (!errs.length) return out2;
   const rate = errs.length / Math.max(1, total);
   const groups = ctx.tools.errorGroups.filter((g) => g.count >= 3).slice(0, 5);
   if (rate >= 0.1 || groups.length) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "tool-errors",
         severity: rate >= 0.2 || (groups[0]?.count ?? 0) >= 6 ? "high" : rate >= 0.1 || groups.length ? "medium" : "low",
@@ -4322,7 +4324,7 @@ var toolErrors = (ctx) => {
       })
     );
   }
-  return out;
+  return out2;
 };
 var oversizedResults = (ctx) => {
   const big = ctx.s.toolCalls.filter((c) => (c.resultBytes ?? 0) >= 4e4).sort((a, b) => (b.resultBytes ?? 0) - (a.resultBytes ?? 0));
@@ -4350,7 +4352,7 @@ var oversizedResults = (ctx) => {
   ];
 };
 var sequentialReads = (ctx) => {
-  const out = [];
+  const out2 = [];
   const runsPerTurn = /* @__PURE__ */ new Map();
   const byTurn = /* @__PURE__ */ new Map();
   for (const c of ctx.s.toolCalls) {
@@ -4384,8 +4386,8 @@ var sequentialReads = (ctx) => {
     }
     flush();
   }
-  if (!totalRuns) return out;
-  out.push(
+  if (!totalRuns) return out2;
+  out2.push(
     mk({
       ruleId: "sequential-reads",
       severity: totalCalls >= 20 ? "medium" : "low",
@@ -4399,15 +4401,15 @@ var sequentialReads = (ctx) => {
       personas: ["developer"]
     })
   );
-  return out;
+  return out2;
 };
 var contextPressure = (ctx) => {
-  const out = [];
+  const out2 = [];
   const win = ctx.context.contextWindow;
   const peak = ctx.context.peak;
   const comps = ctx.s.compactions.length;
   if (comps) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "compactions",
         severity: comps >= 3 ? "high" : comps >= 2 ? "medium" : "low",
@@ -4421,7 +4423,7 @@ var contextPressure = (ctx) => {
       })
     );
   } else if (win && peak > win * 0.7) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "context-near-limit",
         severity: "medium",
@@ -4435,7 +4437,7 @@ var contextPressure = (ctx) => {
       })
     );
   }
-  return out;
+  return out2;
 };
 var preambleWeight = (ctx) => {
   const base = ctx.context.baseline;
@@ -4458,12 +4460,12 @@ var preambleWeight = (ctx) => {
   ];
 };
 var cacheHealth = (ctx) => {
-  const out = [];
+  const out2 = [];
   const reqs = ctx.context.series.filter((p) => !p.agentId).length;
-  if (reqs < 8) return out;
+  if (reqs < 8) return out2;
   const ratio = ctx.context.cacheHitRatio;
   if (ratio < 0.6) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "low-cache-hit",
         severity: ratio < 0.4 ? "high" : "medium",
@@ -4477,7 +4479,7 @@ var cacheHealth = (ctx) => {
       })
     );
   }
-  return out;
+  return out2;
 };
 var humanWait = (ctx) => {
   const wall = ctx.time.wallMs ?? 0;
@@ -4499,13 +4501,13 @@ var humanWait = (ctx) => {
   ];
 };
 var agentEconomics = (ctx) => {
-  const out = [];
+  const out2 = [];
   const a = ctx.agents;
-  if (!a.runs.length) return out;
+  if (!a.runs.length) return out2;
   const share = ctx.tokens.totalTokens ? a.totals.totalTokens / ctx.tokens.totalTokens : 0;
   const idle = a.runs.filter((r) => r.hasTranscript && r.toolCallCount === 0 && r.messageCount <= 2);
   const noTranscript = a.runs.filter((r) => !r.hasTranscript).length;
-  out.push(
+  out2.push(
     mk({
       ruleId: "agent-fanout",
       severity: "info",
@@ -4519,7 +4521,7 @@ var agentEconomics = (ctx) => {
     })
   );
   if (idle.length) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "idle-agents",
         severity: "low",
@@ -4533,13 +4535,13 @@ var agentEconomics = (ctx) => {
       })
     );
   }
-  return out;
+  return out2;
 };
 var hooksOverhead = (ctx) => {
   const h = ctx.hooks;
-  const out = [];
+  const out2 = [];
   if (h.errors) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "hook-errors",
         severity: h.errors >= 5 ? "medium" : "low",
@@ -4554,7 +4556,7 @@ var hooksOverhead = (ctx) => {
     );
   }
   if (h.totalMs > 6e4 || ctx.time.activeMs && h.totalMs > ctx.time.activeMs * 0.05) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "hook-latency",
         severity: "low",
@@ -4569,13 +4571,13 @@ var hooksOverhead = (ctx) => {
       })
     );
   }
-  return out;
+  return out2;
 };
 var interruptionsAndErrors = (ctx) => {
-  const out = [];
+  const out2 = [];
   const q = ctx.quality;
   if (q.interruptions >= 2) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "interruptions",
         severity: q.interruptions >= 4 ? "medium" : "low",
@@ -4590,7 +4592,7 @@ var interruptionsAndErrors = (ctx) => {
     );
   }
   if (q.userCorrections.length >= 2) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "user-corrections",
         severity: q.userCorrections.length >= 4 ? "high" : "medium",
@@ -4605,7 +4607,7 @@ var interruptionsAndErrors = (ctx) => {
     );
   }
   if (q.apiErrors) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "api-errors",
         severity: q.apiErrors >= 5 ? "medium" : "low",
@@ -4621,7 +4623,7 @@ var interruptionsAndErrors = (ctx) => {
   }
   const fb = ctx.s.events.filter((e) => e.kind === "model_fallback");
   if (fb.length) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "model-fallback",
         severity: "medium",
@@ -4635,7 +4637,7 @@ var interruptionsAndErrors = (ctx) => {
       })
     );
   }
-  return out;
+  return out2;
 };
 var outputHeavyWrites = (ctx) => {
   let bytes = 0;
@@ -4913,12 +4915,12 @@ var slowTools = (ctx) => {
   ];
 };
 var agentHealth = (ctx) => {
-  const out = [];
+  const out2 = [];
   const hardFailed = ctx.agents.runs.filter((r) => r.status !== void 0 && /error|fail/i.test(r.status));
   const killed = ctx.agents.runs.filter((r) => r.status === "killed");
   const failed = [...hardFailed, ...killed];
   if (failed.length) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "failed-agents",
         severity: hardFailed.length >= 2 ? "medium" : "low",
@@ -4933,7 +4935,7 @@ var agentHealth = (ctx) => {
     );
   }
   if (ctx.agents.maxDepth >= 3) {
-    out.push(
+    out2.push(
       mk({
         ruleId: "deep-fanout",
         severity: "info",
@@ -4947,7 +4949,7 @@ var agentHealth = (ctx) => {
       })
     );
   }
-  return out;
+  return out2;
 };
 var skillTokenWeight = (ctx) => {
   if (!ctx.s.skills.length) return [];
@@ -5617,15 +5619,15 @@ var RULES = [
 var SEV_ORDER = { high: 3, medium: 2, low: 1, info: 0 };
 function runRules(ctx, rules = RULES) {
   resetInsightIds();
-  const out = [];
+  const out2 = [];
   for (const r of rules) {
     try {
-      out.push(...r(ctx));
+      out2.push(...r(ctx));
     } catch {
     }
   }
-  out.sort((a, b) => (SEV_ORDER[b.severity] ?? 0) - (SEV_ORDER[a.severity] ?? 0) || (b.savings?.tokens ?? 0) - (a.savings?.tokens ?? 0));
-  return out;
+  out2.sort((a, b) => (SEV_ORDER[b.severity] ?? 0) - (SEV_ORDER[a.severity] ?? 0) || (b.savings?.tokens ?? 0) - (a.savings?.tokens ?? 0));
+  return out2;
 }
 
 // src/analyze/analyze.ts
@@ -6143,7 +6145,7 @@ async function analyzeAllPooled(refs, o) {
         }
         assign();
       });
-      w.on("error", (err) => {
+      w.on("error", (err2) => {
         if (currentIdx >= 0 && results[currentIdx] === void 0) {
           failed++;
           done++;
@@ -6151,7 +6153,7 @@ async function analyzeAllPooled(refs, o) {
         alive--;
         void w.terminate();
         if (finishIfDone()) return;
-        if (alive === 0) rejectAll(err instanceof Error ? err : new Error(String(err)));
+        if (alive === 0) rejectAll(err2 instanceof Error ? err2 : new Error(String(err2)));
       });
       assign();
     }
@@ -6531,32 +6533,630 @@ async function watchSession(ref, flags, deps) {
   });
 }
 
-// src/serve/server.ts
-import { randomBytes as randomBytes3, timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
-import { cpus as cpus2 } from "node:os";
-
-// src/suggest/store.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
-import { constants as constants8 } from "node:fs";
-import { lstat as lstat7, mkdir as mkdir2, open as open8, realpath as realpath5, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname4, isAbsolute as isAbsolute4, join as join5 } from "node:path";
-
-// src/suggest/change-classes.ts
-var CHANGE_CLASS_DEFINITIONS = [
-  { id: "instruction", label: "Instruction files", description: "Persistent project guidance and conventions." },
-  { id: "script-cli", label: "Scripts and CLIs", description: "Repeatable actions with checkable output." },
-  { id: "hook", label: "Hooks", description: "Guaranteed actions at lifecycle boundaries." },
-  { id: "skill-create", label: "Skills to create", description: "Reusable knowledge and workflows specific to this setup." },
-  { id: "skill-discover", label: "Skills to discover", description: "Existing capabilities to evaluate before installing." },
-  { id: "subagent-agent", label: "Subagents and agents", description: "Isolated or specialized work with clear ownership." },
-  { id: "mcp", label: "MCP servers", description: "External tools and data the work actually needs." },
-  { id: "plugin", label: "Plugins", description: "A reusable package of related extensions." },
-  { id: "workflow-config", label: "Workflow and configuration", description: "How work is sequenced, checked, and repeated." }
+// src/cli/tty.ts
+import { hostname } from "node:os";
+import { pathToFileURL } from "node:url";
+var MACHINE_CAPS = { tty: false, color: 0, animate: false, hyperlinks: false, columns: 80, unicode: true };
+function ciSet(env) {
+  const ci = env["CI"];
+  return ci !== void 0 && ci !== "" && ci !== "false";
+}
+function detectCaps(stream, env = process.env, opts = {}) {
+  const platform2 = opts.platform ?? process.platform;
+  const tty = Boolean(stream.isTTY);
+  const dumb = env["TERM"] === "dumb";
+  const ci = ciSet(env);
+  let color = 0;
+  if (!opts.machine) {
+    const noColor = env["NO_COLOR"];
+    const force = env["FORCE_COLOR"];
+    if (noColor !== void 0 && noColor !== "") color = 0;
+    else if (force !== void 0) color = force === "0" || force === "false" ? 0 : force === "2" ? 2 : force === "3" ? 3 : 1;
+    else if (tty && !dumb) {
+      const depth = typeof stream.getColorDepth === "function" ? stream.getColorDepth(env) : 4;
+      color = depth >= 24 ? 3 : depth >= 8 ? 2 : depth >= 4 ? 1 : 0;
+    }
+  }
+  const animate = tty && !dumb && !ci && !opts.machine && env["ORANGU_NO_ANIMATION"] !== "1";
+  const unicode = platform2 !== "win32" ? env["TERM"] !== "linux" : Boolean(env["WT_SESSION"] || env["TERM_PROGRAM"] === "vscode" || env["ConEmuTask"]);
+  const columns = Math.max(40, Number.isFinite(stream.columns) && stream.columns > 0 ? stream.columns : 80);
+  const hyperlinks = !opts.machine && supportsHyperlinks(stream, env, ci);
+  return { tty, color, animate, hyperlinks, columns, unicode };
+}
+function supportsHyperlinks(stream, env, ci = ciSet(env)) {
+  const force = env["FORCE_HYPERLINK"];
+  if (force !== void 0) return !(force === "0" || force === "false" || force === "");
+  if (!stream.isTTY || ci || env["TEAMCITY_VERSION"]) return false;
+  if (env["WT_SESSION"]) return true;
+  if (/^(screen|tmux)/.test(env["TERM"] ?? "")) return false;
+  const prog = env["TERM_PROGRAM"];
+  const ver = env["TERM_PROGRAM_VERSION"] ?? "";
+  const major = Number(ver.split(".")[0]);
+  const minor = Number(ver.split(".")[1] ?? 0);
+  if (prog === "iTerm.app") return major > 3 || major === 3 && minor >= 1;
+  if (prog === "vscode") return major > 1 || major === 1 && minor >= 72 || major === 0;
+  if (prog === "WezTerm" || prog === "ghostty" || prog === "zed") return true;
+  if (env["VTE_VERSION"]) return Number(env["VTE_VERSION"]) >= 5e3 && env["VTE_VERSION"] !== "5000";
+  if (env["TERM"] === "xterm-kitty" || env["TERM"] === "alacritty") return true;
+  return false;
+}
+var ACCENT = { 0: "", 1: "33", 2: "38;5;209", 3: "38;2;217;119;87" };
+var SGR = { dim: "2", bold: "1", good: "32", warn: "33", bad: "31" };
+function paint(caps, style, s) {
+  if (caps.color === 0 || s === "") return s;
+  const styles = Array.isArray(style) ? style : [style];
+  const codes = styles.map((st) => st === "accent" ? ACCENT[caps.color] : SGR[st]).filter(Boolean);
+  if (!codes.length) return s;
+  return `\x1B[${codes.join(";")}m${s}\x1B[0m`;
+}
+var UNICODE_GLYPHS = { ok: "\u2713", mark: "\u25CF", sep: " \xB7 ", ellipsis: "\u2026", up: "\u2191", down: "\u2193" };
+var ASCII_GLYPHS = { ok: "ok", mark: "*", sep: " | ", ellipsis: "...", up: "up", down: "down" };
+function glyphs(caps) {
+  return caps.unicode ? UNICODE_GLYPHS : ASCII_GLYPHS;
+}
+var ANSI_OR_OSC = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+var ZERO_WIDTH = /^[\p{Mn}\p{Me}\p{Cf}\p{Cc}\p{Default_Ignorable_Code_Point}]/u;
+var EMOJI = new RegExp("\\p{Emoji_Presentation}|\\uFE0F", "u");
+var WIDE_RANGES = [
+  [4352, 4447],
+  [11904, 42191],
+  [44032, 55203],
+  [63744, 64255],
+  [65072, 65103],
+  [65280, 65376],
+  [65504, 65510],
+  [127744, 128591],
+  [129280, 129535],
+  [131072, 262141]
 ];
-var CHANGE_CLASSES = new Set(CHANGE_CLASS_DEFINITIONS.map((definition) => definition.id));
-function isChangeClass(value) {
-  return CHANGE_CLASSES.has(value);
+var isWide = (cp) => WIDE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi);
+var segmenter = new Intl.Segmenter(void 0, { granularity: "grapheme" });
+function stripAnsi(s) {
+  return s.replace(ANSI_OR_OSC, "");
+}
+function displayWidth(s) {
+  let w = 0;
+  for (const { segment } of segmenter.segment(stripAnsi(s))) {
+    const cp = segment.codePointAt(0);
+    if (cp >= 32 && cp <= 126) {
+      w += 1;
+      continue;
+    }
+    if (ZERO_WIDTH.test(segment)) continue;
+    w += EMOJI.test(segment) || isWide(cp) ? 2 : 1;
+  }
+  return w;
+}
+function truncate(s, budget, caps) {
+  const plain = stripAnsi(s);
+  if (displayWidth(plain) <= budget) return plain;
+  const ell = glyphs(caps).ellipsis;
+  const room = budget - displayWidth(ell);
+  if (room <= 0) return ell.slice(0, Math.max(0, budget));
+  let out2 = "";
+  let w = 0;
+  for (const { segment } of segmenter.segment(plain)) {
+    const sw = displayWidth(segment);
+    if (w + sw > room) break;
+    out2 += segment;
+    w += sw;
+  }
+  return out2 + ell;
+}
+function padCell(s, width, align = "l") {
+  const pad = Math.max(0, width - displayWidth(s));
+  return align === "l" ? s + " ".repeat(pad) : " ".repeat(pad) + s;
+}
+function fileLink(absPath, caps, host = hostname()) {
+  if (!caps.hyperlinks) return absPath;
+  const u = pathToFileURL(absPath);
+  const uri = `file://${host}${u.pathname}`.replace(/;/g, "%3B");
+  return `\x1B]8;;${uri}\x1B\\${absPath}\x1B]8;;\x1B\\`;
+}
+var HIDE_CURSOR = "\x1B[?25l";
+var SHOW_CURSOR = "\x1B[?25h";
+var CLEAR_LINE = "\r\x1B[2K";
+var FRAMES_UNICODE = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
+var FRAMES_ASCII = ["-", "\\", "|", "/"];
+var EXIT_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
+function onceOnExit(fn, proc = process) {
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
+    fn();
+  };
+  const onSignal = (sig) => {
+    run();
+    for (const s of EXIT_SIGNALS) proc.removeListener(s, onSignal);
+    proc.removeListener("exit", run);
+    proc.kill(proc.pid, sig);
+  };
+  proc.once("exit", run);
+  for (const s of EXIT_SIGNALS) proc.on(s, onSignal);
+  return {
+    dispose() {
+      run();
+      proc.removeListener("exit", run);
+      for (const s of EXIT_SIGNALS) proc.removeListener(s, onSignal);
+    }
+  };
+}
+function spinner(caps, stream = process.stderr, opts = {}) {
+  const frames = caps.unicode ? FRAMES_UNICODE : FRAMES_ASCII;
+  const ms2 = opts.intervalMs ?? (caps.unicode ? 80 : 130);
+  let i = 0;
+  let text2 = "";
+  let timer;
+  let hook;
+  const draw = () => {
+    const frame = paint(caps, "accent", frames[i++ % frames.length]);
+    stream.write(CLEAR_LINE + frame + " " + truncate(text2, caps.columns - 4, caps));
+  };
+  const clear = () => {
+    if (!timer) return;
+    clearInterval(timer);
+    timer = void 0;
+    stream.write(CLEAR_LINE + SHOW_CURSOR);
+  };
+  return {
+    start(t) {
+      text2 = t;
+      if (!caps.animate || timer) return;
+      hook = hook ?? onceOnExit(clear, opts.proc);
+      stream.write(HIDE_CURSOR);
+      draw();
+      timer = setInterval(draw, ms2);
+      timer.unref();
+    },
+    update(t) {
+      text2 = t;
+      if (timer) draw();
+    },
+    pause: clear,
+    stop(final) {
+      clear();
+      hook?.dispose();
+      hook = void 0;
+      if (final !== void 0) stream.write(final + "\n");
+    }
+  };
+}
+
+// src/cli/summary.ts
+import { basename as basename6 } from "node:path";
+
+// src/harness/crosswalk.ts
+import { basename as basename5 } from "node:path";
+
+// src/harness/types.ts
+var HARNESS_SCHEMA_VERSION = "1";
+var HARNESS_ROW_CAP = 50;
+
+// src/harness/crosswalk.ts
+var SCOPE_PRECEDENCE = ["repo-local", "repo", "global-local", "global"];
+var approxTokens = (bytes) => Math.ceil(bytes / 4);
+function statusOf(declared2, observations) {
+  if (!declared2) return "undeclared";
+  return observations > 0 ? "used" : "idle";
+}
+function ranked(rows, n2, k) {
+  return rows.slice().sort((a, b) => n2(b) - n2(a) || (k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0)).slice(0, HARNESS_ROW_CAP);
+}
+function parseMcpToolName(name) {
+  if (!name.startsWith("mcp__")) return null;
+  const parts = name.split("__");
+  if (parts.length < 3) return null;
+  const server = parts[1] ?? "";
+  const tool = parts.slice(2).join("__");
+  return server && tool ? { server, tool } : null;
+}
+var norm = (p) => p.replace(/\\/g, "/");
+var isAbs = (p) => p.startsWith("/") || /^[A-Za-z]:\//.test(p);
+function expandHome(p, home) {
+  const s = norm(p);
+  if (!home) return s;
+  const h = norm(home).replace(/\/+$/, "");
+  if (s === "~") return h;
+  if (s.startsWith("~/")) return h + s.slice(1);
+  return s;
+}
+function resolveSessionPath(p, sessionCwd, home) {
+  const s = expandHome(p, home);
+  if (isAbs(s)) return s;
+  if (s.startsWith("~")) return null;
+  if (!sessionCwd) return null;
+  return norm(sessionCwd).replace(/\/+$/, "") + "/" + s;
+}
+function declared(inv, pick) {
+  for (const scope of SCOPE_PRECEDENCE) {
+    for (const s of inv.settings) {
+      if (s.scope !== scope) continue;
+      const v = pick(s);
+      if (v !== void 0 && v !== "") return v;
+    }
+  }
+  return void 0;
+}
+function sameEffort(a, b) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+function stripModelTag(m) {
+  return m.trim().toLowerCase().replace(/\[[^\]]*\]$/, "").trim();
+}
+var MODEL_FAMILY_ALIASES = /* @__PURE__ */ new Set(["opus", "sonnet", "haiku"]);
+function sameModel(configured, seen) {
+  const c = stripModelTag(configured);
+  const s = stripModelTag(seen);
+  if (c === s) return true;
+  return MODEL_FAMILY_ALIASES.has(c) && s.split("-").includes(c);
+}
+function crosswalk(inv, analyses, agg, opts = {}) {
+  const installedSkills = new Map(inv.skills.map((s) => [s.name, s]));
+  const canonicalSkill = (observed) => {
+    if (installedSkills.has(observed)) return observed;
+    const colon = observed.lastIndexOf(":");
+    if (colon > 0) {
+      const bare = observed.slice(colon + 1);
+      const entry = installedSkills.get(bare);
+      if (entry && (entry.plugin === void 0 || pluginName(entry.plugin) === observed.slice(0, colon))) return bare;
+    }
+    return observed;
+  };
+  const pluginName = (key) => key.split("@")[0] ?? key;
+  const skillObs = /* @__PURE__ */ new Map();
+  const skillObsAt = (rawName) => {
+    const name = canonicalSkill(rawName);
+    let e = skillObs.get(name);
+    if (!e) skillObs.set(name, e = { invocations: 0, sessions: 0, viaTool: 0, viaCommand: 0 });
+    return e;
+  };
+  for (const a of analyses) {
+    const here = /* @__PURE__ */ new Set();
+    for (const s of a.skills.byName) {
+      const e = skillObsAt(s.name);
+      e.invocations += s.count;
+      here.add(canonicalSkill(s.name));
+    }
+    for (const i of a.skills.invocations) {
+      const e = skillObsAt(i.name);
+      if (i.via === "tool") e.viaTool++;
+      else e.viaCommand++;
+      here.add(canonicalSkill(i.name));
+    }
+    for (const n2 of here) skillObsAt(n2).sessions++;
+  }
+  for (const r of agg.bySkill) {
+    const uses = r.extra?.["uses"] ?? 0;
+    if (uses > 0 && !skillObs.has(canonicalSkill(r.key))) skillObsAt(r.key).invocations += uses;
+  }
+  const skillRows = [];
+  for (const name of /* @__PURE__ */ new Set([...installedSkills.keys(), ...skillObs.keys()])) {
+    const o = skillObs.get(name);
+    const entry = installedSkills.get(name);
+    skillRows.push({
+      name,
+      ...entry ? { origin: entry.plugin ? `plugin:${entry.plugin}` : entry.origin } : {},
+      installed: !!entry,
+      invocations: o?.invocations ?? 0,
+      sessions: o?.sessions ?? 0,
+      viaTool: o?.viaTool ?? 0,
+      viaCommand: o?.viaCommand ?? 0,
+      status: statusOf(!!entry, o?.invocations ?? 0)
+    });
+  }
+  const mcpObs = /* @__PURE__ */ new Map();
+  const mcpObsAt = (name) => {
+    let e = mcpObs.get(name);
+    if (!e) mcpObs.set(name, e = { toolCalls: 0, tools: /* @__PURE__ */ new Set(), sessions: 0 });
+    return e;
+  };
+  for (const a of analyses) {
+    const here = /* @__PURE__ */ new Set();
+    for (const t of a.tools.byName) {
+      const parsed = parseMcpToolName(t.name);
+      if (!parsed) continue;
+      const e = mcpObsAt(parsed.server);
+      e.toolCalls += t.count;
+      e.tools.add(parsed.tool);
+      here.add(parsed.server);
+    }
+    for (const n2 of here) mcpObsAt(n2).sessions++;
+  }
+  for (const r of agg.byTool) {
+    const calls = r.extra?.["calls"] ?? 0;
+    const parsed = parseMcpToolName(r.key);
+    if (calls > 0 && parsed && !mcpObs.has(parsed.server)) {
+      const e = mcpObsAt(parsed.server);
+      e.toolCalls += calls;
+      e.tools.add(parsed.tool);
+    }
+  }
+  const configuredMcp = new Map(inv.mcpServers.map((m) => [m.name, m]));
+  const mcpRows = [];
+  for (const name of /* @__PURE__ */ new Set([...configuredMcp.keys(), ...mcpObs.keys()])) {
+    const o = mcpObs.get(name);
+    mcpRows.push({
+      name,
+      configured: configuredMcp.has(name),
+      toolCalls: o?.toolCalls ?? 0,
+      distinctTools: o?.tools.size ?? 0,
+      sessions: o?.sessions ?? 0,
+      status: statusOf(configuredMcp.has(name), o?.toolCalls ?? 0)
+    });
+  }
+  const agentObs = /* @__PURE__ */ new Map();
+  const agentObsAt = (name) => {
+    let e = agentObs.get(name);
+    if (!e) agentObs.set(name, e = { dispatches: 0, sessions: 0, models: /* @__PURE__ */ new Set() });
+    return e;
+  };
+  for (const a of analyses) {
+    const here = /* @__PURE__ */ new Set();
+    for (const t of a.agents.byType) {
+      const e = agentObsAt(t.agentType);
+      e.dispatches += t.count;
+      here.add(t.agentType);
+    }
+    for (const r of a.agents.runs) {
+      if (!r.agentType) continue;
+      const e = agentObsAt(r.agentType);
+      if (r.model) e.models.add(r.model);
+      here.add(r.agentType);
+    }
+    for (const n2 of here) agentObsAt(n2).sessions++;
+  }
+  for (const r of agg.byAgentType) {
+    const runs = r.extra?.["runs"] ?? 0;
+    if (runs > 0 && !agentObs.has(r.key)) agentObsAt(r.key).dispatches += runs;
+  }
+  const definedAgents = new Map(inv.agents.map((a) => [a.name, a]));
+  const agentRows = [];
+  for (const name of /* @__PURE__ */ new Set([...definedAgents.keys(), ...agentObs.keys()])) {
+    const o = agentObs.get(name);
+    const entry = definedAgents.get(name);
+    agentRows.push({
+      name,
+      ...entry ? { origin: entry.plugin ? `plugin:${entry.plugin}` : entry.origin } : {},
+      defined: !!entry,
+      dispatches: o?.dispatches ?? 0,
+      sessions: o?.sessions ?? 0,
+      models: [...o?.models ?? []].sort(),
+      status: statusOf(!!entry, o?.dispatches ?? 0)
+    });
+  }
+  const hookObs = /* @__PURE__ */ new Map();
+  const hookObsAt = (name) => {
+    let e = hookObs.get(name);
+    if (!e) hookObs.set(name, e = { runs: 0, errors: 0, totalMs: 0, events: /* @__PURE__ */ new Set() });
+    return e;
+  };
+  for (const a of analyses) {
+    for (const h of a.hooks.byCommand) {
+      const name = basename5((h.command ?? "").trim().split(/\s+/)[0] ?? "");
+      if (!name) continue;
+      const e = hookObsAt(name);
+      e.runs += h.count;
+      e.errors += h.errors;
+      e.totalMs += h.totalMs;
+      if (h.hookEvent) e.events.add(h.hookEvent);
+    }
+  }
+  const configuredHooks = /* @__PURE__ */ new Map();
+  for (const s of inv.settings) for (const h of s.hooks) for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event);
+  const hookRows = [];
+  for (const name of /* @__PURE__ */ new Set([...configuredHooks.keys(), ...hookObs.keys()])) {
+    const o = hookObs.get(name);
+    const event = configuredHooks.get(name) ?? [...o?.events ?? []].sort()[0];
+    hookRows.push({
+      ...event ? { event } : {},
+      commandBasename: name,
+      configured: configuredHooks.has(name),
+      runs: o?.runs ?? 0,
+      errors: o?.errors ?? 0,
+      totalMs: Math.round(o?.totalMs ?? 0),
+      // exact from exposed data: Σ totalMs ÷ Σ runs. No percentile is claimed; see HarnessHookRow.meanMs
+      meanMs: o && o.runs > 0 ? Math.round(o.totalMs / o.runs) : 0,
+      status: statusOf(configuredHooks.has(name), o?.runs ?? 0)
+    });
+  }
+  const modelObs = /* @__PURE__ */ new Map();
+  for (const a of analyses) {
+    const here = /* @__PURE__ */ new Set();
+    for (const m of a.tokens.byModel) {
+      const e = modelObs.get(m.model) ?? { requests: 0, sessions: 0 };
+      e.requests += m.requests;
+      modelObs.set(m.model, e);
+      here.add(m.model);
+    }
+    for (const n2 of here) modelObs.get(n2).sessions++;
+  }
+  const configuredModel = declared(inv, (s) => s.model);
+  const modelsSeen = ranked(
+    [...modelObs].map(([model, v]) => ({ model, requests: v.requests, sessions: v.sessions })),
+    (x) => x.requests,
+    (x) => x.model
+  );
+  const effortObs = /* @__PURE__ */ new Map();
+  for (const a of analyses) for (const e of new Set(a.session.effortLevels)) effortObs.set(e, (effortObs.get(e) ?? 0) + 1);
+  let slashEffortCommands = 0;
+  for (const a of analyses) {
+    for (const t of a.turns) {
+      const c = t.commandName;
+      if (c && c.replace(/^\//, "").toLowerCase() === "effort") slashEffortCommands++;
+    }
+  }
+  const configuredEffort = declared(inv, (s) => s.effortLevel);
+  const effortSeen = ranked(
+    [...effortObs].map(([effort, sessions]) => ({ effort, sessions })),
+    (x) => x.sessions,
+    (x) => x.effort
+  );
+  let promptEvents = 0;
+  let promptSessions = 0;
+  for (const a of analyses) {
+    const n2 = a.events.filter((e) => e.kind === "permission_prompt").length;
+    promptEvents += n2;
+    if (n2 > 0) promptSessions++;
+  }
+  const memoryIndex = /* @__PURE__ */ new Map();
+  const ambiguous = /* @__PURE__ */ new Set();
+  inv.claudeMd.forEach((f, i) => {
+    const abs = expandHome(f.file, opts.home);
+    if (!isAbs(abs)) return;
+    if (memoryIndex.has(abs)) ambiguous.add(abs);
+    else memoryIndex.set(abs, i);
+  });
+  for (const a of ambiguous) memoryIndex.delete(a);
+  const memoryHits = inv.claudeMd.map(() => ({ reads: 0, sessions: 0 }));
+  for (const a of analyses) {
+    const here = /* @__PURE__ */ new Set();
+    for (const s of a.files.files) {
+      const abs = resolveSessionPath(s.path, a.session.cwd, opts.home);
+      if (abs === null) continue;
+      const i = memoryIndex.get(abs);
+      if (i === void 0) continue;
+      memoryHits[i].reads += s.reads;
+      if (s.reads > 0) here.add(i);
+    }
+    for (const i of here) memoryHits[i].sessions++;
+  }
+  const memoryRows = inv.claudeMd.map((f, i) => ({
+    file: f.file,
+    bytes: f.bytes,
+    approxTokens: f.approxTokens,
+    reads: memoryHits[i].reads,
+    sessions: memoryHits[i].sessions,
+    approxTokensCarried: f.approxTokens * memoryHits[i].reads
+  }));
+  const listingObs = /* @__PURE__ */ new Map();
+  for (const a of analyses) {
+    for (const [type, bytes] of Object.entries(a.parse.attachmentBytes ?? {})) {
+      const e = listingObs.get(type) ?? { bytes: 0, sessions: 0 };
+      e.bytes += bytes;
+      e.sessions++;
+      listingObs.set(type, e);
+    }
+  }
+  const listingRows = [...listingObs].map(([type, v]) => {
+    const tokens = approxTokens(v.bytes);
+    return { type, sessions: v.sessions, bytes: v.bytes, approxTokens: tokens, approxTokensPerSession: v.sessions > 0 ? Math.ceil(tokens / v.sessions) : 0 };
+  });
+  const starts = analyses.map((a) => a.session.startedAt).filter((t) => typeof t === "number");
+  return {
+    window: {
+      ...starts.length ? { firstStartedAt: Math.min(...starts) } : {},
+      ...starts.length ? { lastStartedAt: Math.max(...starts) } : {}
+    },
+    skills: ranked(skillRows, (x) => x.invocations, (x) => x.name),
+    mcpServers: ranked(mcpRows, (x) => x.toolCalls, (x) => x.name),
+    agents: ranked(agentRows, (x) => x.dispatches, (x) => x.name),
+    hooks: ranked(hookRows, (x) => x.runs, (x) => x.commandBasename),
+    models: {
+      ...configuredModel ? { configured: configuredModel } : {},
+      seen: modelsSeen,
+      matchesConfigured: configuredModel === void 0 ? true : modelsSeen.some((m) => sameModel(configuredModel, m.model))
+    },
+    effort: {
+      ...configuredEffort ? { configured: configuredEffort } : {},
+      seen: effortSeen,
+      slashEffortCommands,
+      matchesConfigured: configuredEffort === void 0 ? true : effortSeen.some((e) => sameEffort(e.effort, configuredEffort))
+    },
+    permissions: {
+      allowRules: inv.settings.reduce((n2, s) => n2 + s.permissions.allow, 0),
+      denyRules: inv.settings.reduce((n2, s) => n2 + s.permissions.deny, 0),
+      askRules: inv.settings.reduce((n2, s) => n2 + s.permissions.ask, 0),
+      ...declared(inv, (s) => s.permissions.defaultMode) ? { defaultMode: declared(inv, (s) => s.permissions.defaultMode) } : {},
+      promptEvents,
+      promptSessions
+    },
+    claudeMd: ranked(memoryRows, (x) => x.approxTokensCarried, (x) => x.file),
+    injectedListings: ranked(listingRows, (x) => x.approxTokens, (x) => x.type)
+  };
+}
+
+// src/harness/report.ts
+function plural(n2, one) {
+  return `${n2} ${one}${n2 === 1 ? "" : "s"}`;
+}
+function buildNotes(inv, x, sessionsScanned, sessionsUnreadable) {
+  const notes = [];
+  const declaredNothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
+  if (declaredNothing) notes.push("no harness config found under the scanned roots. Nothing to cross-reference");
+  if (!inv.usageCounters) {
+    notes.push("~/.claude.json was not read, so client-side usage counters are omitted; declared vs used is classified from session evidence only");
+  }
+  if (inv.unreadable.length > 0) {
+    notes.push(`${plural(inv.unreadable.length, "configured path")} could not be read. See inventory.unreadable for the reason of each`);
+  }
+  if (sessionsScanned === 0) {
+    notes.push("no sessions in scope, so every crosswalk row is config-only and nothing can be classified used");
+  }
+  if (sessionsUnreadable > 0) {
+    notes.push(`${plural(sessionsUnreadable, "session")} could not be analyzed and ${sessionsUnreadable === 1 ? "is" : "are"} not reflected in the crosswalk`);
+  }
+  if (x.models.configured && !x.models.matchesConfigured) {
+    notes.push(`configured model "${x.models.configured}" does not appear among the models these sessions used`);
+  }
+  if (x.effort.configured && !x.effort.matchesConfigured) {
+    notes.push(`configured effort "${x.effort.configured}" does not appear among the effort levels these sessions used`);
+  }
+  const undeclared = x.skills.filter((s) => s.status === "undeclared").length + x.mcpServers.filter((m) => m.status === "undeclared").length + x.agents.filter((a) => a.status === "undeclared").length + x.hooks.filter((h) => h.status === "undeclared").length;
+  if (undeclared > 0) {
+    notes.push(`${plural(undeclared, "row")} marked undeclared: observed in sessions but not found in the config that was read (a source outside this scope, or drift)`);
+  }
+  return notes;
+}
+function buildHarnessReport(inv, analyses, agg, o) {
+  const home = o.scope.home || process.env["HOME"] || process.env["USERPROFILE"] || void 0;
+  const rel = (p) => redactValue(p, home ? { home } : {});
+  const sessionsUnreadable = o.scope.sessionsUnreadable ?? 0;
+  const x = crosswalk(inv, analyses, agg, home ? { home } : {});
+  return {
+    schemaVersion: HARNESS_SCHEMA_VERSION,
+    generator: { name: "orangu", version: o.version, generatedAt: o.now },
+    scope: {
+      cwd: rel(o.scope.cwd),
+      roots: o.scope.roots.map(rel),
+      global: o.scope.global,
+      limit: o.scope.limit,
+      sessionsScanned: analyses.length,
+      sessionsUnreadable
+    },
+    inventory: inv,
+    crosswalk: x,
+    notes: buildNotes(inv, x, analyses.length, sessionsUnreadable)
+  };
+}
+
+// src/report/client/format.ts
+function plural2(n2, one, many = one + "s") {
+  return `${num2(n2)} ${n2 === 1 ? one : many}`;
+}
+function num2(n2) {
+  return n2.toLocaleString("en-US");
+}
+
+// src/report/client/derive.ts
+function outcomeHeadline(s) {
+  if (s.ending === "interrupted") return `Stopped by you after ${plural2(s.turns, "turn")}`;
+  const parts = outcomeBits(s);
+  if (parts.length) return parts.join(" \xB7 ");
+  const requests = plural2(s.humanTurns, "request");
+  if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural2(s.agents, "subagent") + ", " : ""}nothing committed`;
+  return `${requests}, no tool calls recorded`;
+}
+function outcomeBits(s) {
+  const o = s.outcomes;
+  const parts = [];
+  if (o.prLinks.length) parts.push(plural2(o.prLinks.length, "PR"));
+  if (o.gitCommits) parts.push(plural2(o.gitCommits, "commit"));
+  const changed = o.filesEdited + o.filesWritten;
+  if (changed) parts.push(plural2(changed, "file") + " changed");
+  if (o.buildRunsFailed) parts.push(`${o.buildRunsFailed} of ${plural2(o.buildRuns, "build run")} failed`);
+  if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural2(o.testRuns, "test run")} failed` : `${plural2(o.testRuns, "test run")} green`);
+  return parts;
 }
 
 // src/suggest/id.ts
@@ -6733,6 +7333,203 @@ function kickoffCommand(rec, mode) {
   return kickoffCommands(rec, mode).claude;
 }
 
+// src/report/client/suggest-rows.ts
+var PLUGIN_INSTALL = "/plugin marketplace add NissanOhana/orangu \xB7 /plugin install orangu";
+function titleForRule(ruleId) {
+  const words2 = ruleId.trim().replace(/[-_]+/g, " ") || "finding";
+  return words2[0].toUpperCase() + words2.slice(1);
+}
+var DETAIL_HIDDEN_BY_REDACTION = "Details hidden by redaction (they quote commands and result previews); re-run with --include-text to see them.";
+function safeCopy(ruleId, title, detail) {
+  return {
+    title: title.trim() || titleForRule(ruleId),
+    detail: detail.trim() || DETAIL_HIDDEN_BY_REDACTION
+  };
+}
+function planRowForInsight(i, sessionId) {
+  const copy = safeCopy(i.ruleId, i.title, i.detail);
+  return {
+    ruleId: i.ruleId,
+    ...copy,
+    recommendation: i.recommendation,
+    savings: i.savings,
+    sessionIds: sessionId ? [sessionId] : [],
+    insightId: i.id,
+    severity: i.severity
+  };
+}
+function findingForRow(row2, scope) {
+  return {
+    ruleId: row2.ruleId,
+    title: row2.title,
+    scope,
+    sessionIds: row2.sessionIds,
+    ...row2.insightId ? { insightId: row2.insightId } : {},
+    ...row2.cohortFingerprint ? { cohortFingerprint: row2.cohortFingerprint } : {},
+    evidence: {
+      estimated: row2.savings?.estimated ?? true,
+      sessions: row2.sessions ?? 1,
+      ...row2.savings?.tokens !== void 0 ? { savingsTokens: row2.savings.tokens } : {},
+      ...row2.savings?.ms !== void 0 ? { savingsMs: row2.savings.ms } : {}
+    }
+  };
+}
+
+// src/cli/summary.ts
+var LAYOUT_MAX = 80;
+var INDENT = "  ";
+var LABEL_WIDTH = 8;
+var GUTTER = INDENT.length + LABEL_WIDTH + 1;
+function layoutWidth(caps) {
+  return Math.min(caps.columns, LAYOUT_MAX);
+}
+function valueBudget(caps) {
+  return layoutWidth(caps) - GUTTER;
+}
+function row(caps, label, value, o = {}) {
+  const v = o.raw ? value : truncate(value, valueBudget(caps), caps);
+  return INDENT + padCell(label, LABEL_WIDTH) + " " + (o.style ? paint(caps, o.style, v) : v);
+}
+function continuation(caps, value, style) {
+  const v = truncate(value, valueBudget(caps), caps);
+  return " ".repeat(GUTTER) + (style ? paint(caps, style, v) : v);
+}
+function fit(caps, line) {
+  return truncate(line, layoutWidth(caps), caps);
+}
+function fmtBytes(bytes) {
+  return (bytes / 1e6).toFixed(1) + " MB";
+}
+function doneLine(caps, o) {
+  const g = glyphs(caps);
+  let s = `analyzed ${fmtBytes(o.sizeBytes)} in ${fmtMs(o.elapsedMs)}`;
+  if (o.redactions) s += `${g.sep}${plural(o.redactions, "redaction")}`;
+  return INDENT + paint(caps, "good", g.ok) + " " + truncate(s, layoutWidth(caps) - INDENT.length - displayWidth(g.ok) - 1, caps);
+}
+function nextStepLines(caps, step) {
+  if (!step.finding) return [row(caps, "finding", "none: this session ran clean", { style: "good" })];
+  const lines = [row(caps, "finding", step.finding, { style: "bold" })];
+  if (step.storeNote) {
+    const head = "unavailable: ";
+    const tail = "; long form follows";
+    const reason = truncate(step.storeNote, valueBudget(caps) - head.length - tail.length, caps);
+    lines.push(row(caps, "store", head + reason + tail, { style: "warn", raw: true }));
+  }
+  if (step.next) lines.push(row(caps, "next", step.next, { raw: Boolean(step.storeNote) }));
+  const [add, install] = PLUGIN_INSTALL.split(" \xB7 ");
+  lines.push(row(caps, "plugin", add ?? PLUGIN_INSTALL));
+  if (install) {
+    const note = "(once, inside Claude Code)";
+    const fits = install.length + 4 + note.length <= valueBudget(caps);
+    lines.push(continuation(caps, install) + (fits ? "    " + paint(caps, "dim", note) : ""));
+  }
+  return lines;
+}
+function betaLine(caps, context) {
+  return row(caps, "beta", `orangu feedback --context ${context}`, { style: "dim" });
+}
+function reportFooter(caps, o) {
+  const link = fileLink(o.path, caps);
+  const value = link === o.path ? paint(caps, "accent", o.path) : link;
+  const note = o.opened && displayWidth(o.path) + 10 <= valueBudget(caps) ? paint(caps, "dim", "  (opened)") : "";
+  const lines = [INDENT + padCell("report", LABEL_WIDTH) + " " + value + note];
+  return [...lines, ...nextStepLines(caps, o.step), betaLine(caps, "report")];
+}
+function header(caps, title, sub) {
+  const w = layoutWidth(caps);
+  return [
+    "",
+    paint(caps, ["bold", "accent"], "orangu") + "  " + paint(caps, "bold", truncate(title, w - 8, caps)),
+    "        " + paint(caps, "dim", truncate(sub, w - 8, caps)),
+    ""
+  ];
+}
+function qualityLine(a, sep3) {
+  const o = a.summary.outcomes;
+  const bits = [];
+  if (o.prLinks.length) bits.push(`${o.prLinks.length} PR`);
+  if (o.gitCommits) bits.push(`${o.gitCommits} commits`);
+  if (o.testRuns) bits.push(`${o.testRuns} test runs${o.testRunsFailed ? " (" + o.testRunsFailed + " failed)" : ""}`);
+  if (o.filesEdited + o.filesWritten) bits.push(`${o.filesEdited + o.filesWritten} files changed`);
+  return bits.join(sep3) || "no commits/PRs/tests detected";
+}
+function findingRow(caps, ins) {
+  const g = glyphs(caps);
+  const w = layoutWidth(caps);
+  const save = ins.savings?.tokens ? `save ~${fmtTokens(ins.savings.tokens)} tokens` : ins.savings?.ms ? `save ~${fmtMs(ins.savings.ms)}` : "";
+  const lead = "    ";
+  const budget = w - lead.length - 2 - (save ? displayWidth(save) + 2 : 0);
+  const title = truncate(ins.title, budget, caps);
+  const mark2 = paint(caps, ins.severity === "high" ? "bad" : ins.severity === "medium" ? "warn" : "dim", g.mark);
+  const gap = save ? " ".repeat(Math.max(2, w - lead.length - 2 - displayWidth(title) - displayWidth(save))) : "";
+  return lead + mark2 + " " + title + gap + paint(caps, "accent", save);
+}
+function analysisBlock(caps, a, title) {
+  const s = a.summary;
+  const sep3 = glyphs(caps).sep;
+  const lines = header(caps, title, `${a.session.source}${sep3}${a.session.id}`);
+  lines.push(row(caps, "quality", qualityLine(a, sep3)));
+  lines.push(row(caps, "time", `${fmtMs(s.wallMs)} wall${sep3}${fmtMs(s.activeMs)} active${sep3}${fmtMs(s.humanWaitMs)} waiting`));
+  lines.push(row(caps, "tokens", `${fmtTokens(s.totalTokens)}${sep3}${(s.cacheHitRatio * 100).toFixed(0)}% cache${sep3}${fmtTokens(a.tokens.byKind.output)} output`));
+  lines.push(row(caps, "turns", `${s.turns} (${s.humanTurns} human)`));
+  lines.push(row(caps, "tools", `${s.toolCalls} calls${sep3}${s.toolErrors} errors`));
+  if (s.agents) lines.push(row(caps, "agents", `${s.agents} runs${sep3}${a.agents.maxConcurrency} max parallel${sep3}${fmtTokens(a.tokens.agents)} tokens`));
+  lines.push(row(caps, "context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""}${sep3}${plural(s.compactions, "compaction")}`));
+  lines.push("", paint(caps, "bold", INDENT + "findings"));
+  if (!a.insights.length) lines.push(paint(caps, "good", "    clean: no findings"));
+  for (const ins of a.insights.slice(0, 6)) lines.push(findingRow(caps, ins));
+  lines.push("", paint(caps, "dim", fit(caps, `${INDENT}run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report`)));
+  if (!a.parse.reconciliation.ok) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%`)));
+  return lines;
+}
+function briefBlock(caps, a, title, step, o) {
+  const s = a.summary;
+  const sep3 = glyphs(caps).sep;
+  const lines = header(caps, title, `latest${sep3}${a.session.id.slice(0, 8)}${sep3}${s.turns} turns${sep3}${fmtTokens(s.totalTokens)} tokens${sep3}${fmtMs(s.activeMs)} active`);
+  lines.push(fit(caps, INDENT + outcomeHeadline(s)), "");
+  lines.push(...nextStepLines(caps, step));
+  if (o.hint) lines.push("", paint(caps, "dim", fit(caps, `${INDENT}orangu report for the full picture${sep3}orangu --help for every command`)));
+  return lines;
+}
+function listRows(caps, refs, o) {
+  const w = layoutWidth(caps);
+  const lines = ["", paint(caps, "bold", `${plural(o.total, "session")}${o.global ? " (all roots)" : ""}`), ""];
+  for (const s of refs) {
+    const when = new Date(s.mtimeMs).toISOString().slice(0, 16).replace("T", " ");
+    const size = padCell(fmtBytes(s.sizeBytes), 8, "r");
+    const agents = padCell(s.hasSidecarDir ? `agents ${s.subagentFiles.length}` : "", 10);
+    const lead = `${INDENT}${s.sessionId.slice(0, 8)}  ${when}  ${size}  ${agents}  `;
+    const project = truncate(basename6(s.projectSlug), Math.max(8, w - displayWidth(lead)), caps);
+    lines.push(`${INDENT}${paint(caps, "accent", s.sessionId.slice(0, 8))}  ${paint(caps, "dim", when)}  ${size}  ${paint(caps, "dim", agents)}  ${project}`);
+  }
+  if (!o.total) lines.push(paint(caps, "dim", fit(caps, `${INDENT}No sessions found. Is Claude Code installed?`)), paint(caps, "dim", fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)));
+  else lines.push("", paint(caps, "dim", fit(caps, `${INDENT}orangu report <id>${glyphs(caps).sep}orangu analyze <id>${glyphs(caps).sep}orangu harness`)));
+  return lines;
+}
+
+// src/suggest/store.ts
+import { randomBytes as randomBytes2 } from "node:crypto";
+import { constants as constants8 } from "node:fs";
+import { lstat as lstat7, mkdir as mkdir2, open as open8, realpath as realpath5, rmdir, unlink as unlink2 } from "node:fs/promises";
+import { dirname as dirname4, isAbsolute as isAbsolute4, join as join5 } from "node:path";
+
+// src/suggest/change-classes.ts
+var CHANGE_CLASS_DEFINITIONS = [
+  { id: "instruction", label: "Instruction files", description: "Persistent project guidance and conventions." },
+  { id: "script-cli", label: "Scripts and CLIs", description: "Repeatable actions with checkable output." },
+  { id: "hook", label: "Hooks", description: "Guaranteed actions at lifecycle boundaries." },
+  { id: "skill-create", label: "Skills to create", description: "Reusable knowledge and workflows specific to this setup." },
+  { id: "skill-discover", label: "Skills to discover", description: "Existing capabilities to evaluate before installing." },
+  { id: "subagent-agent", label: "Subagents and agents", description: "Isolated or specialized work with clear ownership." },
+  { id: "mcp", label: "MCP servers", description: "External tools and data the work actually needs." },
+  { id: "plugin", label: "Plugins", description: "A reusable package of related extensions." },
+  { id: "workflow-config", label: "Workflow and configuration", description: "How work is sequenced, checked, and repeated." }
+];
+var CHANGE_CLASSES = new Set(CHANGE_CLASS_DEFINITIONS.map((definition) => definition.id));
+function isChangeClass(value) {
+  return CHANGE_CLASSES.has(value);
+}
+
 // src/suggest/reviewed-path.ts
 import { isAbsolute as isAbsolute3 } from "node:path";
 var WINDOWS_RESERVED_DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
@@ -6750,8 +7547,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename10 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename10)) return { violation: "must not use a reserved Windows device name" };
+    const basename11 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename11)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -7011,18 +7808,18 @@ function allEntries() {
 }
 var SIZE_RULES = /* @__PURE__ */ new Set(["oversized-tool-results", "truncated-reads", "binary-attachments", "large-writes", "reread-files"]);
 var STRING_SCAN_CAP = 500;
-function collectStrings(v, out, depth = 0) {
-  if (out.length >= STRING_SCAN_CAP || depth > 6 || v == null) return;
+function collectStrings(v, out2, depth = 0) {
+  if (out2.length >= STRING_SCAN_CAP || depth > 6 || v == null) return;
   if (typeof v === "string") {
-    out.push(v);
+    out2.push(v);
     return;
   }
   if (Array.isArray(v)) {
-    for (const x of v) collectStrings(x, out, depth + 1);
+    for (const x of v) collectStrings(x, out2, depth + 1);
     return;
   }
   if (typeof v === "object") {
-    for (const x of Object.values(v)) collectStrings(x, out, depth + 1);
+    for (const x of Object.values(v)) collectStrings(x, out2, depth + 1);
   }
 }
 function detectFileExt(ext, a) {
@@ -7074,11 +7871,11 @@ function detectSignal(signal, a) {
   return void 0;
 }
 function matchRule(ruleId, analyses = []) {
-  const out = [];
+  const out2 = [];
   const seen = /* @__PURE__ */ new Set();
   for (const entry of allEntries()) {
     if (entry.pattern.ruleId === ruleId) {
-      out.push({ entry, evidence: `finding ruleId=${ruleId}` });
+      out2.push({ entry, evidence: `finding ruleId=${ruleId}` });
       seen.add(entry.id);
     }
   }
@@ -7092,12 +7889,12 @@ function matchRule(ruleId, analyses = []) {
       if (seen.has(entry.id) || entry.pattern.signal === void 0) continue;
       const evidence = detectSignal(entry.pattern.signal, scoped);
       if (evidence !== void 0) {
-        out.push({ entry, evidence });
+        out2.push({ entry, evidence });
         seen.add(entry.id);
       }
     }
   }
-  return out;
+  return out2;
 }
 
 // src/suggest/source-provenance.ts
@@ -7967,12 +8764,40 @@ var SuggestionStore = class {
   }
 };
 
+// src/cli/next-step.ts
+async function persistNextStep(a, redact, deps = {}) {
+  const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0];
+  if (!top) return {};
+  const row2 = planRowForInsight(top, a.session.id);
+  const title = redact ? redactValue(row2.title, { scrub: redact.scrub, stripPaths: redact.stripPaths }) : row2.title;
+  const finding = findingForRow({ ...row2, title }, "session");
+  try {
+    const store = deps.store ? deps.store() : new SuggestionStore();
+    const { record: record2 } = await store.upsertNew(finding, "report");
+    return { finding: title, next: kickoffCommands(record2, "serve").claude };
+  } catch (e) {
+    const key = suggestionKey(finding, "report");
+    const id = suggestionIdV2(key);
+    const reason = (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "unknown error";
+    return {
+      finding: title,
+      storeNote: reason,
+      next: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: "report" }, "file").claude
+    };
+  }
+}
+
+// src/serve/server.ts
+import { randomBytes as randomBytes3, timingSafeEqual } from "node:crypto";
+import { createServer } from "node:http";
+import { cpus as cpus2 } from "node:os";
+
 // src/serve/api.ts
 import { homedir as homedir3 } from "node:os";
 
 // src/harness/collect.ts
 import { readdir, readFile, stat as stat4 } from "node:fs/promises";
-import { basename as basename5, join as join6 } from "node:path";
+import { basename as basename7, join as join6 } from "node:path";
 var DEFAULT_MAX_FILE_BYTES = 1e6;
 var MAX_WALK_DEPTH = 6;
 var CLAUDE_JSON_KEYS = ["mcpServers", "projects", "skillUsage", "pluginUsage"];
@@ -8048,14 +8873,14 @@ async function listDir(ctx, path, required = false) {
 }
 async function walkMarkdown(ctx, dir, depth = 0) {
   if (depth > MAX_WALK_DEPTH) return [];
-  const out = [];
+  const out2 = [];
   for (const e of await listDir(ctx, dir)) {
     if (e.name.startsWith(".") || e.name === "node_modules") continue;
     const p = join6(dir, e.name);
-    if (e.dir) out.push(...await walkMarkdown(ctx, p, depth + 1));
-    else if (e.name.endsWith(".md")) out.push(p);
+    if (e.dir) out2.push(...await walkMarkdown(ctx, p, depth + 1));
+    else if (e.name.endsWith(".md")) out2.push(p);
   }
-  return out;
+  return out2;
 }
 async function isDir(path) {
   try {
@@ -8064,7 +8889,7 @@ async function isDir(path) {
     return false;
   }
 }
-var approxTokens = (bytes) => Math.ceil(bytes / 4);
+var approxTokens2 = (bytes) => Math.ceil(bytes / 4);
 function lineCount(text2) {
   if (text2 === "") return 0;
   const parts = text2.split("\n");
@@ -8078,7 +8903,7 @@ function headingCount(text2) {
 }
 function argv0Basename(command) {
   const first = command.trim().split(/\s+/)[0] ?? "";
-  return basename5(first.replace(/^['"]|['"]$/g, ""));
+  return basename7(first.replace(/^['"]|['"]$/g, ""));
 }
 var FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/;
 function parseFrontmatter(text2) {
@@ -8102,7 +8927,7 @@ function splitList(value) {
   if (value === void 0) return null;
   let s = value.trim();
   if (s.startsWith("[") && s.endsWith("]")) s = s.slice(1, -1);
-  const out = [];
+  const out2 = [];
   let depth = 0;
   let cur = "";
   for (const ch of s) {
@@ -8110,15 +8935,15 @@ function splitList(value) {
     else if (ch === ")" || ch === "]") depth--;
     if (ch === "," && depth <= 0) {
       const t2 = cur.trim();
-      if (t2) out.push(t2);
+      if (t2) out2.push(t2);
       cur = "";
       continue;
     }
     cur += ch;
   }
   const t = cur.trim();
-  if (t) out.push(t);
-  return out.map((x) => x.replace(/^['"]|['"]$/g, ""));
+  if (t) out2.push(t);
+  return out2.map((x) => x.replace(/^['"]|['"]$/g, ""));
 }
 var asRecord = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
 var asArray = (v) => Array.isArray(v) ? v : [];
@@ -8138,7 +8963,7 @@ function settingsEnv(raw) {
 function settingsHooks(raw) {
   const hooks = asRecord(raw["hooks"]);
   if (!hooks) return [];
-  const out = [];
+  const out2 = [];
   for (const event of Object.keys(hooks).sort()) {
     const matchers = asArray(hooks[event]);
     const names = /* @__PURE__ */ new Set();
@@ -8152,9 +8977,9 @@ function settingsHooks(raw) {
         if (b) names.add(cleanName(b));
       }
     }
-    out.push({ event: cleanName(event), matchers: matchers.length, commands, commandBasenames: [...names].sort() });
+    out2.push({ event: cleanName(event), matchers: matchers.length, commands, commandBasenames: [...names].sort() });
   }
-  return out;
+  return out2;
 }
 function enabledPluginKeys(raw) {
   const v = raw["enabledPlugins"];
@@ -8185,7 +9010,7 @@ function parseSettings(ctx, scope, file, raw) {
   };
 }
 async function readSkillDir(ctx, dir, origin, plugin) {
-  const out = [];
+  const out2 = [];
   for (const e of await listDir(ctx, dir)) {
     if (!e.dir || e.name.startsWith(".")) continue;
     const file = join6(dir, e.name, "SKILL.md");
@@ -8193,35 +9018,35 @@ async function readSkillDir(ctx, dir, origin, plugin) {
     if (text2 === null) continue;
     const { fm, body } = parseFrontmatter(text2);
     const bytes = Buffer.byteLength(text2, "utf8");
-    out.push({
+    out2.push({
       name: cleanName(fm["name"] ?? e.name),
       origin,
       ...plugin ? { plugin: cleanName(plugin) } : {},
       file: cleanPath(ctx, file),
       bytes,
-      approxTokens: approxTokens(bytes),
+      approxTokens: approxTokens2(bytes),
       descriptionChars: (fm["description"] ?? "").length,
       allowedTools: splitList(fm["allowed-tools"] ?? fm["allowedTools"])?.map(cleanName) ?? null,
       bodyLines: lineCount(body),
       hasReferences: await isDir(join6(dir, e.name, "references"))
     });
   }
-  return out;
+  return out2;
 }
 async function readAgentDir(ctx, dir, origin, plugin) {
-  const out = [];
+  const out2 = [];
   for (const file of await walkMarkdown(ctx, dir)) {
     const text2 = await readText(ctx, file);
     if (text2 === null) continue;
     const { fm } = parseFrontmatter(text2);
     const bytes = Buffer.byteLength(text2, "utf8");
-    out.push({
-      name: cleanName(fm["name"] ?? basename5(file, ".md")),
+    out2.push({
+      name: cleanName(fm["name"] ?? basename7(file, ".md")),
       origin,
       ...plugin ? { plugin: cleanName(plugin) } : {},
       file: cleanPath(ctx, file),
       bytes,
-      approxTokens: approxTokens(bytes),
+      approxTokens: approxTokens2(bytes),
       descriptionChars: (fm["description"] ?? "").length,
       ...fm["model"] ? { model: cleanName(fm["model"]) } : {},
       ...fm["effort"] ? { effort: cleanName(fm["effort"]) } : {},
@@ -8229,22 +9054,22 @@ async function readAgentDir(ctx, dir, origin, plugin) {
       disallowedTools: splitList(fm["disallowedTools"] ?? fm["disallowed-tools"])?.map(cleanName) ?? null
     });
   }
-  return out;
+  return out2;
 }
 async function readMemory(ctx, file, scope) {
   const text2 = await readText(ctx, file);
   if (text2 === null) return null;
   const bytes = Buffer.byteLength(text2, "utf8");
-  return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens(bytes), lines: lineCount(text2), headings: headingCount(text2) };
+  return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: lineCount(text2), headings: headingCount(text2) };
 }
 function mcpFromRecord(rec, scope, enabled = true) {
   if (!rec) return [];
-  const out = [];
+  const out2 = [];
   for (const name of Object.keys(rec).sort()) {
     const srv = asRecord(rec[name]);
     const command = asString(srv?.["command"]);
     const transport = asString(srv?.["type"]) ?? (asString(srv?.["url"]) ? "http" : command ? "stdio" : "unknown");
-    out.push({
+    out2.push({
       name: cleanName(name),
       scope,
       transport: cleanName(transport),
@@ -8252,7 +9077,7 @@ function mcpFromRecord(rec, scope, enabled = true) {
       enabled
     });
   }
-  return out;
+  return out2;
 }
 async function walkPlugin(ctx, installPath, key) {
   const skills = await readSkillDir(ctx, join6(installPath, "skills"), "plugin", key);
@@ -8384,7 +9209,7 @@ async function collectInventory(opts) {
           if (!name) continue;
           const clean = cleanName(name);
           const existing = mcpServers.filter((m) => m.name === clean);
-          if (existing.length) for (const row of existing) row.enabled = row.enabled && on;
+          if (existing.length) for (const row2 of existing) row2.enabled = row2.enabled && on;
           else mcpServers.push({ name: clean, scope: "repo-file", transport: "unknown", enabled: on });
         }
       }
@@ -8424,410 +9249,6 @@ async function collectInventory(opts) {
       hookCommands: settings.reduce((n2, s) => n2 + s.hooks.reduce((k, h) => k + h.commands, 0), 0)
     },
     unreadable: ctx.unreadable
-  };
-}
-
-// src/harness/crosswalk.ts
-import { basename as basename6 } from "node:path";
-
-// src/harness/types.ts
-var HARNESS_SCHEMA_VERSION = "1";
-var HARNESS_ROW_CAP = 50;
-
-// src/harness/crosswalk.ts
-var SCOPE_PRECEDENCE = ["repo-local", "repo", "global-local", "global"];
-var approxTokens2 = (bytes) => Math.ceil(bytes / 4);
-function statusOf(declared2, observations) {
-  if (!declared2) return "undeclared";
-  return observations > 0 ? "used" : "idle";
-}
-function ranked(rows, n2, k) {
-  return rows.slice().sort((a, b) => n2(b) - n2(a) || (k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0)).slice(0, HARNESS_ROW_CAP);
-}
-function parseMcpToolName(name) {
-  if (!name.startsWith("mcp__")) return null;
-  const parts = name.split("__");
-  if (parts.length < 3) return null;
-  const server = parts[1] ?? "";
-  const tool = parts.slice(2).join("__");
-  return server && tool ? { server, tool } : null;
-}
-var norm = (p) => p.replace(/\\/g, "/");
-var isAbs = (p) => p.startsWith("/") || /^[A-Za-z]:\//.test(p);
-function expandHome(p, home) {
-  const s = norm(p);
-  if (!home) return s;
-  const h = norm(home).replace(/\/+$/, "");
-  if (s === "~") return h;
-  if (s.startsWith("~/")) return h + s.slice(1);
-  return s;
-}
-function resolveSessionPath(p, sessionCwd, home) {
-  const s = expandHome(p, home);
-  if (isAbs(s)) return s;
-  if (s.startsWith("~")) return null;
-  if (!sessionCwd) return null;
-  return norm(sessionCwd).replace(/\/+$/, "") + "/" + s;
-}
-function declared(inv, pick) {
-  for (const scope of SCOPE_PRECEDENCE) {
-    for (const s of inv.settings) {
-      if (s.scope !== scope) continue;
-      const v = pick(s);
-      if (v !== void 0 && v !== "") return v;
-    }
-  }
-  return void 0;
-}
-function sameEffort(a, b) {
-  return a.trim().toLowerCase() === b.trim().toLowerCase();
-}
-function stripModelTag(m) {
-  return m.trim().toLowerCase().replace(/\[[^\]]*\]$/, "").trim();
-}
-var MODEL_FAMILY_ALIASES = /* @__PURE__ */ new Set(["opus", "sonnet", "haiku"]);
-function sameModel(configured, seen) {
-  const c = stripModelTag(configured);
-  const s = stripModelTag(seen);
-  if (c === s) return true;
-  return MODEL_FAMILY_ALIASES.has(c) && s.split("-").includes(c);
-}
-function crosswalk(inv, analyses, agg, opts = {}) {
-  const installedSkills = new Map(inv.skills.map((s) => [s.name, s]));
-  const canonicalSkill = (observed) => {
-    if (installedSkills.has(observed)) return observed;
-    const colon = observed.lastIndexOf(":");
-    if (colon > 0) {
-      const bare = observed.slice(colon + 1);
-      const entry = installedSkills.get(bare);
-      if (entry && (entry.plugin === void 0 || pluginName(entry.plugin) === observed.slice(0, colon))) return bare;
-    }
-    return observed;
-  };
-  const pluginName = (key) => key.split("@")[0] ?? key;
-  const skillObs = /* @__PURE__ */ new Map();
-  const skillObsAt = (rawName) => {
-    const name = canonicalSkill(rawName);
-    let e = skillObs.get(name);
-    if (!e) skillObs.set(name, e = { invocations: 0, sessions: 0, viaTool: 0, viaCommand: 0 });
-    return e;
-  };
-  for (const a of analyses) {
-    const here = /* @__PURE__ */ new Set();
-    for (const s of a.skills.byName) {
-      const e = skillObsAt(s.name);
-      e.invocations += s.count;
-      here.add(canonicalSkill(s.name));
-    }
-    for (const i of a.skills.invocations) {
-      const e = skillObsAt(i.name);
-      if (i.via === "tool") e.viaTool++;
-      else e.viaCommand++;
-      here.add(canonicalSkill(i.name));
-    }
-    for (const n2 of here) skillObsAt(n2).sessions++;
-  }
-  for (const r of agg.bySkill) {
-    const uses = r.extra?.["uses"] ?? 0;
-    if (uses > 0 && !skillObs.has(canonicalSkill(r.key))) skillObsAt(r.key).invocations += uses;
-  }
-  const skillRows = [];
-  for (const name of /* @__PURE__ */ new Set([...installedSkills.keys(), ...skillObs.keys()])) {
-    const o = skillObs.get(name);
-    const entry = installedSkills.get(name);
-    skillRows.push({
-      name,
-      ...entry ? { origin: entry.plugin ? `plugin:${entry.plugin}` : entry.origin } : {},
-      installed: !!entry,
-      invocations: o?.invocations ?? 0,
-      sessions: o?.sessions ?? 0,
-      viaTool: o?.viaTool ?? 0,
-      viaCommand: o?.viaCommand ?? 0,
-      status: statusOf(!!entry, o?.invocations ?? 0)
-    });
-  }
-  const mcpObs = /* @__PURE__ */ new Map();
-  const mcpObsAt = (name) => {
-    let e = mcpObs.get(name);
-    if (!e) mcpObs.set(name, e = { toolCalls: 0, tools: /* @__PURE__ */ new Set(), sessions: 0 });
-    return e;
-  };
-  for (const a of analyses) {
-    const here = /* @__PURE__ */ new Set();
-    for (const t of a.tools.byName) {
-      const parsed = parseMcpToolName(t.name);
-      if (!parsed) continue;
-      const e = mcpObsAt(parsed.server);
-      e.toolCalls += t.count;
-      e.tools.add(parsed.tool);
-      here.add(parsed.server);
-    }
-    for (const n2 of here) mcpObsAt(n2).sessions++;
-  }
-  for (const r of agg.byTool) {
-    const calls = r.extra?.["calls"] ?? 0;
-    const parsed = parseMcpToolName(r.key);
-    if (calls > 0 && parsed && !mcpObs.has(parsed.server)) {
-      const e = mcpObsAt(parsed.server);
-      e.toolCalls += calls;
-      e.tools.add(parsed.tool);
-    }
-  }
-  const configuredMcp = new Map(inv.mcpServers.map((m) => [m.name, m]));
-  const mcpRows = [];
-  for (const name of /* @__PURE__ */ new Set([...configuredMcp.keys(), ...mcpObs.keys()])) {
-    const o = mcpObs.get(name);
-    mcpRows.push({
-      name,
-      configured: configuredMcp.has(name),
-      toolCalls: o?.toolCalls ?? 0,
-      distinctTools: o?.tools.size ?? 0,
-      sessions: o?.sessions ?? 0,
-      status: statusOf(configuredMcp.has(name), o?.toolCalls ?? 0)
-    });
-  }
-  const agentObs = /* @__PURE__ */ new Map();
-  const agentObsAt = (name) => {
-    let e = agentObs.get(name);
-    if (!e) agentObs.set(name, e = { dispatches: 0, sessions: 0, models: /* @__PURE__ */ new Set() });
-    return e;
-  };
-  for (const a of analyses) {
-    const here = /* @__PURE__ */ new Set();
-    for (const t of a.agents.byType) {
-      const e = agentObsAt(t.agentType);
-      e.dispatches += t.count;
-      here.add(t.agentType);
-    }
-    for (const r of a.agents.runs) {
-      if (!r.agentType) continue;
-      const e = agentObsAt(r.agentType);
-      if (r.model) e.models.add(r.model);
-      here.add(r.agentType);
-    }
-    for (const n2 of here) agentObsAt(n2).sessions++;
-  }
-  for (const r of agg.byAgentType) {
-    const runs = r.extra?.["runs"] ?? 0;
-    if (runs > 0 && !agentObs.has(r.key)) agentObsAt(r.key).dispatches += runs;
-  }
-  const definedAgents = new Map(inv.agents.map((a) => [a.name, a]));
-  const agentRows = [];
-  for (const name of /* @__PURE__ */ new Set([...definedAgents.keys(), ...agentObs.keys()])) {
-    const o = agentObs.get(name);
-    const entry = definedAgents.get(name);
-    agentRows.push({
-      name,
-      ...entry ? { origin: entry.plugin ? `plugin:${entry.plugin}` : entry.origin } : {},
-      defined: !!entry,
-      dispatches: o?.dispatches ?? 0,
-      sessions: o?.sessions ?? 0,
-      models: [...o?.models ?? []].sort(),
-      status: statusOf(!!entry, o?.dispatches ?? 0)
-    });
-  }
-  const hookObs = /* @__PURE__ */ new Map();
-  const hookObsAt = (name) => {
-    let e = hookObs.get(name);
-    if (!e) hookObs.set(name, e = { runs: 0, errors: 0, totalMs: 0, events: /* @__PURE__ */ new Set() });
-    return e;
-  };
-  for (const a of analyses) {
-    for (const h of a.hooks.byCommand) {
-      const name = basename6((h.command ?? "").trim().split(/\s+/)[0] ?? "");
-      if (!name) continue;
-      const e = hookObsAt(name);
-      e.runs += h.count;
-      e.errors += h.errors;
-      e.totalMs += h.totalMs;
-      if (h.hookEvent) e.events.add(h.hookEvent);
-    }
-  }
-  const configuredHooks = /* @__PURE__ */ new Map();
-  for (const s of inv.settings) for (const h of s.hooks) for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event);
-  const hookRows = [];
-  for (const name of /* @__PURE__ */ new Set([...configuredHooks.keys(), ...hookObs.keys()])) {
-    const o = hookObs.get(name);
-    const event = configuredHooks.get(name) ?? [...o?.events ?? []].sort()[0];
-    hookRows.push({
-      ...event ? { event } : {},
-      commandBasename: name,
-      configured: configuredHooks.has(name),
-      runs: o?.runs ?? 0,
-      errors: o?.errors ?? 0,
-      totalMs: Math.round(o?.totalMs ?? 0),
-      // exact from exposed data: Σ totalMs ÷ Σ runs. No percentile is claimed; see HarnessHookRow.meanMs
-      meanMs: o && o.runs > 0 ? Math.round(o.totalMs / o.runs) : 0,
-      status: statusOf(configuredHooks.has(name), o?.runs ?? 0)
-    });
-  }
-  const modelObs = /* @__PURE__ */ new Map();
-  for (const a of analyses) {
-    const here = /* @__PURE__ */ new Set();
-    for (const m of a.tokens.byModel) {
-      const e = modelObs.get(m.model) ?? { requests: 0, sessions: 0 };
-      e.requests += m.requests;
-      modelObs.set(m.model, e);
-      here.add(m.model);
-    }
-    for (const n2 of here) modelObs.get(n2).sessions++;
-  }
-  const configuredModel = declared(inv, (s) => s.model);
-  const modelsSeen = ranked(
-    [...modelObs].map(([model, v]) => ({ model, requests: v.requests, sessions: v.sessions })),
-    (x) => x.requests,
-    (x) => x.model
-  );
-  const effortObs = /* @__PURE__ */ new Map();
-  for (const a of analyses) for (const e of new Set(a.session.effortLevels)) effortObs.set(e, (effortObs.get(e) ?? 0) + 1);
-  let slashEffortCommands = 0;
-  for (const a of analyses) {
-    for (const t of a.turns) {
-      const c = t.commandName;
-      if (c && c.replace(/^\//, "").toLowerCase() === "effort") slashEffortCommands++;
-    }
-  }
-  const configuredEffort = declared(inv, (s) => s.effortLevel);
-  const effortSeen = ranked(
-    [...effortObs].map(([effort, sessions]) => ({ effort, sessions })),
-    (x) => x.sessions,
-    (x) => x.effort
-  );
-  let promptEvents = 0;
-  let promptSessions = 0;
-  for (const a of analyses) {
-    const n2 = a.events.filter((e) => e.kind === "permission_prompt").length;
-    promptEvents += n2;
-    if (n2 > 0) promptSessions++;
-  }
-  const memoryIndex = /* @__PURE__ */ new Map();
-  const ambiguous = /* @__PURE__ */ new Set();
-  inv.claudeMd.forEach((f, i) => {
-    const abs = expandHome(f.file, opts.home);
-    if (!isAbs(abs)) return;
-    if (memoryIndex.has(abs)) ambiguous.add(abs);
-    else memoryIndex.set(abs, i);
-  });
-  for (const a of ambiguous) memoryIndex.delete(a);
-  const memoryHits = inv.claudeMd.map(() => ({ reads: 0, sessions: 0 }));
-  for (const a of analyses) {
-    const here = /* @__PURE__ */ new Set();
-    for (const s of a.files.files) {
-      const abs = resolveSessionPath(s.path, a.session.cwd, opts.home);
-      if (abs === null) continue;
-      const i = memoryIndex.get(abs);
-      if (i === void 0) continue;
-      memoryHits[i].reads += s.reads;
-      if (s.reads > 0) here.add(i);
-    }
-    for (const i of here) memoryHits[i].sessions++;
-  }
-  const memoryRows = inv.claudeMd.map((f, i) => ({
-    file: f.file,
-    bytes: f.bytes,
-    approxTokens: f.approxTokens,
-    reads: memoryHits[i].reads,
-    sessions: memoryHits[i].sessions,
-    approxTokensCarried: f.approxTokens * memoryHits[i].reads
-  }));
-  const listingObs = /* @__PURE__ */ new Map();
-  for (const a of analyses) {
-    for (const [type, bytes] of Object.entries(a.parse.attachmentBytes ?? {})) {
-      const e = listingObs.get(type) ?? { bytes: 0, sessions: 0 };
-      e.bytes += bytes;
-      e.sessions++;
-      listingObs.set(type, e);
-    }
-  }
-  const listingRows = [...listingObs].map(([type, v]) => {
-    const tokens = approxTokens2(v.bytes);
-    return { type, sessions: v.sessions, bytes: v.bytes, approxTokens: tokens, approxTokensPerSession: v.sessions > 0 ? Math.ceil(tokens / v.sessions) : 0 };
-  });
-  const starts = analyses.map((a) => a.session.startedAt).filter((t) => typeof t === "number");
-  return {
-    window: {
-      ...starts.length ? { firstStartedAt: Math.min(...starts) } : {},
-      ...starts.length ? { lastStartedAt: Math.max(...starts) } : {}
-    },
-    skills: ranked(skillRows, (x) => x.invocations, (x) => x.name),
-    mcpServers: ranked(mcpRows, (x) => x.toolCalls, (x) => x.name),
-    agents: ranked(agentRows, (x) => x.dispatches, (x) => x.name),
-    hooks: ranked(hookRows, (x) => x.runs, (x) => x.commandBasename),
-    models: {
-      ...configuredModel ? { configured: configuredModel } : {},
-      seen: modelsSeen,
-      matchesConfigured: configuredModel === void 0 ? true : modelsSeen.some((m) => sameModel(configuredModel, m.model))
-    },
-    effort: {
-      ...configuredEffort ? { configured: configuredEffort } : {},
-      seen: effortSeen,
-      slashEffortCommands,
-      matchesConfigured: configuredEffort === void 0 ? true : effortSeen.some((e) => sameEffort(e.effort, configuredEffort))
-    },
-    permissions: {
-      allowRules: inv.settings.reduce((n2, s) => n2 + s.permissions.allow, 0),
-      denyRules: inv.settings.reduce((n2, s) => n2 + s.permissions.deny, 0),
-      askRules: inv.settings.reduce((n2, s) => n2 + s.permissions.ask, 0),
-      ...declared(inv, (s) => s.permissions.defaultMode) ? { defaultMode: declared(inv, (s) => s.permissions.defaultMode) } : {},
-      promptEvents,
-      promptSessions
-    },
-    claudeMd: ranked(memoryRows, (x) => x.approxTokensCarried, (x) => x.file),
-    injectedListings: ranked(listingRows, (x) => x.approxTokens, (x) => x.type)
-  };
-}
-
-// src/harness/report.ts
-function plural(n2, one) {
-  return `${n2} ${one}${n2 === 1 ? "" : "s"}`;
-}
-function buildNotes(inv, x, sessionsScanned, sessionsUnreadable) {
-  const notes = [];
-  const declaredNothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
-  if (declaredNothing) notes.push("no harness config found under the scanned roots. Nothing to cross-reference");
-  if (!inv.usageCounters) {
-    notes.push("~/.claude.json was not read, so client-side usage counters are omitted; declared vs used is classified from session evidence only");
-  }
-  if (inv.unreadable.length > 0) {
-    notes.push(`${plural(inv.unreadable.length, "configured path")} could not be read. See inventory.unreadable for the reason of each`);
-  }
-  if (sessionsScanned === 0) {
-    notes.push("no sessions in scope, so every crosswalk row is config-only and nothing can be classified used");
-  }
-  if (sessionsUnreadable > 0) {
-    notes.push(`${plural(sessionsUnreadable, "session")} could not be analyzed and ${sessionsUnreadable === 1 ? "is" : "are"} not reflected in the crosswalk`);
-  }
-  if (x.models.configured && !x.models.matchesConfigured) {
-    notes.push(`configured model "${x.models.configured}" does not appear among the models these sessions used`);
-  }
-  if (x.effort.configured && !x.effort.matchesConfigured) {
-    notes.push(`configured effort "${x.effort.configured}" does not appear among the effort levels these sessions used`);
-  }
-  const undeclared = x.skills.filter((s) => s.status === "undeclared").length + x.mcpServers.filter((m) => m.status === "undeclared").length + x.agents.filter((a) => a.status === "undeclared").length + x.hooks.filter((h) => h.status === "undeclared").length;
-  if (undeclared > 0) {
-    notes.push(`${plural(undeclared, "row")} marked undeclared: observed in sessions but not found in the config that was read (a source outside this scope, or drift)`);
-  }
-  return notes;
-}
-function buildHarnessReport(inv, analyses, agg, o) {
-  const home = o.scope.home || process.env["HOME"] || process.env["USERPROFILE"] || void 0;
-  const rel = (p) => redactValue(p, home ? { home } : {});
-  const sessionsUnreadable = o.scope.sessionsUnreadable ?? 0;
-  const x = crosswalk(inv, analyses, agg, home ? { home } : {});
-  return {
-    schemaVersion: HARNESS_SCHEMA_VERSION,
-    generator: { name: "orangu", version: o.version, generatedAt: o.now },
-    scope: {
-      cwd: rel(o.scope.cwd),
-      roots: o.scope.roots.map(rel),
-      global: o.scope.global,
-      limit: o.scope.limit,
-      sessionsScanned: analyses.length,
-      sessionsUnreadable
-    },
-    inventory: inv,
-    crosswalk: x,
-    notes: buildNotes(inv, x, analyses.length, sessionsUnreadable)
   };
 }
 
@@ -9112,15 +9533,15 @@ var Registry = class {
     const now = this.nowFn();
     const { badge, ageMs } = badgeFor(w.ref.mtimeMs, now);
     if (w.analysis) {
-      const row = rowFromAnalysis(w.analysis, now);
-      row.badge = badge;
-      row.ageMs = ageMs;
-      row.mtimeMs = w.ref.mtimeMs;
-      row.sizeBytes = w.ref.sizeBytes;
-      row.possiblyLive = badge !== "ended" && w.analysis.session.live;
-      row.agentsRunning = badge === "ended" ? 0 : w.analysis.agents.runs.filter((r) => r.status === "running").length;
-      row.lastEvents = w.analysis.tools.calls.slice(-LAST_EVENTS_MAX).map((c) => ({ ts: c.startTs, name: c.name, category: c.category, summary: c.summary }));
-      return redactValue(row, { scrub: true, stripText: !this.o.opts.includeText });
+      const row2 = rowFromAnalysis(w.analysis, now);
+      row2.badge = badge;
+      row2.ageMs = ageMs;
+      row2.mtimeMs = w.ref.mtimeMs;
+      row2.sizeBytes = w.ref.sizeBytes;
+      row2.possiblyLive = badge !== "ended" && w.analysis.session.live;
+      row2.agentsRunning = badge === "ended" ? 0 : w.analysis.agents.runs.filter((r) => r.status === "running").length;
+      row2.lastEvents = w.analysis.tools.calls.slice(-LAST_EVENTS_MAX).map((c) => ({ ts: c.startTs, name: c.name, category: c.category, summary: c.summary }));
+      return redactValue(row2, { scrub: true, stripText: !this.o.opts.includeText });
     }
     return redactValue(
       {
@@ -9189,7 +9610,7 @@ var MAX_REPO_CWD_BYTES = 4096;
 var MAX_AGGREGATE_JOBS = 16;
 var MAX_AGGREGATE_CONCURRENCY = 2;
 function aggregateRegistryFingerprint(rows) {
-  return rows.map((row) => JSON.stringify([row.source, row.id, row.path, row.mtimeMs, row.sizeBytes, row.cwd ?? ""])).sort().join("\n");
+  return rows.map((row2) => JSON.stringify([row2.source, row2.id, row2.path, row2.mtimeMs, row2.sizeBytes, row2.cwd ?? ""])).sort().join("\n");
 }
 var AggregateRunner = class {
   constructor(ctx) {
@@ -9256,12 +9677,12 @@ var AggregateRunner = class {
         const prior = aliases.get(alias);
         aliases.set(alias, prior === void 0 || prior === raw ? raw : null);
       };
-      for (const row of rows) {
-        const analysis = await this.ctx.registry.analysis(row.id);
+      for (const row2 of rows) {
+        const analysis = await this.ctx.registry.analysis(row2.id);
         const raw = analysis?.session.cwd;
         if (!raw) continue;
         add(raw, raw);
-        if (row.cwd) add(row.cwd, raw);
+        if (row2.cwd) add(row2.cwd, raw);
         add(redactValue(raw, { scrub: true }), raw);
       }
       this.cwdCache = { fingerprint, aliases };
@@ -9297,8 +9718,8 @@ var AggregateRunner = class {
     job.total = rows.length;
     job.done = 0;
     const analyses = [];
-    for (const row of rows) {
-      const a = await this.ctx.registry.analysis(row.id);
+    for (const row2 of rows) {
+      const a = await this.ctx.registry.analysis(row2.id);
       job.done++;
       if (!a) continue;
       if (scope === "repo" && cwd && a.session.cwd !== cwd) continue;
@@ -9339,8 +9760,8 @@ var HarnessRunner = class {
     this.done = 0;
     const analyses = [];
     let unreadable = 0;
-    for (const row of rows) {
-      const a = await this.ctx.registry.analysis(row.id);
+    for (const row2 of rows) {
+      const a = await this.ctx.registry.analysis(row2.id);
       this.done++;
       if (a) analyses.push(a);
       else unreadable++;
@@ -9957,83 +10378,6 @@ var MASCOT_ASCII = String.raw`
 |  \___/()o  see what your agent did
 \_______/`;
 
-// src/report/client/format.ts
-function plural2(n2, one, many = one + "s") {
-  return `${num2(n2)} ${n2 === 1 ? one : many}`;
-}
-function num2(n2) {
-  return n2.toLocaleString("en-US");
-}
-
-// src/report/client/suggest-rows.ts
-var PLUGIN_INSTALL = "/plugin marketplace add NissanOhana/orangu \xB7 /plugin install orangu";
-function titleForRule(ruleId) {
-  const words2 = ruleId.trim().replace(/[-_]+/g, " ") || "finding";
-  return words2[0].toUpperCase() + words2.slice(1);
-}
-var DETAIL_HIDDEN_BY_REDACTION = "Details hidden by redaction (they quote commands and result previews); re-run with --include-text to see them.";
-function safeCopy(ruleId, title, detail) {
-  return {
-    title: title.trim() || titleForRule(ruleId),
-    detail: detail.trim() || DETAIL_HIDDEN_BY_REDACTION
-  };
-}
-function planRowForInsight(i, sessionId) {
-  const copy = safeCopy(i.ruleId, i.title, i.detail);
-  return {
-    ruleId: i.ruleId,
-    ...copy,
-    recommendation: i.recommendation,
-    savings: i.savings,
-    sessionIds: sessionId ? [sessionId] : [],
-    insightId: i.id,
-    severity: i.severity
-  };
-}
-function handoffForInsight(i, sessionId) {
-  const finding = findingForRow(planRowForInsight(i, sessionId), "session");
-  const key = suggestionKey(finding, "report");
-  const id = suggestionIdV2(key);
-  return { id, command: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: "report" }, "file").claude };
-}
-function findingForRow(row, scope) {
-  return {
-    ruleId: row.ruleId,
-    title: row.title,
-    scope,
-    sessionIds: row.sessionIds,
-    ...row.insightId ? { insightId: row.insightId } : {},
-    ...row.cohortFingerprint ? { cohortFingerprint: row.cohortFingerprint } : {},
-    evidence: {
-      estimated: row.savings?.estimated ?? true,
-      sessions: row.sessions ?? 1,
-      ...row.savings?.tokens !== void 0 ? { savingsTokens: row.savings.tokens } : {},
-      ...row.savings?.ms !== void 0 ? { savingsMs: row.savings.ms } : {}
-    }
-  };
-}
-
-// src/report/client/derive.ts
-function outcomeHeadline(s) {
-  if (s.ending === "interrupted") return `Stopped by you after ${plural2(s.turns, "turn")}`;
-  const parts = outcomeBits(s);
-  if (parts.length) return parts.join(" \xB7 ");
-  const requests = plural2(s.humanTurns, "request");
-  if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural2(s.agents, "subagent") + ", " : ""}nothing committed`;
-  return `${requests}, no tool calls recorded`;
-}
-function outcomeBits(s) {
-  const o = s.outcomes;
-  const parts = [];
-  if (o.prLinks.length) parts.push(plural2(o.prLinks.length, "PR"));
-  if (o.gitCommits) parts.push(plural2(o.gitCommits, "commit"));
-  const changed = o.filesEdited + o.filesWritten;
-  if (changed) parts.push(plural2(changed, "file") + " changed");
-  if (o.buildRunsFailed) parts.push(`${o.buildRunsFailed} of ${plural2(o.buildRuns, "build run")} failed`);
-  if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural2(o.testRuns, "test run")} failed` : `${plural2(o.testRuns, "test run")} green`);
-  return parts;
-}
-
 // src/suggest/evidence.ts
 var EVIDENCE_SCHEMA_VERSION = "1";
 var DEFAULT_EVIDENCE_LIMIT = 12;
@@ -10381,8 +10725,8 @@ function projectEvidence(value, options = {}) {
     rows = rowsFromAnalysis(input.value);
   }
   const seen = /* @__PURE__ */ new Set();
-  for (const row of rows) {
-    const id = suggestionIdV2(suggestionKey(row.finding, "report"));
+  for (const row2 of rows) {
+    const id = suggestionIdV2(suggestionKey(row2.finding, "report"));
     if (seen.has(id)) throw new Error(`duplicate canonical suggestion identity ${id}`);
     seen.add(id);
   }
@@ -10402,18 +10746,18 @@ function projectEvidence(value, options = {}) {
     catalogMatches: [],
     findings: []
   };
-  for (const row of rows.slice(0, limit)) {
-    const suggestionId2 = suggestionIdV2(suggestionKey(row.finding, "report"));
-    const matches = row.catalogMatches.map((match) => catalogOutput(suggestionId2, match));
+  for (const row2 of rows.slice(0, limit)) {
+    const suggestionId2 = suggestionIdV2(suggestionKey(row2.finding, "report"));
+    const matches = row2.catalogMatches.map((match) => catalogOutput(suggestionId2, match));
     const finding = {
       suggestionId: suggestionId2,
-      findingToken: encodeFinding(row.finding, "report"),
-      finding: row.finding,
-      axis: row.axis,
-      severity: row.severity,
-      detail: row.detail,
-      ...row.recommendation !== void 0 ? { recommendation: row.recommendation } : {},
-      ...row.turnIndexes !== void 0 ? { turnIndexes: row.turnIndexes } : {},
+      findingToken: encodeFinding(row2.finding, "report"),
+      finding: row2.finding,
+      axis: row2.axis,
+      severity: row2.severity,
+      detail: row2.detail,
+      ...row2.recommendation !== void 0 ? { recommendation: row2.recommendation } : {},
+      ...row2.turnIndexes !== void 0 ? { turnIndexes: row2.turnIndexes } : {},
       catalogMatchIds: matches.map((match) => match.id)
     };
     const catalogStart = bundle.catalogMatches.length;
@@ -10567,7 +10911,7 @@ function slimAnalysis(a) {
 
 // src/cli/commands/harness.ts
 import { homedir as homedir4 } from "node:os";
-import { basename as basename7, resolve as resolve6 } from "node:path";
+import { basename as basename8, resolve as resolve6 } from "node:path";
 var VERSION = true ? "0.6.0" : "0.0.0-dev";
 var C = {
   dim: (s) => `\x1B[2m${s}\x1B[0m`,
@@ -10576,7 +10920,7 @@ var C = {
   g: (s) => `\x1B[32m${s}\x1B[0m`,
   y: (s) => `\x1B[33m${s}\x1B[0m`
 };
-var paint = (fn, s) => process.stdout.isTTY ? fn(s) : s;
+var paint2 = (fn, s) => process.stdout.isTTY ? fn(s) : s;
 var n = (x) => x.toLocaleString("en-US");
 var kb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
 async function runHarness(flags) {
@@ -10593,7 +10937,7 @@ async function runHarness(flags) {
   } else {
     roots = [configArg ?? defaultConfigDir()];
     refs = await listSessions(configArg ? { configDir: configArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename7(cwd)}`;
+    scopeLabel = `repo ${basename8(cwd)}`;
   }
   const limitDefault = isGlobal ? 500 : 200;
   const limitRaw = flagStr(flags, "limit");
@@ -10621,7 +10965,7 @@ async function runHarness(flags) {
       }
     }
   }
-  if (!flagBool(flags, "quiet")) process.stderr.write(paint(C.dim, `analyzed ${plural(analyses.length, "session")}: declared vs used\u2026
+  if (!flagBool(flags, "quiet")) process.stderr.write(paint2(C.dim, `analyzed ${plural(analyses.length, "session")}: declared vs used\u2026
 `));
   const home = homedir4();
   const inventory = await collectInventory({ cwd, roots, home });
@@ -10639,7 +10983,7 @@ async function cmdHarness(_positionals, flags) {
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
     await writePrivateOutput(resolve6(outFile), JSON.stringify(report, null, 2));
-    process.stderr.write(paint(C.g, "\u2713 ") + `harness written to ${resolve6(outFile)}
+    process.stderr.write(paint2(C.g, "\u2713 ") + `harness written to ${resolve6(outFile)}
 `);
     if (!flagBool(flags, "json")) return;
   }
@@ -10653,15 +10997,15 @@ function printHarness(r) {
   const w = (s = "") => process.stdout.write(s + "\n");
   const inv = r.inventory;
   const x = r.crosswalk;
-  const scopeLabel = r.scope.global ? `global (${r.scope.roots.length} roots)` : `repo ${basename7(r.scope.cwd)}`;
+  const scopeLabel = r.scope.global ? `global (${r.scope.roots.length} roots)` : `repo ${basename8(r.scope.cwd)}`;
   w();
-  w(paint(C.o, paint(C.b, "orangu")) + "  " + paint(C.b, "harness \xB7 " + scopeLabel));
-  w(paint(C.dim, `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? "" : "s"} scanned`));
+  w(paint2(C.o, paint2(C.b, "orangu")) + "  " + paint2(C.b, "harness \xB7 " + scopeLabel));
+  w(paint2(C.dim, `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? "" : "s"} scanned`));
   w();
   const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
   if (nothing) {
     w(`  no harness config found under ${r.scope.roots.join(", ")}. Nothing to cross-reference`);
-    w(paint(C.dim, `
+    w(paint2(C.dim, `
   looked for: settings.json \xB7 skills/ \xB7 agents/ \xB7 plugins/ \xB7 .mcp.json \xB7 CLAUDE.md
 `));
     return;
@@ -10682,12 +11026,12 @@ function printHarness(r) {
     "idle skills",
     inv.totals.skills === 0 ? "no skills installed" : noSessions ? NO_EVIDENCE : idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : "none: every installed skill fired"
   );
-  if (classified(inv.totals.skills) && idleSkills.length) w(paint(C.dim, "    " + idleSkills.slice(0, 8).map((s) => s.name).join(", ")));
+  if (classified(inv.totals.skills) && idleSkills.length) w(paint2(C.dim, "    " + idleSkills.slice(0, 8).map((s) => s.name).join(", ")));
   line(
     "idle MCP",
     inv.totals.mcpServers === 0 ? "no MCP servers configured" : noSessions ? NO_EVIDENCE : idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : "none: every configured server was called"
   );
-  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint(C.dim, "    " + idleMcp.slice(0, 8).map((m) => m.name).join(", ")));
+  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint2(C.dim, "    " + idleMcp.slice(0, 8).map((m) => m.name).join(", ")));
   const undeclared = [
     ...x.skills.filter((s) => s.status === "undeclared").map((s) => "skill " + s.name),
     ...x.mcpServers.filter((m) => m.status === "undeclared").map((m) => "mcp " + m.name),
@@ -10695,7 +11039,7 @@ function printHarness(r) {
     ...x.hooks.filter((h) => h.status === "undeclared").map((h) => "hook " + h.commandBasename)
   ];
   line("undeclared", undeclared.length ? `${undeclared.length} observed but not in the config read` : "none");
-  if (undeclared.length) w(paint(C.dim, "    " + undeclared.slice(0, 8).join(", ")));
+  if (undeclared.length) w(paint2(C.dim, "    " + undeclared.slice(0, 8).join(", ")));
   const usedAgents = x.agents.filter((a) => a.status === "used").length;
   const undeclaredAgents = x.agents.filter((a) => a.status === "undeclared").length;
   const undeclaredClause = undeclaredAgents ? ` \xB7 ${undeclaredAgents} undeclared` : "";
@@ -10707,7 +11051,7 @@ function printHarness(r) {
   const hookErrors = x.hooks.reduce((s, h) => s + h.errors, 0);
   const meanMs = hooksRun > 0 ? Math.round(x.hooks.reduce((s, h) => s + h.totalMs, 0) / hooksRun) : 0;
   line("hooks (configured / runs / errors / mean ms)", "");
-  w(paint(C.dim, `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint(C.y, String(hookErrors)) : "0"} / ${n(meanMs)} ms`));
+  w(paint2(C.dim, `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint2(C.y, String(hookErrors)) : "0"} / ${n(meanMs)} ms`));
   const modelDrift = x.models.configured && !x.models.matchesConfigured;
   const effortDrift = x.effort.configured && !x.effort.matchesConfigured;
   if (noSessions) line("drift", NO_EVIDENCE);
@@ -10715,15 +11059,15 @@ function printHarness(r) {
   line("permissions", `${x.permissions.allowRules} allow / ${x.permissions.denyRules} deny / ${x.permissions.askRules} ask rules \xB7 ${n(x.permissions.promptEvents)} prompt events in ${x.permissions.promptSessions} sessions`);
   if (x.injectedListings.length) {
     w();
-    w(paint(C.b, "  injected listings (recurring context weight, per session)"));
-    for (const l of x.injectedListings.slice(0, 6)) w(`    ${l.type.padEnd(20)} \u2248${n(l.approxTokensPerSession).padStart(8)} tokens/session  ${paint(C.dim, `(${l.sessions} sessions)`)}`);
+    w(paint2(C.b, "  injected listings (recurring context weight, per session)"));
+    for (const l of x.injectedListings.slice(0, 6)) w(`    ${l.type.padEnd(20)} \u2248${n(l.approxTokensPerSession).padStart(8)} tokens/session  ${paint2(C.dim, `(${l.sessions} sessions)`)}`);
   }
   if (r.notes.length) {
     w();
-    w(paint(C.b, "  notes"));
-    for (const note of r.notes) w(paint(C.dim, "    \xB7 " + note));
+    w(paint2(C.b, "  notes"));
+    for (const note of r.notes) w(paint2(C.dim, "    \xB7 " + note));
   }
-  w(paint(C.dim, "\n  add --json for the machine-readable inventory and declared-vs-used rows\n"));
+  w(paint2(C.dim, "\n  add --json for the machine-readable inventory and declared-vs-used rows\n"));
 }
 
 // src/cli/commands/estimate.ts
@@ -10736,16 +11080,16 @@ async function loadAnalysisResult(sel, analyzeOptions = { version: "evidence", n
   let ref;
   try {
     ref = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() });
-  } catch (err) {
-    return { ok: false, reason: `session lookup failed: ${err.message}` };
+  } catch (err2) {
+    return { ok: false, reason: `session lookup failed: ${err2.message}` };
   }
   if (!ref) return { ok: false, reason: "no such session" };
   try {
     const loaded = await readStableEvidenceSession(ref.path);
     const session = await parseClaudeCodeSession(loaded.parseInput);
     return { ok: true, analysis: analyzeSession(session, analyzeOptions) };
-  } catch (err) {
-    return { ok: false, reason: err.message };
+  } catch (err2) {
+    return { ok: false, reason: err2.message };
   }
 }
 async function loadAnalysisBySelector(sel, analyzeOptions) {
@@ -10920,7 +11264,7 @@ import { realpath as realpath8, stat as stat7 } from "node:fs/promises";
 // src/suggest/artifacts.ts
 import { constants as constants9 } from "node:fs";
 import { chmod, lstat as lstat8, open as open9, realpath as realpath6, stat as stat6 } from "node:fs/promises";
-import { basename as basename8, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
+import { basename as basename9, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
 var MAX_FILES = 64;
@@ -10995,7 +11339,7 @@ function sameArtifactSnapshot(a, b) {
 async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   const root = resolve8(proposalsDir);
   const candidate = resolve8(path);
-  if (!inside(root, candidate) || basename8(candidate) !== expectedName) {
+  if (!inside(root, candidate) || basename9(candidate) !== expectedName) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
   let rootStat;
@@ -11825,11 +12169,11 @@ var EXTRA_HELP = [
 
 // src/cli/json-out.ts
 function renderAnalysisJson(a, flags) {
-  let out = a;
+  let out2 = a;
   if (!flagBool(flags, "no-redact")) {
-    out = redactAnalysis(a, { scrub: true, stripText: !flagBool(flags, "include-text"), stripPaths: flagBool(flags, "strip-paths") }).analysis;
+    out2 = redactAnalysis(a, { scrub: true, stripText: !flagBool(flags, "include-text"), stripPaths: flagBool(flags, "strip-paths") }).analysis;
   }
-  const body = flagBool(flags, "slim") ? slimAnalysis(out) : out;
+  const body = flagBool(flags, "slim") ? slimAnalysis(out2) : out2;
   return JSON.stringify(body, null, flagBool(flags, "quiet") ? 0 : 2) + "\n";
 }
 function emitAnalysisJson(a, flags) {
@@ -11849,40 +12193,19 @@ function renderPreparedAggregateJson(a, flags, options = {}) {
 }
 
 // src/cli/main.ts
-var C2 = {
-  dim: (s) => `\x1B[2m${s}\x1B[0m`,
-  b: (s) => `\x1B[1m${s}\x1B[0m`,
-  o: (s) => `\x1B[38;5;209m${s}\x1B[0m`,
-  g: (s) => `\x1B[32m${s}\x1B[0m`,
-  r: (s) => `\x1B[31m${s}\x1B[0m`,
-  y: (s) => `\x1B[33m${s}\x1B[0m`
-};
-var isTTY = process.stdout.isTTY;
-var paint2 = (fn, s) => isTTY ? fn(s) : s;
+var out = MACHINE_CAPS;
+var err = MACHINE_CAPS;
+var progress;
+function detectStreams(flags) {
+  const machine = flagBool(flags, "json") || flagBool(flags, "quiet") || flagBool(flags, "no-color");
+  out = detectCaps(process.stdout, process.env, { machine });
+  err = detectCaps(process.stderr, process.env, { machine });
+}
 function offerBetaFeedback(context) {
-  process.stderr.write(paint2(C2.dim, `  beta: rant about the experience \u2192 orangu feedback --context ${context}
-`));
+  process.stderr.write(betaLine(err, context) + "\n");
 }
-var FOOTER_COLUMNS = 80;
-function nextStepLines(a) {
-  const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0];
-  if (!top) return ["  no findings: this session ran clean"];
-  const { id, command } = handoffForInsight(top, a.session.id);
-  const label = "  top finding:  ";
-  const title = top.title.length > FOOTER_COLUMNS - label.length ? top.title.slice(0, FOOTER_COLUMNS - label.length - 1) + "\u2026" : top.title;
-  return [
-    `${label}${title}`,
-    `  next step:    /orangu:improve on ${id} (copy-ready command below)`,
-    "  needs the plugin once, inside Claude Code:",
-    `    ${PLUGIN_INSTALL}`,
-    "  copy-ready:   the same command with its evidence attached; paste this one",
-    `    ${command}`
-  ];
-}
-function printNextStep(a, flags) {
-  if (flagBool(flags, "quiet") || flagBool(flags, "json")) return;
-  const [first, ...rest] = nextStepLines(a);
-  process.stderr.write(paint2(C2.b, first) + "\n" + rest.map((l) => l + "\n").join(""));
+function nextStep(a, flags) {
+  return persistNextStep(a, redactOptions(flags));
 }
 function redactOptions(flags) {
   if (flagBool(flags, "no-redact")) return false;
@@ -11908,13 +12231,14 @@ async function selectSession(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail(`Ambiguous session "${sel}". ${cands.length} matches:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename9(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename10(c.projectSlug)).join("\n"));
   }
   fail(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
 }
 function fail(msg) {
-  process.stderr.write(paint2(C2.r, "error: ") + msg + "\n");
+  progress?.pause();
+  process.stderr.write(paint(err, "bad", "error: ") + msg + "\n");
   process.exit(1);
 }
 function makeCache(flags) {
@@ -11923,10 +12247,9 @@ function makeCache(flags) {
   return new AnalysisCache({ version: VERSION2 });
 }
 function printCacheStats(cache2, flags) {
-  if (!cache2 || flagBool(flags, "quiet")) return;
+  if (!cache2 || !flagBool(flags, "verbose") || flagBool(flags, "quiet")) return;
   const s = cache2.stats();
-  process.stderr.write(paint2(C2.dim, `cache: ${s.hits} hits, ${s.misses} misses
-`));
+  process.stderr.write(row(err, "cache", `${s.hits} hits, ${s.misses} misses`, { style: "dim" }) + "\n");
 }
 async function analyzeRef(ref, flags, cache2) {
   const c = cache2 !== void 0 ? cache2 : makeCache(flags);
@@ -11934,16 +12257,28 @@ async function analyzeRef(ref, flags, cache2) {
   if (cache2 === void 0) printCacheStats(c, flags);
   return analysis;
 }
+async function analyzeWithProgress(ref, flags) {
+  const quiet = flagBool(flags, "quiet") || flagBool(flags, "json");
+  const t0 = performance.now();
+  const sp = spinner(err);
+  progress = sp;
+  if (!quiet) sp.start(`analyzing ${ref.sessionId.slice(0, 8)} ${fmtBytes(ref.sizeBytes)}`);
+  try {
+    const analysis = await analyzeRef(ref, flags);
+    return { analysis, elapsedMs: performance.now() - t0 };
+  } finally {
+    sp.stop();
+    progress = void 0;
+  }
+}
 function outPath(flags, id, ext = "html") {
-  const out = flagStr(flags, "o", "out");
-  if (out) return resolve10(out);
+  const out2 = flagStr(flags, "o", "out");
+  if (out2) return resolve10(out2);
   return join9(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref = await selectSession(sel, flags);
-  if (!flagBool(flags, "quiet")) process.stderr.write(paint2(C2.dim, `analyzing ${ref.sessionId} (${(ref.sizeBytes / 1e6).toFixed(1)} MB)\u2026
-`));
-  const analysis = await analyzeRef(ref, flags);
+  const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags);
   const { html, redaction } = renderReport(analysis, { redact: redactOptions(flags) });
   if (flagBool(flags, "stdout")) {
     process.stdout.write(html);
@@ -11951,39 +12286,38 @@ async function cmdReport(sel, flags) {
   }
   const path = outPath(flags, ref.sessionId);
   await writePrivateOutput(path, html);
-  process.stderr.write(paint2(C2.g, "\u2713 ") + `report written to ${path}` + (redaction ? paint2(C2.dim, ` (${redaction.applied} redactions)`) : "") + "\n");
-  if (!flagBool(flags, "no-open") && (flagBool(flags, "open") || isTTY)) openInBrowser(path);
+  const opened = !flagBool(flags, "no-open") && (flagBool(flags, "open") || out.tty);
+  if (opened) openInBrowser(path);
   process.stdout.write(path + "\n");
-  printNextStep(analysis, flags);
-  if (!flagBool(flags, "quiet")) offerBetaFeedback("report");
+  if (!flagBool(flags, "quiet")) {
+    process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + "\n");
+    const step = await nextStep(analysis, flags);
+    process.stderr.write(reportFooter(err, { path, opened, step }).join("\n") + "\n");
+  }
   thresholdExit(analysis, flags);
 }
 async function cmdAnalyze(sel, flags) {
   const ref = await selectSession(sel, flags);
-  const analysis = await analyzeRef(ref, flags);
+  const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags);
   if (flagBool(flags, "json")) {
     emitAnalysisJson(analysis, flags);
     thresholdExit(analysis, flags);
     return;
   }
-  printAnalysisSummary(analysis, flags);
-  printNextStep(analysis, flags);
-  if (!flagBool(flags, "quiet")) offerBetaFeedback("session");
+  process.stdout.write(analysisBlock(out, analysis, displayTitle(analysis, flags)).join("\n") + "\n");
+  if (!flagBool(flags, "quiet")) {
+    process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs }) + "\n");
+    const step = await nextStep(analysis, flags);
+    process.stderr.write(nextStepLines(err, step).join("\n") + "\n");
+    offerBetaFeedback("session");
+  }
   thresholdExit(analysis, flags);
 }
 async function cmdBrief(flags) {
   const ref = await selectSession(void 0, flags);
-  const analysis = await analyzeRef(ref, flags);
-  const s = analysis.summary;
-  process.stdout.write("\n" + paint2(C2.o, paint2(C2.b, "orangu")) + "  " + paint2(C2.b, displayTitle(analysis, flags)) + "\n");
-  process.stdout.write(paint2(C2.dim, `  latest session \xB7 ${analysis.session.id.slice(0, 8)} \xB7 ${s.turns} turns \xB7 ${fmtTokens(s.totalTokens)} tokens \xB7 ${fmtMs(s.activeMs)} active
-
-`));
-  process.stdout.write("  " + outcomeHeadline(s) + "\n\n");
-  for (const line of nextStepLines(analysis)) process.stdout.write(line + "\n");
-  if (!flagBool(flags, "quiet")) process.stdout.write(paint2(C2.dim, `
-  orangu report for the full picture \xB7 orangu --help for every command
-`));
+  const { analysis } = await analyzeWithProgress(ref, flags);
+  const step = await nextStep(analysis, flags);
+  process.stdout.write(briefBlock(out, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, "quiet") }).join("\n") + "\n");
   thresholdExit(analysis, flags);
 }
 var RETIRED_FLAGS = {
@@ -12007,52 +12341,14 @@ function thresholdExit(analysis, flags) {
   if (maxTokensStr !== void 0 && Number.isNaN(Number(maxTokensStr))) fail(`--max-tokens must be a number, got "${maxTokensStr}"`);
   const maxTokens = Number(maxTokensStr);
   if (maxTokensStr !== void 0 && !Number.isNaN(maxTokens) && analysis.summary.totalTokens > maxTokens) {
-    process.stderr.write(paint2(C2.r, `FAIL: ${fmtTokens(analysis.summary.totalTokens)} tokens > --max-tokens ${fmtTokens(maxTokens)}
-`));
+    process.stderr.write(paint(err, "bad", `FAIL: ${fmtTokens(analysis.summary.totalTokens)} tokens > --max-tokens ${fmtTokens(maxTokens)}`) + "\n");
     bad = true;
   }
   if (flagBool(flags, "fail-on-hook-errors") && analysis.hooks.errors > 0) {
-    process.stderr.write(paint2(C2.r, `FAIL: ${analysis.hooks.errors} hook errors
-`));
+    process.stderr.write(paint(err, "bad", `FAIL: ${analysis.hooks.errors} hook errors`) + "\n");
     bad = true;
   }
   if (bad) process.exit(2);
-}
-function printAnalysisSummary(a, flags) {
-  const s = a.summary;
-  const line = (label, val) => process.stdout.write("  " + label.padEnd(18) + val + "\n");
-  process.stdout.write("\n" + paint2(C2.o, paint2(C2.b, "orangu")) + "  " + paint2(C2.b, displayTitle(a, flags)) + "\n");
-  process.stdout.write(paint2(C2.dim, `  ${a.session.source} \xB7 ${a.session.id}
-
-`));
-  line("quality", qualityLine(a));
-  line("time", `${fmtMs(s.wallMs)} wall \xB7 ${fmtMs(s.activeMs)} active \xB7 ${fmtMs(s.humanWaitMs)} waiting`);
-  line("tokens", `${fmtTokens(s.totalTokens)} \xB7 ${(s.cacheHitRatio * 100).toFixed(0)}% cache \xB7 ${fmtTokens(a.tokens.byKind.output)} output`);
-  line("turns", `${s.turns} (${s.humanTurns} human)`);
-  line("tools", `${s.toolCalls} calls \xB7 ${s.toolErrors} errors`);
-  if (s.agents) line("agents", `${s.agents} runs \xB7 ${a.agents.maxConcurrency} max parallel \xB7 ${fmtTokens(a.tokens.agents)} tokens`);
-  line("context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""} \xB7 ${s.compactions} compactions`);
-  process.stdout.write("\n" + paint2(C2.b, "  findings") + "\n");
-  if (!a.insights.length) process.stdout.write(paint2(C2.g, "    clean: no findings\n"));
-  for (const ins of a.insights.slice(0, 6)) {
-    const mark2 = ins.severity === "high" ? paint2(C2.r, "\u25CF") : ins.severity === "medium" ? paint2(C2.y, "\u25CF") : paint2(C2.dim, "\u25CF");
-    const save = ins.savings?.tokens ? paint2(C2.o, `  save ~${fmtTokens(ins.savings.tokens)} tokens`) : ins.savings?.ms ? paint2(C2.o, `  save ~${fmtMs(ins.savings.ms)}`) : "";
-    process.stdout.write(`    ${mark2} ${ins.title}${save}
-`);
-  }
-  process.stdout.write("\n" + paint2(C2.dim, `  run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report
-`));
-  if (!a.parse.reconciliation.ok) process.stdout.write(paint2(C2.y, `  \u26A0 token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%
-`));
-}
-function qualityLine(a) {
-  const o = a.summary.outcomes;
-  const bits = [];
-  if (o.prLinks.length) bits.push(`${o.prLinks.length} PR`);
-  if (o.gitCommits) bits.push(`${o.gitCommits} commits`);
-  if (o.testRuns) bits.push(`${o.testRuns} test runs${o.testRunsFailed ? " (" + o.testRunsFailed + " failed)" : ""}`);
-  if (o.filesEdited + o.filesWritten) bits.push(`${o.filesEdited + o.filesWritten} files changed`);
-  return bits.join(" \xB7 ") || "no commits/PRs/tests detected";
 }
 async function cmdList2(flags) {
   const configArg = flagStr(flags, "root", "config", "r");
@@ -12063,22 +12359,7 @@ async function cmdList2(flags) {
     process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
     return;
   }
-  process.stdout.write(paint2(C2.b, `
-${plural(all.length, "session")}${flagBool(flags, "global") ? " (all roots)" : ""}
-
-`));
-  for (const s of rows) {
-    const when = new Date(s.mtimeMs).toISOString().slice(0, 16).replace("T", " ");
-    process.stdout.write(
-      `  ${paint2(C2.o, s.sessionId.slice(0, 8))}  ${paint2(C2.dim, when)}  ${(s.sizeBytes / 1e6).toFixed(1).padStart(5)}MB  ${s.hasSidecarDir ? paint2(C2.dim, "\u26D3 " + s.subagentFiles.length) : "    "}  ${basename9(s.projectSlug)}
-`
-    );
-  }
-  if (!all.length) process.stdout.write(paint2(C2.dim, `  No sessions found. Is Claude Code installed? A transcript path also works: orangu report <path.jsonl>
-`));
-  else process.stdout.write(paint2(C2.dim, `
-  orangu report <id>   \xB7   orangu analyze <id>   \xB7   orangu harness
-`));
+  process.stdout.write(listRows(out, rows, { total: all.length, global: flagBool(flags, "global") }).join("\n") + "\n");
 }
 async function cmdAggregate(scope, selOrPath, flags) {
   let refs;
@@ -12091,13 +12372,16 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const cwd = selOrPath ? resolve10(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename9(cwd)}`;
+    scopeLabel = `repo ${basename10(cwd)}`;
   }
   if (!refs.length) fail(`No sessions found for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
   const use = refs.slice(0, Number.isNaN(max) ? refs.length : max);
-  if (!flagBool(flags, "quiet")) process.stderr.write(paint2(C2.dim, `analyzing ${plural(use.length, "session")}\u2026
-`));
+  const quiet = flagBool(flags, "quiet") || flagBool(flags, "json");
+  const t0 = performance.now();
+  const sp = spinner(err);
+  progress = sp;
+  if (!quiet) sp.start(`analyzing ${plural(use.length, "session")}`);
   const jobsStr = flagStr(flags, "jobs", "j");
   const jobsN = jobsStr !== void 0 ? Math.max(1, Math.floor(Number(jobsStr)) || 1) : defaultJobs();
   const bundledEntry = /\.(m?js)$/.test(new URL(import.meta.url).pathname);
@@ -12108,11 +12392,11 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION2, now: Date.now(), cacheEnabled });
     analyses = r.analyses;
     failed = r.failed;
-    if (!flagBool(flags, "quiet")) {
-      process.stderr.write(paint2(C2.dim, `jobs: ${jobsN}
-`));
-      if (cacheEnabled) process.stderr.write(paint2(C2.dim, `cache: ${r.hits} hits, ${r.misses} misses
-`));
+    sp.stop(quiet ? void 0 : doneLine(err, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
+    progress = void 0;
+    if (!flagBool(flags, "quiet") && flagBool(flags, "verbose")) {
+      process.stderr.write(row(err, "jobs", String(jobsN), { style: "dim" }) + "\n");
+      if (cacheEnabled) process.stderr.write(row(err, "cache", `${r.hits} hits, ${r.misses} misses`, { style: "dim" }) + "\n");
     }
   } else {
     const cache2 = makeCache(flags);
@@ -12123,6 +12407,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
         failed++;
       }
     }
+    sp.stop(quiet ? void 0 : doneLine(err, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
+    progress = void 0;
     printCacheStats(cache2, flags);
   }
   const agg = aggregate(analyses, scopeLabel, Date.now());
@@ -12131,8 +12417,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
     await writePrivateOutput(resolve10(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    process.stderr.write(paint2(C2.g, "\u2713 ") + `aggregate written to ${resolve10(outFile)}
-`);
+    if (!quiet) process.stderr.write(row(err, "written", resolve10(outFile)) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -12146,8 +12431,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
 }
 function printAggregate(a) {
-  process.stdout.write("\n" + paint2(C2.o, paint2(C2.b, "orangu")) + "  " + paint2(C2.b, a.scope) + "\n");
-  process.stdout.write(paint2(C2.dim, `  ${plural(a.sessionCount, "session")}
+  process.stdout.write("\n" + paint(out, ["bold", "accent"], "orangu") + "  " + paint(out, "bold", a.scope) + "\n");
+  process.stdout.write(paint(out, "dim", `  ${plural(a.sessionCount, "session")}
 
 `));
   const line = (l, v) => process.stdout.write("  " + l.padEnd(20) + v + "\n");
@@ -12159,17 +12444,17 @@ function printAggregate(a) {
   line("tokens / human turn", fmtTokens(a.averages.tokensPerHumanTurn));
   line("cache hit ratio", (a.averages.cacheHitRatio * 100).toFixed(1) + "%");
   if (a.byModel.length) {
-    process.stdout.write("\n" + paint2(C2.b, "  tokens by model\n"));
+    process.stdout.write("\n" + paint(out, "bold", "  tokens by model\n"));
     for (const m of a.byModel.slice(0, 6)) process.stdout.write(`    ${m.key.padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${m.count} session${m.count === 1 ? "" : "s"}
 `);
   }
   if (a.crossFindings.length) {
-    process.stdout.write("\n" + paint2(C2.b, "  recurring findings (across sessions)\n"));
-    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint2(C2.o, (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8))}  ${f.title}  ${paint2(C2.dim, "(" + plural(f.sessions, "session") + ")")}
+    process.stdout.write("\n" + paint(out, "bold", "  recurring findings (across sessions)\n"));
+    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(out, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8))}  ${f.title}  ${paint(out, "dim", "(" + plural(f.sessions, "session") + ")")}
 `);
   }
   if (a.recurringErrors.length) {
-    process.stdout.write("\n" + paint2(C2.b, "  recurring tool errors (environment problems)\n"));
+    process.stdout.write("\n" + paint(out, "bold", "  recurring tool errors (environment problems)\n"));
     const hidden = /* @__PURE__ */ new Map();
     for (const e of a.recurringErrors) {
       if (e.signature) continue;
@@ -12179,20 +12464,20 @@ function printAggregate(a) {
       h.sessions = Math.max(h.sessions, e.sessions);
       hidden.set(e.tool, h);
     }
-    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) process.stdout.write(`    ${paint2(C2.r, String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature}  ${paint2(C2.dim, "(" + plural(e.sessions, "session") + ")")}
+    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) process.stdout.write(`    ${paint(out, "bad", String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature}  ${paint(out, "dim", "(" + plural(e.sessions, "session") + ")")}
 `);
-    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint2(C2.r, String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden; use --include-text  ${paint2(C2.dim, "(" + plural(h.sessions, "session") + ")")}
+    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out, "bad", String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden; use --include-text  ${paint(out, "dim", "(" + plural(h.sessions, "session") + ")")}
 `);
   }
   if (a.topReReadFiles.length) {
-    process.stdout.write("\n" + paint2(C2.b, "  most re-read files (context weight)\n"));
-    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint2(C2.dim, "(" + plural(f.sessions, "session") + ")")}
+    process.stdout.write("\n" + paint(out, "bold", "  most re-read files (context weight)\n"));
+    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(out, "dim", "(" + plural(f.sessions, "session") + ")")}
 `);
   }
-  process.stdout.write("\n" + paint2(C2.b, "  heaviest sessions (by tokens)\n"));
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint2(C2.dim, s.title ? s.title.slice(0, 50) : "(title hidden; use --include-text)")}
+  process.stdout.write("\n" + paint(out, "bold", "  heaviest sessions (by tokens)\n"));
+  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, "dim", s.title ? s.title.slice(0, 50) : "(title hidden; use --include-text)")}
 `);
-  process.stdout.write(paint2(C2.dim, `
+  process.stdout.write(paint(out, "dim", `
   add --json for the full machine-readable aggregate
 `));
 }
@@ -12207,7 +12492,7 @@ async function cmdServe(flags) {
   const opts = {
     port,
     // policy: open by default when TTY; --no-open suppresses
-    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || Boolean(isTTY)),
+    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || out.tty),
     // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
     includeText: !flagBool(flags, "no-include-text"),
     // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
@@ -12222,8 +12507,8 @@ async function cmdServe(flags) {
   if (requestedAutomaticLaunch) process.stderr.write("  --allow-claude is retired: the report now provides copy-only Claude/Codex handoffs.\n");
   const srv = await startServe(opts);
   process.stderr.write(
-    paint2(C2.o, paint2(C2.b, "orangu serve")) + ` \xB7 ${srv.url}
-` + paint2(C2.dim, `  loopback + private capability \xB7 model handoff: copy-only \xB7 watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions \xB7 ctrl-c stops
+    paint(err, ["bold", "accent"], "orangu serve") + ` \xB7 ${srv.url}
+` + paint(err, "dim", `  loopback + private capability \xB7 model handoff: copy-only \xB7 watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions \xB7 ctrl-c stops
 `)
   );
   if (opts.open) openInBrowser(srv.url);
@@ -12237,11 +12522,11 @@ async function cmdServe(flags) {
   });
 }
 function printHelp() {
-  process.stdout.write(`${isTTY ? MASCOT_ASCII + "\n" : ""}
-${paint2(C2.b, "orangu")} v${VERSION2}: observe the run, then improve the next outcome.
+  process.stdout.write(`${out.tty ? MASCOT_ASCII + "\n" : ""}
+${paint(out, "bold", "orangu")} v${VERSION2}: observe the run, then improve the next outcome.
 Deterministic observability for Claude Code sessions. No network calls.
 
-${paint2(C2.b, "usage")}
+${paint(out, "bold", "usage")}
   orangu                       analyze the latest session; print the next step
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
@@ -12253,9 +12538,9 @@ ${paint2(C2.b, "usage")}
                                --port <n> \xB7 --open/--no-open \xB7 --max-live <n>
                                --no-include-text \xB7 --global \xB7 --cwd <dir>${EXTRA_HELP.map((l) => "\n" + l).join("")}
 
-${paint2(C2.b, "session")}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
+${paint(out, "bold", "session")}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
 
-${paint2(C2.b, "flags")}
+${paint(out, "bold", "flags")}
   -o, --out <file>       write the report/JSON here (default: temp dir)
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
@@ -12270,12 +12555,15 @@ ${paint2(C2.b, "flags")}
   --root <dir>           scan only this Claude config dir (comma-separated list)
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
+  --verbose              also print the cache diagnostic (stderr)
+  --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
+                         are honoured; ORANGU_NO_ANIMATION=1 stops the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
   --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
-${paint2(C2.dim, "privacy: generated locally, zero network requests, secrets redacted by default.")}
+${paint(out, "dim", "privacy: generated locally, zero network requests, secrets redacted by default.")}
 `);
 }
 async function main() {
@@ -12284,6 +12572,7 @@ async function main() {
     positionals.push(flags["no-cache"]);
     flags["no-cache"] = true;
   }
+  detectStreams(flags);
   if (flagBool(flags, "version")) {
     process.stdout.write(VERSION2 + "\n");
     return;
