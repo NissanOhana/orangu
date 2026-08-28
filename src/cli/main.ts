@@ -28,7 +28,7 @@ import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
 import { MASCOT_ASCII } from '../report/client/mascot.js'
-import { PLUGIN_INSTALL, commandForInsight } from '../report/client/suggest-rows.js'
+import { PLUGIN_INSTALL, handoffForInsight } from '../report/client/suggest-rows.js'
 import { outcomeHeadline } from '../report/client/derive.js'
 import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
@@ -52,18 +52,29 @@ function offerBetaFeedback(context: 'session' | 'repo' | 'global' | 'report'): v
   process.stderr.write(paint(C.dim, `  beta: rant about the experience → orangu feedback --context ${context}\n`))
 }
 
+/** Terminal width the footer is laid out for; the copy-ready payload line is the one exception. */
+const FOOTER_COLUMNS = 80
+
 /**
- * The next step after a session was analyzed: the top finding and the exact improve command the
- * report shows for it (same PlanRow -> sg_ id -> `--finding` handoff, so the terminal and the
- * report name the same proposal). A clean session says so and names no command.
+ * The next step after a session was analyzed: the top finding and the improve command the report
+ * shows for it (same PlanRow -> sg_ id -> `--finding` handoff, so the terminal and the report name
+ * the same proposal). Every line fits FOOTER_COLUMNS except the last: the `--finding` payload is
+ * one token that a paste has to carry whole (the CLI persists no record for a bare sg_ id), so it
+ * stands alone, labelled, after the readable lines. A clean session says so and names no command.
  */
 function nextStepLines(a: Analysis): string[] {
   const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0]
   if (!top) return ['  no findings: this session ran clean']
+  const { id, command } = handoffForInsight(top, a.session.id)
+  const label = '  top finding:  '
+  const title = top.title.length > FOOTER_COLUMNS - label.length ? top.title.slice(0, FOOTER_COLUMNS - label.length - 1) + '…' : top.title
   return [
-    `  top finding:  ${top.title}`,
-    `  next step:    ${commandForInsight(top, a.session.id)}`,
-    `  needs the plugin once, inside Claude Code: ${PLUGIN_INSTALL}`,
+    `${label}${title}`,
+    `  next step:    claude "/orangu:improve ${id}"  (copy-ready below)`,
+    '  needs the plugin once, inside Claude Code:',
+    `    ${PLUGIN_INSTALL}`,
+    '  copy-ready:   the same command with its evidence attached; paste this one',
+    `    ${command}`,
   ]
 }
 

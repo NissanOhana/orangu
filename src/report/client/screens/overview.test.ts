@@ -115,7 +115,8 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(hero).toContain(ctx.a!.summary.outcomes.testRuns ? 'test' : 'request')
   })
 
-  // A3b: Plain mode removes panels (no axes, no chips, no sparkline) and keeps the same top-finding card.
+  // A3b: Plain mode removes panels (no axes, no chips, no sparkline) and keeps the same top-finding card
+  // plus the three links: the public sample opens in Plain and navigates through them.
   it('Plain mode is the sentence, the "What happened here" table, the same top-finding card and the links', async () => {
     const ctx = await context({ audience: 'plain', mode: 'file' })
     renderOverview(ctx)
@@ -123,6 +124,7 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('What happened here')
     expect(markup).toContain('The one thing to improve')
     expect(markup).toContain('<details class="finding top" open>')
+    expect(markup).toContain('<b>Fix.</b> ')
     expect(markup).toContain('class="cmd"')
     expect(markup).not.toContain('class="triptych"')
     expect(markup).not.toContain('sigchip')

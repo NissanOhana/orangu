@@ -5,7 +5,7 @@
  * vocabulary. The app wires [data-turns] buttons to the timeline and [data-copy] to the clipboard.
  */
 import type { Insight } from '../../../model/analysis.js'
-import { esc } from '../format.js'
+import { esc, plural } from '../format.js'
 import { savingsShare } from '../derive.js'
 import { commandBlock } from './command.js'
 import { plainSentence, type Audience } from '../strings.js'
@@ -28,7 +28,7 @@ export function findingHtml(ins: Insight, audience: Audience, opts: FindingOpts 
   // the evidence link (top card) replaces the turns button; never both
   const turnsBtn =
     ins.turnIndexes.length && audience !== 'plain' && !opts.link
-      ? `<div style="margin-top:10px"><button class="btn-sm" data-turns="${esc(ins.turnIndexes.join(','))}">Show ${ins.turnIndexes.length} turn${ins.turnIndexes.length > 1 ? 's' : ''} →</button></div>`
+      ? `<div style="margin-top:10px"><button class="btn-sm" data-turns="${esc(ins.turnIndexes.join(','))}">Show ${plural(ins.turnIndexes.length, 'turn')} →</button></div>`
       : ''
   // Under the default redaction Insight.detail is '' (transcript-derived copy); never render an empty <p>.
   const detail = ins.detail ? `<p>${esc(plainSentence(ins.detail, audience))}</p>` : ''
@@ -38,7 +38,7 @@ export function findingHtml(ins: Insight, audience: Audience, opts: FindingOpts 
     <summary><span class="chev" aria-hidden="true">▸</span><span class="sev ${esc(ins.severity)}" title="${esc(ins.severity)}"></span><b>${esc(plainSentence(ins.title, audience))}</b>${share ? `<span class="fsave" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${pill}</summary>
     <div class="fbody">
       ${detail}
-      <div class="rec">${esc(plainSentence(ins.recommendation, audience))}</div>
+      <div class="rec"><b>Fix.</b> ${esc(plainSentence(ins.recommendation, audience))}</div>
       ${link}${turnsBtn}
       ${cmd}
     </div>

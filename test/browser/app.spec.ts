@@ -147,7 +147,7 @@ test('localhost #harness renders the populated harness view and the Overview car
   await expect(page.getByText('No harness config found')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await page.goto(`${APP}/#overview?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator('a.harness-card[href="#harness"]')).toBeVisible({ timeout: 20_000 })
+  await expect(page.locator(`a.harness-card[href="#harness?s=${SESSION}"]`)).toBeVisible({ timeout: 20_000 })
   await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'Harness' })).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   expect(errors).toEqual([])

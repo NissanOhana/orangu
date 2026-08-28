@@ -6,7 +6,7 @@ import type { Analysis, Insight, QualitySignal, SessionEnding, Summary, ToolCall
 import type { LiveBadge, RowEventView, SessionSummaryRow } from '../../model/app-data.js'
 export type { RowEventView }
 import type { WeekBucket } from '../../analyze/aggregate.js'
-import { ms, pct, tok } from './format.js'
+import { ms, pct, plural, tok } from './format.js'
 
 /** Plain sentence for "How it ended". The word "finished" must never appear. */
 const ENDING: Partial<Record<SessionEnding, string>> = {
@@ -18,7 +18,6 @@ export function endingWord(ending: SessionEnding): string {
   return ENDING[ending] ?? 'The agent completed its last task'
 }
 
-const plural = (n: number, one: string, many = one + 's'): string => `${n} ${n === 1 ? one : many}`
 
 /**
  * Overview headline: what THIS session did, from the outcomes the analyzer counted.
@@ -130,7 +129,7 @@ export function savingsShare(s: Insight['savings'], sessionTotalTokens: number |
 export function recoverableLine(sum: { tokens: number; ms: number }, findings: number): string {
   if (!findings || (!sum.tokens && !sum.ms)) return ''
   const what = sum.tokens ? `≈${tok(sum.tokens)} tokens` : `≈${ms(sum.ms)}`
-  return `${what} recoverable across ${findings} finding${findings === 1 ? '' : 's'}`
+  return `${what} recoverable across ${plural(findings, 'finding')}`
 }
 
 /**

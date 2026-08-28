@@ -171,15 +171,32 @@ export function megaReview(scope: 'repo' | 'global'): string {
   return `<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Review major ${scope} improvements separately.</div><p class="narrative">This interactive command reviews the wider harness. It is copy-only here, creates no row status, and keeps its estimate gates inside /orangu:harness.</p><div class="kickrow"><span class="mono125 grow">${esc(command)}</span><button type="button" class="btn-sm" data-copy="${esc(command)}">Copy whole-harness review</button></div></div>`
 }
 
-// the harness report is fetched once per page (the server refreshes it on registry changes)
+// The harness report is fetched on first use and kept until the registry changes: an SSE session
+// event marks it stale (invalidateHarness) and the next screen that needs it re-fetches, at most
+// once per HARNESS_REFRESH_MS (the server's own recompute floor), keeping the last report on screen
+// until the fresh one lands. Never refetched on a timer: nothing polls while the page is idle.
+export const HARNESS_REFRESH_MS = 30_000
 let harnessReport: HarnessReport | null | undefined
 let harnessInFlight = false
+let harnessStale = false
+let harnessFetchedAt = 0
 
-/** kicks the /api/harness fetch; true while it is in flight (the screen renders aggScreen meanwhile) */
-function ensureHarness(ds: DataSource, onLoaded: () => void): boolean {
-  if (harnessReport !== undefined) return false
+/** an SSE session-added/updated frame: the registry (and so the crosswalk) may have moved */
+export function invalidateHarness(): void {
+  harnessStale = true
+}
+
+/**
+ * kicks the /api/harness fetch when there is no report yet, or a stale one older than the refresh
+ * floor; true only while the FIRST fetch is in flight (the screen renders aggScreen meanwhile; a
+ * refresh keeps rendering the report it has).
+ */
+export function ensureHarness(ds: DataSource, onLoaded: () => void): boolean {
+  const refresh = harnessStale && Date.now() - harnessFetchedAt >= HARNESS_REFRESH_MS
+  if (harnessReport !== undefined && !refresh) return false
   if (!harnessInFlight) {
     harnessInFlight = true
+    harnessStale = false
     void ds
       .harness()
       .then(
@@ -187,16 +204,18 @@ function ensureHarness(ds: DataSource, onLoaded: () => void): boolean {
           harnessReport = r
         },
         () => {
-          harnessReport = null
+          // a failed refresh keeps the last good report; a failed first fetch is the designed degraded state
+          if (harnessReport === undefined) harnessReport = null
         },
       )
       .finally(() => {
         harnessInFlight = false
+        harnessFetchedAt = Date.now()
         // success or failure: re-render so #harness leaves the loading state (null = designed degraded state)
         onLoaded()
       })
   }
-  return harnessInFlight
+  return harnessInFlight && harnessReport === undefined
 }
 
 function harnessView(ctx: Ctx): HTMLElement {
@@ -204,9 +223,9 @@ function harnessView(ctx: Ctx): HTMLElement {
 }
 
 /** the Overview card: '' until the report is here (and the fetch is kicked so a re-render fills it) */
-function harnessCard(ds: DataSource, onLoaded: () => void): string {
+function harnessCard(ds: DataSource, onLoaded: () => void, href: string): string {
   ensureHarness(ds, onLoaded)
-  return harnessReport ? harnessCardHtml(harnessReport) : ''
+  return harnessReport ? harnessCardHtml(harnessReport, href) : ''
 }
 
-export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview, ensureHarness, harnessView, harnessCard }
+export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview, ensureHarness, invalidateHarness, harnessView, harnessCard }

@@ -2,11 +2,14 @@
  * Overview: what happened (one true sentence from the counted outcomes), what matters (three axes with
  * a verdict word, the top finding as a card with its fix, evidence link and improve command), what next
  * (three text links). Detailed adds the context sparkline and the other top findings; Plain removes
- * panels instead of renaming nouns (A1, A3b). One code path renders the top-finding card for both.
+ * panels instead of renaming nouns (A1, A3b) and keeps only the sentence, the "What happened here"
+ * table, the one finding and the three links (the public sample opens in Plain; the links are its
+ * way into the other screens, see test/browser/public-surfaces.spec.ts). One code path renders the
+ * top-finding card for both.
  */
 import type { Ctx } from '../app.js'
 import type { Analysis, Insight } from '../../../model/analysis.js'
-import { esc, ms, num, pct, tok } from '../format.js'
+import { esc, ms, num, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { degradedBanner } from '../components/banner.js'
 import { signalChips } from '../components/chips.js'
@@ -48,7 +51,7 @@ function topFinding(ctx: Ctx, a: Analysis, ins: Insight | undefined): string {
   const link = at?.tool
     ? { href: href(ctx, a, { screen: 'timeline', tool: at.tool }), label: `See the ${at.tool} calls →` }
     : at
-      ? { href: href(ctx, a, { screen: 'timeline', turn: at.turn }), label: `See the ${ins.turnIndexes.length} turn${ins.turnIndexes.length === 1 ? '' : 's'} →` }
+      ? { href: href(ctx, a, { screen: 'timeline', turn: at.turn }), label: `See the ${plural(ins.turnIndexes.length, 'turn')} →` }
       : undefined
   return `<div class="eyebrow mb6">The one thing to improve</div>${findingHtml(ins, ctx.audience, { command: commandForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, ...(link ? { link } : {}) })}`
 }
@@ -58,7 +61,7 @@ function contextSpark(a: Analysis): string {
   const c = a.context
   const main = c.series.filter((p) => !p.agentId)
   const peak = c.contextWindow ? `peak ${pct(a.summary.contextPeak / c.contextWindow)} of the window` : `peak ${tok(a.summary.contextPeak)}`
-  const caption = `${peak} · ${a.summary.compactions} compaction${a.summary.compactions === 1 ? '' : 's'}`
+  const caption = `${peak} · ${plural(a.summary.compactions, 'compaction')}`
   const svg = main.length ? `<div class="spark">${lineChart(main.map((p) => p.contextSize), { width: 320, height: 60, markers: compactionMarkers(c.compactions, main), yMax: c.contextWindow })}</div>` : ''
   return `<div class="card pad"><div class="card-title">Context</div>${svg}<div class="small muted">${esc(caption)}</div></div>`
 }
@@ -68,9 +71,9 @@ function whereNext(ctx: Ctx, a: Analysis): string {
   // the same rows the Suggest screen renders, so the count here equals the rows there
   const n = planRows('session', a, undefined).length
   const links = [
-    { screen: 'timeline', label: s.toolErrors ? `Timeline · ${num(s.toolErrors)} error${s.toolErrors === 1 ? '' : 's'} only` : `Timeline · ${num(s.turns)} turns`, state: s.toolErrors ? { errorsOnly: true } : {} },
-    { screen: 'tools', label: `Tools · ${num(s.toolCalls)} calls, ${num(s.toolErrors)} errors`, state: {} },
-    { screen: 'suggest', label: n ? `Suggestions · ${num(n)} finding${n === 1 ? '' : 's'}` : 'Suggestions · nothing to improve', state: {} },
+    { screen: 'timeline', label: s.toolErrors ? `Timeline · ${plural(s.toolErrors, 'error')} only` : `Timeline · ${num(s.turns)} turns`, state: s.toolErrors ? { errorsOnly: true } : {} },
+    { screen: 'tools', label: `Tools · ${plural(s.toolCalls, 'call')}, ${plural(s.toolErrors, 'error')}`, state: {} },
+    { screen: 'suggest', label: n ? `Suggestions · ${plural(n, 'finding')}` : 'Suggestions · nothing to improve', state: {} },
   ]
   return `<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${links
     .map((l) => `<a data-screen="${l.screen}" href="${esc(href(ctx, a, { screen: l.screen, ...l.state }))}">${esc(plainSentence(l.label, ctx.audience))} →</a>`)

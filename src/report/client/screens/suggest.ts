@@ -182,7 +182,9 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
     ? boundRows.map((r, i) => planItem(ctx, r.row, i + 1, r.sid, r.record)).join('')
     : emptyHero({ title: 'Nothing to improve was found', hint: 'Ran clean. Re-run after your next session.' })
 
-  // the taxonomy is shown on demand, under the first-time note, never as a header before any proposal exists
+  // The taxonomy is explanatory copy under the collapsed first-time note, never a status chip and never
+  // a header before a proposal exists; the class a proposal actually got shows on the proposal itself.
+  // It stays in the app (test/plugin.test.ts pins one taxonomy shared by catalog, plugin and app).
   const types = CHANGE_CLASS_LABELS.map((label) => `<span class="sigchip">${esc(label)}</span>`).join('')
   const install = boundRows.length
     ? `<details class="card pad mb16 sg-install"><summary><span class="chev" aria-hidden="true">▸</span>First time? Install the orangu plugin in Claude Code</summary><div class="mt8">${commandBlock(PLUGIN_INSTALL, '>')}<p class="small muted" style="margin:8px 0 0">Typed inside Claude Code, once. A proposal changes one of:</p><div class="chiprow mt8">${types}</div></div></details>`

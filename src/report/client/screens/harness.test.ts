@@ -90,12 +90,13 @@ describe('renderHarness (A8, serve-only)', () => {
     expect(markup).toContain('data-copy="orangu harness"')
   })
 
-  it('the Overview card is one honest line linking to #harness', () => {
-    const card = harnessCardHtml(report())
-    expect(card).toContain('href="#harness"')
+  it('the Overview card is one honest line linking to #harness on the current session', () => {
+    const card = harnessCardHtml(report(), '#harness?s=abc&audience=plain')
+    expect(card).toContain('href="#harness?s=abc&amp;audience=plain"')
     expect(card).toContain('48 of 85 skills never fired')
     expect(card).toContain('skill_listing ≈10,482 tokens per session')
-    const none = harnessCardHtml(report({ inventory: { ...report().inventory, claudeMd: [] }, crosswalk: { ...report().crosswalk, skills: [] } }))
+    const none = harnessCardHtml(report({ inventory: { ...report().inventory, claudeMd: [] }, crosswalk: { ...report().crosswalk, skills: [] } }), '#harness')
     expect(none).toContain('no harness config found')
+    expect(none).toContain('href="#harness"')
   })
 })

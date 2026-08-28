@@ -3,7 +3,7 @@
  * curve and "Where the tokens went" at full weight, the other charts under "More charts" (A5).
  */
 import type { Ctx } from '../app.js'
-import { catColor, esc, pct, tok } from '../format.js'
+import { catColor, esc, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { degradedBanner } from '../components/banner.js'
@@ -61,7 +61,7 @@ export function renderContext(ctx: Ctx): HTMLElement {
       ${kpi('Compactions', String(c.compactions.length), c.compactions.length ? 'context was reset' : 'none')}
     </div>
     ${card('Context size over the session', `<div class="scroll-x">${ctxLine}</div><div class="legend"><span>Each point is one API request; dashed lines are compactions.</span></div>`, 'mb16')}
-    ${card(`Where the tokens went · ${esc(tok(co.totalTokens))} total`, `${stackedBar(byKind, { height: 22 })}<div class="legend">${byKind.filter((b) => b.value > 0).map((b) => `<span><i class="sw" style="background:${b.color}"></i>${esc(b.label)}</span>`).join('')}</div>${serverTools ? `<div class="smt8">${serverTools} server-tool request${serverTools === 1 ? '' : 's'} (web search/fetch), counted per request, not in tokens</div>` : ''}`, 'mb16')}
+    ${card(`Where the tokens went · ${esc(tok(co.totalTokens))} total`, `${stackedBar(byKind, { height: 22 })}<div class="legend">${byKind.filter((b) => b.value > 0).map((b) => `<span><i class="sw" style="background:${b.color}"></i>${esc(b.label)}</span>`).join('')}</div>${serverTools ? `<div class="smt8">${plural(serverTools, 'server-tool request')} (web search/fetch), counted per request, not in tokens</div>` : ''}`, 'mb16')}
     <details class="more-charts"><summary><span class="chev" aria-hidden="true">▸</span>More charts · composition per request, by model, cumulative</summary><div class="mt8">${more}</div></details>
   </section>`)
 }

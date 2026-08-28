@@ -225,7 +225,7 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('<span class="sev medium" title="medium"></span>')
     expect(markup).toContain('~25% of this session')
     expect(markup).toContain('title="≈25.0k tokens of the 100k this session measured; estimated by rule reread-files"')
-    // the taxonomy no longer leads the screen; it sits under the collapsed first-time note
+    // the taxonomy no longer leads the screen; it is explanatory copy under the collapsed first-time note
     expect(markup).not.toContain('Measured → matched → proposed')
     expect(markup.indexOf('sigchip')).toBeGreaterThan(markup.indexOf('sg-install'))
     expect(markup).not.toContain('effort –')

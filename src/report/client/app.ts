@@ -118,10 +118,13 @@ export interface ServeUi {
   /** repo/global rendering is serve-only; file mode keeps only the small local-viewer empty state */
   aggregateView(ctx: Ctx): HTMLElement
   megaReview(scope: 'repo' | 'global'): string
-  /** kicks the harness fetch the #harness screen (or the Overview card) needs; true while in flight */
+  /** kicks the harness fetch the #harness screen (or the Overview card) needs; true while the first one is in flight */
   ensureHarness(ds: DataSource, onLoaded: () => void): boolean
+  /** the registry moved (an SSE session frame): the next screen that needs the harness re-fetches it */
+  invalidateHarness(): void
   harnessView(ctx: Ctx): HTMLElement
-  harnessCard(ds: DataSource, onLoaded: () => void): string
+  /** the Overview card; `href` is the #harness route carrying the current session key */
+  harnessCard(ds: DataSource, onLoaded: () => void, href: string): string
 }
 
 /** Refresh persisted suggestion state after an SSE transition without erasing the last good view. */
@@ -209,7 +212,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     conn,
     aggLoading: serveUi ? (state.screen === 'harness' ? serveUi.ensureHarness(ds, scheduleRender) : serveUi.ensureAggregate(d, ds, state, scheduleRender)) : false,
     megaReview: serveUi?.megaReview,
-    harnessCard: serveUi ? () => serveUi.harnessCard(ds, scheduleRender) : undefined,
+    harnessCard: serveUi ? () => serveUi.harnessCard(ds, scheduleRender, cleanHash(state, { screen: 'harness' })) : undefined,
     go,
   })
 
@@ -376,9 +379,11 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     if (ev.type === 'session-updated') {
       const i = d.sessions.findIndex((r) => r.id === ev.id)
       if (i >= 0) d.sessions[i] = ev.row
+      serveUi?.invalidateHarness()
       if (state.s === ev.id || state.screen === 'live') scheduleRender()
     } else if (ev.type === 'session-added') {
       d.sessions.push(ev.row)
+      serveUi?.invalidateHarness()
       scheduleRender()
     } else if (ev.type === 'session-live') {
       const row = d.sessions.find((r) => r.id === ev.id)

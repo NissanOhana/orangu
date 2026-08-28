@@ -48,10 +48,10 @@ function idleCard(title: string, idle: string[], total: number, never: string, d
   return `<div class="card pad"><div class="card-title">${title}</div>${body}</div>`
 }
 
-/** The Overview card (serve): one line, linking to #harness. */
-export function harnessCardHtml(r: HarnessReport): string {
+/** The Overview card (serve): one line, linking to #harness. `href` carries the current route (the ?s= key). */
+export function harnessCardHtml(r: HarnessReport, href: string): string {
   const lead = nothingDeclared(r) ? { title: 'no harness config found under the scanned roots', sub: 'settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md' } : harnessLead(r)
-  return `<a class="card pad mb16 harness-card" href="#harness"><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${esc(lead.title)}</div><div class="small muted">${esc(lead.sub)} · open the harness view →</div></a>`
+  return `<a class="card pad mb16 harness-card" href="${esc(href)}"><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${esc(lead.title)}</div><div class="small muted">${esc(lead.sub)} · open the harness view →</div></a>`
 }
 
 export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {

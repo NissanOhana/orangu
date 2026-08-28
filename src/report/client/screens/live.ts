@@ -7,7 +7,7 @@
 import type { Ctx } from '../app.js'
 import type { Analysis, AgentStat } from '../../../model/analysis.js'
 import type { SessionSummaryRow } from '../../../model/app-data.js'
-import { catColor, esc, ms, pct, timeOnly, tok } from '../format.js'
+import { catColor, esc, ms, pct, plural, timeOnly, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { emptyHero } from '../components/empty.js'
@@ -110,7 +110,7 @@ function sessionView(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis |
   const c = a?.context
   const ctxPct = c?.contextWindow ? c.final / c.contextWindow : undefined
   const ctxCaption =
-    state === 'ended' ? '–' : `${s?.compactions ?? 0} compaction${(s?.compactions ?? 0) === 1 ? '' : 's'} so far${ctxPct !== undefined && ctxPct >= 0.75 ? ' · compaction likely near 90%' : ''}`
+    state === 'ended' ? '–' : `${plural(s?.compactions ?? 0, 'compaction')} so far${ctxPct !== undefined && ctxPct >= 0.75 ? ' · compaction likely near 90%' : ''}`
   const ctxCard = `<div class="card pad mb18">
     <div class="ctxhead"><span>Context window</span><span class="mono">${ctxPct !== undefined ? esc(pct(ctxPct)) + ' of ' + esc(tok(c!.contextWindow!)) : c ? esc(tok(c.final)) : '–'}</span></div>
     <div class="ctxbar"><i style="width:${ctxPct !== undefined ? (ctxPct * 100).toFixed(1) : 0}%"></i></div>

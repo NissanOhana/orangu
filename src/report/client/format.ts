@@ -18,6 +18,10 @@ export function ms(v: number | undefined): string {
 export function pct(n: number, digits = 0): string {
   return (n * 100).toFixed(digits) + '%'
 }
+/** `n one` / `n manys`: the count (thousands-separated) and the word that agrees with it */
+export function plural(n: number, one: string, many = one + 's'): string {
+  return `${num(n)} ${n === 1 ? one : many}`
+}
 export function num(n: number): string {
   return n.toLocaleString('en-US')
 }

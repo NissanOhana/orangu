@@ -5,6 +5,7 @@
  * so the screen and the JSON never disagree). Finding conversion preserves the evidence used for IDs.
  */
 import type { Analysis, Insight } from '../../model/analysis.js'
+import { plural } from './format.js'
 import { compareCrossFindings, type Aggregate, type CrossFinding } from '../../analyze/aggregate.js'
 import type { Finding, SuggestionProposal, SuggestionRecord, SuggestionScope } from '../../suggest/types.js'
 import { kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
@@ -86,7 +87,7 @@ export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: A
   return [...(agg?.crossFindings ?? [])]
     .sort(compareCrossFindings)
     .map((f) => {
-      const copy = safeCopy(f.ruleId, f.title, `Recurs in ${f.sessions} session${f.sessions === 1 ? '' : 's'}.`)
+      const copy = safeCopy(f.ruleId, f.title, `Recurs in ${plural(f.sessions, 'session')}.`)
       return {
         ruleId: f.ruleId,
         ...copy,
@@ -105,9 +106,15 @@ export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: A
  * no persisted record, so it is valid from a file report and from localhost alike).
  */
 export function commandForInsight(i: Insight, sessionId: string): string {
+  return handoffForInsight(i, sessionId).command
+}
+
+/** The same handoff, split: the sg_ id (the readable name of the proposal) and the copy-ready command. */
+export function handoffForInsight(i: Insight, sessionId: string): { id: string; command: string } {
   const finding = findingForRow(planRowForInsight(i, sessionId), 'session')
   const key = suggestionKey(finding, 'report')
-  return kickoffCommands({ id: suggestionIdV2(key), ...finding, sessionIds: key.sessionIds, source: 'report' }, 'file').claude
+  const id = suggestionIdV2(key)
+  return { id, command: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: 'report' }, 'file').claude }
 }
 
 /** Recoverable = sums over the rows actually shown; repo/global scopes use cross-session findings. */

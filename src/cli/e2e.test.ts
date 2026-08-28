@@ -228,9 +228,17 @@ syncBuiltinESMExports()
     expect(next).toBeGreaterThan(-1)
     expect(offer).toBeGreaterThan(next)
     expect(human.stderr).toContain('top finding:')
+    expect(human.stderr).toMatch(/next step: {4}claude "\/orangu:improve sg_[0-9a-f]{12}" {2}\(copy-ready below\)/)
     expect(human.stderr).toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12} --finding /)
     expect(human.stderr).toContain('/plugin install orangu')
     expect(human.stdout.trim().endsWith('.html')).toBe(true)
+    // the footer is laid out for an 80-column terminal: only the copy-ready `--finding` payload (one
+    // token a paste must carry whole) may run longer, and it is the last line before the beta offer
+    const footer = human.stderr.slice(next, human.stderr.lastIndexOf('\n', offer)).split('\n').filter(Boolean)
+    const wide = footer.filter((l) => l.length > 80)
+    expect(wide.map((l) => l.slice(0, 40))).toEqual([expect.stringContaining('claude "/orangu:improve sg_')])
+    expect(wide[0]).toContain(' --finding ')
+    expect(footer.at(-1)).toBe(wide[0])
 
     const quiet = spawnSync('node', [CLI, ...base, '--quiet'], { encoding: 'utf8' })
     expect(quiet.status, quiet.stderr).toBe(0)

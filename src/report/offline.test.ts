@@ -64,10 +64,12 @@ describe('offline report', () => {
     // formatting, the redaction placeholder note, the watch-gated Live banner, the outcome headline). Track A (A1)
     // removes the 6-tile KPI grid, the 10 signal chips and 5 of the "Follow the evidence" cards and MUST bring this
     // back under 70 KB; the cap may only go DOWN from there.
-    // Status 2026-08-27 (Track A): measured 72,975 B after the trim pass, 1,295 B above the 70 KB target; the cap
-    // was left at 72 KB, not raised. Closing the gap is still open: either accept this number and restate the
-    // target here, or trim further (sparkline, Suggest first-time note, Context headline fold) and lower the cap.
+    // Status 2026-08-27 (Track A, review round 3): the 70 KB target is NOT met and is recorded as such, not
+    // left open. Measured: the client lands at 72,920 B; the plan's cut list was measured, not projected, and
+    // cannot close the gap (the Overview sparkline is 143 B, the Suggest taxonomy chips 295 B, and the taxonomy
+    // is pinned into the app by test/plugin.test.ts). Reaching 71,680 B needs a screen-level cut, which is a
+    // product decision, not a polish trim. The cap stays at 72 KB and may only go DOWN; the pin is exact.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
-    expect(CLIENT_JS.length).toBe(72975)
+    expect(CLIENT_JS.length).toBe(72920)
   })
 })
