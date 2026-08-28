@@ -215,18 +215,35 @@ describe('pickFrame / pickList', () => {
     { sessionId: '22222222-0000-4000-8000-00000000bbbb', path: '/p/c.jsonl', projectSlug: '-Users-me-Code-demo', project: 'demo', sizeBytes: 0, mtimeMs: NOW - 10 * 60_000, running: false },
     { sessionId: 'aaaaaaaa-0000-4000-8000-000000000001', path: '/p/d.jsonl', projectSlug: '-Users-me-Code-demo', project: 'demo', title: 'old', sizeBytes: 900, mtimeMs: NOW - 400 * 86_400_000, running: false },
   ]
-  const counts = { total: 12, running: 2 }
+  const counts = { total: 4, running: 2 }
+  const cut = { total: 25, running: 25 }
   it('every line fits the layout at every width, with and without unicode and colour', () => {
     for (const [label, caps] of VARIANTS) {
       assertFits(pickFrame(caps, rows, { cursor: 1, start: 0, size: 4 }, counts, NOW), caps, `pickFrame ${label}`)
       assertFits(pickFrame(caps, rows, { cursor: 3, start: 2, size: 2 }, counts, NOW), caps, `pickFrame window ${label}`)
       assertFits(pickList(caps, rows, counts, NOW), caps, `pickList ${label}`)
+      assertFits(pickFrame(caps, rows, { cursor: 0, start: 0, size: 4 }, cut, NOW), caps, `pickFrame cut ${label}`)
+      assertFits(pickList(caps, rows, cut, NOW), caps, `pickList cut ${label}`)
     }
+  })
+  it('a list cut by --limit says "N of M sessions" and points at --limit in both forms', () => {
+    const caps = capsAt(80, { color: 0 })
+    const frame = pickFrame(caps, rows, { cursor: 0, start: 0, size: 4 }, cut, NOW)
+    expect(frame[0]).toMatch(/^  orangu  choose a session +4 of 25 sessions, 25 running$/)
+    expect(frame.at(-1)).toBe('  ↑↓ or j k move · enter opens the report · q quits · --limit <n> for more')
+    const ascii = pickFrame(capsAt(80, { color: 0, unicode: false }), rows, { cursor: 0, start: 0, size: 4 }, cut, NOW)
+    expect(ascii.at(-1)).toBe('  up/down or j k move | enter opens the report | q quits | --limit <n> for more')
+    const list = pickList(caps, rows, cut, NOW)
+    expect(list[0]).toMatch(/4 of 25 sessions, 25 running$/)
+    expect(list.at(-1)).toBe('  run: orangu report <id> · --limit <n> for more · interactive on a terminal')
+    // the whole list shown: a plain total and no --limit hint
+    expect(pickList(caps, rows, counts, NOW).at(-1)).toBe('  run: orangu report <id> · the picker is interactive on a terminal')
+    expect(pickFrame(caps, rows, { cursor: 0, start: 0, size: 4 }, counts, NOW).at(-1)).not.toContain('--limit')
   })
   it('marks the cursor and the running rows, right-aligns age and size, and shows the window remainder', () => {
     const caps = capsAt(80, { color: 0 })
     const frame = pickFrame(caps, rows, { cursor: 1, start: 0, size: 2 }, counts, NOW)
-    expect(frame[0]).toMatch(/^  orangu  choose a session +12 sessions, 2 running$/)
+    expect(frame[0]).toMatch(/^  orangu  choose a session +4 sessions, 2 running$/)
     expect(frame[2]).toMatch(/^    ● 450f127b  /)
     expect(frame[3]).toMatch(/^  > ● 11111111  Fix foo test {11}  a-very-long-p…    2m  123.4 MB  running$/)
     expect(frame[4]).toBe('      ↑↓ 2 more')

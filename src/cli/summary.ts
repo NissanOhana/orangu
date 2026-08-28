@@ -260,10 +260,12 @@ function pickCells(caps: Caps, r: PickRow, now: number, leadWidth: number): stri
   return cells.join('  ')
 }
 
-function pickHeader(caps: Caps, counts: PickCounts): string {
+function pickHeader(caps: Caps, shown: number, counts: PickCounts): string {
   const w = layoutWidth(caps)
   const left = paint(caps, ['bold', 'accent'], 'orangu') + '  ' + paint(caps, 'bold', 'choose a session')
-  const right = `${plural(counts.total, 'session')}, ${counts.running} running`
+  // a list cut by --limit says so ("N of M sessions"), never a bare total above fewer rows
+  const total = shown < counts.total ? `${shown} of ${plural(counts.total, 'session')}` : plural(counts.total, 'session')
+  const right = `${total}, ${counts.running} running`
   const gap = w - INDENT.length - displayWidth(left) - displayWidth(right)
   // the count is right-aligned when it fits and dropped when it does not; the title never yields
   return INDENT + left + (gap >= 2 ? ' '.repeat(gap) + paint(caps, 'dim', right) : '')
@@ -272,7 +274,7 @@ function pickHeader(caps: Caps, counts: PickCounts): string {
 /** The interactive frame: header, the visible window with a cursor and running marks, the key hint. */
 export function pickFrame(caps: Caps, rows: PickRow[], view: { cursor: number; start: number; size: number }, counts: PickCounts, now: number): string[] {
   const g = glyphs(caps)
-  const lines = [pickHeader(caps, counts), '']
+  const lines = [pickHeader(caps, rows.length, counts), '']
   const end = Math.min(rows.length, view.start + view.size)
   for (let i = view.start; i < end; i++) {
     const r = rows[i]!
@@ -284,7 +286,8 @@ export function pickFrame(caps: Caps, rows: PickRow[], view: { cursor: number; s
   if (view.start > 0 || end < rows.length) lines.push(paint(caps, 'dim', `${INDENT}    ${g.up}${g.down} ${rows.length - (end - view.start)} more`))
   else lines.push('')
   const keys = caps.unicode ? '↑↓ or j k move · enter opens the report · q quits' : 'up/down or j k move | enter opens the report | q quits'
-  lines.push(paint(caps, 'dim', truncate(INDENT + keys, layoutWidth(caps), caps)))
+  const more = rows.length < counts.total ? `${g.sep}--limit <n> for more` : ''
+  lines.push(paint(caps, 'dim', truncate(INDENT + keys + more, layoutWidth(caps), caps)))
   return lines
 }
 
@@ -292,12 +295,13 @@ export function pickFrame(caps: Caps, rows: PickRow[], view: { cursor: number; s
 export function pickList(caps: Caps, rows: PickRow[], counts: PickCounts, now: number): string[] {
   const g = glyphs(caps)
   const numWidth = String(rows.length).length + 2
-  const lines = [pickHeader(caps, counts), '']
+  const lines = [pickHeader(caps, rows.length, counts), '']
   rows.forEach((r, i) => {
     const mark = r.running ? paint(caps, 'good', g.mark) : ' '
     const lead = `${INDENT}${padCell(`[${i + 1}]`, numWidth)} ${mark} `
     lines.push(lead + pickCells(caps, r, now, INDENT.length + numWidth + 3))
   })
-  lines.push('', paint(caps, 'dim', truncate(`${INDENT}run: orangu report <id>${g.sep}the picker is interactive on a terminal`, layoutWidth(caps), caps)))
+  const hint = rows.length < counts.total ? `--limit <n> for more${g.sep}interactive on a terminal` : 'the picker is interactive on a terminal'
+  lines.push('', paint(caps, 'dim', truncate(`${INDENT}run: orangu report <id>${g.sep}${hint}`, layoutWidth(caps), caps)))
   return lines
 }
