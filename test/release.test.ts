@@ -85,20 +85,17 @@ describe('release automation', () => {
     expect([...seen].sort()).toEqual(Object.keys(actionPins).sort())
   })
 
-  it('deploys Pages manually, for main site changes, or as the last leg of a release', () => {
+  it('deploys Pages manually or automatically for main site changes only', () => {
     const pages = read('.github/workflows/pages.yml')
-    // workflow_call is how release.yml reuses this instead of duplicating the deploy.
-    expect(pages).toMatch(/\non:\n(?:  #.*\n)*  workflow_call:\n  workflow_dispatch:\n  push:\n/)
+    expect(pages).toMatch(/\non:\n  workflow_dispatch:\n  push:/)
     const push = /\n  push:\n([\s\S]*?)\n\n# Least privilege/.exec(pages)?.[1]
     expect(push).toBe("    branches: [main]\n    paths:\n      - 'site/**'\n      - '.github/workflows/pages.yml'")
-    // A bare refs/heads/main check silently skips the whole deploy when release.yml
-    // calls this from a tag push, so the tag ref has to be allowed explicitly.
-    expect(pages).toContain("if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')")
+    expect(pages).toContain("if: github.ref == 'refs/heads/main'")
     expect(pages).toContain('npm run verify:generated')
     expect(pages).toContain('node scripts/assert-offline.mjs --site')
   })
 
-  it('ships npm, the plugin tag and the landing page from one v* tag', () => {
+  it('ships npm and the plugin tag from one v* tag', () => {
     const release = read('.github/workflows/release.yml')
     expect(release).toMatch(/\non:\n  push:\n    tags: \['v\*'\]\n/)
     expect(release).toContain('permissions:\n  contents: read')
@@ -125,11 +122,16 @@ describe('release automation', () => {
     expect(release).toContain('claude plugin validate ./plugin --strict')
     expect(release).toContain('claude plugin tag ./plugin --push')
 
-    // Strict order: the landing page announces only artifacts that already exist.
+    // Strict order, so a failed publish never leaves a half-shipped release.
     expect(release).toContain('needs: [guard, verify]')
     expect(release).toContain('needs: [guard, verify, npm]')
-    expect(release).toContain('needs: [guard, verify, npm, plugin]')
-    expect(release).toContain('uses: ./.github/workflows/pages.yml')
+
+    // The landing page is deliberately not released from the tag: the version bump
+    // regenerates site/, so pushing that commit to main already deployed the page,
+    // and the github-pages environment admits only the main branch. Comments are
+    // stripped first so the paragraph explaining that does not satisfy its own rule.
+    const config = release.replace(/^\s*#.*$/gm, '')
+    expect(config, 'the release must not deploy Pages from a tag ref').not.toContain('pages.yml')
 
     // Re-pushing a tag must skip what already shipped rather than failing the run.
     expect(release).toContain('is already published; skipping.')
