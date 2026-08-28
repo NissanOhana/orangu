@@ -8,11 +8,12 @@
 
 Concretely, you can:
 
-- `npx orangu report` : build and open a self-contained HTML report for the latest session (`orangu report <id>` for another one).
+- `npx orangu report` : build and open a self-contained HTML report for the latest session (`orangu report <id>` for another one, `orangu report current` for the session Claude Code is running in).
 - `npx orangu serve` : a loopback (127.0.0.1) live viewer over every local session.
 - `npx orangu repo` / `npx orangu global` : aggregate every session for one repository, or everywhere.
 - `npx orangu harness` : declared skills, MCP servers, agents and hooks vs what sessions used or left idle, in tokens.
 - `npx orangu analyze <id> --json` : the full analysis object (`--slim` for the projection LLM consumers read).
+- `npx orangu pick` : choose a session from a list, running ones first, and open its report.
 - `npx orangu list` / `watch` / `evidence` / `estimate` / `suggest` / `feedback` : listing, live-tail, bounded evidence for skills, sizing what an LLM would read, suggestion records, and a localhost feedback form.
 - In Claude Code, after `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`: `/orangu:analyze`, `/orangu:improve latest`, `/orangu:apply <sg_id>`, `/orangu:harness`, `/orangu:feedback`.
 

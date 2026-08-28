@@ -41,6 +41,8 @@ ccusage counts your token usage. orangu tells you what to change.
 ```bash
 npx orangu                 # latest session -> one true sentence, the top finding, the exact next command
 npx orangu report          # latest session -> self-contained HTML report, opened in your browser
+npx orangu pick            # choose a session (running ones first), Enter opens its report
+npx orangu report current  # the session Claude Code is running you in; or -s <id> for any
 npx orangu serve           # live loopback viewer over every local session
 npx orangu repo            # recurring patterns across this repository's sessions
 npx orangu global          # ... across every session on the machine
@@ -69,7 +71,7 @@ One run can be fixed and re-checked against a later session from the same worksp
 
 | Skill | What it does |
 |---|---|
-| `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence |
+| `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence; open the report for the session it runs in |
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, skills, agents, hooks, MCP, in tokens |
@@ -166,6 +168,7 @@ node dist/orangu.js report
 | `orangu report [selector]` | Write and open one self-contained session report |
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |
+| `orangu pick` | Choose a session from a list, running ones first, and open its report |
 | `orangu watch [selector]` | Refresh one report while its session grows |
 | `orangu serve` | Run the capability-protected local app on `127.0.0.1` |
 | `orangu feedback` | Open the isolated, capability-protected localhost beta-feedback form |
@@ -176,9 +179,17 @@ node dist/orangu.js report
 | `orangu harness` | Compare declared harness configuration with observed use |
 | `orangu suggest` | Inspect and transition validated suggestion records |
 
-A session selector can be `latest`, a session id or unique prefix, or a supported `.jsonl` path.
+A session selector can be `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`: the session Claude Code is running orangu from, resolved from the Claude Code environment and never guessed silently (a cwd-based guess says so; outside Claude Code it is an error). `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`); giving both the positional and the flag with different values is an error.
+
+`orangu pick` lists sessions running first (title, project, age, size), moves with the arrow keys, `j`/`k`, or a digit, opens the chosen report on Enter, and cancels on `q`, Esc, or Ctrl-C with the terminal restored. Without a terminal, in CI, or with `--plain` it prints a numbered list and the `orangu report <id>` hint; `--json` prints the array.
 
 Use `orangu --help` for flags and output controls.
+
+### Terminal output
+
+`orangu report` writes only the report path to stdout, so `orangu report | xargs open` works; its summary (the check line, the path, the top finding, and the next command) goes to stderr. `orangu analyze` prints the measurement block on stdout and the same footer on stderr; bare `orangu` prints everything on stdout. The next command is the short `claude "/orangu:improve sg_..."`: the suggestion record is stored under `~/.orangu` at report time, and only when that store cannot be written does the long `--finding` form appear, with a line saying so.
+
+Colour, the spinner, and `file://` hyperlinks appear only on an interactive terminal and are off under `--json`, `--quiet`, `--no-color`, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, `CI`, or a pipe; `ORANGU_NO_ANIMATION=1` stops the spinner alone. `--json` and `--quiet` output never carries an escape sequence. `--verbose` adds the cache diagnostic on stderr.
 
 ## Report and app
 

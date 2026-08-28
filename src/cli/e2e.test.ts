@@ -43,6 +43,10 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     for (const f of ['orangu estimate', 'orangu harness', 'orangu suggest', '--slim']) expect(h).toContain(f)
     expect(h).toContain('orangu feedback')
     expect(h).toContain('--context session|repo|global|report|app')
+    // the selector forms and the flag alias are promised in one place; every help line fits 80 columns
+    for (const f of ['orangu pick', '"current"', '-s, --session <sel>', '--plain', '--verbose', 'ORANGU_NO_ANIMATION']) expect(h).toContain(f)
+    expect(h).not.toMatch(ESCAPES)
+    for (const line of h.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80)
     expect(h).toContain('orangu pick')
     for (const f of ['-s, --session <sel>', '--plain', 'or "current"']) expect(h).toContain(f)
     expect(h.toLowerCase()).toContain('no network calls')

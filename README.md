@@ -32,6 +32,8 @@ ccusage counts your token usage. orangu tells you what to change.
 ```bash
 npx orangu                 # latest session -> one true sentence, the top finding, the exact next command
 npx orangu report          # latest session -> self-contained HTML report, opened in your browser
+npx orangu pick            # choose a session (running ones first), Enter opens its report
+npx orangu report current  # the session Claude Code is running you in; or -s <id> for any
 npx orangu serve           # live loopback viewer over every local session
 npx orangu repo            # recurring patterns across this repository's sessions
 npx orangu global          # ... across every session on the machine
@@ -60,7 +62,7 @@ One run can be fixed and re-checked against a later session from the same worksp
 
 | Skill | What it does |
 |---|---|
-| `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence |
+| `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence; open the report for the session it runs in |
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, skills, agents, hooks, MCP, in tokens |
