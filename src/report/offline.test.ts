@@ -79,6 +79,7 @@ describe('offline report', () => {
     // Tools table: the Avg cell says "outlier" (with a title that explains it) when the mean sits above p95,
     // so one 30-minute timeout among quick calls no longer reads as a broken statistic: +252 B.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
-    expect(CLIENT_JS.length).toBe(72986)
+    // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
+    expect(CLIENT_JS.length).toBe(73036)
   })
 })
