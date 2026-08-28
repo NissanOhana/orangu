@@ -739,7 +739,7 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
     }
   }
   const seen = /* @__PURE__ */ new Set();
-  const out2 = [];
+  const out3 = [];
   for (const r of roots) {
     if (!existsSync(join2(r, "projects"))) continue;
     let real = r;
@@ -749,9 +749,9 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
     }
     if (seen.has(real)) continue;
     seen.add(real);
-    out2.push(r);
+    out3.push(r);
   }
-  return out2;
+  return out3;
 }
 function projectSlug(cwd) {
   return cwd.replace(/[^A-Za-z0-9-]/g, "-");
@@ -890,7 +890,7 @@ async function sessionRefFor(projectPath, file, projectsRoot, entryBudget) {
 async function projectDirsForCwd(root, cwd, entryBudget) {
   const exact = join2(root, projectSlug(cwd));
   if (existsSync(exact)) return [exact];
-  const out2 = [];
+  const out3 = [];
   for (const name of await safeReaddir(root, entryBudget)) {
     const p = join2(root, name);
     try {
@@ -903,9 +903,9 @@ async function projectDirsForCwd(root, cwd, entryBudget) {
     const f = files2[0];
     if (!f) continue;
     const c = await peekCwd(join2(p, f));
-    if (c === cwd) out2.push(p);
+    if (c === cwd) out3.push(p);
   }
-  return out2;
+  return out3;
 }
 async function peekCwd(path) {
   let handle;
@@ -961,7 +961,7 @@ async function listSessionsWithBudget(opts, budget, entryBudget) {
   const root = await canonicalProjectsRoot(configDir);
   if (!root) return [];
   const dirs = opts.cwd ? await projectDirsForCwd(root, resolve2(opts.cwd), entryBudget) : (await safeReaddir(root, entryBudget)).map((n2) => join2(root, n2));
-  const out2 = [];
+  const out3 = [];
   for (const d of dirs) {
     let st;
     try {
@@ -975,11 +975,11 @@ async function listSessionsWithBudget(opts, budget, entryBudget) {
       if (budget.remaining <= 0) throw new Error(`session discovery exceeds ${budget.limit} sessions`);
       budget.remaining--;
       const ref = await sessionRefFor(d, f, root, entryBudget);
-      if (ref) out2.push(ref);
+      if (ref) out3.push(ref);
     }
   }
-  out2.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  return out2;
+  out3.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  return out3;
 }
 async function resolveSession(ref, opts = {}) {
   const r = ref.trim();
@@ -1116,17 +1116,17 @@ function byWeekOf(sessions, weeks = 12) {
   if (latest === void 0) return [];
   const lastWeek = isoWeekStartUtc(latest);
   const firstWeek = lastWeek - (weeks - 1) * WEEK_MS;
-  const out2 = [];
-  for (let i = 0; i < weeks; i++) out2.push({ weekStartUtc: firstWeek + i * WEEK_MS, tokens: 0, sessions: 0 });
+  const out3 = [];
+  for (let i = 0; i < weeks; i++) out3.push({ weekStartUtc: firstWeek + i * WEEK_MS, tokens: 0, sessions: 0 });
   for (const s of sessions) {
     if (s.startedAt === void 0) continue;
     const idx = Math.floor((isoWeekStartUtc(s.startedAt) - firstWeek) / WEEK_MS);
-    const b = out2[idx];
+    const b = out3[idx];
     if (!b) continue;
     b.tokens += s.tokens;
     b.sessions++;
   }
-  return out2;
+  return out3;
 }
 var EXAMPLE_SESSIONS = 5;
 function titlePatternOf(title) {
@@ -1762,14 +1762,14 @@ var PATTERNS = [
 ];
 var counter = 0;
 function scrubStr(s) {
-  let out2 = s;
+  let out3 = s;
   for (const [re, rep] of PATTERNS) {
-    out2 = out2.replace(re, () => {
+    out3 = out3.replace(re, () => {
       counter++;
       return rep;
     });
   }
-  return out2;
+  return out3;
 }
 function basename3(p) {
   return p.split(/[\\/]/).filter(Boolean).at(-1) ?? p;
@@ -1846,15 +1846,15 @@ var UNKNOWN_COUNT_MAP_KEYS = /* @__PURE__ */ new Set([
 ]);
 function scrubOne(s, opts) {
   if (!opts.scrub) return s;
-  let out2 = scrubStr(s);
+  let out3 = scrubStr(s);
   for (const re of [opts.homeRe, opts.homeSlugRe]) {
     if (!re) continue;
-    out2 = out2.replace(re, () => {
+    out3 = out3.replace(re, () => {
       counter++;
       return "~";
     });
   }
-  return out2;
+  return out3;
 }
 function isAgentRecord(obj2) {
   if ("toolUseId" in obj2 || "category" in obj2) return false;
@@ -1888,12 +1888,12 @@ function strippedCountMap(value, opts) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return walk(value, opts);
   const source = value;
   if (!opts.stripText) {
-    const out2 = /* @__PURE__ */ new Map();
+    const out3 = /* @__PURE__ */ new Map();
     for (const [key, count] of Object.entries(source)) {
       const publicKey = scrubOne(key, opts);
-      out2.set(publicKey, typeof count === "number" ? (Number(out2.get(publicKey)) || 0) + count : walk(count, opts));
+      out3.set(publicKey, typeof count === "number" ? (Number(out3.get(publicKey)) || 0) + count : walk(count, opts));
     }
-    return Object.fromEntries(out2);
+    return Object.fromEntries(out3);
   }
   const total = Object.values(source).reduce((sum2, count) => sum2 + (typeof count === "number" ? count : 0), 0);
   return total ? { [STRIPPED_KEY]: total } : {};
@@ -1902,13 +1902,13 @@ function walk(obj2, opts) {
   if (typeof obj2 === "string") return scrubOne(obj2, opts);
   if (Array.isArray(obj2)) return obj2.map((x) => walk(x, opts));
   if (obj2 && typeof obj2 === "object") {
-    const out2 = /* @__PURE__ */ new Map();
+    const out3 = /* @__PURE__ */ new Map();
     const source = obj2;
     const unknownRecordTypes = source["unknownRecordTypes"];
     const unknownRecordKeys = unknownRecordTypes && typeof unknownRecordTypes === "object" && !Array.isArray(unknownRecordTypes) ? new Set(Object.keys(unknownRecordTypes)) : void 0;
     for (const [k, v] of Object.entries(source)) {
       if (UNKNOWN_COUNT_MAP_KEYS.has(k)) {
-        out2.set(k, strippedCountMap(v, opts));
+        out3.set(k, strippedCountMap(v, opts));
         continue;
       }
       if (k === "recordCounts" && v && typeof v === "object" && !Array.isArray(v)) {
@@ -1918,35 +1918,35 @@ function walk(obj2, opts) {
           const publicKey = scrubOne(recordType, opts);
           counts.set(publicKey, typeof count === "number" ? (Number(counts.get(publicKey)) || 0) + count : walk(count, opts));
         }
-        out2.set(k, Object.fromEntries(counts));
+        out3.set(k, Object.fromEntries(counts));
         continue;
       }
       if (opts.stripText && PRIVATE_STRING_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out2.set(k, []);
+        out3.set(k, []);
         continue;
       }
       if (opts.stripText && typeof v === "string" && stripsText(k, source)) {
-        out2.set(k, "");
+        out3.set(k, "");
         continue;
       }
       if (opts.stripText && k === "narrative" && typeof v === "string") {
-        out2.set(k, scrubOne(v.replace(NARRATIVE_TITLE_RE, "In this session, "), opts));
+        out3.set(k, scrubOne(v.replace(NARRATIVE_TITLE_RE, "In this session, "), opts));
         continue;
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === "string" && (v.includes("/") || v.includes("\\"))) {
-        out2.set(k, scrubOne(basename3(v), opts));
+        out3.set(k, scrubOne(basename3(v), opts));
         continue;
       }
       if (opts.stripPaths && PATH_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out2.set(k, v.map((x) => typeof x === "string" ? scrubOne(basename3(x), opts) : walk(x, opts)));
+        out3.set(k, v.map((x) => typeof x === "string" ? scrubOne(basename3(x), opts) : walk(x, opts)));
         continue;
       }
       if (PROJECT_KEYS.has(k) && typeof v === "string") {
-        out2.set(k, projectIdentity(v, opts));
+        out3.set(k, projectIdentity(v, opts));
         continue;
       }
       if (k === "byProject" && Array.isArray(v)) {
-        out2.set(
+        out3.set(
           k,
           v.map((item) => {
             const row2 = walk(item, opts);
@@ -1958,9 +1958,9 @@ function walk(obj2, opts) {
         );
         continue;
       }
-      out2.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
+      out3.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
     }
-    return Object.fromEntries(out2);
+    return Object.fromEntries(out3);
   }
   return obj2;
 }
@@ -2261,29 +2261,29 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
   if (typeof content === "string") return [{ kind: "text", text: keepText ? content : "" }];
   const a = arr(content);
   if (!a) return [];
-  const out2 = [];
+  const out3 = [];
   for (const raw of a) {
     const b = obj(raw);
     if (!b) continue;
     const t = str(b["type"]) ?? "other";
     switch (t) {
       case "text":
-        out2.push({ kind: "text", text: keepText ? str(b["text"]) ?? "" : "" });
+        out3.push({ kind: "text", text: keepText ? str(b["text"]) ?? "" : "" });
         break;
       case "thinking": {
         const th = str(b["thinking"]) ?? "";
-        out2.push({ kind: "thinking", chars: th.length, text: keepText ? th : void 0 });
+        out3.push({ kind: "thinking", chars: th.length, text: keepText ? th : void 0 });
         break;
       }
       case "redacted_thinking":
-        out2.push({ kind: "redacted_thinking", rawType: t, bytes: bytesOf(b["data"]) });
+        out3.push({ kind: "redacted_thinking", rawType: t, bytes: bytesOf(b["data"]) });
         break;
       case "tool_use":
-        out2.push({ kind: "tool_use", toolUseId: str(b["id"]) ?? "", name: str(b["name"]) ?? "unknown", input: b["input"] });
+        out3.push({ kind: "tool_use", toolUseId: str(b["id"]) ?? "", name: str(b["name"]) ?? "unknown", input: b["input"] });
         break;
       case "tool_result": {
         const c = b["content"];
-        out2.push({
+        out3.push({
           kind: "tool_result",
           toolUseId: str(b["tool_use_id"]) ?? "",
           text: textOfContent(c),
@@ -2294,20 +2294,20 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
       }
       case "image":
       case "document":
-        out2.push({ kind: t, rawType: t, bytes: bytesOf(b["source"]) });
+        out3.push({ kind: t, rawType: t, bytes: bytesOf(b["source"]) });
         break;
       case "fallback": {
         const from = obj(b["from"]);
         const to = obj(b["to"]);
-        out2.push({ kind: "other", rawType: "fallback", bytes: 0, note: `model fallback ${str(from?.["model"]) ?? "?"} \u2192 ${str(to?.["model"]) ?? "?"}` });
+        out3.push({ kind: "other", rawType: "fallback", bytes: 0, note: `model fallback ${str(from?.["model"]) ?? "?"} \u2192 ${str(to?.["model"]) ?? "?"}` });
         break;
       }
       default:
         addCount(unknownBlockTypes, t);
-        out2.push({ kind: "other", rawType: t, bytes: bytesOf(b) });
+        out3.push({ kind: "other", rawType: t, bytes: bytesOf(b) });
     }
   }
-  return out2;
+  return out3;
 }
 var COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/;
 var COMMAND_ARGS_RE = /<command-args>\s*([^<]*?)\s*<\/command-args>/;
@@ -3526,9 +3526,9 @@ function resolveModel(rawId) {
   const hit = cache.get(raw);
   if (hit) return hit;
   const { id, tags } = normalizeModelId(raw);
-  let out2;
+  let out3;
   if (raw in T.nonModelSentinels || id in T.nonModelSentinels) {
-    out2 = { rawId: raw, normalizedId: id, displayName: raw, family: "none", estimatedMatch: false, synthetic: true, tags };
+    out3 = { rawId: raw, normalizedId: id, displayName: raw, family: "none", estimatedMatch: false, synthetic: true, tags };
   } else {
     let catalogId;
     let estimatedMatch = false;
@@ -3556,7 +3556,7 @@ function resolveModel(rawId) {
     }
     const entry = catalogId ? T.models[catalogId] : void 0;
     const unverified = entry ? entry.verified === false : false;
-    out2 = {
+    out3 = {
       rawId: raw,
       normalizedId: id,
       catalogId,
@@ -3568,8 +3568,8 @@ function resolveModel(rawId) {
       tags
     };
   }
-  cache.set(raw, out2);
-  return out2;
+  cache.set(raw, out3);
+  return out3;
 }
 function guessFamily(id) {
   for (const f of ["mythos", "fable", "opus", "sonnet", "haiku"]) if (id.includes(f)) return f;
@@ -4248,16 +4248,16 @@ function resetInsightIds() {
   seq = 0;
 }
 var rereadFiles = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const rr = ctx.files.mostReRead.filter((f) => f.redundantReads >= 2);
-  if (!rr.length) return out2;
+  if (!rr.length) return out3;
   const top = rr.slice(0, 5);
   const wastedBytes = top.reduce((a, f) => a + f.bytesRead / Math.max(1, f.reads) * f.redundantReads, 0);
   const wastedTokens = Math.round(wastedBytes / BYTES_PER_TOKEN);
   const laterRequests = Math.max(1, ctx.context.series.filter((p) => !p.agentId).length / 2);
   const carriedTokens = capSavings(ctx, Math.round(wastedTokens + wastedTokens * laterRequests));
   const totalReReads = rr.reduce((a, f) => a + f.redundantReads, 0);
-  out2.push(
+  out3.push(
     mk({
       ruleId: "reread-files",
       severity: totalReReads >= 10 ? "high" : totalReReads >= 5 ? "medium" : "low",
@@ -4271,7 +4271,7 @@ var rereadFiles = (ctx) => {
       personas: ["developer", "lead"]
     })
   );
-  return out2;
+  return out3;
 };
 var repeatedCommands = (ctx) => {
   const counts = /* @__PURE__ */ new Map();
@@ -4302,14 +4302,14 @@ var repeatedCommands = (ctx) => {
   ];
 };
 var toolErrors = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const total = ctx.s.toolCalls.length;
   const errs = ctx.s.toolCalls.filter((c) => c.isError);
-  if (!errs.length) return out2;
+  if (!errs.length) return out3;
   const rate = errs.length / Math.max(1, total);
   const groups = ctx.tools.errorGroups.filter((g) => g.count >= 3).slice(0, 5);
   if (rate >= 0.1 || groups.length) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "tool-errors",
         severity: rate >= 0.2 || (groups[0]?.count ?? 0) >= 6 ? "high" : rate >= 0.1 || groups.length ? "medium" : "low",
@@ -4324,7 +4324,7 @@ var toolErrors = (ctx) => {
       })
     );
   }
-  return out2;
+  return out3;
 };
 var oversizedResults = (ctx) => {
   const big = ctx.s.toolCalls.filter((c) => (c.resultBytes ?? 0) >= 4e4).sort((a, b) => (b.resultBytes ?? 0) - (a.resultBytes ?? 0));
@@ -4352,7 +4352,7 @@ var oversizedResults = (ctx) => {
   ];
 };
 var sequentialReads = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const runsPerTurn = /* @__PURE__ */ new Map();
   const byTurn = /* @__PURE__ */ new Map();
   for (const c of ctx.s.toolCalls) {
@@ -4386,8 +4386,8 @@ var sequentialReads = (ctx) => {
     }
     flush();
   }
-  if (!totalRuns) return out2;
-  out2.push(
+  if (!totalRuns) return out3;
+  out3.push(
     mk({
       ruleId: "sequential-reads",
       severity: totalCalls >= 20 ? "medium" : "low",
@@ -4401,15 +4401,15 @@ var sequentialReads = (ctx) => {
       personas: ["developer"]
     })
   );
-  return out2;
+  return out3;
 };
 var contextPressure = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const win = ctx.context.contextWindow;
   const peak = ctx.context.peak;
   const comps = ctx.s.compactions.length;
   if (comps) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "compactions",
         severity: comps >= 3 ? "high" : comps >= 2 ? "medium" : "low",
@@ -4423,7 +4423,7 @@ var contextPressure = (ctx) => {
       })
     );
   } else if (win && peak > win * 0.7) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "context-near-limit",
         severity: "medium",
@@ -4437,7 +4437,7 @@ var contextPressure = (ctx) => {
       })
     );
   }
-  return out2;
+  return out3;
 };
 var preambleWeight = (ctx) => {
   const base = ctx.context.baseline;
@@ -4460,12 +4460,12 @@ var preambleWeight = (ctx) => {
   ];
 };
 var cacheHealth = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const reqs = ctx.context.series.filter((p) => !p.agentId).length;
-  if (reqs < 8) return out2;
+  if (reqs < 8) return out3;
   const ratio = ctx.context.cacheHitRatio;
   if (ratio < 0.6) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "low-cache-hit",
         severity: ratio < 0.4 ? "high" : "medium",
@@ -4479,7 +4479,7 @@ var cacheHealth = (ctx) => {
       })
     );
   }
-  return out2;
+  return out3;
 };
 var humanWait = (ctx) => {
   const wall = ctx.time.wallMs ?? 0;
@@ -4501,13 +4501,13 @@ var humanWait = (ctx) => {
   ];
 };
 var agentEconomics = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const a = ctx.agents;
-  if (!a.runs.length) return out2;
+  if (!a.runs.length) return out3;
   const share = ctx.tokens.totalTokens ? a.totals.totalTokens / ctx.tokens.totalTokens : 0;
   const idle = a.runs.filter((r) => r.hasTranscript && r.toolCallCount === 0 && r.messageCount <= 2);
   const noTranscript = a.runs.filter((r) => !r.hasTranscript).length;
-  out2.push(
+  out3.push(
     mk({
       ruleId: "agent-fanout",
       severity: "info",
@@ -4521,7 +4521,7 @@ var agentEconomics = (ctx) => {
     })
   );
   if (idle.length) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "idle-agents",
         severity: "low",
@@ -4535,13 +4535,13 @@ var agentEconomics = (ctx) => {
       })
     );
   }
-  return out2;
+  return out3;
 };
 var hooksOverhead = (ctx) => {
   const h = ctx.hooks;
-  const out2 = [];
+  const out3 = [];
   if (h.errors) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "hook-errors",
         severity: h.errors >= 5 ? "medium" : "low",
@@ -4556,7 +4556,7 @@ var hooksOverhead = (ctx) => {
     );
   }
   if (h.totalMs > 6e4 || ctx.time.activeMs && h.totalMs > ctx.time.activeMs * 0.05) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "hook-latency",
         severity: "low",
@@ -4571,13 +4571,13 @@ var hooksOverhead = (ctx) => {
       })
     );
   }
-  return out2;
+  return out3;
 };
 var interruptionsAndErrors = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const q = ctx.quality;
   if (q.interruptions >= 2) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "interruptions",
         severity: q.interruptions >= 4 ? "medium" : "low",
@@ -4592,7 +4592,7 @@ var interruptionsAndErrors = (ctx) => {
     );
   }
   if (q.userCorrections.length >= 2) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "user-corrections",
         severity: q.userCorrections.length >= 4 ? "high" : "medium",
@@ -4607,7 +4607,7 @@ var interruptionsAndErrors = (ctx) => {
     );
   }
   if (q.apiErrors) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "api-errors",
         severity: q.apiErrors >= 5 ? "medium" : "low",
@@ -4623,7 +4623,7 @@ var interruptionsAndErrors = (ctx) => {
   }
   const fb = ctx.s.events.filter((e) => e.kind === "model_fallback");
   if (fb.length) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "model-fallback",
         severity: "medium",
@@ -4637,7 +4637,7 @@ var interruptionsAndErrors = (ctx) => {
       })
     );
   }
-  return out2;
+  return out3;
 };
 var outputHeavyWrites = (ctx) => {
   let bytes = 0;
@@ -4915,12 +4915,12 @@ var slowTools = (ctx) => {
   ];
 };
 var agentHealth = (ctx) => {
-  const out2 = [];
+  const out3 = [];
   const hardFailed = ctx.agents.runs.filter((r) => r.status !== void 0 && /error|fail/i.test(r.status));
   const killed = ctx.agents.runs.filter((r) => r.status === "killed");
   const failed = [...hardFailed, ...killed];
   if (failed.length) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "failed-agents",
         severity: hardFailed.length >= 2 ? "medium" : "low",
@@ -4935,7 +4935,7 @@ var agentHealth = (ctx) => {
     );
   }
   if (ctx.agents.maxDepth >= 3) {
-    out2.push(
+    out3.push(
       mk({
         ruleId: "deep-fanout",
         severity: "info",
@@ -4949,7 +4949,7 @@ var agentHealth = (ctx) => {
       })
     );
   }
-  return out2;
+  return out3;
 };
 var skillTokenWeight = (ctx) => {
   if (!ctx.s.skills.length) return [];
@@ -5619,15 +5619,15 @@ var RULES = [
 var SEV_ORDER = { high: 3, medium: 2, low: 1, info: 0 };
 function runRules(ctx, rules = RULES) {
   resetInsightIds();
-  const out2 = [];
+  const out3 = [];
   for (const r of rules) {
     try {
-      out2.push(...r(ctx));
+      out3.push(...r(ctx));
     } catch {
     }
   }
-  out2.sort((a, b) => (SEV_ORDER[b.severity] ?? 0) - (SEV_ORDER[a.severity] ?? 0) || (b.savings?.tokens ?? 0) - (a.savings?.tokens ?? 0));
-  return out2;
+  out3.sort((a, b) => (SEV_ORDER[b.severity] ?? 0) - (SEV_ORDER[a.severity] ?? 0) || (b.savings?.tokens ?? 0) - (a.savings?.tokens ?? 0));
+  return out3;
 }
 
 // src/analyze/analyze.ts
@@ -6145,7 +6145,7 @@ async function analyzeAllPooled(refs, o) {
         }
         assign();
       });
-      w.on("error", (err2) => {
+      w.on("error", (err3) => {
         if (currentIdx >= 0 && results[currentIdx] === void 0) {
           failed++;
           done++;
@@ -6153,7 +6153,7 @@ async function analyzeAllPooled(refs, o) {
         alive--;
         void w.terminate();
         if (finishIfDone()) return;
-        if (alive === 0) rejectAll(err2 instanceof Error ? err2 : new Error(String(err2)));
+        if (alive === 0) rejectAll(err3 instanceof Error ? err3 : new Error(String(err3)));
       });
       assign();
     }
@@ -6458,81 +6458,6 @@ async function writePrivateOutput(path, data) {
   }
 }
 
-// src/cli/watch.ts
-async function watchSession(ref, flags, deps) {
-  const path = deps.outPath(ref.sessionId);
-  let building = false;
-  let dirty = true;
-  let lastSize = -1;
-  let renders = 0;
-  const st = newTailState(ref.path);
-  const rebuild = async () => {
-    if (building || !dirty) return;
-    building = true;
-    while (dirty) {
-      dirty = false;
-      try {
-        try {
-          ref.subagentFiles = (await discoverSubagentFiles(ref.path)).map((s2) => s2.path);
-        } catch (error) {
-          ref.subagentFiles = [];
-          throw error;
-        }
-        await tailOnce(st, ref);
-        const session = await sessionFromTail(st);
-        const analysis = analyzeSession(session, { version: deps.version, now: Date.now() });
-        const { html } = renderReport(analysis, { watch: true, redact: flagBool(flags, "no-redact") ? false : { scrub: true, stripText: !flagBool(flags, "include-text") } });
-        await writePrivateOutput(path, html);
-        renders++;
-        const s = analysis.summary;
-        process.stderr.write(
-          `\r\x1B[2K\x1B[38;5;209m\u25CF\x1B[0m watching ${ref.sessionId.slice(0, 8)} \xB7 ${s.turns} turns \xB7 ${s.toolCalls} tools \xB7 ${fmtTokens(s.totalTokens)} tok \xB7 ctx ${fmtTokens(s.contextPeak)} \xB7 ${fmtMs(s.wallMs)}  \x1B[2m(render #${renders})\x1B[0m`
-        );
-      } catch (error) {
-        if (error instanceof PrivateOutputError) throw error;
-        dirty = true;
-        break;
-      }
-    }
-    building = false;
-  };
-  await rebuild();
-  process.stderr.write(`
-  report: ${path}
-`);
-  if (!flagBool(flags, "no-open")) deps.openInBrowser(path);
-  const poll = setInterval(async () => {
-    try {
-      const st2 = await stat3(ref.path);
-      if (st2.size !== lastSize) {
-        lastSize = st2.size;
-        dirty = true;
-        void rebuild();
-      }
-    } catch {
-    }
-  }, 1500);
-  try {
-    const w = fsWatch(ref.path, { persistent: true }, () => {
-      dirty = true;
-      void rebuild();
-    });
-    process.on("SIGINT", () => {
-      w.close();
-      clearInterval(poll);
-      process.stderr.write("\n  stopped.\n");
-      process.exit(0);
-    });
-  } catch {
-    process.on("SIGINT", () => {
-      clearInterval(poll);
-      process.exit(0);
-    });
-  }
-  await new Promise(() => {
-  });
-}
-
 // src/cli/tty.ts
 import { hostname } from "node:os";
 import { pathToFileURL } from "node:url";
@@ -6633,15 +6558,15 @@ function truncate(s, budget, caps) {
   const ell = glyphs(caps).ellipsis;
   const room = budget - displayWidth(ell);
   if (room <= 0) return ell.slice(0, Math.max(0, budget));
-  let out2 = "";
+  let out3 = "";
   let w = 0;
   for (const { segment } of segmenter.segment(plain)) {
     const sw = displayWidth(segment);
     if (w + sw > room) break;
-    out2 += segment;
+    out3 += segment;
     w += sw;
   }
-  return out2 + ell;
+  return out3 + ell;
 }
 function padCell(s, width, align = "l") {
   const pad = Math.max(0, width - displayWidth(s));
@@ -6656,6 +6581,9 @@ function fileLink(absPath, caps, host = hostname()) {
 var HIDE_CURSOR = "\x1B[?25l";
 var SHOW_CURSOR = "\x1B[?25h";
 var CLEAR_LINE = "\r\x1B[2K";
+function rewriteLine(stream, caps, text2) {
+  stream.write(caps.animate ? CLEAR_LINE + text2 : text2 + "\n");
+}
 var FRAMES_UNICODE = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
 var FRAMES_ASCII = ["-", "\\", "|", "/"];
 var EXIT_SIGNALS = ["SIGINT", "SIGTERM", "SIGHUP"];
@@ -6721,6 +6649,84 @@ function spinner(caps, stream = process.stderr, opts = {}) {
       if (final !== void 0) stream.write(final + "\n");
     }
   };
+}
+
+// src/cli/watch.ts
+async function watchSession(ref, flags, deps) {
+  const path = deps.outPath(ref.sessionId);
+  const err3 = detectCaps(process.stderr, process.env, { machine: flagBool(flags, "quiet") || flagBool(flags, "no-color") });
+  const sep3 = glyphs(err3).sep;
+  let building = false;
+  let dirty = true;
+  let lastSize = -1;
+  let renders = 0;
+  const st = newTailState(ref.path);
+  const rebuild = async () => {
+    if (building || !dirty) return;
+    building = true;
+    while (dirty) {
+      dirty = false;
+      try {
+        try {
+          ref.subagentFiles = (await discoverSubagentFiles(ref.path)).map((s2) => s2.path);
+        } catch (error) {
+          ref.subagentFiles = [];
+          throw error;
+        }
+        await tailOnce(st, ref);
+        const session = await sessionFromTail(st);
+        const analysis = analyzeSession(session, { version: deps.version, now: Date.now() });
+        const { html } = renderReport(analysis, { watch: true, redact: flagBool(flags, "no-redact") ? false : { scrub: true, stripText: !flagBool(flags, "include-text") } });
+        await writePrivateOutput(path, html);
+        renders++;
+        const s = analysis.summary;
+        rewriteLine(
+          process.stderr,
+          err3,
+          `${paint(err3, "accent", glyphs(err3).mark)} watching ${ref.sessionId.slice(0, 8)}${sep3}${s.turns} turns${sep3}${s.toolCalls} tools${sep3}${fmtTokens(s.totalTokens)} tok${sep3}ctx ${fmtTokens(s.contextPeak)}${sep3}${fmtMs(s.wallMs)}  ${paint(err3, "dim", `(render #${renders})`)}`
+        );
+      } catch (error) {
+        if (error instanceof PrivateOutputError) throw error;
+        dirty = true;
+        break;
+      }
+    }
+    building = false;
+  };
+  await rebuild();
+  process.stderr.write(`${err3.animate ? "\n" : ""}  report: ${path}
+`);
+  if (!flagBool(flags, "no-open")) deps.openInBrowser(path);
+  const poll = setInterval(async () => {
+    try {
+      const st2 = await stat3(ref.path);
+      if (st2.size !== lastSize) {
+        lastSize = st2.size;
+        dirty = true;
+        void rebuild();
+      }
+    } catch {
+    }
+  }, 1500);
+  try {
+    const w = fsWatch(ref.path, { persistent: true }, () => {
+      dirty = true;
+      void rebuild();
+    });
+    process.on("SIGINT", () => {
+      w.close();
+      clearInterval(poll);
+      process.stderr.write("\n  stopped.\n");
+      process.exit(0);
+    });
+  } catch {
+    process.on("SIGINT", () => {
+      clearInterval(poll);
+      process.exit(0);
+    });
+  }
+  await new Promise(() => {
+  });
 }
 
 // src/cli/summary.ts
@@ -7808,18 +7814,18 @@ function allEntries() {
 }
 var SIZE_RULES = /* @__PURE__ */ new Set(["oversized-tool-results", "truncated-reads", "binary-attachments", "large-writes", "reread-files"]);
 var STRING_SCAN_CAP = 500;
-function collectStrings(v, out2, depth = 0) {
-  if (out2.length >= STRING_SCAN_CAP || depth > 6 || v == null) return;
+function collectStrings(v, out3, depth = 0) {
+  if (out3.length >= STRING_SCAN_CAP || depth > 6 || v == null) return;
   if (typeof v === "string") {
-    out2.push(v);
+    out3.push(v);
     return;
   }
   if (Array.isArray(v)) {
-    for (const x of v) collectStrings(x, out2, depth + 1);
+    for (const x of v) collectStrings(x, out3, depth + 1);
     return;
   }
   if (typeof v === "object") {
-    for (const x of Object.values(v)) collectStrings(x, out2, depth + 1);
+    for (const x of Object.values(v)) collectStrings(x, out3, depth + 1);
   }
 }
 function detectFileExt(ext, a) {
@@ -7871,11 +7877,11 @@ function detectSignal(signal, a) {
   return void 0;
 }
 function matchRule(ruleId, analyses = []) {
-  const out2 = [];
+  const out3 = [];
   const seen = /* @__PURE__ */ new Set();
   for (const entry of allEntries()) {
     if (entry.pattern.ruleId === ruleId) {
-      out2.push({ entry, evidence: `finding ruleId=${ruleId}` });
+      out3.push({ entry, evidence: `finding ruleId=${ruleId}` });
       seen.add(entry.id);
     }
   }
@@ -7889,12 +7895,12 @@ function matchRule(ruleId, analyses = []) {
       if (seen.has(entry.id) || entry.pattern.signal === void 0) continue;
       const evidence = detectSignal(entry.pattern.signal, scoped);
       if (evidence !== void 0) {
-        out2.push({ entry, evidence });
+        out3.push({ entry, evidence });
         seen.add(entry.id);
       }
     }
   }
-  return out2;
+  return out3;
 }
 
 // src/suggest/source-provenance.ts
@@ -8873,14 +8879,14 @@ async function listDir(ctx, path, required = false) {
 }
 async function walkMarkdown(ctx, dir, depth = 0) {
   if (depth > MAX_WALK_DEPTH) return [];
-  const out2 = [];
+  const out3 = [];
   for (const e of await listDir(ctx, dir)) {
     if (e.name.startsWith(".") || e.name === "node_modules") continue;
     const p = join6(dir, e.name);
-    if (e.dir) out2.push(...await walkMarkdown(ctx, p, depth + 1));
-    else if (e.name.endsWith(".md")) out2.push(p);
+    if (e.dir) out3.push(...await walkMarkdown(ctx, p, depth + 1));
+    else if (e.name.endsWith(".md")) out3.push(p);
   }
-  return out2;
+  return out3;
 }
 async function isDir(path) {
   try {
@@ -8927,7 +8933,7 @@ function splitList(value) {
   if (value === void 0) return null;
   let s = value.trim();
   if (s.startsWith("[") && s.endsWith("]")) s = s.slice(1, -1);
-  const out2 = [];
+  const out3 = [];
   let depth = 0;
   let cur = "";
   for (const ch of s) {
@@ -8935,15 +8941,15 @@ function splitList(value) {
     else if (ch === ")" || ch === "]") depth--;
     if (ch === "," && depth <= 0) {
       const t2 = cur.trim();
-      if (t2) out2.push(t2);
+      if (t2) out3.push(t2);
       cur = "";
       continue;
     }
     cur += ch;
   }
   const t = cur.trim();
-  if (t) out2.push(t);
-  return out2.map((x) => x.replace(/^['"]|['"]$/g, ""));
+  if (t) out3.push(t);
+  return out3.map((x) => x.replace(/^['"]|['"]$/g, ""));
 }
 var asRecord = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
 var asArray = (v) => Array.isArray(v) ? v : [];
@@ -8963,7 +8969,7 @@ function settingsEnv(raw) {
 function settingsHooks(raw) {
   const hooks = asRecord(raw["hooks"]);
   if (!hooks) return [];
-  const out2 = [];
+  const out3 = [];
   for (const event of Object.keys(hooks).sort()) {
     const matchers = asArray(hooks[event]);
     const names = /* @__PURE__ */ new Set();
@@ -8977,9 +8983,9 @@ function settingsHooks(raw) {
         if (b) names.add(cleanName(b));
       }
     }
-    out2.push({ event: cleanName(event), matchers: matchers.length, commands, commandBasenames: [...names].sort() });
+    out3.push({ event: cleanName(event), matchers: matchers.length, commands, commandBasenames: [...names].sort() });
   }
-  return out2;
+  return out3;
 }
 function enabledPluginKeys(raw) {
   const v = raw["enabledPlugins"];
@@ -9010,7 +9016,7 @@ function parseSettings(ctx, scope, file, raw) {
   };
 }
 async function readSkillDir(ctx, dir, origin, plugin) {
-  const out2 = [];
+  const out3 = [];
   for (const e of await listDir(ctx, dir)) {
     if (!e.dir || e.name.startsWith(".")) continue;
     const file = join6(dir, e.name, "SKILL.md");
@@ -9018,7 +9024,7 @@ async function readSkillDir(ctx, dir, origin, plugin) {
     if (text2 === null) continue;
     const { fm, body } = parseFrontmatter(text2);
     const bytes = Buffer.byteLength(text2, "utf8");
-    out2.push({
+    out3.push({
       name: cleanName(fm["name"] ?? e.name),
       origin,
       ...plugin ? { plugin: cleanName(plugin) } : {},
@@ -9031,16 +9037,16 @@ async function readSkillDir(ctx, dir, origin, plugin) {
       hasReferences: await isDir(join6(dir, e.name, "references"))
     });
   }
-  return out2;
+  return out3;
 }
 async function readAgentDir(ctx, dir, origin, plugin) {
-  const out2 = [];
+  const out3 = [];
   for (const file of await walkMarkdown(ctx, dir)) {
     const text2 = await readText(ctx, file);
     if (text2 === null) continue;
     const { fm } = parseFrontmatter(text2);
     const bytes = Buffer.byteLength(text2, "utf8");
-    out2.push({
+    out3.push({
       name: cleanName(fm["name"] ?? basename7(file, ".md")),
       origin,
       ...plugin ? { plugin: cleanName(plugin) } : {},
@@ -9054,7 +9060,7 @@ async function readAgentDir(ctx, dir, origin, plugin) {
       disallowedTools: splitList(fm["disallowedTools"] ?? fm["disallowed-tools"])?.map(cleanName) ?? null
     });
   }
-  return out2;
+  return out3;
 }
 async function readMemory(ctx, file, scope) {
   const text2 = await readText(ctx, file);
@@ -9064,12 +9070,12 @@ async function readMemory(ctx, file, scope) {
 }
 function mcpFromRecord(rec, scope, enabled = true) {
   if (!rec) return [];
-  const out2 = [];
+  const out3 = [];
   for (const name of Object.keys(rec).sort()) {
     const srv = asRecord(rec[name]);
     const command = asString(srv?.["command"]);
     const transport = asString(srv?.["type"]) ?? (asString(srv?.["url"]) ? "http" : command ? "stdio" : "unknown");
-    out2.push({
+    out3.push({
       name: cleanName(name),
       scope,
       transport: cleanName(transport),
@@ -9077,7 +9083,7 @@ function mcpFromRecord(rec, scope, enabled = true) {
       enabled
     });
   }
-  return out2;
+  return out3;
 }
 async function walkPlugin(ctx, installPath, key) {
   const skills = await readSkillDir(ctx, join6(installPath, "skills"), "plugin", key);
@@ -10913,17 +10919,17 @@ function slimAnalysis(a) {
 import { homedir as homedir4 } from "node:os";
 import { basename as basename8, resolve as resolve6 } from "node:path";
 var VERSION = true ? "0.6.0" : "0.0.0-dev";
-var C = {
-  dim: (s) => `\x1B[2m${s}\x1B[0m`,
-  b: (s) => `\x1B[1m${s}\x1B[0m`,
-  o: (s) => `\x1B[38;5;209m${s}\x1B[0m`,
-  g: (s) => `\x1B[32m${s}\x1B[0m`,
-  y: (s) => `\x1B[33m${s}\x1B[0m`
-};
-var paint2 = (fn, s) => process.stdout.isTTY ? fn(s) : s;
+var out = MACHINE_CAPS;
+var err = MACHINE_CAPS;
+function detectStreams(flags) {
+  const machine = flagBool(flags, "json") || flagBool(flags, "quiet") || flagBool(flags, "no-color");
+  out = detectCaps(process.stdout, process.env, { machine });
+  err = detectCaps(process.stderr, process.env, { machine });
+}
 var n = (x) => x.toLocaleString("en-US");
 var kb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
 async function runHarness(flags) {
+  detectStreams(flags);
   const isGlobal = flagBool(flags, "global");
   const configArg = flagStr(flags, "root", "r");
   const cwd = flags["cwd"] ? resolve6(String(flags["cwd"])) : process.cwd();
@@ -10965,8 +10971,7 @@ async function runHarness(flags) {
       }
     }
   }
-  if (!flagBool(flags, "quiet")) process.stderr.write(paint2(C.dim, `analyzed ${plural(analyses.length, "session")}: declared vs used\u2026
-`));
+  if (!flagBool(flags, "quiet")) process.stderr.write(paint(err, "dim", `analyzed ${plural(analyses.length, "session")}: declared vs used`) + "\n");
   const home = homedir4();
   const inventory = await collectInventory({ cwd, roots, home });
   const agg = aggregate(analyses, scopeLabel, now);
@@ -10983,7 +10988,7 @@ async function cmdHarness(_positionals, flags) {
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
     await writePrivateOutput(resolve6(outFile), JSON.stringify(report, null, 2));
-    process.stderr.write(paint2(C.g, "\u2713 ") + `harness written to ${resolve6(outFile)}
+    process.stderr.write(paint(err, "good", glyphs(err).ok) + ` harness written to ${resolve6(outFile)}
 `);
     if (!flagBool(flags, "json")) return;
   }
@@ -10999,13 +11004,13 @@ function printHarness(r) {
   const x = r.crosswalk;
   const scopeLabel = r.scope.global ? `global (${r.scope.roots.length} roots)` : `repo ${basename8(r.scope.cwd)}`;
   w();
-  w(paint2(C.o, paint2(C.b, "orangu")) + "  " + paint2(C.b, "harness \xB7 " + scopeLabel));
-  w(paint2(C.dim, `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? "" : "s"} scanned`));
+  w(paint(out, ["bold", "accent"], "orangu") + "  " + paint(out, "bold", "harness \xB7 " + scopeLabel));
+  w(paint(out, "dim", `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? "" : "s"} scanned`));
   w();
   const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
   if (nothing) {
     w(`  no harness config found under ${r.scope.roots.join(", ")}. Nothing to cross-reference`);
-    w(paint2(C.dim, `
+    w(paint(out, "dim", `
   looked for: settings.json \xB7 skills/ \xB7 agents/ \xB7 plugins/ \xB7 .mcp.json \xB7 CLAUDE.md
 `));
     return;
@@ -11026,12 +11031,12 @@ function printHarness(r) {
     "idle skills",
     inv.totals.skills === 0 ? "no skills installed" : noSessions ? NO_EVIDENCE : idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : "none: every installed skill fired"
   );
-  if (classified(inv.totals.skills) && idleSkills.length) w(paint2(C.dim, "    " + idleSkills.slice(0, 8).map((s) => s.name).join(", ")));
+  if (classified(inv.totals.skills) && idleSkills.length) w(paint(out, "dim", "    " + idleSkills.slice(0, 8).map((s) => s.name).join(", ")));
   line(
     "idle MCP",
     inv.totals.mcpServers === 0 ? "no MCP servers configured" : noSessions ? NO_EVIDENCE : idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : "none: every configured server was called"
   );
-  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint2(C.dim, "    " + idleMcp.slice(0, 8).map((m) => m.name).join(", ")));
+  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint(out, "dim", "    " + idleMcp.slice(0, 8).map((m) => m.name).join(", ")));
   const undeclared = [
     ...x.skills.filter((s) => s.status === "undeclared").map((s) => "skill " + s.name),
     ...x.mcpServers.filter((m) => m.status === "undeclared").map((m) => "mcp " + m.name),
@@ -11039,7 +11044,7 @@ function printHarness(r) {
     ...x.hooks.filter((h) => h.status === "undeclared").map((h) => "hook " + h.commandBasename)
   ];
   line("undeclared", undeclared.length ? `${undeclared.length} observed but not in the config read` : "none");
-  if (undeclared.length) w(paint2(C.dim, "    " + undeclared.slice(0, 8).join(", ")));
+  if (undeclared.length) w(paint(out, "dim", "    " + undeclared.slice(0, 8).join(", ")));
   const usedAgents = x.agents.filter((a) => a.status === "used").length;
   const undeclaredAgents = x.agents.filter((a) => a.status === "undeclared").length;
   const undeclaredClause = undeclaredAgents ? ` \xB7 ${undeclaredAgents} undeclared` : "";
@@ -11051,7 +11056,7 @@ function printHarness(r) {
   const hookErrors = x.hooks.reduce((s, h) => s + h.errors, 0);
   const meanMs = hooksRun > 0 ? Math.round(x.hooks.reduce((s, h) => s + h.totalMs, 0) / hooksRun) : 0;
   line("hooks (configured / runs / errors / mean ms)", "");
-  w(paint2(C.dim, `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint2(C.y, String(hookErrors)) : "0"} / ${n(meanMs)} ms`));
+  w(paint(out, "dim", `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint(out, "warn", String(hookErrors)) : "0"} / ${n(meanMs)} ms`));
   const modelDrift = x.models.configured && !x.models.matchesConfigured;
   const effortDrift = x.effort.configured && !x.effort.matchesConfigured;
   if (noSessions) line("drift", NO_EVIDENCE);
@@ -11059,15 +11064,15 @@ function printHarness(r) {
   line("permissions", `${x.permissions.allowRules} allow / ${x.permissions.denyRules} deny / ${x.permissions.askRules} ask rules \xB7 ${n(x.permissions.promptEvents)} prompt events in ${x.permissions.promptSessions} sessions`);
   if (x.injectedListings.length) {
     w();
-    w(paint2(C.b, "  injected listings (recurring context weight, per session)"));
-    for (const l of x.injectedListings.slice(0, 6)) w(`    ${l.type.padEnd(20)} \u2248${n(l.approxTokensPerSession).padStart(8)} tokens/session  ${paint2(C.dim, `(${l.sessions} sessions)`)}`);
+    w(paint(out, "bold", "  injected listings (recurring context weight, per session)"));
+    for (const l of x.injectedListings.slice(0, 6)) w(`    ${l.type.padEnd(20)} \u2248${n(l.approxTokensPerSession).padStart(8)} tokens/session  ${paint(out, "dim", `(${l.sessions} sessions)`)}`);
   }
   if (r.notes.length) {
     w();
-    w(paint2(C.b, "  notes"));
-    for (const note of r.notes) w(paint2(C.dim, "    \xB7 " + note));
+    w(paint(out, "bold", "  notes"));
+    for (const note of r.notes) w(paint(out, "dim", "    \xB7 " + note));
   }
-  w(paint2(C.dim, "\n  add --json for the machine-readable inventory and declared-vs-used rows\n"));
+  w(paint(out, "dim", "\n  add --json for the machine-readable inventory and declared-vs-used rows\n"));
 }
 
 // src/cli/commands/estimate.ts
@@ -11080,16 +11085,16 @@ async function loadAnalysisResult(sel, analyzeOptions = { version: "evidence", n
   let ref;
   try {
     ref = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() });
-  } catch (err2) {
-    return { ok: false, reason: `session lookup failed: ${err2.message}` };
+  } catch (err3) {
+    return { ok: false, reason: `session lookup failed: ${err3.message}` };
   }
   if (!ref) return { ok: false, reason: "no such session" };
   try {
     const loaded = await readStableEvidenceSession(ref.path);
     const session = await parseClaudeCodeSession(loaded.parseInput);
     return { ok: true, analysis: analyzeSession(session, analyzeOptions) };
-  } catch (err2) {
-    return { ok: false, reason: err2.message };
+  } catch (err3) {
+    return { ok: false, reason: err3.message };
   }
 }
 async function loadAnalysisBySelector(sel, analyzeOptions) {
@@ -12169,11 +12174,11 @@ var EXTRA_HELP = [
 
 // src/cli/json-out.ts
 function renderAnalysisJson(a, flags) {
-  let out2 = a;
+  let out3 = a;
   if (!flagBool(flags, "no-redact")) {
-    out2 = redactAnalysis(a, { scrub: true, stripText: !flagBool(flags, "include-text"), stripPaths: flagBool(flags, "strip-paths") }).analysis;
+    out3 = redactAnalysis(a, { scrub: true, stripText: !flagBool(flags, "include-text"), stripPaths: flagBool(flags, "strip-paths") }).analysis;
   }
-  const body = flagBool(flags, "slim") ? slimAnalysis(out2) : out2;
+  const body = flagBool(flags, "slim") ? slimAnalysis(out3) : out3;
   return JSON.stringify(body, null, flagBool(flags, "quiet") ? 0 : 2) + "\n";
 }
 function emitAnalysisJson(a, flags) {
@@ -12193,16 +12198,16 @@ function renderPreparedAggregateJson(a, flags, options = {}) {
 }
 
 // src/cli/main.ts
-var out = MACHINE_CAPS;
-var err = MACHINE_CAPS;
+var out2 = MACHINE_CAPS;
+var err2 = MACHINE_CAPS;
 var progress;
-function detectStreams(flags) {
+function detectStreams2(flags) {
   const machine = flagBool(flags, "json") || flagBool(flags, "quiet") || flagBool(flags, "no-color");
-  out = detectCaps(process.stdout, process.env, { machine });
-  err = detectCaps(process.stderr, process.env, { machine });
+  out2 = detectCaps(process.stdout, process.env, { machine });
+  err2 = detectCaps(process.stderr, process.env, { machine });
 }
 function offerBetaFeedback(context) {
-  process.stderr.write(betaLine(err, context) + "\n");
+  process.stderr.write(betaLine(err2, context) + "\n");
 }
 function nextStep(a, flags) {
   return persistNextStep(a, redactOptions(flags));
@@ -12238,7 +12243,7 @@ async function selectSession(sel, flags) {
 }
 function fail(msg) {
   progress?.pause();
-  process.stderr.write(paint(err, "bad", "error: ") + msg + "\n");
+  process.stderr.write(paint(err2, "bad", "error: ") + msg + "\n");
   process.exit(1);
 }
 function makeCache(flags) {
@@ -12249,7 +12254,7 @@ function makeCache(flags) {
 function printCacheStats(cache2, flags) {
   if (!cache2 || !flagBool(flags, "verbose") || flagBool(flags, "quiet")) return;
   const s = cache2.stats();
-  process.stderr.write(row(err, "cache", `${s.hits} hits, ${s.misses} misses`, { style: "dim" }) + "\n");
+  process.stderr.write(row(err2, "cache", `${s.hits} hits, ${s.misses} misses`, { style: "dim" }) + "\n");
 }
 async function analyzeRef(ref, flags, cache2) {
   const c = cache2 !== void 0 ? cache2 : makeCache(flags);
@@ -12260,7 +12265,7 @@ async function analyzeRef(ref, flags, cache2) {
 async function analyzeWithProgress(ref, flags) {
   const quiet = flagBool(flags, "quiet") || flagBool(flags, "json");
   const t0 = performance.now();
-  const sp = spinner(err);
+  const sp = spinner(err2);
   progress = sp;
   if (!quiet) sp.start(`analyzing ${ref.sessionId.slice(0, 8)} ${fmtBytes(ref.sizeBytes)}`);
   try {
@@ -12272,8 +12277,8 @@ async function analyzeWithProgress(ref, flags) {
   }
 }
 function outPath(flags, id, ext = "html") {
-  const out2 = flagStr(flags, "o", "out");
-  if (out2) return resolve10(out2);
+  const out3 = flagStr(flags, "o", "out");
+  if (out3) return resolve10(out3);
   return join9(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
@@ -12286,13 +12291,13 @@ async function cmdReport(sel, flags) {
   }
   const path = outPath(flags, ref.sessionId);
   await writePrivateOutput(path, html);
-  const opened = !flagBool(flags, "no-open") && (flagBool(flags, "open") || out.tty);
+  const opened = !flagBool(flags, "no-open") && (flagBool(flags, "open") || out2.tty);
   if (opened) openInBrowser(path);
   process.stdout.write(path + "\n");
   if (!flagBool(flags, "quiet")) {
-    process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + "\n");
+    process.stderr.write(doneLine(err2, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + "\n");
     const step = await nextStep(analysis, flags);
-    process.stderr.write(reportFooter(err, { path, opened, step }).join("\n") + "\n");
+    process.stderr.write(reportFooter(err2, { path, opened, step }).join("\n") + "\n");
   }
   thresholdExit(analysis, flags);
 }
@@ -12304,11 +12309,11 @@ async function cmdAnalyze(sel, flags) {
     thresholdExit(analysis, flags);
     return;
   }
-  process.stdout.write(analysisBlock(out, analysis, displayTitle(analysis, flags)).join("\n") + "\n");
+  process.stdout.write(analysisBlock(out2, analysis, displayTitle(analysis, flags)).join("\n") + "\n");
   if (!flagBool(flags, "quiet")) {
-    process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs }) + "\n");
+    process.stderr.write(doneLine(err2, { sizeBytes: ref.sizeBytes, elapsedMs }) + "\n");
     const step = await nextStep(analysis, flags);
-    process.stderr.write(nextStepLines(err, step).join("\n") + "\n");
+    process.stderr.write(nextStepLines(err2, step).join("\n") + "\n");
     offerBetaFeedback("session");
   }
   thresholdExit(analysis, flags);
@@ -12317,7 +12322,7 @@ async function cmdBrief(flags) {
   const ref = await selectSession(void 0, flags);
   const { analysis } = await analyzeWithProgress(ref, flags);
   const step = await nextStep(analysis, flags);
-  process.stdout.write(briefBlock(out, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, "quiet") }).join("\n") + "\n");
+  process.stdout.write(briefBlock(out2, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, "quiet") }).join("\n") + "\n");
   thresholdExit(analysis, flags);
 }
 var RETIRED_FLAGS = {
@@ -12341,11 +12346,11 @@ function thresholdExit(analysis, flags) {
   if (maxTokensStr !== void 0 && Number.isNaN(Number(maxTokensStr))) fail(`--max-tokens must be a number, got "${maxTokensStr}"`);
   const maxTokens = Number(maxTokensStr);
   if (maxTokensStr !== void 0 && !Number.isNaN(maxTokens) && analysis.summary.totalTokens > maxTokens) {
-    process.stderr.write(paint(err, "bad", `FAIL: ${fmtTokens(analysis.summary.totalTokens)} tokens > --max-tokens ${fmtTokens(maxTokens)}`) + "\n");
+    process.stderr.write(paint(err2, "bad", `FAIL: ${fmtTokens(analysis.summary.totalTokens)} tokens > --max-tokens ${fmtTokens(maxTokens)}`) + "\n");
     bad = true;
   }
   if (flagBool(flags, "fail-on-hook-errors") && analysis.hooks.errors > 0) {
-    process.stderr.write(paint(err, "bad", `FAIL: ${analysis.hooks.errors} hook errors`) + "\n");
+    process.stderr.write(paint(err2, "bad", `FAIL: ${analysis.hooks.errors} hook errors`) + "\n");
     bad = true;
   }
   if (bad) process.exit(2);
@@ -12359,7 +12364,7 @@ async function cmdList2(flags) {
     process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
     return;
   }
-  process.stdout.write(listRows(out, rows, { total: all.length, global: flagBool(flags, "global") }).join("\n") + "\n");
+  process.stdout.write(listRows(out2, rows, { total: all.length, global: flagBool(flags, "global") }).join("\n") + "\n");
 }
 async function cmdAggregate(scope, selOrPath, flags) {
   let refs;
@@ -12379,7 +12384,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const use = refs.slice(0, Number.isNaN(max) ? refs.length : max);
   const quiet = flagBool(flags, "quiet") || flagBool(flags, "json");
   const t0 = performance.now();
-  const sp = spinner(err);
+  const sp = spinner(err2);
   progress = sp;
   if (!quiet) sp.start(`analyzing ${plural(use.length, "session")}`);
   const jobsStr = flagStr(flags, "jobs", "j");
@@ -12392,11 +12397,11 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION2, now: Date.now(), cacheEnabled });
     analyses = r.analyses;
     failed = r.failed;
-    sp.stop(quiet ? void 0 : doneLine(err, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
+    sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
     progress = void 0;
     if (!flagBool(flags, "quiet") && flagBool(flags, "verbose")) {
-      process.stderr.write(row(err, "jobs", String(jobsN), { style: "dim" }) + "\n");
-      if (cacheEnabled) process.stderr.write(row(err, "cache", `${r.hits} hits, ${r.misses} misses`, { style: "dim" }) + "\n");
+      process.stderr.write(row(err2, "jobs", String(jobsN), { style: "dim" }) + "\n");
+      if (cacheEnabled) process.stderr.write(row(err2, "cache", `${r.hits} hits, ${r.misses} misses`, { style: "dim" }) + "\n");
     }
   } else {
     const cache2 = makeCache(flags);
@@ -12407,7 +12412,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
         failed++;
       }
     }
-    sp.stop(quiet ? void 0 : doneLine(err, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
+    sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
     progress = void 0;
     printCacheStats(cache2, flags);
   }
@@ -12417,7 +12422,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
     await writePrivateOutput(resolve10(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err, "written", resolve10(outFile)) + "\n");
+    if (!quiet) process.stderr.write(row(err2, "written", resolve10(outFile)) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -12431,8 +12436,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
 }
 function printAggregate(a) {
-  process.stdout.write("\n" + paint(out, ["bold", "accent"], "orangu") + "  " + paint(out, "bold", a.scope) + "\n");
-  process.stdout.write(paint(out, "dim", `  ${plural(a.sessionCount, "session")}
+  process.stdout.write("\n" + paint(out2, ["bold", "accent"], "orangu") + "  " + paint(out2, "bold", a.scope) + "\n");
+  process.stdout.write(paint(out2, "dim", `  ${plural(a.sessionCount, "session")}
 
 `));
   const line = (l, v) => process.stdout.write("  " + l.padEnd(20) + v + "\n");
@@ -12444,17 +12449,17 @@ function printAggregate(a) {
   line("tokens / human turn", fmtTokens(a.averages.tokensPerHumanTurn));
   line("cache hit ratio", (a.averages.cacheHitRatio * 100).toFixed(1) + "%");
   if (a.byModel.length) {
-    process.stdout.write("\n" + paint(out, "bold", "  tokens by model\n"));
+    process.stdout.write("\n" + paint(out2, "bold", "  tokens by model\n"));
     for (const m of a.byModel.slice(0, 6)) process.stdout.write(`    ${m.key.padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${m.count} session${m.count === 1 ? "" : "s"}
 `);
   }
   if (a.crossFindings.length) {
-    process.stdout.write("\n" + paint(out, "bold", "  recurring findings (across sessions)\n"));
-    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(out, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8))}  ${f.title}  ${paint(out, "dim", "(" + plural(f.sessions, "session") + ")")}
+    process.stdout.write("\n" + paint(out2, "bold", "  recurring findings (across sessions)\n"));
+    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(out2, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8))}  ${f.title}  ${paint(out2, "dim", "(" + plural(f.sessions, "session") + ")")}
 `);
   }
   if (a.recurringErrors.length) {
-    process.stdout.write("\n" + paint(out, "bold", "  recurring tool errors (environment problems)\n"));
+    process.stdout.write("\n" + paint(out2, "bold", "  recurring tool errors (environment problems)\n"));
     const hidden = /* @__PURE__ */ new Map();
     for (const e of a.recurringErrors) {
       if (e.signature) continue;
@@ -12464,20 +12469,20 @@ function printAggregate(a) {
       h.sessions = Math.max(h.sessions, e.sessions);
       hidden.set(e.tool, h);
     }
-    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) process.stdout.write(`    ${paint(out, "bad", String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature}  ${paint(out, "dim", "(" + plural(e.sessions, "session") + ")")}
+    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) process.stdout.write(`    ${paint(out2, "bad", String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature}  ${paint(out2, "dim", "(" + plural(e.sessions, "session") + ")")}
 `);
-    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out, "bad", String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden; use --include-text  ${paint(out, "dim", "(" + plural(h.sessions, "session") + ")")}
+    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out2, "bad", String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden; use --include-text  ${paint(out2, "dim", "(" + plural(h.sessions, "session") + ")")}
 `);
   }
   if (a.topReReadFiles.length) {
-    process.stdout.write("\n" + paint(out, "bold", "  most re-read files (context weight)\n"));
-    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(out, "dim", "(" + plural(f.sessions, "session") + ")")}
+    process.stdout.write("\n" + paint(out2, "bold", "  most re-read files (context weight)\n"));
+    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(out2, "dim", "(" + plural(f.sessions, "session") + ")")}
 `);
   }
-  process.stdout.write("\n" + paint(out, "bold", "  heaviest sessions (by tokens)\n"));
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, "dim", s.title ? s.title.slice(0, 50) : "(title hidden; use --include-text)")}
+  process.stdout.write("\n" + paint(out2, "bold", "  heaviest sessions (by tokens)\n"));
+  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out2, "dim", s.title ? s.title.slice(0, 50) : "(title hidden; use --include-text)")}
 `);
-  process.stdout.write(paint(out, "dim", `
+  process.stdout.write(paint(out2, "dim", `
   add --json for the full machine-readable aggregate
 `));
 }
@@ -12492,7 +12497,7 @@ async function cmdServe(flags) {
   const opts = {
     port,
     // policy: open by default when TTY; --no-open suppresses
-    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || out.tty),
+    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || out2.tty),
     // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
     includeText: !flagBool(flags, "no-include-text"),
     // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
@@ -12507,8 +12512,8 @@ async function cmdServe(flags) {
   if (requestedAutomaticLaunch) process.stderr.write("  --allow-claude is retired: the report now provides copy-only Claude/Codex handoffs.\n");
   const srv = await startServe(opts);
   process.stderr.write(
-    paint(err, ["bold", "accent"], "orangu serve") + ` \xB7 ${srv.url}
-` + paint(err, "dim", `  loopback + private capability \xB7 model handoff: copy-only \xB7 watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions \xB7 ctrl-c stops
+    paint(err2, ["bold", "accent"], "orangu serve") + ` \xB7 ${srv.url}
+` + paint(err2, "dim", `  loopback + private capability \xB7 model handoff: copy-only \xB7 watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions \xB7 ctrl-c stops
 `)
   );
   if (opts.open) openInBrowser(srv.url);
@@ -12522,11 +12527,11 @@ async function cmdServe(flags) {
   });
 }
 function printHelp() {
-  process.stdout.write(`${out.tty ? MASCOT_ASCII + "\n" : ""}
-${paint(out, "bold", "orangu")} v${VERSION2}: observe the run, then improve the next outcome.
+  process.stdout.write(`${out2.tty ? MASCOT_ASCII + "\n" : ""}
+${paint(out2, "bold", "orangu")} v${VERSION2}: observe the run, then improve the next outcome.
 Deterministic observability for Claude Code sessions. No network calls.
 
-${paint(out, "bold", "usage")}
+${paint(out2, "bold", "usage")}
   orangu                       analyze the latest session; print the next step
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
@@ -12538,9 +12543,9 @@ ${paint(out, "bold", "usage")}
                                --port <n> \xB7 --open/--no-open \xB7 --max-live <n>
                                --no-include-text \xB7 --global \xB7 --cwd <dir>${EXTRA_HELP.map((l) => "\n" + l).join("")}
 
-${paint(out, "bold", "session")}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
+${paint(out2, "bold", "session")}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
 
-${paint(out, "bold", "flags")}
+${paint(out2, "bold", "flags")}
   -o, --out <file>       write the report/JSON here (default: temp dir)
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
@@ -12563,7 +12568,7 @@ ${paint(out, "bold", "flags")}
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
-${paint(out, "dim", "privacy: generated locally, zero network requests, secrets redacted by default.")}
+${paint(out2, "dim", "privacy: generated locally, zero network requests, secrets redacted by default.")}
 `);
 }
 async function main() {
@@ -12572,7 +12577,7 @@ async function main() {
     positionals.push(flags["no-cache"]);
     flags["no-cache"] = true;
   }
-  detectStreams(flags);
+  detectStreams2(flags);
   if (flagBool(flags, "version")) {
     process.stdout.write(VERSION2 + "\n");
     return;

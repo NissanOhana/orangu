@@ -14,6 +14,7 @@ import { fmtMs, fmtTokens } from '../analyze/util.js'
 import type { SessionRef } from '../discover/discover.js'
 import { flagBool } from './args.js'
 import { PrivateOutputError, writePrivateOutput } from './private-output.js'
+import { detectCaps, glyphs, paint, rewriteLine } from './tty.js'
 
 export interface WatchDeps {
   version: string
@@ -23,6 +24,9 @@ export interface WatchDeps {
 
 export async function watchSession(ref: SessionRef, flags: Record<string, string | boolean>, deps: WatchDeps): Promise<void> {
   const path = deps.outPath(ref.sessionId)
+  // stderr caps: the status line redraws in place on a terminal and prints one line per render elsewhere
+  const err = detectCaps(process.stderr, process.env, { machine: flagBool(flags, 'quiet') || flagBool(flags, 'no-color') })
+  const sep = glyphs(err).sep
   let building = false
   let dirty = true
   let lastSize = -1
@@ -48,8 +52,10 @@ export async function watchSession(ref: SessionRef, flags: Record<string, string
         await writePrivateOutput(path, html)
         renders++
         const s = analysis.summary
-        process.stderr.write(
-          `\r\x1b[2K\x1b[38;5;209m●\x1b[0m watching ${ref.sessionId.slice(0, 8)} · ${s.turns} turns · ${s.toolCalls} tools · ${fmtTokens(s.totalTokens)} tok · ctx ${fmtTokens(s.contextPeak)} · ${fmtMs(s.wallMs)}  \x1b[2m(render #${renders})\x1b[0m`,
+        rewriteLine(
+          process.stderr,
+          err,
+          `${paint(err, 'accent', glyphs(err).mark)} watching ${ref.sessionId.slice(0, 8)}${sep}${s.turns} turns${sep}${s.toolCalls} tools${sep}${fmtTokens(s.totalTokens)} tok${sep}ctx ${fmtTokens(s.contextPeak)}${sep}${fmtMs(s.wallMs)}  ${paint(err, 'dim', `(render #${renders})`)}`,
         )
       } catch (error) {
         // Parsing can race a transcript append and is retryable. An unsafe output path is not.
@@ -63,7 +69,7 @@ export async function watchSession(ref: SessionRef, flags: Record<string, string
   }
 
   await rebuild()
-  process.stderr.write(`\n  report: ${path}\n`)
+  process.stderr.write(`${err.animate ? '\n' : ''}  report: ${path}\n`)
   if (!flagBool(flags, 'no-open')) deps.openInBrowser(path)
 
   const poll = setInterval(async () => {

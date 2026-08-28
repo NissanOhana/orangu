@@ -24,18 +24,19 @@ import { redactValue } from '../../redact/redact.js'
 import { flagBool, flagStr } from '../args.js'
 import type { Analysis } from '../../model/analysis.js'
 import { writePrivateOutput } from '../private-output.js'
+import { MACHINE_CAPS, detectCaps, glyphs, paint, type Caps } from '../tty.js'
 
 declare const __ORANGU_VERSION__: string
 const VERSION = typeof __ORANGU_VERSION__ !== 'undefined' ? __ORANGU_VERSION__ : '0.0.0-dev'
 
-const C = {
-  dim: (s: string) => `\x1b[2m${s}\x1b[0m`,
-  b: (s: string) => `\x1b[1m${s}\x1b[0m`,
-  o: (s: string) => `\x1b[38;5;209m${s}\x1b[0m`,
-  g: (s: string) => `\x1b[32m${s}\x1b[0m`,
-  y: (s: string) => `\x1b[33m${s}\x1b[0m`,
+/** caps per stream, decided when the verb runs (src/cli/tty.ts); machine under --json / --quiet / --no-color */
+let out: Caps = MACHINE_CAPS
+let err: Caps = MACHINE_CAPS
+function detectStreams(flags: Record<string, string | boolean>): void {
+  const machine = flagBool(flags, 'json') || flagBool(flags, 'quiet') || flagBool(flags, 'no-color')
+  out = detectCaps(process.stdout, process.env, { machine })
+  err = detectCaps(process.stderr, process.env, { machine })
 }
-const paint = (fn: (s: string) => string, s: string) => (process.stdout.isTTY ? fn(s) : s)
 
 const n = (x: number) => x.toLocaleString('en-US')
 const kb = (bytes: number) => (bytes / 1024).toFixed(1) + ' KB'
@@ -45,6 +46,7 @@ const kb = (bytes: number) => (bytes / 1024).toFixed(1) + ' KB'
  * what would be read, and so the second run of the pair is a cache hit rather than a second full scan.
  */
 export async function runHarness(flags: Record<string, string | boolean>): Promise<HarnessReport> {
+  detectStreams(flags)
   const isGlobal = flagBool(flags, 'global')
   const configArg = flagStr(flags, 'root', 'r')
   const cwd = flags['cwd'] ? resolve(String(flags['cwd'])) : process.cwd()
@@ -93,7 +95,7 @@ export async function runHarness(flags: Record<string, string | boolean>): Promi
       }
     }
   }
-  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzed ${plural(analyses.length, 'session')}: declared vs used…\n`))
+  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(err, 'dim', `analyzed ${plural(analyses.length, 'session')}: declared vs used`) + '\n')
 
   const home = homedir()
   const inventory = await collectInventory({ cwd, roots, home })
@@ -118,7 +120,7 @@ export async function cmdHarness(_positionals: string[], flags: Record<string, s
   const outFile = flagStr(flags, 'o', 'out')
   if (outFile) {
     await writePrivateOutput(resolve(outFile), JSON.stringify(report, null, 2))
-    process.stderr.write(paint(C.g, '✓ ') + `harness written to ${resolve(outFile)}\n`)
+    process.stderr.write(paint(err, 'good', glyphs(err).ok) + ` harness written to ${resolve(outFile)}\n`)
     if (!flagBool(flags, 'json')) return
   }
   if (flagBool(flags, 'json')) {
@@ -135,15 +137,15 @@ function printHarness(r: HarnessReport): void {
   const scopeLabel = r.scope.global ? `global (${r.scope.roots.length} roots)` : `repo ${basename(r.scope.cwd)}`
 
   w()
-  w(paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, 'harness · ' + scopeLabel))
-  w(paint(C.dim, `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? '' : 's'} scanned`))
+  w(paint(out, ['bold', 'accent'], 'orangu') + '  ' + paint(out, 'bold', 'harness · ' + scopeLabel))
+  w(paint(out, 'dim', `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? '' : 's'} scanned`))
   w()
 
   // designed empty state: never a blank report
   const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0
   if (nothing) {
     w(`  no harness config found under ${r.scope.roots.join(', ')}. Nothing to cross-reference`)
-    w(paint(C.dim, `\n  looked for: settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md\n`))
+    w(paint(out, 'dim', `\n  looked for: settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md\n`))
     return
   }
 
@@ -167,12 +169,12 @@ function printHarness(r: HarnessReport): void {
     'idle skills',
     inv.totals.skills === 0 ? 'no skills installed' : noSessions ? NO_EVIDENCE : idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : 'none: every installed skill fired',
   )
-  if (classified(inv.totals.skills) && idleSkills.length) w(paint(C.dim, '    ' + idleSkills.slice(0, 8).map((s) => s.name).join(', ')))
+  if (classified(inv.totals.skills) && idleSkills.length) w(paint(out, 'dim', '    ' + idleSkills.slice(0, 8).map((s) => s.name).join(', ')))
   line(
     'idle MCP',
     inv.totals.mcpServers === 0 ? 'no MCP servers configured' : noSessions ? NO_EVIDENCE : idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : 'none: every configured server was called',
   )
-  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint(C.dim, '    ' + idleMcp.slice(0, 8).map((m) => m.name).join(', ')))
+  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint(out, 'dim', '    ' + idleMcp.slice(0, 8).map((m) => m.name).join(', ')))
 
   // the same four row kinds src/harness/report.ts counts in the "rows marked undeclared" note
   const undeclared = [
@@ -182,7 +184,7 @@ function printHarness(r: HarnessReport): void {
     ...x.hooks.filter((h) => h.status === 'undeclared').map((h) => 'hook ' + h.commandBasename),
   ]
   line('undeclared', undeclared.length ? `${undeclared.length} observed but not in the config read` : 'none')
-  if (undeclared.length) w(paint(C.dim, '    ' + undeclared.slice(0, 8).join(', ')))
+  if (undeclared.length) w(paint(out, 'dim', '    ' + undeclared.slice(0, 8).join(', ')))
 
   // One population per clause, like the idle-skills line: "dispatched" and "never" both count the DEFINED
   // agents (crosswalk status used / idle), and the agent types the sessions ran that no config declares
@@ -203,7 +205,7 @@ function printHarness(r: HarnessReport): void {
   const hookErrors = x.hooks.reduce((s, h) => s + h.errors, 0)
   const meanMs = hooksRun > 0 ? Math.round(x.hooks.reduce((s, h) => s + h.totalMs, 0) / hooksRun) : 0
   line('hooks (configured / runs / errors / mean ms)', '')
-  w(paint(C.dim, `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint(C.y, String(hookErrors)) : '0'} / ${n(meanMs)} ms`))
+  w(paint(out, 'dim', `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint(out, 'warn', String(hookErrors)) : '0'} / ${n(meanMs)} ms`))
 
   const modelDrift = x.models.configured && !x.models.matchesConfigured
   const effortDrift = x.effort.configured && !x.effort.matchesConfigured
@@ -213,14 +215,14 @@ function printHarness(r: HarnessReport): void {
 
   if (x.injectedListings.length) {
     w()
-    w(paint(C.b, '  injected listings (recurring context weight, per session)'))
-    for (const l of x.injectedListings.slice(0, 6)) w(`    ${l.type.padEnd(20)} ≈${n(l.approxTokensPerSession).padStart(8)} tokens/session  ${paint(C.dim, `(${l.sessions} sessions)`)}`)
+    w(paint(out, 'bold', '  injected listings (recurring context weight, per session)'))
+    for (const l of x.injectedListings.slice(0, 6)) w(`    ${l.type.padEnd(20)} ≈${n(l.approxTokensPerSession).padStart(8)} tokens/session  ${paint(out, 'dim', `(${l.sessions} sessions)`)}`)
   }
 
   if (r.notes.length) {
     w()
-    w(paint(C.b, '  notes'))
-    for (const note of r.notes) w(paint(C.dim, '    · ' + note))
+    w(paint(out, 'bold', '  notes'))
+    for (const note of r.notes) w(paint(out, 'dim', '    · ' + note))
   }
-  w(paint(C.dim, '\n  add --json for the machine-readable inventory and declared-vs-used rows\n'))
+  w(paint(out, 'dim', '\n  add --json for the machine-readable inventory and declared-vs-used rows\n'))
 }
