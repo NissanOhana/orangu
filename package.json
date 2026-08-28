@@ -52,7 +52,7 @@
     "bench": "node --import tsx scripts/bench-local.ts",
     "verify:generated": "node scripts/assert-generated.mjs",
     "verify:public": "node scripts/assert-public-tree.mjs",
-    "test:browser": "npm run build && playwright test",
+    "test:browser": "node scripts/assert-ports-free.mjs && npm run build && playwright test",
     "verify": "npm run verify:public && npm run verify:generated && npm run typecheck && npm test && npm run build && node dist/orangu.js --version",
     "verify:release": "npm run verify && node scripts/assert-offline.mjs --file site/sample.html && node scripts/assert-offline.mjs --site && npm run test:browser",
     "prepublishOnly": "npm run verify:release",
