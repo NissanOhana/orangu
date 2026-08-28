@@ -7,6 +7,9 @@
 name: Deploy landing page to GitHub Pages
 
 on:
+  # release.yml calls this as the last leg of a release, so the landing page and
+  # the published artifacts always describe the same version.
+  workflow_call:
   workflow_dispatch:
   push:
     branches: [main]
@@ -28,7 +31,9 @@ concurrency:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/main'
+    # main, or a release tag when release.yml calls this. Anything else (a
+    # workflow_dispatch from a topic branch) is not the published site.
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
