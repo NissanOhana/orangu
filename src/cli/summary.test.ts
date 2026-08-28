@@ -53,10 +53,13 @@ const FALLBACK: NextStep = {
   next: 'claude "/orangu:improve sg_42794f4ccd0b --finding ' + 'eyJ'.repeat(160) + '"',
 }
 
+/** rows a paste must carry whole (the path, the next and plugin commands) wrap below 80 columns */
+const RAW_ROWS = /^ {2}(report|next|plugin) {2,}\S/
+
 function assertFits(lines: string[], caps: Caps, label: string): void {
   const limit = Math.min(caps.columns, 80)
   for (const l of lines) {
-    expect(displayWidth(l), `${label}: ${JSON.stringify(stripAnsi(l))}`).toBeLessThanOrEqual(limit)
+    if (!(caps.columns < 80 && RAW_ROWS.test(stripAnsi(l)))) expect(displayWidth(l), `${label}: ${JSON.stringify(stripAnsi(l))}`).toBeLessThanOrEqual(limit)
     expect(stripAnsi(l), `${label} carries an opaque token`).not.toMatch(OPAQUE)
     expect(l).not.toContain('\r')
   }
@@ -69,10 +72,10 @@ describe('summary renderers fit the layout', () => {
     const title = a.session.title || a.session.id
     assertFits(analysisBlock(caps, a, title), caps, label + ' analysisBlock')
     assertFits(briefBlock(caps, a, title, STEP, { hint: true }), caps, label + ' briefBlock')
-    // the macOS default report path is exactly the 69-column budget; below 80 columns a path (never
-    // cut) is the documented exception, so the row is checked only where it can fit
+    // the macOS default report path is exactly the 69-column budget; below 80 columns the path and
+    // the two commands (never cut) are the documented exceptions, which assertFits skips there
     const footer = reportFooter(caps, { path: '/var/folders/1x/5tq6y5g95l5c2vxg2l7nzf9w0000gn/T/orangu-bbbbbbbb.html', opened: true, step: STEP })
-    assertFits(caps.columns >= 80 ? footer : footer.slice(1), caps, label + ' reportFooter')
+    assertFits(footer, caps, label + ' reportFooter')
     const refs: SessionRef[] = [
       { sessionId: a.session.id, path: '/p/a.jsonl', projectSlug: '-Users-me-Code-a-very-long-project-directory-name-that-goes-on-and-on', projectPath: '/p', sizeBytes: 7_200_000, mtimeMs: 1_700_000_000_000, hasSidecarDir: true, subagentFiles: ['x', 'y'] },
       { sessionId: '22222222-0000-4000-8000-00000000bbbb', path: '/p/b.jsonl', projectSlug: '-Users-me-demo', projectPath: '/p', sizeBytes: 12_000, mtimeMs: 1_700_000_000_000, hasSidecarDir: false, subagentFiles: [] },
@@ -96,6 +99,15 @@ describe('summary renderers fit the layout', () => {
     expect(text).toContain('  plugin   /plugin marketplace add NissanOhana/orangu')
     expect(text).toContain('           /plugin install orangu    (once, inside Claude Code)')
     expect(text.split('\n').at(-1)).toBe('  beta     orangu feedback --context report')
+  })
+
+  it('below 51 columns the next and plugin commands wrap whole instead of being cut', () => {
+    const lines = nextStepLines(capsAt(40, { color: 0 }), STEP)
+    expect(lines[1]).toBe('  next     claude "/orangu:improve sg_42794f4ccd0b"')
+    expect(lines[2]).toBe('  plugin   /plugin marketplace add NissanOhana/orangu')
+    // the install continuation fits at 40 columns on its own, so it drops only its dim note
+    expect(lines[3]).toBe('           /plugin install orangu')
+    expect(lines[0]).toBe('  finding  Subagent results re-read in …')
   })
 
   it('the store fallback is the single line allowed past 80 columns, and it says why', () => {

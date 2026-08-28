@@ -5,7 +5,9 @@
  *
  * Gutter: two spaces, an 8-column label, one space; values start at column 12 and are truncated to
  * fit `min(caps.columns, 80)`. The budget of 69 is exactly what the macOS default report path
- * (/var/folders/xx/<30 chars>/T/orangu-<8 hex>.html) needs, and a path is never cut. ASCII in every aligned cell; the audited glyphs (mark, check, middle
+ * (/var/folders/xx/<30 chars>/T/orangu-<8 hex>.html) needs. A path or a command a paste must carry
+ * whole (the report path, the next and plugin rows, the store fallback) is never cut: below 80
+ * columns it wraps. ASCII in every aligned cell; the audited glyphs (mark, check, middle
  * dot) appear only in a leading position or inside a trailing value, and swap to ASCII when
  * `caps.unicode` is off. Colour is painted after padding and truncation, never before.
  */
@@ -36,7 +38,7 @@ export function valueBudget(caps: Pick<Caps, 'columns'>): number {
 export interface RowOptions {
   /** style applied to the value after truncation */
   style?: Style | Style[]
-  /** the value is a command a paste must carry whole: never truncated (the one documented exception) */
+  /** the value is a path or a command a paste must carry whole: never truncated (the documented exceptions) */
   raw?: boolean
 }
 
@@ -90,9 +92,10 @@ export function nextStepLines(caps: Caps, step: NextStep): string[] {
     const reason = truncate(step.storeNote, valueBudget(caps) - head.length - tail.length, caps)
     lines.push(row(caps, 'store', head + reason + tail, { style: 'warn', raw: true }))
   }
-  if (step.next) lines.push(row(caps, 'next', step.next, { raw: Boolean(step.storeNote) }))
+  // both are paste targets: a cut command is no command, so a narrow terminal wraps them instead
+  if (step.next) lines.push(row(caps, 'next', step.next, { raw: true }))
   const [add, install] = PLUGIN_INSTALL.split(' · ')
-  lines.push(row(caps, 'plugin', add ?? PLUGIN_INSTALL))
+  lines.push(row(caps, 'plugin', add ?? PLUGIN_INSTALL, { raw: true }))
   if (install) {
     const note = '(once, inside Claude Code)'
     const fits = install.length + 4 + note.length <= valueBudget(caps)
