@@ -25,6 +25,37 @@ export function qualityScope(o: Pick<Summary['outcomes'], 'testRuns' | 'testRuns
   return o.testRunsFailed && o.testRunsFailed < o.testRuns ? 'last run' : ''
 }
 
+export interface HiddenErrors {
+  tool: string
+  total: number
+  signatures: number
+  /** the most sessions any one folded signature was seen in (a lower bound for the tool); 0 for a single session */
+  sessions: number
+}
+
+/**
+ * Error groups whose signature the redactor stripped, folded into one row per tool (errors, distinct
+ * signatures, sessions), so the screen never repeats N indistinguishable notices; groups that kept a
+ * signature pass through in order.
+ */
+export function foldHiddenErrors<T extends { signature: string }>(groups: T[], of: (g: T) => { tool: string; total: number; sessions?: number }): { kept: T[]; hidden: HiddenErrors[] } {
+  const kept: T[] = []
+  const by = new Map<string, HiddenErrors>()
+  for (const g of groups) {
+    if (g.signature) {
+      kept.push(g)
+      continue
+    }
+    const { tool, total, sessions = 0 } = of(g)
+    const r = by.get(tool) ?? { tool, total: 0, signatures: 0, sessions: 0 }
+    r.total += total
+    r.signatures++
+    r.sessions = Math.max(r.sessions, sessions)
+    by.set(tool, r)
+  }
+  return { kept, hidden: [...by.values()].sort((a, b) => b.total - a.total) }
+}
+
 
 /**
  * Overview headline: what THIS session did, from the outcomes the analyzer counted.

@@ -86,6 +86,6 @@ describe('offline report', () => {
     // for by two trims: template-literal indentation no longer ships (−1,090 B; continuation lines inside a
     // template start at column 0, every byte of one is in every report) and the six identical "No session
     // selected" guards share noSession() (−199 B).
-    expect(CLIENT_JS.length).toBe(72061)
+    expect(CLIENT_JS.length).toBe(72861)
   })
 })

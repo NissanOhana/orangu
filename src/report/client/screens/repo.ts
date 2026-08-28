@@ -5,7 +5,9 @@ import { esc, num, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { emptyHero, emptyNote } from '../components/empty.js'
+import { hiddenErrorRow } from '../components/errors.js'
 import { savingsText } from '../components/finding.js'
+import { foldHiddenErrors } from '../derive.js'
 import { boundedSavings } from '../suggest-rows.js'
 
 export function aggregateEmpty(scope: 'repo' | 'global' | 'harness'): string {
@@ -62,12 +64,14 @@ export function aggregateEvidence(g: Aggregate, ctx: Ctx): string {
         )
         .join('')
     : emptyNote('No heavily re-read files.')
+  // signatures are stripped with the default redaction: fold those per tool instead of repeating one notice
+  const { kept, hidden } = foldHiddenErrors(g.recurringErrors, (e) => ({ tool: e.tool, total: e.total, sessions: e.sessions }))
   const errs = g.recurringErrors.length
-    ? `<div class="card mb16" style="overflow:hidden"><div class="card-head">Recurring errors · environment problems to fix once</div>${g.recurringErrors
+    ? `<div class="card mb16" style="overflow:hidden"><div class="card-head">Recurring errors · environment problems to fix once</div>${hidden.map((r) => hiddenErrorRow(r, ctx.data.capabilities.includeText, 'padding:10px 18px')).join('')}${kept
         .slice(0, 8)
         .map(
           (e) =>
-            `<div class="rrow" style="padding:10px 18px"><span class="sigline">${esc(e.signature || '(error text not included)')}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${plural(e.sessions, 'session')}</span><span class="mono125">×${e.total}</span></div>`,
+            `<div class="rrow" style="padding:10px 18px"><span class="sigline">${esc(e.signature)}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${plural(e.sessions, 'session')}</span><span class="mono125">×${e.total}</span></div>`,
         )
         .join('')}</div>`
     : ''

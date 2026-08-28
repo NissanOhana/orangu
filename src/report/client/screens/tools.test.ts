@@ -74,3 +74,31 @@ describe('renderTools: the Avg cell when the mean exceeds p95', () => {
     expect(markup).not.toContain('p95 is the typical worst case')
   })
 })
+
+describe('renderTools: recurring errors under the default redaction', () => {
+  const stripped = (name: string, count: number) => ({ name, signature: '', count, sampleTurnIndex: 1 })
+
+  it('folds N stripped signatures into one row per tool that names the count and how to see the text', async () => {
+    const ctx = await context('dev', [stat()])
+    ctx.data.capabilities.includeText = false
+    ctx.a!.tools.errorGroups = [stripped('Bash', 27), stripped('Bash', 14), stripped('Bash', 51), stripped('Bash', 11), stripped('Edit', 2)]
+    renderTools(ctx)
+    expect(markup).toContain('<b>Bash</b> · 103 errors across 4 recurring signatures</span>')
+    expect(markup).toContain('<b>Edit</b> · 2 errors across 1 recurring signature</span>')
+    expect(markup).toContain('text hidden; re-run with <span class="mono">--include-text</span>')
+    expect(markup).not.toContain('not included')
+    expect(markup.match(/class="rrow"/g)?.length).toBe(2)
+    expect(markup).not.toContain('class="sigline"')
+  })
+
+  it('keeps every signature that survived, and never tells an include-text report to re-run', async () => {
+    const ctx = await context('dev', [stat()])
+    ctx.a!.tools.errorGroups = [{ name: 'Read', signature: 'ENOENT: no such file', count: 3, sampleTurnIndex: 2 }, stripped('Bash', 5)]
+    renderTools(ctx)
+    expect(markup).toContain('<span class="sigline">ENOENT: no such file</span>')
+    expect(markup).toContain('run the build first, or check the path')
+    expect(markup).toContain('<b>Bash</b> · 5 errors across 1 recurring signature</span>')
+    expect(markup).toContain('no error text was recorded')
+    expect(markup).not.toContain('--include-text')
+  })
+})

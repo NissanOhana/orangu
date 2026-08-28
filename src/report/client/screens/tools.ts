@@ -4,11 +4,11 @@ import { CAT_LABEL, catColor, esc, ms, num, pct, bytes } from '../format.js'
 import { h } from '../dom.js'
 import { degradedBanner } from '../components/banner.js'
 import { noSession } from '../components/empty.js'
+import { hiddenErrorRow } from '../components/errors.js'
+import { foldHiddenErrors } from '../derive.js'
 import { plainSentence } from '../strings.js'
 
 const SHOW = 12
-/** the default redaction strips the signature with every other transcript-authored string */
-const NO_SIG = '(error text not included in this report)'
 
 /** static hint map keyed by signature prefix (§2.5) */
 const ERR_HINTS: Array<[RegExp, string]> = [
@@ -60,12 +60,15 @@ ${avgCell(s)}
   const head = `<tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg</th><th class="num p95col">${ctx.audience === 'plain' ? '' : 'p95'}</th><th>Share of tool time</th></tr>`
   const more = t.byName.length > SHOW ? `<div class="pagefoot"><button data-more-tools="1">show all ${t.byName.length} tools</button></div>` : ''
 
+  // the default redaction strips the signature with every other transcript-authored string: fold those per tool
+  const { kept, hidden } = foldHiddenErrors(t.errorGroups, (g) => ({ tool: g.name, total: g.count }))
   const errCard = t.errorGroups.length
-    ? t.errorGroups
+    ? hidden.map((r) => hiddenErrorRow(r, ctx.data.capabilities.includeText)).join('') +
+      kept
         .slice(0, 8)
         .map((g) => {
           const hint = g.sampleHint || errHint(g.signature)
-          return `<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${esc(g.signature || NO_SIG)}</span><span class="mono115" style="margin-left:auto">×${g.count}</span></div><div class="small muted" style="margin-top:2px">${esc(g.name)}${hint ? ' · ' + esc(hint) : ''}</div></div>`
+          return `<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${esc(g.signature)}</span><span class="mono115" style="margin-left:auto">×${g.count}</span></div><div class="small muted" style="margin-top:2px">${esc(g.name)}${hint ? ' · ' + esc(hint) : ''}</div></div>`
         })
         .join('')
     : `<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>`

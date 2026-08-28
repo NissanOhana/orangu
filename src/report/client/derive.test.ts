@@ -4,6 +4,7 @@ import {
   outcomeHeadline,
   qualityHeadline,
   qualityScope,
+  foldHiddenErrors,
   callsForTurn,
   catMixForTurn,
   compactionGroups,
@@ -56,6 +57,30 @@ describe('qualityScope', () => {
     expect(qualityScope({ testRuns: 133, testRunsFailed: 0 })).toBe('')
     expect(qualityScope({ testRuns: 3, testRunsFailed: 3 })).toBe('')
     expect(qualityScope({ testRuns: 0, testRunsFailed: 0 })).toBe('')
+  })
+})
+
+describe('foldHiddenErrors', () => {
+  const groups = [
+    { name: 'Bash', signature: '', count: 27, sessions: 6 },
+    { name: 'Bash', signature: '', count: 14, sessions: 6 },
+    { name: 'Read', signature: 'ENOENT: no such file', count: 3, sessions: 2 },
+    { name: 'Bash', signature: '', count: 51, sessions: 5 },
+    { name: 'Edit', signature: '', count: 2, sessions: 2 },
+  ]
+  it('folds stripped signatures into one row per tool and passes the rest through in order', () => {
+    const { kept, hidden } = foldHiddenErrors(groups, (g) => ({ tool: g.name, total: g.count, sessions: g.sessions }))
+    expect(kept.map((g) => g.signature)).toEqual(['ENOENT: no such file'])
+    expect(hidden).toEqual([
+      { tool: 'Bash', total: 92, signatures: 3, sessions: 6 },
+      { tool: 'Edit', total: 2, signatures: 1, sessions: 2 },
+    ])
+  })
+  it('is a no-op when every signature survived (include-text) and reports 0 sessions for a single session', () => {
+    const { kept, hidden } = foldHiddenErrors(groups.slice(2, 3), (g) => ({ tool: g.name, total: g.count }))
+    expect(kept).toHaveLength(1)
+    expect(hidden).toEqual([])
+    expect(foldHiddenErrors(groups.slice(0, 1), (g) => ({ tool: g.name, total: g.count })).hidden).toEqual([{ tool: 'Bash', total: 27, signatures: 1, sessions: 0 }])
   })
 })
 
