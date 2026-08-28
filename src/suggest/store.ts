@@ -522,6 +522,17 @@ function recordMatchesFinding(record: SuggestionRecord, finding: Finding, source
   )
 }
 
+/** Key order is not identity: two evidence objects with the same entries are the same evidence. */
+function sameEvidence(a: unknown, b: unknown): boolean {
+  const canonical = (v: unknown): string =>
+    JSON.stringify(v, (_k, item: unknown) =>
+      item && typeof item === 'object' && !Array.isArray(item)
+        ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([x], [y]) => (x < y ? -1 : x > y ? 1 : 0)))
+        : item,
+    )
+  return canonical(a) === canonical(b)
+}
+
 function assertSafeFindingIdentity(finding: Finding): void {
   const values = [finding.ruleId, finding.insightId, ...finding.sessionIds].filter((value): value is string => typeof value === 'string')
   if (values.some((value) => redactValue(value, { scrub: true }) !== value)) {
@@ -979,6 +990,8 @@ export class SuggestionStore implements SuggestionStoreLike {
       // last-viewed timestamp). In particular, later verification uses the
       // applied timestamp, so a repeated handoff must not move it forward.
       if (existing.status !== 'new') return { record: existing, created: false }
+      // Nothing to refresh: `orangu report` run twice must not append a second line per run.
+      if (existing.title === f.title && sameEvidence(existing.evidence, f.evidence)) return { record: existing, created: false }
       const refreshed: SuggestionRecord = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts }
       await this.append(refreshed, guard)
       return { record: refreshed, created: false }

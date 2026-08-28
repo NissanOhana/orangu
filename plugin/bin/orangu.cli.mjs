@@ -7576,6 +7576,13 @@ var ALLOWED_PATCH_FIELDS = {
 function recordMatchesFinding(record2, finding, source) {
   return record2.source === source && record2.scope === finding.scope && record2.ruleId === finding.ruleId && (record2.insightId ?? "") === (finding.insightId ?? "") && (record2.cohortFingerprint ?? record2.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record2.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));
 }
+function sameEvidence(a, b) {
+  const canonical = (v) => JSON.stringify(
+    v,
+    (_k, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([x], [y]) => x < y ? -1 : x > y ? 1 : 0)) : item
+  );
+  return canonical(a) === canonical(b);
+}
 function assertSafeFindingIdentity(finding) {
   const values = [finding.ruleId, finding.insightId, ...finding.sessionIds].filter((value) => typeof value === "string");
   if (values.some((value) => redactValue(value, { scrub: true }) !== value)) {
@@ -7886,6 +7893,7 @@ var SuggestionStore = class {
         throw new Error(`suggestion id identity mismatch: ${id} belongs to a different finding`);
       }
       if (existing.status !== "new") return { record: existing, created: false };
+      if (existing.title === f.title && sameEvidence(existing.evidence, f.evidence)) return { record: existing, created: false };
       const refreshed = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts2 };
       await this.append(refreshed, guard);
       return { record: refreshed, created: false };

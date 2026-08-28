@@ -194,6 +194,21 @@ describe('SuggestionStore', () => {
     expect(again.record.evidence).toEqual({ estimated: true, sessions: 4, live: true })
   })
 
+  it('an identical re-upsert of a new record appends nothing (orangu report twice = one line)', async () => {
+    const first = await store.upsertNew(finding(), 'report')
+    expect(first.created).toBe(true)
+    // same title, same evidence entries in another key order: still the same finding
+    const again = await store.upsertNew(finding({ evidence: { estimated: true, savingsTokens: 12_000 } }), 'report')
+    expect(again.created).toBe(false)
+    expect(again.record).toEqual(first.record)
+    expect(readFileSync(store.path, 'utf8').trim().split('\n')).toHaveLength(1)
+    // a changed title still refreshes (and appends)
+    const changed = await store.upsertNew(finding({ title: 'Read 15 times now' }), 'report')
+    expect(changed.record.title).toBe('Read 15 times now')
+    expect(changed.record.statusAt).toBeGreaterThan(first.record.statusAt)
+    expect(readFileSync(store.path, 'utf8').trim().split('\n')).toHaveLength(2)
+  })
+
   it('throws on illegal transitions (new → verified) and unknown ids', async () => {
     const { record } = await store.upsertNew(finding(), 'report')
     await expect(store.transition(record.id, 'verified')).rejects.toThrow(/illegal transition new → verified/)
