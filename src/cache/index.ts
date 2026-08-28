@@ -12,7 +12,7 @@ import { constants, type BigIntStats } from 'node:fs'
 import { lstat, mkdir, open, realpath, rename, stat, unlink } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { ANALYSIS_SCHEMA_VERSION, type Analysis } from '../model/analysis.js'
-import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
+import { withStableSessionRead, parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import {
   assertEvidenceSessionManifestStable,
   MAX_LOCAL_SESSION_BYTES,
@@ -283,27 +283,31 @@ export async function analyzeRefCached(
 ): Promise<Analysis> {
   // This validation intentionally precedes cache lookup: a stale key must not
   // turn a replaced/symlinked transcript into a trusted cache hit.
-  let manifest = await prevalidateEvidenceSession(ref.path, { maxBytes: MAX_LOCAL_SESSION_BYTES })
-  if (o.cache) {
-    let key = manifestCacheKey(manifest)
-    const hit = await o.cache.get(key)
-    if (hit) {
-      await assertEvidenceSessionManifestStable(manifest)
-      hit.generator.generatedAt = o.now
-      return hit
+  // The whole prevalidate → (cache lookup) → read pair retries when the transcript is still being appended
+  // (withStableSessionRead); a symlinked or oversized transcript still fails closed on the first attempt.
+  return withStableSessionRead(ref.path, { maxBytes: MAX_LOCAL_SESSION_BYTES }, async (first) => {
+    let manifest = first
+    if (o.cache) {
+      let key = manifestCacheKey(manifest)
+      const hit = await o.cache.get(key)
+      if (hit) {
+        await assertEvidenceSessionManifestStable(manifest)
+        hit.generator.generatedAt = o.now
+        return hit
+      }
+      // A miss may initialize the caller-selected cache directory beside the transcript, changing the
+      // project tree after the first snapshot. Take a fresh immutable manifest (and key) before parsing
+      // rather than weakening tree stability.
+      manifest = await prevalidateEvidenceSession(ref.path, { maxBytes: MAX_LOCAL_SESSION_BYTES })
+      key = manifestCacheKey(manifest)
+      const loaded = await readEvidenceSessionManifest(manifest)
+      const session = await parseClaudeCodeSession(loaded.parseInput)
+      const a = analyzeSession(session, { version: o.version, now: o.now })
+      await o.cache.put(key, a)
+      return a
     }
-    // A miss may initialize the caller-selected cache directory beside the transcript, changing the
-    // project tree after the first snapshot. Take a fresh immutable manifest (and key) before parsing
-    // rather than weakening tree stability.
-    manifest = await prevalidateEvidenceSession(ref.path, { maxBytes: MAX_LOCAL_SESSION_BYTES })
-    key = manifestCacheKey(manifest)
     const loaded = await readEvidenceSessionManifest(manifest)
     const session = await parseClaudeCodeSession(loaded.parseInput)
-    const a = analyzeSession(session, { version: o.version, now: o.now })
-    await o.cache.put(key, a)
-    return a
-  }
-  const loaded = await readEvidenceSessionManifest(manifest)
-  const session = await parseClaudeCodeSession(loaded.parseInput)
-  return analyzeSession(session, { version: o.version, now: o.now })
+    return analyzeSession(session, { version: o.version, now: o.now })
+  })
 }

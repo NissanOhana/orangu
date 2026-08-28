@@ -4,6 +4,10 @@ import { analyzeSession } from '../analyze/analyze.js'
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 import { estimateFor, type AnalysisLoad } from './estimate.js'
 import { projectEvidence } from './evidence.js'
+import { redactAnalysis } from '../redact/redact.js'
+
+/** the bundle `orangu evidence` emits by default: transcript text stripped, secrets scrubbed (see evidenceBytes) */
+const defaultBundle = (a: Analysis) => projectEvidence(redactAnalysis(a, { scrub: true, stripText: true }).analysis)
 import { ESTIMATE_TOKEN_THRESHOLD } from './types.js'
 import type { Analysis } from '../model/analysis.js'
 
@@ -18,7 +22,7 @@ describe('estimateFor', () => {
   it('bytes = evidence bundle JSON size; approxTokens = ceil(bytes/4); counts sessions and files', async () => {
     const a = await canonicalAnalysis()
     const est = await estimateFor(['x'], async () => loaded(a))
-    const expectBytes = Buffer.byteLength(JSON.stringify(projectEvidence(a)))
+    const expectBytes = Buffer.byteLength(JSON.stringify(defaultBundle(a)))
     expect(est.bytes).toBe(expectBytes)
     expect(est.approxTokens).toBe(Math.ceil(expectBytes / 4))
     expect(est.sessions).toBe(1)
@@ -31,7 +35,7 @@ describe('estimateFor', () => {
     const a = await canonicalAnalysis()
     const est = await estimateFor(['x', 'missing', 'y'], async (id) => (id === 'missing' ? missing : loaded(a)))
     expect(est.sessions).toBe(2)
-    expect(est.bytes).toBe(2 * Buffer.byteLength(JSON.stringify(projectEvidence(a))))
+    expect(est.bytes).toBe(2 * Buffer.byteLength(JSON.stringify(defaultBundle(a))))
     expect(est.skipped).toEqual([{ selector: 'missing', reason: 'no such session' }])
   })
 
@@ -46,7 +50,7 @@ describe('estimateFor', () => {
     // projectEvidence clamps titles and finding counts, so one inflated field cannot cross the
     // gate; repetition can. Assert the arithmetic instead of assuming it.
     const a = await canonicalAnalysis()
-    const one = Buffer.byteLength(JSON.stringify(projectEvidence(a)))
+    const one = Buffer.byteLength(JSON.stringify(defaultBundle(a)))
     const n = Math.ceil((ESTIMATE_TOKEN_THRESHOLD * 4) / one) + 1
     const est = await estimateFor(Array.from({ length: n }, (_, i) => `s${i}`), async () => loaded(a))
     expect(est.bytes).toBe(n * one)

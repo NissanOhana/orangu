@@ -22,4 +22,9 @@ describe('fmtTokens', () => {
   it('agrees with the report client at the B tier', () => {
     for (const n of [1e9, 1_180_160_000, 1.44e9, 9.99e9, 1e10, 39_384_000_000]) expect(fmtTokens(n)).toBe(tok(n))
   })
+
+  it('hands values that would round to "1000.00M" to the B tier', () => {
+    expect(fmtTokens(999_999_999)).toBe('1.0B')
+    expect(fmtTokens(999_994_999)).toBe('999.99M')
+  })
 })

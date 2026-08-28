@@ -31,6 +31,7 @@ import {
   MAX_LOCAL_SESSION_BYTES,
   prevalidateEvidenceSession,
   readEvidenceSessionManifest,
+  type EvidenceSessionManifest,
   type PrevalidateEvidenceSessionOptions,
   type ReadEvidenceSessionResult,
 } from './evidence-input.js'
@@ -245,10 +246,21 @@ export const STABLE_READ_ATTEMPTS = 3
 const STABLE_READ_BACKOFF_MS = [20, 80] as const
 export const STILL_WRITING_HINT = 'the session is still being written; re-run, or use `orangu watch` to follow it live'
 
-async function readStableSession(path: string, options: PrevalidateEvidenceSessionOptions): Promise<ReadEvidenceSessionResult> {
+/**
+ * Run the prevalidate + read pair, retrying the WHOLE pair when a live transcript is appended between the
+ * snapshot and the read (or during it). Every loader that turns a transcript path into records goes through
+ * here (report/analyze via the cache, evidence, estimate, verification), so a session that is still being
+ * written is retried at the seam the verbs actually use. Only the transient "changed before/while it was
+ * being read" errors retry; symlink, size-cap, non-regular-file and root-escape errors stay fail-closed.
+ */
+export async function withStableSessionRead<T>(
+  path: string,
+  options: PrevalidateEvidenceSessionOptions | undefined,
+  read: (manifest: EvidenceSessionManifest) => Promise<T>,
+): Promise<T> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await readEvidenceSessionManifest(await prevalidateEvidenceSession(path, options))
+      return await read(await prevalidateEvidenceSession(path, options))
     } catch (error) {
       if (!isTransientInputChange(error)) throw error
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${(error as Error).message}; ${STILL_WRITING_HINT}`)
@@ -257,6 +269,13 @@ async function readStableSession(path: string, options: PrevalidateEvidenceSessi
     }
   }
 }
+
+/** prevalidate + read one session (main transcript and, unless excluded, its sidecars) with the retry above */
+export function readStableEvidenceSession(path: string, options?: PrevalidateEvidenceSessionOptions, maxBytes?: number): Promise<ReadEvidenceSessionResult> {
+  return withStableSessionRead(path, options, (manifest) => readEvidenceSessionManifest(manifest, maxBytes))
+}
+
+const readStableSession = readStableEvidenceSession
 
 // ---------- main entry ----------
 export async function parseClaudeCodeSession(input: ParseInput): Promise<Session> {

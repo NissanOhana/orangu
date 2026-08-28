@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -124,6 +124,19 @@ syncBuiltinESMExports()
       expect(lstatSync(linked).isSymbolicLink()).toBe(true)
       expect(readFileSync(outside, 'utf8')).toBe('outside')
     }
+  })
+
+  it('repo honours --root: only the named config dir is scanned', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-repo-root-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const out = JSON.parse(run(['repo', cwd, '--root', home.configDir, '--json', '--quiet', '--no-cache', '--jobs', '1'])) as {
+      sessionCount: number
+      sessions: Array<{ id: string }>
+    }
+    expect(out.sessionCount).toBe(home.sessions.length)
+    expect(new Set(out.sessions.map((s) => s.id))).toEqual(new Set(home.sessions.map((s) => s.id)))
   })
 
   it('redacts aggregate stdout and --out by default while preserving --no-redact', async () => {

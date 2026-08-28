@@ -33,7 +33,7 @@ JSON is redacted by default. Use `--no-redact` only after the user explicitly re
 2. Trace the important steps, tool results, errors, retries, and context signals without inventing an event the CLI did not report.
 3. Keep scope honest. One session supports diagnosis. Repository and global aggregates support a recurring-pattern claim only when they include example sessions.
 4. Name the top deterministic finding and its exact evidence. A `savings` value is an estimate owned by the rule; a finding without one has no measured saving.
-5. Use plain language when requested: say steps, helper tasks, reused context, and working memory. Keep the numbers and evidence identical across detail levels.
+5. Use plain language when requested: keep the words tool calls and subagents, and say reused context and working memory for the cache and the context window. Keep the numbers and evidence identical across detail levels.
 
 ## Handoff
 

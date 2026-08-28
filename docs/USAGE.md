@@ -64,7 +64,7 @@ See [beta feedback](feedback.md) for the privacy boundary, consent flow, and ove
 
 ## Shareable output
 
-Reports and JSON scrub recognized secrets by default. Report, `analyze --json`, `repo`, and `global` output also omit arbitrary prompt and result text (session titles, previews, tool-error text) unless `--include-text` is requested.
+Reports and JSON scrub recognized secrets by default. Report, `analyze --json`, `evidence`, `repo`, and `global` output also omit arbitrary prompt and result text (session titles, previews, tool-error text, finding details built from commands) unless `--include-text` is requested.
 
 Home paths are shortened to `~`, but other absolute paths may remain useful evidence. Add `--strip-paths` to reduce them to basenames before sharing. `--no-redact` is intended only for explicitly requested local inspection.
 

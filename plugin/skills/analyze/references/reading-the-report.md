@@ -54,5 +54,5 @@ The aggregate JSON also has `schemaVersion` and is the input the **`/orangu:harn
 ## Plain-language vocabulary
 
 When the user asks for plain language, translate:
-- tool call → step; sidechain/subagent → helper task; cache read → reused context; cache creation → fresh context loaded; compaction → memory refresh; context window → working memory; effort → how hard it thought; model → which assistant version.
+- tool call and subagent keep their names (the report's Plain mode uses them too); cache read → reused context; cache creation → fresh context loaded; compaction → memory refresh; context window → working memory; effort → how hard it thought; model → which assistant version.
 Lead with the **Outcome** (what it produced), the **tokens and the time**, and the **one thing to fix**. Never surface `tool_use`, `message.id`, `cache_creation_input_tokens`, or raw model ids.

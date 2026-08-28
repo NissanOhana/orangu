@@ -93,7 +93,7 @@ export async function runHarness(flags: Record<string, string | boolean>): Promi
       }
     }
   }
-  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzed ${analyses.length} sessions for the crosswalk…\n`))
+  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzed ${plural(analyses.length, 'session')} for the crosswalk…\n`))
 
   const home = homedir()
   const inventory = await collectInventory({ cwd, roots, home })

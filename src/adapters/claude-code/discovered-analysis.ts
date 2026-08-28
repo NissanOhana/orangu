@@ -12,11 +12,10 @@ import { isAbsolute, resolve } from 'node:path'
 import { analyzeSession } from '../../analyze/analyze.js'
 import type { Analysis } from '../../model/analysis.js'
 import { claudeRoots, listSessions, SESSION_ID_RE, type SessionRef } from '../../discover/discover.js'
-import { parseClaudeCodeSession } from './parse.js'
+import { parseClaudeCodeSession , withStableSessionRead } from './parse.js'
 import {
   evidenceManifestLatestChangeMs,
   MAX_EVIDENCE_SESSION_BYTES,
-  prevalidateEvidenceSession,
   readEvidenceSessionManifest,
 } from './evidence-input.js'
 
@@ -98,18 +97,20 @@ export function createDiscoveredClaudeAnalysisLoader(
       if (remainingBytes < 1) return undefined
       const ref = await exactDiscoveredRef(selector, await inventory)
       if (!ref) return undefined
-      const manifest = await prevalidateEvidenceSession(ref.path)
-      if (options.requireQuiet) {
-        const changedAt = evidenceManifestLatestChangeMs(manifest)
-        const observedAt = (options.now ?? Date.now)()
-        if (
-          changedAt === undefined ||
-          !Number.isFinite(observedAt) ||
-          observedAt < changedAt ||
-          observedAt - changedAt < MIN_VERIFICATION_QUIET_MS
-        ) return undefined
-      }
-      const loaded = await readEvidenceSessionManifest(manifest, remainingBytes)
+      const loaded = await withStableSessionRead(ref.path, undefined, async (manifest) => {
+        if (options.requireQuiet) {
+          const changedAt = evidenceManifestLatestChangeMs(manifest)
+          const observedAt = (options.now ?? Date.now)()
+          if (
+            changedAt === undefined ||
+            !Number.isFinite(observedAt) ||
+            observedAt < changedAt ||
+            observedAt - changedAt < MIN_VERIFICATION_QUIET_MS
+          ) return undefined
+        }
+        return readEvidenceSessionManifest(manifest, remainingBytes)
+      })
+      if (!loaded) return undefined
       remainingBytes -= loaded.bytesRead
       if (
         options.requireQuiet

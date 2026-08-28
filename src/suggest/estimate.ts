@@ -6,12 +6,18 @@
  */
 import type { Analysis } from '../model/analysis.js'
 import { projectEvidence } from './evidence.js'
+import { redactAnalysis } from '../redact/redact.js'
 import { ESTIMATE_TOKEN_THRESHOLD, type Estimate, type SkippedSession } from './types.js'
 
 /** what one session contributes to the read; the evidence bundle unless the caller sizes another projection */
 export type SizeProjection = (a: Analysis) => number
 
-export const evidenceBytes: SizeProjection = (a) => Buffer.byteLength(JSON.stringify(projectEvidence(a)))
+/**
+ * The bundle `orangu evidence` emits by DEFAULT: transcript-derived text stripped, secrets scrubbed
+ * (evidence.ts bundleFromSession). Sizing the unredacted analysis would over-count the read the skills gate.
+ */
+export const evidenceBytes: SizeProjection = (a) =>
+  Buffer.byteLength(JSON.stringify(projectEvidence(redactAnalysis(a, { scrub: true, stripText: true }).analysis)))
 
 /** One session's load: the analysis, or the reason there is none. A skipped session is never a silent 0. */
 export type AnalysisLoad = { ok: true; analysis: Analysis } | { ok: false; reason: string }

@@ -7,10 +7,10 @@
 import { extname, resolve } from 'node:path'
 import {
   MAX_EVIDENCE_SESSION_BYTES,
-  prevalidateEvidenceSession,
   readEvidenceSessionManifest,
 } from '../../adapters/claude-code/evidence-input.js'
-import { parseClaudeCodeSession } from '../../adapters/claude-code/parse.js'
+import { parseClaudeCodeSession , readStableEvidenceSession } from '../../adapters/claude-code/parse.js'
+import { redactAnalysis } from '../../redact/redact.js'
 import { analyzeSession } from '../../analyze/analyze.js'
 import {
   candidatesForPrefix,
@@ -77,18 +77,20 @@ async function bundleFromJsonFile(path: string, options: ProjectEvidenceOptions)
 
 async function bundleFromSession(selector: string, flags: Record<string, string | boolean>, options: ProjectEvidenceOptions): Promise<EvidenceBundle> {
   const ref = await resolveEvidenceSession(selector, flags)
-  const manifest = await prevalidateEvidenceSession(ref.path)
-  const loaded = await readEvidenceSessionManifest(manifest)
+  const loaded = await readStableEvidenceSession(ref.path)
   const session = await parseClaudeCodeSession(loaded.parseInput)
   // generatedAt/version are deliberately excluded from EvidenceBundle; fixed values
   // make this adapter clock-free without changing analysis or suggestion identity.
   const analysis = analyzeSession(session, { version: 'evidence', now: 0 })
-  return projectEvidence(analysis, options)
+  // The same default as `analyze --json`: transcript-derived text (finding detail built from commands and
+  // error output, previews, titles) leaves only with --include-text; rule copy and counts always stay.
+  const { analysis: redacted } = redactAnalysis(analysis, { scrub: true, stripText: !flagBool(flags, 'include-text') })
+  return projectEvidence(redacted, options)
 }
 
 export async function cmdEvidence(positionals: string[], flags: Record<string, string | boolean>): Promise<void> {
   if (positionals.length !== 1) {
-    throw new Error('usage: orangu evidence <session|latest|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate]')
+    throw new Error('usage: orangu evidence <session|latest|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate] [--include-text]')
   }
   if (flagBool(flags, 'no-redact')) throw new Error('evidence output is always redacted; --no-redact is not supported')
   if (flags['depth'] !== undefined) throw new Error('orangu evidence has one canonical bounded projection; --depth is not supported')

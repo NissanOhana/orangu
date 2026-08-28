@@ -12,7 +12,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js'
 import * as evidenceInput from './evidence-input.js'
-import { isTransientInputChange, parseClaudeCodeSession, STABLE_READ_ATTEMPTS, STILL_WRITING_HINT } from './parse.js'
+import { isTransientInputChange, parseClaudeCodeSession, readStableEvidenceSession, STABLE_READ_ATTEMPTS, STILL_WRITING_HINT } from './parse.js'
+import { analyzeRefCached } from '../../cache/index.js'
 
 vi.mock('./evidence-input.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./evidence-input.js')>()
@@ -117,5 +118,49 @@ describe('parseClaudeCodeSession: every other prevalidation error stays fail-clo
     expect(isTransientInputChange(new Error('session input exceeds 64 bytes'))).toBe(false)
     expect(isTransientInputChange(new Error('proposal changed while it was being read'))).toBe(false)
     expect(isTransientInputChange('session input changed before it was read')).toBe(false)
+  })
+})
+
+describe('the retry lives at the seams the verbs actually use', () => {
+  const ref = (path: string) => ({
+    sessionId: 'aaaaaaaa-0000-4000-8000-000000000001',
+    path,
+    projectSlug: '-tmp-fixture',
+    projectPath: '',
+    sizeBytes: 0,
+    mtimeMs: 0,
+    hasSidecarDir: false,
+    subagentFiles: [] as string[],
+  })
+
+  it('report / analyze (analyzeRefCached) survive one append during the read', async () => {
+    const { path } = fixture()
+    read.mockImplementationOnce(async (manifest) => {
+      appendFileSync(path, appendedLine)
+      return actual.readEvidenceSessionManifest(manifest)
+    })
+    const a = await analyzeRefCached(ref(path), { cache: null, version: 'test', now: 0 })
+    expect(prevalidate).toHaveBeenCalledTimes(2)
+    expect(a.turns.some((t) => t.promptPreview.includes(appendedPrompt))).toBe(true)
+  })
+
+  it('evidence / estimate (readStableEvidenceSession) survive one append during the read', async () => {
+    const { path, lines } = fixture()
+    read.mockImplementationOnce(async (manifest) => {
+      appendFileSync(path, appendedLine)
+      return actual.readEvidenceSessionManifest(manifest)
+    })
+    const loaded = await readStableEvidenceSession(path)
+    expect(prevalidate).toHaveBeenCalledTimes(2)
+    expect(loaded.parseInput.totalLines ?? loaded.parseInput.records?.length).toBe(lines + 1)
+  })
+
+  it('a symlinked transcript still fails closed on the first attempt at those seams', async () => {
+    const { dir, path } = fixture()
+    const link = join(dir, 'link.jsonl')
+    symlinkSync(path, link)
+    await expect(analyzeRefCached(ref(link), { cache: null, version: 'test', now: 0 })).rejects.toThrow()
+    await expect(readStableEvidenceSession(link)).rejects.toThrow()
+    expect(prevalidate).toHaveBeenCalledTimes(2)
   })
 })

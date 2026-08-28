@@ -16,8 +16,7 @@
  * The `harness` scope sizes the `orangu harness` report instead of a session projection.
  */
 import { claudeRoots, resolveSession, findLatestSession, listSessions } from '../../discover/discover.js'
-import { prevalidateEvidenceSession, readEvidenceSessionManifest } from '../../adapters/claude-code/evidence-input.js'
-import { parseClaudeCodeSession } from '../../adapters/claude-code/parse.js'
+import { parseClaudeCodeSession , readStableEvidenceSession } from '../../adapters/claude-code/parse.js'
 import { analyzeSession } from '../../analyze/analyze.js'
 import { estimateFor, type AnalysisLoad, type SizeProjection } from '../../suggest/estimate.js'
 import { CONFIRMATION_PUBLIC_KEY_ENV, verifyConfirmationReceipt } from '../../suggest/receipt.js'
@@ -53,8 +52,7 @@ export async function loadAnalysisResult(
   }
   if (!ref) return { ok: false, reason: 'no such session' }
   try {
-    const manifest = await prevalidateEvidenceSession(ref.path)
-    const loaded = await readEvidenceSessionManifest(manifest)
+    const loaded = await readStableEvidenceSession(ref.path)
     const session = await parseClaudeCodeSession(loaded.parseInput)
     return { ok: true, analysis: analyzeSession(session, analyzeOptions) }
   } catch (err) {

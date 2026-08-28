@@ -13,7 +13,7 @@ import { analyzeSession } from '../../analyze/analyze.js'
 import type { Analysis } from '../../model/analysis.js'
 import { MAX_EVIDENCE_ARTIFACT_BYTES } from '../../suggest/evidence.js'
 import { slimAnalysis } from '../../suggest/slim.js'
-import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js'
+import { buildCanonicalSession, SessionBuilder } from '../../../test/fixtures/session-builder.js'
 import { makeFixtureHome } from '../../../test/fixtures/home.js'
 import { cmdEvidence, MAX_EVIDENCE_SESSION_BYTES } from './evidence.js'
 
@@ -274,6 +274,32 @@ describe('orangu evidence', () => {
       overThreshold: Math.ceil(bytes / 4) > 5_000,
     })
     expect(estimate.findings).toBeUndefined()
+  })
+
+  it('strips transcript-derived finding text by default and restores it, scrubbed, with --include-text', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-evidence-text-'))
+    const id = 'bbbbbbbb-0000-4000-8000-000000000002'
+    const path = join(dir, `${id}.jsonl`)
+    const b = new SessionBuilder({ sessionId: id })
+    b.userPrompt('deploy')
+    for (let i = 0; i < 3; i++) {
+      b.tick(100)
+      b.toolCall('Bash', { command: 'psql' }, 'error: key sk-ant-api03-abc123def456ghi789 rejected; password authentication failed for user acme_prod at db.acme-internal.example', { isError: true, durationMs: 50 })
+    }
+    writeFileSync(path, b.toJsonl())
+
+    await cmdEvidence([path], { quiet: true })
+    const plain = stdout()
+    expect(plain).not.toContain('abc123def456ghi789')
+    expect(plain).not.toContain('acme_prod')
+    expect(plain).not.toContain('acme-internal')
+    expect(JSON.parse(plain).findings.length).toBeGreaterThan(0)
+
+    resetOutput()
+    await cmdEvidence([path], { quiet: true, 'include-text': true })
+    const kept = stdout()
+    expect(kept).not.toContain('abc123def456ghi789')
+    expect(kept).toContain('‹anthropic-key›')
   })
 
   it('always redacts secrets and rejects the redaction bypass flag', async () => {

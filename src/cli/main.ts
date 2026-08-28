@@ -32,6 +32,7 @@ import { PLUGIN_INSTALL, handoffForInsight } from '../report/client/suggest-rows
 import { outcomeHeadline } from '../report/client/derive.js'
 import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
+import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
 import { openInBrowser } from './open-browser.js'
@@ -290,7 +291,7 @@ async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
     process.stdout.write(JSON.stringify(rows, null, 2) + '\n')
     return
   }
-  process.stdout.write(paint(C.b, `\n${all.length} sessions${flagBool(flags, 'global') ? ' (all roots)' : ''}\n\n`))
+  process.stdout.write(paint(C.b, `\n${plural(all.length, 'session')}${flagBool(flags, 'global') ? ' (all roots)' : ''}\n\n`))
   for (const s of rows) {
     const when = new Date(s.mtimeMs).toISOString().slice(0, 16).replace('T', ' ')
     process.stdout.write(
@@ -306,16 +307,18 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   if (scope === 'global') {
     const roots = await claudeRoots(flagStr(flags, 'root', 'r'))
     refs = await listSessions({ roots })
-    scopeLabel = `global (${roots.length} roots)`
+    scopeLabel = `global (${plural(roots.length, 'root')})`
   } else {
     const cwd = selOrPath ? resolve(selOrPath) : process.cwd()
-    refs = await listSessions({ cwd })
+    // --root scopes the repo scan to that config dir, exactly as `orangu harness` does
+    const rootArg = flagStr(flags, 'root', 'r')
+    refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd })
     scopeLabel = `repo ${basename(cwd)}`
   }
   if (!refs.length) fail(`No sessions found for ${scopeLabel}.`)
   const max = Number(flagStr(flags, 'limit') ?? (scope === 'global' ? '500' : '200'))
   const use = refs.slice(0, Number.isNaN(max) ? refs.length : max)
-  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzing ${use.length} sessions…\n`))
+  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzing ${plural(use.length, 'session')}…\n`))
   const jobsStr = flagStr(flags, 'jobs', 'j')
   const jobsN = jobsStr !== undefined ? Math.max(1, Math.floor(Number(jobsStr)) || 1) : defaultJobs()
   // the pool re-loads the CLI bundle as its worker entry, so it only runs from the built file
@@ -364,7 +367,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
 
 function printAggregate(a: ReturnType<typeof aggregate>): void {
   process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, a.scope) + '\n')
-  process.stdout.write(paint(C.dim, `  ${a.sessionCount} sessions\n\n`))
+  process.stdout.write(paint(C.dim, `  ${plural(a.sessionCount, 'session')}\n\n`))
   const line = (l: string, v: string) => process.stdout.write('  ' + l.padEnd(20) + v + '\n')
   line('total tokens', fmtTokens(a.totals.tokens))
   line('tool calls', `${a.totals.toolCalls} (${a.totals.toolErrors} errors, ${(a.averages.toolErrorRate * 100).toFixed(1)}%)`)
