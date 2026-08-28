@@ -85,13 +85,54 @@ describe('release automation', () => {
     expect([...seen].sort()).toEqual(Object.keys(actionPins).sort())
   })
 
-  it('deploys Pages manually or automatically for main site changes only', () => {
+  it('deploys Pages manually, for main site changes, or as the last leg of a release', () => {
     const pages = read('.github/workflows/pages.yml')
-    expect(pages).toMatch(/\non:\n  workflow_dispatch:\n  push:/)
+    // workflow_call is how release.yml reuses this instead of duplicating the deploy.
+    expect(pages).toMatch(/\non:\n(?:  #.*\n)*  workflow_call:\n  workflow_dispatch:\n  push:\n/)
     const push = /\n  push:\n([\s\S]*?)\n\n# Least privilege/.exec(pages)?.[1]
     expect(push).toBe("    branches: [main]\n    paths:\n      - 'site/**'\n      - '.github/workflows/pages.yml'")
-    expect(pages).toContain("if: github.ref == 'refs/heads/main'")
+    // A bare refs/heads/main check silently skips the whole deploy when release.yml
+    // calls this from a tag push, so the tag ref has to be allowed explicitly.
+    expect(pages).toContain("if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')")
     expect(pages).toContain('npm run verify:generated')
     expect(pages).toContain('node scripts/assert-offline.mjs --site')
+  })
+
+  it('ships npm, the plugin tag and the landing page from one v* tag', () => {
+    const release = read('.github/workflows/release.yml')
+    expect(release).toMatch(/\non:\n  push:\n    tags: \['v\*'\]\n/)
+    expect(release).toContain('permissions:\n  contents: read')
+
+    // Nothing ships unless the tag and every version-bearing manifest agree, so a
+    // half-finished bump cannot publish npm against one version and tag another.
+    for (const manifest of [
+      'package.json',
+      'plugin/.claude-plugin/plugin.json',
+      'plugins/orangu/.codex-plugin/plugin.json',
+    ])
+      expect(release, `the guard must compare ${manifest}`).toContain(`compare ${manifest} \\`)
+
+    // The release gate is the same suite the branch already runs, browser tests included.
+    expect(release).toContain('npm run verify:release')
+    expect(release).toContain('npx --no-install playwright install --with-deps chromium')
+
+    // npm auth is OIDC trusted publishing: no token secret may enter this workflow.
+    expect(release).toContain('id-token: write')
+    expect(release, 'npm publish must not read a stored secret').not.toMatch(/secrets\./)
+    expect(release, 'trusted publishing needs npm >= 11.5.1').toContain('npm install -g npm@latest')
+
+    // A Claude Code plugin is released by the {name}--v{version} git tag the marketplace resolves.
+    expect(release).toContain('claude plugin validate ./plugin --strict')
+    expect(release).toContain('claude plugin tag ./plugin --push')
+
+    // Strict order: the landing page announces only artifacts that already exist.
+    expect(release).toContain('needs: [guard, verify]')
+    expect(release).toContain('needs: [guard, verify, npm]')
+    expect(release).toContain('needs: [guard, verify, npm, plugin]')
+    expect(release).toContain('uses: ./.github/workflows/pages.yml')
+
+    // Re-pushing a tag must skip what already shipped rather than failing the run.
+    expect(release).toContain('is already published; skipping.')
+    expect(release).toContain('is already on origin; nothing to publish.')
   })
 })
