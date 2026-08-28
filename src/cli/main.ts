@@ -8,13 +8,16 @@
  *   orangu global                 aggregate every session everywhere
  *   orangu watch [<session>]      live-tail a session and refresh the report
  *
- * Session selector: a session id, a unique id prefix, a path to a .jsonl, or "latest" (default).
+ * Session selector: a session id, a unique id prefix, a path to a .jsonl, "latest" (default), or
+ * "current" (the session the surrounding Claude Code process runs in; src/discover/current.ts).
+ * `--session <sel>` / `-s <sel>` is the flag form of the positional.
  */
 import { existsSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { parseArgs, flagStr, flagBool, unknownFlags } from './args.js'
 import { candidatesForPrefix, claudeRoots, findLatestSession, listSessions, resolveSession, type SessionRef } from '../discover/discover.js'
+import { resolveCurrentSession } from '../discover/current.js'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { aggregate } from '../analyze/aggregate.js'
@@ -84,7 +87,26 @@ function displayTitle(a: Analysis, flags: Record<string, string | boolean>): str
   return ro ? redactValue(title, { scrub: ro.scrub, stripPaths: ro.stripPaths }) : title
 }
 
+/** The verbs that read one session selector (positional or --session); `undefined` is bare `orangu`. */
+const SESSION_SELECTOR_VERBS = new Set<string | undefined>([undefined, 'report', 'html', 'analyze', 'a', 'watch', 'estimate', 'evidence', 'suggest'])
+const SELECTOR_FORMS = 'an id, a unique prefix, a .jsonl path, latest, or current'
+
+/**
+ * One selector from the positional and `--session` / `-s`. Both may be given only when they agree:
+ * a silent preference would be an answer about the wrong session.
+ */
+function sessionSelector(sel: string | undefined, flags: Record<string, string | boolean>): string | undefined {
+  const raw = flags['session'] ?? flags['s']
+  if (raw === undefined) return sel
+  if (typeof raw !== 'string' || !raw.trim()) fail(`--session needs a session selector: ${SELECTOR_FORMS}`)
+  const flag = (raw as string).trim()
+  if (flag.includes(',')) fail('--session takes one session here; comma lists belong to estimate and suggest')
+  if (sel !== undefined && sel !== flag) fail(`--session ${flag} and "${sel}" name different sessions; give one`)
+  return flag
+}
+
 async function selectSession(sel: string | undefined, flags: Record<string, string | boolean>): Promise<SessionRef> {
+  sel = sessionSelector(sel, flags)
   const configArg = flagStr(flags, 'root', 'config', 'r')
   let opts: { configDir?: string; roots?: string[]; cwd?: string } = configArg ? { configDir: configArg } : {}
   if (flagBool(flags, 'global')) opts = { roots: await claudeRoots(configArg) }
@@ -93,6 +115,12 @@ async function selectSession(sel: string | undefined, flags: Record<string, stri
     const s = await findLatestSession(opts)
     if (!s) fail('No sessions found. Is Claude Code installed? Try: orangu list')
     return s!
+  }
+  if (sel === 'current') {
+    // resolved to a concrete session here and never persisted or passed on as the alias
+    const found = await resolveCurrentSession(opts, process.env)
+    if (found.note && !flagBool(flags, 'quiet')) process.stderr.write('  ' + paint(err, 'dim', found.note) + '\n')
+    return found.ref
   }
   const r = await resolveSession(sel, opts)
   if (r) return r
@@ -233,6 +261,9 @@ function rejectUnusableFlags(command: string | undefined, flags: Record<string, 
     for (const flag of SESSION_GATE_FLAGS) {
       if (flags[flag] !== undefined) fail(`--${flag} gates one session: use it with orangu analyze or orangu report`)
     }
+  }
+  if (!SESSION_SELECTOR_VERBS.has(command) && (flags['session'] !== undefined || flags['s'] !== undefined)) {
+    fail('--session selects one session: use it with report, analyze, watch, estimate or evidence')
   }
 }
 
@@ -439,9 +470,11 @@ ${paint(out, 'bold', 'usage')}
                                --port <n> · --open/--no-open · --max-live <n>
                                --no-include-text · --global · --cwd <dir>${EXTRA_HELP.map((l) => '\n' + l).join('')}
 
-${paint(out, 'bold', 'session')}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
+${paint(out, 'bold', 'session')}   a session id, a unique id prefix, a .jsonl path, "latest" (default),
+          or "current" (the session Claude Code is running orangu from)
 
 ${paint(out, 'bold', 'flags')}
+  -s, --session <sel>    the session, as a flag (same forms as the positional)
   -o, --out <file>       write the report/JSON here (default: temp dir)
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout

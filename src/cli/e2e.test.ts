@@ -359,6 +359,77 @@ syncBuiltinESMExports()
   })
 
   // A8: `orangu` with no verb runs the loop on the latest session; --help stays the help screen.
+  it('--session / -s select a session like the positional; disagreement and selector-less verbs fail', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-session-flag-')))
+    const root = ['--root', home.configDir, '--no-cache', '--json']
+    const summary = (stdout: string) => {
+      const a = JSON.parse(stdout) as { session: { id: string }; summary: unknown }
+      return { id: a.session.id, summary: a.summary }
+    }
+    const positional = summary(run(['analyze', home.endedId, ...root]))
+    expect(positional.id).toBe(home.endedId)
+    expect(summary(run(['analyze', '--session', home.endedId, ...root]))).toEqual(positional)
+    expect(summary(run(['analyze', '-s', home.endedId, ...root]))).toEqual(positional)
+    expect(summary(run(['analyze', home.endedId, '--session', home.endedId, ...root]))).toEqual(positional)
+    // report and watch share selectSession: the report path carries the id the flag named
+    expect(run(['report', '--session', home.endedId.slice(0, 8), '--root', home.configDir, '--no-cache', '--no-open', '--quiet']).trim()).toMatch(/orangu-aaaaaaaa\.html$/)
+
+    const conflict = spawnSync('node', [CLI, 'analyze', home.idleId, '--session', home.endedId, ...root], { encoding: 'utf8' })
+    expect(conflict.status).toBe(1)
+    expect(conflict.stderr).toMatch(/name different sessions; give one/)
+    const bare = spawnSync('node', [CLI, 'analyze', '-s', ...root], { encoding: 'utf8' })
+    expect(bare.status).toBe(1)
+    expect(bare.stderr).toMatch(/--session needs a session selector/)
+    const list = spawnSync('node', [CLI, 'list', '--session', home.endedId, '--root', home.configDir], { encoding: 'utf8' })
+    expect(list.status).toBe(1)
+    expect(list.stderr).toMatch(/--session selects one session/)
+    const comma = spawnSync('node', [CLI, 'analyze', '--session', `${home.endedId},${home.idleId}`, ...root], { encoding: 'utf8' })
+    expect(comma.status).toBe(1)
+    expect(comma.stderr).toMatch(/comma lists belong to estimate and suggest/)
+  })
+
+  it('current resolves the surrounding Claude Code session and fails cleanly outside one', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-current-')), { cwd: '/Users/test/Code/demo' })
+    const root = ['--root', home.configDir, '--no-cache']
+    // the suite itself may run inside Claude Code: start from an environment without its variables
+    const outside = { ...process.env } as Record<string, string | undefined>
+    for (const k of ['CLAUDECODE', 'CLAUDE_CODE_SESSION_ID', 'CLAUDE_PID', 'CLAUDE_PROJECT_DIR']) delete outside[k]
+    const id = (stdout: string) => (JSON.parse(stdout) as { session: { id: string } }).session.id
+
+    const named = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--json'], { encoding: 'utf8', env: { ...outside, CLAUDE_CODE_SESSION_ID: home.endedId } })
+    expect(named.status, named.stderr).toBe(0)
+    expect(id(named.stdout)).toBe(home.endedId)
+    expect(named.stderr).toBe('')
+    const viaFlag = spawnSync('node', [CLI, 'report', '--session', 'current', ...root, '--no-open', '--quiet'], { encoding: 'utf8', env: { ...outside, CLAUDE_CODE_SESSION_ID: home.idleId } })
+    expect(viaFlag.status, viaFlag.stderr).toBe(0)
+    expect(viaFlag.stdout.trim()).toMatch(/orangu-22222222\.html$/)
+
+    const guessed = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--json'], { encoding: 'utf8', env: { ...outside, CLAUDECODE: '1', CLAUDE_PROJECT_DIR: '/Users/test/Code/demo' } })
+    expect(guessed.status, guessed.stderr).toBe(0)
+    expect(id(guessed.stdout)).toBe(home.liveId)
+    expect(guessed.stderr).toMatch(/current: guessed 11111111 from cwd/)
+    expect(guessed.stdout + guessed.stderr).not.toMatch(ESCAPES)
+
+    const absent = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--json'], { encoding: 'utf8', env: { ...outside, CLAUDE_CODE_SESSION_ID: '99999999-0000-4000-8000-000000000099' } })
+    expect(absent.status).toBe(1)
+    expect(absent.stderr).toMatch(/has no transcript yet/)
+    const none = spawnSync('node', [CLI, 'analyze', 'current', ...root], { encoding: 'utf8', env: outside })
+    expect(none.status).toBe(1)
+    expect(none.stderr).toMatch(/^error: current: not inside a Claude Code session; use latest, an id, or orangu pick/m)
+    expect(none.stderr).not.toMatch(/^\s+at /m)
+
+    // the other selector readers: evidence and estimate
+    const evidence = spawnSync('node', [CLI, 'evidence', 'current', ...root, '--estimate'], { encoding: 'utf8', env: { ...outside, CLAUDE_CODE_SESSION_ID: home.endedId } })
+    expect(evidence.status, evidence.stderr).toBe(0)
+    expect((JSON.parse(evidence.stdout) as { sessions?: number; bytes?: number }).bytes).toBeGreaterThan(0)
+    const estimate = spawnSync('node', [CLI, 'estimate', '--session', 'current', '--json'], {
+      encoding: 'utf8',
+      env: { ...outside, CLAUDE_CONFIG_DIR: home.configDir, CLAUDE_CODE_SESSION_ID: home.endedId },
+    })
+    expect(estimate.status, estimate.stderr).toBe(0)
+    expect((JSON.parse(estimate.stdout) as { sessions: number }).sessions).toBe(1)
+  })
+
   it('bare orangu analyzes the latest session and prints the sentence and the next command; --help is unchanged', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-bare-')))
     const bare = spawnSync('node', [CLI, '--root', home.configDir, '--no-cache'], { encoding: 'utf8' })

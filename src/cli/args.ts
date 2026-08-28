@@ -5,7 +5,7 @@ export interface ParsedArgs {
   flags: Record<string, string | boolean>
 }
 
-const SHORT_VALUE_FLAGS = new Set(['o', 'r', 'l'])
+const SHORT_VALUE_FLAGS = new Set(['o', 'r', 'l', 's'])
 
 const BOOL_FLAGS = new Set([
   'json',
@@ -35,6 +35,7 @@ const BOOL_FLAGS = new Set([
   'for-apply',
   'verbose',
   'no-color',
+  'plain',
 ])
 
 /**
@@ -113,7 +114,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
         }
       }
     } else if (a.startsWith('-') && a.length > 1) {
-      // single short flag that takes a value: -o out.html, -r dir, -l 20
+      // single short flag that takes a value: -o out.html, -r dir, -l 20, -s <session>
       const ch = a.slice(1)
       if (ch.length === 1 && SHORT_VALUE_FLAGS.has(ch)) {
         const next = argv[i + 1]

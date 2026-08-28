@@ -16,6 +16,15 @@ describe('parseArgs', () => {
     expect(p.flags['open']).toBe(true)
     expect(p.positionals).toEqual(['session-id'])
   })
+  it('-s takes a value like --session; --plain is boolean', () => {
+    const p = parseArgs(['report', '-s', 'abc123', '--plain'])
+    expect(p.flags['s']).toBe('abc123')
+    expect(p.positionals).toEqual([])
+    expect(p.flags['plain']).toBe(true)
+    expect(flagStr(parseArgs(['analyze', '--session', 'current']).flags, 'session', 's')).toBe('current')
+    // a bare -s never eats a following flag
+    expect(parseArgs(['report', '-s', '--json']).flags['s']).toBe(true)
+  })
   it('helpers read flags', () => {
     const p = parseArgs(['x', '--out', 'y', '--global'])
     expect(flagStr(p.flags, 'o', 'out')).toBe('y')

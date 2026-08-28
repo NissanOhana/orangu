@@ -13,9 +13,12 @@
  *   orangu estimate --rule <r> --session <a,b> [--json]
  *   orangu estimate harness [--cwd <dir>] [--root <dir>] [--global] [--limit <n>] [--json]
  *
- * The `harness` scope sizes the `orangu harness` report instead of a session projection.
+ * The `harness` scope sizes the `orangu harness` report instead of a session projection. The
+ * selectors `latest` and `current` are resolved here to concrete transcript paths, in the
+ * positional and inside a `--session` list alike.
  */
 import { claudeRoots, resolveSession, findLatestSession, listSessions } from '../../discover/discover.js'
+import { resolveCurrentSession } from '../../discover/current.js'
 import { parseClaudeCodeSession , readStableEvidenceSession } from '../../adapters/claude-code/parse.js'
 import { analyzeSession } from '../../analyze/analyze.js'
 import { estimateFor, type AnalysisLoad, type SizeProjection } from '../../suggest/estimate.js'
@@ -69,6 +72,25 @@ export async function loadAnalysisBySelector(
   return loaded.ok ? loaded.analysis : undefined
 }
 
+/** `current` -> the transcript path of the session Claude Code is running orangu from (never the alias). */
+async function currentSessionPath(flags: Record<string, string | boolean>): Promise<string> {
+  const found = await resolveCurrentSession({ roots: await claudeRoots() }, process.env)
+  if (found.note && !flagBool(flags, 'quiet') && !flagBool(flags, 'json')) process.stderr.write(`  ${found.note}\n`)
+  return found.ref.path
+}
+
+async function latestSessionPath(): Promise<string> {
+  const latest = await findLatestSession({})
+  if (!latest) throw new Error('No sessions found. Try: orangu list')
+  return latest.path
+}
+
+async function expandSelector(sel: string, flags: Record<string, string | boolean>): Promise<string> {
+  if (sel === 'current') return currentSessionPath(flags)
+  if (sel === 'latest') return latestSessionPath()
+  return sel
+}
+
 async function targetSessionIds(positionals: string[], flags: Record<string, string | boolean>): Promise<string[]> {
   const suggestionId = flagStr(flags, 'suggestion')
   if (suggestionId) {
@@ -76,8 +98,13 @@ async function targetSessionIds(positionals: string[], flags: Record<string, str
     if (!rec) throw new Error(`suggestion ${suggestionId} not found (see: orangu suggest --list)`)
     return rec.sessionIds
   }
+  if (flags['session'] === true || flags['s'] === true) throw new Error('--session needs a session selector (id, prefix, path, latest, current, or a comma list)')
   const sessionsFlag = flagStr(flags, 'session', 's')
-  if (sessionsFlag) return sessionsFlag.split(',').map((s) => s.trim()).filter(Boolean)
+  if (sessionsFlag) {
+    const out: string[] = []
+    for (const sel of sessionsFlag.split(',').map((s) => s.trim()).filter(Boolean)) out.push(await expandSelector(sel, flags))
+    return out
+  }
   // scope keywords, matching the other verbs: `estimate global` / `estimate repo` size every matching session
   if (positionals[0] === 'global' || positionals[0] === 'all') {
     return (await listSessions({})).map((r) => r.path)
@@ -90,11 +117,9 @@ async function targetSessionIds(positionals: string[], flags: Record<string, str
     const sel = (positionals[0] ?? '').trim()
     // an empty selector must not fall through to `latest`: that is a silent answer about the wrong session
     if (!sel) throw new Error('session selector is empty')
-    if (sel !== 'latest') return [sel]
+    return [await expandSelector(sel, flags)]
   }
-  const latest = await findLatestSession({})
-  if (!latest) throw new Error('No sessions found. Try: orangu list')
-  return [latest.path]
+  return [await latestSessionPath()]
 }
 
 const fmtKb = (bytes: number) => (bytes / 1024).toFixed(1) + ' KB'

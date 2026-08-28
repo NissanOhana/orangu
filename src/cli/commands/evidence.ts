@@ -29,6 +29,7 @@ import {
   type EvidenceBundle,
   type ProjectEvidenceOptions,
 } from '../../suggest/evidence.js'
+import { resolveCurrentSession } from '../../discover/current.js'
 import { flagBool, flagStr } from '../args.js'
 import { readStableTextFile } from '../../util/stable-file.js'
 
@@ -62,6 +63,11 @@ async function resolveEvidenceSession(selector: string, flags: Record<string, st
     if (!latest) throw new Error('No sessions found. Is Claude Code installed? Try: orangu list')
     return latest
   }
+  if (selector === 'current') {
+    const found = await resolveCurrentSession(options, process.env)
+    if (found.note && !flagBool(flags, 'quiet')) process.stderr.write(`  ${found.note}\n`)
+    return found.ref
+  }
   const resolved = await resolveSession(selector, options)
   if (resolved) return resolved
   const candidates = await candidatesForPrefix(selector, options)
@@ -90,7 +96,7 @@ async function bundleFromSession(selector: string, flags: Record<string, string 
 
 export async function cmdEvidence(positionals: string[], flags: Record<string, string | boolean>): Promise<void> {
   if (positionals.length !== 1) {
-    throw new Error('usage: orangu evidence <session|latest|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate] [--include-text]')
+    throw new Error('usage: orangu evidence <session|latest|current|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate] [--include-text]')
   }
   if (flagBool(flags, 'no-redact')) throw new Error('evidence output is always redacted; --no-redact is not supported')
   if (flags['depth'] !== undefined) throw new Error('orangu evidence has one canonical bounded projection; --depth is not supported')

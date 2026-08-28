@@ -1,9 +1,9 @@
 // src/cli/main.ts
-import { basename as basename10, join as join9, resolve as resolve10 } from "node:path";
+import { basename as basename10, join as join10, resolve as resolve10 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
-var SHORT_VALUE_FLAGS = /* @__PURE__ */ new Set(["o", "r", "l"]);
+var SHORT_VALUE_FLAGS = /* @__PURE__ */ new Set(["o", "r", "l", "s"]);
 var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "json",
   "open",
@@ -31,7 +31,8 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "for-proposal",
   "for-apply",
   "verbose",
-  "no-color"
+  "no-color",
+  "plain"
 ]);
 var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   ...BOOL_FLAGS,
@@ -1069,6 +1070,78 @@ async function candidatesForPrefix(prefix, opts = {}) {
 async function findLatestSession(opts = {}) {
   const sessions = await listSessions(opts);
   return sessions[0] ?? null;
+}
+
+// src/discover/current.ts
+import { constants as constants4 } from "node:fs";
+import { open as open4, readdir } from "node:fs/promises";
+import { join as join3 } from "node:path";
+var MAX_SESSION_RECORD_BYTES = 4096;
+var ALTERNATIVES = "use latest, an id, or orangu pick";
+function sessionsDirs(opts) {
+  if (opts.configDir) return [join3(opts.configDir, "sessions")];
+  if (opts.roots && opts.roots.length) return opts.roots.map((r) => join3(r, "sessions"));
+  return [join3(defaultConfigDir(), "sessions")];
+}
+async function readSessionRecord(path) {
+  let handle;
+  try {
+    handle = await open4(path, constants4.O_RDONLY | constants4.O_NOFOLLOW);
+  } catch {
+    return void 0;
+  }
+  try {
+    const st = await handle.stat();
+    if (!st.isFile() || st.size > MAX_SESSION_RECORD_BYTES) return void 0;
+    const buffer = Buffer.allocUnsafe(st.size);
+    const { bytesRead } = await handle.read(buffer, 0, st.size, 0);
+    const r = JSON.parse(buffer.subarray(0, bytesRead).toString("utf8"));
+    if (!r || typeof r !== "object") return void 0;
+    const pid = r["pid"];
+    const sessionId = r["sessionId"];
+    if (!Number.isSafeInteger(pid) || pid <= 0 || typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) return void 0;
+    const str2 = (k) => typeof r[k] === "string" ? r[k] : void 0;
+    const out3 = { pid, sessionId };
+    const cwd = str2("cwd");
+    const name = str2("name");
+    const status = str2("status");
+    if (cwd) out3.cwd = cwd;
+    if (name) out3.name = name;
+    if (status) out3.status = status;
+    return out3;
+  } catch {
+    return void 0;
+  } finally {
+    await handle.close();
+  }
+}
+async function resolveNamed(id, opts, via) {
+  const ref = await resolveSession(id, opts);
+  if (ref) return { ref, via };
+  throw new Error(
+    `current: session ${id.slice(0, 8)} has no transcript yet (Claude Code writes it asynchronously); try again in a moment, or ${ALTERNATIVES}`
+  );
+}
+async function resolveCurrentSession(opts, env = process.env, deps = {}) {
+  const envId = env["CLAUDE_CODE_SESSION_ID"]?.trim();
+  if (envId) {
+    if (!SESSION_ID_RE.test(envId)) throw new Error(`current: CLAUDE_CODE_SESSION_ID is not a session id; ${ALTERNATIVES}`);
+    return resolveNamed(envId, opts, "env");
+  }
+  const pid = Number(env["CLAUDE_PID"]);
+  if (Number.isSafeInteger(pid) && pid > 0) {
+    for (const dir of sessionsDirs(opts)) {
+      const rec = await readSessionRecord(join3(dir, `${pid}.json`));
+      if (rec) return resolveNamed(rec.sessionId, opts, "pid-file");
+    }
+  }
+  if (env["CLAUDECODE"]) {
+    const cwd = env["CLAUDE_PROJECT_DIR"]?.trim() || (deps.cwd ?? (() => process.cwd()))();
+    const ref = await findLatestSession({ ...opts, cwd });
+    if (!ref) throw new Error(`current: no session for ${cwd} yet; ${ALTERNATIVES}`);
+    return { ref, via: "cwd", note: `current: guessed ${ref.sessionId.slice(0, 8)} from cwd (no session id in the environment)` };
+  }
+  throw new Error(`current: not inside a Claude Code session; ${ALTERNATIVES}`);
 }
 
 // src/model/session.ts
@@ -2149,9 +2222,9 @@ ${BRAND_ICON_SCRIPT}
 
 // src/cache/index.ts
 import { createHash as createHash2, randomBytes } from "node:crypto";
-import { constants as constants5 } from "node:fs";
-import { lstat as lstat4, mkdir, open as open5, realpath as realpath4, rename, stat as stat2, unlink } from "node:fs/promises";
-import { join as join4, resolve as resolve4 } from "node:path";
+import { constants as constants6 } from "node:fs";
+import { lstat as lstat4, mkdir, open as open6, realpath as realpath4, rename, stat as stat2, unlink } from "node:fs/promises";
+import { join as join5, resolve as resolve4 } from "node:path";
 
 // src/model/analysis.ts
 var ANALYSIS_SCHEMA_VERSION = "2";
@@ -5853,18 +5926,18 @@ function narrative(s, sum2, top) {
 
 // src/util/home.ts
 import { homedir as homedir2 } from "node:os";
-import { join as join3 } from "node:path";
+import { join as join4 } from "node:path";
 function oranguHome(env = process.env) {
   const explicit = env["ORANGU_HOME"];
   if (explicit) return explicit;
   const xdg = env["XDG_DATA_HOME"];
-  if (xdg) return join3(xdg, "orangu");
-  return join3(homedir2(), ".orangu");
+  if (xdg) return join4(xdg, "orangu");
+  return join4(homedir2(), ".orangu");
 }
 
 // src/util/stable-file.ts
-import { constants as constants4 } from "node:fs";
-import { lstat as lstat3, open as open4, realpath as realpath3 } from "node:fs/promises";
+import { constants as constants5 } from "node:fs";
+import { lstat as lstat3, open as open5, realpath as realpath3 } from "node:fs/promises";
 import { resolve as resolve3 } from "node:path";
 function snapshot(stat8) {
   return { dev: stat8.dev, ino: stat8.ino, mode: stat8.mode, size: stat8.size, mtimeNs: stat8.mtimeNs, ctimeNs: stat8.ctimeNs };
@@ -5896,7 +5969,7 @@ async function readStableTextManifest(manifest) {
   const { requestedPath, canonicalPath, maxBytes, label, snapshot: expected } = manifest;
   let handle;
   try {
-    handle = await open4(canonicalPath, constants4.O_RDONLY | (constants4.O_NOFOLLOW ?? 0));
+    handle = await open5(canonicalPath, constants5.O_RDONLY | (constants5.O_NOFOLLOW ?? 0));
   } catch {
     throw new Error(`${label} changed before it was read`);
   }
@@ -5947,7 +6020,7 @@ async function ensurePrivateDirectory(path) {
   await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
   const requested = await lstat4(path, { bigint: true });
   if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`cache directory must be a real directory: ${path}`);
-  const handle = await open5(path, constants5.O_RDONLY | (constants5.O_DIRECTORY ?? 0) | (constants5.O_NOFOLLOW ?? 0));
+  const handle = await open6(path, constants6.O_RDONLY | (constants6.O_DIRECTORY ?? 0) | (constants6.O_NOFOLLOW ?? 0));
   try {
     const before = await handle.stat({ bigint: true });
     if (!before.isDirectory() || !sameInode(requested, before)) throw new Error(`cache directory changed while opening: ${path}`);
@@ -5980,7 +6053,7 @@ async function prevalidateAnalysisCacheEntry(path) {
   if (requested.size > BigInt(MAX_ANALYSIS_CACHE_ENTRY_BYTES)) {
     throw new Error(`cache entry exceeds ${MAX_ANALYSIS_CACHE_ENTRY_BYTES} bytes`);
   }
-  const handle = await open5(path, constants5.O_RDONLY | (constants5.O_NOFOLLOW ?? 0));
+  const handle = await open6(path, constants6.O_RDONLY | (constants6.O_NOFOLLOW ?? 0));
   try {
     const opened = await handle.stat({ bigint: true });
     if (!opened.isFile() || !sameInode(requested, opened) || opened.size > BigInt(MAX_ANALYSIS_CACHE_ENTRY_BYTES)) {
@@ -6008,16 +6081,16 @@ var AnalysisCache = class {
   writes = 0;
   constructor(opts) {
     const home = resolve4(oranguHome());
-    const cacheRoot = resolve4(opts.dir ?? join4(home, "cache"));
+    const cacheRoot = resolve4(opts.dir ?? join5(home, "cache"));
     const versionSegment = `${ANALYSIS_SCHEMA_VERSION}-${opts.version}`;
     this.validVersion = SIMPLE_SEGMENT.test(versionSegment);
-    this.dir = join4(cacheRoot, versionSegment);
+    this.dir = join5(cacheRoot, versionSegment);
     this.layoutDirectories = opts.dir === void 0 ? [home, cacheRoot, this.dir] : [cacheRoot, this.dir];
     this.enabled = opts.enabled !== false;
   }
   file(key) {
     if (!this.validVersion || !SIMPLE_SEGMENT.test(key)) return void 0;
-    return join4(this.dir, `${key}.json`);
+    return join5(this.dir, `${key}.json`);
   }
   async ensurePrivateLayout() {
     const identities = [];
@@ -6062,9 +6135,9 @@ var AnalysisCache = class {
       if (bytes.byteLength > MAX_ANALYSIS_CACHE_ENTRY_BYTES) return;
       const directories = await this.ensurePrivateLayout();
       tmp = `${path}.tmp-${process.pid}-${randomBytes(12).toString("hex")}`;
-      const handle = await open5(
+      const handle = await open6(
         tmp,
-        constants5.O_WRONLY | constants5.O_CREAT | constants5.O_EXCL | (constants5.O_NOFOLLOW ?? 0),
+        constants6.O_WRONLY | constants6.O_CREAT | constants6.O_EXCL | (constants6.O_NOFOLLOW ?? 0),
         PRIVATE_FILE_MODE
       );
       try {
@@ -6214,8 +6287,8 @@ import { watch as fsWatch } from "node:fs";
 import { stat as stat3 } from "node:fs/promises";
 
 // src/serve/tail.ts
-import { constants as constants6 } from "node:fs";
-import { lstat as lstat5, open as open6 } from "node:fs/promises";
+import { constants as constants7 } from "node:fs";
+import { lstat as lstat5, open as open7 } from "node:fs/promises";
 function newTailState(path) {
   return { path, nextByte: 0, records: [], trailingPartial: false, badLines: 0, totalLines: 0, bytes: 0, sidecars: /* @__PURE__ */ new Map() };
 }
@@ -6256,7 +6329,7 @@ function metaIdentity(st) {
   };
 }
 async function readSidecarMeta(path, remainingBytes) {
-  const handle = await open6(path, constants6.O_RDONLY | constants6.O_NOFOLLOW);
+  const handle = await open7(path, constants7.O_RDONLY | constants7.O_NOFOLLOW);
   try {
     const st = await handle.stat({ bigint: true });
     if (!st.isFile()) throw new Error(`session sidecar metadata must be a regular file: ${path}`);
@@ -6439,8 +6512,8 @@ function sessionFromTail(st) {
 }
 
 // src/cli/private-output.ts
-import { constants as constants7 } from "node:fs";
-import { lstat as lstat6, open as open7 } from "node:fs/promises";
+import { constants as constants8 } from "node:fs";
+import { lstat as lstat6, open as open8 } from "node:fs/promises";
 import { resolve as resolve5 } from "node:path";
 var PRIVATE_FILE_MODE2 = 384;
 var PrivateOutputError = class extends Error {
@@ -6460,14 +6533,14 @@ async function assertPathStillNamesHandle(path, opened) {
   }
 }
 async function openOutput(path) {
-  const baseFlags = constants7.O_WRONLY | (constants7.O_NOFOLLOW ?? 0) | (constants7.O_NONBLOCK ?? 0);
+  const baseFlags = constants8.O_WRONLY | (constants8.O_NOFOLLOW ?? 0) | (constants8.O_NONBLOCK ?? 0);
   try {
-    return await open7(path, baseFlags | constants7.O_CREAT | constants7.O_EXCL, PRIVATE_FILE_MODE2);
+    return await open8(path, baseFlags | constants8.O_CREAT | constants8.O_EXCL, PRIVATE_FILE_MODE2);
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
   }
   try {
-    return await open7(path, baseFlags);
+    return await open8(path, baseFlags);
   } catch (error) {
     if (error.code === "ELOOP") {
       throw new PrivateOutputError(`private output target must not be a symbolic link: ${path}`);
@@ -7561,9 +7634,9 @@ function listRows(caps, refs, o) {
 
 // src/suggest/store.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
-import { constants as constants8 } from "node:fs";
-import { lstat as lstat7, mkdir as mkdir2, open as open8, realpath as realpath5, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname4, isAbsolute as isAbsolute4, join as join5 } from "node:path";
+import { constants as constants9 } from "node:fs";
+import { lstat as lstat7, mkdir as mkdir2, open as open9, realpath as realpath5, rmdir, unlink as unlink2 } from "node:fs/promises";
+import { dirname as dirname4, isAbsolute as isAbsolute4, join as join6 } from "node:path";
 
 // src/suggest/change-classes.ts
 var CHANGE_CLASS_DEFINITIONS = [
@@ -8163,7 +8236,7 @@ function sameFileSnapshot(a, b) {
 async function securePrivateDirectory(path, label) {
   const requested = await lstat7(path, { bigint: true });
   if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`${label} must be a real directory: ${path}`);
-  const handle = await open8(path, constants8.O_RDONLY | (constants8.O_DIRECTORY ?? 0) | (constants8.O_NOFOLLOW ?? 0));
+  const handle = await open9(path, constants9.O_RDONLY | (constants9.O_DIRECTORY ?? 0) | (constants9.O_NOFOLLOW ?? 0));
   try {
     const before = await handle.stat({ bigint: true });
     if (!before.isDirectory() || !sameInode3(requested, before)) throw new Error(`${label} changed while opening: ${path}`);
@@ -8207,13 +8280,13 @@ function validLockOwner(value) {
   return owner.v === 1 && typeof owner.pid === "number" && Number.isSafeInteger(owner.pid) && owner.pid > 0 && typeof owner.token === "string" && /^[0-9a-f]{64}$/.test(owner.token) && typeof owner.createdAt === "number" && Number.isFinite(owner.createdAt);
 }
 async function createLockOwner(lock, token) {
-  const path = join5(lock.path, LOCK_OWNER_FILE);
+  const path = join6(lock.path, LOCK_OWNER_FILE);
   const bytes = Buffer.from(`${JSON.stringify({ v: 1, pid: process.pid, token, createdAt: Date.now() })}
 `, "utf8");
   await assertPrivateDirectoriesStable2([lock]);
-  const handle = await open8(
+  const handle = await open9(
     path,
-    constants8.O_WRONLY | constants8.O_CREAT | constants8.O_EXCL | (constants8.O_NOFOLLOW ?? 0),
+    constants9.O_WRONLY | constants9.O_CREAT | constants9.O_EXCL | (constants9.O_NOFOLLOW ?? 0),
     PRIVATE_FILE_MODE3
   );
   try {
@@ -8230,7 +8303,7 @@ async function createLockOwner(lock, token) {
   }
 }
 async function inspectLockOwner(lock) {
-  const path = join5(lock.path, LOCK_OWNER_FILE);
+  const path = join6(lock.path, LOCK_OWNER_FILE);
   let requested;
   try {
     requested = await lstat7(path, { bigint: true });
@@ -8242,7 +8315,7 @@ async function inspectLockOwner(lock) {
   if (requested.nlink !== 1n) throw new Error(`suggestion store lock owner must have exactly one hard link: ${path}`);
   if (requested.size > BigInt(MAX_LOCK_OWNER_BYTES)) throw new Error(`suggestion store lock owner exceeds ${MAX_LOCK_OWNER_BYTES} bytes: ${path}`);
   await assertPrivateDirectoriesStable2([lock]);
-  const handle = await open8(path, constants8.O_RDONLY | (constants8.O_NOFOLLOW ?? 0));
+  const handle = await open9(path, constants9.O_RDONLY | (constants9.O_NOFOLLOW ?? 0));
   try {
     const opened = await handle.stat({ bigint: true });
     if (!opened.isFile() || opened.nlink !== 1n || opened.size > BigInt(MAX_LOCK_OWNER_BYTES) || !sameFileSnapshot(fileSnapshot(requested), fileSnapshot(opened))) {
@@ -8321,7 +8394,7 @@ async function readPrivateSuggestionStore(path, directories) {
     throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`);
   }
   await assertPrivateDirectoriesStable2(directories);
-  const handle = await open8(path, constants8.O_RDONLY | (constants8.O_NOFOLLOW ?? 0));
+  const handle = await open9(path, constants9.O_RDONLY | (constants9.O_NOFOLLOW ?? 0));
   try {
     const opened = await handle.stat({ bigint: true });
     if (!opened.isFile() || opened.nlink !== 1n || !sameInode3(requested, opened) || opened.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
@@ -8366,10 +8439,10 @@ async function appendPrivateSuggestionRecord(path, record2, directories, assertO
   if (requested && !requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`);
   if (requested && requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`);
   await assertPrivateDirectoriesStable2(directories);
-  const createFlags = requested ? 0 : constants8.O_CREAT | constants8.O_EXCL;
-  const handle = await open8(
+  const createFlags = requested ? 0 : constants9.O_CREAT | constants9.O_EXCL;
+  const handle = await open9(
     path,
-    constants8.O_RDWR | constants8.O_APPEND | createFlags | (constants8.O_NOFOLLOW ?? 0),
+    constants9.O_RDWR | constants9.O_APPEND | createFlags | (constants9.O_NOFOLLOW ?? 0),
     PRIVATE_FILE_MODE3
   );
   try {
@@ -8570,8 +8643,8 @@ var SuggestionStore = class {
   chain = Promise.resolve();
   constructor(o = {}) {
     const home = o.home ?? oranguHome();
-    this.path = join5(home, "suggestions.jsonl");
-    this.proposalsDir = join5(home, "proposals");
+    this.path = join6(home, "suggestions.jsonl");
+    this.proposalsDir = join6(home, "proposals");
     this.now = o.now ?? Date.now;
   }
   get lockPath() {
@@ -8848,8 +8921,8 @@ import { cpus as cpus2 } from "node:os";
 import { homedir as homedir3 } from "node:os";
 
 // src/harness/collect.ts
-import { readdir, readFile, stat as stat4 } from "node:fs/promises";
-import { basename as basename7, join as join6 } from "node:path";
+import { readdir as readdir2, readFile, stat as stat4 } from "node:fs/promises";
+import { basename as basename7, join as join7 } from "node:path";
 var DEFAULT_MAX_FILE_BYTES = 1e6;
 var MAX_WALK_DEPTH = 6;
 var CLAUDE_JSON_KEYS = ["mcpServers", "projects", "skillUsage", "pluginUsage"];
@@ -8915,7 +8988,7 @@ async function readJson(ctx, path) {
 }
 async function listDir(ctx, path, required = false) {
   try {
-    const entries = await readdir(path, { withFileTypes: true });
+    const entries = await readdir2(path, { withFileTypes: true });
     return entries.map((e) => ({ name: e.name, dir: e.isDirectory() })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   } catch (e) {
     const r = reasonOf(e);
@@ -8928,7 +9001,7 @@ async function walkMarkdown(ctx, dir, depth = 0) {
   const out3 = [];
   for (const e of await listDir(ctx, dir)) {
     if (e.name.startsWith(".") || e.name === "node_modules") continue;
-    const p = join6(dir, e.name);
+    const p = join7(dir, e.name);
     if (e.dir) out3.push(...await walkMarkdown(ctx, p, depth + 1));
     else if (e.name.endsWith(".md")) out3.push(p);
   }
@@ -9065,7 +9138,7 @@ async function readSkillDir(ctx, dir, origin, plugin) {
   const out3 = [];
   for (const e of await listDir(ctx, dir)) {
     if (!e.dir || e.name.startsWith(".")) continue;
-    const file = join6(dir, e.name, "SKILL.md");
+    const file = join7(dir, e.name, "SKILL.md");
     const text2 = await readText(ctx, file);
     if (text2 === null) continue;
     const { fm, body } = parseFrontmatter(text2);
@@ -9080,7 +9153,7 @@ async function readSkillDir(ctx, dir, origin, plugin) {
       descriptionChars: (fm["description"] ?? "").length,
       allowedTools: splitList(fm["allowed-tools"] ?? fm["allowedTools"])?.map(cleanName) ?? null,
       bodyLines: lineCount(body),
-      hasReferences: await isDir(join6(dir, e.name, "references"))
+      hasReferences: await isDir(join7(dir, e.name, "references"))
     });
   }
   return out3;
@@ -9132,18 +9205,18 @@ function mcpFromRecord(rec, scope, enabled = true) {
   return out3;
 }
 async function walkPlugin(ctx, installPath, key) {
-  const skills = await readSkillDir(ctx, join6(installPath, "skills"), "plugin", key);
-  const agents = await readAgentDir(ctx, join6(installPath, "agents"), "plugin", key);
-  const commands = (await walkMarkdown(ctx, join6(installPath, "commands"))).length;
+  const skills = await readSkillDir(ctx, join7(installPath, "skills"), "plugin", key);
+  const agents = await readAgentDir(ctx, join7(installPath, "agents"), "plugin", key);
+  const commands = (await walkMarkdown(ctx, join7(installPath, "commands"))).length;
   let hooks = 0;
-  const hooksJson = await readJson(ctx, join6(installPath, "hooks", "hooks.json"));
+  const hooksJson = await readJson(ctx, join7(installPath, "hooks", "hooks.json"));
   const hookEvents = asRecord(hooksJson?.["hooks"]) ?? hooksJson;
   if (hookEvents) {
     for (const event of Object.keys(hookEvents)) {
       for (const m of asArray(hookEvents[event])) hooks += asArray(asRecord(m)?.["hooks"]).length;
     }
   }
-  const mcpJson = await readJson(ctx, join6(installPath, ".mcp.json"));
+  const mcpJson = await readJson(ctx, join7(installPath, ".mcp.json"));
   const mcpServers = mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "plugin");
   return { skills, agents, mcpServers, commands, hooks };
 }
@@ -9167,22 +9240,22 @@ async function collectInventory(opts) {
   const mcpServers = [];
   if (await isDir(opts.cwd)) {
     for (const name of ["CLAUDE.md", "AGENTS.md"]) {
-      const m2 = await readMemory(ctx, join6(opts.cwd, name), "repo");
+      const m2 = await readMemory(ctx, join7(opts.cwd, name), "repo");
       if (m2) claudeMd.push(m2);
     }
-    const dotClaude = join6(opts.cwd, ".claude");
-    const m = await readMemory(ctx, join6(dotClaude, "CLAUDE.md"), "repo");
+    const dotClaude = join7(opts.cwd, ".claude");
+    const m = await readMemory(ctx, join7(dotClaude, "CLAUDE.md"), "repo");
     if (m) claudeMd.push(m);
     for (const [file, scope] of [
-      [join6(dotClaude, "settings.json"), "repo"],
-      [join6(dotClaude, "settings.local.json"), "repo-local"]
+      [join7(dotClaude, "settings.json"), "repo"],
+      [join7(dotClaude, "settings.local.json"), "repo-local"]
     ]) {
       const raw = await readJson(ctx, file);
       if (raw) settings.push(parseSettings(ctx, scope, file, raw));
     }
-    skills.push(...await readSkillDir(ctx, join6(dotClaude, "skills"), "repo"));
-    agents.push(...await readAgentDir(ctx, join6(dotClaude, "agents"), "repo"));
-    const mcpJson = await readJson(ctx, join6(opts.cwd, ".mcp.json"));
+    skills.push(...await readSkillDir(ctx, join7(dotClaude, "skills"), "repo"));
+    agents.push(...await readAgentDir(ctx, join7(dotClaude, "agents"), "repo"));
+    const mcpJson = await readJson(ctx, join7(opts.cwd, ".mcp.json"));
     mcpServers.push(...mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "repo-file"));
   } else {
     mark(ctx, opts.cwd, "enoent");
@@ -9199,21 +9272,21 @@ async function collectInventory(opts) {
       continue;
     }
     liveRoots.push(root);
-    const m = await readMemory(ctx, join6(root, "CLAUDE.md"), "global");
+    const m = await readMemory(ctx, join7(root, "CLAUDE.md"), "global");
     if (m) claudeMd.push(m);
     for (const [file, scope] of [
-      [join6(root, "settings.json"), "global"],
-      [join6(root, "settings.local.json"), "global-local"]
+      [join7(root, "settings.json"), "global"],
+      [join7(root, "settings.local.json"), "global-local"]
     ]) {
       const raw = await readJson(ctx, file);
       if (raw) settings.push(parseSettings(ctx, scope, file, raw));
     }
-    skills.push(...await readSkillDir(ctx, join6(root, "skills"), "global"));
-    agents.push(...await readAgentDir(ctx, join6(root, "agents"), "global"));
+    skills.push(...await readSkillDir(ctx, join7(root, "skills"), "global"));
+    agents.push(...await readAgentDir(ctx, join7(root, "agents"), "global"));
   }
   const enabled = new Set(settings.flatMap((s) => s.enabledPlugins));
   for (const root of liveRoots) {
-    const installed = await readJson(ctx, join6(root, "plugins", "installed_plugins.json"));
+    const installed = await readJson(ctx, join7(root, "plugins", "installed_plugins.json"));
     const byName = asRecord(installed?.["plugins"]);
     if (!byName) continue;
     for (const key of Object.keys(byName).sort()) {
@@ -9241,7 +9314,7 @@ async function collectInventory(opts) {
     }
   }
   let usageCounters;
-  const claudeJsonPath = join6(opts.home, ".claude.json");
+  const claudeJsonPath = join7(opts.home, ".claude.json");
   const rawClaudeJson = await readJson(ctx, claudeJsonPath);
   if (rawClaudeJson) {
     const picked = {};
@@ -9340,7 +9413,7 @@ var HTML_ANTI_FRAMING_HEADERS = {
 // src/serve/registry.ts
 import { watch as fsWatch2 } from "node:fs";
 import { stat as stat5 } from "node:fs/promises";
-import { join as join7 } from "node:path";
+import { join as join8 } from "node:path";
 var DEFAULT_MAX_LIVE = 8;
 var LAST_EVENTS_MAX = 5;
 var Registry = class {
@@ -9390,7 +9463,7 @@ var Registry = class {
     const roots = this.o.opts.roots?.length ? this.o.opts.roots : this.o.opts.configDir ? [this.o.opts.configDir] : [];
     for (const root of roots) {
       try {
-        const w = fsWatch2(join7(root, "projects"), { recursive: true }, (_ev, filename) => this.onFsEvent(String(filename ?? "")));
+        const w = fsWatch2(join8(root, "projects"), { recursive: true }, (_ev, filename) => this.onFsEvent(String(filename ?? "")));
         this.watchers.push(w);
       } catch {
       }
@@ -11147,6 +11220,22 @@ async function loadAnalysisBySelector(sel, analyzeOptions) {
   const loaded = await loadAnalysisResult(sel, analyzeOptions);
   return loaded.ok ? loaded.analysis : void 0;
 }
+async function currentSessionPath(flags) {
+  const found = await resolveCurrentSession({ roots: await claudeRoots() }, process.env);
+  if (found.note && !flagBool(flags, "quiet") && !flagBool(flags, "json")) process.stderr.write(`  ${found.note}
+`);
+  return found.ref.path;
+}
+async function latestSessionPath() {
+  const latest = await findLatestSession({});
+  if (!latest) throw new Error("No sessions found. Try: orangu list");
+  return latest.path;
+}
+async function expandSelector(sel, flags) {
+  if (sel === "current") return currentSessionPath(flags);
+  if (sel === "latest") return latestSessionPath();
+  return sel;
+}
 async function targetSessionIds(positionals, flags) {
   const suggestionId2 = flagStr(flags, "suggestion");
   if (suggestionId2) {
@@ -11154,8 +11243,13 @@ async function targetSessionIds(positionals, flags) {
     if (!rec) throw new Error(`suggestion ${suggestionId2} not found (see: orangu suggest --list)`);
     return rec.sessionIds;
   }
+  if (flags["session"] === true || flags["s"] === true) throw new Error("--session needs a session selector (id, prefix, path, latest, current, or a comma list)");
   const sessionsFlag = flagStr(flags, "session", "s");
-  if (sessionsFlag) return sessionsFlag.split(",").map((s) => s.trim()).filter(Boolean);
+  if (sessionsFlag) {
+    const out3 = [];
+    for (const sel of sessionsFlag.split(",").map((s) => s.trim()).filter(Boolean)) out3.push(await expandSelector(sel, flags));
+    return out3;
+  }
   if (positionals[0] === "global" || positionals[0] === "all") {
     return (await listSessions({})).map((r) => r.path);
   }
@@ -11165,11 +11259,9 @@ async function targetSessionIds(positionals, flags) {
   if (positionals.length > 0) {
     const sel = (positionals[0] ?? "").trim();
     if (!sel) throw new Error("session selector is empty");
-    if (sel !== "latest") return [sel];
+    return [await expandSelector(sel, flags)];
   }
-  const latest = await findLatestSession({});
-  if (!latest) throw new Error("No sessions found. Try: orangu list");
-  return [latest.path];
+  return [await latestSessionPath()];
 }
 var fmtKb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
 async function cmdEstimate(positionals, flags) {
@@ -11276,6 +11368,12 @@ async function resolveEvidenceSession(selector, flags) {
     if (!latest) throw new Error("No sessions found. Is Claude Code installed? Try: orangu list");
     return latest;
   }
+  if (selector === "current") {
+    const found = await resolveCurrentSession(options, process.env);
+    if (found.note && !flagBool(flags, "quiet")) process.stderr.write(`  ${found.note}
+`);
+    return found.ref;
+  }
   const resolved = await resolveSession(selector, options);
   if (resolved) return resolved;
   const candidates = await candidatesForPrefix(selector, options);
@@ -11297,7 +11395,7 @@ async function bundleFromSession(selector, flags, options) {
 }
 async function cmdEvidence(positionals, flags) {
   if (positionals.length !== 1) {
-    throw new Error("usage: orangu evidence <session|latest|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate] [--include-text]");
+    throw new Error("usage: orangu evidence <session|latest|current|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate] [--include-text]");
   }
   if (flagBool(flags, "no-redact")) throw new Error("evidence output is always redacted; --no-redact is not supported");
   if (flags["depth"] !== void 0) throw new Error("orangu evidence has one canonical bounded projection; --depth is not supported");
@@ -11313,8 +11411,8 @@ async function cmdEvidence(positionals, flags) {
 import { realpath as realpath8, stat as stat7 } from "node:fs/promises";
 
 // src/suggest/artifacts.ts
-import { constants as constants9 } from "node:fs";
-import { chmod, lstat as lstat8, open as open9, realpath as realpath6, stat as stat6 } from "node:fs/promises";
+import { constants as constants10 } from "node:fs";
+import { chmod, lstat as lstat8, open as open10, realpath as realpath6, stat as stat6 } from "node:fs/promises";
 import { basename as basename9, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
@@ -11411,7 +11509,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   const initial = artifactSnapshot(stat8);
   let handle;
   try {
-    handle = await open9(realCandidate, constants9.O_RDONLY | (constants9.O_NOFOLLOW ?? 0));
+    handle = await open10(realCandidate, constants10.O_RDONLY | (constants10.O_NOFOLLOW ?? 0));
   } catch {
     throw artifactError(`${expectedName} changed before it was read`);
   }
@@ -12072,7 +12170,7 @@ async function cmdSuggest(positionals, flags) {
 }
 
 // src/cli/commands/feedback.ts
-import { join as join8 } from "node:path";
+import { join as join9 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/cli/open-browser.ts
@@ -12137,7 +12235,7 @@ function feedbackOptions(flags) {
 async function cmdFeedback(positionals, flags) {
   if (positionals.length) throw new Error("usage: orangu feedback --context session|repo|global|report|app [--port <n>] [--no-open]");
   const { context, port } = feedbackOptions(flags);
-  const emptyConfigDir = join8(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
+  const emptyConfigDir = join9(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
   const server = await startServe(
     {
       port,
@@ -12267,7 +12365,19 @@ function displayTitle(a, flags) {
   const ro = redactOptions(flags);
   return ro ? redactValue(title, { scrub: ro.scrub, stripPaths: ro.stripPaths }) : title;
 }
+var SESSION_SELECTOR_VERBS = /* @__PURE__ */ new Set([void 0, "report", "html", "analyze", "a", "watch", "estimate", "evidence", "suggest"]);
+var SELECTOR_FORMS = "an id, a unique prefix, a .jsonl path, latest, or current";
+function sessionSelector(sel, flags) {
+  const raw = flags["session"] ?? flags["s"];
+  if (raw === void 0) return sel;
+  if (typeof raw !== "string" || !raw.trim()) fail(`--session needs a session selector: ${SELECTOR_FORMS}`);
+  const flag = raw.trim();
+  if (flag.includes(",")) fail("--session takes one session here; comma lists belong to estimate and suggest");
+  if (sel !== void 0 && sel !== flag) fail(`--session ${flag} and "${sel}" name different sessions; give one`);
+  return flag;
+}
 async function selectSession(sel, flags) {
+  sel = sessionSelector(sel, flags);
   const configArg = flagStr(flags, "root", "config", "r");
   let opts = configArg ? { configDir: configArg } : {};
   if (flagBool(flags, "global")) opts = { roots: await claudeRoots(configArg) };
@@ -12276,6 +12386,11 @@ async function selectSession(sel, flags) {
     const s = await findLatestSession(opts);
     if (!s) fail("No sessions found. Is Claude Code installed? Try: orangu list");
     return s;
+  }
+  if (sel === "current") {
+    const found = await resolveCurrentSession(opts, process.env);
+    if (found.note && !flagBool(flags, "quiet")) process.stderr.write("  " + paint(err2, "dim", found.note) + "\n");
+    return found.ref;
   }
   const r = await resolveSession(sel, opts);
   if (r) return r;
@@ -12325,7 +12440,7 @@ async function analyzeWithProgress(ref, flags) {
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
   if (out3) return resolve10(out3);
-  return join9(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  return join10(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref = await selectSession(sel, flags);
@@ -12384,6 +12499,9 @@ function rejectUnusableFlags(command, flags) {
     for (const flag of SESSION_GATE_FLAGS) {
       if (flags[flag] !== void 0) fail(`--${flag} gates one session: use it with orangu analyze or orangu report`);
     }
+  }
+  if (!SESSION_SELECTOR_VERBS.has(command) && (flags["session"] !== void 0 || flags["s"] !== void 0)) {
+    fail("--session selects one session: use it with report, analyze, watch, estimate or evidence");
   }
 }
 function thresholdExit(analysis, flags) {
@@ -12589,9 +12707,11 @@ ${paint(out2, "bold", "usage")}
                                --port <n> \xB7 --open/--no-open \xB7 --max-live <n>
                                --no-include-text \xB7 --global \xB7 --cwd <dir>${EXTRA_HELP.map((l) => "\n" + l).join("")}
 
-${paint(out2, "bold", "session")}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
+${paint(out2, "bold", "session")}   a session id, a unique id prefix, a .jsonl path, "latest" (default),
+          or "current" (the session Claude Code is running orangu from)
 
 ${paint(out2, "bold", "flags")}
+  -s, --session <sel>    the session, as a flag (same forms as the positional)
   -o, --out <file>       write the report/JSON here (default: temp dir)
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
