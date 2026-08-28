@@ -226,7 +226,7 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('The proposal appears below under Saved proposals.')
   })
 
-  it('walks the handoff in three steps with the workspace, and offers the one-time plugin install', () => {
+  it('walks the handoff in three steps with the workspace, and puts the one-time plugin install inside step 2 (M5)', () => {
     renderSuggest(context('file', []))
     expect(markup).toContain('aria-label="Hand off to Claude Code"')
     expect(markup).toContain('Copy improve command')
@@ -235,6 +235,14 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('/plugin marketplace add NissanOhana/orangu')
     expect(markup).toContain('/plugin install orangu')
     expect(markup).toContain('<span class="p" aria-hidden="true">&gt;</span>')
+    // the install line sits between step 2's sentence and step 3, as the CLI prints it under the next step
+    const step2 = markup.indexOf('Paste it in Claude Code in')
+    const install = markup.indexOf('/plugin install orangu')
+    const step3 = markup.indexOf('open orangu serve to review it')
+    expect(step2).toBeLessThan(install)
+    expect(install).toBeLessThan(step3)
+    expect(markup).toContain('Needs the plugin once, typed inside Claude Code:')
+    expect(markup).not.toContain('First time?')
   })
 
   it('shows a severity dot and the savings as a share of the session; no taxonomy chips, no "effort –", no queued chip', () => {
@@ -242,9 +250,11 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('<span class="sev medium" title="medium"></span>')
     expect(markup).toContain('~25% of this session')
     expect(markup).toContain('title="≈25.0k tokens of the 100k this session measured; estimated by rule reread-files"')
-    // the taxonomy no longer leads the screen; it is explanatory copy under the collapsed first-time note
+    // the taxonomy no longer leads the screen; it is explanatory copy under the collapsed trailing note
     expect(markup).not.toContain('Measured → matched → proposed')
-    expect(markup.indexOf('sigchip')).toBeGreaterThan(markup.indexOf('sg-install'))
+    expect(markup).toContain('What a proposal can change')
+    expect(markup.indexOf('sg-note')).toBeGreaterThan(0)
+    expect(markup.indexOf('sigchip')).toBeGreaterThan(markup.indexOf('sg-note'))
     expect(markup).not.toContain('effort –')
     expect(markup).not.toContain('queued')
     // the change class still shows where one exists: on a proposal

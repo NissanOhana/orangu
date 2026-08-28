@@ -137,7 +137,7 @@ ${statusChip(state, failure, trustedVerification(rec))}
 </div>
 <ol class="steps" aria-label="Hand off to Claude Code">
 <li><button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
-<li><span>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</span></li>
+<li><div><span>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</span><div class="small muted" style="margin:6px 0 4px">Needs the plugin once, typed inside Claude Code:</div>${commandBlock(PLUGIN_INSTALL, '>')}</div></li>
 <li><span>${stepThree(ctx.data.mode)}</span></li>
 </ol>
 <div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
@@ -182,12 +182,13 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
     ? boundRows.map((r, i) => planItem(ctx, r.row, i + 1, r.sid, r.record)).join('')
     : emptyHero({ title: 'Nothing to improve was found', hint: 'Ran clean. Re-run after your next session.' })
 
-  // The taxonomy is explanatory copy under the collapsed first-time note, never a status chip and never
-  // a header before a proposal exists; the class a proposal actually got shows on the proposal itself.
-  // It stays in the app (test/plugin.test.ts pins one taxonomy shared by catalog, plugin and app).
+  // The taxonomy is explanatory copy under a collapsed note, never a status chip and never a header
+  // before a proposal exists; the class a proposal actually got shows on the proposal itself. It stays
+  // in the app (test/plugin.test.ts pins one taxonomy shared by catalog, plugin and app). The one-time
+  // plugin install lives in step 2 of every handoff strip, where the CLI prints it too.
   const types = CHANGE_CLASS_LABELS.map((label) => `<span class="sigchip">${esc(label)}</span>`).join('')
   const install = boundRows.length
-    ? `<details class="card pad mb16 sg-install"><summary><span class="chev" aria-hidden="true">▸</span>First time? Install the orangu plugin in Claude Code</summary><div class="mt8">${commandBlock(PLUGIN_INSTALL, '>')}<p class="small muted" style="margin:8px 0 0">Typed inside Claude Code, once. A proposal changes one of:</p><div class="chiprow mt8">${types}</div></div></details>`
+    ? `<details class="card pad mb16 sg-note"><summary><span class="chev" aria-hidden="true">▸</span>What a proposal can change</summary><div class="chiprow mt8">${types}</div></details>`
     : ''
   const mega = scope === 'session' || !agg ? '' : (ctx.megaReview?.(scope) ?? '')
 
