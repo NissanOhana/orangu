@@ -1,28 +1,38 @@
 # Ships one orangu release: the npm package, then the Claude Code plugin tag.
 #
-#   git tag -a v0.7.1 -m "orangu 0.7.1" && git push origin v0.7.1
+# Two ways to trigger the same release, both guard-gated by the version:
 #
-# The landing page is deliberately NOT here. The version bump regenerates site/,
-# so pushing that commit to main already deploys the page through pages.yml —
-# before this workflow ever runs. Deploying it again from the tag would be a
-# redundant redeploy of identical content, and the github-pages environment
-# only admits the main branch, so it fails.
+#   1. Merge to main. Any push to main runs the guard; it publishes only when
+#      package.json names a version not yet on npm. A merge that does not bump
+#      the version is a no-op (the guard skips every downstream job), so an
+#      ordinary docs or code merge costs one cheap guard run and nothing else.
 #
-# The tag is the release instruction; the working tree is the release content.
-# The guard job refuses to ship unless they agree, so a half-finished version
-# bump fails before anything reaches a registry.
+#   2. Push a v* tag (git push origin v0.7.1). The tag must match package.json.
+#
+# The working tree is the release content; the version is the release
+# instruction. The guard refuses to ship unless every manifest agrees, so a
+# half-finished version bump fails before anything reaches a registry, and a
+# re-run over an already-published version skips instead of erroring.
+#
+# The landing page is deliberately NOT deployed here. A version bump regenerates
+# site/, so the same merge to main already deploys the page through pages.yml.
+#
+# When it publishes from a merge, the plugin job also writes the v{version} tag
+# as a marker, so every release carries one regardless of how it was triggered.
+# A tag pushed by GITHUB_TOKEN does not itself start another workflow run, so
+# there is no trigger loop.
 #
 # npm auth is OIDC trusted publishing — no NPM_TOKEN is stored in this repo.
 # It needs a one-time setup on npmjs.com:
 #   orangu → Settings → Trusted Publisher → GitHub Actions
 #   Organization or user: NissanOhana · Repository: orangu · Workflow: release.yml
-# Until that exists, the publish step fails with an auth error and nothing else
-# in the release has run yet.
 
 name: Release
 
 on:
+  workflow_dispatch:
   push:
+    branches: [main]
     tags: ['v*']
 
 # Least privilege by default. Only the two jobs that need more say so:
@@ -38,7 +48,7 @@ concurrency:
 
 jobs:
   guard:
-    name: Tag agrees with the tree
+    name: The version agrees with the tree
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.check.outputs.version }}
@@ -47,43 +57,57 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Every manifest names the tagged version
+      - name: Resolve the version and check every manifest
         id: check
         env:
-          TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          version="${TAG#v}"
+          pkg_version="$(node -p 'require("./package.json").version')"
+
+          # A tag push is the release instruction verbatim and must match the
+          # tree; a branch push (merge to main) or a manual dispatch takes the
+          # version straight from package.json.
+          if [ "$REF_TYPE" = "tag" ]; then
+            version="${REF_NAME#v}"
+            if [ "$version" != "$pkg_version" ]; then
+              echo "::error::tag $REF_NAME releases $version but package.json says $pkg_version"
+              exit 1
+            fi
+          else
+            version="$pkg_version"
+          fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
           mismatch=0
           compare() {
             if [ "$2" != "$version" ]; then
-              echo "::error file=$1::tag $TAG releases $version but $1 says $2"
+              echo "::error file=$1::$1 says $2 but this release is $version"
               mismatch=1
             fi
           }
-          compare package.json \
-            "$(node -p 'require("./package.json").version')"
           compare plugin/.claude-plugin/plugin.json \
             "$(node -p 'require("./plugin/.claude-plugin/plugin.json").version')"
           compare plugins/orangu/.codex-plugin/plugin.json \
             "$(node -p 'require("./plugins/orangu/.codex-plugin/plugin.json").version')"
           [ "$mismatch" -eq 0 ] || exit 1
 
-          # A re-pushed tag must not hard-fail: record what the registry already
-          # has so the publish step can skip instead of erroring on a duplicate.
+          # The version is the gate: publish only what the registry does not
+          # already have. Every downstream job keys off on-npm, so a merge that
+          # did not bump the version stops right here.
           if npm view "orangu@$version" version > /dev/null 2>&1; then
             echo "on-npm=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::orangu@$version is already on npm; the publish step will skip it"
+            echo "::notice::orangu@$version is already on npm; nothing to release"
           else
             echo "on-npm=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::releasing orangu $version"
           fi
-          echo "releasing orangu $version"
 
   verify:
     name: Verify release
     needs: guard
+    if: needs.guard.outputs.on-npm == 'false'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -113,6 +137,7 @@ jobs:
   npm:
     name: Publish to npm
     needs: [guard, verify]
+    if: needs.guard.outputs.on-npm == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -140,13 +165,14 @@ jobs:
       - name: Install Chromium
         run: npx --no-install playwright install --with-deps chromium
 
+      # A last guard against a race: if the version landed on npm between the
+      # guard job and here, skip rather than error on a duplicate.
       - name: Publish
         env:
-          ON_NPM: ${{ needs.guard.outputs.on-npm }}
           VERSION: ${{ needs.guard.outputs.version }}
         run: |
           set -euo pipefail
-          if [ "$ON_NPM" = "true" ]; then
+          if npm view "orangu@$VERSION" version > /dev/null 2>&1; then
             echo "orangu@$VERSION is already published; skipping."
             exit 0
           fi
@@ -155,6 +181,7 @@ jobs:
   plugin:
     name: Publish the Claude Code plugin
     needs: [guard, verify, npm]
+    if: needs.guard.outputs.on-npm == 'false'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -180,6 +207,26 @@ jobs:
           claude plugin validate . --strict
           claude plugin validate ./plugin --strict
 
+      - name: Identify the release bot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # A merge-triggered release has no v tag yet; write it as the release
+      # marker. A GITHUB_TOKEN tag push does not start another workflow, so this
+      # never re-enters the release. A tag-triggered release already has it.
+      - name: Mark the release with a v tag
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" > /dev/null 2>&1; then
+            echo "v$VERSION already exists; leaving it."
+          else
+            git tag -a "v$VERSION" -m "orangu $VERSION"
+            git push origin "v$VERSION"
+          fi
+
       # A Claude Code plugin is released by the {name}--v{version} git tag that
       # the marketplace resolves. `claude plugin tag` re-checks that plugin.json
       # and the marketplace entry agree before it writes that tag.
@@ -192,6 +239,4 @@ jobs:
             echo "orangu--v$VERSION is already on origin; nothing to publish."
             exit 0
           fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           claude plugin tag ./plugin --push -m "orangu %s"
