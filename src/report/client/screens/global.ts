@@ -1,6 +1,6 @@
 /** Global (§2.7): Aggregate scope='global' with the weekly trend, model/project rollups, source chips. */
 import type { Ctx } from '../app.js'
-import { esc, ms, pct, tok } from '../format.js'
+import { esc, ms, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { emptyNote } from '../components/empty.js'
@@ -13,7 +13,7 @@ export function renderGlobal(ctx: Ctx): HTMLElement {
   const sources = new Map<string, number>()
   for (const s of g.sessions) sources.set(s.source, (sources.get(s.source) ?? 0) + 1)
   const kpis = [
-    kpi('Sessions', String(g.sessionCount), `${sources.size} source${sources.size === 1 ? '' : 's'}`),
+    kpi('Sessions', String(g.sessionCount), plural(sources.size, 'source')),
     kpi('Total tokens', tok(g.totals.tokens), pct(g.averages.cacheHitRatio) + ' read from cache', { accent: true }),
     kpi('Per session', tok(g.averages.tokensPerSession)),
     kpi('Active time', ms(g.totals.activeMs), 'of ' + ms(g.totals.wallMs) + ' wall'),
@@ -37,7 +37,7 @@ export function renderGlobal(ctx: Ctx): HTMLElement {
       .slice(0, 6)
       .map(
         (i) =>
-          `<div class="rollrow"><div class="rollhead"><span class="mono">${esc(i.key)}</span><span class="muted" style="font-size:11.5px">${i.count} sessions</span><span class="mono" style="margin-left:auto;font-weight:700">${esc(tok(i.tokens))}</span></div><span class="trough" style="margin-top:5px"><i style="width:${((i.tokens / max) * 100).toFixed(1)}%;background:${color}"></i></span></div>`,
+          `<div class="rollrow"><div class="rollhead"><span class="mono">${esc(i.key)}</span><span class="muted" style="font-size:11.5px">${plural(i.count, 'session')}</span><span class="mono" style="margin-left:auto;font-weight:700">${esc(tok(i.tokens))}</span></div><span class="trough" style="margin-top:5px"><i style="width:${((i.tokens / max) * 100).toFixed(1)}%;background:${color}"></i></span></div>`,
       )
       .join('')
   }

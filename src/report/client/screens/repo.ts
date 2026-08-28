@@ -1,7 +1,7 @@
 /** Repo (§2.6): Aggregate scope='repo'. File mode without an aggregate shows the designed empty state (policy). */
 import type { Ctx } from '../app.js'
 import type { Aggregate } from '../../../analyze/aggregate.js'
-import { esc, num, pct, tok } from '../format.js'
+import { esc, num, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { emptyHero, emptyNote } from '../components/empty.js'
@@ -43,7 +43,7 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
         .slice(0, 8)
         .map(
           (f) =>
-            `<div class="rrow"><span class="pill">${esc(f.ruleId)}</span><span class="grow">${esc(f.title)}</span><span class="mono small muted">${f.sessions} sessions</span><span class="saveval">${esc(savingsText(boundedSavings(f)))}</span></div>`,
+            `<div class="rrow"><span class="pill">${esc(f.ruleId)}</span><span class="grow">${esc(f.title)}</span><span class="mono small muted">${plural(f.sessions, 'session')}</span><span class="saveval">${esc(savingsText(boundedSavings(f)))}</span></div>`,
         )
         .join('')
     : emptyNote(g.sessionCount < 2 ? 'Patterns appear from 2 sessions on.' : `No recurring findings across ${g.sessionCount} sessions.`)
@@ -62,7 +62,7 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
         .slice(0, 8)
         .map(
           (e) =>
-            `<div class="rrow" style="padding:10px 18px"><span class="sigline">${esc(e.signature || '(error text not included)')}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${e.sessions} sessions</span><span class="mono125">×${e.total}</span></div>`,
+            `<div class="rrow" style="padding:10px 18px"><span class="sigline">${esc(e.signature || '(error text not included)')}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${plural(e.sessions, 'session')}</span><span class="mono125">×${e.total}</span></div>`,
         )
         .join('')}</div>`
     : ''
@@ -94,5 +94,5 @@ ${errs}
 <table class="grid"><thead><tr><th>Session</th><th>Title</th><th class="num">Turns</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th>Outcome</th></tr></thead><tbody>${sessions}</tbody></table>
 </div>
 ${g.sessionCount ? '' : `<div style="margin-top:16px">${emptyNote('Analysing sessions…')}</div>`}
-<p class="small muted" style="margin-top:12px">${num(g.sessionCount)} sessions · every figure is a token count reported by the API.</p>`
+<p class="small muted" style="margin-top:12px">${plural(g.sessionCount, 'session')} · every figure is a token count reported by the API.</p>`
 }
