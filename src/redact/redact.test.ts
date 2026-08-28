@@ -84,12 +84,12 @@ describe('redactAnalysis', () => {
     ({
       session: {
         id: 'x',
-        path: `/Users/test/.claude/projects/${HOME_SLUG}/dc15f998-a1aa-41fe-ad04-c0c2595b64d7.jsonl`,
+        path: `/Users/test/.claude/projects/${HOME_SLUG}/dc000000-0000-4000-8000-0000000000d7.jsonl`,
         cwd: '/Users/test/Code/secretproj',
         projectSlug: HOME_SLUG,
         subagentPaths: [
-          `/Users/test/.claude/projects/${HOME_SLUG}/dc15f998-a1aa-41fe-ad04-c0c2595b64d7/subagents/agent-a50314159.jsonl`,
-          `/Users/test/.claude/projects/${HOME_SLUG}/dc15f998-a1aa-41fe-ad04-c0c2595b64d7/subagents/agent-b7c2d0e11.jsonl`,
+          `/Users/test/.claude/projects/${HOME_SLUG}/dc000000-0000-4000-8000-0000000000d7/subagents/agent-a50314159.jsonl`,
+          `/Users/test/.claude/projects/${HOME_SLUG}/dc000000-0000-4000-8000-0000000000d7/subagents/agent-b7c2d0e11.jsonl`,
         ],
       },
     }) as unknown as Analysis
@@ -100,7 +100,7 @@ describe('redactAnalysis', () => {
     expect(json).not.toContain('-Users-')
     expect(json).not.toContain('-home-')
     expect(json).not.toContain('test')
-    expect(analysis.session.path).toBe('dc15f998-a1aa-41fe-ad04-c0c2595b64d7.jsonl')
+    expect(analysis.session.path).toBe('dc000000-0000-4000-8000-0000000000d7.jsonl')
     expect(analysis.session.subagentPaths).toEqual(['agent-a50314159.jsonl', 'agent-b7c2d0e11.jsonl'])
     for (const p of analysis.session.subagentPaths) expect(p.split('/').length).toBe(1)
     expect(analysis.session.projectSlug).toBe('secretproj')
@@ -111,8 +111,8 @@ describe('redactAnalysis', () => {
     const { analysis } = redactAnalysis(withSubagents(), { home: '/Users/test' })
     const json = JSON.stringify(analysis)
     expect(json).not.toContain('test')
-    expect(analysis.session.path).toBe('~/.claude/projects/~-Code-secretproj/dc15f998-a1aa-41fe-ad04-c0c2595b64d7.jsonl')
-    expect(analysis.session.subagentPaths[0]).toBe('~/.claude/projects/~-Code-secretproj/dc15f998-a1aa-41fe-ad04-c0c2595b64d7/subagents/agent-a50314159.jsonl')
+    expect(analysis.session.path).toBe('~/.claude/projects/~-Code-secretproj/dc000000-0000-4000-8000-0000000000d7.jsonl')
+    expect(analysis.session.subagentPaths[0]).toBe('~/.claude/projects/~-Code-secretproj/dc000000-0000-4000-8000-0000000000d7/subagents/agent-a50314159.jsonl')
     expect(analysis.session.projectSlug).toBe('secretproj')
     // a sibling home sharing the prefix is a different user and stays
     const sibling = redactValue({ path: '/x/-Users-test2-Code-a/s.jsonl' }, { home: '/Users/test' })
@@ -366,5 +366,58 @@ describe('tool error signatures never carry a secret out of the process', () => 
     expect(kept.tools.errorGroups[0]!.signature).toContain('rejected')
     expect(kept.tools.errorGroups[0]!.signature).toContain('‹anthropic-key›')
     expect(JSON.stringify(kept)).not.toContain('abc123def456ghi789')
+  })
+})
+
+describe('scrubStr gaps found in the 0.7.0 QA pass', () => {
+  it('interpolates the key name instead of printing a literal $1', () => {
+    const out = scrubStr('login with password=Hunter2Hunter2! please')
+    expect(out).toContain('password=‹redacted›')
+    expect(out).not.toContain('$1')
+    expect(out).not.toContain('Hunter2')
+  })
+  it('masks env-style names that embed a secret word (AWS_SECRET_ACCESS_KEY=..., GITHUB_TOKEN=...)', () => {
+    const awsSecret = ['wJalrXUtnFEMI', 'K7MDENG', 'bPxRfiCYEXAMPLEKEY'].join('/')
+    const aws = scrubStr(`AWS_SECRET_ACCESS_KEY=${awsSecret}`)
+    expect(aws).toContain('AWS_SECRET_ACCESS_KEY=‹redacted›')
+    expect(aws).not.toContain('wJalrXUtnFEMI')
+    const gh = scrubStr('export GITHUB_TOKEN="abcdefghijklmnop"')
+    expect(gh).toContain('GITHUB_TOKEN=‹redacted›')
+    expect(gh).not.toContain('abcdefghijklmnop')
+  })
+  it('masks npm granular access tokens', () => {
+    const npmToken = ['npm', 'abcdefghijklmnopqrstuvwxyz0123456789'].join('_')
+    const out = scrubStr(`//registry.npmjs.org/:_authToken=${npmToken}`)
+    expect(out).toContain('‹npm-token›')
+    expect(out).not.toContain(npmToken.slice(0, 14))
+  })
+  it('masks PEM private-key blocks, including a block cut off by a preview', () => {
+    const marker = (boundary: 'BEGIN' | 'END', kind: string) => ['-----' + boundary, kind, 'PRIVATE', 'KEY-----'].join(' ')
+    const full = scrubStr(`${marker('BEGIN', 'RSA')}\nMIIEowIBAAKCAQEAfake\n${marker('END', 'RSA')}`)
+    expect(full).toContain('‹private-key›')
+    expect(full).not.toContain('MIIEow')
+    const cut = scrubStr(`cert: ${marker('BEGIN', 'OPENSSH')} b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAA…`)
+    expect(cut).toContain('‹private-key›')
+    expect(cut).not.toContain('b3BlbnNz')
+  })
+})
+
+describe('scrubStr masks the hosted-service tokens the repo hygiene check already knows', () => {
+  it('gitlab, hugging face, sendgrid, digitalocean', () => {
+    const huggingFace = ['hf', 'abcdefghijklmnopqrstuvwxyzABCDEFGH'].join('_')
+    const sendgrid = ['SG', 'abcdefghijklmnopqrstuv', 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJK'].join('.')
+    const digitalOcean = ['dop', 'v1', 'a'.repeat(64)].join('_')
+    expect(scrubStr(['glpat', 'abcdefghijklmnopqrstuv'].join('-'))).toBe('‹gitlab-token›')
+    expect(scrubStr(huggingFace)).toBe('‹huggingface-token›')
+    expect(scrubStr(sendgrid)).toBe('‹sendgrid-key›')
+    expect(scrubStr(digitalOcean)).toBe('‹digitalocean-token›')
+  })
+  it('an already masked value is not masked twice by the key=value rule', () => {
+    const npmToken = ['npm', 'abcdefghijklmnopqrstuvwxyz0123456789'].join('_')
+    expect(scrubStr(`//registry.npmjs.org/:_authToken=${npmToken}`)).toBe('//registry.npmjs.org/:_authToken=‹npm-token›')
+  })
+  it('does not mask ordinary prose that merely contains the keyword', () => {
+    expect(scrubStr('total tokens: 1234567 across 3 turns')).toBe('total tokens: 1234567 across 3 turns')
+    expect(scrubStr('the author: someone wrote this')).toBe('the author: someone wrote this')
   })
 })

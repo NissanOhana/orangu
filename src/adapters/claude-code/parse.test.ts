@@ -248,3 +248,26 @@ describe('additional adapter signals', () => {
     expect(s.meta.enqueueKinds).toBeUndefined()
   })
 })
+
+describe('previews never end in a partial token', () => {
+  // A preview is cut at a fixed length and only scrubbed at the emit boundary. A credential that
+  // straddles the cut would leave a prefix too short for any secret pattern to recognise, so the
+  // cut must fall back to the last whitespace before the limit and drop the partial token.
+  it('drops the token that straddles the 160-character cut instead of leaking its prefix', async () => {
+    const words = Array.from({ length: 30 }, (_, i) => `w${i}`).join(' ') // 30 short words, well under 160
+    const pad = ' ' + 'x'.repeat(150 - words.length) // bring the prefix to exactly 150 chars
+    const githubPrefix = ['gh', 'p'].join('')
+    const prompt = `${words}${pad} ${githubPrefix}_${'FAKE'.repeat(9)} and then a tail`
+    const b = new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000001' }).userPrompt(prompt)
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), path: '/tmp/x/cccccccc.jsonl', noSidecar: true })
+    const preview = s.turns[0]!.promptPreview
+    expect(preview.length).toBeLessThanOrEqual(160)
+    expect(preview.endsWith('…')).toBe(true)
+    expect(preview).not.toContain(`${githubPrefix}_`)
+  })
+  it('keeps the plain hard cut when the text is one unbroken run (nothing to fall back to)', async () => {
+    const b = new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000002' }).userPrompt('y'.repeat(400))
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), path: '/tmp/x/cccccccc2.jsonl', noSidecar: true })
+    expect(s.turns[0]!.promptPreview).toBe('y'.repeat(159) + '…')
+  })
+})

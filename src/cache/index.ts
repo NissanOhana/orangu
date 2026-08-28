@@ -9,7 +9,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
-import { lstat, mkdir, open, realpath, rename, stat, unlink } from 'node:fs/promises'
+import { lstat, mkdir, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { ANALYSIS_SCHEMA_VERSION, type Analysis } from '../model/analysis.js'
 import { withStableSessionRead, parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
@@ -35,6 +35,9 @@ export const MAX_ANALYSIS_CACHE_ENTRY_BYTES = 256 * 1024 * 1024
 const PRIVATE_DIRECTORY_MODE = 0o700
 const PRIVATE_FILE_MODE = 0o600
 const SIMPLE_SEGMENT = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/
+const CACHE_GENERATION_SEGMENT = /^\d+-[A-Za-z0-9][A-Za-z0-9._-]*$/
+const MAX_STALE_CACHE_ROOT_ENTRIES = 512
+const MAX_STALE_CACHE_GENERATION_ENTRIES = 4096
 
 interface PrivateDirectoryIdentity {
   path: string
@@ -131,6 +134,42 @@ export async function readAnalysisCacheEntry(manifest: StableTextManifest): Prom
   return readStableTextManifest(manifest)
 }
 
+/** Tighten cache generations created before private modes were enforced. Best-effort and bounded. */
+async function tightenStaleCacheGenerations(cacheRoot: string, currentSegment: string): Promise<void> {
+  try {
+    const root = await opendir(cacheRoot)
+    let rootEntries = 0
+    for await (const entry of root) {
+      if (++rootEntries > MAX_STALE_CACHE_ROOT_ENTRIES) break
+      if (entry.name === currentSegment || !CACHE_GENERATION_SEGMENT.test(entry.name)) continue
+
+      const generationPath = join(cacheRoot, entry.name)
+      try {
+        // ensurePrivateDirectory opens with O_NOFOLLOW and verifies the inode before chmodding it.
+        const identity = await ensurePrivateDirectory(generationPath)
+        const generation = await opendir(generationPath)
+        let generationEntries = 0
+        for await (const candidate of generation) {
+          if (++generationEntries > MAX_STALE_CACHE_GENERATION_ENTRIES) break
+          if (!candidate.name.endsWith('.json')) continue
+          const key = candidate.name.slice(0, -'.json'.length)
+          if (!SIMPLE_SEGMENT.test(key)) continue
+          try {
+            await prevalidateAnalysisCacheEntry(join(generationPath, candidate.name))
+          } catch {
+            /* a raced, linked, or invalid stale entry is skipped without touching its target */
+          }
+        }
+        await assertPrivateDirectoriesStable([identity])
+      } catch {
+        /* stale generations are maintenance only; the active generation must remain usable */
+      }
+    }
+  } catch {
+    /* the active cache path is checked separately; a stale sweep is always best-effort */
+  }
+}
+
 export interface CacheOptions {
   /** cache root; default oranguHome()/cache */
   dir?: string
@@ -171,9 +210,12 @@ export function manifestCacheKey(manifest: EvidenceSessionManifest): string {
 
 export class AnalysisCache {
   private readonly layoutDirectories: string[]
+  private readonly cacheRoot: string
+  private readonly versionSegment: string
   private readonly dir: string
   private readonly enabled: boolean
   private readonly validVersion: boolean
+  private readonly tightenStaleGenerations: boolean
   private hits = 0
   private misses = 0
   private writes = 0
@@ -182,9 +224,12 @@ export class AnalysisCache {
     const home = resolve(oranguHome())
     const cacheRoot = resolve(opts.dir ?? join(home, 'cache'))
     const versionSegment = `${ANALYSIS_SCHEMA_VERSION}-${opts.version}`
+    this.cacheRoot = cacheRoot
+    this.versionSegment = versionSegment
     this.validVersion = SIMPLE_SEGMENT.test(versionSegment)
     this.dir = join(cacheRoot, versionSegment)
     this.layoutDirectories = opts.dir === undefined ? [home, cacheRoot, this.dir] : [cacheRoot, this.dir]
+    this.tightenStaleGenerations = opts.dir === undefined
     this.enabled = opts.enabled !== false
   }
 
@@ -196,6 +241,11 @@ export class AnalysisCache {
   private async ensurePrivateLayout(): Promise<PrivateDirectoryIdentity[]> {
     const identities: PrivateDirectoryIdentity[] = []
     for (const path of this.layoutDirectories) identities.push(await ensurePrivateDirectory(path))
+    if (this.tightenStaleGenerations) {
+      await assertPrivateDirectoriesStable(identities)
+      await tightenStaleCacheGenerations(this.cacheRoot, this.versionSegment)
+      await assertPrivateDirectoriesStable(identities)
+    }
     return identities
   }
 

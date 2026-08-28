@@ -30,7 +30,7 @@ ccusage counts your token usage. orangu tells you what to change.
 **Read-only.** orangu reads the session files already on your disk and writes one HTML file. No SDK, proxy, account, instrumentation, upload, or telemetry. Your whole history is analyzable the minute it is installed, not just sessions started after it.
 
 ```bash
-npx orangu                 # latest session -> one true sentence, the top finding, the exact next command
+npx orangu                 # orange terminal dashboard -> repo, global, or open session reports
 npx orangu report          # latest session -> self-contained HTML report, opened in your browser
 npx orangu pick            # choose a session (running ones first), Enter opens its report
 npx orangu report current  # the session Claude Code is running you in; or -s <id> for any
@@ -39,6 +39,9 @@ npx orangu repo            # recurring patterns across this repository's session
 npx orangu global          # ... across every session on the machine
 npx orangu harness         # what your config declares vs what your sessions used, in tokens
 ```
+
+Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare
+`orangu` keeps the compact latest-session summary instead of waiting for input.
 
 Node.js 20 or newer. Zero runtime dependencies. More commands, inputs, and limits are in the [usage guide](docs/USAGE.md).
 

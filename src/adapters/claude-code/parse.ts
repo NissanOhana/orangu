@@ -63,7 +63,13 @@ const bytesOf = (v: unknown): number => {
 }
 const preview = (s: string, max = 160): string => {
   const one = s.replace(/\s+/g, ' ').trim()
-  return one.length > max ? one.slice(0, max - 1) + '…' : one
+  if (one.length <= max) return one
+  // Never end in a partial token: previews are scrubbed only at the emit boundary, and a credential cut
+  // in half leaves a prefix no redaction rule recognises. Fall back to the last space before the limit;
+  // one unbroken run keeps the hard cut.
+  const hard = one.slice(0, max - 1)
+  const space = hard.lastIndexOf(' ')
+  return (space > 0 ? hard.slice(0, space) : hard) + '…'
 }
 
 interface FileInput {

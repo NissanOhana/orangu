@@ -441,3 +441,37 @@ describe('cache e2e via the built CLI', () => {
     expect(stored.generator.generatedAt).toBe(0)
   }, 60_000)
 })
+
+describe('stale cache generations', () => {
+  it.skipIf(process.platform === 'win32')('tightens a sibling version directory an older release left world-readable', async () => {
+    const home = join(tmp(), 'stale', 'orangu-home')
+    const old = join(home, 'cache', '1-0.4.1')
+    mkdirSync(old, { recursive: true })
+    writeFileSync(join(old, 'k.json'), '{}')
+    chmodSync(join(old, 'k.json'), 0o644)
+    chmodSync(old, 0o755)
+    const c = defaultCacheAt(home, 'sweep-9.9.9')
+    await c.get('missing') // opening the current generation is the moment the siblings are swept
+    expect(mode(old)).toBe(0o700)
+    expect(mode(join(old, 'k.json'))).toBe(0o600)
+  })
+
+  it.skipIf(process.platform === 'win32')('does not follow a symlink masquerading as a stale generation', async () => {
+    const parent = tmp()
+    const home = join(parent, 'home')
+    const cacheRoot = join(home, 'cache')
+    const outside = join(parent, 'outside')
+    mkdirSync(cacheRoot, { recursive: true })
+    mkdirSync(outside)
+    writeFileSync(join(outside, 'k.json'), '{}')
+    chmodSync(join(outside, 'k.json'), 0o644)
+    chmodSync(outside, 0o755)
+    symlinkSync(outside, join(cacheRoot, '1-0.4.1'), 'dir')
+
+    const c = defaultCacheAt(home, 'sweep-symlink')
+    await c.get('missing')
+
+    expect(mode(outside)).toBe(0o755)
+    expect(mode(join(outside, 'k.json'))).toBe(0o644)
+  })
+})

@@ -46,6 +46,7 @@ const BOOL_FLAGS = new Set([
 export const KNOWN_FLAGS = new Set([
   ...BOOL_FLAGS,
   ...SHORT_VALUE_FLAGS,
+  'h',
   'out',
   'root',
   'config',

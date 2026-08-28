@@ -84,15 +84,25 @@ export async function gatherPickRows(
   const limitStr = flagStr(flags, 'limit', 'l')
   const limit = limitStr !== undefined && Number.isFinite(Number(limitStr)) && Number(limitStr) > 0 ? Math.floor(Number(limitStr)) : DEFAULT_PICK_LIMIT
   const redact = !flagBool(flags, 'no-redact')
-  const rows: PickRow[] = []
-  for (const { r, running } of ordered.slice(0, limit)) {
-    const head = await peekHead(r.path)
-    const title = head.title && redact ? redactValue(head.title, { scrub: true, stripPaths: flagBool(flags, 'strip-paths') }) : head.title
-    const project = head.cwd ? basename(head.cwd) : basename(r.projectSlug)
-    const row: PickRow = { sessionId: r.sessionId, path: r.path, projectSlug: r.projectSlug, project, sizeBytes: r.sizeBytes, mtimeMs: r.mtimeMs, running }
-    if (title) row.title = title
-    rows.push(row)
-  }
+  // Each read is bounded by peekHead and the list is capped above. Parallel enrichment keeps the
+  // dashboard responsive when several live sessions sit on slower volumes while preserving order.
+  const rows: PickRow[] = await Promise.all(
+    ordered.slice(0, limit).map(async ({ r, running }) => {
+      const head = await peekHead(r.path)
+      const title = head.title && redact ? redactValue(head.title, { scrub: true, stripPaths: flagBool(flags, 'strip-paths') }) : head.title
+      const project = head.cwd ? basename(head.cwd) : basename(r.projectSlug)
+      return {
+        sessionId: r.sessionId,
+        path: r.path,
+        projectSlug: r.projectSlug,
+        project,
+        sizeBytes: r.sizeBytes,
+        mtimeMs: r.mtimeMs,
+        running,
+        ...(title ? { title } : {}),
+      }
+    }),
+  )
   return { rows, counts: { total: refs.length, running: ordered.filter((x) => x.running).length } }
 }
 

@@ -1,6 +1,7 @@
 /**
  * orangu CLI. Deterministic session observability. The CLI makes no network calls.
  *
+ *   orangu                        interactive repo/global/session dashboard (TTY)
  *   orangu report [<session>]     build a self-contained HTML report and open it
  *   orangu analyze [<session>]    print the analysis (human summary, or --json for the full object)
  *   orangu list                   list discoverable sessions
@@ -38,6 +39,7 @@ import { MASCOT_ASCII } from '../report/client/mascot.js'
 import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { cmdPick } from './commands/pick.js'
+import { cmdDashboard } from './commands/dashboard.js'
 import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
@@ -244,6 +246,19 @@ async function cmdBrief(flags: Record<string, string | boolean>): Promise<void> 
   thresholdExit(analysis, flags)
 }
 
+/** Bind the shared picker to the real report command once; both `pick` and the dashboard use it. */
+function pickSessions(flags: Record<string, string | boolean>): Promise<void> {
+  return cmdPick(flags, {
+    openReport: (id) => cmdReport(id, { ...flags, open: true }),
+    stdin: process.stdin,
+    stdout: process.stdout,
+    stderr: process.stderr,
+    env: process.env,
+    out,
+    err,
+  })
+}
+
 /** Flags that were removed but would otherwise be ignored in silence, turning a CI gate into a no-op. */
 const RETIRED_FLAGS: Record<string, string> = {
   'max-cost': '--max-cost was removed; use --max-tokens <n>',
@@ -290,9 +305,11 @@ function thresholdExit(analysis: ReturnType<typeof analyzeSession>, flags: Recor
 
 async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
   const configArg = flagStr(flags, 'root', 'config', 'r')
+  // --cwd scopes the list to one repo, exactly as serve --cwd does
+  const cwd = flags['cwd'] ? { cwd: String(flags['cwd']) } : {}
   const all: SessionRef[] = flagBool(flags, 'global')
-    ? await listSessions({ roots: await claudeRoots(configArg) })
-    : await listSessions(configArg ? { configDir: configArg } : {})
+    ? await listSessions({ roots: await claudeRoots(configArg), ...cwd })
+    : await listSessions({ ...(configArg ? { configDir: configArg } : {}), ...cwd })
   const limit = Number(flagStr(flags, 'limit', 'l') ?? '40')
   const rows = all.slice(0, Number.isNaN(limit) ? 40 : limit)
   if (flagBool(flags, 'json')) {
@@ -464,7 +481,8 @@ ${paint(out, 'bold', 'orangu')} v${VERSION}: observe the run, then improve the n
 Deterministic observability for Claude Code sessions. No network calls.
 
 ${paint(out, 'bold', 'usage')}
-  orangu                       analyze the latest session; print the next step
+  orangu                       interactive report dashboard (terminal)
+                               latest-session brief when piped or in CI
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
@@ -497,12 +515,13 @@ ${paint(out, 'bold', 'flags')}
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
   --verbose              also print the cache diagnostic (stderr)
+  --quiet                no progress or hints on stderr (the answer only)
   --plain                pick only: a numbered list instead of the prompt
   --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
                          are honoured; NO_COLOR, FORCE_COLOR=0 and
                          ORANGU_NO_ANIMATION=1 also stop the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
-  --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
+  --max-tokens <n>       exit 2 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
@@ -523,15 +542,30 @@ async function main(): Promise<void> {
     process.stdout.write(VERSION + '\n')
     return
   }
-  if (flagBool(flags, 'help') || command === 'help') {
+  if (flagBool(flags, 'help') || flagBool(flags, 'h') || command === 'help') {
     printHelp()
     return
   }
   rejectUnusableFlags(command, flags)
-  // no verb: the loop in one screen (--json has no verb to serialise, so it keeps printing help)
+  // No verb: an interactive report dashboard on a terminal. Machine callers retain the compact
+  // latest-session answer; --json has no unambiguous scope, so it continues to print help.
   if (!command) {
     if (flagBool(flags, 'json')) printHelp()
-    else await cmdBrief(flags)
+    else {
+      const handled = await cmdDashboard(flags, {
+        showRepo: () => cmdAggregate('repo', undefined, flags),
+        showGlobal: () => cmdAggregate('global', undefined, flags),
+        showSession: (id) => cmdReport(id, { ...flags, open: true }),
+        browseSessions: () => pickSessions({ ...flags, global: true }),
+        stdin: process.stdin,
+        stdout: process.stdout,
+        stderr: process.stderr,
+        env: process.env,
+        out,
+        err,
+      })
+      if (!handled) await cmdBrief(flags)
+    }
     return
   }
   const sel = positionals[0]
@@ -546,16 +580,7 @@ async function main(): Promise<void> {
     case 'ls':
       return cmdList(flags)
     case 'pick':
-      return cmdPick(flags, {
-        // Enter runs the same report path a user would type, opened in the browser
-        openReport: (id) => cmdReport(id, { ...flags, open: true }),
-        stdin: process.stdin,
-        stdout: process.stdout,
-        stderr: process.stderr,
-        env: process.env,
-        out,
-        err,
-      })
+      return pickSessions(flags)
     case 'repo':
       return cmdAggregate('repo', sel, flags)
     case 'global':
@@ -573,6 +598,14 @@ async function main(): Promise<void> {
       fail(`unknown command "${command}". Run: orangu --help`)
     }
   }
+}
+
+// `orangu … | head` closes the pipe early: that is the reader's choice, not an error worth a stack trace
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (e: NodeJS.ErrnoException) => {
+    if (e.code === 'EPIPE') process.exit(0)
+    throw e
+  })
 }
 
 if (isPoolWorker()) {

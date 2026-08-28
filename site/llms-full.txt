@@ -1,6 +1,6 @@
 # orangu llms-full.txt
 
-orangu 0.7.0. This file concatenates README.md, docs/USAGE.md, docs/DETERMINISM.md from the repository, verbatim, with relative links rewritten to https://github.com/NissanOhana/orangu/blob/main/. The short index is llms.txt.
+orangu 0.7.1. This file concatenates README.md, docs/USAGE.md, docs/DETERMINISM.md from the repository, verbatim, with relative links rewritten to https://github.com/NissanOhana/orangu/blob/main/. The short index is llms.txt.
 
 
 ---
@@ -39,7 +39,7 @@ ccusage counts your token usage. orangu tells you what to change.
 **Read-only.** orangu reads the session files already on your disk and writes one HTML file. No SDK, proxy, account, instrumentation, upload, or telemetry. Your whole history is analyzable the minute it is installed, not just sessions started after it.
 
 ```bash
-npx orangu                 # latest session -> one true sentence, the top finding, the exact next command
+npx orangu                 # orange terminal dashboard -> repo, global, or open session reports
 npx orangu report          # latest session -> self-contained HTML report, opened in your browser
 npx orangu pick            # choose a session (running ones first), Enter opens its report
 npx orangu report current  # the session Claude Code is running you in; or -s <id> for any
@@ -48,6 +48,9 @@ npx orangu repo            # recurring patterns across this repository's session
 npx orangu global          # ... across every session on the machine
 npx orangu harness         # what your config declares vs what your sessions used, in tokens
 ```
+
+Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare
+`orangu` keeps the compact latest-session summary instead of waiting for input.
 
 Node.js 20 or newer. Zero runtime dependencies. More commands, inputs, and limits are in the [usage guide](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md).
 
@@ -164,7 +167,7 @@ node dist/orangu.js report
 
 | Command | Purpose |
 |---|---|
-| `orangu` (no verb) | Analyze the latest session and print the one next step |
+| `orangu` (no verb) | Open the terminal dashboard for repo, global, and session reports |
 | `orangu report [selector]` | Write and open one self-contained session report |
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |
@@ -181,15 +184,17 @@ node dist/orangu.js report
 
 A session selector can be `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`: the session Claude Code is running orangu from, resolved from the Claude Code environment and never guessed silently (a cwd-based guess says so; outside Claude Code it is an error). `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`); giving both the positional and the flag with different values is an error.
 
+On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker; currently open Claude Code sessions appear underneath as direct report shortcuts. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. A pipe, CI, `--plain`, `--quiet`, or an explicit scope/session flag keeps the compact latest-session behavior and never waits for input.
+
 `orangu pick` lists sessions running first (title, project, age, size), moves with the arrow keys, `j`/`k`, or a digit, opens the chosen report on Enter, and cancels on `q`, Esc, or Ctrl-C with the terminal restored. Without a terminal, in CI, or with `--plain` it prints a numbered list and the `orangu report <id>` hint; `--json` prints the array (`[]` on an empty home, still exiting 1 because the chooser had nothing to choose).
 
 Use `orangu --help` for flags and output controls.
 
 ### Terminal output
 
-`orangu report` writes only the report path to stdout, so `orangu report | xargs open` works; its summary (the check line, the path, the top finding, and the next command) goes to stderr. `orangu analyze` prints the measurement block on stdout and the same footer on stderr; bare `orangu` prints everything on stdout. The next command is the short `claude "/orangu:improve sg_..."`: the suggestion record is stored under `~/.orangu` at report time, and only when that store cannot be written does the long `--finding` form appear, with a line saying so.
+`orangu report` writes only the report path to stdout, so `orangu report | xargs open` works; its summary (the check line, the path, the top finding, and the next command) goes to stderr. `orangu analyze` prints the measurement block on stdout and the same footer on stderr. The bare interactive dashboard and the non-interactive latest-session brief both use stdout. The next command is the short `claude "/orangu:improve sg_..."`: the suggestion record is stored under `~/.orangu` at report time, and only when that store cannot be written does the long `--finding` form appear, with a line saying so.
 
-Colour appears only on an interactive terminal and is off under `--json`, `--quiet`, `--no-color`, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or a pipe (`FORCE_COLOR=1|2|3` paints a pipe). The spinner needs the same terminal and is also off under `CI`, `NO_COLOR`, `FORCE_COLOR=0`, and `ORANGU_NO_ANIMATION=1` (the last one stops the spinner alone). `file://` hyperlinks (OSC 8) appear on terminals known to render them; `FORCE_HYPERLINK=0|1` overrides, and `NO_COLOR` leaves them alone. `--json` and `--quiet` output never carries an escape sequence. `--verbose` adds the cache diagnostic on stderr. `report`, `analyze`, and the bare `orangu` record the top finding's suggestion under `~/.orangu` so the printed `claude "/orangu:improve sg_…"` works; `--quiet` silences the output but still records it (re-runs add nothing), and `--json` records nothing.
+Colour appears only on an interactive terminal and is off under `--json`, `--quiet`, `--no-color`, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or a pipe (`FORCE_COLOR=1|2|3` paints a pipe). The spinner needs the same terminal and is also off under `CI`, `NO_COLOR`, `FORCE_COLOR=0`, and `ORANGU_NO_ANIMATION=1` (the last one stops the spinner alone). `file://` hyperlinks (OSC 8) appear on terminals known to render them; `FORCE_HYPERLINK=0|1` overrides, and `NO_COLOR` leaves them alone. `--json` and `--quiet` output never carries an escape sequence. `--verbose` adds the cache diagnostic on stderr. `report`, `analyze`, and the non-interactive bare-session brief record the top finding's suggestion under `~/.orangu` so the printed `claude "/orangu:improve sg_…"` works; `--quiet` silences the trailing hint but still records it (re-runs add nothing), and `--json` records nothing.
 
 ## Report and app
 

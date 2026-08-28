@@ -165,9 +165,12 @@ export function analysisBlock(caps: Caps, a: Analysis, title: string): string[] 
   if (s.agents) lines.push(row(caps, 'agents', `${s.agents} runs${sep}${a.agents.maxConcurrency} max parallel${sep}${fmtTokens(a.tokens.agents)} tokens`))
   lines.push(row(caps, 'context', `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? ' of ' + fmtTokens(a.context.contextWindow) : ''}${sep}${plural(s.compactions, 'compaction')}`))
   lines.push('', paint(caps, 'bold', INDENT + 'findings'))
-  if (!a.insights.length) lines.push(paint(caps, 'good', '    clean: no findings'))
+  const bad = a.parse.badLines
+  if (!a.insights.length) lines.push(bad ? paint(caps, 'warn', `    no findings; ${plural(bad, 'unparseable line')} skipped`) : paint(caps, 'good', '    clean: no findings'))
   for (const ins of a.insights.slice(0, 6)) lines.push(findingRow(caps, ins))
   lines.push('', paint(caps, 'dim', fit(caps, `${INDENT}run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report`)))
+  // a transcript that did not parse is not a clean session: say what was skipped
+  if (bad && a.insights.length) lines.push(paint(caps, 'warn', fit(caps, `${INDENT}warning: ${plural(bad, 'unparseable line')} skipped`)))
   if (!a.parse.reconciliation.ok) lines.push(paint(caps, 'warn', fit(caps, `${INDENT}warning: token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%`)))
   return lines
 }
@@ -196,7 +199,13 @@ export function listRows(caps: Caps, refs: SessionRef[], o: { total: number; glo
     lines.push(`${INDENT}${paint(caps, 'accent', s.sessionId.slice(0, 8))}  ${paint(caps, 'dim', when)}  ${size}  ${paint(caps, 'dim', agents)}  ${project}`)
   }
   if (!o.total) lines.push(paint(caps, 'dim', fit(caps, `${INDENT}No sessions found. Is Claude Code installed?`)), paint(caps, 'dim', fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)))
-  else lines.push('', paint(caps, 'dim', fit(caps, `${INDENT}orangu report <id>${glyphs(caps).sep}orangu analyze <id>${glyphs(caps).sep}orangu harness`)))
+  else {
+    const sep = glyphs(caps).sep
+    lines.push('')
+    // the default cap is 40: say so, like pick does, so a JSON-less reader knows the list is cut
+    if (refs.length < o.total) lines.push(paint(caps, 'dim', fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep}--limit <n> for more`)))
+    lines.push(paint(caps, 'dim', fit(caps, `${INDENT}orangu report <id>${sep}orangu analyze <id>${sep}orangu harness`)))
+  }
   return lines
 }
 
