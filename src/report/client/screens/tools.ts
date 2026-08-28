@@ -3,7 +3,7 @@ import type { Ctx } from '../app.js'
 import { CAT_LABEL, catColor, esc, ms, num, pct, bytes } from '../format.js'
 import { h } from '../dom.js'
 import { degradedBanner } from '../components/banner.js'
-import { emptyHero } from '../components/empty.js'
+import { noSession } from '../components/empty.js'
 import { plainSentence } from '../strings.js'
 
 const SHOW = 12
@@ -25,7 +25,7 @@ function errHint(sig: string): string {
 
 export function renderTools(ctx: Ctx): HTMLElement {
   const a = ctx.a
-  if (!a) return h(`<section>${emptyHero({ title: 'No session selected.' })}</section>`)
+  if (!a) return noSession()
   const t = a.tools
   const total = a.summary.toolCalls
   const catBar = t.byCategory
@@ -48,13 +48,13 @@ export function renderTools(ctx: Ctx): HTMLElement {
     rows
       .map(
         (s) => `<tr class="tool-row" data-tool="${esc(s.name)}" title="${esc(`${bytes(s.resultBytesTotal)} output · ${s.mainCount} main / ${s.agentCount} agent`)}">
-      <td><i class="swd" style="background:${catColor(s.category)}"></i><span class="mono125">${esc(s.name)}</span></td>
-      <td class="num">${num(s.count)}</td>
-      <td class="num"${s.errors ? ' style="color:var(--bad)"' : ' style="color:var(--ink3)"'}>${s.errors}</td>
-      ${avgCell(s)}
-      <td class="num p95col">${esc(ms(s.p95Ms))}</td>
-      <td><span class="trough"><i style="width:${((s.totalMs / maxMs) * 100).toFixed(1)}%;background:${catColor(s.category)}"></i></span></td>
-    </tr>`,
+<td><i class="swd" style="background:${catColor(s.category)}"></i><span class="mono125">${esc(s.name)}</span></td>
+<td class="num">${num(s.count)}</td>
+<td class="num"${s.errors ? ' style="color:var(--bad)"' : ' style="color:var(--ink3)"'}>${s.errors}</td>
+${avgCell(s)}
+<td class="num p95col">${esc(ms(s.p95Ms))}</td>
+<td><span class="trough"><i style="width:${((s.totalMs / maxMs) * 100).toFixed(1)}%;background:${catColor(s.category)}"></i></span></td>
+</tr>`,
       )
       .join('')
   const head = `<tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg</th><th class="num p95col">${ctx.audience === 'plain' ? '' : 'p95'}</th><th>Share of tool time</th></tr>`
@@ -71,19 +71,19 @@ export function renderTools(ctx: Ctx): HTMLElement {
     : `<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>`
 
   const el = h(`<section>
-    ${degradedBanner(a, ctx.audience)}
-    <div class="card pad mb16">
-      <div class="card-title">${esc(plainSentence(`Calls by category · ${total} total`, ctx.audience))}</div>
-      <div class="catbar">${catBar}</div>
-      <div class="legend">${legend}</div>
-      ${parCaption ? `<div class="smt8">${esc(parCaption)} · ${esc(pct(par.parallelCallShare))} of calls in a parallel batch</div>` : ''}
-    </div>
-    <div class="card scroll-x mb16">
-      <table class="grid"><thead>${head}</thead><tbody id="toolbody">${toolRows(t.byName.slice(0, SHOW))}</tbody></table>
-      ${more}
-    </div>
-    <div class="card pad"><div class="card-title">Recurring errors in this session</div>${errCard}</div>
-  </section>`)
+${degradedBanner(a, ctx.audience)}
+<div class="card pad mb16">
+<div class="card-title">${esc(plainSentence(`Calls by category · ${total} total`, ctx.audience))}</div>
+<div class="catbar">${catBar}</div>
+<div class="legend">${legend}</div>
+${parCaption ? `<div class="smt8">${esc(parCaption)} · ${esc(pct(par.parallelCallShare))} of calls in a parallel batch</div>` : ''}
+</div>
+<div class="card scroll-x mb16">
+<table class="grid"><thead>${head}</thead><tbody id="toolbody">${toolRows(t.byName.slice(0, SHOW))}</tbody></table>
+${more}
+</div>
+<div class="card pad"><div class="card-title">Recurring errors in this session</div>${errCard}</div>
+</section>`)
   const wire = (root: ParentNode): void => {
     if (ctx.audience === 'plain') root.querySelectorAll('.p95col').forEach((c) => c.remove())
     root.querySelectorAll<HTMLElement>('.tool-row').forEach((r) =>

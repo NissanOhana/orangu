@@ -7,14 +7,14 @@ import { catColor, esc, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { degradedBanner } from '../components/banner.js'
-import { emptyHero } from '../components/empty.js'
+import { noSession } from '../components/empty.js'
 import { compactionMarkers, contextHeadline } from '../derive.js'
 import { lineChart, proportionRows, stackedArea, stackedBar } from '../charts.js'
 import { card } from '../components/card.js'
 
 export function renderContext(ctx: Ctx): HTMLElement {
   const a = ctx.a
-  if (!a) return h(`<section>${emptyHero({ title: 'No session selected.' })}</section>`)
+  if (!a) return noSession()
   const c = a.context
   const main = c.series.filter((p) => !p.agentId)
   const compMarkers = compactionMarkers(c.compactions, main)
@@ -50,18 +50,18 @@ export function renderContext(ctx: Ctx): HTMLElement {
     card('Cumulative tokens over turns', `<div class="scroll-x">${cum}</div>`),
   ].join('')
   return h(`<section>
-    ${degradedBanner(a, ctx.audience)}
-    <p class="ctx-lead">${esc(contextHeadline(a))}</p>
-    <div class="kpis">
-      ${kpi('Peak context', tok(c.peak), c.contextWindow ? pct(c.peak / c.contextWindow) + ' of ' + tok(c.contextWindow) : '')}
-      ${kpi('Cache hit ratio', pct(c.cacheHitRatio, 1), 'context re-read rather than re-sent')}
-      ${kpi('Context re-read', c.reReadMultiplier.toFixed(1) + '×', 'context carried ÷ peak')}
-      ${kpi('Long-lived cache writes', pct(c.cacheWrite1hShare), 'of cache writes (the 1h tier)')}
-      ${kpi('Fixed weight per request', tok(c.baseline), 'system + tools + CLAUDE.md, every request')}
-      ${kpi('Compactions', String(c.compactions.length), c.compactions.length ? 'context was reset' : 'none')}
-    </div>
-    ${card('Context size over the session', `<div class="scroll-x">${ctxLine}</div><div class="legend"><span>Each point is one API request; dashed lines are compactions.</span></div>`, 'mb16')}
-    ${card(`Where the tokens went · ${esc(tok(co.totalTokens))} total`, `${stackedBar(byKind, { height: 22 })}<div class="legend">${byKind.filter((b) => b.value > 0).map((b) => `<span><i class="sw" style="background:${b.color}"></i>${esc(b.label)}</span>`).join('')}</div>${serverTools ? `<div class="smt8">${plural(serverTools, 'server-tool request')} (web search/fetch), counted per request, not in tokens</div>` : ''}`, 'mb16')}
-    <details class="more-charts"><summary><span class="chev" aria-hidden="true">▸</span>More charts · composition per request, by model, cumulative</summary><div class="mt8">${more}</div></details>
-  </section>`)
+${degradedBanner(a, ctx.audience)}
+<p class="ctx-lead">${esc(contextHeadline(a))}</p>
+<div class="kpis">
+${kpi('Peak context', tok(c.peak), c.contextWindow ? pct(c.peak / c.contextWindow) + ' of ' + tok(c.contextWindow) : '')}
+${kpi('Cache hit ratio', pct(c.cacheHitRatio, 1), 'context re-read rather than re-sent')}
+${kpi('Context re-read', c.reReadMultiplier.toFixed(1) + '×', 'context carried ÷ peak')}
+${kpi('Long-lived cache writes', pct(c.cacheWrite1hShare), 'of cache writes (the 1h tier)')}
+${kpi('Fixed weight per request', tok(c.baseline), 'system + tools + CLAUDE.md, every request')}
+${kpi('Compactions', String(c.compactions.length), c.compactions.length ? 'context was reset' : 'none')}
+</div>
+${card('Context size over the session', `<div class="scroll-x">${ctxLine}</div><div class="legend"><span>Each point is one API request; dashed lines are compactions.</span></div>`, 'mb16')}
+${card(`Where the tokens went · ${esc(tok(co.totalTokens))} total`, `${stackedBar(byKind, { height: 22 })}<div class="legend">${byKind.filter((b) => b.value > 0).map((b) => `<span><i class="sw" style="background:${b.color}"></i>${esc(b.label)}</span>`).join('')}</div>${serverTools ? `<div class="smt8">${plural(serverTools, 'server-tool request')} (web search/fetch), counted per request, not in tokens</div>` : ''}`, 'mb16')}
+<details class="more-charts"><summary><span class="chev" aria-hidden="true">▸</span>More charts · composition per request, by model, cumulative</summary><div class="mt8">${more}</div></details>
+</section>`)
 }

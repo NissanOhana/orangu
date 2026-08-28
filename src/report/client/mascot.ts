@@ -17,7 +17,7 @@ export function mascotSvg(size = 30): string {
 }
 
 export const MASCOT_ASCII = String.raw`
-   .-"""-.
-  /  o o  \   orangu
- |  \___/()o  see what your agent did
-  \_______/`
+.-"""-.
+/  o o  \   orangu
+|  \___/()o  see what your agent did
+\_______/`

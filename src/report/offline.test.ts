@@ -80,6 +80,12 @@ describe('offline report', () => {
     // so one 30-minute timeout among quick calls no longer reads as a broken statistic: +252 B.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
     // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
-    expect(CLIENT_JS.length).toBe(73036)
+    // 2026-08-27 final client pass 2 (fix/final-client2): −56 B net, cap unchanged. Eight UX fixes cost +1,233 B
+    // (the Timeline row's own-facts fallback, folded hidden-error rows on Tools/Repo/Global, the Quality verdict
+    // scope, the Global evidence blocks, the install line inside step 2, plural(), the ms() day tier) and were paid
+    // for by two trims: template-literal indentation no longer ships (−1,090 B; continuation lines inside a
+    // template start at column 0, every byte of one is in every report) and the six identical "No session
+    // selected" guards share noSession() (−199 B).
+    expect(CLIENT_JS.length).toBe(71747)
   })
 })

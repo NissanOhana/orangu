@@ -5,7 +5,7 @@ import { catColor, esc, ms, tok, bytes } from '../format.js'
 import { h, wireExpandables } from '../dom.js'
 import { chip } from '../components/chips.js'
 import { degradedBanner } from '../components/banner.js'
-import { emptyHero } from '../components/empty.js'
+import { noSession } from '../components/empty.js'
 import { callsForTurn, catMixForTurn, compactionGroups, topTokenThreshold } from '../derive.js'
 import { plainSentence } from '../strings.js'
 
@@ -67,20 +67,20 @@ function turnRow(a: Analysis, t: TurnAnalysis, ctx: Ctx, hotTokens: number, open
     .join(' · ')
   const dur = ms(t.durationMs ?? t.reportedDurationMs)
   return `<details class="turn${t.interrupted ? ' interrupted' : ''}" id="turn-${t.index}"${open ? ' open' : ''}>
-    <summary>
-      <span class="tnum">#${t.index}</span>
-      <span class="tprompt"${promptCls}>${kindTag(t)}${esc(prompt)}</span>
-      <span class="mixbar" title="tool mix">${mix}</span>
-      <span class="tcell">${calls.length}⚙</span>
-      <span class="tcell">${esc(dur)}</span>
-      <span class="tcell${t.totalTokens >= hotTokens && t.totalTokens > 0 ? ' hot' : ''}">${esc(tok(t.totalTokens))}</span>
-    </summary>
-    <div class="tbody">
-      <div class="tmeta">${esc(meta)}</div>
-      ${evs || '<p class="small muted" style="margin:0">No tool calls in this turn.</p>'}
-      ${agents ? `<div class="pill-row">${agents}</div>` : ''}
-    </div>
-  </details>`
+<summary>
+<span class="tnum">#${t.index}</span>
+<span class="tprompt"${promptCls}>${kindTag(t)}${esc(prompt)}</span>
+<span class="mixbar" title="tool mix">${mix}</span>
+<span class="tcell">${calls.length}⚙</span>
+<span class="tcell">${esc(dur)}</span>
+<span class="tcell${t.totalTokens >= hotTokens && t.totalTokens > 0 ? ' hot' : ''}">${esc(tok(t.totalTokens))}</span>
+</summary>
+<div class="tbody">
+<div class="tmeta">${esc(meta)}</div>
+${evs || '<p class="small muted" style="margin:0">No tool calls in this turn.</p>'}
+${agents ? `<div class="pill-row">${agents}</div>` : ''}
+</div>
+</details>`
 }
 
 function groupsHtml(a: Analysis, list: TurnAnalysis[], ctx: Ctx, hotTokens: number): string {
@@ -97,7 +97,7 @@ function groupsHtml(a: Analysis, list: TurnAnalysis[], ctx: Ctx, hotTokens: numb
 
 export function renderTimeline(ctx: Ctx): HTMLElement {
   const a = ctx.a
-  if (!a) return h(`<section>${emptyHero({ title: 'No session selected.' })}</section>`)
+  if (!a) return noSession()
   const st = ctx.state
   const all = a.turns
   const counts = {
@@ -133,10 +133,10 @@ export function renderTimeline(ctx: Ctx): HTMLElement {
   const caption = plainSentence('expand a turn for every parent and subagent call · the URL is the saved view', ctx.audience)
 
   const el = h(`<section>
-    ${degradedBanner(a, ctx.audience)}
-    <div class="chiprow">${fixed}${cross.join('')}<span class="small muted" style="margin-left:auto">${esc(caption)}</span></div>
-    <div id="turnlist">${rows}${emptyState}${foot}</div>
-  </section>`)
+${degradedBanner(a, ctx.audience)}
+<div class="chiprow">${fixed}${cross.join('')}<span class="small muted" style="margin-left:auto">${esc(caption)}</span></div>
+<div id="turnlist">${rows}${emptyState}${foot}</div>
+</section>`)
 
   el.querySelectorAll<HTMLElement>('[data-filter]').forEach((c) =>
     c.addEventListener('click', () => {

@@ -72,27 +72,27 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
       const outcome = [s.prs ? `${s.prs} PR` : '', s.commits ? `${s.commits} commits` : '', s.interruptions ? `interrupted ×${s.interruptions}` : ''].filter(Boolean).join(' · ') || '–'
       const open = ctx.data.mode === 'serve' ? `href="#overview?s=${esc(s.id)}"` : `href="#" title="open with: orangu report ${esc(s.id.slice(0, 8))}" aria-disabled="true" onclick="return false"`
       return `<tr>
-        <td><a class="mono" style="font-size:12px" ${open}>${esc(s.id.slice(0, 8))}</a></td>
-        <td class="ellip" style="max-width:280px;color:var(--ink2)">${esc(s.title ?? '')}</td>
-        <td class="num">${s.turns}</td>
-        <td class="num">${s.toolCalls}</td>
-        <td class="num"${s.toolErrors ? ' style="color:var(--bad)"' : ''}>${s.toolErrors}</td>
-        <td class="num" style="font-weight:700">${esc(tok(s.tokens))}</td>
-        <td class="small muted">${esc(outcome)}</td>
-      </tr>`
+<td><a class="mono" style="font-size:12px" ${open}>${esc(s.id.slice(0, 8))}</a></td>
+<td class="ellip" style="max-width:280px;color:var(--ink2)">${esc(s.title ?? '')}</td>
+<td class="num">${s.turns}</td>
+<td class="num">${s.toolCalls}</td>
+<td class="num"${s.toolErrors ? ' style="color:var(--bad)"' : ''}>${s.toolErrors}</td>
+<td class="num" style="font-weight:700">${esc(tok(s.tokens))}</td>
+<td class="small muted">${esc(outcome)}</td>
+</tr>`
     })
     .join('')
   return `
-    <div class="kpis">${kpis}</div>
-    <div class="two-up">
-      <div class="card pad"><div class="card-title">Recurring findings · ranked by evidence</div><div class="cardsub">patterns one session cannot establish</div>${findings}</div>
-      <div class="card pad"><div class="card-title">Most re-read files</div><div class="cardsub">context carried again and again · trim or index these</div>${reReads}</div>
-    </div>
-    ${errs}
-    <div class="card scroll-x">
-      <div class="card-head"><span>Heaviest sessions</span><span style="margin-left:auto;font-weight:400;font-size:12px;color:var(--ink3)">sorted by tokens</span></div>
-      <table class="grid"><thead><tr><th>Session</th><th>Title</th><th class="num">Turns</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th>Outcome</th></tr></thead><tbody>${sessions}</tbody></table>
-    </div>
-    ${g.sessionCount ? '' : `<div style="margin-top:16px">${emptyNote('Analysing sessions…')}</div>`}
-    <p class="small muted" style="margin-top:12px">${num(g.sessionCount)} sessions · every figure is a token count reported by the API.</p>`
+<div class="kpis">${kpis}</div>
+<div class="two-up">
+<div class="card pad"><div class="card-title">Recurring findings · ranked by evidence</div><div class="cardsub">patterns one session cannot establish</div>${findings}</div>
+<div class="card pad"><div class="card-title">Most re-read files</div><div class="cardsub">context carried again and again · trim or index these</div>${reReads}</div>
+</div>
+${errs}
+<div class="card scroll-x">
+<div class="card-head"><span>Heaviest sessions</span><span style="margin-left:auto;font-weight:400;font-size:12px;color:var(--ink3)">sorted by tokens</span></div>
+<table class="grid"><thead><tr><th>Session</th><th>Title</th><th class="num">Turns</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th>Outcome</th></tr></thead><tbody>${sessions}</tbody></table>
+</div>
+${g.sessionCount ? '' : `<div style="margin-top:16px">${emptyNote('Analysing sessions…')}</div>`}
+<p class="small muted" style="margin-top:12px">${num(g.sessionCount)} sessions · every figure is a token count reported by the API.</p>`
 }

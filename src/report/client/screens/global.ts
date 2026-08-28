@@ -27,7 +27,7 @@ export function renderGlobal(ctx: Ctx): HTMLElement {
   const trend =
     weeksWithData >= 2
       ? `<svg viewBox="0 0 600 110" style="width:100%;height:110px;display:block" preserveAspectRatio="none" role="img"><title>Weekly token trend</title><polyline points="${weekPoints(g.byWeek)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"></polyline><line x1="0" y1="104" x2="600" y2="104" stroke="var(--border2)" stroke-width="1"></line></svg>
-        <div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:4px"><span>12w ago</span><span>8w</span><span>4w</span><span>this week</span></div>`
+<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:4px"><span>12w ago</span><span>8w</span><span>4w</span><span>this week</span></div>`
       : emptyNote('not enough history for a trend')
 
   const rollup = (items: Array<{ key: string; count: number; tokens: number }>, color: string): string => {
@@ -47,15 +47,15 @@ export function renderGlobal(ctx: Ctx): HTMLElement {
     .join('')
 
   return h(`<section>${aggregateLead('global')}
-    <div class="kpis">${kpis}</div>
-    <div class="card pad mb16">
-      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><span style="font-weight:700;font-size:13.5px">Weekly tokens · last 12 weeks</span><span class="mono small muted">${esc(range)}</span></div>
-      ${trend}
-    </div>
-    <div class="two-up">
-      <div class="card pad"><div class="card-title">Tokens by model</div>${rollup(g.byModel, 'var(--accent)')}</div>
-      <div class="card pad"><div class="card-title">Tokens by project</div>${rollup(g.byProject, 'var(--cat-agent)')}</div>
-    </div>
-    <div class="chiprow">${chips}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>
-  </section>`)
+<div class="kpis">${kpis}</div>
+<div class="card pad mb16">
+<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><span style="font-weight:700;font-size:13.5px">Weekly tokens · last 12 weeks</span><span class="mono small muted">${esc(range)}</span></div>
+${trend}
+</div>
+<div class="two-up">
+<div class="card pad"><div class="card-title">Tokens by model</div>${rollup(g.byModel, 'var(--accent)')}</div>
+<div class="card pad"><div class="card-title">Tokens by project</div>${rollup(g.byProject, 'var(--cat-agent)')}</div>
+</div>
+<div class="chiprow">${chips}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>
+</section>`)
 }

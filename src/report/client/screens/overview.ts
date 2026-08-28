@@ -38,10 +38,10 @@ function triptych(a: Analysis): string {
   const t = timeAxis(s)
   const kNote = s.totalTokens ? `${pct(s.cacheHitRatio)} read from cache · ${tok(a.tokens.byKind.output)} generated` : 'no usage recorded'
   return `<div class="triptych">
-    <div class="axis q"><div class="aname">Quality ↑</div><div class="aval">${esc(qualityHeadline(a.quality.signals))}</div><div class="anote">${esc(qNote)}</div>${signalChips(a.quality.signals)}</div>
-    <div class="axis t"><div class="aname">Time ↓</div><div class="aval">${esc(t.value)}</div><div class="anote">${esc(t.note)}</div></div>
-    <div class="axis c"><div class="aname">Tokens ↓</div><div class="aval">${esc(tok(s.totalTokens))}</div><div class="anote">${esc(kNote)}</div></div>
-  </div>`
+<div class="axis q"><div class="aname">Quality ↑</div><div class="aval">${esc(qualityHeadline(a.quality.signals))}</div><div class="anote">${esc(qNote)}</div>${signalChips(a.quality.signals)}</div>
+<div class="axis t"><div class="aname">Time ↓</div><div class="aval">${esc(t.value)}</div><div class="anote">${esc(t.note)}</div></div>
+<div class="axis c"><div class="aname">Tokens ↓</div><div class="aval">${esc(tok(s.totalTokens))}</div><div class="anote">${esc(kNote)}</div></div>
+</div>`
 }
 
 /** The top finding, hoisted: title, fix, savings as a share of the session, the evidence link, the improve command. */
@@ -86,9 +86,9 @@ function detailedBody(ctx: Ctx, a: Analysis): string {
   const rest = top.slice(1).map((i) => findingHtml(i, 'dev', { command: commandForInsight(i, a.session.id), sessionTotalTokens: a.summary.totalTokens })).join('')
   const recoverable = recoverableLine(recoverableFrom(planRows('session', a, undefined)), a.insights.length)
   return `${triptych(a)}${topFinding(ctx, a, top[0])}
-    <div class="two-up mb16">${contextSpark(a)}${whereNext(ctx, a)}</div>
-    ${ctx.harnessCard?.() ?? ''}
-    ${recoverable ? `<p class="recoverable"><a href="${esc(href(ctx, a, { screen: 'suggest' }))}">${esc(recoverable)} →</a></p>` : ''}${rest ? `<h3 style="margin:4px 0 10px">More findings</h3>${rest}` : ''}`
+<div class="two-up mb16">${contextSpark(a)}${whereNext(ctx, a)}</div>
+${ctx.harnessCard?.() ?? ''}
+${recoverable ? `<p class="recoverable"><a href="${esc(href(ctx, a, { screen: 'suggest' }))}">${esc(recoverable)} →</a></p>` : ''}${rest ? `<h3 style="margin:4px 0 10px">More findings</h3>${rest}` : ''}`
 }
 
 function plainBody(ctx: Ctx, a: Analysis): string {
@@ -98,15 +98,15 @@ function plainBody(ctx: Ctx, a: Analysis): string {
   const effort = `${tok(s.totalTokens)} tokens · ${ms(s.wallMs)}, of which ${ms(s.humanWaitMs)} needed your attention`
   const one = a.insights.find((i) => i.id === s.topInsightIds[0]) ?? a.insights[0]
   return `<div class="card mb16" style="overflow:hidden">
-      <div class="card-head">${mascotSvg(22)}What happened here</div>
-      <div class="plaingrid">
-        <div class="k">Goal</div><div>${esc(goalText)}</div>
-        <div class="k">How it ended</div><div>${esc(endingWord(s.ending))}</div>
-        <div class="k">Tokens &amp; time</div><div>${esc(effort)}</div>
-      </div>
-    </div>
-    ${topFinding(ctx, a, one)}
-    ${whereNext(ctx, a)}`
+<div class="card-head">${mascotSvg(22)}What happened here</div>
+<div class="plaingrid">
+<div class="k">Goal</div><div>${esc(goalText)}</div>
+<div class="k">How it ended</div><div>${esc(endingWord(s.ending))}</div>
+<div class="k">Tokens &amp; time</div><div>${esc(effort)}</div>
+</div>
+</div>
+${topFinding(ctx, a, one)}
+${whereNext(ctx, a)}`
 }
 
 export function renderOverview(ctx: Ctx): HTMLElement {

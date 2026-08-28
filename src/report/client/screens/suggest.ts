@@ -124,26 +124,26 @@ function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: Sugges
     .map((id) => (ctx.data.mode === 'serve' ? `<a class="exch" href="#overview?s=${esc(id)}">${esc(id.slice(0, 8))}</a>` : `<span class="exch">${esc(id.slice(0, 8))}</span>`))
     .join('')
   return `<details class="finding" data-sid="${esc(sid)}" data-rule="${esc(row.ruleId)}">
-    <summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span>${row.severity ? `<span class="sev ${esc(row.severity)}" title="${esc(row.severity)}"></span>` : ''}<b class="sg-t">${esc(plainSentence(row.title, aud))}</b>${share ? `<span class="fsave sg-save" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${effort ? `<span class="pill">effort ${esc(effort)}</span>` : ''}</summary>
-    <div class="fbody sg-body">
-      <div class="sg-ev"><b>Evidence.</b> ${esc(plainSentence(row.detail, aud))} ${aud === 'plain' ? '' : `<span class="pill">${esc(row.ruleId)}</span>`}</div>
-      ${row.recommendation ? `<div class="rec sg-fix"><b>Fix.</b> ${esc(plainSentence(row.recommendation, aud))}</div>` : ''}
-      <div class="sg-ex"><span class="small muted">example sessions:</span>${examples}</div>
-      ${proposalDetails(rec)}
-      <div class="kickrow">
-        <span class="mono115">handled by</span>
-        <span class="pill">orangu:improve</span>
-        ${statusChip(state, failure, trustedVerification(rec))}
-      </div>
-      <ol class="steps" aria-label="Hand off to Claude Code">
-        <li><button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
-        <li><span>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</span></li>
-        <li><span>${stepThree(ctx.data.mode)}</span></li>
-      </ol>
-      <div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
-      <div class="kick-msg small muted" aria-live="polite">${esc(failure)}</div>
-    </div>
-  </details>`
+<summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span>${row.severity ? `<span class="sev ${esc(row.severity)}" title="${esc(row.severity)}"></span>` : ''}<b class="sg-t">${esc(plainSentence(row.title, aud))}</b>${share ? `<span class="fsave sg-save" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${effort ? `<span class="pill">effort ${esc(effort)}</span>` : ''}</summary>
+<div class="fbody sg-body">
+<div class="sg-ev"><b>Evidence.</b> ${esc(plainSentence(row.detail, aud))} ${aud === 'plain' ? '' : `<span class="pill">${esc(row.ruleId)}</span>`}</div>
+${row.recommendation ? `<div class="rec sg-fix"><b>Fix.</b> ${esc(plainSentence(row.recommendation, aud))}</div>` : ''}
+<div class="sg-ex"><span class="small muted">example sessions:</span>${examples}</div>
+${proposalDetails(rec)}
+<div class="kickrow">
+<span class="mono115">handled by</span>
+<span class="pill">orangu:improve</span>
+${statusChip(state, failure, trustedVerification(rec))}
+</div>
+<ol class="steps" aria-label="Hand off to Claude Code">
+<li><button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
+<li><span>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</span></li>
+<li><span>${stepThree(ctx.data.mode)}</span></li>
+</ol>
+<div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
+<div class="kick-msg small muted" aria-live="polite">${esc(failure)}</div>
+</div>
+</details>`
 }
 
 export function renderSuggest(ctx: Ctx): HTMLElement {
@@ -199,16 +199,16 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
       : 'Global suggestions stay proposals; nothing is applied from here.')
 
   const el = h(`<section>
-    <div class="hero">
-      ${mascotBox(48)}
-      <div class="grow sg-hero"><div class="herotitle">Improvement plan</div><div class="sg-sub">${esc(heroSub)}</div></div>
-    </div>
-    <div class="chiprow">${scopeChips}</div>
-    ${scope !== 'session' && !agg ? emptyHero({ title: 'This scope needs orangu serve', command: 'orangu serve' }) : items + install}
-    ${savedProposalInbox(saved, ctx.data.mode)}
-    ${mega}
-    <p class="small muted sg-foot">${foot}</p>
-  </section>`)
+<div class="hero">
+${mascotBox(48)}
+<div class="grow sg-hero"><div class="herotitle">Improvement plan</div><div class="sg-sub">${esc(heroSub)}</div></div>
+</div>
+<div class="chiprow">${scopeChips}</div>
+${scope !== 'session' && !agg ? emptyHero({ title: 'This scope needs orangu serve', command: 'orangu serve' }) : items + install}
+${savedProposalInbox(saved, ctx.data.mode)}
+${mega}
+<p class="small muted sg-foot">${foot}</p>
+</section>`)
 
   el.querySelectorAll<HTMLElement>('[data-scope]').forEach((c) =>
     c.addEventListener('click', () => {

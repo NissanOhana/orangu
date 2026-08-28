@@ -112,10 +112,10 @@ function sessionView(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis |
   const ctxCaption =
     state === 'ended' ? '–' : `${plural(s?.compactions ?? 0, 'compaction')} so far${ctxPct !== undefined && ctxPct >= 0.75 ? ' · compaction likely near 90%' : ''}`
   const ctxCard = `<div class="card pad mb18">
-    <div class="ctxhead"><span>Context window</span><span class="mono">${ctxPct !== undefined ? esc(pct(ctxPct)) + ' of ' + esc(tok(c!.contextWindow!)) : c ? esc(tok(c.final)) : '–'}</span></div>
-    <div class="ctxbar"><i style="width:${ctxPct !== undefined ? (ctxPct * 100).toFixed(1) : 0}%"></i></div>
-    <div class="smt8">${esc(ctxCaption)}</div>
-  </div>`
+<div class="ctxhead"><span>Context window</span><span class="mono">${ctxPct !== undefined ? esc(pct(ctxPct)) + ' of ' + esc(tok(c!.contextWindow!)) : c ? esc(tok(c.final)) : '–'}</span></div>
+<div class="ctxbar"><i style="width:${ctxPct !== undefined ? (ctxPct * 100).toFixed(1) : 0}%"></i></div>
+<div class="smt8">${esc(ctxCaption)}</div>
+</div>`
   const feedAll = a ? liveFeed(a, FEED_MAX + 1) : []
   const truncated = feedAll.length > FEED_MAX
   const rows = feedAll

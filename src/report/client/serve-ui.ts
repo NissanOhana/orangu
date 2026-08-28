@@ -63,12 +63,12 @@ function fleetView(ctx: Ctx, liveIn: SessionSummaryRow[]): HTMLElement {
       const strip = agents ? `<div class="agentstrip">${'<i></i>'.repeat(agents)}${(r.agentsRunning ?? 0) > 8 ? `<span class="more">+${(r.agentsRunning ?? 0) - 8}</span>` : ''}</div>` : ''
       const last = r.lastEvent ? `last: ${r.lastEvent.name} · ${r.lastEvent.summary}` : badgeCopy(r)
       return `<a class="fleetcard" href="#live?s=${esc(r.id)}">
-        <div class="fh"><span class="ldot" data-pulse="1" aria-hidden="true"></span><span>${esc(shortId(r.id))}</span><span class="proj">${esc(r.projectSlug)}</span><span class="muted">turn ${r.turns ?? '–'}</span></div>
-        <div class="fk"><span>${r.startedAt !== undefined && r.mtimeMs > r.startedAt ? esc(ms(r.mtimeMs - r.startedAt)) : '–'}</span><span style="color:var(--accent-ink)">${r.tokens !== undefined ? esc(tok(r.tokens)) : '–'}</span><span>${r.toolCalls ?? '–'}⚙</span><span>${ctxPct ? esc(pct(ctxPct)) : '–'} ctx</span></div>
-        <span class="trough" style="height:6px"><i style="width:${(ctxPct * 100).toFixed(1)}%"></i></span>
-        <div class="fl">${esc(last)}</div>
-        ${strip}
-      </a>`
+<div class="fh"><span class="ldot" data-pulse="1" aria-hidden="true"></span><span>${esc(shortId(r.id))}</span><span class="proj">${esc(r.projectSlug)}</span><span class="muted">turn ${r.turns ?? '–'}</span></div>
+<div class="fk"><span>${r.startedAt !== undefined && r.mtimeMs > r.startedAt ? esc(ms(r.mtimeMs - r.startedAt)) : '–'}</span><span style="color:var(--accent-ink)">${r.tokens !== undefined ? esc(tok(r.tokens)) : '–'}</span><span>${r.toolCalls ?? '–'}⚙</span><span>${ctxPct ? esc(pct(ctxPct)) : '–'} ctx</span></div>
+<span class="trough" style="height:6px"><i style="width:${(ctxPct * 100).toFixed(1)}%"></i></span>
+<div class="fl">${esc(last)}</div>
+${strip}
+</a>`
     })
     .join('')
   return h(`<section>${reconn}${watching}<div class="fleet">${cards}</div>${fleetFeedHtml(live)}<p class="small muted">Each card is one running session. Click a card to watch it.</p></section>`)
@@ -91,7 +91,7 @@ function pickerHtml(d: AppData, row: SessionSummaryRow | undefined): string {
     })
     .join('')
   return `<button class="sid pick" id="btn-pick" aria-haspopup="listbox" aria-expanded="false">${label} ▾</button>
-    <div class="picklist" id="pick-list" role="listbox" aria-label="Sessions" hidden>${options}</div>`
+<div class="picklist" id="pick-list" role="listbox" aria-label="Sessions" hidden>${options}</div>`
 }
 
 function wirePicker(el: HTMLElement, go: (next: { s?: string }, opts?: { push?: boolean }) => void): void {

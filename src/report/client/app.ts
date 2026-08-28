@@ -252,14 +252,14 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
         ? 'Served from 127.0.0.1<br/>nothing leaves this machine.' + (liveN > 1 ? '<br/>alt+↑↓ switch session' : '')
         : 'Self-contained report.<br/>0 network requests.'
     const el = h(`<aside class="side">
-      <div class="brand">${mascotSvg(26)}<span class="name">orangu</span><span class="ver">v${esc(d.version)}</span></div>
-      <div class="sesscard"><div class="eyebrow">Session</div>${serveUi ? serveUi.pickerHtml(d, row) : `<div class="sid">${row ? esc(shortId(row.id)) + ' · ' + esc(row.projectSlug || row.source) : '–'}</div>`}</div>
-      <div class="navwrap"><nav aria-label="Report">${nav}</nav></div>
-      <div class="side-foot">
-        <button class="themebtn" id="btn-theme">◐ theme · ${esc(state.theme ?? 'auto')}</button>
-        <div class="note">${foot}</div>
-      </div>
-    </aside>`)
+<div class="brand">${mascotSvg(26)}<span class="name">orangu</span><span class="ver">v${esc(d.version)}</span></div>
+<div class="sesscard"><div class="eyebrow">Session</div>${serveUi ? serveUi.pickerHtml(d, row) : `<div class="sid">${row ? esc(shortId(row.id)) + ' · ' + esc(row.projectSlug || row.source) : '–'}</div>`}</div>
+<div class="navwrap"><nav aria-label="Report">${nav}</nav></div>
+<div class="side-foot">
+<button class="themebtn" id="btn-theme">◐ theme · ${esc(state.theme ?? 'auto')}</button>
+<div class="note">${foot}</div>
+</div>
+</aside>`)
     el.querySelector('#btn-theme')!.addEventListener('click', () => {
       const order = ['auto', 'light', 'dark']
       const cur = state.theme ?? 'auto'
@@ -273,15 +273,15 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
   function pageHead(ctx: Ctx): HTMLElement {
     const aud = ctx.audience
     const el = h(`<header class="page-head">
-      <div><h1>${esc(screenTitle(state.screen))}</h1><div class="sub">${esc(screenSub(ctx))}</div></div>
-      <div class="page-tools">
-        <div class="aud" role="group" aria-label="Detail level">
-          <button id="aud-dev" aria-pressed="${aud === 'dev'}">Detailed</button>
-          <button id="aud-plain" aria-pressed="${aud === 'plain'}">Plain language</button>
-        </div>
-        <button class="btn" id="btn-export">↓ Export HTML</button>
-      </div>
-    </header>`)
+<div><h1>${esc(screenTitle(state.screen))}</h1><div class="sub">${esc(screenSub(ctx))}</div></div>
+<div class="page-tools">
+<div class="aud" role="group" aria-label="Detail level">
+<button id="aud-dev" aria-pressed="${aud === 'dev'}">Detailed</button>
+<button id="aud-plain" aria-pressed="${aud === 'plain'}">Plain language</button>
+</div>
+<button class="btn" id="btn-export">↓ Export HTML</button>
+</div>
+</header>`)
     el.querySelector('#aud-dev')!.addEventListener('click', () => go({ audience: undefined }))
     el.querySelector('#aud-plain')!.addEventListener('click', () => go({ audience: 'plain' }))
     el.querySelector('#btn-export')!.addEventListener('click', () => {

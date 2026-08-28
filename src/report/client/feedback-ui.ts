@@ -75,29 +75,29 @@ function feedbackView(): HTMLElement {
     (category) => `<option value="${category}"${state.draft.category === category ? ' selected' : ''}>${category}</option>`,
   ).join('')
   const el = h(`<section class="feedback">
-    <div class="banner info"><b>Private until you choose otherwise.</b>&nbsp; Nothing from a session or report is attached. Opening the reviewed composer sends only the preview below to GitHub.</div>
-    <div class="card pad mb16">
-      <div class="card-title">Rant about the beta</div>
-      <p class="narrative">Be blunt. What was confusing, broken, slow, or unexpectedly good?</p>
-      <div class="feedback-grid">
-        <label>Short summary<input id="fb-summary" maxlength="240" value="${esc(state.draft.summary)}" placeholder="What should we fix first?"></label>
-        <label>Category<select id="fb-category">${categoryOptions}</select></label>
-      </div>
-      <label>Your experience<textarea id="fb-rant" rows="7" placeholder="Rant here…">${esc(state.draft.rant)}</textarea></label>
-      <label>What did you expect?<textarea id="fb-expected" rows="3">${esc(state.draft.expected)}</textarea></label>
-      <label>How can we reproduce it? <span class="muted">optional</span><textarea id="fb-reproduction" rows="3">${esc(state.draft.reproduction)}</textarea></label>
-      <button type="button" class="btn" id="fb-preview">Review exact report</button>
-    </div>
-    <div class="card pad mb16" id="fb-review">
-      <div class="card-title">Exact GitHub prefill</div>
-      <p class="small muted" id="fb-review-status">Review the title, body, and generic diagnostics before anything can leave localhost.</p>
-      <div class="eyebrow">Title</div><pre class="feedback-preview" id="fb-title-preview"></pre>
-      <div class="eyebrow">Body</div><pre class="feedback-preview" id="fb-body-preview"></pre>
-      <label class="feedback-check"><input type="checkbox" id="fb-reviewed"> I reviewed this exact report and want to send its prefill to GitHub.</label>
-      <button type="button" class="btn" id="fb-send">Send reviewed prefill to GitHub</button>
-      <div id="fb-fallback"></div>
-    </div>
-  </section>`)
+<div class="banner info"><b>Private until you choose otherwise.</b>&nbsp; Nothing from a session or report is attached. Opening the reviewed composer sends only the preview below to GitHub.</div>
+<div class="card pad mb16">
+<div class="card-title">Rant about the beta</div>
+<p class="narrative">Be blunt. What was confusing, broken, slow, or unexpectedly good?</p>
+<div class="feedback-grid">
+<label>Short summary<input id="fb-summary" maxlength="240" value="${esc(state.draft.summary)}" placeholder="What should we fix first?"></label>
+<label>Category<select id="fb-category">${categoryOptions}</select></label>
+</div>
+<label>Your experience<textarea id="fb-rant" rows="7" placeholder="Rant here…">${esc(state.draft.rant)}</textarea></label>
+<label>What did you expect?<textarea id="fb-expected" rows="3">${esc(state.draft.expected)}</textarea></label>
+<label>How can we reproduce it? <span class="muted">optional</span><textarea id="fb-reproduction" rows="3">${esc(state.draft.reproduction)}</textarea></label>
+<button type="button" class="btn" id="fb-preview">Review exact report</button>
+</div>
+<div class="card pad mb16" id="fb-review">
+<div class="card-title">Exact GitHub prefill</div>
+<p class="small muted" id="fb-review-status">Review the title, body, and generic diagnostics before anything can leave localhost.</p>
+<div class="eyebrow">Title</div><pre class="feedback-preview" id="fb-title-preview"></pre>
+<div class="eyebrow">Body</div><pre class="feedback-preview" id="fb-body-preview"></pre>
+<label class="feedback-check"><input type="checkbox" id="fb-reviewed"> I reviewed this exact report and want to send its prefill to GitHub.</label>
+<button type="button" class="btn" id="fb-send">Send reviewed prefill to GitHub</button>
+<div id="fb-fallback"></div>
+</div>
+</section>`)
 
   const summary = el.querySelector<HTMLInputElement>('#fb-summary')!
   const category = el.querySelector<HTMLSelectElement>('#fb-category')!

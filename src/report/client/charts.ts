@@ -121,10 +121,10 @@ export function proportionRows(items: Array<{ label: string; value: number; colo
   return items
     .map(
       (i) => `<div class="proprow" style="display:grid;grid-template-columns:130px 1fr 72px;gap:10px;align-items:center;padding:3px 0">
-      <div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.label)}${i.sub ? ` <span class="muted">${esc(i.sub)}</span>` : ''}</div>
-      <span class="trough"><i style="width:${((i.value / max) * 100).toFixed(1)}%;background:${i.color}"></i></span>
-      <div class="right mono small">${esc(fmt(i.value))}</div>
-    </div>`,
+<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(i.label)}${i.sub ? ` <span class="muted">${esc(i.sub)}</span>` : ''}</div>
+<span class="trough"><i style="width:${((i.value / max) * 100).toFixed(1)}%;background:${i.color}"></i></span>
+<div class="right mono small">${esc(fmt(i.value))}</div>
+</div>`,
     )
     .join('')
 }

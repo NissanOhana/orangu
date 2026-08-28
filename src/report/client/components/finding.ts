@@ -35,12 +35,12 @@ export function findingHtml(ins: Insight, audience: Audience, opts: FindingOpts 
   const cmd = opts.command ? `<div class="fcmd"><div class="eyebrow">Draft a proposal</div>${commandBlock(opts.command)}</div>` : ''
   const link = opts.link ? `<div style="margin-top:10px"><a class="btn-sm" href="${esc(opts.link.href)}">${esc(opts.link.label)}</a></div>` : ''
   return `<details class="finding${opts.open ? ' top' : ''}"${opts.open ? ' open' : ''}>
-    <summary><span class="chev" aria-hidden="true">▸</span><span class="sev ${esc(ins.severity)}" title="${esc(ins.severity)}"></span><b>${esc(plainSentence(ins.title, audience))}</b>${share ? `<span class="fsave" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${pill}</summary>
-    <div class="fbody">
-      ${detail}
-      <div class="rec"><b>Fix.</b> ${esc(plainSentence(ins.recommendation, audience))}</div>
-      ${link}${turnsBtn}
-      ${cmd}
-    </div>
-  </details>`
+<summary><span class="chev" aria-hidden="true">▸</span><span class="sev ${esc(ins.severity)}" title="${esc(ins.severity)}"></span><b>${esc(plainSentence(ins.title, audience))}</b>${share ? `<span class="fsave" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${pill}</summary>
+<div class="fbody">
+${detail}
+<div class="rec"><b>Fix.</b> ${esc(plainSentence(ins.recommendation, audience))}</div>
+${link}${turnsBtn}
+${cmd}
+</div>
+</details>`
 }
