@@ -35,6 +35,8 @@ export function topN<T>(xs: T[], n: number, key: (x: T) => number): T[] {
   return [...xs].sort((a, b) => key(b) - key(a)).slice(0, n)
 }
 export function fmtTokens(n: number): string {
+  // the B tier mirrors tok() in src/report/client/format.ts so fleet-wide totals never print as "1180.16M"
+  if (n >= 1e9) return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + 'B'
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M'
   if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k'
   return String(n)

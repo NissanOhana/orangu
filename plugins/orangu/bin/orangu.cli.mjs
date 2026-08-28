@@ -1067,6 +1067,7 @@ function topN(xs, n2, key) {
   return [...xs].sort((a, b) => key(b) - key(a)).slice(0, n2);
 }
 function fmtTokens(n2) {
+  if (n2 >= 1e9) return (n2 / 1e9).toFixed(n2 >= 1e10 ? 0 : 1) + "B";
   if (n2 >= 1e6) return (n2 / 1e6).toFixed(2) + "M";
   if (n2 >= 1e3) return (n2 / 1e3).toFixed(1) + "k";
   return String(n2);
