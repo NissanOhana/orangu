@@ -187,7 +187,8 @@ async function cmdBrief(flags: Record<string, string | boolean>): Promise<void> 
   process.stdout.write(paint(C.dim, `  latest session · ${analysis.session.id.slice(0, 8)} · ${s.turns} turns · ${fmtTokens(s.totalTokens)} tokens · ${fmtMs(s.activeMs)} active\n\n`))
   process.stdout.write('  ' + outcomeHeadline(s) + '\n\n')
   for (const line of nextStepLines(analysis)) process.stdout.write(line + '\n')
-  process.stderr.write(paint(C.dim, `\n  orangu report for the full picture · orangu --help for every command\n`))
+  // a hint, so stderr and silenced by --quiet like every other diagnostic (PROJECT.md §Logging contract)
+  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `\n  orangu report for the full picture · orangu --help for every command\n`))
 }
 
 /** Flags that were removed but would otherwise be ignored in silence, turning a CI gate into a no-op. */

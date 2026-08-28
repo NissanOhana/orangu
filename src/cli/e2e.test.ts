@@ -267,6 +267,12 @@ syncBuiltinESMExports()
     expect(bare.stderr).toContain('orangu --help for every command')
     // the sentence is the report's outcome headline, never a canned line
     expect(bare.stdout).toMatch(/commit|test run|file|request|Stopped by you|nothing committed/)
+    // the trailing hint is a diagnostic: --quiet silences it and keeps the answer itself
+    const quiet = spawnSync('node', [CLI, '--root', home.configDir, '--no-cache', '--quiet'], { encoding: 'utf8' })
+    expect(quiet.status, quiet.stderr).toBe(0)
+    expect(quiet.stderr).not.toContain('orangu --help for every command')
+    expect(quiet.stdout).toContain('latest session')
+    expect(quiet.stdout).toMatch(/top finding:|no findings: this session ran clean/)
 
     const help = run(['--help'])
     expect(help).toContain('usage')
