@@ -173,9 +173,12 @@ describe('plugin packaging', () => {
     const desc = /description:\s*(.+)/.exec(md)?.[1] ?? ''
     expect(desc).toContain('open the report for the session running right now')
     // `current` resolves inside the CLI (env id > pid record > cwd guess); the documented
-    // ${CLAUDE_SESSION_ID} substitution is the independent second path on older Claude Code
+    // ${CLAUDE_SESSION_ID} substitution is the independent second path on older Claude Code. It is
+    // the quoted flag form: an unsubstituted placeholder then fails loudly (`--session needs a session
+    // selector`) instead of dropping the word and building the latest session's report
     expect(md).toContain('`orangu report current --open`')
-    expect(md).toContain('`orangu report ${CLAUDE_SESSION_ID} --open`')
+    expect(md).toContain('`orangu report -s "${CLAUDE_SESSION_ID}" --open`')
+    expect(md).not.toContain('`orangu report ${CLAUDE_SESSION_ID} --open`')
     expect(md).toMatch(/`latest`, or `current`/)
     // the picker is not offered: the Bash tool has no TTY, where pick is just a numbered list
     expect(md).not.toContain('orangu pick')
