@@ -186,6 +186,21 @@ describe('peekCwd', () => {
 })
 
 describe('peekHead', () => {
+  it('a bare argument-less slash command yields the title to the next real prompt, else stands', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-peek-cmd-'))
+    const line = (content: string) => JSON.stringify({ type: 'user', cwd: '/w', message: { role: 'user', content } }) + '\n'
+    const bare = '<command-message>model</command-message>\n<command-name>/model</command-name>'
+    const withNext = join(dir, 'a.jsonl')
+    writeFileSync(withNext, line(bare) + line('Fix the flaky test'))
+    expect((await peekHead(withNext)).title).toBe('Fix the flaky test')
+    const alone = join(dir, 'b.jsonl')
+    writeFileSync(alone, line(bare))
+    expect((await peekHead(alone)).title).toBe('/model')
+    const withArgs = join(dir, 'c.jsonl')
+    writeFileSync(withArgs, line('<command-name>/orangu:improve</command-name><command-args>sg_000000000000</command-args>') + line('later'))
+    expect((await peekHead(withArgs)).title).toBe('/orangu:improve sg_000000000000')
+  })
+
   const line = (r: Record<string, unknown>) => JSON.stringify(r) + '\n'
   it('takes the custom title over the AI title over the first human prompt', () => {
     const dir = mkdtempSync(join(tmpdir(), 'orangu-peek-'))

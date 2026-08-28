@@ -409,6 +409,8 @@ export async function peekHead(path: string): Promise<TranscriptHead> {
     let custom: string | undefined
     let ai: string | undefined
     let prompt: string | undefined
+    // a bare `/model`-style command opening the session is a weak title: keep it only if nothing better follows
+    let bareCommand: string | undefined
     for (const line of head.split('\n')) {
       if (!line.startsWith('{')) continue
       let r: Record<string, unknown>
@@ -425,11 +427,17 @@ export async function peekHead(path: string): Promise<TranscriptHead> {
         const message = r['message']
         const content = message && typeof message === 'object' ? (message as { content?: unknown }).content : undefined
         const hasToolResult = Array.isArray(content) && content.some((b) => b && typeof b === 'object' && (b as { type?: unknown }).type === 'tool_result')
-        if (!hasToolResult) prompt = promptTitle(textOfContent(content))
+        if (!hasToolResult) {
+          const text = textOfContent(content)
+          const candidate = promptTitle(text)
+          if (candidate !== undefined && /^<command-(?:message|name)>/.test(text.trim()) && !COMMAND_ARGS_RE.exec(text)?.[1]?.trim()) {
+            if (bareCommand === undefined) bareCommand = candidate
+          } else prompt = candidate
+        }
       }
       if (out.cwd !== undefined && custom !== undefined) break
     }
-    const title = custom ?? ai ?? prompt
+    const title = custom ?? ai ?? prompt ?? bareCommand
     if (title) out.title = title
   } finally {
     await handle.close()

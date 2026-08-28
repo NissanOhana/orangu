@@ -7,7 +7,7 @@
  *
  * Precedence (top wins): machine flag > NO_COLOR (non-empty) > FORCE_COLOR > isTTY + TERM=dumb >
  * stream.getColorDepth(env). Animation additionally needs !CI, no NO_COLOR and
- * ORANGU_NO_ANIMATION !== '1'. NO_COLOR turns off dim/bold and the spinner too (a documented,
+ * ORANGU_NO_ANIMATION !== '1'. NO_COLOR and FORCE_COLOR=0 turn off dim/bold and the spinner too (a documented,
  * simpler contract than the letter of no-color.org); OSC 8 links answer to FORCE_HYPERLINK alone.
  */
 import { hostname } from 'node:os'
@@ -68,10 +68,11 @@ export function detectCaps(stream: StreamLike, env: NodeJS.ProcessEnv = process.
       color = depth >= 24 ? 3 : depth >= 8 ? 2 : depth >= 4 ? 1 : 0
     }
   }
-  // NO_COLOR reads as "no terminal tricks": it stops the spinner and the in-place redraws as well
-  // as colour (OSC 8 links stay; FORCE_HYPERLINK=0 is their switch)
+  // NO_COLOR and FORCE_COLOR=0 read as "no terminal tricks": they stop the spinner and the in-place
+  // redraws as well as colour (OSC 8 links stay; FORCE_HYPERLINK=0 is their switch)
   const noColorSet = env['NO_COLOR'] !== undefined && env['NO_COLOR'] !== ''
-  const animate = tty && !dumb && !ci && !opts.machine && !noColorSet && env['ORANGU_NO_ANIMATION'] !== '1'
+  const forceOff = env['FORCE_COLOR'] === '0' || env['FORCE_COLOR'] === 'false'
+  const animate = tty && !dumb && !ci && !opts.machine && !noColorSet && !forceOff && env['ORANGU_NO_ANIMATION'] !== '1'
   const unicode = platform !== 'win32' ? env['TERM'] !== 'linux' : Boolean(env['WT_SESSION'] || env['TERM_PROGRAM'] === 'vscode' || env['ConEmuTask'])
   const columns = Math.max(40, Number.isFinite(stream.columns) && (stream.columns as number) > 0 ? (stream.columns as number) : 80)
   const hyperlinks = !opts.machine && supportsHyperlinks(stream, env, ci)

@@ -48,6 +48,12 @@ describe('detectCaps', () => {
     expect(detectCaps(tty, { NO_COLOR: '1', TERM_PROGRAM: 'ghostty' }, posix).hyperlinks).toBe(true)
     expect(detectCaps(tty, { NO_COLOR: '1', TERM_PROGRAM: 'ghostty', FORCE_HYPERLINK: '0' }, posix).hyperlinks).toBe(false)
   })
+  it('FORCE_COLOR=0 / false on a terminal stops the spinner as NO_COLOR does; FORCE_COLOR=1 keeps it', () => {
+    expect(detectCaps(tty, { FORCE_COLOR: '0' }, posix)).toMatchObject({ color: 0, animate: false })
+    expect(detectCaps(tty, { FORCE_COLOR: 'false' }, posix)).toMatchObject({ color: 0, animate: false })
+    expect(detectCaps(tty, { FORCE_COLOR: '1' }, posix)).toMatchObject({ color: 1, animate: true })
+  })
+
   it('FORCE_COLOR maps 0/false -> 0, 1/true/empty -> 1, 2 -> 2, 3 -> 3, even on a pipe', () => {
     expect(detectCaps(pipe, { FORCE_COLOR: '0' }, posix).color).toBe(0)
     expect(detectCaps(pipe, { FORCE_COLOR: 'false' }, posix).color).toBe(0)

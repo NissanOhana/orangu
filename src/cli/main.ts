@@ -499,8 +499,8 @@ ${paint(out, 'bold', 'flags')}
   --verbose              also print the cache diagnostic (stderr)
   --plain                pick only: a numbered list instead of the prompt
   --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
-                         are honoured; NO_COLOR or ORANGU_NO_ANIMATION=1 also
-                         stops the spinner)
+                         are honoured; NO_COLOR, FORCE_COLOR=0 and
+                         ORANGU_NO_ANIMATION=1 also stop the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
   --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
