@@ -12666,7 +12666,7 @@ async function selectSession(sel, flags) {
   }
   if (sel === "current") {
     const found = await resolveCurrentSession(opts, process.env);
-    if (found.note && !flagBool(flags, "quiet")) process.stderr.write("  " + paint(err2, "dim", found.note) + "\n");
+    if (found.note && !flagBool(flags, "quiet") && !flagBool(flags, "json")) process.stderr.write("  " + paint(err2, "dim", found.note) + "\n");
     return found.ref;
   }
   const r = await resolveSession(sel, opts);

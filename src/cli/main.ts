@@ -121,7 +121,7 @@ async function selectSession(sel: string | undefined, flags: Record<string, stri
   if (sel === 'current') {
     // resolved to a concrete session here and never persisted or passed on as the alias
     const found = await resolveCurrentSession(opts, process.env)
-    if (found.note && !flagBool(flags, 'quiet')) process.stderr.write('  ' + paint(err, 'dim', found.note) + '\n')
+    if (found.note && !flagBool(flags, 'quiet') && !flagBool(flags, 'json')) process.stderr.write('  ' + paint(err, 'dim', found.note) + '\n')
     return found.ref
   }
   const r = await resolveSession(sel, opts)

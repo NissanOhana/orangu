@@ -464,11 +464,17 @@ syncBuiltinESMExports()
     expect(viaFlag.stdout.trim()).toMatch(/orangu-22222222\.html$/)
 
     const inside = { ...outside, CLAUDECODE: '1', CLAUDE_PROJECT_DIR: '/Users/test/Code/demo' }
-    const guessed = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--json'], { encoding: 'utf8', env: { ...outside, CLAUDECODE: '1', CLAUDE_PROJECT_DIR: '/Users/test/Code/demo' } })
+    const guessed = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--json'], { encoding: 'utf8', env: inside })
     expect(guessed.status, guessed.stderr).toBe(0)
     expect(id(guessed.stdout)).toBe(home.liveId)
-    expect(guessed.stderr).toMatch(/current: guessed 11111111 from cwd/)
-    expect(guessed.stdout + guessed.stderr).not.toMatch(ESCAPES)
+    // the guess is said on the human path only: a 2>&1 capture of --json stays parseable, like estimate
+    expect(guessed.stderr).toBe('')
+    const guessedHuman = spawnSync('node', [CLI, 'analyze', 'current', ...root], { encoding: 'utf8', env: inside })
+    expect(guessedHuman.status, guessedHuman.stderr).toBe(0)
+    expect(guessedHuman.stderr).toMatch(/^  current: guessed 11111111 from cwd/m)
+    expect(guessedHuman.stdout + guessedHuman.stderr).not.toMatch(ESCAPES)
+    const guessedQuiet = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--quiet'], { encoding: 'utf8', env: inside })
+    expect(guessedQuiet.stderr).toBe('')
 
     const absent = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--json'], { encoding: 'utf8', env: { ...outside, CLAUDE_CODE_SESSION_ID: '99999999-0000-4000-8000-000000000099' } })
     expect(absent.status).toBe(1)
