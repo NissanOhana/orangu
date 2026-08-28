@@ -550,7 +550,7 @@ describe('plugin packaging', () => {
     const apply = readText('plugin/skills/apply/SKILL.md')
     expect(improve).toContain('Never edit the target repository')
     expect(improve).toContain("--set '<id>' verified --verification")
-    expect(apply).toContain('status is exactly `proposed`')
+    expect(apply).toContain('`record.status` is exactly `proposed`')
     expect(apply).toContain("--set '<id>' applied --application '<application-path>'")
     expect(apply).toContain('applied locally, not yet verified on a later run')
     expect(apply).not.toMatch(/WebSearch|WebFetch|Agent|Task|mcp__/)

@@ -46,11 +46,11 @@ const VARIANTS: Array<[string, Caps]> = [
   ['machine', MACHINE_CAPS],
 ]
 
-const STEP: NextStep = { finding: 'Subagent results re-read in full', next: 'claude "/orangu:improve sg_42794f4ccd0b"' }
+const STEP: NextStep = { finding: 'Subagent results re-read in full', next: 'claude "/orangu:improve sg_0f0f0f0f0f0f"' }
 const FALLBACK: NextStep = {
   finding: 'Subagent results re-read in full',
   storeNote: 'EACCES: permission denied, mkdir',
-  next: 'claude "/orangu:improve sg_42794f4ccd0b --finding ' + 'eyJ'.repeat(160) + '"',
+  next: 'claude "/orangu:improve sg_0f0f0f0f0f0f --finding ' + 'eyJ'.repeat(160) + '"',
 }
 
 /** rows a paste must carry whole (the paths, the next, plugin and beta commands) wrap below 80 columns */
@@ -94,7 +94,7 @@ describe('summary renderers fit the layout', () => {
 
   it('the footer prints the short command and never a --finding payload', () => {
     const text = reportFooter(capsAt(80), { path: '/tmp/r.html', opened: false, step: STEP }).map(stripAnsi).join('\n')
-    expect(text).toContain('  next     claude "/orangu:improve sg_42794f4ccd0b"')
+    expect(text).toContain('  next     claude "/orangu:improve sg_0f0f0f0f0f0f"')
     expect(text).not.toContain(' --finding ')
     expect(text).toContain('  plugin   /plugin marketplace add NissanOhana/orangu')
     expect(text).toContain('           /plugin install orangu    (once, inside Claude Code)')
@@ -103,7 +103,7 @@ describe('summary renderers fit the layout', () => {
 
   it('below 51 columns the next and plugin commands wrap whole instead of being cut', () => {
     const lines = nextStepLines(capsAt(40, { color: 0 }), STEP)
-    expect(lines[1]).toBe('  next     claude "/orangu:improve sg_42794f4ccd0b"')
+    expect(lines[1]).toBe('  next     claude "/orangu:improve sg_0f0f0f0f0f0f"')
     expect(lines[2]).toBe('  plugin   /plugin marketplace add NissanOhana/orangu')
     // the install continuation fits at 40 columns on its own, so it drops only its dim note
     expect(lines[3]).toBe('           /plugin install orangu')
@@ -210,7 +210,7 @@ describe('persistNextStep', () => {
 describe('pickFrame / pickList', () => {
   const NOW = 1_800_000_000_000
   const rows: PickRow[] = [
-    { sessionId: '450f127b-d499-4fe0-8334-d15d8ba650c3', path: '/p/a.jsonl', projectSlug: '-Users-me-Code-orangu', project: 'orangu', title: '日本語のタイトル: refactor every module and run the tests until green ' + 'x'.repeat(80), sizeBytes: 7_200_000, mtimeMs: NOW - 10_000, running: true },
+    { sessionId: '4f1c7e00-0000-4000-8000-00000000f1c7', path: '/p/a.jsonl', projectSlug: '-Users-me-Code-orangu', project: 'orangu', title: '日本語のタイトル: refactor every module and run the tests until green ' + 'x'.repeat(80), sizeBytes: 7_200_000, mtimeMs: NOW - 10_000, running: true },
     { sessionId: '11111111-0000-4000-8000-00000000aaaa', path: '/p/b.jsonl', projectSlug: '-Users-me-Code-a-very-long-project-directory-name', project: 'a-very-long-project-directory-name', title: 'Fix foo test', sizeBytes: 123_400_000, mtimeMs: NOW - 2 * 60_000, running: true },
     { sessionId: '22222222-0000-4000-8000-00000000bbbb', path: '/p/c.jsonl', projectSlug: '-Users-me-Code-demo', project: 'demo', sizeBytes: 0, mtimeMs: NOW - 10 * 60_000, running: false },
     { sessionId: 'aaaaaaaa-0000-4000-8000-000000000001', path: '/p/d.jsonl', projectSlug: '-Users-me-Code-demo', project: 'demo', title: 'old', sizeBytes: 900, mtimeMs: NOW - 400 * 86_400_000, running: false },
@@ -244,12 +244,12 @@ describe('pickFrame / pickList', () => {
     const caps = capsAt(80, { color: 0 })
     const frame = pickFrame(caps, rows, { cursor: 1, start: 0, size: 2 }, counts, NOW)
     expect(frame[0]).toMatch(/^  orangu  choose a session +4 sessions, 2 running$/)
-    expect(frame[2]).toMatch(/^    ● 450f127b  /)
+    expect(frame[2]).toMatch(/^    ● 4f1c7e00  /)
     expect(frame[3]).toMatch(/^  > ● 11111111  Fix foo test {11}  a-very-long-p…    2m  123.4 MB  running$/)
     expect(frame[4]).toBe('      ↑↓ 2 more')
     expect(frame[5]).toContain('enter opens the report')
     const ascii = pickFrame(capsAt(80, { color: 0, unicode: false }), rows, { cursor: 0, start: 0, size: 4 }, counts, NOW)
-    expect(ascii[2]).toMatch(/^  > \* 450f127b  /)
+    expect(ascii[2]).toMatch(/^  > \* 4f1c7e00  /)
     expect(ascii[4]).toMatch(/^      22222222  \(no title\) {13}  demo {10}   10m    0.0 MB {9}$/)
     expect(ascii[7]).toContain('up/down or j k move | enter')
   })

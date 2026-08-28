@@ -136,3 +136,15 @@ describe('GET /export/:id.html', () => {
     expect(routes.find((r) => r.method === 'GET' && r.path === '/export/:id.html')).toBeDefined()
   })
 })
+
+describe('GET /export/:id.html download name', () => {
+  it('never lets a hostile session id shape the Content-Disposition parameter', async () => {
+    const a = await goldenAnalysis(GOLDEN_FIXTURES[0]!)
+    const id = 'x"; filename="invoice.pdf'
+    const ctx = makeCtx(new Map([[id, a]]))
+    const state = await get(findRoute(ctx), id)
+    expect(state.status).toBe(200)
+    expect(state.headers['Content-Disposition']).not.toContain('invoice.pdf')
+    expect(state.headers['Content-Disposition']).toMatch(/^attachment; filename="orangu-[A-Za-z0-9._-]+\.html"$/)
+  })
+})

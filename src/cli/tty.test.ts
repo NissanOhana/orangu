@@ -374,3 +374,20 @@ describe('decodeKey', () => {
     expect(CURSOR.up(3)).toBe('\x1b[3A')
   })
 })
+
+describe('stripAnsi against transcript-authored control characters', () => {
+  // Session titles come from the transcript (aiTitle is model-written, the first prompt is user-written):
+  // backspaces redraw a printed command into a different one, and an unterminated OSC swallows every
+  // following line into the window title. Both must be removed, not just well-formed escapes.
+  it('removes backspace, BEL, NUL, DEL and C1 controls', () => {
+    expect(stripAnsi('rm -rf /tmp/safe\b\b\b\b\b\b\b\b\b $HOME')).toBe('rm -rf /tmp/safe $HOME')
+    expect(stripAnsi('a\x07b\x00c\x7fd\x9be')).toBe('abcde')
+  })
+  it('removes an unterminated OSC sequence', () => {
+    expect(stripAnsi('title \x1b]0;hidden')).toBe('title ')
+    expect(stripAnsi('title \x1b]0;hidden\x07 visible')).toBe('title  visible')
+  })
+  it('keeps ordinary text, tabs and unicode', () => {
+    expect(stripAnsi('plain\ttext · ünïcödé 🦧')).toBe('plain\ttext · ünïcödé 🦧')
+  })
+})

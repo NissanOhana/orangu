@@ -10,6 +10,7 @@
  */
 import type { RouteFactory } from './types.js'
 import { HTML_ANTI_FRAMING_HEADERS } from './http-security.js'
+import { SESSION_ID_RE } from '../discover/discover.js'
 
 export const exportRoutes: RouteFactory = (ctx) => [
   {
@@ -27,7 +28,8 @@ export const exportRoutes: RouteFactory = (ctx) => [
       const { html } = ctx.renderReport(analysis, { redact: { scrub: true, stripText: !ctx.opts.exportIncludeText } })
       res.writeHead(200, {
         'Content-Type': 'text/html; charset=utf-8',
-        'Content-Disposition': `attachment; filename="orangu-${id}.html"`,
+        // a transcript filename is the id: only a canonical one may name the download (header parameter injection)
+        'Content-Disposition': `attachment; filename="orangu-${SESSION_ID_RE.test(id) ? id : 'session'}.html"`,
         ...HTML_ANTI_FRAMING_HEADERS,
       })
       res.end(html)

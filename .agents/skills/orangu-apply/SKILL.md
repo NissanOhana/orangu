@@ -19,9 +19,9 @@ Only after that check succeeds, read [the application contract](references/appli
 
 Stop unless all are true:
 
-- status is exactly `proposed`;
-- scope is `session` or `repo`; global proposals are proposal-only and must never be applied;
-- `proposal.v` is `1` and `manifestPath` exists;
+- `record.status` is exactly `proposed`;
+- `record.scope` is `session` or `repo`; global proposals are proposal-only and must never be applied;
+- `record.proposal.v` is `1` and `record.proposal.manifestPath` exists;
 - change, risk, verification, and affected files are understandable;
 - every target is a relative path inside the current repository, not `.git`, not a symlink escape, and not an unrelated user file.
 

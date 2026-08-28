@@ -31,6 +31,8 @@ export interface RedactOptions {
 }
 
 const PATTERNS: Array<[RegExp, string]> = [
+  // key material first: its body would otherwise be cut into the blobs and hashes below
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '‹private-key›'],
   // API keys / tokens (do these before generic ones)
   [/\bsk-ant-[A-Za-z0-9_-]{10,}/g, '‹anthropic-key›'],
   [/\bsk-proj-[A-Za-z0-9_-]{20,}/g, '‹openai-project-key›'],
@@ -38,6 +40,11 @@ const PATTERNS: Array<[RegExp, string]> = [
   [/\bwhsec_[A-Za-z0-9]{16,}/g, '‹stripe-webhook-secret›'],
   [/\bsk-[A-Za-z0-9]{20,}/g, '‹api-key›'],
   [/\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}/g, '‹github-token›'],
+  [/\bglpat-[A-Za-z0-9_-]{20,}/g, '‹gitlab-token›'],
+  [/\bnpm_[A-Za-z0-9]{30,}/g, '‹npm-token›'],
+  [/\bhf_[A-Za-z0-9]{30,}/g, '‹huggingface-token›'],
+  [/\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, '‹sendgrid-key›'],
+  [/\bdop_v1_[A-Za-z0-9]{60,}/g, '‹digitalocean-token›'],
   [/\bxox[baprs]-[A-Za-z0-9-]{10,}/g, '‹slack-token›'],
   [/\bAKIA[0-9A-Z]{16}\b/g, '‹aws-key›'],
   [/\bAIza[0-9A-Za-z_-]{30,}/g, '‹google-key›'],
@@ -47,7 +54,10 @@ const PATTERNS: Array<[RegExp, string]> = [
   [/\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s'"]+/gi, '‹db-url›'],
   // bearer/authorization
   [/\bBearer\s+[A-Za-z0-9._-]{12,}/g, 'Bearer ‹token›'],
-  [/\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*['"]?[^\s'"]{6,}/gi, '$1=‹redacted›'],
+  // key=value assignments, including env-style names around the secret word (AWS_SECRET_ACCESS_KEY=,
+  // DB_PASSWORD=, _authToken=). A bare plural such as `tokens:` never matches, and a value a rule above
+  // already masked (‹…›) keeps that marker.
+  [/\b([A-Za-z0-9_-]*?(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|auth)(?:[_-][A-Za-z0-9]+)*)\s*[:=]\s*['"]?[^\s'"‹]{6,}/gi, '$1=‹redacted›'],
   // email
   [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '‹email›'],
   // long hex/base64 blobs
@@ -65,9 +75,10 @@ let counter = 0
 function scrubStr(s: string): string {
   let out = s
   for (const [re, rep] of PATTERNS) {
-    out = out.replace(re, () => {
+    out = out.replace(re, (...m: unknown[]) => {
       counter++
-      return rep
+      // a replacer callback returns its text verbatim, so `$1` (the captured key name) is expanded here
+      return rep.replace(/\$(\d)/g, (_, i: string) => String(m[Number(i)] ?? ''))
     })
   }
   return out
