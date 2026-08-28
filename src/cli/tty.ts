@@ -76,13 +76,14 @@ export function detectCaps(stream: StreamLike, env: NodeJS.ProcessEnv = process.
 
 /**
  * The OSC 8 allowlist, after supports-hyperlinks: an unsupporting terminal ignores the sequence and
- * shows the text, but a log or a tmux pane without passthrough shows garbage, so the default is off.
+ * shows the text, but a log, a tmux pane without passthrough or a TERM=dumb wrapper (an Emacs shell
+ * inherits TERM_PROGRAM from the terminal that launched it) shows garbage, so the default is off.
  * FORCE_HYPERLINK (the name Claude Code documents too) overrides in both directions.
  */
 export function supportsHyperlinks(stream: StreamLike, env: NodeJS.ProcessEnv, ci = ciSet(env)): boolean {
   const force = env['FORCE_HYPERLINK']
   if (force !== undefined) return !(force === '0' || force === 'false' || force === '')
-  if (!stream.isTTY || ci || env['TEAMCITY_VERSION']) return false
+  if (!stream.isTTY || ci || env['TERM'] === 'dumb' || env['TEAMCITY_VERSION']) return false
   if (env['WT_SESSION']) return true
   if (/^(screen|tmux)/.test(env['TERM'] ?? '')) return false
   const prog = env['TERM_PROGRAM']

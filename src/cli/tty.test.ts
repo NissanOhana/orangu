@@ -56,8 +56,9 @@ describe('detectCaps', () => {
     // colour is allowed on a pipe by FORCE_COLOR, animation never is
     expect(detectCaps(pipe, { FORCE_COLOR: '3' }, posix).animate).toBe(false)
   })
-  it('TERM=dumb: no colour, no animation on a TTY', () => {
-    expect(detectCaps(tty, { TERM: 'dumb' }, posix)).toMatchObject({ tty: true, color: 0, animate: false })
+  it('TERM=dumb: no colour, no animation, no links on a TTY', () => {
+    expect(detectCaps(tty, { TERM: 'dumb' }, posix)).toMatchObject({ tty: true, color: 0, animate: false, hyperlinks: false })
+    expect(detectCaps(tty, { TERM: 'dumb', TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.5.0' }, posix).hyperlinks).toBe(false)
   })
   it('CI keeps colour but never animates; CI=false and CI="" opt out', () => {
     expect(detectCaps(tty, { CI: '1' }, posix)).toMatchObject({ color: 2, animate: false })
@@ -88,6 +89,9 @@ describe('supportsHyperlinks', () => {
     expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.0.1' })).toBe(false)
     expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.5.0', CI: '1' })).toBe(false)
     expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.5.0', TERM: 'tmux-256color' })).toBe(false)
+    // TERM_PROGRAM is inherited: an Emacs shell inside iTerm keeps it while TERM=dumb
+    expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'iTerm.app', TERM_PROGRAM_VERSION: '3.5.0', TERM: 'dumb' })).toBe(false)
+    expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'ghostty', TERM: 'dumb' })).toBe(false)
     expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'vscode', TERM_PROGRAM_VERSION: '1.72.0' })).toBe(true)
     expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'vscode', TERM_PROGRAM_VERSION: '1.60.0' })).toBe(false)
     expect(supportsHyperlinks(tty, { TERM_PROGRAM: 'vscode', TERM_PROGRAM_VERSION: '0.45.1' })).toBe(true)
