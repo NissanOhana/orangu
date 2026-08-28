@@ -1,6 +1,6 @@
 ---
 name: harness
-description: Review what your harness declares against what your sessions actually used, across one repository or every session on the machine, and propose ranked changes to instruction files, hooks, skills, agents, MCP servers, plugins, and workflow config. Use when the user asks why the same problem keeps recurring, wants a repo or global harness review, or asks what to change in their setup. Not for one session: /orangu:analyze. Not for one finding: /orangu:improve.
+description: Review what your harness declares against what your sessions actually used, across one repository or every session on the machine, and propose ranked changes to instruction files, hooks, skills, agents, MCP servers, plugins, and workflow config, then apply the repo items you approve by id. Use when the user asks why the same problem keeps recurring, wants a repo or global harness review, or asks what to change in their setup. Not for one session: /orangu:analyze. Not for one finding: /orangu:improve.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**), Skill(orangu:apply)
 ---
 
@@ -82,10 +82,10 @@ Explain any record dropped by deduplication.
 
 ## 5. Report, approve, and apply
 
-Return the numbered, ranked plan and proposal paths: per item the change, its class, evidence and example sessions, the expected quality, token, or millisecond effect (labelled estimated where it is), effort, risk, and the next-run check. End with what was not recommended, and why.
+Return the numbered, ranked plan and proposal paths: per item its `<id>`, the change, its class, the manifest `files` it writes (for `hook`, `mcp`, or `script-cli`, also the exact command it introduces), evidence and example sessions, the expected quality, token, or millisecond effect (labelled estimated where it is), effort, risk, and the next-run check. End with what was not recommended, and why.
 
 Each repo proposal's next action is `/orangu:apply <id>`; it must remain `applied` until Orangu can compare later repository sessions. For every global proposal say review only: global apply and verification are not supported. Say plainly that this review did not edit the target repository; nothing is applied or verified yet.
 
-Ask which items the user approves (AskUserQuestion); apply nothing without explicit approval. Apply approved repo proposals in order with `/orangu:apply <id>` through the Skill tool, one id per invocation, one receipt per id. Stop at the first failure, report it, leave the working tree for review. Never apply a global proposal. If the Skill tool is unavailable or denied, hand the user the ordered `/orangu:apply <id>` list instead.
+Ask which items the user approves (AskUserQuestion), each option labelled with its `<id>`, title, and files; apply nothing without explicit approval. An answer approves only the `<id>`s it names verbatim; if it is ambiguous or a number alone, stop and ask again. Apply approved repo proposals in order with `/orangu:apply <id>` through the Skill tool, one id per invocation, one receipt per id, echoing that exact `<id>`, title, and files just before each invocation. Stop at the first failure, report it, leave the working tree for review. Never apply a global proposal. If the Skill tool is unavailable or denied, hand the user the ordered `/orangu:apply <id>` list instead.
 
 Then offer `/orangu:feedback` with the matching repo or global context once; never launch it unless the user accepts.
