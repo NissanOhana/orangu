@@ -6,8 +6,9 @@
  * colour, and `--json` / `--quiet` set `machine: true` to beat every environment variable.
  *
  * Precedence (top wins): machine flag > NO_COLOR (non-empty) > FORCE_COLOR > isTTY + TERM=dumb >
- * stream.getColorDepth(env). Animation additionally needs !CI and ORANGU_NO_ANIMATION !== '1'.
- * NO_COLOR turns off dim/bold too (a documented, simpler contract than the letter of no-color.org).
+ * stream.getColorDepth(env). Animation additionally needs !CI, no NO_COLOR and
+ * ORANGU_NO_ANIMATION !== '1'. NO_COLOR turns off dim/bold and the spinner too (a documented,
+ * simpler contract than the letter of no-color.org); OSC 8 links answer to FORCE_HYPERLINK alone.
  */
 import { hostname } from 'node:os'
 import { pathToFileURL } from 'node:url'
@@ -67,7 +68,10 @@ export function detectCaps(stream: StreamLike, env: NodeJS.ProcessEnv = process.
       color = depth >= 24 ? 3 : depth >= 8 ? 2 : depth >= 4 ? 1 : 0
     }
   }
-  const animate = tty && !dumb && !ci && !opts.machine && env['ORANGU_NO_ANIMATION'] !== '1'
+  // NO_COLOR reads as "no terminal tricks": it stops the spinner and the in-place redraws as well
+  // as colour (OSC 8 links stay; FORCE_HYPERLINK=0 is their switch)
+  const noColorSet = env['NO_COLOR'] !== undefined && env['NO_COLOR'] !== ''
+  const animate = tty && !dumb && !ci && !opts.machine && !noColorSet && env['ORANGU_NO_ANIMATION'] !== '1'
   const unicode = platform !== 'win32' ? env['TERM'] !== 'linux' : Boolean(env['WT_SESSION'] || env['TERM_PROGRAM'] === 'vscode' || env['ConEmuTask'])
   const columns = Math.max(40, Number.isFinite(stream.columns) && (stream.columns as number) > 0 ? (stream.columns as number) : 80)
   const hyperlinks = !opts.machine && supportsHyperlinks(stream, env, ci)

@@ -48,7 +48,7 @@ Use `orangu --help` for flags and output controls.
 
 `orangu report` writes only the report path to stdout, so `orangu report | xargs open` works; its summary (the check line, the path, the top finding, and the next command) goes to stderr. `orangu analyze` prints the measurement block on stdout and the same footer on stderr; bare `orangu` prints everything on stdout. The next command is the short `claude "/orangu:improve sg_..."`: the suggestion record is stored under `~/.orangu` at report time, and only when that store cannot be written does the long `--finding` form appear, with a line saying so.
 
-Colour, the spinner, and `file://` hyperlinks appear only on an interactive terminal and are off under `--json`, `--quiet`, `--no-color`, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, `CI`, or a pipe; `ORANGU_NO_ANIMATION=1` stops the spinner alone. `--json` and `--quiet` output never carries an escape sequence. `--verbose` adds the cache diagnostic on stderr.
+Colour appears only on an interactive terminal and is off under `--json`, `--quiet`, `--no-color`, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or a pipe (`FORCE_COLOR=1|2|3` paints a pipe). The spinner needs the same terminal and is also off under `CI`, `NO_COLOR`, and `ORANGU_NO_ANIMATION=1` (the last one stops the spinner alone). `file://` hyperlinks (OSC 8) appear on terminals known to render them; `FORCE_HYPERLINK=0|1` overrides, and `NO_COLOR` leaves them alone. `--json` and `--quiet` output never carries an escape sequence. `--verbose` adds the cache diagnostic on stderr.
 
 ## Report and app
 

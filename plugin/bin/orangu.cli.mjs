@@ -6628,7 +6628,8 @@ function detectCaps(stream, env = process.env, opts = {}) {
       color = depth >= 24 ? 3 : depth >= 8 ? 2 : depth >= 4 ? 1 : 0;
     }
   }
-  const animate = tty && !dumb && !ci && !opts.machine && env["ORANGU_NO_ANIMATION"] !== "1";
+  const noColorSet = env["NO_COLOR"] !== void 0 && env["NO_COLOR"] !== "";
+  const animate = tty && !dumb && !ci && !opts.machine && !noColorSet && env["ORANGU_NO_ANIMATION"] !== "1";
   const unicode = platform2 !== "win32" ? env["TERM"] !== "linux" : Boolean(env["WT_SESSION"] || env["TERM_PROGRAM"] === "vscode" || env["ConEmuTask"]);
   const columns = Math.max(40, Number.isFinite(stream.columns) && stream.columns > 0 ? stream.columns : 80);
   const hyperlinks = !opts.machine && supportsHyperlinks(stream, env, ci);
@@ -13005,7 +13006,8 @@ ${paint(out2, "bold", "flags")}
   --verbose              also print the cache diagnostic (stderr)
   --plain                pick only: a numbered list instead of the prompt
   --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
-                         are honoured; ORANGU_NO_ANIMATION=1 stops the spinner)
+                         are honoured; NO_COLOR or ORANGU_NO_ANIMATION=1 also
+                         stops the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
   --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)

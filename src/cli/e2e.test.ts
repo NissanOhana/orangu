@@ -58,6 +58,17 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
       expect(rendered(out), verb).not.toMatch(/analyzing.*cache/)
     }
   })
+  it('NO_COLOR=1 on a terminal: no colour, no spinner, no cursor or erase sequences', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-nocolor-')))
+    const { out, status } = runPty(['report', home.endedId, '--root', home.configDir, '--no-open', '--no-cache'], { NO_COLOR: '1' })
+    expect(status, out).toBe(0)
+    expect(out).not.toMatch(/\x1b\[[0-9;]*m/)
+    expect(out).not.toContain('\x1b[?25')
+    expect(out).not.toContain('\x1b[2K')
+    expect(out).not.toContain('analyzing')
+    expect(rendered(out)).toMatch(/^ {2}✓ analyzed /m)
+    expect(rendered(out)).toMatch(/^ {2}next {5}claude "\/orangu:improve sg_[0-9a-f]{12}"$/m)
+  })
 })
 
 describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {

@@ -41,9 +41,12 @@ describe('detectCaps', () => {
     expect(detectCaps({ isTTY: true }, {}, posix).columns).toBe(80)
     expect(detectCaps({ isTTY: true, columns: 12 }, {}, posix).columns).toBe(40)
   })
-  it('NO_COLOR (non-empty) beats FORCE_COLOR; an empty NO_COLOR is ignored', () => {
-    expect(detectCaps(tty, { NO_COLOR: '1', FORCE_COLOR: '3' }, posix).color).toBe(0)
-    expect(detectCaps(tty, { NO_COLOR: '' }, posix).color).toBe(2)
+  it('NO_COLOR (non-empty) beats FORCE_COLOR and stops the spinner too; an empty NO_COLOR is ignored', () => {
+    expect(detectCaps(tty, { NO_COLOR: '1', FORCE_COLOR: '3' }, posix)).toMatchObject({ color: 0, animate: false })
+    expect(detectCaps(tty, { NO_COLOR: '' }, posix)).toMatchObject({ color: 2, animate: true })
+    // links are not colour: NO_COLOR keeps them, FORCE_HYPERLINK=0 is their switch
+    expect(detectCaps(tty, { NO_COLOR: '1', TERM_PROGRAM: 'ghostty' }, posix).hyperlinks).toBe(true)
+    expect(detectCaps(tty, { NO_COLOR: '1', TERM_PROGRAM: 'ghostty', FORCE_HYPERLINK: '0' }, posix).hyperlinks).toBe(false)
   })
   it('FORCE_COLOR maps 0/false -> 0, 1/true/empty -> 1, 2 -> 2, 3 -> 3, even on a pipe', () => {
     expect(detectCaps(pipe, { FORCE_COLOR: '0' }, posix).color).toBe(0)
