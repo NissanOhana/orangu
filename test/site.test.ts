@@ -559,12 +559,14 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(src).not.toContain('class="card role"')
   })
 
-  it('presents deterministic evidence, optional interpretation, and explicitly attested application as collaborators', () => {
+  it('presents deterministic evidence, optional interpretation, and receipted application as collaborators', () => {
     const trust = src.match(/<section id="trust"[\s\S]*?<\/section>/)?.[0] ?? ''
     expect(trust).toContain('Bounded local evidence')
     expect(trust).toContain('Optional AI interpretation')
     expect(trust).toContain('Explicit reviewed changes')
-    expect(trust).toContain('attestation shape and file list')
+    // B7 vocabulary: one noun, "receipt"; the internal nouns never reach the public page
+    expect(trust).toContain("receipt's shape and file list")
+    expect(src).not.toMatch(/attestation|preflight/i)
     expect(trust).not.toContain('edits the declared repository files')
     expect(trust).toContain('No instrumentation')
     expect(trust).toContain('no upload')
@@ -700,6 +702,21 @@ describe('site/index.html (generated landing)', () => {
       encoding: 'utf8',
     })
     expect(out).toContain('offline OK')
+  })
+})
+
+// C3: the page leans on privacy/determinism/security promises, so the footer links the documents that
+// make them and discloses the one thing the page itself loads (Google Fonts; generated reports load nothing).
+describe('landing footer', () => {
+  const src = readFileSync(join(root, 'site/index.src.html'), 'utf8')
+  const footer = src.match(/<footer>[\s\S]*?<\/footer>/)?.[0] ?? ''
+  it('links the privacy, determinism and security documents', () => {
+    for (const doc of ['docs/PRIVACY.md', 'docs/DETERMINISM.md', 'SECURITY.md']) {
+      expect(footer).toContain(`https://github.com/NissanOhana/orangu/blob/main/${doc}`)
+    }
+  })
+  it('discloses the font load and the report promise', () => {
+    expect(footer).toContain('This page loads Google Fonts; generated reports load nothing.')
   })
 })
 

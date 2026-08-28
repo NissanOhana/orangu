@@ -338,7 +338,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
           <button id="demo-tab-timeline" type="button" role="tab" aria-controls="demo-panel-timeline" aria-selected="false" tabindex="-1" data-demo-view="timeline">Timeline</button>
           <button id="demo-tab-tools" type="button" role="tab" aria-controls="demo-panel-tools" aria-selected="false" tabindex="-1" data-demo-view="tools">Tools &amp; calls</button>
           <button id="demo-tab-suggest" type="button" role="tab" aria-controls="demo-panel-suggest" aria-selected="true" tabindex="0" data-demo-view="suggest" aria-current="page" class="on">Suggestions</button>
-          <span class="dim">Repo / Global</span>
+          <span class="dim" role="presentation">Repo / Global</span>
         </nav>
         <div class="demo-main">
           <div class="demo-view" id="demo-panel-overview" data-demo-view="overview" role="tabpanel" aria-labelledby="demo-tab-overview" hidden>
@@ -379,7 +379,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
             <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic preflight check with explicit pass and fail output. <code>orangu-improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored check attestation. Orangu validates its shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>orangu-improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored receipt of the checks it ran. Orangu validates the receipt's shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
             </div>
             <p class="demo-note">Local code measures and matches. An optional skill drafts. The browser only copies a handoff. A verified session comparison means its reviewed metrics passed on selected later evidence; it is not a causal or overall-quality claim.</p>
           </div>
@@ -431,7 +431,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
       <div class="grid g300" style="margin-bottom:22px">
         <div class="card"><h3>Bounded local evidence</h3><p><code>orangu evidence</code> accepts a supported session or current Orangu Analysis, SlimAnalysis, or Aggregate output. It redacts, bounds, matches, and ranks without a model or network request.</p></div>
         <div class="card"><h3>Optional AI interpretation</h3><p><code>orangu-improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
-        <div class="card"><h3>Explicit reviewed changes</h3><p><code>orangu-apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the attestation shape and file list. Session-only later evidence owns the current verification claim.</p></div>
+        <div class="card"><h3>Explicit reviewed changes</h3><p><code>orangu-apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the receipt's shape and file list. Session-only later evidence owns the current verification claim.</p></div>
       </div>
       <div class="compare" aria-label="How Orangu turns local evidence into improvement">
         <div class="compare-row"><b>Raw transcripts</b><span>Contain the record, but leave the reading and synthesis to you.</span></div>
@@ -494,6 +494,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
 
 <footer>
   <p>MIT © Nissan Ohana · the mascot is CC0, put orangu on a sticker · <a href="https://github.com/NissanOhana/orangu">github.com/NissanOhana/orangu</a></p>
+  <p class="legal">The promises in full: <a href="https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md">privacy</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md">determinism</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/SECURITY.md">security</a>. This page loads Google Fonts; generated reports load nothing.</p>
   <p class="legal">For humans and for machines: <a href="llms.txt">llms.txt</a> is the short index for agents that read this page; <a href="llms-full.txt">llms-full.txt</a> inlines the docs.</p>
   <p class="legal">orangu is not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.</p>
 </footer>
