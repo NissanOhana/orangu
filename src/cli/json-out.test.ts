@@ -21,8 +21,14 @@ async function analysisWithSecrets(): Promise<Analysis> {
 }
 
 describe('renderAnalysisJson', () => {
-  it('masks a planted anthropic key and email by default (policy)', async () => {
+  it('never emits a planted anthropic key or email by default (policy)', async () => {
     const out = renderAnalysisJson(await analysisWithSecrets(), {})
+    expect(out).not.toContain(SECRET)
+    expect(out).not.toContain(EMAIL)
+  })
+
+  it('--include-text keeps the prompt text but still masks the secrets in it', async () => {
+    const out = renderAnalysisJson(await analysisWithSecrets(), { 'include-text': true })
     expect(out).not.toContain(SECRET)
     expect(out).not.toContain(EMAIL)
     expect(out).toContain('‹anthropic-key›')
@@ -42,6 +48,18 @@ describe('renderAnalysisJson', () => {
     expect(obj['turns']).toBeUndefined()
     expect(obj['events']).toBeUndefined()
     expect(out).not.toContain(SECRET)
+  })
+
+  // The report and `analyze --json` apply the same text policy: transcript-derived previews and
+  // Insight.detail are stripped by default and kept only with --include-text (--help: "default: stripped").
+  it('strips prompt previews by default and keeps them with --include-text', async () => {
+    const human = (out: string) => (JSON.parse(out) as Analysis).turns.filter((t) => t.kind === 'human').map((t) => t.promptPreview)
+    const stripped = human(renderAnalysisJson(await analysisWithSecrets(), {}))
+    expect(stripped).toEqual([''])
+    const kept = human(renderAnalysisJson(await analysisWithSecrets(), { 'include-text': true }))
+    expect(kept).toHaveLength(1)
+    expect(kept[0]).toContain('please fix the build')
+    expect(kept[0]).toContain('‹anthropic-key›')
   })
 
   it('--quiet emits compact JSON', async () => {

@@ -13,7 +13,7 @@
 import { existsSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
-import { parseArgs, flagStr, flagBool } from './args.js'
+import { parseArgs, flagStr, flagBool, unknownFlags } from './args.js'
 import { candidatesForPrefix, claudeRoots, findLatestSession, listSessions, resolveSession, type SessionRef } from '../discover/discover.js'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
@@ -59,8 +59,9 @@ const FOOTER_COLUMNS = 80
  * The next step after a session was analyzed: the top finding and the improve command the report
  * shows for it (same PlanRow -> sg_ id -> `--finding` handoff, so the terminal and the report name
  * the same proposal). Every line fits FOOTER_COLUMNS except the last: the `--finding` payload is
- * one token that a paste has to carry whole (the CLI persists no record for a bare sg_ id), so it
- * stands alone, labelled, after the readable lines. A clean session says so and names no command.
+ * one token that a paste has to carry whole (the CLI persists no record for a bare sg_ id, so the
+ * id alone is a label, never printed as a runnable command), so it stands alone, labelled, after
+ * the readable lines. A clean session says so and names no command.
  */
 function nextStepLines(a: Analysis): string[] {
   const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0]
@@ -70,7 +71,7 @@ function nextStepLines(a: Analysis): string[] {
   const title = top.title.length > FOOTER_COLUMNS - label.length ? top.title.slice(0, FOOTER_COLUMNS - label.length - 1) + '…' : top.title
   return [
     `${label}${title}`,
-    `  next step:    claude "/orangu:improve ${id}"  (copy-ready below)`,
+    `  next step:    /orangu:improve on ${id} (copy-ready command below)`,
     '  needs the plugin once, inside Claude Code:',
     `    ${PLUGIN_INSTALL}`,
     '  copy-ready:   the same command with its evidence attached; paste this one',
@@ -169,6 +170,7 @@ async function cmdReport(sel: string | undefined, flags: Record<string, string |
   // the next step comes first; the beta offer is the last line, never the most prominent one
   printNextStep(analysis, flags)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback('report')
+  thresholdExit(analysis, flags)
 }
 
 async function cmdAnalyze(sel: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
@@ -200,6 +202,7 @@ async function cmdBrief(flags: Record<string, string | boolean>): Promise<void> 
   for (const line of nextStepLines(analysis)) process.stdout.write(line + '\n')
   // a hint, so stderr and silenced by --quiet like every other diagnostic (PROJECT.md §Logging contract)
   if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `\n  orangu report for the full picture · orangu --help for every command\n`))
+  thresholdExit(analysis, flags)
 }
 
 /** Flags that were removed but would otherwise be ignored in silence, turning a CI gate into a no-op. */
@@ -207,10 +210,28 @@ const RETIRED_FLAGS: Record<string, string> = {
   'max-cost': '--max-cost was removed; use --max-tokens <n>',
 }
 
+/** The CI gate flags read by thresholdExit; they gate ONE session, so only the session verbs accept them. */
+const SESSION_GATE_FLAGS = ['max-tokens', 'fail-on-hook-errors'] as const
+const SESSION_GATE_VERBS = new Set(['report', 'html', 'analyze', 'a'])
+
+/**
+ * Every verb parses the same flag table, so a retired flag, an unknown flag, or a session gate on a
+ * verb that never evaluates it fails here before any verb runs. A gate that silently stops gating
+ * is worse than a removed gate: exit non-zero and say what to use.
+ */
+function rejectUnusableFlags(command: string | undefined, flags: Record<string, string | boolean>): void {
+  for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== undefined) fail(message)
+  const unknown = unknownFlags(flags)
+  if (unknown.length) fail(`unknown flag${unknown.length > 1 ? 's' : ''} ${unknown.join(', ')}. Run: orangu --help`)
+  if (command !== undefined && !SESSION_GATE_VERBS.has(command)) {
+    for (const flag of SESSION_GATE_FLAGS) {
+      if (flags[flag] !== undefined) fail(`--${flag} gates one session: use it with orangu analyze or orangu report`)
+    }
+  }
+}
+
 function thresholdExit(analysis: ReturnType<typeof analyzeSession>, flags: Record<string, string | boolean>): void {
   let bad = false
-  // A gate that silently stops gating is worse than a removed gate: exit non-zero and say what to use.
-  for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== undefined) fail(message)
   const maxTokensStr = flagStr(flags, 'max-tokens')
   if (maxTokensStr !== undefined && Number.isNaN(Number(maxTokensStr))) fail(`--max-tokens must be a number, got "${maxTokensStr}"`)
   const maxTokens = Number(maxTokensStr)
@@ -447,8 +468,8 @@ ${paint(C.b, 'flags')}
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache (or ORANGU_NO_CACHE=1)
   --jobs <n>             worker threads for repo/global scans (default: CPUs - 1; 1 = sequential)
-  --max-tokens <n>       exit non-zero if a session's total tokens exceed this (CI)
-  --fail-on-hook-errors  exit non-zero if any hook errored (CI)
+  --max-tokens <n>       exit non-zero if the session's total tokens exceed this (CI; analyze, report)
+  --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
 ${paint(C.dim, 'privacy: reports are generated locally, make zero network requests, and redact secrets by default.')}
@@ -471,6 +492,7 @@ async function main(): Promise<void> {
     printHelp()
     return
   }
+  rejectUnusableFlags(command, flags)
   // no verb: the loop in one screen (--json has no verb to serialise, so it keeps printing help)
   if (!command) {
     if (flagBool(flags, 'json')) printHelp()
@@ -511,5 +533,7 @@ if (isPoolWorker()) {
   // this process is a worker thread of the aggregate pool: become one, never run the CLI
   runPoolWorker()
 } else {
-  main().catch((e) => fail(String(e instanceof Error ? e.stack ?? e.message : e)))
+  // A thrown Error is a user-facing message (not found, bad flag value); the stack is noise unless
+  // ORANGU_DEBUG=1 asks for it.
+  main().catch((e) => fail(e instanceof Error ? (process.env['ORANGU_DEBUG'] === '1' ? e.stack ?? e.message : e.message) : String(e)))
 }

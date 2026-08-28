@@ -35,6 +35,54 @@ const BOOL_FLAGS = new Set([
   'for-apply',
 ])
 
+/**
+ * Every flag any verb reads (main.ts, watch.ts, commands/*). A flag outside this set is a typo or a
+ * removed option, and the CLI fails on it instead of silently ignoring it: an ignored `--max-tokns`
+ * in CI is a gate that stopped gating. Retired flags stay listed so their own message fires.
+ */
+export const KNOWN_FLAGS = new Set([
+  ...BOOL_FLAGS,
+  ...SHORT_VALUE_FLAGS,
+  'out',
+  'root',
+  'config',
+  'cwd',
+  'limit',
+  'no-cache',
+  'jobs',
+  'j',
+  'max-tokens',
+  'max-cost',
+  'port',
+  'p',
+  'max-live',
+  'context',
+  'depth',
+  'scope',
+  'session',
+  's',
+  'rule',
+  'insight',
+  'title',
+  'finding',
+  'suggestion',
+  'receipt',
+  'show',
+  'set',
+  'proposal',
+  'manifest',
+  'application',
+  'verification',
+  'cohort',
+])
+
+/** Flags the parser saw that no verb reads, formatted the way the user typed them. */
+export function unknownFlags(flags: Record<string, string | boolean>): string[] {
+  return Object.keys(flags)
+    .filter((k) => !KNOWN_FLAGS.has(k))
+    .map((k) => (k.length === 1 ? '-' : '--') + k)
+}
+
 export function parseArgs(argv: string[]): ParsedArgs {
   const positionals: string[] = []
   const flags: Record<string, string | boolean> = {}

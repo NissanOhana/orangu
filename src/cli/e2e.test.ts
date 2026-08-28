@@ -228,7 +228,9 @@ syncBuiltinESMExports()
     expect(next).toBeGreaterThan(-1)
     expect(offer).toBeGreaterThan(next)
     expect(human.stderr).toContain('top finding:')
-    expect(human.stderr).toMatch(/next step: {4}claude "\/orangu:improve sg_[0-9a-f]{12}" {2}\(copy-ready below\)/)
+    // the bare sg_ id is a label (no record exists for it yet); only the --finding form is runnable
+    expect(human.stderr).toMatch(/next step: {4}\/orangu:improve on sg_[0-9a-f]{12} \(copy-ready command below\)/)
+    expect(human.stderr).not.toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12}"/)
     expect(human.stderr).toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12} --finding /)
     expect(human.stderr).toContain('/plugin install orangu')
     expect(human.stdout.trim().endsWith('.html')).toBe(true)
@@ -326,6 +328,57 @@ syncBuiltinESMExports()
       expect(r.code, 'a removed gate flag must not exit 0').not.toBe(0)
       expect(r.err).toContain('--max-cost was removed')
       expect(r.err).toContain('--max-tokens')
+    })
+
+    // `report` is a session verb too: the gate documented for CI fires on it, and the retired flag
+    // fails on EVERY verb (it is checked once, before dispatch), never exit 0 by accident.
+    it('report honours --max-tokens and rejects --max-cost like analyze does', async () => {
+      const out = join(await mkdtemp(join(tmpdir(), 'orangu-cli-gate-report-')), 'r.html')
+      const report = (extra: string[]) => ['report', 'aaaaaaaa', '--root', home.configDir, '--quiet', '--no-open', '-o', out, ...extra]
+      const over = runExit(report(['--max-tokens', '1']))
+      expect(over.code).toBe(2)
+      expect(over.err).toContain('--max-tokens')
+      expect(runExit(report(['--max-tokens', '999999999'])).code).toBe(0)
+      const retired = runExit(report(['--max-cost', '5']))
+      expect(retired.code).toBe(1)
+      expect(retired.err).toContain('--max-cost was removed')
+      expect(runExit(['global', '--root', home.configDir, '--quiet', '--limit', '1', '--max-cost', '5']).err).toContain('--max-cost was removed')
+    })
+
+    it('a session gate on an aggregate verb fails instead of silently passing', () => {
+      const r = runExit(['global', '--root', home.configDir, '--quiet', '--limit', '1', '--max-tokens', '1'])
+      expect(r.code).toBe(1)
+      expect(r.err).toContain('--max-tokens gates one session')
+    })
+
+    it('an unknown flag fails the run (a typo in a CI flag is not a no-op)', () => {
+      const r = runExit(args(['--json', '--max-tokns', '1']))
+      expect(r.code).toBe(1)
+      expect(r.err).toContain('unknown flag --max-tokns')
+      expect(r.err).toContain('orangu --help')
+      expect(runExit(args(['--json', '-x'])).err).toContain('unknown flag -x')
+    })
+
+    // --help promises "(default: stripped)" for analyze output too: previews and Insight.detail
+    // (transcript-derived copy) leave `analyze --json` only with --include-text, exactly like the report.
+    it('analyze --json strips prompt previews and insight detail unless --include-text', () => {
+      const previews = (out: string): string[] => {
+        const a = JSON.parse(out) as { turns: Array<{ kind: string; promptPreview: string }>; insights: Array<{ detail: string }> }
+        return [...a.turns.filter((t) => t.kind === 'human').map((t) => t.promptPreview), ...a.insights.map((i) => i.detail)]
+      }
+      const stripped = previews(runExit(args(['--json'])).out)
+      expect(stripped.length).toBeGreaterThan(0)
+      expect(stripped.every((p) => p === '')).toBe(true)
+      const kept = previews(runExit(args(['--json', '--include-text'])).out)
+      expect(kept.some((p) => p.length > 0)).toBe(true)
+      expect(kept.length).toBe(stripped.length)
+    })
+
+    it('a not-found suggestion id is a one-line error, not a Node stack trace', () => {
+      const r = runExit(['suggest', '--show', 'sg_000000000000', '--root', home.configDir])
+      expect(r.code).toBe(1)
+      expect(r.err).toContain('not found')
+      expect(r.err).not.toMatch(/^\s+at /m)
     })
   })
 

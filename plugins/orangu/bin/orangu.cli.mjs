@@ -31,6 +31,44 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "for-proposal",
   "for-apply"
 ]);
+var KNOWN_FLAGS = /* @__PURE__ */ new Set([
+  ...BOOL_FLAGS,
+  ...SHORT_VALUE_FLAGS,
+  "out",
+  "root",
+  "config",
+  "cwd",
+  "limit",
+  "no-cache",
+  "jobs",
+  "j",
+  "max-tokens",
+  "max-cost",
+  "port",
+  "p",
+  "max-live",
+  "context",
+  "depth",
+  "scope",
+  "session",
+  "s",
+  "rule",
+  "insight",
+  "title",
+  "finding",
+  "suggestion",
+  "receipt",
+  "show",
+  "set",
+  "proposal",
+  "manifest",
+  "application",
+  "verification",
+  "cohort"
+]);
+function unknownFlags(flags) {
+  return Object.keys(flags).filter((k) => !KNOWN_FLAGS.has(k)).map((k) => (k.length === 1 ? "-" : "--") + k);
+}
 function parseArgs(argv) {
   const positionals = [];
   const flags = {};
@@ -11652,7 +11690,7 @@ var EXTRA_HELP = [
 function renderAnalysisJson(a, flags) {
   let out = a;
   if (!flagBool(flags, "no-redact")) {
-    out = redactAnalysis(a, { scrub: true, stripText: false, stripPaths: flagBool(flags, "strip-paths") }).analysis;
+    out = redactAnalysis(a, { scrub: true, stripText: !flagBool(flags, "include-text"), stripPaths: flagBool(flags, "strip-paths") }).analysis;
   }
   const body = flagBool(flags, "slim") ? slimAnalysis(out) : out;
   return JSON.stringify(body, null, flagBool(flags, "quiet") ? 0 : 2) + "\n";
@@ -11718,7 +11756,7 @@ function nextStepLines(a) {
   const title = top.title.length > FOOTER_COLUMNS - label.length ? top.title.slice(0, FOOTER_COLUMNS - label.length - 1) + "\u2026" : top.title;
   return [
     `${label}${title}`,
-    `  next step:    claude "/orangu:improve ${id}"  (copy-ready below)`,
+    `  next step:    /orangu:improve on ${id} (copy-ready command below)`,
     "  needs the plugin once, inside Claude Code:",
     `    ${PLUGIN_INSTALL}`,
     "  copy-ready:   the same command with its evidence attached; paste this one",
@@ -11802,6 +11840,7 @@ async function cmdReport(sel, flags) {
   process.stdout.write(path + "\n");
   printNextStep(analysis, flags);
   if (!flagBool(flags, "quiet")) offerBetaFeedback("report");
+  thresholdExit(analysis, flags);
 }
 async function cmdAnalyze(sel, flags) {
   const ref = await selectSession(sel, flags);
@@ -11829,13 +11868,25 @@ async function cmdBrief(flags) {
   if (!flagBool(flags, "quiet")) process.stderr.write(paint2(C2.dim, `
   orangu report for the full picture \xB7 orangu --help for every command
 `));
+  thresholdExit(analysis, flags);
 }
 var RETIRED_FLAGS = {
   "max-cost": "--max-cost was removed; use --max-tokens <n>"
 };
+var SESSION_GATE_FLAGS = ["max-tokens", "fail-on-hook-errors"];
+var SESSION_GATE_VERBS = /* @__PURE__ */ new Set(["report", "html", "analyze", "a"]);
+function rejectUnusableFlags(command, flags) {
+  for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== void 0) fail(message);
+  const unknown = unknownFlags(flags);
+  if (unknown.length) fail(`unknown flag${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")}. Run: orangu --help`);
+  if (command !== void 0 && !SESSION_GATE_VERBS.has(command)) {
+    for (const flag of SESSION_GATE_FLAGS) {
+      if (flags[flag] !== void 0) fail(`--${flag} gates one session: use it with orangu analyze or orangu report`);
+    }
+  }
+}
 function thresholdExit(analysis, flags) {
   let bad = false;
-  for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== void 0) fail(message);
   const maxTokensStr = flagStr(flags, "max-tokens");
   if (maxTokensStr !== void 0 && Number.isNaN(Number(maxTokensStr))) fail(`--max-tokens must be a number, got "${maxTokensStr}"`);
   const maxTokens = Number(maxTokensStr);
@@ -12088,8 +12139,8 @@ ${paint2(C2.b, "flags")}
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache (or ORANGU_NO_CACHE=1)
   --jobs <n>             worker threads for repo/global scans (default: CPUs - 1; 1 = sequential)
-  --max-tokens <n>       exit non-zero if a session's total tokens exceed this (CI)
-  --fail-on-hook-errors  exit non-zero if any hook errored (CI)
+  --max-tokens <n>       exit non-zero if the session's total tokens exceed this (CI; analyze, report)
+  --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
 ${paint2(C2.dim, "privacy: reports are generated locally, make zero network requests, and redact secrets by default.")}
@@ -12109,6 +12160,7 @@ async function main() {
     printHelp();
     return;
   }
+  rejectUnusableFlags(command, flags);
   if (!command) {
     if (flagBool(flags, "json")) printHelp();
     else await cmdBrief(flags);
@@ -12146,5 +12198,5 @@ async function main() {
 if (isPoolWorker()) {
   runPoolWorker();
 } else {
-  main().catch((e) => fail(String(e instanceof Error ? e.stack ?? e.message : e)));
+  main().catch((e) => fail(e instanceof Error ? process.env["ORANGU_DEBUG"] === "1" ? e.stack ?? e.message : e.message : String(e)));
 }
