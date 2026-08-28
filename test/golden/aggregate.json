@@ -168,7 +168,8 @@
   "crossFindings": [
     {
       "ruleId": "unverified-edits",
-      "title": "The last test run failed and the session ended",
+      "title": "e.g. The last test run failed and the session ended",
+      "titlePattern": "The last test run failed and the session ended",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,
@@ -182,7 +183,8 @@
     },
     {
       "ruleId": "tool-errors",
-      "title": "N tool errors (N of N calls)",
+      "title": "e.g. 2 tool errors (66.7% of 3 calls)",
+      "titlePattern": "N tool errors (N of N calls)",
       "sessions": 2,
       "totalSavingsTokens": 24,
       "totalSavingsMs": 0,
@@ -197,7 +199,8 @@
     },
     {
       "ruleId": "compactions",
-      "title": "N context compactions (peak N of N)",
+      "title": "e.g. 2 context compactions (peak 175.0k of 1.00M)",
+      "titlePattern": "N context compactions (peak N of N)",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,
@@ -211,7 +214,8 @@
     },
     {
       "ruleId": "preamble-weight",
-      "title": "Every request starts from a N-token baseline (system prompt, tools, CLAUDE.md, skills)",
+      "title": "e.g. Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills)",
+      "titlePattern": "Every request starts from a N-token baseline (system prompt, tools, CLAUDE.md, skills)",
       "sessions": 1,
       "totalSavingsTokens": 180018,
       "totalSavingsMs": 0,
@@ -225,7 +229,8 @@
     },
     {
       "ruleId": "api-errors",
-      "title": "N API error / retries",
+      "title": "e.g. 1 API error / retries",
+      "titlePattern": "N API error / retries",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,
@@ -239,7 +244,8 @@
     },
     {
       "ruleId": "fanout-opportunity",
-      "title": "N subagents ran one-after-another in N run with no visible dependency; a parallel fan-out would cut the wait",
+      "title": "e.g. 5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait",
+      "titlePattern": "N subagents ran one-after-another in N run with no visible dependency; a parallel fan-out would cut the wait",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 3000,
@@ -253,7 +259,8 @@
     },
     {
       "ruleId": "hook-errors",
-      "title": "N hook error",
+      "title": "e.g. 1 hook error",
+      "titlePattern": "N hook error",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,
@@ -267,7 +274,8 @@
     },
     {
       "ruleId": "idle-agents",
-      "title": "N subagents did no tool calls",
+      "title": "e.g. 5 subagents did no tool calls",
+      "titlePattern": "N subagents did no tool calls",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,
@@ -281,7 +289,8 @@
     },
     {
       "ruleId": "agent-fanout",
-      "title": "N subagent run = N of the session's tokens (N), max N in parallel",
+      "title": "e.g. 1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel",
+      "titlePattern": "N subagent run = N of the session's tokens (N), max N in parallel",
       "sessions": 2,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,
@@ -296,7 +305,8 @@
     },
     {
       "ruleId": "cache-ttl-churn",
-      "title": "N of the N tokens written to cache went to the N-hour tier",
+      "title": "e.g. 100% of the 210.0k tokens written to cache went to the 1-hour tier",
+      "titlePattern": "N of the N tokens written to cache went to the N-hour tier",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,
@@ -310,7 +320,8 @@
     },
     {
       "ruleId": "time-budget",
-      "title": "N of the Nm Ns active time went to tool execution",
+      "title": "e.g. 92% of the 1m 5s active time went to tool execution",
+      "titlePattern": "N of the Nm Ns active time went to tool execution",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 0,

@@ -102,9 +102,37 @@ export interface RollupItem {
   extra?: Record<string, number>
 }
 
+/** How many sessions a cross-finding links to as examples; the same five the suggestion identity hashes. */
+const EXAMPLE_SESSIONS = 5
+
+/**
+ * The shape of a rule's title that stays the same from session to session: every number (with its unit
+ * suffix) replaced by `N`. Internal: a grouping key for consumers comparing findings across scopes,
+ * never something to show a person.
+ */
+function titlePatternOf(title: string): string {
+  return title.replace(/\d[\d.,kM%×]*/g, 'N')
+}
+
+/** A per-session title, prefixed so it reads honestly once the renderers add "(N sessions)" after it. */
+function exampleTitle(title: string): string {
+  return title ? `e.g. ${title}` : ''
+}
+
 export interface CrossFinding {
   ruleId: string
+  /**
+   * User-facing. The title of the example session (one of `exampleSessionIds`) with the largest
+   * savings claim for this rule, prefixed `e.g. `: real figures from one real session, which the
+   * renderers follow with the "(N sessions)" count. Ties keep the first session seen.
+   */
   title: string
+  /**
+   * Additive (v2 unchanged): the rule's title with every number replaced by `N`, i.e. the shape shared by
+   * every session the finding recurs in. Internal grouping key; not for display (it was the old `title`).
+   * Optional in the type so older aggregate JSON still validates; the aggregate always emits it.
+   */
+  titlePattern?: string
   sessions: number
   totalSavingsTokens: number
   totalSavingsMs: number
@@ -185,6 +213,8 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
   const findings = new Map<string, Omit<CrossFinding, 'boundedSavingsTokens' | 'boundedSavingsMs'>>()
   /** per-rule, per-session claims: the bounded figure is median × sessions */
   const perSessionSavings = new Map<string, { tokens: number[]; ms: number[] }>()
+  /** per-rule: the largest claim among the example sessions, whose title the cross-finding carries */
+  const exampleClaim = new Map<string, { tokens: number; ms: number }>()
   const rows: SessionRow[] = []
   const t = { tokens: 0, toolCalls: 0, toolErrors: 0, agents: 0, turns: 0, humanTurns: 0, wallMs: 0, activeMs: 0, compactions: 0, prs: 0, commits: 0 }
   let cacheRatioSum = 0
@@ -228,11 +258,23 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
       errorSigs.set(key, e)
     }
     for (const ins of a.insights) {
-      const f = findings.get(ins.ruleId) ?? { ruleId: ins.ruleId, title: ins.title.replace(/\d[\d.,kM%×]*/g, 'N'), sessions: 0, totalSavingsTokens: 0, totalSavingsMs: 0, axis: ins.axis, severity: ins.severity, exampleSessionIds: [] }
+      const claimTokens = ins.savings?.tokens ?? 0
+      const claimMs = ins.savings?.ms ?? 0
+      const f = findings.get(ins.ruleId) ?? { ruleId: ins.ruleId, title: exampleTitle(ins.title), titlePattern: titlePatternOf(ins.title), sessions: 0, totalSavingsTokens: 0, totalSavingsMs: 0, axis: ins.axis, severity: ins.severity, exampleSessionIds: [] }
       f.sessions++
-      f.totalSavingsTokens += ins.savings?.tokens ?? 0
-      f.totalSavingsMs += ins.savings?.ms ?? 0
-      if (f.exampleSessionIds.length < 5) f.exampleSessionIds.push(sid)
+      f.totalSavingsTokens += claimTokens
+      f.totalSavingsMs += claimMs
+      if (f.exampleSessionIds.length < EXAMPLE_SESSIONS) {
+        f.exampleSessionIds.push(sid)
+        // the title follows the example session with the largest claim (tokens, then ms; ties keep the
+        // first seen), so the figures a person reads belong to a session they can open from the examples
+        const best = exampleClaim.get(ins.ruleId)
+        if (!best) exampleClaim.set(ins.ruleId, { tokens: claimTokens, ms: claimMs })
+        else if (claimTokens > best.tokens || (claimTokens === best.tokens && claimMs > best.ms)) {
+          f.title = exampleTitle(ins.title)
+          exampleClaim.set(ins.ruleId, { tokens: claimTokens, ms: claimMs })
+        }
+      }
       findings.set(ins.ruleId, f)
       const per = perSessionSavings.get(ins.ruleId) ?? { tokens: [], ms: [] }
       per.tokens.push(ins.savings?.tokens ?? 0)

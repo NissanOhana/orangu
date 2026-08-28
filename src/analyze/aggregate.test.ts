@@ -3,6 +3,9 @@ import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from './analyze.js'
 import { aggregate } from './aggregate.js'
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
+import { goldenCorpus } from '../../test/fixtures/corpus.js'
+import { aggregateBody } from '../report/client/screens/repo.js'
+import type { Ctx } from '../report/client/app.js'
 
 async function two() {
   const a1 = analyzeSession(await parseClaudeCodeSession({ records: buildCanonicalSession().toRecords(), noSidecar: true }), { version: 't', now: 0 })
@@ -112,5 +115,58 @@ describe('crossFindings bounded savings (A6)', () => {
     expect(f.totalSavingsTokens).toBe(103)
     expect(f.boundedSavingsTokens).toBeLessThanOrEqual(f.totalSavingsTokens)
     expect(f.boundedSavingsTokens).toBe(4)
+  })
+})
+
+describe('crossFindings title: a real example session, not a number-stripped template', () => {
+  async function titled(claims: Array<{ tokens: number; ms?: number; title: string }>) {
+    const base = analyzeSession(await parseClaudeCodeSession({ records: buildCanonicalSession().toRecords(), noSidecar: true }), { version: 't', now: 0 })
+    const analyses = claims.map((c, i) => ({
+      ...base,
+      session: { ...base.session, id: `sess-${i}` },
+      insights: [{ ...base.insights[0]!, id: `ins-${i}`, ruleId: 'one-rule', title: c.title, savings: { tokens: c.tokens, ms: c.ms ?? 0, estimated: true } }],
+    }))
+    return aggregate(analyses, 'repo test', 0).crossFindings.find((f) => f.ruleId === 'one-rule')!
+  }
+  it('carries the title of the highest-savings example session, prefixed e.g.', async () => {
+    const f = await titled([
+      { tokens: 10, title: '10 tool results over 4 KB carried in context' },
+      { tokens: 1000, title: '35 tool results over 40 KB, 1.38M tokens carried in context' },
+      { tokens: 5, title: '5 tool results over 1 KB carried in context' },
+    ])
+    expect(f.title).toBe('e.g. 35 tool results over 40 KB, 1.38M tokens carried in context')
+    expect(f.titlePattern).toBe('N tool results over N KB carried in context')
+    expect(f.titlePattern).not.toMatch(/\d/)
+    expect(f.title).not.toMatch(/\bN\b/)
+  })
+  it('breaks a token tie on ms, then keeps the first session seen', async () => {
+    const byMs = await titled([{ tokens: 10, ms: 100, title: 'first' }, { tokens: 10, ms: 900, title: 'second' }])
+    expect(byMs.title).toBe('e.g. second')
+    const tie = await titled([{ tokens: 10, ms: 5, title: 'first' }, { tokens: 10, ms: 5, title: 'second' }])
+    expect(tie.title).toBe('e.g. first')
+  })
+  it('chooses among the example sessions only, so the figures belong to a session the reader can open', async () => {
+    const claims = [1, 2, 3, 4, 5, 100, 200].map((tokens) => ({ tokens, title: `${tokens} tokens wasted` }))
+    const f = await titled(claims)
+    expect(f.exampleSessionIds).toEqual(['sess-0', 'sess-1', 'sess-2', 'sess-3', 'sess-4'])
+    expect(f.title).toBe('e.g. 5 tokens wasted')
+    expect(f.sessions).toBe(7)
+    expect(f.totalSavingsTokens).toBe(315)
+  })
+  it('never renders a template N in the repo screen over the whole golden corpus', async () => {
+    const { aggregateJson } = await goldenCorpus()
+    const agg = JSON.parse(aggregateJson) as ReturnType<typeof aggregate>
+    expect(agg.crossFindings.length).toBeGreaterThan(3)
+    for (const f of agg.crossFindings) {
+      expect(f.title, f.ruleId).toMatch(/^e\.g\. \S/)
+      expect(f.title, f.ruleId).not.toMatch(/\bN\b/)
+      expect(typeof f.titlePattern).toBe('string')
+    }
+    const html = aggregateBody(agg, { data: { mode: 'file' } } as unknown as Ctx)
+    const rendered = [...html.matchAll(/<span class="grow">([^<]*)<\/span>/g)].map((m) => m[1]!)
+    expect(rendered.length).toBe(Math.min(8, agg.crossFindings.length))
+    for (const title of rendered) expect(title).not.toMatch(/\bN\b/)
+    // the "(N sessions)" count the screen adds still follows every title
+    expect(html).toMatch(/<span class="grow">e\.g\. [^<]*<\/span><span class="mono small muted">\d+ sessions<\/span>/)
   })
 })
