@@ -99,6 +99,9 @@ describe('plugin packaging', () => {
       const writes = allowed.match(/Write\([^)]*\)|Write(?!\()/g) ?? []
       for (const w of writes) expect(w, `${s} write grant is proposals-scoped: ${w}`).toMatch(/^Write\(~\/\.orangu\//)
     }
+    // the only grant that can reach a repository edit is the apply skill itself, one approved id per call
+    const harness = /^allowed-tools:\s*(.+)$/m.exec(readText('plugin/skills/harness/SKILL.md'))?.[1] ?? ''
+    expect(harness, 'harness may invoke apply through the Skill tool').toContain('Skill(orangu:apply)')
   })
   it('the localhost handoff is copy-only and cannot spawn a model process', () => {
     const source = readText('src/serve/kickoff.ts')
@@ -242,6 +245,26 @@ describe('plugin packaging', () => {
     expect(harness).toContain('Confirmation of one read does not confirm the other.')
     expect(harness).toContain('pass the same explicit directory')
     expect(harness).not.toContain('--receipt')
+  })
+
+  // Stage 5 is the only path from a harness review to a repository edit: the ranked report first, then
+  // an explicit per-item approval, then /orangu:apply one id at a time. Global stays review-only, and
+  // the skill says nothing about how the host treats the nested skill's own grants (unverified).
+  it('harness asks for approval, applies repo proposals one id at a time, and never a global one', () => {
+    const harness = readText('plugin/skills/harness/SKILL.md')
+    expect(harness).toContain('## 5. Report, approve, and apply')
+    expect(harness).toContain('which items the user approves')
+    expect(harness).toContain('apply nothing without explicit approval')
+    expect(harness).toContain('one id per invocation, one receipt per id')
+    expect(harness).toContain('Stop at the first failure')
+    expect(harness).toContain('Never apply a global proposal')
+    expect(harness).toContain('If the Skill tool is unavailable or denied')
+    expect(harness).toContain('the ordered `/orangu:apply <id>` list')
+    const report = harness.indexOf('this review did not edit the target repository')
+    const approval = harness.indexOf('which items the user approves')
+    expect(approval, 'the approval question follows the pre-approval report').toBeGreaterThan(report)
+    expect(approval, 'nothing is invoked before the approval question').toBeLessThan(harness.indexOf('through the Skill tool'))
+    expect(harness).not.toMatch(/permission prompt|not honou?red/i)
   })
 
   // B7: the record identity is derived by the CLI from --session; the skill never asks the model to
@@ -647,7 +670,10 @@ describe('plugin packaging', () => {
     // 2026-08-27 final pass (measured 1,110 / 998): the remaining words are pinned command literals and
     // policy sentences this file asserts (the network-disclosure paragraph alone is ~60 words per skill).
     // The targets stay unmet, not redefined; the ceilings track the measurement and only go DOWN.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1120, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
+    // 2026-08-28 harness 1120 -> 1180: stage 5 gained the approve-and-apply gate (ask, apply approved repo
+    // ids one at a time through the Skill tool, stop at the first failure, never global) after the smallest
+    // honest wording; measured 1,179, and the comparator is strict, so 1,180 leaves zero words of headroom.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1180, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
     const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
