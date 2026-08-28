@@ -184,6 +184,23 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).not.toContain('Unvalidated legacy claim')
   })
 
+  it('the footer speaks the user-facing vocabulary in every scope and never the internal one', () => {
+    const foot = (): string => /<p class="small muted sg-foot">([^<]*)<\/p>/.exec(markup)?.[1] ?? ''
+    const expected: Record<'session' | 'repo' | 'global', string> = {
+      session: 'Only a later session in the same workspace can verify it.',
+      repo: 'Applied means the reviewed files changed; only a later session can verify it.',
+      global: 'Global suggestions stay proposals; nothing is applied from here.',
+    }
+    for (const scope of ['session', 'repo', 'global'] as const) {
+      const ctx = context('serve', [])
+      if (scope !== 'session') ctx.state.scope = scope
+      renderSuggest(ctx)
+      const text = foot()
+      expect(text, scope).toBe(`The evidence is deterministic; an optional AI skill drafts the proposal. ${expected[scope]}`)
+      for (const internal of ['catalog', 'cohort', 'handoff', 'stay deterministic']) expect(text, `${scope} says "${internal}"`).not.toContain(internal)
+    }
+  })
+
   it('shows only selected-session, unmapped proposals in the localhost inbox', () => {
     const saved = proposalRecord('sg_0000000000ac')
     const other = proposalRecord('sg_0000000000ad', { sessionIds: ['another-session'], proposal: { title: 'Wrong session', change: 'x', effort: 'S', proposalPath: '/tmp/other.md' } })

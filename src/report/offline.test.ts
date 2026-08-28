@@ -74,7 +74,9 @@ describe('offline report', () => {
     // says its details are hidden and names --include-text instead of asserting evidence it cannot show).
     // 2026-08-27 final client pass: -474 B, the Plain "What happened here" card no longer repeats the hero
     // (its "What happened" and "What it produced" rows duplicated the headline and the narrative sentence).
+    // Suggest footer rewritten in the six user-facing nouns (session, finding, evidence, proposal, apply,
+    // verify): +1 B.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
-    expect(CLIENT_JS.length).toBe(72733)
+    expect(CLIENT_JS.length).toBe(72734)
   })
 })

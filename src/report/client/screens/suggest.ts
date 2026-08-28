@@ -191,11 +191,12 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
     : ''
   const mega = scope === 'session' || !agg ? '' : (ctx.megaReview?.(scope) ?? '')
 
-  const foot = 'Evidence and catalog matches stay deterministic; optional AI drafts the proposal. ' + (scope === 'session'
-    ? 'Only a later same-workspace session can verify it.'
+  // User-facing nouns only (session · finding · evidence · proposal · apply · verify); no internal vocabulary.
+  const foot = 'The evidence is deterministic; an optional AI skill drafts the proposal. ' + (scope === 'session'
+    ? 'Only a later session in the same workspace can verify it.'
     : scope === 'repo'
-      ? 'Applied means the reviewed files changed, not a cohort-wide verification.'
-      : 'Global suggestions stay proposals and never get an apply handoff.')
+      ? 'Applied means the reviewed files changed; only a later session can verify it.'
+      : 'Global suggestions stay proposals; nothing is applied from here.')
 
   const el = h(`<section>
     <div class="hero">
