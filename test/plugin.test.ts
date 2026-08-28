@@ -329,7 +329,8 @@ describe('plugin packaging', () => {
     for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md']) {
       const text = readText(path)
       expect(text, `${path} rejects global`).toMatch(/global proposals?[^\n]*proposal-only[^\n]*never be applied/i)
-      expect(text, `${path} keeps repo applied`).toMatch(/repo scope[^\n]*no fresh-cohort comparator[^\n]*cannot become `verified`/i)
+      expect(text, `${path} keeps repo applied`).toMatch(/repo scope[^\n]*cannot yet compare later repository sessions[^\n]*cannot become `verified`/i)
+      expect(text, `${path} uses plain words`).not.toMatch(/cohort/i)
       expect(text, `${path} permits session later verification`).toMatch(/session scope[^\n]*later verification/i)
     }
 

@@ -38,7 +38,7 @@ Allowed `changeClass`: `instruction`, `script-cli`, `hook`, `skill-create`, `ski
 
 `/orangu:harness` proposals are ranked structured reviews. Repo-scope proposals are apply-compatible; global-scope proposals use the same manifest for review but are proposal-only. They must include `rank`, a nonempty `files` list, and a nonempty `sources` list in addition to every required evidence, effect, risk, and verification field above. A recommendation without a concrete relative repository file or honest source remains a chat recommendation rather than a `proposed` record.
 
-Lifecycle authority is scope-specific: session proposals may be applied and later verified; repo proposals may be applied but remain `applied` until a real fresh-cohort comparator exists; global proposals are review-only and may not be applied or verified.
+Lifecycle authority is scope-specific: session proposals may be applied and later verified; repo proposals may be applied but remain `applied` until Orangu can compare later repository sessions; global proposals are review-only and may not be applied or verified.
 
 ## Verification intent
 

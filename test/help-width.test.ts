@@ -11,7 +11,8 @@ describe('EXTRA_HELP', () => {
   })
   it('hides internal nouns from the user-facing help', () => {
     const text = EXTRA_HELP.join('\n')
-    // `--slim` is a real flag on estimate/analyze and may be named; the bare noun may not
-    expect(text).not.toMatch(/cohort|catalog|preflight|projection|\bL[123]\b|fresh-cohort|(?<!-)slim/i)
+    // `--slim` is a real flag on estimate/analyze and may be named; the bare noun may not.
+    // `--manifest` (the skills' proposal JSON) is still accepted by `suggest --set` but is not printed.
+    expect(text).not.toMatch(/cohort|catalog|preflight|projection|manifest|\bL[123]\b|fresh-cohort|(?<!-)slim/i)
   })
 })

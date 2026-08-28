@@ -43,6 +43,6 @@ Analysis observes and diagnoses. It does not edit a harness or write a proposal.
 - Quote `orangu estimate --suggestion <id>` before the deeper read.
 - Use `/orangu:harness --scope repo|global` only for a separately requested whole-harness review of recurring patterns.
 
-Session proposals may be applied explicitly and become verified only after Orangu passes their reviewed checks against a later supported session. Repo proposals may be applied but remain `applied` until a real fresh-cohort comparator exists; global proposals are review-only. Never describe a proposal as applied, verified, or improved beyond the evidence its scope supports.
+Session proposals may be applied explicitly and become verified only after Orangu passes their reviewed checks against a later supported session. Repo proposals may be applied but remain `applied` until Orangu can compare later repository sessions; global proposals are review-only. Never describe a proposal as applied, verified, or improved beyond the evidence its scope supports.
 
 After the requested analysis is complete, briefly offer `/orangu:feedback` with the matching context once. Never launch it unless the user accepts.

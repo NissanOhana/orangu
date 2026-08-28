@@ -54,7 +54,7 @@ export const EXTRA_HELP: string[] = [
     '                                    --session <a,b>',
     '                                  | --show <id> [--for-proposal|--for-apply]',
     '                                  | --set <id> <status> [--proposal <path>]',
-    '                                    [--manifest <path>] [--application <path>]',
+    '                                    [--application <path>]',
     '                                    [--verification <path>]',
     '                                  | --list)',
   ].join('\n'),
