@@ -1,0 +1,203 @@
+# Ships one orangu release: the npm package, the Claude Code plugin tag, and the
+# landing page, in that order.
+#
+#   git tag -a v0.6.1 -m "orangu 0.6.1" && git push origin v0.6.1
+#
+# The tag is the release instruction; the working tree is the release content.
+# The guard job refuses to ship unless they agree, so a half-finished version
+# bump fails before anything reaches a registry.
+#
+# npm auth is OIDC trusted publishing — no NPM_TOKEN is stored in this repo.
+# It needs a one-time setup on npmjs.com:
+#   orangu → Settings → Trusted Publisher → GitHub Actions
+#   Organization or user: NissanOhana · Repository: orangu · Workflow: release.yml
+# Until that exists, the publish step fails with an auth error and nothing else
+# in the release has run yet.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Least privilege by default. Only the two jobs that need more say so:
+# publishing mints an OIDC token, tagging writes to contents.
+permissions:
+  contents: read
+
+# One release at a time, and never cancel one midway: a cancelled run can leave
+# npm published but the plugin untagged.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Tag agrees with the tree
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      on-npm: ${{ steps.check.outputs.on-npm }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Every manifest names the tagged version
+        id: check
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          mismatch=0
+          compare() {
+            if [ "$2" != "$version" ]; then
+              echo "::error file=$1::tag $TAG releases $version but $1 says $2"
+              mismatch=1
+            fi
+          }
+          compare package.json \
+            "$(node -p 'require("./package.json").version')"
+          compare plugin/.claude-plugin/plugin.json \
+            "$(node -p 'require("./plugin/.claude-plugin/plugin.json").version')"
+          compare plugins/orangu/.codex-plugin/plugin.json \
+            "$(node -p 'require("./plugins/orangu/.codex-plugin/plugin.json").version')"
+          [ "$mismatch" -eq 0 ] || exit 1
+
+          # A re-pushed tag must not hard-fail: record what the registry already
+          # has so the publish step can skip instead of erroring on a duplicate.
+          if npm view "orangu@$version" version > /dev/null 2>&1; then
+            echo "on-npm=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::orangu@$version is already on npm; the publish step will skip it"
+          else
+            echo "on-npm=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "releasing orangu $version"
+
+  verify:
+    name: Verify release
+    needs: guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx --no-install playwright install --with-deps chromium
+
+      # verify:release is the full gate: the public-tree and generated-artifact
+      # checks, typecheck, unit tests, the build, both offline assertions and the
+      # browser suite. A stale plugin/bin/orangu.cli.mjs fails here.
+      - name: Verify
+        run: npm run verify:release
+
+      - name: Audit
+        run: npm audit --audit-level=high
+
+  npm:
+    name: Publish to npm
+    needs: [guard, verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm >= 11.5.1; Node 22 still bundles npm 10.
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      # prepublishOnly re-runs verify:release against the exact tree being
+      # packed, and that suite includes the browser tests.
+      - name: Install Chromium
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Publish
+        env:
+          ON_NPM: ${{ needs.guard.outputs.on-npm }}
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$ON_NPM" = "true" ]; then
+            echo "orangu@$VERSION is already published; skipping."
+            exit 0
+          fi
+          npm publish
+
+  plugin:
+    name: Publish the Claude Code plugin
+    needs: [guard, verify, npm]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # `claude plugin tag` refuses to move a tag that already exists, so it
+          # needs the existing tags to check against.
+          fetch-depth: 0
+
+      - name: Use Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+
+      - name: Install the Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      # Local manifest checks only: no account or API key is involved.
+      - name: Validate the marketplace and the plugin
+        run: |
+          claude plugin validate . --strict
+          claude plugin validate ./plugin --strict
+
+      # A Claude Code plugin is released by the {name}--v{version} git tag that
+      # the marketplace resolves. `claude plugin tag` re-checks that plugin.json
+      # and the marketplace entry agree before it writes that tag.
+      - name: Tag and push the plugin release
+        env:
+          VERSION: ${{ needs.guard.outputs.version }}
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --tags origin "refs/tags/orangu--v$VERSION" > /dev/null 2>&1; then
+            echo "orangu--v$VERSION is already on origin; nothing to publish."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          claude plugin tag ./plugin --push -m "orangu %s"
+
+  # Last, because the landing page is the public announcement: it goes out only
+  # once both artifacts it points at are real.
+  pages:
+    name: Deploy the landing page
+    needs: [guard, verify, npm, plugin]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml
