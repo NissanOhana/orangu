@@ -89,7 +89,7 @@ const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
   a.summary.narrative = generated
   a.summary.outcomes.prLinks.push({ label: text, url: `https://example.test/${ARBITRARY_MARKER}`, turnIndex: 0 })
   if (a.turns[0]) {
-    a.turns[0].commandName = text
+    a.turns[0].commandName = '/login' // a slash-command name is an identifier Coverage publishes; the text lives in the preview
     a.turns[0].promptPreview = text
   }
   const call = a.tools.calls.at(-1)

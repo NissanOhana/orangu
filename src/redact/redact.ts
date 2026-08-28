@@ -163,7 +163,6 @@ const TEXT_KEYS = new Set([
   'description',
   'args',
   'command',
-  'commandName',
   'message',
   'errorHint',
   'teamName',

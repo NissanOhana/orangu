@@ -153,7 +153,8 @@ describe('redactAnalysis', () => {
         live: false,
       },
       summary: { narrative: GENERATED, outcomes: { prLinks: [{ label: MARKER, url: `https://example.test/${MARKER}`, turnIndex: 0 }] } },
-      turns: [{ commandName: MARKER, promptPreview: MARKER, kind: 'human', agents: [], models: ['claude-test'], activity: 'Bash×1' }],
+      // commandName is a slash-command identifier (kept, like a tool name); the marker lives in the preview
+      turns: [{ commandName: '/login', promptPreview: MARKER, kind: 'human', agents: [], models: ['claude-test'], activity: 'Bash×1' }],
       tools: {
         byName: [{ name: 'Bash', category: 'exec' }],
         errorGroups: [{ name: 'Bash', signature: MARKER, sampleHint: MARKER }],
@@ -247,7 +248,8 @@ describe('redactAnalysis', () => {
     // the transcript wrote these: they are gone
     expect(out.session.title).toBe('')
     expect(out.turns[0]!.promptPreview).toBe('')
-    expect(out.turns[0]!.commandName).toBe('')
+    // a slash-command NAME is an identifier Coverage already publishes; args stay in the stripped preview
+    expect(out.turns[0]!.commandName).toBe('/login')
     expect(out.tools.calls[0]!.summary).toBe('')
     expect(out.tools.calls[0]!.errorHint).toBe('')
     expect(out.tools.errorGroups[0]!.sampleHint).toBe('')

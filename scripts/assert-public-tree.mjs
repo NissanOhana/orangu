@@ -86,6 +86,8 @@ const binaryDigests = new Map([
   ['design/brand/mascot-main-transparent.png', '91be2625136579826ff0f650a249f7924243bbf7e0e1e5c759b581fd060870fb'],
   ['plugins/orangu/assets/icon.png', '3be627a8e18dfd2d1f3d26dbfc224f15f9c1c563cbdddb73a587f031d2328cba'],
   ['plugins/orangu/assets/logo.png', '91be2625136579826ff0f650a249f7924243bbf7e0e1e5c759b581fd060870fb'],
+  // link-unfurl card: the landing hero at 1200x630 (node scripts/og-card.mjs, then paste the digest)
+  ['site/assets/og.png', '31ea9b4db2b156f22e1affc34976e38792943eb0cd2bddc43bf427164de5abf1'],
 ])
 
 const binaryExtensions = new Set(['.7z', '.avi', '.bin', '.bmp', '.dmg', '.doc', '.docx', '.gif', '.gz', '.ico', '.jpeg', '.jpg', '.mov', '.mp3', '.mp4', '.pdf', '.png', '.tar', '.tgz', '.wasm', '.webp', '.xls', '.xlsx', '.zip'])

@@ -33,7 +33,7 @@ describe.skipIf(!existsSync(CLI))('orangu global: recurring-finding titles (buil
     expect(lines.length).toBeGreaterThan(0)
     for (const line of lines) {
       expect(line).not.toMatch(/\bN\b/)
-      expect(line).toMatch(/ {2}e\.g\. \S.*\(\d+ sessions\)$/)
+      expect(line).toMatch(/ {2}e\.g\. \S.*\(\d+ sessions?\)$/)
     }
   })
 })

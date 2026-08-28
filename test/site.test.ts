@@ -690,7 +690,8 @@ describe('site/index.html (generated landing)', () => {
   })
 
   it('references only approved public origins', () => {
-    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com'])
+    // nissanohana.github.io: og:url / og:image link-unfurl metadata; the page never requests it
+    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'nissanohana.github.io'])
     const urls = html.match(/https?:\/\/[^\s"'<>)]+/g) ?? []
     expect(urls.length).toBeGreaterThan(0)
     for (const url of urls) expect(allowed.has(new URL(url).host), `disallowed origin: ${url}`).toBe(true)

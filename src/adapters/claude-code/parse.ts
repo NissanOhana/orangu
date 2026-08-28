@@ -187,6 +187,13 @@ function parseBlocks(content: unknown, keepText: boolean, unknownBlockTypes: Cou
 }
 
 const COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/
+const COMMAND_ARGS_RE = /<command-args>\s*([^<]*?)\s*<\/command-args>/
+/** `<command-message>x</command-message> <command-name>/x</command-name> <command-args>a</command-args>` → `/x a` */
+function commandEnvelopeTitle(envelope: string, commandName?: string): string {
+  const name = commandName || COMMAND_RE.exec(envelope)?.[1] || envelope
+  const args = COMMAND_ARGS_RE.exec(envelope)?.[1]
+  return args ? `${name} ${args}` : name
+}
 const INTERRUPT_RE = /\[Request interrupted by user/i
 /**
  * A machine-generated queue enqueue: the harness pastes a task/system notification envelope into the
@@ -984,7 +991,9 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
   meta.startedAt = firstTs
   meta.endedAt = lastTs
   meta.wallMs = firstTs !== undefined && lastTs !== undefined ? lastTs - firstTs : undefined
-  meta.title = meta.customTitle ?? meta.aiTitle ?? firstPromptPreview ?? turns[0]?.promptPreview
+  const rawTitle = meta.customTitle ?? meta.aiTitle ?? firstPromptPreview ?? turns[0]?.promptPreview
+  // a first prompt that is a slash-command envelope titles the session by its command, not its markup
+  meta.title = rawTitle !== undefined && /^\s*<command-(?:message|name)>/.test(rawTitle) ? commandEnvelopeTitle(rawTitle, turns[0]?.commandName) : rawTitle
   if (!meta.sessionId) meta.sessionId = basename(mainPath, '.jsonl')
   if (files[0]?.trailingPartial) meta.possiblyLive = true
   if (seenSessionIds.size > 1) warn('multiple_session_ids', `records reference ${seenSessionIds.size} distinct sessionIds (resumed/forked session)`)

@@ -51,7 +51,7 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, sessionsScanned:
   if (declaredNothing) notes.push('no harness config found under the scanned roots. Nothing to cross-reference')
 
   if (!inv.usageCounters) {
-    notes.push('~/.claude.json was not read, so client-side usage counters are omitted; the crosswalk uses session evidence only')
+    notes.push('~/.claude.json was not read, so client-side usage counters are omitted; declared vs used is classified from session evidence only')
   }
   if (inv.unreadable.length > 0) {
     notes.push(`${plural(inv.unreadable.length, 'configured path')} could not be read. See inventory.unreadable for the reason of each`)

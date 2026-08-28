@@ -162,7 +162,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(note, 'undeclared note').not.toBeNull()
     expect(headline![1]).toBe(note![1])
     expect(out).toContain('hook rogue-hook.sh')
-    expect(out).toContain('add --json for the machine-readable inventory + crosswalk')
+    expect(out).toContain('add --json for the machine-readable inventory and declared-vs-used rows')
   })
 
   // the agents line counts one population per clause: dispatched and never are both over the DEFINED agents

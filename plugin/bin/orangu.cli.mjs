@@ -1819,7 +1819,6 @@ var TEXT_KEYS = /* @__PURE__ */ new Set([
   "description",
   "args",
   "command",
-  "commandName",
   "message",
   "errorHint",
   "teamName",
@@ -2307,6 +2306,12 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
   return out;
 }
 var COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/;
+var COMMAND_ARGS_RE = /<command-args>\s*([^<]*?)\s*<\/command-args>/;
+function commandEnvelopeTitle(envelope, commandName) {
+  const name = commandName || COMMAND_RE.exec(envelope)?.[1] || envelope;
+  const args = COMMAND_ARGS_RE.exec(envelope)?.[1];
+  return args ? `${name} ${args}` : name;
+}
 var INTERRUPT_RE = /\[Request interrupted by user/i;
 var NOTIFICATION_ENQUEUE_RE = /^\s*<(?:task|system)-notification>/;
 var LEADING_REMINDERS_RE = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/;
@@ -3014,7 +3019,8 @@ function buildSession(files2, mainPath, keepText, t0) {
   meta.startedAt = firstTs;
   meta.endedAt = lastTs;
   meta.wallMs = firstTs !== void 0 && lastTs !== void 0 ? lastTs - firstTs : void 0;
-  meta.title = meta.customTitle ?? meta.aiTitle ?? firstPromptPreview ?? turns[0]?.promptPreview;
+  const rawTitle = meta.customTitle ?? meta.aiTitle ?? firstPromptPreview ?? turns[0]?.promptPreview;
+  meta.title = rawTitle !== void 0 && /^\s*<command-(?:message|name)>/.test(rawTitle) ? commandEnvelopeTitle(rawTitle, turns[0]?.commandName) : rawTitle;
   if (!meta.sessionId) meta.sessionId = basename4(mainPath, ".jsonl");
   if (files2[0]?.trailingPartial) meta.possiblyLive = true;
   if (seenSessionIds.size > 1) warn("multiple_session_ids", `records reference ${seenSessionIds.size} distinct sessionIds (resumed/forked session)`);
@@ -8770,7 +8776,7 @@ function buildNotes(inv, x, sessionsScanned, sessionsUnreadable) {
   const declaredNothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
   if (declaredNothing) notes.push("no harness config found under the scanned roots. Nothing to cross-reference");
   if (!inv.usageCounters) {
-    notes.push("~/.claude.json was not read, so client-side usage counters are omitted; the crosswalk uses session evidence only");
+    notes.push("~/.claude.json was not read, so client-side usage counters are omitted; declared vs used is classified from session evidence only");
   }
   if (inv.unreadable.length > 0) {
     notes.push(`${plural(inv.unreadable.length, "configured path")} could not be read. See inventory.unreadable for the reason of each`);
@@ -10605,7 +10611,7 @@ async function runHarness(flags) {
       }
     }
   }
-  if (!flagBool(flags, "quiet")) process.stderr.write(paint(C.dim, `analyzed ${plural(analyses.length, "session")} for the crosswalk\u2026
+  if (!flagBool(flags, "quiet")) process.stderr.write(paint(C.dim, `analyzed ${plural(analyses.length, "session")}: declared vs used\u2026
 `));
   const home = homedir4();
   const inventory = await collectInventory({ cwd, roots, home });
@@ -10694,7 +10700,8 @@ function printHarness(r) {
   w(paint(C.dim, `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint(C.y, String(hookErrors)) : "0"} / ${n(meanMs)} ms`));
   const modelDrift = x.models.configured && !x.models.matchesConfigured;
   const effortDrift = x.effort.configured && !x.effort.matchesConfigured;
-  line("drift", `model ${x.models.configured ?? "(unset)"} ${modelDrift ? "\u2260" : "="} seen \xB7 effort ${x.effort.configured ?? "(unset)"} ${effortDrift ? "\u2260" : "="} seen \xB7 ${n(x.effort.slashEffortCommands)} /effort commands`);
+  if (noSessions) line("drift", NO_EVIDENCE);
+  else line("drift", `model ${x.models.configured ?? "(unset)"} ${modelDrift ? "\u2260" : "="} seen \xB7 effort ${x.effort.configured ?? "(unset)"} ${effortDrift ? "\u2260" : "="} seen \xB7 ${n(x.effort.slashEffortCommands)} /effort commands`);
   line("permissions", `${x.permissions.allowRules} allow / ${x.permissions.denyRules} deny / ${x.permissions.askRules} ask rules \xB7 ${n(x.permissions.promptEvents)} prompt events in ${x.permissions.promptSessions} sessions`);
   if (x.injectedListings.length) {
     w();
@@ -10706,7 +10713,7 @@ function printHarness(r) {
     w(paint(C.b, "  notes"));
     for (const note of r.notes) w(paint(C.dim, "    \xB7 " + note));
   }
-  w(paint(C.dim, "\n  add --json for the machine-readable inventory + crosswalk\n"));
+  w(paint(C.dim, "\n  add --json for the machine-readable inventory and declared-vs-used rows\n"));
 }
 
 // src/cli/commands/estimate.ts
@@ -11964,7 +11971,7 @@ async function cmdBrief(flags) {
 `));
   process.stdout.write("  " + outcomeHeadline(s) + "\n\n");
   for (const line of nextStepLines(analysis)) process.stdout.write(line + "\n");
-  if (!flagBool(flags, "quiet")) process.stderr.write(paint2(C2.dim, `
+  if (!flagBool(flags, "quiet")) process.stdout.write(paint2(C2.dim, `
   orangu report for the full picture \xB7 orangu --help for every command
 `));
   thresholdExit(analysis, flags);
@@ -12057,7 +12064,9 @@ ${plural(all.length, "session")}${flagBool(flags, "global") ? " (all roots)" : "
 `
     );
   }
-  process.stdout.write(paint2(C2.dim, `
+  if (!all.length) process.stdout.write(paint2(C2.dim, `  No sessions found. Is Claude Code installed? A transcript path also works: orangu report <path.jsonl>
+`));
+  else process.stdout.write(paint2(C2.dim, `
   orangu report <id>   \xB7   orangu analyze <id>   \xB7   orangu harness
 `));
 }
@@ -12146,21 +12155,32 @@ function printAggregate(a) {
   }
   if (a.crossFindings.length) {
     process.stdout.write("\n" + paint2(C2.b, "  recurring findings (across sessions)\n"));
-    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint2(C2.o, (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8))}  ${f.title}  ${paint2(C2.dim, "(" + f.sessions + " sessions)")}
+    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint2(C2.o, (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8))}  ${f.title}  ${paint2(C2.dim, "(" + plural(f.sessions, "session") + ")")}
 `);
   }
   if (a.recurringErrors.length) {
     process.stdout.write("\n" + paint2(C2.b, "  recurring tool errors (environment problems)\n"));
-    for (const e of a.recurringErrors.slice(0, 6)) process.stdout.write(`    ${paint2(C2.r, String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature || "(error text not included; use --include-text)"}  ${paint2(C2.dim, "(" + e.sessions + " sessions)")}
+    const hidden = /* @__PURE__ */ new Map();
+    for (const e of a.recurringErrors) {
+      if (e.signature) continue;
+      const h = hidden.get(e.tool) ?? { total: 0, groups: 0, sessions: 0 };
+      h.total += e.total;
+      h.groups += 1;
+      h.sessions = Math.max(h.sessions, e.sessions);
+      hidden.set(e.tool, h);
+    }
+    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) process.stdout.write(`    ${paint2(C2.r, String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature}  ${paint2(C2.dim, "(" + plural(e.sessions, "session") + ")")}
+`);
+    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint2(C2.r, String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden; use --include-text  ${paint2(C2.dim, "(" + plural(h.sessions, "session") + ")")}
 `);
   }
   if (a.topReReadFiles.length) {
     process.stdout.write("\n" + paint2(C2.b, "  most re-read files (context weight)\n"));
-    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint2(C2.dim, "(" + f.sessions + " sessions)")}
+    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint2(C2.dim, "(" + plural(f.sessions, "session") + ")")}
 `);
   }
   process.stdout.write("\n" + paint2(C2.b, "  heaviest sessions (by tokens)\n"));
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint2(C2.dim, (s.title ?? "").slice(0, 50))}
+  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint2(C2.dim, s.title ? s.title.slice(0, 50) : "(title hidden; use --include-text)")}
 `);
   process.stdout.write(paint2(C2.dim, `
   add --json for the full machine-readable aggregate
@@ -12209,41 +12229,43 @@ async function cmdServe(flags) {
 function printHelp() {
   process.stdout.write(`${isTTY ? MASCOT_ASCII + "\n" : ""}
 ${paint2(C2.b, "orangu")} v${VERSION2}: observe the run, then improve the next outcome.
-Deterministic observability for Claude Code sessions. The CLI makes no network calls.
+Deterministic observability for Claude Code sessions. No network calls.
 
 ${paint2(C2.b, "usage")}
-  orangu                       analyze the latest session and print the one next step
+  orangu                       analyze the latest session; print the next step
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
-  orangu list                  list discoverable sessions  (--global for all roots)
-  orangu repo    [<path>]      aggregate every session for a repo   (--json / --out)
+  orangu list                  list discoverable sessions  (--global: all roots)
+  orangu repo    [<path>]      aggregate every session for a repo (--json/--out)
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report
-  orangu serve                 local live viewer for EVERY session: fleet, SSE, aggregates
-                               (--port <n> \xB7 --open/--no-open \xB7 --no-include-text \xB7 --max-live <n> \xB7 --global \xB7 --cwd <dir>)${EXTRA_HELP.map((l) => "\n" + l).join("")}
+  orangu serve                 local live viewer for every session (fleet, SSE)
+                               --port <n> \xB7 --open/--no-open \xB7 --max-live <n>
+                               --no-include-text \xB7 --global \xB7 --cwd <dir>${EXTRA_HELP.map((l) => "\n" + l).join("")}
 
-${paint2(C2.b, "session")}   a session id, a unique id prefix, a path to a .jsonl, or "latest" (default)
+${paint2(C2.b, "session")}   a session id, a unique id prefix, a .jsonl path, or "latest" (default)
 
 ${paint2(C2.b, "flags")}
   -o, --out <file>       write the report/JSON here (default: temp dir)
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
   --open / --no-open     open (or don't) the report in a browser
-  --no-redact            keep secrets/paths in the report and --json (default: redacted)
-  --slim                 with analyze --json: the slim projection LLM consumers read
-  --include-text         keep prompt/result previews in report/analyze/watch output and in serve's exported HTML (default: stripped)
-  --no-include-text      serve only: hide prompt/result previews in the loopback viewer too (serve shows them by default)
-  --strip-paths          reduce absolute paths to basenames (home prefix is already ~ by default)
+  --no-redact            keep secrets/paths in the output (default: redacted)
+  --slim                 with analyze --json: the slim projection LLMs read
+  --include-text         keep prompt/result previews in report, analyze, watch,
+                         evidence, repo/global output and serve's exported HTML
+  --no-include-text      serve only: hide previews in the loopback viewer too
+  --strip-paths          reduce absolute paths to basenames (home is ~ already)
   --global               scan all roots incl. Cowork/Desktop
-  --root <dir>           scan only this Claude config dir (comma-separated; replaces ~/.claude)
+  --root <dir>           scan only this Claude config dir (comma-separated list)
   --limit <n>            cap sessions scanned (repo/global) or listed
-  --no-cache             skip the analysis cache under ~/.orangu/cache (or ORANGU_NO_CACHE=1)
-  --jobs <n>             worker threads for repo/global scans (default: CPUs - 1; 1 = sequential)
-  --max-tokens <n>       exit non-zero if the session's total tokens exceed this (CI; analyze, report)
+  --no-cache             skip the analysis cache under ~/.orangu/cache
+  --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
+  --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
-${paint2(C2.dim, "privacy: reports are generated locally, make zero network requests, and redact secrets by default.")}
+${paint2(C2.dim, "privacy: generated locally, zero network requests, secrets redacted by default.")}
 `);
 }
 async function main() {

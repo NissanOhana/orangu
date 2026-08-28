@@ -29,8 +29,8 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     expect(h).toContain('orangu serve')
     for (const f of ['--port', '--open', '--include-text', '--no-include-text', '--max-live']) expect(h).toContain(f)
     // --include-text governs shareable output (report/watch and serve's export); --no-include-text is the viewer opt-out
-    expect(h).toContain("in serve's exported HTML")
-    expect(h).toContain('hide prompt/result previews in the loopback viewer')
+    expect(h).toContain("serve's exported HTML")
+    expect(h).toContain('hide previews in the loopback viewer')
     expect(h).not.toContain('--allow-claude')
     // Hard-assert the suggest-layer verbs here because suggest.e2e.test.ts skips when they are
     // missing, so this unconditional test is the guard that keeps the registry wired and documented
@@ -294,7 +294,7 @@ syncBuiltinESMExports()
     expect(bare.stdout).toMatch(/top finding:|no findings: this session ran clean/)
     expect(bare.stdout).toMatch(/claude "\/orangu:improve sg_[0-9a-f]{12} --finding |ran clean/)
     expect(bare.stdout).not.toContain('usage')
-    expect(bare.stderr).toContain('orangu --help for every command')
+    expect(bare.stdout).toContain('orangu --help for every command')
     // the sentence is the report's outcome headline, never a canned line
     expect(bare.stdout).toMatch(/commit|test run|file|request|Stopped by you|nothing committed/)
     // the trailing hint is a diagnostic: --quiet silences it and keeps the answer itself
@@ -306,7 +306,7 @@ syncBuiltinESMExports()
 
     const help = run(['--help'])
     expect(help).toContain('usage')
-    expect(help).toMatch(/usage\n  orangu {2,}analyze the latest session and print the one next step\n  orangu report/)
+    expect(help).toMatch(/usage\n  orangu {2,}analyze the latest session; print the next step\n  orangu report/)
     expect(help).not.toContain('top finding')
     expect(help).not.toContain('latest session ·')
     expect(run(['help'])).toBe(help)

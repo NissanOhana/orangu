@@ -93,7 +93,7 @@ export async function runHarness(flags: Record<string, string | boolean>): Promi
       }
     }
   }
-  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzed ${plural(analyses.length, 'session')} for the crosswalk…\n`))
+  if (!flagBool(flags, 'quiet')) process.stderr.write(paint(C.dim, `analyzed ${plural(analyses.length, 'session')}: declared vs used…\n`))
 
   const home = homedir()
   const inventory = await collectInventory({ cwd, roots, home })
@@ -207,7 +207,8 @@ function printHarness(r: HarnessReport): void {
 
   const modelDrift = x.models.configured && !x.models.matchesConfigured
   const effortDrift = x.effort.configured && !x.effort.matchesConfigured
-  line('drift', `model ${x.models.configured ?? '(unset)'} ${modelDrift ? '≠' : '='} seen · effort ${x.effort.configured ?? '(unset)'} ${effortDrift ? '≠' : '='} seen · ${n(x.effort.slashEffortCommands)} /effort commands`)
+  if (noSessions) line('drift', NO_EVIDENCE)
+  else line('drift', `model ${x.models.configured ?? '(unset)'} ${modelDrift ? '≠' : '='} seen · effort ${x.effort.configured ?? '(unset)'} ${effortDrift ? '≠' : '='} seen · ${n(x.effort.slashEffortCommands)} /effort commands`)
   line('permissions', `${x.permissions.allowRules} allow / ${x.permissions.denyRules} deny / ${x.permissions.askRules} ask rules · ${n(x.permissions.promptEvents)} prompt events in ${x.permissions.promptSessions} sessions`)
 
   if (x.injectedListings.length) {
@@ -221,5 +222,5 @@ function printHarness(r: HarnessReport): void {
     w(paint(C.b, '  notes'))
     for (const note of r.notes) w(paint(C.dim, '    · ' + note))
   }
-  w(paint(C.dim, '\n  add --json for the machine-readable inventory + crosswalk\n'))
+  w(paint(C.dim, '\n  add --json for the machine-readable inventory and declared-vs-used rows\n'))
 }

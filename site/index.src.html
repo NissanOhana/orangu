@@ -7,6 +7,10 @@
 <meta name="description" content="Orangu reads your local AI sessions so you can inspect a run, discover repository-wide patterns, and improve workflows with real evidence."/>
 <meta property="og:title" content="orangu: turn your AI history into actionable insights"/>
 <meta property="og:description" content="Inspect individual runs, discover recurring repository patterns, and improve AI workflows using evidence from your local session history."/>
+<meta property="og:url" content="https://nissanohana.github.io/orangu/"/>
+<meta property="og:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
 <link rel="icon" type="image/png" sizes="32x32" href="{{favicon:32}}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{favicon:180}}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -296,10 +300,11 @@ footer .legal{margin:0;font-size:12.5px}
           <button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Inspect a session</span><span class="sep">·</span>npx orangu report</button>
           <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See the observe-to-proposal sample (opens in a new tab)">See the observe-to-proposal sample ↗</a>
         </div>
-        <p class="fine">The report observes locally. <code>orangu-improve</code> drafts; <code>orangu-apply</code> changes session/repo files only when invoked.</p>
+        <p class="fine">The report observes locally. <code>/orangu:improve</code> drafts; <code>/orangu:apply</code> changes session/repo files only when invoked.</p>
       </div>
       <div class="hero-viz">
-        <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink"></qtc-triad>
+        <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink" role="img" aria-label="The three axes orangu measures: quality up, time down, tokens down. Never a single score."></qtc-triad>
+        <p class="triad-cap">Quality ↑ × Time ↓ × Tokens ↓: the three axes orangu measures. Never a single score.</p>
       </div>
       <div class="term-wrap">
         <div class="term" aria-label="orangu workflow"><pre><span class="p">$</span> npx orangu report
@@ -379,7 +384,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
             <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>orangu-improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored receipt of the checks it ran. Orangu validates the receipt's shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored receipt of the checks it ran. Orangu validates the receipt's shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
             </div>
             <p class="demo-note">Local code measures and matches. An optional skill drafts. The browser only copies a handoff. A verified session comparison means its reviewed metrics passed on selected later evidence; it is not a causal or overall-quality claim.</p>
           </div>
@@ -394,7 +399,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
   <div class="wrap">
     <div class="kicker">Change the right layer</div>
     <h2>A suggestion should name what needs to change.</h2>
-    <p class="sec-lead">Deterministic matches narrow the options. <code>orangu-improve</code> drafts the smallest useful change for review; <code>orangu-apply</code> performs reviewed session/repo changes only when invoked.</p>
+    <p class="sec-lead">Deterministic matches narrow the options. <code>/orangu:improve</code> drafts the smallest useful change for review; <code>/orangu:apply</code> performs reviewed session/repo changes only when invoked.</p>
     <div class="change-grid">
       <div class="card change-card"><h3>Instruction files</h3><p>Persistent project guidance and conventions.</p></div>
       <div class="card change-card"><h3>Scripts and CLIs</h3><p>Repeatable actions with checkable output.</p></div>
@@ -430,8 +435,8 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
       <p class="sec-lead">No instrumentation, no account, no upload, and no telemetry are required to inspect supported sessions already on disk.</p>
       <div class="grid g300" style="margin-bottom:22px">
         <div class="card"><h3>Bounded local evidence</h3><p><code>orangu evidence</code> accepts a supported session or current Orangu Analysis, SlimAnalysis, or Aggregate output. It redacts, bounds, matches, and ranks without a model or network request.</p></div>
-        <div class="card"><h3>Optional AI interpretation</h3><p><code>orangu-improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
-        <div class="card"><h3>Explicit reviewed changes</h3><p><code>orangu-apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the receipt's shape and file list. Session-only later evidence owns the current verification claim.</p></div>
+        <div class="card"><h3>Optional AI interpretation</h3><p><code>/orangu:improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
+        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the receipt's shape and file list. Session-only later evidence owns the current verification claim.</p></div>
       </div>
       <div class="compare" aria-label="How Orangu turns local evidence into improvement">
         <div class="compare-row"><b>Raw transcripts</b><span>Contain the record, but leave the reading and synthesis to you.</span></div>
