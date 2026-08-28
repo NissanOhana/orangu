@@ -1484,6 +1484,8 @@ table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: 
 .overview-hero { position: relative; min-height: 112px; flex-wrap: nowrap; overflow: hidden; padding: 20px 24px; background: linear-gradient(120deg, var(--surface), var(--accent-weak)); }
 .overview-hero::after { content: ""; position: absolute; width: 220px; height: 220px; right: -70px; top: -110px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 12%, transparent); }
 .overview-brand { position: relative; z-index: 1; display: grid; place-items: center; width: 80px; height: 80px; flex: none; }
+@keyframes overview-float { 0%, 100% { transform: translateY(0) rotate(-1deg); } 50% { transform: translateY(-6px) rotate(1deg); } }
+@keyframes overview-halo { 0%, 100% { transform: scale(.92); opacity: .45; } 50% { transform: scale(1.08); opacity: 1; } }
 .overview-brand::before { content: ""; position: absolute; inset: 9px; border: 1px solid color-mix(in srgb, var(--accent-ink) 28%, transparent); border-radius: 50%; animation: overview-halo 3.8s ease-in-out infinite; }
 .overview-brand .logo { position: relative; z-index: 1; filter: drop-shadow(0 10px 14px color-mix(in srgb, var(--ink1) 18%, transparent)); animation: overview-float 4.8s ease-in-out infinite; }
 .overview-copy { position: relative; z-index: 1; min-width: 0; }
@@ -9186,14 +9188,15 @@ var HarnessRunner = class {
       else unreadable++;
     }
     const home = homedir3();
-    const cwd = this.ctx.opts.cwd ?? process.cwd();
+    const repoCwd = this.ctx.opts.cwd;
+    const cwd = repoCwd ?? process.cwd();
     const roots = this.ctx.opts.roots ?? [this.ctx.opts.configDir ?? defaultConfigDir()];
     const now = this.ctx.now();
     const inventory = await collectInventory({ cwd, roots, home });
-    const report = buildHarnessReport(inventory, analyses, aggregate(analyses, "serve", now), {
+    const report = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : "global", now), {
       version: this.ctx.opts.version,
       now,
-      scope: { cwd, roots, global: !!this.ctx.opts.roots, limit: rows.length, sessionsUnreadable: unreadable, home }
+      scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home }
     });
     this.result = redactValue(report, { scrub: true, home });
     this.fingerprint = fp;
@@ -11808,7 +11811,7 @@ async function cmdBrief(flags) {
 `));
   process.stdout.write("  " + outcomeHeadline(s) + "\n\n");
   for (const line of nextStepLines(analysis)) process.stdout.write(line + "\n");
-  process.stderr.write(paint2(C2.dim, `
+  if (!flagBool(flags, "quiet")) process.stderr.write(paint2(C2.dim, `
   orangu report for the full picture \xB7 orangu --help for every command
 `));
 }
