@@ -137,7 +137,9 @@ export function glyphs(caps: Pick<Caps, 'unicode'>): Glyphs {
 
 // ---------- width ----------
 
-const ANSI_OR_OSC = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g
+const ANSI_OR_OSC = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)/g
+/** C0 (minus tab and newline), DEL and C1: a backspace redraws a printed command, a bare ESC starts one */
+const CONTROL = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g
 const ZERO_WIDTH = /^[\p{Mn}\p{Me}\p{Cf}\p{Cc}\p{Default_Ignorable_Code_Point}]/u
 const EMOJI = /\p{Emoji_Presentation}|\uFE0F/u
 // East Asian Width W/F is not an ECMAScript property; these ranges cover realistic input.
@@ -156,9 +158,12 @@ const WIDE_RANGES: ReadonlyArray<readonly [number, number]> = [
 const isWide = (cp: number): boolean => WIDE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi)
 const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
-/** Remove SGR/CSI and OSC sequences; what remains is what the terminal shows. */
+/**
+ * Remove SGR/CSI and OSC sequences and every other control character; what remains is what the terminal
+ * shows. Session titles are transcript-authored, so the input may be hostile, not merely styled.
+ */
 export function stripAnsi(s: string): string {
-  return s.replace(ANSI_OR_OSC, '')
+  return s.replace(ANSI_OR_OSC, '').replace(CONTROL, '')
 }
 
 /** Terminal columns a string occupies: escapes 0, ASCII 1, combining/format 0, CJK and emoji 2. */

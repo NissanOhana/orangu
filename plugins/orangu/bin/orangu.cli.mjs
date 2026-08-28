@@ -37,6 +37,7 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
 var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   ...BOOL_FLAGS,
   ...SHORT_VALUE_FLAGS,
+  "h",
   "out",
   "root",
   "config",
@@ -1870,7 +1871,7 @@ svg { display: block; max-width: 100%; }
 .feedback-launch { position: fixed; z-index: 80; right: 18px; bottom: 18px; border: 1px solid var(--border2); border-radius: 999px; padding: 8px 13px; background: var(--surface); color: var(--accent-ink); box-shadow: 0 5px 20px color-mix(in srgb, var(--ink1) 14%, transparent); font-size: 12.5px; font-weight: 700; }
 .feedback-launch:hover { text-decoration: none; background: var(--accent-weak); }
 `;
-var BUILD_VERSION = "0.7.0";
+var BUILD_VERSION = "0.7.1";
 
 // src/report/brand.ts
 var BRAND_ICON_ID = "orangu-brand-icon";
@@ -1891,6 +1892,8 @@ function badgeFor(mtimeMs, now) {
 
 // src/redact/redact.ts
 var PATTERNS = [
+  // key material first: its body would otherwise be cut into the blobs and hashes below
+  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, "\u2039private-key\u203A"],
   // API keys / tokens (do these before generic ones)
   [/\bsk-ant-[A-Za-z0-9_-]{10,}/g, "\u2039anthropic-key\u203A"],
   [/\bsk-proj-[A-Za-z0-9_-]{20,}/g, "\u2039openai-project-key\u203A"],
@@ -1898,6 +1901,11 @@ var PATTERNS = [
   [/\bwhsec_[A-Za-z0-9]{16,}/g, "\u2039stripe-webhook-secret\u203A"],
   [/\bsk-[A-Za-z0-9]{20,}/g, "\u2039api-key\u203A"],
   [/\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}/g, "\u2039github-token\u203A"],
+  [/\bglpat-[A-Za-z0-9_-]{20,}/g, "\u2039gitlab-token\u203A"],
+  [/\bnpm_[A-Za-z0-9]{30,}/g, "\u2039npm-token\u203A"],
+  [/\bhf_[A-Za-z0-9]{30,}/g, "\u2039huggingface-token\u203A"],
+  [/\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, "\u2039sendgrid-key\u203A"],
+  [/\bdop_v1_[A-Za-z0-9]{60,}/g, "\u2039digitalocean-token\u203A"],
   [/\bxox[baprs]-[A-Za-z0-9-]{10,}/g, "\u2039slack-token\u203A"],
   [/\bAKIA[0-9A-Z]{16}\b/g, "\u2039aws-key\u203A"],
   [/\bAIza[0-9A-Za-z_-]{30,}/g, "\u2039google-key\u203A"],
@@ -1907,7 +1915,10 @@ var PATTERNS = [
   [/\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s'"]+/gi, "\u2039db-url\u203A"],
   // bearer/authorization
   [/\bBearer\s+[A-Za-z0-9._-]{12,}/g, "Bearer \u2039token\u203A"],
-  [/\b(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*['"]?[^\s'"]{6,}/gi, "$1=\u2039redacted\u203A"],
+  // key=value assignments, including env-style names around the secret word (AWS_SECRET_ACCESS_KEY=,
+  // DB_PASSWORD=, _authToken=). A bare plural such as `tokens:` never matches, and a value a rule above
+  // already masked (‹…›) keeps that marker.
+  [/\b([A-Za-z0-9_-]*?(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|auth)(?:[_-][A-Za-z0-9]+)*)\s*[:=]\s*['"]?[^\s'"‹]{6,}/gi, "$1=\u2039redacted\u203A"],
   // email
   [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "\u2039email\u203A"],
   // long hex/base64 blobs
@@ -1917,9 +1928,9 @@ var counter = 0;
 function scrubStr(s) {
   let out3 = s;
   for (const [re, rep] of PATTERNS) {
-    out3 = out3.replace(re, () => {
+    out3 = out3.replace(re, (...m) => {
       counter++;
-      return rep;
+      return rep.replace(/\$(\d)/g, (_, i) => String(m[Number(i)] ?? ""));
     });
   }
   return out3;
@@ -2257,7 +2268,7 @@ ${BRAND_ICON_SCRIPT}
 // src/cache/index.ts
 import { createHash as createHash2, randomBytes } from "node:crypto";
 import { constants as constants6 } from "node:fs";
-import { lstat as lstat4, mkdir, open as open6, realpath as realpath4, rename, stat as stat2, unlink } from "node:fs/promises";
+import { chmod, lstat as lstat4, mkdir, open as open6, readdir as readdir2, realpath as realpath4, rename, stat as stat2, unlink } from "node:fs/promises";
 import { join as join5, resolve as resolve4 } from "node:path";
 
 // src/model/analysis.ts
@@ -2364,7 +2375,10 @@ var bytesOf = (v) => {
 };
 var preview = (s, max = 160) => {
   const one = s.replace(/\s+/g, " ").trim();
-  return one.length > max ? one.slice(0, max - 1) + "\u2026" : one;
+  if (one.length <= max) return one;
+  const hard = one.slice(0, max - 1);
+  const space = hard.lastIndexOf(" ");
+  return (space > 0 ? hard.slice(0, space) : hard) + "\u2026";
 };
 function parseUsage(u) {
   const o = obj(u);
@@ -6105,8 +6119,35 @@ async function readAnalysisCacheEntry(manifest) {
 function manifestCacheKey(manifest) {
   return createHash2("sha1").update(`manifest-v1|${manifest.fingerprint}`).digest("hex");
 }
+async function sweepStaleGenerations(cacheRoot, currentDir) {
+  let entries;
+  try {
+    entries = await readdir2(cacheRoot);
+  } catch {
+    return;
+  }
+  for (const name of entries) {
+    const dir = join5(cacheRoot, name);
+    if (dir === currentDir) continue;
+    try {
+      const st = await lstat4(dir);
+      if (!st.isDirectory() || st.isSymbolicLink()) continue;
+      if ((st.mode & 511) !== PRIVATE_DIRECTORY_MODE) await chmod(dir, PRIVATE_DIRECTORY_MODE);
+      for (const file of await readdir2(dir)) {
+        const fp = join5(dir, file);
+        try {
+          const fst = await lstat4(fp);
+          if (fst.isFile() && !fst.isSymbolicLink() && (fst.mode & 511) !== PRIVATE_FILE_MODE) await chmod(fp, PRIVATE_FILE_MODE);
+        } catch {
+        }
+      }
+    } catch {
+    }
+  }
+}
 var AnalysisCache = class {
   layoutDirectories;
+  sweptStale = false;
   dir;
   enabled;
   validVersion;
@@ -6129,6 +6170,10 @@ var AnalysisCache = class {
   async ensurePrivateLayout() {
     const identities = [];
     for (const path of this.layoutDirectories) identities.push(await ensurePrivateDirectory(path));
+    if (!this.sweptStale) {
+      this.sweptStale = true;
+      await sweepStaleGenerations(resolve4(this.dir, ".."), this.dir);
+    }
     return identities;
   }
   /** miss on absent/corrupt/version mismatch; never throws */
@@ -6674,7 +6719,8 @@ var ASCII_GLYPHS = { ok: "ok", mark: "*", sep: " | ", ellipsis: "...", up: "up",
 function glyphs(caps) {
   return caps.unicode ? UNICODE_GLYPHS : ASCII_GLYPHS;
 }
-var ANSI_OR_OSC = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+var ANSI_OR_OSC = /\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\|$)/g;
+var CONTROL = /[\x00-\x08\x0b-\x1f\x7f-\x9f]/g;
 var ZERO_WIDTH = /^[\p{Mn}\p{Me}\p{Cf}\p{Cc}\p{Default_Ignorable_Code_Point}]/u;
 var EMOJI = new RegExp("\\p{Emoji_Presentation}|\\uFE0F", "u");
 var WIDE_RANGES = [
@@ -6692,7 +6738,7 @@ var WIDE_RANGES = [
 var isWide = (cp) => WIDE_RANGES.some(([lo, hi]) => cp >= lo && cp <= hi);
 var segmenter = new Intl.Segmenter(void 0, { granularity: "grapheme" });
 function stripAnsi(s) {
-  return s.replace(ANSI_OR_OSC, "");
+  return s.replace(ANSI_OR_OSC, "").replace(CONTROL, "");
 }
 function displayWidth(s) {
   let w = 0;
@@ -7661,9 +7707,11 @@ function analysisBlock(caps, a, title) {
   if (s.agents) lines.push(row(caps, "agents", `${s.agents} runs${sep3}${a.agents.maxConcurrency} max parallel${sep3}${fmtTokens(a.tokens.agents)} tokens`));
   lines.push(row(caps, "context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""}${sep3}${plural(s.compactions, "compaction")}`));
   lines.push("", paint(caps, "bold", INDENT + "findings"));
-  if (!a.insights.length) lines.push(paint(caps, "good", "    clean: no findings"));
+  const bad = a.parse.badLines;
+  if (!a.insights.length) lines.push(bad ? paint(caps, "warn", `    no findings; ${plural(bad, "unparseable line")} skipped`) : paint(caps, "good", "    clean: no findings"));
   for (const ins of a.insights.slice(0, 6)) lines.push(findingRow(caps, ins));
   lines.push("", paint(caps, "dim", fit(caps, `${INDENT}run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report`)));
+  if (bad && a.insights.length) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: ${plural(bad, "unparseable line")} skipped`)));
   if (!a.parse.reconciliation.ok) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%`)));
   return lines;
 }
@@ -7688,7 +7736,12 @@ function listRows(caps, refs, o) {
     lines.push(`${INDENT}${paint(caps, "accent", s.sessionId.slice(0, 8))}  ${paint(caps, "dim", when)}  ${size}  ${paint(caps, "dim", agents)}  ${project}`);
   }
   if (!o.total) lines.push(paint(caps, "dim", fit(caps, `${INDENT}No sessions found. Is Claude Code installed?`)), paint(caps, "dim", fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)));
-  else lines.push("", paint(caps, "dim", fit(caps, `${INDENT}orangu report <id>${glyphs(caps).sep}orangu analyze <id>${glyphs(caps).sep}orangu harness`)));
+  else {
+    const sep3 = glyphs(caps).sep;
+    lines.push("");
+    if (refs.length < o.total) lines.push(paint(caps, "dim", fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep3}--limit <n> for more`)));
+    lines.push(paint(caps, "dim", fit(caps, `${INDENT}orangu report <id>${sep3}orangu analyze <id>${sep3}orangu harness`)));
+  }
   return lines;
 }
 function fmtAge(mtimeMs, now) {
@@ -9050,7 +9103,7 @@ import { cpus as cpus2 } from "node:os";
 import { homedir as homedir3 } from "node:os";
 
 // src/harness/collect.ts
-import { readdir as readdir2, readFile, stat as stat4 } from "node:fs/promises";
+import { readdir as readdir3, readFile, stat as stat4 } from "node:fs/promises";
 import { basename as basename7, join as join7 } from "node:path";
 var DEFAULT_MAX_FILE_BYTES = 1e6;
 var MAX_WALK_DEPTH = 6;
@@ -9117,7 +9170,7 @@ async function readJson(ctx, path) {
 }
 async function listDir(ctx, path, required = false) {
   try {
-    const entries = await readdir2(path, { withFileTypes: true });
+    const entries = await readdir3(path, { withFileTypes: true });
     return entries.map((e) => ({ name: e.name, dir: e.isDirectory() })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
   } catch (e) {
     const r = reasonOf(e);
@@ -10159,7 +10212,8 @@ var exportRoutes = (ctx) => [
       const { html } = ctx.renderReport(analysis, { redact: { scrub: true, stripText: !ctx.opts.exportIncludeText } });
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
-        "Content-Disposition": `attachment; filename="orangu-${id}.html"`,
+        // a transcript filename is the id: only a canonical one may name the download (header parameter injection)
+        "Content-Disposition": `attachment; filename="orangu-${SESSION_ID_RE.test(id) ? id : "session"}.html"`,
         ...HTML_ANTI_FRAMING_HEADERS
       });
       res.end(html);
@@ -11166,7 +11220,7 @@ function slimAnalysis(a) {
 // src/cli/commands/harness.ts
 import { homedir as homedir4 } from "node:os";
 import { basename as basename8, resolve as resolve6 } from "node:path";
-var VERSION = true ? "0.7.0" : "0.0.0-dev";
+var VERSION = true ? "0.7.1" : "0.0.0-dev";
 var out = MACHINE_CAPS;
 var err = MACHINE_CAPS;
 function detectStreams(flags) {
@@ -11541,7 +11595,7 @@ import { realpath as realpath8, stat as stat7 } from "node:fs/promises";
 
 // src/suggest/artifacts.ts
 import { constants as constants10 } from "node:fs";
-import { chmod, lstat as lstat8, open as open10, realpath as realpath6, stat as stat6 } from "node:fs/promises";
+import { chmod as chmod2, lstat as lstat8, open as open10, realpath as realpath6, stat as stat6 } from "node:fs/promises";
 import { basename as basename9, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
@@ -11632,7 +11686,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   if (!stat8.isFile() || stat8.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`);
   if (stat8.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`);
   if (stat8.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
-  if (process.platform !== "win32") await chmod(root, 448);
+  if (process.platform !== "win32") await chmod2(root, 448);
   const [realRoot, realCandidate] = await Promise.all([realpath6(root), realpath6(candidate)]);
   if (!inside(realRoot, realCandidate)) throw artifactError(`${expectedName} resolves outside ${realRoot}`);
   const initial = artifactSnapshot(stat8);
@@ -12046,7 +12100,7 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
 }
 
 // src/version.ts
-var VERSION2 = true ? "0.7.0" : "0.0.0-dev";
+var VERSION2 = true ? "0.7.1" : "0.0.0-dev";
 
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
@@ -12807,7 +12861,8 @@ function thresholdExit(analysis, flags) {
 }
 async function cmdList2(flags) {
   const configArg = flagStr(flags, "root", "config", "r");
-  const all = flagBool(flags, "global") ? await listSessions({ roots: await claudeRoots(configArg) }) : await listSessions(configArg ? { configDir: configArg } : {});
+  const cwd = flags["cwd"] ? { cwd: String(flags["cwd"]) } : {};
+  const all = flagBool(flags, "global") ? await listSessions({ roots: await claudeRoots(configArg), ...cwd }) : await listSessions({ ...configArg ? { configDir: configArg } : {}, ...cwd });
   const limit = Number(flagStr(flags, "limit", "l") ?? "40");
   const rows = all.slice(0, Number.isNaN(limit) ? 40 : limit);
   if (flagBool(flags, "json")) {
@@ -13015,12 +13070,13 @@ ${paint(out2, "bold", "flags")}
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
   --verbose              also print the cache diagnostic (stderr)
+  --quiet                no progress or hints on stderr (the answer only)
   --plain                pick only: a numbered list instead of the prompt
   --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
                          are honoured; NO_COLOR, FORCE_COLOR=0 and
                          ORANGU_NO_ANIMATION=1 also stop the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
-  --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
+  --max-tokens <n>       exit 2 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
@@ -13038,7 +13094,7 @@ async function main() {
     process.stdout.write(VERSION2 + "\n");
     return;
   }
-  if (flagBool(flags, "help") || command === "help") {
+  if (flagBool(flags, "help") || flagBool(flags, "h") || command === "help") {
     printHelp();
     return;
   }
@@ -13087,6 +13143,12 @@ async function main() {
       fail(`unknown command "${command}". Run: orangu --help`);
     }
   }
+}
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on("error", (e) => {
+    if (e.code === "EPIPE") process.exit(0);
+    throw e;
+  });
 }
 if (isPoolWorker()) {
   runPoolWorker();

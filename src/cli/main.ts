@@ -290,9 +290,11 @@ function thresholdExit(analysis: ReturnType<typeof analyzeSession>, flags: Recor
 
 async function cmdList(flags: Record<string, string | boolean>): Promise<void> {
   const configArg = flagStr(flags, 'root', 'config', 'r')
+  // --cwd scopes the list to one repo, exactly as serve --cwd does
+  const cwd = flags['cwd'] ? { cwd: String(flags['cwd']) } : {}
   const all: SessionRef[] = flagBool(flags, 'global')
-    ? await listSessions({ roots: await claudeRoots(configArg) })
-    : await listSessions(configArg ? { configDir: configArg } : {})
+    ? await listSessions({ roots: await claudeRoots(configArg), ...cwd })
+    : await listSessions({ ...(configArg ? { configDir: configArg } : {}), ...cwd })
   const limit = Number(flagStr(flags, 'limit', 'l') ?? '40')
   const rows = all.slice(0, Number.isNaN(limit) ? 40 : limit)
   if (flagBool(flags, 'json')) {
@@ -497,12 +499,13 @@ ${paint(out, 'bold', 'flags')}
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
   --verbose              also print the cache diagnostic (stderr)
+  --quiet                no progress or hints on stderr (the answer only)
   --plain                pick only: a numbered list instead of the prompt
   --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
                          are honoured; NO_COLOR, FORCE_COLOR=0 and
                          ORANGU_NO_ANIMATION=1 also stop the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
-  --max-tokens <n>       exit 1 above this token total (CI: analyze/report)
+  --max-tokens <n>       exit 2 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
   --version, --help
 
@@ -523,7 +526,7 @@ async function main(): Promise<void> {
     process.stdout.write(VERSION + '\n')
     return
   }
-  if (flagBool(flags, 'help') || command === 'help') {
+  if (flagBool(flags, 'help') || flagBool(flags, 'h') || command === 'help') {
     printHelp()
     return
   }
@@ -573,6 +576,14 @@ async function main(): Promise<void> {
       fail(`unknown command "${command}". Run: orangu --help`)
     }
   }
+}
+
+// `orangu … | head` closes the pipe early: that is the reader's choice, not an error worth a stack trace
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (e: NodeJS.ErrnoException) => {
+    if (e.code === 'EPIPE') process.exit(0)
+    throw e
+  })
 }
 
 if (isPoolWorker()) {

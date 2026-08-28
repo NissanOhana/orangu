@@ -95,19 +95,23 @@ describe('release automation', () => {
     expect(pages).toContain('node scripts/assert-offline.mjs --site')
   })
 
-  it('ships npm and the plugin tag from one v* tag', () => {
+  it('ships npm and the plugin tag on a version bump to main or a v* tag', () => {
     const release = read('.github/workflows/release.yml')
-    expect(release).toMatch(/\non:\n  push:\n    tags: \['v\*'\]\n/)
+    // Two triggers, one guard: a merge to main and a v* tag both reach the same jobs.
+    expect(release).toMatch(/\non:\n  workflow_dispatch:\n  push:\n    branches: \[main\]\n    tags: \['v\*'\]\n/)
     expect(release).toContain('permissions:\n  contents: read')
 
-    // Nothing ships unless the tag and every version-bearing manifest agree, so a
+    // package.json carries the version; the two plugin manifests must agree with it, so a
     // half-finished bump cannot publish npm against one version and tag another.
+    expect(release, 'the guard reads the version from package.json').toContain('require("./package.json").version')
     for (const manifest of [
-      'package.json',
       'plugin/.claude-plugin/plugin.json',
       'plugins/orangu/.codex-plugin/plugin.json',
     ])
       expect(release, `the guard must compare ${manifest}`).toContain(`compare ${manifest} \\`)
+
+    // Only a version not already on npm ships: every downstream job keys off the guard.
+    expect(release).toContain("if: needs.guard.outputs.on-npm == 'false'")
 
     // The release gate is the same suite the branch already runs, browser tests included.
     expect(release).toContain('npm run verify:release')
@@ -118,22 +122,23 @@ describe('release automation', () => {
     expect(release, 'npm publish must not read a stored secret').not.toMatch(/secrets\./)
     expect(release, 'trusted publishing needs npm >= 11.5.1').toContain('npm install -g npm@latest')
 
-    // A Claude Code plugin is released by the {name}--v{version} git tag the marketplace resolves.
+    // A Claude Code plugin is released by the {name}--v{version} git tag the marketplace
+    // resolves; a merge-triggered release also writes the v{version} marker tag.
     expect(release).toContain('claude plugin validate ./plugin --strict')
     expect(release).toContain('claude plugin tag ./plugin --push')
+    expect(release).toContain('git push origin "v$VERSION"')
 
     // Strict order, so a failed publish never leaves a half-shipped release.
     expect(release).toContain('needs: [guard, verify]')
     expect(release).toContain('needs: [guard, verify, npm]')
 
-    // The landing page is deliberately not released from the tag: the version bump
-    // regenerates site/, so pushing that commit to main already deployed the page,
-    // and the github-pages environment admits only the main branch. Comments are
+    // The landing page is deliberately not released here: the version bump regenerates
+    // site/, so pushing that commit to main already deployed the page. Comments are
     // stripped first so the paragraph explaining that does not satisfy its own rule.
     const config = release.replace(/^\s*#.*$/gm, '')
-    expect(config, 'the release must not deploy Pages from a tag ref').not.toContain('pages.yml')
+    expect(config, 'the release must not deploy Pages').not.toContain('pages.yml')
 
-    // Re-pushing a tag must skip what already shipped rather than failing the run.
+    // A re-run over an already-shipped version skips rather than failing.
     expect(release).toContain('is already published; skipping.')
     expect(release).toContain('is already on origin; nothing to publish.')
   })

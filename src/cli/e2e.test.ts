@@ -815,3 +815,57 @@ syncBuiltinESMExports()
     }
   }, 45_000)
 })
+
+describe.skipIf(!existsSync(CLI))('orangu CLI regressions from the 0.7.0 QA pass', () => {
+  const sq = (s: string) => `'${s.replace(/'/g, "'\\''")}'`
+
+  it('exits 0 with no EPIPE trace when the reader closes stdout early (report --stdout | head)', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-epipe-')))
+    const cmd = `set -o pipefail; node ${sq(CLI)} report --stdout aaaaaaaa --root ${sq(home.configDir)} | head -c 10 >/dev/null`
+    const r = spawnSync('bash', ['-c', cmd], { encoding: 'utf8', env: { ...process.env, ORANGU_NO_CACHE: '1' } })
+    expect(r.stderr).not.toContain('EPIPE')
+    expect(r.status, r.stderr).toBe(0)
+  })
+
+  it('-h is --help', () => {
+    const h = run(['-h'])
+    expect(h).toContain('usage')
+    expect(h).toContain('orangu report')
+  })
+
+  it('help documents the real gate exit code and the --quiet flag the skills use', () => {
+    const h = run(['--help'])
+    expect(h).toContain('exit 2 above this token total')
+    expect(h).not.toContain('exit 1 above')
+    expect(h).toMatch(/^ {2}--quiet {2,}/m)
+    for (const line of h.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80)
+  })
+
+  it('list says when --limit cut the rows, like pick does', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-list-')))
+    const cut = run(['list', '--root', home.configDir, '--limit', '1', '--no-color'])
+    expect(cut).toMatch(/1 of 3 shown/)
+    expect(cut).toContain('--limit')
+    const all = run(['list', '--root', home.configDir, '--no-color'])
+    expect(all).not.toMatch(/of 3 shown/)
+  })
+
+  it('analyze warns about unparseable transcript lines instead of calling the session clean', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-badlines-'))
+    const path = join(dir, 'dddddddd-0000-4000-8000-000000000001.jsonl')
+    await writeFile(path, 'this is not json\n{"type":"user","truncated\n')
+    const out = run(['analyze', path, '--no-color', '--no-cache'])
+    expect(out).toContain('2 unparseable lines')
+    expect(out).not.toContain('clean: no findings')
+  })
+})
+
+describe.skipIf(!existsSync(CLI))('orangu list --cwd', () => {
+  it('scopes the list to the repo like serve --cwd does, instead of ignoring the flag', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-listcwd-')))
+    const none = run(['list', '--root', home.configDir, '--cwd', '/nonexistent/repo', '--no-color'])
+    expect(none).toContain('No sessions found')
+    const all = run(['list', '--root', home.configDir, '--cwd', '/Users/test/Code/demo', '--no-color'])
+    expect(all).toContain('3 sessions')
+  })
+})

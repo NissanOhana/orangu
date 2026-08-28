@@ -9,7 +9,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
-import { lstat, mkdir, open, realpath, rename, stat, unlink } from 'node:fs/promises'
+import { chmod, lstat, mkdir, open, readdir, realpath, rename, stat, unlink } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { ANALYSIS_SCHEMA_VERSION, type Analysis } from '../model/analysis.js'
 import { withStableSessionRead, parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
@@ -169,8 +169,44 @@ export function manifestCacheKey(manifest: EvidenceSessionManifest): string {
   return createHash('sha1').update(`manifest-v1|${manifest.fingerprint}`).digest('hex')
 }
 
+/**
+ * Tighten the modes of stale cache generations a pre-0.5.0 release left world-readable. Those siblings
+ * of the current `<schema>-<version>` directory are never reopened, so their raw (unredacted) analysis
+ * files keep their old 0644/0755 modes. We only ever narrow permissions here, best-effort: a failure to
+ * chmod one leftover entry must never break a cache read.
+ */
+async function sweepStaleGenerations(cacheRoot: string, currentDir: string): Promise<void> {
+  let entries: string[]
+  try {
+    entries = await readdir(cacheRoot)
+  } catch {
+    return
+  }
+  for (const name of entries) {
+    const dir = join(cacheRoot, name)
+    if (dir === currentDir) continue
+    try {
+      const st = await lstat(dir)
+      if (!st.isDirectory() || st.isSymbolicLink()) continue
+      if ((st.mode & 0o777) !== PRIVATE_DIRECTORY_MODE) await chmod(dir, PRIVATE_DIRECTORY_MODE)
+      for (const file of await readdir(dir)) {
+        const fp = join(dir, file)
+        try {
+          const fst = await lstat(fp)
+          if (fst.isFile() && !fst.isSymbolicLink() && (fst.mode & 0o777) !== PRIVATE_FILE_MODE) await chmod(fp, PRIVATE_FILE_MODE)
+        } catch {
+          // a disappearing entry needs no tightening
+        }
+      }
+    } catch {
+      // best-effort: skip anything we cannot stat
+    }
+  }
+}
+
 export class AnalysisCache {
   private readonly layoutDirectories: string[]
+  private sweptStale = false
   private readonly dir: string
   private readonly enabled: boolean
   private readonly validVersion: boolean
@@ -196,6 +232,10 @@ export class AnalysisCache {
   private async ensurePrivateLayout(): Promise<PrivateDirectoryIdentity[]> {
     const identities: PrivateDirectoryIdentity[] = []
     for (const path of this.layoutDirectories) identities.push(await ensurePrivateDirectory(path))
+    if (!this.sweptStale) {
+      this.sweptStale = true
+      await sweepStaleGenerations(resolve(this.dir, '..'), this.dir)
+    }
     return identities
   }
 

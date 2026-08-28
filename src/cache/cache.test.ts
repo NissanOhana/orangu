@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { chmodSync as chmodS, mkdirSync as mkdirS, writeFileSync as writeS } from 'node:fs'
 import {
   chmodSync,
   existsSync,
@@ -440,4 +441,19 @@ describe('cache e2e via the built CLI', () => {
     const stored = JSON.parse(readFileSync(join(home, 'cache', vdir, file), 'utf8')) as Analysis
     expect(stored.generator.generatedAt).toBe(0)
   }, 60_000)
+})
+
+describe('stale cache generations', () => {
+  it.skipIf(process.platform === 'win32')('tightens a sibling version directory an older release left world-readable', async () => {
+    const home = join(tmp(), 'stale', 'orangu-home')
+    const old = join(home, 'cache', '1-0.4.1')
+    mkdirS(old, { recursive: true })
+    writeS(join(old, 'k.json'), '{}')
+    chmodS(join(old, 'k.json'), 0o644)
+    chmodS(old, 0o755)
+    const c = defaultCacheAt(home, 'sweep-9.9.9')
+    await c.get('missing') // opening the current generation is the moment the siblings are swept
+    expect(mode(old)).toBe(0o700)
+    expect(mode(join(old, 'k.json'))).toBe(0o600)
+  })
 })
