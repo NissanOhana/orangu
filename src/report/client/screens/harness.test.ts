@@ -99,4 +99,17 @@ describe('renderHarness (A8, serve-only)', () => {
     expect(none).toContain('no harness config found')
     expect(none).toContain('href="#harness"')
   })
+
+  it('the Overview card has a designed loading state while the report computes and a degraded one when it cannot', () => {
+    const loading = harnessCardHtml(undefined, '#harness?s=abc')
+    expect(loading).toContain('aria-busy="true"')
+    expect(loading).toContain('href="#harness?s=abc"')
+    expect(loading).toContain('Comparing what your config declares with what these sessions used…')
+    expect(loading).toContain('open the harness view →')
+    const failed = harnessCardHtml(null, '#harness?s=abc')
+    expect(failed).not.toContain('aria-busy')
+    expect(failed).toContain('The harness report could not be computed.')
+    expect(failed).toContain('orangu harness prints the reason')
+    for (const html of [loading, failed]) expect(html).toMatch(/^<a class="card pad mb16 harness-card"/)
+  })
 })

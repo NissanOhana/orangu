@@ -222,10 +222,10 @@ function harnessView(ctx: Ctx): HTMLElement {
   return renderHarness(ctx, harnessReport ?? null)
 }
 
-/** the Overview card: '' until the report is here (and the fetch is kicked so a re-render fills it) */
+/** the Overview card: the loading state until the report is here (the fetch is kicked so a re-render fills it), the degraded state if it never is */
 function harnessCard(ds: DataSource, onLoaded: () => void, href: string): string {
   ensureHarness(ds, onLoaded)
-  return harnessReport ? harnessCardHtml(harnessReport, href) : ''
+  return harnessCardHtml(harnessReport, href)
 }
 
 export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview, ensureHarness, invalidateHarness, harnessView, harnessCard }

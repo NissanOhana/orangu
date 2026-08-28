@@ -48,10 +48,21 @@ function idleCard(title: string, idle: string[], total: number, never: string, d
   return `<div class="card pad"><div class="card-title">${title}</div>${body}</div>`
 }
 
-/** The Overview card (serve): one line, linking to #harness. `href` carries the current route (the ?s= key). */
-export function harnessCardHtml(r: HarnessReport, href: string): string {
-  const lead = nothingDeclared(r) ? { title: 'no harness config found under the scanned roots', sub: 'settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md' } : harnessLead(r)
-  return `<a class="card pad mb16 harness-card" href="${esc(href)}"><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${esc(lead.title)}</div><div class="small muted">${esc(lead.sub)} · open the harness view →</div></a>`
+/**
+ * The Overview card (serve): one line, linking to #harness. `href` carries the current route (the ?s= key).
+ * `undefined` = the report is still computing (designed loading state, never a blank slot); `null` = it
+ * could not be computed (the degraded state the #harness screen shows, one line).
+ */
+export function harnessCardHtml(r: HarnessReport | null | undefined, href: string): string {
+  const lead =
+    r === undefined
+      ? { title: 'Comparing what your config declares with what these sessions used…', sub: 'a cold cache takes a moment' }
+      : r === null
+        ? { title: 'The harness report could not be computed.', sub: 'orangu harness prints the reason' }
+        : nothingDeclared(r)
+          ? { title: 'no harness config found under the scanned roots', sub: 'settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md' }
+          : harnessLead(r)
+  return `<a class="card pad mb16 harness-card" href="${esc(href)}"${r === undefined ? ' aria-busy="true"' : ''}><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${esc(lead.title)}</div><div class="small muted">${esc(lead.sub)} · open the harness view →</div></a>`
 }
 
 export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {

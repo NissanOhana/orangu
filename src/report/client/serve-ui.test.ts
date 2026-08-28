@@ -11,6 +11,34 @@ describe('whole-harness review CTA', () => {
   })
 })
 
+describe('the Overview harness card (M3)', () => {
+  it('renders the loading state while the first fetch is in flight, then the report line or the degraded line', async () => {
+    vi.resetModules() // the report cache is module state; start from "never fetched"
+    const { serveUi } = await import('./serve-ui.js')
+    let resolve!: (r: unknown) => void
+    const ds = { harness: vi.fn(() => new Promise((r) => { resolve = r })) } as unknown as Parameters<typeof serveUi.harnessCard>[0]
+    const onLoaded = vi.fn()
+    const loading = serveUi.harnessCard(ds, onLoaded, '#harness?s=abc')
+    expect(loading).toContain('aria-busy="true"')
+    expect(loading).toContain('href="#harness?s=abc"')
+    expect(loading).toContain('Harness')
+    expect(serveUi.harnessCard(ds, onLoaded, '#harness?s=abc')).toBe(loading) // one fetch, same state
+    resolve({ inventory: { settings: [], skills: [], agents: [], plugins: [], mcpServers: [], claudeMd: [] } })
+    await new Promise((r) => setTimeout(r, 0))
+    expect(onLoaded).toHaveBeenCalledTimes(1)
+    const loaded = serveUi.harnessCard(ds, onLoaded, '#harness?s=abc')
+    expect(loaded).not.toContain('aria-busy')
+    expect(loaded).toContain('no harness config found under the scanned roots')
+
+    vi.resetModules()
+    const fresh = (await import('./serve-ui.js')).serveUi
+    const failing = { harness: vi.fn(async () => { throw new Error('502') }) } as unknown as Parameters<typeof fresh.harnessCard>[0]
+    expect(fresh.harnessCard(failing, onLoaded, '#harness')).toContain('aria-busy="true"')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(fresh.harnessCard(failing, onLoaded, '#harness')).toContain('could not be computed')
+  })
+})
+
 describe('harness report cache', () => {
   const fakeDs = (report: unknown) => {
     const harness = vi.fn(async () => report as never)
