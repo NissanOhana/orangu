@@ -185,7 +185,8 @@ function outPath(flags: Record<string, string | boolean>, id: string, ext = 'htm
 // ---------- commands ----------
 /**
  * stdout is the path and nothing else (a piping contract: `orangu report | xargs open`); the whole
- * human footer goes to stderr. Under --quiet stderr is silent; --stdout writes the HTML instead.
+ * human footer goes to stderr. Under --quiet or --json stderr is silent and nothing is persisted (a
+ * machine read has no side effect); --stdout writes the HTML instead.
  */
 async function cmdReport(sel: string | undefined, flags: Record<string, string | boolean>): Promise<void> {
   const ref = await selectSession(sel, flags)
@@ -200,7 +201,7 @@ async function cmdReport(sel: string | undefined, flags: Record<string, string |
   const opened = !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || out.tty)
   if (opened) openInBrowser(path)
   process.stdout.write(path + '\n')
-  if (!flagBool(flags, 'quiet')) {
+  if (!flagBool(flags, 'quiet') && !flagBool(flags, 'json')) {
     process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + '\n')
     const step = await nextStep(analysis, flags)
     process.stderr.write(reportFooter(err, { path, opened, step }).join('\n') + '\n')

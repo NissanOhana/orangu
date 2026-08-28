@@ -294,6 +294,12 @@ syncBuiltinESMExports()
     expect(quiet.status, quiet.stderr).toBe(0)
     expect(quiet.stderr).toBe('')
     expect(quiet.stdout.trim().endsWith('.html')).toBe(true)
+    // --json on report is a machine read too: the path, no footer, and nothing persisted
+    const json = spawnSync('node', [CLI, ...base, '--json'], { encoding: 'utf8', env })
+    expect(json.status, json.stderr).toBe(0)
+    expect(json.stderr).toBe('')
+    expect(json.stdout.trim().split('\n')).toHaveLength(1)
+    expect(records()).toHaveLength(1)
 
     const analyze = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache'], { encoding: 'utf8', env })
     expect(analyze.status, analyze.stderr).toBe(0)
