@@ -82,19 +82,21 @@ describe('money guard: the curated catalog', () => {
 })
 
 describe('money guard: the documentation we publish', () => {
-  const DOCS = [
-    'README.md',
-    'CONTRIBUTING.md',
-    'SECURITY.md',
-    'design/brand/README.md',
-    'docs/README.md',
-    'docs/USAGE.md',
-    'docs/PRIVACY.md',
-    'docs/DETERMINISM.md',
-    'docs/ARCHITECTURE.md',
-    'docs/DATA-CONTRACTS.md',
-    'docs/DESIGN.md',
-  ]
+  // The root documents by name, plus EVERY top-level docs/*.md (docs/feedback.md escaped the earlier
+  // hand-written list): a published doc must not be able to skip this gate by being new.
+  const ROOT_DOCS = ['README.md', 'CONTRIBUTING.md', 'SECURITY.md', 'design/brand/README.md']
+  const PUBLISHED_DOCS = readdirSync(join(ROOT, 'docs'))
+    .filter((e) => e.endsWith('.md') && statSync(join(ROOT, 'docs', e)).isFile())
+    .sort()
+    .map((e) => `docs/${e}`)
+  const DOCS = [...ROOT_DOCS, ...PUBLISHED_DOCS]
+
+  it('walks every top-level docs/*.md, feedback.md included', () => {
+    expect(DOCS).toContain('docs/feedback.md')
+    for (const known of ['docs/README.md', 'docs/USAGE.md', 'docs/PRIVACY.md', 'docs/DETERMINISM.md', 'docs/ARCHITECTURE.md', 'docs/DATA-CONTRACTS.md', 'docs/DESIGN.md']) {
+      expect(DOCS).toContain(known)
+    }
+  })
 
   for (const f of DOCS) {
     it(`${f} quotes no currency amount`, () => {
