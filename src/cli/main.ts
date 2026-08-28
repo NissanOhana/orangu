@@ -22,7 +22,7 @@ import { renderReport } from '../report/render.js'
 import { AnalysisCache, analyzeRefCached } from '../cache/index.js'
 import { analyzeAllPooled, defaultJobs, isPoolWorker, runPoolWorker } from '../cache/pool.js'
 import { fmtMs, fmtTokens } from '../analyze/util.js'
-import type { RedactOptions } from '../redact/redact.js'
+import { redactValue, type RedactOptions } from '../redact/redact.js'
 import { watchSession } from './watch.js'
 import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
@@ -77,6 +77,17 @@ function printNextStep(a: Analysis, flags: Record<string, string | boolean>): vo
 function redactOptions(flags: Record<string, string | boolean>): RedactOptions | false {
   if (flagBool(flags, 'no-redact')) return false
   return { scrub: true, stripText: !flagBool(flags, 'include-text'), stripPaths: flagBool(flags, 'strip-paths') }
+}
+
+/**
+ * The session title for a human stdout line. `analyzeRef` returns the raw Analysis (redaction is an
+ * emit-boundary concern), and the title is transcript-authored, so it gets the same scrub the
+ * `--json` path applies to `session.title` (scrubbed, never stripped) unless --no-redact.
+ */
+function displayTitle(a: Analysis, flags: Record<string, string | boolean>): string {
+  const title = a.session.title || a.session.id.slice(0, 12)
+  const ro = redactOptions(flags)
+  return ro ? redactValue(title, { scrub: ro.scrub, stripPaths: ro.stripPaths }) : title
 }
 
 async function selectSession(sel: string | undefined, flags: Record<string, string | boolean>): Promise<SessionRef> {
@@ -157,7 +168,7 @@ async function cmdAnalyze(sel: string | undefined, flags: Record<string, string 
     thresholdExit(analysis, flags)
     return
   }
-  printAnalysisSummary(analysis)
+  printAnalysisSummary(analysis, flags)
   printNextStep(analysis, flags)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback('session')
   thresholdExit(analysis, flags)
@@ -172,7 +183,7 @@ async function cmdBrief(flags: Record<string, string | boolean>): Promise<void> 
   const ref = await selectSession(undefined, flags)
   const analysis = await analyzeRef(ref, flags)
   const s = analysis.summary
-  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, analysis.session.title || analysis.session.id.slice(0, 12)) + '\n')
+  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, displayTitle(analysis, flags)) + '\n')
   process.stdout.write(paint(C.dim, `  latest session · ${analysis.session.id.slice(0, 8)} · ${s.turns} turns · ${fmtTokens(s.totalTokens)} tokens · ${fmtMs(s.activeMs)} active\n\n`))
   process.stdout.write('  ' + outcomeHeadline(s) + '\n\n')
   for (const line of nextStepLines(analysis)) process.stdout.write(line + '\n')
@@ -202,10 +213,10 @@ function thresholdExit(analysis: ReturnType<typeof analyzeSession>, flags: Recor
   if (bad) process.exit(2)
 }
 
-function printAnalysisSummary(a: ReturnType<typeof analyzeSession>): void {
+function printAnalysisSummary(a: ReturnType<typeof analyzeSession>, flags: Record<string, string | boolean>): void {
   const s = a.summary
   const line = (label: string, val: string) => process.stdout.write('  ' + label.padEnd(18) + val + '\n')
-  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, a.session.title || a.session.id.slice(0, 12)) + '\n')
+  process.stdout.write('\n' + paint(C.o, paint(C.b, 'orangu')) + '  ' + paint(C.b, displayTitle(a, flags)) + '\n')
   process.stdout.write(paint(C.dim, `  ${a.session.source} · ${a.session.id}\n\n`))
   line('quality', qualityLine(a))
   line('time', `${fmtMs(s.wallMs)} wall · ${fmtMs(s.activeMs)} active · ${fmtMs(s.humanWaitMs)} waiting`)
@@ -397,6 +408,7 @@ ${paint(C.b, 'orangu')} v${VERSION}: observe the run, then improve the next outc
 Deterministic observability for Claude Code sessions. The CLI makes no network calls.
 
 ${paint(C.b, 'usage')}
+  orangu                       analyze the latest session and print the one next step
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global for all roots)

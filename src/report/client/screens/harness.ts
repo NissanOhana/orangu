@@ -70,10 +70,10 @@ export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {
     ...x.agents.filter((a) => a.status === 'undeclared').map((a) => 'agent ' + a.name),
   ]
   const listings = x.injectedListings.length
-    ? `<table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th></tr></thead><tbody>${[...x.injectedListings]
+    ? `<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th></tr></thead><tbody>${[...x.injectedListings]
         .sort((a, b) => b.approxTokensPerSession - a.approxTokensPerSession)
         .map((l) => `<tr><td class="mono">${esc(l.type)}</td><td class="num">${esc(num(l.approxTokensPerSession))}</td><td class="num">${l.sessions}</td></tr>`)
-        .join('')}</tbody></table><div class="smt8">Recurring context weight: what Claude Code injects at the start of every session (skill and tool listings), bytes ÷ 4.</div>`
+        .join('')}</tbody></table></div><div class="smt8">Recurring context weight: what Claude Code injects at the start of every session (skill and tool listings), bytes ÷ 4.</div>`
     : `<p class="small muted" style="margin:0">No injected listings were measured in these sessions.</p>`
   const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0)
   const memory = inv.claudeMd.length

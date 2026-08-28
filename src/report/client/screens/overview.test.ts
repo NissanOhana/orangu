@@ -150,6 +150,16 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('title="≈')
   })
 
+  it('renders the recoverable line above the findings even when only one finding is a top finding', async () => {
+    const ctx = await context()
+    expect(ctx.a!.insights.length).toBeGreaterThan(1)
+    ctx.a!.summary.topInsightIds = ctx.a!.summary.topInsightIds.slice(0, 1)
+    renderOverview(ctx)
+    expect(markup).not.toContain('More findings')
+    expect(markup).toContain('recoverable across')
+    expect(markup).toMatch(/class="recoverable"><a href="[^"]*#suggest/)
+  })
+
   it('designs the clean-session state instead of an empty card', async () => {
     const ctx = await context()
     ctx.a!.insights = []

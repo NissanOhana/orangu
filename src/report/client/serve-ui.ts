@@ -182,15 +182,18 @@ function ensureHarness(ds: DataSource, onLoaded: () => void): boolean {
     harnessInFlight = true
     void ds
       .harness()
-      .then((r) => {
-        harnessReport = r
-        onLoaded()
-      })
-      .catch(() => {
-        harnessReport = null
-      })
+      .then(
+        (r) => {
+          harnessReport = r
+        },
+        () => {
+          harnessReport = null
+        },
+      )
       .finally(() => {
         harnessInFlight = false
+        // success or failure: re-render so #harness leaves the loading state (null = designed degraded state)
+        onLoaded()
       })
   }
   return harnessInFlight

@@ -39,6 +39,7 @@ ccusage counts your token usage. orangu tells you what to change.
 **Read-only.** orangu reads the session files already on your disk and writes one HTML file. No SDK, proxy, account, instrumentation, upload, or telemetry. Your whole history is analyzable the minute it is installed, not just sessions started after it.
 
 ```bash
+npx orangu                 # latest session -> one true sentence, the top finding, the exact next command
 npx orangu report          # latest session -> self-contained HTML report, opened in your browser
 npx orangu serve           # live loopback viewer over every local session
 npx orangu repo            # recurring patterns across this repository's sessions
