@@ -267,6 +267,31 @@ describe('plugin packaging', () => {
     expect(harness).not.toMatch(/permission prompt|not honou?red/i)
   })
 
+  // Informed consent: the user approves a repository write knowing which files it touches and, for a
+  // hook, MCP, or script-cli item, the command it introduces; item titles alone are model-authored from
+  // evidence text and cannot carry that. The applied id is bound to the approved item by echoing it.
+  it('harness names the files and command per item before approval, and binds each apply to a verbatim id', () => {
+    const harness = readText('plugin/skills/harness/SKILL.md')
+    expect(harness).toContain('the manifest `files` it writes')
+    expect(harness).toContain('the exact command it introduces')
+    expect(harness).toContain('each option labelled with its `<id>`, title, and files')
+    expect(harness).toContain('approves only the `<id>`s it names verbatim')
+    expect(harness).toContain('a number alone, stop and ask again')
+    expect(harness).toContain('echoing that exact `<id>`, title, and files just before each invocation')
+    const files = harness.indexOf('the manifest `files` it writes')
+    expect(files, 'the files list is part of the pre-approval report').toBeLessThan(harness.indexOf('this review did not edit the target repository'))
+    const verbatim = harness.indexOf('approves only the `<id>`s it names verbatim')
+    expect(verbatim, 'the id rule is set before any invocation').toBeLessThan(harness.indexOf('through the Skill tool'))
+  })
+
+  // The description governs auto-invocation; a skill that can end in a repository edit says so there,
+  // the way apply does, so the model never routes a "why does this keep happening" question into a
+  // mutating flow without the user knowing that is where it leads.
+  it('harness description discloses that approved repo items get applied', () => {
+    const desc = /description:\s*(.+)/.exec(readText('plugin/skills/harness/SKILL.md'))?.[1] ?? ''
+    expect(desc).toContain('apply the repo items you approve by id')
+  })
+
   // B7: the record identity is derived by the CLI from --session; the skill never asks the model to
   // read, validate or pass a cohort fingerprint (`--cohort` stays accepted for compatibility, undocumented).
   it('harness projects the aggregate through the evidence seam and never asks for a cohort fingerprint', () => {
@@ -673,7 +698,10 @@ describe('plugin packaging', () => {
     // 2026-08-28 harness 1120 -> 1180: stage 5 gained the approve-and-apply gate (ask, apply approved repo
     // ids one at a time through the Skill tool, stop at the first failure, never global) after the smallest
     // honest wording; measured 1,179, and the comparator is strict, so 1,180 leaves zero words of headroom.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1180, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
+    // 2026-08-28 harness 1180 -> 1239 (review fix): the approval gate now names each item's files and, for a
+    // hook, MCP, or script-cli item, the command it introduces, labels every option by id, accepts only a
+    // verbatim id, and echoes id, title, and files before each apply; measured 1,238, again zero headroom.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1239, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
     const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
