@@ -83,6 +83,29 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('class="sigchip"')
   })
 
+  it('scopes the Quality verdict to the last run when earlier test runs failed, in both audiences', async () => {
+    const mixed = async (audience: Ctx['audience']) => {
+      const ctx = await context({ audience })
+      const s = ctx.a!.summary
+      s.ending = 'clean'
+      s.outcomes.testRuns = 133
+      s.outcomes.testRunsFailed = 8
+      ctx.a!.quality.signals = [{ id: 'tests', label: 'Test runs', value: '133 (125 passed)', tone: 'good', detail: 'last run passed' }]
+      return ctx
+    }
+    renderOverview(await mixed('dev'))
+    expect(markup).toContain('<div class="aval">passing <span class="anote">(last run)</span></div>')
+    expect(markup).toContain('8 of 133 test runs failed')
+    renderOverview(await mixed('plain'))
+    expect(markup).toContain('<div class="k">How it ended</div><div>The last check it ran passed; 8 of 133 test runs failed earlier</div>')
+
+    const green = await mixed('dev')
+    green.a!.summary.outcomes.testRunsFailed = 0
+    renderOverview(green)
+    expect(markup).toContain('<div class="aval">passing</div>')
+    expect(markup).not.toContain('(last run)')
+  })
+
   it('hoists the top finding as an open card with its fix, share, evidence link and improve command', async () => {
     const ctx = await context()
     renderOverview(ctx)

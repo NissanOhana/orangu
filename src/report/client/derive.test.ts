@@ -3,6 +3,7 @@ import {
   endingWord,
   outcomeHeadline,
   qualityHeadline,
+  qualityScope,
   callsForTurn,
   catMixForTurn,
   compactionGroups,
@@ -36,6 +37,25 @@ describe('endingWord', () => {
     expect(endingWord('interrupted')).toBe('You stopped it')
     expect(endingWord('failing')).toContain('failing')
     expect(endingWord('unknown').toLowerCase()).not.toContain('finished')
+  })
+
+  it('a clean ending over mixed test runs says so, instead of contradicting the "N of M failed" headline', () => {
+    const o = (testRuns: number, testRunsFailed: number) => ({ testRuns, testRunsFailed }) as Summary['outcomes']
+    expect(endingWord('clean', o(133, 8))).toBe('The last check it ran passed; 8 of 133 test runs failed earlier')
+    expect(endingWord('clean', o(133, 0))).toBe('The last check it ran passed')
+    expect(endingWord('clean', o(0, 0))).toBe('The last check it ran passed')
+    // a failing ending already agrees with the headline; interrupted never mentions tests
+    expect(endingWord('failing', o(133, 8))).toBe('The last test run was failing')
+    expect(endingWord('interrupted', o(133, 8))).toBe('You stopped it')
+  })
+})
+
+describe('qualityScope', () => {
+  it('is "last run" only when the test runs were mixed', () => {
+    expect(qualityScope({ testRuns: 133, testRunsFailed: 8 })).toBe('last run')
+    expect(qualityScope({ testRuns: 133, testRunsFailed: 0 })).toBe('')
+    expect(qualityScope({ testRuns: 3, testRunsFailed: 3 })).toBe('')
+    expect(qualityScope({ testRuns: 0, testRunsFailed: 0 })).toBe('')
   })
 })
 

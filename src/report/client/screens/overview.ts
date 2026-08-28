@@ -18,7 +18,7 @@ import { findingHtml } from '../components/finding.js'
 import { emptyHero } from '../components/empty.js'
 import { mascotSvg } from '../mascot.js'
 import { lineChart } from '../charts.js'
-import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, recoverableLine, timeAxis } from '../derive.js'
+import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, qualityScope, recoverableLine, timeAxis } from '../derive.js'
 import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
 import { cleanHash, type RouteState } from '../nav.js'
 import { plainSentence } from '../strings.js'
@@ -37,8 +37,10 @@ function triptych(a: Analysis): string {
   const qNote = outcomeBits(s).join(' · ') || 'no commits, PRs or test runs detected'
   const t = timeAxis(s)
   const kNote = s.totalTokens ? `${pct(s.cacheHitRatio)} read from cache · ${tok(a.tokens.byKind.output)} generated` : 'no usage recorded'
+  // the verdict word comes from the LAST test run; with mixed runs it carries that scope, or it contradicts the note under it
+  const scope = qualityScope(s.outcomes)
   return `<div class="triptych">
-<div class="axis q"><div class="aname">Quality ↑</div><div class="aval">${esc(qualityHeadline(a.quality.signals))}</div><div class="anote">${esc(qNote)}</div>${signalChips(a.quality.signals)}</div>
+<div class="axis q"><div class="aname">Quality ↑</div><div class="aval">${esc(qualityHeadline(a.quality.signals))}${scope ? ` <span class="anote">(${scope})</span>` : ''}</div><div class="anote">${esc(qNote)}</div>${signalChips(a.quality.signals)}</div>
 <div class="axis t"><div class="aname">Time ↓</div><div class="aval">${esc(t.value)}</div><div class="anote">${esc(t.note)}</div></div>
 <div class="axis c"><div class="aname">Tokens ↓</div><div class="aval">${esc(tok(s.totalTokens))}</div><div class="anote">${esc(kNote)}</div></div>
 </div>`
@@ -101,7 +103,7 @@ function plainBody(ctx: Ctx, a: Analysis): string {
 <div class="card-head">${mascotSvg(22)}What happened here</div>
 <div class="plaingrid">
 <div class="k">Goal</div><div>${esc(goalText)}</div>
-<div class="k">How it ended</div><div>${esc(endingWord(s.ending))}</div>
+<div class="k">How it ended</div><div>${esc(endingWord(s.ending, s.outcomes))}</div>
 <div class="k">Tokens &amp; time</div><div>${esc(effort)}</div>
 </div>
 </div>
