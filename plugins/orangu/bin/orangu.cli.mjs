@@ -7602,7 +7602,7 @@ function nextStepLines(caps, step) {
   return lines;
 }
 function betaLine(caps, context) {
-  return row(caps, "beta", `orangu feedback --context ${context}`, { style: "dim" });
+  return row(caps, "beta", `orangu feedback --context ${context}`, { style: "dim", raw: true });
 }
 function reportFooter(caps, o) {
   const link = fileLink(o.path, caps);
@@ -12859,7 +12859,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
     await writePrivateOutput(resolve10(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve10(outFile)) + "\n");
+    if (!quiet) process.stderr.write(row(err2, "written", resolve10(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;

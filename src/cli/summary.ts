@@ -105,7 +105,7 @@ export function nextStepLines(caps: Caps, step: NextStep): string[] {
 }
 
 export function betaLine(caps: Caps, context: string): string {
-  return row(caps, 'beta', `orangu feedback --context ${context}`, { style: 'dim' })
+  return row(caps, 'beta', `orangu feedback --context ${context}`, { style: 'dim', raw: true })
 }
 
 /** stderr footer of `orangu report`: the path (a link when the terminal can), then the next step. */

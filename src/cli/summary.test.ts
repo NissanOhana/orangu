@@ -53,8 +53,8 @@ const FALLBACK: NextStep = {
   next: 'claude "/orangu:improve sg_42794f4ccd0b --finding ' + 'eyJ'.repeat(160) + '"',
 }
 
-/** rows a paste must carry whole (the path, the next and plugin commands) wrap below 80 columns */
-const RAW_ROWS = /^ {2}(report|next|plugin) {2,}\S/
+/** rows a paste must carry whole (the paths, the next, plugin and beta commands) wrap below 80 columns */
+const RAW_ROWS = /^ {2}(report|next|plugin|written|beta) {2,}\S/
 
 function assertFits(lines: string[], caps: Caps, label: string): void {
   const limit = Math.min(caps.columns, 80)
@@ -108,6 +108,8 @@ describe('summary renderers fit the layout', () => {
     // the install continuation fits at 40 columns on its own, so it drops only its dim note
     expect(lines[3]).toBe('           /plugin install orangu')
     expect(lines[0]).toBe('  finding  Subagent results re-read in …')
+    // the beta hint is a command too: whole at 40 columns, and wider than the 29-column budget
+    expect(stripAnsi(betaLine(capsAt(40), 'report'))).toBe('  beta     orangu feedback --context report')
   })
 
   it('the store fallback is the single line allowed past 80 columns, and it says why', () => {

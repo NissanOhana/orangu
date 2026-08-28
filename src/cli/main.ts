@@ -358,7 +358,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   const outFile = flagStr(flags, 'o', 'out')
   if (outFile) {
     await writePrivateOutput(resolve(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }))
-    if (!quiet) process.stderr.write(row(err, 'written', resolve(outFile)) + '\n')
+    if (!quiet) process.stderr.write(row(err, 'written', resolve(outFile), { raw: true }) + '\n')
     if (!flagBool(flags, 'json')) {
       if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
       return
