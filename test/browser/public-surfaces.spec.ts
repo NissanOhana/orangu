@@ -110,7 +110,7 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await expect(suggestions).toHaveClass(/\bon\b/)
   await expect(demo.getByRole('tab', { name: 'Suggestions' })).toHaveAttribute('aria-selected', 'true')
   await expect(suggestions.locator('.demo-proposal')).toContainText('Proposal.')
-  await expect(suggestions.locator('.demo-proposal')).toContainText('deterministic preflight check')
+  await expect(suggestions.locator('.demo-proposal')).toContainText('deterministic check with explicit pass and fail output')
   await expect(suggestions.locator('.demo-verify')).toContainText('Next-run verification.')
   await expect(suggestions.locator('.demo-verify')).toContainText('average failed test runs decreased')
   await expect(suggestions.locator('.demo-verify')).toContainText('without increasing tool errors')

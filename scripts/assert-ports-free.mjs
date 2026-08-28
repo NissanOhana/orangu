@@ -19,7 +19,7 @@ for (const port of PORTS) if (!(await free(port))) busy.push(port)
 if (busy.length) {
   process.stderr.write(
     `test:browser: port${busy.length > 1 ? 's' : ''} ${busy.join(', ')} on 127.0.0.1 ${busy.length > 1 ? 'are' : 'is'} already in use (a stale test server?).\n` +
-      `free ${busy.length > 1 ? 'them' : 'it'} and re-run:  lsof -ti tcp:${busy.join(' tcp:')} | xargs kill\n`,
+      `free ${busy.length > 1 ? 'them' : 'it'} and re-run:  lsof -ti ${busy.map((p) => `tcp:${p}`).join(' -i ')} | xargs kill\n`,
   )
   process.exit(1)
 }
