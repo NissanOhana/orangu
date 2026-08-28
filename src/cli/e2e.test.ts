@@ -25,6 +25,41 @@ const run = (args: string[]) => execFileSync('node', [CLI, ...args], { encoding:
 const ESCAPES = /[\x1b\r\x07]/
 const stripEscapes = (s: string) => s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
 
+/**
+ * The built CLI on a real pseudo-terminal through script(1) (BSD on macOS, util-linux elsewhere;
+ * skipped where neither is present). Every pipe-spawned test above runs with animate=false, so the
+ * spinner frames, cursor codes and erase sequences only ever appear here.
+ */
+const SCRIPT = process.platform === 'darwin' || process.platform === 'linux' ? '/usr/bin/script' : ''
+function runPty(args: string[], envDelta: Record<string, string> = {}): { out: string; status: number | null } {
+  const env = { ...process.env, TERM: 'xterm-256color', ...envDelta } as Record<string, string | undefined>
+  // the suite may run under CI or inside Claude Code: both would switch the animation off
+  for (const k of ['CI', 'NO_COLOR', 'FORCE_COLOR', 'FORCE_HYPERLINK', 'ORANGU_NO_ANIMATION', 'TERM_PROGRAM', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID']) if (!(k in envDelta)) delete env[k]
+  const cmd = ['node', CLI, ...args]
+  const spawnArgs = process.platform === 'darwin' ? ['-q', '/dev/null', ...cmd] : ['-qec', cmd.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' '), '/dev/null']
+  const r = spawnSync(SCRIPT, spawnArgs, { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 })
+  return { out: r.stdout + r.stderr, status: r.status }
+}
+/** what a terminal shows: escapes stripped, and of a `\r`-redrawn line only the last frame */
+const rendered = (s: string) => stripEscapes(s).split(/\r?\n/).map((l) => l.split('\r').at(-1) ?? '').join('\n')
+
+describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI on a pseudo-terminal', () => {
+  it('--verbose keeps a standalone cache row: the spinner frame is erased before the row, not after it', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-')))
+    for (const verb of ['report', 'analyze']) {
+      const args = [verb, home.endedId, '--root', home.configDir, '--verbose', ...(verb === 'report' ? ['--no-open'] : [])]
+      runPty(args) // warm the cache so the row is deterministic
+      const { out, status } = runPty(args)
+      expect(status, verb + '\n' + out).toBe(0)
+      expect(out, verb + ': the spinner ran').toContain('\x1b[?25l')
+      // the erase + show-cursor lands before the row, and nothing erases the row afterwards
+      expect(out, verb).toMatch(/\r\x1b\[2K\x1b\[\?25h {2}cache {4}\x1b\[2m1 hits, 0 misses\x1b\[0m\r?\n/)
+      expect(rendered(out), verb).toMatch(/^ {2}cache {4}1 hits, 0 misses$/m)
+      expect(rendered(out), verb).not.toMatch(/analyzing.*cache/)
+    }
+  })
+})
+
 describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
   it('--version prints the version', () => {
     expect(run(['--version']).trim()).toMatch(/^\d+\.\d+\.\d+/)
@@ -417,6 +452,7 @@ syncBuiltinESMExports()
     expect(viaFlag.status, viaFlag.stderr).toBe(0)
     expect(viaFlag.stdout.trim()).toMatch(/orangu-22222222\.html$/)
 
+    const inside = { ...outside, CLAUDECODE: '1', CLAUDE_PROJECT_DIR: '/Users/test/Code/demo' }
     const guessed = spawnSync('node', [CLI, 'analyze', 'current', ...root, '--json'], { encoding: 'utf8', env: { ...outside, CLAUDECODE: '1', CLAUDE_PROJECT_DIR: '/Users/test/Code/demo' } })
     expect(guessed.status, guessed.stderr).toBe(0)
     expect(id(guessed.stdout)).toBe(home.liveId)

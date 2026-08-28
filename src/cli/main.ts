@@ -149,6 +149,8 @@ function makeCache(flags: Record<string, string | boolean>): AnalysisCache | nul
 /** A diagnostic, not an answer: --verbose only, dim, stderr (also under --json, whose stdout stays the contract). */
 function printCacheStats(cache: AnalysisCache | null, flags: Record<string, string | boolean>): void {
   if (!cache || !flagBool(flags, 'verbose') || flagBool(flags, 'quiet')) return
+  // the row lands while the spinner runs: erase its frame first, or the spinner's own stop() erases the row
+  progress?.pause()
   const s = cache.stats()
   process.stderr.write(row(err, 'cache', `${s.hits} hits, ${s.misses} misses`, { style: 'dim' }) + '\n')
 }

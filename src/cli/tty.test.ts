@@ -283,6 +283,18 @@ describe('spinner', () => {
       vi.useRealTimers()
     }
   })
+  it('pause() erases the frame once so a line written next survives stop()', () => {
+    const { stream, out } = sink()
+    const sp = spinner(caps({ color: 0 }), stream)
+    sp.start('analyzing')
+    sp.pause()
+    expect(out.at(-1)).toBe('\r\x1b[2K\x1b[?25h')
+    stream.write('  cache    1 hits, 0 misses\n')
+    sp.stop()
+    // no second erase: the paused spinner has no timer, so stop() writes nothing at all
+    expect(out.at(-1)).toBe('  cache    1 hits, 0 misses\n')
+    expect(out.filter((c) => c.includes('\x1b[2K')).length).toBe(2)
+  })
   it('uses ASCII frames without unicode and keeps the frame under the width', () => {
     const { stream, out } = sink()
     const sp = spinner(caps({ color: 0, unicode: false, columns: 40 }), stream)

@@ -12687,6 +12687,7 @@ function makeCache(flags) {
 }
 function printCacheStats(cache2, flags) {
   if (!cache2 || !flagBool(flags, "verbose") || flagBool(flags, "quiet")) return;
+  progress?.pause();
   const s = cache2.stats();
   process.stderr.write(row(err2, "cache", `${s.hits} hits, ${s.misses} misses`, { style: "dim" }) + "\n");
 }
