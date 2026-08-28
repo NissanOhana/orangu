@@ -384,7 +384,7 @@ function printAggregate(a: ReturnType<typeof aggregate>): void {
   }
   if (a.recurringErrors.length) {
     process.stdout.write('\n' + paint(C.b, '  recurring tool errors (environment problems)\n'))
-    for (const e of a.recurringErrors.slice(0, 6)) process.stdout.write(`    ${paint(C.r, String(e.total).padStart(4))}×  ${e.tool}: ${e.signature}  ${paint(C.dim, '(' + e.sessions + ' sessions)')}\n`)
+    for (const e of a.recurringErrors.slice(0, 6)) process.stdout.write(`    ${paint(C.r, String(e.total).padStart(4))}×  ${e.tool}: ${e.signature || '(error text not included; use --include-text)'}  ${paint(C.dim, '(' + e.sessions + ' sessions)')}\n`)
   }
   if (a.topReReadFiles.length) {
     process.stdout.write('\n' + paint(C.b, '  most re-read files (context weight)\n'))

@@ -16,7 +16,12 @@ export interface RedactOptions {
   scrub?: boolean
   /** drop preview/summary text entirely, keeping only structural fields (default false) */
   stripText?: boolean
-  /** drop absolute filesystem paths down to basenames (default false; the stronger opt-in over ~) */
+  /**
+   * Drop every filesystem path down to its last segment (default false; the stronger opt-in over ~). One
+   * segment, never two: for a Claude Code transcript the second-to-last segment IS the encoded home slug
+   * (`-Users-<user>-Code-<project>`), and for a file under $HOME it is the username. Project identities
+   * (`projectSlug`, aggregate `project` / `byProject` keys) drop to the same leaf.
+   */
   stripPaths?: boolean
   /**
    * Home directory whose prefix is rewritten to `~` wherever it appears while scrubbing:
@@ -67,9 +72,43 @@ function scrubStr(s: string): string {
   }
   return out
 }
+/** The last path segment only (see RedactOptions.stripPaths for why never two). */
 function basename(p: string): string {
-  const parts = p.split(/[\\/]/)
-  return parts.slice(-2).join('/')
+  return p.split(/[\\/]/).filter(Boolean).at(-1) ?? p
+}
+
+/**
+ * Claude Code encodes a project cwd as one directory name (every '/' '.' ':' … becomes '-',
+ * src/discover/discover.ts projectSlug): `-Users-<user>-Code-<project>`. Walk from the end so a
+ * redaction marker such as ‹anthropic-key› stays one unit. Exported for the CLI aggregate path.
+ */
+export function encodedProjectLeaf(value: string): string {
+  let inMarker = false
+  for (let i = value.length - 1; i >= 0; i--) {
+    if (value[i] === '›') inMarker = true
+    else if (value[i] === '‹') inMarker = false
+    else if (value[i] === '-' && !inMarker) return value.slice(i + 1) || 'project'
+  }
+  return value
+}
+
+function isEncodedProjectSlug(value: string): boolean {
+  return value.startsWith('-') || /^[A-Za-z]--/.test(value)
+}
+
+/**
+ * A project identity (`session.projectSlug`, aggregate `project` and `byProject[].key`). Encoded slugs
+ * defeat the `~` rewrite (no separator to anchor on) and render in the nav label and the serve picker,
+ * so they always drop to their leaf; a plain path drops to its basename only under stripPaths.
+ */
+function projectIdentity(value: string, opts: WalkOpts): string {
+  if (!opts.scrub) return value
+  // scrub first: a leaf is cut at the last '-', which may sit inside a credential the masks would have caught
+  const scrubbed = scrubOne(value, opts)
+  // decide the shape on the raw value: the home-slug rewrite may already have turned `-Users-me-…` into `~-…`
+  if (isEncodedProjectSlug(value) || isEncodedProjectSlug(scrubbed)) return encodedProjectLeaf(scrubbed)
+  if (opts.stripPaths && (scrubbed.includes('/') || scrubbed.includes('\\'))) return scrubOne(basename(scrubbed), opts)
+  return scrubbed
 }
 
 /** guarded so the shared type file stays importable from the browser bundles (no node globals assumed) */
@@ -86,14 +125,29 @@ function homeRegExp(home: string): RegExp | null {
 }
 
 /**
+ * The same home prefix as Claude Code encodes it inside a project slug (`/Users/<user>` → `-Users-<user>`, see
+ * src/discover/discover.ts projectSlug), so `~/.claude/projects/-Users-me-Code-x/…` and a slug quoted in
+ * prose lose the username too. Anchored on a segment boundary: `-Users-me2` is a different home.
+ */
+function homeSlugRegExp(home: string): RegExp | null {
+  if (home.length < 2) return null
+  const slug = home.replace(/[^A-Za-z0-9-]/g, '-')
+  if (slug.length < 2 || !/[A-Za-z0-9]/.test(slug)) return null
+  const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(escaped + '(?![A-Za-z0-9_.])', 'g')
+}
+
+/**
  * String fields whose values can contain transcript-authored prose.  Keep this
  * list about semantics, not spelling alone: `name` is deliberately handled by
  * `isAgentRecord` below so structural tool/skill/model names remain useful, and
  * `title` / `label` / `detail` are decided per record shape by `stripsText`
  * (rule-generated copy keeps them; transcript-derived records lose them,
  * including `Insight.detail`, which embeds raw commands and prompt previews).
- * `narrative`, `recommendation` and `signature` are only ever generated copy and
- * are therefore not listed.
+ * `narrative` and `recommendation` are only ever generated copy and are therefore
+ * not listed. `tools.errorGroups[].signature` is NOT generated copy: it is the raw
+ * error hint lower-cased with paths/numbers masked (src/analyze/tools.ts
+ * errorSignature), so it carries whatever a failing command printed.
  */
 const TEXT_KEYS = new Set([
   'promptPreview',
@@ -103,6 +157,7 @@ const TEXT_KEYS = new Set([
   'preview',
   'detail',
   'sampleHint',
+  'signature',
   'title',
   'label',
   'description',
@@ -118,6 +173,10 @@ const TEXT_KEYS = new Set([
   'sample',
 ])
 const PATH_KEYS = new Set(['path', 'cwd', 'transcriptPath', 'file'])
+/** string[] of paths (Session.subagentPaths): each element is a path under stripPaths */
+const PATH_ARRAY_KEYS = new Set(['subagentPaths'])
+/** project identities: session.projectSlug, aggregate SessionRow.project (see projectIdentity) */
+const PROJECT_KEYS = new Set(['projectSlug', 'project'])
 /**
  * summary.narrative is generated copy except for its opening clause, where the analyzer quotes the session
  * title (the first user prompt, src/analyze/analyze.ts narrative()). The default strip rewrites only that
@@ -140,13 +199,16 @@ interface WalkOpts {
   stripPaths: boolean
   /** compiled from RedactOptions.home; applied wherever the prefix appears, only while scrubbing */
   homeRe: RegExp | null
+  /** the same home as an encoded project-slug prefix (`-Users-me`), see homeSlugRegExp */
+  homeSlugRe: RegExp | null
 }
 
 function scrubOne(s: string, opts: WalkOpts): string {
   if (!opts.scrub) return s
   let out = scrubStr(s)
-  if (opts.homeRe) {
-    out = out.replace(opts.homeRe, () => {
+  for (const re of [opts.homeRe, opts.homeSlugRe]) {
+    if (!re) continue
+    out = out.replace(re, () => {
       counter++
       return '~'
     })
@@ -265,6 +327,27 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
         out.set(k, scrubOne(basename(v), opts))
         continue
       }
+      if (opts.stripPaths && PATH_ARRAY_KEYS.has(k) && Array.isArray(v)) {
+        out.set(k, v.map((x) => (typeof x === 'string' ? scrubOne(basename(x), opts) : walk(x, opts))))
+        continue
+      }
+      if (PROJECT_KEYS.has(k) && typeof v === 'string') {
+        out.set(k, projectIdentity(v, opts))
+        continue
+      }
+      if (k === 'byProject' && Array.isArray(v)) {
+        out.set(
+          k,
+          v.map((item) => {
+            const row = walk(item, opts)
+            if (row && typeof row === 'object' && !Array.isArray(row) && typeof (row as { key?: unknown }).key === 'string') {
+              return { ...(row as Record<string, unknown>), key: projectIdentity((item as { key: string }).key, opts) }
+            }
+            return row
+          }),
+        )
+        continue
+      }
       out.set(k, typeof v === 'string' ? scrubOne(v, opts) : walk(v, opts))
     }
     return Object.fromEntries(out)
@@ -281,6 +364,7 @@ export function redactAnalysis(a: Analysis, options: RedactOptions = {}): { anal
     stripText: options.stripText ?? false,
     stripPaths: options.stripPaths ?? false,
     homeRe: scrub ? homeRegExp(home) : null,
+    homeSlugRe: scrub ? homeSlugRegExp(home) : null,
   }
   counter = 0
   const redacted = walk(a, opts) as Analysis
@@ -299,6 +383,7 @@ export function redactValue<T>(value: T, options: RedactOptions = {}): T {
     stripText: options.stripText ?? false,
     stripPaths: options.stripPaths ?? false,
     homeRe: scrub ? homeRegExp(home) : null,
+    homeSlugRe: scrub ? homeSlugRegExp(home) : null,
   }
   return walk(value, opts) as T
 }

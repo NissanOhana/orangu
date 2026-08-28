@@ -90,7 +90,7 @@ describe.skipIf(!HOME)('renderAnalysisJson home-path redaction', () => {
   it('--strip-paths remains the stronger opt-in (basenames win over ~)', () => {
     const out = renderAnalysisJson(mk(), { json: true, 'strip-paths': true })
     expect(out).not.toContain(HOME)
-    expect(out).toContain('demo/s.jsonl')
+    expect(out).toContain('"path": "s.jsonl"')
     expect(out).not.toContain('~/Code/demo/s.jsonl')
   })
 
@@ -146,7 +146,7 @@ describe('renderAggregateJson', () => {
     expect(parsed.byProject[0]!.key).toBe('‹anthropic-key›')
     expect(parsed.sessions[0]!.project).toBe('‹anthropic-key›')
     expect(parsed.topSessions[0]!.project).toBe('‹anthropic-key›')
-    expect(parsed.topReReadFiles[0]!.path).toBe('src/‹anthropic-key›.ts')
+    expect(parsed.topReReadFiles[0]!.path).toBe('‹anthropic-key›.ts')
     expect(out.trim().split('\n')).toHaveLength(1)
   })
 

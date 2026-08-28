@@ -72,7 +72,9 @@ describe('offline report', () => {
     // 2026-08-27 final fix pass: +287 B inside the cap for two honesty fixes (the Plain "What happened"
     // sentence no longer cuts at "incl." with an open parenthesis: leadSentence; the redacted Suggest row
     // says its details are hidden and names --include-text instead of asserting evidence it cannot show).
+    // 2026-08-27 redaction fix: +50 B for the "(error text not included …)" fallback the Tools and Repo
+    // "Recurring errors" rows show now that tools.errorGroups[].signature is stripped by default.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
-    expect(CLIENT_JS.length).toBe(73207)
+    expect(CLIENT_JS.length).toBe(73257)
   })
 })

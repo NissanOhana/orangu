@@ -1,6 +1,7 @@
 import type { Session, ToolCall } from '../model/session.js'
 import type { ToolCallView, ToolErrorGroup, ToolStat, ToolsAnalysis } from '../model/analysis.js'
 import { percentile, round, sum, topN } from './util.js'
+import { scrubStr } from '../redact/redact.js'
 
 export function toolCallView(c: ToolCall): ToolCallView {
   return {
@@ -19,9 +20,14 @@ export function toolCallView(c: ToolCall): ToolCallView {
   }
 }
 
-/** Normalize an error hint into a grouping signature (strip numbers, paths, ids). */
+/**
+ * Normalize an error hint into a grouping signature (strip numbers, paths, ids). The secret masks run
+ * FIRST: once digits become `<n>` a key such as `sk-ant-api03-…` no longer matches its pattern, so the
+ * signature would carry a credential past the redaction the raw hint gets. Under the default stripText
+ * redaction the whole field is blanked anyway (src/redact/redact.ts TEXT_KEYS).
+ */
 export function errorSignature(c: ToolCall): string {
-  const raw = (c.errorHint ?? c.resultPreview ?? 'error').toLowerCase()
+  const raw = scrubStr(c.errorHint ?? c.resultPreview ?? 'error').toLowerCase()
   return raw
     .replace(/\/[^\s'"]+/g, '<path>')
     .replace(/0x[0-9a-f]+/g, '<hex>')

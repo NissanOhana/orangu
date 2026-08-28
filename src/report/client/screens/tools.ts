@@ -7,6 +7,8 @@ import { emptyHero } from '../components/empty.js'
 import { plainSentence } from '../strings.js'
 
 const SHOW = 12
+/** the default redaction strips the signature with every other transcript-authored string */
+const NO_SIG = '(error text not included in this report)'
 
 /** static hint map keyed by signature prefix (§2.5) */
 const ERR_HINTS: Array<[RegExp, string]> = [
@@ -58,7 +60,7 @@ export function renderTools(ctx: Ctx): HTMLElement {
         .slice(0, 8)
         .map((g) => {
           const hint = g.sampleHint || errHint(g.signature)
-          return `<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${esc(g.signature)}</span><span class="mono115" style="margin-left:auto">×${g.count}</span></div><div class="small muted" style="margin-top:2px">${esc(g.name)}${hint ? ' · ' + esc(hint) : ''}</div></div>`
+          return `<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${esc(g.signature || NO_SIG)}</span><span class="mono115" style="margin-left:auto">×${g.count}</span></div><div class="small muted" style="margin-top:2px">${esc(g.name)}${hint ? ' · ' + esc(hint) : ''}</div></div>`
         })
         .join('')
     : `<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>`

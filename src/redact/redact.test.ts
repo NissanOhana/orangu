@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { scrubStr, redactAnalysis, redactValue } from './redact.js'
+import { scrubStr, redactAnalysis, redactValue, encodedProjectLeaf } from './redact.js'
 import type { Analysis } from '../model/analysis.js'
+import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
+import { analyzeSession } from '../analyze/analyze.js'
+import { renderReport } from '../report/render.js'
+import { renderAnalysisJson } from '../cli/json-out.js'
+import { SessionBuilder } from '../../test/fixtures/session-builder.js'
 
 describe('scrubStr', () => {
   it('masks anthropic keys, github tokens, jwts, db urls, emails', () => {
@@ -67,7 +72,65 @@ describe('redactAnalysis', () => {
   it('can strip text and paths', () => {
     const { analysis } = redactAnalysis(mk(), { stripText: true, stripPaths: true })
     expect(analysis.turns[0]!.promptPreview).toBe('')
-    expect(analysis.session.path).toBe('proj/a.jsonl')
+    // one segment, never two: the second-to-last segment of a home path is the username
+    expect(analysis.session.path).toBe('a.jsonl')
+    expect(analysis.session.cwd).toBe('proj')
+  })
+
+  // --strip-paths is the pre-share mitigation docs/PRIVACY.md names; the shipped report carries the
+  // session path, every subagent path and the encoded project slug, all of which embed the username.
+  const HOME_SLUG = '-Users-test-Code-secretproj'
+  const withSubagents = (): Analysis =>
+    ({
+      session: {
+        id: 'x',
+        path: `/Users/test/.claude/projects/${HOME_SLUG}/dc15f998-a1aa-41fe-ad04-c0c2595b64d7.jsonl`,
+        cwd: '/Users/test/Code/secretproj',
+        projectSlug: HOME_SLUG,
+        subagentPaths: [
+          `/Users/test/.claude/projects/${HOME_SLUG}/dc15f998-a1aa-41fe-ad04-c0c2595b64d7/subagents/agent-a50314159.jsonl`,
+          `/Users/test/.claude/projects/${HOME_SLUG}/dc15f998-a1aa-41fe-ad04-c0c2595b64d7/subagents/agent-b7c2d0e11.jsonl`,
+        ],
+      },
+    }) as unknown as Analysis
+
+  it('stripPaths reduces subagentPaths, session.path and projectSlug to one username-free segment each', () => {
+    const { analysis } = redactAnalysis(withSubagents(), { stripPaths: true, home: '' })
+    const json = JSON.stringify(analysis)
+    expect(json).not.toContain('-Users-')
+    expect(json).not.toContain('-home-')
+    expect(json).not.toContain('test')
+    expect(analysis.session.path).toBe('dc15f998-a1aa-41fe-ad04-c0c2595b64d7.jsonl')
+    expect(analysis.session.subagentPaths).toEqual(['agent-a50314159.jsonl', 'agent-b7c2d0e11.jsonl'])
+    for (const p of analysis.session.subagentPaths) expect(p.split('/').length).toBe(1)
+    expect(analysis.session.projectSlug).toBe('secretproj')
+    expect(analysis.session.cwd).toBe('secretproj')
+  })
+
+  it('by default the encoded home slug inside a path becomes ~ and projectSlug drops to its leaf', () => {
+    const { analysis } = redactAnalysis(withSubagents(), { home: '/Users/test' })
+    const json = JSON.stringify(analysis)
+    expect(json).not.toContain('test')
+    expect(analysis.session.path).toBe('~/.claude/projects/~-Code-secretproj/dc15f998-a1aa-41fe-ad04-c0c2595b64d7.jsonl')
+    expect(analysis.session.subagentPaths[0]).toBe('~/.claude/projects/~-Code-secretproj/dc15f998-a1aa-41fe-ad04-c0c2595b64d7/subagents/agent-a50314159.jsonl')
+    expect(analysis.session.projectSlug).toBe('secretproj')
+    // a sibling home sharing the prefix is a different user and stays
+    const sibling = redactValue({ path: '/x/-Users-test2-Code-a/s.jsonl' }, { home: '/Users/test' })
+    expect(sibling.path).toBe('/x/-Users-test2-Code-a/s.jsonl')
+    // scrub off keeps everything
+    expect(redactAnalysis(withSubagents(), { scrub: false, home: '/Users/test' }).analysis.session.projectSlug).toBe(HOME_SLUG)
+  })
+
+  it('aggregate project identities (byProject keys, sessions[].project) drop to the same leaf', () => {
+    const agg = { byProject: [{ key: HOME_SLUG, count: 1, tokens: 5 }], sessions: [{ id: 'a', project: HOME_SLUG }], byModel: [{ key: 'claude-x', count: 1 }] }
+    const out = redactValue(agg, { home: '' })
+    expect(out.byProject[0]).toEqual({ key: 'secretproj', count: 1, tokens: 5 })
+    expect(out.sessions[0]!.project).toBe('secretproj')
+    expect(out.byModel[0]!.key).toBe('claude-x')
+    expect(redactValue(agg, { home: '', stripPaths: true }).byProject[0]!.key).toBe('secretproj')
+    expect(redactValue({ project: '/Users/me/Code/plain' }, { home: '', stripPaths: true }).project).toBe('plain')
+    expect(encodedProjectLeaf('-Users-me-Code-‹anthropic-key›')).toBe('‹anthropic-key›')
+    expect(encodedProjectLeaf('plain')).toBe('plain')
   })
 
   const GENERATED = 'rule-authored-copy-4412'
@@ -93,7 +156,7 @@ describe('redactAnalysis', () => {
       turns: [{ commandName: MARKER, promptPreview: MARKER, kind: 'human', agents: [], models: ['claude-test'], activity: 'Bash×1' }],
       tools: {
         byName: [{ name: 'Bash', category: 'exec' }],
-        errorGroups: [{ name: 'Bash', signature: GENERATED, sampleHint: MARKER }],
+        errorGroups: [{ name: 'Bash', signature: MARKER, sampleHint: MARKER }],
         calls: [{ toolUseId: 'tool-1', name: 'Bash', category: 'exec', summary: MARKER, errorHint: MARKER }],
       },
       agents: {
@@ -179,7 +242,8 @@ describe('redactAnalysis', () => {
     expect(out.quality.signals[0]!.label).toBe(GENERATED)
     expect(out.quality.signals[0]!.detail).toBe(GENERATED)
     expect(out.events[0]!.label).toBe(GENERATED)
-    expect(out.tools.errorGroups[0]!.signature).toBe(GENERATED)
+    // the error signature is the lower-cased raw hint (src/analyze/tools.ts), never rule copy
+    expect(out.tools.errorGroups[0]!.signature).toBe('')
     // the transcript wrote these: they are gone
     expect(out.session.title).toBe('')
     expect(out.turns[0]!.promptPreview).toBe('')
@@ -256,8 +320,49 @@ describe('redactValue', () => {
     const secret = 'sk-ant-api03-abc123def456ghi789'
     const path = `/home/tester/private/${secret}.jsonl`
     const out = redactValue({ path }, { stripPaths: true, home: '' })
-    expect(out.path).toBe('private/‹anthropic-key›.jsonl')
+    expect(out.path).toBe('‹anthropic-key›.jsonl')
     expect(out.path).not.toContain(secret)
     expect(redactValue({ path }, { scrub: false, stripPaths: true, home: '' }).path).toContain(secret)
+  })
+})
+
+describe('tool error signatures never carry a secret out of the process', () => {
+  const secret = 'sk-ant-api03-abc123def456ghi789'
+  const password = 'password authentication failed for user acme_prod at db.acme-internal.example'
+  async function analysis() {
+    const b = new SessionBuilder()
+    b.userPrompt('deploy')
+    for (let i = 0; i < 3; i++) {
+      b.tick(100)
+      b.toolCall('Bash', { command: 'psql' }, `error: key ${secret} rejected; ${password}`, { isError: true, durationMs: 50 })
+    }
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    return analyzeSession(s, { version: 'test', now: 0 })
+  }
+
+  it('errorSignature masks the key before its digits are normalized away', async () => {
+    const a = await analysis()
+    expect(a.tools.errorGroups.length).toBe(1)
+    expect(a.tools.errorGroups[0]!.count).toBe(3)
+    expect(a.tools.errorGroups[0]!.signature).toContain('‹anthropic-key›')
+    expect(a.tools.errorGroups[0]!.signature).not.toContain('abc123def456ghi789')
+  })
+
+  it('the default report and analyze --json strip the signature with the other transcript text', async () => {
+    const a = await analysis()
+    const { html } = renderReport(a, { redact: { scrub: true, stripText: true } })
+    expect(html).not.toContain(secret)
+    expect(html).not.toContain('abc123def456ghi789')
+    expect(html).not.toContain('acme_prod')
+    expect(html).not.toContain('acme-internal')
+    const json = JSON.parse(renderAnalysisJson(a, {})) as Analysis
+    expect(json.tools.errorGroups[0]!.signature).toBe('')
+    expect(json.tools.errorGroups[0]!.sampleHint).toBe('')
+    expect(JSON.stringify(json)).not.toContain('acme_prod')
+    // --include-text keeps the (masked) signature so the Recurring errors card stays useful
+    const kept = JSON.parse(renderAnalysisJson(a, { 'include-text': true })) as Analysis
+    expect(kept.tools.errorGroups[0]!.signature).toContain('rejected')
+    expect(kept.tools.errorGroups[0]!.signature).toContain('‹anthropic-key›')
+    expect(JSON.stringify(kept)).not.toContain('abc123def456ghi789')
   })
 })

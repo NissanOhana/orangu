@@ -62,7 +62,7 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
         .slice(0, 8)
         .map(
           (e) =>
-            `<div class="rrow" style="padding:10px 18px"><span class="sigline">${esc(e.signature)}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${e.sessions} sessions</span><span class="mono125">×${e.total}</span></div>`,
+            `<div class="rrow" style="padding:10px 18px"><span class="sigline">${esc(e.signature || '(error text not included)')}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${e.sessions} sessions</span><span class="mono125">×${e.total}</span></div>`,
         )
         .join('')}</div>`
     : ''
