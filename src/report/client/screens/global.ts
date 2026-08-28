@@ -1,10 +1,10 @@
-/** Global (§2.7): Aggregate scope='global' with the weekly trend, model/project rollups, source chips. */
+/** Global (§2.7): Aggregate scope='global' with the weekly trend, model/project rollups, source chips, then the evidence blocks Repo renders. */
 import type { Ctx } from '../app.js'
 import { esc, ms, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
 import { emptyNote } from '../components/empty.js'
-import { aggregateEmpty, aggregateLead } from './repo.js'
+import { aggregateEmpty, aggregateEvidence, aggregateLead } from './repo.js'
 import { sourceLabel, weekPoints } from '../derive.js'
 
 export function renderGlobal(ctx: Ctx): HTMLElement {
@@ -56,6 +56,7 @@ ${trend}
 <div class="card pad"><div class="card-title">Tokens by model</div>${rollup(g.byModel, 'var(--accent)')}</div>
 <div class="card pad"><div class="card-title">Tokens by project</div>${rollup(g.byProject, 'var(--cat-agent)')}</div>
 </div>
-<div class="chiprow">${chips}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>
+<div class="chiprow mb16">${chips}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>
+${aggregateEvidence(g, ctx)}
 </section>`)
 }

@@ -28,7 +28,7 @@ export function renderRepo(ctx: Ctx): HTMLElement {
   return h(`<section>${aggregateLead('repo')}${aggregateBody(g, ctx)}</section>`)
 }
 
-/** shared by Repo and (partly) Global */
+/** Repo: the KPI strip, then the evidence blocks Global shares. */
 export function aggregateBody(g: Aggregate, ctx: Ctx): string {
   const kpis = [
     kpi('Sessions', String(g.sessionCount)),
@@ -38,6 +38,11 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
     kpi('Cache hits', pct(g.averages.cacheHitRatio)),
     kpi('Tool error rate', pct(g.averages.toolErrorRate, 1), '', { badHint: g.averages.toolErrorRate >= 0.03 }),
   ].join('')
+  return `<div class="kpis">${kpis}</div>${aggregateEvidence(g, ctx)}`
+}
+
+/** The evidence every Aggregate carries, rendered the same on Repo and Global: recurring findings, re-read files, recurring errors, heaviest sessions. */
+export function aggregateEvidence(g: Aggregate, ctx: Ctx): string {
   const findings = g.crossFindings.length
     ? g.crossFindings
         .slice(0, 8)
@@ -82,9 +87,7 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
 </tr>`
     })
     .join('')
-  return `
-<div class="kpis">${kpis}</div>
-<div class="two-up">
+  return `<div class="two-up">
 <div class="card pad"><div class="card-title">Recurring findings · ranked by evidence</div><div class="cardsub">patterns one session cannot establish</div>${findings}</div>
 <div class="card pad"><div class="card-title">Most re-read files</div><div class="cardsub">context carried again and again · trim or index these</div>${reReads}</div>
 </div>
