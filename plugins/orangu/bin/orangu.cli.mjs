@@ -907,17 +907,43 @@ async function projectDirsForCwd(root, cwd, entryBudget) {
   }
   return out3;
 }
-async function peekCwd(path) {
+var PEEK_HEAD_BYTES = 64e3;
+var TITLE_MAX = 120;
+var COMMAND_NAME_RE = /<command-name>([^<]*)<\/command-name>/;
+var COMMAND_ARGS_RE = /<command-args>([^<]*)<\/command-args>/;
+function textOfContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content.map((b) => b && typeof b === "object" && b.type === "text" && typeof b.text === "string" ? b.text : "").filter(Boolean).join(" ");
+}
+function oneLine(s) {
+  const flat = s.replace(/\s+/g, " ").trim();
+  return flat.length > TITLE_MAX ? flat.slice(0, TITLE_MAX - 1) + "\u2026" : flat;
+}
+function promptTitle(text2) {
+  const t = text2.trim();
+  if (!t) return void 0;
+  if (/^<command-(?:message|name)>/.test(t)) {
+    const name = COMMAND_NAME_RE.exec(t)?.[1]?.trim();
+    if (!name) return void 0;
+    const args = COMMAND_ARGS_RE.exec(t)?.[1]?.trim();
+    return oneLine(args ? `${name} ${args}` : name);
+  }
+  if (/^<(?:task|system)-notification>/.test(t)) return void 0;
+  return oneLine(t);
+}
+async function peekHead(path) {
+  const out3 = {};
   let handle;
   try {
     handle = await open3(path, constants3.O_RDONLY | constants3.O_NOFOLLOW);
   } catch {
-    return void 0;
+    return out3;
   }
   try {
     const st = await handle.stat();
-    if (!st.isFile()) return void 0;
-    const size = Math.min(st.size, 64e3);
+    if (!st.isFile()) return out3;
+    const size = Math.min(st.size, PEEK_HEAD_BYTES);
     const buffer = Buffer.allocUnsafe(size);
     let offset = 0;
     while (offset < size) {
@@ -926,18 +952,38 @@ async function peekCwd(path) {
       offset += read.bytesRead;
     }
     const head = buffer.subarray(0, offset).toString("utf8");
+    let custom;
+    let ai;
+    let prompt;
     for (const line of head.split("\n")) {
       if (!line.startsWith("{")) continue;
+      let r;
       try {
-        const r = JSON.parse(line);
-        if (typeof r.cwd === "string") return r.cwd;
+        r = JSON.parse(line);
       } catch {
+        continue;
       }
+      if (out3.cwd === void 0 && typeof r["cwd"] === "string") out3.cwd = r["cwd"];
+      const type = r["type"];
+      if (type === "custom-title" && custom === void 0 && typeof r["customTitle"] === "string") custom = oneLine(r["customTitle"]);
+      else if (type === "ai-title" && ai === void 0 && typeof r["aiTitle"] === "string") ai = oneLine(r["aiTitle"]);
+      else if (type === "user" && prompt === void 0 && !r["isMeta"] && !r["isCompactSummary"] && !r["isSidechain"]) {
+        const message = r["message"];
+        const content = message && typeof message === "object" ? message.content : void 0;
+        const hasToolResult = Array.isArray(content) && content.some((b) => b && typeof b === "object" && b.type === "tool_result");
+        if (!hasToolResult) prompt = promptTitle(textOfContent(content));
+      }
+      if (out3.cwd !== void 0 && custom !== void 0) break;
     }
+    const title = custom ?? ai ?? prompt;
+    if (title) out3.title = title;
   } finally {
     await handle.close();
   }
-  return void 0;
+  return out3;
+}
+async function peekCwd(path) {
+  return (await peekHead(path)).cwd;
 }
 async function listSessions(opts = {}) {
   const limit = sessionLimit(opts);
@@ -2239,7 +2285,7 @@ function parseUsage(u) {
     inferenceGeo: str(o["inference_geo"])
   };
 }
-function textOfContent(content) {
+function textOfContent2(content) {
   if (typeof content === "string") return content;
   const a = arr(content);
   if (!a) return "";
@@ -2286,7 +2332,7 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
         out3.push({
           kind: "tool_result",
           toolUseId: str(b["tool_use_id"]) ?? "",
-          text: textOfContent(c),
+          text: textOfContent2(c),
           isError: bool(b["is_error"]),
           bytes: bytesOf(c)
         });
@@ -2310,10 +2356,10 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
   return out3;
 }
 var COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/;
-var COMMAND_ARGS_RE = /<command-args>\s*([^<]*?)\s*<\/command-args>/;
+var COMMAND_ARGS_RE2 = /<command-args>\s*([^<]*?)\s*<\/command-args>/;
 function commandEnvelopeTitle(envelope, commandName) {
   const name = commandName || COMMAND_RE.exec(envelope)?.[1] || envelope;
-  const args = COMMAND_ARGS_RE.exec(envelope)?.[1];
+  const args = COMMAND_ARGS_RE2.exec(envelope)?.[1];
   return args ? `${name} ${args}` : name;
 }
 var INTERRUPT_RE = /\[Request interrupted by user/i;
@@ -2623,7 +2669,7 @@ function buildSession(files2, mainPath, keepText, t0) {
       const hasToolResult = blocks.some((b) => b.kind === "tool_result");
       const isMeta = bool(r["isMeta"]);
       const isCompactSummary = bool(r["isCompactSummary"]);
-      const text2 = type === "system" ? str(r["content"]) ?? "" : textOfContent(content);
+      const text2 = type === "system" ? str(r["content"]) ?? "" : textOfContent2(content);
       const cmd = COMMAND_RE.exec(text2)?.[1];
       const interrupted = INTERRUPT_RE.test(text2);
       const isPromptLike = type === "user" && !hasToolResult && !isCompactSummary && !!message;

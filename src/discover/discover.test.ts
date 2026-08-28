@@ -8,6 +8,7 @@ import {
   listProjects,
   listSessions,
   peekCwd,
+  peekHead,
   projectSlug,
   readBoundedDiscoveryDirectory,
   resolveSession,
@@ -181,6 +182,50 @@ describe('peekCwd', () => {
     symlinkSync(large, link)
     expect(await peekCwd(large)).toBe('/bounded')
     expect(await peekCwd(link)).toBeUndefined()
+  })
+})
+
+describe('peekHead', () => {
+  const line = (r: Record<string, unknown>) => JSON.stringify(r) + '\n'
+  it('takes the custom title over the AI title over the first human prompt', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-peek-'))
+    const p = join(dir, 'a.jsonl')
+    writeFileSync(
+      p,
+      line({ type: 'user', cwd: '/w', isMeta: true, message: { role: 'user', content: 'meta prompt' } }) +
+        line({ type: 'user', cwd: '/w', message: { role: 'user', content: [{ type: 'tool_result', content: 'x' }] } }) +
+        line({ type: 'user', cwd: '/w', message: { role: 'user', content: [{ type: 'text', text: '  Fix the   flaky\n test  ' }] } }) +
+        line({ type: 'ai-title', aiTitle: 'AI says' }) +
+        line({ type: 'custom-title', customTitle: 'Custom' }),
+    )
+    return peekHead(p).then((h) => expect(h).toEqual({ cwd: '/w', title: 'Custom' }))
+  })
+  it('falls back to the AI title, then to the one-line first prompt', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-peek-'))
+    const ai = join(dir, 'ai.jsonl')
+    writeFileSync(ai, line({ type: 'user', message: { role: 'user', content: 'first' } }) + line({ type: 'ai-title', aiTitle: 'AI says' }))
+    expect((await peekHead(ai)).title).toBe('AI says')
+    const prompt = join(dir, 'prompt.jsonl')
+    writeFileSync(prompt, line({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: '  Fix the   flaky\n test  ' }] } }))
+    expect((await peekHead(prompt)).title).toBe('Fix the flaky test')
+  })
+  it('names a slash command by its command, skips notifications, and caps the title', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-peek-'))
+    const cmd = join(dir, 'cmd.jsonl')
+    writeFileSync(cmd, line({ type: 'user', message: { role: 'user', content: '<command-message>x</command-message><command-name>/review</command-name><command-args>pr 12</command-args>' } }))
+    expect((await peekHead(cmd)).title).toBe('/review pr 12')
+    const note = join(dir, 'note.jsonl')
+    writeFileSync(note, line({ type: 'user', message: { role: 'user', content: '<task-notification>done</task-notification>' } }) + line({ type: 'user', message: { role: 'user', content: 'real' } }))
+    expect((await peekHead(note)).title).toBe('real')
+    const long = join(dir, 'long.jsonl')
+    writeFileSync(long, line({ type: 'user', message: { role: 'user', content: 'y'.repeat(300) } }))
+    const t = (await peekHead(long)).title!
+    expect(t.length).toBe(120)
+    expect(t.endsWith('…')).toBe(true)
+  })
+  it('returns nothing for a missing or symlinked file', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-peek-'))
+    expect(await peekHead(join(dir, 'missing.jsonl'))).toEqual({})
   })
 })
 

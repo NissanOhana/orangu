@@ -345,18 +345,59 @@ async function projectDirsForCwd(root: string, cwd: string, entryBudget: Discove
   return out
 }
 
-/** Read the first few KB of a transcript and return its `cwd` field if present. */
-export async function peekCwd(path: string): Promise<string | undefined> {
+/** What a bounded head read of a transcript can tell without parsing it: the cwd and a title. */
+export interface TranscriptHead {
+  cwd?: string
+  /** custom title, else AI title, else the first human prompt (one line, at most 120 chars) */
+  title?: string
+}
+
+export const PEEK_HEAD_BYTES = 64_000
+const TITLE_MAX = 120
+const COMMAND_NAME_RE = /<command-name>([^<]*)<\/command-name>/
+const COMMAND_ARGS_RE = /<command-args>([^<]*)<\/command-args>/
+
+function textOfContent(content: unknown): string {
+  if (typeof content === 'string') return content
+  if (!Array.isArray(content)) return ''
+  return content
+    .map((b) => (b && typeof b === 'object' && (b as { type?: unknown }).type === 'text' && typeof (b as { text?: unknown }).text === 'string' ? (b as { text: string }).text : ''))
+    .filter(Boolean)
+    .join(' ')
+}
+
+function oneLine(s: string): string {
+  const flat = s.replace(/\s+/g, ' ').trim()
+  return flat.length > TITLE_MAX ? flat.slice(0, TITLE_MAX - 1) + '…' : flat
+}
+
+/** The first human prompt as a title: a slash-command envelope names its command, not its markup. */
+function promptTitle(text: string): string | undefined {
+  const t = text.trim()
+  if (!t) return undefined
+  if (/^<command-(?:message|name)>/.test(t)) {
+    const name = COMMAND_NAME_RE.exec(t)?.[1]?.trim()
+    if (!name) return undefined
+    const args = COMMAND_ARGS_RE.exec(t)?.[1]?.trim()
+    return oneLine(args ? `${name} ${args}` : name)
+  }
+  if (/^<(?:task|system)-notification>/.test(t)) return undefined
+  return oneLine(t)
+}
+
+/** Read at most the first 64 KB of a transcript (never through a symlink) and return its head facts. */
+export async function peekHead(path: string): Promise<TranscriptHead> {
+  const out: TranscriptHead = {}
   let handle: Awaited<ReturnType<typeof open>>
   try {
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
   } catch {
-    return undefined
+    return out
   }
   try {
     const st = await handle.stat()
-    if (!st.isFile()) return undefined
-    const size = Math.min(st.size, 64_000)
+    if (!st.isFile()) return out
+    const size = Math.min(st.size, PEEK_HEAD_BYTES)
     const buffer = Buffer.allocUnsafe(size)
     let offset = 0
     while (offset < size) {
@@ -365,19 +406,40 @@ export async function peekCwd(path: string): Promise<string | undefined> {
       offset += read.bytesRead
     }
     const head = buffer.subarray(0, offset).toString('utf8')
+    let custom: string | undefined
+    let ai: string | undefined
+    let prompt: string | undefined
     for (const line of head.split('\n')) {
       if (!line.startsWith('{')) continue
+      let r: Record<string, unknown>
       try {
-        const r = JSON.parse(line) as { cwd?: unknown }
-        if (typeof r.cwd === 'string') return r.cwd
+        r = JSON.parse(line) as Record<string, unknown>
       } catch {
-        /* partial line */
+        continue /* partial line */
       }
+      if (out.cwd === undefined && typeof r['cwd'] === 'string') out.cwd = r['cwd'] as string
+      const type = r['type']
+      if (type === 'custom-title' && custom === undefined && typeof r['customTitle'] === 'string') custom = oneLine(r['customTitle'] as string)
+      else if (type === 'ai-title' && ai === undefined && typeof r['aiTitle'] === 'string') ai = oneLine(r['aiTitle'] as string)
+      else if (type === 'user' && prompt === undefined && !r['isMeta'] && !r['isCompactSummary'] && !r['isSidechain']) {
+        const message = r['message']
+        const content = message && typeof message === 'object' ? (message as { content?: unknown }).content : undefined
+        const hasToolResult = Array.isArray(content) && content.some((b) => b && typeof b === 'object' && (b as { type?: unknown }).type === 'tool_result')
+        if (!hasToolResult) prompt = promptTitle(textOfContent(content))
+      }
+      if (out.cwd !== undefined && custom !== undefined) break
     }
+    const title = custom ?? ai ?? prompt
+    if (title) out.title = title
   } finally {
     await handle.close()
   }
-  return undefined
+  return out
+}
+
+/** Read the first few KB of a transcript and return its `cwd` field if present. */
+export async function peekCwd(path: string): Promise<string | undefined> {
+  return (await peekHead(path)).cwd
 }
 
 export async function listSessions(opts: DiscoverOptions = {}): Promise<SessionRef[]> {
