@@ -4,6 +4,7 @@
  *   orangu report [<session>]     build a self-contained HTML report and open it
  *   orangu analyze [<session>]    print the analysis (human summary, or --json for the full object)
  *   orangu list                   list discoverable sessions
+ *   orangu pick                   choose an open session interactively and open its report
  *   orangu repo [<path>]          aggregate every session for a repo/cwd (--json / --out report)
  *   orangu global                 aggregate every session everywhere
  *   orangu watch [<session>]      live-tail a session and refresh the report
@@ -36,6 +37,7 @@ import type { ServeOptions } from '../serve/types.js'
 import { MASCOT_ASCII } from '../report/client/mascot.js'
 import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
+import { cmdPick } from './commands/pick.js'
 import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
@@ -463,6 +465,8 @@ ${paint(out, 'bold', 'usage')}
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
+  orangu pick                  choose an open session, open its report
+                               (--json lists; --plain numbers; --limit <n>)
   orangu repo    [<path>]      aggregate every session for a repo (--json/--out)
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report
@@ -490,6 +494,7 @@ ${paint(out, 'bold', 'flags')}
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
   --verbose              also print the cache diagnostic (stderr)
+  --plain                pick only: a numbered list instead of the prompt
   --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
                          are honoured; ORANGU_NO_ANIMATION=1 stops the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
@@ -536,6 +541,17 @@ async function main(): Promise<void> {
     case 'list':
     case 'ls':
       return cmdList(flags)
+    case 'pick':
+      return cmdPick(flags, {
+        // Enter runs the same report path a user would type, opened in the browser
+        openReport: (id) => cmdReport(id, { ...flags, open: true }),
+        stdin: process.stdin,
+        stdout: process.stdout,
+        stderr: process.stderr,
+        env: process.env,
+        out,
+        err,
+      })
     case 'repo':
       return cmdAggregate('repo', sel, flags)
     case 'global':

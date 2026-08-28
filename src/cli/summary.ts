@@ -196,3 +196,105 @@ export function listRows(caps: Caps, refs: SessionRef[], o: { total: number; glo
   else lines.push('', paint(caps, 'dim', fit(caps, `${INDENT}orangu report <id>${glyphs(caps).sep}orangu analyze <id>${glyphs(caps).sep}orangu harness`)))
   return lines
 }
+
+// ---------- orangu pick ----------
+
+/** One choice in `orangu pick`: a session ref plus what the picker learned about it. */
+export interface PickRow {
+  sessionId: string
+  path: string
+  projectSlug: string
+  /** the project's directory name: the transcript's cwd basename when the head has it, else the slug */
+  project: string
+  /** head-read title, already redacted; absent when the head had none */
+  title?: string
+  sizeBytes: number
+  mtimeMs: number
+  /** Claude Code records a live pid for it, or its transcript changed recently */
+  running: boolean
+}
+
+export interface PickCounts {
+  total: number
+  running: number
+}
+
+/** `now`, `12m`, `3h`, `9d` (capped at 99d): four columns at most. */
+export function fmtAge(mtimeMs: number, now: number): string {
+  const s = Math.max(0, now - mtimeMs) / 1000
+  if (s < 60) return 'now'
+  if (s < 3600) return `${Math.floor(s / 60)}m`
+  if (s < 86_400) return `${Math.floor(s / 3600)}h`
+  return `${Math.min(99, Math.floor(s / 86_400))}d`
+}
+
+const AGE_WIDTH = 4
+const SIZE_WIDTH = 8
+const RUNNING = 'running'
+const TITLE_MIN = 12
+
+/**
+ * One pick row after the lead: id, title, project, age, size, running. Columns yield in order
+ * project, size, the running word (the leading mark stays), and the title never drops below 4.
+ */
+function pickCells(caps: Caps, r: PickRow, now: number, leadWidth: number): string {
+  const w = layoutWidth(caps)
+  const id = r.sessionId.slice(0, 8)
+  let showProject = true
+  let showSize = true
+  let showRunning = true
+  const fixed = (): number => leadWidth + 8 + 2 + (showProject ? 16 : 0) + 2 + AGE_WIDTH + (showSize ? 2 + SIZE_WIDTH : 0) + (showRunning ? 2 + RUNNING.length : 0)
+  if (w - fixed() < TITLE_MIN) showProject = false
+  if (w - fixed() < TITLE_MIN) showSize = false
+  if (w - fixed() < TITLE_MIN) showRunning = false
+  const titleWidth = Math.max(4, w - fixed())
+  const title = padCell(truncate(r.title ?? '(no title)', titleWidth, caps), titleWidth)
+  const cells = [paint(caps, 'accent', id), r.title ? title : paint(caps, 'dim', title)]
+  if (showProject) cells.push(paint(caps, 'dim', padCell(truncate(r.project, 14, caps), 14)))
+  cells.push(paint(caps, 'dim', padCell(fmtAge(r.mtimeMs, now), AGE_WIDTH, 'r')))
+  if (showSize) cells.push(padCell(fmtBytes(r.sizeBytes), SIZE_WIDTH, 'r'))
+  if (showRunning) cells.push(r.running ? paint(caps, 'good', RUNNING) : ' '.repeat(RUNNING.length))
+  return cells.join('  ')
+}
+
+function pickHeader(caps: Caps, counts: PickCounts): string {
+  const w = layoutWidth(caps)
+  const left = paint(caps, ['bold', 'accent'], 'orangu') + '  ' + paint(caps, 'bold', 'choose a session')
+  const right = `${plural(counts.total, 'session')}, ${counts.running} running`
+  const gap = w - INDENT.length - displayWidth(left) - displayWidth(right)
+  // the count is right-aligned when it fits and dropped when it does not; the title never yields
+  return INDENT + left + (gap >= 2 ? ' '.repeat(gap) + paint(caps, 'dim', right) : '')
+}
+
+/** The interactive frame: header, the visible window with a cursor and running marks, the key hint. */
+export function pickFrame(caps: Caps, rows: PickRow[], view: { cursor: number; start: number; size: number }, counts: PickCounts, now: number): string[] {
+  const g = glyphs(caps)
+  const lines = [pickHeader(caps, counts), '']
+  const end = Math.min(rows.length, view.start + view.size)
+  for (let i = view.start; i < end; i++) {
+    const r = rows[i]!
+    const cursor = i === view.cursor
+    const mark = r.running ? paint(caps, 'good', g.mark) : ' '
+    const lead = `${INDENT}${cursor ? paint(caps, 'accent', '>') : ' '} ${mark} `
+    lines.push(lead + pickCells(caps, r, now, INDENT.length + 4))
+  }
+  if (view.start > 0 || end < rows.length) lines.push(paint(caps, 'dim', `${INDENT}    ${g.up}${g.down} ${rows.length - (end - view.start)} more`))
+  else lines.push('')
+  const keys = caps.unicode ? '↑↓ or j k move · enter opens the report · q quits' : 'up/down or j k move | enter opens the report | q quits'
+  lines.push(paint(caps, 'dim', truncate(INDENT + keys, layoutWidth(caps), caps)))
+  return lines
+}
+
+/** The non-interactive form: numbered rows and one hint, so a pipe or the Bash tool can act on it. */
+export function pickList(caps: Caps, rows: PickRow[], counts: PickCounts, now: number): string[] {
+  const g = glyphs(caps)
+  const numWidth = String(rows.length).length + 2
+  const lines = [pickHeader(caps, counts), '']
+  rows.forEach((r, i) => {
+    const mark = r.running ? paint(caps, 'good', g.mark) : ' '
+    const lead = `${INDENT}${padCell(`[${i + 1}]`, numWidth)} ${mark} `
+    lines.push(lead + pickCells(caps, r, now, INDENT.length + numWidth + 3))
+  })
+  lines.push('', paint(caps, 'dim', truncate(`${INDENT}run: orangu report <id>${g.sep}the picker is interactive on a terminal`, layoutWidth(caps), caps)))
+  return lines
+}

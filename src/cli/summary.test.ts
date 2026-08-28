@@ -10,7 +10,7 @@ import type { Analysis } from '../model/analysis.js'
 import type { SessionRef } from '../discover/discover.js'
 import { SuggestionStore } from '../suggest/store.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi, type Caps } from './tty.js'
-import { analysisBlock, betaLine, briefBlock, doneLine, listRows, nextStepLines, reportFooter, row, valueBudget, type NextStep } from './summary.js'
+import { analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, valueBudget, type NextStep, type PickRow } from './summary.js'
 import { persistNextStep } from './next-step.js'
 
 async function analyzed(b: SessionBuilder): Promise<Analysis> {
@@ -190,5 +190,52 @@ describe('persistNextStep', () => {
     const step = await persistNextStep(a, false, { store: () => ((touched = true), new SuggestionStore({ home: '/nonexistent' })) })
     expect(step).toEqual({})
     expect(touched).toBe(false)
+  })
+})
+
+describe('pickFrame / pickList', () => {
+  const NOW = 1_800_000_000_000
+  const rows: PickRow[] = [
+    { sessionId: '450f127b-d499-4fe0-8334-d15d8ba650c3', path: '/p/a.jsonl', projectSlug: '-Users-me-Code-orangu', project: 'orangu', title: '日本語のタイトル: refactor every module and run the tests until green ' + 'x'.repeat(80), sizeBytes: 7_200_000, mtimeMs: NOW - 10_000, running: true },
+    { sessionId: '11111111-0000-4000-8000-00000000aaaa', path: '/p/b.jsonl', projectSlug: '-Users-me-Code-a-very-long-project-directory-name', project: 'a-very-long-project-directory-name', title: 'Fix foo test', sizeBytes: 123_400_000, mtimeMs: NOW - 2 * 60_000, running: true },
+    { sessionId: '22222222-0000-4000-8000-00000000bbbb', path: '/p/c.jsonl', projectSlug: '-Users-me-Code-demo', project: 'demo', sizeBytes: 0, mtimeMs: NOW - 10 * 60_000, running: false },
+    { sessionId: 'aaaaaaaa-0000-4000-8000-000000000001', path: '/p/d.jsonl', projectSlug: '-Users-me-Code-demo', project: 'demo', title: 'old', sizeBytes: 900, mtimeMs: NOW - 400 * 86_400_000, running: false },
+  ]
+  const counts = { total: 12, running: 2 }
+  it('every line fits the layout at every width, with and without unicode and colour', () => {
+    for (const [label, caps] of VARIANTS) {
+      assertFits(pickFrame(caps, rows, { cursor: 1, start: 0, size: 4 }, counts, NOW), caps, `pickFrame ${label}`)
+      assertFits(pickFrame(caps, rows, { cursor: 3, start: 2, size: 2 }, counts, NOW), caps, `pickFrame window ${label}`)
+      assertFits(pickList(caps, rows, counts, NOW), caps, `pickList ${label}`)
+    }
+  })
+  it('marks the cursor and the running rows, right-aligns age and size, and shows the window remainder', () => {
+    const caps = capsAt(80, { color: 0 })
+    const frame = pickFrame(caps, rows, { cursor: 1, start: 0, size: 2 }, counts, NOW)
+    expect(frame[0]).toMatch(/^  orangu  choose a session +12 sessions, 2 running$/)
+    expect(frame[2]).toMatch(/^    ● 450f127b  /)
+    expect(frame[3]).toMatch(/^  > ● 11111111  Fix foo test {11}  a-very-long-p…    2m  123.4 MB  running$/)
+    expect(frame[4]).toBe('      ↑↓ 2 more')
+    expect(frame[5]).toContain('enter opens the report')
+    const ascii = pickFrame(capsAt(80, { color: 0, unicode: false }), rows, { cursor: 0, start: 0, size: 4 }, counts, NOW)
+    expect(ascii[2]).toMatch(/^  > \* 450f127b  /)
+    expect(ascii[4]).toMatch(/^      22222222  \(no title\) {13}  demo {10}   10m    0.0 MB {9}$/)
+    expect(ascii[7]).toContain('up/down or j k move | enter')
+  })
+  it('numbers the list, pads the numbers, and ends with the run hint', () => {
+    const caps = capsAt(80, { color: 0 })
+    const many = Array.from({ length: 12 }, (_, i) => ({ ...rows[i % 4]!, sessionId: `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000` }))
+    const list = pickList(caps, many, { total: 12, running: 2 }, NOW)
+    expect(list[2]).toMatch(/^  \[1\]  ● 00000000  /)
+    expect(list[13]).toMatch(/^  \[12\]   00000011  /)
+    expect(list[list.length - 1]).toBe('  run: orangu report <id> · the picker is interactive on a terminal')
+    assertFits(list, caps, 'pickList 12')
+  })
+  it('fmtAge is at most four columns', () => {
+    expect(fmtAge(NOW, NOW)).toBe('now')
+    expect(fmtAge(NOW - 59_000, NOW)).toBe('now')
+    expect(fmtAge(NOW - 61_000, NOW)).toBe('1m')
+    expect(fmtAge(NOW - 3_600_000 * 23, NOW)).toBe('23h')
+    expect(fmtAge(NOW - 86_400_000 * 400, NOW)).toBe('99d')
   })
 })

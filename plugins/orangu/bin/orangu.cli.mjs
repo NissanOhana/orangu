@@ -1,5 +1,5 @@
 // src/cli/main.ts
-import { basename as basename10, join as join10, resolve as resolve10 } from "node:path";
+import { basename as basename11, join as join10, resolve as resolve10 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -1077,6 +1077,7 @@ import { constants as constants4 } from "node:fs";
 import { open as open4, readdir } from "node:fs/promises";
 import { join as join3 } from "node:path";
 var MAX_SESSION_RECORD_BYTES = 4096;
+var MAX_SESSION_RECORDS = 500;
 var ALTERNATIVES = "use latest, an id, or orangu pick";
 function sessionsDirs(opts) {
   if (opts.configDir) return [join3(opts.configDir, "sessions")];
@@ -1114,6 +1115,32 @@ async function readSessionRecord(path) {
   } finally {
     await handle.close();
   }
+}
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+async function runningSessions(opts, deps = {}) {
+  const isAlive = deps.isAlive ?? pidAlive;
+  const out3 = /* @__PURE__ */ new Map();
+  for (const dir of sessionsDirs(opts)) {
+    let names;
+    try {
+      names = (await readdir(dir)).filter((n2) => /^\d+\.json$/.test(n2)).sort().slice(0, MAX_SESSION_RECORDS);
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      const rec = await readSessionRecord(join3(dir, name));
+      if (!rec || !isAlive(rec.pid)) continue;
+      if (!out3.has(rec.sessionId)) out3.set(rec.sessionId, rec);
+    }
+  }
+  return out3;
 }
 async function resolveNamed(id, opts, via) {
   const ref = await resolveSession(id, opts);
@@ -6700,6 +6727,30 @@ function fileLink(absPath, caps, host = hostname()) {
 var HIDE_CURSOR = "\x1B[?25l";
 var SHOW_CURSOR = "\x1B[?25h";
 var CLEAR_LINE = "\r\x1B[2K";
+var CURSOR = {
+  hide: HIDE_CURSOR,
+  show: SHOW_CURSOR,
+  /** move up n lines (nothing for n <= 0) */
+  up: (n2) => n2 > 0 ? `\x1B[${n2}A` : "",
+  /** erase from the cursor to the end of the screen */
+  eraseDown: "\x1B[0J",
+  /** carriage return */
+  home: "\r"
+};
+function decodeKey(chunk) {
+  if (chunk === "") return { key: "cancel" };
+  if (chunk === "\x1B") return { key: "escape" };
+  if (chunk === "\r" || chunk === "\n") return { key: "enter" };
+  if (chunk === "q" || chunk === "Q" || chunk === "") return { key: "quit" };
+  if (chunk === "j" || chunk === "\x1B[B" || chunk === "\x1BOB") return { key: "down" };
+  if (chunk === "k" || chunk === "\x1B[A" || chunk === "\x1BOA") return { key: "up" };
+  if (chunk === "g" || chunk === "\x1B[H" || chunk === "\x1BOH" || chunk === "\x1B[1~") return { key: "home" };
+  if (chunk === "G" || chunk === "\x1B[F" || chunk === "\x1BOF" || chunk === "\x1B[4~") return { key: "end" };
+  if (chunk === "\x1B[5~") return { key: "pageup" };
+  if (chunk === "\x1B[6~") return { key: "pagedown" };
+  if (/^[1-9]$/.test(chunk)) return { key: "digit", digit: Number(chunk) };
+  return { key: "other" };
+}
 function rewriteLine(stream, caps, text2) {
   stream.write(caps.animate ? CLEAR_LINE + text2 : text2 + "\n");
 }
@@ -7631,6 +7682,72 @@ function listRows(caps, refs, o) {
   else lines.push("", paint(caps, "dim", fit(caps, `${INDENT}orangu report <id>${glyphs(caps).sep}orangu analyze <id>${glyphs(caps).sep}orangu harness`)));
   return lines;
 }
+function fmtAge(mtimeMs, now) {
+  const s = Math.max(0, now - mtimeMs) / 1e3;
+  if (s < 60) return "now";
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.min(99, Math.floor(s / 86400))}d`;
+}
+var AGE_WIDTH = 4;
+var SIZE_WIDTH = 8;
+var RUNNING = "running";
+var TITLE_MIN = 12;
+function pickCells(caps, r, now, leadWidth) {
+  const w = layoutWidth(caps);
+  const id = r.sessionId.slice(0, 8);
+  let showProject = true;
+  let showSize = true;
+  let showRunning = true;
+  const fixed = () => leadWidth + 8 + 2 + (showProject ? 16 : 0) + 2 + AGE_WIDTH + (showSize ? 2 + SIZE_WIDTH : 0) + (showRunning ? 2 + RUNNING.length : 0);
+  if (w - fixed() < TITLE_MIN) showProject = false;
+  if (w - fixed() < TITLE_MIN) showSize = false;
+  if (w - fixed() < TITLE_MIN) showRunning = false;
+  const titleWidth = Math.max(4, w - fixed());
+  const title = padCell(truncate(r.title ?? "(no title)", titleWidth, caps), titleWidth);
+  const cells = [paint(caps, "accent", id), r.title ? title : paint(caps, "dim", title)];
+  if (showProject) cells.push(paint(caps, "dim", padCell(truncate(r.project, 14, caps), 14)));
+  cells.push(paint(caps, "dim", padCell(fmtAge(r.mtimeMs, now), AGE_WIDTH, "r")));
+  if (showSize) cells.push(padCell(fmtBytes(r.sizeBytes), SIZE_WIDTH, "r"));
+  if (showRunning) cells.push(r.running ? paint(caps, "good", RUNNING) : " ".repeat(RUNNING.length));
+  return cells.join("  ");
+}
+function pickHeader(caps, counts) {
+  const w = layoutWidth(caps);
+  const left = paint(caps, ["bold", "accent"], "orangu") + "  " + paint(caps, "bold", "choose a session");
+  const right = `${plural(counts.total, "session")}, ${counts.running} running`;
+  const gap = w - INDENT.length - displayWidth(left) - displayWidth(right);
+  return INDENT + left + (gap >= 2 ? " ".repeat(gap) + paint(caps, "dim", right) : "");
+}
+function pickFrame(caps, rows, view, counts, now) {
+  const g = glyphs(caps);
+  const lines = [pickHeader(caps, counts), ""];
+  const end = Math.min(rows.length, view.start + view.size);
+  for (let i = view.start; i < end; i++) {
+    const r = rows[i];
+    const cursor = i === view.cursor;
+    const mark2 = r.running ? paint(caps, "good", g.mark) : " ";
+    const lead = `${INDENT}${cursor ? paint(caps, "accent", ">") : " "} ${mark2} `;
+    lines.push(lead + pickCells(caps, r, now, INDENT.length + 4));
+  }
+  if (view.start > 0 || end < rows.length) lines.push(paint(caps, "dim", `${INDENT}    ${g.up}${g.down} ${rows.length - (end - view.start)} more`));
+  else lines.push("");
+  const keys = caps.unicode ? "\u2191\u2193 or j k move \xB7 enter opens the report \xB7 q quits" : "up/down or j k move | enter opens the report | q quits";
+  lines.push(paint(caps, "dim", truncate(INDENT + keys, layoutWidth(caps), caps)));
+  return lines;
+}
+function pickList(caps, rows, counts, now) {
+  const g = glyphs(caps);
+  const numWidth = String(rows.length).length + 2;
+  const lines = [pickHeader(caps, counts), ""];
+  rows.forEach((r, i) => {
+    const mark2 = r.running ? paint(caps, "good", g.mark) : " ";
+    const lead = `${INDENT}${padCell(`[${i + 1}]`, numWidth)} ${mark2} `;
+    lines.push(lead + pickCells(caps, r, now, INDENT.length + numWidth + 3));
+  });
+  lines.push("", paint(caps, "dim", truncate(`${INDENT}run: orangu report <id>${g.sep}the picker is interactive on a terminal`, layoutWidth(caps), caps)));
+  return lines;
+}
 
 // src/suggest/store.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
@@ -7672,8 +7789,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename11 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename11)) return { violation: "must not use a reserved Windows device name" };
+    const basename12 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename12)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -12316,6 +12433,164 @@ var EXTRA_HELP = [
   ].join("\n")
 ];
 
+// src/cli/commands/pick.ts
+import { basename as basename10 } from "node:path";
+
+// src/cli/select.ts
+var FRAME_CHROME_LINES = 5;
+function windowFor(cursor, start, size, count) {
+  if (count <= size) return 0;
+  let s = start;
+  if (cursor < s) s = cursor;
+  if (cursor >= s + size) s = cursor - size + 1;
+  return Math.max(0, Math.min(s, count - size));
+}
+function select(o) {
+  const count = Math.max(1, o.count);
+  const columns = () => Math.max(40, o.output.columns ?? o.caps.columns);
+  const size = Math.max(1, Math.min(count, o.viewRows ?? Math.max(3, (o.output.rows ?? 24) - FRAME_CHROME_LINES)));
+  let cursor = Math.max(0, Math.min(o.initial ?? 0, count - 1));
+  let start = windowFor(cursor, 0, size, count);
+  let drawn = 0;
+  const frame = () => {
+    const lines = o.render({ cursor, start, size, columns: columns() });
+    drawn = lines.length;
+    return lines.join("\n") + "\n";
+  };
+  const draw = () => {
+    o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
+  };
+  return new Promise((resolve11) => {
+    let done = false;
+    const restore = () => {
+      if (done) return;
+      done = true;
+      o.input.removeListener("data", onData);
+      if (o.output.removeListener) o.output.removeListener("resize", onResize);
+      try {
+        o.input.setRawMode?.(false);
+      } catch {
+      }
+      o.input.pause();
+      o.output.write(CURSOR.show);
+    };
+    const hook = onceOnExit(restore, o.proc);
+    const finish = (r) => {
+      restore();
+      hook.dispose();
+      resolve11(r);
+    };
+    const move = (to) => {
+      cursor = Math.max(0, Math.min(to, count - 1));
+      start = windowFor(cursor, start, size, count);
+      draw();
+    };
+    const onResize = () => draw();
+    const onData = (chunk) => {
+      const { key, digit } = decodeKey(typeof chunk === "string" ? chunk : chunk.toString("utf8"));
+      switch (key) {
+        case "cancel":
+          return finish({ kind: "cancel", code: 130 });
+        case "quit":
+        case "escape":
+          return finish({ kind: "cancel", code: 0 });
+        case "enter":
+          return finish({ kind: "pick", index: cursor });
+        case "up":
+          return move(cursor - 1);
+        case "down":
+          return move(cursor + 1);
+        case "home":
+          return move(0);
+        case "end":
+          return move(count - 1);
+        case "pageup":
+          return move(cursor - size);
+        case "pagedown":
+          return move(cursor + size);
+        case "digit":
+          return move((digit ?? 1) - 1);
+        default:
+          return;
+      }
+    };
+    o.input.setEncoding?.("utf8");
+    o.input.setRawMode?.(true);
+    o.input.resume();
+    o.input.on("data", onData);
+    if (o.output.on) o.output.on("resize", onResize);
+    o.output.write(CURSOR.hide + frame());
+  });
+}
+
+// src/cli/commands/pick.ts
+var DEFAULT_PICK_LIMIT = 20;
+function interactivePrecondition(stdin, stdout, env, flags) {
+  const ci = env["CI"];
+  if (ci !== void 0 && ci !== "" && ci !== "false") return false;
+  if (env["TERM"] === "dumb" || env["ORANGU_NO_ANIMATION"] === "1") return false;
+  if (flagBool(flags, "json") || flagBool(flags, "plain") || flagBool(flags, "quiet")) return false;
+  return Boolean(stdin.isTTY && stdout.isTTY && typeof stdin.setRawMode === "function");
+}
+async function discoverOptions(flags) {
+  const configArg = flagStr(flags, "root", "config", "r");
+  const opts = flagBool(flags, "global") ? { roots: await claudeRoots(configArg) } : configArg ? { configDir: configArg } : {};
+  if (flags["cwd"]) opts.cwd = String(flags["cwd"]);
+  return opts;
+}
+async function gatherPickRows(flags, deps = {}) {
+  const now = deps.now ?? Date.now();
+  const opts = await discoverOptions(flags);
+  const refs = await listSessions(opts);
+  let live = /* @__PURE__ */ new Map();
+  try {
+    live = await runningSessions(opts, deps.isAlive ? { isAlive: deps.isAlive } : {});
+  } catch {
+  }
+  const isRunning = (r) => live.has(r.sessionId) || badgeFor(r.mtimeMs, now).badge !== "ended";
+  const ordered = refs.map((r) => ({ r, running: isRunning(r) })).sort((a, b) => Number(b.running) - Number(a.running) || b.r.mtimeMs - a.r.mtimeMs);
+  const limitStr = flagStr(flags, "limit", "l");
+  const limit = limitStr !== void 0 && Number.isFinite(Number(limitStr)) && Number(limitStr) > 0 ? Math.floor(Number(limitStr)) : DEFAULT_PICK_LIMIT;
+  const redact = !flagBool(flags, "no-redact");
+  const rows = [];
+  for (const { r, running } of ordered.slice(0, limit)) {
+    const head = await peekHead(r.path);
+    const title = head.title && redact ? redactValue(head.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head.title;
+    const project = head.cwd ? basename10(head.cwd) : basename10(r.projectSlug);
+    const row2 = { sessionId: r.sessionId, path: r.path, projectSlug: r.projectSlug, project, sizeBytes: r.sizeBytes, mtimeMs: r.mtimeMs, running };
+    if (title) row2.title = title;
+    rows.push(row2);
+  }
+  return { rows, counts: { total: refs.length, running: ordered.filter((x) => x.running).length } };
+}
+async function cmdPick(flags, deps) {
+  const now = deps.now ?? Date.now();
+  const { rows, counts } = await gatherPickRows(flags, { now, ...deps.isAlive ? { isAlive: deps.isAlive } : {} });
+  if (!rows.length) throw new Error("No sessions found. Is Claude Code installed? Try: orangu list");
+  if (flagBool(flags, "json")) {
+    deps.stdout.write(JSON.stringify(rows, null, 2) + "\n");
+    return;
+  }
+  if (!interactivePrecondition(deps.stdin, deps.stdout, deps.env, flags)) {
+    deps.stdout.write(pickList(deps.out, rows, counts, now).join("\n") + "\n");
+    return;
+  }
+  const result = await select({
+    count: rows.length,
+    render: (view) => pickFrame({ ...deps.out, columns: view.columns }, rows, view, counts, now),
+    input: deps.stdin,
+    output: deps.stdout,
+    caps: deps.out,
+    ...deps.proc ? { proc: deps.proc } : {}
+  });
+  if (result.kind === "cancel") {
+    if (result.code) process.exitCode = result.code;
+    else deps.stderr.write(paint(deps.err, "dim", "  cancelled") + "\n");
+    return;
+  }
+  await deps.openReport(rows[result.index].sessionId);
+}
+
 // src/cli/json-out.ts
 function renderAnalysisJson(a, flags) {
   let out3 = a;
@@ -12397,7 +12672,7 @@ async function selectSession(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail(`Ambiguous session "${sel}". ${cands.length} matches:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename10(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename11(c.projectSlug)).join("\n"));
   }
   fail(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
@@ -12541,7 +12816,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const cwd = selOrPath ? resolve10(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename10(cwd)}`;
+    scopeLabel = `repo ${basename11(cwd)}`;
   }
   if (!refs.length) fail(`No sessions found for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
@@ -12700,6 +12975,8 @@ ${paint(out2, "bold", "usage")}
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
+  orangu pick                  choose an open session, open its report
+                               (--json lists; --plain numbers; --limit <n>)
   orangu repo    [<path>]      aggregate every session for a repo (--json/--out)
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report
@@ -12727,6 +13004,7 @@ ${paint(out2, "bold", "flags")}
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
   --verbose              also print the cache diagnostic (stderr)
+  --plain                pick only: a numbered list instead of the prompt
   --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
                          are honoured; ORANGU_NO_ANIMATION=1 stops the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
@@ -12769,6 +13047,17 @@ async function main() {
     case "list":
     case "ls":
       return cmdList2(flags);
+    case "pick":
+      return cmdPick(flags, {
+        // Enter runs the same report path a user would type, opened in the browser
+        openReport: (id) => cmdReport(id, { ...flags, open: true }),
+        stdin: process.stdin,
+        stdout: process.stdout,
+        stderr: process.stderr,
+        env: process.env,
+        out: out2,
+        err: err2
+      });
     case "repo":
       return cmdAggregate("repo", sel, flags);
     case "global":

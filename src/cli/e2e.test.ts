@@ -43,6 +43,8 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     for (const f of ['orangu estimate', 'orangu harness', 'orangu suggest', '--slim']) expect(h).toContain(f)
     expect(h).toContain('orangu feedback')
     expect(h).toContain('--context session|repo|global|report|app')
+    expect(h).toContain('orangu pick')
+    for (const f of ['-s, --session <sel>', '--plain', 'or "current"']) expect(h).toContain(f)
     expect(h.toLowerCase()).toContain('no network calls')
   })
 
@@ -334,6 +336,7 @@ syncBuiltinESMExports()
       ['report', home.endedId, ...root, '--no-open', '--json'],
       ['analyze', home.endedId, ...root, '--json'],
       ['list', ...root, '--json'],
+      ['pick', ...root, '--json'],
       ['report', home.endedId, ...root, '--no-open', '--quiet'],
       ['analyze', home.endedId, ...root, '--quiet'],
       [...root, '--quiet'],
@@ -428,6 +431,38 @@ syncBuiltinESMExports()
     })
     expect(estimate.status, estimate.stderr).toBe(0)
     expect((JSON.parse(estimate.stdout) as { sessions: number }).sessions).toBe(1)
+  })
+
+  it('pick: --json lists on piped stdio without waiting; no TTY prints a numbered list and a hint; an empty root exits 1', async () => {
+    const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-pick-')))
+    const root = ['--root', home.configDir]
+    // the hang regression: stdin is a pipe nobody writes to, and the command must still return
+    const json = spawnSync('node', [CLI, 'pick', ...root, '--json'], { encoding: 'utf8', input: '', timeout: 15_000 })
+    expect(json.status, json.stderr).toBe(0)
+    const rows = JSON.parse(json.stdout) as Array<{ sessionId: string; running: boolean; title?: string; project: string }>
+    expect(rows.map((r) => r.sessionId)).toEqual([home.liveId, home.idleId, home.endedId])
+    expect(rows[0]!.running).toBe(true)
+    expect(rows[2]!.running).toBe(false)
+    expect(rows[0]!.title).not.toContain('sk-ant-api03-FAKE')
+    expect(json.stderr).toBe('')
+
+    const list = spawnSync('node', [CLI, 'pick', ...root], { encoding: 'utf8', input: '', timeout: 15_000 })
+    expect(list.status, list.stderr).toBe(0)
+    expect(list.stdout).toMatch(/^  \[1\] . 11111111 /m)
+    expect(list.stdout).toMatch(/^  \[3\] {3}aaaaaaaa /m)
+    expect(list.stdout).toContain('3 sessions, 2 running')
+    expect(list.stdout).toContain('run: orangu report <id>')
+    expect(list.stdout + list.stderr).not.toMatch(ESCAPES)
+    for (const l of list.stdout.split('\n')) expect(l.length, l).toBeLessThanOrEqual(80)
+    // --plain and --limit shape the list; the picker never opens a report on its own
+    const limited = spawnSync('node', [CLI, 'pick', ...root, '--plain', '--limit', '1'], { encoding: 'utf8', input: '', timeout: 15_000 })
+    expect(limited.stdout).toContain('[1]')
+    expect(limited.stdout).not.toContain('[2]')
+
+    const empty = await mkdtemp(join(tmpdir(), 'orangu-cli-pick-empty-'))
+    const none = spawnSync('node', [CLI, 'pick', '--root', empty], { encoding: 'utf8', input: '', timeout: 15_000 })
+    expect(none.status).toBe(1)
+    expect(none.stderr).toMatch(/^error: No sessions found/m)
   })
 
   it('bare orangu analyzes the latest session and prints the sentence and the next command; --help is unchanged', async () => {
