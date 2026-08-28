@@ -4,10 +4,12 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { makeFixtureHome } from '../../../test/fixtures/home.js'
+import { MASCOT_MINI, MASCOT_STACKED, MASCOT_WIDE } from '../mascot-ascii.js'
 import { displayWidth, stripAnsi, type Caps, type ExitHookProcess } from '../tty.js'
 import {
   cmdDashboard,
   dashboardChoices,
+  dashboardChromeLines,
   dashboardFrame,
   dashboardPrecondition,
   gatherDashboardData,
@@ -129,15 +131,56 @@ describe('dashboard discovery and rendering', () => {
       ],
     }
     const choices = dashboardChoices(data)
-    for (const columns of [40, 80, 160]) {
+    // the art is the frame's leading block, up to the blank line before "Choose a report"
+    const artOf = (lines: string[]): string[] => lines.slice(0, lines.indexOf('')).map(stripAnsi)
+    for (const [columns, tier] of [[40, MASCOT_MINI], [80, MASCOT_WIDE], [160, MASCOT_WIDE]] as const) {
       const caps = { ...tty, columns }
       const lines = dashboardFrame(caps, data, choices, { cursor: 3, start: 0, size: choices.length }, NOW)
       for (const line of lines) expect(displayWidth(line), stripAnsi(line)).toBeLessThanOrEqual(Math.min(columns, 80))
       expect(stripAnsi(lines.join('\n'))).toContain('Choose a report')
+      const art = artOf(lines)
+      expect(art.length, `${columns}: art rows`).toBe(tier.length)
+      // every row of the tier is present whole: nothing was cut, and no truncation ellipsis appears
+      for (const row of tier) expect(art.join('\n'), `${columns}: ${row}`).toContain(row)
+      expect(art.join('\n'), `${columns}: ellipsis in the art`).not.toContain('…')
     }
+    // 42-67 columns keeps the wordmark and drops the face
+    expect(artOf(dashboardFrame({ ...tty, columns: 60 }, data, choices, { cursor: 0, start: 0, size: choices.length }, NOW))).toHaveLength(
+      MASCOT_STACKED.length,
+    )
     expect(dashboardFrame(tty, data, choices, { cursor: 0, start: 0, size: choices.length }, NOW).join('\n')).toContain('\x1b[38;5;209m')
   })
+
+  it('derives the chrome-line budget from the tier the same caps render', () => {
+    expect(dashboardChromeLines({ ...tty, columns: 160 }), 'WIDE').toBe(14)
+    expect(dashboardChromeLines({ ...tty, columns: 80 }), 'WIDE').toBe(14)
+    expect(dashboardChromeLines({ ...tty, columns: 68 }), 'WIDE').toBe(14)
+    expect(dashboardChromeLines({ ...tty, columns: 67 }), 'STACKED').toBe(13)
+    expect(dashboardChromeLines({ ...tty, columns: 42 }), 'STACKED').toBe(13)
+    expect(dashboardChromeLines({ ...tty, columns: 40 }), 'MINI').toBe(15)
+    // the budget is exactly what the frame spends outside the choice rows
+    const data: DashboardData = { repoName: 'demo', repoSessions: 1, globalSessions: 1, roots: 1, runningSessions: 0, live: [] }
+    const choices = dashboardChoices(data)
+    for (const columns of [40, 60, 80]) {
+      const caps = { ...tty, columns }
+      const lines = dashboardFrame(caps, data, choices, { cursor: 0, start: 0, size: choices.length }, NOW)
+      expect(lines.length - choices.length, `${columns}: frame rows minus choices`).toBe(dashboardChromeLines(caps))
+    }
+  })
 })
+
+/**
+ * Wait for the frame instead of sleeping: FakeOutput.write appends synchronously and select
+ * registers its key listener before it writes the first frame, so seeing the frame proves the
+ * listener is attached. A fixed 25 ms sleep raced discovery under full-suite load.
+ */
+async function firstFrame(out: FakeOutput): Promise<void> {
+  for (let i = 0; i < 600; i++) {
+    if (stripAnsi(out.text).includes('Choose a report')) return
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+  throw new Error('the dashboard never rendered its first frame')
+}
 
 describe('cmdDashboard', () => {
   it('navigates to scope reports and direct live-session reports', async () => {
@@ -145,11 +188,11 @@ describe('cmdDashboard', () => {
 
     const repo = deps(cwd)
     const repoRun = cmdDashboard({ root }, repo)
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await firstFrame(repo.stdout)
     repo.stdin.emit('data', '\r')
     await repoRun
     expect(repo.showRepo).toHaveBeenCalledOnce()
-    expect(stripAnsi(repo.stdout.text)).toContain('.-"""-.')
+    expect(stripAnsi(repo.stdout.text)).toContain("'-...............-'")
     expect(stripAnsi(repo.stdout.text)).toContain('Repository report')
     expect(stripAnsi(repo.stdout.text)).toContain('Global report')
     expect(stripAnsi(repo.stdout.text)).toContain('Browse session reports')
@@ -157,7 +200,7 @@ describe('cmdDashboard', () => {
 
     const session = deps(cwd)
     const sessionRun = cmdDashboard({ root }, session)
-    await new Promise((resolve) => setTimeout(resolve, 25))
+    await firstFrame(session.stdout)
     session.stdin.emit('data', '4')
     session.stdin.emit('data', '\r')
     await sessionRun

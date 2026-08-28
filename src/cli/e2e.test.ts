@@ -7,6 +7,8 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
+import { MASCOT_STACKED } from './mascot-ascii.js'
+import { displayWidth } from './tty.js'
 
 async function until(cond: () => boolean, ms: number, what: string): Promise<void> {
   const t0 = Date.now()
@@ -57,6 +59,14 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
       expect(rendered(out), verb).toMatch(/^ {2}cache {4}1 hits, 0 misses$/m)
       expect(rendered(out), verb).not.toMatch(/analyzing.*cache/)
     }
+  })
+  it('--help prints the wordmark whole, and no printed line overflows 80 columns', () => {
+    const { out, status } = runPty(['--help'])
+    expect(status, out).toBe(0)
+    const shown = rendered(out)
+    // the wordmark and the tagline, row by row: a cut row would fail here, not merely look wrong
+    for (const row of MASCOT_STACKED) expect(shown, row).toContain(row)
+    for (const line of shown.split('\n')) expect(displayWidth(line), line).toBeLessThanOrEqual(80)
   })
   it('NO_COLOR=1 on a terminal: no colour, no spinner, no cursor or erase sequences', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-nocolor-')))

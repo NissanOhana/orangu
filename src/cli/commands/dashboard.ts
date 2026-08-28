@@ -7,8 +7,8 @@
  */
 import { basename, resolve } from 'node:path'
 import { claudeRoots, listSessions } from '../../discover/discover.js'
-import { MASCOT_ASCII } from '../../report/client/mascot.js'
 import { flagStr } from '../args.js'
+import { mascotArt, mascotLines } from '../mascot-ascii.js'
 import { select, type InputLike, type OutputLike, type SelectView } from '../select.js'
 import { fmtAge, layoutWidth, type PickRow } from '../summary.js'
 import { displayWidth, glyphs, paint, truncate, type Caps, type ExitHookProcess, type WritableLike } from '../tty.js'
@@ -16,7 +16,8 @@ import { gatherPickRows, interactivePrecondition } from './pick.js'
 
 const INDENT = '  '
 const TAG_WIDTH = 7
-const DASHBOARD_CHROME_LINES = 10
+/** frame rows outside the art and the choices: blank, header, counts, blank, "N more", key hint */
+const CHROME_ROWS_AROUND_ART = 6
 const TARGETED_BARE_FLAGS = ['session', 's', 'global', 'cwd', 'max-tokens', 'fail-on-hook-errors'] as const
 
 export interface DashboardData {
@@ -115,12 +116,13 @@ function choiceText(choice: DashboardChoice, data: DashboardData, now: number, s
   }
 }
 
-function mascot(caps: Caps): string[] {
-  const width = layoutWidth(caps)
-  const raw = MASCOT_ASCII.trim().split('\n')
-  const widest = Math.max(...raw.map(displayWidth))
-  const indent = ' '.repeat(Math.max(INDENT.length, Math.floor((width - widest) / 2)))
-  return raw.map((line) => paint(caps, 'accent', indent + truncate(line, width - indent.length, caps)))
+/**
+ * Rows the frame spends on everything that is not a choice. Derived from the art the same caps
+ * render, so a taller tier never leaves the window claiming rows the frame has already spent:
+ * WIDE 14, STACKED 13, MINI 15.
+ */
+export function dashboardChromeLines(caps: Caps): number {
+  return mascotArt(layoutWidth(caps)).length + CHROME_ROWS_AROUND_ART
 }
 
 /** Pure terminal frame: orange mascot, scope summaries, live shortcuts, and one key hint. */
@@ -134,7 +136,7 @@ export function dashboardFrame(
   const width = layoutWidth(caps)
   const g = glyphs(caps)
   const lines = [
-    ...mascot(caps),
+    ...mascotLines(caps),
     '',
     paint(caps, 'bold', INDENT + 'Choose a report'),
     paint(caps, 'dim', truncate(`${INDENT}${count(data.runningSessions, 'open Claude session')}${g.sep}local only${g.sep}no network calls`, width, caps)),
@@ -189,7 +191,7 @@ export async function cmdDashboard(flags: Record<string, string | boolean>, deps
     input: deps.stdin,
     output: deps.stdout,
     caps: deps.out,
-    viewRows: Math.max(1, terminalRows - DASHBOARD_CHROME_LINES),
+    viewRows: Math.max(1, terminalRows - dashboardChromeLines(deps.out)),
     ...(deps.proc ? { proc: deps.proc } : {}),
   })
   if (result.kind === 'cancel') {
