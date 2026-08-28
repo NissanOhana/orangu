@@ -35,7 +35,7 @@ import { persistNextStep } from './next-step.js'
 import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
-import { MASCOT_ASCII } from '../report/client/mascot.js'
+import { mascotLines } from './mascot-ascii.js'
 import type { Analysis } from '../model/analysis.js'
 import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { cmdPick } from './commands/pick.js'
@@ -476,7 +476,7 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
 }
 
 function printHelp(): void {
-  process.stdout.write(`${out.tty ? MASCOT_ASCII + '\n' : ''}
+  process.stdout.write(`${out.tty ? '\n' + mascotLines(out).join('\n') + '\n' : ''}
 ${paint(out, 'bold', 'orangu')} v${VERSION}: observe the run, then improve the next outcome.
 Deterministic observability for Claude Code sessions. No network calls.
 

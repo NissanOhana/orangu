@@ -8,6 +8,7 @@ import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { renderReport } from './render.js'
 import { CLIENT_JS, CLIENT_JS_SERVE } from './generated/client-bundle.js'
+import { MASCOT_STACKED } from '../cli/mascot-ascii.js'
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 
 const CHECKS: Array<[RegExp, string]> = [
@@ -57,6 +58,13 @@ describe('offline report', () => {
     expect(CLIENT_JS_SERVE).toContain('github.com/NissanOhana/orangu/issues/new')
   })
 
+  it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
+    // String.raw survives tree-shaking, so the old 4-line art shipped in every saved report for
+    // nothing. Neither the old face nor the new wordmark may come back into the file bundle.
+    expect(CLIENT_JS).not.toContain('.-"""-.')
+    expect(CLIENT_JS).not.toContain(MASCOT_STACKED[0]!)
+  })
+
   it('client JS never says "finished" (possibly-live honesty) and stays inside its size ratchet', () => {
     expect(CLIENT_JS.includes('finished'), 'the string "finished"').toBe(false)
     // Budget history: design B2 budgeted 60 KB for 7 screens; the shipped client renders 10 and landed at 68 KB
@@ -86,6 +94,8 @@ describe('offline report', () => {
     // for by two trims: template-literal indentation no longer ships (−1,090 B; continuation lines inside a
     // template start at column 0, every byte of one is in every report) and the six identical "No session
     // selected" guards share noSession() (−199 B).
-    expect(CLIENT_JS.length).toBe(72980)
+    // 2026-08-28 mascot: -94 B. MASCOT_ASCII (a String.raw literal esbuild could not shake out) left
+    // the client tree for src/cli/mascot-ascii.ts, so terminal art no longer ships in saved reports.
+    expect(CLIENT_JS.length).toBe(72886)
   })
 })

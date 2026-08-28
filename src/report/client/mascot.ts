@@ -15,9 +15,3 @@ export function mascotSvg(size = 30): string {
   if (!href || !PNG_DATA_URI.test(href)) return `<span class="logo" ${dimensions} role="img" aria-label="orangu"></span>`
   return `<img class="logo" src="${href}" ${dimensions} alt="orangu" draggable="false">`
 }
-
-export const MASCOT_ASCII = String.raw`
-.-"""-.
-/  o o  \   orangu
-|  \___/()o  see what your agent did
-\_______/`
