@@ -39,6 +39,11 @@ export function renderTools(ctx: Ctx): HTMLElement {
     ? `${par.parallelGroups} of ${par.groups} batches ran in parallel · max ${par.maxGroupSize} at once`
     : ''
   const maxMs = Math.max(...t.byName.map((s) => s.totalMs), 1)
+  // A mean above p95 is honest arithmetic (one 30-minute timeout among 62 quick calls) but reads as a
+  // broken statistic next to p95, so the Avg cell says why. Client-only; the Analysis contract is untouched.
+  const outlierWhy = ctx.audience === 'plain' ? 'one or more calls far above the rest' : 'one or more calls far above the rest; p95 is the typical worst case'
+  const avgCell = (s: typeof t.byName[number]): string =>
+    s.avgMs > s.p95Ms ? `<td class="num" title="${outlierWhy}">${esc(ms(s.avgMs))}<span class="outlier">outlier</span></td>` : `<td class="num">${esc(ms(s.avgMs))}</td>`
   const toolRows = (rows: typeof t.byName): string =>
     rows
       .map(
@@ -46,7 +51,7 @@ export function renderTools(ctx: Ctx): HTMLElement {
       <td><i class="swd" style="background:${catColor(s.category)}"></i><span class="mono125">${esc(s.name)}</span></td>
       <td class="num">${num(s.count)}</td>
       <td class="num"${s.errors ? ' style="color:var(--bad)"' : ' style="color:var(--ink3)"'}>${s.errors}</td>
-      <td class="num">${esc(ms(s.avgMs))}</td>
+      ${avgCell(s)}
       <td class="num p95col">${esc(ms(s.p95Ms))}</td>
       <td><span class="trough"><i style="width:${((s.totalMs / maxMs) * 100).toFixed(1)}%;background:${catColor(s.category)}"></i></span></td>
     </tr>`,

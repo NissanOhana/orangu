@@ -76,7 +76,9 @@ describe('offline report', () => {
     // (its "What happened" and "What it produced" rows duplicated the headline and the narrative sentence).
     // Suggest footer rewritten in the six user-facing nouns (session, finding, evidence, proposal, apply,
     // verify): +1 B.
+    // Tools table: the Avg cell says "outlier" (with a title that explains it) when the mean sits above p95,
+    // so one 30-minute timeout among quick calls no longer reads as a broken statistic: +252 B.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
-    expect(CLIENT_JS.length).toBe(72734)
+    expect(CLIENT_JS.length).toBe(72986)
   })
 })

@@ -198,6 +198,8 @@ table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: 
 /* bars */
 .trough { display: block; height: 8px; border-radius: 4px; background: var(--bg2); overflow: hidden; }
 .trough > i { display: block; height: 100%; background: var(--accent); }
+/* Tools table: the Avg cell carries a mean that sits above p95 (a few calls far above the rest); the title says why. */
+.outlier { font: 600 10px/1.4 var(--sans); color: var(--ink3); text-transform: uppercase; letter-spacing: 0.04em; margin-left: 5px; vertical-align: middle; cursor: help; }
 .ctxbar { height: 10px; border-radius: 6px; background: var(--bg2); border: 1px solid var(--border); overflow: hidden; }
 .ctxbar > i { display: block; height: 100%; background: var(--accent); }
 
