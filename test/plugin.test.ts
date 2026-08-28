@@ -267,13 +267,17 @@ describe('plugin packaging', () => {
     expect(harness).not.toMatch(/permission prompt|not honou?red/i)
   })
 
-  // Informed consent: the user approves a repository write knowing which files it touches and, for a
-  // hook, MCP, or script-cli item, the command it introduces; item titles alone are model-authored from
-  // evidence text and cannot carry that. The applied id is bound to the approved item by echoing it.
-  it('harness names the files and command per item before approval, and binds each apply to a verbatim id', () => {
+  // Informed consent: the user approves a repository write knowing which files it touches and the exact
+  // text of anything it introduces that will run or grant authority; item titles alone are model-authored
+  // from evidence text and cannot carry that. The disclosure is content-shaped, not a class list: a
+  // workflow-config, skill-create, subagent-agent, or plugin item writes CI steps, settings hooks and
+  // permission grants, or instruction files that later models obey, and none of those is a `hook`, `mcp`,
+  // or `script-cli` item. The applied id is bound to the approved item by echoing it.
+  it('harness names the files and the executable or authority-granting text per item before approval, and binds each apply to a verbatim id', () => {
     const harness = readText('plugin/skills/harness/SKILL.md')
     expect(harness).toContain('the manifest `files` it writes')
-    expect(harness).toContain('the exact command it introduces')
+    expect(harness).toContain('the exact text of any command, hook, workflow step, permission or plugin grant, or skill or agent instruction file it introduces')
+    expect(harness, 'no disclosure limited to a class list').not.toMatch(/for `hook`, `mcp`, or `script-cli`|the exact command it introduces/)
     expect(harness).toContain('each option labelled with its `<id>`, title, and files')
     expect(harness).toContain('approves only the `<id>`s it names verbatim')
     expect(harness).toContain('a number alone, stop and ask again')
@@ -701,7 +705,11 @@ describe('plugin packaging', () => {
     // 2026-08-28 harness 1180 -> 1239 (review fix): the approval gate now names each item's files and, for a
     // hook, MCP, or script-cli item, the command it introduces, labels every option by id, accepts only a
     // verbatim id, and echoes id, title, and files before each apply; measured 1,238, again zero headroom.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1239, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
+    // 2026-08-28 harness 1239 -> 1249 (review fix 2): the command disclosure was limited to hook, MCP, and
+    // script-cli items, which left workflow-config, skill-create, subagent-agent, and plugin items (CI steps,
+    // settings hooks and permission grants, instruction files) undisclosed; it is now content-shaped, which
+    // costs ten words after "numbered" was dropped; measured 1,248, again zero headroom.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1249, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
     const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

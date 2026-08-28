@@ -82,7 +82,7 @@ Explain any record dropped by deduplication.
 
 ## 5. Report, approve, and apply
 
-Return the numbered, ranked plan and proposal paths: per item its `<id>`, the change, its class, the manifest `files` it writes (for `hook`, `mcp`, or `script-cli`, also the exact command it introduces), evidence and example sessions, the expected quality, token, or millisecond effect (labelled estimated where it is), effort, risk, and the next-run check. End with what was not recommended, and why.
+Return the ranked plan and proposal paths: per item its `<id>`, the change, its class, the manifest `files` it writes and the exact text of any command, hook, workflow step, permission or plugin grant, or skill or agent instruction file it introduces, evidence and example sessions, the expected quality, token, or millisecond effect (labelled estimated where it is), effort, risk, and the next-run check. End with what was not recommended, and why.
 
 Each repo proposal's next action is `/orangu:apply <id>`; it must remain `applied` until Orangu can compare later repository sessions. For every global proposal say review only: global apply and verification are not supported. Say plainly that this review did not edit the target repository; nothing is applied or verified yet.
 
