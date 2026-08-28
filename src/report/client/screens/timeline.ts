@@ -33,11 +33,23 @@ function kindTag(t: TurnAnalysis): string {
   return `<span class="kind ${cls}">${esc(label)}</span>`
 }
 
+/**
+ * The row's text: the prompt, else the command name, else the row's OWN facts (prompt size and the
+ * activity string, neither of which the redactor strips) so a default-redacted report never reads as
+ * N rows of the same notice; the notice is left for a turn that has no facts at all.
+ */
+export function promptText(t: TurnAnalysis, includeText: boolean): { text: string; own: boolean } {
+  const given = t.promptPreview || t.commandName
+  if (given) return { text: given, own: false }
+  const facts = [t.promptChars ? `${tok(t.promptChars)}-char prompt` : '', t.activity].filter(Boolean).join(' · ')
+  return { text: facts || (includeText ? '(no prompt)' : '(prompt text not included)'), own: true }
+}
+
 function turnRow(a: Analysis, t: TurnAnalysis, ctx: Ctx, hotTokens: number, open: boolean): string {
   const segs = catMixForTurn(a.tools.calls, t.index, ctx.state.agent)
   const mix = segs.map((s) => `<i style="width:${s.pct.toFixed(1)}%;background:${catColor(s.cat)}"></i>`).join('')
-  const prompt = t.promptPreview || t.commandName || (ctx.data.capabilities.includeText ? '(no prompt)' : '(prompt text not included)')
-  const promptCls = t.promptPreview ? '' : ' style="color:var(--ink3)"'
+  const { text: prompt, own } = promptText(t, ctx.data.capabilities.includeText)
+  const promptCls = own ? ' style="color:var(--ink3)"' : ''
   const calls = callsForTurn(a.tools.calls, t.index, ctx.state.agent)
   const evs = calls
     .map(
