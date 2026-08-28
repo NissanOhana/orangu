@@ -1,7 +1,7 @@
 # orangu
 
 > Local, offline, deterministic observability for coding-agent sessions (Claude Code, Cowork and
-> Desktop). orangu 0.6.0 reads the `.jsonl` transcripts already on your disk and turns them into a
+> Desktop). orangu 0.7.0 reads the `.jsonl` transcripts already on your disk and turns them into a
 > self-contained HTML report, a stable JSON API, cross-session aggregates, and a harness report of what your config declares vs what your sessions used
 > (what your config declares vs what your sessions actually used). Optional Claude Code skills turn
 > that evidence into reviewable proposals and receipts. The loop is observe -> see -> improve.
