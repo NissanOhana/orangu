@@ -105,3 +105,23 @@ describe('ratchet: no em-dash on product surfaces', () => {
     expect(hits, `em-dash is banned product-wide: ${hits.join(', ')}`).toEqual([])
   })
 })
+
+/**
+ * Raw escape sequences belong to src/cli/tty.ts, whose caps decide per stream whether they may be
+ * written at all. Any other file that spells `\x1b` bypasses NO_COLOR, --json and non-TTY handling.
+ */
+describe('ratchet: raw ANSI escapes live only in src/cli/tty.ts', () => {
+  // baseline at the ratchet's birth; the CLI UX pass drives it to [] and it never grows
+  const BASELINE = ['src/cli/commands/harness.ts', 'src/cli/main.ts', 'src/cli/watch.ts']
+  it('no file under src/ outside the baseline contains an escape literal', () => {
+    const hits: string[] = []
+    for (const f of walk(join(ROOT, 'src'))) {
+      if (!f.endsWith('.ts') || f.endsWith('.test.ts')) continue
+      if (f.includes(join('src', 'report', 'generated'))) continue
+      if (f.endsWith(join('src', 'cli', 'tty.ts'))) continue
+      if (countIn(f, /\\x1b|\\u001b|\\033/g)) hits.push(relative(ROOT, f))
+    }
+    const grown = hits.filter((h) => !BASELINE.includes(h))
+    expect(grown, `escape literals outside tty.ts: ${grown.join(', ')}`).toEqual([])
+  })
+})
