@@ -1688,7 +1688,7 @@ svg { display: block; max-width: 100%; }
 .feedback-launch { position: fixed; z-index: 80; right: 18px; bottom: 18px; border: 1px solid var(--border2); border-radius: 999px; padding: 8px 13px; background: var(--surface); color: var(--accent-ink); box-shadow: 0 5px 20px color-mix(in srgb, var(--ink1) 14%, transparent); font-size: 12.5px; font-weight: 700; }
 .feedback-launch:hover { text-decoration: none; background: var(--accent-weak); }
 `;
-var BUILD_VERSION = "0.5.0";
+var BUILD_VERSION = "0.6.0";
 
 // src/report/brand.ts
 var BRAND_ICON_ID = "orangu-brand-icon";
@@ -10456,7 +10456,7 @@ function slimAnalysis(a) {
 // src/cli/commands/harness.ts
 import { homedir as homedir4 } from "node:os";
 import { basename as basename7, resolve as resolve6 } from "node:path";
-var VERSION = true ? "0.5.0" : "0.0.0-dev";
+var VERSION = true ? "0.6.0" : "0.0.0-dev";
 var C = {
   dim: (s) => `\x1B[2m${s}\x1B[0m`,
   b: (s) => `\x1B[1m${s}\x1B[0m`,
@@ -11296,7 +11296,7 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
 }
 
 // src/version.ts
-var VERSION2 = true ? "0.5.0" : "0.0.0-dev";
+var VERSION2 = true ? "0.6.0" : "0.0.0-dev";
 
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
