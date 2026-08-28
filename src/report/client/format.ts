@@ -13,7 +13,8 @@ export function ms(v: number | undefined): string {
   const m = Math.floor(s / 60)
   if (m < 60) return m + 'm ' + Math.round(s % 60) + 's'
   const h = Math.floor(m / 60)
-  return h + 'h ' + (m % 60) + 'm'
+  if (h < 24) return h + 'h ' + (m % 60) + 'm'
+  return Math.floor(h / 24) + 'd ' + (h % 24) + 'h'
 }
 export function pct(n: number, digits = 0): string {
   return (n * 100).toFixed(digits) + '%'
