@@ -17,7 +17,8 @@ Use the bundled CLI to observe a supported session and explain its outcome. The 
 ## Choose the scope
 
 - **One session, observe and diagnose:** `orangu analyze <session> --json --slim`
-  `<session>` may be a supported session id, unique prefix, transcript path, or `latest`. Prefer `--slim`; it omits the large event and turn arrays. Run `orangu estimate <session> --slim` first; it sizes exactly this read. Before an evidence read, the canonical gate is `orangu evidence '<session>' --estimate --quiet`.
+  `<session>` may be a supported session id, unique prefix, transcript path, or `latest`. Prefer `--slim`; it omits the large event and turn arrays. Size that read first with `orangu estimate <session> --slim`; it sizes exactly this read and nothing else.
+- **One session, bounded findings for a hand-off:** `orangu evidence '<session>' --quiet`. Its gate is `orangu evidence '<session>' --estimate --quiet`; use the gate that matches the read you are about to make.
 - **Repository, find recurring patterns:** `orangu repo [<path>] --json`
 - **Supported sessions on this machine, find recurring patterns:** `orangu global --json`
 - **Find the right session:** `orangu list`; add `--global` to include supported Cowork and Desktop sources.

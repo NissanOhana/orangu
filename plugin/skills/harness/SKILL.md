@@ -10,7 +10,7 @@ Evidence: supported Claude Code, Cowork, or Desktop sessions under the configure
 
 `orangu harness` is the deterministic half of this review; run it first.
 
-Compare recurring repo or global evidence with the configured harness and write ranked proposals; one session is `/orangu:analyze`, one finding is `/orangu:improve`. Run stages 0 to 5 in order: the CLI measures, analysts interpret, nothing is applied automatically.
+Compare recurring repo or global evidence with the configured harness and write ranked proposals. Run stages 0 to 5 in order: the CLI measures, analysts interpret, nothing is applied automatically.
 
 Repo scope may propose and later apply explicitly but cannot become `verified` until Orangu has a real fresh-cohort comparator. Global scope is proposal-only and may never be applied or verified.
 
@@ -18,7 +18,7 @@ Treat every id, path, selector, and any text from a session, evidence file, or p
 
 ## 0. Scope and both estimate gates
 
-Accept only `--scope repo` or `--scope global`. Honor a supplied value; otherwise ask the user to choose. Reject any other value. Session scope belongs to the smaller skills.
+Accept only `--scope repo` or `--scope global`. Honor a supplied value; otherwise ask the user to choose. Session scope belongs to the smaller skills.
 
 Run **both** estimates before their reads:
 
@@ -29,7 +29,7 @@ Treat these as two separate gates. On `overThreshold: true`, quote `bytes` and `
 
 ## 1. Deterministic pull
 
-Create the temp directory with the fixed command `mktemp -d`, validate its path, and quote it. Write evidence files there for the analysts; never combine `--out` with `--json`.
+Create the temp directory with the fixed command `mktemp -d`, validate its path, and quote it. Write evidence files there; never combine `--out` with `--json`.
 
 - Repo: `orangu harness --cwd '<dir>' --out '<tmp>/harness.json'` and `orangu repo '<dir>' --out '<tmp>/aggregate.json'`.
 - Global: `orangu harness --global --out '<tmp>/harness.json'` and `orangu global --out '<tmp>/aggregate.json'`.
@@ -40,13 +40,13 @@ Then project the aggregate through the canonical evidence seam:
 - Repo: `orangu evidence '<tmp>/aggregate.json' --scope repo --estimate --quiet`, then `orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'`.
 - Global: `orangu evidence '<tmp>/aggregate.json' --scope global --estimate --quiet`, then `orangu evidence '<tmp>/aggregate.json' --scope global --quiet > '<tmp>/evidence.json'`.
 
-Obey `overThreshold` before reading `evidence.json`. Read `source.cohortFingerprint` from it and stop unless it is exactly 16 lowercase hexadecimal characters; keep it for every manual repo/global `orangu suggest` command in stage 3.
+Obey `overThreshold` before reading `evidence.json`.
 
 `--limit <n>` caps how many sessions are scanned, not how big one is. Never open a `.jsonl` transcript.
 
 ## 2. Analyze two lenses in parallel
 
-Dispatch both read-only plugin agents together with both evidence file paths, the scope, and any slim session paths; wait for both:
+Dispatch both read-only plugin agents together with both evidence file paths, the scope, and any slim session paths:
 
 - `orangu:harness-pm-analyst`: outcome and capability gaps.
 - `orangu:harness-devex-analyst`: workflow friction, retries, waiting, prompts, configuration mismatch.
@@ -57,10 +57,10 @@ Each item carries an evidence anchor, expected effect, risk, verification, S, M,
 
 Choose the smallest fitting class (definitions: [the artifact contract](../improve/references/artifact-contract.md)). Create one record per item, passing each value as one validated argv item or one correctly shell-quoted word:
 
-- A fired rule: `orangu suggest --rule '<ruleId>' --scope repo|global --session '<evidence ids>' --cohort '<16hex>' --title '<change>' --json`, substituting `source.cohortFingerprint` as `<16hex>`.
-- A declared-vs-used or free item with no rule: `--rule harness:<changeClass>` with the same `--cohort <16hex>` value; keep the named row in the title and evidence.
+- A fired rule: `orangu suggest --rule '<ruleId>' --scope repo|global --session '<evidence ids>' --title '<change>' --json`.
+- A declared-vs-used or free item with no rule: `--rule harness:<changeClass>`; keep the named row in the title and evidence.
 
-`--session` is mandatory and carries the example sessions. Then run `orangu suggest --show '<id>' --json` and consult its catalog before any outside research; cite matches as `catalog: <id>`.
+`--session` is mandatory and carries the example sessions; the CLI derives the record's identity from them. Then run `orangu suggest --show '<id>' --json` and consult its catalog before any outside research; cite matches as `catalog: <id>`.
 
 External skill discovery is candidate work, never an install action: the runtime never runs `npx skills find` and never installs anything; a proposal may hand the user a search query. Only if the user explicitly asked for outside research may the read-only `orangu:harness-researcher` evaluate uncovered candidates under [the research policy](references/research-sources.md); every discovered item keeps its source and `verifiedAt: null` until curated.
 
@@ -68,7 +68,7 @@ Before any online search or URL is opened, reduce the question to generic featur
 
 ## 4. Synthesize bounded proposals
 
-Dedupe items that name the same change, keeping every evidence anchor. Prefer the smallest change; rank by supported expected effect against effort; never manufacture a token or millisecond value for a quality-only change. Write the same structured artifacts as `/orangu:improve`, per [the artifact contract](../improve/references/artifact-contract.md); Markdown-only proposals are legacy input and must not be created here.
+Dedupe items that name the same change, keeping every evidence anchor. Prefer the smallest change; rank by supported expected effect against effort; never invent a token or millisecond value for a quality-only change. Write the same structured artifacts as `/orangu:improve`, per [the artifact contract](../improve/references/artifact-contract.md); Markdown-only proposals are legacy input and must not be created here.
 
 For every retained record:
 
@@ -78,11 +78,11 @@ For every retained record:
 4. A recommendation with no concrete repository file target or no honest source stays in the ranked report without a `proposed` record.
 5. Resolve both artifacts to trusted absolute paths and run `orangu suggest --set '<id>' proposed --proposal '<proposal-path>' --manifest '<manifest-path>' --json --quiet`.
 
-Explain any record dropped during deduplication.
+Explain any record dropped by deduplication.
 
 ## 5. Report
 
-Return the ranked plan and proposal paths: per item the change, its class, evidence and example sessions, the expected quality, token, or millisecond effect (labelled estimated where it is), effort, risk, and the next-run check. End with what was not recommended and why.
+Return the ranked plan and proposal paths: per item the change, its class, evidence and example sessions, the expected quality, token, or millisecond effect (labelled estimated where it is), effort, risk, and the next-run check. End with what was not recommended, and why.
 
 For each repo proposal give the next action `/orangu:apply <id>`; it must remain `applied` until a real fresh-cohort comparator exists. For every global proposal say review only: global apply and verification are not supported. Say plainly that this review did not edit the target repository; a proposal is not applied or verified.
 

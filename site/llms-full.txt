@@ -69,7 +69,7 @@ One run can be fixed and re-checked against a later session from the same worksp
 
 | Skill | What it does |
 |---|---|
-| `/orangu:analyze` | Explain one session, a repo, or every session on the machine from local evidence |
+| `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence |
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, skills, agents, hooks, MCP, in tokens |

@@ -228,16 +228,19 @@ describe('plugin packaging', () => {
     expect(harness).not.toContain('--receipt')
   })
 
-  it('harness binds every manual aggregate suggestion to canonical evidence and the full cohort', () => {
+  // B7: the record identity is derived by the CLI from --session; the skill never asks the model to
+  // read, validate or pass a cohort fingerprint (`--cohort` stays accepted for compatibility, undocumented).
+  it('harness projects the aggregate through the evidence seam and never asks for a cohort fingerprint', () => {
     const harness = readText('plugin/skills/harness/SKILL.md')
     for (const scope of ['repo', 'global']) {
       expect(harness).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --estimate --quiet`)
       expect(harness).toContain(`orangu evidence '<tmp>/aggregate.json' --scope ${scope} --quiet > '<tmp>/evidence.json'`)
     }
-    expect(harness).toContain('source.cohortFingerprint')
-    expect(harness).toMatch(/exactly 16 lowercase hexadecimal characters/i)
-    expect(harness).toContain('--cohort <16hex>')
-    expect(harness).toMatch(/manual repo\/global `orangu suggest` command/i)
+    expect(harness).toContain("--scope repo|global --session '<evidence ids>'")
+    expect(harness).toContain('`--session` is mandatory')
+    expect(harness).not.toContain('--cohort')
+    expect(harness).not.toContain('cohortFingerprint')
+    expect(harness).not.toMatch(/16 lowercase hexadecimal/i)
   })
 
   it('external skill discovery stays user-run, candidate-only, and install-free', () => {
@@ -623,9 +626,11 @@ describe('plugin packaging', () => {
   // Ceilings, not targets. Measured on the day they landed; they may only go DOWN.
   // Raising one requires a stated reason in the commit body (PROJECT.md §Testing).
   describe('ratchet: skill weight', () => {
-    // harness and improve landed above their targets (1000 / 900): the remaining words are pinned
-    // command literals and policy sentences this file asserts. Shrink toward the target; never up.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1160, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
+    // harness and improve landed above their B4 targets (1000 / 900) and are still above them after the
+    // 2026-08-27 final pass (measured 1,110 / 998): the remaining words are pinned command literals and
+    // policy sentences this file asserts (the network-disclosure paragraph alone is ~60 words per skill).
+    // The targets stay unmet, not redefined; the ceilings track the measurement and only go DOWN.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1120, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
     const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

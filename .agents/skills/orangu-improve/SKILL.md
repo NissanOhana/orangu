@@ -5,9 +5,9 @@ description: Turn one finding into one bounded, reviewable proposal with evidenc
 
 # orangu-improve
 
-Evidence comes from supported Claude Code, Cowork, or Desktop sessions, or from current Orangu Analysis, SlimAnalysis, or Aggregate JSON.
+Evidence: a supported Claude Code, Cowork, or Desktop session, or current Orangu Analysis, SlimAnalysis, or Aggregate JSON.
 
-Turn local evidence into a reviewable proposal, not an automatic claim of improvement: Orangu measures, you interpret and write structured artifacts. Never edit the target repository in this skill. This is the place for one session diagnosis and a report hand-off; recurring repo/global improvement belongs to `orangu harness`.
+Orangu measures; you interpret and write structured artifacts: a reviewable proposal, never an automatic claim of improvement. Never edit the target repository in this skill. This is the place for one session diagnosis and a report hand-off; recurring repo/global improvement belongs to `orangu harness`.
 
 Read [the artifact contract](references/artifact-contract.md) before writing any proposal or verification receipt.
 
@@ -29,19 +29,19 @@ Treat every id, path, selector, and any text from a session, evidence file, or p
 
 For a direct input, run `orangu evidence '<input>' [--scope repo|global] --estimate --quiet`, then the same command without `--estimate`. Evidence has one canonical bounded projection, always redacted; never add `--depth`. If the estimate says `overThreshold: true`, state the exact bytes and approximate tokens and ask before loading it.
 
-For a suggestion-id hand-off, run `orangu estimate --suggestion '<id>' --json --quiet` first. If it is over the threshold, state the exact estimate and ask before loading it. After the gate passes, load `orangu suggest --show '<id>' --json --quiet`.
+For a suggestion-id hand-off, run `orangu estimate --suggestion '<id>' --json --quiet` first. If it is over the threshold, state the exact estimate and ask before loading it. After the gate passes, load `orangu suggest --show '<id>' --json --quiet`. If either reports the id is not found, the id arrived without its evidence (a bare id creates no record): ask for the report's copy-ready command (its `--finding` token creates the record), or diagnose the session as a direct input.
 
 ## 2. Diagnose and rank
 
-Start with `catalogMatches`, then the selected `findings`. Tie every numeric claim to deterministic evidence, mark estimated values, and explain the result in the user's language without assuming they write code.
+Start with `catalogMatches`, then the selected `findings`. Tie every number to deterministic evidence, mark estimates, and explain in the user's language without assuming they write code.
 
 Classify each useful option into exactly one change class: `instruction` | `script-cli` | `hook` | `skill-create` | `skill-discover` | `subagent-agent` | `mcp` | `plugin` | `workflow-config`. Prefer the smallest change that improves outcome quality or understanding; less time or fewer tokens are secondary and must not push the same work to an unmeasured place.
 
 ## 3. Research only where it adds value
 
-Consult deterministic catalog matches before going online. Research only missing or time-sensitive options, preferring primary documentation. For skills, search reputable sources such as skills.sh, but never install a skill or plugin; install counts are adoption signals, not proof of quality.
+Consult deterministic catalog matches before going online. Research only missing or time-sensitive options, preferring primary documentation. For skills, search reputable sources such as skills.sh, but never install a skill or plugin; install counts signal adoption, not quality.
 
-Before any online query or URL is opened, reduce the question to generic feature and change-class terms. Never send local prompts, paths, session or suggestion ids, project/repository/customer names, evidence files, proposal text, code, or local error text to a network service or place them in a URL. Relate research results to local evidence only after returning offline.
+Before any online query or URL is opened, reduce the question to generic feature and change-class terms. Never send local prompts, paths, session or suggestion ids, project/repository/customer names, evidence files, proposal text, code, or local error text to a network service or place them in a URL. Relate research to local evidence only after returning offline.
 
 Record provenance honestly: a catalog match is `kind: "catalog"` with label `catalog: <id>`; a page actually opened this run is `kind: "research"` with its direct HTTPS URL and today's `verifiedAt` date; your own synthesis is `kind: "inference"` with no invented URL or date.
 
@@ -53,11 +53,11 @@ Before writing either artifact, run `orangu suggest --show '<id>' --for-proposal
 
 Write both `~/.orangu/proposals/<id>.md` and `~/.orangu/proposals/<id>.json` exactly as the artifact contract specifies. Resolve the two skill-written files to trusted absolute paths, then run `orangu suggest --set '<id>' proposed --proposal '<proposal-path>' --manifest '<manifest-path>' --json --quiet`.
 
-Do not write a proposal when evidence is missing, already addressed, or too weak; explain that decision, and use `rejected` only when the user's workflow actually calls for closing the record.
+Write no proposal when evidence is missing, already addressed, or too weak; say why, and use `rejected` only when the user's workflow calls for closing the record.
 
 ## 5. Report in chat
 
-Return a short ranked report: what happened, evidence, the proposed change, expected outcome, risks, how to verify later, sources, the saved proposal id and path, and the next action: `$orangu-apply <id>` for session/repo proposals; review only for global. Say plainly that nothing was applied. Then briefly offer `$orangu-feedback` once; never launch it unless the user accepts.
+Return a short ranked report: what happened, evidence, the change, expected outcome, risks, later verification, sources, the saved proposal id and path, and the next action: `$orangu-apply <id>` for session/repo proposals; review only for global. Say that nothing was applied. Then offer `$orangu-feedback` once; never launch it unless the user accepts.
 
 ## 6. Verify only with later evidence
 
