@@ -133,6 +133,14 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     const { inv, analyses, agg } = await fixture()
     const r = buildHarnessReport(inv, analyses, agg, opts({ scope: { cwd: '/repo', roots: ['/root'], global: false, limit: 200, sessionsUnreadable: 2 } }))
     expect(r.notes.some((n) => n.includes('2') && n.toLowerCase().includes('session'))).toBe(true)
+    expect(r.notes).toContain('2 sessions could not be analyzed and are not reflected in the crosswalk')
+  })
+
+  it('agrees the verb with the count when exactly one session could not be analyzed', async () => {
+    const { inv, analyses, agg } = await fixture()
+    const r = buildHarnessReport(inv, analyses, agg, opts({ scope: { cwd: '/repo', roots: ['/root'], global: false, limit: 200, sessionsUnreadable: 1 } }))
+    expect(r.notes).toContain('1 session could not be analyzed and is not reflected in the crosswalk')
+    expect(r.notes.some((n) => /1 sessions?\b.*\bare not reflected/.test(n))).toBe(false)
   })
 
   it('notes an empty harness instead of emitting a blank report', async () => {

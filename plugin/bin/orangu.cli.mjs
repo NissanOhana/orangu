@@ -8737,7 +8737,7 @@ function buildNotes(inv, x, sessionsScanned, sessionsUnreadable) {
     notes.push("no sessions in scope, so every crosswalk row is config-only and nothing can be classified used");
   }
   if (sessionsUnreadable > 0) {
-    notes.push(`${plural(sessionsUnreadable, "session")} could not be analyzed and are not reflected in the crosswalk`);
+    notes.push(`${plural(sessionsUnreadable, "session")} could not be analyzed and ${sessionsUnreadable === 1 ? "is" : "are"} not reflected in the crosswalk`);
   }
   if (x.models.configured && !x.models.matchesConfigured) {
     notes.push(`configured model "${x.models.configured}" does not appear among the models these sessions used`);
@@ -10609,18 +10609,27 @@ function printHarness(r) {
     return;
   }
   const line = (l, v) => w("  " + l.padEnd(22) + v);
-  line("inventory", `${inv.totals.skills} skills \xB7 ${inv.totals.agents} agents \xB7 ${inv.totals.plugins} plugins \xB7 ${inv.totals.mcpServers} MCP \xB7 ${inv.totals.hookCommands} hook commands`);
+  line("inventory", `${plural(inv.totals.skills, "skill")} \xB7 ${plural(inv.totals.agents, "agent")} \xB7 ${plural(inv.totals.plugins, "plugin")} \xB7 ${plural(inv.totals.mcpServers, "MCP server")} \xB7 ${plural(inv.totals.hookCommands, "hook command")}`);
   if (inv.claudeMd.length) {
     const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0);
     line("CLAUDE.md", `${kb(inv.totals.claudeMdBytes)} \xB7 \u2248${n(inv.totals.claudeMdApproxTokens)} tokens \xB7 \u2248${n(carried)} tokens carried across the window`);
   }
+  const noSessions = r.scope.sessionsScanned === 0;
+  const NO_EVIDENCE = "no sessions in scope: nothing can be classified";
   const idleSkills = x.skills.filter((s) => s.status === "idle");
   const idleMcp = x.mcpServers.filter((m) => m.status === "idle");
   const idleAgents = x.agents.filter((a) => a.status === "idle");
-  line("idle skills", idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : "none: every installed skill fired");
-  if (idleSkills.length) w(paint(C.dim, "    " + idleSkills.slice(0, 8).map((s) => s.name).join(", ")));
-  line("idle MCP", idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : "none: every configured server was called");
-  if (idleMcp.length) w(paint(C.dim, "    " + idleMcp.slice(0, 8).map((m) => m.name).join(", ")));
+  const classified = (total) => total > 0 && !noSessions;
+  line(
+    "idle skills",
+    inv.totals.skills === 0 ? "no skills installed" : noSessions ? NO_EVIDENCE : idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : "none: every installed skill fired"
+  );
+  if (classified(inv.totals.skills) && idleSkills.length) w(paint(C.dim, "    " + idleSkills.slice(0, 8).map((s) => s.name).join(", ")));
+  line(
+    "idle MCP",
+    inv.totals.mcpServers === 0 ? "no MCP servers configured" : noSessions ? NO_EVIDENCE : idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : "none: every configured server was called"
+  );
+  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint(C.dim, "    " + idleMcp.slice(0, 8).map((m) => m.name).join(", ")));
   const undeclared = [
     ...x.skills.filter((s) => s.status === "undeclared").map((s) => "skill " + s.name),
     ...x.mcpServers.filter((m) => m.status === "undeclared").map((m) => "mcp " + m.name),
@@ -10629,8 +10638,13 @@ function printHarness(r) {
   ];
   line("undeclared", undeclared.length ? `${undeclared.length} observed but not in the config read` : "none");
   if (undeclared.length) w(paint(C.dim, "    " + undeclared.slice(0, 8).join(", ")));
-  const dispatched = x.agents.filter((a) => a.dispatches > 0).length;
-  line("agents", `${inv.totals.agents} defined / ${dispatched} dispatched / ${idleAgents.length} never`);
+  const usedAgents = x.agents.filter((a) => a.status === "used").length;
+  const undeclaredAgents = x.agents.filter((a) => a.status === "undeclared").length;
+  const undeclaredClause = undeclaredAgents ? ` \xB7 ${undeclaredAgents} undeclared` : "";
+  line(
+    "agents",
+    inv.totals.agents === 0 ? "none defined" + undeclaredClause : noSessions ? NO_EVIDENCE : `${usedAgents} of ${inv.totals.agents} dispatched \xB7 ${idleAgents.length} never` + undeclaredClause
+  );
   const hooksRun = x.hooks.reduce((s, h) => s + h.runs, 0);
   const hookErrors = x.hooks.reduce((s, h) => s + h.errors, 0);
   const meanMs = hooksRun > 0 ? Math.round(x.hooks.reduce((s, h) => s + h.totalMs, 0) / hooksRun) : 0;

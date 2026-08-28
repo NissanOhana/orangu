@@ -165,6 +165,62 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(out).toContain('add --json for the machine-readable inventory + crosswalk')
   })
 
+  // the agents line counts one population per clause: dispatched and never are both over the DEFINED agents
+  // (crosswalk status used / idle); agent types the sessions ran without any declaration are named apart
+  it('counts dispatched and never over the defined agents, and names undeclared agent types apart', () => {
+    const r = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home))
+    const agents = r.crosswalk.agents as Array<{ status: string; dispatches: number }>
+    const used = agents.filter((a) => a.status === 'used').length
+    const idle = agents.filter((a) => a.status === 'idle').length
+    const undeclared = agents.filter((a) => a.status === 'undeclared').length
+    const defined = r.inventory.totals.agents as number
+    expect(defined).toBe(1)
+    expect(used + idle).toBe(defined)
+    const out = run(['harness', '--global', '--cwd', fx.repo, '--quiet'], fx.home)
+    const line = /^ {2}agents\s+(.*)$/m.exec(out)
+    expect(line, 'agents line').not.toBeNull()
+    expect(line![1]).toBe(`${used} of ${defined} dispatched · ${idle} never${undeclared ? ` · ${undeclared} undeclared` : ''}`)
+    // the old mixed-population form ("21 defined / 24 dispatched / 17 never") is gone
+    expect(out).not.toMatch(/defined \//)
+  })
+
+  it('pluralises the inventory counts', () => {
+    const out = run(['harness', '--global', '--cwd', fx.repo, '--quiet'], fx.home)
+    const line = /^ {2}inventory\s+(.*)$/m.exec(out)
+    expect(line, 'inventory line').not.toBeNull()
+    expect(line![1]).toBe('3 skills · 1 agent · 0 plugins · 1 MCP server · 1 hook command')
+    expect(out).not.toMatch(/\b1 (?:skills|agents|plugins|hook commands)\b/)
+  })
+
+  // Zero-state guards: a population that is empty, or a scan with no sessions, must not read as
+  // "none: every installed skill fired": that sentence claims evidence the run never had
+  it('says what is missing instead of "every skill fired" when nothing is installed', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'orangu-harness-noskills-'))
+    const configDir = join(home, '.claude')
+    await mkdir(configDir, { recursive: true })
+    await writeFile(join(configDir, 'settings.json'), JSON.stringify({ model: 'claude-opus-5' }), 'utf8')
+    const repo = await mkdtemp(join(tmpdir(), 'orangu-harness-noskills-repo-'))
+    const out = run(['harness', '--cwd', repo, '--root', configDir, '--quiet'], home)
+    expect(out).toContain('0 sessions scanned')
+    expect(out).toMatch(/^ {2}idle skills\s+no skills installed$/m)
+    expect(out).toMatch(/^ {2}idle MCP\s+no MCP servers configured$/m)
+    expect(out).toMatch(/^ {2}agents\s+none defined$/m)
+    expect(out).not.toContain('every installed skill fired')
+    expect(out).not.toContain('every configured server was called')
+  })
+
+  it('says nothing can be classified when the scope holds no sessions, even with skills installed', () => {
+    const out = run(['harness', '--global', '--cwd', fx.repo, '--limit', '0', '--quiet'], fx.home)
+    expect(out).toContain('0 sessions scanned')
+    expect(out).toMatch(/^ {2}idle skills\s+no sessions in scope: nothing can be classified$/m)
+    expect(out).toMatch(/^ {2}idle MCP\s+no sessions in scope: nothing can be classified$/m)
+    expect(out).toMatch(/^ {2}agents\s+no sessions in scope: nothing can be classified$/m)
+    expect(out).not.toContain('never fired')
+    expect(out).not.toContain('every installed skill fired')
+    // the idle name lists are suppressed too: with no sessions every declared row is idle by construction
+    expect(out).not.toContain('never-fires')
+  })
+
   it('prints the designed empty state when there is no config at all', async () => {
     const bare = await mkdtemp(join(tmpdir(), 'orangu-harness-bare-'))
     const emptyRepo = await mkdtemp(join(tmpdir(), 'orangu-harness-bare-repo-'))

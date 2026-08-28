@@ -18,7 +18,7 @@ import { AnalysisCache, analyzeRefCached } from '../../cache/index.js'
 import { analyzeAllPooled, defaultJobs } from '../../cache/pool.js'
 import { aggregate } from '../../analyze/aggregate.js'
 import { collectInventory } from '../../harness/collect.js'
-import { buildHarnessReport } from '../../harness/report.js'
+import { buildHarnessReport, plural } from '../../harness/report.js'
 import type { HarnessReport } from '../../harness/types.js'
 import { redactValue } from '../../redact/redact.js'
 import { flagBool, flagStr } from '../args.js'
@@ -148,19 +148,31 @@ function printHarness(r: HarnessReport): void {
   }
 
   const line = (l: string, v: string) => w('  ' + l.padEnd(22) + v)
-  line('inventory', `${inv.totals.skills} skills · ${inv.totals.agents} agents · ${inv.totals.plugins} plugins · ${inv.totals.mcpServers} MCP · ${inv.totals.hookCommands} hook commands`)
+  line('inventory', `${plural(inv.totals.skills, 'skill')} · ${plural(inv.totals.agents, 'agent')} · ${plural(inv.totals.plugins, 'plugin')} · ${plural(inv.totals.mcpServers, 'MCP server')} · ${plural(inv.totals.hookCommands, 'hook command')}`)
   if (inv.claudeMd.length) {
     const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0)
     line('CLAUDE.md', `${kb(inv.totals.claudeMdBytes)} · ≈${n(inv.totals.claudeMdApproxTokens)} tokens · ≈${n(carried)} tokens carried across the window`)
   }
 
+  // Population guards come before the idle/used split. With nothing installed there is nothing to be idle,
+  // and with no sessions in scope every declared row is config-only (crosswalk.ts classifies from session
+  // evidence alone), so "every installed skill fired" would be a claim with no evidence behind it.
+  const noSessions = r.scope.sessionsScanned === 0
+  const NO_EVIDENCE = 'no sessions in scope: nothing can be classified'
   const idleSkills = x.skills.filter((s) => s.status === 'idle')
   const idleMcp = x.mcpServers.filter((m) => m.status === 'idle')
   const idleAgents = x.agents.filter((a) => a.status === 'idle')
-  line('idle skills', idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : 'none: every installed skill fired')
-  if (idleSkills.length) w(paint(C.dim, '    ' + idleSkills.slice(0, 8).map((s) => s.name).join(', ')))
-  line('idle MCP', idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : 'none: every configured server was called')
-  if (idleMcp.length) w(paint(C.dim, '    ' + idleMcp.slice(0, 8).map((m) => m.name).join(', ')))
+  const classified = (total: number) => total > 0 && !noSessions
+  line(
+    'idle skills',
+    inv.totals.skills === 0 ? 'no skills installed' : noSessions ? NO_EVIDENCE : idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : 'none: every installed skill fired',
+  )
+  if (classified(inv.totals.skills) && idleSkills.length) w(paint(C.dim, '    ' + idleSkills.slice(0, 8).map((s) => s.name).join(', ')))
+  line(
+    'idle MCP',
+    inv.totals.mcpServers === 0 ? 'no MCP servers configured' : noSessions ? NO_EVIDENCE : idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : 'none: every configured server was called',
+  )
+  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint(C.dim, '    ' + idleMcp.slice(0, 8).map((m) => m.name).join(', ')))
 
   // the same four row kinds src/harness/report.ts counts in the "rows marked undeclared" note
   const undeclared = [
@@ -172,8 +184,20 @@ function printHarness(r: HarnessReport): void {
   line('undeclared', undeclared.length ? `${undeclared.length} observed but not in the config read` : 'none')
   if (undeclared.length) w(paint(C.dim, '    ' + undeclared.slice(0, 8).join(', ')))
 
-  const dispatched = x.agents.filter((a) => a.dispatches > 0).length
-  line('agents', `${inv.totals.agents} defined / ${dispatched} dispatched / ${idleAgents.length} never`)
+  // One population per clause, like the idle-skills line: "dispatched" and "never" both count the DEFINED
+  // agents (crosswalk status used / idle), and the agent types the sessions ran that no config declares
+  // are named separately as undeclared instead of being folded into the dispatched count.
+  const usedAgents = x.agents.filter((a) => a.status === 'used').length
+  const undeclaredAgents = x.agents.filter((a) => a.status === 'undeclared').length
+  const undeclaredClause = undeclaredAgents ? ` · ${undeclaredAgents} undeclared` : ''
+  line(
+    'agents',
+    inv.totals.agents === 0
+      ? 'none defined' + undeclaredClause
+      : noSessions
+        ? NO_EVIDENCE
+        : `${usedAgents} of ${inv.totals.agents} dispatched · ${idleAgents.length} never` + undeclaredClause,
+  )
 
   const hooksRun = x.hooks.reduce((s, h) => s + h.runs, 0)
   const hookErrors = x.hooks.reduce((s, h) => s + h.errors, 0)

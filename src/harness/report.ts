@@ -37,7 +37,8 @@ export interface BuildHarnessReportOptions {
   scope: HarnessReportScope
 }
 
-function plural(n: number, one: string): string {
+/** `1 session` / `2 sessions`: the one plural helper the harness surfaces share (src/cli/commands/harness.ts too) */
+export function plural(n: number, one: string): string {
   return `${n} ${one}${n === 1 ? '' : 's'}`
 }
 
@@ -59,7 +60,7 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, sessionsScanned:
     notes.push('no sessions in scope, so every crosswalk row is config-only and nothing can be classified used')
   }
   if (sessionsUnreadable > 0) {
-    notes.push(`${plural(sessionsUnreadable, 'session')} could not be analyzed and are not reflected in the crosswalk`)
+    notes.push(`${plural(sessionsUnreadable, 'session')} could not be analyzed and ${sessionsUnreadable === 1 ? 'is' : 'are'} not reflected in the crosswalk`)
   }
   if (x.models.configured && !x.models.matchesConfigured) {
     notes.push(`configured model "${x.models.configured}" does not appear among the models these sessions used`)
