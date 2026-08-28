@@ -1,7 +1,12 @@
-# Ships one orangu release: the npm package, the Claude Code plugin tag, and the
-# landing page, in that order.
+# Ships one orangu release: the npm package, then the Claude Code plugin tag.
 #
-#   git tag -a v0.6.1 -m "orangu 0.6.1" && git push origin v0.6.1
+#   git tag -a v0.7.1 -m "orangu 0.7.1" && git push origin v0.7.1
+#
+# The landing page is deliberately NOT here. The version bump regenerates site/,
+# so pushing that commit to main already deploys the page through pages.yml —
+# before this workflow ever runs. Deploying it again from the tag would be a
+# redundant redeploy of identical content, and the github-pages environment
+# only admits the main branch, so it fails.
 #
 # The tag is the release instruction; the working tree is the release content.
 # The guard job refuses to ship unless they agree, so a half-finished version
@@ -190,14 +195,3 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           claude plugin tag ./plugin --push -m "orangu %s"
-
-  # Last, because the landing page is the public announcement: it goes out only
-  # once both artifacts it points at are real.
-  pages:
-    name: Deploy the landing page
-    needs: [guard, verify, npm, plugin]
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
-    uses: ./.github/workflows/pages.yml
