@@ -12730,7 +12730,7 @@ async function cmdReport(sel, flags) {
   const opened = !flagBool(flags, "no-open") && (flagBool(flags, "open") || out2.tty);
   if (opened) openInBrowser(path);
   process.stdout.write(path + "\n");
-  if (!flagBool(flags, "quiet")) {
+  if (!flagBool(flags, "quiet") && !flagBool(flags, "json")) {
     process.stderr.write(doneLine(err2, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + "\n");
     const step = await nextStep(analysis, flags);
     process.stderr.write(reportFooter(err2, { path, opened, step }).join("\n") + "\n");
