@@ -3,9 +3,10 @@
  * a verdict word, the top finding as a card with its fix, evidence link and improve command), what next
  * (three text links). Detailed adds the context sparkline and the other top findings; Plain removes
  * panels instead of renaming nouns (A1, A3b) and keeps only the sentence, the "What happened here"
- * table, the one finding and the three links (the public sample opens in Plain; the links are its
- * way into the other screens, see test/browser/public-surfaces.spec.ts). One code path renders the
- * top-finding card for both.
+ * card, the one finding and the three links (the public sample opens in Plain; the links are its
+ * way into the other screens, see test/browser/public-surfaces.spec.ts). The card holds only what the
+ * hero does not already say (goal, ending, tokens & time): the outcome headline and the narrative
+ * sentence render once, in the hero. One code path renders the top-finding card for both.
  */
 import type { Ctx } from '../app.js'
 import type { Analysis, Insight } from '../../../model/analysis.js'
@@ -20,7 +21,7 @@ import { lineChart } from '../charts.js'
 import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, recoverableLine, timeAxis } from '../derive.js'
 import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
 import { cleanHash, type RouteState } from '../nav.js'
-import { leadSentence, plainSentence } from '../strings.js'
+import { plainSentence } from '../strings.js'
 
 /** A link into this run's own screens: every aggregate/filter key cleared so the target starts clean. */
 function href(ctx: Ctx, a: Analysis, next: Partial<RouteState>): string {
@@ -94,15 +95,12 @@ function plainBody(ctx: Ctx, a: Analysis): string {
   const s = a.summary
   const goal = a.turns.find((t) => t.kind === 'human')?.promptPreview.slice(0, 140)
   const goalText = goal || (a.session.title ? a.session.title : '(prompt text not included in this report)')
-  const firstSentence = leadSentence(s.narrative)
   const effort = `${tok(s.totalTokens)} tokens · ${ms(s.wallMs)}, of which ${ms(s.humanWaitMs)} needed your attention`
   const one = a.insights.find((i) => i.id === s.topInsightIds[0]) ?? a.insights[0]
   return `<div class="card mb16" style="overflow:hidden">
       <div class="card-head">${mascotSvg(22)}What happened here</div>
       <div class="plaingrid">
         <div class="k">Goal</div><div>${esc(goalText)}</div>
-        <div class="k">What happened</div><div>${esc(plainSentence(firstSentence, 'plain'))}</div>
-        <div class="k">What it produced</div><div>${esc(outcomeBits(s).join(' · ') || 'no tracked outputs')}</div>
         <div class="k">How it ended</div><div>${esc(endingWord(s.ending))}</div>
         <div class="k">Tokens &amp; time</div><div>${esc(effort)}</div>
       </div>

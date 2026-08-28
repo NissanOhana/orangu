@@ -5,7 +5,9 @@ import type { AppData } from '../../../model/app-data.js'
 import { buildCanonicalSession } from '../../../../test/fixtures/session-builder.js'
 import type { Ctx } from '../app.js'
 import { renderOverview } from './overview.js'
-import { ms } from '../format.js'
+import { esc, ms } from '../format.js'
+import { outcomeHeadline } from '../derive.js'
+import { leadSentence, plainSentence } from '../strings.js'
 
 let markup = ''
 
@@ -117,11 +119,19 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
 
   // A3b: Plain mode removes panels (no axes, no chips, no sparkline) and keeps the same top-finding card
   // plus the three links: the public sample opens in Plain and navigates through them.
-  it('Plain mode is the sentence, the "What happened here" table, the same top-finding card and the links', async () => {
+  it('Plain mode is the sentence, the "What happened here" card, the same top-finding card and the links', async () => {
     const ctx = await context({ audience: 'plain', mode: 'file' })
     renderOverview(ctx)
 
     expect(markup).toContain('What happened here')
+    // The card adds only what the hero does not already say: the outcome headline and the narrative's
+    // lead sentence render once (in the hero), never again as "What happened" / "What it produced" rows.
+    const s = ctx.a!.summary
+    expect(markup.split(esc(outcomeHeadline(s))).length - 1).toBe(1)
+    expect(markup.split(esc(plainSentence(leadSentence(s.narrative), 'plain'))).length - 1).toBe(1)
+    for (const row of ['Goal', 'How it ended', 'Tokens &amp; time']) expect(markup).toContain(`<div class="k">${row}</div>`)
+    expect(markup).not.toContain('<div class="k">What happened</div>')
+    expect(markup).not.toContain('What it produced')
     expect(markup).toContain('The one thing to improve')
     expect(markup).toContain('<details class="finding top" open>')
     expect(markup).toContain('<b>Fix.</b> ')
