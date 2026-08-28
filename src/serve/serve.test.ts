@@ -295,15 +295,31 @@ describe('orangu serve (in-process e2e)', () => {
     if (first.status === 202) expect(((await first.json()) as { progress: unknown }).progress).toBeDefined()
     const report = await pollUntil(async () => {
       const r = await fetch(url + '/api/harness')
-      return r.status === 200 ? ((await r.json()) as { schemaVersion: string; scope: { sessionsScanned: number; roots: string[] }; crosswalk: { injectedListings: unknown[] }; notes: string[] }) : undefined
+      return r.status === 200 ? ((await r.json()) as { schemaVersion: string; scope: { sessionsScanned: number; roots: string[]; global: boolean }; crosswalk: { injectedListings: unknown[] }; notes: string[] }) : undefined
     })
     expect(report.schemaVersion).toBe('1')
     expect(report.scope.sessionsScanned).toBe(3)
+    // no --cwd: the registry holds every session under the scanned root, so the scope says global
+    expect(report.scope.global).toBe(true)
+    expect(report.scope.roots).toHaveLength(1)
     expect(Array.isArray(report.crosswalk.injectedListings)).toBe(true)
     const text = JSON.stringify(report)
     expect(text).not.toContain(homedir())
     expect(text).not.toContain(SECRET)
     expect(text).not.toMatch(/"cost"|"usd"|"price"/i)
+  })
+
+  // The scope label must describe what the crosswalk saw: repo only when the registry was restricted to
+  // one project (--cwd), never because the server happens to run inside a repo.
+  it('/api/harness reports repo scope only when serve was restricted with --cwd', async () => {
+    const { url } = await bootWith({ cwd: '/Users/test/Code/demo' })
+    const report = await pollUntil(async () => {
+      const r = await fetch(url + '/api/harness')
+      return r.status === 200 ? ((await r.json()) as { scope: { global: boolean; cwd: string; sessionsScanned: number } }) : undefined
+    })
+    expect(report.scope.global).toBe(false)
+    expect(report.scope.cwd).toBe('/Users/test/Code/demo')
+    expect(report.scope.sessionsScanned).toBe(3)
   })
 
   it('/api/repo and /api/global answer 202 {progress} then the Aggregate', async () => {

@@ -257,14 +257,20 @@ class HarnessRunner {
       else unreadable++
     }
     const home = homedir()
-    const cwd = this.ctx.opts.cwd ?? process.cwd()
+    // Declare the scope the registry actually holds. The registry is restricted to one project only when
+    // serve was started with --cwd (registry.discoverOpts passes it to listSessions); otherwise every
+    // session under the scanned roots feeds the crosswalk, which is global scope no matter how many roots
+    // there are. Labelling that as `repo <cwd>` would count a skill used in any other repo as "fired" here
+    // and hand out a `--scope repo` command that reproduces different numbers than the screen shows.
+    const repoCwd = this.ctx.opts.cwd
+    const cwd = repoCwd ?? process.cwd()
     const roots = this.ctx.opts.roots ?? [this.ctx.opts.configDir ?? defaultConfigDir()]
     const now = this.ctx.now()
     const inventory = await collectInventory({ cwd, roots, home })
-    const report = buildHarnessReport(inventory, analyses, aggregate(analyses, 'serve', now), {
+    const report = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : 'global', now), {
       version: this.ctx.opts.version,
       now,
-      scope: { cwd, roots, global: !!this.ctx.opts.roots, limit: rows.length, sessionsUnreadable: unreadable, home },
+      scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home },
     })
     // computed from raw analyses and config paths: scrub before it leaves the process (api.ts discipline)
     this.result = redactValue(report, { scrub: true, home })
