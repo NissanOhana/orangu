@@ -2329,22 +2329,35 @@ function classifyPrompt(r, text2, isMeta) {
 async function discoverSubagentFiles(mainPath) {
   return evidenceManifestSidecarFiles(await prevalidateEvidenceSession(mainPath, { maxBytes: MAX_LOCAL_SESSION_BYTES }));
 }
+var TRANSIENT_INPUT_CHANGE_RE = /^session (?:input|sidecar (?:directory|tree)) changed (?:before it was read|while it was being read)\b/;
+function isTransientInputChange(error) {
+  return error instanceof Error && TRANSIENT_INPUT_CHANGE_RE.test(error.message);
+}
+var STABLE_READ_ATTEMPTS = 3;
+var STABLE_READ_BACKOFF_MS = [20, 80];
+var STILL_WRITING_HINT = "the session is still being written; re-run, or use `orangu watch` to follow it live";
+async function readStableSession(path, options) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await readEvidenceSessionManifest(await prevalidateEvidenceSession(path, options));
+    } catch (error) {
+      if (!isTransientInputChange(error)) throw error;
+      if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}; ${STILL_WRITING_HINT}`);
+      const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
+      await new Promise((resolve11) => setTimeout(resolve11, pause));
+    }
+  }
+}
 async function parseClaudeCodeSession(input) {
   const t0 = Date.now();
   const keepText = input.keepText ?? true;
   const files2 = [];
   let effectiveInput = input;
   if (input.path && input.records === void 0) {
-    const manifest = await prevalidateEvidenceSession(input.path, {
-      includeSidecars: !input.noSidecar,
-      maxBytes: MAX_LOCAL_SESSION_BYTES
-    });
-    const loaded = await readEvidenceSessionManifest(manifest);
+    const loaded = await readStableSession(input.path, { includeSidecars: !input.noSidecar, maxBytes: MAX_LOCAL_SESSION_BYTES });
     effectiveInput = { ...loaded.parseInput, keepText: input.keepText, noSidecar: true };
   } else if (input.path && input.records && input.subagents === void 0 && !input.noSidecar) {
-    const loaded = await readEvidenceSessionManifest(
-      await prevalidateEvidenceSession(input.path, { maxBytes: MAX_LOCAL_SESSION_BYTES })
-    );
+    const loaded = await readStableSession(input.path, { maxBytes: MAX_LOCAL_SESSION_BYTES });
     effectiveInput = { ...input, subagents: loaded.parseInput.subagents };
   }
   const mainPath = effectiveInput.path ?? "(memory)";

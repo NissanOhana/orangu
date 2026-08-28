@@ -31,6 +31,8 @@ import {
   MAX_LOCAL_SESSION_BYTES,
   prevalidateEvidenceSession,
   readEvidenceSessionManifest,
+  type PrevalidateEvidenceSessionOptions,
+  type ReadEvidenceSessionResult,
 } from './evidence-input.js'
 import type { ParseInput } from './parse-input.js'
 import { categorizeTool, skillNameFromInput, summarizeToolInput } from './tools.js'
@@ -223,6 +225,39 @@ export async function discoverSubagentFiles(mainPath: string): Promise<Array<{ p
   return evidenceManifestSidecarFiles(await prevalidateEvidenceSession(mainPath, { maxBytes: MAX_LOCAL_SESSION_BYTES }))
 }
 
+// ---------- stable read with a bounded retry ----------
+/**
+ * A write that lands between prevalidation and the read of a live transcript surfaces as one of two
+ * errors from evidence-input.ts: "changed before it was read" (the inode snapshot no longer matches at
+ * open) or "changed while it was being read" (it stopped matching after the read, or a sidecar entry
+ * did). Both mean the session is still being written, not that the input is unsafe, so the one-shot
+ * verbs (report / analyze / evidence / estimate) re-run the prevalidate + read pair a bounded number of
+ * times. Every other error (symbolic link, non-regular file, byte or record cap, a sidecar escaping its
+ * root, "changed during prevalidation") stays fail-closed and is never retried.
+ */
+const TRANSIENT_INPUT_CHANGE_RE = /^session (?:input|sidecar (?:directory|tree)) changed (?:before it was read|while it was being read)\b/
+export function isTransientInputChange(error: unknown): boolean {
+  return error instanceof Error && TRANSIENT_INPUT_CHANGE_RE.test(error.message)
+}
+/** attempts at the prevalidate + read pair before the race is reported to the caller */
+export const STABLE_READ_ATTEMPTS = 3
+/** pause before attempt 2 and before attempt 3 (ms): an appending writer finishes a line in far less */
+const STABLE_READ_BACKOFF_MS = [20, 80] as const
+export const STILL_WRITING_HINT = 'the session is still being written; re-run, or use `orangu watch` to follow it live'
+
+async function readStableSession(path: string, options: PrevalidateEvidenceSessionOptions): Promise<ReadEvidenceSessionResult> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await readEvidenceSessionManifest(await prevalidateEvidenceSession(path, options))
+    } catch (error) {
+      if (!isTransientInputChange(error)) throw error
+      if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${(error as Error).message}; ${STILL_WRITING_HINT}`)
+      const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1]!
+      await new Promise<void>((resolve) => setTimeout(resolve, pause))
+    }
+  }
+}
+
 // ---------- main entry ----------
 export async function parseClaudeCodeSession(input: ParseInput): Promise<Session> {
   const t0 = Date.now()
@@ -230,16 +265,10 @@ export async function parseClaudeCodeSession(input: ParseInput): Promise<Session
   const files: FileInput[] = []
   let effectiveInput = input
   if (input.path && input.records === undefined) {
-    const manifest = await prevalidateEvidenceSession(input.path, {
-      includeSidecars: !input.noSidecar,
-      maxBytes: MAX_LOCAL_SESSION_BYTES,
-    })
-    const loaded = await readEvidenceSessionManifest(manifest)
+    const loaded = await readStableSession(input.path, { includeSidecars: !input.noSidecar, maxBytes: MAX_LOCAL_SESSION_BYTES })
     effectiveInput = { ...loaded.parseInput, keepText: input.keepText, noSidecar: true }
   } else if (input.path && input.records && input.subagents === undefined && !input.noSidecar) {
-    const loaded = await readEvidenceSessionManifest(
-      await prevalidateEvidenceSession(input.path, { maxBytes: MAX_LOCAL_SESSION_BYTES }),
-    )
+    const loaded = await readStableSession(input.path, { maxBytes: MAX_LOCAL_SESSION_BYTES })
     effectiveInput = { ...input, subagents: loaded.parseInput.subagents }
   }
   const mainPath = effectiveInput.path ?? '(memory)'
