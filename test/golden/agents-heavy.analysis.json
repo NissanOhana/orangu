@@ -1551,7 +1551,7 @@
       "severity": "low",
       "axis": "time",
       "title": "5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait",
-      "detail": "turn 0: 5 serial spawns (test-writer, code-reviewer, test-writer, code-reviewer, agent), 1.8s serial vs 600ms longest",
+      "detail": "turn 0: 5 serial spawns (test-writer, code-reviewer, test-writer, code-reviewer, agent), 3.8s serial vs 800ms longest",
       "recommendation": "Independent subagents can be spawned in one message (parallel tool calls) or with run_in_background. The wall-clock time becomes the longest run instead of the sum. Keep serial spawning for agents that consume an earlier agent’s result.",
       "evidence": {
         "runs": [
@@ -1561,22 +1561,22 @@
               {
                 "type": "test-writer",
                 "promptChars": 17,
-                "durationMs": 300
+                "durationMs": 800
               },
               {
                 "type": "code-reviewer",
                 "promptChars": 17,
-                "durationMs": 300
+                "durationMs": 800
               },
               {
                 "type": "test-writer",
                 "promptChars": 17,
-                "durationMs": 300
+                "durationMs": 800
               },
               {
                 "type": "code-reviewer",
                 "promptChars": 17,
-                "durationMs": 300
+                "durationMs": 800
               },
               {
                 "type": "",
@@ -1584,17 +1584,17 @@
                 "durationMs": 600
               }
             ],
-            "serialMs": 1800,
-            "longestMs": 600
+            "serialMs": 3800,
+            "longestMs": 800
           }
         ],
-        "heuristic": "independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching"
+        "heuristic": "independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching. Timing is the spawned agent run (start, end, duration), falling back to the spawn call span when no run is linked"
       },
       "turnIndexes": [
         0
       ],
       "savings": {
-        "ms": 1200,
+        "ms": 3000,
         "estimated": true
       },
       "personas": [

@@ -242,14 +242,14 @@
       "title": "N subagents ran one-after-another in N run with no visible dependency; a parallel fan-out would cut the wait",
       "sessions": 1,
       "totalSavingsTokens": 0,
-      "totalSavingsMs": 1200,
+      "totalSavingsMs": 3000,
       "axis": "time",
       "severity": "low",
       "exampleSessionIds": [
         "bbbbbbbb-0000-4000-8000-000000000002"
       ],
       "boundedSavingsTokens": 0,
-      "boundedSavingsMs": 1200
+      "boundedSavingsMs": 3000
     },
     {
       "ruleId": "hook-errors",

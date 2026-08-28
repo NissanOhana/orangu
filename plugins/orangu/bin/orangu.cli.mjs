@@ -5298,6 +5298,13 @@ var scriptCandidate = (ctx) => {
 var AGENT_SPAWN_TOOLS = /* @__PURE__ */ new Set(["Agent", "Task"]);
 var fanoutOpportunity = (ctx) => {
   const norm2 = (s) => s.replace(/\s+/g, " ").trim();
+  const runBySpawn = /* @__PURE__ */ new Map();
+  for (const r of ctx.s.agents) if (r.spawnedByToolUseId) runBySpawn.set(r.spawnedByToolUseId, r);
+  const timing = (c) => {
+    const run = runBySpawn.get(c.toolUseId);
+    if (!run) return { startTs: c.startTs, endTs: c.endTs, durationMs: c.durationMs };
+    return { startTs: run.startTs ?? c.startTs, endTs: run.endTs ?? c.endTs, durationMs: run.durationMs ?? run.reportedDurationMs ?? c.durationMs };
+  };
   const dependsOn = (later, earlier) => {
     const spawned = earlier.call.spawnedAgentId;
     if (spawned && later.prompt.includes(spawned)) return true;
@@ -5328,9 +5335,9 @@ var fanoutOpportunity = (ctx) => {
         continue;
       }
       const input = c.input;
-      const item = { call: c, prompt: norm2(String(input?.["prompt"] ?? "")), preview: norm2(String(c.resultPreview ?? "")) };
+      const item = { call: c, prompt: norm2(String(input?.["prompt"] ?? "")), preview: norm2(String(c.resultPreview ?? "")), ...timing(c) };
       const prev = run[run.length - 1];
-      const overlapsPrev = !!prev && prev.call.endTs !== void 0 && c.startTs !== void 0 && c.startTs < prev.call.endTs;
+      const overlapsPrev = !!prev && prev.endTs !== void 0 && item.startTs !== void 0 && item.startTs < prev.endTs;
       if (overlapsPrev || run.some((e) => dependsOn(item, e))) flush();
       run.push(item);
     }
@@ -5340,19 +5347,20 @@ var fanoutOpportunity = (ctx) => {
   let serialMs = 0;
   let parallelMs = 0;
   const agentsInRuns = runs.reduce((a, r) => a + r.length, 0);
-  const evRuns = runs.slice(0, 5).map((r) => {
-    const durs = r.map((e) => e.call.durationMs ?? 0);
+  const measured = runs.map((r) => {
+    const durs = r.map((e) => e.durationMs ?? 0);
     const total = durs.reduce((a, d) => a + d, 0);
     const max = Math.max(...durs);
     serialMs += total;
     parallelMs += max;
     return {
       turnIndex: r[0].call.turnIndex,
-      agents: r.map((e) => ({ type: String(e.call.input?.["subagent_type"] ?? ""), promptChars: e.prompt.length, durationMs: e.call.durationMs })),
+      agents: r.map((e) => ({ type: String(e.call.input?.["subagent_type"] ?? ""), promptChars: e.prompt.length, durationMs: e.durationMs })),
       serialMs: total,
       longestMs: max
     };
   });
+  const evRuns = measured.slice(0, 5);
   const savedMs = Math.max(0, serialMs - parallelMs);
   return [
     mk({
@@ -5364,7 +5372,7 @@ var fanoutOpportunity = (ctx) => {
       recommendation: "Independent subagents can be spawned in one message (parallel tool calls) or with run_in_background. The wall-clock time becomes the longest run instead of the sum. Keep serial spawning for agents that consume an earlier agent\u2019s result.",
       evidence: {
         runs: evRuns,
-        heuristic: "independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching"
+        heuristic: "independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching. Timing is the spawned agent run (start, end, duration), falling back to the spawn call span when no run is linked"
       },
       turnIndexes: [...new Set(runs.map((r) => r[0].call.turnIndex))].slice(0, 30),
       savings: { ms: savedMs, estimated: true },

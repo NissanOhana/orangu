@@ -10,7 +10,7 @@
  * the same tokens between categories (a cache tier, a cache miss) or between models saves nothing we
  * can measure, and those rules say so instead of inventing a number.
  */
-import type { Session, ToolCall, Usage } from '../model/session.js'
+import type { AgentRun, Session, ToolCall, Usage } from '../model/session.js'
 import type { AgentsAnalysis, ContextAnalysis, FilesAnalysis, HooksAnalysis, Insight, InsightSeverity, QualityAnalysis, TimeAnalysis, TokensAnalysis, ToolsAnalysis, TurnAnalysis } from '../model/analysis.js'
 import { resolveModel } from '../models/catalog.js'
 import { usageTotal } from '../model/session.js'
@@ -1405,11 +1405,27 @@ const fanoutOpportunity: Rule = (ctx) => {
   // is decided from ids/lengths alone; never from full content matching.
   // Serial same-category read/search tool runs are sequential-reads' territory: this rule only
   // looks at Agent/Task calls, so the two can never double-fire.
+  //
+  // TIMING comes from the AgentRun the call spawned (agents[].spawnedByToolUseId), not from the
+  // spawn ToolCall: when the agent body lives in a sidecar file the tool_result lands within
+  // milliseconds while the agent runs for minutes, so the call's own span says nothing about the
+  // wait, and three quick spawns whose runs overlapped were never serial. A spawn with no linked run
+  // (older transcripts, where the Agent call blocks until the agent returns) keeps its call span.
   const norm = (s: string) => s.replace(/\s+/g, ' ').trim()
   interface Item {
     call: ToolCall
     prompt: string
     preview: string
+    startTs?: number
+    endTs?: number
+    durationMs?: number
+  }
+  const runBySpawn = new Map<string, AgentRun>()
+  for (const r of ctx.s.agents) if (r.spawnedByToolUseId) runBySpawn.set(r.spawnedByToolUseId, r)
+  const timing = (c: ToolCall): Pick<Item, 'startTs' | 'endTs' | 'durationMs'> => {
+    const run = runBySpawn.get(c.toolUseId)
+    if (!run) return { startTs: c.startTs, endTs: c.endTs, durationMs: c.durationMs }
+    return { startTs: run.startTs ?? c.startTs, endTs: run.endTs ?? c.endTs, durationMs: run.durationMs ?? run.reportedDurationMs ?? c.durationMs }
   }
   const dependsOn = (later: Item, earlier: Item): boolean => {
     const spawned = earlier.call.spawnedAgentId
@@ -1441,31 +1457,33 @@ const fanoutOpportunity: Rule = (ctx) => {
         continue
       }
       const input = c.input as Record<string, unknown> | undefined
-      const item: Item = { call: c, prompt: norm(String(input?.['prompt'] ?? '')), preview: norm(String(c.resultPreview ?? '')) }
+      const item: Item = { call: c, prompt: norm(String(input?.['prompt'] ?? '')), preview: norm(String(c.resultPreview ?? '')), ...timing(c) }
       const prev = run[run.length - 1]
-      const overlapsPrev = !!prev && prev.call.endTs !== undefined && c.startTs !== undefined && c.startTs < prev.call.endTs
+      const overlapsPrev = !!prev && prev.endTs !== undefined && item.startTs !== undefined && item.startTs < prev.endTs
       if (overlapsPrev || run.some((e) => dependsOn(item, e))) flush()
       run.push(item)
     }
     flush()
   }
   if (!runs.length) return []
+  // The saving sums EVERY flagged run; the evidence lists the first five.
   let serialMs = 0
   let parallelMs = 0
   const agentsInRuns = runs.reduce((a, r) => a + r.length, 0)
-  const evRuns = runs.slice(0, 5).map((r) => {
-    const durs = r.map((e) => e.call.durationMs ?? 0)
+  const measured = runs.map((r) => {
+    const durs = r.map((e) => e.durationMs ?? 0)
     const total = durs.reduce((a, d) => a + d, 0)
     const max = Math.max(...durs)
     serialMs += total
     parallelMs += max
     return {
       turnIndex: r[0]!.call.turnIndex,
-      agents: r.map((e) => ({ type: String((e.call.input as Record<string, unknown> | undefined)?.['subagent_type'] ?? ''), promptChars: e.prompt.length, durationMs: e.call.durationMs })),
+      agents: r.map((e) => ({ type: String((e.call.input as Record<string, unknown> | undefined)?.['subagent_type'] ?? ''), promptChars: e.prompt.length, durationMs: e.durationMs })),
       serialMs: total,
       longestMs: max,
     }
   })
+  const evRuns = measured.slice(0, 5)
   const savedMs = Math.max(0, serialMs - parallelMs)
   return [
     mk({
@@ -1479,7 +1497,7 @@ const fanoutOpportunity: Rule = (ctx) => {
       evidence: {
         runs: evRuns,
         heuristic:
-          'independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching',
+          'independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching. Timing is the spawned agent run (start, end, duration), falling back to the spawn call span when no run is linked',
       },
       turnIndexes: [...new Set(runs.map((r) => r[0]!.call.turnIndex))].slice(0, 30),
       savings: { ms: savedMs, estimated: true },

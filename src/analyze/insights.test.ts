@@ -1169,6 +1169,53 @@ describe('workflow improvement insight rules', () => {
     it('stays silent when the calls were already issued in parallel', async () => {
       expect(find(await analyzeOf(serialAgents(3, { parallel: true })), 'fanout-opportunity')).toBeUndefined()
     })
+
+    // The spawn ToolCall resolves in milliseconds when the agent body lives in a sidecar (the tool_result
+    // is a receipt, not the wait); the linked AgentRun carries the real span. Measuring the call reported
+    // "save ~83ms" for 100 minutes of serial agent time on a real session, and called concurrent runs serial.
+    function linkedAgents(n: number, opts: { overlap?: boolean } = {}): SessionBuilder {
+      const b = new SessionBuilder()
+      b.userPrompt('do the chores')
+      const RUN_MS = 60_000
+      for (let i = 0; i < n; i++) {
+        const agentId = `agent${i}`
+        // the spawn returns its receipt 10 ms later, agentId linking it to the run
+        b.toolCall('Agent', { description: `chore ${i}`, prompt: `do chore number ${i} in module m${i}`, subagent_type: 'Explore' }, `queued chore ${i}`, {
+          durationMs: 10,
+          toolUseResult: { status: 'completed', agentId, content: [{ type: 'text', text: `queued chore ${i}` }] },
+        })
+        // the agent's own records span RUN_MS; with overlap every run starts at (nearly) the same instant
+        if (opts.overlap) b.tick(-10 - i * 20 - (i ? RUN_MS : 0))
+        b.sidechain(agentId)
+        b.userPrompt(`chore ${i}`)
+        b.tick(RUN_MS)
+        b.assistant([{ type: 'text', text: 'done' }])
+        b.sidechain(agentId, false)
+        if (opts.overlap) b.tick(-RUN_MS + 30 + i * 20 + (i ? RUN_MS : 0))
+      }
+      b.tick(1000)
+      b.assistant([{ type: 'text', text: 'done' }])
+      return b
+    }
+    it('measures the linked agent run, not the millisecond spawn call', async () => {
+      const a = await analyzeOf(linkedAgents(3))
+      expect(a.agents.runs.filter((r) => r.spawnedByToolUseId).length).toBe(3)
+      const ins = find(a, 'fanout-opportunity')!
+      expect(ins).toBeDefined()
+      // three serial 60 s runs (each span includes its 10 ms spawn) -> ~180 s serial vs ~60 s parallel;
+      // the spawn calls alone would have claimed ~20 ms
+      expect(ins.savings?.ms).toBeGreaterThanOrEqual(120_000)
+      expect(ins.savings?.ms).toBeLessThan(121_000)
+      const runs = ins.evidence['runs'] as Array<{ serialMs: number; longestMs: number }>
+      expect(runs[0]!.serialMs).toBeGreaterThanOrEqual(180_000)
+      expect(runs[0]!.longestMs).toBeGreaterThanOrEqual(60_000)
+      expect(runs[0]!.longestMs).toBeLessThan(61_000)
+    })
+    it('stays silent when the spawned runs overlapped, however serial the spawn calls look', async () => {
+      const a = await analyzeOf(linkedAgents(3, { overlap: true }))
+      expect(a.agents.maxConcurrency).toBeGreaterThan(1)
+      expect(find(a, 'fanout-opportunity')).toBeUndefined()
+    })
   })
 
   describe('model-for-task', () => {
