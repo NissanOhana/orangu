@@ -64,6 +64,9 @@ describe('offline report', () => {
     // formatting, the redaction placeholder note, the watch-gated Live banner, the outcome headline). Track A (A1)
     // removes the 6-tile KPI grid, the 10 signal chips and 5 of the "Follow the evidence" cards and MUST bring this
     // back under 70 KB; the cap may only go DOWN from there.
+    // Status 2026-08-27 (Track A): measured 72,975 B after the trim pass, 1,295 B above the 70 KB target; the cap
+    // was left at 72 KB, not raised. Closing the gap is still open: either accept this number and restate the
+    // target here, or trim further (sparkline, Suggest first-time note, Context headline fold) and lower the cap.
     expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
     expect(CLIENT_JS.length).toBe(72975)
   })
