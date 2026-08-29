@@ -340,4 +340,38 @@ describe('renderSuggest on a repo/global scope', () => {
     expect(markup).toContain('<button type="button" class="btn-primary" data-kick-copy=')
     expect(markup).not.toContain('class="btn-sm" data-kick-copy=')
   })
+
+  // AC16b: the sidebar's Suggestions link carries no scope=, so a file with no session would land on
+  // the session scope and report "Nothing to improve was found" about a session it does not contain.
+  it.each(['repo', 'global'] as const)('defaults an unscoped hash to the scope the file is about (%s)', (scope) => {
+    const ctx = scopeContext(scope)
+    ctx.state = { screen: 'suggest' }
+    renderSuggest(ctx)
+    expect(markup).toContain('Whole-harness review')
+    expect(markup).toContain(scope === 'repo' ? 'Recurring repo patterns' : 'Recurring global patterns')
+    expect(markup).not.toContain('Nothing to improve was found')
+  })
+
+  it('keeps the session default for an unscoped hash when the file does have a session', () => {
+    const ctx = scopeContext('repo')
+    ctx.data.session = analysis
+    ctx.data.selectedId = analysis.session.id
+    ctx.a = analysis
+    ctx.state = { screen: 'suggest', s: analysis.session.id }
+    renderSuggest(ctx)
+    expect(markup).toContain('One finding, one bounded proposal')
+    expect(markup).not.toContain('Whole-harness review')
+  })
+
+  // AC22: a chip that cannot lead anywhere must say so, not silently do nothing when clicked.
+  it('disables the This session chip in a report that carries no session', () => {
+    renderSuggest(scopeContext('repo'))
+    expect(markup).toContain('<button type="button" class="chip" aria-disabled="true" tabindex="-1" title="this report has no session" data-scope="session">This session</button>')
+  })
+
+  it('leaves the This session chip enabled when a session is present', () => {
+    renderSuggest(context('file', []))
+    expect(markup).toContain('data-scope="session">This session</button>')
+    expect(markup).not.toContain('this report has no session')
+  })
 })

@@ -14,6 +14,7 @@ import { CHANGE_CLASS_LABELS } from '../../../suggest/change-class-labels.js'
 import { esc } from '../format.js'
 import { h, wireCopyButtons } from '../dom.js'
 import { chip } from '../components/chips.js'
+import { fileScope } from '../nav.js'
 import { commandBlock } from '../components/command.js'
 import { emptyHero } from '../components/empty.js'
 import { mascotBox } from '../components/mascot-box.js'
@@ -148,11 +149,13 @@ ${statusChip(state, failure, trustedVerification(rec))}
 
 export function renderSuggest(ctx: Ctx): HTMLElement {
   const a = ctx.a
-  const scope = ctx.state.scope ?? 'session'
+  // No scope= in the hash: a file about a scope answers about that scope, not about a session it has
+  // no record of. The session chip is then a dead end, so it says so rather than ignoring the click.
+  const scope = ctx.state.scope ?? fileScope(ctx.data) ?? 'session'
   const repoN = ctx.data.aggregates.repo?.sessionCount
   const globalN = ctx.data.aggregates.global?.sessionCount
   const scopeChips = [
-    chip('This session', { active: scope === 'session', data: { scope: 'session' } }),
+    chip('This session', { active: scope === 'session', disabled: !a, title: a ? '' : 'this report has no session', data: { scope: 'session' } }),
     chip(repoN !== undefined ? `Repo · ${repoN}` : 'Repo', { active: scope === 'repo', disabled: repoN === undefined, title: repoN === undefined ? 'run orangu serve' : '', data: { scope: 'repo' } }),
     chip(globalN !== undefined ? `Global · ${globalN}` : 'Global', { active: scope === 'global', disabled: globalN === undefined, title: globalN === undefined ? 'run orangu serve' : '', data: { scope: 'global' } }),
   ].join('')

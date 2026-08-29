@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { NAV_GROUPS, SCREEN_IDS, defaultScreen, liveRows, navFor, parseHash, writeHash, type RouteState } from './nav.js'
+import type { Aggregate } from '../../analyze/aggregate.js'
+import type { Analysis } from '../../model/analysis.js'
 import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
+
+/** navFor only reads the subagent run count off the Analysis; the rest of the shape is irrelevant here. */
+const analysis = { session: { id: 'abc12345-6789' }, agents: { runs: [] } } as unknown as Analysis
 
 function row(over: Partial<SessionSummaryRow> = {}): SessionSummaryRow {
   return {
@@ -24,11 +29,23 @@ function appData(over: Partial<AppData> = {}): AppData {
     version: 'test',
     generatedAt: 0,
     capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: false },
+    selectedId: 'abc12345-6789',
+    session: analysis,
     sessions: [row()],
     aggregates: {},
     suggestions: [],
     ...over,
   }
+}
+
+/** The scope label a saved aggregate carries: already redacted by the CLI before it reaches the file. */
+function agg(scope: string, sessionCount: number): Aggregate {
+  return { scope, sessionCount } as unknown as Aggregate
+}
+
+/** A saved `orangu repo --html` / `orangu global --html` file: aggregates, and no session at all. */
+function aggReport(aggregates: AppData['aggregates']): AppData {
+  return appData({ selectedId: undefined, session: undefined, sessions: [], aggregates })
 }
 
 describe('nav model', () => {
@@ -144,5 +161,48 @@ describe('hash routes', () => {
   it('preserves the dev and plain audience protocol values', () => {
     expect(writeHash({ screen: 'overview', audience: 'dev' })).toContain('audience=dev')
     expect(parseHash('#overview?audience=plain').audience).toBe('plain')
+  })
+})
+
+/**
+ * The aggregate file report is the one shell state with no session. Nothing here is new UI: it is
+ * decided by what the sidebar and the router SUBTRACT, so that no link promises a screen the file
+ * cannot render.
+ */
+describe('the shell of a report that has no session', () => {
+  it('lands on the scope the file is about instead of an Overview with nothing in it', () => {
+    expect(defaultScreen(aggReport({ repo: agg('repo orangu', 12) }))).toBe('repo')
+    expect(defaultScreen(aggReport({ global: agg('global', 103) }))).toBe('global')
+  })
+
+  it('still lands on Overview when the file has a session, aggregate or not', () => {
+    expect(defaultScreen(appData({ aggregates: { repo: agg('repo orangu', 12) } }))).toBe('overview')
+    expect(defaultScreen(appData())).toBe('overview')
+  })
+
+  it('falls back to Overview when a sessionless file carries no aggregate either', () => {
+    expect(defaultScreen(aggReport({}))).toBe('overview')
+  })
+
+  it('omits the session group rather than linking to five screens that can only say "no session"', () => {
+    expect(navFor(aggReport({ repo: agg('repo orangu', 12) }), { screen: 'repo' }).find((g) => g.id === 'session')!.items).toEqual([])
+  })
+
+  it('keeps the unchanged five-item session group when the file has a session', () => {
+    const items = navFor(appData(), { screen: 'overview' }).find((g) => g.id === 'session')!.items
+    expect(items.map((i) => i.screen)).toEqual(['overview', 'timeline', 'tools', 'context', 'coverage'])
+  })
+
+  it('counts the scope the file carries and keeps the hint on the one it does not', () => {
+    const across = navFor(aggReport({ global: agg('global', 103) }), { screen: 'global' }).find((g) => g.id === 'across')!
+    const item = (screen: string): (typeof across.items)[number] => across.items.find((i) => i.screen === screen)!
+    expect(item('global').label).toBe('Global · 103 sessions')
+    expect(item('global').hint).toBeUndefined()
+    expect(item('repo').hint).toBe('needs orangu serve')
+    expect(item('harness').hint).toBe('needs orangu serve')
+  })
+
+  it('leaves the Global label alone when no global aggregate is in the file', () => {
+    expect(navFor(appData(), { screen: 'overview' }).find((g) => g.id === 'across')!.items.find((i) => i.screen === 'global')!.label).toBe('Global · all time')
   })
 })

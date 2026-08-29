@@ -6,7 +6,7 @@ import type { Analysis } from '../../model/analysis.js'
 import type { AppData } from '../../model/app-data.js'
 import type { DataSource } from './data.js'
 import type { ServeEvent } from '../../serve/types.js'
-import { cleanHash, defaultScreen, liveRows, navFor, parseHash, writeHash, shortId, type RouteState } from './nav.js'
+import { cleanHash, defaultScreen, fileScope, liveRows, navFor, parseHash, writeHash, shortId, type RouteState } from './nav.js'
 import { badgeCopy, mergeOpenIds } from './derive.js'
 import { esc, num } from './format.js'
 import { mascotSvg } from './mascot.js'
@@ -70,7 +70,8 @@ function screenTitle(id: string): string {
   return TITLES[id] ?? 'Overview'
 }
 
-function screenSub(ctx: Ctx): string {
+/** Exported for the unit test: the header must never describe a scope the body did not render. */
+export function screenSub(ctx: Ctx): string {
   const a = ctx.a
   const aud = ctx.audience
   switch (ctx.state.screen) {
@@ -94,8 +95,12 @@ function screenSub(ctx: Ctx): string {
       return `${ctx.data.aggregates.global ? ctx.data.aggregates.global.sessionCount + ' sessions · ' : ''}recurring evidence across this machine`
     case 'harness':
       return 'declared vs used, in tokens'
-    case 'suggest':
-      return ctx.state.scope === 'repo' || ctx.state.scope === 'global' ? 'recurring patterns · bounded proposals · whole-harness review' : 'one finding · one bounded proposal'
+    case 'suggest': {
+      // the same default the screen itself applies: an unscoped hash in a file with no session is
+      // about that file's scope, so the header may not still promise one finding from one session
+      const scope = ctx.state.scope ?? fileScope(ctx.data)
+      return scope === 'repo' || scope === 'global' ? 'recurring patterns · bounded proposals · whole-harness review' : 'one finding · one bounded proposal'
+    }
     case 'agents':
       return a ? `${a.agents.runs.length} runs · up to ${a.agents.maxConcurrency} parallel` : ''
     case 'context':
@@ -159,6 +164,17 @@ export function themeName(theme: string | undefined): 'light' | 'dark' {
 /** The sidebar control toggles the two states; light clears `theme=` so its hash stays shareable. */
 export function cycleTheme(theme: string | undefined): string | undefined {
   return themeName(theme) === 'dark' ? undefined : 'dark'
+}
+
+/** The sidebar card names what the file is about; only a session report has a session to name. */
+export function sesscardEyebrow(d: AppData): string {
+  return d.session ? 'Session' : 'Scope'
+}
+
+/** The browser tab: the session's title, else its short id, else the scope a saved aggregate covers. */
+export function docTitle(d: AppData, a: Analysis | undefined, s: string | undefined): string {
+  const scope = fileScope(d)
+  return 'orangu · ' + (a?.session.title || shortId(s ?? '') || (scope && d.aggregates[scope]?.scope) || 'report')
 }
 
 export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void> {
@@ -265,7 +281,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
         : 'Self-contained report.<br/>0 network requests.'
     const el = h(`<aside class="side">
 <div class="brand">${mascotSvg(26)}<span class="name">orangu</span><span class="ver">v${esc(d.version)}</span></div>
-<div class="sesscard"><div class="eyebrow">Session</div>${serveUi ? serveUi.pickerHtml(d, row) : `<div class="sid">${row ? esc(shortId(row.id)) + ' · ' + esc(row.projectSlug || row.source) : '–'}</div>`}</div>
+<div class="sesscard"><div class="eyebrow">${sesscardEyebrow(d)}</div>${serveUi ? serveUi.pickerHtml(d, row) : `<div class="sid">${row ? esc(shortId(row.id)) + ' · ' + esc(row.projectSlug || row.source) : '–'}</div>`}</div>
 <div class="navwrap"><nav aria-label="Report">${nav}</nav></div>
 <div class="side-foot">
 <button class="themebtn" id="btn-theme">◐ theme · ${themeName(state.theme)}</button>
@@ -321,7 +337,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     lastRenderMs = Date.now()
     applyTheme()
     const ctx = await ctxFor()
-    document.title = 'orangu · ' + (ctx.a?.session.title || shortId(state.s ?? '') || 'report')
+    document.title = docTitle(d, ctx.a, state.s)
     const renderer = SCREENS[state.screen] ?? renderOverview
     const aggregateScope = state.screen === 'repo' || state.screen === 'global' || state.screen === 'harness' ? state.screen : undefined
     const screenEl =
