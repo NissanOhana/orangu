@@ -18,11 +18,11 @@
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
 <style>
 /* Canonical design tokens for the report, served app, and landing page.
-   scripts/build.mjs inlines this file.
-   Do not hand-duplicate these values anywhere else. `--accent` is decorative only on light backgrounds; text uses `--accent-ink`. */
+   scripts/build.mjs inlines this file. Do not hand-duplicate these values anywhere else.
+   Light is the only default: dark exists solely under :root[data-theme="dark"], never from the
+   system colour scheme. `--accent` is decorative only on light backgrounds; text uses `--accent-ink`. */
 :root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#8a877e;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
 :root[data-theme="dark"]{--bg:#151412;--bg2:#1d1c18;--surface:#201f1b;--border:#2e2c25;--border2:#403d33;--ink1:#f5f3ec;--ink2:#c9c5ba;--ink3:#8f8c81;--accent-ink:#e79f84;--accent-weak:#38281f;--good:#9cc47f;--warn:#e6c374;--bad:#f0a08b;--cmd:#26241e;--cmd-ink:#f5f3ec;--cat-read:#7fa8d8;--cat-search:#9cc0e8;--cat-edit:#e79f84;--cat-write:#f0a08b;--cat-exec:#b39bd8;--cat-agent:#6fbdb8;--cat-skill:#e6c374;--cat-web:#9cc47f;--cat-other:#a8a498}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151412;--bg2:#1d1c18;--surface:#201f1b;--border:#2e2c25;--border2:#403d33;--ink1:#f5f3ec;--ink2:#c9c5ba;--ink3:#8f8c81;--accent-ink:#e79f84;--accent-weak:#38281f;--good:#9cc47f;--warn:#e6c374;--bad:#f0a08b;--cmd:#26241e;--cmd-ink:#f5f3ec;--cat-read:#7fa8d8;--cat-search:#9cc0e8;--cat-edit:#e79f84;--cat-write:#f0a08b;--cat-exec:#b39bd8;--cat-agent:#6fbdb8;--cat-skill:#e6c374;--cat-web:#9cc47f;--cat-other:#a8a498}}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
@@ -285,7 +285,7 @@ footer .legal{margin:0;font-size:12.5px}
       <a href="#trust">Why local</a>
       <a href="#install">Install</a>
       <a href="https://github.com/NissanOhana/orangu">GitHub ↗</a>
-      <button class="btn-theme" id="themeBtn" aria-label="switch to dark theme">◐ <span id="themeLabel">system</span></button>
+      <button class="btn-theme" id="themeBtn" aria-label="theme light, switch to dark">◐ <span id="themeLabel">light</span></button>
     </nav>
   </div>
 </header>
@@ -716,10 +716,9 @@ class QtcTriad extends HTMLElement{
       if(!reduce)requestAnimationFrame(draw);
     };
     if(reduce){
-      // static frame: no animation loop, but re-render when the theme flips
+      // static frame: no animation loop, but re-render when the theme attribute flips
       try{
         new MutationObserver(()=>draw(0)).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
-        matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>draw(0));
       }catch(e){}
     }else requestAnimationFrame(draw);
   }
@@ -730,21 +729,21 @@ if(!customElements.get('qtc-triad'))customElements.define('qtc-triad',QtcTriad);
 <script>
 (function () {
   var root = document.documentElement
-  var order = ['system', 'dark', 'light']
   var btn = document.getElementById('themeBtn')
   var lbl = document.getElementById('themeLabel')
-  var pref = 'system'
-  try { pref = localStorage.getItem('orangu-theme') || 'system' } catch (e) {}
+  // Light is the only default. A stored 'system' from the old three-state control reads as light,
+  // so the label can never print a state the button cannot reach.
+  var pref = 'light'
+  try { pref = localStorage.getItem('orangu-theme') === 'dark' ? 'dark' : 'light' } catch (e) {}
   function apply(p) {
     pref = p
-    if (p === 'system') root.removeAttribute('data-theme')
-    else root.setAttribute('data-theme', p)
+    if (p === 'dark') root.setAttribute('data-theme', 'dark')
+    else root.removeAttribute('data-theme')
     lbl.textContent = p
-    var next = order[(order.indexOf(p) + 1) % order.length]
-    btn.setAttribute('aria-label', 'switch to ' + next + ' theme')
+    btn.setAttribute('aria-label', 'theme ' + p + ', switch to ' + (p === 'dark' ? 'light' : 'dark'))
   }
   btn.addEventListener('click', function () {
-    var next = order[(order.indexOf(pref) + 1) % order.length]
+    var next = pref === 'dark' ? 'light' : 'dark'
     try { localStorage.setItem('orangu-theme', next) } catch (e) {}
     apply(next)
   })

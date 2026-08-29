@@ -280,7 +280,7 @@ footer .legal{margin:0;font-size:12.5px}
       <a href="#trust">Why local</a>
       <a href="#install">Install</a>
       <a href="https://github.com/NissanOhana/orangu">GitHub ↗</a>
-      <button class="btn-theme" id="themeBtn" aria-label="switch to dark theme">◐ <span id="themeLabel">system</span></button>
+      <button class="btn-theme" id="themeBtn" aria-label="theme light, switch to dark">◐ <span id="themeLabel">light</span></button>
     </nav>
   </div>
 </header>
@@ -711,10 +711,9 @@ class QtcTriad extends HTMLElement{
       if(!reduce)requestAnimationFrame(draw);
     };
     if(reduce){
-      // static frame: no animation loop, but re-render when the theme flips
+      // static frame: no animation loop, but re-render when the theme attribute flips
       try{
         new MutationObserver(()=>draw(0)).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
-        matchMedia('(prefers-color-scheme: dark)').addEventListener('change',()=>draw(0));
       }catch(e){}
     }else requestAnimationFrame(draw);
   }
@@ -725,21 +724,21 @@ if(!customElements.get('qtc-triad'))customElements.define('qtc-triad',QtcTriad);
 <script>
 (function () {
   var root = document.documentElement
-  var order = ['system', 'dark', 'light']
   var btn = document.getElementById('themeBtn')
   var lbl = document.getElementById('themeLabel')
-  var pref = 'system'
-  try { pref = localStorage.getItem('orangu-theme') || 'system' } catch (e) {}
+  // Light is the only default. A stored 'system' from the old three-state control reads as light,
+  // so the label can never print a state the button cannot reach.
+  var pref = 'light'
+  try { pref = localStorage.getItem('orangu-theme') === 'dark' ? 'dark' : 'light' } catch (e) {}
   function apply(p) {
     pref = p
-    if (p === 'system') root.removeAttribute('data-theme')
-    else root.setAttribute('data-theme', p)
+    if (p === 'dark') root.setAttribute('data-theme', 'dark')
+    else root.removeAttribute('data-theme')
     lbl.textContent = p
-    var next = order[(order.indexOf(p) + 1) % order.length]
-    btn.setAttribute('aria-label', 'switch to ' + next + ' theme')
+    btn.setAttribute('aria-label', 'theme ' + p + ', switch to ' + (p === 'dark' ? 'light' : 'dark'))
   }
   btn.addEventListener('click', function () {
-    var next = order[(order.indexOf(pref) + 1) % order.length]
+    var next = pref === 'dark' ? 'light' : 'dark'
     try { localStorage.setItem('orangu-theme', next) } catch (e) {}
     apply(next)
   })

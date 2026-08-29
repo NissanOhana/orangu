@@ -71,6 +71,20 @@ describe('ratchet: design tokens', () => {
 })
 
 /**
+ * Light is the only default (AC26, AC27). Nothing in the report client may follow the system colour
+ * scheme, and the removed third theme state may not come back: both are one grep away from returning
+ * by accident, and neither shows up as a failing behaviour test.
+ */
+describe('ratchet: light is the only default theme', () => {
+  it('tokens.css never follows the system colour scheme', () => {
+    expect(countIn(join(ROOT, 'src/report/client/tokens.css'), /prefers-color-scheme/g)).toBe(0)
+  })
+  it('app.ts carries no third theme state', () => {
+    expect(countIn(join(ROOT, 'src/report/client/app.ts'), /'auto'/g)).toBe(0)
+  })
+})
+
+/**
  * U+2014 is banned from
  * every product surface and from every string the product renders. En-dash (U+2013, ranges and the
  * "no value" placeholder) and the middle dot (U+00B7, the client's separator) are unaffected.
