@@ -3,7 +3,7 @@ import type { Aggregate } from '../../analyze/aggregate.js'
 import type { Analysis } from '../../model/analysis.js'
 import type { AppData } from '../../model/app-data.js'
 import type { SuggestionRecord } from '../../suggest/types.js'
-import { cycleTheme, docTitle, refreshSuggestions, refreshSuggestionsOnConnection, screenSub, sesscardEyebrow, themeName } from './app.js'
+import { cycleTheme, docTitle, refreshSuggestions, refreshSuggestionsOnConnection, renderWait, showLoader, screenSub, sesscardEyebrow, themeName } from './app.js'
 
 const record = (id: string): SuggestionRecord => ({ id, v: 2, status: 'new' }) as SuggestionRecord
 
@@ -110,5 +110,51 @@ describe('a report about a scope, not a session', () => {
     expect(sub(aggReport('global', 'global'))).toBe('recurring patterns · bounded proposals · whole-harness review')
     expect(sub(appData())).toBe('one finding · one bounded proposal')
     expect(sub(appData(), 'repo')).toBe('recurring patterns · bounded proposals · whole-harness review')
+  })
+})
+
+/**
+ * A click and a live tick share one render seam, and they must not share one delay. The throttle
+ * exists for the SSE stream; a person who clicked is owed the next frame, not the rest of a window
+ * they never saw start.
+ */
+describe('a click is never throttled behind a live tick', () => {
+  it('renders user navigation on the next frame however recently the last render painted', () => {
+    expect(renderWait(true, 1_000, 1_000)).toBe(0)
+    expect(renderWait(true, 1_000, 1_001)).toBe(0)
+    expect(renderWait(true, 1_000, 1_599)).toBe(0)
+  })
+
+  it('keeps the whole floor for a data-driven re-render inside the window', () => {
+    expect(renderWait(false, 1_000, 1_000)).toBe(600)
+    expect(renderWait(false, 1_000, 1_200)).toBe(400)
+    expect(renderWait(false, 1_000, 1_599)).toBe(1)
+  })
+
+  it('never delays a data-driven re-render once the window has passed', () => {
+    expect(renderWait(false, 1_000, 1_600)).toBe(0)
+    expect(renderWait(false, 1_000, 9_000)).toBe(0)
+  })
+})
+
+/**
+ * A blocked build paints no frames, so neither a timer nor a CSS delay can decide this after the
+ * fact: the only frame the reader gets is the one yielded before the build, and the loader is
+ * either in it or never seen. The decision therefore has to be a prediction, made before the build.
+ */
+describe('a loading state only where the reader would otherwise wait', () => {
+  it('paints one for a screen that measured slow last time', () => {
+    expect(showLoader(304)).toBe(true)
+    expect(showLoader(81)).toBe(true)
+  })
+
+  it('paints none for a screen that measured fast, so a quick click never flashes', () => {
+    expect(showLoader(80)).toBe(false)
+    expect(showLoader(5)).toBe(false)
+    expect(showLoader(0)).toBe(false)
+  })
+
+  it('treats a screen it has never built as slow, because a first visit is the worst freeze', () => {
+    expect(showLoader(undefined)).toBe(true)
   })
 })

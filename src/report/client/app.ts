@@ -112,6 +112,32 @@ export function screenSub(ctx: Ctx): string {
   }
 }
 
+/** Live updates re-render at most ~1-2 Hz. A click is owed the next frame, never that window. */
+const RENDER_MIN_MS = 600
+
+/**
+ * The one scheduling rule, kept pure so it is testable without a DOM. User navigation (a sidebar
+ * click, a CTA, a scope chip, back/forward) renders on the next frame however recently the last
+ * paint landed; only a data-driven re-render (an SSE tick, a suggestion refresh, an aggregate that
+ * finished loading) keeps the throttle floor, which is the stream it was written for.
+ */
+export function renderWait(immediate: boolean, lastRenderMs: number, now: number): number {
+  return immediate ? 0 : Math.max(0, lastRenderMs + RENDER_MIN_MS - now)
+}
+
+/** Above this, a screen took long enough that a reader needs telling something is happening. */
+const SLOW_BUILD_MS = 80
+
+/**
+ * Whether a navigation into a screen should paint a loading state, given what that same screen took
+ * to build last time. A screen never measured is treated as slow, because a first visit is both the
+ * heaviest build and the one the reader has no expectation for. Exported pure: the alternative to
+ * predicting is a timer, and a timer cannot fire inside the single blocking task it would measure.
+ */
+export function showLoader(lastBuildMs: number | undefined): boolean {
+  return (lastBuildMs ?? Infinity) > SLOW_BUILD_MS
+}
+
 /** Serve-only chrome injected by serve-entry.ts so its bytes stay out of the file-mode bundle. */
 export interface ServeUi {
   pickerHtml(d: AppData, row: import('../../model/app-data.js').SessionSummaryRow | undefined): string
@@ -228,7 +254,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     const hash = writeHash(state)
     if (opts.push) history.pushState(null, '', hash)
     else history.replaceState(null, '', hash)
-    void render()
+    scheduleRender(true)
   }
 
   // serve mode: connection state; on-demand aggregates live in serve-ui (bundle-size, policy)
@@ -247,17 +273,20 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     go,
   })
 
-  // Live updates re-render at most ~1–2 Hz via the client-side throttle.
+  // One seam for both kinds of re-render, so the rule that separates them lives in one place:
+  // renderWait() decides the delay, and a navigation also supersedes a queued live tick, which
+  // would otherwise rebuild the whole shell a second time up to the floor after the click landed.
   let renderQueued = false
+  let queuedAt: ReturnType<typeof setTimeout> | undefined
   let lastRenderMs = 0
-  const RENDER_MIN_MS = 600
-  function scheduleRender(): void {
-    if (renderQueued) return
+  function scheduleRender(immediate?: boolean): void {
+    const wait = renderWait(immediate === true, lastRenderMs, Date.now())
+    if (immediate) clearTimeout(queuedAt)
+    else if (renderQueued) return
     renderQueued = true
-    const wait = Math.max(0, lastRenderMs + RENDER_MIN_MS - Date.now())
-    setTimeout(() => {
+    queuedAt = setTimeout(() => {
       renderQueued = false
-      void render()
+      void render(immediate)
     }, wait)
   }
 
@@ -333,12 +362,25 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
   // (data-sid, or an id like the timeline's turn-N) and the scroll position are captured before
   // the wipe and re-applied after: an SSE tick must not collapse what the user opened.
   let openIds: string[] = []
+  // what each screen cost last time, click to painted: the only honest input showLoader() can have
+  const builtMs: Record<string, number> = {}
   const EXPANDABLE = 'details[data-sid],details[id]'
   const keyOf = (el: HTMLElement): string => el.dataset['sid'] ?? el.id
 
-  async function render(): Promise<void> {
+  async function render(nav?: boolean): Promise<void> {
     lastRenderMs = Date.now()
     applyTheme()
+    // A click can be followed by a build of tens of thousands of nodes in one task (Timeline renders
+    // every event row) and the browser paints nothing at all while that task holds the thread: the
+    // only frame it gets is the one yielded here, so the loading state has to be fully visible in
+    // that single frame. Which is also why the loader cannot be deferred by a timer or a CSS delay:
+    // neither elapses during a blocked build. showLoader() answers "will this one be slow" from what
+    // the same screen measured last time instead, so a screen that never blocks never paints one.
+    // `aria-busy` rides the old .main, which the wipe below drops, so the flag clears itself.
+    if (nav && showLoader(builtMs[state.screen])) {
+      app!.querySelector('.main')?.setAttribute('aria-busy', 'true')
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r)))
+    }
     const ctx = await ctxFor()
     document.title = docTitle(d, ctx.a, state.s)
     const renderer = SCREENS[state.screen] ?? renderOverview
@@ -381,11 +423,12 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
         go({ screen: 'timeline', turn: first }, { push: true })
       }),
     )
+    builtMs[state.screen] = Date.now() - lastRenderMs
   }
 
   window.addEventListener('hashchange', () => {
     state = routeFor(location.hash)
-    void render()
+    scheduleRender(true)
   })
 
   // Alt+↑/↓ cycles live sessions on a Live screen
