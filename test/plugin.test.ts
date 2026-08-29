@@ -692,8 +692,10 @@ describe('plugin packaging', () => {
     expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 200 words').toBeLessThan(200)
   })
 
-  // Ceilings, not targets. Measured on the day they landed; they may only go DOWN.
-  // Raising one requires a stated reason in the commit body (PROJECT.md §Testing).
+  // Ceilings, not targets: each is the value MEASURED on the day it landed. Lowering one needs nothing.
+  // Raising one is allowed only in the same commit that measures a deliberate, named growth, with the
+  // measured value and the reason written both here and in the commit body; otherwise the chunk stops
+  // and escalates rather than widening the ceiling (PROJECT.md §Testing).
   describe('ratchet: skill weight', () => {
     // harness and improve landed above their B4 targets (1000 / 900) and are still above them after the
     // 2026-08-27 final pass (measured 1,110 / 998): the remaining words are pinned command literals and
