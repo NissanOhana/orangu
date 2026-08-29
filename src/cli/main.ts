@@ -14,6 +14,7 @@
  * "current" (the session the surrounding Claude Code process runs in; src/discover/current.ts).
  * `--session <sel>` / `-s <sel>` is the flag form of the positional.
  */
+import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
@@ -23,7 +24,7 @@ import { resolveCurrentSession } from '../discover/current.js'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { aggregate } from '../analyze/aggregate.js'
-import { renderReport } from '../report/render.js'
+import { renderAggregateReport, renderReport } from '../report/render.js'
 import { AnalysisCache, analyzeRefCached } from '../cache/index.js'
 import { analyzeAllPooled, defaultJobs, isPoolWorker, runPoolWorker } from '../cache/pool.js'
 import { fmtTokens } from '../analyze/util.js'
@@ -41,7 +42,7 @@ import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { cmdPick } from './commands/pick.js'
 import { cmdDashboard } from './commands/dashboard.js'
 import { plural } from '../harness/report.js'
-import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
+import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson, type PreparedAggregate } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
 import { openInBrowser } from './open-browser.js'
 import { VERSION } from '../version.js'
@@ -268,6 +269,11 @@ const RETIRED_FLAGS: Record<string, string> = {
 const SESSION_GATE_FLAGS = ['max-tokens', 'fail-on-hook-errors'] as const
 const SESSION_GATE_VERBS = new Set(['report', 'html', 'analyze', 'a'])
 
+/** The scope verbs, whose answer is stdout: an HTML file and a browser handoff are opt-in extras. */
+const AGGREGATE_VERBS = new Set(['repo', 'global', 'all'])
+/** Side-effect flags that a machine read must never trigger on a scope verb. */
+const AGGREGATE_SIDE_EFFECT_FLAGS = ['html', 'open'] as const
+
 /**
  * Every verb parses the same flag table, so a retired flag, an unknown flag, or a session gate on a
  * verb that never evaluates it fails here before any verb runs. A gate that silently stops gating
@@ -284,6 +290,19 @@ function rejectUnusableFlags(command: string | undefined, flags: Record<string, 
   }
   if (!SESSION_SELECTOR_VERBS.has(command) && (flags['session'] !== undefined || flags['s'] !== undefined)) {
     fail('--session selects one session: use it with report, analyze, watch, estimate or evidence')
+  }
+  if (command !== undefined && AGGREGATE_VERBS.has(command)) {
+    // A machine read has no side effect: refuse the combination here, before a single session is
+    // read, rather than writing a file the caller piping JSON never asked for.
+    if (flagBool(flags, 'json')) {
+      for (const flag of AGGREGATE_SIDE_EFFECT_FLAGS) {
+        if (flags[flag] !== undefined) fail(`--${flag} writes the HTML report; --json is a machine read with no side effect. Run them separately.`)
+      }
+    }
+  } else if (command !== undefined && flags['html'] !== undefined) {
+    // Only the scope verbs write an aggregate report; elsewhere --html would be silently ignored,
+    // and an ignored output flag is a report the caller never gets and never hears about.
+    fail('--html writes the scope report: use it with orangu repo or orangu global')
   }
 }
 
@@ -374,6 +393,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   const agg = aggregate(analyses, scopeLabel, Date.now())
   if (failed) agg.scope += ` (${failed} unreadable skipped)`
   const outputAggregate = prepareAggregateForOutput(agg, flags)
+  await writeAggregateHtml(scope, outputAggregate, flags)
   const outFile = flagStr(flags, 'o', 'out')
   if (outFile) {
     await writePrivateOutput(resolve(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }))
@@ -389,6 +409,31 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   }
   printAggregate(outputAggregate)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
+}
+
+/**
+ * The scope report as one self-contained HTML file, written only when --html or --open asks for it.
+ *
+ * The input is a PreparedAggregate, so the redaction boundary is the type: this function never
+ * redacts and cannot be handed a raw aggregate. --json can never reach here (rejectUnusableFlags
+ * refuses the combination first) and --no-open beats --open, exactly as it does for `orangu report`.
+ * The default name carries the scope and a hash of the scope label and the aggregate clock, so two
+ * repositories never collide and a re-run never overwrites the file a browser still has open.
+ */
+async function writeAggregateHtml(scope: 'repo' | 'global', a: PreparedAggregate, flags: Record<string, string | boolean>): Promise<void> {
+  const open = flagBool(flags, 'open') && !flagBool(flags, 'no-open')
+  if (flags['html'] === undefined && !open) return
+  const named = flagStr(flags, 'html')
+  const stamp = createHash('sha256').update(`${a.scope}\n${a.generatedAt}`).digest('hex').slice(0, 8)
+  const path = named ? resolve(named) : join(tmpdir(), `orangu-${scope}-${stamp}.html`)
+  // includeText mirrors what survived prepareAggregateForOutput, so the client's "text hidden" note is true
+  const includeText = flagBool(flags, 'no-redact') || flagBool(flags, 'include-text')
+  const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText })
+  await writePrivateOutput(path, html)
+  if (open) openInBrowser(path)
+  if (!flagBool(flags, 'quiet')) {
+    process.stderr.write(row(err, 'report', path, { raw: true }) + (open ? paint(err, 'dim', '  (opened)') : '') + '\n')
+  }
 }
 
 function printAggregate(a: ReturnType<typeof aggregate>): void {
@@ -432,7 +477,7 @@ function printAggregate(a: ReturnType<typeof aggregate>): void {
   }
   process.stdout.write('\n' + paint(out, 'bold', '  heaviest sessions (by tokens)\n'))
   for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, 'dim', s.title ? s.title.slice(0, 50) : '(title hidden; use --include-text)')}\n`)
-  process.stdout.write(paint(out, 'dim', `\n  add --json for the full machine-readable aggregate\n`))
+  process.stdout.write(paint(out, 'dim', `\n  add --open for the HTML report, --json for the full machine-readable aggregate\n`))
 }
 
 async function cmdServe(flags: Record<string, string | boolean>): Promise<void> {
@@ -503,7 +548,8 @@ ${paint(out, 'bold', 'flags')}
   -o, --out <file>       write the report/JSON here (default: temp dir)
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
-  --open / --no-open     open (or don't) the report in a browser
+  --html <file>          repo/global: write the aggregate HTML report here
+  --open / --no-open     open (or don't) the HTML report (report, repo/global)
   --no-redact            keep secrets/paths in the output (default: redacted)
   --slim                 with analyze --json: the slim projection LLMs read
   --include-text         keep prompt/result previews in report, analyze, watch,
@@ -553,8 +599,8 @@ async function main(): Promise<void> {
     if (flagBool(flags, 'json')) printHelp()
     else {
       const handled = await cmdDashboard(flags, {
-        showRepo: () => cmdAggregate('repo', undefined, flags),
-        showGlobal: () => cmdAggregate('global', undefined, flags),
+        showRepo: (o) => cmdAggregate('repo', undefined, { ...flags, ...o }),
+        showGlobal: (o) => cmdAggregate('global', undefined, { ...flags, ...o }),
         showSession: (id) => cmdReport(id, { ...flags, open: true }),
         browseSessions: () => pickSessions({ ...flags, global: true }),
         stdin: process.stdin,

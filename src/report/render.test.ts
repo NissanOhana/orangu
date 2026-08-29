@@ -2,8 +2,10 @@ import { readFileSync } from 'node:fs'
 import { describe, it, expect } from 'vitest'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
+import { aggregate } from '../analyze/aggregate.js'
+import { prepareAggregateForOutput } from '../cli/json-out.js'
 import { BRAND_ICON_ID } from './brand.js'
-import { renderReport, renderShell, safeJson } from './render.js'
+import { renderAggregateReport, renderReport, renderShell, safeJson } from './render.js'
 import { buildCanonicalSession, SessionBuilder } from '../../test/fixtures/session-builder.js'
 
 const CURRENT_BRAND_BYTES = readFileSync(new URL('../../design/brand/mascot-96.png', import.meta.url))
@@ -176,5 +178,89 @@ describe('renderShell (serve app shell)', () => {
     expect(head).toContain(CURRENT_BRAND_DATA_URI)
     expect(html.split(CURRENT_BRAND_DATA_URI)).toHaveLength(2)
     expect(/<link\b/i.test(html)).toBe(false)
+  })
+})
+
+const CSP_FILE =
+  "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"
+
+/** The one confidentiality boundary the aggregate report may cross: prepareAggregateForOutput. */
+async function preparedAggregate(scopeLabel: string, flags: Record<string, string | boolean> = {}) {
+  const b = buildCanonicalSession()
+  const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+  const a = analyzeSession(s, { version: 'test', now: 0 })
+  return prepareAggregateForOutput(aggregate([a], scopeLabel, 1_700_000_000_000), flags)
+}
+
+function embedded(html: string): Record<string, unknown> {
+  const start = html.indexOf('id="orangu-data">') + 'id="orangu-data">'.length
+  return JSON.parse(html.slice(start, html.indexOf('</script>', start)))
+}
+
+describe('renderAggregateReport (repo/global HTML)', () => {
+  it('emits the same offline document shell as renderReport: the file CSP, no link tag, no remote origin', async () => {
+    const a = await preparedAggregate('repo demo')
+    const { html } = renderAggregateReport(a, { scope: 'repo', scopeLabel: a.scope, includeText: false })
+    expect(html.startsWith('<!doctype html>')).toBe(true)
+    expect(html).toContain(`content="${CSP_FILE}"`)
+    expect(/<link\b/i.test(html)).toBe(false)
+    expect(html).toContain(`l.id="${BRAND_ICON_ID}"`)
+    expect(html).toContain('<style>')
+    expect(html).toContain('window.__ORANGU__')
+    const body = html.slice(html.indexOf('</head>'))
+    expect(/https?:\/\/(?!localhost)/.test(body)).toBe(false)
+    expect(/\bfetch\s*\(/.test(html)).toBe(false)
+    expect(/EventSource/.test(html)).toBe(false)
+  })
+
+  it('embeds AppData v1 with no session, no session rows, and the scope aggregate', async () => {
+    const a = await preparedAggregate('repo demo')
+    const { html } = renderAggregateReport(a, { scope: 'repo', scopeLabel: a.scope, includeText: false })
+    const data = embedded(html) as {
+      v: string
+      mode: string
+      session?: unknown
+      selectedId?: string
+      sessions: unknown[]
+      aggregates: { repo?: { scope: string }; global?: unknown }
+      suggestions: unknown[]
+      capabilities: Record<string, boolean>
+    }
+    expect(data.v).toBe('1')
+    expect(data.mode).toBe('file')
+    expect(data.session).toBeUndefined()
+    expect(data.selectedId).toBeUndefined()
+    expect(data.sessions).toEqual([])
+    expect(data.suggestions).toEqual([])
+    expect(data.aggregates.global).toBeUndefined()
+    expect(data.aggregates.repo?.scope).toBe('repo demo')
+    expect(data.capabilities).toEqual({ live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false })
+  })
+
+  it('keys the aggregate under the scope it was rendered for', async () => {
+    const a = await preparedAggregate('global (1 root)')
+    const { html } = renderAggregateReport(a, { scope: 'global', scopeLabel: a.scope, includeText: true })
+    const data = embedded(html) as { aggregates: { repo?: unknown; global?: { sessionCount: number } }; capabilities: { includeText: boolean } }
+    expect(data.aggregates.repo).toBeUndefined()
+    expect(data.aggregates.global?.sessionCount).toBe(1)
+    expect(data.capabilities.includeText).toBe(true)
+  })
+
+  it('titles the browser tab with the scope label, escaped, and lets the caller override it', async () => {
+    const a = await preparedAggregate('repo <demo>')
+    const { html } = renderAggregateReport(a, { scope: 'repo', scopeLabel: a.scope, includeText: false })
+    expect(/<title>([^<]*)<\/title>/.exec(html)?.[1]).toBe('orangu · repo &lt;demo&gt;')
+    const forced = renderAggregateReport(a, { scope: 'repo', scopeLabel: a.scope, includeText: false, title: 'orangu · pinned' })
+    expect(/<title>([^<]*)<\/title>/.exec(forced.html)?.[1]).toBe('orangu · pinned')
+  })
+
+  it('escapes an aggregate that carries a script-closing sequence so it cannot break out of the data block', async () => {
+    const a = await preparedAggregate('repo </script><script>alert(1)</script>')
+    const { html } = renderAggregateReport(a, { scope: 'repo', scopeLabel: a.scope, includeText: true })
+    const start = html.indexOf('id="orangu-data">') + 'id="orangu-data">'.length
+    const block = html.slice(start, html.indexOf('</script>', start))
+    expect(block.includes('<')).toBe(false)
+    expect(block).toContain('\\u003c')
+    expect(embedded(html).aggregates).toBeDefined()
   })
 })

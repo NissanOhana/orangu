@@ -52,6 +52,10 @@ npx orangu harness         # what your config declares vs what your sessions use
 Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare
 `orangu` keeps the compact latest-session summary instead of waiting for input.
 
+The repo and global choices open the same self-contained HTML report for a whole scope. From the
+command line, `orangu repo --html <file>` writes it where you say and `--open` writes it to the
+temp directory and hands it to your browser; `--json` stays a side-effect-free machine read.
+
 Node.js 20 or newer. Zero runtime dependencies. More commands, inputs, and limits are in the [usage guide](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md).
 
 ## The improve loop
@@ -175,8 +179,8 @@ node dist/orangu.js report
 | `orangu watch [selector]` | Refresh one report while its session grows |
 | `orangu serve` | Run the capability-protected local app on `127.0.0.1` |
 | `orangu feedback` | Open the isolated, capability-protected localhost beta-feedback form |
-| `orangu repo` | Aggregate supported sessions for the current repository |
-| `orangu global` | Aggregate supported sessions across configured roots |
+| `orangu repo` | Aggregate supported sessions for the current repository (`--html`/`--open` for the report) |
+| `orangu global` | Aggregate supported sessions across configured roots (`--html`/`--open` for the report) |
 | `orangu evidence <input>` | Emit the bounded, always-redacted evidence a skill reads |
 | `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
 | `orangu harness` | Compare declared harness configuration with observed use |
@@ -185,6 +189,8 @@ node dist/orangu.js report
 A session selector can be `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`: the session Claude Code is running orangu from, resolved from the Claude Code environment and never guessed silently (a cwd-based guess says so; outside Claude Code it is an error). `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`); giving both the positional and the flag with different values is an error.
 
 On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker; currently open Claude Code sessions appear underneath as direct report shortcuts. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. A pipe, CI, `--plain`, `--quiet`, or an explicit scope/session flag keeps the compact latest-session behavior and never waits for input.
+
+`orangu repo` and `orangu global` print their answer to stdout. `--html <file>` also writes that scope as one self-contained HTML report, and `--open` writes it into the temp directory as `orangu-<scope>-<hash>.html` and hands it to your browser, so a re-run never overwrites a file a browser still has open. The dashboard's repository and global choices ask for that report; `--no-open` suppresses it. Both flags are refused with `--json`, which is a machine read with no side effect, and `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report.
 
 `orangu pick` lists sessions running first (title, project, age, size), moves with the arrow keys, `j`/`k`, or a digit, opens the chosen report on Enter, and cancels on `q`, Esc, or Ctrl-C with the terminal restored. Without a terminal, in CI, or with `--plain` it prints a numbered list and the `orangu report <id>` hint; `--json` prints the array (`[]` on an empty home, still exiting 1 because the chooser had nothing to choose).
 

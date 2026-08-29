@@ -48,6 +48,7 @@ export const KNOWN_FLAGS = new Set([
   ...SHORT_VALUE_FLAGS,
   'h',
   'out',
+  'html',
   'root',
   'config',
   'cwd',

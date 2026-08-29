@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseArgs, flagStr, flagBool } from './args.js'
+import { parseArgs, flagStr, flagBool, unknownFlags } from './args.js'
 
 describe('parseArgs', () => {
   it('parses command, positionals, --key value, --key=value, --bool, -x', () => {
@@ -56,5 +56,20 @@ describe('suggest/estimate flags ', () => {
     expect(p.flags['set']).toBe('sg_abc')
     expect(p.positionals).toEqual(['proposed'])
     expect(p.flags['proposal']).toBe('/tmp/p.md')
+  })
+})
+
+describe('--html (the aggregate report file)', () => {
+  it('takes the next token as its path and is a known flag, so a typo still fails', () => {
+    const p = parseArgs(['repo', '--html', '/tmp/repo.html'])
+    expect(flagStr(p.flags, 'html')).toBe('/tmp/repo.html')
+    expect(p.positionals).toEqual([])
+    expect(unknownFlags(p.flags)).toEqual([])
+    // the typo is the whole point of KNOWN_FLAGS: an ignored --htlm is a report that never appears
+    expect(unknownFlags(parseArgs(['repo', '--htlm', '/tmp/repo.html']).flags)).toEqual(['--htlm'])
+  })
+  it('is boolean-shaped when no path follows, so --html alone still asks for a report', () => {
+    expect(parseArgs(['repo', '--html']).flags['html']).toBe(true)
+    expect(unknownFlags(parseArgs(['repo', '--html']).flags)).toEqual([])
   })
 })

@@ -207,6 +207,26 @@ describe('cmdDashboard', () => {
     expect(session.showSession).toHaveBeenCalledWith(home.liveId)
   })
 
+  it('asks both scope reports for their HTML: choosing one is an explicit request to see it', async () => {
+    const { root, cwd } = await fixture()
+
+    const repo = deps(cwd)
+    const repoRun = cmdDashboard({ root }, repo)
+    await firstFrame(repo.stdout)
+    repo.stdin.emit('data', '\r')
+    await repoRun
+    expect(repo.showRepo).toHaveBeenCalledWith({ open: true })
+
+    const global = deps(cwd)
+    const globalRun = cmdDashboard({ root }, global)
+    await firstFrame(global.stdout)
+    global.stdin.emit('data', '2')
+    global.stdin.emit('data', '\r')
+    await globalRun
+    expect(global.showGlobal).toHaveBeenCalledWith({ open: true })
+    expect(global.showRepo).not.toHaveBeenCalled()
+  })
+
   it('returns false without reading or waiting when a dashboard is not safe', async () => {
     const d = deps('/repo')
     d.stdin.isTTY = false

@@ -43,6 +43,10 @@ npx orangu harness         # what your config declares vs what your sessions use
 Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare
 `orangu` keeps the compact latest-session summary instead of waiting for input.
 
+The repo and global choices open the same self-contained HTML report for a whole scope. From the
+command line, `orangu repo --html <file>` writes it where you say and `--open` writes it to the
+temp directory and hands it to your browser; `--json` stays a side-effect-free machine read.
+
 Node.js 20 or newer. Zero runtime dependencies. More commands, inputs, and limits are in the [usage guide](docs/USAGE.md).
 
 ## The improve loop
