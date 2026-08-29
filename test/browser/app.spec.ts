@@ -198,3 +198,46 @@ test('the Repo hero CTA keeps the reader in the theme and audience they are in',
   await expect(page.locator('.eyebrow', { hasText: 'Whole-harness review' })).toBeVisible()
   expect(errors).toEqual([])
 })
+
+/**
+ * A click used to be followed by nothing at all until the whole screen had been built in one task:
+ * measured at 304 ms of blocked thread on a 50-turn Timeline, with the DOM swap as the first thing
+ * the reader ever saw. The shell now marks the region busy and yields a painted frame first. A
+ * MutationObserver installed before the app boots is what makes that provable: polling for a state
+ * that lasts one frame is a race, but an observer sees every attribute flip in order.
+ */
+test('a sidebar click is acknowledged before the new screen is built', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.addInitScript(() => {
+    const w = window as unknown as { __busyMarks: number }
+    w.__busyMarks = 0
+    new MutationObserver((records) => {
+      for (const record of records) {
+        const target = record.target as HTMLElement
+        if (target.classList?.contains('main') && target.getAttribute('aria-busy') === 'true') w.__busyMarks++
+      }
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ['aria-busy'] })
+  })
+  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+  expect(await page.evaluate(() => (window as unknown as { __busyMarks: number }).__busyMarks)).toBe(0)
+
+  await page.locator('nav[aria-label="Report"] a', { hasText: 'Timeline' }).first().click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Timeline' })).toBeVisible()
+  // the region was marked busy on the way, and the region that replaced it is not born busy
+  expect(await page.evaluate(() => (window as unknown as { __busyMarks: number }).__busyMarks)).toBeGreaterThan(0)
+  await expect(page.locator('main.main')).not.toHaveAttribute('aria-busy', 'true')
+
+  // and the mark actually paints something. It has to be fully opaque with no delay: a blocked build
+  // produces no further frames, so anything not visible in the one yielded frame is never seen.
+  const painted = await page.evaluate(() => {
+    const main = document.querySelector('main.main')!
+    main.setAttribute('aria-busy', 'true')
+    const bar = getComputedStyle(main, '::after')
+    const seen = { name: bar.animationName, delay: bar.animationDelay, opacity: bar.opacity, height: bar.height, position: bar.position, cursor: getComputedStyle(main).cursor }
+    main.removeAttribute('aria-busy')
+    return seen
+  })
+  expect(painted).toEqual({ name: 'o-busy', delay: '0s', opacity: '1', height: '2px', position: 'fixed', cursor: 'progress' })
+  expect(errors).toEqual([])
+})

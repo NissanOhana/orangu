@@ -61,6 +61,16 @@ nav a.navitem .hint { margin-left: auto; font-size: 11px; color: var(--ink3); fo
 
 .main { flex: 1; overflow-y: auto; background: var(--bg); }
 .page { max-width: 1080px; margin: 0 auto; padding: 22px 28px 64px; }
+/* The shell marks .main busy and yields one painted frame before a long screen build blocks the
+   thread, so a click is acknowledged instead of freezing. The bar carries no animation-delay and no
+   fade on purpose: a blocked build produces no further frames, so whatever is not visible in that
+   one yielded frame is never seen at all. Not flashing on a fast screen is decided in app.ts, which
+   only marks a screen busy when that screen measured slow. Decorative only (--accent is never text
+   here); aria-busy is the part a screen reader is told about. */
+.main[aria-busy="true"] { cursor: progress; }
+.main[aria-busy="true"]::after { content: ""; position: fixed; inset: 0 0 auto; height: 2px; background: var(--accent); transform-origin: left; animation: o-busy 2.4s ease-out forwards; }
+@keyframes o-busy { from { transform: scaleX(.08); } to { transform: scaleX(.92); } }
+@media (prefers-reduced-motion: reduce) { .main[aria-busy="true"]::after { animation: none; transform: scaleX(.35); } }
 .sample-note { border: 1px solid var(--border); border-radius: 9px; background: var(--accent-weak); color: var(--ink2); padding: 9px 12px; margin-bottom: 14px; font-size: 12.5px; }
 .sample-note b { color: var(--accent-ink); }
 .page-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 22px; }
