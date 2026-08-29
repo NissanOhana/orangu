@@ -96,13 +96,17 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
       dot: 'pulse',
     })
 
-  // No session, no session group: app.ts drops an empty group, so an aggregate report hides the whole
-  // "Observe this session" block instead of offering five links that can only answer "no session".
+  // A file about a scope has no session group: app.ts drops an empty group, so an aggregate report
+  // hides the whole "Observe this session" block instead of offering five links that can only answer
+  // "no session". The gate is fileScope, the same answer defaultScreen routes on, so the group and the
+  // landing screen can never contradict each other. It is deliberately not "no session": serve can
+  // bootstrap with none (an empty registry, or a first analysis that throws) and never write one back,
+  // and its pane fills in from ctx.a, so subtracting there would strip the group for the whole page.
   const sessionItems: NavItem[] = []
-  if (data.session) {
+  if (fileScope(data) === undefined) {
     sessionItems.push({ id: 'overview', label: 'Overview', screen: 'overview' }, { id: 'timeline', label: 'Timeline', screen: 'timeline' }, { id: 'tools', label: 'Tools & calls', screen: 'tools' })
     if (audience === 'dev') {
-      if (data.session.agents.runs.length > 0) sessionItems.push({ id: 'agents', label: 'Agents', screen: 'agents' })
+      if ((data.session?.agents.runs.length ?? 0) > 0) sessionItems.push({ id: 'agents', label: 'Agents', screen: 'agents' })
       sessionItems.push({ id: 'context', label: 'Context & tokens', screen: 'context' })
       sessionItems.push({ id: 'coverage', label: 'Coverage', screen: 'coverage' })
     }
