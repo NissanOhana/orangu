@@ -27,8 +27,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-function fileData(scope: 'repo' | 'global', sessionCount: number): AppData {
-  const agg = { scope, sessionCount, sessions: [], crossFindings: [], topReReadFiles: [], recurringErrors: [], topSessions: [] } as unknown as Aggregate
+function fileData(scope: 'repo' | 'global', sessionCount: number, label: string = scope): AppData {
+  const agg = { scope: label, sessionCount, sessions: [], crossFindings: [], topReReadFiles: [], recurringErrors: [], topSessions: [] } as unknown as Aggregate
   return {
     v: '1', mode: 'file', version: 'test', generatedAt: 0,
     capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false },
@@ -45,9 +45,14 @@ describe('the aggregate report seam', () => {
     expect(onLoaded).not.toHaveBeenCalled()
   })
 
-  it('names the scope and its session count in the sidebar, never a session id', () => {
-    expect(aggUi.pickerHtml(fileData('repo', 3), undefined)).toBe('<div class="sid">repo · 3 sessions</div>')
-    expect(aggUi.pickerHtml(fileData('global', 1), undefined)).toBe('<div class="sid">global · 1 session</div>')
+  it('names the scope label the aggregate carries and its session count, never a session id', () => {
+    // the label is the aggregate's own scope string, already redacted by the CLI before it was embedded
+    expect(aggUi.pickerHtml(fileData('repo', 103, 'repo orangu'), undefined)).toBe('<div class="sid">repo orangu · 103 sessions</div>')
+    expect(aggUi.pickerHtml(fileData('global', 1, 'global'), undefined)).toBe('<div class="sid">global · 1 sessions</div>')
+  })
+
+  it('escapes a scope label rather than trusting a project name to be markup-free', () => {
+    expect(aggUi.pickerHtml(fileData('repo', 2, 'repo <b>x</b>'), undefined)).toBe('<div class="sid">repo &lt;b&gt;x&lt;/b&gt; · 2 sessions</div>')
   })
 
   it('shows the designed empty state for the harness, which has no file form, and no Overview card', () => {

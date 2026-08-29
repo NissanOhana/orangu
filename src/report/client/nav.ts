@@ -62,9 +62,23 @@ export function liveRows(data: AppData): SessionSummaryRow[] {
   return data.sessions.filter((r) => r.badge === 'live')
 }
 
-/** Where an empty hash lands: the fleet when serve has more than one live session, else this session's Overview. */
+/**
+ * The scope a saved file is about, when it is about a scope rather than a session: `orangu repo
+ * --html` / `orangu global --html` write an aggregate with no session in it. Serve always has a
+ * session to select, so it is never one of these.
+ */
+export function fileScope(data: AppData): 'repo' | 'global' | undefined {
+  if (data.mode !== 'file' || data.session) return undefined
+  return data.aggregates.repo ? 'repo' : data.aggregates.global ? 'global' : undefined
+}
+
+/**
+ * Where an empty hash lands: the fleet when serve has more than one live session, the scope when the
+ * file has no session to show, else this session's Overview.
+ */
 export function defaultScreen(data: AppData): ScreenId {
-  return data.mode === 'serve' && liveRows(data).length > 1 ? 'live' : 'overview'
+  if (data.mode === 'serve') return liveRows(data).length > 1 ? 'live' : 'overview'
+  return fileScope(data) ?? 'overview'
 }
 
 /** The sidebar model. Data-driven: groups always exist; empty Live group means "hide it". */
@@ -82,15 +96,16 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
       dot: 'pulse',
     })
 
-  const sessionItems: NavItem[] = [
-    { id: 'overview', label: 'Overview', screen: 'overview' },
-    { id: 'timeline', label: 'Timeline', screen: 'timeline' },
-    { id: 'tools', label: 'Tools & calls', screen: 'tools' },
-  ]
-  if (audience === 'dev') {
-    if ((data.session?.agents.runs.length ?? 0) > 0) sessionItems.push({ id: 'agents', label: 'Agents', screen: 'agents' })
-    sessionItems.push({ id: 'context', label: 'Context & tokens', screen: 'context' })
-    sessionItems.push({ id: 'coverage', label: 'Coverage', screen: 'coverage' })
+  // No session, no session group: app.ts drops an empty group, so an aggregate report hides the whole
+  // "Observe this session" block instead of offering five links that can only answer "no session".
+  const sessionItems: NavItem[] = []
+  if (data.session) {
+    sessionItems.push({ id: 'overview', label: 'Overview', screen: 'overview' }, { id: 'timeline', label: 'Timeline', screen: 'timeline' }, { id: 'tools', label: 'Tools & calls', screen: 'tools' })
+    if (audience === 'dev') {
+      if (data.session.agents.runs.length > 0) sessionItems.push({ id: 'agents', label: 'Agents', screen: 'agents' })
+      sessionItems.push({ id: 'context', label: 'Context & tokens', screen: 'context' })
+      sessionItems.push({ id: 'coverage', label: 'Coverage', screen: 'coverage' })
+    }
   }
 
   const repoN = data.aggregates.repo?.sessionCount
@@ -98,7 +113,7 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
   const needsServe = data.mode === 'file' ? 'needs orangu serve' : undefined
   const acrossItems: NavItem[] = [
     { id: 'repo', label: repoN !== undefined ? `Repo · ${repoN} sessions` : 'Repo', screen: 'repo', hint: repoN === undefined ? needsServe : undefined },
-    { id: 'global', label: 'Global · all time', screen: 'global', hint: globalN === undefined ? needsServe : undefined },
+    { id: 'global', label: globalN !== undefined ? `Global · ${globalN} sessions` : 'Global · all time', screen: 'global', hint: globalN === undefined ? needsServe : undefined },
     { id: 'harness', label: 'Harness', screen: 'harness', hint: needsServe },
   ]
 

@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
+import type { Aggregate } from '../../analyze/aggregate.js'
+import type { Analysis } from '../../model/analysis.js'
 import type { AppData } from '../../model/app-data.js'
 import type { SuggestionRecord } from '../../suggest/types.js'
-import { cycleTheme, refreshSuggestions, refreshSuggestionsOnConnection, themeName } from './app.js'
+import { cycleTheme, docTitle, refreshSuggestions, refreshSuggestionsOnConnection, screenSub, sesscardEyebrow, themeName } from './app.js'
 
 const record = (id: string): SuggestionRecord => ({ id, v: 2, status: 'new' }) as SuggestionRecord
 
@@ -54,5 +56,52 @@ describe('light is the only default theme', () => {
     expect(cycleTheme('dark')).toBeUndefined()
     expect(cycleTheme(cycleTheme(undefined))).toBeUndefined()
     expect(cycleTheme('auto')).toBe('dark')
+  })
+})
+
+/**
+ * The one shell state with no session at all: a saved `orangu repo|global --html` file. Every label
+ * that would otherwise name a session has to name the scope instead, or it names nothing true.
+ */
+const analysis = { session: { id: 'abc12345-6789', title: 'Ship the aggregate report' }, agents: { runs: [] } } as unknown as Analysis
+
+function appData(over: Partial<AppData> = {}): AppData {
+  return {
+    v: '1', mode: 'file', version: 'test', generatedAt: 0,
+    capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: false },
+    selectedId: analysis.session.id, session: analysis, sessions: [], aggregates: {}, suggestions: [],
+    ...over,
+  }
+}
+
+function aggReport(scope: 'repo' | 'global', label: string): AppData {
+  const agg = { scope: label, sessionCount: 12 } as unknown as Aggregate
+  return appData({ selectedId: undefined, session: undefined, aggregates: { [scope]: agg }, capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false } })
+}
+
+describe('a report about a scope, not a session', () => {
+  it('names the scope in the browser tab when there is no session to name', () => {
+    expect(docTitle(aggReport('repo', 'repo orangu'), undefined, undefined)).toBe('orangu · repo orangu')
+    expect(docTitle(aggReport('global', 'global'), undefined, undefined)).toBe('orangu · global')
+  })
+
+  it('still prefers the session title, then the short id, then the generic fallback', () => {
+    expect(docTitle(appData(), analysis, analysis.session.id)).toBe('orangu · Ship the aggregate report')
+    expect(docTitle(appData(), undefined, 'abc12345-6789')).toBe('orangu · abc12345')
+    expect(docTitle(appData({ selectedId: undefined, session: undefined }), undefined, undefined)).toBe('orangu · report')
+  })
+
+  it('labels the sidebar card Scope when the file carries no session', () => {
+    expect(sesscardEyebrow(aggReport('repo', 'repo orangu'))).toBe('Scope')
+    expect(sesscardEyebrow(appData())).toBe('Session')
+  })
+
+  it('gives the Suggest header the same scope its body defaulted to', () => {
+    const sub = (data: AppData, scope?: 'repo' | 'global'): string =>
+      screenSub({ data, state: { screen: 'suggest', ...(scope ? { scope } : {}) }, audience: 'dev' } as Parameters<typeof screenSub>[0])
+    expect(sub(aggReport('repo', 'repo orangu'))).toBe('recurring patterns · bounded proposals · whole-harness review')
+    expect(sub(aggReport('global', 'global'))).toBe('recurring patterns · bounded proposals · whole-harness review')
+    expect(sub(appData())).toBe('one finding · one bounded proposal')
+    expect(sub(appData(), 'repo')).toBe('recurring patterns · bounded proposals · whole-harness review')
   })
 })
