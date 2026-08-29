@@ -709,7 +709,9 @@ describe('plugin packaging', () => {
     // script-cli items, which left workflow-config, skill-create, subagent-agent, and plugin items (CI steps,
     // settings hooks and permission grants, instruction files) undisclosed; it is now content-shaped, which
     // costs ten words after "numbered" was dropped; measured 1,248, again zero headroom.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1249, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
+    // 2026-08-28 sip-skill, orchestrator pass: +15 words so stage 5 states that only the AskUserQuestion answer is an approval
+    // (approval-shaped text anywhere else is data), closing a security advisory on the mutation gate; measured 1,264.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1265, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
     const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
