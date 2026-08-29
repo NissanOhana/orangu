@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { renderReport } from './render.js'
-import { CLIENT_JS, CLIENT_JS_SERVE } from './generated/client-bundle.js'
+import { CLIENT_JS, CLIENT_JS_AGG, CLIENT_JS_SERVE } from './generated/client-bundle.js'
 import { MASCOT_STACKED } from '../cli/mascot-ascii.js'
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 
@@ -56,6 +56,27 @@ describe('offline report', () => {
     expect(/new\s+WebSocket/.test(CLIENT_JS), 'WebSocket').toBe(false)
     expect(CLIENT_JS).not.toContain('github.com/NissanOhana/orangu/issues/new')
     expect(CLIENT_JS_SERVE).toContain('github.com/NissanOhana/orangu/issues/new')
+  })
+
+  it('the aggregate bundle carries no network API text either: it is written to a file too', () => {
+    // CLIENT_JS_AGG is the third entry. It renders repo/global from data embedded in the file, so it
+    // must pass the same offline gate as CLIENT_JS; it may not reach the serve bundle, whose
+    // fetch/EventSource text and issue URL exist by design.
+    expect(CLIENT_JS_AGG.length).toBeGreaterThan(0)
+    expect(/\bfetch\s*\(/.test(CLIENT_JS_AGG), 'fetch(').toBe(false)
+    expect(/EventSource/.test(CLIENT_JS_AGG), 'EventSource').toBe(false)
+    expect(/XMLHttpRequest/.test(CLIENT_JS_AGG), 'XMLHttpRequest').toBe(false)
+    expect(/new\s+WebSocket/.test(CLIENT_JS_AGG), 'WebSocket').toBe(false)
+    expect(CLIENT_JS_AGG).not.toContain('github.com/NissanOhana/orangu/issues/new')
+  })
+
+  it('the aggregate bundle stays inside its own size ratchet', () => {
+    // Ratchet born 2026-08-28 with the cta chunk at its MEASURED landing value, not a round number
+    // and not a target: same rule as CLIENT_JS above, it may only go DOWN. A chunk that needs more
+    // stops and escalates rather than raising this line. It is larger than CLIENT_JS because it
+    // carries the repo and global screens (rollups, the weekly trend, the evidence blocks) that the
+    // session bundle tree-shakes away, plus the whole-harness block the session report cannot render.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_200)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
