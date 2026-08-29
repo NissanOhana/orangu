@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, lstatSync, mkdtempSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -94,6 +94,9 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     expect(h).toContain("serve's exported HTML")
     expect(h).toContain('hide previews in the loopback viewer')
     expect(h).not.toContain('--allow-claude')
+    // the aggregate report is activated: an undocumented flag is a dark surface
+    expect(h).toContain('--html <file>')
+    expect(h.split('\n').find((l) => l.includes('--open / --no-open'))).toContain('repo/global')
     // Hard-assert the suggest-layer verbs here because suggest.e2e.test.ts skips when they are
     // missing, so this unconditional test is the guard that keeps the registry wired and documented
     for (const f of ['orangu estimate', 'orangu harness', 'orangu suggest', '--slim']) expect(h).toContain(f)
@@ -205,6 +208,104 @@ syncBuiltinESMExports()
     }
     expect(out.sessionCount).toBe(home.sessions.length)
     expect(new Set(out.sessions.map((s) => s.id))).toEqual(new Set(home.sessions.map((s) => s.id)))
+  })
+
+  /** Default aggregate report names in the OS temp dir, so a test can prove none was written. */
+  const tempAggregateReports = () => readdirSync(tmpdir()).filter((f) => /^orangu-(repo|global)-[0-9a-f]{8}\.html$/.test(f))
+
+  it('repo --html writes one offline, redacted, private aggregate report', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-agg-html-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const secret = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
+    const secretPath = `/Users/test/Code/demo/private/${secret}.ts`
+    const builder = new SessionBuilder({ sessionId: home.liveId })
+    builder.userPrompt(`My key is ${secret}`)
+    for (let i = 0; i < 3; i++) builder.toolCall('Read', { file_path: secretPath }, `read ${i}`)
+    await writeFile(home.sessions[0]!.path, builder.toJsonl())
+    const base = ['repo', cwd, '--root', home.configDir, '--jobs', '1', '--no-cache', '--quiet']
+
+    const file = join(dir, 'repo.html')
+    const wrote = spawnSync('node', [CLI, ...base, '--html', file], { encoding: 'utf8' })
+    expect(wrote.status, wrote.stderr).toBe(0)
+    expect(existsSync(file)).toBe(true)
+
+    // the same gate the session report passes: no external reference, no network API, the CSP meta
+    const offline = spawnSync('node', [join(process.cwd(), 'scripts', 'assert-offline.mjs'), '--file', file], { encoding: 'utf8' })
+    expect(offline.status, offline.stdout + offline.stderr).toBe(0)
+
+    // the file crossed prepareAggregateForOutput, exactly like --out and --json
+    const html = readFileSync(file, 'utf8')
+    expect(html).not.toContain(secret)
+    expect(html).toContain('‹anthropic-key›')
+    expect(html).not.toContain('Users-test-Code')
+    expect(html).not.toContain('My key is')
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600)
+  })
+
+  it('the aggregate report is written only when asked: never for --json, never under --no-open', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-agg-none-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const base = ['repo', cwd, '--root', home.configDir, '--jobs', '1', '--no-cache', '--quiet']
+    const before = tempAggregateReports()
+
+    // AC1: the machine read is byte-for-byte the shipped one and has no side effect
+    const machine = spawnSync('node', [CLI, ...base, '--json'], { encoding: 'utf8' })
+    expect(machine.status, machine.stderr).toBe(0)
+    expect(JSON.parse(machine.stdout).sessionCount).toBe(home.sessions.length)
+    expect(tempAggregateReports()).toEqual(before)
+
+    // --no-open beats the dashboard's --open, so nothing is built and nothing is handed to a browser
+    const suppressed = spawnSync('node', [CLI, ...base, '--open', '--no-open'], { encoding: 'utf8' })
+    expect(suppressed.status, suppressed.stderr).toBe(0)
+    expect(tempAggregateReports()).toEqual(before)
+  })
+
+  it('--html with no path names the file from the scope and the aggregate clock, in the temp dir', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-agg-default-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const before = new Set(tempAggregateReports())
+    const r = spawnSync('node', [CLI, 'repo', cwd, '--root', home.configDir, '--jobs', '1', '--no-cache', '--html'], { encoding: 'utf8' })
+    expect(r.status, r.stderr).toBe(0)
+    const written = tempAggregateReports().filter((f) => !before.has(f))
+    expect(written).toHaveLength(1)
+    expect(written[0]).toMatch(/^orangu-repo-[0-9a-f]{8}\.html$/)
+    // the human footer names the file it just wrote
+    expect(r.stderr).toContain(written[0]!)
+    rmSync(join(tmpdir(), written[0]!))
+  })
+
+  it('--html and --open are side effects: both are refused with --json, before anything is written', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-agg-conflict-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const base = ['repo', cwd, '--root', home.configDir, '--jobs', '1', '--no-cache']
+    const file = join(dir, 'never.html')
+    for (const extra of [['--html', file], ['--open']]) {
+      const r = spawnSync('node', [CLI, ...base, '--json', ...extra], { encoding: 'utf8' })
+      expect(r.status, extra.join(' ')).not.toBe(0)
+      expect(r.stderr, extra.join(' ')).toContain('--json')
+      expect(r.stderr, extra.join(' ')).toContain(extra[0]!)
+      expect(r.stdout, extra.join(' ')).toBe('')
+    }
+    expect(existsSync(file)).toBe(false)
+  })
+
+  it('--html on a verb that never writes an aggregate fails instead of being ignored', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-agg-verb-'))
+    const home = await makeFixtureHome(dir)
+    const file = join(dir, 'never.html')
+    const r = spawnSync('node', [CLI, 'analyze', home.endedId, '--root', home.configDir, '--no-cache', '--html', file], { encoding: 'utf8' })
+    expect(r.status, r.stderr).not.toBe(0)
+    expect(r.stderr).toContain('--html')
+    expect(r.stderr).toContain('orangu repo')
+    expect(existsSync(file)).toBe(false)
   })
 
   it('redacts aggregate stdout and --out by default while preserving --no-redact', async () => {

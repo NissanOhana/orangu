@@ -35,9 +35,18 @@ type DashboardChoice =
   | { kind: 'browse' }
   | { kind: 'session'; row: PickRow }
 
+/**
+ * What a scope choice asks its command for. Choosing REPO or GLOBAL here is an explicit request to
+ * see the report, so the dashboard asks for the HTML one; main.ts folds this into the run's flags,
+ * where --no-open still wins.
+ */
+export interface ScopeReportRequest {
+  open: true
+}
+
 export interface DashboardDeps {
-  showRepo: () => Promise<void>
-  showGlobal: () => Promise<void>
+  showRepo: (request: ScopeReportRequest) => Promise<void>
+  showGlobal: (request: ScopeReportRequest) => Promise<void>
   showSession: (sessionId: string) => Promise<void>
   browseSessions: () => Promise<void>
   stdin: InputLike & { isTTY?: boolean }
@@ -164,9 +173,9 @@ export function dashboardFrame(
 async function runChoice(choice: DashboardChoice, deps: DashboardDeps): Promise<void> {
   switch (choice.kind) {
     case 'repo':
-      return deps.showRepo()
+      return deps.showRepo({ open: true })
     case 'global':
-      return deps.showGlobal()
+      return deps.showGlobal({ open: true })
     case 'browse':
       return deps.browseSessions()
     case 'session':

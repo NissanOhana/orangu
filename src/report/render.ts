@@ -15,6 +15,7 @@ import type { AppCapabilities } from '../model/app-data.js'
 import { APP_DATA_VERSION, type AppData, type SessionSummaryRow } from '../model/app-data.js'
 import { badgeFor } from '../serve/badge.js'
 import { redactAnalysis, type RedactOptions, type RedactionReport } from '../redact/redact.js'
+import type { PreparedAggregate } from '../cli/json-out.js'
 import type { FeedbackBootstrap } from '../feedback/diagnostics.js'
 
 export interface RenderOptions {
@@ -134,6 +135,69 @@ ${BRAND_ICON_SCRIPT}
 </body>
 </html>`
   return { html, redaction }
+}
+
+/**
+ * The aggregate client is the third esbuild entry (file bundle / serve bundle / aggregate bundle).
+ * Read through the namespace so a stale committed client-bundle.ts still typechecks, exactly as
+ * CLIENT_JS_SERVE is read below; `npm run build` regenerates it before anything runs.
+ */
+const CLIENT_JS_AGG: string = (bundle as { CLIENT_JS_AGG?: string }).CLIENT_JS_AGG ?? ''
+
+export interface AggregateRenderOptions {
+  /** which aggregate this file carries; the client lands on that screen */
+  scope: 'repo' | 'global'
+  /** the aggregate's own label, already past the redaction boundary; the document title is built from it */
+  scopeLabel: string
+  /** whether transcript-derived text survived redaction, mirrored into capabilities for the client */
+  includeText: boolean
+  /** override the <title> (default: `orangu · <scopeLabel>`) */
+  title?: string
+}
+
+/**
+ * A repo/global aggregate as one self-contained HTML file: the same offline document shell as
+ * renderReport, the aggregate client bundle, and no session.
+ *
+ * The parameter is a PreparedAggregate, so the type system, not a convention, records that the one
+ * confidentiality boundary (prepareAggregateForOutput) has already been crossed. This function
+ * never redacts and must never be handed a raw Aggregate.
+ */
+export function renderAggregateReport(a: PreparedAggregate, o: AggregateRenderOptions): RenderResult {
+  const appData: AppData = {
+    v: APP_DATA_VERSION,
+    mode: 'file',
+    version: BUILD_VERSION,
+    generatedAt: a.generatedAt,
+    capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: o.includeText },
+    selectedId: undefined,
+    session: undefined,
+    sessions: [],
+    aggregates: { [o.scope]: a },
+    suggestions: [],
+  }
+  // Built from the prepared (redacted) label, never a raw scope string, so the tab cannot leak a path.
+  const title = escapeHtml(o.title ?? `orangu · ${o.scopeLabel}`)
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Content-Security-Policy" content="${CSP}"/>
+<meta name="generator" content="orangu ${escapeHtml(BUILD_VERSION)}"/>
+<meta name="robots" content="noindex"/>
+<title>${title}</title>
+${BRAND_ICON_SCRIPT}
+<style>${CLIENT_CSS}</style>
+</head>
+<body data-density="comfortable">
+<div id="app" class="app"></div>
+<script type="application/json" id="orangu-data">${safeJson(appData)}</script>
+<script>window.__ORANGU__=JSON.parse(document.getElementById('orangu-data').textContent);</script>
+<script>${CLIENT_JS_AGG}</script>
+</body>
+</html>`
+  return { html }
 }
 
 function escapeHtml(s: string): string {
