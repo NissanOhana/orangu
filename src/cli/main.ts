@@ -393,7 +393,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
   const agg = aggregate(analyses, scopeLabel, Date.now())
   if (failed) agg.scope += ` (${failed} unreadable skipped)`
   const outputAggregate = prepareAggregateForOutput(agg, flags)
-  await writeAggregateHtml(scope, outputAggregate, flags)
+  const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags)
   const outFile = flagStr(flags, 'o', 'out')
   if (outFile) {
     await writePrivateOutput(resolve(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }))
@@ -407,7 +407,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
     process.stdout.write(renderPreparedAggregateJson(outputAggregate, flags))
     return
   }
-  printAggregate(outputAggregate)
+  printAggregate(outputAggregate, wroteHtml)
   if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
 }
 
@@ -420,9 +420,9 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
  * The default name carries the scope and a hash of the scope label and the aggregate clock, so two
  * repositories never collide and a re-run never overwrites the file a browser still has open.
  */
-async function writeAggregateHtml(scope: 'repo' | 'global', a: PreparedAggregate, flags: Record<string, string | boolean>): Promise<void> {
+async function writeAggregateHtml(scope: 'repo' | 'global', a: PreparedAggregate, flags: Record<string, string | boolean>): Promise<boolean> {
   const open = flagBool(flags, 'open') && !flagBool(flags, 'no-open')
-  if (flags['html'] === undefined && !open) return
+  if (flags['html'] === undefined && !open) return false
   const named = flagStr(flags, 'html')
   const stamp = createHash('sha256').update(`${a.scope}\n${a.generatedAt}`).digest('hex').slice(0, 8)
   const path = named ? resolve(named) : join(tmpdir(), `orangu-${scope}-${stamp}.html`)
@@ -434,9 +434,10 @@ async function writeAggregateHtml(scope: 'repo' | 'global', a: PreparedAggregate
   if (!flagBool(flags, 'quiet')) {
     process.stderr.write(row(err, 'report', path, { raw: true }) + (open ? paint(err, 'dim', '  (opened)') : '') + '\n')
   }
+  return true
 }
 
-function printAggregate(a: ReturnType<typeof aggregate>): void {
+function printAggregate(a: ReturnType<typeof aggregate>, wroteHtml: boolean): void {
   process.stdout.write('\n' + paint(out, ['bold', 'accent'], 'orangu') + '  ' + paint(out, 'bold', a.scope) + '\n')
   process.stdout.write(paint(out, 'dim', `  ${plural(a.sessionCount, 'session')}\n\n`))
   const line = (l: string, v: string) => process.stdout.write('  ' + l.padEnd(20) + v + '\n')
@@ -477,7 +478,10 @@ function printAggregate(a: ReturnType<typeof aggregate>): void {
   }
   process.stdout.write('\n' + paint(out, 'bold', '  heaviest sessions (by tokens)\n'))
   for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, 'dim', s.title ? s.title.slice(0, 50) : '(title hidden; use --include-text)')}\n`)
-  process.stdout.write(paint(out, 'dim', `\n  add --open for the HTML report, --json for the full machine-readable aggregate\n`))
+  // --open already did what it offers: once the report is written and handed to a browser, repeating
+  // the flag that wrote it is noise. The machine-readable half is still news either way.
+  const offer = wroteHtml ? '--json for the full machine-readable aggregate' : '--open for the HTML report, --json for the full machine-readable aggregate'
+  process.stdout.write(paint(out, 'dim', `\n  add ${offer}\n`))
 }
 
 async function cmdServe(flags: Record<string, string | boolean>): Promise<void> {

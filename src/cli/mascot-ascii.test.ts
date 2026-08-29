@@ -3,6 +3,7 @@
  * reviewing what the terminal draws. AC31-AC35, plus the tier rule the dashboard and --help share.
  */
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import * as clientMascot from '../report/client/mascot.js'
 import { MASCOT_MINI, MASCOT_STACKED, MASCOT_WIDE, mascotArt, mascotLines } from './mascot-ascii.js'
 import { displayWidth, stripAnsi, type Caps } from './tty.js'
@@ -118,6 +119,15 @@ describe('mascotLines', () => {
     expect(stripAnsi(lines.join('\n'))).toBe(
       MASCOT_WIDE.map((row) => ' '.repeat(Math.max(2, Math.floor((80 - 66) / 2))) + row).join('\n'),
     )
+  })
+
+  // A reader budgets a frame from this comment (dashboard.ts derives its chrome lines from the tier),
+  // so a tier description that does not match the shipped rows mis-sizes the frame.
+  it('describes its own three tiers the way it draws them', () => {
+    const doc = readFileSync(new URL('./mascot-ascii.ts', import.meta.url), 'utf8').split('*/')[0]!
+    expect(doc).toContain(`WIDE face + wordmark + tagline (${MASCOT_WIDE.length} rows)`)
+    expect(doc).toContain(`STACKED wordmark + tagline (${MASCOT_STACKED.length})`)
+    expect(doc).toContain(`MINI face + tagline (${MASCOT_MINI.length})`)
   })
 
   it('truncates rather than overflowing a terminal narrower than any tier', () => {

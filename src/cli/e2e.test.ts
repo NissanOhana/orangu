@@ -280,6 +280,27 @@ syncBuiltinESMExports()
     rmSync(join(tmpdir(), written[0]!))
   })
 
+  it('stops offering --open on stdout once the HTML report has been written', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-agg-hint-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const base = ['repo', cwd, '--root', home.configDir, '--jobs', '1', '--no-cache']
+
+    // nothing was written: the hint is how the reader learns the HTML report exists at all
+    const plain = spawnSync('node', [CLI, ...base], { encoding: 'utf8' })
+    expect(plain.status, plain.stderr).toBe(0)
+    expect(stripEscapes(plain.stdout)).toContain('add --open for the HTML report, --json for the full machine-readable aggregate')
+
+    // the report is already written and already open: offering the flag that wrote it is noise
+    const file = join(dir, 'repo.html')
+    const wrote = spawnSync('node', [CLI, ...base, '--html', file], { encoding: 'utf8' })
+    expect(wrote.status, wrote.stderr).toBe(0)
+    const hint = stripEscapes(wrote.stdout)
+    expect(hint).toContain('add --json for the full machine-readable aggregate')
+    expect(hint).not.toContain('--open')
+  })
+
   it('--html and --open are side effects: both are refused with --json, before anything is written', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-agg-conflict-'))
     const cwd = join(dir, 'project')

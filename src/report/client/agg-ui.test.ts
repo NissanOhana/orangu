@@ -56,9 +56,12 @@ describe('the aggregate report seam', () => {
   })
 
   it('shows the designed empty state for the harness, which has no file form, and no Overview card', () => {
-    aggUi.harnessView({} as Ctx)
+    aggUi.harnessView({ data: fileData('repo', 19, 'repo orangu') } as Ctx)
     expect(markup).toContain('Across-session views need orangu serve')
     expect(markup).toContain('compare your Claude Code config with what your sessions used')
+    // the file the reader is holding carries no session at all, so the hint may not claim one
+    expect(markup).toContain('This report carries one scope, not a session.')
+    expect(markup).not.toContain('carries one session')
     expect(aggUi.harnessCard({} as Parameters<typeof aggUi.harnessCard>[0], vi.fn(), '#harness')).toBe('')
   })
 

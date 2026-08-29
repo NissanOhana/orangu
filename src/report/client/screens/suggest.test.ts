@@ -363,15 +363,26 @@ describe('renderSuggest on a repo/global scope', () => {
     expect(markup).not.toContain('Whole-harness review')
   })
 
-  // AC22: a chip that cannot lead anywhere must say so, not silently do nothing when clicked.
+  // AC22: a chip that cannot lead anywhere must say so, not silently do nothing when clicked. The
+  // wording is mode-neutral because serve reaches the same branch: a bootstrapping app with an empty
+  // registry has no analysis yet while its sidebar still offers a picker, so "this report has no
+  // session" would be false there.
   it('disables the This session chip in a report that carries no session', () => {
     renderSuggest(scopeContext('repo'))
-    expect(markup).toContain('<button type="button" class="chip" aria-disabled="true" tabindex="-1" title="this report has no session" data-scope="session">This session</button>')
+    expect(markup).toContain('<button type="button" class="chip" aria-disabled="true" tabindex="-1" title="no session is selected" data-scope="session">This session</button>')
+    expect(markup).not.toContain('this report has no session')
+  })
+
+  it('says the same true thing in a served app that has not selected a session yet', () => {
+    const ctx = scopeContext('repo')
+    ctx.data.mode = 'serve'
+    renderSuggest(ctx)
+    expect(markup).toContain('title="no session is selected" data-scope="session"')
   })
 
   it('leaves the This session chip enabled when a session is present', () => {
     renderSuggest(context('file', []))
     expect(markup).toContain('data-scope="session">This session</button>')
-    expect(markup).not.toContain('this report has no session')
+    expect(markup).not.toContain('no session is selected')
   })
 })

@@ -33,8 +33,8 @@ function aggregateView(ctx: Ctx): HTMLElement {
   return ctx.state.screen === 'global' ? renderGlobal(ctx) : renderRepo(ctx)
 }
 
-function harnessView(): HTMLElement {
-  return h(`<section>${aggregateEmpty('harness')}</section>`)
+function harnessView(ctx: Ctx): HTMLElement {
+  return h(`<section>${aggregateEmpty('harness', ctx.data)}</section>`)
 }
 
 /** Unreachable: aggLoading is false on every screen because neither ensure* ever kicks a fetch. */

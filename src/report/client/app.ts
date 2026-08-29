@@ -347,7 +347,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
       ctx.aggLoading && serveUi
         ? serveUi.aggScreen()
         : aggregateScope
-          ? (serveUi ? (aggregateScope === 'harness' ? serveUi.harnessView(ctx) : serveUi.aggregateView(ctx)) : h(`<section>${aggregateEmpty(aggregateScope)}</section>`))
+          ? (serveUi ? (aggregateScope === 'harness' ? serveUi.harnessView(ctx) : serveUi.aggregateView(ctx)) : h(`<section>${aggregateEmpty(aggregateScope, d)}</section>`))
           : renderer(ctx)
     screenEl.classList.add('screen')
     screenEl.id = 'screen-' + state.screen
