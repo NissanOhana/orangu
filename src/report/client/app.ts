@@ -148,6 +148,19 @@ export async function refreshSuggestionsOnConnection(
   if (ev.type === 'connection' && ev.state === 'connected') await refreshSuggestions(d, ds, visible, rerender)
 }
 
+/**
+ * Light is the only default: dark exists solely under `data-theme="dark"`, never from the system
+ * colour scheme, so any hash value that is not `dark` reads as light.
+ */
+export function themeName(theme: string | undefined): 'light' | 'dark' {
+  return theme === 'dark' ? 'dark' : 'light'
+}
+
+/** The sidebar control toggles the two states; light clears `theme=` so its hash stays shareable. */
+export function cycleTheme(theme: string | undefined): string | undefined {
+  return themeName(theme) === 'dark' ? undefined : 'dark'
+}
+
 export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void> {
   const app = document.getElementById('app')
   if (!app) return
@@ -187,8 +200,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
 
   const applyTheme = (): void => {
     const root = document.documentElement
-    if (state.theme === 'dark') root.setAttribute('data-theme', 'dark')
-    else if (state.theme === 'light') root.setAttribute('data-theme', 'light')
+    if (themeName(state.theme) === 'dark') root.setAttribute('data-theme', 'dark')
     else root.removeAttribute('data-theme')
   }
 
@@ -256,16 +268,11 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
 <div class="sesscard"><div class="eyebrow">Session</div>${serveUi ? serveUi.pickerHtml(d, row) : `<div class="sid">${row ? esc(shortId(row.id)) + ' · ' + esc(row.projectSlug || row.source) : '–'}</div>`}</div>
 <div class="navwrap"><nav aria-label="Report">${nav}</nav></div>
 <div class="side-foot">
-<button class="themebtn" id="btn-theme">◐ theme · ${esc(state.theme ?? 'auto')}</button>
+<button class="themebtn" id="btn-theme">◐ theme · ${themeName(state.theme)}</button>
 <div class="note">${foot}</div>
 </div>
 </aside>`)
-    el.querySelector('#btn-theme')!.addEventListener('click', () => {
-      const order = ['auto', 'light', 'dark']
-      const cur = state.theme ?? 'auto'
-      const next = order[(order.indexOf(cur) + 1) % 3]!
-      go({ theme: next === 'auto' ? undefined : next })
-    })
+    el.querySelector('#btn-theme')!.addEventListener('click', () => go({ theme: cycleTheme(state.theme) }))
     serveUi?.wirePicker(el, go)
     return el
   }

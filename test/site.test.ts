@@ -550,6 +550,64 @@ describe('site/index.src.html (authored landing source)', () => {
     await exerciseCopy(false)
   })
 
+  it('defaults the theme to light, cycles two states, and round-trips the stored preference', () => {
+    const scripts = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)]
+    const interactions = scripts.at(-1)?.[1] ?? ''
+    const start = (stored: string | null) => {
+      let click: (() => void) | undefined
+      let saved = stored
+      let attr: string | null = 'never touched'
+      const attrs: Record<string, string> = {}
+      const label = { textContent: '' }
+      const button = {
+        addEventListener: (type: string, fn: () => void) => { if (type === 'click') click = fn },
+        setAttribute: (name: string, value: string) => { attrs[name] = value },
+      }
+      const document = {
+        documentElement: {
+          removeAttribute: () => { attr = null },
+          setAttribute: (_name: string, value: string) => { attr = value },
+        },
+        getElementById: (id: string) => id === 'themeBtn' ? button : label,
+        addEventListener: () => {},
+        createElement: () => ({}),
+        body: { appendChild: () => {} },
+      }
+      runInNewContext(interactions, {
+        document,
+        navigator: {},
+        // a viewer whose system asks for dark: after the cascade change it changes nothing
+        localStorage: { getItem: () => saved, setItem: (_key: string, value: string) => { saved = value } },
+        matchMedia: () => ({ matches: true }),
+        setTimeout: () => 1,
+      })
+      expect(click).toBeTypeOf('function')
+      return { click: click!, label, attrs, attr: () => attr, saved: () => saved }
+    }
+
+    const fresh = start(null)
+    expect(fresh.label.textContent).toBe('light')
+    expect(fresh.attr()).toBeNull()
+    expect(fresh.attrs['aria-label']).toBe('theme light, switch to dark')
+    fresh.click()
+    expect(fresh.label.textContent).toBe('dark')
+    expect(fresh.attr()).toBe('dark')
+    expect(fresh.saved()).toBe('dark')
+    expect(fresh.attrs['aria-label']).toBe('theme dark, switch to light')
+    fresh.click()
+    expect(fresh.label.textContent).toBe('light')
+    expect(fresh.attr()).toBeNull()
+    expect(fresh.saved()).toBe('light')
+
+    // a stored preference is restored, and the removed third state reads as light rather than
+    // printing a word the button can no longer reach
+    expect(start('dark').label.textContent).toBe('dark')
+    expect(start('light').attr()).toBeNull()
+    const legacy = start('system')
+    expect(legacy.label.textContent).toBe('light')
+    expect(legacy.attr()).toBeNull()
+  })
+
   it('uses work scenarios instead of profession cards', () => {
     const scenarios = src.match(/<section id="scenarios"[\s\S]*?<\/section>/)?.[0] ?? ''
     for (const title of ['Review delegated work', 'Diagnose a rough outcome', 'Improve a repeated workflow'])
@@ -680,13 +738,16 @@ describe('site/index.html (generated landing)', () => {
     expect(html).not.toContain('{{role:')
   })
 
-  it('keeps the inline triad and three-state theme cascade', () => {
+  it('keeps the inline triad and the two-state theme cascade', () => {
     expect(html).toContain('qtc-triad')
     expect(html).toContain('prefers-reduced-motion')
     expect(html).toContain('sort((a,b)=>a.z-b.z)')
     expect(html).toContain(':root[data-theme="dark"]')
-    expect(html).toContain('@media (prefers-color-scheme:dark)')
-    expect(html).toContain(':root:not([data-theme="light"])')
+    // Light is the only default: dark exists solely under the explicit attribute, so nothing in the
+    // generated page reads the system colour scheme, and the redraw listener that watched it is gone.
+    expect(html).not.toContain('@media (prefers-color-scheme:dark)')
+    expect(html).not.toContain(':root:not([data-theme="light"])')
+    expect(html).not.toContain('prefers-color-scheme')
   })
 
   it('references only approved public origins', () => {

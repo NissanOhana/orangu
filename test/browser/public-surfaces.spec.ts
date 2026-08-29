@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { readFileSync } from 'node:fs'
 import { APP_URL } from './app-url.js'
+import { paintedTheme, projectTheme, seedLandingTheme, withTheme } from './theme.js'
 
 const SITE = 'http://127.0.0.1:4173'
 const APP = APP_URL
@@ -73,6 +74,7 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
   await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: SITE })
+  await seedLandingTheme(page, info)
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Turn your AI history into actionable insights.')
@@ -132,7 +134,12 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await expect(demo.getByRole('tab', { name: 'Suggestions' })).toHaveAttribute('aria-selected', 'true')
   await expectNoHorizontalOverflow(page)
   await expect(page.locator('qtc-triad canvas')).toHaveCount(1)
-  expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(info.project.name.endsWith('dark'))
+  // The landing follows its stored preference, never the system one: the emulated preference is live
+  // and only the seeded value decides what paints, and the visible label names the state it is in.
+  expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(projectTheme(info) === 'dark')
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  await expect(page.locator('#themeLabel')).toHaveText(projectTheme(info))
+  await expect(page.locator('#themeBtn')).toHaveAccessibleName(new RegExp(`^theme ${projectTheme(info)},`))
   expect(errors).toEqual([])
 })
 
@@ -245,7 +252,7 @@ test('generated sample exposes outcome, timeline, subagent evidence, and both la
   page.on('request', (request) => {
     if (new URL(request.url()).origin !== 'http://127.0.0.1:4173') external.push(request.url())
   })
-  await page.goto(`${SITE}/sample.html#overview`, { waitUntil: 'domcontentloaded' })
+  await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByRole('note')).toContainText('Illustrative synthetic sample.')
   await expect(page.getByRole('note')).toContainText('made-up input')
@@ -269,7 +276,8 @@ test('generated sample exposes outcome, timeline, subagent evidence, and both la
   expect(actors.some((actor) => actor.trim() !== 'main')).toBe(true)
 
   await expectNoHorizontalOverflow(page)
-  expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(info.project.name.endsWith('dark'))
+  expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(projectTheme(info) === 'dark')
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
   expect(external).toEqual([])
   expect(errors).toEqual([])
 })

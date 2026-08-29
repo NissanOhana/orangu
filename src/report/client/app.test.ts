@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { AppData } from '../../model/app-data.js'
 import type { SuggestionRecord } from '../../suggest/types.js'
-import { refreshSuggestions, refreshSuggestionsOnConnection } from './app.js'
+import { cycleTheme, refreshSuggestions, refreshSuggestionsOnConnection, themeName } from './app.js'
 
 const record = (id: string): SuggestionRecord => ({ id, v: 2, status: 'new' }) as SuggestionRecord
 
@@ -38,5 +38,21 @@ describe('suggestion-updated refresh', () => {
     expect(data.suggestions.map((item) => item.id)).toEqual(['during-reconnect'])
     expect(suggestions).toHaveBeenCalledTimes(2)
     expect(rerender).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('light is the only default theme', () => {
+  it('reads every value but dark as light, so a legacy hash cannot resurrect a third state', () => {
+    expect(themeName('dark')).toBe('dark')
+    expect(themeName('light')).toBe('light')
+    expect(themeName(undefined)).toBe('light')
+    expect(themeName('auto')).toBe('light')
+  })
+
+  it('cycles exactly two states and clears the key on the default so the light hash stays clean', () => {
+    expect(cycleTheme(undefined)).toBe('dark')
+    expect(cycleTheme('dark')).toBeUndefined()
+    expect(cycleTheme(cycleTheme(undefined))).toBeUndefined()
+    expect(cycleTheme('auto')).toBe('dark')
   })
 })

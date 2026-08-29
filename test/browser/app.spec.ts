@@ -1,5 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, test, type Page, type TestInfo } from '@playwright/test'
 import { APP_URL } from './app-url.js'
+import { paintedTheme, projectTheme, withTheme } from './theme.js'
 
 const APP = APP_URL
 const APP_ORIGIN = new URL(APP).origin
@@ -14,8 +15,8 @@ function runtimeErrors(page: Page): string[] {
   return errors
 }
 
-async function openFirstSuggestion(page: Page): Promise<ReturnType<Page['locator']>> {
-  await page.goto(`${APP}/#suggest?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
+async function openFirstSuggestion(page: Page, info: TestInfo): Promise<ReturnType<Page['locator']>> {
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1, name: 'Improve the next outcome' })).toBeVisible()
   const row = page.locator('details.finding').first()
   await expect(row).toBeVisible()
@@ -37,7 +38,15 @@ test('localhost fixture is readable at the release viewport and theme', async ({
   await expect(page.getByRole('heading', { level: 1, name: 'Timeline' })).toBeVisible()
   await expect(page.locator('details.turn')).not.toHaveCount(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
-  expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(info.project.name.endsWith('dark'))
+  // Light is the only default: the emulated system preference is live and the app ignores it, so the
+  // dark projects have to ask for dark in the hash before anything paints dark.
+  expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(projectTheme(info) === 'dark')
+  expect(await paintedTheme(page)).toBe('light')
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBeNull()
+  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(await page.evaluate(() => document.documentElement.getAttribute('data-theme'))).toBe(projectTheme(info) === 'dark' ? 'dark' : null)
   expect(errors).toEqual([])
 })
 
@@ -62,10 +71,10 @@ test('localhost with no hash lands on the fleet when several sessions are live',
   expect(errors).toEqual([])
 })
 
-test('localhost creates only a copy handoff and never offers automatic model launch', async ({ page, context }) => {
+test('localhost creates only a copy handoff and never offers automatic model launch', async ({ page, context }, info) => {
   const errors = runtimeErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
-  const row = await openFirstSuggestion(page)
+  const row = await openFirstSuggestion(page, info)
   const posted = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/api/kickoff'))
   await row.getByRole('button', { name: 'Copy improve command' }).click()
   const request = await posted
@@ -81,7 +90,7 @@ test('localhost creates only a copy handoff and never offers automatic model lau
   expect(errors).toEqual([])
 })
 
-test('localhost saved proposals are escaped, status-distinct, responsive, and expose copy-only apply handoffs', async ({ page, context }) => {
+test('localhost saved proposals are escaped, status-distinct, responsive, and expose copy-only apply handoffs', async ({ page, context }, info) => {
   const errors = runtimeErrors(page)
   const proposedId = 'sg_0000000000c1'
   const verifiedId = 'sg_0000000000c2'
@@ -111,7 +120,7 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
     await route.fulfill({ response, json: body })
   })
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
-  await page.goto(`${APP}/#suggest?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
 
   const inbox = page.locator('.sg-inbox')
   await expect(inbox).toContainText('Saved proposals · 2')
@@ -137,30 +146,31 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
 // A8: the harness reaches the app. The fixture repo declares one idle skill and one session carries a
 // skill_listing attachment (app-server.ts), so the populated view renders: the idle card, the injected-
 // listings table (which must scroll inside its own container at 390 px), and the copy-only command.
-test('localhost #harness renders the populated harness view and the Overview carries its card', async ({ page }) => {
+test('localhost #harness renders the populated harness view and the Overview carries its card', async ({ page }, info) => {
   const errors = runtimeErrors(page)
-  await page.goto(`${APP}/#harness?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
+  await page.goto(withTheme(`${APP}/#harness?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1, name: 'Harness' })).toBeVisible()
   await expect(page.locator('.herotitle', { hasText: '1 of 1 skills never fired' })).toBeVisible({ timeout: 20_000 })
   await expect(page.locator('.scroll-x table.grid td.mono', { hasText: 'skill_listing' })).toBeVisible()
   await expect(page.locator('[data-copy=\'claude "/orangu:harness --scope repo"\']')).toBeVisible()
   await expect(page.getByText('No harness config found')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
-  await page.goto(`${APP}/#overview?s=${SESSION}`, { waitUntil: 'domcontentloaded' })
-  await expect(page.locator(`a.harness-card[href="#harness?s=${SESSION}"]`)).toBeVisible({ timeout: 20_000 })
+  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  // the card links through cleanHash, so it carries whatever theme the current view is in
+  await expect(page.locator(`a.harness-card[href="${withTheme(`#harness?s=${SESSION}`, info)}"]`)).toBeVisible({ timeout: 20_000 })
   await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'Harness' })).toBeVisible()
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   expect(errors).toEqual([])
 })
 
-test('repo whole-harness review is copy-only and never posts a kickoff', async ({ page, context }) => {
+test('repo whole-harness review is copy-only and never posts a kickoff', async ({ page, context }, info) => {
   const errors = runtimeErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   let kickoffPosts = 0
   page.on('request', (request) => {
     if (request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/api/kickoff')) kickoffPosts++
   })
-  await page.goto(`${APP}/#suggest?s=${SESSION}&scope=repo`, { waitUntil: 'domcontentloaded' })
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}&scope=repo`, info), { waitUntil: 'domcontentloaded' })
   await expect(page.getByText('Whole-harness review')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByText('claude "/orangu:harness --scope repo"')).toBeVisible()
   await page.getByRole('button', { name: 'Copy whole-harness review' }).click()
