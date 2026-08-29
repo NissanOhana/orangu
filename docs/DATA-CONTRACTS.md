@@ -132,6 +132,22 @@ AppData = {
 }
 ```
 
+### The sessionless shape (aggregate report)
+
+An `orangu repo --html` / `orangu global --html` file is `AppData` v1 with **no session at all**. It is a legal v1 value, not a new version:
+
+| Field | Value in an aggregate report |
+|---|---|
+| `mode` | `"file"` |
+| `session` | `undefined` — the file carries no `Analysis` |
+| `sessions` | `[]` — no session rows, so no session picker and no session group in the sidebar |
+| `selectedId` | `undefined` |
+| `aggregates` | exactly one of `repo` / `global` is filled: the scope the file was built for |
+| `capabilities.aggregates` | `true` |
+| `capabilities.live` / `kickoffRun` | `false` — a file never tails a session and never launches anything |
+
+Two rules follow from it. **Read the scope, not the absence of a session:** "this file is about a scope" and "there is no session right now" are different questions, and serve can legitimately answer yes to the second while answering no to the first (it bootstraps with zero discovered sessions and still has a session picker). The client asks one predicate, `fileScope()` in `src/report/client/nav.ts`, and every subtraction — the landing screen, the sidebar groups, the tab title, the disabled `This session` chip, the across-session empty state — hangs off that one answer. **Nothing keys off `capabilities.aggregates`:** it is documentation of what the payload contains, and no client code reads it. A consumer that needs to branch on scope reads `aggregates.<scope>` and `fileScope()`.
+
 Suggestion actions in the app are copy-only Claude Code and Codex handoffs. The browser does not create an application or verification claim.
 
 ## SuggestionRecord
