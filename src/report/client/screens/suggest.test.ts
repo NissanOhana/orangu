@@ -3,6 +3,8 @@ import type { Analysis } from '../../../model/analysis.js'
 import type { AppData, SuggestionViewRecord } from '../../../model/app-data.js'
 import { suggestionIdV2, suggestionKey } from '../../../suggest/id.js'
 import type { Ctx } from '../app.js'
+import type { Aggregate } from '../../../analyze/aggregate.js'
+import { megaReview } from '../mega-review.js'
 import { findingForRow, planRows } from '../suggest-rows.js'
 import { renderSuggest } from './suggest.js'
 
@@ -272,5 +274,70 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('Legacy proposal')
     expect(markup).not.toContain('/orangu:apply')
     expect(markup).not.toContain('$orangu-apply')
+  })
+})
+
+/**
+ * The scope screens are the whole-harness entry point: the block that runs the review must be the
+ * first thing on them (AC21), and the action the user came for is a primary control, not a 12 px
+ * outline button (AC23). Both are position/class facts in the rendered markup.
+ */
+describe('renderSuggest on a repo/global scope', () => {
+  const crossFinding = {
+    ruleId: 'reread-files',
+    title: 'e.g. Read the same file 6 times',
+    sessions: 3,
+    totalSavingsTokens: 30_000,
+    totalSavingsMs: 0,
+    boundedSavingsTokens: 24_000,
+    boundedSavingsMs: 0,
+    axis: 'tokens',
+    severity: 'medium',
+    exampleSessionIds: ['session-a', 'session-b'],
+  }
+
+  function scopeContext(scope: 'repo' | 'global', findings = [crossFinding]): Ctx {
+    const agg = {
+      schemaVersion: '2', generatedAt: 0, scope, sessionCount: 3,
+      sessions: [{ id: 'session-a' }, { id: 'session-b' }, { id: 'session-c' }],
+      crossFindings: findings,
+    } as unknown as Aggregate
+    const data: AppData = {
+      v: '1', mode: 'file', version: 'test', generatedAt: 0,
+      capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false },
+      selectedId: undefined, session: undefined, sessions: [], aggregates: { [scope]: agg }, suggestions: [],
+    }
+    return { data, ds: {} as Ctx['ds'], state: { screen: 'suggest', scope }, audience: 'dev', megaReview, go: vi.fn() }
+  }
+
+  it.each(['repo', 'global'] as const)('puts the whole-harness block above the first finding (%s)', (scope) => {
+    renderSuggest(scopeContext(scope))
+    const block = markup.indexOf('Whole-harness review')
+    const firstFinding = markup.indexOf('<details class="finding"')
+    expect(block).toBeGreaterThan(-1)
+    expect(firstFinding).toBeGreaterThan(-1)
+    expect(block).toBeLessThan(firstFinding)
+    expect(markup.indexOf('<div class="chiprow">')).toBeLessThan(block)
+  })
+
+  it('keeps the block when the scope has no findings, because the review reads config too', () => {
+    renderSuggest(scopeContext('repo', []))
+    expect(markup).toContain('Whole-harness review')
+    expect(markup).toContain('Nothing to improve was found')
+    expect(markup.indexOf('Whole-harness review')).toBeLessThan(markup.indexOf('Nothing to improve was found'))
+  })
+
+  it('drops the block when the scope has no aggregate: the block would claim a harness it cannot see', () => {
+    const ctx = scopeContext('repo')
+    ctx.data.aggregates = {}
+    renderSuggest(ctx)
+    expect(markup).not.toContain('Whole-harness review')
+    expect(markup).toContain('This scope needs orangu serve')
+  })
+
+  it('makes the per-finding copy control a primary CTA, not a small outline button', () => {
+    renderSuggest(scopeContext('repo'))
+    expect(markup).toContain('<button type="button" class="btn-primary" data-kick-copy=')
+    expect(markup).not.toContain('class="btn-sm" data-kick-copy=')
   })
 })

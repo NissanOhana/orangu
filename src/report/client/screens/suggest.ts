@@ -136,7 +136,7 @@ ${proposalDetails(rec)}
 ${statusChip(state, failure, trustedVerification(rec))}
 </div>
 <ol class="steps" aria-label="Hand off to Claude Code">
-<li><button type="button" class="btn-sm" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
+<li><button type="button" class="btn-primary" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
 <li><div><span>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</span><div class="small muted" style="margin:6px 0 4px">Needs the plugin once, typed inside Claude Code:</div>${commandBlock(PLUGIN_INSTALL, '>')}</div></li>
 <li><span>${stepThree(ctx.data.mode)}</span></li>
 </ol>
@@ -205,9 +205,9 @@ ${mascotBox(48)}
 <div class="grow sg-hero"><div class="herotitle">Improvement plan</div><div class="sg-sub">${esc(heroSub)}</div></div>
 </div>
 <div class="chiprow">${scopeChips}</div>
+${mega}
 ${scope !== 'session' && !agg ? emptyHero({ title: 'This scope needs orangu serve', command: 'orangu serve' }) : items + install}
 ${savedProposalInbox(saved, ctx.data.mode)}
-${mega}
 <p class="small muted sg-foot">${foot}</p>
 </section>`)
 

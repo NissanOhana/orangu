@@ -91,6 +91,14 @@ nav a.navitem .hint { margin-left: auto; font-size: 11px; color: var(--ink3); fo
 .btn-sm { border: 1px solid var(--border2); border-radius: 7px; padding: 5px 11px; font-size: 12px; color: var(--ink1); background: transparent; cursor: pointer; }
 .btn-sm:hover { background: var(--bg2); }
 .btn-sm[aria-disabled="true"], .btn[aria-disabled="true"] { color: var(--ink3); cursor: not-allowed; }
+/* The one filled control: the single next action on a screen. text-decoration is set on both the base
+   and :hover because the Repo/Global CTA is an <a> and a:hover underlines. No focus rule: the global
+   :focus-visible ring sits on the page background at outline-offset 2px, not on the fill. The fill pair
+   is the shipped .rank pair (--accent-ink / --bg): 5.01:1 light, 8.50:1 dark, and the hover mix only
+   raises it. 15px bold is not WCAG large text, so 4.5:1 is the bar it has to clear. */
+.btn-primary { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--accent-ink); background: var(--accent-ink); color: var(--bg); border-radius: 10px; padding: 12px 20px; font-size: 15px; font-weight: 700; line-height: 1.2; min-height: 44px; cursor: pointer; text-decoration: none; font-family: var(--sans); }
+.btn-primary:hover { background: color-mix(in srgb, var(--accent-ink) 88%, var(--ink1)); border-color: color-mix(in srgb, var(--accent-ink) 88%, var(--ink1)); text-decoration: none; }
+.btn-primary[aria-disabled="true"] { background: var(--bg2); color: var(--ink3); border-color: var(--border2); cursor: not-allowed; }
 
 /* ---------- cards / KPIs ---------- */
 .card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
@@ -415,6 +423,7 @@ svg { display: block; max-width: 100%; }
   .sg-hand .cmd { width: 100%; }
   .navwrap { flex-wrap: wrap; overflow-x: visible; }
   .navgroup { flex-wrap: wrap; }
+  .btn-primary { width: 100%; justify-content: center; }
 }
 
 @media print {
@@ -541,7 +550,7 @@ ${qt(o)}
 ${Ot(c,p,Ne(o))}
 </div>
 <ol class="steps" aria-label="Hand off to Claude Code">
-<li><button type="button" class="btn-sm" data-kick-copy="${r(s)}">Copy improve command</button></li>
+<li><button type="button" class="btn-primary" data-kick-copy="${r(s)}">Copy improve command</button></li>
 <li><div><span>Paste it in Claude Code${f?` in <span class="mono">${r(f)}</span>`:""}.</span><div class="small muted" style="margin:6px 0 4px">Needs the plugin once, typed inside Claude Code:</div>${z(xt,">")}</div></li>
 <li><span>${Mn(e.data.mode)}</span></li>
 </ol>
@@ -554,9 +563,9 @@ ${he(48)}
 <div class="grow sg-hero"><div class="herotitle">Improvement plan</div><div class="sg-sub">${r(h)}</div></div>
 </div>
 <div class="chiprow">${a}</div>
+${$}
 ${n!=="session"&&!i?O({title:"This scope needs orangu serve",command:"orangu serve"}):y+S}
 ${En(T,e.data.mode)}
-${$}
 <p class="small muted sg-foot">${m}</p>
 </section>`);u.querySelectorAll("[data-scope]").forEach(d=>d.addEventListener("click",()=>{if(d.getAttribute("aria-disabled")==="true")return;let b=d.dataset.scope;e.go({scope:b==="session"?void 0:b})}));let v=t?.session.cwd;return(d=>{u.querySelectorAll(d).forEach(b=>b.addEventListener("click",()=>{let C=b.closest("details"),B=C.querySelector(".kick-msg"),P=b.dataset.kickCopy,D=P?c.get(P):void 0;if(!D)return;b.setAttribute("aria-busy","true");let j={mode:"copy",suggestionId:P,finding:D.finding};e.ds.kickoff(j).then(w=>w.ok?{kind:"copied",message:`Claude command copied. Paste it in Claude Code${v?` in ${v}`:""}.`,response:w.response}:{kind:"error",message:w.message,...w.response?{response:w.response}:{}}).then(w=>{if(b.removeAttribute("aria-busy"),B.textContent=w.message,"response"in w&&w.response?.commands){let J=C.querySelector(".kick-cmd");J.innerHTML=Dt(w.response.commands),fe(J),w.kind==="copied"&&J.querySelector("[data-copy]")?.click()}})}))})("[data-kick-copy]"),u}var _e=24;function Ut(e){let t=e.a;if(!t)return U();let n=t.agents;if(!n.runs.length)return I(`<section>${O({title:"No subagents in this session.",hint:"This session ran entirely on the main thread."})}</section>`);let s=Math.min(...n.runs.map(p=>p.startTs??1/0).filter(isFinite)),o=Math.max(...n.runs.map(p=>p.endTs??-1/0).filter(isFinite)),a=n.runs.slice(0,_e).map(p=>$e(p,s,o)).join(""),i=ve(n.byType.map(p=>({label:p.agentType,value:p.tokens,color:F("agent"),sub:"\xD7"+p.count})),p=>x(p)),l=n.runs.map(p=>`<tr data-agent="${r(p.agentId)}" class="agent-row"${e.state.agent===p.agentId?' style="background:var(--accent-weak)"':""}>
 <td>${"\xB7 ".repeat(p.spawnDepth)}${r(p.agentType||p.name||p.agentId.slice(0,8))}${p.hasTranscript?"":' <span class="tag warn" title="only the parent summary was available">summary</span>'}</td>

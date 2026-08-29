@@ -75,6 +75,14 @@ nav a.navitem .hint { margin-left: auto; font-size: 11px; color: var(--ink3); fo
 .btn-sm { border: 1px solid var(--border2); border-radius: 7px; padding: 5px 11px; font-size: 12px; color: var(--ink1); background: transparent; cursor: pointer; }
 .btn-sm:hover { background: var(--bg2); }
 .btn-sm[aria-disabled="true"], .btn[aria-disabled="true"] { color: var(--ink3); cursor: not-allowed; }
+/* The one filled control: the single next action on a screen. text-decoration is set on both the base
+   and :hover because the Repo/Global CTA is an <a> and a:hover underlines. No focus rule: the global
+   :focus-visible ring sits on the page background at outline-offset 2px, not on the fill. The fill pair
+   is the shipped .rank pair (--accent-ink / --bg): 5.01:1 light, 8.50:1 dark, and the hover mix only
+   raises it. 15px bold is not WCAG large text, so 4.5:1 is the bar it has to clear. */
+.btn-primary { display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--accent-ink); background: var(--accent-ink); color: var(--bg); border-radius: 10px; padding: 12px 20px; font-size: 15px; font-weight: 700; line-height: 1.2; min-height: 44px; cursor: pointer; text-decoration: none; font-family: var(--sans); }
+.btn-primary:hover { background: color-mix(in srgb, var(--accent-ink) 88%, var(--ink1)); border-color: color-mix(in srgb, var(--accent-ink) 88%, var(--ink1)); text-decoration: none; }
+.btn-primary[aria-disabled="true"] { background: var(--bg2); color: var(--ink3); border-color: var(--border2); cursor: not-allowed; }
 
 /* ---------- cards / KPIs ---------- */
 .card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
@@ -399,6 +407,7 @@ svg { display: block; max-width: 100%; }
   .sg-hand .cmd { width: 100%; }
   .navwrap { flex-wrap: wrap; overflow-x: visible; }
   .navgroup { flex-wrap: wrap; }
+  .btn-primary { width: 100%; justify-content: center; }
 }
 
 @media print {
