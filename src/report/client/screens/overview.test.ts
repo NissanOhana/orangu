@@ -205,3 +205,28 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).not.toContain('recoverable across')
   })
 })
+
+describe('renderOverview with no session to show', () => {
+  // A saved scope report has no session picker at all: the session group is subtracted from its
+  // sidebar, so #overview is reachable only by a typed hash and "pick one from the sidebar" points at
+  // a control that is not on the page.
+  it('does not send a scope report to a session picker it does not have', async () => {
+    const ctx = await context()
+    ctx.a = undefined
+    ctx.data.session = undefined
+    ctx.data.selectedId = undefined
+    ctx.data.aggregates = { repo: { scope: 'repo orangu', sessionCount: 19, sessions: [], crossFindings: [], topReReadFiles: [], recurringErrors: [], topSessions: [] } as unknown as NonNullable<AppData['aggregates']['repo']> }
+    renderOverview(ctx)
+    expect(markup).toContain('No session selected.')
+    expect(markup).toContain('This report covers a scope, not a session.')
+    expect(markup).not.toContain('Pick a session from the sidebar.')
+  })
+
+  it('still names the picker in a served app, which has one', async () => {
+    const ctx = await context({ mode: 'serve' })
+    ctx.a = undefined
+    ctx.data.session = undefined
+    renderOverview(ctx)
+    expect(markup).toContain('Pick a session from the sidebar.')
+  })
+})

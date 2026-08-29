@@ -113,7 +113,10 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
   }
 
   const repoN = data.aggregates.repo?.sessionCount
-  const globalN = data.aggregates.global?.sessionCount
+  // The count belongs to a saved file that is about a scope. Serve fetches the global aggregate while
+  // the page is open, and counting there would rewrite "Global · all time" under the reader mid-session,
+  // so this asks the same predicate the session group above does.
+  const globalN = fileScope(data) !== undefined ? data.aggregates.global?.sessionCount : undefined
   const needsServe = data.mode === 'file' ? 'needs orangu serve' : undefined
   const acrossItems: NavItem[] = [
     { id: 'repo', label: repoN !== undefined ? `Repo · ${repoN} sessions` : 'Repo', screen: 'repo', hint: repoN === undefined ? needsServe : undefined },

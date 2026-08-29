@@ -84,7 +84,17 @@ describe('offline report', () => {
     // 2026-08-28 shell fix 1: +14 B, re-measured. The sessionless subtraction is gated on fileScope()
     // rather than on a missing session, so serve (which can bootstrap with none) keeps its session nav
     // and its Session eyebrow. Same escalation rule: it may only go down from here.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_518)
+    // 2026-08-28 fix 1: +208 B, re-measured. Two truthfulness fixes in the shared client: the hero CTA
+    // builds its href through the hash writer so the theme survives the click, and the across-session
+    // empty state asks fileScope() before claiming the file carries a session. Both land in modules
+    // this bundle owns outright (screens/repo.ts, screens/global.ts), which is why the aggregate
+    // bundle pays more for them than the session bundle does.
+    // POLICY for this ratchet, restated so the next chunk does not have to reconstruct it: the number
+    // is BORN at the value measured on the day it is written, never a round number and never a target,
+    // and from there it may only go DOWN. Raising it is allowed only in the same commit that measures
+    // a deliberate, named growth, with the delta and its reason written above the line, exactly as the
+    // CLIENT_JS pin below is kept. A chunk that merely bumps into it stops and escalates.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_726)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -139,6 +149,11 @@ describe('offline report', () => {
     // gated on "this data has no session", which is also true of a serve page whose first frame arrived
     // before any analysis did; both now ask fileScope() instead, the one answer the router already uses,
     // so the nav group and the landing screen cannot disagree in any mode.
-    expect(CLIENT_JS.length).toBe(73253)
+    // 2026-08-28 fix 1: +146 B, inside the cap with 329 B to spare. The empty state that says a report
+    // needs the local viewer now asks fileScope() before telling the reader the file carries a session
+    // (a saved scope report carries none), the Overview guard stops pointing at a session picker that
+    // is not in a scope report's sidebar, and the Global nav count is gated on the same predicate so
+    // serve keeps "Global · all time" instead of rewriting it mid-session.
+    expect(CLIENT_JS.length).toBe(73399)
   })
 })

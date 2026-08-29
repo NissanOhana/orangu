@@ -178,3 +178,23 @@ test('repo whole-harness review is copy-only and never posts a kickoff', async (
   expect(kickoffPosts).toBe(0)
   expect(errors).toEqual([])
 })
+
+// The hash is the only carrier of the theme now that nothing follows the system colour scheme, so the
+// one click the Repo screen promotes to a primary CTA has to keep it. Loading a dark page proves the
+// cascade; only clicking proves the link.
+test('the Repo hero CTA keeps the reader in the theme and audience they are in', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#repo?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
+  const cta = page.getByRole('link', { name: /Review repo improvements/ })
+  await expect(cta).toBeVisible({ timeout: 20_000 })
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  await cta.click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improve the next outcome' })).toBeVisible()
+  const hash = await page.evaluate(() => location.hash)
+  expect(hash).toContain('scope=repo')
+  expect(hash.includes('theme=dark')).toBe(projectTheme(info) === 'dark')
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  await expect(page.locator('.eyebrow', { hasText: 'Whole-harness review' })).toBeVisible()
+  expect(errors).toEqual([])
+})

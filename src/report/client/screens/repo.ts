@@ -1,6 +1,8 @@
 /** Repo (§2.6): Aggregate scope='repo'. File mode without an aggregate shows the designed empty state (policy). */
 import type { Ctx } from '../app.js'
 import type { Aggregate } from '../../../analyze/aggregate.js'
+import type { AppData } from '../../../model/app-data.js'
+import { cleanHash, fileScope, type RouteState } from '../nav.js'
 import { esc, num, pct, plural, tok } from '../format.js'
 import { h } from '../dom.js'
 import { kpi } from '../components/kpi.js'
@@ -10,24 +12,36 @@ import { savingsText } from '../components/finding.js'
 import { foldHiddenErrors } from '../derive.js'
 import { boundedSavings } from '../suggest-rows.js'
 
-export function aggregateEmpty(scope: 'repo' | 'global' | 'harness'): string {
+/**
+ * The shared "this needs the local viewer" state, reached on the scope a file does not carry and on
+ * Harness. What the file itself carries differs by document, so the sentence asks fileScope, the same
+ * predicate the sidebar and the landing screen route on: a saved scope report holds no session, and
+ * telling its reader it carries one is false about the page they are looking at.
+ */
+export function aggregateEmpty(scope: 'repo' | 'global' | 'harness', data: AppData): string {
   const what = scope === 'repo' ? 'analyse this repository' : scope === 'global' ? 'analyse everything on this machine' : 'compare your Claude Code config with what your sessions used'
+  const carries = fileScope(data) ? 'This report carries one scope, not a session.' : 'This single-file report carries one session.'
   return emptyHero({
     title: `Across-session views need orangu serve`,
-    hint: `This single-file report carries one session. Start the local viewer to ${what}. Nothing leaves your machine.`,
+    hint: `${carries} Start the local viewer to ${what}. Nothing leaves your machine.`,
     command: 'orangu serve',
   })
 }
 
-export function aggregateLead(scope: 'repo' | 'global'): string {
+/**
+ * The screen's one promoted click. It goes through the hash writer rather than a literal `#suggest?`
+ * because the hash is the only carrier of theme and audience: a literal href would drop `theme=dark`
+ * and repaint a dark reader light on the action the screen makes largest.
+ */
+export function aggregateLead(scope: 'repo' | 'global', state: RouteState): string {
   const place = scope === 'repo' ? 'this repository' : 'supported sessions on this machine'
-  return `<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${place} link back to example sessions. Review them before changing instructions, tools, skills, hooks, agents, plugins, or workflow configuration.</div></div><a class="btn-primary" href="#suggest?scope=${scope}">Review ${scope} improvements →</a></div>`
+  return `<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${place} link back to example sessions. Review them before changing instructions, tools, skills, hooks, agents, plugins, or workflow configuration.</div></div><a class="btn-primary" href="${esc(cleanHash(state, { screen: 'suggest', scope }))}">Review ${scope} improvements →</a></div>`
 }
 
 export function renderRepo(ctx: Ctx): HTMLElement {
   const g = ctx.data.aggregates.repo
-  if (!g) return h(`<section>${aggregateEmpty('repo')}</section>`)
-  return h(`<section>${aggregateLead('repo')}${aggregateBody(g, ctx)}</section>`)
+  if (!g) return h(`<section>${aggregateEmpty('repo', ctx.data)}</section>`)
+  return h(`<section>${aggregateLead('repo', ctx.state)}${aggregateBody(g, ctx)}</section>`)
 }
 
 /** Repo: the KPI strip, then the evidence blocks Global shares. */

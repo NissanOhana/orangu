@@ -9,7 +9,7 @@ import { sourceLabel, weekPoints } from '../derive.js'
 
 export function renderGlobal(ctx: Ctx): HTMLElement {
   const g = ctx.data.aggregates.global
-  if (!g) return h(`<section>${aggregateEmpty('global')}</section>`)
+  if (!g) return h(`<section>${aggregateEmpty('global', ctx.data)}</section>`)
   const sources = new Map<string, number>()
   for (const s of g.sessions) sources.set(s.source, (sources.get(s.source) ?? 0) + 1)
   const kpis = [
@@ -46,7 +46,7 @@ export function renderGlobal(ctx: Ctx): HTMLElement {
     .map(([k, n]) => `<span class="sigchip">${esc(sourceLabel(k))} · ${n}</span>`)
     .join('')
 
-  return h(`<section>${aggregateLead('global')}
+  return h(`<section>${aggregateLead('global', ctx.state)}
 <div class="kpis">${kpis}</div>
 <div class="card pad mb16">
 <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><span style="font-weight:700;font-size:13.5px">Weekly tokens · last 12 weeks</span><span class="mono small muted">${esc(range)}</span></div>

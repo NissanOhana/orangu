@@ -9,9 +9,10 @@
  * `caps.unicode`, so a box-drawing character would be mojibake on a TERM=linux console.
  *
  * Three tiers, because the lockup has to survive an 80-, a 60- and a 40-column terminal:
- * WIDE face + wordmark, STACKED wordmark only, MINI face only. `mascotArt` picks; `mascotLines`
- * composes, centres and paints. Both `--help` and the dashboard go through `mascotLines`, so the two
- * can never disagree about tier, indent or colour.
+ * WIDE face + wordmark + tagline (8 rows), STACKED wordmark + tagline (7), MINI face + tagline (9).
+ * Every tier carries the tagline, and the row counts are what `dashboard.ts` derives its chrome-line
+ * budget from. `mascotArt` picks; `mascotLines` composes, centres and paints. Both `--help` and the
+ * dashboard go through `mascotLines`, so the two can never disagree about tier, indent or colour.
  */
 import { layoutWidth } from './summary.js'
 import { displayWidth, paint, truncate, type Caps, type Style } from './tty.js'

@@ -217,4 +217,14 @@ describe('the shell of a report that has no session', () => {
   it('leaves the Global label alone when no global aggregate is in the file', () => {
     expect(navFor(appData(), { screen: 'overview' }).find((g) => g.id === 'across')!.items.find((i) => i.screen === 'global')!.label).toBe('Global · all time')
   })
+
+  it('keeps "Global · all time" in serve, where the count arrives mid-session', () => {
+    // serve fetches the global aggregate while the page is open, so counting there would rewrite the
+    // label under the reader. The count is a fact about a saved scope file, and fileScope is the one
+    // predicate every sessionless subtraction in this function asks.
+    const served = appData({ mode: 'serve', aggregates: { global: agg('global', 103) } })
+    const item = navFor(served, { screen: 'overview' }).find((g) => g.id === 'across')!.items.find((i) => i.screen === 'global')!
+    expect(item.label).toBe('Global · all time')
+    expect(item.hint).toBeUndefined()
+  })
 })

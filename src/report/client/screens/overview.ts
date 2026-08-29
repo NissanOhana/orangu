@@ -20,7 +20,7 @@ import { mascotSvg } from '../mascot.js'
 import { lineChart } from '../charts.js'
 import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, qualityScope, recoverableLine, timeAxis } from '../derive.js'
 import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
-import { cleanHash, type RouteState } from '../nav.js'
+import { cleanHash, fileScope, type RouteState } from '../nav.js'
 import { plainSentence } from '../strings.js'
 
 /** A link into this run's own screens: every aggregate/filter key cleared so the target starts clean. */
@@ -113,8 +113,10 @@ ${whereNext(ctx, a)}`
 
 export function renderOverview(ctx: Ctx): HTMLElement {
   const a = ctx.a
+  // A file about a scope has no session group in its sidebar, so there is no picker to point at: the
+  // hint has to name what the document is instead of a control that is not on the page.
   if (!a)
-    return h(`<section>${emptyHero({ title: 'No session selected.', hint: 'Pick a session from the sidebar.' })}</section>`)
+    return h(`<section>${emptyHero({ title: 'No session selected.', hint: fileScope(ctx.data) ? 'This report covers a scope, not a session.' : 'Pick a session from the sidebar.' })}</section>`)
   const body = ctx.audience === 'plain' ? plainBody(ctx, a) : detailedBody(ctx, a)
   return h(`<section>${degradedBanner(a, ctx.audience)}${outcome(a, ctx.audience)}${body}</section>`)
 }

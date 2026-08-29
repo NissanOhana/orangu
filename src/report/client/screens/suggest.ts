@@ -155,7 +155,7 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
   const repoN = ctx.data.aggregates.repo?.sessionCount
   const globalN = ctx.data.aggregates.global?.sessionCount
   const scopeChips = [
-    chip('This session', { active: scope === 'session', disabled: !a, title: a ? '' : 'this report has no session', data: { scope: 'session' } }),
+    chip('This session', { active: scope === 'session', disabled: !a, title: a ? '' : 'no session is selected', data: { scope: 'session' } }),
     chip(repoN !== undefined ? `Repo · ${repoN}` : 'Repo', { active: scope === 'repo', disabled: repoN === undefined, title: repoN === undefined ? 'run orangu serve' : '', data: { scope: 'repo' } }),
     chip(globalN !== undefined ? `Global · ${globalN}` : 'Global', { active: scope === 'global', disabled: globalN === undefined, title: globalN === undefined ? 'run orangu serve' : '', data: { scope: 'global' } }),
   ].join('')
