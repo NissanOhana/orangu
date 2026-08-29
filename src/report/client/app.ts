@@ -166,9 +166,12 @@ export function cycleTheme(theme: string | undefined): string | undefined {
   return themeName(theme) === 'dark' ? undefined : 'dark'
 }
 
-/** The sidebar card names what the file is about; only a session report has a session to name. */
+/**
+ * The sidebar card names what the file is about. Only a saved file about a scope reads `Scope`: serve
+ * renders the session picker in this card and can bootstrap with no session, so it keeps `Session`.
+ */
 export function sesscardEyebrow(d: AppData): string {
-  return d.session ? 'Session' : 'Scope'
+  return fileScope(d) === undefined ? 'Session' : 'Scope'
 }
 
 /** The browser tab: the session's title, else its short id, else the scope a saved aggregate covers. */

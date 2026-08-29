@@ -188,6 +188,18 @@ describe('the shell of a report that has no session', () => {
     expect(navFor(aggReport({ repo: agg('repo orangu', 12) }), { screen: 'repo' }).find((g) => g.id === 'session')!.items).toEqual([])
   })
 
+  it('keeps the session group in serve, whose first frame can arrive before any analysis does', () => {
+    // serve bootstraps AppData with session: undefined when the registry is still empty or the first
+    // analysis throws (src/serve/api.ts appData, src/serve/registry.ts analysis), and nothing ever
+    // writes d.session afterwards: the pane reads ctx.a, not d.session. Subtracting on "no session"
+    // alone would strip the whole group for the life of that page, while defaultScreen still lands on
+    // Overview. Only a saved file that is about a scope has no session to observe.
+    const bootstrapping = appData({ mode: 'serve', selectedId: undefined, session: undefined, sessions: [] })
+    expect(navFor(bootstrapping, { screen: 'overview' }).find((g) => g.id === 'session')!.items.map((i) => i.screen)).toEqual(['overview', 'timeline', 'tools', 'context', 'coverage'])
+    const withRow = appData({ mode: 'serve', session: undefined, sessions: [row({ badge: 'live', ageMs: 1000 })] })
+    expect(navFor(withRow, { screen: 'overview' }).find((g) => g.id === 'session')!.items).toHaveLength(5)
+  })
+
   it('keeps the unchanged five-item session group when the file has a session', () => {
     const items = navFor(appData(), { screen: 'overview' }).find((g) => g.id === 'session')!.items
     expect(items.map((i) => i.screen)).toEqual(['overview', 'timeline', 'tools', 'context', 'coverage'])

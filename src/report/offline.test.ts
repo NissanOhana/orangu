@@ -81,7 +81,10 @@ describe('offline report', () => {
     // job is the sessionless state, which lives in the shared nav.ts/app.ts/suggest.ts), so the value
     // could not survive its own successor. Treated like the CLIENT_JS pin below: re-measured in the
     // same commit, with the delta named. Flagged for the reviewer to rule on rather than raised quietly.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_504)
+    // 2026-08-28 shell fix 1: +14 B, re-measured. The sessionless subtraction is gated on fileScope()
+    // rather than on a missing session, so serve (which can bootstrap with none) keeps its session nav
+    // and its Session eyebrow. Same escalation rule: it may only go down from here.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_518)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -132,6 +135,10 @@ describe('offline report', () => {
     // document title in app.ts, and in the Suggest screen the scope default plus the disabled
     // "This session" chip. The session report pays for it because nav.ts, app.ts and suggest.ts are
     // shared with the aggregate bundle; the six conditionals are the whole cost.
-    expect(CLIENT_JS.length).toBe(73236)
+    // 2026-08-28 shell fix 1: +17 B, inside the cap with 475 B to spare. Two of those conditionals were
+    // gated on "this data has no session", which is also true of a serve page whose first frame arrived
+    // before any analysis did; both now ask fileScope() instead, the one answer the router already uses,
+    // so the nav group and the landing screen cannot disagree in any mode.
+    expect(CLIENT_JS.length).toBe(73253)
   })
 })

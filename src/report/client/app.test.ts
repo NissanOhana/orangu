@@ -96,6 +96,13 @@ describe('a report about a scope, not a session', () => {
     expect(sesscardEyebrow(appData())).toBe('Session')
   })
 
+  it('still says Session in serve, where the card holds the session picker', () => {
+    // serve can bootstrap with session: undefined (an empty registry, or a first analysis that throws)
+    // and never writes it back. The card renders the picker there, so Scope would name a scope the
+    // served app is not about and does not show.
+    expect(sesscardEyebrow(appData({ mode: 'serve', selectedId: undefined, session: undefined }))).toBe('Session')
+  })
+
   it('gives the Suggest header the same scope its body defaulted to', () => {
     const sub = (data: AppData, scope?: 'repo' | 'global'): string =>
       screenSub({ data, state: { screen: 'suggest', ...(scope ? { scope } : {}) }, audience: 'dev' } as Parameters<typeof screenSub>[0])
