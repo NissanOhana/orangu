@@ -128,7 +128,13 @@ A proposal cannot verify itself, and an application receipt does not prove that 
 ### Supporting skills
 
 - `/orangu:analyze` translates one supported session or aggregate without designing or applying a change.
-- `/orangu:harness` is a separately requested deep review for repo or global scope. It remains catalog-first and saves the same structured Markdown plus manifest pair as `/orangu:improve`. Repo proposals may later be applied explicitly; global proposals remain review-only.
+- `/orangu:harness` is a separately requested deep review for repo or global scope. It remains catalog-first and saves the same structured Markdown plus manifest pair as `/orangu:improve`. It ends by asking which of its ranked items you approve, and then applies the ones you approved — under four standing limits:
+  - **Per-item explicit approval.** Before the question it discloses, for every item, its id, the files its manifest declares, and the exact text of anything that would run or grant authority. Only a verbatim id approves, and only the answer to that question counts; nothing else in the conversation is consent.
+  - **Repo scope only.** Global proposals are review-only and are never applied, at any approval.
+  - **Through `/orangu:apply`, unchanged.** Each approved item is applied by invoking `/orangu:apply <id>` — one id, one record, one receipt per invocation, with that skill's existing binding check, untrusted-input rules and confinement contract. Harness forks nothing and grants itself no edit authority of its own; it prints the `/orangu:apply <id>` list so the same work can be done by hand.
+  - **Stop at the first failure.** Approved items are applied in order and the run halts on the first one that fails, leaving the working tree as it stands for review rather than continuing down the list.
+
+  None of this moves the deterministic boundary: no model measures anything, the evidence is still the bounded deterministic projection, and the CLI still validates artifact shape rather than inspecting a diff.
 - Live observation is a CLI concern: `orangu watch` refreshes one report and `orangu serve` follows several sessions; neither performs model reasoning of its own.
 
 ## Claude Code and Codex parity
