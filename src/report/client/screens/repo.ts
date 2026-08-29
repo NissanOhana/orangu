@@ -21,7 +21,7 @@ export function aggregateEmpty(scope: 'repo' | 'global' | 'harness'): string {
 
 export function aggregateLead(scope: 'repo' | 'global'): string {
   const place = scope === 'repo' ? 'this repository' : 'supported sessions on this machine'
-  return `<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${place} link back to example sessions. Review them before changing instructions, tools, skills, hooks, agents, plugins, or workflow configuration.</div></div><a class="btn" href="#suggest?scope=${scope}">Review ${scope} improvements →</a></div>`
+  return `<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${place} link back to example sessions. Review them before changing instructions, tools, skills, hooks, agents, plugins, or workflow configuration.</div></div><a class="btn-primary" href="#suggest?scope=${scope}">Review ${scope} improvements →</a></div>`
 }
 
 export function renderRepo(ctx: Ctx): HTMLElement {

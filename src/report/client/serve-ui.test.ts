@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { HARNESS_REFRESH_MS, ensureHarness, invalidateHarness, megaReview } from './serve-ui.js'
+import { HARNESS_REFRESH_MS, ensureHarness, invalidateHarness } from './serve-ui.js'
+import { megaReview } from './mega-review.js'
 
 describe('whole-harness review CTA', () => {
   it.each(['repo', 'global'] as const)('is an exact copy-only %s command with no row lifecycle', (scope) => {
@@ -8,6 +9,28 @@ describe('whole-harness review CTA', () => {
     expect(html).toContain('data-copy=')
     expect(html).not.toContain('data-kick')
     expect(html).not.toContain('status-chip')
+  })
+
+  // AC19: three steps, no more, no fewer, in both scopes; the block is the screen's primary action,
+  // so its own control is the primary CTA class and the .cmd bar stays as the clipboard fallback.
+  it.each(['repo', 'global'] as const)('is one card with a primary CTA and exactly three steps (%s)', (scope) => {
+    const html = megaReview(scope)
+    expect((html.match(/<li>/g) ?? []).length).toBe(3)
+    expect(html).toContain('<div class="card pad mb16">')
+    expect(html).toContain('<ol class="steps" aria-label="Run the whole-harness review">')
+    expect(html).toContain('class="btn-primary"')
+    expect(html).not.toContain('class="btn-sm"')
+    expect(html).toContain('<div class="cmd">')
+  })
+
+  it('names the scope it can act on and never contradicts the global review-only boundary', () => {
+    expect(megaReview('repo')).toContain('Improve this repository')
+    expect(megaReview('repo')).toContain('approve the items you want')
+    expect(megaReview('repo')).not.toContain('review only')
+    const global = megaReview('global')
+    expect(global).toContain('Review every harness on this machine')
+    expect(global).not.toContain('Claude applies them')
+    expect((global.match(/Global scope is review only: nothing is applied\./g) ?? []).length).toBe(2)
   })
 })
 

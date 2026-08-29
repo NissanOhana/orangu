@@ -139,3 +139,52 @@ describe('ratchet: raw ANSI escapes live only in src/cli/tty.ts', () => {
     expect(grown, `escape literals outside tty.ts: ${grown.join(', ')}`).toEqual([])
   })
 })
+
+/**
+ * The primary CTA is the one filled control in the sheet (AC24). It may only wear tokens: a hex, an
+ * rgb()/hsl() triple or a bare colour keyword would fork the palette away from tokens.css and break
+ * in the theme it was not authored in.
+ */
+describe('ratchet: the primary CTA is built from tokens only', () => {
+  const SHEET = join(ROOT, 'src/report/client/styles.css')
+  const COLOUR_PROPS = /(?:^|;)\s*(color|background|background-color|border|border-color|outline|outline-color)\s*:\s*([^;}]+)/g
+
+  function primaryRules(): Array<[string, string]> {
+    const css = readFileSync(SHEET, 'utf8')
+    const rules: Array<[string, string]> = []
+    // the selector class excludes @ and the body excludes braces, so a rule nested in an
+    // @media block is found as itself rather than swallowed by the wrapper
+    for (const m of css.matchAll(/([^{}@]+)\{([^{}]*)\}/g)) {
+      const selector = m[1]!.trim()
+      if (/(^|[\s,])\.btn-primary\b/.test(selector)) rules.push([selector, m[2]!])
+    }
+    return rules
+  }
+
+  it('styles.css defines .btn-primary', () => {
+    expect(primaryRules().map(([s]) => s)).toContain('.btn-primary')
+  })
+
+  it('every colour it declares is a var() token, never a literal', () => {
+    for (const [selector, body] of primaryRules()) {
+      expect(body.match(/#[0-9a-fA-F]{3,8}\b/g), `${selector} hardcodes a hex colour`).toBeNull()
+      expect(body.match(/\b(?:rgba?|hsla?)\(/g), `${selector} hardcodes a colour function`).toBeNull()
+      for (const decl of body.matchAll(COLOUR_PROPS)) {
+        const value = decl[2]!.trim()
+        expect(value.includes('var(--'), `${selector} { ${decl[1]}: ${value} } is not a token`).toBe(true)
+      }
+    }
+  })
+})
+
+/**
+ * The Ctx.megaReview seam is what keeps the whole-harness block out of the byte-pinned file bundle
+ * (AC20). A direct import from the screen would pull it back in and cost every saved report its
+ * bytes, silently, with no failing behaviour test.
+ */
+describe('ratchet: the whole-harness block reaches the screen only through the seam', () => {
+  it('screens/suggest.ts does not import mega-review.js', () => {
+    const file = join(ROOT, 'src/report/client/screens/suggest.ts')
+    expect(countIn(file, /mega-review/g), 'suggest.ts names mega-review').toBe(0)
+  })
+})

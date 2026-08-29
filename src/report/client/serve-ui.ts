@@ -14,7 +14,7 @@ import { h } from './dom.js'
 import { mascotSvg } from './mascot.js'
 import { shortId } from './nav.js'
 import { badgeCopy, fleetFeed } from './derive.js'
-import { harnessCommand } from './suggest-rows.js'
+import { megaReview } from './mega-review.js'
 import { renderRepo } from './screens/repo.js'
 import { renderGlobal } from './screens/global.js'
 import { harnessCardHtml, renderHarness } from './screens/harness.js'
@@ -164,11 +164,6 @@ function aggScreen(): HTMLElement {
 
 function aggregateView(ctx: Ctx): HTMLElement {
   return ctx.state.screen === 'global' ? renderGlobal(ctx) : renderRepo(ctx)
-}
-
-export function megaReview(scope: 'repo' | 'global'): string {
-  const command = harnessCommand(scope)
-  return `<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Review major ${scope} improvements separately.</div><p class="narrative">This interactive command reviews the wider harness. It is copy-only here, creates no row status, and keeps its estimate gates inside /orangu:harness.</p><div class="kickrow"><span class="mono125 grow">${esc(command)}</span><button type="button" class="btn-sm" data-copy="${esc(command)}">Copy whole-harness review</button></div></div>`
 }
 
 // The harness report is fetched on first use and kept until the registry changes: an SSE session

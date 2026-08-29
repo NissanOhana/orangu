@@ -98,6 +98,8 @@ describe('offline report', () => {
     // the client tree for src/cli/mascot-ascii.ts, so terminal art no longer ships in saved reports.
     // 2026-08-28 theme: -41 B. Light is the only default, so applyTheme lost its middle branch and the
     // sidebar control lost its three-state order array; themeName/cycleTheme pay a little of it back.
-    expect(CLIENT_JS.length).toBe(72845)
+    // 2026-08-28 cta: +5 B. The per-finding copy control wears the primary CTA class; the whole-harness
+    // block and the aggregate screens cost this bundle nothing (the Ctx.megaReview seam and tree-shaking).
+    expect(CLIENT_JS.length).toBe(72850)
   })
 })
