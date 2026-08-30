@@ -39,6 +39,7 @@ const publicSurfaces = [
   // The sample's visible app is rendered from inline data + client JS. Scan the raw artifact;
   // stripping scripts would leave only its empty mount and title.
   ['site/sample.html', join(root, 'site/sample.html'), 'sample'],
+  ['site/sample-repo.html', join(root, 'site/sample-repo.html'), 'sample'],
 ] as const
 
 const forbiddenPublicClaims = [
@@ -751,8 +752,10 @@ describe('site/index.html (generated landing)', () => {
   })
 
   it('references only approved public origins', () => {
-    // nissanohana.github.io: og:url / og:image link-unfurl metadata; the page never requests it
-    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'nissanohana.github.io'])
+    // nissanohana.github.io: og:url / og:image link-unfurl metadata; the page never requests it.
+    // schema.org: the JSON-LD @context IRI, an identifier, never fetched. www.npmjs.com: the
+    // structured-data download URL, plain text inside an inert <script type="application/ld+json">.
+    const allowed = new Set(['fonts.googleapis.com', 'fonts.gstatic.com', 'github.com', 'nissanohana.github.io', 'schema.org', 'www.npmjs.com'])
     const urls = html.match(/https?:\/\/[^\s"'<>)]+/g) ?? []
     expect(urls.length).toBeGreaterThan(0)
     for (const url of urls) expect(allowed.has(new URL(url).host), `disallowed origin: ${url}`).toBe(true)
@@ -849,8 +852,13 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
   })
 })
 
-describe('site/sample.html (published sample report)', () => {
-  const sample = readFileSync(new URL('../site/sample.html', import.meta.url), 'utf8')
+describe.each([
+  ['site/sample.html', 'sample.html', 'one Claude Code session'],
+  ['site/sample-repo.html', 'sample-repo.html', 'recurring patterns across a repository'],
+])('%s (published sample report)', (file, page, ogTitleFragment) => {
+  const sample = readFileSync(new URL(`../${file}`, import.meta.url), 'utf8')
+  const head = sample.slice(0, sample.indexOf('</head>'))
+  const SITE = 'https://nissanohana.github.io/orangu/'
 
   it('is self-contained, offline, and free of money claims', () => {
     expect(sample).toContain('Content-Security-Policy')
@@ -859,6 +867,16 @@ describe('site/sample.html (published sample report)', () => {
     expect(/https?:\/\/(?!localhost|127\.0\.0\.1)/.test(sample.slice(sample.indexOf('</head>')))).toBe(false)
     expect(currencyHits(sample)).toEqual([])
     expect(moneyHits(sample)).toEqual([])
+  })
+
+  it('is indexable with a description and link-unfurl metadata that point only at the site itself', () => {
+    expect(head).toContain('<meta name="robots" content="index,follow"/>')
+    expect(head).not.toContain('noindex')
+    expect(head).toMatch(/<meta name="description" content="[^"]{60,}"\/>/)
+    expect(head).toContain(`<meta property="og:url" content="${SITE}${page}"/>`)
+    expect(head).toContain(`<meta property="og:image" content="${SITE}assets/og.png"/>`)
+    expect(head).toMatch(new RegExp(`<meta property="og:title" content="[^"]*${ogTitleFragment}[^"]*"/>`))
+    for (const url of head.match(/https?:\/\/[^\s"'<>)]+/g) ?? []) expect(url.startsWith(SITE), `foreign origin in the sample head: ${url}`).toBe(true)
   })
 
   it('tells a no-script reader what the page is, without any URL', () => {
@@ -878,16 +896,88 @@ describe('site/sample.html (published sample report)', () => {
       ['try', 'brain', 'iac'].join(''),
       ['d3d3', 'adfd'].join(''),
     ]
-    // The public plugin marketplace slug (the Suggest install line, README "Install the plugin") is the one
-    // place the owner's handle may appear. Scope the exemption to exactly that: every occurrence of the
-    // handle must be one of the slug, so a leak that merely happens to contain it still fails.
+    // The public plugin marketplace slug (the Suggest install line, README "Install the plugin") and the
+    // site's own origin (the unfurl metadata in the head) are the two places the owner's handle may
+    // appear. Scope the exemption to exactly those: every occurrence of the handle must be one of them,
+    // so a leak that merely happens to contain it still fails.
     const count = (re: RegExp): number => sample.match(re)?.length ?? 0
-    const slugHits = count(/NissanOhana\/orangu/g)
-    expect(slugHits).toBeGreaterThan(0)
-    expect(count(new RegExp(handle, 'gi')), `the handle "${handle}" outside the marketplace slug`).toBe(slugHits)
+    const slugHits = count(/NissanOhana\/orangu/g) + count(/nissanohana\.github\.io\/orangu\//g)
+    expect(count(/NissanOhana\/orangu/g)).toBeGreaterThan(0)
+    expect(count(new RegExp(handle, 'gi')), `the handle "${handle}" outside the marketplace slug and the site origin`).toBe(slugHits)
     const scanned = sample.toLowerCase()
     for (const marker of ['private-user', 'private-project', privatePath, 'private-host', 'real-session-marker', ...knownPrivateMarkers])
       expect(scanned, `leak: ${marker}`).not.toContain(marker.toLowerCase())
     expect(sample).toContain('5a91c73e')
+  })
+})
+
+// SEO contract: the head carries what crawlers and link unfurlers read, the structured data parses
+// and names the shipped version, and the static crawl files list only pages that exist in site/.
+describe('landing SEO surface', () => {
+  const src = readFileSync(srcPath, 'utf8')
+  const html = readFileSync(outPath, 'utf8')
+  const head = html.slice(0, html.indexOf('</head>'))
+  const SITE = 'https://nissanohana.github.io/orangu/'
+
+  it('names Claude Code in the title and description and declares one canonical URL', () => {
+    expect(head).toMatch(/<title>[^<]*Claude Code[^<]*<\/title>/)
+    expect(head).toMatch(/<meta name="description" content="[^"]*Claude Code[^"]*"\/>/)
+    expect(head.match(/<link rel="canonical" href="([^"]+)"\/>/g)).toHaveLength(1)
+    expect(head).toContain(`<link rel="canonical" href="${SITE}"/>`)
+    expect(head).toContain('<meta name="robots" content="index,follow,max-image-preview:large"/>')
+  })
+
+  it('carries a complete Open Graph and Twitter card set for link unfurlers', () => {
+    for (const property of ['og:type', 'og:site_name', 'og:title', 'og:description', 'og:url', 'og:image', 'og:image:width', 'og:image:height', 'og:image:alt'])
+      expect(head, property).toMatch(new RegExp(`<meta property="${property}" content="[^"]+"/>`))
+    for (const name of ['twitter:card', 'twitter:title', 'twitter:description', 'twitter:image', 'twitter:image:alt'])
+      expect(head, name).toMatch(new RegExp(`<meta name="${name}" content="[^"]+"/>`))
+    expect(head).toContain('<meta property="og:image:width" content="1200"/>')
+    expect(head).toContain('<meta property="og:image:height" content="630"/>')
+  })
+
+  it('ships valid JSON-LD that names the software, the shipped version, and the public repository', () => {
+    const block = head.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)?.[1] ?? ''
+    expect(block.length).toBeGreaterThan(0)
+    const data = JSON.parse(block) as { '@context': string; '@graph': Array<Record<string, unknown>> }
+    expect(data['@context']).toBe('https://schema.org')
+    const app = data['@graph'].find((node) => node['@type'] === 'SoftwareApplication')
+    const site = data['@graph'].find((node) => node['@type'] === 'WebSite')
+    expect(app?.['name']).toBe('orangu')
+    expect(app?.['softwareVersion']).toBe(pkg.version)
+    expect(app?.['url']).toBe(SITE)
+    expect(app?.['sameAs']).toContain('https://github.com/NissanOhana/orangu')
+    expect(site?.['url']).toBe(SITE)
+    expect(src, 'the version is injected, never hand-typed').toContain('"softwareVersion":"{{version}}"')
+    // structured data is inert text: no script may execute it, and it must not hold a hex colour or money word
+    expect(block).not.toMatch(/<\/?script/)
+  })
+
+  it('wraps the page in one main landmark and keeps footer links distinguishable without colour', () => {
+    expect(html.match(/<main>/g)).toHaveLength(1)
+    expect(html.match(/<\/main>/g)).toHaveLength(1)
+    expect(html.indexOf('<main>')).toBeLessThan(html.indexOf('<section class="hero">'))
+    expect(html.indexOf('</main>')).toBeLessThan(html.indexOf('<footer>'))
+    expect(html).toContain('footer a{text-decoration:underline')
+  })
+
+  it('publishes robots.txt, a sitemap that lists only pages present in site/, and a 404 page', () => {
+    const robots = readFileSync(join(root, 'site/robots.txt'), 'utf8')
+    expect(robots).toContain('User-agent: *')
+    expect(robots).toContain('Allow: /')
+    expect(robots).toContain(`Sitemap: ${SITE}sitemap.xml`)
+    const sitemap = readFileSync(join(root, 'site/sitemap.xml'), 'utf8')
+    const locs = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]!)
+    expect(locs[0]).toBe(SITE)
+    expect(locs.length).toBeGreaterThanOrEqual(2)
+    for (const loc of locs) {
+      expect(loc.startsWith(SITE)).toBe(true)
+      const file = loc.slice(SITE.length) || 'index.html'
+      expect(existsSync(join(root, 'site', file)), `sitemap lists a missing page: ${loc}`).toBe(true)
+    }
+    const notFound = readFileSync(join(root, 'site/404.html'), 'utf8')
+    expect(notFound).toContain('<meta name="robots" content="noindex"/>')
+    expect(notFound).toContain('href="/orangu/"')
+    expect(notFound).not.toMatch(/https?:\/\//)
   })
 })

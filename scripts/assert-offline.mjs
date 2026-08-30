@@ -27,6 +27,8 @@ if (args.includes('--site')) {
     'nissanohana.github.io',
     // the footer's package link; a plain <a>, never fetched by the page
     'www.npmjs.com',
+    // the JSON-LD @context IRI: an identifier inside inert structured data, never fetched by the page
+    'schema.org',
   ])
   const checkHosts = (text, label) => {
     for (const url of text.match(/https?:\/\/[^\s"'<>)]+/g) ?? []) {
@@ -82,9 +84,14 @@ if (fileIx >= 0) {
 // likeliest regression). Only two inert spans are excluded:
 // the #orangu-data JSON block (data may cite https:// URLs as text) and the <title> text (user text,
 // already scrubbed; a URL there is words, not a request).
+// The two published samples (scripts/build-sample.ts) also carry og:/twitter: metadata pointing at the
+// site itself so a shared link unfurls; a <meta> is inert (no request), and only the site's own origin
+// is exempt, so a foreign og:image still fails. A user's own report never carries these tags.
+const UNFURL_META = /<meta (?:property|name)="(?:og|twitter):[a-z:]+" content="https:\/\/nissanohana\.github\.io\/orangu\/[^"]*"\/>/g
 const text = html
   .replace(/<script type="application\/json" id="orangu-data">[\s\S]*?<\/script>/, '')
   .replace(/<title>[\s\S]*?<\/title>/, '<title></title>')
+  .replace(UNFURL_META, '')
 const checks = [
   [/https?:\/\/(?!localhost|127\.0\.0\.1)/, 'external http(s) URL'],
   [/<link\b/i, '<link> tag'],

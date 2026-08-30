@@ -24,6 +24,15 @@ export type ContentBlock =
   | { type: 'tool_result'; tool_use_id: string; content: string | Array<{ type: string; text?: string }>; is_error?: boolean }
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
 
+/** the attribution* fields Claude Code stamps on an assistant record it ran on behalf of a skill, plugin, MCP server or agent */
+export interface Attribution {
+  skill?: string
+  plugin?: string
+  mcpServer?: string
+  mcpTool?: string
+  agent?: string
+}
+
 export interface BuilderOptions {
   sessionId?: string
   cwd?: string
@@ -136,7 +145,17 @@ export class SessionBuilder {
   /** an assistant API response; returns the tool_use ids created so tests can pair results */
   assistant(
     blocks: ContentBlock[],
-    opts: { usage?: Partial<Usage>; model?: string; stopReason?: string; messageId?: string; effort?: string; requestId?: string; diagnostics?: Record<string, unknown> } = {},
+    opts: {
+      usage?: Partial<Usage>
+      model?: string
+      stopReason?: string
+      messageId?: string
+      effort?: string
+      requestId?: string
+      diagnostics?: Record<string, unknown>
+      /** Claude Code's own attribution of the request to a skill / plugin / MCP server / agent (attribution* record fields) */
+      attribution?: Attribution
+    } = {},
   ): this {
     const usage: Usage = {
       input_tokens: 3,
@@ -167,6 +186,14 @@ export class SessionBuilder {
         ...(opts.diagnostics ? { diagnostics: opts.diagnostics } : {}),
       },
     })
+    if (opts.attribution) {
+      const a = opts.attribution
+      if (a.skill !== undefined) rec['attributionSkill'] = a.skill
+      if (a.plugin !== undefined) rec['attributionPlugin'] = a.plugin
+      if (a.mcpServer !== undefined) rec['attributionMcpServer'] = a.mcpServer
+      if (a.mcpTool !== undefined) rec['attributionMcpTool'] = a.mcpTool
+      if (a.agent !== undefined) rec['attributionAgent'] = a.agent
+    }
     this.records.push(rec)
     return this
   }
@@ -195,13 +222,14 @@ export class SessionBuilder {
     name: string,
     input: Record<string, unknown>,
     result: string,
-    opts: { durationMs?: number; isError?: boolean; usage?: Partial<Usage>; toolUseResult?: unknown; text?: string } = {},
+    opts: { durationMs?: number; isError?: boolean; usage?: Partial<Usage>; toolUseResult?: unknown; text?: string; thinking?: string; model?: string; attribution?: Attribution } = {},
   ): string {
     const id = fakeToolUseId()
     const blocks: ContentBlock[] = []
+    if (opts.thinking) blocks.push({ type: 'thinking', thinking: opts.thinking })
     if (opts.text) blocks.push({ type: 'text', text: opts.text })
     blocks.push({ type: 'tool_use', id, name, input })
-    this.assistant(blocks, { usage: opts.usage })
+    this.assistant(blocks, { usage: opts.usage, model: opts.model, attribution: opts.attribution })
     this.tick(opts.durationMs ?? 800)
     this.toolResult(id, result, { isError: opts.isError, toolUseResult: opts.toolUseResult })
     return id

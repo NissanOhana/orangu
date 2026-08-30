@@ -237,6 +237,14 @@ describe('renderAggregateReport (repo/global HTML)', () => {
     expect(data.capabilities).toEqual({ live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false })
   })
 
+  it('carries the illustrative marker only when the sample build asks for it', async () => {
+    const a = await preparedAggregate('repo demo')
+    const plain = embedded(renderAggregateReport(a, { scope: 'repo', scopeLabel: a.scope, includeText: false }).html) as { illustrative?: boolean }
+    expect(plain.illustrative).toBeUndefined()
+    const sample = embedded(renderAggregateReport(a, { scope: 'repo', scopeLabel: a.scope, includeText: true, illustrative: true }).html) as { illustrative?: boolean }
+    expect(sample.illustrative).toBe(true)
+  })
+
   it('keys the aggregate under the scope it was rendered for', async () => {
     const a = await preparedAggregate('global (1 root)')
     const { html } = renderAggregateReport(a, { scope: 'global', scopeLabel: a.scope, includeText: true })

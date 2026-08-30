@@ -1811,7 +1811,8 @@ svg { display: block; max-width: 100%; }
 .status-chip[data-status="legacy"] { color: var(--warn); border-color: var(--warn); background: transparent; }
 .status-chip[data-status="dismissed"] { color: var(--ink3); text-decoration: line-through; }
 .status-chip[data-status="failed"] { color: var(--bad); }
-.rrow { display: flex; gap: 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.rrow { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.rrow .grow { flex: 1 1 260px; min-width: 0; }
 .rerow { padding: 8px 0; border-bottom: 1px solid var(--border); }
 .rehead { display: flex; gap: 10px; font-size: 12.5px; align-items: baseline; }
 .saveval { font-family: var(--mono); font-size: 12.5px; color: var(--accent-ink); font-weight: 700; }
@@ -2266,6 +2267,7 @@ function renderAggregateReport(a, o) {
     mode: "file",
     version: BUILD_VERSION,
     generatedAt: a.generatedAt,
+    ...o.illustrative ? { illustrative: true } : {},
     capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: o.includeText },
     selectedId: void 0,
     session: void 0,

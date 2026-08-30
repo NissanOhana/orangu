@@ -51,6 +51,7 @@ Visual changes should run:
 npm run verify:generated
 npm run test:browser
 node scripts/assert-offline.mjs --file site/sample.html
+node scripts/assert-offline.mjs --file site/sample-repo.html
 node scripts/assert-offline.mjs --site
 ```
 
