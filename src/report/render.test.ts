@@ -5,6 +5,7 @@ import { analyzeSession } from '../analyze/analyze.js'
 import { aggregate } from '../analyze/aggregate.js'
 import { prepareAggregateForOutput } from '../cli/json-out.js'
 import { BRAND_ICON_ID } from './brand.js'
+import { CLIENT_JS, CLIENT_JS_AGG } from './generated/client-bundle.js'
 import { renderAggregateReport, renderReport, renderShell, safeJson } from './render.js'
 import { buildCanonicalSession, SessionBuilder } from '../../test/fixtures/session-builder.js'
 
@@ -102,6 +103,32 @@ describe('renderReport', () => {
     const dataStart = html.indexOf('id="orangu-data">') + 'id="orangu-data">'.length
     const data = JSON.parse(html.slice(dataStart, html.indexOf('</script>', dataStart)))
     expect(data.illustrative).toBe(true)
+  })
+
+  it('embeds prepared aggregates beside the session and ships the aggregate bundle only then', async () => {
+    const b = buildCanonicalSession()
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    const a = analyzeSession(s, { version: 'sample', now: 0 })
+    const repo = prepareAggregateForOutput(aggregate([a], 'repo demo', 0), {})
+    const global = prepareAggregateForOutput(aggregate([a], 'global (1 root)', 0), {})
+    const plain = renderReport(a).html
+    const plainData = embedded(plain) as { capabilities: { aggregates: boolean }; aggregates: Record<string, unknown> }
+    expect(plainData.capabilities.aggregates).toBe(false)
+    expect(plainData.aggregates).toEqual({})
+    expect(plain).toContain(CLIENT_JS)
+    const { html } = renderReport(a, { aggregates: { repo, global } })
+    const data = embedded(html) as { session?: unknown; capabilities: { aggregates: boolean }; aggregates: { repo?: { scope: string }; global?: { scope: string } } }
+    expect(data.session).toBeDefined()
+    expect(data.capabilities.aggregates).toBe(true)
+    expect(data.aggregates.repo?.scope).toBe('repo demo')
+    expect(data.aggregates.global?.scope).toBe('global (1 root)')
+    expect(html).toContain(CLIENT_JS_AGG)
+    expect(html).not.toContain(CLIENT_JS)
+    // the offline shell is unchanged: file CSP, no link, no remote origin, no network API text
+    expect(html).toContain(`content="${CSP_FILE}"`)
+    expect(/<link\b/i.test(html)).toBe(false)
+    expect(/\bfetch\s*\(/.test(html)).toBe(false)
+    expect(/EventSource/.test(html)).toBe(false)
   })
 
   it('loads no web fonts (policy): no <link>, no fonts.googleapis anywhere', async () => {

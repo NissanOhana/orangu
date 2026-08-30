@@ -4,7 +4,7 @@
  * a saved report would sit on a placeholder forever, because nothing can resolve a fetch it never made.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AppData } from '../../model/app-data.js'
+import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 import type { Aggregate } from '../../analyze/aggregate.js'
 import type { Ctx } from './app.js'
 import { aggUi } from './agg-ui.js'
@@ -49,6 +49,13 @@ describe('the aggregate report seam', () => {
     // the label is the aggregate's own scope string, already redacted by the CLI before it was embedded
     expect(aggUi.pickerHtml(fileData('repo', 103, 'repo orangu'), undefined)).toBe('<div class="sid">repo orangu · 103 sessions</div>')
     expect(aggUi.pickerHtml(fileData('global', 1, 'global'), undefined)).toBe('<div class="sid">global · 1 sessions</div>')
+  })
+
+  it('keeps the session card when the file carries a session beside its aggregates (the published sample)', () => {
+    const data = { ...fileData('repo', 7, 'repo checkout-api'), session: {} as AppData['session'] }
+    const row = { id: '5a91c73e-0000-4000-8000-00000000d0c5', source: 'claude-code', projectSlug: 'checkout-api' } as SessionSummaryRow
+    expect(aggUi.pickerHtml(data, row)).toBe('<div class="sid">5a91c73e · checkout-api</div>')
+    expect(aggUi.pickerHtml(data, undefined)).toBe('<div class="sid">–</div>')
   })
 
   it('escapes a scope label rather than trusting a project name to be markup-free', () => {
