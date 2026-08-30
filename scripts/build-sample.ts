@@ -1,7 +1,8 @@
 /**
  * Builds the two public samples linked from the landing page:
  *
- *   site/sample.html       one session, as `orangu report` writes it
+ *   site/sample.html       one session, plus the repository and machine-wide aggregates beside it, so
+ *                          every scope of the app (this session / repo / global) has evidence to show
  *   site/sample-repo.html  seven sessions in the same repository, as `orangu repo --html` writes it
  *
  * Every session is SYNTHETIC: composed here with the fixture builder the tests use, so no real
@@ -54,8 +55,8 @@ class Story {
   private turnStart = 0
   private turnMessages = 0
   private hookMs: Array<{ command: string; durationMs: number }>
-  constructor(o: { sessionId: string; startAt: string; title: string; baseline?: number; hooks?: Array<{ command: string; durationMs: number }> }) {
-    this.b = new SessionBuilder({ sessionId: o.sessionId, startAt: o.startAt, cwd: SRC, gitBranch: 'main', version: '2.1.231' })
+  constructor(o: { sessionId: string; startAt: string; title: string; cwd?: string; baseline?: number; hooks?: Array<{ command: string; durationMs: number }> }) {
+    this.b = new SessionBuilder({ sessionId: o.sessionId, startAt: o.startAt, cwd: o.cwd ?? SRC, gitBranch: 'main', version: '2.1.231' })
     this.ctx = 0
     this.pending = o.baseline ?? BASELINE
     this.hookMs = o.hooks ?? [
@@ -409,6 +410,77 @@ function buildSiblingSessions(): SessionBuilder[] {
   return out
 }
 
+/** Four sessions in the neighbouring repositories: the machine-wide scope shows more than one project. */
+function buildOtherProjectSessions(): SessionBuilder[] {
+  const out: SessionBuilder[] = []
+  {
+    const cwd = '/workspace/storefront-web'
+    const s = new Story({ sessionId: 'a11ce000-0000-4000-8000-0000000000a1', startAt: '2026-02-11T13:20:00.000Z', title: 'Fix the cart badge count after checkout', cwd })
+    s.human('The cart badge still shows the old count after a successful checkout. Fix it.', 0)
+    s.grep('cartCount|badge', 61_000, `${cwd}/src`)
+    for (const f of ['src/components/CartBadge.tsx', 'src/store/cart.ts', 'src/pages/checkout/success.tsx']) s.read(f, 3_100)
+    s.edit('src/pages/checkout/success.tsx', 'router.push(\'/\')', 'cart.reset()\nrouter.push(\'/\')')
+    s.bash('npx vitest run src/store', 'PASS 31 tests', { ms: 18_000 })
+    s.bash('npm run typecheck', '', { ms: 14_200 })
+    s.bash('git add -A && git commit -m "fix(cart): reset the badge after a successful checkout"', '[main 71ad0c3] fix(cart): reset the badge', { ms: 510 })
+    s.end()
+    out.push(s.b)
+  }
+  {
+    const cwd = '/workspace/storefront-web'
+    const s = new Story({ sessionId: 'a11ce000-0000-4000-8000-0000000000a2', startAt: '2026-02-20T09:05:00.000Z', title: 'Add the order history page', cwd })
+    s.human('Add an order history page at /account/orders. Reuse the table component from /account/invoices.', 0)
+    for (const f of ['src/pages/account/invoices.tsx', 'src/components/Table.tsx', 'src/api/orders.ts', 'src/pages/account/index.tsx']) s.read(f, 3_400)
+    s.write('src/pages/account/orders.tsx', filler(4_600, 'export default function Orders() { return <Table rows={useOrders()} columns={columns} /> }\n'))
+    s.write('src/pages/account/orders.test.tsx', filler(2_200, "it('lists the orders newest first', async () => { /* ... */ })\n"))
+    s.bash('npx vitest run src/pages/account', 'FAIL src/pages/account/orders.test.tsx\n  expected 3 rows, received 0\n1 failed, 12 passed', { ms: 21_000, isError: true })
+    s.read('src/api/orders.ts', 3_400)
+    s.edit('src/pages/account/orders.tsx', 'useOrders()', 'useOrders({ limit: 50 })')
+    s.bash('npx vitest run src/pages/account', 'PASS 13 tests', { ms: 20_400 })
+    s.say('The page lists the last 50 orders in the invoices table layout.', 120)
+    s.end()
+    s.human('Also add a filter by status.', 300_000)
+    s.read('src/pages/account/orders.tsx', 4_600)
+    s.write('src/pages/account/orders.tsx', filler(4_900, 'export default function Orders() { const [status, setStatus] = useState<Status | undefined>(); return <Table rows={useOrders({ limit: 50, status })} columns={columns} /> }\n'))
+    s.bash('npx vitest run src/pages/account', 'PASS 13 tests', { ms: 20_900 })
+    s.bash('git add -A && git commit -m "feat(account): order history with a status filter"', '[main 9c02e4b] feat(account): order history', { ms: 520 })
+    s.end()
+    out.push(s.b)
+  }
+  {
+    const cwd = '/workspace/platform-infra'
+    const s = new Story({ sessionId: 'a11ce000-0000-4000-8000-0000000000a3', startAt: '2026-02-16T17:45:00.000Z', title: 'Why does the staging deploy take 25 minutes?', cwd })
+    s.human('The staging deploy went from 8 to 25 minutes this week. Find out why.', 0)
+    s.bash('gh run list --workflow deploy-staging.yml --limit 20 --json databaseId,conclusion,updatedAt', filler(5_800, '{"databaseId":1,"conclusion":"success","updatedAt":"2026-02-16T10:00:00Z"}\n'), { ms: 2_400 })
+    for (let i = 0; i < 6; i++) s.bash(`gh run view 3321${i} --log`, filler(88_000, `deploy\tbuild image\t2026-02-16T10:0${i}:00Z step ${i}\n`), { ms: 6_200 + i * 300 })
+    s.say('Every run since Tuesday spends 17 minutes in "build image": the layer cache is cold on every run.', 160)
+    s.read('.github/workflows/deploy-staging.yml', 4_200)
+    s.read('Dockerfile', 1_900)
+    s.edit('.github/workflows/deploy-staging.yml', 'cache-from: type=gha', 'cache-from: type=gha,scope=staging\n          cache-to: type=gha,mode=max,scope=staging')
+    s.bash('git add -A && git commit -m "ci(deploy): scope the image layer cache so it is warm across runs"', '[main 5e1f7aa] ci(deploy): scope the image layer cache', { ms: 480 })
+    s.end()
+    out.push(s.b)
+  }
+  {
+    const cwd = '/workspace/platform-infra'
+    const s = new Story({ sessionId: 'a11ce000-0000-4000-8000-0000000000a4', startAt: '2026-02-27T08:30:00.000Z', title: 'Rotate the staging database credentials', cwd })
+    s.human('Rotate the staging database credentials and update every consumer. Do not touch production.', 0)
+    s.grep('STAGING_DB_URL|staging-db', 47_000, cwd)
+    for (const f of ['terraform/staging/db.tf', 'terraform/staging/secrets.tf', 'k8s/staging/api.yaml', 'k8s/staging/worker.yaml', 'docs/runbooks/rotate-db.md']) s.read(f, 2_600)
+    s.call('AskUserQuestion', { questions: [{ question: 'Rotate in place (brief downtime) or dual-write with a second user for a day?', header: 'Rotation', options: [{ label: 'Dual user (Recommended)', description: 'no downtime, cleanup tomorrow' }, { label: 'In place', description: 'one restart, done today' }] }] }, 'Dual user.', { ms: 9 * 60_000 + 40_000, out: 180 })
+    s.edit('terraform/staging/db.tf', 'resource "postgresql_role" "api"', 'resource "postgresql_role" "api_v2"')
+    s.edit('terraform/staging/secrets.tf', 'staging_db_url_v1', 'staging_db_url_v2')
+    s.bash('terraform -chdir=terraform/staging plan -out staging.plan', filler(24_000, 'Plan: 3 to add, 2 to change, 0 to destroy.\n'), { ms: 38_000 })
+    s.bash('terraform -chdir=terraform/staging apply staging.plan', 'Apply complete! Resources: 3 added, 2 changed, 0 destroyed.', { ms: 71_000 })
+    for (const f of ['k8s/staging/api.yaml', 'k8s/staging/worker.yaml']) s.edit(f, 'staging-db-url-v1', 'staging-db-url-v2')
+    s.bash('kubectl -n staging rollout restart deploy/api deploy/worker && kubectl -n staging rollout status deploy/api', 'deployment "api" successfully rolled out', { ms: 64_000 })
+    s.bash('git add -A && git commit -m "ops(staging): rotate the database credentials (dual user)"', '[main 0bb31de] ops(staging): rotate the database credentials', { ms: 500 })
+    s.end()
+    out.push(s.b)
+  }
+  return out
+}
+
 async function analyze(b: SessionBuilder, path: string): Promise<Analysis> {
   const session = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true, path })
   const analysis = analyzeSession(session, { version: 'sample', now: NOW })
@@ -458,17 +530,25 @@ async function main(): Promise<void> {
   const siblings: Analysis[] = []
   for (const [i, b] of buildSiblingSessions().entries()) siblings.push(await analyze(b, `/sample/checkout-api/session-${i + 1}.jsonl`))
 
-  const session = renderReport(feature, { title: 'orangu · sample report: one Claude Code session', illustrative: true })
+  const others: Analysis[] = []
+  for (const [i, b] of buildOtherProjectSessions().entries()) others.push(await analyze(b, `/sample/other/session-${i + 1}.jsonl`))
+
+  const all = [feature, ...siblings].sort((a, b) => (a.session.startedAt ?? 0) - (b.session.startedAt ?? 0))
+  const agg = prepareAggregateForOutput(aggregate(all, 'repo checkout-api', NOW), { 'include-text': true })
+  const everything = [...all, ...others].sort((a, b) => (a.session.startedAt ?? 0) - (b.session.startedAt ?? 0))
+  const globalAgg = prepareAggregateForOutput(aggregate(everything, 'global (1 root)', NOW), { 'include-text': true })
+
+  // The session sample carries both aggregates beside the session: every scope chip on Suggestions and
+  // both across-session screens have evidence, the way a serve session does, without a server.
+  const session = renderReport(feature, { title: 'orangu · sample report: one Claude Code session', illustrative: true, aggregates: { repo: agg, global: globalAgg } })
   const sessionHtml = publish(session.html, {
     description: 'A synthetic Claude Code session, analysed by orangu: every tool call, subagent, test run, token and minute, and the ranked findings with a concrete fix for each.',
     ogTitle: 'orangu sample report: one Claude Code session, step by step',
     url: `${SITE}sample.html`,
-    crossLink: { href: 'sample-repo.html', screen: 'repo', label: 'See the same evidence across a repository →' },
+    crossLink: { href: 'sample-repo.html', screen: 'repo', label: 'See the repository as its own file →' },
   })
   writeFileSync(join(ROOT, 'site/sample.html'), sessionHtml)
 
-  const all = [feature, ...siblings].sort((a, b) => (a.session.startedAt ?? 0) - (b.session.startedAt ?? 0))
-  const agg = prepareAggregateForOutput(aggregate(all, 'checkout-api', NOW), { 'include-text': true })
   const repo = renderAggregateReport(agg, { scope: 'repo', scopeLabel: agg.scope, includeText: true, illustrative: true, title: 'orangu · sample repository report: seven sessions' })
   const repoHtml = publish(repo.html, {
     description: 'Seven synthetic Claude Code sessions in one repository, aggregated by orangu: the findings that recur, the files read again and again, the one environment error every session hits.',
@@ -487,6 +567,7 @@ async function main(): Promise<void> {
   const fired = feature.insights.map((i) => `${i.ruleId}(${i.severity})`).join(', ')
   process.stdout.write(`built site/sample.html (${kb(sessionHtml)} KB) — ${feature.summary.turns} turns, ${feature.summary.toolCalls} calls, ${feature.summary.agents} agents, ${feature.summary.compactions} compaction\nrules fired: ${fired}\n`)
   process.stdout.write(`built site/sample-repo.html (${kb(repoHtml)} KB) — ${agg.sessionCount} sessions, ${agg.crossFindings.length} cross findings, ${agg.recurringErrors.length} recurring errors, ${agg.topReReadFiles.length} re-read files\n`)
+  process.stdout.write(`embedded in sample.html: repo ${agg.sessionCount} sessions · global ${globalAgg.sessionCount} sessions across ${globalAgg.byProject.length} projects, ${globalAgg.crossFindings.length} cross findings\n`)
 }
 
 await main()

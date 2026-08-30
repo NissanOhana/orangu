@@ -20,6 +20,8 @@ import type { FeedbackBootstrap } from '../feedback/diagnostics.js'
 
 export interface RenderOptions {
   redact?: RedactOptions | false
+  /** the published sample only: embed prepared repo/global aggregates and ship the aggregate bundle */
+  aggregates?: EmbeddedAggregates
   /** override the <title> */
   title?: string
   /** mark a generated public demo as synthetic in every rendered screen */
@@ -99,17 +101,19 @@ export function renderReport(analysis: Analysis, options: RenderOptions = {}): R
   }
   const now = data.generator.generatedAt
   const stripText = options.redact !== false && options.redact?.stripText === true
+  const embedded = options.aggregates ?? {}
+  const withAggregates = embedded.repo !== undefined || embedded.global !== undefined
   const appData: AppData = {
     v: APP_DATA_VERSION,
     mode: 'file',
     version: BUILD_VERSION,
     generatedAt: now,
     ...(options.illustrative ? { illustrative: true } : {}),
-    capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: !stripText, ...(options.watch ? { watch: true } : {}) },
+    capabilities: { live: false, aggregates: withAggregates, kickoffRun: false, exportHtml: true, includeText: !stripText, ...(options.watch ? { watch: true } : {}) },
     selectedId: data.session.id,
     session: data,
     sessions: [rowFromAnalysis(data, now)],
-    aggregates: {},
+    aggregates: { ...(embedded.repo ? { repo: embedded.repo } : {}), ...(embedded.global ? { global: embedded.global } : {}) },
     suggestions: [],
     redaction: redaction ? { applied: redaction.applied, strippedText: redaction.strippedText, strippedPaths: redaction.strippedPaths } : undefined,
   }
@@ -131,7 +135,7 @@ ${BRAND_ICON_SCRIPT}
 <div id="app" class="app"></div>
 <script type="application/json" id="orangu-data">${safeJson(appData)}</script>
 <script>window.__ORANGU__=JSON.parse(document.getElementById('orangu-data').textContent);</script>
-<script>${CLIENT_JS}</script>
+<script>${withAggregates ? CLIENT_JS_AGG : CLIENT_JS}</script>
 </body>
 </html>`
   return { html, redaction }
@@ -155,6 +159,16 @@ export interface AggregateRenderOptions {
   title?: string
   /** the published sample only: the client shows the synthetic-numbers note (mirrors RenderOptions.illustrative) */
   illustrative?: boolean
+}
+
+/**
+ * Aggregates a session report may carry beside its session (the published sample; `orangu report` never
+ * does). Typed as PreparedAggregate so the redaction boundary is the type, exactly as renderAggregateReport
+ * has it. Present, the file ships the aggregate bundle, whose Repo / Global screens read them.
+ */
+export interface EmbeddedAggregates {
+  repo?: PreparedAggregate
+  global?: PreparedAggregate
 }
 
 /**

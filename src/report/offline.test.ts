@@ -101,7 +101,12 @@ describe('offline report', () => {
     // alternative was to ship a navigation that freezes for a third of a second with no feedback,
     // which the aggregate screens suffer worst of all. Flagged for the reviewer to rule on rather
     // than raised quietly; from here it may only go DOWN.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(83_039)
+    // 2026-08-29 embedded aggregates: +97 B, re-measured. The published sample carries its session AND
+    // the repo/global aggregates, so it ships this bundle; agg-ui's sidebar card now draws the session
+    // card when the file has a session (the same markup the session bundle draws inline) instead of a
+    // dash, and nav.ts counts an embedded global aggregate in any file (+2 B, shared with CLIENT_JS).
+    // Named here rather than raised quietly; from here it may only go DOWN.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(83_136)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -171,6 +176,9 @@ describe('offline report', () => {
     // the prediction 94 B, the scheduling seam 78 B, plumbing 35 B. If a later chunk needs the room,
     // the cheapest cut is the prediction (-94 B), which costs a two-frame hairline on quick screens.
     // The cap is untouched and still may only go DOWN.
-    expect(CLIENT_JS.length).toBe(73713)
+    // 2026-08-29 embedded aggregates: +2 B, re-measured. nav.ts counts an embedded global aggregate in
+    // any saved file (`data.mode === 'file'` instead of the fileScope predicate), so the published
+    // sample's "Global · 11 sessions" label is true; serve still never counts. The cap is untouched.
+    expect(CLIENT_JS.length).toBe(73715)
   })
 })

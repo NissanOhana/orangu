@@ -214,6 +214,19 @@ describe('the shell of a report that has no session', () => {
     expect(item('harness').hint).toBe('needs orangu serve')
   })
 
+  it('counts both scopes when a session file carries them beside the session (the published sample)', () => {
+    const data = { ...appData(), aggregates: { repo: agg('repo checkout-api', 7), global: agg('global (1 root)', 11) } }
+    const groups = navFor(data, { screen: 'overview' })
+    expect(groups.find((g) => g.id === 'session')!.items.map((i) => i.screen)).toEqual(['overview', 'timeline', 'tools', 'context', 'coverage'])
+    const across = groups.find((g) => g.id === 'across')!
+    const item = (screen: string): (typeof across.items)[number] => across.items.find((i) => i.screen === screen)!
+    expect(item('repo').label).toBe('Repo · 7 sessions')
+    expect(item('repo').hint).toBeUndefined()
+    expect(item('global').label).toBe('Global · 11 sessions')
+    expect(item('global').hint).toBeUndefined()
+    expect(item('harness').hint).toBe('needs orangu serve')
+  })
+
   it('leaves the Global label alone when no global aggregate is in the file', () => {
     expect(navFor(appData(), { screen: 'overview' }).find((g) => g.id === 'across')!.items.find((i) => i.screen === 'global')!.label).toBe('Global · all time')
   })

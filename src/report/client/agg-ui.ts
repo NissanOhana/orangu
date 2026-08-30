@@ -9,23 +9,26 @@
  * carries fetch/EventSource by design and its text may not enter a document that has to pass the
  * offline gate.
  */
-import type { AppData } from '../../model/app-data.js'
+import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 import type { Ctx, ServeUi } from './app.js'
 import { h } from './dom.js'
 import { esc } from './format.js'
 import { megaReview } from './mega-review.js'
-import { fileScope } from './nav.js'
+import { fileScope, shortId } from './nav.js'
 import { renderGlobal } from './screens/global.js'
 import { aggregateEmpty, renderRepo } from './screens/repo.js'
 
 /**
- * The sidebar card names the scope this file covers and how many sessions it read: a file has no
- * session to pick. The label is the aggregate's own scope string (`repo <project>` / `global`),
- * already redacted by the CLI, so the card says which repository the numbers came from.
+ * The sidebar card names the scope this file covers and how many sessions it read: a file about a
+ * scope has no session to pick. The label is the aggregate's own scope string (`repo <project>` /
+ * `global`), already redacted by the CLI, so the card says which repository the numbers came from.
+ * A file that carries a session beside its aggregates (the published sample) keeps the session card
+ * the session bundle draws, so the same file reads the same in both shells.
  */
-function pickerHtml(d: AppData): string {
+function pickerHtml(d: AppData, row: SessionSummaryRow | undefined): string {
   const scope = fileScope(d)
-  const agg = scope ? d.aggregates[scope] : undefined
+  if (!scope) return `<div class="sid">${row ? esc(shortId(row.id)) + ' · ' + esc(row.projectSlug || row.source) : '–'}</div>`
+  const agg = d.aggregates[scope]
   return `<div class="sid">${agg ? esc(`${agg.scope} · ${agg.sessionCount} sessions`) : '–'}</div>`
 }
 
