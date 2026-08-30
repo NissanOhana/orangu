@@ -1,6 +1,6 @@
 {
   "name": "orangu",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Observe supported Claude Code, Cowork, and Desktop sessions, then improve the next outcome with deterministic local evidence and Claude Code or Codex skills.",
   "license": "MIT",
   "author": "Nissan Ohana",

@@ -1,6 +1,6 @@
 # orangu llms-full.txt
 
-orangu 0.7.1. This file concatenates README.md, docs/USAGE.md, docs/DETERMINISM.md from the repository, verbatim, with relative links rewritten to https://github.com/NissanOhana/orangu/blob/main/. The short index is llms.txt.
+orangu 0.7.2. This file concatenates README.md, docs/USAGE.md, docs/DETERMINISM.md from the repository, verbatim, with relative links rewritten to https://github.com/NissanOhana/orangu/blob/main/. The short index is llms.txt.
 
 
 ---

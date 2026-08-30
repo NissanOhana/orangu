@@ -1,6 +1,6 @@
 {
   "name": "orangu",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Turn supported local session evidence into reviewable proposals and explicit changes, with private reviewed feedback.",
   "author": {
     "name": "Nissan Ohana",
