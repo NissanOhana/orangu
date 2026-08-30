@@ -8,7 +8,7 @@
 
 Local, offline, deterministic observability for Claude Code, Cowork, and Desktop sessions, with optional Claude Code skills that turn the evidence into reviewable changes.
 
-[sample report](https://nissanohana.github.io/orangu/sample.html) · [docs](docs/README.md) · [npm](https://www.npmjs.com/package/orangu) · `npx orangu report`
+[sample report](https://nissanohana.github.io/orangu/sample.html) · [repo sample](https://nissanohana.github.io/orangu/sample-repo.html) · [docs](docs/README.md) · [npm](https://www.npmjs.com/package/orangu) · `npx orangu report`
 
 </div>
 

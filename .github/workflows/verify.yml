@@ -25,6 +25,7 @@ jobs:
       - run: npm ci
       - run: npm run verify
       - run: node scripts/assert-offline.mjs --file site/sample.html
+      - run: node scripts/assert-offline.mjs --file site/sample-repo.html
       - run: node scripts/assert-offline.mjs --site
       - run: npm audit --audit-level=high
       - name: Install and run the packed CLI

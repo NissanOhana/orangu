@@ -3,14 +3,32 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>orangu: turn your AI history into actionable insights</title>
-<meta name="description" content="Orangu reads your local AI sessions so you can inspect a run, discover repository-wide patterns, and improve workflows with real evidence."/>
-<meta property="og:title" content="orangu: turn your AI history into actionable insights"/>
-<meta property="og:description" content="Inspect individual runs, discover recurring repository patterns, and improve AI workflows using evidence from your local session history."/>
+<title>orangu: turn your Claude Code history into actionable insights</title>
+<meta name="description" content="Open-source CLI that turns local Claude Code sessions into an offline HTML report: tool calls, tokens, time, errors, subagents, and evidence for what to change next."/>
+<meta name="robots" content="index,follow,max-image-preview:large"/>
+<meta name="author" content="Nissan Ohana"/>
+<link rel="canonical" href="https://nissanohana.github.io/orangu/"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="orangu"/>
+<meta property="og:locale" content="en_US"/>
+<meta property="og:title" content="orangu: turn your Claude Code history into actionable insights"/>
+<meta property="og:description" content="Inspect one Claude Code session step by step, discover recurring patterns across a repository, and improve the next run with local, offline evidence."/>
 <meta property="og:url" content="https://nissanohana.github.io/orangu/"/>
 <meta property="og:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta property="og:image:alt" content="orangu: the three axes it measures, quality up, time down, tokens down"/>
 <meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="orangu: turn your Claude Code history into actionable insights"/>
+<meta name="twitter:description" content="Inspect one Claude Code session, discover recurring patterns across a repository, and improve the next run with local, offline evidence."/>
 <meta name="twitter:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
+<meta name="twitter:image:alt" content="orangu: the three axes it measures, quality up, time down, tokens down"/>
+<script type="application/ld+json">
+{"@context":"https://schema.org","@graph":[
+{"@type":"SoftwareApplication","@id":"https://nissanohana.github.io/orangu/#software","name":"orangu","url":"https://nissanohana.github.io/orangu/","description":"Deterministic, offline observability for Claude Code sessions: one self-contained HTML report per session, repository-wide aggregates, and reviewed proposals for the next run.","applicationCategory":"DeveloperApplication","applicationSubCategory":"Developer tools","operatingSystem":"macOS, Linux, Windows","softwareVersion":"{{version}}","isAccessibleForFree":true,"license":"https://github.com/NissanOhana/orangu/blob/main/LICENSE","downloadUrl":"https://www.npmjs.com/package/orangu","installUrl":"https://www.npmjs.com/package/orangu","screenshot":"https://nissanohana.github.io/orangu/assets/og.png","softwareHelp":{"@type":"CreativeWork","url":"https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md"},"author":{"@type":"Person","name":"Nissan Ohana","url":"https://github.com/NissanOhana"},"keywords":"Claude Code, session report, tokens, subagents, observability, CLI, offline","sameAs":["https://github.com/NissanOhana/orangu","https://www.npmjs.com/package/orangu"]},
+{"@type":"WebSite","@id":"https://nissanohana.github.io/orangu/#website","url":"https://nissanohana.github.io/orangu/","name":"orangu","description":"Turn your Claude Code history into actionable insights.","inLanguage":"en","publisher":{"@id":"https://nissanohana.github.io/orangu/#software"}}
+]}
+</script>
 <link rel="icon" type="image/png" sizes="32x32" href="{{favicon:32}}">
 <link rel="apple-touch-icon" sizes="180x180" href="{{favicon:180}}">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -100,15 +118,17 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .demo-bar{display:flex;gap:6px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
 .demo-bar i{width:10px;height:10px;border-radius:50%}
 .demo-bar .d1{background:var(--bad)}.demo-bar .d2{background:var(--warn)}.demo-bar .d3{background:var(--good)}
-.demo-bar>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--ink3);margin-left:8px;font-family:var(--mono)}
+.demo-bar>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--ink2);margin-left:8px;font-family:var(--mono)}
 .demo-motion{margin-left:auto;min-height:32px;padding:5px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--ink2);font:600 11px var(--sans);cursor:pointer;white-space:nowrap}
 .demo-motion:disabled{cursor:default;color:var(--ink3);opacity:.75}
 .demo-body{display:grid;grid-template-columns:minmax(140px,178px) 1fr;min-height:382px}
 .demo-rail{border-right:1px solid var(--border);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
-.demo-rail button{appearance:none;min-height:40px;border:0;background:transparent;text-align:left;font:inherit;font-size:13px;color:var(--ink3);padding:7px 10px;border-radius:8px;cursor:pointer}
+.demo-tabs{display:contents}
+.demo-rail button{appearance:none;min-height:40px;border:0;background:transparent;text-align:left;font:inherit;font-size:13px;color:var(--ink2);padding:7px 10px;border-radius:8px;cursor:pointer}
 .demo-rail button.on{color:var(--accent-ink);font-weight:700;background:var(--accent-weak)}
 .demo-rail button:focus-visible{outline:2px solid var(--accent-ink);outline-offset:1px}
-.demo-rail .dim{font-size:13px;color:var(--ink3);opacity:.55;padding:7px 10px}
+.demo-rail .rail-link{font-size:13px;color:var(--ink2);padding:7px 10px;text-decoration:underline;text-underline-offset:2px}
+.demo-rail .rail-link:hover{color:var(--accent-ink)}
 .demo-main{padding:18px 20px;position:relative;min-width:0;min-height:382px}
 .demo-view{min-width:0}
 .demo-view[hidden]{display:none}
@@ -166,10 +186,10 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .demo-card .demo-cat{margin-top:6px;font-size:12px;color:var(--ink3)}
 .demo-card .demo-cat b{color:var(--accent-ink)}
 .demo-scope{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
-.demo-scope span{border:1px solid var(--border);border-radius:999px;padding:4px 9px;font-size:11.5px;color:var(--ink3)}
+.demo-scope span{border:1px solid var(--border);border-radius:999px;padding:4px 9px;font-size:11.5px;color:var(--ink2)}
 .demo-scope span.on{background:var(--accent-weak);border-color:var(--border2);color:var(--accent-ink);font-weight:700}
 .demo-types{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 10px}
-.demo-types span{border:1px solid var(--border);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--ink3);background:var(--surface)}
+.demo-types span{border:1px solid var(--border);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--ink2);background:var(--surface)}
 .demo-evidence,.demo-proposal,.demo-verify{margin-top:7px;font-size:12.5px;color:var(--ink2)}
 .demo-proposal{padding:8px 10px;border-radius:7px;background:var(--accent-weak)}
 .demo-kick{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
@@ -241,7 +261,7 @@ h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px
 .who{max-width:560px;margin:26px auto 0;padding-top:20px;border-top:1px solid var(--border);font-size:14px;color:var(--ink2)}
 .job{position:relative;overflow:hidden}
 .job .scope{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);margin-bottom:10px}
-.job .result{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--ink3)}
+.job .result{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--ink2)}
 .demo-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--border);background:var(--bg2)}
 .demo-actions p{margin:0 auto 0 0;color:var(--ink3);font-size:13px}
 .change-card{padding:18px}
@@ -262,6 +282,7 @@ h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px
 @media (max-width:560px){.change-grid{grid-template-columns:1fr}.compare-row{grid-template-columns:1fr;gap:4px}.demo-step{grid-template-columns:34px minmax(0,1fr)}}
 footer{border-top:1px solid var(--border);padding:32px 28px;text-align:center;color:var(--ink3);font-size:13px}
 footer p{margin:0 0 6px}
+footer a{text-decoration:underline;text-underline-offset:2px}
 footer .legal{margin:0;font-size:12.5px}
 </style>
 </head>
@@ -285,6 +306,7 @@ footer .legal{margin:0;font-size:12.5px}
   </div>
 </header>
 
+<main>
 <section class="hero">
   <div class="wrap">
     <div class="hero-grid">
@@ -335,12 +357,12 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
     <div class="appdemo" id="appdemo">
       <div class="demo-bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>orangu report · illustrative supported session</span><button class="demo-motion" id="demoMotion" type="button" aria-pressed="true" aria-label="Automatic preview is static" disabled>Static</button></div>
       <div class="demo-body">
-        <nav class="demo-rail" role="tablist" aria-label="Report sections in the example">
+        <nav class="demo-rail" aria-label="Report sections in the example"><div class="demo-tabs" role="tablist">
           <button id="demo-tab-overview" type="button" role="tab" aria-controls="demo-panel-overview" aria-selected="false" tabindex="-1" data-demo-view="overview">Overview</button>
           <button id="demo-tab-timeline" type="button" role="tab" aria-controls="demo-panel-timeline" aria-selected="false" tabindex="-1" data-demo-view="timeline">Timeline</button>
           <button id="demo-tab-tools" type="button" role="tab" aria-controls="demo-panel-tools" aria-selected="false" tabindex="-1" data-demo-view="tools">Tools &amp; calls</button>
           <button id="demo-tab-suggest" type="button" role="tab" aria-controls="demo-panel-suggest" aria-selected="true" tabindex="0" data-demo-view="suggest" aria-current="page" class="on">Suggestions</button>
-          <span class="dim" role="presentation">Repo / Global</span>
+          </div><a class="rail-link" href="sample-repo.html" target="_blank" rel="noopener" aria-label="Repo / Global: open the repository-level sample (opens in a new tab)">Repo / Global ↗</a>
         </nav>
         <div class="demo-main">
           <div class="demo-view" id="demo-panel-overview" data-demo-view="overview" role="tabpanel" aria-labelledby="demo-tab-overview" hidden>
@@ -387,7 +409,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
           </div>
         </div>
       </div>
-      <div class="demo-actions"><p>Observe locally. Draft from evidence. Use only the lifecycle the scope supports.</p><a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="Open the full sample report (opens in a new tab)">Open the full sample report ↗</a></div>
+      <div class="demo-actions"><p>Observe locally. Draft from evidence. Use only the lifecycle the scope supports.</p><a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="Open the full sample report (opens in a new tab)">Open the full sample report ↗</a><a class="ghost" href="sample-repo.html" target="_blank" rel="noopener" aria-label="Open the repository-level sample (opens in a new tab)">Open the repository-level sample ↗</a></div>
     </div>
   </div>
 </section>
@@ -493,6 +515,8 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
     </div>
   </div>
 </section>
+
+</main>
 
 <footer>
   <p>MIT © Nissan Ohana · the mascot is CC0, put orangu on a sticker · <a href="https://github.com/NissanOhana/orangu">github.com/NissanOhana/orangu</a></p>

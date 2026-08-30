@@ -1,0 +1,5 @@
+# orangu landing (GitHub Pages). Everything here is public and static.
+User-agent: *
+Allow: /
+
+Sitemap: https://nissanohana.github.io/orangu/sitemap.xml

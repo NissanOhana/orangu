@@ -44,6 +44,7 @@ Facts an LLM should not get wrong:
 - `npx orangu report` inspects the latest local session; `npx orangu serve` follows all of them live.
 - Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`.
 - [Sample report](https://nissanohana.github.io/orangu/sample.html): a synthetic, deterministic report you can open without installing anything.
+- [Repository sample](https://nissanohana.github.io/orangu/sample-repo.html): the same synthetic corpus aggregated across sessions, as `npx orangu repo --html` writes it.
 
 ## Optional
 

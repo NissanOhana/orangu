@@ -29,11 +29,12 @@ describe('release automation', () => {
     expect(pkg.scripts['verify:release']).toContain('npm run test:browser')
     expect(pkg.scripts['prepublishOnly']).toBe('npm run verify:release')
     const generated = read('scripts/assert-generated.mjs')
-    for (const path of ['plugin/bin/orangu.cli.mjs', 'src/report/generated/client-bundle.ts', 'site/index.html', 'site/sample.html'])
+    for (const path of ['plugin/bin/orangu.cli.mjs', 'src/report/generated/client-bundle.ts', 'site/index.html', 'site/sample.html', 'site/sample-repo.html'])
       expect(generated).toContain(`'${path}'`)
     const verify = pkg.scripts['verify']!
     expect(verify.indexOf('verify:generated')).toBeLessThan(verify.indexOf('npm run build'))
     expect(pkg.scripts['verify:release']).toContain('assert-offline.mjs --file site/sample.html')
+    expect(pkg.scripts['verify:release']).toContain('assert-offline.mjs --file site/sample-repo.html')
   })
 
   it('verifies pull requests and retains browser diagnostics on failure', () => {
@@ -43,6 +44,7 @@ describe('release automation', () => {
     expect(workflow).toContain('npm run verify')
     expect(workflow).toContain('npm run test:browser')
     expect(workflow).toContain('assert-offline.mjs --file site/sample.html')
+    expect(workflow).toContain('assert-offline.mjs --file site/sample-repo.html')
     expect(workflow).toContain('npx --no-install playwright install --with-deps chromium')
     expect(workflow).toContain('if: failure()')
     expect(workflow).toContain('playwright-report/')

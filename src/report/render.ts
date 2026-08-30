@@ -153,6 +153,8 @@ export interface AggregateRenderOptions {
   includeText: boolean
   /** override the <title> (default: `orangu · <scopeLabel>`) */
   title?: string
+  /** the published sample only: the client shows the synthetic-numbers note (mirrors RenderOptions.illustrative) */
+  illustrative?: boolean
 }
 
 /**
@@ -169,6 +171,7 @@ export function renderAggregateReport(a: PreparedAggregate, o: AggregateRenderOp
     mode: 'file',
     version: BUILD_VERSION,
     generatedAt: a.generatedAt,
+    ...(o.illustrative ? { illustrative: true } : {}),
     capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: o.includeText },
     selectedId: undefined,
     session: undefined,

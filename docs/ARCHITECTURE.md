@@ -83,7 +83,7 @@ The evidence projection accepts supported direct JSONL plus current Analysis, Sl
 
 - `npm run verify` checks generated artifacts, strict TypeScript, the synthetic test suite, the build, and the CLI version.
 - `npm run test:browser` covers the landing, sample, report, and localhost app across supported viewports and themes.
-- `node scripts/assert-offline.mjs --file site/sample.html` validates the generated report's zero-network policy and CSP.
+- `node scripts/assert-offline.mjs --file site/sample.html` (and `--file site/sample-repo.html`, the repository-level sample) validates the generated report's zero-network policy and CSP.
 - `node scripts/assert-offline.mjs --site` validates the landing's allowlisted public origins.
 - `npm run verify:public` checks the tracked publication boundary, private-data markers, and local documentation links.
 - Focused evidence, lifecycle, and host-parity tests pin the contracts under `src/suggest/`, `src/cli/commands/`, and `plugin/`.

@@ -53,6 +53,15 @@ describe('assert-offline gate', () => {
     expect(gate(loosened, 'loose-csp.html').status).not.toBe(0)
   })
 
+  it('passes the published samples\' own link-unfurl metadata (the site origin only) and fails a foreign og:image', () => {
+    const own = html.replace('</head>', '<meta property="og:image" content="https://nissanohana.github.io/orangu/assets/og.png"/></head>')
+    expect(gate(own, 'own-unfurl.html').status).toBe(0)
+    const foreign = html.replace('</head>', '<meta property="og:image" content="https://cdn.example.com/og.png"/></head>')
+    expect(gate(foreign, 'foreign-unfurl.html').status).not.toBe(0)
+    const link = html.replace('</head>', '<link rel="canonical" href="https://nissanohana.github.io/orangu/sample.html"/></head>')
+    expect(gate(link, 'own-link.html').status).not.toBe(0)
+  })
+
   it('still passes when inert user text (the <title>) mentions a URL', () => {
     const titled = html.replace(/<title>[^<]*<\/title>/, '<title>fix https://example.com bug</title>')
     expect(titled).not.toBe(html)

@@ -333,3 +333,33 @@ test('generated sample fits a 390px resized desktop viewport', async ({ browser 
   expect(errors).toEqual([])
   await context.close()
 })
+
+test('generated repository sample renders the repo scope and the two samples link each other with the theme kept', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  const external: string[] = []
+  page.on('request', (request) => {
+    if (new URL(request.url()).origin !== 'http://127.0.0.1:4173') external.push(request.url())
+  })
+  await page.goto(withTheme(`${SITE}/sample-repo.html#repo`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('note')).toContainText('Illustrative synthetic sample.')
+  await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
+  await expect(page.getByText('Recurring findings', { exact: false }).first()).toBeVisible()
+  await expect(page.locator('.rrow')).not.toHaveCount(0)
+  await expectNoHorizontalOverflow(page)
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+
+  // the cross-link is the only sample-specific element; it copies theme and audience from the hash
+  const back = page.getByRole('link', { name: /See one session step by step/ })
+  await expect(back).toBeVisible()
+  const backHref = await back.getAttribute('href')
+  expect(backHref).toMatch(/^sample\.html#overview/)
+  if (projectTheme(info) === 'dark') expect(backHref).toContain('theme=dark')
+  else expect(backHref).not.toContain('theme=')
+
+  await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
+  const forward = page.getByRole('link', { name: /See the same evidence across a repository/ })
+  await expect(forward).toBeVisible()
+  expect(await forward.getAttribute('href')).toMatch(/^sample-repo\.html#repo/)
+  expect(external).toEqual([])
+  expect(errors).toEqual([])
+})
