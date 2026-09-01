@@ -319,14 +319,25 @@ export interface HarnessRetention {
   source?: { scope: HarnessConfigScope; file: string }
   /** settings files that carried a value too small or not whole to be a window. Counted, never an error. */
   invalidConfigured?: number
-  /** sessions the sweep can reach. `bytes` is the primary transcript on disk, not its sidecars. */
+  /**
+   * Sessions the sweep can reach. `bytes` is the primary transcript on disk: each session's `subagents/`
+   * and `tool-results/` are swept with it and are NOT counted here, so the size is a floor, not a total.
+   * The basis is every session the caller discovered under the scanned roots, which is not the same set as
+   * `scope.sessionsScanned`: the CLI passes the full discovery while the `--limit` slice bounds the
+   * crosswalk, so this count can legitimately exceed it.
+   */
   sweepable: { sessions: number; bytes: number }
   /** Desktop/Cowork sessions, kept at any age unless `configuredDays` gives them a window */
   exempt: { sessions: number; bytes: number; configuredDays?: number }
   /** age of the oldest sweepable session, whole days; absent when nothing is sweepable */
   oldestSweepableDays?: number
-  /** sweepable sessions already within `windowDays` of the cutoff */
+  /** sweepable sessions inside the band `[effectiveDays - windowDays, effectiveDays)`: close, not yet past */
   expiringSoon: { sessions: number; bytes: number; windowDays: number }
+  /**
+   * Sweepable sessions already older than `effectiveDays`. The sweep should have taken them; a paused
+   * sweep or a window that was just lowered is why they are still on disk. Measured, not an alarm.
+   */
+  pastCutoff: { sessions: number; bytes: number }
 }
 
 /** Seven top-level keys. `generator.generatedAt` is the injected `now`, never a clock read. */

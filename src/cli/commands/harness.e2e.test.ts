@@ -252,7 +252,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
   it('--json carries a measured retention block that leaves Desktop/Cowork sessions out of the sweep', () => {
     const r = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home))
     const t = r.retention
-    expect(Object.keys(t).sort()).toEqual(['effectiveDays', 'expiringSoon', 'exempt', 'isDefault', 'oldestSweepableDays', 'sweepable'].sort())
+    expect(Object.keys(t).sort()).toEqual(['effectiveDays', 'expiringSoon', 'exempt', 'isDefault', 'oldestSweepableDays', 'pastCutoff', 'sweepable'].sort())
     expect(t.effectiveDays).toBe(30)
     expect(t.isDefault).toBe(true)
     expect(t.sweepable.sessions).toBeGreaterThan(0)
@@ -260,6 +260,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(t.exempt).toEqual({ sessions: 1, bytes: expect.any(Number) })
     expect(t.expiringSoon.windowDays).toBe(7)
     expect(t.expiringSoon.sessions).toBe(1)
+    expect(t.pastCutoff).toEqual({ sessions: 0, bytes: 0 })
     expect(t.oldestSweepableDays).toBe(28)
     // the value Claude Code rejects must never appear as a window anywhere in the payload
     expect(JSON.stringify(t)).not.toContain('"effectiveDays":0')
@@ -267,7 +268,8 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
 
   it('prints the retention block and names the setting without recommending a value', () => {
     const out = run(['harness', '--global', '--cwd', fx.repo, '--quiet'], fx.home)
-    expect(out).toMatch(/^ {2}retention\s+30 days window · \d+ sessions? \([\d.]+ KB\) in reach of the sweep · oldest 28 days$/m)
+    expect(out).toMatch(/^ {2}retention\s+30-day window · \d+ sessions? \([\d.]+ KB\) in reach of the sweep · oldest 28 days$/m)
+    expect(out).toContain("sizes count primary transcripts only; each session's subagent and tool-result files are swept with it")
     expect(out).toContain("cleanupPeriodDays is unset, so the window is Claude Code's default of 30 days")
     expect(out).toMatch(/^ {4}1 session \([\d.]+ KB\) is within 7 days of the cutoff$/m)
     expect(out).toMatch(/^ {4}1 Desktop\/Cowork session \([\d.]+ KB\) is kept at any age by default$/m)
@@ -280,6 +282,27 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const note = /(\d+) sessions? \([\d.]+ KB\) (?:is|are) within 7 days of the cleanupPeriodDays cutoff at 30 days/.exec(out)
     expect(note, 'retention note').not.toBeNull()
     expect(note![1]).toBe('1')
+  })
+
+  // `isDefault` means "no USABLE value", not "no value". A rejected setting IS set, and saying it is unset
+  // right above "1 settings file set cleanupPeriodDays below the minimum of 1" is a contradiction.
+  it('does not call a rejected cleanupPeriodDays unset', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'orangu-harness-badcleanup-'))
+    const configDir = join(home, '.claude')
+    await mkdir(configDir, { recursive: true })
+    await writeFile(join(configDir, 'settings.json'), JSON.stringify({ model: 'claude-opus-5', cleanupPeriodDays: 0 }), 'utf8')
+    const repo = await mkdtemp(join(tmpdir(), 'orangu-harness-badcleanup-repo-'))
+    const out = run(['harness', '--cwd', repo, '--root', configDir, '--quiet'], home)
+    expect(out).toContain("no settings file set a usable cleanupPeriodDays, so Claude Code's default of 30 days applies")
+    expect(out).not.toContain('cleanupPeriodDays is unset')
+    expect(out).toContain('1 settings file set cleanupPeriodDays below the minimum of 1 or not to a whole number, and was ignored')
+    // the rejected value is never echoed back as if it were a window
+    expect(out).not.toMatch(/^ {2}retention\s+0-day window/m)
+
+    const r = JSON.parse(run(['harness', '--json', '--cwd', repo, '--root', configDir, '--quiet'], home))
+    expect(r.retention.effectiveDays).toBe(30)
+    expect(r.retention.invalidConfigured).toBe(1)
+    expect(r.retention.source).toBeUndefined()
   })
 
   // the --out contract, mirroring cmdAggregate (src/cli/main.ts:262-267). This is the mechanism the skill

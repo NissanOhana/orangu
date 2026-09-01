@@ -52,9 +52,18 @@ function ageDays(mtimeMs: number, now: number): number {
   return Math.max(0, Math.floor((now - mtimeMs) / DAY_MS))
 }
 
-/** the settings files that could set a window, highest precedence first */
+/**
+ * The settings files that can set a window for the swept corpus, highest precedence first.
+ *
+ * Files nested in a Cowork / Claude Desktop tree are dropped first. Under `--global`, `claudeRoots()` returns
+ * those roots too and the collector labels every root's `settings.local.json` `global-local`, which outranks
+ * the user's own `settings.json`. Those files govern Desktop sessions, which `cleanupPeriodDays` does not
+ * reach, so letting one win would set the reported window for the whole machine from a single Desktop
+ * session. `cleanPath` keeps the marker segment in the `~`-relativized path, so the predicate still matches.
+ */
 function byPrecedence(settings: readonly HarnessSettingsFile[]): HarnessSettingsFile[] {
-  return SCOPE_PRECEDENCE.flatMap((scope) => settings.filter((s) => s.scope === scope))
+  const governing = settings.filter((s) => !isDesktopSessionPath(s.file))
+  return SCOPE_PRECEDENCE.flatMap((scope) => governing.filter((s) => s.scope === scope))
 }
 
 export function computeRetention(settings: readonly HarnessSettingsFile[], sessions: readonly RetentionSessionRef[], now: number): HarnessRetention {
@@ -82,6 +91,7 @@ export function computeRetention(settings: readonly HarnessSettingsFile[], sessi
   const sweepable = { sessions: 0, bytes: 0 }
   const exempt = { sessions: 0, bytes: 0 }
   const expiring = { sessions: 0, bytes: 0 }
+  const pastCutoff = { sessions: 0, bytes: 0 }
   let oldestSweepableDays: number | undefined
   const expiresAtDays = effectiveDays - RETENTION_EXPIRING_WINDOW_DAYS
   for (const ref of sessions) {
@@ -94,7 +104,13 @@ export function computeRetention(settings: readonly HarnessSettingsFile[], sessi
     sweepable.bytes += ref.sizeBytes
     const age = ageDays(ref.mtimeMs, now)
     if (oldestSweepableDays === undefined || age > oldestSweepableDays) oldestSweepableDays = age
-    if (age >= expiresAtDays) {
+    // The window is bounded at both ends. A session already older than the cutoff is not "within N days of
+    // it": the sweep should have taken it, and a paused sweep or a just-lowered window is why it is still
+    // here. Counting it apart keeps the two lines from contradicting each other.
+    if (age >= effectiveDays) {
+      pastCutoff.sessions++
+      pastCutoff.bytes += ref.sizeBytes
+    } else if (age >= expiresAtDays) {
       expiring.sessions++
       expiring.bytes += ref.sizeBytes
     }
@@ -109,5 +125,6 @@ export function computeRetention(settings: readonly HarnessSettingsFile[], sessi
     exempt: { ...exempt, ...(desktopDays !== undefined ? { configuredDays: desktopDays } : {}) },
     ...(oldestSweepableDays !== undefined ? { oldestSweepableDays } : {}),
     expiringSoon: { ...expiring, windowDays: RETENTION_EXPIRING_WINDOW_DAYS },
+    pastCutoff,
   }
 }

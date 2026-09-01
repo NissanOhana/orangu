@@ -33,6 +33,14 @@ function settings(scope: HarnessConfigScope, over: Partial<HarnessSettingsFile> 
   }
 }
 
+/** a settings file nested inside a Cowork / Claude Desktop local-mode tree */
+function desktopSettings(over: Partial<HarnessSettingsFile> = {}): HarnessSettingsFile {
+  return settings('global-local', {
+    file: '~/Library/Application Support/Claude/local-agent-mode-sessions/ws/proj/local_1/.claude/settings.local.json',
+    ...over,
+  })
+}
+
 /** a session `ageDays` old, `kb` kilobytes on disk, under a normal Claude Code root */
 function session(ageDays: number, kb = 1, name = `s${ageDays}`): RetentionSessionRef {
   return { path: `/roots/.claude/projects/-repo/${name}.jsonl`, sizeBytes: kb * 1024, mtimeMs: NOW - ageDays * DAY }
@@ -100,6 +108,25 @@ describe('computeRetention: resolving the effective window', () => {
   })
 })
 
+describe('computeRetention: a Desktop/Cowork settings file never sets the window for the corpus', () => {
+  // Under --global, claudeRoots() returns the Cowork roots too, and the collector labels every root's
+  // settings.local.json `global-local`, which outranks the user's own settings.json. Those files govern
+  // Desktop sessions, which cleanupPeriodDays does not reach, so they must not win here.
+  it('lets the user global value stand over a value nested in a local-agent-mode tree', () => {
+    const r = computeRetention([desktopSettings({ cleanupPeriodDays: 7 }), settings('global', { cleanupPeriodDays: 90 })], [session(10), session(60)], NOW)
+    expect(r.effectiveDays).toBe(90)
+    expect(r.source?.file).toBe('~/.claude/global-settings.json')
+    expect(r.expiringSoon.sessions).toBe(0)
+  })
+
+  it('does not count a skipped Desktop file as an invalid value, and ignores its desktop key too', () => {
+    const r = computeRetention([desktopSettings({ cleanupPeriodDays: 0, desktopSessionCleanupPeriodDays: 5 })], [desktopSession(10)], NOW)
+    expect(r.invalidConfigured).toBeUndefined()
+    expect(r.isDefault).toBe(true)
+    expect(r.exempt.configuredDays).toBeUndefined()
+  })
+})
+
 describe('computeRetention: which sessions the sweep can reach', () => {
   it('counts normal roots as sweepable and keeps Desktop/Cowork sessions out of that bucket', () => {
     const r = computeRetention([], [session(1, 2), session(2, 3), desktopSession(400, 10)], NOW)
@@ -133,22 +160,50 @@ describe('computeRetention: which sessions the sweep can reach', () => {
 describe('computeRetention: the expiring-soon window', () => {
   it('counts a sweepable session once it is within the window of the cutoff', () => {
     expect(RETENTION_EXPIRING_WINDOW_DAYS).toBe(7)
-    // default 30-day window: the boundary is 23 days of age
+    // default 30-day window: the band is [23, 30). 22 is too young, 31 is already past the cutoff.
     const r = computeRetention([], [session(22, 1), session(23, 2), session(29, 4), session(31, 8)], NOW)
     expect(r.expiringSoon.windowDays).toBe(7)
-    expect(r.expiringSoon.sessions).toBe(3)
-    expect(r.expiringSoon.bytes).toBe((2 + 4 + 8) * 1024)
+    expect(r.expiringSoon.sessions).toBe(2)
+    expect(r.expiringSoon.bytes).toBe((2 + 4) * 1024)
+    expect(r.pastCutoff).toEqual({ sessions: 1, bytes: 8 * 1024 })
   })
 
   it('moves the boundary with the configured window', () => {
     const refs = [session(2), session(4), session(20)]
-    expect(computeRetention([settings('repo', { cleanupPeriodDays: 10 })], refs, NOW).expiringSoon.sessions).toBe(2)
-    expect(computeRetention([settings('repo', { cleanupPeriodDays: 90 })], refs, NOW).expiringSoon.sessions).toBe(0)
+    // window 10: the band is [3, 10), so only the 4-day session; the 20-day one is already past the cutoff
+    const tight = computeRetention([settings('repo', { cleanupPeriodDays: 10 })], refs, NOW)
+    expect(tight.expiringSoon.sessions).toBe(1)
+    expect(tight.pastCutoff.sessions).toBe(1)
+    const wide = computeRetention([settings('repo', { cleanupPeriodDays: 90 })], refs, NOW)
+    expect(wide.expiringSoon.sessions).toBe(0)
+    expect(wide.pastCutoff.sessions).toBe(0)
   })
 
   it('never counts a Desktop/Cowork session as expiring, whatever its age', () => {
     const r = computeRetention([], [desktopSession(365, 5)], NOW)
     expect(r.expiringSoon).toEqual({ sessions: 0, bytes: 0, windowDays: RETENTION_EXPIRING_WINDOW_DAYS })
+  })
+})
+
+describe('computeRetention: sessions the sweep should already have taken', () => {
+  // "within 7 days of the cutoff" and "oldest 400 days" cannot both be true of one session. Anything past
+  // the window is counted apart, which is reachable the moment someone LOWERS cleanupPeriodDays.
+  it('keeps a session past the cutoff out of expiringSoon and counts it in pastCutoff', () => {
+    const r = computeRetention([settings('global', { cleanupPeriodDays: 5 })], [session(1, 1), session(200, 2), session(365, 4)], NOW)
+    expect(r.expiringSoon.sessions).toBe(1)
+    expect(r.expiringSoon.bytes).toBe(1024)
+    expect(r.pastCutoff).toEqual({ sessions: 2, bytes: (2 + 4) * 1024 })
+    expect(r.expiringSoon.sessions + r.pastCutoff.sessions).toBeLessThanOrEqual(r.sweepable.sessions)
+  })
+
+  it('puts a session exactly at the cutoff past it, not inside the window', () => {
+    const r = computeRetention([settings('global', { cleanupPeriodDays: 30 })], [session(29, 1), session(30, 2)], NOW)
+    expect(r.expiringSoon).toEqual({ sessions: 1, bytes: 1024, windowDays: 7 })
+    expect(r.pastCutoff).toEqual({ sessions: 1, bytes: 2048 })
+  })
+
+  it('never counts a Desktop/Cowork session as past the cutoff', () => {
+    expect(computeRetention([], [desktopSession(900)], NOW).pastCutoff).toEqual({ sessions: 0, bytes: 0 })
   })
 })
 

@@ -7399,7 +7399,8 @@ function ageDays(mtimeMs, now) {
   return Math.max(0, Math.floor((now - mtimeMs) / DAY_MS2));
 }
 function byPrecedence(settings) {
-  return SCOPE_PRECEDENCE2.flatMap((scope) => settings.filter((s) => s.scope === scope));
+  const governing = settings.filter((s) => !isDesktopSessionPath(s.file));
+  return SCOPE_PRECEDENCE2.flatMap((scope) => governing.filter((s) => s.scope === scope));
 }
 function computeRetention(settings, sessions, now) {
   const ordered = byPrecedence(settings);
@@ -7422,6 +7423,7 @@ function computeRetention(settings, sessions, now) {
   const sweepable = { sessions: 0, bytes: 0 };
   const exempt = { sessions: 0, bytes: 0 };
   const expiring = { sessions: 0, bytes: 0 };
+  const pastCutoff = { sessions: 0, bytes: 0 };
   let oldestSweepableDays;
   const expiresAtDays = effectiveDays - RETENTION_EXPIRING_WINDOW_DAYS;
   for (const ref of sessions) {
@@ -7434,7 +7436,10 @@ function computeRetention(settings, sessions, now) {
     sweepable.bytes += ref.sizeBytes;
     const age = ageDays(ref.mtimeMs, now);
     if (oldestSweepableDays === void 0 || age > oldestSweepableDays) oldestSweepableDays = age;
-    if (age >= expiresAtDays) {
+    if (age >= effectiveDays) {
+      pastCutoff.sessions++;
+      pastCutoff.bytes += ref.sizeBytes;
+    } else if (age >= expiresAtDays) {
       expiring.sessions++;
       expiring.bytes += ref.sizeBytes;
     }
@@ -7447,7 +7452,8 @@ function computeRetention(settings, sessions, now) {
     sweepable,
     exempt: { ...exempt, ...desktopDays !== void 0 ? { configuredDays: desktopDays } : {} },
     ...oldestSweepableDays !== void 0 ? { oldestSweepableDays } : {},
-    expiringSoon: { ...expiring, windowDays: RETENTION_EXPIRING_WINDOW_DAYS }
+    expiringSoon: { ...expiring, windowDays: RETENTION_EXPIRING_WINDOW_DAYS },
+    pastCutoff
   };
 }
 
@@ -11516,15 +11522,22 @@ async function cmdHarness(_positionals, flags) {
 function printRetention(r, line, w) {
   const t = r.retention;
   const oldest = t.oldestSweepableDays === void 0 ? "" : ` \xB7 oldest ${plural(t.oldestSweepableDays, "day")}`;
-  line("retention", `${plural(t.effectiveDays, "day")} window \xB7 ${plural(t.sweepable.sessions, "session")} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`);
+  line("retention", `${t.effectiveDays}-day window \xB7 ${plural(t.sweepable.sessions, "session")} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`);
   const dim = (s) => w(paint(out, "dim", "    " + s));
-  dim(t.isDefault ? "cleanupPeriodDays is unset, so the window is Claude Code's default of 30 days" : `set by ${t.source.file} (${t.source.scope})`);
+  dim("sizes count primary transcripts only; each session's subagent and tool-result files are swept with it");
+  if (t.source) dim(`set by ${t.source.file} (${t.source.scope})`);
+  else if (t.invalidConfigured) dim(`no settings file set a usable cleanupPeriodDays, so Claude Code's default of ${RETENTION_DEFAULT_DAYS} days applies`);
+  else dim(`cleanupPeriodDays is unset, so the window is Claude Code's default of ${RETENTION_DEFAULT_DAYS} days`);
   if (t.invalidConfigured) {
     dim(`${plural(t.invalidConfigured, "settings file")} set cleanupPeriodDays below the minimum of 1 or not to a whole number, and ${t.invalidConfigured === 1 ? "was" : "were"} ignored`);
   }
   if (t.expiringSoon.sessions > 0) {
     const verb = t.expiringSoon.sessions === 1 ? "is" : "are";
     dim(`${plural(t.expiringSoon.sessions, "session")} (${sizeLabel(t.expiringSoon.bytes)}) ${verb} within ${plural(t.expiringSoon.windowDays, "day")} of the cutoff`);
+  }
+  if (t.pastCutoff.sessions > 0) {
+    const verb = t.pastCutoff.sessions === 1 ? "is" : "are";
+    dim(`${plural(t.pastCutoff.sessions, "session")} (${sizeLabel(t.pastCutoff.bytes)}) ${verb} already past the cutoff and still on disk`);
   }
   if (t.exempt.sessions > 0) {
     const label = `${plural(t.exempt.sessions, "Desktop/Cowork session")} (${sizeLabel(t.exempt.bytes)})`;

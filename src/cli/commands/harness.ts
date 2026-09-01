@@ -19,6 +19,7 @@ import { analyzeAllPooled, defaultJobs } from '../../cache/pool.js'
 import { aggregate } from '../../analyze/aggregate.js'
 import { collectInventory } from '../../harness/collect.js'
 import { buildHarnessReport, plural, sizeLabel } from '../../harness/report.js'
+import { RETENTION_DEFAULT_DAYS } from '../../harness/retention.js'
 import type { HarnessReport } from '../../harness/types.js'
 import { redactValue } from '../../redact/redact.js'
 import { flagBool, flagStr } from '../args.js'
@@ -139,15 +140,24 @@ export async function cmdHarness(_positionals: string[], flags: Record<string, s
 function printRetention(r: HarnessReport, line: (l: string, v: string) => void, w: (s?: string) => void): void {
   const t = r.retention
   const oldest = t.oldestSweepableDays === undefined ? '' : ` · oldest ${plural(t.oldestSweepableDays, 'day')}`
-  line('retention', `${plural(t.effectiveDays, 'day')} window · ${plural(t.sweepable.sessions, 'session')} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`)
+  // `${n}-day window` is an attributive compound, not a count, so it does not take the plural helper
+  line('retention', `${t.effectiveDays}-day window · ${plural(t.sweepable.sessions, 'session')} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`)
   const dim = (s: string) => w(paint(out, 'dim', '    ' + s))
-  dim(t.isDefault ? 'cleanupPeriodDays is unset, so the window is Claude Code\'s default of 30 days' : `set by ${t.source!.file} (${t.source!.scope})`)
+  dim("sizes count primary transcripts only; each session's subagent and tool-result files are swept with it")
+  // Three states, because `isDefault` means "no USABLE value", not "no value": a rejected setting is set.
+  if (t.source) dim(`set by ${t.source.file} (${t.source.scope})`)
+  else if (t.invalidConfigured) dim(`no settings file set a usable cleanupPeriodDays, so Claude Code's default of ${RETENTION_DEFAULT_DAYS} days applies`)
+  else dim(`cleanupPeriodDays is unset, so the window is Claude Code's default of ${RETENTION_DEFAULT_DAYS} days`)
   if (t.invalidConfigured) {
     dim(`${plural(t.invalidConfigured, 'settings file')} set cleanupPeriodDays below the minimum of 1 or not to a whole number, and ${t.invalidConfigured === 1 ? 'was' : 'were'} ignored`)
   }
   if (t.expiringSoon.sessions > 0) {
     const verb = t.expiringSoon.sessions === 1 ? 'is' : 'are'
     dim(`${plural(t.expiringSoon.sessions, 'session')} (${sizeLabel(t.expiringSoon.bytes)}) ${verb} within ${plural(t.expiringSoon.windowDays, 'day')} of the cutoff`)
+  }
+  if (t.pastCutoff.sessions > 0) {
+    const verb = t.pastCutoff.sessions === 1 ? 'is' : 'are'
+    dim(`${plural(t.pastCutoff.sessions, 'session')} (${sizeLabel(t.pastCutoff.bytes)}) ${verb} already past the cutoff and still on disk`)
   }
   if (t.exempt.sessions > 0) {
     const label = `${plural(t.exempt.sessions, 'Desktop/Cowork session')} (${sizeLabel(t.exempt.bytes)})`
