@@ -72,7 +72,10 @@ export interface HarnessSettingsFile {
   /** NAMES ONLY, never values */
   env: { count: number; names: string[] }
   statusLine: boolean
+  /** the sweep window Claude Code applies to `projects/`; present only when this file sets a numeric value */
   cleanupPeriodDays?: number
+  /** the sweep window for Claude Desktop / Cowork transcripts, which carry no limit unless this is set */
+  desktopSessionCleanupPeriodDays?: number
   enabledPlugins: string[]
 }
 
@@ -296,13 +299,45 @@ export interface HarnessScope {
   sessionsUnreadable: number
 }
 
-/** Six top-level keys. `generator.generatedAt` is the injected `now`, never a clock read. */
+/**
+ * How much of the evidence orangu reads Claude Code is going to delete, and when.
+ *
+ * Every field is measured. `effectiveDays` is the window Claude Code applies to `projects/` (the transcripts,
+ * their `subagents/` and their `tool-results/`, which is exactly orangu's evidence base); the auto-memory
+ * directory beside them is not swept. Claude Desktop and Cowork transcripts are kept at any age unless a settings file gives them
+ * their own limit, so they are counted apart instead of being folded into the at-risk number.
+ *
+ * There is no recommendation here and none is implied: a longer window keeps more history to measure, and
+ * leaves plaintext transcripts on disk for longer. Both are true at once.
+ */
+export interface HarnessRetention {
+  /** whole days; never below `RETENTION_MIN_DAYS`, because Claude Code rejects a smaller value */
+  effectiveDays: number
+  /** true when no settings file set a usable value, so the window is Claude Code's built-in default */
+  isDefault: boolean
+  /** which file the effective value came from; absent when `isDefault` */
+  source?: { scope: HarnessConfigScope; file: string }
+  /** settings files that carried a value too small or not whole to be a window. Counted, never an error. */
+  invalidConfigured?: number
+  /** sessions the sweep can reach. `bytes` is the primary transcript on disk, not its sidecars. */
+  sweepable: { sessions: number; bytes: number }
+  /** Desktop/Cowork sessions, kept at any age unless `configuredDays` gives them a window */
+  exempt: { sessions: number; bytes: number; configuredDays?: number }
+  /** age of the oldest sweepable session, whole days; absent when nothing is sweepable */
+  oldestSweepableDays?: number
+  /** sweepable sessions already within `windowDays` of the cutoff */
+  expiringSoon: { sessions: number; bytes: number; windowDays: number }
+}
+
+/** Seven top-level keys. `generator.generatedAt` is the injected `now`, never a clock read. */
 export interface HarnessReport {
   schemaVersion: string
   generator: { name: string; version: string; generatedAt: number }
   scope: HarnessScope
   inventory: HarnessInventory
   crosswalk: HarnessCrosswalk
+  /** what the configured cleanup window will delete out from under the crosswalk above */
+  retention: HarnessRetention
   /** drift and skip notes, human-readable. A note is how this layer reports a miss instead of throwing. */
   notes: string[]
 }

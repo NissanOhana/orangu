@@ -51,6 +51,7 @@ function report(over: Partial<HarnessReport> = {}): HarnessReport {
       claudeMd: [{ file: '~/Code/demo/CLAUDE.md', bytes: 4000, approxTokens: 1000, reads: 12, sessions: 12, approxTokensCarried: 12_000 }],
       injectedListings: [{ type: 'skill_listing', sessions: 12, bytes: 500_000, approxTokens: 125_784, approxTokensPerSession: 10_482 }],
     },
+    retention: { effectiveDays: 30, isDefault: true, sweepable: { sessions: 12, bytes: 90_000 }, exempt: { sessions: 0, bytes: 0 }, oldestSweepableDays: 9, expiringSoon: { sessions: 0, bytes: 0, windowDays: 7 } },
     notes: ['~/.claude.json was not read, so client-side usage counters are omitted; the crosswalk uses session evidence only'],
     ...over,
   }

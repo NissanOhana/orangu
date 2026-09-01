@@ -271,6 +271,8 @@ class HarnessRunner {
       version: this.ctx.opts.version,
       now,
       scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home },
+      // the registry rows already carry what retention measures: path, size and mtime of each transcript
+      sessions: rows.map((row) => ({ path: row.path, sizeBytes: row.sizeBytes, mtimeMs: row.mtimeMs })),
     })
     // computed from raw analyses and config paths: scrub before it leaves the process (api.ts discipline)
     this.result = redactValue(report, { scrub: true, home })

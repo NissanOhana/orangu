@@ -696,6 +696,10 @@ async function readEvidenceSessionManifest(manifest, maxBytes = manifest.maxByte
 }
 
 // src/discover/discover.ts
+var DESKTOP_SESSIONS_DIR = "local-agent-mode-sessions";
+function isDesktopSessionPath(p) {
+  return p.split(/[\\/]/).includes(DESKTOP_SESSIONS_DIR);
+}
 function defaultConfigDir() {
   const env = process.env["CLAUDE_CONFIG_DIR"];
   if (env && env.trim()) return env;
@@ -716,12 +720,12 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
   (env["CLAUDE_CONFIG_DIR"] ?? "").split(",").forEach((r) => add(r.trim()));
   add(join2(homeDir, ".claude"));
   add(join2(homeDir, ".config", "claude"));
-  const coworkBase = join2(homeDir, "Library", "Application Support", "Claude", "local-agent-mode-sessions");
+  const coworkBase = join2(homeDir, "Library", "Application Support", "Claude", DESKTOP_SESSIONS_DIR);
   const canonicalCoworkBase = await canonicalNonSymlinkDirectoryChain(homeDir, [
     "Library",
     "Application Support",
     "Claude",
-    "local-agent-mode-sessions"
+    DESKTOP_SESSIONS_DIR
   ]);
   if (canonicalCoworkBase) {
     for (const a of await safeReaddir(canonicalCoworkBase, entryBudget)) {
@@ -7381,11 +7385,80 @@ function crosswalk(inv, analyses, agg, opts = {}) {
   };
 }
 
+// src/harness/retention.ts
+var RETENTION_DEFAULT_DAYS = 30;
+var RETENTION_MIN_DAYS = 1;
+var RETENTION_EXPIRING_WINDOW_DAYS = 7;
+var DAY_MS2 = 864e5;
+var SCOPE_PRECEDENCE2 = ["repo-local", "repo", "global-local", "global"];
+function usableDays(v) {
+  if (v === void 0) return void 0;
+  return Number.isInteger(v) && v >= RETENTION_MIN_DAYS ? v : void 0;
+}
+function ageDays(mtimeMs, now) {
+  return Math.max(0, Math.floor((now - mtimeMs) / DAY_MS2));
+}
+function byPrecedence(settings) {
+  return SCOPE_PRECEDENCE2.flatMap((scope) => settings.filter((s) => s.scope === scope));
+}
+function computeRetention(settings, sessions, now) {
+  const ordered = byPrecedence(settings);
+  let effectiveDays = RETENTION_DEFAULT_DAYS;
+  let source;
+  let invalidConfigured = 0;
+  for (const s of ordered) {
+    if (s.cleanupPeriodDays === void 0) continue;
+    const days = usableDays(s.cleanupPeriodDays);
+    if (days === void 0) {
+      invalidConfigured++;
+      continue;
+    }
+    if (source === void 0) {
+      effectiveDays = days;
+      source = { scope: s.scope, file: s.file };
+    }
+  }
+  const desktopDays = ordered.map((s) => usableDays(s.desktopSessionCleanupPeriodDays)).find((d) => d !== void 0);
+  const sweepable = { sessions: 0, bytes: 0 };
+  const exempt = { sessions: 0, bytes: 0 };
+  const expiring = { sessions: 0, bytes: 0 };
+  let oldestSweepableDays;
+  const expiresAtDays = effectiveDays - RETENTION_EXPIRING_WINDOW_DAYS;
+  for (const ref of sessions) {
+    if (isDesktopSessionPath(ref.path)) {
+      exempt.sessions++;
+      exempt.bytes += ref.sizeBytes;
+      continue;
+    }
+    sweepable.sessions++;
+    sweepable.bytes += ref.sizeBytes;
+    const age = ageDays(ref.mtimeMs, now);
+    if (oldestSweepableDays === void 0 || age > oldestSweepableDays) oldestSweepableDays = age;
+    if (age >= expiresAtDays) {
+      expiring.sessions++;
+      expiring.bytes += ref.sizeBytes;
+    }
+  }
+  return {
+    effectiveDays,
+    isDefault: source === void 0,
+    ...source ? { source } : {},
+    ...invalidConfigured > 0 ? { invalidConfigured } : {},
+    sweepable,
+    exempt: { ...exempt, ...desktopDays !== void 0 ? { configuredDays: desktopDays } : {} },
+    ...oldestSweepableDays !== void 0 ? { oldestSweepableDays } : {},
+    expiringSoon: { ...expiring, windowDays: RETENTION_EXPIRING_WINDOW_DAYS }
+  };
+}
+
 // src/harness/report.ts
 function plural(n2, one) {
   return `${n2} ${one}${n2 === 1 ? "" : "s"}`;
 }
-function buildNotes(inv, x, sessionsScanned, sessionsUnreadable) {
+function sizeLabel(bytes) {
+  return bytes < 1024 * 1024 ? (bytes / 1024).toFixed(1) + " KB" : (bytes / 1024 / 1024).toFixed(1) + " MB";
+}
+function buildNotes(inv, x, r, sessionsScanned, sessionsUnreadable) {
   const notes = [];
   const declaredNothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
   if (declaredNothing) notes.push("no harness config found under the scanned roots. Nothing to cross-reference");
@@ -7411,6 +7484,12 @@ function buildNotes(inv, x, sessionsScanned, sessionsUnreadable) {
   if (undeclared > 0) {
     notes.push(`${plural(undeclared, "row")} marked undeclared: observed in sessions but not found in the config that was read (a source outside this scope, or drift)`);
   }
+  if (r.expiringSoon.sessions > 0) {
+    const one = r.expiringSoon.sessions === 1;
+    notes.push(
+      `${plural(r.expiringSoon.sessions, "session")} (${sizeLabel(r.expiringSoon.bytes)}) ${one ? "is" : "are"} within ${plural(r.expiringSoon.windowDays, "day")} of the cleanupPeriodDays cutoff at ${plural(r.effectiveDays, "day")}, after which Claude Code deletes the transcript`
+    );
+  }
   return notes;
 }
 function buildHarnessReport(inv, analyses, agg, o) {
@@ -7418,6 +7497,7 @@ function buildHarnessReport(inv, analyses, agg, o) {
   const rel = (p) => redactValue(p, home ? { home } : {});
   const sessionsUnreadable = o.scope.sessionsUnreadable ?? 0;
   const x = crosswalk(inv, analyses, agg, home ? { home } : {});
+  const retention = computeRetention(inv.settings, o.sessions, o.now);
   return {
     schemaVersion: HARNESS_SCHEMA_VERSION,
     generator: { name: "orangu", version: o.version, generatedAt: o.now },
@@ -7431,7 +7511,8 @@ function buildHarnessReport(inv, analyses, agg, o) {
     },
     inventory: inv,
     crosswalk: x,
-    notes: buildNotes(inv, x, analyses.length, sessionsUnreadable)
+    retention,
+    notes: buildNotes(inv, x, retention, analyses.length, sessionsUnreadable)
   };
 }
 
@@ -9386,7 +9467,10 @@ function parseSettings(ctx, scope, file, raw) {
     hooks: settingsHooks(raw),
     env: settingsEnv(raw),
     statusLine: raw["statusLine"] != null,
+    // both cleanup windows, kept raw: `src/harness/retention.ts` decides which values are usable, so a
+    // value this collector cannot vouch for is still visible in the inventory rather than silently dropped
     ...typeof raw["cleanupPeriodDays"] === "number" ? { cleanupPeriodDays: raw["cleanupPeriodDays"] } : {},
+    ...typeof raw["desktopSessionCleanupPeriodDays"] === "number" ? { desktopSessionCleanupPeriodDays: raw["desktopSessionCleanupPeriodDays"] } : {},
     enabledPlugins: enabledPluginKeys(raw)
   };
 }
@@ -10156,7 +10240,9 @@ var HarnessRunner = class {
     const report = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : "global", now), {
       version: this.ctx.opts.version,
       now,
-      scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home }
+      scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home },
+      // the registry rows already carry what retention measures: path, size and mtime of each transcript
+      sessions: rows.map((row2) => ({ path: row2.path, sizeBytes: row2.sizeBytes, mtimeMs: row2.mtimeMs }))
     });
     this.result = redactValue(report, { scrub: true, home });
     this.fingerprint = fp;
@@ -11355,7 +11441,6 @@ function detectStreams(flags) {
   err = detectCaps(process.stderr, process.env, { machine });
 }
 var n = (x) => x.toLocaleString("en-US");
-var kb = (bytes) => (bytes / 1024).toFixed(1) + " KB";
 async function runHarness(flags) {
   detectStreams(flags);
   const isGlobal = flagBool(flags, "global");
@@ -11406,7 +11491,9 @@ async function runHarness(flags) {
   const report = buildHarnessReport(inventory, analyses, agg, {
     version: VERSION,
     now,
-    scope: { cwd, roots, global: isGlobal, limit, sessionsUnreadable: failed, home }
+    scope: { cwd, roots, global: isGlobal, limit, sessionsUnreadable: failed, home },
+    // every discovered session, not the `--limit` slice: the cleanup sweep reaches all of them
+    sessions: refs
   });
   if (flagBool(flags, "no-redact")) return report;
   return redactValue(report, { scrub: true, stripPaths: flagBool(flags, "strip-paths"), home });
@@ -11425,6 +11512,27 @@ async function cmdHarness(_positionals, flags) {
     return;
   }
   printHarness(report);
+}
+function printRetention(r, line, w) {
+  const t = r.retention;
+  const oldest = t.oldestSweepableDays === void 0 ? "" : ` \xB7 oldest ${plural(t.oldestSweepableDays, "day")}`;
+  line("retention", `${plural(t.effectiveDays, "day")} window \xB7 ${plural(t.sweepable.sessions, "session")} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`);
+  const dim = (s) => w(paint(out, "dim", "    " + s));
+  dim(t.isDefault ? "cleanupPeriodDays is unset, so the window is Claude Code's default of 30 days" : `set by ${t.source.file} (${t.source.scope})`);
+  if (t.invalidConfigured) {
+    dim(`${plural(t.invalidConfigured, "settings file")} set cleanupPeriodDays below the minimum of 1 or not to a whole number, and ${t.invalidConfigured === 1 ? "was" : "were"} ignored`);
+  }
+  if (t.expiringSoon.sessions > 0) {
+    const verb = t.expiringSoon.sessions === 1 ? "is" : "are";
+    dim(`${plural(t.expiringSoon.sessions, "session")} (${sizeLabel(t.expiringSoon.bytes)}) ${verb} within ${plural(t.expiringSoon.windowDays, "day")} of the cutoff`);
+  }
+  if (t.exempt.sessions > 0) {
+    const label = `${plural(t.exempt.sessions, "Desktop/Cowork session")} (${sizeLabel(t.exempt.bytes)})`;
+    dim(
+      t.exempt.configuredDays === void 0 ? `${label} ${t.exempt.sessions === 1 ? "is" : "are"} kept at any age by default` : `${label} follow${t.exempt.sessions === 1 ? "s" : ""} desktopSessionCleanupPeriodDays: ${plural(t.exempt.configuredDays, "day")}`
+    );
+  }
+  dim("cleanupPeriodDays sets the window, minimum 1. A larger value keeps more history to measure, and leaves plaintext transcripts on disk for longer");
 }
 function printHarness(r) {
   const w = (s = "") => process.stdout.write(s + "\n");
@@ -11447,7 +11555,7 @@ function printHarness(r) {
   line("inventory", `${plural(inv.totals.skills, "skill")} \xB7 ${plural(inv.totals.agents, "agent")} \xB7 ${plural(inv.totals.plugins, "plugin")} \xB7 ${plural(inv.totals.mcpServers, "MCP server")} \xB7 ${plural(inv.totals.hookCommands, "hook command")}`);
   if (inv.claudeMd.length) {
     const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0);
-    line("CLAUDE.md", `${kb(inv.totals.claudeMdBytes)} \xB7 \u2248${n(inv.totals.claudeMdApproxTokens)} tokens \xB7 \u2248${n(carried)} tokens carried across the window`);
+    line("CLAUDE.md", `${sizeLabel(inv.totals.claudeMdBytes)} \xB7 \u2248${n(inv.totals.claudeMdApproxTokens)} tokens \xB7 \u2248${n(carried)} tokens carried across the window`);
   }
   const noSessions = r.scope.sessionsScanned === 0;
   const NO_EVIDENCE = "no sessions in scope: nothing can be classified";
@@ -11490,6 +11598,7 @@ function printHarness(r) {
   if (noSessions) line("drift", NO_EVIDENCE);
   else line("drift", `model ${x.models.configured ?? "(unset)"} ${modelDrift ? "\u2260" : "="} seen \xB7 effort ${x.effort.configured ?? "(unset)"} ${effortDrift ? "\u2260" : "="} seen \xB7 ${n(x.effort.slashEffortCommands)} /effort commands`);
   line("permissions", `${x.permissions.allowRules} allow / ${x.permissions.denyRules} deny / ${x.permissions.askRules} ask rules \xB7 ${n(x.permissions.promptEvents)} prompt events in ${x.permissions.promptSessions} sessions`);
+  printRetention(r, line, w);
   if (x.injectedListings.length) {
     w();
     w(paint(out, "bold", "  injected listings (recurring context weight, per session)"));

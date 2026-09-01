@@ -13,8 +13,9 @@ import { redactValue } from '../redact/redact.js'
 import type { Analysis } from '../model/analysis.js'
 import type { Aggregate } from '../analyze/aggregate.js'
 import { crosswalk } from './crosswalk.js'
+import { computeRetention, type RetentionSessionRef } from './retention.js'
 import { HARNESS_SCHEMA_VERSION } from './types.js'
-import type { HarnessCrosswalk, HarnessInventory, HarnessReport } from './types.js'
+import type { HarnessCrosswalk, HarnessInventory, HarnessReport, HarnessRetention } from './types.js'
 
 export interface HarnessReportScope {
   /** the repo whose `.claude/` was read */
@@ -35,6 +36,12 @@ export interface BuildHarnessReportOptions {
   /** epoch ms, injected by the caller; this module never reads a clock */
   now: number
   scope: HarnessReportScope
+  /**
+   * Every session discovered under the scanned roots, for the retention block. Deliberately the full
+   * discovery and not the `--limit` slice the crosswalk was built from: what the cleanup sweep will delete
+   * is a fact about the disk, not about how many sessions this run chose to analyze.
+   */
+  sessions: RetentionSessionRef[]
 }
 
 /** `1 session` / `2 sessions`: the one plural helper the harness surfaces share (src/cli/commands/harness.ts too) */
@@ -42,8 +49,16 @@ export function plural(n: number, one: string): string {
   return `${n} ${one}${n === 1 ? '' : 's'}`
 }
 
+/**
+ * The one byte formatter the harness surfaces share, so a note and the printed line never disagree.
+ * Scales to MB above a megabyte: a whole corpus of transcripts runs to hundreds of thousands of KB.
+ */
+export function sizeLabel(bytes: number): string {
+  return bytes < 1024 * 1024 ? (bytes / 1024).toFixed(1) + ' KB' : (bytes / 1024 / 1024).toFixed(1) + ' MB'
+}
+
 /** deterministic: same inventory + same crosswalk always yields the same lines in the same order */
-function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, sessionsScanned: number, sessionsUnreadable: number): string[] {
+function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetention, sessionsScanned: number, sessionsUnreadable: number): string[] {
   const notes: string[] = []
 
   const declaredNothing =
@@ -76,6 +91,12 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, sessionsScanned:
   if (undeclared > 0) {
     notes.push(`${plural(undeclared, 'row')} marked undeclared: observed in sessions but not found in the config that was read (a source outside this scope, or drift)`)
   }
+  if (r.expiringSoon.sessions > 0) {
+    const one = r.expiringSoon.sessions === 1
+    notes.push(
+      `${plural(r.expiringSoon.sessions, 'session')} (${sizeLabel(r.expiringSoon.bytes)}) ${one ? 'is' : 'are'} within ${plural(r.expiringSoon.windowDays, 'day')} of the cleanupPeriodDays cutoff at ${plural(r.effectiveDays, 'day')}, after which Claude Code deletes the transcript`,
+    )
+  }
   return notes
 }
 
@@ -88,6 +109,7 @@ export function buildHarnessReport(inv: HarnessInventory, analyses: Analysis[], 
   const sessionsUnreadable = o.scope.sessionsUnreadable ?? 0
   // the same home the inventory paths were written with, so `~/…` rows can be joined against session reads
   const x = crosswalk(inv, analyses, agg, home ? { home } : {})
+  const retention = computeRetention(inv.settings, o.sessions, o.now)
 
   return {
     schemaVersion: HARNESS_SCHEMA_VERSION,
@@ -102,6 +124,7 @@ export function buildHarnessReport(inv: HarnessInventory, analyses: Analysis[], 
     },
     inventory: inv,
     crosswalk: x,
-    notes: buildNotes(inv, x, analyses.length, sessionsUnreadable),
+    retention,
+    notes: buildNotes(inv, x, retention, analyses.length, sessionsUnreadable),
   }
 }

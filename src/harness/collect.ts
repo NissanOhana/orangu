@@ -320,7 +320,10 @@ function parseSettings(ctx: Ctx, scope: HarnessConfigScope, file: string, raw: R
     hooks: settingsHooks(raw),
     env: settingsEnv(raw),
     statusLine: raw['statusLine'] != null,
+    // both cleanup windows, kept raw: `src/harness/retention.ts` decides which values are usable, so a
+    // value this collector cannot vouch for is still visible in the inventory rather than silently dropped
     ...(typeof raw['cleanupPeriodDays'] === 'number' ? { cleanupPeriodDays: raw['cleanupPeriodDays'] } : {}),
+    ...(typeof raw['desktopSessionCleanupPeriodDays'] === 'number' ? { desktopSessionCleanupPeriodDays: raw['desktopSessionCleanupPeriodDays'] } : {}),
     enabledPlugins: enabledPluginKeys(raw),
   }
 }

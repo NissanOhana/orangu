@@ -117,6 +117,24 @@ describe('collectInventory: the collection boundary', () => {
     expect(s.keys).toContain('permissions')
   })
 
+  // Both cleanup windows reach the inventory raw: `src/harness/retention.ts` owns the validity rule, so a
+  // value the collector cannot vouch for is still visible rather than silently dropped.
+  it('records both cleanup windows, and keeps a non-numeric one out of the typed field', async () => {
+    const root = await tmp()
+    const home = await bareHome()
+    await writeFile(join(root, 'settings.json'), JSON.stringify({ cleanupPeriodDays: 0.5, desktopSessionCleanupPeriodDays: 90 }), 'utf8')
+    const s = (await collectInventory({ cwd: await tmp(), roots: [root], home })).settings[0]!
+    expect(s.cleanupPeriodDays).toBe(0.5)
+    expect(s.desktopSessionCleanupPeriodDays).toBe(90)
+    expect(s.keys).toEqual(['cleanupPeriodDays', 'desktopSessionCleanupPeriodDays'])
+
+    const other = await tmp()
+    await writeFile(join(other, 'settings.json'), JSON.stringify({ cleanupPeriodDays: '30' }), 'utf8')
+    const t = (await collectInventory({ cwd: await tmp(), roots: [other], home })).settings[0]!
+    expect(t.cleanupPeriodDays).toBeUndefined()
+    expect(t.keys).toContain('cleanupPeriodDays')
+  })
+
   it('reduces a hook command to basename(argv0) — arguments never enter the report', async () => {
     const root = await tmp()
     const home = await bareHome()

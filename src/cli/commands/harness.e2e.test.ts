@@ -9,7 +9,7 @@
 import { describe, it, expect, beforeAll } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { makeFixtureHome } from '../../../test/fixtures/home.js'
@@ -22,6 +22,8 @@ interface Fixture {
   configDir: string
   repo: string
 }
+
+const DAY_SECONDS = 86_400
 
 /** a fake $HOME containing .claude/ (sessions + global config) and .claude.json, plus a separate repo dir */
 async function makeHarnessFixture(): Promise<Fixture> {
@@ -71,6 +73,20 @@ async function makeHarnessFixture(): Promise<Fixture> {
     'utf8',
   )
 
+  // Age one transcript so it sits inside the expiring window of the default 30-day cleanup, and one
+  // Cowork/Desktop session, which Claude Code keeps at any age: retention must not count it as at-risk.
+  const aged = join(configDir, 'projects', '-Users-test-Code-demo', '99999999-0000-4000-8000-00000000cccc.jsonl')
+  const agedSeconds = Math.floor(Date.now() / 1000) - 28 * DAY_SECONDS
+  await utimes(aged, agedSeconds, agedSeconds)
+
+  const coworkClaude = join(home, 'Library', 'Application Support', 'Claude', 'local-agent-mode-sessions', 'ws', 'proj', 'local_1', '.claude')
+  await mkdir(join(coworkClaude, 'projects', '-Users-test-Code-demo'), { recursive: true })
+  resetIds()
+  const cw = new SessionBuilder({ sessionId: '99999999-0000-4000-8000-00000000dddd', cwd: '/Users/test/Code/demo' })
+  cw.userPrompt('desktop work')
+  cw.turnDuration(1000, 1)
+  await writeFile(join(coworkClaude, 'projects', '-Users-test-Code-demo', '99999999-0000-4000-8000-00000000dddd.jsonl'), cw.toJsonl())
+
   // the repo side
   const repo = await mkdtemp(join(tmpdir(), 'orangu-harness-repo-'))
   await mkdir(join(repo, '.claude', 'skills', 'repo-only-skill'), { recursive: true })
@@ -92,9 +108,10 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     fx = await makeHarnessFixture()
   })
 
-  it('emits the six top-level keys with the harness schema version', () => {
+  it('emits the seven top-level keys with the harness schema version', () => {
     const r = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home))
-    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'schemaVersion', 'scope'])
+    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
+    // additive: the retention block joined the envelope without changing the contract of any existing key
     expect(r.schemaVersion).toBe('1')
     expect(r.scope.sessionsScanned).toBeGreaterThan(0)
   })
@@ -230,6 +247,41 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(out).not.toContain('$')
   })
 
+  // Retention: Claude Code deletes the very transcripts every row above is computed from. The block is
+  // measured, not advisory, and the Cowork/Desktop session must never be counted as at-risk.
+  it('--json carries a measured retention block that leaves Desktop/Cowork sessions out of the sweep', () => {
+    const r = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home))
+    const t = r.retention
+    expect(Object.keys(t).sort()).toEqual(['effectiveDays', 'expiringSoon', 'exempt', 'isDefault', 'oldestSweepableDays', 'sweepable'].sort())
+    expect(t.effectiveDays).toBe(30)
+    expect(t.isDefault).toBe(true)
+    expect(t.sweepable.sessions).toBeGreaterThan(0)
+    expect(t.sweepable.bytes).toBeGreaterThan(0)
+    expect(t.exempt).toEqual({ sessions: 1, bytes: expect.any(Number) })
+    expect(t.expiringSoon.windowDays).toBe(7)
+    expect(t.expiringSoon.sessions).toBe(1)
+    expect(t.oldestSweepableDays).toBe(28)
+    // the value Claude Code rejects must never appear as a window anywhere in the payload
+    expect(JSON.stringify(t)).not.toContain('"effectiveDays":0')
+  })
+
+  it('prints the retention block and names the setting without recommending a value', () => {
+    const out = run(['harness', '--global', '--cwd', fx.repo, '--quiet'], fx.home)
+    expect(out).toMatch(/^ {2}retention\s+30 days window · \d+ sessions? \([\d.]+ KB\) in reach of the sweep · oldest 28 days$/m)
+    expect(out).toContain("cleanupPeriodDays is unset, so the window is Claude Code's default of 30 days")
+    expect(out).toMatch(/^ {4}1 session \([\d.]+ KB\) is within 7 days of the cutoff$/m)
+    expect(out).toMatch(/^ {4}1 Desktop\/Cowork session \([\d.]+ KB\) is kept at any age by default$/m)
+    // the shared formatter scales: a corpus-sized bucket must not print as six figures of KB
+    expect(out).not.toMatch(/\d{6,}\.\d KB/)
+    expect(out).toContain('cleanupPeriodDays sets the window, minimum 1.')
+    expect(out).toContain('leaves plaintext transcripts on disk for longer')
+    // measured only: the surface never tells the user which number to pick, and never offers the rejected 0
+    expect(out).not.toMatch(/\brecommend|\bshould set\b|cleanupPeriodDays[^\n]*\b0\b/)
+    const note = /(\d+) sessions? \([\d.]+ KB\) (?:is|are) within 7 days of the cleanupPeriodDays cutoff at 30 days/.exec(out)
+    expect(note, 'retention note').not.toBeNull()
+    expect(note![1]).toBe('1')
+  })
+
   // the --out contract, mirroring cmdAggregate (src/cli/main.ts:262-267). This is the mechanism the skill
   // uses to materialise the digest without it entering context, so stdout MUST stay empty.
   it('--out writes the pretty JSON to the file and leaves stdout empty', async () => {
@@ -240,7 +292,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const raw = readFileSync(dest, 'utf8')
     const r = JSON.parse(raw)
     expect(r.schemaVersion).toBe('1')
-    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'schemaVersion', 'scope'])
+    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     expect(raw).toContain('\n  ') // pretty-printed with 2 spaces, like cmdAggregate
     expect(raw).not.toContain('$')
     if (process.platform !== 'win32') expect(statSync(dest).mode & 0o777).toBe(0o600)

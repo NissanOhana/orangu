@@ -12,7 +12,7 @@ import { analyzeSession } from '../analyze/analyze.js'
 import { aggregate } from '../analyze/aggregate.js'
 import { SessionBuilder, resetIds } from '../../test/fixtures/session-builder.js'
 import { collectInventory } from './collect.js'
-import { buildHarnessReport } from './report.js'
+import { buildHarnessReport, sizeLabel } from './report.js'
 import { HARNESS_SCHEMA_VERSION } from './types.js'
 import type { HarnessInventory, HarnessReport } from './types.js'
 
@@ -43,11 +43,22 @@ async function fixture(): Promise<{ inv: HarnessInventory; analyses: Analysis[];
   return { inv, analyses: [a], agg: aggregate([a], 'test', 0) }
 }
 
+const DAY = 86_400_000
+const NOW = 1_700_000_000_000
+
 const opts = (over: Partial<Parameters<typeof buildHarnessReport>[3]> = {}) => ({
   version: '0.2.0',
-  now: 1_700_000_000_000,
+  now: NOW,
   scope: { cwd: '/repo', roots: ['/root'], global: false, limit: 200, sessionsUnreadable: 0 },
+  sessions: [],
   ...over,
+})
+
+/** a discovered transcript `ageDays` old, synthesized: retention reads only path, size and mtime */
+const ref = (ageDays: number, sizeBytes = 1024, name = `s${ageDays}`) => ({
+  path: `/root/projects/-repo/${name}.jsonl`,
+  sizeBytes,
+  mtimeMs: NOW - ageDays * DAY,
 })
 
 /** every key name anywhere in the object graph */
@@ -63,10 +74,10 @@ function allKeys(v: unknown, out: string[] = []): string[] {
 }
 
 describe('buildHarnessReport: shape', () => {
-  it('emits exactly the six top-level keys, with the schema version and the injected clock', async () => {
+  it('emits exactly the seven top-level keys, with the schema version and the injected clock', async () => {
     const { inv, analyses, agg } = await fixture()
     const r = buildHarnessReport(inv, analyses, agg, opts())
-    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'schemaVersion', 'scope'])
+    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     expect(r.schemaVersion).toBe(HARNESS_SCHEMA_VERSION)
     expect(r.schemaVersion).toBe('1')
     expect(r.generator).toEqual({ name: 'orangu', version: '0.2.0', generatedAt: 1_700_000_000_000 })
@@ -105,6 +116,7 @@ describe('buildHarnessReport: shape', () => {
       version: 't',
       now: 0,
       scope: { cwd: join(homedir(), 'Code', 'app'), roots: [join(homedir(), '.claude')], global: false, limit: 200 },
+      sessions: [],
     })
     expect(r.scope.cwd).toBe('~/Code/app')
     expect(r.scope.roots).toEqual(['~/.claude'])
@@ -149,6 +161,48 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     const r = buildHarnessReport(inv, [], aggregate([], 'test', 0), opts())
     expect(r.notes.some((n) => n.includes('no harness config'))).toBe(true)
     expect(r.scope.sessionsScanned).toBe(0)
+  })
+})
+
+describe('buildHarnessReport: retention', () => {
+  it('measures the sessions it was handed, splitting Desktop/Cowork out of the sweepable bucket', async () => {
+    const { inv, analyses, agg } = await fixture()
+    const desktop = {
+      path: '/base/Library/Application Support/Claude/local-agent-mode-sessions/a/b/local_1/.claude/projects/-repo/d.jsonl',
+      sizeBytes: 4096,
+      mtimeMs: NOW - 400 * DAY,
+    }
+    const r = buildHarnessReport(inv, analyses, agg, opts({ sessions: [ref(2), ref(26, 2048), desktop] }))
+    // the fixture's settings.json sets no cleanup key, so the window is the built-in default
+    expect(r.retention.effectiveDays).toBe(30)
+    expect(r.retention.isDefault).toBe(true)
+    expect(r.retention.sweepable).toEqual({ sessions: 2, bytes: 1024 + 2048 })
+    expect(r.retention.exempt.sessions).toBe(1)
+    expect(r.retention.oldestSweepableDays).toBe(26)
+    expect(r.retention.expiringSoon).toEqual({ sessions: 1, bytes: 2048, windowDays: 7 })
+  })
+
+  it('adds one note when a transcript is inside the window, and none when nothing is', async () => {
+    const { inv, analyses, agg } = await fixture()
+    const quiet = buildHarnessReport(inv, analyses, agg, opts({ sessions: [ref(1)] }))
+    expect(quiet.notes.some((note) => note.includes('cleanupPeriodDays'))).toBe(false)
+
+    const soon = buildHarnessReport(inv, analyses, agg, opts({ sessions: [ref(28, 2048)] }))
+    expect(soon.notes).toContain('1 session (2.0 KB) is within 7 days of the cleanupPeriodDays cutoff at 30 days, after which Claude Code deletes the transcript')
+    expect(soon.notes.filter((note) => note.includes('cleanupPeriodDays'))).toHaveLength(1)
+  })
+
+  it('scales the size label past a megabyte instead of printing six figures of KB', () => {
+    expect(sizeLabel(2048)).toBe('2.0 KB')
+    expect(sizeLabel(1024 * 1024)).toBe('1.0 MB')
+    expect(sizeLabel(785_893_012)).toBe('749.5 MB')
+  })
+
+  it('never emits a window Claude Code would reject', async () => {
+    const { inv, analyses, agg } = await fixture()
+    const r = buildHarnessReport(inv, analyses, agg, opts({ sessions: [ref(3)] }))
+    expect(r.retention.effectiveDays).toBeGreaterThanOrEqual(1)
+    expect(JSON.stringify(r.retention)).not.toContain('"effectiveDays":0')
   })
 })
 

@@ -18,7 +18,7 @@ import { AnalysisCache, analyzeRefCached } from '../../cache/index.js'
 import { analyzeAllPooled, defaultJobs } from '../../cache/pool.js'
 import { aggregate } from '../../analyze/aggregate.js'
 import { collectInventory } from '../../harness/collect.js'
-import { buildHarnessReport, plural } from '../../harness/report.js'
+import { buildHarnessReport, plural, sizeLabel } from '../../harness/report.js'
 import type { HarnessReport } from '../../harness/types.js'
 import { redactValue } from '../../redact/redact.js'
 import { flagBool, flagStr } from '../args.js'
@@ -39,7 +39,6 @@ function detectStreams(flags: Record<string, string | boolean>): void {
 }
 
 const n = (x: number) => x.toLocaleString('en-US')
-const kb = (bytes: number) => (bytes / 1024).toFixed(1) + ' KB'
 
 /**
  * Build the report the verb prints. Shared with `orangu estimate harness`, so the two never disagree about
@@ -104,6 +103,8 @@ export async function runHarness(flags: Record<string, string | boolean>): Promi
     version: VERSION,
     now,
     scope: { cwd, roots, global: isGlobal, limit, sessionsUnreadable: failed, home },
+    // every discovered session, not the `--limit` slice: the cleanup sweep reaches all of them
+    sessions: refs,
   })
 
   // the collector already scrubs at construction; this pass adds --strip-paths and is a no-op otherwise
@@ -130,6 +131,35 @@ export async function cmdHarness(_positionals: string[], flags: Record<string, s
   printHarness(report)
 }
 
+/**
+ * The measured retention block. Claude Code deletes the transcripts every line above is computed from, so
+ * this states how much is in reach of that sweep and when. It names `cleanupPeriodDays` and both directions
+ * of the tradeoff; it recommends no value, in keeping with this file's header.
+ */
+function printRetention(r: HarnessReport, line: (l: string, v: string) => void, w: (s?: string) => void): void {
+  const t = r.retention
+  const oldest = t.oldestSweepableDays === undefined ? '' : ` · oldest ${plural(t.oldestSweepableDays, 'day')}`
+  line('retention', `${plural(t.effectiveDays, 'day')} window · ${plural(t.sweepable.sessions, 'session')} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`)
+  const dim = (s: string) => w(paint(out, 'dim', '    ' + s))
+  dim(t.isDefault ? 'cleanupPeriodDays is unset, so the window is Claude Code\'s default of 30 days' : `set by ${t.source!.file} (${t.source!.scope})`)
+  if (t.invalidConfigured) {
+    dim(`${plural(t.invalidConfigured, 'settings file')} set cleanupPeriodDays below the minimum of 1 or not to a whole number, and ${t.invalidConfigured === 1 ? 'was' : 'were'} ignored`)
+  }
+  if (t.expiringSoon.sessions > 0) {
+    const verb = t.expiringSoon.sessions === 1 ? 'is' : 'are'
+    dim(`${plural(t.expiringSoon.sessions, 'session')} (${sizeLabel(t.expiringSoon.bytes)}) ${verb} within ${plural(t.expiringSoon.windowDays, 'day')} of the cutoff`)
+  }
+  if (t.exempt.sessions > 0) {
+    const label = `${plural(t.exempt.sessions, 'Desktop/Cowork session')} (${sizeLabel(t.exempt.bytes)})`
+    dim(
+      t.exempt.configuredDays === undefined
+        ? `${label} ${t.exempt.sessions === 1 ? 'is' : 'are'} kept at any age by default`
+        : `${label} follow${t.exempt.sessions === 1 ? 's' : ''} desktopSessionCleanupPeriodDays: ${plural(t.exempt.configuredDays, 'day')}`,
+    )
+  }
+  dim('cleanupPeriodDays sets the window, minimum 1. A larger value keeps more history to measure, and leaves plaintext transcripts on disk for longer')
+}
+
 function printHarness(r: HarnessReport): void {
   const w = (s = '') => process.stdout.write(s + '\n')
   const inv = r.inventory
@@ -153,7 +183,7 @@ function printHarness(r: HarnessReport): void {
   line('inventory', `${plural(inv.totals.skills, 'skill')} · ${plural(inv.totals.agents, 'agent')} · ${plural(inv.totals.plugins, 'plugin')} · ${plural(inv.totals.mcpServers, 'MCP server')} · ${plural(inv.totals.hookCommands, 'hook command')}`)
   if (inv.claudeMd.length) {
     const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0)
-    line('CLAUDE.md', `${kb(inv.totals.claudeMdBytes)} · ≈${n(inv.totals.claudeMdApproxTokens)} tokens · ≈${n(carried)} tokens carried across the window`)
+    line('CLAUDE.md', `${sizeLabel(inv.totals.claudeMdBytes)} · ≈${n(inv.totals.claudeMdApproxTokens)} tokens · ≈${n(carried)} tokens carried across the window`)
   }
 
   // Population guards come before the idle/used split. With nothing installed there is nothing to be idle,
@@ -212,6 +242,7 @@ function printHarness(r: HarnessReport): void {
   if (noSessions) line('drift', NO_EVIDENCE)
   else line('drift', `model ${x.models.configured ?? '(unset)'} ${modelDrift ? '≠' : '='} seen · effort ${x.effort.configured ?? '(unset)'} ${effortDrift ? '≠' : '='} seen · ${n(x.effort.slashEffortCommands)} /effort commands`)
   line('permissions', `${x.permissions.allowRules} allow / ${x.permissions.denyRules} deny / ${x.permissions.askRules} ask rules · ${n(x.permissions.promptEvents)} prompt events in ${x.permissions.promptSessions} sessions`)
+  printRetention(r, line, w)
 
   if (x.injectedListings.length) {
     w()

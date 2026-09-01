@@ -48,6 +48,17 @@ export interface SessionRef {
   subagentFiles: string[]
 }
 
+/** the directory Cowork / Claude Desktop local mode nests its per-session `.claude` trees under */
+export const DESKTOP_SESSIONS_DIR = 'local-agent-mode-sessions'
+
+/**
+ * True when a discovered path lives under a Cowork / Claude Desktop local-mode root. Pure and
+ * home-independent: the marker is a path segment, so it holds for an explicit `--root` too.
+ */
+export function isDesktopSessionPath(p: string): boolean {
+  return p.split(/[\\/]/).includes(DESKTOP_SESSIONS_DIR)
+}
+
 export function defaultConfigDir(): string {
   const env = process.env['CLAUDE_CONFIG_DIR']
   if (env && env.trim()) return env
@@ -81,12 +92,12 @@ export async function claudeRoots(
   add(join(homeDir, '.claude'))
   add(join(homeDir, '.config', 'claude'))
   // Cowork / Claude Desktop local mode (macOS). Each session nests a full .claude tree.
-  const coworkBase = join(homeDir, 'Library', 'Application Support', 'Claude', 'local-agent-mode-sessions')
+  const coworkBase = join(homeDir, 'Library', 'Application Support', 'Claude', DESKTOP_SESSIONS_DIR)
   const canonicalCoworkBase = await canonicalNonSymlinkDirectoryChain(homeDir, [
     'Library',
     'Application Support',
     'Claude',
-    'local-agent-mode-sessions',
+    DESKTOP_SESSIONS_DIR,
   ])
   if (canonicalCoworkBase) {
     for (const a of await safeReaddir(canonicalCoworkBase, entryBudget)) {
