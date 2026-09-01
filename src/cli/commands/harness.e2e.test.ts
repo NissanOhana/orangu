@@ -305,6 +305,36 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(r.retention.source).toBeUndefined()
   })
 
+  // The line the reviewer caught: a session past the window is NOT "within 7 days of the cutoff". It is
+  // reported apart, as measurement rather than alarm, so the two lines cannot contradict each other.
+  it('reports a session past the cutoff apart from the expiring ones', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'orangu-harness-past-'))
+    const configDir = join(home, '.claude')
+    const project = join(configDir, 'projects', '-Users-test-Code-old')
+    await mkdir(project, { recursive: true })
+    await writeFile(join(configDir, 'settings.json'), JSON.stringify({ model: 'claude-opus-5' }), 'utf8')
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '99999999-0000-4000-8000-00000000eeee', cwd: '/Users/test/Code/old' })
+    b.userPrompt('long ago')
+    b.turnDuration(1000, 1)
+    const stale = join(project, '99999999-0000-4000-8000-00000000eeee.jsonl')
+    await writeFile(stale, b.toJsonl())
+    const old = Math.floor(Date.now() / 1000) - 400 * DAY_SECONDS
+    await utimes(stale, old, old)
+
+    const repo = await mkdtemp(join(tmpdir(), 'orangu-harness-past-repo-'))
+    // --global so the scan is not restricted to the project that owns `repo`
+    const args = ['harness', '--global', '--cwd', repo, '--root', configDir, '--quiet']
+    const r = JSON.parse(run([...args, '--json'], home))
+    expect(r.retention.oldestSweepableDays).toBe(400)
+    expect(r.retention.expiringSoon.sessions).toBe(0)
+    expect(r.retention.pastCutoff.sessions).toBe(1)
+
+    const out = run(args, home)
+    expect(out).toMatch(/^ {4}1 session \([\d.]+ KB\) is already past the cutoff and still on disk$/m)
+    expect(out).not.toContain('within 7 days of the cutoff')
+  })
+
   // the --out contract, mirroring cmdAggregate (src/cli/main.ts:262-267). This is the mechanism the skill
   // uses to materialise the digest without it entering context, so stdout MUST stay empty.
   it('--out writes the pretty JSON to the file and leaves stdout empty', async () => {
