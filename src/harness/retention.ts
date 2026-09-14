@@ -15,7 +15,8 @@
  * Shape and doc-comment density copied from `src/harness/report.ts:1-11`.
  */
 import { isDesktopSessionPath } from '../discover/discover.js'
-import type { HarnessConfigScope, HarnessRetention, HarnessSettingsFile } from './types.js'
+import type { HarnessRetention, HarnessSettingsFile } from './types.js'
+import { byPrecedence as orderByPrecedence } from './precedence.js'
 
 /** Claude Code's built-in window when no settings file sets one */
 export const RETENTION_DEFAULT_DAYS = 30
@@ -28,11 +29,8 @@ export const RETENTION_EXPIRING_WINDOW_DAYS = 7
 
 const DAY_MS = 86_400_000
 
-/**
- * Claude Code's settings precedence: project local overrides shared project, which overrides user. That is
- * why `repo-local` reads before `repo` and `global-local` before `global` here.
- */
-const SCOPE_PRECEDENCE: readonly HarnessConfigScope[] = ['repo-local', 'repo', 'global-local', 'global']
+// Claude Code's settings precedence lives in `precedence.ts`, shared with the crosswalk: managed policy first
+// (its drop-ins in reverse merge order), then project local, shared project, user local, user.
 
 /** the three fields retention needs from a discovered session (`SessionRef`, `src/discover/discover.ts:40-49`) */
 export interface RetentionSessionRef {
@@ -62,8 +60,7 @@ function ageDays(mtimeMs: number, now: number): number {
  * session. `cleanPath` keeps the marker segment in the `~`-relativized path, so the predicate still matches.
  */
 function byPrecedence(settings: readonly HarnessSettingsFile[]): HarnessSettingsFile[] {
-  const governing = settings.filter((s) => !isDesktopSessionPath(s.file))
-  return SCOPE_PRECEDENCE.flatMap((scope) => governing.filter((s) => s.scope === scope))
+  return orderByPrecedence(settings.filter((s) => !isDesktopSessionPath(s.file)))
 }
 
 export function computeRetention(settings: readonly HarnessSettingsFile[], sessions: readonly RetentionSessionRef[], now: number): HarnessRetention {

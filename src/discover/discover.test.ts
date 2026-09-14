@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import {
   claudeRoots,
   findLatestSession,
+  managedSettingsDirs,
   listProjects,
   listSessions,
   peekCwd,
@@ -268,5 +269,16 @@ describe('findLatestSession', () => {
     expect(latest?.sessionId.startsWith('bbbbbbbb')).toBe(true)
     const latestAlpha = await findLatestSession({ configDir: home, cwd: '/Users/me/Code/alpha' })
     expect(latestAlpha?.projectSlug).toBe('-Users-me-Code-alpha')
+  })
+})
+
+describe('managedSettingsDirs', () => {
+  it('names the platform system directory, or what ORANGU_CLAUDE_MANAGED_DIRS says', () => {
+    expect(managedSettingsDirs({}, 'darwin')).toEqual(['/Library/Application Support/ClaudeCode'])
+    expect(managedSettingsDirs({}, 'linux')).toEqual(['/etc/claude-code'])
+    expect(managedSettingsDirs({}, 'win32')).toEqual(['C:\\Program Files\\ClaudeCode'])
+    expect(managedSettingsDirs({ ORANGU_CLAUDE_MANAGED_DIRS: '/tmp/a, /tmp/b' }, 'darwin')).toEqual(['/tmp/a', '/tmp/b'])
+    // an EMPTY override means none: how a test keeps the machine's real policy out of a fixture run
+    expect(managedSettingsDirs({ ORANGU_CLAUDE_MANAGED_DIRS: '' }, 'darwin')).toEqual([])
   })
 })

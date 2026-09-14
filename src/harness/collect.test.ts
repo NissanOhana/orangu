@@ -260,6 +260,9 @@ describe('collectInventory: what it inventories', () => {
     expect(p.agents).toBe(1)
     expect(p.commands).toBe(1)
     expect(p.hooks).toBe(1)
+    // the hook commands themselves, basename only, so the crosswalk can join a plugin hook like a settings one
+    expect(p.hookConfigs).toEqual([{ event: 'SessionStart', matchers: 1, commands: 1, commandBasenames: ['run-hook.cmd'] }])
+    expect(inv.totals.hookCommands).toBe(1)
     expect(p.mcpServers).toBe(1)
     // the walk is what keeps `undeclared` from over-firing: plugin components are in the inventory
     expect(inv.skills.filter((s) => s.origin === 'plugin').map((s) => s.name)).toEqual(['one', 'two'])
@@ -322,5 +325,115 @@ describe('collectInventory: what it inventories', () => {
     expect(JSON.stringify(one)).toBe(JSON.stringify(two))
     expect(one.skills.map((s) => s.name)).toEqual(['a-skill', 'b-skill'])
     expect(one.mcpServers.map((m) => m.name)).toEqual(['alpha', 'zeta'])
+  })
+})
+
+describe('collectInventory: managed policy and every project entry', () => {
+  it('reads managed-settings.json, managed-settings.d/*.json and managed-mcp.json as scope managed', async () => {
+    const managed = await tmp()
+    const home = await bareHome()
+    await writeFile(join(managed, 'managed-settings.json'), JSON.stringify({ allowManagedHooksOnly: true, hooks: { SessionStart: [{ hooks: [{ type: 'command', command: '/opt/policy/audit.sh --org' }] }] } }), 'utf8')
+    await write(join(managed, 'managed-settings.d', '10-model.json'), JSON.stringify({ model: 'claude-opus-5' }))
+    await writeFile(join(managed, 'managed-mcp.json'), JSON.stringify({ mcpServers: { 'org-gateway': { type: 'http', url: 'https://mcp.example.internal' } } }), 'utf8')
+    const inv = await collectInventory({ cwd: await tmp(), roots: [], home, managedDirs: [managed] })
+    const rows = inv.settings.filter((s) => s.scope === 'managed')
+    expect(rows.map((s) => s.file.split('/').pop()).sort()).toEqual(['10-model.json', 'managed-settings.json'])
+    const policy = rows.find((s) => s.allowManagedHooksOnly)!
+    expect(policy.hooks).toEqual([{ event: 'SessionStart', matchers: 1, commands: 1, commandBasenames: ['audit.sh'] }])
+    expect(rows.find((s) => s.model === 'claude-opus-5')?.allowManagedHooksOnly).toBeUndefined()
+    expect(inv.totals.hookCommands).toBe(1)
+    expect(inv.mcpServers.find((m) => m.name === 'org-gateway')?.scope).toBe('managed')
+    expect(inv.unreadable).toEqual([])
+  })
+
+  it('an absent managed directory is silent, and no managedDirs means none are probed', async () => {
+    const home = await bareHome()
+    const inv = await collectInventory({ cwd: await tmp(), roots: [], home, managedDirs: [join(await tmp(), 'no-such-ClaudeCode')] })
+    expect(inv.settings.some((s) => s.scope === 'managed')).toBe(false)
+    expect(inv.unreadable).toEqual([])
+    const none = await collectInventory({ cwd: await tmp(), roots: [], home })
+    expect(none.settings).toEqual([])
+  })
+
+  it('under allProjects reads the MCP declarations of every project entry in ~/.claude.json, not only cwd', async () => {
+    const cwd = await tmp()
+    const home = await tmp()
+    await writeFile(
+      join(home, '.claude.json'),
+      JSON.stringify({
+        projects: {
+          [cwd]: { mcpServers: { here: { type: 'stdio', command: '/x/here' } } },
+          '/Users/test/Code/elsewhere': { mcpServers: { there: { type: 'stdio', command: '/x/there' } }, enabledMcpjsonServers: ['toggled'] },
+        },
+      }),
+      'utf8',
+    )
+    const only = await collectInventory({ cwd, roots: [], home })
+    expect(only.mcpServers.map((m) => m.name)).toEqual(['here'])
+    expect(only.totals.projectEntries).toBe(1)
+    const all = await collectInventory({ cwd, roots: [], home, allProjects: true })
+    expect(all.mcpServers.map((m) => m.name)).toEqual(['here', 'there', 'toggled'])
+    expect(all.mcpServers.find((m) => m.name === 'there')?.scope).toBe('project')
+    expect(all.totals.projectEntries).toBe(2)
+  })
+})
+
+describe('collectInventory: review-4 fixes', () => {
+  it("a foreign project's toggle list never rewrites rows it does not own, and its own fallback row is scope project", async () => {
+    const cwd = await tmp()
+    const home = await tmp()
+    await write(join(cwd, '.mcp.json'), JSON.stringify({ mcpServers: { repoSrv: { type: 'stdio', command: '/bin/repo-srv' } } }))
+    await writeFile(
+      join(home, '.claude.json'),
+      JSON.stringify({
+        projects: {
+          '/Code/foreign': { disabledMcpjsonServers: ['repoSrv', 'shared'] },
+          '/Code/other': { mcpServers: { shared: { type: 'stdio', command: '/x/shared' } } },
+          [cwd]: { enabledMcpjsonServers: ['repoSrv'] },
+        },
+      }),
+      'utf8',
+    )
+    const all = await collectInventory({ cwd, roots: [], home, allProjects: true })
+    // the repo's own server keeps the repo's own approval; the foreign decline is recorded under that project's
+    // own scope and never rewrites the repo-file row
+    expect(
+      all.mcpServers
+        .filter((m) => m.name === 'repoSrv')
+        .map((m) => `${m.scope}:${m.enabled}`)
+        .sort(),
+    ).toEqual(['project:false', 'repo-file:true'])
+    // another project's declaration is not flipped by a third project's toggle
+    const shared = all.mcpServers.filter((m) => m.name === 'shared')
+    expect(shared.every((m) => m.scope === 'project')).toBe(true)
+    expect(shared.map((m) => m.enabled).sort()).toEqual([false, true])
+    expect(all.mcpServers.some((m) => m.scope === 'repo-file' && m.name === 'shared')).toBe(false)
+  })
+
+  it('a plugin hook launched through an interpreter is declared by its script, not by bash', async () => {
+    const root = await tmp()
+    const home = await bareHome()
+    const installPath = join(await tmp(), 'guard-plugin')
+    await write(
+      join(installPath, 'hooks', 'hooks.json'),
+      JSON.stringify({ hooks: { PostToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/security.sh" --strict' }] }] } }),
+    )
+    await write(join(root, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 1, plugins: { 'guard@market': [{ scope: 'user', installPath }] } }))
+    await writeFile(join(root, 'settings.json'), JSON.stringify({ enabledPlugins: { 'guard@market': true } }), 'utf8')
+    const inv = await collectInventory({ cwd: await tmp(), roots: [root], home })
+    expect(inv.plugins[0]?.hookConfigs).toEqual([{ event: 'PostToolUse', matchers: 1, commands: 1, commandBasenames: ['security.sh'] }])
+  })
+
+  it('a malformed plugin hooks.json declares nothing rather than an event named hooks', async () => {
+    const root = await tmp()
+    const home = await bareHome()
+    for (const [i, body] of [[1, '{"hooks":[]}'], [2, '{"hooks":null}']] as Array<[number, string]>) {
+      const installPath = join(await tmp(), `bad-plugin-${i}`)
+      await write(join(installPath, 'hooks', 'hooks.json'), body)
+      await write(join(root, 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 1, plugins: { [`bad${i}@market`]: [{ scope: 'user', installPath }] } }))
+      const inv = await collectInventory({ cwd: await tmp(), roots: [root], home })
+      expect(inv.plugins[0]?.hooks).toBe(0)
+      expect(inv.plugins[0]?.hookConfigs).toBeUndefined()
+    }
   })
 })

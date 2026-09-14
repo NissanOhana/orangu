@@ -705,6 +705,13 @@ function defaultConfigDir() {
   if (env && env.trim()) return env;
   return join2(homedir(), ".claude");
 }
+function managedSettingsDirs(env = process.env, platform2 = process.platform) {
+  const override = env["ORANGU_CLAUDE_MANAGED_DIRS"];
+  if (override !== void 0) return override.split(",").map((s) => s.trim()).filter(Boolean);
+  if (platform2 === "darwin") return ["/Library/Application Support/ClaudeCode"];
+  if (platform2 === "win32") return ["C:\\Program Files\\ClaudeCode"];
+  return ["/etc/claude-code"];
+}
 async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
   const entryBudget = discoveryEntryBudget();
   const roots = [];
@@ -7084,13 +7091,36 @@ function canonicalName(observed, declared2) {
   }
   return observed;
 }
+var INTERPRETERS = /* @__PURE__ */ new Set(["env", "bash", "sh", "zsh", "dash", "fish", "python", "python3", "node", "npx", "bun", "deno", "tsx", "ts-node", "ruby", "perl", "pwsh", "powershell"]);
+var unquote = (t) => t.replace(/^['"]|['"]$/g, "");
+var pathLike = (t) => t.includes("/") || t.includes("\\") || /\.[A-Za-z0-9]+$/.test(t);
 function argv0Basename(command) {
-  const first = command.trim().split(/\s+/)[0] ?? "";
-  return basename5(first.replace(/^['"]|['"]$/g, ""));
+  const tokens = command.trim().split(/\s+/).map(unquote);
+  const argv0 = basename5(tokens[0] ?? "");
+  if (!INTERPRETERS.has(argv0)) return argv0;
+  for (const t of tokens.slice(1)) {
+    if (t.startsWith("-")) continue;
+    if (INTERPRETERS.has(basename5(t))) continue;
+    return pathLike(t) ? basename5(t) : argv0;
+  }
+  return argv0;
+}
+
+// src/harness/precedence.ts
+var SCOPE_PRECEDENCE = ["managed", "repo-local", "repo", "global-local", "global"];
+var isDropIn = (file) => /[\\/]managed-settings\.d[\\/][^\\/]+$/.test(file);
+function managedOrder(rows) {
+  const dropIns = rows.filter((r) => isDropIn(r.file)).sort((a, b) => a.file < b.file ? 1 : a.file > b.file ? -1 : 0);
+  return [...dropIns, ...rows.filter((r) => !isDropIn(r.file))];
+}
+function byPrecedence(settings) {
+  return SCOPE_PRECEDENCE.flatMap((scope) => {
+    const rows = settings.filter((s) => s.scope === scope);
+    return scope === "managed" ? managedOrder(rows) : rows;
+  });
 }
 
 // src/harness/crosswalk.ts
-var SCOPE_PRECEDENCE = ["repo-local", "repo", "global-local", "global"];
 var approxTokens = (bytes) => Math.ceil(bytes / 4);
 var EVENT_ROW_PREFIX = "event:";
 function statusOf(declared2, observations) {
@@ -7126,12 +7156,9 @@ function resolveSessionPath(p, sessionCwd, home) {
   return norm(sessionCwd).replace(/\/+$/, "") + "/" + s;
 }
 function declared(inv, pick) {
-  for (const scope of SCOPE_PRECEDENCE) {
-    for (const s of inv.settings) {
-      if (s.scope !== scope) continue;
-      const v = pick(s);
-      if (v !== void 0 && v !== "") return v;
-    }
+  for (const s of byPrecedence(inv.settings)) {
+    const v = pick(s);
+    if (v !== void 0 && v !== "") return v;
   }
   return void 0;
 }
@@ -7176,9 +7203,10 @@ function crosswalk(inv, analyses, agg, opts = {}) {
     }
     for (const n2 of here) skillObsAt(n2).sessions++;
   }
+  const skillsFromAnalyses = new Set(skillObs.keys());
   for (const r of agg.bySkill) {
     const uses = r.extra?.["uses"] ?? 0;
-    if (uses > 0 && !skillObs.has(canonicalSkill(r.key))) skillObsAt(r.key).invocations += uses;
+    if (uses > 0 && !skillsFromAnalyses.has(canonicalSkill(r.key))) skillObsAt(r.key).invocations += uses;
   }
   const skillRows = [];
   for (const name of /* @__PURE__ */ new Set([...installedSkills.keys(), ...skillObs.keys()])) {
@@ -7238,7 +7266,8 @@ function crosswalk(inv, analyses, agg, opts = {}) {
   const definedAgents = new Map(inv.agents.map((a) => [a.name, a]));
   const canonicalAgent = (observed) => canonicalName(observed, definedAgents);
   const agentObs = /* @__PURE__ */ new Map();
-  const agentObsAt = (name) => {
+  const agentObsAt = (rawName) => {
+    const name = canonicalAgent(rawName);
     let e = agentObs.get(name);
     if (!e) agentObs.set(name, e = { dispatches: 0, sessions: 0, models: /* @__PURE__ */ new Set() });
     return e;
@@ -7246,24 +7275,22 @@ function crosswalk(inv, analyses, agg, opts = {}) {
   for (const a of analyses) {
     const here = /* @__PURE__ */ new Set();
     for (const t of a.agents.byType) {
-      const name = canonicalAgent(t.agentType);
-      const e = agentObsAt(name);
+      const e = agentObsAt(t.agentType);
       e.dispatches += t.count;
-      here.add(name);
+      here.add(canonicalAgent(t.agentType));
     }
     for (const r of a.agents.runs) {
       if (!r.agentType) continue;
-      const name = canonicalAgent(r.agentType);
-      const e = agentObsAt(name);
+      const e = agentObsAt(r.agentType);
       if (r.model) e.models.add(r.model);
-      here.add(name);
+      here.add(canonicalAgent(r.agentType));
     }
     for (const n2 of here) agentObsAt(n2).sessions++;
   }
+  const agentsFromAnalyses = new Set(agentObs.keys());
   for (const r of agg.byAgentType) {
     const runs = r.extra?.["runs"] ?? 0;
-    const name = canonicalAgent(r.key);
-    if (runs > 0 && !agentObs.has(name)) agentObsAt(name).dispatches += runs;
+    if (runs > 0 && !agentsFromAnalyses.has(canonicalAgent(r.key))) agentObsAt(r.key).dispatches += runs;
   }
   const agentRows = [];
   for (const name of /* @__PURE__ */ new Set([...definedAgents.keys(), ...agentObs.keys()])) {
@@ -7300,11 +7327,10 @@ function crosswalk(inv, analyses, agg, opts = {}) {
   }
   const configuredHooks = /* @__PURE__ */ new Map();
   const configuredEvents = /* @__PURE__ */ new Set();
-  for (const s of inv.settings) {
-    for (const h of s.hooks) {
-      configuredEvents.add(h.event);
-      for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event);
-    }
+  const declaredHooks = [...inv.settings.flatMap((s) => s.hooks), ...inv.plugins.flatMap((p) => p.enabled ? p.hookConfigs ?? [] : [])];
+  for (const h of declaredHooks) {
+    configuredEvents.add(h.event);
+    for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event);
   }
   const hookRows = [];
   for (const key of /* @__PURE__ */ new Set([...configuredHooks.keys(), ...hookObs.keys()])) {
@@ -7471,7 +7497,6 @@ var RETENTION_DEFAULT_DAYS = 30;
 var RETENTION_MIN_DAYS = 1;
 var RETENTION_EXPIRING_WINDOW_DAYS = 7;
 var DAY_MS2 = 864e5;
-var SCOPE_PRECEDENCE2 = ["repo-local", "repo", "global-local", "global"];
 function usableDays(v) {
   if (v === void 0) return void 0;
   return Number.isInteger(v) && v >= RETENTION_MIN_DAYS ? v : void 0;
@@ -7479,12 +7504,11 @@ function usableDays(v) {
 function ageDays(mtimeMs, now) {
   return Math.max(0, Math.floor((now - mtimeMs) / DAY_MS2));
 }
-function byPrecedence(settings) {
-  const governing = settings.filter((s) => !isDesktopSessionPath(s.file));
-  return SCOPE_PRECEDENCE2.flatMap((scope) => governing.filter((s) => s.scope === scope));
+function byPrecedence2(settings) {
+  return byPrecedence(settings.filter((s) => !isDesktopSessionPath(s.file)));
 }
 function computeRetention(settings, sessions, now) {
-  const ordered = byPrecedence(settings);
+  const ordered = byPrecedence2(settings);
   let effectiveDays = RETENTION_DEFAULT_DAYS;
   let source;
   let invalidConfigured = 0;
@@ -7570,6 +7594,9 @@ function buildNotes(inv, x, r, sessionsScanned, sessionsUnreadable, unsplitAnaly
   }
   if (x.effort.configured && !x.effort.matchesConfigured) {
     notes.push(`configured effort "${x.effort.configured}" does not appear among the effort levels these sessions used`);
+  }
+  if (inv.settings.some((s) => s.scope === "managed" && s.allowManagedHooksOnly)) {
+    notes.push("managed policy sets allowManagedHooksOnly, so hook commands declared in user, project and plugin settings do not run; only managed hook rows can be used");
   }
   const undeclared = x.skills.filter((s) => s.status === "undeclared").length + x.mcpServers.filter((m) => m.status === "undeclared").length + x.agents.filter((a) => a.status === "undeclared").length + x.hooks.filter((h) => h.status === "undeclared").length;
   if (undeclared > 0) {
@@ -9511,7 +9538,9 @@ function settingsEnv(raw) {
   return { count: names.length, names };
 }
 function settingsHooks(raw) {
-  const hooks = asRecord(raw["hooks"]);
+  return hookConfigsFrom(asRecord(raw["hooks"]));
+}
+function hookConfigsFrom(hooks) {
   if (!hooks) return [];
   const out3 = [];
   for (const event of Object.keys(hooks).sort()) {
@@ -9559,6 +9588,7 @@ function parseSettings(ctx, scope, file, raw) {
     // value this collector cannot vouch for is still visible in the inventory rather than silently dropped
     ...typeof raw["cleanupPeriodDays"] === "number" ? { cleanupPeriodDays: raw["cleanupPeriodDays"] } : {},
     ...typeof raw["desktopSessionCleanupPeriodDays"] === "number" ? { desktopSessionCleanupPeriodDays: raw["desktopSessionCleanupPeriodDays"] } : {},
+    ...typeof raw["allowManagedHooksOnly"] === "boolean" ? { allowManagedHooksOnly: raw["allowManagedHooksOnly"] } : {},
     enabledPlugins: enabledPluginKeys(raw)
   };
 }
@@ -9636,17 +9666,12 @@ async function walkPlugin(ctx, installPath, key) {
   const skills = await readSkillDir(ctx, join7(installPath, "skills"), "plugin", key);
   const agents = await readAgentDir(ctx, join7(installPath, "agents"), "plugin", key);
   const commands = (await walkMarkdown(ctx, join7(installPath, "commands"))).length;
-  let hooks = 0;
   const hooksJson = await readJson(ctx, join7(installPath, "hooks", "hooks.json"));
-  const hookEvents = asRecord(hooksJson?.["hooks"]) ?? hooksJson;
-  if (hookEvents) {
-    for (const event of Object.keys(hookEvents)) {
-      for (const m of asArray(hookEvents[event])) hooks += asArray(asRecord(m)?.["hooks"]).length;
-    }
-  }
+  const hookConfigs = hookConfigsFrom(hooksJson && "hooks" in hooksJson ? asRecord(hooksJson["hooks"]) : hooksJson);
+  const hooks = hookConfigs.reduce((n2, h) => n2 + h.commands, 0);
   const mcpJson = await readJson(ctx, join7(installPath, ".mcp.json"));
   const mcpServers = mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "plugin");
-  return { skills, agents, mcpServers, commands, hooks };
+  return { skills, agents, mcpServers, commands, hooks, hookConfigs };
 }
 async function collectInventory(opts) {
   if (typeof opts.cwd !== "string" || typeof opts.home !== "string" || !Array.isArray(opts.roots)) {
@@ -9687,6 +9712,28 @@ async function collectInventory(opts) {
     mcpServers.push(...mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "repo-file"));
   } else {
     mark(ctx, opts.cwd, "enoent");
+  }
+  for (const dir of opts.managedDirs ?? []) {
+    if (!await isDir(dir)) continue;
+    const main2 = join7(dir, "managed-settings.json");
+    const rawMain = await readJson(ctx, main2);
+    if (rawMain) settings.push(parseSettings(ctx, "managed", main2, rawMain));
+    const dropIns = join7(dir, "managed-settings.d");
+    if (await isDir(dropIns)) {
+      let names = [];
+      try {
+        names = (await readdir2(dropIns)).filter((n2) => n2.endsWith(".json")).sort();
+      } catch (e) {
+        mark(ctx, dropIns, reasonOf(e));
+      }
+      for (const name of names) {
+        const file = join7(dropIns, name);
+        const raw = await readJson(ctx, file);
+        if (raw) settings.push(parseSettings(ctx, "managed", file, raw));
+      }
+    }
+    const mcp = await readJson(ctx, join7(dir, "managed-mcp.json"));
+    mcpServers.push(...mcpFromRecord(asRecord(mcp?.["mcpServers"]), "managed"));
   }
   const liveRoots = [];
   for (const root of opts.roots) {
@@ -9737,22 +9784,30 @@ async function collectInventory(opts) {
         agents: walk2.agents.length,
         commands: walk2.commands,
         hooks: walk2.hooks,
-        mcpServers: walk2.mcpServers.length
+        mcpServers: walk2.mcpServers.length,
+        ...walk2.hookConfigs.length ? { hookConfigs: walk2.hookConfigs } : {}
       });
     }
   }
   let usageCounters;
+  let projectEntries = 0;
   const claudeJsonPath = join7(opts.home, ".claude.json");
   const rawClaudeJson = await readJson(ctx, claudeJsonPath);
   if (rawClaudeJson) {
     const picked = {};
     for (const k of CLAUDE_JSON_KEYS) if (k in rawClaudeJson) picked[k] = rawClaudeJson[k];
     mcpServers.push(...mcpFromRecord(asRecord(picked["mcpServers"]), "global"));
-    const project = asRecord(asRecord(picked["projects"])?.[opts.cwd]);
-    if (project) {
+    const projects = asRecord(picked["projects"]) ?? {};
+    const projectKeys = opts.allProjects ? Object.keys(projects).sort() : [opts.cwd];
+    for (const key of projectKeys) {
+      const project = asRecord(projects[key]);
+      if (!project) continue;
+      projectEntries++;
       const proj = {};
       for (const k of CLAUDE_JSON_PROJECT_KEYS) if (k in project) proj[k] = project[k];
+      const ownRowsFrom = mcpServers.length;
       mcpServers.push(...mcpFromRecord(asRecord(proj["mcpServers"]), "project"));
+      const ownsRepoFile = key === opts.cwd;
       for (const [list, on] of [
         [asArray(proj["enabledMcpjsonServers"]), true],
         [asArray(proj["disabledMcpjsonServers"]), false]
@@ -9761,9 +9816,9 @@ async function collectInventory(opts) {
           const name = asString(raw);
           if (!name) continue;
           const clean = cleanName(name);
-          const existing = mcpServers.filter((m) => m.name === clean);
+          const existing = mcpServers.filter((m, i) => m.name === clean && (i >= ownRowsFrom || ownsRepoFile && m.scope === "repo-file"));
           if (existing.length) for (const row2 of existing) row2.enabled = row2.enabled && on;
-          else mcpServers.push({ name: clean, scope: "repo-file", transport: "unknown", enabled: on });
+          else mcpServers.push({ name: clean, scope: ownsRepoFile ? "repo-file" : "project", transport: "unknown", enabled: on });
         }
       }
     }
@@ -9799,7 +9854,9 @@ async function collectInventory(opts) {
       plugins: plugins.length,
       // distinct NAMES: one server declared by `.mcp.json` and named again by a toggle list is one server
       mcpServers: new Set(mcpServers.map((m) => m.name)).size,
-      hookCommands: settings.reduce((n2, s) => n2 + s.hooks.reduce((k, h) => k + h.commands, 0), 0)
+      // settings files plus the hooks of ENABLED plugins: the commands Claude Code will actually run
+      hookCommands: settings.reduce((n2, s) => n2 + s.hooks.reduce((k, h) => k + h.commands, 0), 0) + plugins.reduce((n2, p) => n2 + (p.enabled ? p.hooks : 0), 0),
+      projectEntries
     },
     unreadable: ctx.unreadable
   };
@@ -11577,7 +11634,7 @@ async function runHarness(flags) {
   }
   if (!flagBool(flags, "quiet")) process.stderr.write(paint(err, "dim", `analyzed ${plural(analyses.length, "session")}: declared vs used`) + "\n");
   const home = homedir4();
-  const inventory = await collectInventory({ cwd, roots, home });
+  const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: isGlobal });
   const agg = aggregate(analyses, scopeLabel, now);
   const report = buildHarnessReport(inventory, analyses, agg, {
     version: VERSION,
@@ -11640,6 +11697,10 @@ function printHarness(r) {
   w();
   w(paint(out, ["bold", "accent"], "orangu") + "  " + paint(out, "bold", "harness \xB7 " + scopeLabel));
   w(paint(out, "dim", `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? "" : "s"} scanned`));
+  if (r.scope.global) {
+    const entries = inv.totals.projectEntries ?? 0;
+    w(paint(out, "dim", `  declared side: ${plural(r.scope.roots.length, "config root")} \xB7 ${entries} project ${entries === 1 ? "entry" : "entries"} in ~/.claude.json \xB7 repo files from ${r.scope.cwd}`));
+  }
   w();
   const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
   if (nothing) {

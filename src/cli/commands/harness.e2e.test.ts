@@ -69,6 +69,8 @@ async function makeHarnessFixture(): Promise<Fixture> {
     JSON.stringify({
       oauthAccount: { emailAddress: 'planted@example.com' },
       mcpServers: { figma: { type: 'stdio', command: '/usr/local/bin/figma-mcp' } },
+      // a server declared under ANOTHER project: only a global scan reads this entry
+      projects: { '/Users/test/Code/elsewhere': { mcpServers: { octocode: { type: 'stdio', command: '/usr/local/bin/octocode-mcp' } } } },
       skillUsage: { 'fires-often': { usageCount: 4, lastUsedAt: 1000 } },
       pluginUsage: {},
     }),
@@ -98,11 +100,12 @@ async function makeHarnessFixture(): Promise<Fixture> {
 }
 
 let fx: Fixture
-const run = (args: string[], home: string) =>
+// ORANGU_CLAUDE_MANAGED_DIRS is set EMPTY so the machine's real managed policy, if any, never enters a fixture run
+const run = (args: string[], home: string, extraEnv: Record<string, string> = {}) =>
   execFileSync('node', [CLI, ...args], {
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, HOME: home, ORANGU_NO_CACHE: '1', ORANGU_HOME: join(home, '.orangu'), ORANGU_CLAUDE_ROOTS: '', CLAUDE_CONFIG_DIR: '' },
+    env: { ...process.env, HOME: home, ORANGU_NO_CACHE: '1', ORANGU_HOME: join(home, '.orangu'), ORANGU_CLAUDE_ROOTS: '', CLAUDE_CONFIG_DIR: '', ORANGU_CLAUDE_MANAGED_DIRS: '', ...extraEnv },
   })
 
 describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
@@ -125,7 +128,11 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(idle.map((s: { name: string }) => s.name)).toContain('never-fires')
     expect(r.crosswalk.skills.find((s: { name: string }) => s.name === 'fires-often')?.status).toBe('used')
     expect(r.crosswalk.mcpServers.find((m: { name: string }) => m.name === 'figma')?.status).toBe('idle')
-    expect(r.crosswalk.mcpServers.find((m: { name: string }) => m.name === 'octocode')?.status).toBe('undeclared')
+    // declared under another project entry: the global scan reads every entry, so it is used, not undeclared
+    expect(r.crosswalk.mcpServers.find((m: { name: string }) => m.name === 'octocode')?.status).toBe('used')
+    // a repo scan of the project the sessions ran in reads only that project's entry, so the same server stays undeclared
+    const repo = JSON.parse(run(['harness', '--json', '--cwd', '/Users/test/Code/demo', '--root', fx.configDir, '--quiet'], fx.home))
+    expect(repo.crosswalk.mcpServers.find((m: { name: string }) => m.name === 'octocode')?.status).toBe('undeclared')
     expect(r.crosswalk.agents.find((a: { name: string }) => a.name === 'idle-agent')?.status).toBe('idle')
   })
 
@@ -145,6 +152,25 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const one = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--limit', '1', '--quiet'], fx.home))
     expect(one.scope.limit).toBe(1)
     expect(one.scope.sessionsScanned).toBeLessThanOrEqual(1)
+  })
+
+  it('reads managed policy from ORANGU_CLAUDE_MANAGED_DIRS and names what the declared side covers', async () => {
+    const managed = await mkdtemp(join(tmpdir(), 'orangu-managed-'))
+    await writeFile(
+      join(managed, 'managed-settings.json'),
+      JSON.stringify({ allowManagedHooksOnly: true, hooks: { SessionStart: [{ hooks: [{ type: 'command', command: '/opt/policy/audit.sh --org' }] }] } }),
+      'utf8',
+    )
+    const r = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home, { ORANGU_CLAUDE_MANAGED_DIRS: managed }))
+    expect(r.inventory.settings.some((s: { scope: string }) => s.scope === 'managed')).toBe(true)
+    expect(r.crosswalk.hooks.find((h: { commandBasename?: string }) => h.commandBasename === 'audit.sh')?.status).toBe('idle')
+    expect(r.notes.some((n: string) => n.includes('allowManagedHooksOnly'))).toBe(true)
+    const human = run(['harness', '--global', '--cwd', fx.repo, '--quiet'], fx.home, { ORANGU_CLAUDE_MANAGED_DIRS: managed })
+    expect(human).toContain('declared side:')
+    expect(human).toContain('1 project entry in ~/.claude.json')
+    // without the override nothing managed is read, and the printout still says what was covered
+    const none = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home))
+    expect(none.inventory.settings.some((s: { scope: string }) => s.scope === 'managed')).toBe(false)
   })
 
   it('puts no money on either surface', () => {
@@ -210,7 +236,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const out = run(['harness', '--global', '--cwd', fx.repo, '--quiet'], fx.home)
     const line = /^ {2}inventory\s+(.*)$/m.exec(out)
     expect(line, 'inventory line').not.toBeNull()
-    expect(line![1]).toBe('3 skills · 1 agent · 0 plugins · 1 MCP server · 1 hook command')
+    expect(line![1]).toBe('3 skills · 1 agent · 0 plugins · 2 MCP servers · 1 hook command')
     expect(out).not.toMatch(/\b1 (?:skills|agents|plugins|hook commands)\b/)
   })
 

@@ -11,7 +11,7 @@ import { aggregate } from '../analyze/aggregate.js'
 import { SessionBuilder, resetIds } from '../../test/fixtures/session-builder.js'
 import { crosswalk } from './crosswalk.js'
 import { HARNESS_ROW_CAP } from './types.js'
-import type { HarnessAgentEntry, HarnessInventory, HarnessMcpServerEntry, HarnessSettingsFile, HarnessSkillEntry } from './types.js'
+import type { HarnessAgentEntry, HarnessInventory, HarnessMcpServerEntry, HarnessPluginEntry, HarnessSettingsFile, HarnessSkillEntry } from './types.js'
 
 const emptyInventory = (over: Partial<HarnessInventory> = {}): HarnessInventory => ({
   claudeMd: [],
@@ -49,6 +49,20 @@ const agentEntry = (name: string): HarnessAgentEntry => ({
 })
 
 const mcpEntry = (name: string): HarnessMcpServerEntry => ({ name, scope: 'global', transport: 'stdio', enabled: true })
+
+const pluginEntry = (key: string, enabled: boolean, hookConfigs: HarnessPluginEntry['hookConfigs']): HarnessPluginEntry => ({
+  key,
+  name: key.split('@')[0]!,
+  marketplace: key.split('@')[1] ?? '',
+  scope: 'user',
+  enabled,
+  skills: 0,
+  agents: 0,
+  commands: 0,
+  hooks: hookConfigs?.reduce((n, h) => n + h.commands, 0) ?? 0,
+  mcpServers: 0,
+  ...(hookConfigs ? { hookConfigs } : {}),
+})
 
 const settingsEntry = (over: Partial<HarnessSettingsFile> = {}): HarnessSettingsFile => ({
   scope: 'global',
@@ -115,6 +129,23 @@ describe('crosswalk: skills', () => {
     expect(rows[0]!.installed).toBe(true)
     expect(rows[0]!.invocations).toBe(1)
     expect(rows[0]!.status).toBe('used')
+  })
+
+  it('credits every aggregate key that canonicalises to one installed skill, not only the first', async () => {
+    resetIds()
+    const one = new SessionBuilder({ sessionId: 'aaaaaaaa-0000-4000-8000-000000000004' })
+    one.userPrompt('a')
+    one.toolCall('Skill', { skill: 'brainstorming' }, 'ok')
+    const a1 = await analyze(one)
+    resetIds()
+    const two = new SessionBuilder({ sessionId: 'aaaaaaaa-0000-4000-8000-000000000005' })
+    two.userPrompt('b')
+    two.toolCall('Skill', { skill: 'superpowers:brainstorming' }, 'ok')
+    const a2 = await analyze(two)
+    const inv = emptyInventory({ skills: [{ ...skillEntry('brainstorming'), origin: 'plugin', plugin: 'superpowers@market' }] })
+    const x = crosswalk(inv, [], aggregate([a1, a2], 'test', 0))
+    expect(x.skills.map((s) => s.name)).toEqual(['brainstorming'])
+    expect(x.skills[0]!.invocations).toBe(2)
   })
 
   it('keeps a qualified invocation undeclared when no installed skill has that bare name', async () => {
@@ -228,6 +259,28 @@ describe('crosswalk: agents', () => {
     expect(x.agents.find((g) => g.name === 'q:backend')?.status).toBe('undeclared')
     expect(x.agents.find((g) => g.name === 'backend')?.status).toBe('idle')
   })
+
+  it('credits every aggregate key that canonicalises to one defined agent, not only the first', async () => {
+    // a wider aggregate than the analyses passed (a cached or served one) may carry both spellings of one agent
+    resetIds()
+    const one = new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000004' })
+    one.userPrompt('a')
+    one.toolCall('Agent', { description: 'x', prompt: 'go', subagent_type: 'backend' }, 'ok', {
+      toolUseResult: { status: 'completed', agentId: 'agent0004', content: [{ type: 'text', text: 'ok' }], totalDurationMs: 10, totalTokens: 5, totalToolUseCount: 0, usage: { input_tokens: 5, output_tokens: 1 } },
+    })
+    const a1 = await analyze(one)
+    resetIds()
+    const two = new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000005' })
+    two.userPrompt('b')
+    two.toolCall('Agent', { description: 'y', prompt: 'go', subagent_type: 'p:backend' }, 'ok', {
+      toolUseResult: { status: 'completed', agentId: 'agent0005', content: [{ type: 'text', text: 'ok' }], totalDurationMs: 10, totalTokens: 5, totalToolUseCount: 0, usage: { input_tokens: 5, output_tokens: 1 } },
+    })
+    const a2 = await analyze(two)
+    const inv = emptyInventory({ agents: [{ ...agentEntry('backend'), origin: 'plugin', plugin: 'p@market' }] })
+    const x = crosswalk(inv, [], aggregate([a1, a2], 'test', 0))
+    expect(x.agents.map((g) => g.name)).toEqual(['backend'])
+    expect(x.agents[0]!.dispatches).toBe(2)
+  })
 })
 
 describe('crosswalk: hooks', () => {
@@ -316,6 +369,34 @@ describe('crosswalk: hooks', () => {
     expect(row).toMatchObject({ configured: true, runs: 2, errors: 1, status: 'used' })
   })
 
+  it('joins a hook an enabled plugin declares, and leaves a disabled plugin\'s hook undeclared', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000003' })
+    b.userPrompt('a')
+    b.attachmentHook('SessionStart:startup', 'SessionStart', 'ok', { command: '/x/run-hook.cmd --arg', durationMs: 40 })
+    const a = await analyze(b)
+    const declared = [{ event: 'SessionStart', matchers: 1, commands: 1, commandBasenames: ['run-hook.cmd'] }]
+    const on = crosswalk(emptyInventory({ plugins: [pluginEntry('demo@market', true, declared)] }), [a], aggregate([a], 'test', 0))
+    expect(on.hooks.find((h) => h.commandBasename === 'run-hook.cmd')).toMatchObject({ configured: true, runs: 1, status: 'used' })
+    // a disabled plugin's hooks do not run, so its declaration must not claim the row
+    const off = crosswalk(emptyInventory({ plugins: [pluginEntry('demo@market', false, declared)] }), [a], aggregate([a], 'test', 0))
+    expect(off.hooks.find((h) => h.commandBasename === 'run-hook.cmd')).toMatchObject({ configured: false, status: 'undeclared' })
+  })
+
+  it("an observed `bash <script>` run is not claimed by a plugin's unrelated `bash <other script>` declaration", async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000006' })
+    b.userPrompt('a')
+    b.attachmentHook('SessionStart:startup', 'SessionStart', 'ok', { command: 'bash /opt/guard/session-start.sh', durationMs: 9 })
+    const a = await analyze(b)
+    const declared = [{ event: 'PostToolUse', matchers: 1, commands: 1, commandBasenames: ['security.sh'] }]
+    const x = crosswalk(emptyInventory({ plugins: [pluginEntry('guard@market', true, declared)] }), [a], aggregate([a], 'test', 0))
+    const observed = x.hooks.find((h) => h.commandBasename === 'session-start.sh')!
+    expect(observed).toMatchObject({ event: 'SessionStart', configured: false, status: 'undeclared', runs: 1 })
+    expect(x.hooks.find((h) => h.commandBasename === 'security.sh')).toMatchObject({ event: 'PostToolUse', status: 'idle' })
+    expect(x.hooks.some((h) => h.commandBasename === 'bash')).toBe(false)
+  })
+
   it('folds a run the transcript recorded by name only into one row per event, never a phantom command', async () => {
     resetIds()
     const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000002' })
@@ -355,6 +436,20 @@ describe('crosswalk: models, effort, permissions', () => {
 
   // `model` in settings.json may carry a context-window tag that sessions do not report. The tag is
   // configuration metadata, not part of the model identity used for drift detection.
+  it('reads the configured model from the alphabetically last managed drop-in, the one Claude Code enforces', async () => {
+    resetIds()
+    const a = await analyze(busySession())
+    const inv = emptyInventory({
+      settings: [
+        settingsEntry({ scope: 'managed', file: '/Library/Application Support/ClaudeCode/managed-settings.d/10-base.json', model: 'from-10' }),
+        settingsEntry({ scope: 'managed', file: '/Library/Application Support/ClaudeCode/managed-settings.d/20-security.json', model: 'from-20' }),
+        settingsEntry({ scope: 'managed', file: '/Library/Application Support/ClaudeCode/managed-settings.json', model: 'from-main' }),
+        settingsEntry({ model: 'from-user' }),
+      ],
+    })
+    expect(crosswalk(inv, [a], aggregate([a], 'test', 0)).models.configured).toBe('from-20')
+  })
+
   it('ignores a context-window tag on the configured model', async () => {
     resetIds()
     const a = await analyze(busySession())

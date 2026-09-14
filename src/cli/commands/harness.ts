@@ -13,7 +13,7 @@
  */
 import { homedir } from 'node:os'
 import { basename, resolve } from 'node:path'
-import { claudeRoots, defaultConfigDir, listSessions, type SessionRef } from '../../discover/discover.js'
+import { claudeRoots, defaultConfigDir, listSessions, managedSettingsDirs, type SessionRef } from '../../discover/discover.js'
 import { AnalysisCache, analyzeRefCached } from '../../cache/index.js'
 import { analyzeAllPooled, defaultJobs } from '../../cache/pool.js'
 import { aggregate } from '../../analyze/aggregate.js'
@@ -106,7 +106,9 @@ export async function runHarness(flags: Record<string, string | boolean>): Promi
   if (!flagBool(flags, 'quiet')) process.stderr.write(paint(err, 'dim', `analyzed ${plural(analyses.length, 'session')}: declared vs used`) + '\n')
 
   const home = homedir()
-  const inventory = await collectInventory({ cwd, roots, home })
+  // the declared side follows the observed one: a global scan reads every project entry, and managed policy
+  // is read wherever the platform keeps it (ORANGU_CLAUDE_MANAGED_DIRS overrides; empty reads none)
+  const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: isGlobal })
   const agg = aggregate(analyses, scopeLabel, now)
   const report = buildHarnessReport(inventory, analyses, agg, {
     version: VERSION,
@@ -187,6 +189,11 @@ function printHarness(r: HarnessReport): void {
   w()
   w(paint(out, ['bold', 'accent'], 'orangu') + '  ' + paint(out, 'bold', 'harness · ' + scopeLabel))
   w(paint(out, 'dim', `  ${n(r.scope.sessionsScanned)} session${r.scope.sessionsScanned === 1 ? '' : 's'} scanned`))
+  if (r.scope.global) {
+    // under --global the observed side spans every project; say exactly what the declared side covered
+    const entries = inv.totals.projectEntries ?? 0
+    w(paint(out, 'dim', `  declared side: ${plural(r.scope.roots.length, 'config root')} · ${entries} project ${entries === 1 ? 'entry' : 'entries'} in ~/.claude.json · repo files from ${r.scope.cwd}`))
+  }
   w()
 
   // designed empty state: never a blank report

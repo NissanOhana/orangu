@@ -144,6 +144,25 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     expect(fresh.notes.some((n) => n.includes('primary-transcript split'))).toBe(false)
   })
 
+  it('notes when managed policy makes every other hook declaration inert', async () => {
+    const { inv, analyses, agg } = await fixture()
+    inv.settings.push({
+      scope: 'managed',
+      file: '/Library/Application Support/ClaudeCode/managed-settings.json',
+      keys: ['allowManagedHooksOnly'],
+      permissions: { allow: 0, deny: 0, ask: 0 },
+      hooks: [],
+      env: { count: 0, names: [] },
+      statusLine: false,
+      enabledPlugins: [],
+      allowManagedHooksOnly: true,
+    })
+    const r = buildHarnessReport(inv, analyses, agg, opts())
+    expect(r.notes).toContain('managed policy sets allowManagedHooksOnly, so hook commands declared in user, project and plugin settings do not run; only managed hook rows can be used')
+    const plain = buildHarnessReport({ ...inv, settings: inv.settings.filter((s) => s.scope !== 'managed') }, analyses, agg, opts())
+    expect(plain.notes.some((n) => n.includes('allowManagedHooksOnly'))).toBe(false)
+  })
+
   it('notes that ~/.claude.json was not read, and leaves usageCounters off the payload', async () => {
     const { inv, analyses, agg } = await fixture()
     const r = buildHarnessReport(inv, analyses, agg, opts())

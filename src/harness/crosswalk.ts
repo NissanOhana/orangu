@@ -18,6 +18,7 @@ import type { Analysis } from '../model/analysis.js'
 import type { Aggregate } from '../analyze/aggregate.js'
 import { HARNESS_ROW_CAP } from './types.js'
 import { argv0Basename, canonicalName } from './names.js'
+import { byPrecedence } from './precedence.js'
 import type {
   HarnessAgentRow,
   HarnessCrosswalk,
@@ -29,11 +30,7 @@ import type {
   HarnessMemoryRow,
   HarnessSkillRow,
   HarnessStatus,
-  HarnessConfigScope,
 } from './types.js'
-
-/** most specific config wins when two files declare the same thing */
-const SCOPE_PRECEDENCE: HarnessConfigScope[] = ['repo-local', 'repo', 'global-local', 'global']
 
 const approxTokens = (bytes: number): number => Math.ceil(bytes / 4)
 
@@ -94,14 +91,11 @@ function resolveSessionPath(p: string, sessionCwd: string | undefined, home?: st
   return norm(sessionCwd).replace(/\/+$/, '') + '/' + s
 }
 
-/** first value declared by the most specific settings file that declares one */
+/** first value declared by the highest-precedence settings file that declares one (`precedence.ts`) */
 function declared<T>(inv: HarnessInventory, pick: (s: HarnessInventory['settings'][number]) => T | undefined): T | undefined {
-  for (const scope of SCOPE_PRECEDENCE) {
-    for (const s of inv.settings) {
-      if (s.scope !== scope) continue
-      const v = pick(s)
-      if (v !== undefined && v !== '') return v
-    }
+  for (const s of byPrecedence(inv.settings)) {
+    const v = pick(s)
+    if (v !== undefined && v !== '') return v
   }
   return undefined
 }
@@ -175,10 +169,13 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
     }
     for (const n of here) skillObsAt(n).sessions++
   }
-  // the cross-session rollup is the same signal; anything it knows that no single analysis carried still counts
+  // the cross-session rollup is the same signal; anything it knows that no single analysis carried still counts.
+  // The guard set is a SNAPSHOT: two rollup keys that canonicalise to one name (`brainstorming` and
+  // `superpowers:brainstorming`) must both be credited, and testing the live map would drop the second
+  const skillsFromAnalyses = new Set(skillObs.keys())
   for (const r of agg.bySkill) {
     const uses = r.extra?.['uses'] ?? 0
-    if (uses > 0 && !skillObs.has(canonicalSkill(r.key))) skillObsAt(r.key).invocations += uses
+    if (uses > 0 && !skillsFromAnalyses.has(canonicalSkill(r.key))) skillObsAt(r.key).invocations += uses
   }
 
   const skillRows: HarnessSkillRow[] = []
@@ -248,7 +245,9 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
   // definition, so one agent is one row and its models land on that row rather than on an orphan
   const canonicalAgent = (observed: string): string => canonicalName(observed, definedAgents)
   const agentObs = new Map<string, { dispatches: number; sessions: number; models: Set<string> }>()
-  const agentObsAt = (name: string) => {
+  // canonicalises inside the accessor, exactly like `skillObsAt`, so no call site can forget to
+  const agentObsAt = (rawName: string) => {
+    const name = canonicalAgent(rawName)
     let e = agentObs.get(name)
     if (!e) agentObs.set(name, (e = { dispatches: 0, sessions: 0, models: new Set() }))
     return e
@@ -256,24 +255,23 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
   for (const a of analyses) {
     const here = new Set<string>()
     for (const t of a.agents.byType) {
-      const name = canonicalAgent(t.agentType)
-      const e = agentObsAt(name)
+      const e = agentObsAt(t.agentType)
       e.dispatches += t.count
-      here.add(name)
+      here.add(canonicalAgent(t.agentType))
     }
     for (const r of a.agents.runs) {
       if (!r.agentType) continue
-      const name = canonicalAgent(r.agentType)
-      const e = agentObsAt(name)
+      const e = agentObsAt(r.agentType)
       if (r.model) e.models.add(r.model)
-      here.add(name)
+      here.add(canonicalAgent(r.agentType))
     }
     for (const n of here) agentObsAt(n).sessions++
   }
+  // same snapshot rule as the skills rollup above
+  const agentsFromAnalyses = new Set(agentObs.keys())
   for (const r of agg.byAgentType) {
     const runs = r.extra?.['runs'] ?? 0
-    const name = canonicalAgent(r.key)
-    if (runs > 0 && !agentObs.has(name)) agentObsAt(name).dispatches += runs
+    if (runs > 0 && !agentsFromAnalyses.has(canonicalAgent(r.key))) agentObsAt(r.key).dispatches += runs
   }
 
   const agentRows: HarnessAgentRow[] = []
@@ -319,11 +317,11 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
   }
   const configuredHooks = new Map<string, string | undefined>()
   const configuredEvents = new Set<string>()
-  for (const s of inv.settings) {
-    for (const h of s.hooks) {
-      configuredEvents.add(h.event)
-      for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event)
-    }
+  // settings files and the hooks.json of every ENABLED plugin: a disabled plugin's hooks do not run
+  const declaredHooks = [...inv.settings.flatMap((s) => s.hooks), ...inv.plugins.flatMap((p) => (p.enabled ? p.hookConfigs ?? [] : []))]
+  for (const h of declaredHooks) {
+    configuredEvents.add(h.event)
+    for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event)
   }
 
   const hookRows: HarnessHookRow[] = []

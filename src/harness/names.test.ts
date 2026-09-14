@@ -38,4 +38,15 @@ describe('names: argv0Basename', () => {
     expect(argv0Basename("'/usr/bin/afplay' ~/x.mp3 &")).toBe('afplay')
     expect(argv0Basename('   ')).toBe('')
   })
+  it('names the script, not the interpreter, when argv0 is an interpreter', () => {
+    // a dozen plugin hooks would otherwise collapse onto the one key `bash` and inherit each other's event
+    expect(argv0Basename('bash "${CLAUDE_PLUGIN_ROOT}/hooks/security.sh" --strict')).toBe('security.sh')
+    expect(argv0Basename('python3 /opt/tools/guard.py --json')).toBe('guard.py')
+    expect(argv0Basename('node --experimental-strip-types scripts/run-hook.ts')).toBe('run-hook.ts')
+    expect(argv0Basename('npx tsx hooks/check.ts')).toBe('check.ts')
+  })
+  it('falls back to the interpreter when nothing after it looks like a script path', () => {
+    expect(argv0Basename('bash -c "echo hi"')).toBe('bash')
+    expect(argv0Basename('sh')).toBe('sh')
+  })
 })

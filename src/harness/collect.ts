@@ -17,9 +17,12 @@
  *   - a hook command is reduced to `basename(argv0)` before it enters the report (`argv0Basename` in names.ts, the
  *     same rule the crosswalk joins on),
  *     and the arguments, which is where secrets live, are dropped rather than masked;
- *   - `~/.claude.json` is read through an explicit four-key allowlist (`CLAUDE_JSON_KEYS`), with the
- *     `projects[cwd]` branch reading exactly three more (`CLAUDE_JSON_PROJECT_KEYS`). The account block,
- *     history, caches and the ~75 other top-level keys of that file are never touched.
+ *   - `~/.claude.json` is read through an explicit four-key allowlist (`CLAUDE_JSON_KEYS`), with each
+ *     `projects[*]` entry that is read (the cwd's, or every entry under a global scan) reading exactly three
+ *     more (`CLAUDE_JSON_PROJECT_KEYS`). The account block, history, caches and the ~75 other top-level keys
+ *     of that file are never touched;
+ *   - managed (organization) policy is read from the platform's system directory (`managedDirs`), through the
+ *     same settings parser and the same boundary as a user settings file.
  * Every string that survives into the report goes through `../redact/redact.js`: `redactValue` for paths
  * (secret patterns + the home prefix rewritten to `~`) and `scrubStr` for names. There is no second,
  * hand-rolled scrubber here.
@@ -54,6 +57,10 @@ export interface CollectOptions {
   home: string
   /** any single file bigger than this is skipped as `too-large` and never read (default 1 MB) */
   maxFileBytes?: number
+  /** managed (organization) policy dirs from `managedSettingsDirs()`: managed-settings.json, managed-settings.d/, managed-mcp.json */
+  managedDirs?: string[]
+  /** read the MCP declarations of EVERY project entry in `~/.claude.json`, the declared side a global session scan needs; default: only cwd's */
+  allProjects?: boolean
 }
 
 const DEFAULT_MAX_FILE_BYTES = 1_000_000
@@ -62,7 +69,7 @@ const MAX_WALK_DEPTH = 6
 
 /** the ONLY keys read from `~/.claude.json`. Everything else in that file is never touched. */
 const CLAUDE_JSON_KEYS = ['mcpServers', 'projects', 'skillUsage', 'pluginUsage'] as const
-/** the ONLY keys read from `~/.claude.json` → `projects[cwd]` */
+/** the ONLY keys read from `~/.claude.json` → `projects[*]` */
 const CLAUDE_JSON_PROJECT_KEYS = ['mcpServers', 'enabledMcpjsonServers', 'disabledMcpjsonServers'] as const
 
 // ---------------------------------------------------------------------------------------------------------
@@ -267,7 +274,11 @@ function settingsEnv(raw: Record<string, unknown>): { count: number; names: stri
 }
 
 function settingsHooks(raw: Record<string, unknown>): HarnessHookConfig[] {
-  const hooks = asRecord(raw['hooks'])
+  return hookConfigsFrom(asRecord(raw['hooks']))
+}
+
+/** `{ <Event>: [{ matcher?, hooks: [{ command }] }] }`, the shape settings files and plugin `hooks.json` share */
+function hookConfigsFrom(hooks: Record<string, unknown> | null): HarnessHookConfig[] {
   if (!hooks) return []
   const out: HarnessHookConfig[] = []
   for (const event of Object.keys(hooks).sort()) {
@@ -320,6 +331,7 @@ function parseSettings(ctx: Ctx, scope: HarnessConfigScope, file: string, raw: R
     // value this collector cannot vouch for is still visible in the inventory rather than silently dropped
     ...(typeof raw['cleanupPeriodDays'] === 'number' ? { cleanupPeriodDays: raw['cleanupPeriodDays'] } : {}),
     ...(typeof raw['desktopSessionCleanupPeriodDays'] === 'number' ? { desktopSessionCleanupPeriodDays: raw['desktopSessionCleanupPeriodDays'] } : {}),
+    ...(typeof raw['allowManagedHooksOnly'] === 'boolean' ? { allowManagedHooksOnly: raw['allowManagedHooksOnly'] } : {}),
     enabledPlugins: enabledPluginKeys(raw),
   }
 }
@@ -416,6 +428,7 @@ interface PluginWalk {
   mcpServers: HarnessMcpServerEntry[]
   commands: number
   hooks: number
+  hookConfigs: HarnessHookConfig[]
 }
 
 /**
@@ -426,17 +439,14 @@ async function walkPlugin(ctx: Ctx, installPath: string, key: string): Promise<P
   const skills = await readSkillDir(ctx, join(installPath, 'skills'), 'plugin', key)
   const agents = await readAgentDir(ctx, join(installPath, 'agents'), 'plugin', key)
   const commands = (await walkMarkdown(ctx, join(installPath, 'commands'))).length
-  let hooks = 0
+  // a plugin's hooks.json either wraps the events in `hooks` or is the event map itself; a `hooks` key that
+  // is not an object is a malformed file and declares nothing, never an event named `hooks`
   const hooksJson = await readJson(ctx, join(installPath, 'hooks', 'hooks.json'))
-  const hookEvents = asRecord(hooksJson?.['hooks']) ?? hooksJson
-  if (hookEvents) {
-    for (const event of Object.keys(hookEvents)) {
-      for (const m of asArray(hookEvents[event])) hooks += asArray(asRecord(m)?.['hooks']).length
-    }
-  }
+  const hookConfigs = hookConfigsFrom(hooksJson && 'hooks' in hooksJson ? asRecord(hooksJson['hooks']) : hooksJson)
+  const hooks = hookConfigs.reduce((n, h) => n + h.commands, 0)
   const mcpJson = await readJson(ctx, join(installPath, '.mcp.json'))
   const mcpServers = mcpFromRecord(asRecord(mcpJson?.['mcpServers']), 'plugin')
-  return { skills, agents, mcpServers, commands, hooks }
+  return { skills, agents, mcpServers, commands, hooks, hookConfigs }
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -485,6 +495,30 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
     mcpServers.push(...mcpFromRecord(asRecord(mcpJson?.['mcpServers']), 'repo-file'))
   } else {
     mark(ctx, opts.cwd, 'enoent')
+  }
+
+  // ---- managed side: organization policy, the scope every other one is read under ----
+  for (const dir of opts.managedDirs ?? []) {
+    if (!(await isDir(dir))) continue // most machines carry no policy; absence is not a miss
+    const main = join(dir, 'managed-settings.json')
+    const rawMain = await readJson(ctx, main)
+    if (rawMain) settings.push(parseSettings(ctx, 'managed', main, rawMain))
+    const dropIns = join(dir, 'managed-settings.d')
+    if (await isDir(dropIns)) {
+      let names: string[] = []
+      try {
+        names = (await readdir(dropIns)).filter((n) => n.endsWith('.json')).sort()
+      } catch (e) {
+        mark(ctx, dropIns, reasonOf(e))
+      }
+      for (const name of names) {
+        const file = join(dropIns, name)
+        const raw = await readJson(ctx, file)
+        if (raw) settings.push(parseSettings(ctx, 'managed', file, raw))
+      }
+    }
+    const mcp = await readJson(ctx, join(dir, 'managed-mcp.json'))
+    mcpServers.push(...mcpFromRecord(asRecord(mcp?.['mcpServers']), 'managed'))
   }
 
   // ---- global side ----
@@ -541,12 +575,14 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
         commands: walk.commands,
         hooks: walk.hooks,
         mcpServers: walk.mcpServers.length,
+        ...(walk.hookConfigs.length ? { hookConfigs: walk.hookConfigs } : {}),
       })
     }
   }
 
   // ---- ~/.claude.json: allowlist read only ----
   let usageCounters: HarnessUsageCounters | undefined
+  let projectEntries = 0
   const claudeJsonPath = join(opts.home, '.claude.json')
   const rawClaudeJson = await readJson(ctx, claudeJsonPath)
   if (rawClaudeJson) {
@@ -556,15 +592,24 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
 
     mcpServers.push(...mcpFromRecord(asRecord(picked['mcpServers']), 'global'))
 
-    const project = asRecord(asRecord(picked['projects'])?.[opts.cwd])
-    if (project) {
+    // one entry, the cwd, for a repo scan; every entry for a global one, whose observed side spans every project
+    const projects = asRecord(picked['projects']) ?? {}
+    const projectKeys = opts.allProjects ? Object.keys(projects).sort() : [opts.cwd]
+    for (const key of projectKeys) {
+      const project = asRecord(projects[key])
+      if (!project) continue
+      projectEntries++
       const proj: Record<string, unknown> = {}
       for (const k of CLAUDE_JSON_PROJECT_KEYS) if (k in project) proj[k] = project[k]
+      const ownRowsFrom = mcpServers.length
       mcpServers.push(...mcpFromRecord(asRecord(proj['mcpServers']), 'project'))
-      // These two lists record the user's approval of servers the repo `.mcp.json` ALREADY declared, so the
-      // normal case is a name that is already in `mcpServers`. Reconcile onto that row instead of pushing a
-      // second one: a duplicate inflates `totals.mcpServers` and lets the inventory claim the same server is
-      // both enabled and disabled. Disabled always wins.
+      // These two lists record ONE project's approval of the servers ITS `.mcp.json` declared, so the normal
+      // case is a name already among the rows this entry owns: what it just declared, plus the repo `.mcp.json`
+      // rows when the entry is the cwd. Reconcile onto those rows instead of pushing a second one (a duplicate
+      // inflates `totals.mcpServers` and lets the inventory claim one server is both enabled and disabled;
+      // disabled always wins), and never onto another project's, a plugin's or a managed row: under a global
+      // scan a foreign project's decline must not flip a server it never declared.
+      const ownsRepoFile = key === opts.cwd
       for (const [list, on] of [
         [asArray(proj['enabledMcpjsonServers']), true],
         [asArray(proj['disabledMcpjsonServers']), false],
@@ -573,9 +618,9 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
           const name = asString(raw)
           if (!name) continue
           const clean = cleanName(name)
-          const existing = mcpServers.filter((m) => m.name === clean)
+          const existing = mcpServers.filter((m, i) => m.name === clean && (i >= ownRowsFrom || (ownsRepoFile && m.scope === 'repo-file')))
           if (existing.length) for (const row of existing) row.enabled = row.enabled && on
-          else mcpServers.push({ name: clean, scope: 'repo-file', transport: 'unknown', enabled: on })
+          else mcpServers.push({ name: clean, scope: ownsRepoFile ? 'repo-file' : 'project', transport: 'unknown', enabled: on })
         }
       }
     }
@@ -619,7 +664,11 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
       plugins: plugins.length,
       // distinct NAMES: one server declared by `.mcp.json` and named again by a toggle list is one server
       mcpServers: new Set(mcpServers.map((m) => m.name)).size,
-      hookCommands: settings.reduce((n, s) => n + s.hooks.reduce((k, h) => k + h.commands, 0), 0),
+      // settings files plus the hooks of ENABLED plugins: the commands Claude Code will actually run
+      hookCommands:
+        settings.reduce((n, s) => n + s.hooks.reduce((k, h) => k + h.commands, 0), 0) +
+        plugins.reduce((n, p) => n + (p.enabled ? p.hooks : 0), 0),
+      projectEntries,
     },
     unreadable: ctx.unreadable,
   }

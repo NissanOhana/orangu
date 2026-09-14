@@ -30,8 +30,8 @@ export const HARNESS_ROW_CAP = 50
  */
 export type HarnessStatus = 'used' | 'idle' | 'undeclared'
 
-/** which config file a declaration came from */
-export type HarnessConfigScope = 'repo' | 'global' | 'repo-local' | 'global-local'
+/** which config file a declaration came from; `managed` is organization policy, above every other scope */
+export type HarnessConfigScope = 'managed' | 'repo' | 'global' | 'repo-local' | 'global-local'
 
 /** where a skill or agent definition lives */
 export type HarnessOrigin = 'repo' | 'global' | 'plugin'
@@ -77,6 +77,8 @@ export interface HarnessSettingsFile {
   cleanupPeriodDays?: number
   /** the sweep window for Claude Desktop / Cowork transcripts, which carry no limit unless this is set */
   desktopSessionCleanupPeriodDays?: number
+  /** managed policy only: when true, hook commands declared in user, project and plugin settings do not run */
+  allowManagedHooksOnly?: boolean
   enabledPlugins: string[]
 }
 
@@ -119,9 +121,11 @@ export interface HarnessPluginEntry {
   commands: number
   hooks: number
   mcpServers: number
+  /** the plugin's `hooks/hooks.json`, basenames only, so a plugin hook joins like a settings one; absent when it declares none */
+  hookConfigs?: HarnessHookConfig[]
 }
 
-export type HarnessMcpScope = 'global' | 'project' | 'repo-file' | 'plugin'
+export type HarnessMcpScope = 'managed' | 'global' | 'project' | 'repo-file' | 'plugin'
 
 export interface HarnessMcpServerEntry {
   name: string
@@ -151,6 +155,8 @@ export interface HarnessInventoryTotals {
   plugins: number
   mcpServers: number
   hookCommands: number
+  /** `~/.claude.json` project entries that were read, whether or not they declared anything: the cwd's, or every entry under a global scan */
+  projectEntries?: number
 }
 
 export interface HarnessUnreadableEntry {

@@ -66,6 +66,19 @@ export function defaultConfigDir(): string {
 }
 
 /**
+ * Where Claude Code reads managed (organization) policy from: `managed-settings.json`, `managed-settings.d/`
+ * and `managed-mcp.json` in one system directory per platform. `ORANGU_CLAUDE_MANAGED_DIRS` (comma-separated)
+ * replaces the list; set it EMPTY to read none, which is how a test keeps the machine's policy out of a run.
+ */
+export function managedSettingsDirs(env: Record<string, string | undefined> = process.env, platform: NodeJS.Platform = process.platform): string[] {
+  const override = env['ORANGU_CLAUDE_MANAGED_DIRS']
+  if (override !== undefined) return override.split(',').map((s) => s.trim()).filter(Boolean)
+  if (platform === 'darwin') return ['/Library/Application Support/ClaudeCode']
+  if (platform === 'win32') return ['C:\\Program Files\\ClaudeCode']
+  return ['/etc/claude-code']
+}
+
+/**
  * All Claude config roots to scan, in order:
  * ORANGU_CLAUDE_ROOTS (comma-separated), then CLAUDE_CONFIG_DIR, then ~/.claude, then ~/.config/claude,
  * then Cowork/Desktop local session roots under Library/Application Support/Claude/local-agent-mode-sessions.

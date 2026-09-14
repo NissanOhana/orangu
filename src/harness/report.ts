@@ -87,6 +87,9 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetent
   if (x.effort.configured && !x.effort.matchesConfigured) {
     notes.push(`configured effort "${x.effort.configured}" does not appear among the effort levels these sessions used`)
   }
+  if (inv.settings.some((s) => s.scope === 'managed' && s.allowManagedHooksOnly)) {
+    notes.push('managed policy sets allowManagedHooksOnly, so hook commands declared in user, project and plugin settings do not run; only managed hook rows can be used')
+  }
   const undeclared =
     x.skills.filter((s) => s.status === 'undeclared').length +
     x.mcpServers.filter((m) => m.status === 'undeclared').length +

@@ -78,6 +78,22 @@ describe('computeRetention: resolving the effective window', () => {
     expect(computeRetention(all.slice(0, 1), [], NOW).effectiveDays).toBe(4)
   })
 
+  it('within managed policy the alphabetically LAST drop-in wins, and managed-settings.json loses to every drop-in', () => {
+    // Claude Code merges managed-settings.json first, then managed-settings.d/*.json in alphabetical order, and a
+    // later single value replaces an earlier one; rows arrive in file order and must be consulted in reverse
+    const rows = [
+      settings('managed', { file: '/Library/Application Support/ClaudeCode/managed-settings.d/10-base.json', cleanupPeriodDays: 30 }),
+      settings('managed', { file: '/Library/Application Support/ClaudeCode/managed-settings.d/20-security.json', cleanupPeriodDays: 7 }),
+      settings('managed', { file: '/Library/Application Support/ClaudeCode/managed-settings.json', cleanupPeriodDays: 90 }),
+      settings('repo-local', { file: '/repo/.claude/settings.local.json', cleanupPeriodDays: 3 }),
+    ]
+    const r = computeRetention(rows, [], NOW)
+    expect(r.effectiveDays).toBe(7)
+    expect(r.source?.file).toContain('20-security.json')
+    const noDropIns = computeRetention([rows[2]!, rows[3]!], [], NOW)
+    expect(noDropIns.effectiveDays).toBe(90)
+  })
+
   it('names the file the winning value came from', () => {
     const r = computeRetention([settings('global', { cleanupPeriodDays: 45 })], [], NOW)
     expect(r.isDefault).toBe(false)
