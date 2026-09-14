@@ -19,7 +19,8 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  * Bumped when the engine adds to `Analysis` WITHOUT a schema bump (an additive field, a corrected counter), so
  * a cache the previous engine wrote under the same schema and package version is a miss instead of a payload
  * that silently lacks the new field. Part of the cache directory name, never of the payload.
- *   1 (2026-09-14): parse.primaryAttachmentTypes / primaryAttachmentBytes
+ *   1 (2026-09-14): parse.primaryAttachmentTypes / primaryAttachmentBytes; hooks.byCommand[].keyedBy and
+ *     .events; hook runs counted from run records only, with command and durationMs picked up
  */
 export const ANALYSIS_PAYLOAD_GENERATION = 1
 
@@ -233,7 +234,12 @@ export interface HooksAnalysis {
   runs: number
   errors: number
   totalMs: number
-  byCommand: Array<{ command: string; count: number; totalMs: number; errors: number; hookEvent?: string }>
+  /**
+   * `command` is the command line when the transcript recorded one; otherwise the hook's name or event, and
+   * `keyedBy` says which. Only a `command` key can be joined against a settings file. One command may fire on
+   * several events: `events` counts its runs per event and `hookEvent` names the busiest (ties by name).
+   */
+  byCommand: Array<{ command: string; count: number; totalMs: number; errors: number; hookEvent?: string; events: Record<string, number>; keyedBy: 'command' | 'hookName' | 'hookEvent' }>
   events: Array<{ hookEvent: string; count: number }>
 }
 

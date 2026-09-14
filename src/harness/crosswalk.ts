@@ -14,11 +14,10 @@
  *
  * The window comes from session `startedAt` values, never from the clock.
  */
-import { basename } from 'node:path'
 import type { Analysis } from '../model/analysis.js'
 import type { Aggregate } from '../analyze/aggregate.js'
 import { HARNESS_ROW_CAP } from './types.js'
-import { canonicalName } from './names.js'
+import { argv0Basename, canonicalName } from './names.js'
 import type {
   HarnessAgentRow,
   HarnessCrosswalk,
@@ -37,6 +36,9 @@ import type {
 const SCOPE_PRECEDENCE: HarnessConfigScope[] = ['repo-local', 'repo', 'global-local', 'global']
 
 const approxTokens = (bytes: number): number => Math.ceil(bytes / 4)
+
+/** key prefix of a hook row that stands for every run of one event the transcript recorded without a command */
+const EVENT_ROW_PREFIX = 'event:'
 
 function statusOf(declared: boolean, observations: number): HarnessStatus {
   if (!declared) return 'undeclared'
@@ -290,40 +292,57 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
   }
 
   // ---------- hooks ----------
-  const hookObs = new Map<string, { runs: number; errors: number; totalMs: number; events: Set<string> }>()
-  const hookObsAt = (name: string) => {
-    let e = hookObs.get(name)
-    if (!e) hookObs.set(name, (e = { runs: 0, errors: 0, totalMs: 0, events: new Set() }))
+  // `events` counts runs per event, so a command that fires on several is labelled with the busiest one
+  const hookObs = new Map<string, { runs: number; errors: number; totalMs: number; events: Map<string, number> }>()
+  const hookObsAt = (key: string) => {
+    let e = hookObs.get(key)
+    if (!e) hookObs.set(key, (e = { runs: 0, errors: 0, totalMs: 0, events: new Map() }))
     return e
   }
+  const busiestEvent = (events: Map<string, number>): string | undefined =>
+    [...events.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))[0]?.[0]
   for (const a of analyses) {
     for (const h of a.hooks.byCommand) {
-      const name = basename((h.command ?? '').trim().split(/\s+/)[0] ?? '')
-      if (!name) continue
-      const e = hookObsAt(name)
+      // a command joins by basename through the same rule the collector applied to the settings file; a run
+      // the transcript recorded by name or event only folds into one row per event, never into a phantom
+      // command named after the event
+      const key = h.keyedBy === 'command' ? argv0Basename(h.command) : h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : ''
+      if (!key) continue
+      const e = hookObsAt(key)
       e.runs += h.count
       e.errors += h.errors
       e.totalMs += h.totalMs
-      if (h.hookEvent) e.events.add(h.hookEvent)
+      // an analysis from an engine without per-event counts carries only `hookEvent`; credit it the whole row
+      const perEvent = h.events ?? (h.hookEvent ? { [h.hookEvent]: h.count } : {})
+      for (const [ev, runs] of Object.entries(perEvent)) e.events.set(ev, (e.events.get(ev) ?? 0) + runs)
     }
   }
   const configuredHooks = new Map<string, string | undefined>()
-  for (const s of inv.settings) for (const h of s.hooks) for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event)
+  const configuredEvents = new Set<string>()
+  for (const s of inv.settings) {
+    for (const h of s.hooks) {
+      configuredEvents.add(h.event)
+      for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event)
+    }
+  }
 
   const hookRows: HarnessHookRow[] = []
-  for (const name of new Set([...configuredHooks.keys(), ...hookObs.keys()])) {
-    const o = hookObs.get(name)
-    const event = configuredHooks.get(name) ?? [...(o?.events ?? [])].sort()[0]
+  for (const key of new Set([...configuredHooks.keys(), ...hookObs.keys()])) {
+    const o = hookObs.get(key)
+    const eventOnly = key.startsWith(EVENT_ROW_PREFIX)
+    const event = eventOnly ? key.slice(EVENT_ROW_PREFIX.length) : (configuredHooks.get(key) ?? (o ? busiestEvent(o.events) : undefined))
+    // an event-only row is declared when any settings file declares a hook for that event
+    const configured = eventOnly ? configuredEvents.has(event ?? '') : configuredHooks.has(key)
     hookRows.push({
       ...(event ? { event } : {}),
-      commandBasename: name,
-      configured: configuredHooks.has(name),
+      ...(eventOnly ? {} : { commandBasename: key }),
+      configured,
       runs: o?.runs ?? 0,
       errors: o?.errors ?? 0,
       totalMs: Math.round(o?.totalMs ?? 0),
       // exact from exposed data: Σ totalMs ÷ Σ runs. No percentile is claimed; see HarnessHookRow.meanMs
       meanMs: o && o.runs > 0 ? Math.round(o.totalMs / o.runs) : 0,
-      status: statusOf(configuredHooks.has(name), o?.runs ?? 0),
+      status: statusOf(configured, o?.runs ?? 0),
     })
   }
 
@@ -466,7 +485,7 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
     skills: ranked(skillRows, (x) => x.invocations, (x) => x.name),
     mcpServers: ranked(mcpRows, (x) => x.toolCalls, (x) => x.name),
     agents: ranked(agentRows, (x) => x.dispatches, (x) => x.name),
-    hooks: ranked(hookRows, (x) => x.runs, (x) => x.commandBasename),
+    hooks: ranked(hookRows, (x) => x.runs, (x) => x.commandBasename ?? EVENT_ROW_PREFIX + (x.event ?? '')),
     models: {
       ...(configuredModel ? { configured: configuredModel } : {}),
       seen: modelsSeen,

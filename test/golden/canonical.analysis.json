@@ -603,14 +603,22 @@
         "count": 1,
         "totalMs": 300,
         "errors": 0,
-        "hookEvent": "Stop"
+        "hookEvent": "Stop",
+        "events": {
+          "Stop": 1
+        },
+        "keyedBy": "command"
       },
       {
         "command": "SessionStart:startup",
         "count": 1,
         "totalMs": 0,
         "errors": 0,
-        "hookEvent": "SessionStart"
+        "hookEvent": "SessionStart",
+        "events": {
+          "SessionStart": 1
+        },
+        "keyedBy": "hookName"
       }
     ],
     "events": [

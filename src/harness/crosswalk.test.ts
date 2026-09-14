@@ -275,6 +275,65 @@ describe('crosswalk: hooks', () => {
     expect(row.meanMs).toBe(500)
     expect(row.meanMs).toBe(Math.round(row.totalMs / row.runs))
   })
+
+  it('joins a non-Stop hook by the command its attachment recorded, with its timing', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000001' })
+    b.userPrompt('a')
+    b.attachmentHook('SessionStart:startup', 'SessionStart', 'ok', { command: '"/opt/tools/start.sh" --quiet', durationMs: 75 })
+    b.attachmentHook('SessionStart', 'SessionStart', '', { type: 'hook_additional_context' })
+    const a = await analyze(b)
+    const inv = emptyInventory({ settings: [settingsEntry({ hooks: [{ event: 'SessionStart', matchers: 1, commands: 1, commandBasenames: ['start.sh'] }] })] })
+    const x = crosswalk(inv, [a], aggregate([a], 'test', 0))
+    expect(x.hooks).toHaveLength(1)
+    expect(x.hooks[0]).toMatchObject({ commandBasename: 'start.sh', event: 'SessionStart', configured: true, runs: 1, totalMs: 75, meanMs: 75, status: 'used' })
+  })
+
+  it('labels a command that fires on several events with the busiest one, not the first alphabetically', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000004' })
+    b.userPrompt('a')
+    b.attachmentHook('PostToolUse:Bash', 'PostToolUse', 'ok', { command: '/opt/tools/notify.sh --loud', durationMs: 5 })
+    b.stopHookSummary([{ command: '/opt/tools/notify.sh --loud', durationMs: 300 }])
+    b.stopHookSummary([{ command: '/opt/tools/notify.sh --loud', durationMs: 300 }])
+    const a = await analyze(b)
+    const x = crosswalk(emptyInventory(), [a], aggregate([a], 'test', 0))
+    const row = x.hooks.find((h) => h.commandBasename === 'notify.sh')!
+    expect(row.runs).toBe(3)
+    expect(row.event).toBe('Stop')
+  })
+
+  it('an async hook response is a run of its event, joined by event because it carries no command', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000005' })
+    b.userPrompt('a')
+    b.attachmentHook('PreToolUse:Bash', 'PreToolUse', '', { type: 'async_hook_response', exitCode: 1 })
+    b.attachmentHook('PreToolUse:Bash', 'PreToolUse', '', { type: 'async_hook_response', exitCode: 0 })
+    const a = await analyze(b)
+    const inv = emptyInventory({ settings: [settingsEntry({ hooks: [{ event: 'PreToolUse', matchers: 1, commands: 1, commandBasenames: ['guard.sh'] }] })] })
+    const x = crosswalk(inv, [a], aggregate([a], 'test', 0))
+    const row = x.hooks.find((h) => h.event === 'PreToolUse' && h.commandBasename === undefined)!
+    expect(row).toMatchObject({ configured: true, runs: 2, errors: 1, status: 'used' })
+  })
+
+  it('folds a run the transcript recorded by name only into one row per event, never a phantom command', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000002' })
+    b.userPrompt('a')
+    b.attachmentHook('SessionStart:startup', 'SessionStart')
+    b.attachmentHook('SessionStart:resume', 'SessionStart')
+    b.attachmentHook('PostToolUse:Edit', 'PostToolUse')
+    const a = await analyze(b)
+    const inv = emptyInventory({ settings: [settingsEntry({ hooks: [{ event: 'SessionStart', matchers: 1, commands: 1, commandBasenames: ['start.sh'] }] })] })
+    const x = crosswalk(inv, [a], aggregate([a], 'test', 0))
+    expect(x.hooks.map((h) => h.commandBasename)).not.toContain('SessionStart:startup')
+    const start = x.hooks.find((h) => h.event === 'SessionStart' && h.commandBasename === undefined)!
+    expect(start).toMatchObject({ configured: true, runs: 2, status: 'used' })
+    const post = x.hooks.find((h) => h.event === 'PostToolUse' && h.commandBasename === undefined)!
+    expect(post).toMatchObject({ configured: false, runs: 1, status: 'undeclared' })
+    // the declared command still gets its own idle row
+    expect(x.hooks.find((h) => h.commandBasename === 'start.sh')?.status).toBe('idle')
+  })
 })
 
 describe('crosswalk: models, effort, permissions', () => {

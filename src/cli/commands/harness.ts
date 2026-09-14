@@ -229,7 +229,7 @@ function printHarness(r: HarnessReport): void {
     ...x.skills.filter((s) => s.status === 'undeclared').map((s) => 'skill ' + s.name),
     ...x.mcpServers.filter((m) => m.status === 'undeclared').map((m) => 'mcp ' + m.name),
     ...x.agents.filter((a) => a.status === 'undeclared').map((a) => 'agent ' + a.name),
-    ...x.hooks.filter((h) => h.status === 'undeclared').map((h) => 'hook ' + h.commandBasename),
+    ...x.hooks.filter((h) => h.status === 'undeclared').map((h) => 'hook ' + (h.commandBasename ?? `${h.event} (by event)`)),
   ]
   line('undeclared', undeclared.length ? `${undeclared.length} observed but not in the config read` : 'none')
   if (undeclared.length) w(paint(out, 'dim', '    ' + undeclared.slice(0, 8).join(', ')))

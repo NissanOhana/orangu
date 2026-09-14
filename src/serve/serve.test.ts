@@ -117,7 +117,7 @@ const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
   a.agents.byType.push({ agentType: 'code-reviewer', count: 1, tokens: 0, avgDurationMs: 0 })
   a.skills.invocations.push({ name: 'orangu-improve', via: 'command', turnIndex: 0, args: text })
   a.skills.byName.push({ name: 'orangu-improve', count: 1, via: ['command'], turnIndexes: [0] })
-  a.hooks.byCommand.push({ command: text, count: 1, totalMs: 0, errors: 0, hookEvent: 'Stop' })
+  a.hooks.byCommand.push({ command: text, count: 1, totalMs: 0, errors: 0, hookEvent: 'Stop', events: { Stop: 1 }, keyedBy: 'command' })
   a.time.longestTurns.push({ turnIndex: 0, durationMs: 1, preview: text })
   a.quality.testRuns.push({ turnIndex: 0, command: text, ok: false })
   a.quality.buildRuns.push({ turnIndex: 0, command: text, ok: false })

@@ -43,6 +43,15 @@ export type { ParseInput } from './parse-input.js'
 // ---------- typed access helpers ----------
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const num = (v: unknown): number | undefined => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
+
+/**
+ * Attachment types that each record ONE hook run; the other `hook_*` types annotate a run already counted.
+ * `async_hook_response` is the completion record of a hook that ran in the background: it carries the event,
+ * the name and an exit code, never a command or a duration.
+ */
+const HOOK_RUN_ATTACHMENTS: ReadonlySet<string> = new Set(['hook_success', 'hook_error', 'hook_failure', 'hook_cancelled', 'hook_non_blocking_error', 'async_hook_response'])
+/** a run is ok when it completed with exit 0: an error, a failure, a timeout (`hook_cancelled`) and a non-blocking error all did not */
+const HOOK_RUN_NOT_OK: ReadonlySet<string> = new Set(['hook_error', 'hook_failure', 'hook_cancelled', 'hook_non_blocking_error'])
 const bool = (v: unknown): boolean => v === true
 const obj = (v: unknown): JsonObject | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as JsonObject) : undefined)
 const arr = (v: unknown): unknown[] | undefined => (Array.isArray(v) ? v : undefined)
@@ -515,13 +524,24 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
           addCount(primaryAttachmentTypes, at)
           addCount(primaryAttachmentBytes, at, attachmentBytesHere)
         }
-        if (at.startsWith('hook')) {
-          // a hook_success attachment is a context-injection notice with no timing; the authoritative,
-          // timed Stop-hook records come from the stop_hook_summary system record. Only record non-Stop
-          // hook events here (SessionStart/UserPromptSubmit/PreToolUse...), and mark failures.
+        if (at.startsWith('hook') || at === 'async_hook_response') {
+          // A hook run is ONE record among HOOK_RUN_ATTACHMENTS; `hook_additional_context` and
+          // `hook_system_message` are the output of a run that already has its `hook_success`, and counting
+          // them doubled every hook that emits context. Newer transcripts put `command` and `durationMs` on
+          // the run record; older ones carry only the name and event. Stop hooks come from the timed
+          // stop_hook_summary system record instead, so they are skipped here.
           const he = str(a?.['hookEvent'])
-          if (he && he !== 'Stop') {
-            hooks.push({ hookEvent: he, hookName: str(a?.['hookName']), ok: at !== 'hook_error' && at !== 'hook_failure', ts: t, turnIndex: mainTurnIndex })
+          if (he && he !== 'Stop' && HOOK_RUN_ATTACHMENTS.has(at)) {
+            const exitCode = num(a?.['exitCode'])
+            hooks.push({
+              hookEvent: he,
+              hookName: str(a?.['hookName']),
+              command: str(a?.['command']),
+              durationMs: num(a?.['durationMs']),
+              ok: !HOOK_RUN_NOT_OK.has(at) && (exitCode === undefined || exitCode === 0),
+              ts: t,
+              turnIndex: mainTurnIndex,
+            })
           }
         } else if (at === 'skill_listing' && !isSub) {
           const names = (arr(a?.['names']) ?? []).filter((x): x is string => typeof x === 'string')

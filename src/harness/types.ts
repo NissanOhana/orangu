@@ -213,7 +213,11 @@ export interface HarnessAgentRow {
 
 export interface HarnessHookRow {
   event?: string
-  commandBasename: string
+  /**
+   * absent on an event-only row: the transcript recorded the run by name or event, so it can be joined to
+   * the event a settings file declares but not to a command
+   */
+  commandBasename?: string
   configured: boolean
   runs: number
   errors: number

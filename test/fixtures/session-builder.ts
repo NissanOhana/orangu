@@ -288,11 +288,22 @@ export class SessionBuilder {
     return this
   }
 
-  attachmentHook(hookName: string, hookEvent: string, stdout = ''): this {
+  /** a hook attachment; `type` defaults to hook_success, and newer transcripts also carry `command` and `durationMs` */
+  attachmentHook(hookName: string, hookEvent: string, stdout = '', extra: { command?: string; durationMs?: number; type?: string; exitCode?: number } = {}): this {
     this.records.push(
       this.base({
         type: 'attachment',
-        attachment: { type: 'hook_success', hookName, hookEvent, toolUseID: fakeUuid('hook'), content: '', stdout },
+        attachment: {
+          type: extra.type ?? 'hook_success',
+          hookName,
+          hookEvent,
+          toolUseID: fakeUuid('hook'),
+          content: '',
+          stdout,
+          ...(extra.command ? { command: extra.command } : {}),
+          ...(extra.durationMs !== undefined ? { durationMs: extra.durationMs } : {}),
+          ...(extra.exitCode !== undefined ? { exitCode: extra.exitCode } : {}),
+        },
       }),
     )
     return this

@@ -41,6 +41,8 @@ async function makeHarnessFixture(): Promise<Fixture> {
   b.toolCall('mcp__octocode__githubSearchCode', { q: 'x' }, 'ok')
   // a hook that ran but is in no config the collector reads: an `undeclared` hook row
   b.stopHookSummary([{ command: '/opt/tools/rogue-hook.sh --quiet', durationMs: 12 }])
+  // an OBSERVED command with a secret in its arguments: the transcript side of the basename boundary
+  b.attachmentHook('PreToolUse:Bash', 'PreToolUse', 'ok', { command: '/opt/tools/observed.sh --token sk-ant-observedplanted0000', durationMs: 3 })
   b.turnDuration(3000, 5)
   await writeFile(join(configDir, 'projects', '-Users-test-Code-demo', '99999999-0000-4000-8000-00000000cccc.jsonl'), b.toJsonl())
 
@@ -163,6 +165,9 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     // the NAME is kept; only the value is out of reach
     expect(json).toContain('SOME_TOKEN_NAME')
     expect(json).toContain('notify.sh')
+    // the observed side keeps the same boundary: basename in, arguments out
+    expect(json).not.toContain('observedplanted')
+    expect(json).toContain('observed.sh')
   })
 
   it('prints a human report with the labelled lines and no crash', () => {

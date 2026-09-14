@@ -2424,6 +2424,8 @@ function skillNameFromInput(input) {
 // src/adapters/claude-code/parse.ts
 var str = (v) => typeof v === "string" ? v : void 0;
 var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : void 0;
+var HOOK_RUN_ATTACHMENTS = /* @__PURE__ */ new Set(["hook_success", "hook_error", "hook_failure", "hook_cancelled", "hook_non_blocking_error", "async_hook_response"]);
+var HOOK_RUN_NOT_OK = /* @__PURE__ */ new Set(["hook_error", "hook_failure", "hook_cancelled", "hook_non_blocking_error"]);
 var bool = (v) => v === true;
 var obj = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : void 0;
 var arr = (v) => Array.isArray(v) ? v : void 0;
@@ -2815,10 +2817,19 @@ function buildSession(files2, mainPath, keepText, t0) {
           addCount(primaryAttachmentTypes, at);
           addCount(primaryAttachmentBytes, at, attachmentBytesHere);
         }
-        if (at.startsWith("hook")) {
+        if (at.startsWith("hook") || at === "async_hook_response") {
           const he = str(a?.["hookEvent"]);
-          if (he && he !== "Stop") {
-            hooks.push({ hookEvent: he, hookName: str(a?.["hookName"]), ok: at !== "hook_error" && at !== "hook_failure", ts: t, turnIndex: mainTurnIndex });
+          if (he && he !== "Stop" && HOOK_RUN_ATTACHMENTS.has(at)) {
+            const exitCode = num(a?.["exitCode"]);
+            hooks.push({
+              hookEvent: he,
+              hookName: str(a?.["hookName"]),
+              command: str(a?.["command"]),
+              durationMs: num(a?.["durationMs"]),
+              ok: !HOOK_RUN_NOT_OK.has(at) && (exitCode === void 0 || exitCode === 0),
+              ts: t,
+              turnIndex: mainTurnIndex
+            });
           }
         } else if (at === "skill_listing" && !isSub) {
           const names = (arr(a?.["names"]) ?? []).filter((x) => typeof x === "string");
@@ -4411,22 +4422,29 @@ function analyzeHooks(s) {
   let totalMs = 0;
   let errors = 0;
   for (const h of s.hooks) {
+    const keyedBy = h.command ? "command" : h.hookName ? "hookName" : "hookEvent";
     const key = h.command ?? h.hookName ?? h.hookEvent ?? "hook";
-    const e = byCmd.get(key) ?? { count: 0, totalMs: 0, errors: 0, hookEvent: h.hookEvent };
+    const e = byCmd.get(key) ?? { count: 0, totalMs: 0, errors: 0, events: /* @__PURE__ */ new Map(), keyedBy };
     e.count++;
     e.totalMs += h.durationMs ?? 0;
     if (!h.ok) e.errors++;
+    if (h.hookEvent) e.events.set(h.hookEvent, (e.events.get(h.hookEvent) ?? 0) + 1);
     byCmd.set(key, e);
     totalMs += h.durationMs ?? 0;
     if (!h.ok) errors++;
     const ev = h.hookEvent ?? "unknown";
     byEvent.set(ev, (byEvent.get(ev) ?? 0) + 1);
   }
+  const busiest = (events) => [...events.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))[0]?.[0];
+  const eventsRecord = (events) => Object.fromEntries([...events.entries()].sort((a, b) => a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   return {
     runs: s.hooks.length,
     errors,
     totalMs,
-    byCommand: [...byCmd.entries()].map(([command, e]) => ({ command, ...e })).sort((a, b) => b.totalMs - a.totalMs),
+    byCommand: [...byCmd.entries()].map(([command, e]) => {
+      const hookEvent = busiest(e.events);
+      return { command, count: e.count, totalMs: e.totalMs, errors: e.errors, ...hookEvent ? { hookEvent } : {}, events: eventsRecord(e.events), keyedBy: e.keyedBy };
+    }).sort((a, b) => b.totalMs - a.totalMs),
     events: [...byEvent.entries()].map(([hookEvent, count2]) => ({ hookEvent, count: count2 }))
   };
 }
@@ -4808,7 +4826,7 @@ var hooksOverhead = (ctx) => {
         axis: "time",
         title: `Hooks consumed ${fmtMs(h.totalMs)} across ${h.runs} runs`,
         detail: h.byCommand.slice(0, 5).map((c) => `${c.command.slice(0, 50)} ${fmtMs(c.totalMs)}`).join("; "),
-        recommendation: "Slow Stop/PostToolUse hooks run on every turn. Make them async (background &), cache their work, or scope them to the events that need them.",
+        recommendation: "A slow hook runs on every turn of the event it is attached to (Stop, UserPromptSubmit, SessionStart, PostToolUse). Make it async (background &), cache its work, or scope it to the events that need it.",
         evidence: { totalMs: h.totalMs, byCommand: h.byCommand.slice(0, 5) },
         turnIndexes: [],
         savings: { ms: Math.round(h.totalMs * 0.8), estimated: true },
@@ -7047,14 +7065,12 @@ async function watchSession(ref, flags, deps) {
 // src/cli/summary.ts
 import { basename as basename6 } from "node:path";
 
-// src/harness/crosswalk.ts
-import { basename as basename5 } from "node:path";
-
 // src/harness/types.ts
 var HARNESS_SCHEMA_VERSION = "2";
 var HARNESS_ROW_CAP = 50;
 
 // src/harness/names.ts
+import { basename as basename5 } from "node:path";
 function pluginName(key) {
   return key.split("@")[0] ?? key;
 }
@@ -7068,10 +7084,15 @@ function canonicalName(observed, declared2) {
   }
   return observed;
 }
+function argv0Basename(command) {
+  const first = command.trim().split(/\s+/)[0] ?? "";
+  return basename5(first.replace(/^['"]|['"]$/g, ""));
+}
 
 // src/harness/crosswalk.ts
 var SCOPE_PRECEDENCE = ["repo-local", "repo", "global-local", "global"];
 var approxTokens = (bytes) => Math.ceil(bytes / 4);
+var EVENT_ROW_PREFIX = "event:";
 function statusOf(declared2, observations) {
   if (!declared2) return "undeclared";
   return observations > 0 ? "used" : "idle";
@@ -7259,38 +7280,48 @@ function crosswalk(inv, analyses, agg, opts = {}) {
     });
   }
   const hookObs = /* @__PURE__ */ new Map();
-  const hookObsAt = (name) => {
-    let e = hookObs.get(name);
-    if (!e) hookObs.set(name, e = { runs: 0, errors: 0, totalMs: 0, events: /* @__PURE__ */ new Set() });
+  const hookObsAt = (key) => {
+    let e = hookObs.get(key);
+    if (!e) hookObs.set(key, e = { runs: 0, errors: 0, totalMs: 0, events: /* @__PURE__ */ new Map() });
     return e;
   };
+  const busiestEvent = (events) => [...events.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))[0]?.[0];
   for (const a of analyses) {
     for (const h of a.hooks.byCommand) {
-      const name = basename5((h.command ?? "").trim().split(/\s+/)[0] ?? "");
-      if (!name) continue;
-      const e = hookObsAt(name);
+      const key = h.keyedBy === "command" ? argv0Basename(h.command) : h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : "";
+      if (!key) continue;
+      const e = hookObsAt(key);
       e.runs += h.count;
       e.errors += h.errors;
       e.totalMs += h.totalMs;
-      if (h.hookEvent) e.events.add(h.hookEvent);
+      const perEvent = h.events ?? (h.hookEvent ? { [h.hookEvent]: h.count } : {});
+      for (const [ev, runs] of Object.entries(perEvent)) e.events.set(ev, (e.events.get(ev) ?? 0) + runs);
     }
   }
   const configuredHooks = /* @__PURE__ */ new Map();
-  for (const s of inv.settings) for (const h of s.hooks) for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event);
+  const configuredEvents = /* @__PURE__ */ new Set();
+  for (const s of inv.settings) {
+    for (const h of s.hooks) {
+      configuredEvents.add(h.event);
+      for (const b of h.commandBasenames) if (!configuredHooks.has(b)) configuredHooks.set(b, h.event);
+    }
+  }
   const hookRows = [];
-  for (const name of /* @__PURE__ */ new Set([...configuredHooks.keys(), ...hookObs.keys()])) {
-    const o = hookObs.get(name);
-    const event = configuredHooks.get(name) ?? [...o?.events ?? []].sort()[0];
+  for (const key of /* @__PURE__ */ new Set([...configuredHooks.keys(), ...hookObs.keys()])) {
+    const o = hookObs.get(key);
+    const eventOnly = key.startsWith(EVENT_ROW_PREFIX);
+    const event = eventOnly ? key.slice(EVENT_ROW_PREFIX.length) : configuredHooks.get(key) ?? (o ? busiestEvent(o.events) : void 0);
+    const configured = eventOnly ? configuredEvents.has(event ?? "") : configuredHooks.has(key);
     hookRows.push({
       ...event ? { event } : {},
-      commandBasename: name,
-      configured: configuredHooks.has(name),
+      ...eventOnly ? {} : { commandBasename: key },
+      configured,
       runs: o?.runs ?? 0,
       errors: o?.errors ?? 0,
       totalMs: Math.round(o?.totalMs ?? 0),
       // exact from exposed data: Σ totalMs ÷ Σ runs. No percentile is claimed; see HarnessHookRow.meanMs
       meanMs: o && o.runs > 0 ? Math.round(o.totalMs / o.runs) : 0,
-      status: statusOf(configuredHooks.has(name), o?.runs ?? 0)
+      status: statusOf(configured, o?.runs ?? 0)
     });
   }
   const modelObs = /* @__PURE__ */ new Map();
@@ -7410,7 +7441,7 @@ function crosswalk(inv, analyses, agg, opts = {}) {
     skills: ranked(skillRows, (x) => x.invocations, (x) => x.name),
     mcpServers: ranked(mcpRows, (x) => x.toolCalls, (x) => x.name),
     agents: ranked(agentRows, (x) => x.dispatches, (x) => x.name),
-    hooks: ranked(hookRows, (x) => x.runs, (x) => x.commandBasename),
+    hooks: ranked(hookRows, (x) => x.runs, (x) => x.commandBasename ?? EVENT_ROW_PREFIX + (x.event ?? "")),
     models: {
       ...configuredModel ? { configured: configuredModel } : {},
       seen: modelsSeen,
@@ -9423,10 +9454,6 @@ function headingCount(text2) {
   let n2 = 0;
   for (const l of text2.split("\n")) if (/^#{1,6}\s/.test(l)) n2++;
   return n2;
-}
-function argv0Basename(command) {
-  const first = command.trim().split(/\s+/)[0] ?? "";
-  return basename7(first.replace(/^['"]|['"]$/g, ""));
 }
 var FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/;
 function parseFrontmatter(text2) {
@@ -11648,7 +11675,7 @@ function printHarness(r) {
     ...x.skills.filter((s) => s.status === "undeclared").map((s) => "skill " + s.name),
     ...x.mcpServers.filter((m) => m.status === "undeclared").map((m) => "mcp " + m.name),
     ...x.agents.filter((a) => a.status === "undeclared").map((a) => "agent " + a.name),
-    ...x.hooks.filter((h) => h.status === "undeclared").map((h) => "hook " + h.commandBasename)
+    ...x.hooks.filter((h) => h.status === "undeclared").map((h) => "hook " + (h.commandBasename ?? `${h.event} (by event)`))
   ];
   line("undeclared", undeclared.length ? `${undeclared.length} observed but not in the config read` : "none");
   if (undeclared.length) w(paint(out, "dim", "    " + undeclared.slice(0, 8).join(", ")));

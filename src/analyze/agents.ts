@@ -115,27 +115,40 @@ export function analyzeSkills(s: Session): SkillsAnalysis {
 }
 
 export function analyzeHooks(s: Session): HooksAnalysis {
-  const byCmd = new Map<string, { count: number; totalMs: number; errors: number; hookEvent?: string }>()
+  const byCmd = new Map<string, { count: number; totalMs: number; errors: number; events: Map<string, number>; keyedBy: 'command' | 'hookName' | 'hookEvent' }>()
   const byEvent = new Map<string, number>()
   let totalMs = 0
   let errors = 0
   for (const h of s.hooks) {
+    // the key names what the transcript recorded; a hook event name is not a command and must not be read as one
+    const keyedBy = h.command ? 'command' : h.hookName ? 'hookName' : 'hookEvent'
     const key = h.command ?? h.hookName ?? h.hookEvent ?? 'hook'
-    const e = byCmd.get(key) ?? { count: 0, totalMs: 0, errors: 0, hookEvent: h.hookEvent }
+    const e = byCmd.get(key) ?? { count: 0, totalMs: 0, errors: 0, events: new Map<string, number>(), keyedBy }
     e.count++
     e.totalMs += h.durationMs ?? 0
     if (!h.ok) e.errors++
+    if (h.hookEvent) e.events.set(h.hookEvent, (e.events.get(h.hookEvent) ?? 0) + 1)
     byCmd.set(key, e)
     totalMs += h.durationMs ?? 0
     if (!h.ok) errors++
     const ev = h.hookEvent ?? 'unknown'
     byEvent.set(ev, (byEvent.get(ev) ?? 0) + 1)
   }
+  // one command may fire on several events (a Stop hook reused on PostToolUse); the row names the busiest,
+  // ties broken by name so two runs over the same transcript emit the same label
+  const busiest = (events: Map<string, number>): string | undefined =>
+    [...events.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))[0]?.[0]
+  const eventsRecord = (events: Map<string, number>): Record<string, number> => Object.fromEntries([...events.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0)))
   return {
     runs: s.hooks.length,
     errors,
     totalMs,
-    byCommand: [...byCmd.entries()].map(([command, e]) => ({ command, ...e })).sort((a, b) => b.totalMs - a.totalMs),
+    byCommand: [...byCmd.entries()]
+      .map(([command, e]) => {
+        const hookEvent = busiest(e.events)
+        return { command, count: e.count, totalMs: e.totalMs, errors: e.errors, ...(hookEvent ? { hookEvent } : {}), events: eventsRecord(e.events), keyedBy: e.keyedBy }
+      })
+      .sort((a, b) => b.totalMs - a.totalMs),
     events: [...byEvent.entries()].map(([hookEvent, count]) => ({ hookEvent, count })),
   }
 }

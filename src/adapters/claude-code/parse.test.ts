@@ -312,3 +312,52 @@ describe('attachments: primary transcript vs subagent sidecars', () => {
     expect(s.parseReport.primaryAttachmentTypes?.['skill_listing']).toBe(1)
   })
 })
+
+describe('hooks: attachment run records', () => {
+  it('picks command and durationMs from a hook_success attachment', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'bbbbbbbb-0000-4000-8000-0000000000b1' })
+    b.userPrompt('hi')
+    b.attachmentHook('SessionStart:startup', 'SessionStart', 'ok', { command: '/opt/tools/start.sh --quiet', durationMs: 75 })
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    expect(s.hooks).toHaveLength(1)
+    expect(s.hooks[0]).toMatchObject({ hookEvent: 'SessionStart', hookName: 'SessionStart:startup', command: '/opt/tools/start.sh --quiet', durationMs: 75, ok: true })
+  })
+
+  it('a hook_additional_context record is the output of a run already counted, not a second run', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'bbbbbbbb-0000-4000-8000-0000000000b2' })
+    b.userPrompt('hi')
+    b.attachmentHook('UserPromptSubmit', 'UserPromptSubmit', 'ok', { command: '/opt/tools/prompt.sh', durationMs: 5 })
+    b.attachmentHook('UserPromptSubmit', 'UserPromptSubmit', '', { type: 'hook_additional_context' })
+    b.attachmentHook('UserPromptSubmit', 'UserPromptSubmit', '', { type: 'hook_system_message' })
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    expect(s.hooks).toHaveLength(1)
+    expect(s.parseReport.attachmentTypes['hook_additional_context']).toBe(1)
+  })
+
+  it('hook_error, hook_failure, hook_cancelled and hook_non_blocking_error are runs', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'bbbbbbbb-0000-4000-8000-0000000000b3' })
+    b.userPrompt('hi')
+    for (const type of ['hook_error', 'hook_failure', 'hook_cancelled', 'hook_non_blocking_error']) b.attachmentHook('PreToolUse:Bash', 'PreToolUse', '', { type })
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    expect(s.hooks).toHaveLength(4)
+    // none of the four completed with exit 0: a cancelled hook timed out, a non-blocking error exited non-zero
+    expect(s.hooks.filter((h) => !h.ok)).toHaveLength(4)
+  })
+
+  it('an async_hook_response is a run of its event with no command; ok follows its exit code', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'bbbbbbbb-0000-4000-8000-0000000000b4' })
+    b.userPrompt('hi')
+    b.attachmentHook('PreToolUse:Bash', 'PreToolUse', '', { type: 'async_hook_response', exitCode: 1 })
+    b.attachmentHook('PreToolUse:Bash', 'PreToolUse', '', { type: 'async_hook_response', exitCode: 0 })
+    b.attachmentHook('PreToolUse:Bash', 'PreToolUse', '', { type: 'async_hook_response' })
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    expect(s.hooks).toHaveLength(3)
+    expect(s.hooks.map((h) => h.ok)).toEqual([false, true, true])
+    expect(s.hooks[0]).toMatchObject({ hookEvent: 'PreToolUse', hookName: 'PreToolUse:Bash' })
+    expect(s.hooks[0]!.command).toBeUndefined()
+  })
+})

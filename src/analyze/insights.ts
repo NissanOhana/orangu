@@ -393,7 +393,7 @@ const hooksOverhead: Rule = (ctx) => {
         axis: 'time',
         title: `Hooks consumed ${fmtMs(h.totalMs)} across ${h.runs} runs`,
         detail: h.byCommand.slice(0, 5).map((c) => `${c.command.slice(0, 50)} ${fmtMs(c.totalMs)}`).join('; '),
-        recommendation: 'Slow Stop/PostToolUse hooks run on every turn. Make them async (background &), cache their work, or scope them to the events that need them.',
+        recommendation: 'A slow hook runs on every turn of the event it is attached to (Stop, UserPromptSubmit, SessionStart, PostToolUse). Make it async (background &), cache its work, or scope it to the events that need it.',
         evidence: { totalMs: h.totalMs, byCommand: h.byCommand.slice(0, 5) },
         turnIndexes: [],
         savings: { ms: Math.round(h.totalMs * 0.8), estimated: true },

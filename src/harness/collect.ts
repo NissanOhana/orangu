@@ -14,7 +14,8 @@
  *
  * **The collection boundary is narrower than redaction.** `--no-redact` does not widen it:
  *   - env is read with `Object.keys`: NAMES ONLY, never a value (see `settingsEnv`);
- *   - a hook command is reduced to `basename(argv0)` before it enters the report (see `argv0Basename`),
+ *   - a hook command is reduced to `basename(argv0)` before it enters the report (`argv0Basename` in names.ts, the
+ *     same rule the crosswalk joins on),
  *     and the arguments, which is where secrets live, are dropped rather than masked;
  *   - `~/.claude.json` is read through an explicit four-key allowlist (`CLAUDE_JSON_KEYS`), with the
  *     `projects[cwd]` branch reading exactly three more (`CLAUDE_JSON_PROJECT_KEYS`). The account block,
@@ -26,6 +27,7 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { redactValue, scrubStr } from '../redact/redact.js'
+import { argv0Basename } from './names.js'
 import type {
   HarnessAgentEntry,
   HarnessConfigScope,
@@ -196,12 +198,6 @@ function headingCount(text: string): number {
   let n = 0
   for (const l of text.split('\n')) if (/^#{1,6}\s/.test(l)) n++
   return n
-}
-
-/** `basename(argv0)`: the command word only. Arguments are DROPPED, never masked. */
-function argv0Basename(command: string): string {
-  const first = command.trim().split(/\s+/)[0] ?? ''
-  return basename(first.replace(/^['"]|['"]$/g, ''))
 }
 
 const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/
