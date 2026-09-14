@@ -8,7 +8,7 @@
 import type { ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
 import { aggregate, type Aggregate } from '../analyze/aggregate.js'
-import { defaultConfigDir } from '../discover/discover.js'
+import { defaultConfigDir, managedSettingsDirs } from '../discover/discover.js'
 import { collectInventory } from '../harness/collect.js'
 import { buildHarnessReport } from '../harness/report.js'
 import type { HarnessReport } from '../harness/types.js'
@@ -266,7 +266,8 @@ class HarnessRunner {
     const cwd = repoCwd ?? process.cwd()
     const roots = this.ctx.opts.roots ?? [this.ctx.opts.configDir ?? defaultConfigDir()]
     const now = this.ctx.now()
-    const inventory = await collectInventory({ cwd, roots, home })
+    // the same declared side the CLI verb reads: managed settings, and every project entry under global scope
+    const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: !repoCwd })
     const report = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : 'global', now), {
       version: this.ctx.opts.version,
       now,

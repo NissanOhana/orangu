@@ -79,24 +79,27 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetent
   }
   if (unsplitAnalyses > 0) {
     const one = unsplitAnalyses === 1
-    notes.push(`${unsplitAnalyses} ${one ? 'analysis comes' : 'analyses come'} from an engine without the primary-transcript split and ${one ? 'is' : 'are'} left out of injected listings`)
+    notes.push(
+      `${unsplitAnalyses} ${one ? 'session was' : 'sessions were'} read from a cache written by an older orangu that did not separate the main transcript from its subagent files, so ${one ? 'it is' : 'they are'} left out of the injected listings. Re-run with --no-cache to rebuild ${one ? 'it' : 'them'}`,
+    )
   }
-  if (x.models.configured && !x.models.matchesConfigured) {
+  // drift is a statement about what the sessions used; over zero sessions there is nothing to disagree with
+  if (sessionsScanned > 0 && x.models.configured && !x.models.matchesConfigured) {
     notes.push(`configured model "${x.models.configured}" does not appear among the models these sessions used`)
   }
-  if (x.effort.configured && !x.effort.matchesConfigured) {
+  if (sessionsScanned > 0 && x.effort.configured && !x.effort.matchesConfigured) {
     notes.push(`configured effort "${x.effort.configured}" does not appear among the effort levels these sessions used`)
   }
+  const managedRead = inv.settings.some((s) => s.scope === 'managed')
   if (inv.settings.some((s) => s.scope === 'managed' && s.allowManagedHooksOnly)) {
-    notes.push('managed policy sets allowManagedHooksOnly, so hook commands declared in user, project and plugin settings do not run; only managed hook rows can be used')
+    notes.push('managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run; only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used')
   }
-  const undeclared =
-    x.skills.filter((s) => s.status === 'undeclared').length +
-    x.mcpServers.filter((m) => m.status === 'undeclared').length +
-    x.agents.filter((a) => a.status === 'undeclared').length +
-    x.hooks.filter((h) => h.status === 'undeclared').length
+  // counted over the full population (`counts`), never over the capped row arrays
+  const undeclared = x.counts.skills.undeclared + x.counts.mcpServers.undeclared + x.counts.agents.undeclared + x.counts.hooks.undeclared
   if (undeclared > 0) {
     notes.push(`${plural(undeclared, 'row')} marked undeclared: observed in sessions but not found in the config that was read (a source outside this scope, or drift)`)
+    // the files on disk are the third of four managed sources Claude Code consults; say so where an operator is already looking at an unexplained row
+    if (!managedRead) notes.push('managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console; orangu reads only the managed files on disk, so a policy delivered that way is not in this inventory')
   }
   if (r.expiringSoon.sessions > 0) {
     const one = r.expiringSoon.sessions === 1

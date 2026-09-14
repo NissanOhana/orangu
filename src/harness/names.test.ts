@@ -48,5 +48,13 @@ describe('names: argv0Basename', () => {
   it('falls back to the interpreter when nothing after it looks like a script path', () => {
     expect(argv0Basename('bash -c "echo hi"')).toBe('bash')
     expect(argv0Basename('sh')).toBe('sh')
+    // a bare token is a script only with a known script extension: a module name or an inline expression is not
+    expect(argv0Basename('python3 -m mymodule.sub')).toBe('python3')
+    expect(argv0Basename('node -e console.log(1)')).toBe('node')
+  })
+  it('never lets an environment assignment stand in for the script: the value is an argument, and arguments carry secrets', () => {
+    expect(argv0Basename('env SLACK_WEBHOOK=T01.B02.xoxbSECRET /usr/local/bin/notify.sh')).toBe('notify.sh')
+    expect(argv0Basename('env DB_PASSWORD=hunter2.prod /opt/hooks/guard.sh')).toBe('guard.sh')
+    expect(argv0Basename('bash FOO=bar.baz')).toBe('bash')
   })
 })

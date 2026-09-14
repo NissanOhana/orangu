@@ -287,6 +287,35 @@ describe('orangu serve (in-process e2e)', () => {
     expect((await fetch(url + '/api/session/nope')).status).toBe(404)
   })
 
+  it('/api/harness reads the same declared side the CLI does: every project entry and managed settings', async () => {
+    const fakeHome = await mkdtemp(join(tmpdir(), 'orangu-serve-home-'))
+    const managed = await mkdtemp(join(tmpdir(), 'orangu-serve-managed-'))
+    await writeFile(join(managed, 'managed-settings.json'), JSON.stringify({ allowManagedHooksOnly: true }), 'utf8')
+    await writeFile(
+      join(fakeHome, '.claude.json'),
+      JSON.stringify({ projects: { '/Code/one': { mcpServers: { one: { type: 'stdio', command: '/x/one' } } }, '/Code/two': { mcpServers: { two: { type: 'stdio', command: '/x/two' } } } } }),
+      'utf8',
+    )
+    const prev = { HOME: process.env['HOME'], MANAGED: process.env['ORANGU_CLAUDE_MANAGED_DIRS'] }
+    process.env['HOME'] = fakeHome
+    process.env['ORANGU_CLAUDE_MANAGED_DIRS'] = managed
+    try {
+      const { url } = await boot()
+      const report = await pollUntil(async () => {
+        const r = await fetch(url + '/api/harness')
+        return r.status === 200 ? ((await r.json()) as { inventory: { totals: { projectEntries?: number }; settings: Array<{ scope: string }> }; notes: string[] }) : undefined
+      })
+      expect(report.inventory.totals.projectEntries).toBe(2)
+      expect(report.inventory.settings.some((s) => s.scope === 'managed')).toBe(true)
+      expect(report.notes.some((n) => n.includes('allowManagedHooksOnly'))).toBe(true)
+    } finally {
+      if (prev.HOME === undefined) delete process.env['HOME']
+      else process.env['HOME'] = prev.HOME
+      if (prev.MANAGED === undefined) delete process.env['ORANGU_CLAUDE_MANAGED_DIRS']
+      else process.env['ORANGU_CLAUDE_MANAGED_DIRS'] = prev.MANAGED
+    }
+  })
+
   // A8: the harness report reaches the app through the same capability-gated, lazy, redacted path
   it('/api/harness answers 202 {progress} then the redacted HarnessReport, never an absolute home path', async () => {
     const { url } = await boot()

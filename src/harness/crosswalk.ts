@@ -30,6 +30,7 @@ import type {
   HarnessMemoryRow,
   HarnessSkillRow,
   HarnessStatus,
+  HarnessStatusCounts,
 } from './types.js'
 
 const approxTokens = (bytes: number): number => Math.ceil(bytes / 4)
@@ -40,6 +41,13 @@ const EVENT_ROW_PREFIX = 'event:'
 function statusOf(declared: boolean, observations: number): HarnessStatus {
   if (!declared) return 'undeclared'
   return observations > 0 ? 'used' : 'idle'
+}
+
+/** the status counts of one axis over ALL its rows, taken before `ranked` caps them */
+function countStatus(rows: ReadonlyArray<{ status: HarnessStatus }>): HarnessStatusCounts {
+  const c: HarnessStatusCounts = { used: 0, idle: 0, undeclared: 0 }
+  for (const r of rows) c[r.status]++
+  return c
 }
 
 /** desc by `n`, then asc by `k`: the comparator every capped array uses */
@@ -304,13 +312,16 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
       // a command joins by basename through the same rule the collector applied to the settings file; a run
       // the transcript recorded by name or event only folds into one row per event, never into a phantom
       // command named after the event
-      const key = h.keyedBy === 'command' ? argv0Basename(h.command) : h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : ''
+      // an analysis older than `keyedBy` keyed every row it could by command, exactly as `events` below falls
+      // back to `hookEvent`: one back-compat policy for both fields (unreachable through the versioned cache)
+      const keyedBy = h.keyedBy ?? 'command'
+      const key = keyedBy === 'command' ? argv0Basename(h.command) : h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : ''
       if (!key) continue
       const e = hookObsAt(key)
       e.runs += h.count
       e.errors += h.errors
       e.totalMs += h.totalMs
-      // an analysis from an engine without per-event counts carries only `hookEvent`; credit it the whole row
+      // the same older analysis carries only `hookEvent`, no per-event counts; credit it the whole row
       const perEvent = h.events ?? (h.hookEvent ? { [h.hookEvent]: h.count } : {})
       for (const [ev, runs] of Object.entries(perEvent)) e.events.set(ev, (e.events.get(ev) ?? 0) + runs)
     }
@@ -480,6 +491,8 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
       ...(starts.length ? { firstStartedAt: Math.min(...starts) } : {}),
       ...(starts.length ? { lastStartedAt: Math.max(...starts) } : {}),
     },
+    // counted over every row BEFORE the cap: `ranked` sorts idle rows last and cuts them first
+    counts: { skills: countStatus(skillRows), mcpServers: countStatus(mcpRows), agents: countStatus(agentRows), hooks: countStatus(hookRows) },
     skills: ranked(skillRows, (x) => x.invocations, (x) => x.name),
     mcpServers: ranked(mcpRows, (x) => x.toolCalls, (x) => x.name),
     agents: ranked(agentRows, (x) => x.dispatches, (x) => x.name),

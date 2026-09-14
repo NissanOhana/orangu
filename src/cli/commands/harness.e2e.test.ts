@@ -43,6 +43,8 @@ async function makeHarnessFixture(): Promise<Fixture> {
   b.stopHookSummary([{ command: '/opt/tools/rogue-hook.sh --quiet', durationMs: 12 }])
   // an OBSERVED command with a secret in its arguments: the transcript side of the basename boundary
   b.attachmentHook('PreToolUse:Bash', 'PreToolUse', 'ok', { command: '/opt/tools/observed.sh --token sk-ant-observedplanted0000', durationMs: 3 })
+  // an env assignment whose NAME the scrubber does not recognise: the basename rule alone must keep it out
+  b.attachmentHook('PostToolUse:Edit', 'PostToolUse', 'ok', { command: 'env SLACK_WEBHOOK=T01.B02.xoxbobservedenvleak0000 /opt/tools/envhook.sh', durationMs: 2 })
   b.turnDuration(3000, 5)
   await writeFile(join(configDir, 'projects', '-Users-test-Code-demo', '99999999-0000-4000-8000-00000000cccc.jsonl'), b.toJsonl())
 
@@ -194,6 +196,9 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     // the observed side keeps the same boundary: basename in, arguments out
     expect(json).not.toContain('observedplanted')
     expect(json).toContain('observed.sh')
+    expect(json).not.toContain('xoxbobservedenvleak')
+    expect(json).not.toContain('SLACK_WEBHOOK')
+    expect(json).toContain('envhook.sh')
   })
 
   it('prints a human report with the labelled lines and no crash', () => {
@@ -202,7 +207,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(out).toContain('inventory')
     expect(out).toContain('idle skills')
     expect(out).toContain('undeclared')
-    expect(out).toContain('hooks (configured / runs / errors / mean ms)')
+    expect(out).toMatch(/^ {2}hooks\s+\d+ configured · [\d,]+ runs · \d+ errors · [\d,]+ ms mean$/m)
     // one count for "undeclared": the headline row lists hooks like the note below it counts them
     const headline = /undeclared\s+(\d+) observed but not in the config read/.exec(out)
     const note = /(\d+) rows? marked undeclared/.exec(out)
@@ -310,7 +315,9 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(out).toContain('leaves plaintext transcripts on disk for longer')
     // measured only: the surface never tells the user which number to pick, and never offers the rejected 0
     expect(out).not.toMatch(/\brecommend|\bshould set\b|cleanupPeriodDays[^\n]*\b0\b/)
-    const note = /(\d+) sessions? \([\d.]+ KB\) (?:is|are) within 7 days of the cleanupPeriodDays cutoff at 30 days/.exec(out)
+    // notes wrap to the 80-column layout; re-join a wrapped note's continuation lines before matching it
+    const flat = out.replace(/\n {6,}(?=\S)/g, ' ')
+    const note = /(\d+) sessions? \([\d.]+ KB\) (?:is|are) within 7 days of the cleanupPeriodDays cutoff at 30 days/.exec(flat)
     expect(note, 'retention note').not.toBeNull()
     expect(note![1]).toBe('1')
   })

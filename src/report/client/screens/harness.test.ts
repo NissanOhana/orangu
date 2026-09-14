@@ -44,7 +44,9 @@ function report(over: Partial<HarnessReport> = {}): HarnessReport {
       skills: [skill('used-one', 'used'), ...Array.from({ length: 48 }, (_, i) => skill(`idle-${i}`, 'idle')), skill('ghost', 'undeclared')],
       mcpServers: [{ name: 'figma', configured: true, toolCalls: 0, distinctTools: 0, sessions: 0, status: 'idle' }],
       agents: [{ name: 'reviewer', defined: true, dispatches: 0, sessions: 0, models: [], status: 'idle' }],
-      hooks: [],
+      hooks: [{ event: 'PreToolUse', configured: false, runs: 5, errors: 1, totalMs: 0, meanMs: 0, status: 'undeclared' }],
+      // the row arrays above are capped at 50; these are the counts over the FULL population
+      counts: { skills: { used: 1, idle: 84, undeclared: 1 }, agents: { used: 0, idle: 1, undeclared: 0 }, mcpServers: { used: 0, idle: 1, undeclared: 0 }, hooks: { used: 0, idle: 0, undeclared: 1 } },
       models: { seen: [], matchesConfigured: true },
       effort: { seen: [], slashEffortCommands: 0, matchesConfigured: true },
       permissions: { allowRules: 0, denyRules: 0, askRules: 0, promptEvents: 0, promptSessions: 0 },
@@ -59,9 +61,12 @@ function report(over: Partial<HarnessReport> = {}): HarnessReport {
 
 describe('renderHarness (A8, serve-only)', () => {
   it('leads with the idle-skill count and the heaviest injected listing, in tokens', () => {
-    expect(harnessLead(report())).toEqual({ title: '48 of 85 skills never fired', sub: 'skill_listing ≈10,417 tokens per session in the main context' })
+    // 84, not 48: the headline counts the full population, not the 50 rows that survived the cap
+    expect(harnessLead(report())).toEqual({ title: '84 of 85 skills never fired', sub: 'skill_listing ≈10,417 tokens per session in the main context' })
     renderHarness(ctx(), report())
-    expect(markup).toContain('48 of 85 skills never fired')
+    expect(markup).toContain('84 of 85 skills never fired')
+    expect(markup).toContain('<span class="pill">hook PreToolUse</span>')
+    expect(markup).toContain('anywhere in the tree')
     expect(markup).toContain('<span class="pill">idle-0</span>')
     expect(markup).toContain('+36 more')
     expect(markup).toContain('Idle MCP servers')
@@ -69,7 +74,7 @@ describe('renderHarness (A8, serve-only)', () => {
     expect(markup).toContain('Agents never dispatched')
     expect(markup).toContain('skill ghost')
     expect(markup).not.toContain('never fired.')
-    const allUsed = report({ crosswalk: { ...report().crosswalk, skills: [skill('used-one', 'used')] } })
+    const allUsed = report({ crosswalk: { ...report().crosswalk, skills: [skill('used-one', 'used')], counts: { ...report().crosswalk.counts, skills: { used: 85, idle: 0, undeclared: 0 } } } })
     renderHarness(ctx(), allUsed)
     expect(markup).toContain('Every one of 85 skills fired.')
     expect(markup).toContain('10,417')
@@ -97,7 +102,7 @@ describe('renderHarness (A8, serve-only)', () => {
   it('the Overview card is one honest line linking to #harness on the current session', () => {
     const card = harnessCardHtml(report(), '#harness?s=abc&audience=plain')
     expect(card).toContain('href="#harness?s=abc&amp;audience=plain"')
-    expect(card).toContain('48 of 85 skills never fired')
+    expect(card).toContain('84 of 85 skills never fired')
     expect(card).toContain('skill_listing ≈10,417 tokens per session')
     const none = harnessCardHtml(report({ inventory: { ...report().inventory, claudeMd: [] }, crosswalk: { ...report().crosswalk, skills: [] } }), '#harness')
     expect(none).toContain('no harness config found')

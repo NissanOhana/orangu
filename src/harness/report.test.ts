@@ -85,6 +85,7 @@ describe('buildHarnessReport: shape', () => {
     expect(Object.keys(r.crosswalk).sort()).toEqual([
       'agents',
       'claudeMd',
+      'counts',
       'effort',
       'hooks',
       'injectedListings',
@@ -134,14 +135,36 @@ describe('buildHarnessReport: shape', () => {
 })
 
 describe('buildHarnessReport: notes instead of throwing', () => {
+  it('asserts no model or effort drift over an empty population', async () => {
+    const { inv, agg } = await fixture()
+    // the fixture's global settings configure claude-opus-5 / high; with no sessions nothing can disagree with them
+    const r = buildHarnessReport(inv, [], agg, opts())
+    expect(r.notes.some((n) => n.includes('does not appear among'))).toBe(false)
+    expect(r.notes).toContain('no sessions in scope, so every crosswalk row is config-only and nothing can be classified used')
+  })
+
+  it('names the managed sources it cannot read when an undeclared row is on the screen and no managed file was found', async () => {
+    const { inv, analyses, agg } = await fixture()
+    const r = buildHarnessReport(inv, analyses, agg, opts())
+    expect(r.crosswalk.counts.mcpServers.undeclared + r.crosswalk.counts.skills.undeclared).toBeGreaterThan(0)
+    expect(r.notes).toContain('managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console; orangu reads only the managed files on disk, so a policy delivered that way is not in this inventory')
+    const withManaged = buildHarnessReport(
+      { ...inv, settings: [...inv.settings, { scope: 'managed', file: '/Library/Application Support/ClaudeCode/managed-settings.json', keys: [], permissions: { allow: 0, deny: 0, ask: 0 }, hooks: [], env: { count: 0, names: [] }, statusLine: false, enabledPlugins: [] }] },
+      analyses,
+      agg,
+      opts(),
+    )
+    expect(withManaged.notes.some((n) => n.includes('MDM'))).toBe(false)
+  })
+
   it('notes analyses that come from an engine without the primary-transcript split and are left out of injected listings', async () => {
     const { inv, analyses, agg } = await fixture()
     delete analyses[0]!.parse.primaryAttachmentTypes
     delete analyses[0]!.parse.primaryAttachmentBytes
     const r = buildHarnessReport(inv, analyses, agg, opts())
-    expect(r.notes).toContain('1 analysis comes from an engine without the primary-transcript split and is left out of injected listings')
+    expect(r.notes).toContain('1 session was read from a cache written by an older orangu that did not separate the main transcript from its subagent files, so it is left out of the injected listings. Re-run with --no-cache to rebuild it')
     const fresh = buildHarnessReport(inv, (await fixture()).analyses, agg, opts())
-    expect(fresh.notes.some((n) => n.includes('primary-transcript split'))).toBe(false)
+    expect(fresh.notes.some((n) => n.includes('older orangu'))).toBe(false)
   })
 
   it('notes when managed policy makes every other hook declaration inert', async () => {
@@ -158,7 +181,7 @@ describe('buildHarnessReport: notes instead of throwing', () => {
       allowManagedHooksOnly: true,
     })
     const r = buildHarnessReport(inv, analyses, agg, opts())
-    expect(r.notes).toContain('managed policy sets allowManagedHooksOnly, so hook commands declared in user, project and plugin settings do not run; only managed hook rows can be used')
+    expect(r.notes).toContain('managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run; only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used')
     const plain = buildHarnessReport({ ...inv, settings: inv.settings.filter((s) => s.scope !== 'managed') }, analyses, agg, opts())
     expect(plain.notes.some((n) => n.includes('allowManagedHooksOnly'))).toBe(false)
   })

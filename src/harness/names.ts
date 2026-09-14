@@ -42,7 +42,11 @@ export function canonicalName(observed: string, declared: ReadonlyMap<string, { 
 const INTERPRETERS: ReadonlySet<string> = new Set(['env', 'bash', 'sh', 'zsh', 'dash', 'fish', 'python', 'python3', 'node', 'npx', 'bun', 'deno', 'tsx', 'ts-node', 'ruby', 'perl', 'pwsh', 'powershell'])
 
 const unquote = (t: string): string => t.replace(/^['"]|['"]$/g, '')
-const pathLike = (t: string): boolean => t.includes('/') || t.includes('\\') || /\.[A-Za-z0-9]+$/.test(t)
+/** extensions a hook script ships with; a bare token needs one of these, or a path separator, to count as the script */
+const SCRIPT_EXT = /\.(sh|bash|zsh|py|js|mjs|cjs|ts|mts|cts|rb|pl|ps1|cmd|bat)$/i
+const pathLike = (t: string): boolean => t.includes('/') || t.includes('\\') || SCRIPT_EXT.test(t)
+/** `NAME=value`, the way `env` reads one: the value is an argument, and arguments carry secrets */
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
 
 /**
  * The basename that names a hook command: `basename(argv0)`, or, when argv0 is an interpreter, the basename
@@ -56,6 +60,7 @@ export function argv0Basename(command: string): string {
   if (!INTERPRETERS.has(argv0)) return argv0
   for (const t of tokens.slice(1)) {
     if (t.startsWith('-')) continue
+    if (ENV_ASSIGNMENT.test(t)) continue
     if (INTERPRETERS.has(basename(t))) continue
     return pathLike(t) ? basename(t) : argv0
   }

@@ -657,6 +657,22 @@ describe('crosswalk: memory files and injected listings', () => {
   })
 })
 
+describe('crosswalk: counts over the full population', () => {
+  it('counts used / idle / undeclared before the row cap cuts the idle rows, so a surface never claims every skill fired', async () => {
+    resetIds()
+    const a = await analyze(busySession())
+    const skills = [skillEntry('used-skill'), ...Array.from({ length: 70 }, (_, i) => skillEntry(`idle-${String(i).padStart(2, '0')}`))]
+    const agents = Array.from({ length: 60 }, (_, i) => agentEntry(`agent-${String(i).padStart(2, '0')}`))
+    const x = crosswalk(emptyInventory({ skills, agents }), [a], aggregate([a], 'test', 0))
+    expect(x.skills.length).toBe(HARNESS_ROW_CAP)
+    expect(x.skills.filter((s) => s.status === 'idle').length).toBeLessThan(70)
+    expect(x.counts.skills).toEqual({ used: 1, idle: 70, undeclared: 0 })
+    expect(x.counts.agents).toEqual({ used: 0, idle: 60, undeclared: 0 })
+    expect(x.counts.mcpServers).toEqual({ used: 0, idle: 0, undeclared: 1 })
+    expect(x.counts.hooks.undeclared).toBe(1)
+  })
+})
+
 describe('crosswalk: window and bounds', () => {
   it('derives the window from session startedAt, never from the clock', async () => {
     resetIds()

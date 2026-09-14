@@ -297,12 +297,26 @@ export interface HarnessListingRow {
   approxTokensPerMainSession: number
 }
 
+/** used / idle / undeclared over the FULL population of one axis, counted before `HARNESS_ROW_CAP` cuts its rows */
+export interface HarnessStatusCounts {
+  used: number
+  idle: number
+  undeclared: number
+}
+
 /**
  * Stable crosswalk contract. `status` is the only classification this shape carries: no `severity`,
  * `recommendation`, `title`, `detail`, or `findings`.
  */
 export interface HarnessCrosswalk {
   window: HarnessWindow
+  /**
+   * The status counts of every axis over its whole population. The row arrays below are capped at
+   * `HARNESS_ROW_CAP` after a sort that puts idle rows last, so a count taken from the rows under-reports idle
+   * and can claim "every skill fired" on a machine where most never did. A surface reads these counts and uses
+   * the rows for names only.
+   */
+  counts: { skills: HarnessStatusCounts; mcpServers: HarnessStatusCounts; agents: HarnessStatusCounts; hooks: HarnessStatusCounts }
   skills: HarnessSkillRow[]
   mcpServers: HarnessMcpRow[]
   agents: HarnessAgentRow[]

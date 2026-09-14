@@ -20,7 +20,7 @@ import { aggregate } from '../../analyze/aggregate.js'
 import { collectInventory } from '../../harness/collect.js'
 import { buildHarnessReport, plural, sizeLabel } from '../../harness/report.js'
 import { RETENTION_DEFAULT_DAYS } from '../../harness/retention.js'
-import type { HarnessListingRow, HarnessReport } from '../../harness/types.js'
+import type { HarnessConfigScope, HarnessListingRow, HarnessReport } from '../../harness/types.js'
 import { redactValue } from '../../redact/redact.js'
 import { flagBool, flagStr } from '../args.js'
 import type { Analysis } from '../../model/analysis.js'
@@ -40,6 +40,9 @@ function detectStreams(flags: Record<string, string | boolean>): void {
 }
 
 const n = (x: number) => x.toLocaleString('en-US')
+
+/** the vendor's names for the settings scopes (what `/status` prints), for display only; the JSON keeps its enum */
+const SCOPE_LABEL: Record<HarnessConfigScope, string> = { managed: 'managed settings', global: 'user', 'global-local': 'user local', repo: 'shared project', 'repo-local': 'project local' }
 
 /**
  * The listing rows the printout shows, ranked by the column it prints. The JSON array is ranked by whole-tree
@@ -155,7 +158,7 @@ function printRetention(r: HarnessReport, line: (l: string, v: string) => void, 
   const dim = (s: string) => w(paint(out, 'dim', '    ' + s))
   dim("sizes count primary transcripts only; each session's subagent and tool-result files are swept with it")
   // Three states, because `isDefault` means "no USABLE value", not "no value": a rejected setting is set.
-  if (t.source) dim(`set by ${t.source.file} (${t.source.scope})`)
+  if (t.source) dim(`set by ${t.source.file} (${SCOPE_LABEL[t.source.scope]})`)
   else if (t.invalidConfigured) dim(`no settings file set a usable cleanupPeriodDays, so Claude Code's default of ${RETENTION_DEFAULT_DAYS} days applies`)
   else dim(`cleanupPeriodDays is unset, so the window is Claude Code's default of ${RETENTION_DEFAULT_DAYS} days`)
   if (t.invalidConfigured) {
@@ -192,7 +195,8 @@ function printHarness(r: HarnessReport): void {
   if (r.scope.global) {
     // under --global the observed side spans every project; say exactly what the declared side covered
     const entries = inv.totals.projectEntries ?? 0
-    w(paint(out, 'dim', `  declared side: ${plural(r.scope.roots.length, 'config root')} · ${entries} project ${entries === 1 ? 'entry' : 'entries'} in ~/.claude.json · repo files from ${r.scope.cwd}`))
+    w(paint(out, 'dim', `  declared side: ${plural(r.scope.roots.length, 'config root')} · ${entries} project ${entries === 1 ? 'entry' : 'entries'} in ~/.claude.json`))
+    w(paint(out, 'dim', `                 repo files from ${r.scope.cwd}`))
   }
   w()
 
@@ -205,6 +209,36 @@ function printHarness(r: HarnessReport): void {
   }
 
   const line = (l: string, v: string) => w('  ' + l.padEnd(22) + v)
+  // the 80-column contract every other verb keeps (src/cli/summary.ts): a name list wraps onto continuation
+  // lines rather than being cut, so no name is lost; a path is never touched
+  const width = Math.min(out.columns || 80, 80)
+  const dim = (s: string) => w(paint(out, 'dim', '    ' + s))
+  /** word-wrap a sentence into lines that fit the layout width under a given indent */
+  const wrapped = (s: string, indent: string): string[] => {
+    const max = Math.max(20, width - indent.length)
+    const lines: string[] = []
+    let cur = ''
+    for (const word of s.split(' ')) {
+      const next = cur ? `${cur} ${word}` : word
+      if (cur && next.length > max) {
+        lines.push(cur)
+        cur = word
+      } else cur = next
+    }
+    if (cur) lines.push(cur)
+    return lines.map((l, i) => (i === 0 ? indent + l : ' '.repeat(indent.length) + l))
+  }
+  const dimList = (items: string[]) => {
+    let cur = ''
+    for (const item of items) {
+      const next = cur ? `${cur}, ${item}` : item
+      if (cur && next.length > width - 4) {
+        dim(cur + ',')
+        cur = item
+      } else cur = next
+    }
+    if (cur) dim(cur)
+  }
   line('inventory', `${plural(inv.totals.skills, 'skill')} · ${plural(inv.totals.agents, 'agent')} · ${plural(inv.totals.plugins, 'plugin')} · ${plural(inv.totals.mcpServers, 'MCP server')} · ${plural(inv.totals.hookCommands, 'hook command')}`)
   if (inv.claudeMd.length) {
     const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0)
@@ -216,51 +250,54 @@ function printHarness(r: HarnessReport): void {
   // evidence alone), so "every installed skill fired" would be a claim with no evidence behind it.
   const noSessions = r.scope.sessionsScanned === 0
   const NO_EVIDENCE = 'no sessions in scope: nothing can be classified'
+  // every COUNT comes from `x.counts`, taken over the whole population before the 50-row cap cut the idle
+  // rows; the row arrays supply names only, so a name list may be shorter than the count beside it
+  const c = x.counts
   const idleSkills = x.skills.filter((s) => s.status === 'idle')
   const idleMcp = x.mcpServers.filter((m) => m.status === 'idle')
-  const idleAgents = x.agents.filter((a) => a.status === 'idle')
   const classified = (total: number) => total > 0 && !noSessions
   line(
     'idle skills',
-    inv.totals.skills === 0 ? 'no skills installed' : noSessions ? NO_EVIDENCE : idleSkills.length ? `${idleSkills.length} of ${inv.totals.skills} never fired` : 'none: every installed skill fired',
+    inv.totals.skills === 0 ? 'no skills installed' : noSessions ? NO_EVIDENCE : c.skills.idle ? `${c.skills.idle} of ${inv.totals.skills} never fired` : 'none: every installed skill fired',
   )
-  if (classified(inv.totals.skills) && idleSkills.length) w(paint(out, 'dim', '    ' + idleSkills.slice(0, 8).map((s) => s.name).join(', ')))
+  if (classified(inv.totals.skills) && idleSkills.length) dimList(idleSkills.slice(0, 8).map((s) => s.name))
   line(
     'idle MCP',
-    inv.totals.mcpServers === 0 ? 'no MCP servers configured' : noSessions ? NO_EVIDENCE : idleMcp.length ? `${idleMcp.length} of ${inv.totals.mcpServers} never called` : 'none: every configured server was called',
+    inv.totals.mcpServers === 0 ? 'no MCP servers configured' : noSessions ? NO_EVIDENCE : c.mcpServers.idle ? `${c.mcpServers.idle} of ${inv.totals.mcpServers} never called` : 'none: every configured server was called',
   )
-  if (classified(inv.totals.mcpServers) && idleMcp.length) w(paint(out, 'dim', '    ' + idleMcp.slice(0, 8).map((m) => m.name).join(', ')))
+  if (classified(inv.totals.mcpServers) && idleMcp.length) dimList(idleMcp.slice(0, 8).map((m) => m.name))
 
   // the same four row kinds src/harness/report.ts counts in the "rows marked undeclared" note
-  const undeclared = [
+  const undeclaredCount = c.skills.undeclared + c.mcpServers.undeclared + c.agents.undeclared + c.hooks.undeclared
+  const undeclaredNames = [
     ...x.skills.filter((s) => s.status === 'undeclared').map((s) => 'skill ' + s.name),
     ...x.mcpServers.filter((m) => m.status === 'undeclared').map((m) => 'mcp ' + m.name),
     ...x.agents.filter((a) => a.status === 'undeclared').map((a) => 'agent ' + a.name),
-    ...x.hooks.filter((h) => h.status === 'undeclared').map((h) => 'hook ' + (h.commandBasename ?? `${h.event} (by event)`)),
+    ...x.hooks.filter((h) => h.status === 'undeclared').map((h) => 'hook ' + (h.commandBasename ?? `${h.event} (no command recorded)`)),
   ]
-  line('undeclared', undeclared.length ? `${undeclared.length} observed but not in the config read` : 'none')
-  if (undeclared.length) w(paint(out, 'dim', '    ' + undeclared.slice(0, 8).join(', ')))
+  line('undeclared', noSessions ? NO_EVIDENCE : undeclaredCount ? `${undeclaredCount} observed but not in the config read` : 'none')
+  if (!noSessions && undeclaredNames.length) dimList(undeclaredNames.slice(0, 8))
 
   // One population per clause, like the idle-skills line: "dispatched" and "never" both count the DEFINED
   // agents (crosswalk status used / idle), and the agent types the sessions ran that no config declares
   // are named separately as undeclared instead of being folded into the dispatched count.
-  const usedAgents = x.agents.filter((a) => a.status === 'used').length
-  const undeclaredAgents = x.agents.filter((a) => a.status === 'undeclared').length
-  const undeclaredClause = undeclaredAgents ? ` · ${undeclaredAgents} undeclared` : ''
+  const undeclaredClause = c.agents.undeclared ? ` · ${c.agents.undeclared} undeclared` : ''
   line(
     'agents',
     inv.totals.agents === 0
       ? 'none defined' + undeclaredClause
       : noSessions
         ? NO_EVIDENCE
-        : `${usedAgents} of ${inv.totals.agents} dispatched · ${idleAgents.length} never` + undeclaredClause,
+        : `${c.agents.used} of ${inv.totals.agents} dispatched · ${c.agents.idle} never` + undeclaredClause,
   )
 
   const hooksRun = x.hooks.reduce((s, h) => s + h.runs, 0)
   const hookErrors = x.hooks.reduce((s, h) => s + h.errors, 0)
   const meanMs = hooksRun > 0 ? Math.round(x.hooks.reduce((s, h) => s + h.totalMs, 0) / hooksRun) : 0
-  line('hooks (configured / runs / errors / mean ms)', '')
-  w(paint(out, 'dim', `    ${inv.totals.hookCommands} / ${n(hooksRun)} / ${hookErrors ? paint(out, 'warn', String(hookErrors)) : '0'} / ${n(meanMs)} ms`))
+  line('hooks', noSessions ? `${inv.totals.hookCommands} configured · ${NO_EVIDENCE}` : `${inv.totals.hookCommands} configured · ${n(hooksRun)} runs · ${hookErrors} errors · ${n(meanMs)} ms mean`)
+  // the pooled figures hide their own story: name the hook that carries the errors
+  const worst = [...x.hooks].sort((a, b) => b.errors - a.errors)[0]
+  if (!noSessions && worst && worst.errors > 0) dim(`most errors: ${worst.commandBasename ?? worst.event} · ${n(worst.errors)} of ${n(hookErrors)} on ${plural(worst.runs, 'run')}`)
 
   const modelDrift = x.models.configured && !x.models.matchesConfigured
   const effortDrift = x.effort.configured && !x.effort.matchesConfigured
@@ -272,18 +309,19 @@ function printHarness(r: HarnessReport): void {
   if (x.injectedListings.length) {
     w()
     w(paint(out, 'bold', '  injected listings (recurring context weight, ranked by tokens per session)'))
-    w(paint(out, 'dim', '    per session counts the primary transcript of each session that carried it; the subagent figure is the agent tree beneath, over its own sessions'))
+    w(paint(out, 'dim', "    per session counts each session's main transcript that carried the listing;"))
+    w(paint(out, 'dim', '    the subagent line is summed across the sessions that had subagents'))
     for (const l of printedListings(x.injectedListings)) {
-      const tree = l.subagent.injections ? ` · subagents ≈${n(l.subagent.approxTokens)} tokens over ${n(l.subagent.injections)} injections in ${plural(l.subagent.sessions, 'session')}` : ''
-      const main = `(${n(l.main.injections)} injections in ${plural(l.main.sessions, 'session')}) · ≈${n(l.approxTokensPerInjection)} per injection${tree}`
-      w(`    ${l.type.padEnd(22)} ≈${n(l.approxTokensPerMainSession).padStart(8)} tokens/session ${paint(out, 'dim', main)}`)
+      w(`    ${l.type.padEnd(22)} ≈${n(l.approxTokensPerMainSession).padStart(8)} tokens/session`)
+      w(paint(out, 'dim', `      ${plural(l.main.injections, 'injection')} in ${plural(l.main.sessions, 'session')} · ≈${n(l.approxTokensPerInjection)} per injection anywhere in the tree`))
+      if (l.subagent.injections) w(paint(out, 'dim', `      subagents ≈${n(l.subagent.approxTokens)} tokens over ${plural(l.subagent.injections, 'injection')} in ${plural(l.subagent.sessions, 'session')}`))
     }
   }
 
   if (r.notes.length) {
     w()
     w(paint(out, 'bold', '  notes'))
-    for (const note of r.notes) w(paint(out, 'dim', '    · ' + note))
+    for (const note of r.notes) for (const l of wrapped(note, '    · ')) w(paint(out, 'dim', l))
   }
   w(paint(out, 'dim', '\n  add --json for the machine-readable inventory and declared-vs-used rows\n'))
 }

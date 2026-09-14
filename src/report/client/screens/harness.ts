@@ -24,7 +24,8 @@ const nothingDeclared = (r: HarnessReport): boolean => {
 /** The single most actionable line: idle skills (a count, not an estimate), then the injected-listing weight. */
 export function harnessLead(r: HarnessReport): { title: string; sub: string } {
   const x = r.crosswalk
-  const idle = x.skills.filter((s) => s.status === 'idle').length
+  // the full-population count, not the rows: the 50-row cap cuts idle rows first
+  const idle = x.counts.skills.idle
   const skills = r.inventory.totals.skills
   const title = skills ? (idle ? `${idle} of ${skills} skills never fired` : `every one of ${skills} skills fired`) : 'no skills installed'
   const listing = [...x.injectedListings].sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession)[0]
@@ -38,11 +39,11 @@ function names(list: string[]): string {
   return `<div class="pill-row">${shown}${list.length > NAMES ? `<span class="small muted">+${list.length - NAMES} more</span>` : ''}</div>`
 }
 
-/** `never` is the idle phrase ("skills never fired"); `did` the positive one ("skills fired"). */
-function idleCard(title: string, idle: string[], total: number, never: string, did: string): string {
+/** `never` is the idle phrase ("skills never fired"); `did` the positive one ("skills fired"). `count` is the full-population idle count; `idle` the names the capped rows carry. */
+function idleCard(title: string, idle: string[], count: number, total: number, never: string, did: string): string {
   const body = total
-    ? idle.length
-      ? `<div class="aval">${idle.length}<span class="anote"> of ${total} ${never}</span></div>${names(idle)}`
+    ? count
+      ? `<div class="aval">${count}<span class="anote"> of ${total} ${never}</span></div>${names(idle)}`
       : `<p class="small" style="color:var(--good);margin:0">Every one of ${total} ${did}.</p>`
     : `<p class="small muted" style="margin:0">None declared in the config that was read.</p>`
   return `<div class="card pad"><div class="card-title">${title}</div>${body}</div>`
@@ -75,13 +76,16 @@ export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {
   const idleSkills = x.skills.filter((s) => s.status === 'idle').map((s) => s.name)
   const idleMcp = x.mcpServers.filter((m) => m.status === 'idle').map((m) => m.name)
   const idleAgents = x.agents.filter((a) => a.status === 'idle').map((a) => a.name)
+  // the same four row kinds the notes count, and the count from the full population
   const undeclared = [
     ...x.skills.filter((s) => s.status === 'undeclared').map((s) => 'skill ' + s.name),
     ...x.mcpServers.filter((m) => m.status === 'undeclared').map((m) => 'mcp ' + m.name),
     ...x.agents.filter((a) => a.status === 'undeclared').map((a) => 'agent ' + a.name),
+    ...x.hooks.filter((h) => h.status === 'undeclared').map((h) => 'hook ' + (h.commandBasename ?? h.event)),
   ]
+  const undeclaredCount = x.counts.skills.undeclared + x.counts.mcpServers.undeclared + x.counts.agents.undeclared + x.counts.hooks.undeclared
   const listings = x.injectedListings.length
-    ? `<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th><th class="num">≈ tokens / injection</th><th class="num">Subagents ≈ tokens</th><th class="num">Subagent sessions</th></tr></thead><tbody>${[...x.injectedListings]
+    ? `<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th><th class="num">≈ tokens / injection<br><span class="small muted">anywhere in the tree</span></th><th class="num">Subagents ≈ tokens</th><th class="num">Subagent sessions</th></tr></thead><tbody>${[...x.injectedListings]
         .sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession)
         .map((l) => `<tr><td class="mono">${esc(l.type)}</td><td class="num">${esc(num(l.approxTokensPerMainSession))}</td><td class="num">${l.main.sessions}</td><td class="num">${esc(num(l.approxTokensPerInjection))}</td><td class="num">${esc(num(l.subagent.approxTokens))}</td><td class="num">${l.subagent.sessions}</td></tr>`)
         .join('')}</tbody></table></div><div class="smt8">Recurring context weight, bytes ÷ 4. Per session counts the primary transcript of each session that carried it; the subagent columns are what the agent tree carried, over the sessions that had subagents.</div>`
@@ -98,14 +102,14 @@ ${mascotBox(48)}
 <div class="grow"><div class="eyebrow">Declared vs used</div><div class="herotitle">${esc(lead.title)}</div><div class="sg-sub">${esc(lead.sub)} · ${esc(scope)} · ${num(r.scope.sessionsScanned)} sessions scanned</div></div>
 </div>
 <div class="kpis">
-${idleCard('Idle skills', idleSkills, inv.totals.skills, 'skills never fired', 'skills fired')}
-${idleCard('Idle MCP servers', idleMcp, inv.totals.mcpServers, 'servers never called', 'servers was called')}
-${idleCard('Agents never dispatched', idleAgents, inv.totals.agents, 'agents never dispatched', 'agents was dispatched')}
+${idleCard('Idle skills', idleSkills, x.counts.skills.idle, inv.totals.skills, 'skills never fired', 'skills fired')}
+${idleCard('Idle MCP servers', idleMcp, x.counts.mcpServers.idle, inv.totals.mcpServers, 'servers never called', 'servers was called')}
+${idleCard('Agents never dispatched', idleAgents, x.counts.agents.idle, inv.totals.agents, 'agents never dispatched', 'agents was dispatched')}
 </div>
 <div class="card pad mb16"><div class="card-title">Injected listings · per session</div>${listings}</div>
 <div class="two-up">
 <div class="card pad"><div class="card-title">CLAUDE.md</div>${memory}</div>
-<div class="card pad"><div class="card-title">Undeclared · ${undeclared.length}</div>${undeclared.length ? `<p class="small muted" style="margin:0 0 8px">Observed in sessions but not found in the config that was read: a source outside this scope, or drift.</p>${names(undeclared)}` : '<p class="small muted" style="margin:0">Everything the sessions used is declared in the config that was read.</p>'}</div>
+<div class="card pad"><div class="card-title">Undeclared · ${undeclaredCount}</div>${undeclaredCount ? `<p class="small muted" style="margin:0 0 8px">Observed in sessions but not found in the config that was read: a source outside this scope, or drift.</p>${names(undeclared)}` : '<p class="small muted" style="margin:0">Everything the sessions used is declared in the config that was read.</p>'}</div>
 </div>
 <div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Turn this into proposals in Claude Code.</div>${commandBlock(harnessCommand(r.scope.global ? 'global' : 'repo'))}<div class="smt8">Copy only; nothing runs here. <span class="mono">orangu harness --json</span> prints this report.</div></div>
 ${notes}
