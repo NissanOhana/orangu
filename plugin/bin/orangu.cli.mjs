@@ -7042,6 +7042,21 @@ import { basename as basename5 } from "node:path";
 var HARNESS_SCHEMA_VERSION = "1";
 var HARNESS_ROW_CAP = 50;
 
+// src/harness/names.ts
+function pluginName(key) {
+  return key.split("@")[0] ?? key;
+}
+function canonicalName(observed, declared2) {
+  if (declared2.has(observed)) return observed;
+  const colon = observed.lastIndexOf(":");
+  if (colon > 0) {
+    const bare = observed.slice(colon + 1);
+    const entry = declared2.get(bare);
+    if (entry && (entry.plugin === void 0 || pluginName(entry.plugin) === observed.slice(0, colon))) return bare;
+  }
+  return observed;
+}
+
 // src/harness/crosswalk.ts
 var SCOPE_PRECEDENCE = ["repo-local", "repo", "global-local", "global"];
 var approxTokens = (bytes) => Math.ceil(bytes / 4);
@@ -7102,17 +7117,7 @@ function sameModel(configured, seen) {
 }
 function crosswalk(inv, analyses, agg, opts = {}) {
   const installedSkills = new Map(inv.skills.map((s) => [s.name, s]));
-  const canonicalSkill = (observed) => {
-    if (installedSkills.has(observed)) return observed;
-    const colon = observed.lastIndexOf(":");
-    if (colon > 0) {
-      const bare = observed.slice(colon + 1);
-      const entry = installedSkills.get(bare);
-      if (entry && (entry.plugin === void 0 || pluginName(entry.plugin) === observed.slice(0, colon))) return bare;
-    }
-    return observed;
-  };
-  const pluginName = (key) => key.split("@")[0] ?? key;
+  const canonicalSkill = (observed) => canonicalName(observed, installedSkills);
   const skillObs = /* @__PURE__ */ new Map();
   const skillObsAt = (rawName) => {
     const name = canonicalSkill(rawName);
@@ -7194,6 +7199,8 @@ function crosswalk(inv, analyses, agg, opts = {}) {
       status: statusOf(configuredMcp.has(name), o?.toolCalls ?? 0)
     });
   }
+  const definedAgents = new Map(inv.agents.map((a) => [a.name, a]));
+  const canonicalAgent = (observed) => canonicalName(observed, definedAgents);
   const agentObs = /* @__PURE__ */ new Map();
   const agentObsAt = (name) => {
     let e = agentObs.get(name);
@@ -7203,23 +7210,25 @@ function crosswalk(inv, analyses, agg, opts = {}) {
   for (const a of analyses) {
     const here = /* @__PURE__ */ new Set();
     for (const t of a.agents.byType) {
-      const e = agentObsAt(t.agentType);
+      const name = canonicalAgent(t.agentType);
+      const e = agentObsAt(name);
       e.dispatches += t.count;
-      here.add(t.agentType);
+      here.add(name);
     }
     for (const r of a.agents.runs) {
       if (!r.agentType) continue;
-      const e = agentObsAt(r.agentType);
+      const name = canonicalAgent(r.agentType);
+      const e = agentObsAt(name);
       if (r.model) e.models.add(r.model);
-      here.add(r.agentType);
+      here.add(name);
     }
     for (const n2 of here) agentObsAt(n2).sessions++;
   }
   for (const r of agg.byAgentType) {
     const runs = r.extra?.["runs"] ?? 0;
-    if (runs > 0 && !agentObs.has(r.key)) agentObsAt(r.key).dispatches += runs;
+    const name = canonicalAgent(r.key);
+    if (runs > 0 && !agentObs.has(name)) agentObsAt(name).dispatches += runs;
   }
-  const definedAgents = new Map(inv.agents.map((a) => [a.name, a]));
   const agentRows = [];
   for (const name of /* @__PURE__ */ new Set([...definedAgents.keys(), ...agentObs.keys()])) {
     const o = agentObs.get(name);

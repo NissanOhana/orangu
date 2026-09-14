@@ -18,6 +18,7 @@ import { basename } from 'node:path'
 import type { Analysis } from '../model/analysis.js'
 import type { Aggregate } from '../analyze/aggregate.js'
 import { HARNESS_ROW_CAP } from './types.js'
+import { canonicalName } from './names.js'
 import type {
   HarnessAgentRow,
   HarnessCrosswalk,
@@ -142,25 +143,8 @@ export interface CrosswalkOptions {
 export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggregate, opts: CrosswalkOptions = {}): HarnessCrosswalk {
   // ---------- skills ----------
   const installedSkills = new Map(inv.skills.map((s) => [s.name, s]))
-  /**
-   * Claude Code reports an invocation under the plugin-qualified name (`superpowers:brainstorming`) while the
-   * inventory holds the bare one, so the raw string would split ONE skill into two contradictory rows, an
-   * `idle` install and an `undeclared` observation. Resolve an observed name onto the installed skill it names:
-   * exact first, then the `<plugin>:<skill>` suffix. A qualified name nothing installs stays as observed.
-   */
-  const canonicalSkill = (observed: string): string => {
-    if (installedSkills.has(observed)) return observed
-    const colon = observed.lastIndexOf(':')
-    if (colon > 0) {
-      const bare = observed.slice(colon + 1)
-      const entry = installedSkills.get(bare)
-      // the inventory records the marketplace-qualified key (`superpowers@superpowers-marketplace`) while the
-      // invocation carries the bare plugin name (`superpowers:brainstorming`), so compare the name part
-      if (entry && (entry.plugin === undefined || pluginName(entry.plugin) === observed.slice(0, colon))) return bare
-    }
-    return observed
-  }
-  const pluginName = (key: string): string => key.split('@')[0] ?? key
+  // one identity rule for every observed name: names.ts says why a raw string would split one skill in two
+  const canonicalSkill = (observed: string): string => canonicalName(observed, installedSkills)
   const skillObs = new Map<string, { invocations: number; sessions: number; viaTool: number; viaCommand: number }>()
   const skillObsAt = (rawName: string) => {
     const name = canonicalSkill(rawName)
@@ -251,6 +235,10 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
   }
 
   // ---------- agents ----------
+  const definedAgents = new Map(inv.agents.map((a) => [a.name, a]))
+  // a dispatch names a plugin agent as `<plugin>:<name>`; the same rule the skills arm uses joins it to its
+  // definition, so one agent is one row and its models land on that row rather than on an orphan
+  const canonicalAgent = (observed: string): string => canonicalName(observed, definedAgents)
   const agentObs = new Map<string, { dispatches: number; sessions: number; models: Set<string> }>()
   const agentObsAt = (name: string) => {
     let e = agentObs.get(name)
@@ -260,24 +248,26 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
   for (const a of analyses) {
     const here = new Set<string>()
     for (const t of a.agents.byType) {
-      const e = agentObsAt(t.agentType)
+      const name = canonicalAgent(t.agentType)
+      const e = agentObsAt(name)
       e.dispatches += t.count
-      here.add(t.agentType)
+      here.add(name)
     }
     for (const r of a.agents.runs) {
       if (!r.agentType) continue
-      const e = agentObsAt(r.agentType)
+      const name = canonicalAgent(r.agentType)
+      const e = agentObsAt(name)
       if (r.model) e.models.add(r.model)
-      here.add(r.agentType)
+      here.add(name)
     }
     for (const n of here) agentObsAt(n).sessions++
   }
   for (const r of agg.byAgentType) {
     const runs = r.extra?.['runs'] ?? 0
-    if (runs > 0 && !agentObs.has(r.key)) agentObsAt(r.key).dispatches += runs
+    const name = canonicalAgent(r.key)
+    if (runs > 0 && !agentObs.has(name)) agentObsAt(name).dispatches += runs
   }
 
-  const definedAgents = new Map(inv.agents.map((a) => [a.name, a]))
   const agentRows: HarnessAgentRow[] = []
   for (const name of new Set([...definedAgents.keys(), ...agentObs.keys()])) {
     const o = agentObs.get(name)

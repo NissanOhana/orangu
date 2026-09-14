@@ -190,6 +190,44 @@ describe('crosswalk: agents', () => {
     expect(idle.dispatches).toBe(0)
     expect(idle.models).toEqual([])
   })
+
+  it('credits a plugin-qualified dispatch to the defined agent, as ONE row (not idle + undeclared)', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000002', model: 'claude-sonnet-5' })
+    b.userPrompt('build it')
+    b.toolCall('Agent', { description: 'Build', prompt: 'go', subagent_type: 'p:backend' }, 'done', {
+      toolUseResult: { status: 'completed', agentId: 'agent0002', content: [{ type: 'text', text: 'done' }], totalDurationMs: 10, totalTokens: 5, totalToolUseCount: 0, usage: { input_tokens: 5, output_tokens: 1 } },
+    })
+    // the sidechain records carry the model the run used
+    b.sidechain('agent0002')
+    b.assistant([{ type: 'text', text: 'working' }], { usage: { input_tokens: 3, output_tokens: 1 } })
+    b.sidechain('agent0002', false)
+    const a = await analyze(b)
+    const inv = emptyInventory({ agents: [{ ...agentEntry('backend'), origin: 'plugin', plugin: 'p@market' }] })
+    const x = crosswalk(inv, [a], aggregate([a], 'test', 0))
+
+    expect(x.agents.map((g) => g.name)).toEqual(['backend'])
+    const row = x.agents[0]!
+    expect(row.status).toBe('used')
+    expect(row.defined).toBe(true)
+    expect(row.dispatches).toBeGreaterThanOrEqual(1)
+    expect(row.sessions).toBe(1)
+    expect(row.models).toEqual(['claude-sonnet-5'])
+  })
+
+  it("keeps a qualified dispatch undeclared when the prefix is not the entry's plugin", async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000003' })
+    b.userPrompt('build it')
+    b.toolCall('Agent', { description: 'Build', prompt: 'go', subagent_type: 'q:backend' }, 'done', {
+      toolUseResult: { status: 'completed', agentId: 'agent0003', content: [{ type: 'text', text: 'done' }], totalDurationMs: 10, totalTokens: 5, totalToolUseCount: 0, usage: { input_tokens: 5, output_tokens: 1 } },
+    })
+    const a = await analyze(b)
+    const inv = emptyInventory({ agents: [{ ...agentEntry('backend'), origin: 'plugin', plugin: 'p@market' }] })
+    const x = crosswalk(inv, [a], aggregate([a], 'test', 0))
+    expect(x.agents.find((g) => g.name === 'q:backend')?.status).toBe('undeclared')
+    expect(x.agents.find((g) => g.name === 'backend')?.status).toBe('idle')
+  })
 })
 
 describe('crosswalk: hooks', () => {
