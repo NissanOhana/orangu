@@ -25,6 +25,7 @@ import type {
   HarnessHookRow,
   HarnessInventory,
   HarnessListingRow,
+  HarnessListingShare,
   HarnessMcpRow,
   HarnessMemoryRow,
   HarnessSkillRow,
@@ -132,6 +133,11 @@ function sameModel(configured: string, seen: string): boolean {
   const s = stripModelTag(seen)
   if (c === s) return true
   return MODEL_FAMILY_ALIASES.has(c) && s.split('-').includes(c)
+}
+
+/** true when the parser that produced this analysis split attachments into primary transcript vs sidecars */
+export function hasPrimaryView(a: Analysis): a is Analysis & { parse: { primaryAttachmentTypes: Record<string, number>; primaryAttachmentBytes: Record<string, number> } } {
+  return a.parse.primaryAttachmentTypes !== undefined && a.parse.primaryAttachmentBytes !== undefined
 }
 
 export interface CrosswalkOptions {
@@ -403,18 +409,50 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
   }))
 
   // ---------- injected listings ----------
-  const listingObs = new Map<string, { bytes: number; sessions: number }>()
+  // Each Analysis folds the main transcript AND every sidecar beneath it, so `attachmentBytes` spans the whole
+  // agent tree while `analyses.length` counts only roots. Dividing one by the other printed a per-session figure
+  // larger than any context window. The parser exports the primary-transcript share separately; the sidecar
+  // share is the difference. An analysis from an engine without the primary view is LEFT OUT: nothing here can
+  // say which side carried its injections, and a guessed split under a label that names a population would be
+  // the defect this arm replaced. `report.ts` counts those analyses in a note.
+  const emptyShare = (): HarnessListingShare => ({ sessions: 0, injections: 0, bytes: 0, approxTokens: 0 })
+  const listingObs = new Map<string, { main: HarnessListingShare; subagent: HarnessListingShare }>()
+  const listingAt = (type: string) => {
+    let e = listingObs.get(type)
+    if (!e) listingObs.set(type, (e = { main: emptyShare(), subagent: emptyShare() }))
+    return e
+  }
   for (const a of analyses) {
-    for (const [type, bytes] of Object.entries(a.parse.attachmentBytes ?? {})) {
-      const e = listingObs.get(type) ?? { bytes: 0, sessions: 0 }
-      e.bytes += bytes
-      e.sessions++
-      listingObs.set(type, e)
+    if (!hasPrimaryView(a)) continue
+    const treeBytes = a.parse.attachmentBytes ?? {}
+    const treeN = a.parse.attachmentTypes ?? {}
+    const mainBytes = a.parse.primaryAttachmentBytes
+    const mainN = a.parse.primaryAttachmentTypes
+    for (const type of new Set([...Object.keys(treeBytes), ...Object.keys(treeN)])) {
+      const e = listingAt(type)
+      const mb = mainBytes[type] ?? 0
+      const mn = mainN[type] ?? 0
+      const sb = Math.max(0, (treeBytes[type] ?? 0) - mb)
+      const sn = Math.max(0, (treeN[type] ?? 0) - mn)
+      e.main.bytes += mb
+      e.main.injections += mn
+      if (mn > 0) e.main.sessions++
+      e.subagent.bytes += sb
+      e.subagent.injections += sn
+      if (sn > 0) e.subagent.sessions++
     }
   }
   const listingRows: HarnessListingRow[] = [...listingObs].map(([type, v]) => {
-    const tokens = approxTokens(v.bytes)
-    return { type, sessions: v.sessions, bytes: v.bytes, approxTokens: tokens, approxTokensPerSession: v.sessions > 0 ? Math.ceil(tokens / v.sessions) : 0 }
+    const main = { ...v.main, approxTokens: approxTokens(v.main.bytes) }
+    const subagent = { ...v.subagent, approxTokens: approxTokens(v.subagent.bytes) }
+    const injections = main.injections + subagent.injections
+    return {
+      type,
+      main,
+      subagent,
+      approxTokensPerInjection: injections > 0 ? Math.ceil((main.bytes + subagent.bytes) / 4 / injections) : 0,
+      approxTokensPerMainSession: main.sessions > 0 ? Math.ceil(main.approxTokens / main.sessions) : 0,
+    }
   })
 
   // ---------- window: from session data, never the clock ----------
@@ -449,6 +487,6 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
       promptSessions,
     },
     claudeMd: ranked(memoryRows, (x) => x.approxTokensCarried, (x) => x.file),
-    injectedListings: ranked(listingRows, (x) => x.approxTokens, (x) => x.type),
+    injectedListings: ranked(listingRows, (x) => x.main.approxTokens + x.subagent.approxTokens, (x) => x.type),
   }
 }

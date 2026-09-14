@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   chmodSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -28,7 +29,7 @@ import {
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
-import type { Analysis } from '../model/analysis.js'
+import { ANALYSIS_PAYLOAD_GENERATION, ANALYSIS_SCHEMA_VERSION, type Analysis } from '../model/analysis.js'
 import {
   MAX_EVIDENCE_META_BYTES,
   MAX_EVIDENCE_SESSION_RECORDS,
@@ -112,6 +113,20 @@ describe('cacheKey', () => {
 })
 
 describe('AnalysisCache', () => {
+  it("names the generation directory with the payload generation, so an older engine's entries under the same version are misses", async () => {
+    const dir = tmp()
+    const c = new AnalysisCache({ dir, version: '9.9.9' })
+    await c.put('k-gen', await fixtureAnalysis())
+    const current = `${ANALYSIS_SCHEMA_VERSION}-9.9.9-p${ANALYSIS_PAYLOAD_GENERATION}`
+    expect(readdirSync(dir)).toEqual([current])
+    // an entry the previous generation wrote (same schema, same package version, no generation suffix) is never read
+    const previous = join(dir, `${ANALYSIS_SCHEMA_VERSION}-9.9.9`)
+    mkdirSync(previous, { recursive: true })
+    copyFileSync(join(dir, current, 'k-gen.json'), join(previous, 'k-old.json'))
+    expect(await c.get('k-old')).toBeUndefined()
+    expect(await c.get('k-gen')).toBeDefined()
+  })
+
   it('round-trips an analysis byte-identically after re-stamping generatedAt', async () => {
     const a = await fixtureAnalysis()
     const c = new AnalysisCache({ dir: tmp(), version: '9.9.9' })

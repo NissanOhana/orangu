@@ -388,6 +388,8 @@
     "unknownBlockTypes": {},
     "attachmentTypes": {},
     "attachmentBytes": {},
+    "primaryAttachmentTypes": {},
+    "primaryAttachmentBytes": {},
     "systemSubtypes": {
       "turn_duration": 1
     },

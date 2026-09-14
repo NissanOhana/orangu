@@ -15,6 +15,14 @@ import type { ParseReport, PromptKind, Usage } from './session.js'
 
 export const ANALYSIS_SCHEMA_VERSION = '2'
 
+/**
+ * Bumped when the engine adds to `Analysis` WITHOUT a schema bump (an additive field, a corrected counter), so
+ * a cache the previous engine wrote under the same schema and package version is a miss instead of a payload
+ * that silently lacks the new field. Part of the cache directory name, never of the payload.
+ *   1 (2026-09-14): parse.primaryAttachmentTypes / primaryAttachmentBytes
+ */
+export const ANALYSIS_PAYLOAD_GENERATION = 1
+
 export interface AnalysisSessionInfo {
   id: string
   title?: string

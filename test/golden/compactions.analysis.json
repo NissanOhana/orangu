@@ -738,6 +738,8 @@
     "unknownBlockTypes": {},
     "attachmentTypes": {},
     "attachmentBytes": {},
+    "primaryAttachmentTypes": {},
+    "primaryAttachmentBytes": {},
     "systemSubtypes": {
       "compact_boundary": 2,
       "turn_duration": 1

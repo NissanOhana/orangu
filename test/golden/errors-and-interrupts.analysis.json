@@ -871,6 +871,8 @@
     "unknownBlockTypes": {},
     "attachmentTypes": {},
     "attachmentBytes": {},
+    "primaryAttachmentTypes": {},
+    "primaryAttachmentBytes": {},
     "systemSubtypes": {
       "api_error": 1,
       "turn_duration": 2

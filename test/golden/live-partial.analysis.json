@@ -491,6 +491,8 @@
     "unknownBlockTypes": {},
     "attachmentTypes": {},
     "attachmentBytes": {},
+    "primaryAttachmentTypes": {},
+    "primaryAttachmentBytes": {},
     "systemSubtypes": {},
     "warnings": [],
     "parseMs": 0,

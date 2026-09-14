@@ -431,20 +431,75 @@ describe('crosswalk: memory files and injected listings', () => {
     expect(x.claudeMd[0]!.approxTokensCarried).toBe(200)
   })
 
-  it('reports injected listing weight per attachment type from parse.attachmentBytes', async () => {
+  it('reports injected listing weight per side: the primary transcript is what a session pays, sidecars are the tree', async () => {
     resetIds()
-    const b = new SessionBuilder({ sessionId: 'ffffffff-0000-4000-8000-000000000001' })
+    const main = new SessionBuilder({ sessionId: 'ffffffff-0000-4000-8000-000000000001' })
+    main.userPrompt('hi')
+    main.attachment('skill_listing', { content: 'x'.repeat(2000) })
+    main.attachment('agent_listing', { content: 'y'.repeat(400) })
+    const sub1 = new SessionBuilder({ sessionId: 'ffffffff-0000-4000-8000-000000000001' })
+    sub1.sidechain('agent0000001')
+    sub1.attachment('skill_listing', { content: 'x'.repeat(2000) })
+    const sub2 = new SessionBuilder({ sessionId: 'ffffffff-0000-4000-8000-000000000001' })
+    sub2.sidechain('agent0000002')
+    sub2.attachment('skill_listing', { content: 'x'.repeat(2000) })
+    const session = await parseClaudeCodeSession({
+      records: main.toRecords(),
+      subagents: [
+        { path: '/tmp/x/subagents/agent-agent0000001.jsonl', records: sub1.toRecords() },
+        { path: '/tmp/x/subagents/agent-agent0000002.jsonl', records: sub2.toRecords() },
+      ],
+    })
+    const a = analyzeSession(session, { version: 't', now: 0 })
+    const x = crosswalk(emptyInventory(), [a], aggregate([a], 'test', 0))
+    const row = x.injectedListings.find((l) => l.type === 'skill_listing')!
+    expect(row.main.sessions).toBe(1)
+    expect(row.main.injections).toBe(1)
+    expect(row.main.bytes).toBeGreaterThan(2000)
+    expect(row.main.approxTokens).toBe(Math.ceil(row.main.bytes / 4))
+    expect(row.subagent.sessions).toBe(1)
+    expect(row.subagent.injections).toBe(2)
+    expect(row.subagent.bytes).toBe(2 * row.main.bytes)
+    // the per-session figure is the main-only value, not one third of the tree
+    expect(row.approxTokensPerMainSession).toBe(row.main.approxTokens)
+    expect(row.approxTokensPerInjection).toBe(Math.ceil((row.main.bytes + row.subagent.bytes) / 4 / 3))
+    const agentListing = x.injectedListings.find((l) => l.type === 'agent_listing')!
+    expect(agentListing.subagent).toEqual({ sessions: 0, injections: 0, bytes: 0, approxTokens: 0 })
+  })
+
+  it('leaves an analysis without the primary view out of the listings instead of guessing a split', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'ffffffff-0000-4000-8000-000000000003' })
     b.userPrompt('hi')
     b.attachment('skill_listing', { content: 'x'.repeat(2000) })
-    b.attachment('agent_listing', { content: 'y'.repeat(400) })
-    const a = await analyze(b)
+    const stale = await analyze(b)
+    delete stale.parse.primaryAttachmentTypes
+    delete stale.parse.primaryAttachmentBytes
+    resetIds()
+    const fresh = await analyze(b)
+    // alone: nothing can be said about which side carried it, so no row rather than a confident wrong split
+    expect(crosswalk(emptyInventory(), [stale], aggregate([stale], 'test', 0)).injectedListings).toEqual([])
+    // beside a fresh analysis: only the fresh one is counted
+    const x = crosswalk(emptyInventory(), [stale, fresh], aggregate([stale, fresh], 'test', 0))
+    const row = x.injectedListings.find((l) => l.type === 'skill_listing')!
+    expect(row.main).toMatchObject({ sessions: 1, injections: 1 })
+    expect(row.subagent.injections).toBe(0)
+  })
+
+  it('a listing type only the sidecars carry has no main share and no per-main-session figure', async () => {
+    resetIds()
+    const main = new SessionBuilder({ sessionId: 'ffffffff-0000-4000-8000-000000000002' })
+    main.userPrompt('hi')
+    const sub = new SessionBuilder({ sessionId: 'ffffffff-0000-4000-8000-000000000002' })
+    sub.sidechain('agent0000003')
+    sub.attachment('read_truncation_notice', { content: 'cut' })
+    const session = await parseClaudeCodeSession({ records: main.toRecords(), subagents: [{ path: '/tmp/x/subagents/agent-agent0000003.jsonl', records: sub.toRecords() }] })
+    const a = analyzeSession(session, { version: 't', now: 0 })
     const x = crosswalk(emptyInventory(), [a], aggregate([a], 'test', 0))
-    const skillListing = x.injectedListings.find((l) => l.type === 'skill_listing')
-    expect(skillListing).toBeDefined()
-    expect(skillListing!.bytes).toBeGreaterThan(0)
-    expect(skillListing!.sessions).toBe(1)
-    expect(skillListing!.approxTokens).toBe(Math.ceil(skillListing!.bytes / 4))
-    expect(skillListing!.approxTokensPerSession).toBe(Math.ceil(skillListing!.approxTokens / 1))
+    const row = x.injectedListings.find((l) => l.type === 'read_truncation_notice')!
+    expect(row.main.sessions).toBe(0)
+    expect(row.subagent.sessions).toBe(1)
+    expect(row.approxTokensPerMainSession).toBe(0)
   })
 })
 

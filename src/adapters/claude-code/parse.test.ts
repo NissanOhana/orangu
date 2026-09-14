@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { parseClaudeCodeSession } from './parse.js'
-import { buildCanonicalSession, SessionBuilder } from '../../../test/fixtures/session-builder.js'
+import { buildCanonicalSession, resetIds, SessionBuilder } from '../../../test/fixtures/session-builder.js'
 
 async function canonical() {
   const b = buildCanonicalSession()
@@ -269,5 +269,46 @@ describe('previews never end in a partial token', () => {
     const b = new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000002' }).userPrompt('y'.repeat(400))
     const s = await parseClaudeCodeSession({ records: b.toRecords(), path: '/tmp/x/cccccccc2.jsonl', noSidecar: true })
     expect(s.turns[0]!.promptPreview).toBe('y'.repeat(159) + '…')
+  })
+})
+
+describe('attachments: primary transcript vs subagent sidecars', () => {
+  it('counts every injection in the tree, and separately the ones in the primary transcript', async () => {
+    resetIds()
+    const main = new SessionBuilder({ sessionId: 'aaaaaaaa-0000-4000-8000-0000000000a1' })
+    main.userPrompt('hi')
+    main.attachment('skill_listing', { content: 'x'.repeat(400) })
+    const sub1 = new SessionBuilder({ sessionId: 'aaaaaaaa-0000-4000-8000-0000000000a1' })
+    sub1.sidechain('agent0000001')
+    sub1.attachment('skill_listing', { content: 'y'.repeat(400) })
+    const sub2 = new SessionBuilder({ sessionId: 'aaaaaaaa-0000-4000-8000-0000000000a1' })
+    sub2.sidechain('agent0000002')
+    sub2.attachment('skill_listing', { content: 'z'.repeat(400) })
+    sub2.attachment('read_truncation_notice', { content: 'cut' })
+    const s = await parseClaudeCodeSession({
+      records: main.toRecords(),
+      subagents: [
+        { path: '/tmp/x/subagents/agent-agent0000001.jsonl', records: sub1.toRecords() },
+        { path: '/tmp/x/subagents/agent-agent0000002.jsonl', records: sub2.toRecords() },
+      ],
+    })
+    expect(s.parseReport.attachmentTypes['skill_listing']).toBe(3)
+    expect(s.parseReport.primaryAttachmentTypes?.['skill_listing']).toBe(1)
+    expect(s.parseReport.primaryAttachmentTypes?.['read_truncation_notice']).toBeUndefined()
+    expect(s.parseReport.primaryAttachmentBytes?.['skill_listing']).toBeGreaterThan(400)
+    expect(s.parseReport.attachmentBytes?.['skill_listing']).toBeGreaterThan(s.parseReport.primaryAttachmentBytes?.['skill_listing'] ?? Infinity)
+  })
+
+  it('an inline sidechain record (older transcripts) is not primary either', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: 'aaaaaaaa-0000-4000-8000-0000000000a2' })
+    b.userPrompt('hi')
+    b.attachment('skill_listing', { content: 'x'.repeat(400) })
+    b.sidechain('agent0000009')
+    b.attachment('skill_listing', { content: 'y'.repeat(400) })
+    b.sidechain('agent0000009', false)
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    expect(s.parseReport.attachmentTypes['skill_listing']).toBe(2)
+    expect(s.parseReport.primaryAttachmentTypes?.['skill_listing']).toBe(1)
   })
 })

@@ -27,8 +27,8 @@ export function harnessLead(r: HarnessReport): { title: string; sub: string } {
   const idle = x.skills.filter((s) => s.status === 'idle').length
   const skills = r.inventory.totals.skills
   const title = skills ? (idle ? `${idle} of ${skills} skills never fired` : `every one of ${skills} skills fired`) : 'no skills installed'
-  const listing = [...x.injectedListings].sort((a, b) => b.approxTokensPerSession - a.approxTokensPerSession)[0]
-  const sub = listing ? `${listing.type} ≈${num(listing.approxTokensPerSession)} tokens per session, every session` : `${num(r.scope.sessionsScanned)} sessions scanned`
+  const listing = [...x.injectedListings].sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession)[0]
+  const sub = listing ? `${listing.type} ≈${num(listing.approxTokensPerMainSession)} tokens per session in the main context` : `${num(r.scope.sessionsScanned)} sessions scanned`
   return { title, sub }
 }
 
@@ -81,10 +81,10 @@ export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {
     ...x.agents.filter((a) => a.status === 'undeclared').map((a) => 'agent ' + a.name),
   ]
   const listings = x.injectedListings.length
-    ? `<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th></tr></thead><tbody>${[...x.injectedListings]
-        .sort((a, b) => b.approxTokensPerSession - a.approxTokensPerSession)
-        .map((l) => `<tr><td class="mono">${esc(l.type)}</td><td class="num">${esc(num(l.approxTokensPerSession))}</td><td class="num">${l.sessions}</td></tr>`)
-        .join('')}</tbody></table></div><div class="smt8">Recurring context weight: what Claude Code injects at the start of every session (skill and tool listings), bytes ÷ 4.</div>`
+    ? `<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th><th class="num">≈ tokens / injection</th><th class="num">Subagents ≈ tokens</th><th class="num">Subagent sessions</th></tr></thead><tbody>${[...x.injectedListings]
+        .sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession)
+        .map((l) => `<tr><td class="mono">${esc(l.type)}</td><td class="num">${esc(num(l.approxTokensPerMainSession))}</td><td class="num">${l.main.sessions}</td><td class="num">${esc(num(l.approxTokensPerInjection))}</td><td class="num">${esc(num(l.subagent.approxTokens))}</td><td class="num">${l.subagent.sessions}</td></tr>`)
+        .join('')}</tbody></table></div><div class="smt8">Recurring context weight, bytes ÷ 4. Per session counts the primary transcript of each session that carried it; the subagent columns are what the agent tree carried, over the sessions that had subagents.</div>`
     : `<p class="small muted" style="margin:0">No injected listings were measured in these sessions.</p>`
   const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0)
   const memory = inv.claudeMd.length

@@ -111,8 +111,8 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
   it('emits the seven top-level keys with the harness schema version', () => {
     const r = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home))
     expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
-    // additive: the retention block joined the envelope without changing the contract of any existing key
-    expect(r.schemaVersion).toBe('1')
+    // 2: listing rows name their population (main vs subagent) and hook rows may be event-only
+    expect(r.schemaVersion).toBe('2')
     expect(r.scope.sessionsScanned).toBeGreaterThan(0)
   })
 
@@ -344,7 +344,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(existsSync(dest)).toBe(true)
     const raw = readFileSync(dest, 'utf8')
     const r = JSON.parse(raw)
-    expect(r.schemaVersion).toBe('1')
+    expect(r.schemaVersion).toBe('2')
     expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     expect(raw).toContain('\n  ') // pretty-printed with 2 spaces, like cmdAggregate
     expect(raw).not.toContain('$')
@@ -355,12 +355,12 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const dir = await mkdtemp(join(tmpdir(), 'orangu-harness-out2-'))
     const short = join(dir, 'short.json')
     expect(run(['harness', '--global', '--cwd', fx.repo, '-o', short, '--quiet'], fx.home)).toBe('')
-    expect(JSON.parse(readFileSync(short, 'utf8')).schemaVersion).toBe('1')
+    expect(JSON.parse(readFileSync(short, 'utf8')).schemaVersion).toBe('2')
 
     const both = join(dir, 'both.json')
     const printed = run(['harness', '--global', '--cwd', fx.repo, '--out', both, '--json', '--quiet'], fx.home)
-    expect(JSON.parse(printed).schemaVersion).toBe('1')
-    expect(JSON.parse(readFileSync(both, 'utf8')).schemaVersion).toBe('1')
+    expect(JSON.parse(printed).schemaVersion).toBe('2')
+    expect(JSON.parse(readFileSync(both, 'utf8')).schemaVersion).toBe('2')
   })
 
   it('orangu estimate harness sizes the report in tokens, with no currency figure', () => {

@@ -389,6 +389,8 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
   }
   const attachmentTypes: CountMap = new Map()
   const attachmentBytes: CountMap = new Map()
+  const primaryAttachmentTypes: CountMap = new Map()
+  const primaryAttachmentBytes: CountMap = new Map()
   const systemSubtypes: CountMap = new Map()
   const queueOperations: CountMap = new Map()
   let enqueueHuman = 0
@@ -504,8 +506,15 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
       if (type === 'attachment') {
         const a = obj(r['attachment'])
         const at = str(a?.['type']) ?? 'unknown'
+        const attachmentBytesHere = bytesOf(a)
         addCount(attachmentTypes, at)
-        addCount(attachmentBytes, at, bytesOf(a))
+        addCount(attachmentBytes, at, attachmentBytesHere)
+        // the primary transcript is what the main context pays for; a sidecar file or an inline sidechain
+        // record is the agent tree's cost and is kept apart so a per-session figure divides the right total
+        if (!isSub && !bool(r['isSidechain'])) {
+          addCount(primaryAttachmentTypes, at)
+          addCount(primaryAttachmentBytes, at, attachmentBytesHere)
+        }
         if (at.startsWith('hook')) {
           // a hook_success attachment is a context-injection notice with no timing; the authoritative,
           // timed Stop-hook records come from the stop_hook_summary system record. Only record non-Stop
@@ -1017,6 +1026,8 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
     unknownBlockTypes: countRecord(unknownBlockTypes),
     attachmentTypes: countRecord(attachmentTypes),
     attachmentBytes: countRecord(attachmentBytes),
+    primaryAttachmentTypes: countRecord(primaryAttachmentTypes),
+    primaryAttachmentBytes: countRecord(primaryAttachmentBytes),
     systemSubtypes: countRecord(systemSubtypes),
     warnings: [...warnings.values()],
     parseMs: Date.now() - t0,

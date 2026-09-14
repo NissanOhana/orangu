@@ -20,7 +20,7 @@ import { aggregate } from '../../analyze/aggregate.js'
 import { collectInventory } from '../../harness/collect.js'
 import { buildHarnessReport, plural, sizeLabel } from '../../harness/report.js'
 import { RETENTION_DEFAULT_DAYS } from '../../harness/retention.js'
-import type { HarnessReport } from '../../harness/types.js'
+import type { HarnessListingRow, HarnessReport } from '../../harness/types.js'
 import { redactValue } from '../../redact/redact.js'
 import { flagBool, flagStr } from '../args.js'
 import type { Analysis } from '../../model/analysis.js'
@@ -40,6 +40,14 @@ function detectStreams(flags: Record<string, string | boolean>): void {
 }
 
 const n = (x: number) => x.toLocaleString('en-US')
+
+/**
+ * The listing rows the printout shows, ranked by the column it prints. The JSON array is ranked by whole-tree
+ * tokens (the payload contract); a slice taken in that order would hide the rows heaviest per main session.
+ */
+export function printedListings(rows: readonly HarnessListingRow[], n = 6): HarnessListingRow[] {
+  return [...rows].sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession || (a.type < b.type ? -1 : a.type > b.type ? 1 : 0)).slice(0, n)
+}
 
 /**
  * Build the report the verb prints. Shared with `orangu estimate harness`, so the two never disagree about
@@ -256,8 +264,13 @@ function printHarness(r: HarnessReport): void {
 
   if (x.injectedListings.length) {
     w()
-    w(paint(out, 'bold', '  injected listings (recurring context weight, per session)'))
-    for (const l of x.injectedListings.slice(0, 6)) w(`    ${l.type.padEnd(20)} ≈${n(l.approxTokensPerSession).padStart(8)} tokens/session  ${paint(out, 'dim', `(${l.sessions} sessions)`)}`)
+    w(paint(out, 'bold', '  injected listings (recurring context weight, ranked by tokens per session)'))
+    w(paint(out, 'dim', '    per session counts the primary transcript of each session that carried it; the subagent figure is the agent tree beneath, over its own sessions'))
+    for (const l of printedListings(x.injectedListings)) {
+      const tree = l.subagent.injections ? ` · subagents ≈${n(l.subagent.approxTokens)} tokens over ${n(l.subagent.injections)} injections in ${plural(l.subagent.sessions, 'session')}` : ''
+      const main = `(${n(l.main.injections)} injections in ${plural(l.main.sessions, 'session')}) · ≈${n(l.approxTokensPerInjection)} per injection${tree}`
+      w(`    ${l.type.padEnd(22)} ≈${n(l.approxTokensPerMainSession).padStart(8)} tokens/session ${paint(out, 'dim', main)}`)
+    }
   }
 
   if (r.notes.length) {

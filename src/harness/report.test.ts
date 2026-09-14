@@ -79,7 +79,7 @@ describe('buildHarnessReport: shape', () => {
     const r = buildHarnessReport(inv, analyses, agg, opts())
     expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     expect(r.schemaVersion).toBe(HARNESS_SCHEMA_VERSION)
-    expect(r.schemaVersion).toBe('1')
+    expect(r.schemaVersion).toBe('2')
     expect(r.generator).toEqual({ name: 'orangu', version: '0.2.0', generatedAt: 1_700_000_000_000 })
     expect(Object.keys(r.inventory).sort()).toEqual(['agents', 'claudeMd', 'mcpServers', 'plugins', 'settings', 'skills', 'totals', 'unreadable'])
     expect(Object.keys(r.crosswalk).sort()).toEqual([
@@ -134,6 +134,16 @@ describe('buildHarnessReport: shape', () => {
 })
 
 describe('buildHarnessReport: notes instead of throwing', () => {
+  it('notes analyses that come from an engine without the primary-transcript split and are left out of injected listings', async () => {
+    const { inv, analyses, agg } = await fixture()
+    delete analyses[0]!.parse.primaryAttachmentTypes
+    delete analyses[0]!.parse.primaryAttachmentBytes
+    const r = buildHarnessReport(inv, analyses, agg, opts())
+    expect(r.notes).toContain('1 analysis comes from an engine without the primary-transcript split and is left out of injected listings')
+    const fresh = buildHarnessReport(inv, (await fixture()).analyses, agg, opts())
+    expect(fresh.notes.some((n) => n.includes('primary-transcript split'))).toBe(false)
+  })
+
   it('notes that ~/.claude.json was not read, and leaves usageCounters off the payload', async () => {
     const { inv, analyses, agg } = await fixture()
     const r = buildHarnessReport(inv, analyses, agg, opts())

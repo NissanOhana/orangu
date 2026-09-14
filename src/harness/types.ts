@@ -15,7 +15,8 @@
  * Versioned independently of `ANALYSIS_SCHEMA_VERSION`: this is its own contract, and `Analysis` is untouched.
  */
 
-export const HARNESS_SCHEMA_VERSION = '1'
+/** 2 (2026-09-14): listing rows split main vs subagent and name their population; hook rows may be event-only */
+export const HARNESS_SCHEMA_VERSION = '2'
 
 /** every `crosswalk` array is bounded to this many rows, after an explicit sort */
 export const HARNESS_ROW_CAP = 50
@@ -259,12 +260,31 @@ export interface HarnessMemoryRow {
   approxTokensCarried: number
 }
 
-export interface HarnessListingRow {
-  type: string
+/** one side of an injected listing: the primary transcripts, or the subagent sidecars beneath them */
+export interface HarnessListingShare {
+  /** main sessions in scope whose transcripts on THIS side carried at least one injection */
   sessions: number
+  injections: number
   bytes: number
   approxTokens: number
-  approxTokensPerSession: number
+}
+
+/**
+ * What Claude Code injects at session start (skill and tool listings) and on the way (truncation notices),
+ * counted over the population each field names. A ratio here always divides a numerator and a denominator
+ * from the SAME side: the whole-tree bytes over the main-session count printed a figure larger than any
+ * context window, which is the defect this shape replaced.
+ */
+export interface HarnessListingRow {
+  type: string
+  /** the primary transcript of each session: what the main context carries */
+  main: HarnessListingShare
+  /** the subagent sidecars folded under those sessions: what the agent tree carries */
+  subagent: HarnessListingShare
+  /** (main + subagent) bytes/4 ÷ (main + subagent) injections: the weight of ONE injection */
+  approxTokensPerInjection: number
+  /** main.approxTokens ÷ main.sessions: what the primary context of a session that carried it paid, per session */
+  approxTokensPerMainSession: number
 }
 
 /**

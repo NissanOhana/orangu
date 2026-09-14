@@ -2,7 +2,8 @@
  * AnalysisCache: on-disk cache of Analysis JSON under <oranguHome>/cache.
  *
  * Keyed by transcript path + size + mtime + sidecar fingerprint; versioned by directory
- * (<ANALYSIS_SCHEMA_VERSION>-<engine version>) so a schema or engine bump is an automatic miss.
+ * (<ANALYSIS_SCHEMA_VERSION>-<engine version>-p<ANALYSIS_PAYLOAD_GENERATION>) so a schema bump, an engine bump
+ * or an additive payload change is an automatic miss.
  * A miss is NEVER an error: absent, corrupt or mismatched entries simply re-analyze.
  * Entries are stored with generator.generatedAt = 0 (no clock in the cached bytes);
  * analyzeRefCached re-stamps it on the way out.
@@ -11,7 +12,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
 import { lstat, mkdir, open, opendir, realpath, rename, stat, unlink } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
-import { ANALYSIS_SCHEMA_VERSION, type Analysis } from '../model/analysis.js'
+import { ANALYSIS_PAYLOAD_GENERATION, ANALYSIS_SCHEMA_VERSION, type Analysis } from '../model/analysis.js'
 import { withStableSessionRead, parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import {
   assertEvidenceSessionManifestStable,
@@ -223,7 +224,7 @@ export class AnalysisCache {
   constructor(opts: CacheOptions) {
     const home = resolve(oranguHome())
     const cacheRoot = resolve(opts.dir ?? join(home, 'cache'))
-    const versionSegment = `${ANALYSIS_SCHEMA_VERSION}-${opts.version}`
+    const versionSegment = `${ANALYSIS_SCHEMA_VERSION}-${opts.version}-p${ANALYSIS_PAYLOAD_GENERATION}`
     this.cacheRoot = cacheRoot
     this.versionSegment = versionSegment
     this.validVersion = SIMPLE_SEGMENT.test(versionSegment)

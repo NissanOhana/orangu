@@ -12,7 +12,7 @@
 import { redactValue } from '../redact/redact.js'
 import type { Analysis } from '../model/analysis.js'
 import type { Aggregate } from '../analyze/aggregate.js'
-import { crosswalk } from './crosswalk.js'
+import { crosswalk, hasPrimaryView } from './crosswalk.js'
 import { computeRetention, type RetentionSessionRef } from './retention.js'
 import { HARNESS_SCHEMA_VERSION } from './types.js'
 import type { HarnessCrosswalk, HarnessInventory, HarnessReport, HarnessRetention } from './types.js'
@@ -58,7 +58,7 @@ export function sizeLabel(bytes: number): string {
 }
 
 /** deterministic: same inventory + same crosswalk always yields the same lines in the same order */
-function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetention, sessionsScanned: number, sessionsUnreadable: number): string[] {
+function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetention, sessionsScanned: number, sessionsUnreadable: number, unsplitAnalyses: number): string[] {
   const notes: string[] = []
 
   const declaredNothing =
@@ -76,6 +76,10 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetent
   }
   if (sessionsUnreadable > 0) {
     notes.push(`${plural(sessionsUnreadable, 'session')} could not be analyzed and ${sessionsUnreadable === 1 ? 'is' : 'are'} not reflected in the crosswalk`)
+  }
+  if (unsplitAnalyses > 0) {
+    const one = unsplitAnalyses === 1
+    notes.push(`${unsplitAnalyses} ${one ? 'analysis comes' : 'analyses come'} from an engine without the primary-transcript split and ${one ? 'is' : 'are'} left out of injected listings`)
   }
   if (x.models.configured && !x.models.matchesConfigured) {
     notes.push(`configured model "${x.models.configured}" does not appear among the models these sessions used`)
@@ -110,6 +114,7 @@ export function buildHarnessReport(inv: HarnessInventory, analyses: Analysis[], 
   // the same home the inventory paths were written with, so `~/…` rows can be joined against session reads
   const x = crosswalk(inv, analyses, agg, home ? { home } : {})
   const retention = computeRetention(inv.settings, o.sessions, o.now)
+  const unsplitAnalyses = analyses.filter((a) => !hasPrimaryView(a)).length
 
   return {
     schemaVersion: HARNESS_SCHEMA_VERSION,
@@ -125,6 +130,6 @@ export function buildHarnessReport(inv: HarnessInventory, analyses: Analysis[], 
     inventory: inv,
     crosswalk: x,
     retention,
-    notes: buildNotes(inv, x, retention, analyses.length, sessionsUnreadable),
+    notes: buildNotes(inv, x, retention, analyses.length, sessionsUnreadable, unsplitAnalyses),
   }
 }

@@ -1106,6 +1106,12 @@
     "attachmentBytes": {
       "hook_success": 160
     },
+    "primaryAttachmentTypes": {
+      "hook_success": 1
+    },
+    "primaryAttachmentBytes": {
+      "hook_success": 160
+    },
     "systemSubtypes": {
       "stop_hook_summary": 1,
       "turn_duration": 2

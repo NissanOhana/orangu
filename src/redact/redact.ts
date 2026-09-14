@@ -199,6 +199,8 @@ const UNKNOWN_COUNT_MAP_KEYS = new Set([
   'unknownBlockTypes',
   'attachmentTypes',
   'attachmentBytes',
+  'primaryAttachmentTypes',
+  'primaryAttachmentBytes',
   'systemSubtypes',
   'queueOperations',
 ])

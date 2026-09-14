@@ -30,7 +30,7 @@ const skill = (name: string, status: 'used' | 'idle' | 'undeclared') => ({ name,
 
 function report(over: Partial<HarnessReport> = {}): HarnessReport {
   return {
-    schemaVersion: '1',
+    schemaVersion: '2',
     generator: { name: 'orangu', version: 'test', generatedAt: 0 },
     scope: { cwd: '~/Code/demo', roots: ['~/.claude'], global: false, limit: 200, sessionsScanned: 12, sessionsUnreadable: 0 },
     inventory: {
@@ -49,7 +49,7 @@ function report(over: Partial<HarnessReport> = {}): HarnessReport {
       effort: { seen: [], slashEffortCommands: 0, matchesConfigured: true },
       permissions: { allowRules: 0, denyRules: 0, askRules: 0, promptEvents: 0, promptSessions: 0 },
       claudeMd: [{ file: '~/Code/demo/CLAUDE.md', bytes: 4000, approxTokens: 1000, reads: 12, sessions: 12, approxTokensCarried: 12_000 }],
-      injectedListings: [{ type: 'skill_listing', sessions: 12, bytes: 500_000, approxTokens: 125_784, approxTokensPerSession: 10_482 }],
+      injectedListings: [{ type: 'skill_listing', main: { sessions: 12, injections: 12, bytes: 500_000, approxTokens: 125_000 }, subagent: { sessions: 3, injections: 40, bytes: 1_600_000, approxTokens: 400_000 }, approxTokensPerInjection: 10_096, approxTokensPerMainSession: 10_417 }],
     },
     retention: { effectiveDays: 30, isDefault: true, sweepable: { sessions: 12, bytes: 90_000 }, exempt: { sessions: 0, bytes: 0 }, oldestSweepableDays: 9, expiringSoon: { sessions: 0, bytes: 0, windowDays: 7 }, pastCutoff: { sessions: 0, bytes: 0 } },
     notes: ['~/.claude.json was not read, so client-side usage counters are omitted; the crosswalk uses session evidence only'],
@@ -59,7 +59,7 @@ function report(over: Partial<HarnessReport> = {}): HarnessReport {
 
 describe('renderHarness (A8, serve-only)', () => {
   it('leads with the idle-skill count and the heaviest injected listing, in tokens', () => {
-    expect(harnessLead(report())).toEqual({ title: '48 of 85 skills never fired', sub: 'skill_listing ≈10,482 tokens per session, every session' })
+    expect(harnessLead(report())).toEqual({ title: '48 of 85 skills never fired', sub: 'skill_listing ≈10,417 tokens per session in the main context' })
     renderHarness(ctx(), report())
     expect(markup).toContain('48 of 85 skills never fired')
     expect(markup).toContain('<span class="pill">idle-0</span>')
@@ -72,7 +72,10 @@ describe('renderHarness (A8, serve-only)', () => {
     const allUsed = report({ crosswalk: { ...report().crosswalk, skills: [skill('used-one', 'used')] } })
     renderHarness(ctx(), allUsed)
     expect(markup).toContain('Every one of 85 skills fired.')
-    expect(markup).toContain('10,482')
+    expect(markup).toContain('10,417')
+    // the subagent figure names its own population: its sessions are not the main-context sessions
+    expect(markup).toContain('<th class="num">Subagent sessions</th>')
+    expect(markup).toContain('<td class="num">400,000</td><td class="num">3</td>')
     // the listings table scrolls inside its own container at 390 px (tools/repo/agents do the same)
     expect(markup).toContain('<div class="scroll-x"><table class="grid">')
     expect(markup).toContain('</table></div>')
@@ -95,7 +98,7 @@ describe('renderHarness (A8, serve-only)', () => {
     const card = harnessCardHtml(report(), '#harness?s=abc&audience=plain')
     expect(card).toContain('href="#harness?s=abc&amp;audience=plain"')
     expect(card).toContain('48 of 85 skills never fired')
-    expect(card).toContain('skill_listing ≈10,482 tokens per session')
+    expect(card).toContain('skill_listing ≈10,417 tokens per session')
     const none = harnessCardHtml(report({ inventory: { ...report().inventory, claudeMd: [] }, crosswalk: { ...report().crosswalk, skills: [] } }), '#harness')
     expect(none).toContain('no harness config found')
     expect(none).toContain('href="#harness"')

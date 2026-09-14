@@ -354,6 +354,13 @@ export interface ParseReport {
   attachmentTypes: Record<string, number>
   /** serialized payload bytes by attachment.type (additive; absent on analyses from older engines) */
   attachmentBytes?: Record<string, number>
+  /**
+   * The same two counters over the PRIMARY transcript only: no subagent sidecar, no inline sidechain record.
+   * `attachmentTypes` / `attachmentBytes` span the whole agent tree, so a per-session ratio must divide these,
+   * not those. Additive; absent on analyses from older engines.
+   */
+  primaryAttachmentTypes?: Record<string, number>
+  primaryAttachmentBytes?: Record<string, number>
   /** system subtype counts */
   systemSubtypes: Record<string, number>
   warnings: ParseWarning[]
