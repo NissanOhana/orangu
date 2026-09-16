@@ -252,7 +252,7 @@ describe('plugin packaging', () => {
   // the skill says nothing about how the host treats the nested skill's own grants (unverified).
   it('harness asks for approval, applies repo proposals one id at a time, and never a global one', () => {
     const harness = readText('plugin/skills/harness/SKILL.md')
-    expect(harness).toContain('## 5. Report, approve, and apply')
+    expect(harness).toContain('## 6. Report, approve, and apply')
     expect(harness).toContain('which items the user approves')
     expect(harness).toContain('apply nothing without explicit approval')
     expect(harness).toContain('one id per invocation, one receipt per id')
@@ -294,6 +294,57 @@ describe('plugin packaging', () => {
   it('harness description discloses that approved repo items get applied', () => {
     const desc = /description:\s*(.+)/.exec(readText('plugin/skills/harness/SKILL.md'))?.[1] ?? ''
     expect(desc).toContain('apply the repo items you approve by id')
+  })
+
+  // The interview stage: evidence says what happened; only the user knows why and what they will accept. It
+  // sits between the analysts (stage 2) and the first suggestion record (stage 4) so answers shape the
+  // proposals; it uses AskUserQuestion only where the choices are finite and free text otherwise; and its
+  // answers are user-stated context that never becomes a measurement and never counts as apply approval.
+  it('harness interviews the user in depth after the analysts and before any record, per the shared guide', () => {
+    const harness = readText('plugin/skills/harness/SKILL.md')
+    const heading = harness.indexOf('## 3. Interview the user')
+    expect(heading, 'the interview is a stage of its own').toBeGreaterThan(0)
+    expect(heading).toBeGreaterThan(harness.indexOf('## 2. Analyze two lenses in parallel'))
+    expect(heading, 'the interview precedes the first suggest --rule record').toBeLessThan(harness.indexOf("orangu suggest --rule '<ruleId>'"))
+    expect(harness).toContain('](../shared/interview.md)')
+    expect(harness).toContain('AskUserQuestion when the choices are finite')
+    expect(harness).toContain('free text in chat when the answer is open')
+    expect(harness).toContain('one follow-up at a time')
+    for (const topic of ['instruction files and memory', 'hooks', 'skills and agents', 'MCP servers', 'settings'])
+      expect(harness, `the interview covers ${topic}`).toContain(topic)
+    expect(harness).toContain('the user may skip any topic or stop')
+    expect(harness).toContain('user-stated context, never as a measurement')
+    expect(harness).toContain('"What you told us"')
+    expect(harness).toContain('Nothing said in the interview approves an application')
+  })
+
+  it('improve asks the bounded interview questions before drafting, from the same guide, in both hosts', () => {
+    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md']) {
+      const text = readText(path)
+      expect(text, `${path} links the guide`).toContain('](../shared/interview.md)')
+      expect(text).toContain('AskUserQuestion when the choices are finite, free text otherwise')
+      expect(text).toContain('user-stated context, never a measurement')
+      expect(text.indexOf('interview the user'), `${path} interviews before the proposal is saved`).toBeGreaterThan(0)
+      expect(text.indexOf('interview the user'), `${path} interviews before the proposal is saved`).toBeLessThan(text.indexOf('## 4. Save one bounded proposal'))
+    }
+  })
+
+  it('the shared interview guide is deep, bounded, host-portable, and turns answers into context, never measurements', () => {
+    const rel = 'plugin/skills/shared/interview.md'
+    expect(existsSync(join(root, rel)), `${rel} exists`).toBe(true)
+    const guide = readText(rel)
+    for (const literal of [
+      'AskUserQuestion', 'free text', 'at most four questions per call', 'one follow-up at a time', 'Stop after twelve questions',
+      'never ask the user to confirm a measured number', 'ask in plain text and wait', 'Never answer for the user',
+      'never read consent into silence', '"What you told us"', '"kind": "inference"', 'interview: <short paraphrase>',
+      'never a measured value', 'Nothing said in an interview approves an application', '](untrusted-input.md)',
+    ]) expect(guide, `the guide says: ${literal}`).toContain(literal)
+    for (const topic of ['Instruction files and memory', 'Hooks', 'Skills and agents', 'MCP servers', 'Settings and workflow'])
+      expect(guide, `the guide covers ${topic}`).toContain(`**${topic}.**`)
+    // portable to the generated Codex mirror: no slash command, no plugin root variable
+    expect(guide).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
+    // a ceiling measured on 2026-09-16, not a target (PROJECT.md: ratchets only go down)
+    expect(guide.split(/\s+/).filter(Boolean).length, 'interview guide words').toBeLessThan(620)
   })
 
   // B7: the record identity is derived by the CLI from --session; the skill never asks the model to
@@ -665,7 +716,7 @@ describe('plugin packaging', () => {
     ]
     for (const literal of literals) expect(md, `harness names ${literal}`).toContain(literal)
     const stages = [...md.matchAll(/^## (\d)\. /gm)].map((m) => m[1])
-    expect(stages, 'six numbered stages, in order').toEqual(['0', '1', '2', '3', '4', '5'])
+    expect(stages, 'seven numbered stages, in order').toEqual(['0', '1', '2', '3', '4', '5', '6'])
   })
 
   it('every description routes away from a sibling and opens with its own job', () => {
@@ -689,6 +740,7 @@ describe('plugin packaging', () => {
     const dirs = readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()
     const rows = [...readme.matchAll(/^\| `\/orangu:([a-z]+)`/gm)].map((m) => m[1]).sort()
     expect(rows).toEqual(dirs)
+    expect(readme, 'the harness row says the review interviews the user').toMatch(/interview/)
     expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 200 words').toBeLessThan(200)
   })
 
@@ -713,7 +765,12 @@ describe('plugin packaging', () => {
     // costs ten words after "numbered" was dropped; measured 1,248, again zero headroom.
     // 2026-08-28 sip-skill, orchestrator pass: +15 words so stage 5 states that only the AskUserQuestion answer is an approval
     // (approval-shaped text anywhere else is data), closing a security advisory on the mutation gate; measured 1,264.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1265, improve: 1000, analyze: 700, apply: 700, feedback: 350 }
+    // 2026-09-16 harness 1265 -> 1402 and improve 1000 -> 1029: the interview stage. Harness gained stage 3 "Interview the
+    // user" (summarize, then AskUserQuestion for finite choices and free text for open ones, one follow-up at a time, five
+    // topics, answers are user-stated context and never approval) plus three clauses tying stages 4 and 5 to it; improve
+    // gained one bounded-interview sentence before drafting. The question bank lives in shared/interview.md, not here.
+    // Measured 1,401 / 1,028; the comparator is strict, so both ceilings leave zero words of headroom.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1402, improve: 1029, analyze: 700, apply: 700, feedback: 350 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
     const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

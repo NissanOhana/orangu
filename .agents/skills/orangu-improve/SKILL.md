@@ -37,6 +37,8 @@ Start with `catalogMatches`, then the selected `findings`. Tie every number to d
 
 Classify each useful option into exactly one change class: `instruction` | `script-cli` | `hook` | `skill-create` | `skill-discover` | `subagent-agent` | `mcp` | `plugin` | `workflow-config`. Prefer the smallest change that improves outcome quality or understanding; less time or fewer tokens are secondary and must not push the same work to an unmeasured place.
 
+Before drafting, interview the user on what the evidence cannot show, as [the interview guide](../shared/interview.md) directs: AskUserQuestion when the choices are finite, free text otherwise; answers are user-stated context, never a measurement.
+
 ## 3. Research only where it adds value
 
 Consult deterministic catalog matches before going online. Research only missing or time-sensitive options, preferring primary documentation. For skills, search reputable sources such as skills.sh, but never install a skill or plugin; install counts signal adoption, not quality.

@@ -10,7 +10,7 @@ Evidence: supported Claude Code, Cowork, or Desktop sessions under the configure
 
 `orangu harness` is the deterministic half of this review; run it first.
 
-Compare recurring repo or global evidence with the configured harness and write ranked proposals. Run stages 0 to 5 in order: the CLI measures, analysts interpret, nothing is applied automatically.
+Compare recurring repo or global evidence with the configured harness and write ranked proposals. Run stages 0 to 6 in order: the CLI measures, analysts interpret, the user is interviewed, nothing is applied automatically.
 
 Repo scope may propose and later apply explicitly but cannot become `verified` until Orangu can compare later repository sessions. Global scope is proposal-only and may never be applied or verified.
 
@@ -53,9 +53,13 @@ Dispatch both read-only plugin agents together with both evidence file paths, th
 
 Each item carries an evidence anchor, expected effect, risk, verification, S, M, or L effort, and exactly one change class: `instruction` | `script-cli` | `hook` | `skill-create` | `skill-discover` | `subagent-agent` | `mcp` | `plugin` | `workflow-config`. `pull[]` items cite a fired `ruleId` or a named declared-vs-used row; `free[]` items use `free:<slug>` and name the evidence behind the inference. If an analyst is unavailable, perform that lens yourself and disclose the fallback.
 
-## 3. Classify, consult the catalog, then optional research
+## 3. Interview the user
 
-Choose the smallest fitting class (definitions: [the artifact contract](../improve/references/artifact-contract.md)). Create one record per item, passing each value as one validated argv item or one correctly shell-quoted word:
+Evidence says what happened; only the user knows why, and what they will accept. Before any record is created, summarize the top items in plain language, then interview in depth as [the interview guide](../shared/interview.md) directs: AskUserQuestion when the choices are finite, free text in chat when the answer is open, one follow-up at a time until each answer names a constraint or a preference. Cover instruction files and memory, hooks, skills and agents, MCP servers, and settings as the evidence warrants; the user may skip any topic or stop. Record every answer as user-stated context, never as a measurement; carry it into the ranking and into each proposal's "What you told us" section. Nothing said in the interview approves an application.
+
+## 4. Classify, consult the catalog, then optional research
+
+Choose the smallest fitting class (definitions: [the artifact contract](../improve/references/artifact-contract.md)). Create one record per item the interview kept, passing each value as one validated argv item or one correctly shell-quoted word:
 
 - A fired rule: `orangu suggest --rule '<ruleId>' --scope repo|global --session '<evidence ids>' --title '<change>' --json`.
 - A declared-vs-used or free item with no rule: `--rule harness:<changeClass>`; keep the named row in the title and evidence.
@@ -66,9 +70,9 @@ External skill discovery is candidate work, never an install action: the runtime
 
 Before any online search or URL is opened, reduce the question to generic feature and change-class terms. Never send local prompts, paths, session or suggestion ids, project/repository/customer names, evidence content, proposal text, code, or local error text to a network service or place them in a URL. The researcher receives only uncovered item ids, change classes, evidence file paths, and the policy.
 
-## 4. Synthesize bounded proposals
+## 5. Synthesize bounded proposals
 
-Dedupe items that name the same change, keeping every evidence anchor. Prefer the smallest change; rank by supported expected effect against effort; never invent a token or millisecond value for a quality-only change. Write the same structured artifacts as `/orangu:improve`, per [the artifact contract](../improve/references/artifact-contract.md); Markdown-only proposals are legacy input and must not be created here.
+Dedupe items that name the same change, keeping every evidence anchor. Prefer the smallest change; rank by supported expected effect against effort, informed by the interview; never invent a token or millisecond value for a quality-only change. Write the same structured artifacts as `/orangu:improve`, per [the artifact contract](../improve/references/artifact-contract.md); Markdown-only proposals are legacy input and must not be created here.
 
 For every retained record:
 
@@ -80,7 +84,7 @@ For every retained record:
 
 Explain any record dropped by deduplication.
 
-## 5. Report, approve, and apply
+## 6. Report, approve, and apply
 
 Return the ranked plan and proposal paths: per item its `<id>`, the change, its class, the manifest `files` it writes and the exact text of any command, hook, workflow step, permission or plugin grant, or skill or agent instruction file it introduces, evidence and example sessions, the expected quality, token, or millisecond effect (labelled estimated where it is), effort, risk, and the next-run check. End with what was not recommended, and why.
 
