@@ -41,6 +41,7 @@ npm run test:browser
 - `node scripts/assert-offline.mjs --file site/sample.html` checks the report network boundary.
 - `node scripts/assert-offline.mjs --site` checks the landing's allowlisted network policy, including `llms.txt` and `llms-full.txt`.
 - `node scripts/site-screenshot.mjs` regenerates `site/assets/report-overview.png` from a local session (developer-only, needs Playwright Chromium); paste the printed digest into `scripts/assert-public-tree.mjs` and read the image before committing.
+- `npm run eval:plugin` runs the behavioural suite under [`plugin/evals/`](plugin/evals/README.md) with `claude plugin eval`: real model calls on your own account, so run it after a skill description or body changes rather than on every commit. `npm test` checks the suite's shape offline.
 - `npm run verify:public` rejects private working directories, personal paths or emails, internal process artifacts, and broken local documentation links in the tracked tree.
 - Intentional analysis changes must regenerate `test/golden/` in the same commit and explain the expected diff.
 

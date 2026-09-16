@@ -38,3 +38,6 @@ test-results/
 /private/
 /fixtures/real/
 /.orangu-cache/
+
+# plugin eval runs (claude plugin eval writes a timestamped report per run)
+/plugin/evals/results/

@@ -1,0 +1,79 @@
+# Behavioural evals for the orangu plugin: the suite under plugin/evals/, run by
+# `claude plugin eval` (see plugin/evals/README.md for what it grades).
+#
+# Manual only. Every run is a batch of real model calls made with the
+# ANTHROPIC_API_KEY repository secret, so nothing here fires on push or pull
+# request. Dispatch it after a skill description or body changes, or when a new
+# model ships, then read the uploaded report. `npm run verify` stays the
+# deterministic gate; test/plugin-evals.test.ts pins this suite's shape offline.
+#
+# Both models are pinned so a model rollout is never mistaken for a plugin
+# regression. No tool grant is passed: runs keep the read-only tool set, so the
+# bundled CLI never executes inside a run and no scaffold script runs.
+
+name: Plugin evals
+
+on:
+  workflow_dispatch:
+    inputs:
+      threshold:
+        description: Minimum with-plugin score a case must reach (0 to 1)
+        default: '0.8'
+      runs:
+        description: Runs per case per arm
+        default: '3'
+      case:
+        description: Case-name glob; leave empty to run every case
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    name: claude plugin eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      # inputs reach the shell through the environment, never by interpolation into a script
+      PLUGIN_EVAL_THRESHOLD: ${{ inputs.threshold }}
+      PLUGIN_EVAL_RUNS: ${{ inputs.runs }}
+      PLUGIN_EVAL_CASE: ${{ inputs.case }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+      - name: Refuse to run without a credential
+        if: env.ANTHROPIC_API_KEY == ''
+        run: |
+          echo "ANTHROPIC_API_KEY is not set; add the repository secret before dispatching this workflow." >&2
+          exit 1
+      - name: Install Claude Code
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+      - name: Run the suite
+        run: |
+          filter=()
+          if [ -n "$PLUGIN_EVAL_CASE" ]; then filter=(--case "$PLUGIN_EVAL_CASE"); fi
+          claude plugin eval ./plugin "${filter[@]}" \
+            --trust-plugin \
+            --json plugin-eval-results.json \
+            --report plugin-eval-report.html \
+            --threshold "$PLUGIN_EVAL_THRESHOLD" \
+            --runs "$PLUGIN_EVAL_RUNS" \
+            --model claude-sonnet-5 \
+            --judge-model claude-haiku-4-5-20251001 \
+            --no-publish \
+            --max-cost-usd 10
+      - name: Retain the results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: plugin-eval-results
+          path: |
+            plugin-eval-results.json
+            plugin-eval-report.html
+          if-no-files-found: ignore
