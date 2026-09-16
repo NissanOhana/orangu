@@ -1,6 +1,6 @@
 ---
 name: improve
-description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Use when the user runs /orangu:improve, pastes a suggestion id from a report, asks what to change after one session, or wants an applied session change verified against a later run. Never edits the target repository. Not for applying a proposal: /orangu:apply. Not for a repo or global harness review: /orangu:harness.
+description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Use when the user runs /orangu:improve, pastes a suggestion id from a report, asks what to change so the next run or session goes better, or wants an applied session change verified against a later run. Never edits the target repository. Not for applying a proposal: /orangu:apply. Not for a repo or global harness review: /orangu:harness.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read, Write(~/.orangu/proposals/**), WebSearch, WebFetch
 ---
 
