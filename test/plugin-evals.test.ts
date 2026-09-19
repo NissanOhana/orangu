@@ -25,7 +25,7 @@ function frontmatter(path: string): Frontmatter {
   if (!match) throw new Error(`${path} has no frontmatter`)
   const fields: Record<string, string> = {}
   for (const line of match[1]!.split('\n')) {
-    const kv = /^([A-Za-z_]+):\s*(.*)$/.exec(line)
+    const kv = /^([A-Za-z_-]+):\s*(.*)$/.exec(line)
     if (kv) fields[kv[1]!] = kv[2]!.trim()
   }
   return { fields, body: match[2]!.trim() }
@@ -87,6 +87,11 @@ describe('plugin eval suite', () => {
       for (const g of gs) {
         const s = firesSkill(g) ?? (provesApply(dir, g) ? 'apply' : undefined)
         if (s) fired.set(s, [...(fired.get(s) ?? []), dir])
+      }
+      for (const g of gs.filter(forbidsAnySkill)) {
+        // either input form, every shipped skill: a negative that only knew one form could never fail
+        expect(g.fields.input_match, `${g.file} accepts the plugin-qualified form`).toContain('(?:[\\w-]+:)?')
+        for (const s of SKILLS) expect(g.fields.input_match, `${g.file} names ${s}`).toContain(s)
       }
       if (gs.some(forbidsAnySkill)) negatives++
     }
@@ -191,7 +196,8 @@ describe('plugin eval suite', () => {
     expect(workflow, 'never on push or pull request: every run is a batch of real model calls').not.toMatch(/\n  push:|\n  pull_request:/)
     expect(workflow).toContain('permissions:\n  contents: read')
     expect(workflow).toContain('secrets.ANTHROPIC_API_KEY')
-    for (const flag of ['claude plugin eval ./plugin', '--trust-plugin', '--json', '--threshold', '--model claude-sonnet-5', '--judge-model claude-haiku-4-5', '--no-publish', '--max-cost-usd'])
+    // --report <path> is in `claude plugin eval --help` (2.1.273) and wrote both local reports on 2026-09-16
+    for (const flag of ['claude plugin eval ./plugin', '--trust-plugin', '--json', '--report', '--threshold', '--model claude-sonnet-5', '--judge-model claude-haiku-4-5', '--no-publish', '--max-cost-usd'])
       expect(workflow, `workflow passes ${flag}`).toContain(flag)
     for (const grant of ['--allow-tools', '--scaffold', '--mocks off', '--allow-real-servers'])
       expect(workflow, `workflow never widens the run with ${grant}`).not.toContain(grant)

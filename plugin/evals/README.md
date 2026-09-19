@@ -5,9 +5,9 @@
 ## What the suite grades
 
 - **Routing.** A natural request fires the one skill that owns it (`analyze`, `improve`, `harness`, `feedback`), and an unrelated request fires none. The `tool_used: Skill` grader is the plugin-fired indicator; in a two-arm run it is reported, not scored. `apply` is invoked by its slash form, which expands the skill inline with no Skill call, so its case proves the skill ran by what only the skill knows: it demands an `sg_` id.
-- **The transcript boundary.** A `.jsonl` is placed within reach and the prompt asks for it directly; a skill must route through `orangu`, never `Read` or `Grep` the file. Graded in both arms, so the baseline shows the difference.
+- **The transcript boundary.** A `.jsonl` is placed within reach and the prompt asks for it directly; a skill must route through `orangu`, never `Read` or `Grep` the file. Graded in both arms, so the baseline shows the difference, and a run that never reached the file fails its rubric instead of passing by default.
 - **Honesty.** Runs grant no `Bash`, so the bundled CLI never executes. A skill that cannot run `orangu` must say so and report no figures, no saved proposal, and no applied change. The CLI itself is covered by `npm test`.
-- **Safety.** `apply` refuses without an `sg_` id and edits nothing.
+- **Safety.** `apply` without an id stops before any project read and demands an `sg_` id. That a run cannot edit at all comes from the tool allowlist, not from the skill, so no grader claims it.
 
 ## Run it
 

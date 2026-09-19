@@ -1,5 +1,5 @@
 ---
 type: regex
-pattern: \+|subtract|minus|wrong operator
+pattern: a\s*\+\s*b|subtract|minus|wrong operator
 flags: i
 ---
