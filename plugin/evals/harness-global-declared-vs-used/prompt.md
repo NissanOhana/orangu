@@ -2,7 +2,7 @@
 name: harness-global-declared-vs-used
 description: A machine-wide declared-versus-used question routes to the harness review at global scope.
 expected_outcome: The harness skill fires, the reply names the global scope, and no finding is stated without tool output.
-tags: [routing, harness, honesty]
+tags: [routing, harness, honesty, holdout]
 max_turns: 14
 allowed_tools: [Read, Glob, Grep, Skill]
 ---

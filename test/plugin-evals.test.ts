@@ -190,6 +190,42 @@ describe('plugin eval suite', () => {
     expect(pkg.scripts['eval:plugin']).toContain('--no-publish')
   })
 
+  it('splits the cases into a train set to improve against and a held-out set that is never tuned on', () => {
+    // Held out: one routing case per skill family that has more than one, plus one negative. Improving a skill against
+    // the same cases that judge it rewards the suite's quirks; train up with holdout flat is the overfitting sign.
+    const HOLDOUT = ['analyze-live-session', 'harness-global-declared-vs-used', 'ignores-a-jsonl-coding-question', 'improve-from-suggestion-id']
+    const split = new Map<string, string[]>()
+    for (const dir of cases) {
+      const tags = list(frontmatter(`${dir}/prompt.md`).fields.tags)
+      const sides = tags.filter((tag) => tag === 'train' || tag === 'holdout')
+      expect(sides, `${dir} is tagged train or holdout, exactly once`).toHaveLength(1)
+      if (existsSync(join(root, dir, 'case.yaml'))) {
+        const yamlTags = list(/^tags:\s*(.*)$/m.exec(readText(`${dir}/case.yaml`))?.[1])
+        expect(yamlTags, `${dir} case.yaml tags match prompt.md`).toEqual(tags)
+      }
+      split.set(basename(dir), tags)
+    }
+    const holdout = [...split].filter(([, tags]) => tags.includes('holdout')).map(([name]) => name).sort()
+    expect(holdout).toEqual(HOLDOUT)
+    expect(holdout.some((name) => split.get(name)!.includes('negative')), 'holdout keeps a negative').toBe(true)
+    expect(holdout.some((name) => split.get(name)!.includes('routing')), 'holdout keeps a routing case').toBe(true)
+    const pkg = JSON.parse(readText('package.json')) as { scripts: Record<string, string> }
+    expect(pkg.scripts['eval:plugin:train']).toBe('claude plugin eval ./plugin --no-publish --tag train')
+    expect(pkg.scripts['eval:plugin:holdout']).toBe('claude plugin eval ./plugin --no-publish --tag holdout')
+  })
+
+  it('documents how to improve the skills against the suite without fooling yourself', () => {
+    const readme = readText(`${EVALS}/README.md`)
+    expect(readme).toContain('## Improving the skills against this suite')
+    expect(readme).toContain('npm run eval:plugin:train')
+    expect(readme).toContain('npm run eval:plugin:holdout')
+    expect(readme, 'overfitting sign').toMatch(/train[^\n]*up[^\n]*holdout[^\n]*flat/i)
+    expect(readme, 'no pasting failures into a skill').toMatch(/never paste a failing prompt or reply into a skill/i)
+    expect(readme, 'headroom').toMatch(/0\.95/)
+    expect(readme, 'plumbing is not a skill failure').toMatch(/grader that threw[^\n]*not a skill failure/i)
+    expect(readme, 'read graded runs before trusting a score').toMatch(/read a sample of graded runs/i)
+  })
+
   it('CI runs the suite only on demand: trusted, both models pinned, local report, spend ceiling, no tool grant', () => {
     const workflow = readText('.github/workflows/plugin-evals.yml')
     expect(workflow).toMatch(/\non:\n  workflow_dispatch:/)

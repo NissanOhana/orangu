@@ -18,9 +18,24 @@ claude plugin eval ./plugin --case <name> --runs 1 --ablation none    # one case
 
 Each run is a batch of model calls on your own account. Results land in `plugin/evals/results/<timestamp>/` (ignored by git) as `aggregate-result.json` and a self-contained `report.html`. On demand, `.github/workflows/plugin-evals.yml` runs the suite with both models pinned, a spend ceiling, and the report kept local; it needs an `ANTHROPIC_API_KEY` repository secret.
 
+## Improving the skills against this suite
+
+Every case is tagged `train` or `holdout`. Four are held out: one routing case each for analyze, improve, and harness, and one negative.
+
+```bash
+npm run eval:plugin:train     # iterate here: read these runs, change one thing, run again
+npm run eval:plugin:holdout   # run once at the end to confirm; never tune against it
+```
+
+- Change one thing per round and aim it at the cause the train runs show; never paste a failing prompt or reply into a skill.
+- If train goes up while holdout stays flat, the change fit these cases rather than the skill's job: revert it.
+- Headroom: when the with-plugin arm already scores 0.95 or more on most cases, the suite cannot show a quality gain. Hold the score and aim at fewer turns, or add cases whose difficulty a person can explain before anyone runs them. Do not add a case only because today's model fails it.
+- Plumbing: a grader that threw, or a run that stopped on a usage limit or a timeout, is not a skill failure. Re-run it before reading the score.
+- Graders: read a sample of graded runs before trusting a score. A case that fails every run whatever the skill says usually has an ambiguous prompt or a grader that asks for something the prompt never stated.
+
 ## Add a case
 
-One directory per case: `prompt.md` (frontmatter for limits and `allowed_tools`, a body phrased the way a person types, never the skill name) and `graders/*.md`, one grader on the result and one on the path Claude took. Keep `llm` rubrics to concrete PASS and FAIL lines, and prefer `regex` and `tool_used`, which are free and stable. `npm test -- test/plugin-evals` checks the shape offline.
+One directory per case: `prompt.md` (frontmatter for limits, `allowed_tools`, and a `train` or `holdout` tag, a body phrased the way a person types, never the skill name) and `graders/*.md`, one grader on the result and one on the path Claude took. Keep `llm` rubrics to concrete PASS and FAIL lines, and prefer `regex` and `tool_used`, which are free and stable. `npm test -- test/plugin-evals` checks the shape offline.
 
 ## Not covered here
 
