@@ -331,7 +331,7 @@ footer .legal{margin:0;font-size:12.5px}
 one session  →  steps, tool calls, errors, outcome evidence
 repo/global  →  recurring patterns worth a larger change
 improve skill  →  a structured proposal you review
-scope policy →  session: apply + verify · repo: apply · global: review</pre></div>
+scope policy →  session + repo: apply + verify · global: review</pre></div>
       </div>
     </div>
   </div>
@@ -344,7 +344,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
     <p class="sec-lead">A session explains what happened. Repo and global views show which patterns deserve a change to the way future work runs.</p>
     <div class="grid g300">
       <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a run.</div></div>
-      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result"><code>repo</code> may be applied explicitly. <code>global</code> is proposal-only.</div></div>
+      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result"><code>repo</code> may be applied explicitly and verified on later sessions. <code>global</code> is proposal-only.</div></div>
     </div>
   </div>
 </section>
@@ -373,7 +373,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
             <div class="demo-kpis">
               <div class="demo-kpi"><em>Observe</em><b class="accent">Every tool call</b><span>input, result, error, and duration</span></div>
               <div class="demo-kpi"><em>Connect</em><b>Parent + subagents</b><span>one ordered session timeline</span></div>
-              <div class="demo-kpi"><em>Improve</em><b>Review proposals</b><span>verify session changes on a later run</span></div>
+              <div class="demo-kpi"><em>Improve</em><b>Review proposals</b><span>verify changes on later sessions</span></div>
             </div>
             <div class="demo-line">Session scope diagnoses one run. Repo and global scopes find recurring patterns worth a larger harness change.</div>
           </div>
@@ -400,10 +400,10 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
           </div>
           <div class="demo-view on" id="demo-panel-suggest" data-demo-view="suggest" role="tabpanel" aria-labelledby="demo-tab-suggest">
             <div class="demo-scope"><span class="on">This session</span><span>Repo</span><span>Global</span></div>
-            <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied · Global: proposed</b></div>
+            <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored receipt of the checks it ran. Orangu validates the receipt's shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> For this session-scope proposal, Orangu resolves a later session from the same workspace and confirms that average failed test runs decreased without increasing tool errors.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored receipt of the checks it ran. Orangu validates the receipt's shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change, and records verified only if failed test runs dropped beyond chance without tool errors rising.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
             </div>
             <p class="demo-note">Local code measures and matches. An optional skill drafts. The browser only copies a handoff. A verified session comparison means its reviewed metrics passed on selected later evidence; it is not a causal or overall-quality claim.</p>
           </div>
@@ -455,14 +455,14 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
       <div class="grid g300" style="margin-bottom:22px">
         <div class="card"><h3>Bounded local evidence</h3><p><code>orangu evidence</code> accepts a supported session or current Orangu Analysis, SlimAnalysis, or Aggregate output. It redacts, bounds, matches, and ranks without a model or network request.</p></div>
         <div class="card"><h3>Optional AI interpretation</h3><p><code>/orangu:improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
-        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the receipt's shape and file list. Session-only later evidence owns the current verification claim.</p></div>
+        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the receipt's shape and file list. Later sessions, compared beyond chance with the sessions before the change, own the verification claim.</p></div>
         <div class="card"><h3>Evidence with an expiry date</h3><p>Claude Code deletes session transcripts once they pass its <code>cleanupPeriodDays</code> window, which defaults to 30 days. <code>orangu harness</code> measures how much history is inside that window, what is within a week of the cutoff, and which Desktop or Cowork transcripts the window does not reach. Reported sizes count primary transcripts; each session's subagent and tool-result files are deleted along with it. A longer window leaves more history to read, and leaves plain-text transcripts on disk for longer. Orangu reports both and picks neither.</p></div>
       </div>
       <div class="compare" aria-label="How Orangu turns local evidence into improvement">
         <div class="compare-row"><b>Raw transcripts</b><span>Contain the record, but leave the reading and synthesis to you.</span></div>
         <div class="compare-row"><b>Local usage counters</b><span>Summarize usage across time and sources.</span></div>
         <div class="compare-row"><b>Instrumented trace platforms</b><span>Capture applications that have been wired to send traces and evaluations.</span></div>
-        <div class="compare-row"><b>orangu</b><span>Connects supported local evidence to a reviewable draft, explicit session/repo application, and session-scope later verification.</span></div>
+        <div class="compare-row"><b>orangu</b><span>Connects supported local evidence to a reviewable draft, explicit session/repo application, and later verification beyond chance.</span></div>
       </div>
     </div>
   </div>
@@ -493,7 +493,7 @@ scope policy →  session: apply + verify · repo: apply · global: review</pre>
     </div>
     <div class="sub">
       <h3>One improvement workflow, explicit stages</h3>
-      <p class="sub-lead">Measurement stays in the local CLI. Session can propose, apply, and verify; repo can propose and apply; global stays proposal-only.</p>
+      <p class="sub-lead">Measurement stays in the local CLI. Session and repo can propose, apply, and verify; global stays proposal-only.</p>
       <div class="skills">
         <div class="skill"><b>/orangu:improve</b><div>Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Never edits the target repository.</div></div>
         <div class="skill"><b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository, run its own checks, and record a receipt. Global proposals are review-only.</div></div>

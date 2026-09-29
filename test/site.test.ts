@@ -184,7 +184,7 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(suggestionPanel).toContain('class="demo-view on"')
     expect(suggestionPanel).not.toContain(' hidden')
     for (const scope of ['This session', 'Repo', 'Global']) expect(demo).toContain(`>${scope}<`)
-    expect(demo).toContain('Session: proposed → applied → verified · Repo: proposed → applied · Global: proposed')
+    expect(demo).toContain('Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed')
     for (const changeClass of [
       'Instruction files',
       'Scripts and CLIs',
@@ -203,7 +203,7 @@ describe('site/index.src.html (authored landing source)', () => {
       '<b>Explicit apply.</b>',
       'handled by orangu:improve',
       'Claude apply',
-      'Orangu resolves a later session from the same workspace',
+      'Orangu compares later sessions from the same workspace with the sessions before the change',
     ]) expect(demo).toContain(copy)
     expect(demo).not.toContain('Codex apply')
     expect(demo).not.toContain('Run locally')
@@ -234,7 +234,7 @@ describe('site/index.src.html (authored landing source)', () => {
       'Every tool call',
       'Parent + subagents',
       'one ordered session timeline',
-      'verify session changes on a later run',
+      'verify changes on later sessions',
     ]) expect(demo, `missing truthful overview capability: ${capability}`).toContain(capability)
 
     for (const timelineEvidence of [
@@ -634,10 +634,11 @@ describe('site/index.src.html (authored landing source)', () => {
 
   it('states the conservative lifecycle without broadening repo or global authority', () => {
     const text = htmlText(src)
-    expect(text).toContain('Session: proposed -> applied -> verified · Repo: proposed -> applied · Global: proposed')
-    expect(text).toContain('repo may be applied explicitly. global is proposal-only.')
-    expect(text).toContain('Session can propose, apply, and verify; repo can propose and apply; global stays proposal-only.')
-    expect(text).toContain('session-scope later verification')
+    expect(text).toContain('Session: proposed -> applied -> verified · Repo: proposed -> applied -> verified · Global: proposed')
+    expect(text).toContain('repo may be applied explicitly and verified on later sessions. global is proposal-only.')
+    expect(text).toContain('Session and repo can propose, apply, and verify; global stays proposal-only.')
+    expect(text).toContain('later verification beyond chance')
+    expect(text, 'no claim that one later session verifies a change').not.toMatch(/\ba later session\b/i)
     expect(text).not.toMatch(/\bglobal\b[^.]{0,80}\b(?:can|may) be (?:applied|verified)\b/i)
     expect(text).not.toMatch(/\b(?:apply|verify) (?:a )?global (?:proposal|change)\b/i)
   })

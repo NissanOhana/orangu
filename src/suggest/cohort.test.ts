@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { COHORT_TOTAL_BYTES, measureCohortEffect, verificationPatch, type CohortCandidate, type CohortDeps, type CohortSession } from './cohort.js'
+import { COHORT_SIDE_BYTES, measureCohortEffect, nextStep, ranOranguLifecycle, verificationPatch, type CohortCandidate, type CohortDeps, type CohortSession } from './cohort.js'
 import { SuggestionStore } from './store.js'
 import type { SuggestionRecord, SuggestionVerificationIntent } from './types.js'
 
@@ -18,6 +18,7 @@ interface FakeSession {
   cwd?: string
   skip?: 'still-settling' | 'unreadable' | 'over-budget'
   bytes?: number
+  ranOrangu?: boolean
 }
 
 const uuid = (n: number): string => `aaaaaaaa-0000-4000-8000-${n.toString(16).padStart(12, '0')}`
@@ -40,6 +41,7 @@ function fakeDeps(sessions: FakeSession[]): CohortDeps & { loaded: string[] } {
         id: s.id,
         path: candidate.path,
         cwd: s.cwd ?? WORKSPACE,
+        ranOrangu: s.ranOrangu ?? false,
         startedAt: s.startedAt,
         endedAt: s.endedAt,
         metrics: {
@@ -152,16 +154,51 @@ describe('measureCohortEffect: selection', () => {
     expect(effect.later).toHaveLength(3)
   })
 
-  it('stops reading once the cohort byte budget is spent', async () => {
-    // Eight 64 MiB sessions (the per-session cap) spend the 512 MiB cohort budget; the rest are never read.
-    const sessions = separated(5).map((s) => ({ ...s, bytes: 64 * MiB }))
+  it('gives each side its own byte budget and stops a side, in order, once it is spent', async () => {
+    // Four 64 MiB sessions (the per-session cap) spend one side's 256 MiB; that side stops there instead of
+    // skipping ahead to smaller sessions, so session size cannot decide who is in a cohort.
+    const sessions = separated(6).map((s) => ({ ...s, bytes: 64 * MiB }))
+    sessions.push({ id: uuid(300), startedAt: T + 50_000, endedAt: T + 51_000, toolCalls: 0, bytes: 1_000 })
     const deps = fakeDeps(sessions)
     const effect = await measureCohortEffect(appliedRecord(), [], deps)
-    expect(COHORT_TOTAL_BYTES).toBe(512 * MiB)
+    expect(COHORT_SIDE_BYTES).toBe(256 * MiB)
+    expect(effect.baseline).toHaveLength(4)
+    expect(effect.later).toHaveLength(4)
+    expect(effect.later.map((s) => s.id)).not.toContain(uuid(300))
+    expect(effect.skipped['budget-spent']).toBe(2)
     expect(deps.loaded).toHaveLength(8)
-    expect(effect.skipped['over-budget']).toBe(2)
-    expect(effect.baseline).toHaveLength(5)
+  })
+
+  it('skips a session over the per-session cap on either side and keeps reading', async () => {
+    const sessions = [...separated(3), { id: uuid(301), startedAt: T + 500, endedAt: T + 600, toolCalls: 0, bytes: 100 * MiB }]
+    const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps(sessions))
+    expect(effect.skipped['over-budget']).toBe(1)
     expect(effect.later).toHaveLength(3)
+  })
+
+  it("never counts orangu's own lifecycle sessions as evidence, so checking cannot manufacture a result", async () => {
+    // Ten ordinary sessions before the change, then only short verify runs after it: without the rule the three
+    // tiny verify sessions would beat the baseline at p = 1/286.
+    const before = separated(10).filter((s) => s.startedAt < T)
+    const verifyRuns = [0, 1, 2, 3].map((i) => ({ id: uuid(400 + i), startedAt: T + 10_000 * (i + 1), endedAt: T + 10_000 * (i + 1) + 500, toolCalls: 2, ranOrangu: true }))
+    const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps([...before, ...verifyRuns]))
+    expect(effect.later).toHaveLength(0)
+    expect(effect.skipped['orangu-session']).toBe(4)
+    expect(effect.verdict).toBe('not-enough-sessions')
+    const withOranguBaseline = [...before.slice(0, 3).map((s) => ({ ...s, ranOrangu: true })), ...before.slice(3)]
+    expect((await measureCohortEffect(appliedRecord(), [], fakeDeps(withOranguBaseline))).skipped['orangu-session']).toBe(3)
+  })
+
+  it('rechecks the workspace identity after reading the transcripts', async () => {
+    const deps = fakeDeps(separated(3))
+    let calls = 0
+    deps.canonicalWorkspace = async () => {
+      calls++
+      if (calls > 1) throw new Error('invalid suggestion artifact: reviewed proposal workspace identity no longer matches')
+      return WORKSPACE
+    }
+    await expect(measureCohortEffect(appliedRecord(), [], deps)).rejects.toThrow(/workspace identity no longer matches/)
+    expect(calls).toBe(2)
   })
 
   it('reports not enough sessions below three per side', async () => {
@@ -175,6 +212,34 @@ describe('measureCohortEffect: selection', () => {
     const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps(sessions))
     expect(effect.verdict).toBe('within-noise')
     expect(() => verificationPatch(effect)).toThrow(/not verified: within-noise/)
+  })
+})
+
+describe('nextStep', () => {
+  it('says a full later cohort is final, and that a verified record needs nothing more', async () => {
+    const overlap = separated(10).map((s) => ({ ...s, toolCalls: s.startedAt < T ? 5 + (s.toolCalls % 3) : 5 + ((s.toolCalls + 1) % 3) }))
+    const full = await measureCohortEffect(appliedRecord(), [], fakeDeps(overlap))
+    expect(full.verdict).toBe('within-noise')
+    expect(nextStep(full)).toBe('the later cohort is complete (10 of 10) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal')
+    const partial = await measureCohortEffect(appliedRecord(), [], fakeDeps(overlap.filter((s) => s.startedAt < T || s.startedAt < T + 5_000)))
+    expect(partial.verdict).toBe('within-noise')
+    expect(nextStep(partial)).toBe(`${partial.later.length} of 10 later sessions counted: later sessions can still join, or reject the proposal`)
+    const done = await measureCohortEffect(appliedRecord({ status: 'verified' }), [], fakeDeps(separated(3)))
+    expect(nextStep(done)).toBe('already recorded as verified')
+  })
+})
+
+describe('ranOranguLifecycle', () => {
+  it('recognises orangu skills, slash commands, and CLI calls, and nothing else', () => {
+    const skill = (name: string) => ({ skills: [{ name }], toolCalls: [] })
+    const bash = (command: string) => ({ skills: [], toolCalls: [{ name: 'Bash', input: { command } }] })
+    for (const name of ['orangu:improve', 'orangu:apply', '/orangu:harness', 'orangu-analyze', 'orangu:feedback']) expect(ranOranguLifecycle(skill(name)), name).toBe(true)
+    for (const command of ["orangu suggest --effect 'sg_0123456789ab' --json --quiet", 'node "/p/bin/orangu.cli.mjs" evidence latest --quiet', 'npx orangu harness --json']) {
+      expect(ranOranguLifecycle(bash(command)), command).toBe(true)
+    }
+    for (const name of ['improve', 'code-review', 'my-orangutan']) expect(ranOranguLifecycle(skill(name)), name).toBe(false)
+    for (const command of ['npm test', 'grep -r orangu src', 'node dist/orangu.js report --open', 'git log --oneline']) expect(ranOranguLifecycle(bash(command)), command).toBe(false)
+    expect(ranOranguLifecycle({ skills: [], toolCalls: [{ name: 'Read', input: { file_path: 'orangu suggest' } }] })).toBe(false)
   })
 })
 

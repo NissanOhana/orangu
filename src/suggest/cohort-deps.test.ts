@@ -24,10 +24,12 @@ afterEach(() => {
 const APPLIED_AT = Date.parse('2026-08-05T00:00:00.000Z')
 const id = (n: number): string => `bbbbbbbb-0000-4000-8000-${n.toString(16).padStart(12, '0')}`
 
-function writeSession(project: string, sessionId: string, cwd: string, startAt: string, toolCalls: number): void {
+function writeSession(project: string, sessionId: string, cwd: string, startAt: string, toolCalls: number, oranguCheck?: 'skill' | 'cli'): void {
   const b = new SessionBuilder({ sessionId, cwd, startAt })
   b.userPrompt('Make the change')
   for (let i = 0; i < toolCalls; i++) b.toolCall('Read', { file_path: `${cwd}/src/f${i}.ts` }, 'ok')
+  if (oranguCheck === 'skill') b.toolCall('Skill', { skill: 'orangu:improve', args: '--verify sg_aaaaaaaaaaaa' }, 'Launching skill: orangu:improve')
+  if (oranguCheck === 'cli') b.toolCall('Bash', { command: "orangu suggest --effect 'sg_aaaaaaaaaaaa' --json --quiet" }, '{}')
   b.assistant([{ type: 'text', text: 'Done.' }])
   const path = join(project, `${sessionId}.jsonl`)
   writeFileSync(path, b.toJsonl())
@@ -89,6 +91,17 @@ function applied(identity: { cwd: string; device: string; inode: string }): Sugg
 }
 
 describe('createCohortDeps over real transcripts', () => {
+  it('skips later sessions that only ran orangu to check the change', async () => {
+    const { cwd, identity } = workspaceWithSessions()
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    writeSession(project, id(300), cwd, '2026-08-14T10:00:00.000Z', 0, 'skill')
+    writeSession(project, id(301), cwd, '2026-08-15T10:00:00.000Z', 0, 'cli')
+    const deps = createCohortDeps({ now: () => Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000 })
+    const effect = await measureCohortEffect(applied(identity), [], deps)
+    expect(effect.later.map((s) => s.id)).toEqual([id(100), id(101), id(102)])
+    expect(effect.skipped['orangu-session']).toBe(2)
+  })
+
   it('reads settled sessions through the evidence manifest and cuts them at the application', async () => {
     const { identity } = workspaceWithSessions()
     const deps = createCohortDeps({ now: () => Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000 })

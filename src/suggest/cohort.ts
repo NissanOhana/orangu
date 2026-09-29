@@ -8,8 +8,11 @@
  * - baseline: the most recent settled sessions that ended before application, minus the finding's own sessions;
  * - later: the first settled sessions that started after application.
  *
- * A session that spans the application belongs to neither. Reading is sequential under a per-session and a
- * whole-cohort byte budget. Discovery and loading are injected so the selection rules are testable without disk.
+ * A session that spans the application belongs to neither, and neither does a session that ran orangu's own
+ * lifecycle (an orangu skill or CLI call): checking a result must never become evidence for it. Reading is
+ * sequential; a session over the 64 MiB evidence cap is skipped on either side, and each side has its own byte
+ * budget and stops, in order, once it is spent, so session size cannot decide who is in a cohort. Discovery and
+ * loading are injected so the selection rules are testable without disk.
  */
 import { basename } from 'node:path'
 import { MAX_EVIDENCE_SESSION_BYTES } from '../adapters/claude-code/evidence-input.js'
@@ -33,15 +36,17 @@ import {
 } from './types.js'
 import { applicationTime, cohortReceiptSummary } from './verification-policy.js'
 
-/** Whole-cohort transcript budget: up to twenty sessions, each still capped at the 64 MiB evidence limit. */
-export const COHORT_TOTAL_BYTES = 512 * 1024 * 1024
+/** Transcript budget per side (baseline, later); each session is also capped at the 64 MiB evidence limit. */
+export const COHORT_SIDE_BYTES = 256 * 1024 * 1024
 
 export const COHORT_SKIP_REASONS = [
   'evidence-session',
+  'orangu-session',
   'spans-application',
   'still-settling',
   'other-workspace',
   'over-budget',
+  'budget-spent',
   'unreadable',
 ] as const
 export type CohortSkipReason = (typeof COHORT_SKIP_REASONS)[number]
@@ -57,6 +62,8 @@ export interface CohortSession {
   path: string
   /** canonical (realpath) session cwd */
   cwd: string
+  /** the session ran an orangu skill or CLI command; see ranOranguLifecycle */
+  ranOrangu: boolean
   startedAt: number
   endedAt: number
   metrics: Record<SuggestionVerificationMetric, number>
@@ -75,6 +82,7 @@ export interface CohortDeps {
 
 export interface CohortEffect {
   id: string
+  status: SuggestionRecord['status']
   scope: 'session' | 'repo'
   appliedAt: number
   verdict: CohortVerdict
@@ -113,6 +121,25 @@ export function metricValues(analysis: CohortAnalysis): Record<SuggestionVerific
     if (!Number.isFinite(values[metric]) || values[metric] < 0) throw new Error(`analysis has an invalid ${metric} value`)
   }
   return values
+}
+
+const ORANGU_SKILL_RE = /^\/?orangu[:-][a-z-]+$/i
+const ORANGU_CLI_RE = /\borangu(?:\.cli\.mjs|\.js)?["']?\s+(?:suggest|evidence|estimate|harness)\b/
+
+/**
+ * True when a session ran orangu itself: an orangu skill (Skill tool or slash command) or an orangu CLI call that
+ * reads evidence or moves a suggestion. Such a session is a check-in on the work, not the work.
+ */
+export function ranOranguLifecycle(session: {
+  skills: ReadonlyArray<{ name: string }>
+  toolCalls: ReadonlyArray<{ name: string; input: unknown }>
+}): boolean {
+  if (session.skills.some((skill) => ORANGU_SKILL_RE.test(skill.name.trim()))) return true
+  return session.toolCalls.some((call) => {
+    if (call.name !== 'Bash' || !call.input || typeof call.input !== 'object') return false
+    const command = (call.input as { command?: unknown }).command
+    return typeof command === 'string' && ORANGU_CLI_RE.test(command)
+  })
 }
 
 /** Session ids named by the finding, whether given as a UUID or as a transcript path. */
@@ -154,10 +181,10 @@ export async function measureCohortEffect(
   const laterCandidates = candidates.filter((c) => c.mtimeMs > appliedAt).sort((a, b) => a.mtimeMs - b.mtimeMs || byPath(a, b))
   skipped['spans-application'] += candidates.filter((c) => c.mtimeMs === appliedAt).length
 
-  let bytesUsed = 0
   const seen = new Set<string>()
   const take = async (list: CohortCandidate[], side: 'baseline' | 'later'): Promise<CohortSession[]> => {
     const accepted: CohortSession[] = []
+    let sideBytes = 0
     for (const candidate of list) {
       if (accepted.length >= COHORT_MAX) break
       const id = candidate.sessionId.toLowerCase()
@@ -166,14 +193,21 @@ export async function measureCohortEffect(
         skipped['evidence-session']++
         continue
       }
-      const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, COHORT_TOTAL_BYTES - bytesUsed)
-      if (maxBytes < 1) {
-        skipped['over-budget']++
-        continue
+      const remaining = COHORT_SIDE_BYTES - sideBytes
+      if (remaining < 1) {
+        skipped['budget-spent']++
+        break
       }
+      const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining)
       const loaded = await deps.loadCandidate(candidate, maxBytes)
-      bytesUsed += loaded.bytesRead
+      sideBytes += loaded.bytesRead
       if ('skip' in loaded) {
+        // Over the fixed per-session cap: skipped on either side alike. Over what is left of this side's
+        // budget: the side stops here rather than reaching past it for smaller sessions.
+        if (loaded.skip === 'over-budget' && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
+          skipped['budget-spent']++
+          break
+        }
         skipped[loaded.skip]++
         continue
       }
@@ -190,6 +224,10 @@ export async function measureCohortEffect(
         skipped['spans-application']++
         continue
       }
+      if (session.ranOrangu) {
+        skipped['orangu-session']++
+        continue
+      }
       seen.add(id)
       accepted.push({ ...session, id })
     }
@@ -197,6 +235,10 @@ export async function measureCohortEffect(
   }
   const baseline = await take(baselineCandidates, 'baseline')
   const later = await take(laterCandidates, 'later')
+  // Recheck after transcript I/O, so replacing the directory while sessions were read cannot keep its trust.
+  if ((await deps.canonicalWorkspace(proposal.workspace)) !== cwd) {
+    throw new Error(`suggestion ${record.id}: the reviewed workspace changed while its sessions were read`)
+  }
 
   const checks = intents.map((intent) =>
     evaluateCheck(
@@ -222,6 +264,7 @@ export async function measureCohortEffect(
 
   return {
     id: record.id,
+    status: record.status,
     scope: record.scope,
     appliedAt,
     verdict: overallVerdict(checks, baseline.length, later.length),
@@ -234,12 +277,15 @@ export async function measureCohortEffect(
 }
 
 /** One plain next step for each verdict. */
-export function nextStep(effect: Pick<CohortEffect, 'id' | 'verdict' | 'baseline' | 'later'>): string {
+export function nextStep(effect: Pick<CohortEffect, 'id' | 'status' | 'verdict' | 'baseline' | 'later'>): string {
   switch (effect.verdict) {
     case 'verified':
-      return `record it: orangu suggest --set ${effect.id} verified`
+      return effect.status === 'verified' ? 'already recorded as verified' : `record it: orangu suggest --set ${effect.id} verified`
     case 'within-noise':
-      return `${effect.later.length} of ${COHORT_MAX} later sessions counted: add sessions, or reject the proposal`
+      // The later cohort is the first ten sessions after application, so once it is full the verdict is final.
+      return effect.later.length >= COHORT_MAX
+        ? `the later cohort is complete (${COHORT_MAX} of ${COHORT_MAX}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal`
+        : `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`
     case 'not-enough-sessions':
       return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)`
     case 'regressed':

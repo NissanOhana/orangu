@@ -12505,13 +12505,15 @@ async function canonicalWorkspace(value) {
 
 // src/suggest/cohort.ts
 import { basename as basename10 } from "node:path";
-var COHORT_TOTAL_BYTES = 512 * 1024 * 1024;
+var COHORT_SIDE_BYTES = 256 * 1024 * 1024;
 var COHORT_SKIP_REASONS = [
   "evidence-session",
+  "orangu-session",
   "spans-application",
   "still-settling",
   "other-workspace",
   "over-budget",
+  "budget-spent",
   "unreadable"
 ];
 function metricValues(analysis) {
@@ -12529,6 +12531,16 @@ function metricValues(analysis) {
     if (!Number.isFinite(values[metric]) || values[metric] < 0) throw new Error(`analysis has an invalid ${metric} value`);
   }
   return values;
+}
+var ORANGU_SKILL_RE = /^\/?orangu[:-][a-z-]+$/i;
+var ORANGU_CLI_RE = /\borangu(?:\.cli\.mjs|\.js)?["']?\s+(?:suggest|evidence|estimate|harness)\b/;
+function ranOranguLifecycle(session) {
+  if (session.skills.some((skill) => ORANGU_SKILL_RE.test(skill.name.trim()))) return true;
+  return session.toolCalls.some((call) => {
+    if (call.name !== "Bash" || !call.input || typeof call.input !== "object") return false;
+    const command = call.input.command;
+    return typeof command === "string" && ORANGU_CLI_RE.test(command);
+  });
 }
 function evidenceSessionIds(selectors) {
   const ids = /* @__PURE__ */ new Set();
@@ -12560,10 +12572,10 @@ async function measureCohortEffect(record2, others, deps) {
   const baselineCandidates = candidates.filter((c) => c.mtimeMs < appliedAt).sort((a, b) => b.mtimeMs - a.mtimeMs || byPath(a, b));
   const laterCandidates = candidates.filter((c) => c.mtimeMs > appliedAt).sort((a, b) => a.mtimeMs - b.mtimeMs || byPath(a, b));
   skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === appliedAt).length;
-  let bytesUsed = 0;
   const seen = /* @__PURE__ */ new Set();
   const take = async (list, side) => {
     const accepted = [];
+    let sideBytes = 0;
     for (const candidate of list) {
       if (accepted.length >= COHORT_MAX) break;
       const id = candidate.sessionId.toLowerCase();
@@ -12572,14 +12584,19 @@ async function measureCohortEffect(record2, others, deps) {
         skipped["evidence-session"]++;
         continue;
       }
-      const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, COHORT_TOTAL_BYTES - bytesUsed);
-      if (maxBytes < 1) {
-        skipped["over-budget"]++;
-        continue;
+      const remaining = COHORT_SIDE_BYTES - sideBytes;
+      if (remaining < 1) {
+        skipped["budget-spent"]++;
+        break;
       }
+      const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining);
       const loaded = await deps.loadCandidate(candidate, maxBytes);
-      bytesUsed += loaded.bytesRead;
+      sideBytes += loaded.bytesRead;
       if ("skip" in loaded) {
+        if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
+          skipped["budget-spent"]++;
+          break;
+        }
         skipped[loaded.skip]++;
         continue;
       }
@@ -12596,6 +12613,10 @@ async function measureCohortEffect(record2, others, deps) {
         skipped["spans-application"]++;
         continue;
       }
+      if (session.ranOrangu) {
+        skipped["orangu-session"]++;
+        continue;
+      }
       seen.add(id);
       accepted.push({ ...session, id });
     }
@@ -12603,6 +12624,9 @@ async function measureCohortEffect(record2, others, deps) {
   };
   const baseline = await take(baselineCandidates, "baseline");
   const later = await take(laterCandidates, "later");
+  if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
+    throw new Error(`suggestion ${record2.id}: the reviewed workspace changed while its sessions were read`);
+  }
   const checks2 = intents.map(
     (intent) => evaluateCheck(
       intent,
@@ -12623,6 +12647,7 @@ async function measureCohortEffect(record2, others, deps) {
   ].sort();
   return {
     id: record2.id,
+    status: record2.status,
     scope: record2.scope,
     appliedAt,
     verdict: overallVerdict(checks2, baseline.length, later.length),
@@ -12636,9 +12661,9 @@ async function measureCohortEffect(record2, others, deps) {
 function nextStep(effect) {
   switch (effect.verdict) {
     case "verified":
-      return `record it: orangu suggest --set ${effect.id} verified`;
+      return effect.status === "verified" ? "already recorded as verified" : `record it: orangu suggest --set ${effect.id} verified`;
     case "within-noise":
-      return `${effect.later.length} of ${COHORT_MAX} later sessions counted: add sessions, or reject the proposal`;
+      return effect.later.length >= COHORT_MAX ? `the later cohort is complete (${COHORT_MAX} of ${COHORT_MAX}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal` : `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`;
     case "not-enough-sessions":
       return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)`;
     case "regressed":
@@ -12755,7 +12780,7 @@ async function loadSettledAnalysis(ref, maxBytes, options = {}) {
     if (analysis.session.source !== "claude-code" || analysis.session.id.toLowerCase() !== ref.sessionId.toLowerCase()) {
       return { skip: "unreadable", bytesRead };
     }
-    return { analysis, bytesRead };
+    return { analysis, session, bytesRead };
   } catch (error) {
     return { skip: error instanceof Error && OVER_BUDGET_RE.test(error.message) ? "over-budget" : "unreadable", bytesRead: 0 };
   }
@@ -12793,7 +12818,7 @@ function createCohortDeps(options = {}) {
         ...options.now ? { now: options.now } : {}
       });
       if ("skip" in loaded) return loaded;
-      const { analysis, bytesRead } = loaded;
+      const { analysis, session, bytesRead } = loaded;
       const { cwd, startedAt, endedAt, live } = analysis.session;
       if (live !== false) return { skip: "still-settling", bytesRead };
       if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute7(cwd)) return { skip: "unreadable", bytesRead };
@@ -12808,7 +12833,10 @@ function createCohortDeps(options = {}) {
       } catch {
         return { skip: "unreadable", bytesRead };
       }
-      return { session: { id: analysis.session.id, path: candidate.path, cwd: canonicalCwd, startedAt, endedAt, metrics }, bytesRead };
+      return {
+        session: { id: analysis.session.id, path: candidate.path, cwd: canonicalCwd, ranOrangu: ranOranguLifecycle(session), startedAt, endedAt, metrics },
+        bytesRead
+      };
     },
     canonicalWorkspace
   };

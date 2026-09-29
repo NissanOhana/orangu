@@ -58,7 +58,7 @@ Node.js 20 or newer. Zero runtime dependencies. More commands, inputs, and limit
 
 Every proposal lands in one of nine change classes: instruction files, scripts and CLIs, hooks, skills to create, skills to discover, subagents and agents, MCP servers, plugins, or workflow and configuration ([data contracts](docs/DATA-CONTRACTS.md)).
 
-One run can be fixed and re-checked against a later session from the same workspace. Repo-wide changes are applied on request. Whole-harness (global) changes stay review-only. A proposal is not an application, and a later comparison is not causal proof; the full boundary is in [determinism and skill authority](docs/DETERMINISM.md).
+A session or repo-wide change is applied on request and re-checked against later sessions from the same workspace; it counts as verified only when those sessions beat the sessions before it beyond chance (`orangu suggest --effect <id>` shows the comparison). Whole-harness (global) changes stay review-only. A proposal is not an application, and a later comparison is not causal proof; the full boundary is in [determinism and skill authority](docs/DETERMINISM.md).
 
 ## Skills
 

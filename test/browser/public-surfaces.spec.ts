@@ -114,8 +114,8 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await expect(suggestions.locator('.demo-proposal')).toContainText('Proposal.')
   await expect(suggestions.locator('.demo-proposal')).toContainText('deterministic check with explicit pass and fail output')
   await expect(suggestions.locator('.demo-verify')).toContainText('Next-run verification.')
-  await expect(suggestions.locator('.demo-verify')).toContainText('average failed test runs decreased')
-  await expect(suggestions.locator('.demo-verify')).toContainText('without increasing tool errors')
+  await expect(suggestions.locator('.demo-verify')).toContainText('failed test runs dropped beyond chance')
+  await expect(suggestions.locator('.demo-verify')).toContainText('without tool errors rising')
   expect(await suggestions.locator('.demo-types span').allTextContents()).toEqual(CHANGE_CLASSES)
 
   await demo.getByRole('tab', { name: 'Overview' }).click()

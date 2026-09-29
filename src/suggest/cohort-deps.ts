@@ -10,7 +10,7 @@ import {
 } from '../adapters/claude-code/discovered-analysis.js'
 import { claudeRoots, listSessions, SESSION_ID_RE } from '../discover/discover.js'
 import { canonicalWorkspace } from './artifacts.js'
-import { metricValues, type CohortDeps } from './cohort.js'
+import { metricValues, ranOranguLifecycle, type CohortDeps } from './cohort.js'
 
 export function createCohortDeps(options: { now?: () => number } = {}): CohortDeps {
   return {
@@ -26,7 +26,7 @@ export function createCohortDeps(options: { now?: () => number } = {}): CohortDe
         ...(options.now ? { now: options.now } : {}),
       })
       if ('skip' in loaded) return loaded
-      const { analysis, bytesRead } = loaded
+      const { analysis, session, bytesRead } = loaded
       const { cwd, startedAt, endedAt, live } = analysis.session
       if (live !== false) return { skip: 'still-settling', bytesRead }
       if (
@@ -46,7 +46,10 @@ export function createCohortDeps(options: { now?: () => number } = {}): CohortDe
       } catch {
         return { skip: 'unreadable', bytesRead }
       }
-      return { session: { id: analysis.session.id, path: candidate.path, cwd: canonicalCwd, startedAt, endedAt, metrics }, bytesRead }
+      return {
+        session: { id: analysis.session.id, path: candidate.path, cwd: canonicalCwd, ranOrangu: ranOranguLifecycle(session), startedAt, endedAt, metrics },
+        bytesRead,
+      }
     },
     canonicalWorkspace,
   }

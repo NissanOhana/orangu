@@ -11,6 +11,7 @@ import { realpath } from 'node:fs/promises'
 import { isAbsolute, resolve } from 'node:path'
 import { analyzeSession } from '../../analyze/analyze.js'
 import type { Analysis } from '../../model/analysis.js'
+import type { Session } from '../../model/session.js'
 import { claudeRoots, listSessions, SESSION_ID_RE, type SessionRef } from '../../discover/discover.js'
 import { parseClaudeCodeSession , withStableSessionRead } from './parse.js'
 import {
@@ -81,7 +82,7 @@ async function exactDiscoveredRef(selector: string, inventory: DiscoveredInvento
 }
 
 export type SettledAnalysisLoad =
-  | { analysis: Analysis; bytesRead: number }
+  | { analysis: Analysis; session: Session; bytesRead: number }
   | { skip: 'still-settling' | 'over-budget' | 'unreadable'; bytesRead: number }
 
 const OVER_BUDGET_RE = /exceeds (?:\d+ bytes|the remaining \d+-byte read budget)/
@@ -127,7 +128,7 @@ export async function loadSettledAnalysis(
     if (analysis.session.source !== 'claude-code' || analysis.session.id.toLowerCase() !== ref.sessionId.toLowerCase()) {
       return { skip: 'unreadable', bytesRead }
     }
-    return { analysis, bytesRead }
+    return { analysis, session, bytesRead }
   } catch (error) {
     return { skip: error instanceof Error && OVER_BUDGET_RE.test(error.message) ? 'over-budget' : 'unreadable', bytesRead: 0 }
   }
