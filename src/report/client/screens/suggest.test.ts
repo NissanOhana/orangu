@@ -168,6 +168,40 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).not.toContain(`/orangu:apply ${record.id}`)
   })
 
+  it('renders a noise-checked cohort receipt with its summary and graded comparisons', () => {
+    const base = proposalRecord('sg_0000000000ae')
+    const record: SuggestionViewRecord = {
+      ...base,
+      status: 'verified',
+      verificationTrust: 'computed-v2',
+      verificationTrusted: true,
+      appliedAt: 5,
+      proposal: { ...base.proposal!, verificationChecks: [{ metric: 'avgToolCalls', comparison: 'decreased' }] },
+      application: { v: 1, summary: 'Applied.', files: ['CLAUDE.md'], checks: [{ name: 'tests', ok: true }], receiptPath: '/tmp/applied.json' },
+      verificationReceipt: {
+        v: 2,
+        method: 'cohort-rank-v1',
+        alpha: 0.05,
+        appliedAt: 5,
+        summary: 'Later sessions beat the baseline beyond chance (3 before, 3 after, p ≤ 0.05): avgToolCalls decreased.',
+        baselineSessionIds: ['b1', 'b2', 'b3'],
+        measuredSessionIds: ['l1', 'l2', 'l3'],
+        confoundedBy: [],
+        checks: [{
+          metric: 'avgToolCalls', comparison: 'decreased', name: 'avgToolCalls decreased', before: 12, after: 8, beforeMedian: 12, afterMedian: 8,
+          pLower: 0.05, pHigher: 1, verdict: 'improved', evidence: 'avgToolCalls: 12 → 8 (median 12 → 8; exact rank test p=0.05; improved)', ok: true,
+        }],
+      },
+      effect: { before: { avgToolCalls: 12 }, after: { avgToolCalls: 8 }, measuredSessionIds: ['l1', 'l2', 'l3'] },
+    }
+    renderSuggest(context('serve', [record]))
+    expect(markup).toContain('data-status="verified"')
+    expect(markup).toContain('verified comparison ✓')
+    expect(markup).not.toContain('Not verified under the current deterministic contract.')
+    expect(markup).toContain('Later sessions beat the baseline beyond chance (3 before, 3 after, p ≤ 0.05)')
+    expect(markup).toContain('exact rank test p=0.05; improved')
+  })
+
   it('never promotes a legacy persisted verified line to the current trust claim', () => {
     const record = proposalRecord('sg_0000000000bb', {
       status: 'verified',
@@ -189,8 +223,8 @@ describe('renderSuggest proposal UX', () => {
   it('the footer speaks the user-facing vocabulary in every scope and never the internal one', () => {
     const foot = (): string => /<p class="small muted sg-foot">([^<]*)<\/p>/.exec(markup)?.[1] ?? ''
     const expected: Record<'session' | 'repo' | 'global', string> = {
-      session: 'Only a later session in the same workspace can verify it.',
-      repo: 'Applied means the reviewed files changed; only a later session can verify it.',
+      session: 'Only later sessions in the same workspace can verify it.',
+      repo: 'Applied means the reviewed files changed; only later sessions can verify it.',
       global: 'Global suggestions stay proposals; nothing is applied from here.',
     }
     for (const scope of ['session', 'repo', 'global'] as const) {

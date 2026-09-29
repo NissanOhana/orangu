@@ -179,6 +179,10 @@ describe('offline report', () => {
     // 2026-08-29 embedded aggregates: +2 B, re-measured. nav.ts counts an embedded global aggregate in
     // any saved file (`data.mode === 'file'` instead of the fileScope predicate), so the published
     // sample's "Global · 11 sessions" label is true; serve still never counts. The cap is untouched.
-    expect(CLIENT_JS.length).toBe(73715)
+    // 2026-09-29 cohort verification: -13 B, re-measured. The Suggest screen renders a trusted receipt of
+    // either version (a noise-checked cohort receipt is v2) instead of only v1, and both footers say
+    // "later sessions" now that one session cannot verify anything. A distinct chip label for the older
+    // comparison was costed at about +200 B, over the cap, and left out: the receipt summary names the method.
+    expect(CLIENT_JS.length).toBe(73702)
   })
 })

@@ -88,7 +88,8 @@ function proposalDetails(record: SuggestionViewRecord | undefined): string {
   const proposal = record.proposal
   const verification = record.verificationReceipt
   const trusted = trustedVerification(record)
-  const lifecycle = verification?.v === 1 && trusted
+  // Trust is computed server-side for either receipt version; both carry a summary and graded checks.
+  const lifecycle = trusted && verification
     ? detail('Later evidence', verification.summary) + detailList('Computed comparisons', verification.checks, ['name', 'evidence'])
     : record.status === 'verified'
       ? detail('Legacy state', 'Not verified under the current deterministic contract.')
@@ -197,9 +198,9 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
 
   // User-facing nouns only (session · finding · evidence · proposal · apply · verify); no internal vocabulary.
   const foot = 'The evidence is deterministic; an optional AI skill drafts the proposal. ' + (scope === 'session'
-    ? 'Only a later session in the same workspace can verify it.'
+    ? 'Only later sessions in the same workspace can verify it.'
     : scope === 'repo'
-      ? 'Applied means the reviewed files changed; only a later session can verify it.'
+      ? 'Applied means the reviewed files changed; only later sessions can verify it.'
       : 'Global suggestions stay proposals; nothing is applied from here.')
 
   const el = h(`<section>
