@@ -79,9 +79,14 @@ export interface SuggestionRecord {
   evidence: SuggestionEvidence
   proposal?: SuggestionProposal
   application?: SuggestionApplicationReceipt
-  verificationReceipt?: SuggestionVerificationReceipt
-  /** Store-owned marker for verification that passed the current computed-evidence contract. */
-  verificationTrust?: 'computed-v1'
+  /** Store-stamped time of the `applied` transition; carried forward so later cohorts can be cut at it. */
+  appliedAt?: number
+  verificationReceipt?: SuggestionVerificationReceipt | SuggestionVerificationReceiptV2
+  /**
+   * Store-owned marker for verification that passed a computed-evidence contract: `computed-v2` is the
+   * noise-aware cohort comparison; `computed-v1` is the earlier later-session mean comparison, still readable.
+   */
+  verificationTrust?: 'computed-v1' | 'computed-v2'
   status: SuggestionStatus
   statusAt: number
   effect?: { before: Record<string, number>; after: Record<string, number>; measuredSessionIds: string[] }
@@ -170,7 +175,43 @@ export interface SuggestionVerificationCheck extends SuggestionVerificationInten
   ok: true
 }
 
-/** Later evidence, kept separate from the claim that a change was merely applied. */
+/** One reviewed check graded over two cohorts; every field is computed by Orangu, never accepted from input. */
+export interface SuggestionCohortCheck extends SuggestionVerificationIntent {
+  name: string
+  /** cohort means */
+  before: number
+  after: number
+  beforeMedian: number
+  afterMedian: number
+  /** exact one-sided rank-test p-values, 6-decimal */
+  pLower: number
+  pHigher: number
+  /** only passing verdicts are ever persisted */
+  verdict: 'improved' | 'held'
+  evidence: string
+  ok: true
+}
+
+/**
+ * Noise-aware later evidence: Orangu picks both cohorts from the proposal's workspace, cut at the
+ * application time, and grades every reviewed check with an exact rank test.
+ */
+export interface SuggestionVerificationReceiptV2 {
+  v: 2
+  method: 'cohort-rank-v1'
+  alpha: 0.05
+  appliedAt: number
+  summary: string
+  /** sorted; settled sessions that ended before application, excluding the finding's own sessions */
+  baselineSessionIds: string[]
+  /** sorted; settled sessions that started after application */
+  measuredSessionIds: string[]
+  /** sorted ids of other changes applied in the same workspace inside the measured window */
+  confoundedBy: string[]
+  checks: SuggestionCohortCheck[]
+}
+
+/** Later evidence, kept separate from the claim that a change was merely applied (legacy v1 shape). */
 export interface SuggestionVerificationReceipt {
   v: 1
   summary: string

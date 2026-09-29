@@ -19,7 +19,14 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SuggestionStore } from './store.js'
 import { suggestionId, suggestionIdV2, suggestionKey } from './id.js'
-import type { Finding, SuggestionApplicationReceipt, SuggestionProposal, SuggestionRecord } from './types.js'
+import type {
+  Finding,
+  SuggestionApplicationReceipt,
+  SuggestionCohortCheck,
+  SuggestionProposal,
+  SuggestionRecord,
+  SuggestionVerificationReceiptV2,
+} from './types.js'
 
 interface StoreWorkerMessage {
   type: string
@@ -98,6 +105,45 @@ function applicationReceipt(id: string, files = ['src/a.ts']): SuggestionApplica
     files,
     checks: [{ name: 'tests', ok: true }],
     receiptPath: join(home, 'proposals', `${id}.applied.json`),
+  }
+}
+
+/** A hand-written v2 cohort receipt for the reviewed `avgToolCalls decreased` check (3 before, 3 after, perfect separation). */
+function cohortPatch(
+  appliedAt: number,
+  check: Partial<SuggestionCohortCheck> = {},
+  receipt: Partial<SuggestionVerificationReceiptV2> = {},
+): { verificationReceipt: SuggestionVerificationReceiptV2; effect: NonNullable<SuggestionRecord['effect']> } {
+  const graded: SuggestionCohortCheck = {
+    metric: 'avgToolCalls',
+    comparison: 'decreased',
+    name: 'avgToolCalls decreased',
+    before: 12,
+    after: 8,
+    beforeMedian: 12,
+    afterMedian: 8,
+    pLower: 0.05,
+    pHigher: 1,
+    verdict: 'improved',
+    evidence: 'avgToolCalls: 12 → 8 (median 12 → 8; exact rank test p=0.05; improved)',
+    ok: true,
+    ...check,
+  }
+  const verificationReceipt: SuggestionVerificationReceiptV2 = {
+    v: 2,
+    method: 'cohort-rank-v1',
+    alpha: 0.05,
+    appliedAt,
+    summary: `Later sessions beat the baseline beyond chance (3 before, 3 after, p ≤ 0.05): ${graded.name}.`,
+    baselineSessionIds: ['b1', 'b2', 'b3'],
+    measuredSessionIds: ['l1', 'l2', 'l3'],
+    confoundedBy: [],
+    checks: [graded],
+    ...receipt,
+  }
+  return {
+    verificationReceipt,
+    effect: { before: { avgToolCalls: graded.before }, after: { avgToolCalls: graded.after }, measuredSessionIds: verificationReceipt.measuredSessionIds },
   }
 }
 
@@ -434,7 +480,61 @@ describe('SuggestionStore', () => {
     await store.transition(repo.record.id, 'kicked-off')
     await store.transition(repo.record.id, 'proposed', { proposal: structuredProposal(repo.record.id) })
     await store.transition(repo.record.id, 'applied', { application: applicationReceipt(repo.record.id) })
-    await expect(store.transition(repo.record.id, 'verified')).rejects.toThrow(/repo\/global suggestions cannot be verified.*session-scoped/)
+    // Repo scope now verifies through the same computed cohort receipt as session scope.
+    await expect(store.transition(repo.record.id, 'verified')).rejects.toThrow(/verification receipt is required/)
+    const appliedAt = (await store.get(repo.record.id))!.appliedAt!
+    const verified = await store.transition(repo.record.id, 'verified', cohortPatch(appliedAt))
+    expect(verified.verificationTrust).toBe('computed-v2')
+
+    // A hand-written applied global line still cannot become verified.
+    const globalApplied: SuggestionRecord = { ...(await store.get(global.record.id))!, status: 'applied', application: applicationReceipt(global.record.id), statusAt: 50 }
+    appendFileSync(join(home, 'suggestions.jsonl'), `${JSON.stringify(globalApplied)}\n`)
+    await expect(store.transition(global.record.id, 'verified', cohortPatch(50))).rejects.toThrow(/global suggestions cannot be verified; they are review-only/)
+  })
+
+  it('stamps appliedAt on application and carries it forward', async () => {
+    const { record } = await store.upsertNew(finding(), 'report')
+    await store.transition(record.id, 'kicked-off')
+    await store.transition(record.id, 'proposed', { proposal: structuredProposal(record.id) })
+    const applied = await store.transition(record.id, 'applied', { application: applicationReceipt(record.id) })
+    expect(applied.appliedAt).toBe(applied.statusAt)
+    const rejected = await store.transition(record.id, 'rejected')
+    expect(rejected.appliedAt).toBe(applied.statusAt)
+    expect((await store.get(record.id))!.appliedAt).toBe(applied.statusAt)
+  })
+
+  it('accepts only a complete, noise-cleared v2 cohort receipt', async () => {
+    const { record } = await store.upsertNew(finding(), 'report')
+    await store.transition(record.id, 'kicked-off')
+    await store.transition(record.id, 'proposed', { proposal: structuredProposal(record.id) })
+    const { appliedAt } = await store.transition(record.id, 'applied', { application: applicationReceipt(record.id) })
+    const ok = cohortPatch(appliedAt!)
+    const legacyShape = {
+      verificationReceipt: {
+        v: 1 as const,
+        summary: 'Later-session comparison passed: avgToolCalls decreased.',
+        measuredSessionIds: ['later-session'],
+        checks: [{ name: 'avgToolCalls decreased', metric: 'avgToolCalls' as const, comparison: 'decreased' as const, before: 12, after: 8, evidence: 'avgToolCalls: 12 → 8 (decreased)', ok: true as const }],
+        receiptPath: join(home, 'proposals', `${record.id}.verified.json`),
+      },
+      effect: { before: { avgToolCalls: 12 }, after: { avgToolCalls: 8 }, measuredSessionIds: ['later-session'] },
+    }
+    await expect(store.transition(record.id, 'verified', legacyShape)).rejects.toThrow(/must be computed by orangu \(v2 cohort receipt\)/)
+    const withinNoise = cohortPatch(appliedAt!, { pLower: 0.4, verdict: 'within-noise' as never })
+    await expect(store.transition(record.id, 'verified', withinNoise)).rejects.toThrow(/cohort receipt/)
+    const twoBaseline = cohortPatch(appliedAt!, {}, { baselineSessionIds: ['b1', 'b2'] })
+    await expect(store.transition(record.id, 'verified', twoBaseline)).rejects.toThrow(/cohort receipt/)
+    const wrongSummary = cohortPatch(appliedAt!, {}, { summary: 'It worked.' })
+    await expect(store.transition(record.id, 'verified', wrongSummary)).rejects.toThrow(/cohort receipt/)
+    const wrongAppliedAt = cohortPatch(appliedAt! + 1)
+    await expect(store.transition(record.id, 'verified', wrongAppliedAt)).rejects.toThrow(/cohort receipt/)
+    await expect(
+      store.transition(record.id, 'verified', { ...ok, effect: { ...ok.effect, after: { avgToolCalls: 1 } } }),
+    ).rejects.toThrow(/must exactly match/)
+    const verified = await store.transition(record.id, 'verified', ok)
+    expect(verified.status).toBe('verified')
+    expect(verified.verificationTrust).toBe('computed-v2')
+    expect(verified.appliedAt).toBe(appliedAt)
   })
 
   it.skipIf(process.platform === 'win32')('hardens Orangu state directories and JSONL to private POSIX modes', async () => {
@@ -635,53 +735,20 @@ describe('SuggestionStore', () => {
         },
       } as never),
     ).rejects.toThrow(/not valid for this transition/)
-    const verificationReceipt = {
-      v: 1 as const,
-      summary: 'Later-session comparison passed: avgToolCalls decreased.',
-      measuredSessionIds: ['later-session'],
-      checks: [
-        {
-          name: 'avgToolCalls decreased',
-          metric: 'avgToolCalls' as const,
-          comparison: 'decreased' as const,
-          before: 12,
-          after: 8,
-          evidence: 'avgToolCalls: 12 → 8 (decreased)',
-          ok: true as const,
-        },
-      ],
-      receiptPath: join(home, 'proposals', `${record.id}.verified.json`),
-    }
-    await expect(store.transition(record.id, 'verified', { verificationReceipt })).rejects.toThrow(/effect is required/)
+    const appliedAt = (await store.get(record.id))!.appliedAt!
+    const ok = cohortPatch(appliedAt)
+    await expect(store.transition(record.id, 'verified', { verificationReceipt: ok.verificationReceipt })).rejects.toThrow(/effect is required/)
     await expect(
       store.transition(record.id, 'verified', {
-        verificationReceipt,
-        effect: { before: { avgToolCalls: 999 }, after: { avgToolCalls: 0 }, measuredSessionIds: ['later-session'] },
+        verificationReceipt: ok.verificationReceipt,
+        effect: { before: { avgToolCalls: 999 }, after: { avgToolCalls: 0 }, measuredSessionIds: ok.effect.measuredSessionIds },
       }),
     ).rejects.toThrow(/must exactly match/)
-    const movedGoalposts = {
-      ...verificationReceipt,
-      summary: 'Later-session comparison passed: avgToolCalls not-increased.',
-      checks: [
-        {
-          ...verificationReceipt.checks[0]!,
-          name: 'avgToolCalls not-increased',
-          comparison: 'not-increased' as const,
-        },
-      ],
-    }
-    await expect(
-      store.transition(record.id, 'verified', {
-        verificationReceipt: movedGoalposts,
-        effect: { before: { avgToolCalls: 12 }, after: { avgToolCalls: 8 }, measuredSessionIds: ['later-session'] },
-      }),
-    ).rejects.toThrow(/exactly match the reviewed proposal verificationChecks/)
-    const verified = await store.transition(record.id, 'verified', {
-      verificationReceipt,
-      effect: { before: { avgToolCalls: 12 }, after: { avgToolCalls: 8 }, measuredSessionIds: ['later-session'] },
-    })
+    const movedGoalposts = cohortPatch(appliedAt, { comparison: 'not-increased', name: 'avgToolCalls not-increased', verdict: 'held', evidence: 'avgToolCalls: 12 → 8 (median 12 → 8; exact rank test p=1; held)' })
+    await expect(store.transition(record.id, 'verified', movedGoalposts)).rejects.toThrow(/exactly match the reviewed proposal verificationChecks/)
+    const verified = await store.transition(record.id, 'verified', ok)
     expect(verified.status).toBe('verified')
-    expect(verified.verificationTrust).toBe('computed-v1')
+    expect(verified.verificationTrust).toBe('computed-v2')
   })
 
   it('does not allow a patch object to overwrite record identity or status', async () => {

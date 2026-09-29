@@ -7,8 +7,7 @@
  * different tasks, so the claim it supports is "later sessions ran lower than the baseline beyond chance",
  * never "the change caused it".
  */
-import type { SuggestionVerificationComparison, SuggestionVerificationIntent } from './types.js'
-import { verificationCheckName } from './verification-policy.js'
+import type { SuggestionVerificationComparison, SuggestionVerificationIntent, SuggestionVerificationMetric } from './types.js'
 
 /** A directional check must beat chance at this one-sided level; a guard fails only past it. */
 export const COHORT_ALPHA = 0.05
@@ -137,20 +136,27 @@ export function evaluateCheck(intent: SuggestionVerificationIntent, before: read
   const beforeMedian = median(before)
   const afterMedian = median(after)
   const verdict = checkVerdict(intent.comparison, beforeMean, afterMean, pLower, pHigher)
-  const p = reportedP(intent.comparison, pLower, pHigher)
+  const numbers = { before: beforeMean, after: afterMean, beforeMedian, afterMedian, pLower, pHigher }
   return {
     metric: intent.metric,
     comparison: intent.comparison,
-    name: verificationCheckName(intent),
-    before: beforeMean,
-    after: afterMean,
-    beforeMedian,
-    afterMedian,
-    pLower,
-    pHigher,
+    // Same rule as verificationCheckName; spelled here so the policy can import this module without a cycle.
+    name: `${intent.metric} ${intent.comparison}`,
+    ...numbers,
     verdict,
-    evidence: `${intent.metric}: ${beforeMean} → ${afterMean} (median ${beforeMedian} → ${afterMedian}; exact rank test p=${p}; ${verdict})`,
+    evidence: checkEvidence(intent.metric, intent.comparison, numbers, verdict),
   }
+}
+
+/** Deterministic rendering of one graded check; the store re-derives it rather than trusting stored text. */
+export function checkEvidence(
+  metric: SuggestionVerificationMetric,
+  comparison: SuggestionVerificationComparison,
+  n: { before: number; after: number; beforeMedian: number; afterMedian: number; pLower: number; pHigher: number },
+  verdict: CohortCheckVerdict,
+): string {
+  const p = reportedP(comparison, n.pLower, n.pHigher)
+  return `${metric}: ${n.before} → ${n.after} (median ${n.beforeMedian} → ${n.afterMedian}; exact rank test p=${p}; ${verdict})`
 }
 
 export function isDirectional(comparison: SuggestionVerificationComparison): boolean {

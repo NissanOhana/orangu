@@ -32,13 +32,13 @@ import {
   type SuggestionStatus,
   type SuggestionStoreLike,
   type SuggestionVerificationIntent,
-  type SuggestionVerificationReceipt,
+  type SuggestionVerificationReceiptV2,
 } from './types.js'
 import {
   hasUniqueVerificationIntents,
   sameVerificationIntentSequence,
-  verificationCheckName,
-  verificationReceiptSummary,
+  applicationTime,
+  cohortReceiptViolation,
 } from './verification-policy.js'
 
 /** lock older than this is a dead writer's leftover and may be broken */
@@ -584,7 +584,8 @@ function isPersistedSuggestionRecord(value: unknown): value is SuggestionRecord 
     !Number.isFinite(record.statusAt) ||
     (record.legacyIds !== undefined && (!stringArray(record.legacyIds) || !record.legacyIds.every(isSuggestionId))) ||
     (record.insightId !== undefined && typeof record.insightId !== 'string') ||
-    (record.cohortFingerprint !== undefined && typeof record.cohortFingerprint !== 'string')
+    (record.cohortFingerprint !== undefined && typeof record.cohortFingerprint !== 'string') ||
+    (record.appliedAt !== undefined && (typeof record.appliedAt !== 'number' || !Number.isFinite(record.appliedAt)))
   ) {
     return false
   }
@@ -686,50 +687,9 @@ function assertApplication(value: unknown, to: SuggestionStatus): asserts value 
   }
 }
 
-function assertVerification(value: unknown, to: SuggestionStatus): asserts value is SuggestionVerificationReceipt {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw lifecycleError(to, 'verification receipt is required')
-  const verification = value as Partial<SuggestionVerificationReceipt>
-  if (
-    verification.v !== 1 ||
-    !nonEmptyString(verification.summary) ||
-    !nonEmptyString(verification.receiptPath) ||
-    !Array.isArray(verification.measuredSessionIds) ||
-    verification.measuredSessionIds.length === 0 ||
-    verification.measuredSessionIds.length > 50 ||
-    !verification.measuredSessionIds.every(nonEmptyString) ||
-    new Set(verification.measuredSessionIds).size !== verification.measuredSessionIds.length ||
-    !Array.isArray(verification.checks) ||
-    verification.checks.length === 0 ||
-    verification.checks.length > 32 ||
-    !verification.checks.every(
-      (check) =>
-        check &&
-        typeof check === 'object' &&
-        check.ok === true &&
-        nonEmptyString(check.name) &&
-        SUGGESTION_VERIFICATION_METRICS.includes(check.metric) &&
-        SUGGESTION_VERIFICATION_COMPARISONS.includes(check.comparison) &&
-        typeof check.before === 'number' &&
-        Number.isFinite(check.before) &&
-        typeof check.after === 'number' &&
-        Number.isFinite(check.after) &&
-        nonEmptyString(check.evidence),
-    )
-  ) {
-    throw lifecycleError(to, 'verification receipt must be structured and contain measured sessions and successful checks')
-  }
-  if (
-    !hasUniqueVerificationIntents(verification.checks) ||
-    verification.checks.some((check) => check.name !== verificationCheckName(check)) ||
-    verification.summary !== verificationReceiptSummary(verification.checks)
-  ) {
-    throw lifecycleError(to, 'verification receipt summary and check names must be deterministic from unique metric/comparison pairs')
-  }
-}
-
 function assertVerificationEffect(
   value: unknown,
-  receipt: SuggestionVerificationReceipt,
+  receipt: SuggestionVerificationReceiptV2,
   to: SuggestionStatus,
 ): asserts value is NonNullable<SuggestionRecord['effect']> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw lifecycleError(to, 'computed verification effect is required')
@@ -775,16 +735,18 @@ function validateTransitionPatch(current: SuggestionRecord, to: SuggestionStatus
       throw lifecycleError(to, 'application files must exactly match the reviewed proposal files')
     }
   } else if (to === 'verified') {
-    if (current.scope !== 'session') {
-      throw lifecycleError(to, 'repo/global suggestions cannot be verified; verify a session-scoped suggestion against later supported sessions instead')
-    }
+    if (current.scope === 'global') throw lifecycleError(to, 'global suggestions cannot be verified; they are review-only')
     assertStructuredProposal(current.proposal, to)
     assertApplication(current.application, to)
-    assertVerification(patch.verificationReceipt, to)
-    if (!sameVerificationIntentSequence(current.proposal.verificationChecks, patch.verificationReceipt.checks)) {
+    const receipt = patch.verificationReceipt
+    if (!receipt || typeof receipt !== 'object' || Array.isArray(receipt)) throw lifecycleError(to, 'verification receipt is required')
+    if (receipt.v !== 2) throw lifecycleError(to, 'verification receipt must be computed by orangu (v2 cohort receipt)')
+    if (!Array.isArray(receipt.checks) || !sameVerificationIntentSequence(current.proposal.verificationChecks, receipt.checks)) {
       throw lifecycleError(to, 'verification receipt checks must exactly match the reviewed proposal verificationChecks')
     }
-    assertVerificationEffect(patch.effect, patch.verificationReceipt, to)
+    const violation = cohortReceiptViolation(receipt, current.proposal.verificationChecks, applicationTime(current))
+    if (violation) throw lifecycleError(to, `invalid cohort receipt: ${violation}`)
+    assertVerificationEffect(patch.effect, receipt, to)
   }
   return patch
 }
@@ -1070,12 +1032,16 @@ export class SuggestionStore implements SuggestionStoreLike {
       throw new Error(`illegal transition ${current.status} → ${to} for ${id} (allowed: ${allowed.join(', ') || 'none'})`)
     }
     const safePatch = validateTransitionPatch(current, to, patch)
+    const statusAt = this.now()
+    // Stamp the application time once, and keep it on every later line (a legacy applied record gets it on its next move).
+    const appliedAt = to === 'applied' ? statusAt : applicationTime(current)
     const next: SuggestionRecord = {
       ...current,
       ...safePatch,
-      ...(to === 'verified' ? { verificationTrust: 'computed-v1' as const } : {}),
+      ...(appliedAt !== undefined ? { appliedAt } : {}),
+      ...(to === 'verified' ? { verificationTrust: 'computed-v2' as const } : {}),
       status: to,
-      statusAt: this.now(),
+      statusAt,
     }
     await this.append(next, guard)
     return next
