@@ -73,6 +73,7 @@ export const KNOWN_FLAGS = new Set([
   'suggestion',
   'receipt',
   'show',
+  'effect',
   'set',
   'proposal',
   'manifest',

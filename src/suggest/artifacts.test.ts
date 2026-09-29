@@ -2,19 +2,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { chmodSync, linkSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
-import { analyzeSession } from '../analyze/analyze.js'
-import type { Analysis } from '../model/analysis.js'
-import { buildCanonicalSession, SessionBuilder } from '../../test/fixtures/session-builder.js'
-import { loadApplicationReceipt, loadProposalArtifacts, loadVerificationReceipt } from './artifacts.js'
+import { SessionBuilder } from '../../test/fixtures/session-builder.js'
+import { canonicalWorkspace, loadApplicationReceipt, loadProposalArtifacts, loadVerificationIntent } from './artifacts.js'
 import type { SuggestionVerificationIntent } from './types.js'
 
 const id = 'sg_0123456789ab'
 let root: string
 let proposals: string
-let baselinePath: string
 let laterPath: string
-const applicationStatusAt = Date.parse('2026-08-15T00:00:00.000Z')
 let workspace: { cwd: string; device: string; inode: string }
 const plannedVerificationChecks = [
   { metric: 'avgToolCalls', comparison: 'decreased' },
@@ -57,13 +52,6 @@ function laterSession(startAt = '2026-08-16T10:00:00.000Z', sessionId = 'bbbbbbb
     .turnDuration(100, 2)
 }
 
-async function analysesByPath(paths: string[]): Promise<Map<string, Analysis>> {
-  const entries = await Promise.all(
-    paths.map(async (path) => [path, analyzeSession(await parseClaudeCodeSession({ path }), { now: applicationStatusAt })] as const),
-  )
-  return new Map(entries)
-}
-
 beforeEach(() => {
   root = mkdtempSync(join(tmpdir(), 'orangu-artifacts-'))
   const workspacePath = join(root, 'workspace')
@@ -74,9 +62,7 @@ beforeEach(() => {
   proposals = join(root, 'proposals')
   mkdirSync(proposals)
   writeFileSync(join(proposals, `${id}.md`), '# Proposal\n', 'utf8')
-  baselinePath = join(root, 'aaaaaaaa-0000-4000-8000-000000000001.jsonl')
   laterPath = join(root, 'bbbbbbbb-0000-4000-8000-000000000002.jsonl')
-  writeFileSync(baselinePath, buildCanonicalSession({ cwd: workspace.cwd }).toJsonl(), 'utf8')
   writeFileSync(laterPath, laterSession().toJsonl(), 'utf8')
 })
 
@@ -210,7 +196,7 @@ describe('suggestion lifecycle artifact validation', () => {
     await expect(loadProposalArtifacts(proposals, id, join(proposals, `${id}.md`), duplicate, workspace)).rejects.toThrow(/duplicate metric\/comparison pairs/)
   })
 
-  it('loads successful application and later verification receipts', async () => {
+  it('loads a successful application receipt and a well-formed verification intent', async () => {
     const applicationPath = json(`${id}.applied.json`, {
       v: 1,
       id,
@@ -228,114 +214,9 @@ describe('suggestion lifecycle artifact validation', () => {
       measuredSessionIds: [laterPath],
       checks: [{ name: 'Untrusted display name', metric: 'avgToolCalls', comparison: 'decreased' }],
     })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const verified = await loadVerificationReceipt(proposals, id, verificationPath, {
-      baselineSessionIds: [baselinePath],
-      applicationStatusAt,
-      expectedChecks: plannedVerificationChecks,
-      workspace,
-      loadAnalysis: async (selector) => analyses.get(selector),
-    })
-    expect(verified.receipt.summary).toBe('Later-session comparison passed: avgToolCalls decreased.')
-    expect(verified.receipt.measuredSessionIds).toEqual(['bbbbbbbb-0000-4000-8000-000000000002'])
-    expect(verified.receipt.checks[0]).toMatchObject({ name: 'avgToolCalls decreased', metric: 'avgToolCalls', comparison: 'decreased', before: 6, after: 0, ok: true })
-    expect(verified.effect).toEqual({
-      before: { avgToolCalls: 6 },
-      after: { avgToolCalls: 0 },
-      measuredSessionIds: ['bbbbbbbb-0000-4000-8000-000000000002'],
-    })
+    await expect(loadVerificationIntent(proposals, id, verificationPath, plannedVerificationChecks)).resolves.toEqual({ selectors: [laterPath] })
   })
-
-  it('accepts a completed baseline that ended before application', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      measuredSessionIds: [laterPath],
-      checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const baseline = analyses.get(baselinePath)!
-    expect(baseline.session.live).toBe(false)
-    expect(baseline.session.endedAt).toBeLessThan(applicationStatusAt)
-
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => analyses.get(selector),
-      }),
-    ).resolves.toMatchObject({ receipt: { measuredSessionIds: ['bbbbbbbb-0000-4000-8000-000000000002'] } })
-  })
-
-  it('rejects a live baseline even when it has a last-record timestamp', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      measuredSessionIds: [laterPath],
-      checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const liveBaseline = { ...analyses.get(baselinePath)!, session: { ...analyses.get(baselinePath)!.session, live: true } }
-
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === baselinePath ? liveBaseline : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/baseline session .* is live/)
-  })
-
-  it('rejects a baseline that grew past the application transition', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      measuredSessionIds: [laterPath],
-      checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const postApplicationBaseline = {
-      ...analyses.get(baselinePath)!,
-      session: { ...analyses.get(baselinePath)!.session, endedAt: applicationStatusAt + 1, live: false },
-    }
-
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === baselinePath ? postApplicationBaseline : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/baseline sessions must end no later than the application transition/)
-  })
-
-  it('rejects a live measured session before computing its metrics', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      measuredSessionIds: [laterPath],
-      checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const liveLater = { ...analyses.get(laterPath)!, session: { ...analyses.get(laterPath)!.session, live: true } }
-
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === laterPath ? liveLater : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/measured session .* is live/)
-  })
-
-  it('does not accept failed checks or reuse baseline sessions as verification', async () => {
+  it('does not accept failed application checks', async () => {
     const applicationPath = json(`${id}.applied.json`, {
       v: 1,
       id,
@@ -344,26 +225,7 @@ describe('suggestion lifecycle artifact validation', () => {
       checks: [{ name: 'unit tests', ok: false }],
     })
     await expect(loadApplicationReceipt(proposals, id, applicationPath, ['scripts/check.mjs'])).rejects.toThrow(/ok must be true/)
-
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      summary: 'Reused the original evidence.',
-      measuredSessionIds: [baselinePath],
-      checks: [{ name: 'comparison', metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath])
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => analyses.get(selector),
-      }),
-    ).rejects.toThrow(/later evidence/)
   })
-
   it('rejects self-attested metric values and unsupported comparison intents', async () => {
     const tampered = json(`${id}.verified.json`, {
       v: 1,
@@ -374,17 +236,14 @@ describe('suggestion lifecycle artifact validation', () => {
       before: { avgToolCalls: 999 },
       after: { avgToolCalls: 0 },
     })
-    await expect(
-      loadVerificationReceipt(proposals, id, tampered, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async () => {
-          throw new Error('must not load self-attested metrics')
-        },
-      }),
-    ).rejects.toThrow(/must be omitted/)
+    await expect(loadVerificationIntent(proposals, id, tampered, plannedVerificationChecks)).rejects.toThrow(/must be omitted/)
+    const selfGraded = json(`${id}.verified.json`, {
+      v: 1,
+      id,
+      measuredSessionIds: [laterPath],
+      checks: [{ metric: 'avgToolCalls', comparison: 'decreased', ok: true }],
+    })
+    await expect(loadVerificationIntent(proposals, id, selfGraded, plannedVerificationChecks)).rejects.toThrow(/must omit ok, before, after, and evidence/)
 
     const unsupported = json(`${id}.verified.json`, {
       v: 1,
@@ -393,17 +252,8 @@ describe('suggestion lifecycle artifact validation', () => {
       measuredSessionIds: [laterPath],
       checks: [{ name: 'claimed', metric: 'moneySaved', comparison: 'roughly-better' }],
     })
-    await expect(
-      loadVerificationReceipt(proposals, id, unsupported, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async () => undefined,
-      }),
-    ).rejects.toThrow(/metric is not supported/)
+    await expect(loadVerificationIntent(proposals, id, unsupported, plannedVerificationChecks)).rejects.toThrow(/metric is not supported/)
   })
-
   it('binds later verification intent to the reviewed proposal checks', async () => {
     const verificationPath = json(`${id}.verified.json`, {
       v: 1,
@@ -412,85 +262,13 @@ describe('suggestion lifecycle artifact validation', () => {
       measuredSessionIds: [laterPath],
       checks: [{ name: 'broader claim', metric: 'avgToolCalls', comparison: 'not-increased' }],
     })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => analyses.get(selector),
-      }),
-    ).rejects.toThrow(/exactly match the reviewed proposal verificationChecks/)
-  })
-
-  it('refuses unresolved, missing-time, and not-later sessions', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      summary: 'Measure a later run.',
-      measuredSessionIds: [laterPath],
-      checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const baselineOnly = await analysesByPath([baselinePath])
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => baselineOnly.get(selector),
-      }),
-    ).rejects.toThrow(/could not be resolved/)
-
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const missingBaselineTime = { ...analyses.get(baselinePath)!, session: { ...analyses.get(baselinePath)!.session, startedAt: undefined } }
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === baselinePath ? missingBaselineTime : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/baselineSessionIds\[0\] has no valid session start timestamp/)
-
-    const missingTime = { ...analyses.get(laterPath)!, session: { ...analyses.get(laterPath)!.session, startedAt: undefined } }
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === laterPath ? missingTime : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/no valid session start timestamp/)
-
-    const notLaterPath = join(root, 'cccccccc-0000-4000-8000-000000000003.jsonl')
-    writeFileSync(notLaterPath, laterSession('2026-08-15T00:00:00.000Z', 'cccccccc-0000-4000-8000-000000000003').toJsonl(), 'utf8')
-    const notLaterAnalyses = await analysesByPath([baselinePath, notLaterPath])
-    writeFileSync(
-      verificationPath,
-      JSON.stringify({
-        v: 1,
-        id,
-        summary: 'Not actually later.',
-        measuredSessionIds: [notLaterPath],
-        checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
-      }),
+    await expect(loadVerificationIntent(proposals, id, verificationPath, plannedVerificationChecks)).rejects.toThrow(
+      /exactly match the reviewed proposal verificationChecks/,
     )
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => notLaterAnalyses.get(selector),
-      }),
-    ).rejects.toThrow(/must start after the application transition/)
+    const otherId = json(`${id}.verified.json`, { v: 1, id: 'sg_ffffffffffff', measuredSessionIds: [laterPath], checks: plannedVerificationChecks })
+    await expect(loadVerificationIntent(proposals, id, otherId, plannedVerificationChecks)).rejects.toThrow(/id must exactly match/)
   })
-
-  it('caps verification selectors and accepts only supported session analyses', async () => {
+  it('caps and de-duplicates verification selectors', async () => {
     const tooMany = json(`${id}.verified.json`, {
       v: 1,
       id,
@@ -498,80 +276,12 @@ describe('suggestion lifecycle artifact validation', () => {
       measuredSessionIds: Array.from({ length: 51 }, (_, index) => `session-${index}`),
       checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
     })
-    await expect(
-      loadVerificationReceipt(proposals, id, tooMany, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async () => undefined,
-      }),
-    ).rejects.toThrow(/1-50 session selectors/)
-
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      summary: 'Unsupported source.',
-      measuredSessionIds: [laterPath],
-      checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const unsupported = { ...analyses.get(laterPath)!, session: { ...analyses.get(laterPath)!.session, source: 'unknown' } }
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === laterPath ? unsupported : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/not a supported Claude session/)
+    await expect(loadVerificationIntent(proposals, id, tooMany, plannedVerificationChecks)).rejects.toThrow(/1-50 session selectors/)
+    const duplicated = json(`${id}.verified.json`, { v: 1, id, measuredSessionIds: [laterPath, laterPath], checks: plannedVerificationChecks })
+    await expect(loadVerificationIntent(proposals, id, duplicated, plannedVerificationChecks)).rejects.toThrow(/duplicate selectors/)
   })
-
-  it('binds every baseline and later analysis to the reviewed canonical workspace', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      measuredSessionIds: [laterPath],
-      checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    const otherWorkspace = join(root, 'other-workspace')
-    mkdirSync(otherWorkspace)
-    const wrongWorkspace = {
-      ...analyses.get(laterPath)!,
-      session: { ...analyses.get(laterPath)!.session, cwd: otherWorkspace },
-    }
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === laterPath ? wrongWorkspace : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/belongs to a different workspace/)
-
-    const missingCwd = { ...analyses.get(baselinePath)!, session: { ...analyses.get(baselinePath)!.session, cwd: undefined } }
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => (selector === baselinePath ? missingCwd : analyses.get(selector)),
-      }),
-    ).rejects.toThrow(/has no resolvable workspace cwd/)
-  })
-
   it('rejects a replacement workspace at the same canonical path', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      measuredSessionIds: [laterPath],
-      checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
+    await expect(canonicalWorkspace(workspace)).resolves.toBe(workspace.cwd)
     const originalWorkspace = `${workspace.cwd}-original`
     renameSync(workspace.cwd, originalWorkspace)
     mkdirSync(workspace.cwd)
@@ -580,38 +290,8 @@ describe('suggestion lifecycle artifact validation', () => {
       device: workspace.device,
       inode: workspace.inode,
     })
-
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: plannedVerificationChecks,
-        workspace,
-        loadAnalysis: async (selector) => analyses.get(selector),
-      }),
-    ).rejects.toThrow(/workspace identity no longer matches/)
+    await expect(canonicalWorkspace(workspace)).rejects.toThrow(/workspace identity no longer matches/)
   })
-
-  it('requires every computed comparison to pass', async () => {
-    const verificationPath = json(`${id}.verified.json`, {
-      v: 1,
-      id,
-      summary: 'Expect the wrong direction.',
-      measuredSessionIds: [laterPath],
-      checks: [{ name: 'more tool calls', metric: 'avgToolCalls', comparison: 'increased' }],
-    })
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    await expect(
-      loadVerificationReceipt(proposals, id, verificationPath, {
-        baselineSessionIds: [baselinePath],
-        applicationStatusAt,
-        expectedChecks: [{ metric: 'avgToolCalls', comparison: 'increased' }],
-        workspace,
-        loadAnalysis: async (selector) => analyses.get(selector),
-      }),
-    ).rejects.toThrow(/did not pass/)
-  })
-
   it('binds an application receipt to exactly the reviewed proposal files', async () => {
     const applicationPath = json(`${id}.applied.json`, {
       v: 1,
@@ -644,14 +324,7 @@ describe('suggestion lifecycle artifact validation', () => {
 
     await loadProposalArtifacts(proposals, id, markdownPath, manifestPath, workspace)
     await loadApplicationReceipt(proposals, id, applicationPath, ['scripts/check.mjs'])
-    const analyses = await analysesByPath([baselinePath, laterPath])
-    await loadVerificationReceipt(proposals, id, verificationPath, {
-      baselineSessionIds: [baselinePath],
-      applicationStatusAt,
-      expectedChecks: plannedVerificationChecks,
-      workspace,
-      loadAnalysis: async (selector) => analyses.get(selector),
-    })
+    await loadVerificationIntent(proposals, id, verificationPath, plannedVerificationChecks)
 
     expect(statSync(proposals).mode & 0o777).toBe(0o700)
     for (const path of [markdownPath, manifestPath, applicationPath, verificationPath]) {

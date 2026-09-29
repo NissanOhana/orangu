@@ -4,12 +4,13 @@
  */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js'
 import { encodeFinding, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import type { Finding } from '../../suggest/types.js'
+import { projectSlug } from '../../discover/discover.js'
 
 const CLI = join(process.cwd(), 'dist', 'orangu.js')
 const helpHasSuggest = (): boolean => {
@@ -77,4 +78,53 @@ describe.skipIf(!existsSync(CLI) || !helpHasSuggest())('orangu suggest/estimate 
     const raw = run(['analyze', secretFixture, '--json', '--no-redact'])
     expect(raw).toContain('sk-ant-api03-abc123def456ghi789')
   })
+
+  it('--effect reads the cohort and --set verified refuses a verdict short of verified', () => {
+    // Hermetic: the only Claude root is a temp one, HOME is empty, and the child runs in a temp workspace.
+    const claudeRoot = mkdtempSync(join(tmpdir(), 'orangu-e2e-claude-'))
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'orangu-e2e-ws-')))
+    const project = join(claudeRoot, 'projects', projectSlug(workspace))
+    mkdirSync(project, { recursive: true })
+    const evidence = join(project, 'aaaaaaaa-0000-4000-8000-000000000001.jsonl')
+    writeFileSync(evidence, buildCanonicalSession({ cwd: workspace }).toJsonl())
+    const env = {
+      ...process.env,
+      ORANGU_HOME: mkdtempSync(join(tmpdir(), 'orangu-e2e-home2-')),
+      HOME: mkdtempSync(join(tmpdir(), 'orangu-e2e-user-')),
+      ORANGU_CLAUDE_ROOTS: claudeRoot,
+      CLAUDE_CONFIG_DIR: claudeRoot,
+    }
+    const cli = (args: string[]) => execFileSync('node', [CLI, ...args], { encoding: 'utf8', env, cwd: workspace, stdio: ['ignore', 'pipe', 'pipe'] })
+    const id = JSON.parse(cli(['suggest', '--rule', 'reread-files', '--scope', 'session', '--session', evidence, '--json'])).record.id as string
+    cli(['suggest', '--set', id, 'kicked-off', '--json'])
+    const proposals = join(env.ORANGU_HOME, 'proposals')
+    writeFileSync(join(proposals, `${id}.md`), '# proposal\n')
+    writeFileSync(
+      join(proposals, `${id}.json`),
+      JSON.stringify({
+        v: 1, id, title: 'Name the file once', changeClass: 'instruction', change: 'Add one line to CLAUDE.md.',
+        evidence: 'The same file was re-read.', expectedEffect: 'Fewer tool calls.', effort: 'S', risk: 'None known.',
+        files: ['CLAUDE.md'], verification: 'Compare later sessions.', verificationChecks: [{ metric: 'avgToolCalls', comparison: 'decreased' }],
+        sources: [{ kind: 'inference', label: 'Smallest change consistent with the evidence' }],
+      }),
+    )
+    cli(['suggest', '--set', id, 'proposed', '--proposal', join(proposals, `${id}.md`), '--manifest', join(proposals, `${id}.json`), '--json'])
+    writeFileSync(join(proposals, `${id}.applied.json`), JSON.stringify({ v: 1, id, summary: 'Added the line.', files: ['CLAUDE.md'], checks: [{ name: 'diff check', ok: true }] }))
+    cli(['suggest', '--set', id, 'applied', '--application', join(proposals, `${id}.applied.json`), '--json'])
+
+    const effect = JSON.parse(cli(['suggest', '--effect', id, '--json']))
+    expect(effect).toMatchObject({ id, verdict: 'not-enough-sessions', baseline: { n: 0 }, later: { n: 0 } })
+    expect(effect.skipped['evidence-session']).toBe(1)
+    expect(cli(['suggest', '--effect', id])).toMatch(/verdict: not-enough-sessions\n {2}next: needs at least 3 settled sessions on each side/)
+    let failure = ''
+    try {
+      cli(['suggest', '--set', id, 'verified', '--json'])
+    } catch (error) {
+      failure = String((error as { stderr?: string }).stderr)
+    }
+    expect(failure).toMatch(/not verified: not-enough-sessions/)
+    expect(JSON.parse(cli(['suggest', '--show', id, '--json'])).record.status).toBe('applied')
+    expect(execFileSync('node', [CLI, '--help'], { encoding: 'utf8' })).toContain('--effect <id>')
+  })
 })
+

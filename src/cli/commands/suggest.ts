@@ -12,12 +12,17 @@
  *                                                record + bounded evidence, with an optional lifecycle preflight
  *   orangu suggest --set <id> proposed --proposal <id>.md [--manifest <id>.json] [--json]
  *   orangu suggest --set <id> applied --application <id>.applied.json [--json]
- *   orangu suggest --set <id> verified --verification <id>.verified.json [--json]
+ *   orangu suggest --effect <id> [--json]      read-only: later sessions vs baseline, beyond chance
+ *   orangu suggest --set <id> verified [--verification <id>.verified.json] [--json]
+ *     (Orangu picks both cohorts; an optional intent may only name sessions inside the later cohort)
  *   orangu suggest --list [--scope <s>] [--json]
  */
 import { matchRule, type CatalogMatch } from '../../suggest/catalog.js'
 import { realpath, stat } from 'node:fs/promises'
-import { loadApplicationReceipt, loadProposalArtifacts, loadVerificationReceipt } from '../../suggest/artifacts.js'
+import { loadApplicationReceipt, loadProposalArtifacts, loadVerificationIntent } from '../../suggest/artifacts.js'
+import { measureCohortEffect, nextStep, verificationPatch, type CohortEffect } from '../../suggest/cohort.js'
+import { createCohortDeps } from '../../suggest/cohort-deps.js'
+import { SESSION_ID_RE } from '../../discover/discover.js'
 import { decodeFinding, kickoffCommand, sessionCohortFingerprint, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import { redactAnalysis, redactValue } from '../../redact/redact.js'
 import { slimAnalysis, type SlimAnalysis } from '../../suggest/slim.js'
@@ -233,23 +238,22 @@ async function cmdSet(store: SuggestionStore, id: string, positionals: string[],
     const proposal = await assertWorkspaceMatch(rec)
     patch = { application: await loadApplicationReceipt(store.proposalsDir, rec.id, applicationPath, proposal.files) }
   } else if (status === 'verified') {
-    if (!verificationPath) throw new Error('--verification <id>.verified.json is required when setting verified')
-    if (rec.scope !== 'session') {
-      throw new Error(`suggestion ${id} has ${rec.scope} scope; later verification is currently supported only for one-session suggestions`)
-    }
+    if (rec.scope === 'global') throw new Error(`suggestion ${id}: global suggestions are review-only and cannot be verified`)
     if (!rec.application) throw new Error(`suggestion ${id} has no validated application receipt to verify`)
     if (!rec.proposal?.verificationChecks?.length) {
       throw new Error(`suggestion ${id} has no reviewed structured verification checks`)
     }
     if (!rec.proposal.workspace) throw new Error(`suggestion ${id} has no canonical proposal workspace`)
-    const verified = await loadVerificationReceipt(store.proposalsDir, rec.id, verificationPath, {
-      baselineSessionIds: rec.sessionIds,
-      applicationStatusAt: rec.statusAt,
-      expectedChecks: rec.proposal.verificationChecks,
-      workspace: rec.proposal.workspace,
-      loadAnalysis: createDiscoveredClaudeAnalysisLoader(undefined, { requireQuiet: true }),
-    })
-    patch = { verificationReceipt: verified.receipt, effect: verified.effect }
+    const effect = await measureCohortEffect(rec, await store.all(), createCohortDeps())
+    if (verificationPath) {
+      const { selectors } = await loadVerificationIntent(store.proposalsDir, rec.id, verificationPath, rec.proposal.verificationChecks)
+      for (const selector of selectors) {
+        if (!(await inLaterCohort(selector, effect))) {
+          throw new Error(`verification intent names ${selector}, which is not in the later cohort orangu measured`)
+        }
+      }
+    }
+    patch = verificationPatch(effect)
   }
   const next = await store.transition(id, status, patch)
   if (flagBool(flags, 'json')) return emit(visible(next, flags), flags) as unknown as void
@@ -310,11 +314,64 @@ async function cmdCreate(store: SuggestionStore, positionals: string[], flags: R
   process.stdout.write(`  ${created ? 'created' : 'already existed'}. Continue with:\n    ${command}\n`)
 }
 
+/** A compatibility intent may name a later session by full id or by transcript path; either must be in the cohort. */
+async function inLaterCohort(selector: string, effect: CohortEffect): Promise<boolean> {
+  const value = selector.trim()
+  if (SESSION_ID_RE.test(value)) return effect.later.some((session) => session.id === value.toLowerCase())
+  let canonical: string
+  try {
+    canonical = await realpath(value)
+  } catch {
+    return false
+  }
+  for (const session of effect.later) {
+    try {
+      if ((await realpath(session.path)) === canonical) return true
+    } catch {
+      // a session that vanished after it was measured cannot be named
+    }
+  }
+  return false
+}
+
+function effectView(effect: CohortEffect) {
+  return {
+    id: effect.id,
+    scope: effect.scope,
+    verdict: effect.verdict,
+    appliedAt: effect.appliedAt,
+    baseline: { n: effect.baseline.length, ids: effect.baseline.map((session) => session.id) },
+    later: { n: effect.later.length, ids: effect.later.map((session) => session.id) },
+    checks: effect.checks,
+    confoundedBy: effect.confoundedBy,
+    skipped: effect.skipped,
+    next: nextStep(effect),
+  }
+}
+
+async function cmdEffect(store: SuggestionStore, id: string, flags: Record<string, string | boolean>): Promise<void> {
+  const rec = await store.get(id)
+  if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`)
+  const effect = await measureCohortEffect(rec, await store.all(), createCohortDeps())
+  const view = visible(effectView(effect), flags)
+  if (flagBool(flags, 'json')) return emit(view, flags) as unknown as void
+  const w = (s: string) => process.stdout.write(s + '\n')
+  w(`  ${terminal(view.id)}  later sessions vs baseline · ${view.baseline.n} before, ${view.later.n} after the change`)
+  for (const check of view.checks) w(`    ${terminal(check.evidence)}`)
+  if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal).join(', ')} (not attributable to this change alone)`)
+  const skipped = Object.entries(view.skipped).filter(([, count]) => count > 0)
+  if (skipped.length) w(`    skipped: ${skipped.map(([reason, count]) => `${reason} ${count}`).join(', ')}`)
+  w(`  verdict: ${view.verdict}`)
+  w(`  next: ${terminal(view.next)}`)
+}
+
 export async function cmdSuggest(positionals: string[], flags: Record<string, string | boolean>): Promise<void> {
   const store = new SuggestionStore()
   if (flagBool(flags, 'list')) return cmdList(store, flags)
   const show = flagStr(flags, 'show')
   if (show) return cmdShow(store, show, flags)
+  const effect = flagStr(flags, 'effect')
+  if (effect) return cmdEffect(store, effect, flags)
   const set = flagStr(flags, 'set')
   if (set) return cmdSet(store, set, positionals, flags)
   return cmdCreate(store, positionals, flags)

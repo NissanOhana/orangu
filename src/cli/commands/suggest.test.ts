@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession, SessionBuilder } from '../../../test/fixtures/session-builder.js'
@@ -16,8 +16,12 @@ let claudeHome: string
 let fixturePath: string
 let laterFixturePath: string
 let out: string[]
+let savedHome: string | undefined
 
 beforeEach(() => {
+  // claudeRoots always appends the home roots: an empty temp HOME keeps the machine's own sessions out of cohorts.
+  savedHome = process.env['HOME']
+  process.env['HOME'] = mkdtempSync(join(tmpdir(), 'orangu-cmd-home-'))
   home = mkdtempSync(join(tmpdir(), 'orangu-cmd-'))
   process.env['ORANGU_HOME'] = home
   claudeHome = mkdtempSync(join(tmpdir(), 'orangu-claude-'))
@@ -46,6 +50,8 @@ afterEach(() => {
   vi.useRealTimers()
   delete process.env['ORANGU_HOME']
   delete process.env['CLAUDE_CONFIG_DIR']
+  if (savedHome === undefined) delete process.env['HOME']
+  else process.env['HOME'] = savedHome
   vi.restoreAllMocks()
 })
 
@@ -288,87 +294,92 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
     await cmdSuggest(['applied'], { set: id, application: applicationPath, json: true })
     expect(JSON.parse(stdout()).application).toMatchObject({ v: 1, summary: 'Added the script.', receiptPath: applicationPath })
 
+    // Orangu picks both cohorts from this workspace, cut at the application (2026-08-15). The finding's own
+    // session is left out of the baseline; sessions must be quiet for 30 minutes, so move the clock past ctime.
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'))
+    const project = join(claudeHome, 'projects', '-fixture')
+    const writeWorkspaceSession = (sessionId: string, startAt: string, toolCalls: number, mtime?: string): string => {
+      const b = new SessionBuilder({ sessionId, startAt, cwd: process.cwd() }).userPrompt('Work.')
+      for (let i = 0; i < toolCalls; i++) b.toolCall('Read', { file_path: `src/f${i}.ts` }, 'ok')
+      b.assistant([{ type: 'text', text: 'Done.' }], { usage: { input_tokens: 1, output_tokens: 1 } })
+      const path = join(project, `${sessionId}.jsonl`)
+      writeFileSync(path, b.toJsonl())
+      if (mtime) utimesSync(path, new Date(mtime), new Date(mtime))
+      return path
+    }
+    writeWorkspaceSession('dddddddd-0000-4000-8000-000000000011', '2026-08-10T10:00:00.000Z', 6, '2026-08-10T12:00:00.000Z')
+    writeWorkspaceSession('dddddddd-0000-4000-8000-000000000012', '2026-08-11T10:00:00.000Z', 7, '2026-08-11T12:00:00.000Z')
+    writeWorkspaceSession('dddddddd-0000-4000-8000-000000000013', '2026-08-12T10:00:00.000Z', 8, '2026-08-12T12:00:00.000Z')
+
+    out = []
+    await cmdSuggest([], { effect: id, json: true })
+    const early = JSON.parse(stdout())
+    expect(early).toMatchObject({ id, verdict: 'not-enough-sessions', baseline: { n: 3 }, later: { n: 1 } })
+    expect(early.skipped['evidence-session']).toBe(1)
+    expect(early.next).toMatch(/needs at least 3 settled sessions on each side \(has 3 before, 1 after\)/)
+    await expect(cmdSuggest(['verified'], { set: id, json: true })).rejects.toThrow(/not verified: not-enough-sessions/)
+
+    writeWorkspaceSession('dddddddd-0000-4000-8000-000000000021', '2026-08-17T10:00:00.000Z', 1)
+    writeWorkspaceSession('dddddddd-0000-4000-8000-000000000022', '2026-08-18T10:00:00.000Z', 0)
+
     const verificationPath = join(proposals, `${id}.verified.json`)
     writeFileSync(
       verificationPath,
       JSON.stringify({
         v: 1,
         id,
-        summary: 'Tampered metrics.',
-        measuredSessionIds: [laterFixturePath],
+        measuredSessionIds: ['bbbbbbbb-0000-4000-8000-000000000002'],
         checks: [{ name: 'claimed improvement', metric: 'avgToolCalls', comparison: 'decreased', before: 999, after: 0, ok: true }],
         before: { avgToolCalls: 999 },
         after: { avgToolCalls: 0 },
       }),
     )
     await expect(cmdSuggest(['verified'], { set: id, verification: verificationPath, json: true })).rejects.toThrow(/must be omitted|must omit/)
-
-    writeFileSync(
-      verificationPath,
-      JSON.stringify({
-        v: 1,
-        id,
-        summary: 'Missing session.',
-        measuredSessionIds: [join(home, 'does-not-exist.jsonl')],
-        checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
-      }),
-    )
-    await expect(cmdSuggest(['verified'], { set: id, verification: verificationPath, json: true })).rejects.toThrow(/could not be resolved/)
-
     const fabricatedPath = join(proposals, 'cccccccc-0000-4000-8000-000000000003.jsonl')
-    writeFileSync(
-      fabricatedPath,
-      new SessionBuilder({ sessionId: 'cccccccc-0000-4000-8000-000000000003', startAt: '2026-08-17T10:00:00.000Z' })
-        .userPrompt('Fabricated later evidence.')
-        .tick(100)
-        .assistant([{ type: 'text', text: 'Done.' }], { usage: { input_tokens: 1, output_tokens: 1 } })
-        .turnDuration(100, 2)
-        .toJsonl(),
-    )
+    writeFileSync(fabricatedPath, '{}\n')
     writeFileSync(
       verificationPath,
-      JSON.stringify({
-        v: 1,
-        id,
-        summary: 'Fabricated session under the writable proposal directory.',
-        measuredSessionIds: [fabricatedPath],
-        checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
-      }),
+      JSON.stringify({ v: 1, id, measuredSessionIds: [fabricatedPath], checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }] }),
     )
-    await expect(cmdSuggest(['verified'], { set: id, verification: verificationPath, json: true })).rejects.toThrow(/could not be resolved/)
+    await expect(cmdSuggest(['verified'], { set: id, verification: verificationPath, json: true })).rejects.toThrow(
+      /names .*cccccccc-0000-4000-8000-000000000003\.jsonl, which is not in the later cohort orangu measured/,
+    )
 
-    // Verification accepts immutable baseline/later manifests only after a
-    // 30-minute quiet window; advance beyond filesystem ctime.
-    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'))
-    writeFileSync(
-      verificationPath,
-      JSON.stringify({
-        v: 1,
-        id,
-        summary: 'Reused baseline.',
-        measuredSessionIds: [fixturePath],
-        checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
-      }),
-    )
-    await expect(cmdSuggest(['verified'], { set: id, verification: verificationPath, json: true })).rejects.toThrow(/later evidence/)
+    out = []
+    await cmdSuggest([], { effect: id })
+    expect(stdout()).toMatch(/avgToolCalls: 7 → 0\.333333 \(median 7 → 0; exact rank test p=0\.05; improved\)/)
+    expect(stdout()).toMatch(/verdict: verified/)
+    const listed = readFileSync(join(home, 'suggestions.jsonl'), 'utf8')
 
+    // The compatibility intent may name later sessions, but only ones inside the cohort; it chooses nothing.
     writeFileSync(
       verificationPath,
-      JSON.stringify({
-        v: 1,
-        id,
-        summary: 'A later session used the script.',
-        measuredSessionIds: ['bbbbbbbb-0000-4000-8000-000000000002'],
-        checks: [{ name: 'fewer tool calls', metric: 'avgToolCalls', comparison: 'decreased' }],
-      }),
+      JSON.stringify({ v: 1, id, measuredSessionIds: [laterFixturePath], checks: [{ metric: 'avgToolCalls', comparison: 'decreased' }] }),
     )
+    expect(readFileSync(join(home, 'suggestions.jsonl'), 'utf8')).toBe(listed) // --effect wrote nothing
     out = []
     await cmdSuggest(['verified'], { set: id, verification: verificationPath, json: true })
     const verified = JSON.parse(stdout())
     expect(verified.status).toBe('verified')
-    expect(verified.verificationReceipt.measuredSessionIds).toEqual(['bbbbbbbb-0000-4000-8000-000000000002'])
-    expect(verified.verificationReceipt.checks[0]).toMatchObject({ metric: 'avgToolCalls', before: 6, after: 0, ok: true })
-    expect(verified.effect.after.avgToolCalls).toBe(0)
+    expect(verified.verificationReceipt).toMatchObject({
+      v: 2,
+      baselineSessionIds: ['dddddddd-0000-4000-8000-000000000011', 'dddddddd-0000-4000-8000-000000000012', 'dddddddd-0000-4000-8000-000000000013'],
+      measuredSessionIds: ['bbbbbbbb-0000-4000-8000-000000000002', 'dddddddd-0000-4000-8000-000000000021', 'dddddddd-0000-4000-8000-000000000022'],
+    })
+    expect(verified.verificationReceipt.checks[0]).toMatchObject({ metric: 'avgToolCalls', before: 7, after: 0.333333, verdict: 'improved', ok: true })
+    out = []
+    await cmdSuggest([], { show: id, json: true })
+    expect(JSON.parse(stdout()).verificationTrusted).toBe(true)
+  })
+
+  it('--effect refuses global scope, which can never be applied or verified', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-15T00:00:00.000Z'))
+    await cmdSuggest([], { rule: 'reread-files', scope: 'global', session: fixturePath, json: true })
+    const globalId = JSON.parse(stdout()).record.id as string
+    out = []
+    await expect(cmdSuggest([], { effect: globalId, json: true })).rejects.toThrow(/global suggestions are review-only/)
+    await expect(cmdSuggest(['verified'], { set: globalId, json: true })).rejects.toThrow(/illegal transition new → verified/)
   })
 
   it('--list filters by scope', async () => {

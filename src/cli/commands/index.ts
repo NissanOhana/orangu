@@ -53,6 +53,8 @@ export const EXTRA_HELP: string[] = [
     '                                  | [<sg_id>] --rule <r> --scope <s>',
     '                                    --session <a,b> [--title <t>]',
     '                                  | --show <id> [--for-proposal|--for-apply]',
+    '                                  | --effect <id>  (later sessions vs baseline,',
+    '                                    beyond chance; read-only)',
     '                                  | --set <id> <status> [--proposal <path>]',
     '                                    [--manifest <path>]',
     '                                    [--application <path>]',

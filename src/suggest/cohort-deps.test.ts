@@ -9,7 +9,7 @@ import { measureCohortEffect } from './cohort.js'
 import { createCohortDeps } from './cohort-deps.js'
 import type { SuggestionRecord } from './types.js'
 
-const ENV_KEYS = ['ORANGU_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR'] as const
+const ENV_KEYS = ['ORANGU_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR', 'HOME'] as const
 let saved: Record<string, string | undefined> = {}
 beforeEach(() => {
   saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
@@ -48,6 +48,8 @@ function workspaceWithSessions(): { cwd: string; identity: { cwd: string; device
   writeSession(project, id(200), `${cwd}-elsewhere`, '2026-08-13T10:00:00.000Z', 0)
   process.env['ORANGU_CLAUDE_ROOTS'] = root
   process.env['CLAUDE_CONFIG_DIR'] = root
+  // claudeRoots always appends the home roots; an empty temp HOME keeps the machine's sessions out.
+  process.env['HOME'] = mkdtempSync(join(tmpdir(), 'orangu-cohort-home-'))
   const st = statSync(cwd, { bigint: true })
   return { cwd, identity: { cwd, device: String(st.dev), inode: String(st.ino) } }
 }

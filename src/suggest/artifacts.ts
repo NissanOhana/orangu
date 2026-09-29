@@ -18,17 +18,13 @@ import type {
   SuggestionProposal,
   SuggestionWorkspaceIdentity,
   SuggestionVerificationComparison,
-  SuggestionVerificationCheck,
   SuggestionVerificationIntent,
   SuggestionVerificationMetric,
-  SuggestionVerificationReceipt,
 } from './types.js'
 import { SUGGESTION_VERIFICATION_COMPARISONS, SUGGESTION_VERIFICATION_METRICS } from './types.js'
 import {
   hasUniqueVerificationIntents,
   sameVerificationIntentSet,
-  verificationCheckName,
-  verificationReceiptSummary,
 } from './verification-policy.js'
 
 const MAX_JSON_BYTES = 64 * 1024
@@ -39,41 +35,6 @@ const MAX_VERIFICATION_SESSIONS = 50
 const ID_RE = /^sg_[0-9a-f]{12}$/
 
 type JsonObject = Record<string, unknown>
-
-interface LoadedVerification {
-  receipt: SuggestionVerificationReceipt
-  effect: { before: Record<string, number>; after: Record<string, number>; measuredSessionIds: string[] }
-}
-
-interface VerificationAnalysis {
-  session: { id: string; source: string; cwd?: string; startedAt?: number; endedAt?: number; live: boolean }
-  summary: {
-    totalTokens: number
-    toolCalls: number
-    toolErrors: number
-    activeMs: number
-    contextPeak: number
-    outcomes: { testRunsFailed: number; buildRunsFailed: number }
-  }
-  turns: Array<{ interrupted: boolean }>
-}
-
-interface VerificationContext {
-  baselineSessionIds: string[]
-  applicationStatusAt: number
-  expectedChecks: SuggestionVerificationIntent[]
-  /** Canonical path and filesystem identity captured with the reviewed proposal. */
-  workspace: SuggestionWorkspaceIdentity
-  loadAnalysis: (selector: string) => Promise<VerificationAnalysis | undefined>
-}
-
-interface ResolvedAnalysis {
-  id: string
-  startedAt: number
-  endedAt?: number
-  live: boolean
-  metrics: Record<SuggestionVerificationMetric, number>
-}
 
 function artifactError(message: string): Error {
   return new Error(`invalid suggestion artifact: ${message}`)
@@ -334,42 +295,23 @@ export async function loadApplicationReceipt(
   }
 }
 
-export async function loadVerificationReceipt(
+/**
+ * A skill-written verification intent is optional and chooses nothing: Orangu picks both cohorts itself. When
+ * present it must be this record's bounded intent whose checks match the reviewed set exactly, and the caller
+ * checks that every selector it names is inside the later cohort Orangu measured.
+ */
+export async function loadVerificationIntent(
   proposalsDir: string,
   id: string,
   receiptPath: string,
-  context: VerificationContext,
-): Promise<LoadedVerification> {
-  const { path, value } = await readJsonArtifact(proposalsDir, receiptPath, `${id}.verified.json`)
+  expectedChecks: SuggestionVerificationIntent[],
+): Promise<{ selectors: string[] }> {
+  const { value } = await readJsonArtifact(proposalsDir, receiptPath, `${id}.verified.json`)
   versionAndId(value, id)
-  if (!Number.isFinite(context.applicationStatusAt) || context.applicationStatusAt <= 0) {
-    throw artifactError('application status timestamp is missing or invalid')
-  }
   optionalText(value['summary'], 'summary', 4_000)
-  const baselineSelectors = sessionSelectors(context.baselineSessionIds, 'baselineSessionIds')
-  const laterSelectors = sessionSelectors(value['measuredSessionIds'], 'measuredSessionIds')
-  const intents = verificationIntents(value, context.expectedChecks)
-  const workspaceCwd = await canonicalWorkspace(context.workspace)
-
-  // The loader owns one aggregate transcript-byte budget. Keep resolution
-  // sequential so at most one bounded raw session is resident at a time.
-  const baseline = await resolveAnalyses(baselineSelectors, 'baselineSessionIds', workspaceCwd, context.loadAnalysis)
-  const later = await resolveAnalyses(laterSelectors, 'measuredSessionIds', workspaceCwd, context.loadAnalysis)
-  // Recheck after transcript I/O so replacing the directory during resolution
-  // cannot preserve trust merely because the canonical path stayed the same.
-  await canonicalWorkspace(context.workspace)
-  const measuredSessionIds = validateVerificationTimeline(baseline, later, context.applicationStatusAt)
-  const computed = computeVerificationChecks(intents, baseline, later)
-  return {
-    receipt: {
-      v: 1,
-      summary: verificationReceiptSummary(computed.checks),
-      measuredSessionIds,
-      checks: computed.checks,
-      receiptPath: path,
-    },
-    effect: { before: computed.before, after: computed.after, measuredSessionIds },
-  }
+  const selectors = sessionSelectors(value['measuredSessionIds'], 'measuredSessionIds')
+  verificationIntents(value, expectedChecks)
+  return { selectors }
 }
 
 function verificationPairs(value: unknown, label: string): SuggestionVerificationIntent[] {
@@ -409,76 +351,6 @@ function verificationIntents(value: JsonObject, expectedChecks: SuggestionVerifi
   return reviewed
 }
 
-function validateVerificationTimeline(baseline: ResolvedAnalysis[], later: ResolvedAnalysis[], applicationStatusAt: number): string[] {
-  if (new Set(baseline.map((entry) => entry.id)).size !== baseline.length) {
-    throw artifactError('baselineSessionIds must resolve to distinct sessions')
-  }
-  const baselineIds = new Set(baseline.map((entry) => entry.id))
-  if (later.some((entry) => baselineIds.has(entry.id))) {
-    throw artifactError('measuredSessionIds must resolve to later evidence, not a baseline session')
-  }
-  if (new Set(later.map((entry) => entry.id)).size !== later.length) {
-    throw artifactError('measuredSessionIds must resolve to distinct sessions')
-  }
-  const baselineEndTimes = baseline.map((entry) => completedSessionEnd(entry, 'baseline'))
-  later.forEach((entry) => completedSessionEnd(entry, 'measured'))
-  const baselineMaxStartedAt = Math.max(...baseline.map((entry) => entry.startedAt))
-  if (baselineMaxStartedAt > applicationStatusAt) {
-    throw artifactError('baseline sessions must start no later than the application transition')
-  }
-  const baselineMaxEndedAt = Math.max(...baselineEndTimes)
-  if (baselineMaxEndedAt > applicationStatusAt) {
-    throw artifactError('baseline sessions must end no later than the application transition')
-  }
-  const notLater = later.find((entry) => entry.startedAt <= Math.max(applicationStatusAt, baselineMaxEndedAt))
-  if (notLater) {
-    throw artifactError(`measured session ${notLater.id} must start after the application transition and every baseline session`)
-  }
-  return later.map((entry) => entry.id).sort()
-}
-
-function completedSessionEnd(entry: ResolvedAnalysis, label: 'baseline' | 'measured'): number {
-  if (entry.live !== false) {
-    throw artifactError(`${label} session ${entry.id} is live and cannot be used for verification`)
-  }
-  if (typeof entry.endedAt !== 'number' || !Number.isFinite(entry.endedAt) || entry.endedAt <= 0) {
-    throw artifactError(`${label} session ${entry.id} has no valid session end timestamp`)
-  }
-  if (entry.endedAt < entry.startedAt) {
-    throw artifactError(`${label} session ${entry.id} ends before it starts`)
-  }
-  return entry.endedAt
-}
-
-function computeVerificationChecks(
-  intents: SuggestionVerificationIntent[],
-  baseline: ResolvedAnalysis[],
-  later: ResolvedAnalysis[],
-): { checks: SuggestionVerificationCheck[]; before: Record<string, number>; after: Record<string, number> } {
-  const entries = intents.map((intent, index) => {
-    const before = averageMetric(baseline, intent.metric)
-    const after = averageMetric(later, intent.metric)
-    if (!compareMetric(before, after, intent.comparison)) {
-      throw artifactError(`checks[${index}] did not pass: ${intent.metric} ${intent.comparison} (before ${before}, after ${after})`)
-    }
-    const check: SuggestionVerificationCheck = {
-      name: verificationCheckName(intent),
-      metric: intent.metric,
-      comparison: intent.comparison,
-      before,
-      after,
-      evidence: `${intent.metric}: ${before} → ${after} (${intent.comparison})`,
-      ok: true,
-    }
-    return check
-  })
-  return {
-    checks: entries,
-    before: Object.fromEntries(entries.map((check) => [check.metric, check.before])),
-    after: Object.fromEntries(entries.map((check) => [check.metric, check.after])),
-  }
-}
-
 function sessionSelectors(value: unknown, label: string): string[] {
   if (!Array.isArray(value) || value.length < 1 || value.length > MAX_VERIFICATION_SESSIONS) {
     throw artifactError(`${label} must contain 1-${MAX_VERIFICATION_SESSIONS} session selectors`)
@@ -496,51 +368,6 @@ function isVerificationComparison(value: unknown): value is SuggestionVerificati
   return SUGGESTION_VERIFICATION_COMPARISONS.some((comparison) => comparison === value)
 }
 
-async function resolveAnalyses(
-  selectors: string[],
-  label: string,
-  workspaceCwd: string,
-  loadAnalysis: VerificationContext['loadAnalysis'],
-): Promise<ResolvedAnalysis[]> {
-  const loaded: ResolvedAnalysis[] = []
-  for (let index = 0; index < selectors.length; index++) {
-    const selector = selectors[index]!
-    let analysis: VerificationAnalysis | undefined
-    try {
-      analysis = await loadAnalysis(selector)
-    } catch {
-      throw artifactError(`${label}[${index}] could not be resolved and analyzed`)
-    }
-    if (!analysis) throw artifactError(`${label}[${index}] could not be resolved and analyzed`)
-    if (analysis.session.source !== 'claude-code') throw artifactError(`${label}[${index}] is not a supported Claude session`)
-    let analysisCwd: string
-    try {
-      if (typeof analysis.session.cwd !== 'string' || !isAbsolute(analysis.session.cwd)) throw new Error('missing cwd')
-      analysisCwd = await realpath(analysis.session.cwd)
-    } catch {
-      throw artifactError(`${label}[${index}] has no resolvable workspace cwd`)
-    }
-    if (analysisCwd !== workspaceCwd) throw artifactError(`${label}[${index}] belongs to a different workspace`)
-    const id = text(analysis.session.id, `${label}[${index}] canonical id`, 500).toLowerCase()
-    const startedAt = analysis.session.startedAt
-    if (typeof startedAt !== 'number' || !Number.isFinite(startedAt) || startedAt <= 0) {
-      throw artifactError(`${label}[${index}] has no valid session start timestamp`)
-    }
-    loaded.push({
-      id,
-      startedAt,
-      endedAt: analysis.session.endedAt,
-      live: analysis.session.live,
-      metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, metricValue(analysis, metric)])) as Record<
-        SuggestionVerificationMetric,
-        number
-      >,
-    })
-  }
-  return loaded
-}
-
-/** Resolve a reviewed workspace identity to its canonical path, refusing a moved or replaced directory. */
 export async function canonicalWorkspace(value: SuggestionWorkspaceIdentity): Promise<string> {
   try {
     if (
@@ -568,31 +395,3 @@ export async function canonicalWorkspace(value: SuggestionWorkspaceIdentity): Pr
   }
 }
 
-function averageMetric(analyses: ResolvedAnalysis[], metric: SuggestionVerificationMetric): number {
-  const total = analyses.reduce((sum, entry) => sum + entry.metrics[metric], 0)
-  return Number((total / analyses.length).toFixed(6))
-}
-
-function metricValue(analysis: VerificationAnalysis, metric: SuggestionVerificationMetric): number {
-  const values: Record<SuggestionVerificationMetric, number> = {
-    avgTotalTokens: analysis.summary.totalTokens,
-    avgToolCalls: analysis.summary.toolCalls,
-    avgToolErrors: analysis.summary.toolErrors,
-    avgActiveMs: analysis.summary.activeMs,
-    avgContextPeak: analysis.summary.contextPeak,
-    avgTestRunsFailed: analysis.summary.outcomes.testRunsFailed,
-    avgBuildRunsFailed: analysis.summary.outcomes.buildRunsFailed,
-    avgInterruptions: analysis.turns.filter((turn) => turn.interrupted).length,
-  }
-  const value = values[metric]
-  if (!Number.isFinite(value) || value < 0) throw artifactError(`resolved Analysis has an invalid ${metric} value`)
-  return value
-}
-
-function compareMetric(before: number, after: number, comparison: SuggestionVerificationComparison): boolean {
-  if (comparison === 'decreased') return after < before
-  if (comparison === 'not-increased') return after <= before
-  if (comparison === 'increased') return after > before
-  if (comparison === 'not-decreased') return after >= before
-  return after === before
-}
