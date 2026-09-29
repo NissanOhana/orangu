@@ -175,8 +175,9 @@ SuggestionRecord = {
   evidence: SuggestionEvidence,
   proposal?: SuggestionProposal,
   application?: SuggestionApplicationReceipt,
-  verificationReceipt?: SuggestionVerificationReceipt,
-  verificationTrust?: "computed-v1",
+  appliedAt?: number,
+  verificationReceipt?: SuggestionVerificationReceiptV2 | SuggestionVerificationReceipt,
+  verificationTrust?: "computed-v2" | "computed-v1",
   status: "new" | "kicked-off" | "proposed" | "applied" | "verified" | "rejected" | "failed",
   statusAt: number,
   effect?: {
@@ -202,11 +203,11 @@ The underlying state union is shared, but legal forward authority is scope-speci
 
 ```text
 session: new -> kicked-off -> proposed -> applied -> verified
-repo:    new -> kicked-off -> proposed -> applied
+repo:    new -> kicked-off -> proposed -> applied -> verified
 global:  new -> kicked-off -> proposed
 ```
 
-Session verification additionally requires later same-workspace evidence. Repo has no `verified` transition until a real fresh-cohort comparator exists. Global has no apply or verify authority. Applicable states may be rejected; `kicked-off` may fail, and `failed` may return to `kicked-off` or be rejected. No other transition is legal.
+Session and repo verification require later same-workspace sessions that beat an Orangu-chosen baseline beyond chance. The store stamps `appliedAt` on the `applied` transition and carries it on every later line; it is where both cohorts are cut. Global has no apply or verify authority. Applicable states may be rejected; `kicked-off` may fail, and `failed` may return to `kicked-off` or be rejected. No other transition is legal.
 
 ## Proposal artifacts
 
@@ -246,7 +247,7 @@ SuggestionProposal = {
 }
 ```
 
-Project files are a nonempty set of relative paths and may not escape the target repository or include `.git`. `verificationChecks` contains 1-32 unique supported metric/comparison pairs. The skill supplies those reviewed pairs; the CLI later requires the verification intent to match them exactly. `workspace` is captured by Orangu when it accepts the structured proposal, not supplied by the manifest. Catalog labels must name a real shipped entry exactly as `catalog: <id>`; Orangu derives its URL/date from the catalog and rejects conflicting supplied metadata. Research requires a direct HTTPS URL and a non-null checked `YYYY-MM-DD` date. Inference carries neither URL nor date. A candidate with `verifiedAt: null` is not valid persisted proposal provenance.
+Project files are a nonempty set of relative paths and may not escape the target repository or include `.git`. `verificationChecks` contains 1-32 unique supported metric/comparison pairs. The skill supplies those reviewed pairs; later verification grades exactly those pairs, in that order. `workspace` is captured by Orangu when it accepts the structured proposal, not supplied by the manifest. Catalog labels must name a real shipped entry exactly as `catalog: <id>`; Orangu derives its URL/date from the catalog and rejects conflicting supplied metadata. Research requires a direct HTTPS URL and a non-null checked `YYYY-MM-DD` date. Inference carries neither URL nor date. A candidate with `verifiedAt: null` is not valid persisted proposal provenance.
 
 Every `orangu-harness` manifest includes its rank, at least one reviewed relative project file, and at least one honest catalog, research, or inference source. The harness skill passes both artifact paths with `--proposal` and `--manifest`; it never authors a repository edit of its own. It may apply the repo items you approve, and only by invoking `orangu-apply` for one id at a time under that skill's unchanged contract, after disclosing each item's files and command text and taking an explicit per-item approval by verbatim id; it stops at the first failure. A global harness proposal is review-only and is never applied.
 
@@ -272,50 +273,37 @@ The receipt is a skill-authored attestation. The deterministic CLI validates its
 
 ## Later verification receipt
 
-`orangu-improve --verify` writes `<id>.verified.json` as a verification intent only for an applied session-scope record. The skill supplies selectors and the exact reviewed metric/comparison pairs only:
+Verification takes no skill-written file. `orangu suggest --effect <id>` computes the result read-only; `orangu suggest --set <id> verified` recomputes it and records it only when the overall verdict is `verified`. An older `<id>.verified.json` intent (`v: 1`, `id`, `measuredSessionIds`, reviewed `checks`, and nothing self-attested) is still accepted, but it chooses nothing: every session it names must already be in the later cohort Orangu measured.
+
+Orangu resolves the proposal's canonical workspace (path, device, inode) and lists its sessions from the configured supported roots. The baseline is up to ten settled sessions that ended before `appliedAt`, most recent first, leaving out the finding's own `sessionIds`; the later cohort is up to ten settled sessions that started after it, earliest first. Settled means an immutable, non-partial transcript snapshot whose complete main/sidecar/metadata manifest has been quiet for at least 30 minutes. A session that spans the application, has another cwd, is still settling, or exceeds the 64 MiB per-session or 512 MiB cohort budget is skipped and counted by reason.
+
+Each reviewed check is graded with an exact permutation rank test (midranks for ties). `decreased`/`increased` checks must move that way at p ≤ 0.05 (`improved`); `not-increased`/`not-decreased`/`equal` must not move the wrong way at p ≤ 0.05 (`held`). The overall verdict is `not-enough-sessions` (fewer than three on a side), `regressed`, `no-directional-check`, `within-noise`, or `verified` (every directional check improved and every guard held). On `verified`, the append-only record receives:
 
 ```ts
-VerificationIntentFile = {
-  v: 1,
-  id: "sg_...",
-  measuredSessionIds: string[],
-  checks: Array<{
-    metric:
-      | "avgTotalTokens"
-      | "avgToolCalls"
-      | "avgToolErrors"
-      | "avgActiveMs"
-      | "avgContextPeak"
-      | "avgTestRunsFailed"
-      | "avgBuildRunsFailed"
-      | "avgInterruptions",
-    comparison: "decreased" | "not-increased" | "increased" | "not-decreased" | "equal"
-  }>
-}
-```
-
-The intent file omits `summary`; each check omits `name`. Orangu generates the canonical summary and check labels. The intent must also omit top-level `before` and `after`, and each check must omit `ok`, `before`, `after`, and `evidence`. Those are computed by Orangu, not asserted by the skill. The unordered metric/comparison set must exactly match the proposal's reviewed `verificationChecks`; the persisted receipt uses proposal order.
-
-The CLI resolves every baseline and later selector through configured supported session roots. Each must be an immutable, non-partial transcript snapshot whose complete main/sidecar/metadata file manifest has been quiet for at least 30 minutes. That means settled for this comparison, not provider-confirmed completion. Resolved sessions must be distinct and use the proposal's canonical workspace; later ids may not overlap baseline ids; every baseline timeline must end before application; and every later session must start after the application transition and every baseline session. Orangu computes the average metric values and refuses the transition if any requested comparison fails. Repo verification is unavailable until a real fresh-cohort comparator exists; global apply and verification are unavailable.
-
-On success, the append-only record receives the normalized result:
-
-```ts
-SuggestionVerificationReceipt = {
-  v: 1,
-  summary: string,
-  measuredSessionIds: string[],
+SuggestionVerificationReceiptV2 = {
+  v: 2,
+  method: "cohort-rank-v1",
+  alpha: 0.05,
+  appliedAt: number,
+  summary: string,              // computed from the checks, both cohort sizes, and confounders
+  baselineSessionIds: string[], // sorted, 3-10
+  measuredSessionIds: string[], // sorted, 3-10, disjoint from the baseline
+  confoundedBy: string[],       // sorted ids of other changes applied in this workspace inside the window
   checks: Array<{
     name: string,
     metric: SuggestionVerificationMetric,
     comparison: SuggestionVerificationComparison,
-    before: number,
+    before: number,             // cohort means
     after: number,
-    evidence: string,
+    beforeMedian: number,
+    afterMedian: number,
+    pLower: number,             // exact one-sided p-values
+    pHigher: number,
+    verdict: "improved" | "held",
+    evidence: string,           // computed rendering of the numbers above
     ok: true
-  }>,
-  receiptPath: string
+  }>
 }
 ```
 
-The record's `effect.before` and `effect.after` maps are derived from the same computed checks. A successful current verifier also writes `verificationTrust: "computed-v1"`; readable legacy verified records lack that marker and must not be presented as current computed verification. Without a passing computed receipt, status remains `applied`.
+The store and every display re-grade a v2 receipt from its own numbers (verdicts, evidence text, p-values possible for the cohort sizes, summary) and stamp `verificationTrust: "computed-v2"`. The record's `effect.before` and `effect.after` maps are the cohort means of the same checks. Earlier `computed-v1` records carry a v1 receipt (a later-session mean comparison without a noise check) and stay readable; legacy verified records lack either marker and must not be presented as current computed verification. Without a passing computed receipt, status remains `applied`.

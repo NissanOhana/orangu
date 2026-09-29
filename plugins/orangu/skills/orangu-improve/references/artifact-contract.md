@@ -38,25 +38,18 @@ Allowed `changeClass`: `instruction`, `script-cli`, `hook`, `skill-create`, `ski
 
 `orangu harness` proposals are ranked structured reviews. Repo-scope proposals are apply-compatible; global-scope proposals use the same manifest for review but are proposal-only. They must include `rank`, a nonempty `files` list, and a nonempty `sources` list in addition to every required evidence, effect, risk, and verification field above. A recommendation without a concrete relative repository file or honest source remains a chat recommendation rather than a `proposed` record.
 
-Lifecycle authority is scope-specific: session proposals may be applied and later verified; repo proposals may be applied but remain `applied` until Orangu can compare later repository sessions; global proposals are review-only and may not be applied or verified.
+Lifecycle authority is scope-specific: session and repo proposals may be applied and later verified; global proposals are review-only and may not be applied or verified.
 
-## Verification intent
+## Verification
 
-Write this only for a real later supported session. The artifact declares what Orangu should measure; it does not declare the result:
+Verification needs no skill-written file: Orangu computes it. `orangu suggest --effect <id>` is read-only; `orangu suggest --set <id> verified` records the result only when the verdict is `verified`. An older `<id>.verified.json` intent is still accepted but chooses nothing; do not write one.
 
-```json
-{
-  "v": 1,
-  "id": "sg_000000000000",
-  "measuredSessionIds": ["later-session-id"],
-  "checks": [
-    { "metric": "avgToolCalls", "comparison": "decreased" }
-  ]
-}
-```
+Orangu picks both sides from the proposal's canonical workspace, cut at the recorded application time: the baseline is up to ten settled sessions that ended before it, leaving out the finding's own sessions (they were chosen for going badly), and the later side is up to ten settled sessions that started after it. A session that spans the application counts on neither side; settled means quiet for at least 30 minutes with no partial line.
+
+Each reviewed check is graded with an exact rank test. A `decreased` or `increased` check must beat chance at p ≤ 0.05 and a guard (`not-increased`, `not-decreased`, `equal`) must not move the wrong way beyond chance, with at least three sessions on each side. The verdict is `verified`, `within-noise`, `regressed`, `not-enough-sessions`, or `no-directional-check`; only `verified` changes state. Other changes applied in the same workspace inside the measured window are named in `confoundedBy`. A `verified` result says later sessions beat the baseline beyond chance; it does not prove the change caused it.
 
 Supported metrics: `avgTotalTokens`, `avgToolCalls`, `avgToolErrors`, `avgActiveMs`, `avgContextPeak`, `avgTestRunsFailed`, `avgBuildRunsFailed`, `avgInterruptions`.
 
 Supported comparisons: `decreased`, `not-increased`, `increased`, `not-decreased`, `equal`.
 
-The receipt's metric/comparison set must exactly match the reviewed proposal `verificationChecks`. Omit `summary` and check `name`; Orangu generates both deterministically. Never include `before`, `after`, `evidence`, or `ok`, and never reuse a baseline selector. Verification is session-only. Orangu resolves every selector from configured supported roots, revalidates the proposal's canonical workspace identity, requires immutable non-partial baseline/later manifests quiet for at least 30 minutes, enforces baseline-end/application/later-start ordering, computes averages, and accepts the transition only when every comparison passes. Quiet means a settled snapshot, not provider-confirmed completion.
+Choose checks the change directly moves, plus one guard for what must not get worse. Every directional check must clear noise, so a check the change cannot move only makes verification harder.

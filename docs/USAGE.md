@@ -104,11 +104,13 @@ Unknown records appear in Coverage instead of being silently treated as supporte
 The optional skills use `orangu evidence` as their only transcript boundary:
 
 ```text
-observe -> draft proposal -> explicit apply -> later session comparison
+observe -> draft proposal -> explicit apply -> later sessions vs baseline, beyond chance
 ```
 
-- Session scope supports proposal, explicit application, and later same-workspace comparison.
-- Repo scope supports proposal and explicit application; later verification for repo scope is not implemented yet.
+- Session and repo scope support proposal, explicit application, and later same-workspace verification.
+- `orangu suggest --effect <id>` shows the comparison read-only: Orangu picks up to ten settled sessions before the change (leaving out the ones that surfaced the finding) and up to ten after it, and grades each reviewed check with an exact rank test.
+- A record becomes `verified` only when every directional check beats chance at p ≤ 0.05, no guard moves the wrong way beyond chance, and each side has at least three sessions. Otherwise it stays `applied` with a verdict such as `within-noise` or `not-enough-sessions`.
+- Changes applied in the same workspace at overlapping times are named as confounders; apply one at a time when each effect should be measured.
 - Global scope is proposal-only.
 
 See [determinism and AI skills](DETERMINISM.md) and [data contracts](DATA-CONTRACTS.md) for the complete rules.

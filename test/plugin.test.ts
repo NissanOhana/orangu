@@ -412,13 +412,13 @@ describe('plugin packaging', () => {
       for (const field of ['changeClass', 'evidence', 'expectedEffect', 'risk', 'verification', 'verificationChecks']) {
         expect(format, `${name} proposal format requires ${field}`).toContain(field)
       }
-      expect(format).toContain('measuredSessionIds')
-      const marker = format.indexOf('"measuredSessionIds"')
-      expect(marker, `${name} has verification intent example`).toBeGreaterThan(0)
-      const intent = format.slice(Math.max(format.lastIndexOf('## Verification intent', marker), format.lastIndexOf('For a real later supported', marker)))
-      expect(intent, `${name} intent omits authored labels`).not.toMatch(/"summary"|"name"/)
-      expect(intent, `${name} intent matches review`).toMatch(/(?:must )?exactly match (?:the )?(?:reviewed )?proposal `verificationChecks`/i)
-      expect(intent, `${name} lets Orangu label checks`).toMatch(/Orangu generates (?:both|them) deterministically/i)
+      // Verification needs no skill-written file: Orangu picks both cohorts and computes every number.
+      expect(format, `${name} writes no verification intent`).not.toContain('"measuredSessionIds"')
+      expect(format, `${name} names the read-only effect`).toContain('orangu suggest --effect')
+      expect(format, `${name} keeps session choice out of the model's reach`).toMatch(/Orangu picks both sides/)
+      expect(format, `${name} leaves the finding's own sessions out`).toMatch(/leaving out the finding's own sessions/)
+      expect(format, `${name} states the noise rule`).toMatch(/beat chance at p ≤ 0\.05[^\n]*at least three sessions/)
+      expect(format, `${name} makes no causal claim`).toMatch(/does not prove the change caused it/)
       expect(format, `${name} uses a real shipped catalog id`).toContain('catalog: cli-ripgrep')
       expect(format, `${name} omits caller-owned catalog metadata`).not.toMatch(/"kind": "catalog"[^\n]*(?:"url"|"verifiedAt")/)
       expect(format, `${name} requires dated research provenance`).toMatch(/research source requires[^\n]*HTTPS[^\n]*non-null[^\n]*YYYY-MM-DD/i)
@@ -431,6 +431,7 @@ describe('plugin packaging', () => {
       const text = readText(path)
       expect(text, `${path} names the current trust marker`).toContain('verificationTrust')
       expect(text, `${path} distinguishes legacy verification`).toMatch(/legacy verified records?[^\n]*(?:lack|without)[^\n]*(?:marker|current computed verification)/i)
+      expect(text, `${path} names the noise-aware marker`).toContain('computed-v2')
     }
   })
 
@@ -441,7 +442,7 @@ describe('plugin packaging', () => {
     ] as const) {
       const text = readText(path)
       expect(text, `${name} supports session verification`).toMatch(/session[^\n]*propose[^\n]*apply[^\n]*verif/i)
-      expect(text, `${name} leaves repo applied`).toMatch(/repo[^\n]*(?:remain|leave)[^\n]*`applied`/i)
+      expect(text, `${name} supports repo verification`).toMatch(/`repo`[^\n]*propose[^\n]*apply[^\n]*verif/i)
       expect(text, `${name} keeps global proposal-only`).toMatch(/global[^\n]*proposal-only/i)
       expect(text, `${name} refuses global apply/verify`).toMatch(/global[^\n]*(?:never|cannot)[^\n]*(?:apply|applied)[^\n]*(?:verif|verified)|global[^\n]*(?:apply|applied)[^\n]*(?:verif|verified)[^\n]*(?:unsupported|cannot)/i)
     }
@@ -449,13 +450,13 @@ describe('plugin packaging', () => {
     for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md']) {
       const text = readText(path)
       expect(text, `${path} rejects global`).toMatch(/global proposals?[^\n]*proposal-only[^\n]*never be applied/i)
-      expect(text, `${path} keeps repo applied`).toMatch(/repo scope[^\n]*cannot yet compare later repository sessions[^\n]*cannot become `verified`/i)
+      expect(text, `${path} says applied is not verified`).toMatch(/session or repo scope[^\n]*applied locally, not yet verified; verify after at least three settled later sessions/i)
       expect(text, `${path} uses plain words`).not.toMatch(/cohort/i)
-      expect(text, `${path} permits session later verification`).toMatch(/session scope[^\n]*later verification/i)
     }
 
     const harness = readText('plugin/skills/harness/SKILL.md')
-    expect(harness).toMatch(/repo scope[^\n]*apply[^\n]*cannot become `verified`/i)
+    expect(harness).toMatch(/repo scope[^\n]*apply[^\n]*verify against later repository sessions/i)
+    expect(harness, 'harness keeps changes attributable').toMatch(/applied together are measured together/i)
     expect(harness).toMatch(/global scope[^\n]*proposal-only[^\n]*never be applied or verified/i)
     expect(harness).toMatch(/global apply and verification are not supported/i)
   })
@@ -653,10 +654,14 @@ describe('plugin packaging', () => {
     const improve = readText('plugin/skills/improve/SKILL.md')
     const apply = readText('plugin/skills/apply/SKILL.md')
     expect(improve).toContain('Never edit the target repository')
-    expect(improve).toContain("--set '<id>' verified --verification")
+    expect(improve).toContain("orangu suggest --effect '<id>' --json --quiet")
+    expect(improve).toContain("orangu suggest --set '<id>' verified --json --quiet")
+    expect(improve).not.toContain('--verification')
+    expect(improve, 'improve fixes causes instead of pasting the failure').toMatch(/never copy the session's own failing text/)
+    expect(improve, 'improve picks attributable checks').toMatch(/the change directly moves, plus one guard/)
     expect(apply).toContain('`record.status` is exactly `proposed`')
     expect(apply).toContain("--set '<id>' applied --application '<application-path>'")
-    expect(apply).toContain('applied locally, not yet verified on a later run')
+    expect(apply).toContain('applied locally, not yet verified; verify after at least three settled later sessions')
     expect(apply).not.toMatch(/WebSearch|WebFetch|Agent|Task|mcp__/)
   })
 
@@ -771,7 +776,10 @@ describe('plugin packaging', () => {
     // topics, answers are user-stated context and never approval) plus three clauses tying stages 4 and 5 to it; improve
     // gained one bounded-interview sentence before drafting. The question bank lives in shared/interview.md, not here.
     // Measured 1,401 / 1,028; the comparator is strict, so both ceilings leave zero words of headroom.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1402, improve: 1029, analyze: 700, apply: 700, feedback: 350 }
+    // 2026-09-29 noise-aware verification: harness 1402 -> 1401 and improve 1029 -> 1021, lowered to the measured
+    // 1,400 / 1,020. Both skills now hand verification to `orangu suggest --effect` (Orangu picks the sessions), which
+    // paid for the root-cause, attributable-check, and one-change-at-a-time sentences.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
     const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
