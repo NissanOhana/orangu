@@ -80,6 +80,59 @@ async function exactDiscoveredRef(selector: string, inventory: DiscoveredInvento
   return unique.size === 1 ? [...unique.values()][0] : undefined
 }
 
+export type SettledAnalysisLoad =
+  | { analysis: Analysis; bytesRead: number }
+  | { skip: 'still-settling' | 'over-budget' | 'unreadable'; bytesRead: number }
+
+const OVER_BUDGET_RE = /exceeds (?:\d+ bytes|the remaining \d+-byte read budget)/
+
+/**
+ * Load one discovered session through its immutable evidence manifest, within `maxBytes`, and say why when it
+ * cannot be verification evidence: still being written (quiet gate or a trailing partial line), over the byte
+ * budget, or unreadable. Analysis is independent of wall-clock time.
+ */
+export async function loadSettledAnalysis(
+  ref: Pick<SessionRef, 'path' | 'sessionId'>,
+  maxBytes: number,
+  options: DiscoveredClaudeAnalysisLoaderOptions = {},
+): Promise<SettledAnalysisLoad> {
+  let settling = false
+  try {
+    const loaded = await withStableSessionRead(ref.path, undefined, async (manifest) => {
+      if (options.requireQuiet) {
+        const changedAt = evidenceManifestLatestChangeMs(manifest)
+        const observedAt = (options.now ?? Date.now)()
+        if (
+          changedAt === undefined ||
+          !Number.isFinite(observedAt) ||
+          observedAt < changedAt ||
+          observedAt - changedAt < MIN_VERIFICATION_QUIET_MS
+        ) {
+          settling = true
+          return undefined
+        }
+      }
+      return readEvidenceSessionManifest(manifest, maxBytes)
+    })
+    if (!loaded) return { skip: settling ? 'still-settling' : 'unreadable', bytesRead: 0 }
+    const bytesRead = loaded.bytesRead
+    if (
+      options.requireQuiet
+      && (loaded.parseInput.trailingPartial || loaded.parseInput.subagents?.some((sidecar) => sidecar.trailingPartial))
+    ) return { skip: 'still-settling', bytesRead }
+    const session = await parseClaudeCodeSession(loaded.parseInput)
+    // Verification compares transcript facts only. Keep this loader independent
+    // of wall-clock time so the deterministic analysis contract stays intact.
+    const analysis = analyzeSession(session, { version: 'verification', now: 0 })
+    if (analysis.session.source !== 'claude-code' || analysis.session.id.toLowerCase() !== ref.sessionId.toLowerCase()) {
+      return { skip: 'unreadable', bytesRead }
+    }
+    return { analysis, bytesRead }
+  } catch (error) {
+    return { skip: error instanceof Error && OVER_BUDGET_RE.test(error.message) ? 'over-budget' : 'unreadable', bytesRead: 0 }
+  }
+}
+
 /** Create one sequential verification loader with a shared transcript-byte cap. */
 export function createDiscoveredClaudeAnalysisLoader(
   maxTotalBytes = MAX_EVIDENCE_SESSION_BYTES,
@@ -97,31 +150,9 @@ export function createDiscoveredClaudeAnalysisLoader(
       if (remainingBytes < 1) return undefined
       const ref = await exactDiscoveredRef(selector, await inventory)
       if (!ref) return undefined
-      const loaded = await withStableSessionRead(ref.path, undefined, async (manifest) => {
-        if (options.requireQuiet) {
-          const changedAt = evidenceManifestLatestChangeMs(manifest)
-          const observedAt = (options.now ?? Date.now)()
-          if (
-            changedAt === undefined ||
-            !Number.isFinite(observedAt) ||
-            observedAt < changedAt ||
-            observedAt - changedAt < MIN_VERIFICATION_QUIET_MS
-          ) return undefined
-        }
-        return readEvidenceSessionManifest(manifest, remainingBytes)
-      })
-      if (!loaded) return undefined
+      const loaded = await loadSettledAnalysis(ref, remainingBytes, options)
       remainingBytes -= loaded.bytesRead
-      if (
-        options.requireQuiet
-        && (loaded.parseInput.trailingPartial || loaded.parseInput.subagents?.some((sidecar) => sidecar.trailingPartial))
-      ) return undefined
-      const session = await parseClaudeCodeSession(loaded.parseInput)
-      // Verification compares transcript facts only. Keep this loader independent
-      // of wall-clock time so the deterministic analysis contract stays intact.
-      const analysis = analyzeSession(session, { version: 'verification', now: 0 })
-      if (analysis.session.source !== 'claude-code' || analysis.session.id.toLowerCase() !== ref.sessionId.toLowerCase()) return undefined
-      return analysis
+      return 'analysis' in loaded ? loaded.analysis : undefined
     } catch {
       return undefined
     }

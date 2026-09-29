@@ -540,7 +540,8 @@ async function resolveAnalyses(
   return loaded
 }
 
-async function canonicalWorkspace(value: SuggestionWorkspaceIdentity): Promise<string> {
+/** Resolve a reviewed workspace identity to its canonical path, refusing a moved or replaced directory. */
+export async function canonicalWorkspace(value: SuggestionWorkspaceIdentity): Promise<string> {
   try {
     if (
       !value ||
