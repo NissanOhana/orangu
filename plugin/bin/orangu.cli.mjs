@@ -12576,6 +12576,7 @@ async function measureCohortEffect(record2, others, deps) {
   const take = async (list, side) => {
     const accepted = [];
     let sideBytes = 0;
+    let budgetSpent = false;
     for (const candidate of list) {
       if (accepted.length >= COHORT_MAX) break;
       const id = candidate.sessionId.toLowerCase();
@@ -12587,6 +12588,7 @@ async function measureCohortEffect(record2, others, deps) {
       const remaining = COHORT_SIDE_BYTES - sideBytes;
       if (remaining < 1) {
         skipped["budget-spent"]++;
+        budgetSpent = true;
         break;
       }
       const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining);
@@ -12595,6 +12597,7 @@ async function measureCohortEffect(record2, others, deps) {
       if ("skip" in loaded) {
         if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
           skipped["budget-spent"]++;
+          budgetSpent = true;
           break;
         }
         skipped[loaded.skip]++;
@@ -12620,10 +12623,11 @@ async function measureCohortEffect(record2, others, deps) {
       seen.add(id);
       accepted.push({ ...session, id });
     }
-    return accepted;
+    return { accepted, budgetSpent };
   };
-  const baseline = await take(baselineCandidates, "baseline");
-  const later = await take(laterCandidates, "later");
+  const baseline = (await take(baselineCandidates, "baseline")).accepted;
+  const laterSide = await take(laterCandidates, "later");
+  const later = laterSide.accepted;
   if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
     throw new Error(`suggestion ${record2.id}: the reviewed workspace changed while its sessions were read`);
   }
@@ -12653,6 +12657,7 @@ async function measureCohortEffect(record2, others, deps) {
     verdict: overallVerdict(checks2, baseline.length, later.length),
     baseline,
     later,
+    laterComplete: later.length >= COHORT_MAX || laterSide.budgetSpent,
     checks: checks2,
     confoundedBy,
     skipped
@@ -12663,9 +12668,10 @@ function nextStep(effect) {
     case "verified":
       return effect.status === "verified" ? "already recorded as verified" : `record it: orangu suggest --set ${effect.id} verified`;
     case "within-noise":
-      return effect.later.length >= COHORT_MAX ? `the later cohort is complete (${COHORT_MAX} of ${COHORT_MAX}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal` : `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`;
+      if (!effect.laterComplete) return `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`;
+      return `the later cohort is complete (${effect.later.length >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX}` : `${effect.later.length} sessions, its byte budget is spent`}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal`;
     case "not-enough-sessions":
-      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)`;
+      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)${effect.laterComplete ? "; the later cohort is complete, so this record cannot be verified" : ""}`;
     case "regressed":
       return "a check moved the wrong way beyond chance: review the change, or reject the proposal";
     case "no-directional-check":
@@ -13108,7 +13114,7 @@ function effectView(effect) {
     verdict: effect.verdict,
     appliedAt: effect.appliedAt,
     baseline: { n: effect.baseline.length, ids: effect.baseline.map((session) => session.id) },
-    later: { n: effect.later.length, ids: effect.later.map((session) => session.id) },
+    later: { n: effect.later.length, ids: effect.later.map((session) => session.id), complete: effect.laterComplete },
     checks: effect.checks,
     confoundedBy: effect.confoundedBy,
     skipped: effect.skipped,

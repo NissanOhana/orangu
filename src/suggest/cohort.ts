@@ -88,6 +88,8 @@ export interface CohortEffect {
   verdict: CohortVerdict
   baseline: CohortSession[]
   later: CohortSession[]
+  /** no newer session can join the later cohort: it holds ten, or its byte budget is spent */
+  laterComplete: boolean
   checks: CohortCheckResult[]
   confoundedBy: string[]
   skipped: Record<CohortSkipReason, number>
@@ -182,9 +184,10 @@ export async function measureCohortEffect(
   skipped['spans-application'] += candidates.filter((c) => c.mtimeMs === appliedAt).length
 
   const seen = new Set<string>()
-  const take = async (list: CohortCandidate[], side: 'baseline' | 'later'): Promise<CohortSession[]> => {
+  const take = async (list: CohortCandidate[], side: 'baseline' | 'later'): Promise<{ accepted: CohortSession[]; budgetSpent: boolean }> => {
     const accepted: CohortSession[] = []
     let sideBytes = 0
+    let budgetSpent = false
     for (const candidate of list) {
       if (accepted.length >= COHORT_MAX) break
       const id = candidate.sessionId.toLowerCase()
@@ -196,6 +199,7 @@ export async function measureCohortEffect(
       const remaining = COHORT_SIDE_BYTES - sideBytes
       if (remaining < 1) {
         skipped['budget-spent']++
+        budgetSpent = true
         break
       }
       const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining)
@@ -206,6 +210,7 @@ export async function measureCohortEffect(
         // budget: the side stops here rather than reaching past it for smaller sessions.
         if (loaded.skip === 'over-budget' && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
           skipped['budget-spent']++
+          budgetSpent = true
           break
         }
         skipped[loaded.skip]++
@@ -231,10 +236,11 @@ export async function measureCohortEffect(
       seen.add(id)
       accepted.push({ ...session, id })
     }
-    return accepted
+    return { accepted, budgetSpent }
   }
-  const baseline = await take(baselineCandidates, 'baseline')
-  const later = await take(laterCandidates, 'later')
+  const baseline = (await take(baselineCandidates, 'baseline')).accepted
+  const laterSide = await take(laterCandidates, 'later')
+  const later = laterSide.accepted
   // Recheck after transcript I/O, so replacing the directory while sessions were read cannot keep its trust.
   if ((await deps.canonicalWorkspace(proposal.workspace)) !== cwd) {
     throw new Error(`suggestion ${record.id}: the reviewed workspace changed while its sessions were read`)
@@ -270,6 +276,7 @@ export async function measureCohortEffect(
     verdict: overallVerdict(checks, baseline.length, later.length),
     baseline,
     later,
+    laterComplete: later.length >= COHORT_MAX || laterSide.budgetSpent,
     checks,
     confoundedBy,
     skipped,
@@ -277,17 +284,16 @@ export async function measureCohortEffect(
 }
 
 /** One plain next step for each verdict. */
-export function nextStep(effect: Pick<CohortEffect, 'id' | 'status' | 'verdict' | 'baseline' | 'later'>): string {
+export function nextStep(effect: Pick<CohortEffect, 'id' | 'status' | 'verdict' | 'baseline' | 'later' | 'laterComplete'>): string {
   switch (effect.verdict) {
     case 'verified':
       return effect.status === 'verified' ? 'already recorded as verified' : `record it: orangu suggest --set ${effect.id} verified`
     case 'within-noise':
-      // The later cohort is the first ten sessions after application, so once it is full the verdict is final.
-      return effect.later.length >= COHORT_MAX
-        ? `the later cohort is complete (${COHORT_MAX} of ${COHORT_MAX}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal`
-        : `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`
+      // The later cohort is the first sessions after application, so once it is full the verdict is final.
+      if (!effect.laterComplete) return `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`
+      return `the later cohort is complete (${effect.later.length >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX}` : `${effect.later.length} sessions, its byte budget is spent`}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal`
     case 'not-enough-sessions':
-      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)`
+      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)${effect.laterComplete ? '; the later cohort is complete, so this record cannot be verified' : ''}`
     case 'regressed':
       return 'a check moved the wrong way beyond chance: review the change, or reject the proposal'
     case 'no-directional-check':

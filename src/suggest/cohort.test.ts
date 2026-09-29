@@ -226,6 +226,17 @@ describe('nextStep', () => {
     expect(nextStep(partial)).toBe(`${partial.later.length} of 10 later sessions counted: later sessions can still join, or reject the proposal`)
     const done = await measureCohortEffect(appliedRecord({ status: 'verified' }), [], fakeDeps(separated(3)))
     expect(nextStep(done)).toBe('already recorded as verified')
+    // A later side that spent its byte budget is final too: newer sessions are never read.
+    const heavy = overlap.map((s) => (s.startedAt > T ? { ...s, bytes: 60 * MiB } : s))
+    const budgetFull = await measureCohortEffect(appliedRecord(), [], fakeDeps(heavy))
+    expect(budgetFull.later).toHaveLength(4)
+    expect(budgetFull.laterComplete).toBe(true)
+    expect(nextStep(budgetFull)).toMatch(/^the later cohort is complete \(4 sessions, its byte budget is spent\) and did not beat the baseline beyond chance/)
+    const stranded = await measureCohortEffect(appliedRecord(), [], fakeDeps(heavy.map((s) => (s.startedAt > T ? { ...s, bytes: 100 * MiB } : s)).concat(
+      separated(10).filter((s) => s.startedAt > T).slice(0, 2).map((s, i) => ({ ...s, id: uuid(700 + i), bytes: 120 * MiB })),
+    )))
+    expect(stranded.verdict).toBe('not-enough-sessions')
+    expect(stranded.laterComplete).toBe(false)
   })
 })
 

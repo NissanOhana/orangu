@@ -341,7 +341,7 @@ function effectView(effect: CohortEffect) {
     verdict: effect.verdict,
     appliedAt: effect.appliedAt,
     baseline: { n: effect.baseline.length, ids: effect.baseline.map((session) => session.id) },
-    later: { n: effect.later.length, ids: effect.later.map((session) => session.id) },
+    later: { n: effect.later.length, ids: effect.later.map((session) => session.id), complete: effect.laterComplete },
     checks: effect.checks,
     confoundedBy: effect.confoundedBy,
     skipped: effect.skipped,
