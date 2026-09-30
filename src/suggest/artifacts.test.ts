@@ -280,6 +280,13 @@ describe('suggestion lifecycle artifact validation', () => {
     const duplicated = json(`${id}.verified.json`, { v: 1, id, measuredSessionIds: [laterPath, laterPath], checks: plannedVerificationChecks })
     await expect(loadVerificationIntent(proposals, id, duplicated, plannedVerificationChecks)).rejects.toThrow(/duplicate selectors/)
   })
+  it('accepts a renumbered device for the same directory', async () => {
+    // macOS renumbers volumes across restarts: same path, same inode, new device.
+    const renumbered = { ...workspace, device: String(BigInt(workspace.device) + 5n) }
+    await expect(canonicalWorkspace(renumbered)).resolves.toBe(workspace.cwd)
+    await expect(canonicalWorkspace({ ...renumbered, inode: String(BigInt(workspace.inode) + 1n) })).rejects.toThrow(/workspace identity no longer matches/)
+  })
+
   it('rejects a replacement workspace at the same canonical path', async () => {
     await expect(canonicalWorkspace(workspace)).resolves.toBe(workspace.cwd)
     const originalWorkspace = `${workspace.cwd}-original`

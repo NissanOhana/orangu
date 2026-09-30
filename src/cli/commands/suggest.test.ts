@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, utimesSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession, SessionBuilder } from '../../../test/fixtures/session-builder.js'
@@ -290,6 +290,19 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
     } finally {
       process.chdir(originalCwd)
     }
+    // A restart can renumber the volume: the same directory (path and inode) with a new device still applies,
+    // while another directory at that path does not.
+    const storePath = join(home, 'suggestions.jsonl')
+    const proposedLine = JSON.parse(readFileSync(storePath, 'utf8').trim().split('\n').at(-1)!) as SuggestionRecord
+    const rewrite = (workspace: Record<string, string>): void =>
+      appendFileSync(storePath, `${JSON.stringify({ ...proposedLine, proposal: { ...proposedLine.proposal, workspace: { ...proposedLine.proposal!.workspace, ...workspace } } })}\n`)
+    rewrite({ inode: String(BigInt(proposedLine.proposal!.workspace!.inode) + 1n) })
+    await expect(cmdSuggest([], { show: id, 'for-apply': true, json: true })).rejects.toThrow(/belongs to workspace/)
+    rewrite({ device: String(BigInt(proposedLine.proposal!.workspace!.device) + 5n) })
+    out = []
+    await cmdSuggest([], { show: id, 'for-apply': true, json: true })
+    expect(JSON.parse(stdout()).workspaceMatchesCurrent).toBe(true)
+
     out = []
     await cmdSuggest(['applied'], { set: id, application: applicationPath, json: true })
     expect(JSON.parse(stdout()).application).toMatchObject({ v: 1, summary: 'Added the script.', receiptPath: applicationPath })

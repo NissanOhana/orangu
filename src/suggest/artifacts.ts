@@ -7,11 +7,12 @@
  * below before any lifecycle transition is recorded.
  */
 import { constants, type BigIntStats } from 'node:fs'
-import { chmod, lstat, open, realpath, stat } from 'node:fs/promises'
+import { chmod, lstat, open, realpath } from 'node:fs/promises'
 import { basename, isAbsolute, relative, resolve } from 'node:path'
 import { isChangeClass } from './change-classes.js'
 import { canonicalReviewedPath, reviewedPathKey, reviewedPathViolation } from './reviewed-path.js'
 import { normalizeProposalSources } from './source-provenance.js'
+import { liveWorkspaceIdentity, sameWorkspace } from './workspace-identity.js'
 import type {
   SuggestionApplicationCheck,
   SuggestionApplicationReceipt,
@@ -379,17 +380,9 @@ export async function canonicalWorkspace(value: SuggestionWorkspaceIdentity): Pr
     ) {
       throw new Error('invalid identity')
     }
-    const cwd = await realpath(value.cwd)
-    const current = await stat(cwd, { bigint: true })
-    if (
-      !current.isDirectory() ||
-      cwd !== value.cwd ||
-      String(current.dev) !== value.device ||
-      String(current.ino) !== value.inode
-    ) {
-      throw new Error('identity mismatch')
-    }
-    return cwd
+    const live = await liveWorkspaceIdentity(value.cwd)
+    if (!sameWorkspace(value, live)) throw new Error('identity mismatch')
+    return live.cwd
   } catch {
     throw artifactError('reviewed proposal workspace identity no longer matches the current workspace')
   }

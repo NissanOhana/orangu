@@ -18,7 +18,7 @@
  *   orangu suggest --list [--scope <s>] [--json]
  */
 import { matchRule, type CatalogMatch } from '../../suggest/catalog.js'
-import { realpath, stat } from 'node:fs/promises'
+import { realpath } from 'node:fs/promises'
 import { loadApplicationReceipt, loadProposalArtifacts, loadVerificationIntent } from '../../suggest/artifacts.js'
 import { measureCohortEffect, nextStep, verificationPatch, type CohortEffect } from '../../suggest/cohort.js'
 import { createCohortDeps } from '../../suggest/cohort-deps.js'
@@ -27,6 +27,7 @@ import { decodeFinding, kickoffCommand, sessionCohortFingerprint, suggestionIdV2
 import { redactAnalysis, redactValue } from '../../redact/redact.js'
 import { slimAnalysis, type SlimAnalysis } from '../../suggest/slim.js'
 import { SuggestionStore } from '../../suggest/store.js'
+import { liveWorkspaceIdentity, sameWorkspace } from '../../suggest/workspace-identity.js'
 import { isTrustedComputedVerification } from '../../suggest/verification-policy.js'
 import { MAX_EVIDENCE_LIMIT, projectEvidence } from '../../suggest/evidence.js'
 import {
@@ -43,11 +44,10 @@ import { flagBool, flagStr } from '../args.js'
 import { loadAnalysisBySelector } from './estimate.js'
 import { VERSION } from '../../version.js'
 
-async function currentWorkspaceIdentity(): Promise<{ cwd: string; device: string; inode: string }> {
-  const cwd = await realpath(process.cwd())
-  const info = await stat(cwd, { bigint: true })
-  if (!info.isDirectory()) throw new Error(`current workspace is not a directory: ${cwd}`)
-  return { cwd, device: String(info.dev), inode: String(info.ino) }
+async function currentWorkspaceIdentity(): Promise<SuggestionWorkspaceIdentity> {
+  // Only the three stored fields: this value is persisted with the reviewed proposal.
+  const { cwd, device, inode } = await liveWorkspaceIdentity(process.cwd())
+  return { cwd, device, inode }
 }
 
 async function assertEvidenceWorkspace(
@@ -114,12 +114,7 @@ async function assertWorkspaceMatch(rec: SuggestionRecord): Promise<ApplyReadyPr
     throw new Error(`suggestion ${rec.id} is not an apply-ready structured proposal`)
   }
   if (!rec.proposal.workspace) throw new Error(`suggestion ${rec.id} is a legacy unbound proposal and cannot be applied`)
-  const workspace = await currentWorkspaceIdentity()
-  if (
-    workspace.cwd !== rec.proposal.workspace.cwd ||
-    workspace.device !== rec.proposal.workspace.device ||
-    workspace.inode !== rec.proposal.workspace.inode
-  ) {
+  if (!sameWorkspace(rec.proposal.workspace, await liveWorkspaceIdentity(process.cwd()))) {
     throw new Error(`suggestion ${rec.id} belongs to workspace ${rec.proposal.workspace.cwd}; run apply from that exact workspace`)
   }
   return rec.proposal as ApplyReadyProposal

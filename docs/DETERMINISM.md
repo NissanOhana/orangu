@@ -119,7 +119,7 @@ The AI skill can make the reviewed edit. Its application receipt is skill-author
 
 `orangu-improve --verify <id>` is available for an `applied` session- or repo-scope record; global records cannot be applied or verified. The skill writes no verification file and chooses no sessions. It runs the read-only `orangu suggest --effect <id>`, reports the verdict, and only on `verified` runs `orangu suggest --set <id> verified`, which recomputes the same result before it records anything.
 
-Orangu picks both cohorts from the proposal's canonical workspace (its path, device, and inode are revalidated), cut at the application time the store stamped as `appliedAt`:
+Orangu picks both cohorts from the proposal's canonical workspace (its path and inode are revalidated before and after the transcripts are read), cut at the application time the store stamped as `appliedAt`:
 
 - **Baseline:** up to ten settled sessions that ended before the application, most recent first, leaving out the finding's own sessions. Those sessions were chosen because they went badly, so any later session would look better against them by regression to the mean alone.
 - **Later:** up to ten settled sessions that started after the application, earliest first, so the verdict freezes once ten exist.

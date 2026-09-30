@@ -310,14 +310,14 @@ var MAX_EVIDENCE_META_BYTES = 1 * 1024 * 1024;
 var MAX_EVIDENCE_SESSION_RECORDS = DEFAULT_MAX_JSONL_RECORDS;
 var MAX_EVIDENCE_SIDECAR_ENTRIES = 2048;
 var MAX_EVIDENCE_SIDECAR_DEPTH = 4;
-function snapshotOf(stat8) {
+function snapshotOf(stat7) {
   return {
-    dev: stat8.dev,
-    ino: stat8.ino,
-    mode: stat8.mode,
-    size: stat8.size,
-    mtimeNs: stat8.mtimeNs,
-    ctimeNs: stat8.ctimeNs
+    dev: stat7.dev,
+    ino: stat7.ino,
+    mode: stat7.mode,
+    size: stat7.size,
+    mtimeNs: stat7.mtimeNs,
+    ctimeNs: stat7.ctimeNs
   };
 }
 function sameSnapshot(a, b) {
@@ -436,9 +436,9 @@ async function discoverEvidenceSidecars(main2) {
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
       const path = join(canonicalDir, entry.name);
-      const stat8 = await lstat(path, { bigint: true });
-      if (stat8.isSymbolicLink()) throw new Error(`session input must not include symbolic links: ${path}`);
-      if (stat8.isDirectory()) {
+      const stat7 = await lstat(path, { bigint: true });
+      if (stat7.isSymbolicLink()) throw new Error(`session input must not include symbolic links: ${path}`);
+      if (stat7.isDirectory()) {
         if (depth >= MAX_EVIDENCE_SIDECAR_DEPTH) {
           throw new Error(`session sidecar traversal exceeds ${MAX_EVIDENCE_SIDECAR_DEPTH} levels`);
         }
@@ -6091,8 +6091,8 @@ function oranguHome(env = process.env) {
 import { constants as constants5 } from "node:fs";
 import { lstat as lstat3, open as open5, realpath as realpath3 } from "node:fs/promises";
 import { resolve as resolve3 } from "node:path";
-function snapshot(stat8) {
-  return { dev: stat8.dev, ino: stat8.ino, mode: stat8.mode, size: stat8.size, mtimeNs: stat8.mtimeNs, ctimeNs: stat8.ctimeNs };
+function snapshot(stat7) {
+  return { dev: stat7.dev, ino: stat7.ino, mode: stat7.mode, size: stat7.size, mtimeNs: stat7.mtimeNs, ctimeNs: stat7.ctimeNs };
 }
 function same(a, b) {
   return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
@@ -6168,8 +6168,8 @@ var MAX_STALE_CACHE_GENERATION_ENTRIES = 4096;
 function sameInode(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function modeBits(stat8) {
-  return Number(stat8.mode & 0o777n);
+function modeBits(stat7) {
+  return Number(stat7.mode & 0o777n);
 }
 async function ensurePrivateDirectory(path) {
   await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
@@ -6717,9 +6717,9 @@ var PrivateOutputError = class extends Error {
 function sameInode2(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function assertSafeOutput(stat8, path) {
-  if (!stat8.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
-  if (stat8.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
+function assertSafeOutput(stat7, path) {
+  if (!stat7.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
+  if (stat7.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
 }
 async function assertPathStillNamesHandle(path, opened) {
   const current = await lstat6(path, { bigint: true });
@@ -8872,18 +8872,18 @@ function errno(error) {
 function sameInode3(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function modeBits2(stat8) {
-  return Number(stat8.mode & 0o777n);
+function modeBits2(stat7) {
+  return Number(stat7.mode & 0o777n);
 }
-function fileSnapshot(stat8) {
+function fileSnapshot(stat7) {
   return {
-    dev: stat8.dev,
-    ino: stat8.ino,
-    mode: stat8.mode,
-    nlink: stat8.nlink,
-    size: stat8.size,
-    mtimeNs: stat8.mtimeNs,
-    ctimeNs: stat8.ctimeNs
+    dev: stat7.dev,
+    ino: stat7.ino,
+    mode: stat7.mode,
+    nlink: stat7.nlink,
+    size: stat7.size,
+    mtimeNs: stat7.mtimeNs,
+    ctimeNs: stat7.ctimeNs
   };
 }
 function sameFileSnapshot(a, b) {
@@ -12213,12 +12213,30 @@ async function cmdEvidence(positionals, flags) {
 }
 
 // src/cli/commands/suggest.ts
-import { realpath as realpath9, stat as stat7 } from "node:fs/promises";
+import { realpath as realpath10 } from "node:fs/promises";
 
 // src/suggest/artifacts.ts
 import { constants as constants10 } from "node:fs";
-import { chmod, lstat as lstat8, open as open10, realpath as realpath6, stat as stat6 } from "node:fs/promises";
+import { chmod, lstat as lstat8, open as open10, realpath as realpath7 } from "node:fs/promises";
 import { basename as basename9, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
+
+// src/suggest/workspace-identity.ts
+import { realpath as realpath6, stat as stat6 } from "node:fs/promises";
+import { dirname as dirname5 } from "node:path";
+async function liveWorkspaceIdentity(path) {
+  const cwd = await realpath6(path);
+  const info = await stat6(cwd, { bigint: true });
+  if (!info.isDirectory()) throw new Error(`workspace is not a directory: ${cwd}`);
+  const parent = dirname5(cwd);
+  const mountRoot = parent === cwd || (await stat6(parent, { bigint: true })).dev !== info.dev;
+  return { cwd, device: String(info.dev), inode: String(info.ino), mountRoot };
+}
+function sameWorkspace(stored, live) {
+  if (live.cwd !== stored.cwd || live.inode !== stored.inode) return false;
+  return live.device === stored.device || !live.mountRoot;
+}
+
+// src/suggest/artifacts.ts
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
 var MAX_FILES = 64;
@@ -12276,15 +12294,15 @@ function inside(root, candidate) {
   const rel = relative3(root, candidate);
   return rel === "" || !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && rel !== ".." && !isAbsolute5(rel);
 }
-function artifactSnapshot(stat8) {
+function artifactSnapshot(stat7) {
   return {
-    dev: stat8.dev,
-    ino: stat8.ino,
-    mode: stat8.mode,
-    nlink: stat8.nlink,
-    size: stat8.size,
-    mtimeNs: stat8.mtimeNs,
-    ctimeNs: stat8.ctimeNs
+    dev: stat7.dev,
+    ino: stat7.ino,
+    mode: stat7.mode,
+    nlink: stat7.nlink,
+    size: stat7.size,
+    mtimeNs: stat7.mtimeNs,
+    ctimeNs: stat7.ctimeNs
   };
 }
 function sameArtifactSnapshot(a, b) {
@@ -12297,21 +12315,21 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
   let rootStat;
-  let stat8;
+  let stat7;
   try {
     ;
-    [rootStat, stat8] = await Promise.all([lstat8(root, { bigint: true }), lstat8(candidate, { bigint: true })]);
+    [rootStat, stat7] = await Promise.all([lstat8(root, { bigint: true }), lstat8(candidate, { bigint: true })]);
   } catch {
     throw artifactError(`${expectedName} does not exist`);
   }
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw artifactError(`proposals directory must be a regular directory`);
-  if (!stat8.isFile() || stat8.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`);
-  if (stat8.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`);
-  if (stat8.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
+  if (!stat7.isFile() || stat7.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`);
+  if (stat7.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`);
+  if (stat7.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
   if (process.platform !== "win32") await chmod(root, 448);
-  const [realRoot, realCandidate] = await Promise.all([realpath6(root), realpath6(candidate)]);
+  const [realRoot, realCandidate] = await Promise.all([realpath7(root), realpath7(candidate)]);
   if (!inside(realRoot, realCandidate)) throw artifactError(`${expectedName} resolves outside ${realRoot}`);
-  const initial = artifactSnapshot(stat8);
+  const initial = artifactSnapshot(stat7);
   let handle;
   try {
     handle = await open10(realCandidate, constants10.O_RDONLY | (constants10.O_NOFOLLOW ?? 0));
@@ -12327,7 +12345,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     const [secured, securedPath, securedReal] = await Promise.all([
       handle.stat({ bigint: true }),
       lstat8(candidate, { bigint: true }),
-      realpath6(candidate)
+      realpath7(candidate)
     ]);
     if (secured.nlink !== 1n || securedPath.nlink !== 1n || securedPath.isSymbolicLink() || securedReal !== realCandidate || !sameArtifactSnapshot(artifactSnapshot(secured), artifactSnapshot(securedPath))) {
       throw artifactError(`${expectedName} changed before it was read`);
@@ -12343,7 +12361,7 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     const [after, pathAfter, realAfter] = await Promise.all([
       handle.stat({ bigint: true }),
       lstat8(candidate, { bigint: true }),
-      realpath6(candidate)
+      realpath7(candidate)
     ]);
     if (offset !== buffer.length || after.nlink !== 1n || pathAfter.nlink !== 1n || pathAfter.isSymbolicLink() || realAfter !== realCandidate || !sameArtifactSnapshot(expected, artifactSnapshot(after)) || !sameArtifactSnapshot(expected, artifactSnapshot(pathAfter))) {
       throw artifactError(`${expectedName} changed while it was being read`);
@@ -12492,12 +12510,9 @@ async function canonicalWorkspace(value) {
     if (!value || typeof value.cwd !== "string" || !isAbsolute5(value.cwd) || !/^\d+$/.test(value.device) || !/^\d+$/.test(value.inode)) {
       throw new Error("invalid identity");
     }
-    const cwd = await realpath6(value.cwd);
-    const current = await stat6(cwd, { bigint: true });
-    if (!current.isDirectory() || cwd !== value.cwd || String(current.dev) !== value.device || String(current.ino) !== value.inode) {
-      throw new Error("identity mismatch");
-    }
-    return cwd;
+    const live = await liveWorkspaceIdentity(value.cwd);
+    if (!sameWorkspace(value, live)) throw new Error("identity mismatch");
+    return live.cwd;
   } catch {
     throw artifactError("reviewed proposal workspace identity no longer matches the current workspace");
   }
@@ -12717,11 +12732,11 @@ function verificationPatch(effect) {
 }
 
 // src/suggest/cohort-deps.ts
-import { realpath as realpath8 } from "node:fs/promises";
+import { realpath as realpath9 } from "node:fs/promises";
 import { isAbsolute as isAbsolute7 } from "node:path";
 
 // src/adapters/claude-code/discovered-analysis.ts
-import { realpath as realpath7 } from "node:fs/promises";
+import { realpath as realpath8 } from "node:fs/promises";
 import { isAbsolute as isAbsolute6, resolve as resolve9 } from "node:path";
 var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
 var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
@@ -12733,7 +12748,7 @@ async function discoveredInventory() {
   const byCanonicalPath = /* @__PURE__ */ new Map();
   for (const ref of refs) {
     try {
-      const canonical = await realpath7(ref.path);
+      const canonical = await realpath8(ref.path);
       const prior = byCanonicalPath.get(canonical);
       if (prior === void 0) byCanonicalPath.set(canonical, ref);
       else if (prior !== null && resolve9(prior.path) !== resolve9(ref.path)) byCanonicalPath.set(canonical, null);
@@ -12751,7 +12766,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
     let canonical;
     try {
-      canonical = await realpath7(isAbsolute6(value) ? value : resolve9(process.cwd(), value));
+      canonical = await realpath8(isAbsolute6(value) ? value : resolve9(process.cwd(), value));
     } catch {
       return void 0;
     }
@@ -12830,7 +12845,7 @@ function createCohortDeps(options = {}) {
       if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute7(cwd)) return { skip: "unreadable", bytesRead };
       let canonicalCwd = cwd;
       try {
-        canonicalCwd = await realpath8(cwd);
+        canonicalCwd = await realpath9(cwd);
       } catch {
       }
       let metrics;
@@ -12853,10 +12868,8 @@ var VERSION2 = true ? "0.7.2" : "0.0.0-dev";
 
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
-  const cwd = await realpath9(process.cwd());
-  const info = await stat7(cwd, { bigint: true });
-  if (!info.isDirectory()) throw new Error(`current workspace is not a directory: ${cwd}`);
-  return { cwd, device: String(info.dev), inode: String(info.ino) };
+  const { cwd, device, inode } = await liveWorkspaceIdentity(process.cwd());
+  return { cwd, device, inode };
 }
 async function assertEvidenceWorkspace(rec, workspace) {
   if (rec.scope === "global") return;
@@ -12870,7 +12883,7 @@ async function assertEvidenceWorkspace(rec, workspace) {
     if (!cwd) throw new Error(`suggestion ${rec.id} evidence session ${selector} has no workspace identity`);
     let canonical;
     try {
-      canonical = await realpath9(cwd);
+      canonical = await realpath10(cwd);
     } catch {
       throw new Error(`suggestion ${rec.id} evidence workspace no longer exists: ${cwd}`);
     }
@@ -12909,8 +12922,7 @@ async function assertWorkspaceMatch(rec) {
     throw new Error(`suggestion ${rec.id} is not an apply-ready structured proposal`);
   }
   if (!rec.proposal.workspace) throw new Error(`suggestion ${rec.id} is a legacy unbound proposal and cannot be applied`);
-  const workspace = await currentWorkspaceIdentity();
-  if (workspace.cwd !== rec.proposal.workspace.cwd || workspace.device !== rec.proposal.workspace.device || workspace.inode !== rec.proposal.workspace.inode) {
+  if (!sameWorkspace(rec.proposal.workspace, await liveWorkspaceIdentity(process.cwd()))) {
     throw new Error(`suggestion ${rec.id} belongs to workspace ${rec.proposal.workspace.cwd}; run apply from that exact workspace`);
   }
   return rec.proposal;
@@ -13095,13 +13107,13 @@ async function inLaterCohort(selector, effect) {
   if (SESSION_ID_RE.test(value)) return effect.later.some((session) => session.id === value.toLowerCase());
   let canonical;
   try {
-    canonical = await realpath9(value);
+    canonical = await realpath10(value);
   } catch {
     return false;
   }
   for (const session of effect.later) {
     try {
-      if (await realpath9(session.path) === canonical) return true;
+      if (await realpath10(session.path) === canonical) return true;
     } catch {
     }
   }
