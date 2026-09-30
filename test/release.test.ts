@@ -143,5 +143,10 @@ describe('release automation', () => {
     // A re-run over an already-shipped version skips rather than failing.
     expect(release).toContain('is already published; skipping.')
     expect(release).toContain('is already on origin; nothing to publish.')
+    // The registry can report a just-published version as absent for a while, so the pre-check can miss a
+    // release a queued run has just made (main and its tag pushed together, 2026-09-30). The registry's own
+    // refusal is the reliable signal and must count as already published, not as a failed release.
+    expect(release).toContain('cannot publish over the previously published versions')
+    expect(release, 'the publish exit code is kept for every other failure').toMatch(/exit "\$status"/)
   })
 })

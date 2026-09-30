@@ -166,7 +166,12 @@ jobs:
         run: npx --no-install playwright install --with-deps chromium
 
       # A last guard against a race: if the version landed on npm between the
-      # guard job and here, skip rather than error on a duplicate.
+      # guard job and here, skip rather than error on a duplicate. The registry
+      # can still report a just-published version as absent for a while (seen
+      # 2026-09-30, when main and its tag were pushed together and the queued
+      # tag run followed the merge run), so the registry's own refusal to
+      # publish over an existing version is treated as "already published" too.
+      # Every other publish failure keeps its exit code.
       - name: Publish
         env:
           VERSION: ${{ needs.guard.outputs.version }}
@@ -176,7 +181,15 @@ jobs:
             echo "orangu@$VERSION is already published; skipping."
             exit 0
           fi
-          npm publish
+          set +e
+          npm publish 2>&1 | tee publish.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 0 ] && grep -q 'cannot publish over the previously published versions' publish.log; then
+            echo "orangu@$VERSION is already published; skipping."
+            exit 0
+          fi
+          exit "$status"
 
   plugin:
     name: Publish the Claude Code plugin
