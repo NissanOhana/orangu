@@ -280,6 +280,17 @@ describe('suggestion lifecycle artifact validation', () => {
     const duplicated = json(`${id}.verified.json`, { v: 1, id, measuredSessionIds: [laterPath, laterPath], checks: plannedVerificationChecks })
     await expect(loadVerificationIntent(proposals, id, duplicated, plannedVerificationChecks)).rejects.toThrow(/duplicate selectors/)
   })
+  it('persists a well-formed creation time with the workspace and rejects a malformed one', async () => {
+    const manifestPath = json(`${id}.json`, manifest())
+    const markdownPath = join(proposals, `${id}.md`)
+    const withBirth = { ...workspace, birthtimeNs: '1755000000000000000' }
+    expect((await loadProposalArtifacts(proposals, id, markdownPath, manifestPath, withBirth)).workspace).toEqual(withBirth)
+    await expect(loadProposalArtifacts(proposals, id, markdownPath, manifestPath, { ...workspace, birthtimeNs: 'soon' })).rejects.toThrow(
+      /canonical workspace identity/,
+    )
+    await expect(canonicalWorkspace({ ...workspace, birthtimeNs: '1' })).rejects.toThrow(/workspace identity no longer matches/)
+  })
+
   it('accepts a renumbered device for the same directory', async () => {
     // macOS renumbers volumes across restarts: same path, same inode, new device.
     const renumbered = { ...workspace, device: String(BigInt(workspace.device) + 5n) }

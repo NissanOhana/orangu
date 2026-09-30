@@ -27,7 +27,7 @@ import { decodeFinding, kickoffCommand, sessionCohortFingerprint, suggestionIdV2
 import { redactAnalysis, redactValue } from '../../redact/redact.js'
 import { slimAnalysis, type SlimAnalysis } from '../../suggest/slim.js'
 import { SuggestionStore } from '../../suggest/store.js'
-import { liveWorkspaceIdentity, sameWorkspace } from '../../suggest/workspace-identity.js'
+import { liveWorkspaceIdentity, sameWorkspace, storedWorkspaceIdentity } from '../../suggest/workspace-identity.js'
 import { isTrustedComputedVerification } from '../../suggest/verification-policy.js'
 import { MAX_EVIDENCE_LIMIT, projectEvidence } from '../../suggest/evidence.js'
 import {
@@ -45,9 +45,8 @@ import { loadAnalysisBySelector } from './estimate.js'
 import { VERSION } from '../../version.js'
 
 async function currentWorkspaceIdentity(): Promise<SuggestionWorkspaceIdentity> {
-  // Only the three stored fields: this value is persisted with the reviewed proposal.
-  const { cwd, device, inode } = await liveWorkspaceIdentity(process.cwd())
-  return { cwd, device, inode }
+  // Only the stored fields: this value is persisted with the reviewed proposal.
+  return storedWorkspaceIdentity(await liveWorkspaceIdentity(process.cwd()))
 }
 
 async function assertEvidenceWorkspace(

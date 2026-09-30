@@ -492,6 +492,18 @@ describe('SuggestionStore', () => {
     await expect(store.transition(global.record.id, 'verified', cohortPatch(50))).rejects.toThrow(/global suggestions cannot be verified; they are review-only/)
   })
 
+  it('accepts a workspace with a creation time and rejects a malformed one', async () => {
+    const { record } = await store.upsertNew(finding({ ruleId: 'workspace-birth' }), 'report')
+    await store.transition(record.id, 'kicked-off')
+    const proposal = structuredProposal(record.id)
+    await expect(
+      store.transition(record.id, 'proposed', { proposal: { ...proposal, workspace: { ...proposal.workspace!, birthtimeNs: 'soon' } } }),
+    ).rejects.toThrow(/structured proposal/)
+    const withBirth = { ...proposal.workspace!, birthtimeNs: '1755000000000000000' }
+    const proposed = await store.transition(record.id, 'proposed', { proposal: { ...proposal, workspace: withBirth } })
+    expect(proposed.proposal?.workspace).toEqual(withBirth)
+  })
+
   it('stamps appliedAt on application and carries it forward', async () => {
     const { record } = await store.upsertNew(finding(), 'report')
     await store.transition(record.id, 'kicked-off')

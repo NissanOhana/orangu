@@ -13,7 +13,7 @@
 import { randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
 import { lstat, mkdir, open, realpath, rmdir, unlink } from 'node:fs/promises'
-import { dirname, isAbsolute, join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { oranguHome } from '../util/home.js'
 import { redactValue } from '../redact/redact.js'
 import { isChangeClass } from './change-classes.js'
@@ -40,6 +40,7 @@ import {
   applicationTime,
   cohortReceiptViolation,
 } from './verification-policy.js'
+import { isStoredWorkspaceIdentity } from './workspace-identity.js'
 
 /** lock older than this is a dead writer's leftover and may be broken */
 const LOCK_STALE_MS = 10_000
@@ -633,10 +634,7 @@ function assertStructuredProposal(
     !nonEmptyString(value.expectedEffect) ||
     !nonEmptyString(value.risk) ||
     !nonEmptyString(value.verification) ||
-    !value.workspace ||
-    !isAbsolute(value.workspace.cwd) ||
-    !/^\d+$/.test(value.workspace.device) ||
-    !/^\d+$/.test(value.workspace.inode) ||
+    !isStoredWorkspaceIdentity(value.workspace) ||
     !Array.isArray(value.files) ||
     value.files.length === 0 ||
     value.files.length > 64 ||

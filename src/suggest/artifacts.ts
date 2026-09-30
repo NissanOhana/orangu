@@ -12,7 +12,7 @@ import { basename, isAbsolute, relative, resolve } from 'node:path'
 import { isChangeClass } from './change-classes.js'
 import { canonicalReviewedPath, reviewedPathKey, reviewedPathViolation } from './reviewed-path.js'
 import { normalizeProposalSources } from './source-provenance.js'
-import { liveWorkspaceIdentity, sameWorkspace } from './workspace-identity.js'
+import { isStoredWorkspaceIdentity, liveWorkspaceIdentity, sameWorkspace } from './workspace-identity.js'
 import type {
   SuggestionApplicationCheck,
   SuggestionApplicationReceipt,
@@ -230,7 +230,7 @@ export async function loadProposalArtifacts(
   }
 
   const { path, value } = await readJsonArtifact(proposalsDir, manifestPath, `${id}.json`)
-  if (!workspace || !isAbsolute(workspace.cwd) || !/^\d+$/.test(workspace.device) || !/^\d+$/.test(workspace.inode)) {
+  if (!isStoredWorkspaceIdentity(workspace)) {
     throw artifactError('structured proposals require a canonical workspace identity')
   }
   versionAndId(value, id)
@@ -371,15 +371,7 @@ function isVerificationComparison(value: unknown): value is SuggestionVerificati
 
 export async function canonicalWorkspace(value: SuggestionWorkspaceIdentity): Promise<string> {
   try {
-    if (
-      !value ||
-      typeof value.cwd !== 'string' ||
-      !isAbsolute(value.cwd) ||
-      !/^\d+$/.test(value.device) ||
-      !/^\d+$/.test(value.inode)
-    ) {
-      throw new Error('invalid identity')
-    }
+    if (!isStoredWorkspaceIdentity(value)) throw new Error('invalid identity')
     const live = await liveWorkspaceIdentity(value.cwd)
     if (!sameWorkspace(value, live)) throw new Error('identity mismatch')
     return live.cwd

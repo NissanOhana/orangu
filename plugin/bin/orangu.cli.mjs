@@ -8107,8 +8107,8 @@ function pickList(caps, rows, counts, now) {
 // src/suggest/store.ts
 import { randomBytes as randomBytes2 } from "node:crypto";
 import { constants as constants9 } from "node:fs";
-import { lstat as lstat7, mkdir as mkdir2, open as open9, realpath as realpath5, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname4, isAbsolute as isAbsolute4, join as join6 } from "node:path";
+import { lstat as lstat7, mkdir as mkdir2, open as open9, realpath as realpath6, rmdir, unlink as unlink2 } from "node:fs/promises";
+import { dirname as dirname5, join as join6 } from "node:path";
 
 // src/suggest/change-classes.ts
 var CHANGE_CLASS_DEFINITIONS = [
@@ -8856,6 +8856,38 @@ function isTrustedComputedVerification(record2) {
   return numericMapMatches(effect.before, before) && numericMapMatches(effect.after, after);
 }
 
+// src/suggest/workspace-identity.ts
+import { realpath as realpath5, stat as stat4 } from "node:fs/promises";
+import { dirname as dirname4, isAbsolute as isAbsolute4 } from "node:path";
+function reliableBirthtimeNs(birthtimeNs, ctimeNs) {
+  return birthtimeNs > 0n && birthtimeNs !== ctimeNs ? String(birthtimeNs) : void 0;
+}
+async function liveWorkspaceIdentity(path) {
+  const cwd = await realpath5(path);
+  const info = await stat4(cwd, { bigint: true });
+  if (!info.isDirectory()) throw new Error(`workspace is not a directory: ${cwd}`);
+  const parent = dirname4(cwd);
+  const mountRoot = parent === cwd || (await stat4(parent, { bigint: true })).dev !== info.dev;
+  const birthtimeNs = reliableBirthtimeNs(info.birthtimeNs, info.ctimeNs);
+  return { cwd, device: String(info.dev), inode: String(info.ino), ...birthtimeNs ? { birthtimeNs } : {}, mountRoot };
+}
+function storedWorkspaceIdentity(live) {
+  const { cwd, device, inode, birthtimeNs } = live;
+  return { cwd, device, inode, ...birthtimeNs ? { birthtimeNs } : {} };
+}
+var DIGITS_RE = /^\d+$/;
+function isStoredWorkspaceIdentity(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const identity = value;
+  return typeof identity.cwd === "string" && isAbsolute4(identity.cwd) && typeof identity.device === "string" && DIGITS_RE.test(identity.device) && typeof identity.inode === "string" && DIGITS_RE.test(identity.inode) && (identity.birthtimeNs === void 0 || typeof identity.birthtimeNs === "string" && DIGITS_RE.test(identity.birthtimeNs));
+}
+function sameWorkspace(stored, live, platform2 = process.platform) {
+  if (live.cwd !== stored.cwd || live.inode !== stored.inode) return false;
+  if (stored.birthtimeNs !== void 0 && stored.birthtimeNs !== live.birthtimeNs) return false;
+  if (live.device === stored.device) return true;
+  return platform2 !== "win32" && !live.mountRoot;
+}
+
 // src/suggest/store.ts
 var LOCK_STALE_MS = 1e4;
 var LOCK_TIMEOUT_MS = 5e3;
@@ -8900,7 +8932,7 @@ async function securePrivateDirectory(path, label) {
     const [after, requestedAfter, canonicalPath] = await Promise.all([
       handle.stat({ bigint: true }),
       lstat7(path, { bigint: true }),
-      realpath5(path)
+      realpath6(path)
     ]);
     if (!after.isDirectory() || requestedAfter.isSymbolicLink() || !requestedAfter.isDirectory() || !sameInode3(after, requestedAfter) || process.platform !== "win32" && (modeBits2(after) !== PRIVATE_DIRECTORY_MODE2 || modeBits2(requestedAfter) !== PRIVATE_DIRECTORY_MODE2)) {
       throw new Error(`${label} changed while securing: ${path}`);
@@ -8924,7 +8956,7 @@ async function secureExistingPrivateDirectory(path, label) {
 }
 async function assertPrivateDirectoriesStable2(directories) {
   await Promise.all(directories.map(async (expected) => {
-    const [current, canonicalPath] = await Promise.all([lstat7(expected.path, { bigint: true }), realpath5(expected.path)]);
+    const [current, canonicalPath] = await Promise.all([lstat7(expected.path, { bigint: true }), realpath6(expected.path)]);
     if (current.isSymbolicLink() || !current.isDirectory() || current.dev !== expected.dev || current.ino !== expected.ino || canonicalPath !== expected.canonicalPath || process.platform !== "win32" && modeBits2(current) !== PRIVATE_DIRECTORY_MODE2) {
       throw new Error(`suggestion store directory changed during access: ${expected.path}`);
     }
@@ -9209,7 +9241,7 @@ function assertProposal(value, to) {
 }
 function assertStructuredProposal(value, to) {
   assertProposal(value, to);
-  if (value.v !== 1 || !nonEmptyString(value.manifestPath) || !value.changeClass || !isChangeClass(value.changeClass) || !nonEmptyString(value.evidence) || !nonEmptyString(value.expectedEffect) || !nonEmptyString(value.risk) || !nonEmptyString(value.verification) || !value.workspace || !isAbsolute4(value.workspace.cwd) || !/^\d+$/.test(value.workspace.device) || !/^\d+$/.test(value.workspace.inode) || !Array.isArray(value.files) || value.files.length === 0 || value.files.length > 64 || !value.files.every(safeReviewedFile) || !hasUniqueReviewedFiles(value.files) || !proposalSourcesAreCanonical(value.sources) || !Array.isArray(value.verificationChecks) || value.verificationChecks.length === 0 || value.verificationChecks.length > 32 || !value.verificationChecks.every(
+  if (value.v !== 1 || !nonEmptyString(value.manifestPath) || !value.changeClass || !isChangeClass(value.changeClass) || !nonEmptyString(value.evidence) || !nonEmptyString(value.expectedEffect) || !nonEmptyString(value.risk) || !nonEmptyString(value.verification) || !isStoredWorkspaceIdentity(value.workspace) || !Array.isArray(value.files) || value.files.length === 0 || value.files.length > 64 || !value.files.every(safeReviewedFile) || !hasUniqueReviewedFiles(value.files) || !proposalSourcesAreCanonical(value.sources) || !Array.isArray(value.verificationChecks) || value.verificationChecks.length === 0 || value.verificationChecks.length > 32 || !value.verificationChecks.every(
     (check) => check && typeof check === "object" && SUGGESTION_VERIFICATION_METRICS.includes(check.metric) && SUGGESTION_VERIFICATION_COMPARISONS.includes(check.comparison)
   ) || !hasUniqueVerificationIntents(value.verificationChecks)) {
     throw lifecycleError(to, "a structured proposal with a manifest, reviewed files, and bounded unique verificationChecks is required");
@@ -9298,7 +9330,7 @@ var SuggestionStore = class {
   }
   /** Atomic directory lock with token/PID ownership; only dead stale owners may be broken. */
   async acquireLock() {
-    const parent = await ensurePrivateDirectory2(dirname4(this.path), "suggestion store directory");
+    const parent = await ensurePrivateDirectory2(dirname5(this.path), "suggestion store directory");
     const t0 = Date.now();
     const token = randomBytes2(32).toString("hex");
     for (; ; ) {
@@ -9379,7 +9411,7 @@ var SuggestionStore = class {
    */
   async replay(parent) {
     const canonical = /* @__PURE__ */ new Map();
-    const root = parent ?? await secureExistingPrivateDirectory(dirname4(this.path), "suggestion store directory");
+    const root = parent ?? await secureExistingPrivateDirectory(dirname5(this.path), "suggestion store directory");
     if (!root) return canonical;
     await assertPrivateDirectoriesStable2([root]);
     const proposals = await secureExistingPrivateDirectory(this.proposalsDir, "suggestion proposals directory");
@@ -9570,7 +9602,7 @@ import { cpus as cpus2 } from "node:os";
 import { homedir as homedir3 } from "node:os";
 
 // src/harness/collect.ts
-import { readdir as readdir2, readFile, stat as stat4 } from "node:fs/promises";
+import { readdir as readdir2, readFile, stat as stat5 } from "node:fs/promises";
 import { basename as basename7, join as join7 } from "node:path";
 var DEFAULT_MAX_FILE_BYTES = 1e6;
 var MAX_WALK_DEPTH = 6;
@@ -9598,7 +9630,7 @@ function mark(ctx, path, reason) {
 async function readText(ctx, path) {
   let size;
   try {
-    const st = await stat4(path);
+    const st = await stat5(path);
     if (!st.isFile()) return null;
     size = st.size;
   } catch (e) {
@@ -9658,7 +9690,7 @@ async function walkMarkdown(ctx, dir, depth = 0) {
 }
 async function isDir(path) {
   try {
-    return (await stat4(path)).isDirectory();
+    return (await stat5(path)).isDirectory();
   } catch {
     return false;
   }
@@ -9932,7 +9964,7 @@ async function collectInventory(opts) {
   for (const root of opts.roots) {
     if (!await isDir(root)) {
       try {
-        await stat4(root);
+        await stat5(root);
         mark(ctx, root, "other");
       } catch (e) {
         mark(ctx, root, reasonOf(e));
@@ -10090,7 +10122,7 @@ var HTML_ANTI_FRAMING_HEADERS = {
 
 // src/serve/registry.ts
 import { watch as fsWatch2 } from "node:fs";
-import { stat as stat5 } from "node:fs/promises";
+import { stat as stat6 } from "node:fs/promises";
 import { join as join8 } from "node:path";
 var DEFAULT_MAX_LIVE = 8;
 var LAST_EVENTS_MAX = 5;
@@ -10199,7 +10231,7 @@ var Registry = class {
     for (const [id, w] of this.watched) {
       if (!w.tail) continue;
       try {
-        const st = await stat5(w.ref.path);
+        const st = await stat6(w.ref.path);
         if (st.size !== w.ref.sizeBytes || st.mtimeMs !== w.ref.mtimeMs) {
           w.ref.sizeBytes = st.size;
           w.ref.mtimeMs = st.mtimeMs;
@@ -10306,7 +10338,7 @@ var Registry = class {
   async tickInner(w) {
     if (!w.tail) return;
     try {
-      const st = await stat5(w.ref.path);
+      const st = await stat6(w.ref.path);
       w.ref.sizeBytes = st.size;
       w.ref.mtimeMs = st.mtimeMs;
     } catch {
@@ -12219,24 +12251,6 @@ import { realpath as realpath10 } from "node:fs/promises";
 import { constants as constants10 } from "node:fs";
 import { chmod, lstat as lstat8, open as open10, realpath as realpath7 } from "node:fs/promises";
 import { basename as basename9, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
-
-// src/suggest/workspace-identity.ts
-import { realpath as realpath6, stat as stat6 } from "node:fs/promises";
-import { dirname as dirname5 } from "node:path";
-async function liveWorkspaceIdentity(path) {
-  const cwd = await realpath6(path);
-  const info = await stat6(cwd, { bigint: true });
-  if (!info.isDirectory()) throw new Error(`workspace is not a directory: ${cwd}`);
-  const parent = dirname5(cwd);
-  const mountRoot = parent === cwd || (await stat6(parent, { bigint: true })).dev !== info.dev;
-  return { cwd, device: String(info.dev), inode: String(info.ino), mountRoot };
-}
-function sameWorkspace(stored, live) {
-  if (live.cwd !== stored.cwd || live.inode !== stored.inode) return false;
-  return live.device === stored.device || !live.mountRoot;
-}
-
-// src/suggest/artifacts.ts
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
 var MAX_FILES = 64;
@@ -12390,7 +12404,7 @@ async function loadProposalArtifacts(proposalsDir, id, proposalPath, manifestPat
     return { title: id, change: `see ${markdown.path}`, effort: "M", proposalPath: markdown.path };
   }
   const { path, value } = await readJsonArtifact(proposalsDir, manifestPath, `${id}.json`);
-  if (!workspace || !isAbsolute5(workspace.cwd) || !/^\d+$/.test(workspace.device) || !/^\d+$/.test(workspace.inode)) {
+  if (!isStoredWorkspaceIdentity(workspace)) {
     throw artifactError("structured proposals require a canonical workspace identity");
   }
   versionAndId(value, id);
@@ -12507,9 +12521,7 @@ function isVerificationComparison(value) {
 }
 async function canonicalWorkspace(value) {
   try {
-    if (!value || typeof value.cwd !== "string" || !isAbsolute5(value.cwd) || !/^\d+$/.test(value.device) || !/^\d+$/.test(value.inode)) {
-      throw new Error("invalid identity");
-    }
+    if (!isStoredWorkspaceIdentity(value)) throw new Error("invalid identity");
     const live = await liveWorkspaceIdentity(value.cwd);
     if (!sameWorkspace(value, live)) throw new Error("identity mismatch");
     return live.cwd;
@@ -12868,8 +12880,7 @@ var VERSION2 = true ? "0.7.2" : "0.0.0-dev";
 
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
-  const { cwd, device, inode } = await liveWorkspaceIdentity(process.cwd());
-  return { cwd, device, inode };
+  return storedWorkspaceIdentity(await liveWorkspaceIdentity(process.cwd()));
 }
 async function assertEvidenceWorkspace(rec, workspace) {
   if (rec.scope === "global") return;

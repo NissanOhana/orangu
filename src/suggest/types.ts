@@ -128,6 +128,8 @@ export interface SuggestionWorkspaceIdentity {
   cwd: string
   device: string
   inode: string
+  /** Directory creation time in ns, recorded only where the filesystem reports a real one; absent on earlier records. */
+  birthtimeNs?: string
 }
 
 export interface SuggestionApplicationCheck {

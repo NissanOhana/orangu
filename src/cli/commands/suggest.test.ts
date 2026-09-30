@@ -298,6 +298,8 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
       appendFileSync(storePath, `${JSON.stringify({ ...proposedLine, proposal: { ...proposedLine.proposal, workspace: { ...proposedLine.proposal!.workspace, ...workspace } } })}\n`)
     rewrite({ inode: String(BigInt(proposedLine.proposal!.workspace!.inode) + 1n) })
     await expect(cmdSuggest([], { show: id, 'for-apply': true, json: true })).rejects.toThrow(/belongs to workspace/)
+    rewrite({ birthtimeNs: '1' })
+    await expect(cmdSuggest([], { show: id, 'for-apply': true, json: true })).rejects.toThrow(/belongs to workspace/)
     rewrite({ device: String(BigInt(proposedLine.proposal!.workspace!.device) + 5n) })
     out = []
     await cmdSuggest([], { show: id, 'for-apply': true, json: true })
