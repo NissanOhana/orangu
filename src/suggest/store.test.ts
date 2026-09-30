@@ -537,6 +537,23 @@ describe('SuggestionStore', () => {
     expect(verified.appliedAt).toBe(appliedAt)
   })
 
+  it('accepts a receipt that names confounders only with the qualified summary', async () => {
+    const { record } = await store.upsertNew(finding({ ruleId: 'confounded-change' }), 'report')
+    await store.transition(record.id, 'kicked-off')
+    await store.transition(record.id, 'proposed', { proposal: structuredProposal(record.id) })
+    const { appliedAt } = await store.transition(record.id, 'applied', { application: applicationReceipt(record.id) })
+    const confoundedBy = ['sg_aaaaaaaaaaaa', 'sg_bbbbbbbbbbbb']
+    const plainSummary = cohortPatch(appliedAt!).verificationReceipt.summary
+    await expect(store.transition(record.id, 'verified', cohortPatch(appliedAt!, {}, { confoundedBy }))).rejects.toThrow(/summary must be the computed summary/)
+    await expect(
+      store.transition(record.id, 'verified', cohortPatch(appliedAt!, {}, { confoundedBy: ['sg_bbbbbbbbbbbb', 'sg_aaaaaaaaaaaa'] })),
+    ).rejects.toThrow(/confoundedBy must be sorted unique suggestion ids/)
+    const summary = `${plainSummary} Measured together with 2 other applied changes; not attributable to this change alone.`
+    const verified = await store.transition(record.id, 'verified', cohortPatch(appliedAt!, {}, { confoundedBy, summary }))
+    expect(verified.verificationTrust).toBe('computed-v2')
+    expect(verified.verificationReceipt).toMatchObject({ v: 2, confoundedBy, summary })
+  })
+
   it.skipIf(process.platform === 'win32')('hardens Orangu state directories and JSONL to private POSIX modes', async () => {
     await store.upsertNew(finding(), 'report')
     chmodSync(home, 0o777)

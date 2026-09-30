@@ -385,6 +385,72 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
     expect(JSON.parse(stdout()).verificationTrusted).toBe(true)
   })
 
+  it('--effect prints every verdict short of verified with its next step, and --set verified refuses each', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-08-15T00:00:00.000Z'))
+    const proposals = join(home, 'proposals')
+    const project = join(claudeHome, 'projects', '-fixture')
+    const appliedWith = async (ruleId: string, metric: string, comparison: string): Promise<string> => {
+      out = []
+      await cmdSuggest([], { rule: ruleId, scope: 'session', session: fixturePath, json: true })
+      const id = JSON.parse(stdout()).record.id as string
+      await cmdSuggest(['kicked-off'], { set: id, json: true })
+      writeFileSync(join(proposals, `${id}.md`), '# proposal\n')
+      writeFileSync(
+        join(proposals, `${id}.json`),
+        JSON.stringify({
+          v: 1, id, title: 'Reviewed change', changeClass: 'instruction', change: 'One line in CLAUDE.md.', evidence: 'Repeated reads.',
+          expectedEffect: 'Named outcome.', effort: 'S', risk: 'None known.', files: ['CLAUDE.md'], verification: 'Compare later sessions.',
+          verificationChecks: [{ metric, comparison }], sources: [{ kind: 'inference', label: 'Smallest change consistent with the evidence' }],
+        }),
+      )
+      await cmdSuggest(['proposed'], { set: id, proposal: join(proposals, `${id}.md`), manifest: join(proposals, `${id}.json`), json: true })
+      writeFileSync(join(proposals, `${id}.applied.json`), JSON.stringify({ v: 1, id, summary: 'Added the line.', files: ['CLAUDE.md'], checks: [{ name: 'diff check', ok: true }] }))
+      await cmdSuggest(['applied'], { set: id, application: join(proposals, `${id}.applied.json`), json: true })
+      return id
+    }
+    const regressed = await appliedWith('verdict-regressed', 'avgToolCalls', 'increased')
+    const guardsOnly = await appliedWith('verdict-guards-only', 'avgToolCalls', 'not-increased')
+    const withinNoise = await appliedWith('verdict-within-noise', 'avgTestRunsFailed', 'decreased')
+
+    // Three sessions before the change (6, 7, 8 tool calls) and three after it (0, 1, 0), all settled.
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'))
+    const session = (sessionId: string, startAt: string, toolCalls: number, mtime?: string): void => {
+      const b = new SessionBuilder({ sessionId, startAt, cwd: process.cwd() }).userPrompt('Work.')
+      for (let i = 0; i < toolCalls; i++) b.toolCall('Read', { file_path: `src/f${i}.ts` }, 'ok')
+      b.assistant([{ type: 'text', text: 'Done.' }], { usage: { input_tokens: 1, output_tokens: 1 } })
+      const path = join(project, `${sessionId}.jsonl`)
+      writeFileSync(path, b.toJsonl())
+      if (mtime) utimesSync(path, new Date(mtime), new Date(mtime))
+    }
+    session('eeeeeeee-0000-4000-8000-000000000011', '2026-08-10T10:00:00.000Z', 6, '2026-08-10T12:00:00.000Z')
+    session('eeeeeeee-0000-4000-8000-000000000012', '2026-08-11T10:00:00.000Z', 7, '2026-08-11T12:00:00.000Z')
+    session('eeeeeeee-0000-4000-8000-000000000013', '2026-08-12T10:00:00.000Z', 8, '2026-08-12T12:00:00.000Z')
+    session('eeeeeeee-0000-4000-8000-000000000021', '2026-08-17T10:00:00.000Z', 1)
+    session('eeeeeeee-0000-4000-8000-000000000022', '2026-08-18T10:00:00.000Z', 0)
+
+    const expected: Array<[string, string, RegExp, RegExp]> = [
+      [regressed, 'regressed', /avgToolCalls: 7 → 0\.333333 \(median 7 → 0; exact rank test p=1; regressed\)/, /next: a check moved the wrong way beyond chance: review the change, or reject the proposal/],
+      [guardsOnly, 'no-directional-check', /avgToolCalls: 7 → 0\.333333 \(median 7 → 0; exact rank test p=1; held\)/, /next: no reviewed check names a direction to improve, so nothing can be verified/],
+      [withinNoise, 'within-noise', /avgTestRunsFailed: 0 → 0 \(median 0 → 0; exact rank test p=1; within-noise\)/, /next: 3 of 10 later sessions counted: later sessions can still join, or reject the proposal/],
+    ]
+    for (const [id, verdict, evidence, next] of expected) {
+      out = []
+      await cmdSuggest([], { effect: id })
+      const text = stdout()
+      expect(text, verdict).toContain('3 before, 3 after the change')
+      expect(text, verdict).toMatch(evidence)
+      expect(text, verdict).toContain(`verdict: ${verdict}`)
+      expect(text, verdict).toMatch(next)
+      // The three changes were applied together, so each names the other two.
+      expect(text, verdict).toMatch(/measured together with: sg_[0-9a-f]{12}, sg_[0-9a-f]{12} \(not attributable to this change alone\)/)
+      await expect(cmdSuggest(['verified'], { set: id, json: true })).rejects.toThrow(new RegExp(`not verified: ${verdict};`))
+      out = []
+      await cmdSuggest([], { show: id, json: true })
+      expect(JSON.parse(stdout()).record.status, verdict).toBe('applied')
+    }
+  })
+
   it('--effect refuses global scope, which can never be applied or verified', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-08-15T00:00:00.000Z'))

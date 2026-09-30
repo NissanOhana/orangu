@@ -657,6 +657,8 @@ describe('plugin packaging', () => {
     expect(improve).toContain("orangu suggest --effect '<id>' --json --quiet")
     expect(improve).toContain("orangu suggest --set '<id>' verified --json --quiet")
     expect(improve).not.toContain('--verification')
+    expect(improve, 'an older `--verify <id> <later-input>` handoff still works').toContain('ignore any later-input after the id')
+    expect(improve, 'the skill chooses no sessions').toContain('Orangu picks the sessions; never choose them.')
     expect(improve, 'improve fixes causes instead of pasting the failure').toMatch(/never copy the session's own failing text/)
     expect(improve, 'improve picks attributable checks').toMatch(/the change directly moves, plus one guard/)
     expect(apply).toContain('`record.status` is exactly `proposed`')

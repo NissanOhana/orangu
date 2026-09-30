@@ -13,7 +13,7 @@ Read [the artifact contract](references/artifact-contract.md) before writing any
 
 ## Inputs
 
-Accept exactly one of: `<suggestion-id> [handoff flags]` from the report or localhost app; `<session-id|latest|path.jsonl|analysis.json>` for one session or current Analysis/SlimAnalysis JSON; `<aggregate.json> --scope repo|global` for current Aggregate JSON; or `--verify <suggestion-id>` to compare an applied session or repo change with later sessions.
+Accept exactly one of: `<suggestion-id> [handoff flags]` from the report or localhost app; `<session-id|latest|path.jsonl|analysis.json>` for one session or current Analysis/SlimAnalysis JSON; `<aggregate.json> --scope repo|global` for current Aggregate JSON; or `--verify <suggestion-id>` to compare an applied session or repo change with later sessions (ignore any later-input after the id).
 
 Never open or parse a `.jsonl` transcript yourself; pass it to `orangu evidence`. If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`: try `../../bin/orangu.cli.mjs` for an installed plugin, then `../../../dist/orangu.js` for a source checkout, and run the first file that exists with Node.js 20 or newer. Never fetch a package to continue. If neither works, report the blocker and stop.
 
@@ -63,7 +63,7 @@ Return a short ranked report: what happened, evidence, the change, expected outc
 
 ## 6. Verify only with later evidence
 
-For `--verify`, the record must be `applied` with session or repo scope; global scope cannot be applied or verified. Orangu picks the later and baseline sessions itself; never name or choose them.
+For `--verify`, the record must be `applied` with session or repo scope; global scope cannot be applied or verified. Orangu picks the sessions; never choose them.
 
 1. Run `orangu suggest --effect '<id>' --json --quiet`. Report its verdict, both session counts, each check's evidence line, and any `confoundedBy` ids: changes measured together, so the effect is not attributable to this one alone.
 2. Only when the verdict is `verified`, run `orangu suggest --set '<id>' verified --json --quiet`. Report verified only when that returns status `verified`; for `within-noise` or `not-enough-sessions` say it is not verified, keep it `applied`, and name the next step. Never call a draft or an application verified by assertion alone.
