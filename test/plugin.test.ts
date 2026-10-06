@@ -590,6 +590,12 @@ describe('plugin packaging', () => {
       expect(readText(path), path).toMatch(/research source requires the direct HTTPS page opened while the skill ran/)
   })
 
+  // Diagnosis covers the input forms the skill accepts and nothing wider.
+  it('improve diagnoses only an accepted input', () => {
+    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md'])
+      expect(readText(path), path).toContain('Diagnose any accepted input in chat.')
+  })
+
   // The descriptions keep the phrases that the routing cases in plugin/evals send.
   it('the mirrored descriptions keep the phrases the routing evals rely on', () => {
     const desc = (s: string): string => /description:\s*(.+)/.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? ''
