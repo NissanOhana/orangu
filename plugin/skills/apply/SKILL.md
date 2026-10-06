@@ -48,4 +48,4 @@ After all named checks pass, derive a trusted absolute `<application-path>` from
 
 The receipt is skill-authored. Orangu validates its shape, and it checks that the relative file list exactly matches the reviewed manifest for this invocation. Orangu does not inspect the working-tree diff, run the checks again, or prove filesystem confinement. Two requirements of this skill contract remain: stay inside the declared files, and report checks truthfully.
 
-Return the changed files, check results, and receipt path. For session or repo scope, say: applied locally, not yet verified; verify after at least three settled later sessions with `/orangu:improve --verify <id>`. Never offer verification for global scope.
+Return the changed files, check results, and receipt path. For session or repo scope, say: "applied locally, not yet verified. Verify after at least three settled later sessions with `/orangu:improve --verify <id>`." Never offer verification for global scope.

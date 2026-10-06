@@ -1,6 +1,6 @@
 # orangu `--json` shape (schemaVersion 2)
 
-The stable machine contract emitted by `orangu analyze --json`. The HTML report renders the same evidence and the skills read its bounded projection. Breaking changes bump `schemaVersion`. Fields use explicit tokens, milliseconds, bytes, timestamps, ratios, and plain counts from the supported source.
+This is the stable machine contract that `orangu analyze --json` emits. The HTML report renders the same evidence and the skills read its bounded projection. Breaking changes bump `schemaVersion`. Fields use explicit tokens, milliseconds, bytes, timestamps, ratios, and plain counts from the supported source.
 
 ## Top level
 ```
@@ -37,7 +37,7 @@ The stable machine contract emitted by `orangu analyze --json`. The HTML report 
 - **AgentStat** = `{ agentId, name?, agentType?, description?, model?, spawnDepth, parentAgentId?, spawnedByToolUseId?, turnIndex?, startTs?, endTs?, durationMs?, messageCount, toolCallCount, toolErrors, tokens:Usage, totalTokens, reportedTotalTokens?, reportedDurationMs?, status?, hasTranscript }`
 - **ContextPoint** = `{ messageUuid, turnIndex, agentId?, ts?, model, contextSize, input, cacheRead, cacheWrite, cacheWrite1h, output }`
 - **Insight** = `{ id, ruleId, severity(info|low|medium|high), axis(quality|time|tokens|context), title, detail, recommendation, evidence{}, turnIndexes[], savings?{tokens?,ms?,estimated}, personas[] }`
-  - `savings.tokens` is a **token count**, present only when following the recommendation would have caused fewer tokens to be sent or generated. A rule whose change would merely move the same tokens (a cache tier, a different model) omits `savings` entirely; do not invent one for it.
+  - `savings.tokens` is a **token count**. It is present only when following the recommendation would cause fewer tokens to be sent or generated. A rule whose change would only move the same tokens (a cache tier, a different model) omits `savings` entirely. Do not invent one for it.
 
 ## Aggregate (`orangu repo/global --json`)
 ```
@@ -47,7 +47,7 @@ The stable machine contract emitted by `orangu analyze --json`. The HTML report 
   byModel[], byProject[], byTool[], byAgentType[], bySkill[],
   topReReadFiles:[{path,sessions,totalReads}],
   recurringErrors:[{signature,tool,sessions,total}],
-  crossFindings:[{ruleId,title,sessions,totalSavingsTokens,totalSavingsMs,axis,severity,exampleSessionIds[]}],
+  crossFindings:[{ruleId,title,recommendation,sessions,totalSavingsTokens,totalSavingsMs,axis,severity,exampleSessionIds[]}],
   sessions:[SessionRow], topSessions:[SessionRow], byWeek:[{weekStartUtc,tokens,sessions}] }
 ```
 
@@ -59,10 +59,10 @@ Kept: `schemaVersion, generator, session, summary, insights`, `tools.{byName,err
 `context.{peak,baseline,final,contextWindow,cacheHitRatio,reReadMultiplier,compactions}`,
 `quality.signals`, `parse.reconciliation`, plus a `slim: true` marker.
 Dropped: `turns`, `tools.calls`, `context.series`, `events`, `time`, the rest of `parse`.
-Typically ~20 KB where the full object is megabytes. Size any read first: `orangu estimate <id>`.
+It is typically ~20 KB, where the full object is megabytes. Size any read first: `orangu estimate <id>`.
 
 ## Redaction (default-on)
 
-`--json` output is redacted by default: API keys, tokens, emails and other obvious secrets in previews,
-titles and summaries are masked (e.g. `‹anthropic-key›`, `‹email›`). `--no-redact` restores the raw
-strings, only when the user explicitly asks. Structural numbers are never altered by redaction.
+`--json` output is redacted by default. Orangu masks API keys, tokens, emails and other obvious secrets in
+previews, titles and summaries (for example `‹anthropic-key›`, `‹email›`). `--no-redact` restores the raw
+strings. Use it only when the user explicitly asks. Redaction never alters structural numbers.

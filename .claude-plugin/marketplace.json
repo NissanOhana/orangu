@@ -6,7 +6,7 @@
   "plugins": [
     {
       "name": "orangu",
-      "description": "Observe Claude Code, Cowork, and Desktop sessions with deterministic local evidence, then use optional skills to draft changes, apply session/repo proposals explicitly, and verify session-scope changes against later evidence. No account, instrumentation, or report upload.",
+      "description": "Observe Claude Code, Cowork, and Desktop sessions with deterministic local evidence. Then use optional skills to draft changes, apply session/repo proposals explicitly, and verify session-scope changes against later evidence. It needs no account and no instrumentation, and it uploads no report.",
       "author": { "name": "Nissan Ohana" },
       "category": "productivity",
       "source": "./plugin"

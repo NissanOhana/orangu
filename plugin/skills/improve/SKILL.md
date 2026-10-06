@@ -75,7 +75,7 @@ Return a short ranked summary: what happened, evidence, the change, expected out
 
 ## 6. Verify only with later evidence
 
-For `--verify`, the record must be `applied` with session or repo scope. Global scope cannot be applied or verified. Orangu picks the sessions; never choose them.
+For `--verify`, the record must be `applied` with session or repo scope. Global scope cannot be applied or verified. Orangu picks the sessions. Never choose them.
 
 1. Run `orangu suggest --effect '<id>' --json --quiet`. Report its verdict, both session counts, each check's evidence line, and any `confoundedBy` ids. Those are changes measured together, so the effect is not attributable to this one alone.
 2. Only when the verdict is `verified`, run `orangu suggest --set '<id>' verified --json --quiet`. Report verified only when that returns status `verified`. For `within-noise` or `not-enough-sessions`, say it is not verified, keep it `applied`, and name the next step. Never call a proposal or an application verified by assertion alone.

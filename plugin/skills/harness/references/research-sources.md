@@ -1,10 +1,10 @@
 # Outside-research policy
 
-Read this only after the deterministic catalog has been consulted and the user has explicitly approved outside research. Pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`.
+Read this only after you consult the deterministic catalog and the user explicitly approves outside research. Pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`.
 
 ## Nondisclosure boundary
 
-Evidence file paths, item ids, project context, and proposal content are local-only inputs. Online queries and opened URLs use generic feature and change-class terms only. Never send local prompts, paths, session or suggestion ids, project/repository/customer names, evidence content, proposal text, code, or local error text to a network service or place them in a URL. Join generic research results to local evidence only after returning offline.
+Evidence file paths, item ids, project context, and proposal content are local-only inputs. Online queries and opened URLs use generic feature and change-class terms only. Never send local prompts, paths, session or suggestion ids, or project/repository/customer names to a network service. The same rule covers evidence content, proposal text, code, and local error text. Never place them in a URL. Join generic research results to local evidence only after returning offline.
 
 ## Provenance rule
 
@@ -14,7 +14,7 @@ Evidence file paths, item ids, project context, and proposal content are local-o
 
 **Budget: at most 4 web calls.**
 
-Use the official Claude Code or Claude platform documentation for instruction files, scripts and commands, hooks, skills, agents, MCP, plugins, settings, and workflows. Prefer the page that directly defines the extension surface. Open only pages needed for the supplied gap.
+Use the official Claude Code or Claude platform documentation for each extension surface. The surfaces are instruction files, scripts and commands, hooks, skills, agents, MCP, plugins, settings, and workflows. Prefer the page that directly defines the extension surface. Open only pages needed for the supplied gap.
 
 ## Tier 2: maintained repositories and directories
 
@@ -24,7 +24,7 @@ Use maintained source repositories and focused directories for a named missing c
 
 Do not run `npx skills find`, do not install anything, and do not present a search result as an endorsed change. Return a user-run query or install command only as part of candidate review.
 
-For `skill-discover`, a proposal carries a **Candidate review** section with the user-run search query, source, install count as observed by the user, repository evidence, and `verifiedAt: null`. Never claim installation.
+For `skill-discover`, a proposal carries a **Candidate review** section. The section holds the user-run search query, source, install count as observed by the user, repository evidence, and `verifiedAt: null`. Never claim installation.
 
 ## Tier 3: practitioner evidence
 
