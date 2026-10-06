@@ -1089,8 +1089,23 @@ describe('docs/USAGE.md entry point', () => {
     expect(gate('src/cli/commands/evidence.ts')).toHaveLength(1)
     expect(gate('src/cli/commands/evidence.ts')[0]).toContain("!flagBool(flags, 'quiet')")
     expect(gate('src/cli/commands/evidence.ts')[0]).not.toContain("'json'")
+    // exactly these 3 files resolve `current`: a 4th caller fails here until this sentence covers it
+    const sources = (readdirSync(join(root, 'src'), { recursive: true }) as string[])
+      .map((file) => `src/${file.split('\\').join('/')}`)
+      .filter((file) => file.endsWith('.ts') && !/\.(test|spec|d)\.ts$/.test(file) && file !== 'src/discover/current.ts')
+    const callers = sources.filter((file) => readFileSync(join(root, file), 'utf8').includes('resolveCurrentSession(')).sort()
+    expect(callers).toEqual(['src/cli/commands/estimate.ts', 'src/cli/commands/evidence.ts', 'src/cli/main.ts'])
     expect(usage).not.toContain('never guessed silently')
     expect(usage).toContain('If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch` and `estimate`.')
+  })
+
+  it('names the Improvements screen with the label the report sidebar uses', () => {
+    // one word for one thing: the sidebar (nav.ts), the page title (app.ts), this list and the landing demo tab
+    const label = /\{ id: 'suggest', label: '([^']+)', screen: 'suggest' \}/.exec(readFileSync(join(root, 'src/report/client/nav.ts'), 'utf8'))?.[1]
+    expect(label).toBe('Improvements')
+    expect(readFileSync(join(root, 'src/report/client/app.ts'), 'utf8')).toContain(`suggest: '${label}',`)
+    expect(usage).toContain(`\n- ${label}: `)
+    expect(readFileSync(join(root, 'site/index.src.html'), 'utf8')).toMatch(new RegExp(`data-demo-view="suggest"[^>]*>${label}</button>`))
   })
 
   it('lists every input that keeps bare orangu on the latest-session brief', () => {
