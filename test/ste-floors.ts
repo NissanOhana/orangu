@@ -80,19 +80,20 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // parse.ts parses them. The duplicate_uuid warning (parse.ts:579) is cached Analysis payload copy.
   'src/adapters': { floor: 88, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'src/cache': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (10 of 10), no change was needed
-  'src/cli': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (235 of 235): the printHelp template, 20 semicolons, "is running"
+  'src/cli': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (234 of 234): the printHelp template, 20 semicolons, "is running"
   'src/discover': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (17 of 17): the 4 current-session errors split
   'src/feedback': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (2 of 2), no change was needed
   'src/harness': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (21 of 21): the notes split, the no-config note now matches the report
   'src/redact': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (1 of 1), no change was needed
-  // measured 97 (28 of 29). tail.ts:127 keeps "changed while it was being read", the phrase of the
-  // read-race family that the adapter regex parses (one phrase for one error)
+  // measured 97 (28 of 29). tail.ts:127 keeps "changed while it was being read": one phrase for every
+  // read-race error. The adapter retry regex (parse.ts:261) parses only the evidence-input.ts messages
   'src/serve': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // measured 99 (230 of 233). Kept on purpose: the cohort receipt summary (verification-policy.ts:73)
   // and the check evidence line (cohort-stats.ts:159) are stored in each verified record and compared
   // byte for byte on read, and artifacts.ts:196 is the read-race phrase
   'src/suggest': { floor: 97, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  // measured 83 (5 of 6). stable-file.ts:85 is the read-race phrase that the adapter regex parses
+  // measured 83 (5 of 6). stable-file.ts:85 keeps the read-race phrase: one phrase for every read-race
+  // error. The adapter retry regex does not parse it (parse-retry.test.ts "classifies exactly the two transient forms")
   'src/util': { floor: 81, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'src/suggest/catalog.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (52 of 52): 11 notes rewritten, no claim, id, URL or verifiedAt moved
   'src/suggest/features.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (22 of 22): 7 notes rewritten, no claim, id, URL or verifiedAt moved
