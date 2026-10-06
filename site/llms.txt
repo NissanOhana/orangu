@@ -19,7 +19,7 @@ Concretely, you can:
 - `npx orangu list` / `watch` : list the sessions, or tail a live session.
 - `npx orangu evidence` / `estimate` : give bounded evidence to skills, or size what an LLM would read.
 - `npx orangu suggest` / `feedback` : read and write the suggestion records in `~/.orangu`, or open a localhost feedback form.
-- In Claude Code, after `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`: `/orangu:analyze`, `/orangu:improve latest`, `/orangu:apply <sg_id>`, `/orangu:harness`, `/orangu:feedback`.
+- In Claude Code, after `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`: `/orangu:analyze`, `/orangu:improve latest`, `/orangu:apply <sg_id>`, `/orangu:harness`, `/orangu:show-me latest` (a slide deck and a written report, as offline HTML), `/orangu:feedback`.
 
 Facts an LLM should not get wrong:
 

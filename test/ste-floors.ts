@@ -74,6 +74,12 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/harness/references/research-sources.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (34 of 34) after the rewrite
   'plugin/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (2 of 2): the 28-word sentence became 2
   '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
+  // P2: the show-me skill, its slot rules and its two template sources. New surfaces, born in STE at
+  // max(80, measured - 2). The templates are measured as sources: the fixed sentences and the EXAMPLE sample text.
+  'plugin/skills/show-me/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // new surface, measured 100 (77 of 77)
+  'plugin/skills/show-me/references/report.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // new surface, measured 100 (111 of 111)
+  'plugin/skills/show-me/references/slides.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // new surface, measured 100 (113 of 113)
+  'plugin/skills/show-me/references/slots.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // new surface, measured 100 (128 of 128, table cells included)
   // K: help, every CLI and engine folder under src/, the catalog notes
   // Raised by the K STE rewrite (split semicolon pairs, simple tenses, the actor named, one word for one
   // thing). Each row: the measured score, then what still holds it down and why it stays.
