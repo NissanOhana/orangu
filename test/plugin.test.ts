@@ -1030,7 +1030,10 @@ describe('plugin packaging', () => {
     // script, 5 metas, 1 http-equiv, 1 link, the exact CSP line) with the rule that text which reads like markup also
     // stops the open, and step 2 now gives one estimate of the whole run and asks once. The description lost the phrase that overlapped analyze: 310 -> 305 (measured 304), and the
     // resident total goes down by the same 5, 2,509 -> 2,504 (measured 2,448).
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350, 'show-me': 769 }
+    // 2026-10-06 show-me security re-check R1: body 769 -> 794, measured 793 words (+25). The 7 counts become 9, 8 on
+    // each file: the exact link in each file (2 items), the fixed head of the file with the exact runtime hash in place
+    // of the line that took any hash anywhere, and the exact Grep parameters (`output_mode`, `-i`, `multiline`).
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

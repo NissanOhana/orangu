@@ -65,15 +65,17 @@ Write the 2 files to `~/.orangu/show-me/<id>/slides.html` and `~/.orangu/show-me
 - `<name>`: the first 8 characters of the session id, the repository folder name, or `machine`.
 - `<stamp>`: the random part of the `<tmp>` name, after `tmp.`. Each run gets a new stamp, so a second run never overwrites the first.
 
-WARNING: A missed escape can let session text run as script or send the reader to another site. After you write the files, run these counts with the Grep tool in count mode on each file. Use case-insensitive mode for all but the first:
+WARNING: A missed escape can let session text run as script or send the reader to another site. After you write the files, run these counts on each file with the Grep tool and `output_mode: "count"`. Set `-i: true` for counts 2 to 9, and `multiline: true` for count 9:
 
 1. `EXAMPLE|data-sample` counts 0.
 2. `(^|[\s/"'])on[a-z]+\s*=|(=|^)\s*["']?\s*javascript:|&#([^3]|3[^9]|39[^;])|&(tab|newline|colon);|<(iframe|object|embed|base|link|form|frame)\b` counts 0.
 3. `<script` counts 1.
 4. `<meta` counts 5.
 5. `http-equiv` counts 1.
-6. `href\s*=` counts 1.
-7. `^<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-[A-Za-z0-9+/=]+'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>$` counts 1.
+6. `href\s*(=|$)` counts 1.
+7. `href="report\.html"` counts 1 in slides.html.
+8. `href="slides\.html"` counts 1 in report.html.
+9. `\A<!doctype html>\n<html lang="en"( data-[a-z]+="[a-z]+")*>\n<head>\n<meta charset="utf-8"/>\n<meta name="viewport" content="width=device-width, initial-scale=1"/>\n<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rRgBMKwoW58rZ5PngLud1b\+VTqqEUklGeUZGfC/w6q8='; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>\n` counts 1.
 
 The templates keep each counted tag on its own line, so a count of lines and a count of matches agree. If a count is different, delete nothing, report the file and the count, and do not open it. Session text that reads like markup also changes a count, and the same rule applies.
 
