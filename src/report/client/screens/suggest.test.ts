@@ -334,6 +334,83 @@ describe('renderSuggest proposal UX', () => {
   })
 })
 
+/** The markup of the first card, from its opening tag to its own closing tag. */
+function firstCard(html: string): string {
+  const start = html.indexOf('<details class="finding"')
+  return html.slice(start, html.indexOf('</details>', start))
+}
+
+/** Everything inside a card's <summary>: what a reader sees while the card is closed. */
+function summaryOf(card: string): string {
+  return card.slice(card.indexOf('<summary>'), card.indexOf('</summary>'))
+}
+
+/**
+ * The card names the change before any command, and the way to an AI proposal is explained once, above
+ * the cards, not repeated in every card. The copied text is a shell command (`claude "/orangu:improve …"`),
+ * so the explainer says to paste it in a terminal, where it starts Claude Code.
+ */
+describe('renderSuggest: each card leads with its improvement, one explainer says how to get an AI proposal', () => {
+  it('puts the improvement in the closed card summary, before the copy button, and keeps no steps in the card', () => {
+    renderSuggest(context('file', []))
+    const card = firstCard(markup)
+    expect(summaryOf(card)).toContain('<span class="rec sg-lead"><b>Improvement:</b> Cache it</span>')
+    expect(card.indexOf('sg-lead')).toBeLessThan(card.indexOf('data-kick-copy'))
+    expect(card).toContain('data-kick-copy="')
+    expect(card).toContain('>Copy the Claude Code command</button>')
+    expect(card).not.toContain('<ol class="steps"')
+    expect(card).not.toContain('handled by')
+    expect(card).not.toContain('<span class="pill">orangu:improve</span>')
+    expect(card).not.toContain('<b>Fix.</b>')
+  })
+
+  it.each(['file', 'serve'] as const)('renders exactly one explainer, above the first card and outside every card (%s)', (mode) => {
+    renderSuggest(mode === 'serve' ? serveContext([]) : context('file', []))
+    expect(markup.split('Get an AI proposal').length - 1).toBe(1)
+    const at = markup.indexOf('Get an AI proposal')
+    const before = markup.slice(0, at)
+    expect((before.match(/<details/g) ?? []).length).toBe((before.match(/<\/details>/g) ?? []).length)
+    expect(at).toBeLessThan(markup.indexOf('<details class="finding"'))
+  })
+
+  it('walks the 3 steps once: the button, the paste in a terminal with 2 install lines, and what Claude writes', () => {
+    renderSuggest(context('file', []))
+    const box = markup.slice(markup.indexOf('Get an AI proposal'), markup.indexOf('<details class="finding"'))
+    expect((box.match(/<li>/g) ?? []).length).toBe(3)
+    expect(box).toContain('Open an improvement. Click <b>Copy the Claude Code command</b>.')
+    expect(box).toContain('Paste it in a terminal in ~/Code/demo. It starts Claude Code.')
+    expect(box).toContain('First time only, type these 2 lines in Claude Code:')
+    // one bar per command: one bar with both commands copied a line that does not run
+    expect(box).toContain('data-copy="/plugin marketplace add NissanOhana/orangu"')
+    expect(box).toContain('data-copy="/plugin install orangu"')
+    expect(box.split('<span class="p" aria-hidden="true">&gt;</span>').length - 1).toBe(2)
+    expect(markup).not.toContain('NissanOhana/orangu · /plugin install orangu')
+    expect(box).toContain('Claude writes one proposal: the change, its effect, its risk and how to check it. It changes no file in your repository.')
+    expect(box).toContain('The proposal is in ~/.orangu/proposals. Run orangu serve to see it here.')
+    const paste = box.indexOf('Paste it in a terminal')
+    const install = box.indexOf('/plugin install orangu')
+    const writes = box.indexOf('Claude writes one proposal')
+    expect(paste).toBeLessThan(install)
+    expect(install).toBeLessThan(writes)
+  })
+
+  it('says the proposal shows below on localhost, where the Saved proposals list is', () => {
+    renderSuggest(serveContext([]))
+    expect(markup).toContain('The proposal shows below, in Saved proposals.')
+    expect(markup).not.toContain('Run orangu serve to see it here.')
+  })
+
+  it('shows no explainer and no note when nothing was found', () => {
+    const ctx = context('file', [])
+    ctx.a = { ...analysis, insights: [] } as unknown as Analysis
+    renderSuggest(ctx)
+    expect(markup).toContain('No improvements found')
+    expect(markup).toContain('The rules found nothing to change. Look again after your next session.')
+    expect(markup).not.toContain('Get an AI proposal')
+    expect(markup).not.toContain('What a proposal can change')
+  })
+})
+
 /**
  * The scope screens are the whole-harness entry point: the block that runs the review must be the
  * first thing on them (AC21), and the action the user came for is a primary control, not a 12 px
@@ -441,5 +518,47 @@ describe('renderSuggest on a repo/global scope', () => {
     renderSuggest(context('file', []))
     expect(markup).toContain('data-scope="session">This session</button>')
     expect(markup).not.toContain('no session is selected')
+  })
+
+  it.each(['repo', 'global'] as const)('leads each %s card with the improvement its cross finding carries', (scope) => {
+    renderSuggest(scopeContext(scope, [{ ...crossFinding, recommendation: 'Read each file once.' }]))
+    const card = firstCard(markup)
+    expect(summaryOf(card)).toContain('<span class="rec sg-lead"><b>Improvement:</b> Read each file once.</span>')
+    expect(card.indexOf('sg-lead')).toBeLessThan(card.indexOf('data-kick-copy'))
+    expect(card).not.toContain('<ol class="steps"')
+  })
+
+  it('shows a card without an improvement line for an older aggregate that has no recommendation', () => {
+    renderSuggest(scopeContext('repo'))
+    expect(firstCard(markup)).not.toContain('sg-lead')
+    expect(markup).toContain('Get an AI proposal')
+  })
+
+  it.each([
+    ['repo', 'Paste it in a terminal in this repository. It starts Claude Code.'],
+    ['global', 'Paste it in a terminal. It starts Claude Code.'],
+  ] as const)('puts the explainer under the whole-harness block and names where to paste (%s)', (scope, paste) => {
+    renderSuggest(scopeContext(scope))
+    const block = markup.indexOf('Whole-harness review')
+    const explainer = markup.indexOf('Get an AI proposal')
+    expect(block).toBeLessThan(explainer)
+    expect(explainer).toBeLessThan(markup.indexOf('<details class="finding"'))
+    expect(markup.slice(explainer, markup.indexOf('<details class="finding"'))).toContain(paste)
+  })
+
+  it('counts the sessions that show the pattern against the sessions in the scope', () => {
+    renderSuggest(scopeContext('repo', [{ ...crossFinding, sessions: 1 }]))
+    expect(firstCard(markup)).toContain('This pattern shows in 1 of 3 sessions.')
+    expect(markup).not.toContain('Recurs in')
+  })
+
+  // A literal #overview?s= link dropped theme= and audience=, so a dark reader turned light on the click.
+  it('builds the localhost example-session links through the hash writer, so theme and audience survive', () => {
+    const ctx = scopeContext('repo')
+    ctx.data.mode = 'serve'
+    ctx.state = { screen: 'suggest', scope: 'repo', theme: 'dark', audience: 'plain' }
+    renderSuggest(ctx)
+    expect(markup).toContain('<a class="exch" href="#overview?s=session-a&amp;audience=plain&amp;theme=dark">session-</a>')
+    expect(markup).not.toContain('href="#overview?s=session-a"')
   })
 })

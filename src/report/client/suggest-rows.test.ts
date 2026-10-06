@@ -3,6 +3,7 @@
  * same rows, and status-record matching by ruleId+scope across sources.
  */
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'node:fs'
 import type { Analysis } from '../../model/analysis.js'
 import type { Aggregate } from '../../analyze/aggregate.js'
 import { embeddedSource } from './data.js'
@@ -107,6 +108,25 @@ describe('planRows', () => {
   })
   it('repo/global scope without an aggregate yields no rows (designed empty state)', () => {
     expect(planRows('global', analysis, undefined)).toEqual([])
+  })
+
+  // The card names the change before any command: every recurring finding carries the improvement of
+  // the example session whose figures its title shows.
+  it('copies the improvement onto every repo/global row of the golden aggregate', () => {
+    const golden = JSON.parse(readFileSync(new URL('../../../test/golden/aggregate.json', import.meta.url), 'utf8')) as Aggregate
+    const rows = planRows('repo', undefined, golden)
+    expect(rows.length).toBe(golden.crossFindings.length)
+    expect(rows.length).toBeGreaterThan(0)
+    for (const row of rows) expect(row.recommendation?.trim(), row.ruleId).toBeTruthy()
+  })
+
+  it('counts the sessions that show a pattern against the sessions in the scope, never as a bare recurrence', () => {
+    const one = { ...agg, sessionCount: 7, crossFindings: [{ ...agg.crossFindings[0]!, sessions: 1 }] } as unknown as Aggregate
+    const three = { ...agg, sessionCount: 7, crossFindings: [{ ...agg.crossFindings[0]!, sessions: 3 }] } as unknown as Aggregate
+    const single = { ...agg, sessionCount: 1, crossFindings: [{ ...agg.crossFindings[0]!, sessions: 1 }] } as unknown as Aggregate
+    expect(planRows('repo', undefined, one)[0]!.detail).toBe('This pattern shows in 1 of 7 sessions.')
+    expect(planRows('global', undefined, three)[0]!.detail).toBe('This pattern shows in 3 of 7 sessions.')
+    expect(planRows('repo', undefined, single)[0]!.detail).toBe('This pattern shows in 1 of 1 session.')
   })
 })
 

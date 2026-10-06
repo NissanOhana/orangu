@@ -4,7 +4,12 @@ import { paintedTheme, projectTheme, withTheme } from './theme.js'
 
 const APP = APP_URL
 const APP_ORIGIN = new URL(APP).origin
+const SITE = 'http://127.0.0.1:4173'
 const SESSION = 'aaaaaaaa-0000-4000-8000-000000000001'
+
+async function noHorizontalOverflow(page: Page): Promise<void> {
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+}
 
 function runtimeErrors(page: Page): string[] {
   const errors: string[] = []
@@ -239,5 +244,115 @@ test('a sidebar click is acknowledged before the new screen is built', async ({ 
     return seen
   })
   expect(painted).toEqual({ name: 'o-busy', delay: '0s', opacity: '1', height: '2px', position: 'fixed', cursor: 'progress' })
+  expect(errors).toEqual([])
+})
+
+/**
+ * Each Improvements card names its change while closed, and the way to an AI proposal is explained
+ * once, above the cards. The plugin install is 2 lines typed in Claude Code, so each line has its own
+ * bar: one bar with both copied a line that does not run.
+ */
+test('each Improvements card names its improvement while closed, and one explainer copies one install line per bar', async ({ page, context }, info) => {
+  const errors = runtimeErrors(page)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  const explainer = page.locator('.card', { has: page.locator('.eyebrow', { hasText: 'Get an AI proposal' }) })
+  await expect(explainer).toHaveCount(1)
+  await expect(explainer).toContainText('Paste it in a terminal')
+  await expect(explainer).toContainText('It starts Claude Code.')
+  const bars = explainer.locator('.cmd')
+  await expect(bars).toHaveCount(2)
+  await bars.last().locator('.copy').click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('/plugin install orangu')
+  const row = page.locator('details.finding').first()
+  await expect(row).not.toHaveAttribute('open', '')
+  await expect(row.locator('summary .sg-lead')).toBeVisible()
+  await expect(row.locator('summary .sg-lead')).toContainText('Improvement:')
+  await expect(row.locator('.steps')).toHaveCount(0)
+  await noHorizontalOverflow(page)
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(errors).toEqual([])
+})
+
+// The page head of every screen offers the show-me command for what the page shows. Copy only.
+test('Show me in the page head copies the session show-me command, opens and closes from the keyboard, and keeps the theme', async ({ page, context }, info) => {
+  const errors = runtimeErrors(page)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
+  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+  const control = page.locator('.page-head').getByRole('button', { name: 'Show me' })
+  await expect(control).toHaveAttribute('aria-expanded', 'false')
+  await control.click()
+  await expect(control).toHaveAttribute('aria-expanded', 'true')
+  const popover = page.locator('#show-me > .card')
+  await expect(popover).toBeVisible()
+  await expect(popover).toContainText('a slide deck and a written report')
+  const command = `claude "/orangu:show-me ${SESSION}"`
+  const bar = popover.locator('.cmd').first()
+  await expect(bar.locator('.txt')).toHaveText(command)
+  await bar.locator('.copy').click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(command)
+  await expect(popover.locator('.cmd')).toHaveCount(3)
+  await noHorizontalOverflow(page)
+  await control.focus()
+  await page.keyboard.press('Enter')
+  await expect(control).toHaveAttribute('aria-expanded', 'false')
+  await expect(popover).toBeHidden()
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(errors).toEqual([])
+})
+
+test('Show me copies the scope command on the Repo screen and on a saved repository report', async ({ page, context }, info) => {
+  const errors = runtimeErrors(page)
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: SITE })
+  const scoped = 'claude "/orangu:show-me --scope repo"'
+  for (const url of [`${APP}/#repo?s=${SESSION}`, `${SITE}/sample-repo.html#repo`]) {
+    await page.goto(withTheme(url, info), { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
+    await page.locator('.page-head').getByRole('button', { name: 'Show me' }).click()
+    const bar = page.locator('#show-me > .card .cmd').first()
+    await expect(bar.locator('.txt')).toHaveText(scoped)
+    await bar.locator('.copy').click()
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(scoped)
+    expect(await paintedTheme(page)).toBe(projectTheme(info))
+  }
+  // the session sample ships the same bundle and copies its session instead
+  await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
+  await page.locator('.page-head').getByRole('button', { name: 'Show me' }).click()
+  await expect(page.locator('#show-me > .card .cmd .txt').first()).toHaveText(/^claude "\/orangu:show-me [0-9a-f-]+"$/)
+  expect(errors).toEqual([])
+})
+
+test('the Overview top card leads to the 3 steps and keeps the theme and the audience', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}&audience=plain`, info), { waitUntil: 'domcontentloaded' })
+  const top = page.locator('details.finding.top')
+  await expect(top.locator('summary .sg-lead')).toBeVisible()
+  await expect(top).toContainText('It starts Claude Code.')
+  await top.getByRole('link', { name: 'See the 3 steps →' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  await expect(page.locator('.eyebrow', { hasText: 'Get an AI proposal' })).toBeVisible()
+  const hash = await page.evaluate(() => location.hash)
+  expect(hash).toContain('audience=plain')
+  expect(hash.includes('theme=dark')).toBe(projectTheme(info) === 'dark')
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(errors).toEqual([])
+})
+
+test('an example session link on a repo improvement keeps the theme and the audience', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}&scope=repo&audience=plain`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  const row = page.locator('details.finding').first()
+  await expect(row).toBeVisible({ timeout: 20_000 })
+  await row.locator('summary').click()
+  await row.locator('a.exch').first().click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+  const hash = await page.evaluate(() => location.hash)
+  expect(hash).toContain('audience=plain')
+  expect(hash.includes('theme=dark')).toBe(projectTheme(info) === 'dark')
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
   expect(errors).toEqual([])
 })

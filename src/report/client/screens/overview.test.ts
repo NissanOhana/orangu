@@ -207,6 +207,44 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
   })
 })
 
+/**
+ * The top card names the change in its summary, says where the copied command goes (a terminal: the
+ * text is `claude "…"`, which starts Claude Code), and links to the 3 steps on the Improvements screen
+ * through the hash writer, so the reader keeps their theme and audience.
+ */
+describe('renderOverview: the top improvement and the way to an AI proposal', () => {
+  it('names the improvement in the top card summary and drops the body box that repeated it', async () => {
+    const ctx = await context()
+    renderOverview(ctx)
+    const top = ctx.a!.insights.find((i) => i.id === ctx.a!.summary.topInsightIds[0])!
+    const start = markup.indexOf('<details class="finding top" open>')
+    const card = markup.slice(start, markup.indexOf('</details>', start))
+    expect(card.slice(0, card.indexOf('</summary>'))).toContain(`<span class="rec sg-lead"><b>Improvement:</b> ${esc(top.recommendation)}</span>`)
+    expect(card).not.toContain('<b>Fix.</b>')
+    expect(markup).toContain('<div class="eyebrow mb6">Top improvement</div>')
+  })
+
+  it('says to paste the command in a terminal and links the top card only to the 3 steps, keeping theme and audience', async () => {
+    const ctx = await context({ mode: 'serve', dirtyRoute: true })
+    expect(ctx.a!.summary.topInsightIds.length).toBeGreaterThan(1)
+    renderOverview(ctx)
+    expect(markup).toContain('<div class="eyebrow">Get an AI proposal</div>')
+    const captions = markup.split('<div class="small">Paste it in a terminal. It starts Claude Code.').length - 1
+    expect(captions).toBe(ctx.a!.summary.topInsightIds.length)
+    expect(markup).toContain(`<a href="#suggest?s=${ctx.state.s}&amp;audience=dev&amp;theme=dark">See the 3 steps →</a>`)
+    expect(markup.split('See the 3 steps').length - 1).toBe(1)
+    expect(markup).not.toContain('Draft a proposal')
+  })
+
+  it('keeps the improvement line and the link to the 3 steps in Plain language', async () => {
+    const ctx = await context({ audience: 'plain' })
+    renderOverview(ctx)
+    expect(markup).toContain('<span class="rec sg-lead"><b>Improvement:</b> ')
+    expect(markup).toContain('See the 3 steps →</a>')
+    expect(markup).toContain('audience=plain')
+  })
+})
+
 describe('renderOverview with no session to show', () => {
   // A saved scope report has no session picker at all: the session group is subtracted from its
   // sidebar, so #overview is reachable only by a typed hash and "pick one from the sidebar" points at
