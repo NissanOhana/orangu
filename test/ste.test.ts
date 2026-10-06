@@ -3,10 +3,11 @@
  * ceilings from test/ste-floors.ts. `npm run ste` prints the table, and `npm run ste -- <surface>` prints
  * the findings of one surface with file, line and fix.
  */
-import { readdirSync } from 'node:fs'
+import ts from 'typescript'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, helpText, listFiles, measureAll, surfaces, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
+import { DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, helpText, listFiles, measureAll, surfaces, tsBlocks, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
 import { BANNED, STE_FLOORS } from './ste-floors.js'
 
 let measured = new Map<string, SurfaceMeasure>()
@@ -69,5 +70,32 @@ describe('STE gate', () => {
 
   it('measures the copy that the Codex mirror injects into the mirrored skills', () => {
     expect(measured.get('scripts/build.mjs#codex')?.sentences ?? 0).toBeGreaterThan(0)
+  })
+
+  it('leaves out the copy that a verified record stores and compares byte for byte, and names why', () => {
+    // A verified record stores the receipt summary and each check's evidence. On every read the store renders
+    // them again and compares byte for byte (verification-policy.ts isTrustedComputedVerification and
+    // cohortReceiptViolation). New words would not match the stored text, so every verified record on disk
+    // would lose its trusted state. The suggest unit tests pin each rendering exactly; the gate does not score it.
+    expect(STORED_COPY_EXEMPT).toEqual({
+      'src/suggest/verification-policy.ts': { functions: ['verificationReceiptSummary', 'cohortReceiptSummary'], reason: expect.stringMatching(/byte for byte/) },
+      'src/suggest/cohort-stats.ts': { functions: ['checkEvidence'], reason: expect.stringMatching(/byte for byte/) },
+    })
+    const findings = measured.get('src/suggest')!.findings
+    for (const [file, { functions }] of Object.entries(STORED_COPY_EXEMPT)) {
+      const source = readFileSync(join(ROOT, file), 'utf8')
+      const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true)
+      const line = (pos: number): number => sf.getLineAndCharacterOfPosition(pos).line + 1
+      const spans = functions.map((name) => {
+        const fn = sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === name)
+        expect(fn, `${file} still declares ${name}: a rename must move this entry, never drop the freeze`).toBeDefined()
+        return [line(fn!.getStart(sf)), line(fn!.end)] as const
+      })
+      const inside = findings.filter((f) => f.file === file && spans.some(([from, to]) => f.line >= from && f.line <= to))
+      expect(inside.map((f) => `${file}:${f.line} ${f.rule}`), 'a stored string is scored').toEqual([])
+      // the rest of the file is still measured: only the named functions are left out
+      const rest = tsBlocks(source, file).filter((block) => !spans.some(([from, to]) => block.line >= from && block.line <= to))
+      expect(rest.length, `${file} keeps its other copy in the gate`).toBeGreaterThan(0)
+    }
   })
 })

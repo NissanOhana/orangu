@@ -55,6 +55,24 @@ export const DOC_EXEMPT: Readonly<Record<string, string>> = {
   'docs/PRIVACY.md': 'privacy text (carve-out 8)',
 }
 
+/**
+ * Copy that a user's records store and that orangu compares byte for byte on read, so it is frozen and not
+ * gated. Each entry names the file, its top-level functions and the reason. Everything else in the file is
+ * still measured. To change this copy, version the record instead of rewording it.
+ */
+export const STORED_COPY_EXEMPT: Readonly<Record<string, { functions: readonly string[]; reason: string }>> = {
+  'src/suggest/verification-policy.ts': {
+    functions: ['verificationReceiptSummary', 'cohortReceiptSummary'],
+    reason:
+      'receipt summaries: each verified record stores one, and on every read the store renders it again and compares it byte for byte (isTrustedComputedVerification, cohortReceiptViolation). New words would demote every verified record on disk.',
+  },
+  'src/suggest/cohort-stats.ts': {
+    functions: ['checkEvidence'],
+    reason:
+      'check evidence: each cohort receipt stores one line per check, and on every read cohortReceiptViolation renders it again and compares it byte for byte. New words would demote every verified record on disk.',
+  },
+}
+
 export type RuleField = 'title' | 'detail' | 'recommendation'
 const RULE_FIELDS: readonly RuleField[] = ['title', 'detail', 'recommendation']
 
@@ -65,6 +83,8 @@ export interface TsOptions {
   consts?: readonly string[]
   /** skip the arguments of a call or a `new` whose callee reads exactly like one of these */
   skipCalls?: readonly string[]
+  /** skip these top-level function declarations (STORED_COPY_EXEMPT) */
+  skipFunctions?: readonly string[]
   /** keep only the copy of one rule field, or every string except the rule copy ('exclude') */
   ruleCopy?: RuleField | 'exclude'
 }
@@ -197,6 +217,7 @@ function sourceBlocks(sf: ts.SourceFile, file: string, options: TsOptions): SteB
   }
   const visit = (node: ts.Node): void => {
     if ((ts.isCallExpression(node) || ts.isNewExpression(node)) && options.skipCalls?.includes(node.expression.getText(sf))) return
+    if (ts.isFunctionDeclaration(node) && node.name && options.skipFunctions?.includes(node.name.text)) return
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return take(node, node.text)
     if (ts.isTemplateExpression(node)) {
       if (notCopy(node, sf)) return
@@ -476,7 +497,9 @@ const SRC_SPLIT = new Set(['report', 'analyze'])
 function srcSurfaces(files: readonly string[]): Surface[] {
   const dirs = [...new Set(files.filter((file) => /^src\/[^/]+\//.test(file)).map((file) => file.split('/')[1]!))].sort()
   return [
-    ...dirs.filter((dir) => !SRC_SPLIT.has(dir)).map((dir) => tsSurface(`src/${dir}`, SRC_OWNERS[dir] ?? 'new', [`src/${dir}`])),
+    ...dirs
+      .filter((dir) => !SRC_SPLIT.has(dir))
+      .map((dir) => tsSurface(`src/${dir}`, SRC_OWNERS[dir] ?? 'new', [`src/${dir}`], { for: (file) => ({ skipFunctions: STORED_COPY_EXEMPT[file]?.functions ?? [] }) })),
     { ...tsSurface('src/*.ts', 'K', [], { files: (read) => tsFiles(read.root, ['src'], [], read.files).filter((file) => /^src\/[^/]+\.ts$/.test(file)) }), source: 'TS literals in the top-level src files' },
   ]
 }
