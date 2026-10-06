@@ -184,25 +184,33 @@ for (const target of CODEX_TARGETS) {
 }
 
 // 4c) /orangu:show-me templates. plugin/skills/show-me/references/{slides,report}.src.html are the sources, and
-// the skill reads only the built {slides,report}.html beside them. They resolve the landing page's placeholders
-// (the canonical tokens, the 96px mascot, the version) plus the one shared runtime, minified; a placeholder left
-// over stops the build. The mascot is wrapped at 76 characters: a URL parser drops the line breaks, and a reader
-// that cuts long lines still sees every byte.
+// the skill reads only the built {slides,report}.html beside them. Each build resolves the canonical tokens (as
+// tokens.css writes them), the 64px mascot, the version and the one shared runtime; a placeholder left over stops
+// the build.
+// The skill reads both files and writes them again in full, so every byte is a read and a write token: the template
+// CSS is minified, and the mascot is the 64px image. No line is longer than about 1,300 characters (the tokens line):
+// the CSS and the runtime break at 200, and the mascot at 76 (a URL parser drops the breaks), so a reader that cuts
+// long lines still copies every byte. The runtime is ASCII, so no character can change form in the copy.
 // The CSP is the report's with one change: script-src is the sha256 of the runtime's exact bytes, never
 // 'unsafe-inline'. Claude writes session text into these files, so a missed escape (an onerror attribute, an
 // injected <script>) must stay inert; only the pinned runtime runs. style-src keeps 'unsafe-inline': the charts
 // set raw values in style attributes, a style cannot run script, and img-src data: and default-src 'none' leave
 // it no request to make.
 const SHOW_ME = join(root, 'plugin/skills/show-me/references')
-const showMeRuntime = (await transform(readFileSync(join(SHOW_ME, 'runtime.src.js'), 'utf8'), { minify: true, target: 'es2020', legalComments: 'none', charset: 'utf8' })).code.trim()
+const SHOW_ME_MIN = { minify: true, legalComments: 'none', charset: 'ascii', lineLimit: 200 }
+const showMeRuntime = (await transform(readFileSync(join(SHOW_ME, 'runtime.src.js'), 'utf8'), { ...SHOW_ME_MIN, target: 'es2020' })).code.trim()
 const showMeScriptHash = `'sha256-${createHash('sha256').update(showMeRuntime, 'utf8').digest('base64')}'`
-const showMeMascot = `data:image/png;base64,\n${readFileSync(join(root, 'design/brand/mascot-96.png')).toString('base64').match(/.{1,76}/g).join('\n')}`
+const showMeMascot = `data:image/png;base64,\n${readFileSync(join(root, 'design/brand/favicon-64.png')).toString('base64').match(/.{1,76}/g).join('\n')}`
 for (const name of ['slides', 'report']) {
-  const out = readFileSync(join(SHOW_ME, `${name}.src.html`), 'utf8')
-    .replace('<!-- @tokens -->', () => tokensCss.trim())
+  const source = readFileSync(join(SHOW_ME, `${name}.src.html`), 'utf8')
+  const [head, rest] = source.split('<!-- @tokens -->')
+  if (rest === undefined) throw new Error(`show-me ${name}: no <!-- @tokens --> placeholder`)
+  const styleEnd = rest.indexOf('</style>')
+  const ownCss = (await transform(rest.slice(0, styleEnd), { ...SHOW_ME_MIN, loader: 'css' })).code.trim()
+  const out = `${head}${tokensCss.trim()}\n${ownCss}\n${rest.slice(styleEnd)}`
     .replace('<!-- @runtime -->', () => showMeRuntime)
     .replace('{{script-hash}}', () => showMeScriptHash)
-    .replaceAll('{{mascot:logo}}', () => showMeMascot)
+    .replaceAll('{{mascot:64}}', () => showMeMascot)
     .replaceAll('{{version}}', () => pkg.version)
   for (const left of out.match(/\{\{[^}]+\}\}|<!-- @[a-z]+ -->/g) ?? []) throw new Error(`show-me ${name}: unresolved placeholder ${left}`)
   writeFileSync(join(SHOW_ME, `${name}.html`), out)

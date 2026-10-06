@@ -121,6 +121,7 @@ describe('show-me runtime', () => {
     const document = {
       documentElement: { dataset: {} as Record<string, string> },
       querySelectorAll: (selector: string) => (selector === '[data-f][data-v]' ? elements : []),
+      links: [],
       getElementById: () => null,
       addEventListener: () => undefined,
     }
@@ -253,7 +254,9 @@ const oneTurn = (): Analysis => {
 function filledFiles(): Array<[string, string]> {
   const a = golden('errors-and-interrupts')
   const single = golden('single-prompt')
-  const hostile = '</title><script>alert(1)</script><img src=x onerror="alert(2)"><a href="javascript:alert(3)">x</a>'
+  // escaped markup and the plain word "JavaScript:" pass. Text that reads like an attribute (" onerror=", "href=")
+  // fails closed instead: see "escaped session text that reads like a handler stops the open".
+  const hostile = '</title><script>alert(1)</script><b>bold</b> JavaScript: tests'
   const oneSession = evidenceOf()
   const pages: Array<[string, ReturnType<typeof sessionPage>]> = [
     ['session', sessionPage(slimAnalysis(a), WORDS)],
@@ -294,6 +297,15 @@ describe('show-me post-write check (SKILL.md, step 4)', () => {
   it('every filled shape passes every count, by lines and by matches', () => {
     for (const [name, html] of filledFiles())
       for (const check of CHECKS) for (const by of BY) expect(countCheck(html, check, by), `${name}: ${check.pattern} by ${by}`).toBe(check.expected)
+  })
+
+  // A regex cannot tell an onerror attribute from the words " onerror=" in escaped text. The check fails closed:
+  // the skill reports the count and opens nothing, which SKILL.md says is correct.
+  it('escaped session text that reads like a handler stops the open instead of passing', () => {
+    const a = golden('errors-and-interrupts')
+    const { slides } = fillAll(sessionPage(slimAnalysis({ ...a, session: { ...a.session, title: 'img onerror="alert(2)"' } }), WORDS))
+    expect(slides).toContain('img onerror=&quot;alert(2)&quot;')
+    for (const by of BY) expect(countCheck(slides, CHECKS[1]!, by), by).toBeGreaterThan(0)
   })
 
   // The forms that the security review proved against the CSP-only defence, plus a dropped and a loosened CSP.
@@ -372,10 +384,11 @@ describe('show-me review fixes', () => {
     expect(fillAll(sessionPage(slimAnalysis(golden('errors-and-interrupts')), WORDS)).slides).toContain('1 file edited · 2 of 2 test runs failed')
   })
 
+  // A Read tool can cut a line at 2,000 characters. The longest line is the canonical tokens line, about 1,300.
   it('ships an ASCII runtime and no line that a reader could cut', () => {
     for (const name of NAMES) {
       expect(scripts(built(name))[0], name).toMatch(/^[\x00-\x7f]*$/)
-      expect(Math.max(...built(name).split('\n').map((line) => line.length)), `${name} longest line`).toBeLessThan(1000)
+      expect(Math.max(...built(name).split('\n').map((line) => line.length)), `${name} longest line`).toBeLessThan(2000)
     }
   })
 

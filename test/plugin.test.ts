@@ -1021,9 +1021,14 @@ describe('plugin packaging', () => {
     // value, strict, so zero headroom. The resident description total rises once, 2,200 -> 2,509, by exactly that
     // description (the five others measured 2,144 after their STE rewrite, so the total is 2,453); the catalog cap
     // rises once, 200 -> 226, by exactly its new row (26 words, 199 -> 225). No other ceiling moves.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350, 'show-me': 650 }
-    const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 310 }
-    const TOTAL_DESC_CEILING = 2509 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309)
+    // 2026-10-06 show-me review fixes: body 650 -> 769, measured 768 words (+119). The post-write check grew from 3
+    // Grep counts to 7 (no sample text or unset chart, no active markup in any form the security review proved, 1
+    // script, 5 metas, 1 http-equiv, 1 link, the exact CSP line) with the rule that text which reads like markup also
+    // stops the open, and step 2 now gives one estimate of the whole run and asks once. The description lost the phrase that overlapped analyze: 310 -> 305 (measured 304), and the
+    // resident total goes down by the same 5, 2,509 -> 2,504 (measured 2,448).
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350, 'show-me': 769 }
+    const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
+    const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
     const split = (name: string): { desc: string; body: string } => {
       const md = readText(`plugin/skills/${name}/SKILL.md`)

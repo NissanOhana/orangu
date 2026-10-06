@@ -103,11 +103,16 @@ const checks = [
   [/XMLHttpRequest/, 'XMLHttpRequest'],
   [/new\s+WebSocket/, 'WebSocket'],
   [/<iframe/i, 'iframe'],
+  // a browser also follows "https:host/path" with no slashes, for example in a meta refresh or a link
+  [/\bhttps?:(?!\/\/)/i, 'http(s) URL without slashes'],
 ]
 for (const [re, label] of checks) {
   const m = text.match(re)
   if (m) fail(label, m[0])
 }
+// The CSP is the one http-equiv a file may carry. A refresh navigates, and the CSP cannot stop a navigation.
+const equivs = text.match(/\bhttp-equiv\s*=\s*["']?[^"'\s>]*/gi) ?? []
+if (equivs.length !== 1 || !/content-security-policy$/i.test(equivs[0])) fail('http-equiv other than the one CSP meta', equivs.join(' '))
 // exact CSP match (src/report/render.ts CSP const) — a loosened directive fails, not just a missing one
 const EXPECTED_CSP =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"
@@ -121,11 +126,17 @@ const HASHED_CSP = new RegExp(`<meta http-equiv="Content-Security-Policy" conten
 const hashed = HASHED_CSP.exec(html)
 if (!html.includes(`<meta http-equiv="Content-Security-Policy" content="${EXPECTED_CSP}"/>`) && !hashed) fail('missing or loosened CSP', '')
 if (hashed) {
+  // The pinned hashes must be exactly the hashes of the scripts that can run: no unpinned script, and no spare hash
+  // that a script added later could match. A JSON data block is data only when its own type attribute says so.
   const pinned = new Set(hashed[1].split(' ').map((source) => source.slice('\'sha256-'.length, -1)))
+  const runnable = new Set()
   for (const [, attrs, body] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
-    if (/\btype="application\/json"/.test(attrs)) continue
-    if (!pinned.has(createHash('sha256').update(body, 'utf8').digest('base64'))) fail('inline script not pinned by the CSP hash', body)
+    if (/(?:^|\s)type\s*=\s*["']?application\/json["']?(?=\s|$)/i.test(attrs)) continue
+    const hash = createHash('sha256').update(body, 'utf8').digest('base64')
+    if (!pinned.has(hash)) fail('inline script not pinned by the CSP hash', body)
+    runnable.add(hash)
   }
+  for (const hash of pinned) if (!runnable.has(hash)) fail('CSP pins a hash that no inline script has', hash)
 }
 if (bad) process.exit(1)
 console.log('offline OK: no external references, CSP present, %d KB', Math.round(html.length / 1024))

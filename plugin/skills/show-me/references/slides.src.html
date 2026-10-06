@@ -25,7 +25,8 @@ html:not([data-scope=repo]) [data-if=repo],html:not([data-scope=global]) [data-i
 html:not([data-live=true]) [data-if=live],html:not([data-caution=true]) [data-if=caution],
 html[data-caution=true] [data-if=reconciled],html:not([data-redacted=true]) [data-if=redacted],
 html:not(:has([data-repeat=improvement])) [data-if=improvements],
-html:has([data-repeat=improvement]) [data-empty=improvement]{display:none!important}
+html:not(:has([data-repeat=finding])) [data-if=findings],
+html:has([data-repeat=improvement]) [data-empty=improvement],html:has([data-repeat=finding]) [data-empty=finding]{display:none!important}
 
 /* the frame: one 16:9 slide, sized by the viewport, typeset in container units */
 .deck{counter-reset:slide;outline:none}
@@ -80,7 +81,7 @@ html[data-scope=global] .ft .sc::before{content:"orangu \00b7  all sessions on t
 .glow i:nth-child(1){width:60cqh;height:60cqh;right:-9cqh;top:-23cqh;background:color-mix(in srgb,var(--accent) 12%,transparent)}
 .glow i:nth-child(2){width:92cqh;height:92cqh;right:-25cqh;top:-39cqh;border:1px solid color-mix(in srgb,var(--accent) 24%,transparent)}
 .glow i:nth-child(3){width:11cqh;height:11cqh;right:41cqh;top:47cqh;background:color-mix(in srgb,var(--accent) 20%,transparent)}
-.mascot{width:6cqw;height:6cqw;object-fit:contain}
+.mascot{width:4.6cqw;height:4.6cqw;object-fit:contain}
 .wm{font:700 1.9cqw/1 var(--title);letter-spacing:-.02em}
 .s-title .bd{align-content:end}
 .tt{grid-column:1/9}
@@ -201,13 +202,13 @@ html[data-scope=global] .ft .sc::before{content:"orangu \00b7  all sessions on t
 
 <section class="slide s-title" aria-roledescription="slide">
  <div class="frame"><div class="glow" aria-hidden="true"><i></i><i></i><i></i></div><div class="sl">
-  <header class="hd"><img class="mascot" src="{{mascot:logo}}" width="96" height="96" alt=""><span class="wm">orangu</span></header>
+  <header class="hd"><img class="mascot" src="{{mascot:64}}" width="64" height="64" alt=""><span class="wm">orangu</span></header>
   <div class="bd">
    <div class="tt">
     <p class="ey"><span data-if="session">orangu · session report</span><span data-if="repo">orangu · repository report</span><span data-if="global">orangu · all sessions on this machine</span></p>
     <h1 class="dp" data-slot="title">EXAMPLE Fix the flaky checkout tests</h1>
     <p class="mt" data-if="session"><span data-slot="project">EXAMPLE demo</span><span data-slot="date" data-f="date" data-v="">EXAMPLE 2026-08-17</span><span data-slot="models">EXAMPLE Claude Opus 5</span></p>
-    <p class="mt" data-if="aggregate"><span><b data-slot="sessions" data-f="num" data-v="">EXAMPLE 7</b> sessions</span></p>
+    <p class="mt" data-if="aggregate"><span><b data-slot="sessions" data-f="num" data-v="">EXAMPLE 7</b> <span data-slot="session-noun">EXAMPLE sessions</span></span></p>
     <p class="lv" data-if="live">Live session: these numbers are a snapshot from <span data-slot="live-at" data-f="time" data-v="">EXAMPLE 2026-08-17 14:05</span>.</p>
    </div>
    <div class="nt">
@@ -223,7 +224,7 @@ html[data-scope=global] .ft .sc::before{content:"orangu \00b7  all sessions on t
  <div class="frame"><div class="sl">
   <header class="hd"><span class="ey">Verdict</span></header>
   <div class="bd">
-   <p class="vd" data-slot="verdict">EXAMPLE The session fixed the checkout tests and ended with a green test run.</p>
+   <h2 class="vd" data-slot="verdict">EXAMPLE The session fixed the checkout tests and ended with a green test run.</h2>
    <div class="cards" data-if="session">
     <div class="ax q" data-end="clean">
      <div class="an">Quality ↑</div>
@@ -234,16 +235,16 @@ html[data-scope=global] .ft .sc::before{content:"orangu \00b7  all sessions on t
      <div class="an">Time ↓</div>
      <div class="av"><b data-slot="active" data-f="ms" data-v="">EXAMPLE 4m 12s</b></div>
      <p class="ann"><span data-slot="wall" data-f="ms" data-v="">EXAMPLE 21m 3s</span> in total · <span data-slot="waiting" data-f="ms" data-v="">EXAMPLE 9m 40s</span> waiting for you</p>
-     <div class="chart" data-chart="time">
+     <div class="chart" data-chart="time" data-sample>
       <div class="bar" role="img" aria-label="EXAMPLE Working 4m 12s, waiting for you 9m 40s"><i data-k="active" style="--n:252000"></i><i data-k="waiting" style="--n:580000"></i></div>
       <p class="lg"><span data-k="active">working</span><span data-k="waiting">waiting for you</span></p>
      </div>
     </div>
     <div class="ax c">
      <div class="an">Tokens ↓</div>
-     <div class="av"><svg class="ring" data-chart="cache" viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 84% read from cache"><circle class="trk" cx="18" cy="18" r="15" pathLength="100"/><circle class="val" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="84 100" transform="rotate(-90 18 18)"/></svg><span><b data-slot="tokens" data-f="tok" data-v="">EXAMPLE 1.23M</b> <small>tokens</small></span></div>
+     <div class="av"><svg class="ring" data-chart="cache" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 84% read from cache"><circle class="trk" cx="18" cy="18" r="15" pathLength="100"/><circle class="val" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="84 100" transform="rotate(-90 18 18)"/></svg><span><b data-slot="tokens" data-f="tok" data-v="">EXAMPLE 1.23M</b> <small>tokens</small></span></div>
      <p class="ann"><span data-slot="cache" data-f="pct" data-v="">EXAMPLE 84%</span> read from cache · <span data-slot="output" data-f="tok" data-v="">EXAMPLE 12.3k</span> generated</p>
-     <div class="chart" data-chart="tokens">
+     <div class="chart" data-chart="tokens" data-sample>
       <div class="bar" role="img" aria-label="EXAMPLE Tokens by kind: cache read 1,032,000, cache write 1h 98,000, fresh input 87,600, output 12,300"><i data-k="read" style="--n:1032000"></i><i data-k="write5m" style="--n:0"></i><i data-k="write1h" style="--n:98000"></i><i data-k="input" style="--n:87600"></i><i data-k="output" style="--n:12300"></i></div>
       <p class="lg"><span data-k="read">cache read</span><span data-k="write5m">cache write 5m</span><span data-k="write1h">cache write 1h</span><span data-k="input">fresh input</span><span data-k="output">output</span></p>
      </div>
@@ -260,9 +261,14 @@ html[data-scope=global] .ft .sc::before{content:"orangu \00b7  all sessions on t
      <div class="av"><b data-slot="kpi-findings" data-f="num" data-v="">EXAMPLE 11</b></div>
      <p class="ann">Rule findings in these sessions</p>
     </div>
-    <div class="ax c">
+    <div class="ax c" data-empty="finding">
      <div class="an">Top pattern</div>
-     <div class="av share"><svg class="ring" data-chart="share" viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span><b data-slot="kpi-top-n" data-f="num" data-v="">EXAMPLE 3</b> <small>of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> sessions</small></span></div>
+     <div class="av phrase">None</div>
+     <p class="ann">The rules found no finding in these sessions.</p>
+    </div>
+    <div class="ax c" data-if="findings">
+     <div class="an">Top pattern</div>
+     <div class="av share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span><b data-slot="kpi-top-n" data-f="num" data-v="">EXAMPLE 3</b> <small>of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></small></span></div>
      <p class="ann">Rule <span class="pill" data-slot="kpi-top-rule">EXAMPLE tool-errors</span></p>
     </div>
    </div>
@@ -283,13 +289,13 @@ html[data-scope=global] .ft .sc::before{content:"orangu \00b7  all sessions on t
      <p class="tx" data-slot="f-evidence">EXAMPLE The same test command failed 4 times in a row. Each run stopped on the same missing module.</p>
     </div>
     <div class="facts" data-if="session">
-     <div class="fr" data-if="turns"><span class="fk">Turns</span><span class="fv"><span data-slot="f-turns">EXAMPLE 4, 9, 12</span><svg class="strip" data-chart="turns" viewBox="0 0 40 1" preserveAspectRatio="none" role="img" aria-label="EXAMPLE Turns 4, 9 and 12 of 40"><rect class="trk" width="40" height="1"/><rect class="hit" data-repeat="turn" data-max="50" x="4" width="1" height="1"/></svg><span class="cap"><span data-slot="turn-count" data-f="num" data-v="">EXAMPLE 40</span> turns in the session</span></span></div>
+     <div class="fr" data-if="turns"><span class="fk">In turns</span><span class="fv"><span data-slot="f-turns">EXAMPLE #4, #9, #12</span><svg class="strip" data-chart="turns" data-sample viewBox="0 0 40 1" preserveAspectRatio="none" role="img" aria-label="EXAMPLE In turns #4, #9 and #12 of 40"><rect class="trk" width="40" height="1"/><rect class="hit" data-repeat="turn" data-max="50" x="4" width="1" height="1"/></svg><span class="cap"><span data-slot="turn-count" data-f="num" data-v="">EXAMPLE 40</span> <span data-slot="turn-noun">EXAMPLE turns</span> in the session</span></span></div>
      <div class="fr" data-if="savings"><span class="fk">Savings</span><span class="fv">≈<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>
      <div class="fr" data-if="savings-ms"><span class="fk">Savings</span><span class="fv">≈<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>
      <div class="fr"><span class="fk">Rule</span><span class="fv"><span class="pill" data-slot="f-rule">EXAMPLE tool-errors</span></span></div>
     </div>
     <div class="facts" data-if="aggregate">
-     <div class="fr"><span class="fk">Sessions</span><span class="fv share"><svg class="ring" data-chart="share" viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span>Shows in <span data-slot="f-shows" data-f="num" data-v="">EXAMPLE 3</span> of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> sessions</span></span></div>
+     <div class="fr"><span class="fk">Sessions</span><span class="fv share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span>Shows in <span data-slot="f-shows" data-f="num" data-v="">EXAMPLE 3</span> of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></span></span></div>
      <div class="fr"><span class="fk">Examples</span><span class="fv"><code data-slot="f-examples">EXAMPLE 63d26acb, a1b2c3d4</code></span></div>
      <div class="fr" data-if="savings"><span class="fk">Savings</span><span class="fv">≈<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>
      <div class="fr" data-if="savings-ms"><span class="fk">Savings</span><span class="fv">≈<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>

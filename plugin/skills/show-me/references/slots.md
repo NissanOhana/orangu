@@ -1,6 +1,6 @@
 # Show-me slot rules
 
-The two templates, `slides.html` (the slide deck) and `report.html` (the written report), use the same slots and these rules. Each template renders a complete sample. Every sample value starts with the word `EXAMPLE`. Fill a copy of each template, and change only what these rules name.
+The two templates, `slides.html` (the slide deck) and `report.html` (the written report), use the same slots and these rules. Each template renders a complete sample. Every sample value starts with the word `EXAMPLE`, and every sample chart has a `data-sample` attribute. Fill a copy of each template, and change only what these rules name.
 
 ## The attributes
 
@@ -11,11 +11,11 @@ The two templates, `slides.html` (the slide deck) and `report.html` (the written
 | `data-repeat="<name>"` | Copy the element once for each item, up to `data-max`. With 0 items, delete it. |
 | `data-empty="<name>"` | Keep it only when the list `<name>` has 0 items. Else, delete it. |
 | `data-if="<condition>"` | Keep it only when its condition holds. Else, delete it. |
-| `data-chart="<name>"` | Set the chart values that the chart table names. |
+| `data-chart="<name>"` | Set the chart values that the chart table names. Then delete its `data-sample` attribute. |
 
 On `<html>`, set `data-scope` to `session`, `repo` or `global`. Set `data-live`, `data-caution` and `data-redacted` to `true` or `false`.
 
-Escape each text that you insert: `&` as `&amp;`, `<` as `&lt;`, `>` as `&gt;`, `"` as `&quot;` and `'` as `&#39;`. Do not change the `<style>` and `<script>` blocks or the image data. The page runs its script only when the script is unchanged, because the page pins it by its hash. Do not add an attribute that loads anything. Keep every sentence that has no slot word for word.
+Escape each text that you insert: `&` as `&amp;`, `<` as `&lt;`, `>` as `&gt;`, `"` as `&quot;` and `'` as `&#39;`. Use no other numeric character reference. Do not change the `<style>` and `<script>` blocks or the image data. The page runs its script only when the script is unchanged, because the page pins it by its hash. Do not add an attribute that loads anything. Keep every sentence that has no slot word for word.
 
 ## Conditions
 
@@ -27,6 +27,7 @@ Escape each text that you insert: `&` as `&amp;`, `<` as `&lt;`, `>` as `&gt;`, 
 | `caution` | `parse.reconciliation.ok` is false |
 | `reconciled` | `parse.reconciliation.ok` is true, and always in repo and global scope |
 | `redacted` | a finding on the page has an empty detail |
+| `findings` | the list `finding` has 1 item or more |
 | `improvements` | the list `improvement` has 1 item or more |
 | `turns` | the finding has 1 turn index or more (per finding) |
 | `savings` | the item has a token saving over 0 (per item) |
@@ -68,13 +69,14 @@ The page formats each `data-v` again when it opens, so the text and the value al
 | `cwd` | `session.cwd`. If it is missing, write "the project directory". |
 | `session-id` | `session.id`, the full id |
 
-**The quality value.** Join these parts with " · ", in this order. Write a part only when its count is over 0. Use the singular for 1.
+**The quality value.** Join these parts with " · ", in this order. Write a part only when its count is over 0. Use the singular for 1. Each count is one CLI value: never add two values.
 
 1. "`n` PRs": the length of `summary.outcomes.prLinks`
 2. "`n` commits": `gitCommits`
-3. "`n` files changed": `filesEdited` plus `filesWritten`, the sum that the report shows
-4. "`f` of `n` build runs failed": `buildRunsFailed` and `buildRuns`
-5. "`f` of `n` test runs failed": `testRunsFailed` and `testRuns`. With no failed test run, write "`n` test runs green".
+3. "`n` files edited": `filesEdited`
+4. "`n` files written": `filesWritten`
+5. "`f` of `n` build runs failed": `buildRunsFailed` and `buildRuns`
+6. "`f` of `n` test runs failed": `testRunsFailed` and `testRuns`. With no failed test run, write "`n` test runs green".
 
 With no part, write "No commits, PRs or test runs".
 
@@ -86,8 +88,8 @@ With no part, write "No commits, PRs or test runs".
 | `f-sev` | `insight.severity` |
 | `f-title` | `insight.title` |
 | `f-evidence` | `insight.detail`. If it is empty, write "orangu hides these details because they quote commands and output." |
-| `f-turns` | the first 5 values of `insight.turnIndexes`, joined with ", " |
-| `turn-count` | `summary.turns` (`num`) |
+| `f-turns` | each of the first 5 values of `insight.turnIndexes` as "#" and the value, joined with ", ". The report writes turns the same way: "#0" is the first prompt. |
+| `turn-count`, `turn-noun` | `summary.turns` (`num`), then "turn" when it is 1, else "turns" |
 | `f-savings`, `f-savings-ms` | `insight.savings.tokens` (`tok`), `insight.savings.ms` (`ms`) |
 | `f-rule` | `insight.ruleId` |
 | `f-improvement` | `insight.recommendation` |
@@ -100,11 +102,14 @@ With no part, write "No commits, PRs or test runs".
 |---|---|
 | `title` | "Recurring patterns in " and the folder name of the repository, or "Recurring patterns on this machine" |
 | `sessions`, `kpi-sessions` | `source.sessions` (`num`) |
+| `session-noun` | "session" when `source.sessions` is 1, else "sessions" |
 | `kpi-findings` | `totalFindings` (`num`) |
 | `kpi-top-n`, `kpi-top-rule` | `findings[0].finding.evidence.sessions` (`num`), `findings[0].finding.ruleId` |
 | `version` | the output of `orangu --version` |
 
 This scope has no date, no `live-at` and no `generated` slot. Delete the elements that hold them.
+
+With 0 findings, keep the Top pattern card with `data-empty="finding"` as it is, and delete the one with `data-if="findings"`. Its text is fixed, so you invent no top pattern.
 
 **Findings.** Use the first 3 of `findings`, in order. Set `data-sev` to `severity`.
 
@@ -130,7 +135,7 @@ This scope has no date, no `live-at` and no `generated` slot. Delete the element
 | `share` | `pathLength` of both circles: `source.sessions`. `stroke-dasharray` of `circle.val`: the `n` of that slot, a space, then `source.sessions`. |
 | `turns` | `viewBox` of the `<svg>`: "0 0 `summary.turns` 1". `width` of `rect.trk`: `summary.turns`. One `rect.hit` for each turn index, up to 50, with `x` set to the index. |
 
-Use the raw CLI values. Never scale or round them. On the element with `role="img"`, set `aria-label` to the values in words, for example "Tokens by kind: cache read 56,900, output 305".
+Use the raw CLI values. Never scale or round them. On the element with `role="img"`, set `aria-label` to the values in words, for example "Tokens by kind: cache read 56,900, output 305". Then delete `data-sample` from the chart element.
 
 ## Text that you write
 

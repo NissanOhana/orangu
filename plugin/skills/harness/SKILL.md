@@ -1,7 +1,7 @@
 ---
 name: harness
 description: Review what your harness declares against what your sessions used, across one repository or every session on the machine. Propose ranked changes to instruction files, hooks, skills, agents, MCP servers, plugins, and workflow config, then apply the repo items you approve by id. Use when the user asks why the same problem keeps recurring or what to change in their setup. Also use when the user wants a repo or global harness review. Not for one session: /orangu:analyze. Not for one finding: /orangu:improve.
-allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**), Skill(orangu:apply)
+allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**), Skill(orangu:apply)
 ---
 
 # /orangu:harness

@@ -3,10 +3,11 @@
 //
 // 1. Every element with data-f and a data-v gets its text from the raw CLI value in data-v, formatted
 //    exactly as src/report/client/format.ts formats it, so the deck, the written report and the orangu
-//    report agree. "a+b" in data-v is a sum the report also shows (files changed = edited + written).
-// 2. The theme lives in the hash (#theme=dark), as in the report. Light is the default. T toggles it.
-// 3. In the deck: arrow keys, PageUp/PageDown, Space, J/K, Home and End move between slides, and the slide
-//    across the middle of the viewport is written to the hash as n=<slide>.
+//    report agree. "a+b" in data-v adds two raw values; no slot rule asks for it today.
+// 2. The theme lives in the hash (#theme=dark), as in the report. Light is the default. T toggles it, and the
+//    link to the other file carries it.
+// 3. In the deck: arrow keys and J/K move between slides (the browser moves on Space, PageUp/PageDown, Home and
+//    End), and the slide across the middle of the viewport is written to the hash as n=<slide>.
 ;(() => {
   const d = document
   const root = d.documentElement
@@ -53,6 +54,8 @@
     if (dark) root.dataset.theme = 'dark'
     else delete root.dataset.theme
     if (button) button.textContent = '\u25d0 theme \u00b7 ' + (dark ? 'dark' : 'light')
+    // the link to the other file carries the theme, so a dark reader stays dark across the click
+    for (const a of d.links) a.setAttribute('href', a.getAttribute('href').split('#')[0] + (dark ? '#theme=dark' : ''))
   }
   const toggle = () => {
     dark = !dark
@@ -88,19 +91,18 @@
             write()
           }
       },
-      { rootMargin: '-45% 0px -45% 0px' },
+      { rootMargin: '-45% 0px' },
     )
     for (const s of slides) seen.observe(s)
   }
+  // Space, Shift+Space, PageUp, PageDown, Home and End stay with the browser: on the snapped deck they move one slide
+  // or to an end, and on a focused button or link Space presses it.
   d.addEventListener('keydown', (e) => {
     const k = e.key
     if (e.metaKey || e.ctrlKey || e.altKey) return
     if (/^t$/i.test(k)) toggle()
-    else if (!count) return
-    else if (/^(Arrow(Right|Down)|PageDown|j)$/i.test(k) || (k == ' ' && !e.shiftKey)) go(at + 1)
-    else if (/^(Arrow(Left|Up)|PageUp|k| )$/i.test(k)) go(at - 1)
-    else if (k == 'Home') go(0)
-    else if (k == 'End') go(count - 1)
+    else if (count && /^(Arrow(Right|Down)|j)$/i.test(k)) go(at + 1)
+    else if (count && /^(Arrow(Left|Up)|k)$/i.test(k)) go(at - 1)
     else return
     e.preventDefault()
   })

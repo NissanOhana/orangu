@@ -1,7 +1,7 @@
 ---
 name: show-me
-description: Turn the evidence of one session, one repository or all sessions into a slide deck and a written report, as offline HTML files. Use when the user asks to present, share or show what happened, or wants slides for a team. Not for a diagnosis in chat: /orangu:analyze. Not for a change proposal: /orangu:improve.
-allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Bash(mktemp:*), Read, Grep, Write(~/.orangu/show-me/**)
+description: Turn the evidence of one session, one repository or all sessions into a slide deck and a written report, as offline HTML files. Use when the user asks for slides, a deck or a report to present or share with a team. Not for a diagnosis in chat: /orangu:analyze. Not for a change proposal: /orangu:improve.
+allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Bash(mktemp:*), Read, Grep, Write(~/.orangu/show-me/**)
 ---
 
 # /orangu:show-me
@@ -28,15 +28,22 @@ The Show me button of a report copies one of these 3 forms, as `claude "/orangu:
 
 With no argument, show `latest`, and tell the user which session id that is.
 
-## 2. Size each read, then read
+## 2. Size the run, ask once, then read
 
 Create a work directory with the fixed command `mktemp -d`. Validate its path and quote it. It is `<tmp>`.
 
-Run the size command before each read, and quote its bytes and approximate tokens. If a read is over about 5,000 tokens (about 20 KB), ask before you read it. If the size command fails or skips a session, treat the read as over the limit. Say why, and ask.
+First, size the evidence:
 
-- Session: `orangu estimate '<session>' --slim --json`, then `orangu analyze '<session>' --json --slim`.
-- Repo: `orangu repo '<dir>' --out '<tmp>/aggregate.json'`. Then run `orangu evidence '<tmp>/aggregate.json' --scope repo --estimate --quiet`, then `orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'`, and read `evidence.json`. Run `orangu --version` for the version.
+- Session: `orangu estimate '<session>' --slim --json`.
+- Repo: `orangu repo '<dir>' --out '<tmp>/aggregate.json'`, then `orangu evidence '<tmp>/aggregate.json' --scope repo --estimate --quiet`.
 - Global: the same steps with `orangu global --out '<tmp>/aggregate.json'` and `--scope global`.
+
+The run reads more than about 5,000 tokens (about 20 KB), so ask once before you read anything. Give the user one estimate of the whole run. The 2 templates and the slot rules are about 78 KB to read (about 20k tokens). The 2 files are about 66 KB to write (about 17k tokens). Add the bytes and the approximate tokens of the evidence from the size command. If the size command fails or skips a session, treat the read as over the limit, and say why in the same question.
+
+When the user agrees, read the evidence:
+
+- Session: `orangu analyze '<session>' --json --slim`.
+- Repo or global: `orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'` (or `--scope global`), then read `evidence.json`. Run `orangu --version` for the version.
 
 Never combine `--out` with `--json`.
 
@@ -58,15 +65,17 @@ Write the 2 files to `~/.orangu/show-me/<id>/slides.html` and `~/.orangu/show-me
 - `<name>`: the first 8 characters of the session id, the repository folder name, or `machine`.
 - `<stamp>`: the random part of the `<tmp>` name, after `tmp.`. Each run gets a new stamp, so a second run never overwrites the first.
 
-Before you write a file, search its text for `EXAMPLE`. The count must be 0. If it is not 0, fill the slot that holds it.
+WARNING: A missed escape can let session text run as script or send the reader to another site. After you write the files, run these counts with the Grep tool in count mode on each file. Use case-insensitive mode for all but the first:
 
-WARNING: A missed escape can let session text run as script. After you write the files, check each file with the Grep tool in count mode, case-insensitive:
+1. `EXAMPLE|data-sample` counts 0.
+2. `(^|[\s/"'])on[a-z]+\s*=|(=|^)\s*["']?\s*javascript:|&#([^3]|3[^9]|39[^;])|&(tab|newline|colon);|<(iframe|object|embed|base|link|form|frame)\b` counts 0.
+3. `<script` counts 1.
+4. `<meta` counts 5.
+5. `http-equiv` counts 1.
+6. `href\s*=` counts 1.
+7. `^<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-[A-Za-z0-9+/=]+'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>$` counts 1.
 
-- `<script` counts 1.
-- `<[^>]*\son[a-z]+\s*=` counts 0.
-- `=\s*["']?\s*javascript:` counts 0.
-
-If a count is different, delete nothing, report the file and the count, and do not open it.
+The templates keep each counted tag on its own line, so a count of lines and a count of matches agree. If a count is different, delete nothing, report the file and the count, and do not open it. Session text that reads like markup also changes a count, and the same rule applies.
 
 Print both absolute paths. Then open both files with the OS opener: `open` on macOS, `xdg-open` on Linux, `start` on Windows. If it fails, give the paths only.
 

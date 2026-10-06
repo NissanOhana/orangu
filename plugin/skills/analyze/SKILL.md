@@ -1,7 +1,7 @@
 ---
 name: analyze
 description: Explain what happened in one session, finished or still running, from local deterministic evidence. Use when the user asks to review a run or trace what the agent did and why it ended there. Use it to diagnose an error or retry, see where time or tokens went, or open a visual report. Use it to open the report for the session running right now. Use it to keep a report refreshed while a session runs. Not for a change proposal (/orangu:improve) or a repo or global harness review (/orangu:harness).
-allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read
+allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Read
 ---
 
 # /orangu:analyze

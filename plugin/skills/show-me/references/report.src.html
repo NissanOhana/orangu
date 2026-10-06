@@ -23,7 +23,8 @@ html:not([data-scope=repo]) [data-if=repo],html:not([data-scope=global]) [data-i
 html:not([data-live=true]) [data-if=live],html:not([data-caution=true]) [data-if=caution],
 html[data-caution=true] [data-if=reconciled],html:not([data-redacted=true]) [data-if=redacted],
 html:not(:has([data-repeat=improvement])) [data-if=improvements],
-html:has([data-repeat=improvement]) [data-empty=improvement]{display:none!important}
+html:not(:has([data-repeat=finding])) [data-if=findings],
+html:has([data-repeat=improvement]) [data-empty=improvement],html:has([data-repeat=finding]) [data-empty=finding]{display:none!important}
 
 .page{max-width:760px;margin:0 auto;padding:48px 24px 72px}
 .top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}
@@ -158,11 +159,12 @@ h2::before{content:"";flex:none;width:4px;height:20px;border-radius:2px;backgrou
   <p class="ey"><span data-if="session">orangu · session report</span><span data-if="repo">orangu · repository report</span><span data-if="global">orangu · all sessions on this machine</span></p>
   <h1 data-slot="title">EXAMPLE Fix the flaky checkout tests</h1>
   <p class="meta" data-if="session"><span data-slot="project">EXAMPLE demo</span><span data-slot="date" data-f="date" data-v="">EXAMPLE 2026-08-17</span><span data-slot="models">EXAMPLE Claude Opus 5</span></p>
-  <p class="meta" data-if="aggregate"><span><b data-slot="sessions" data-f="num" data-v="">EXAMPLE 7</b> sessions</span></p>
+  <p class="meta" data-if="aggregate"><span><b data-slot="sessions" data-f="num" data-v="">EXAMPLE 7</b> <span data-slot="session-noun">EXAMPLE sessions</span></span></p>
   <p class="lv" data-if="live">Live session: these numbers are a snapshot from <span data-slot="live-at" data-f="time" data-v="">EXAMPLE 2026-08-17 14:05</span>.</p>
   <div><a class="open" href="slides.html">Open the slides →</a></div>
  </header>
 
+ <main>
  <section>
   <h2>Summary</h2>
   <p class="lead" data-slot="summary">EXAMPLE The session fixed the checkout tests. The first test runs failed on a missing module. The agent installed the module, and the last test run passed. Most tokens came from the cache.</p>
@@ -181,16 +183,16 @@ h2::before{content:"";flex:none;width:4px;height:20px;border-radius:2px;backgrou
     <div class="an">Time ↓</div>
     <div class="av"><b data-slot="active" data-f="ms" data-v="">EXAMPLE 4m 12s</b></div>
     <p class="ann"><span data-slot="wall" data-f="ms" data-v="">EXAMPLE 21m 3s</span> in total · <span data-slot="waiting" data-f="ms" data-v="">EXAMPLE 9m 40s</span> waiting for you</p>
-    <div class="chart" data-chart="time">
+    <div class="chart" data-chart="time" data-sample>
      <div class="bar" role="img" aria-label="EXAMPLE Working 4m 12s, waiting for you 9m 40s"><i data-k="active" style="--n:252000"></i><i data-k="waiting" style="--n:580000"></i></div>
      <p class="lg"><span data-k="active">working</span><span data-k="waiting">waiting for you</span></p>
     </div>
    </div>
    <div class="ax c">
     <div class="an">Tokens ↓</div>
-    <div class="av"><svg class="ring" data-chart="cache" viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 84% read from cache"><circle class="trk" cx="18" cy="18" r="15" pathLength="100"/><circle class="val" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="84 100" transform="rotate(-90 18 18)"/></svg><span><b data-slot="tokens" data-f="tok" data-v="">EXAMPLE 1.23M</b> <small>tokens</small></span></div>
+    <div class="av"><svg class="ring" data-chart="cache" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 84% read from cache"><circle class="trk" cx="18" cy="18" r="15" pathLength="100"/><circle class="val" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="84 100" transform="rotate(-90 18 18)"/></svg><span><b data-slot="tokens" data-f="tok" data-v="">EXAMPLE 1.23M</b> <small>tokens</small></span></div>
     <p class="ann"><span data-slot="cache" data-f="pct" data-v="">EXAMPLE 84%</span> read from cache · <span data-slot="output" data-f="tok" data-v="">EXAMPLE 12.3k</span> generated</p>
-    <div class="chart" data-chart="tokens">
+    <div class="chart" data-chart="tokens" data-sample>
      <div class="bar" role="img" aria-label="EXAMPLE Tokens by kind: cache read 1,032,000, cache write 1h 98,000, fresh input 87,600, output 12,300"><i data-k="read" style="--n:1032000"></i><i data-k="write5m" style="--n:0"></i><i data-k="write1h" style="--n:98000"></i><i data-k="input" style="--n:87600"></i><i data-k="output" style="--n:12300"></i></div>
      <p class="lg"><span data-k="read">cache read</span><span data-k="write5m">cache write 5m</span><span data-k="write1h">cache write 1h</span><span data-k="input">fresh input</span><span data-k="output">output</span></p>
     </div>
@@ -207,9 +209,14 @@ h2::before{content:"";flex:none;width:4px;height:20px;border-radius:2px;backgrou
     <div class="av"><b data-slot="kpi-findings" data-f="num" data-v="">EXAMPLE 11</b></div>
     <p class="ann">Rule findings in these sessions</p>
    </div>
-   <div class="ax c">
+   <div class="ax c" data-empty="finding">
     <div class="an">Top pattern</div>
-    <div class="av share"><svg class="ring" data-chart="share" viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span><b data-slot="kpi-top-n" data-f="num" data-v="">EXAMPLE 3</b> <small>of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> sessions</small></span></div>
+    <div class="av phrase">None</div>
+    <p class="ann">The rules found no finding in these sessions.</p>
+   </div>
+   <div class="ax c" data-if="findings">
+    <div class="an">Top pattern</div>
+    <div class="av share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span><b data-slot="kpi-top-n" data-f="num" data-v="">EXAMPLE 3</b> <small>of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></small></span></div>
     <p class="ann">Rule <span class="pill" data-slot="kpi-top-rule">EXAMPLE tool-errors</span></p>
    </div>
   </div>
@@ -226,13 +233,13 @@ h2::before{content:"";flex:none;width:4px;height:20px;border-radius:2px;backgrou
     <p data-slot="f-evidence">EXAMPLE The same test command failed 4 times in a row. Each run stopped on the same missing module.</p>
    </div>
    <dl class="facts" data-if="session">
-    <div data-if="turns"><dt>Turns</dt><dd><span data-slot="f-turns">EXAMPLE 4, 9, 12</span><svg class="strip" data-chart="turns" viewBox="0 0 40 1" preserveAspectRatio="none" role="img" aria-label="EXAMPLE Turns 4, 9 and 12 of 40"><rect class="trk" width="40" height="1"/><rect class="hit" data-repeat="turn" data-max="50" x="4" width="1" height="1"/></svg><span class="cap"><span data-slot="turn-count" data-f="num" data-v="">EXAMPLE 40</span> turns in the session</span></dd></div>
+    <div data-if="turns"><dt>In turns</dt><dd><span data-slot="f-turns">EXAMPLE #4, #9, #12</span><svg class="strip" data-chart="turns" data-sample viewBox="0 0 40 1" preserveAspectRatio="none" role="img" aria-label="EXAMPLE In turns #4, #9 and #12 of 40"><rect class="trk" width="40" height="1"/><rect class="hit" data-repeat="turn" data-max="50" x="4" width="1" height="1"/></svg><span class="cap"><span data-slot="turn-count" data-f="num" data-v="">EXAMPLE 40</span> <span data-slot="turn-noun">EXAMPLE turns</span> in the session</span></dd></div>
     <div data-if="savings"><dt>Savings</dt><dd>≈<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
     <div data-if="savings-ms"><dt>Savings</dt><dd>≈<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
     <div><dt>Rule</dt><dd><span class="pill" data-slot="f-rule">EXAMPLE tool-errors</span></dd></div>
    </dl>
    <dl class="facts" data-if="aggregate">
-    <div><dt>Sessions</dt><dd class="share"><svg class="ring" data-chart="share" viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span>Shows in <span data-slot="f-shows" data-f="num" data-v="">EXAMPLE 3</span> of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> sessions</span></dd></div>
+    <div><dt>Sessions</dt><dd class="share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span>Shows in <span data-slot="f-shows" data-f="num" data-v="">EXAMPLE 3</span> of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></span></dd></div>
     <div><dt>Examples</dt><dd><code data-slot="f-examples">EXAMPLE 63d26acb, a1b2c3d4</code></dd></div>
     <div data-if="savings"><dt>Savings</dt><dd>≈<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
     <div data-if="savings-ms"><dt>Savings</dt><dd>≈<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
@@ -294,6 +301,8 @@ h2::before{content:"";flex:none;width:4px;height:20px;border-radius:2px;backgrou
   </ul>
   <p class="caution" data-if="caution"><b>CAUTION:</b> The token totals do not reconcile. The numbers can be wrong by <span data-slot="caution-pct">EXAMPLE 2.4</span>%.</p>
  </section>
+
+ </main>
 
  <footer class="foot"><span>The numbers come from orangu <span data-slot="version">EXAMPLE 0.8.0</span>. Claude wrote the words.</span><span data-if="session" data-slot="generated" data-f="date" data-v="">EXAMPLE 2026-08-17</span></footer>
 </div>

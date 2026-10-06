@@ -39,4 +39,4 @@ One directory per case: `prompt.md` (frontmatter for limits, `allowed_tools`, an
 
 ## Not covered here
 
-Exercising the CLI inside a run needs an operator grant such as `--allow-tools "Bash(node *orangu.cli.mjs*)"`, the OS sandbox, and a `scaffold_script` that writes a synthetic transcript into the workspace. Those flags widen what a run can do, so they stay out of the default suite and the workflow.
+Exercising the CLI inside a run needs an operator grant that names the CLI file before its `*`, such as `--allow-tools "Bash(node <plugin-root>/bin/orangu.cli.mjs *)"`, the OS sandbox, and a `scaffold_script` that writes a synthetic transcript into the workspace. Those flags widen what a run can do, so they stay out of the default suite and the workflow.
