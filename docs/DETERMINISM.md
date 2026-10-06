@@ -10,9 +10,10 @@ The boundary makes each claim inspectable without pretending that deterministic 
 DETERMINISTIC LOCAL CORE
 
 supported JSONL session ─┐
-current Analysis JSON ───┼─> orangu evidence ─> catalog matches + bounded findings
-current SlimAnalysis ────┤   │
-current Aggregate JSON ──┘   ▼
+current Analysis JSON ───┼─> orangu evidence
+current SlimAnalysis ────┤   catalog matches + bounded findings
+current Aggregate JSON ──┘   │
+                             ▼
 AI SKILLS                    orangu-improve
                              explain + optional research
                              write <id>.md + <id>.json
@@ -158,7 +159,7 @@ A proposal cannot verify itself, and an application receipt does not prove that 
   - **Per-item explicit approval.** Before the question, it discloses each item's id, the files its manifest declares, and the exact text of anything that would run or grant authority. Only a verbatim id approves, and only the answer to that question counts. Nothing else in the conversation is consent.
   - **Repo scope only.** Global proposals are review-only and are never applied, at any approval.
   - **Through `/orangu:apply`, unchanged.** For each approved item, harness invokes `/orangu:apply <id>`: one id, one record, one receipt per invocation. Each invocation keeps that skill's existing binding check, untrusted-input rules, and confinement contract. Harness forks nothing and grants itself no edit authority of its own. It prints the `/orangu:apply <id>` list, so you can do the same work by hand.
-  - **Stop at the first failure.** Approved items are applied in order, and the run halts on the first one that fails. It leaves the working tree as it stands for review and does not continue down the list.
+  - **Stop at the first failure.** Harness applies the approved items in order and halts at the first one that fails. It leaves the working tree as it stands for review and does not continue down the list.
 
   None of this moves the deterministic boundary. No model measures anything, and the evidence is still the bounded deterministic projection. The CLI still validates artifact shape and does not inspect a diff.
 - Live observation is a CLI concern. `orangu watch` refreshes one report, and `orangu serve` follows several sessions. Neither performs model reasoning of its own.

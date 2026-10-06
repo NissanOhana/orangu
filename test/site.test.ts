@@ -875,6 +875,11 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     expect(full).toContain('https://github.com/NissanOhana/orangu/blob/main/docs/README.md')
     expect(full).not.toMatch(/\]\((?!https?:|#)[^)]+\)/)
     // Ratchet: only down. It grows with the README; trim before raising.
+    // Named growth, measured 2026-10-06 (docs STE chunk, review fixes): 38,340 B on main -> 38,429 B (+89).
+    // Cause: two accuracy fixes in docs/USAGE.md and docs/DETERMINISM.md that no qualifier-free cut could pay
+    // for. The workflow diagram gets back its edge from the bounded findings into the AI skill (+24 B). USAGE
+    // says that the stripped text is examples and that --include-text keeps all of it, scrubbed (+69 B). Three
+    // scope fixes and the STE rewrite net -4 B. The 40,000 B cap does not move.
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(40_000)
   })
 

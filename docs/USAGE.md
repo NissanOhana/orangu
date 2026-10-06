@@ -45,11 +45,11 @@ A session selector is `latest`, a session id or unique prefix, a supported `.jso
 
 On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. A pipe, CI, `--plain`, `--quiet`, or an explicit scope or session flag keeps the compact latest-session behavior and never waits for input.
 
-`orangu repo` and `orangu global` print their answer to stdout. `--html <file>` also writes that scope as one self-contained HTML report. `--open` writes it into the temp directory as `orangu-<scope>-<hash>.html` and hands it to your browser. So a re-run never overwrites a file that a browser still has open.
+`orangu repo` and `orangu global` print their answer to stdout. `--html <file>` also writes that scope as one self-contained HTML report. `--open` writes it into the temp directory as `orangu-<scope>-<hash>.html` and hands it to your browser. So a re-run of `--open` never overwrites a file that a browser still has open. The dashboard's repository and global choices ask for `--open`, and `--no-open` suppresses it.
 
-The dashboard's repository and global choices ask for that report, and `--no-open` suppresses it. Orangu refuses `--html` and `--open` with `--json`, which is a machine read with no side effect. `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report.
+Orangu refuses `--html` and `--open` with `--json`, which is a machine read with no side effect. `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report.
 
-`orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array. On an empty home it prints `[]` and still exits 1, because the chooser had nothing to choose.
+`orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
 
 Use `orangu --help` for flags and output controls.
 
@@ -86,7 +86,7 @@ See [beta feedback](feedback.md) for the privacy boundary, consent flow, and ove
 
 ## Shareable output
 
-Reports and JSON scrub recognized secrets by default. Report, `analyze --json`, `evidence`, `repo`, and `global` output also omit arbitrary prompt and result text unless you ask for `--include-text`. That text is session titles, previews, tool-error text, and finding details built from commands.
+Reports and JSON scrub recognized secrets by default. Report, `analyze --json`, `evidence`, `repo`, and `global` output also omit arbitrary prompt and result text unless you ask for `--include-text`. That text includes session titles, previews, tool-error text, and finding details built from commands. `--include-text` keeps all of it, with secrets still scrubbed.
 
 Orangu shortens home paths to `~`, but other absolute paths may remain as useful evidence. Add `--strip-paths` to reduce them to basenames before sharing. `--no-redact` is only for a local inspection that you explicitly ask for.
 
