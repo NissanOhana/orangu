@@ -21,7 +21,7 @@ Choose exactly one context: `session`, `repo`, `global`, `report` or `app`. Unle
 
 `orangu feedback --context <context>`
 
-If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`: try `../../bin/orangu.cli.mjs` for an installed plugin, then `../../../dist/orangu.js` for a source checkout, and run the first file that exists with Node.js 20 or newer. Never fetch a package to continue.
+If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`. For an installed plugin, try `../../bin/orangu.cli.mjs` first. For a source checkout, try `../../../dist/orangu.js` next. Run the first file that exists with Node.js 20 or newer. Never fetch a package to continue.
 
 Pass no other content. Tell the user these three facts:
 

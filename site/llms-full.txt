@@ -191,9 +191,15 @@ node dist/orangu.js report
 | `orangu harness` | Compare declared harness configuration with observed use |
 | `orangu suggest` | Inspect and transition validated suggestion records |
 
-A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment and never guessed silently. A guess from the cwd says so, and outside Claude Code `current` is an error. `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
+A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment. If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch` and `estimate`. Outside Claude Code, `current` is an error.
 
-On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. A pipe, CI, `--plain`, `--quiet`, or an explicit scope or session flag keeps the compact latest-session behavior and never waits for input.
+`report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
+
+On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. These keep bare `orangu` on the latest-session brief, which never waits for input:
+
+- a pipe, `CI`, `TERM=dumb`, or `ORANGU_NO_ANIMATION=1`
+- `--plain` or `--quiet`
+- `--session`, `--global`, `--cwd`, `--max-tokens`, or `--fail-on-hook-errors`
 
 `orangu repo` and `orangu global` print their answer to stdout. `--html <file>` also writes that scope as one self-contained HTML report. `--open` writes it into the temp directory as `orangu-<scope>-<hash>.html` and hands it to your browser. So a re-run of `--open` never overwrites a file that a browser still has open. The dashboard's repository and global choices ask for `--open`, and `--no-open` suppresses it.
 
@@ -224,7 +230,7 @@ The file report and localhost app render the same session evidence:
 - Context and tokens: context changes, compaction, cache behavior, and token composition.
 - Coverage: parsed and unknown records plus usage reconciliation.
 - Repo and Global: recurring patterns across supported sessions.
-- Improvements: matching known changes, proposals, receipts, host commands, and scope-aware verification state.
+- Improvements: matching known improvements, proposals, receipts, host commands, and scope-aware verification state.
 
 The browser never starts an agent or marks a proposal applied. It only copies a command for explicit use in Claude Code or Codex.
 

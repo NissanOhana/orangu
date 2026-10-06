@@ -20,7 +20,7 @@ Accept exactly one input:
 - `<aggregate.json> --scope repo|global` for current Aggregate JSON.
 - `--verify <suggestion-id>` to compare an applied session or repo change with later sessions (ignore any later-input after the id).
 
-Never open or parse a `.jsonl` transcript yourself. Pass it to `orangu evidence`. If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`: try `../../bin/orangu.cli.mjs` for an installed plugin, then `../../../dist/orangu.js` for a source checkout, and run the first file that exists with Node.js 20 or newer. Never fetch a package to continue. If neither works, report the blocker and stop.
+Never open or parse a `.jsonl` transcript yourself. Pass it to `orangu evidence`. If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`. For an installed plugin, try `../../bin/orangu.cli.mjs` first. For a source checkout, try `../../../dist/orangu.js` next. Run the first file that exists with Node.js 20 or newer. Never fetch a package to continue. If neither works, report the blocker and stop.
 
 Diagnose any accepted input in chat. Save only inside its scope's lifecycle:
 

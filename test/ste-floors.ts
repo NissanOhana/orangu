@@ -55,7 +55,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/shared/untrusted-input.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (37 of 37) after the rewrite
   'plugin/codex/*/openai.yaml': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (6 of 6), no change was needed
   'plugins/orangu/.codex-plugin/plugin.json#interface': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (9 of 9): the 33-word long description became 3 sentences
-  'scripts/build.mjs#codex': { floor: 65, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // Z: floor 65 -> 98. Measured 100 (6 of 6, was 2 of 3, score 67). The Codex CLI fallback was one 36-word
+  // sentence. It is now 5 short sentences, with the same 2 paths in the same order.
+  'scripts/build.mjs#codex': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // P1b: analyze, harness, the agents, the skills catalog, the plugin and marketplace descriptions
   // Raised by the P1b STE rewrite of each file (no semicolon, split sentences, vertical lists, simple tenses, the
   // product nouns). Each row: the measured score, then what still holds it down.
