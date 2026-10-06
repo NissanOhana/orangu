@@ -45,10 +45,10 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // P1a: improve, apply, feedback, shared, and the Codex copy (yaml, manifest, mirror fallback)
   // Raised by the P1a STE rewrite of each file (one instruction per sentence, no semicolon lists, vertical
   // lists, simple tenses, the product nouns). Each row: the measured score, then what still holds it down.
-  'plugin/skills/apply/SKILL.md': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 98 (53 of 54): the pinned "applied locally, not yet verified; verify ..." keeps its semicolon
+  'plugin/skills/apply/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (55 of 55). P1b moved the pinned "applied locally, not yet verified; verify ..." to two sentences, quoted as one said text
   'plugin/skills/apply/references/application-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (16 of 16) after the rewrite
   'plugin/skills/feedback/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (31 of 31) after the rewrite
-  'plugin/skills/improve/SKILL.md': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 97 (87 of 90): the pinned "Orangu picks the sessions; never choose them.", the 30-word network-disclosure list, and the 26-word routing sentence in the description
+  'plugin/skills/improve/SKILL.md': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 98 (89 of 91): the 30-word network-disclosure list and the 26-word routing sentence in the description. P1b moved the pinned "Orangu picks the sessions; never choose them." to two sentences
   'plugin/skills/improve/references/artifact-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (56 of 56) after the rewrite
   'plugin/skills/shared/interview.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (47 of 47) after the rewrite
   'plugin/skills/shared/ste.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // new surface, measured 100 (86 of 86, table cells included)
@@ -57,19 +57,21 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugins/orangu/.codex-plugin/plugin.json#interface': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (9 of 9): the 33-word long description became 3 sentences
   'scripts/build.mjs#codex': { floor: 65, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // P1b: analyze, harness, the agents, the skills catalog, the plugin and marketplace descriptions
-  'plugin/agents/harness-devex-analyst.md': { floor: 86, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/agents/harness-pm-analyst.md': { floor: 84, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/agents/harness-researcher.md': { floor: 87, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/README.md': { floor: 63, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/analyze/SKILL.md': { floor: 71, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/analyze/references/json-shape.md': { floor: 84, emDash: 0, eg: 1, ie: 0, etc: 0, contractions: 0 },
+  // Raised by the P1b STE rewrite of each file (no semicolon, split sentences, vertical lists, simple tenses, the
+  // product nouns). Each row: the measured score, then what still holds it down.
+  'plugin/agents/harness-devex-analyst.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (41 of 41) after the rewrite
+  'plugin/agents/harness-pm-analyst.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (40 of 40) after the rewrite
+  'plugin/agents/harness-researcher.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (43 of 43) after the rewrite
+  'plugin/skills/README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (22 of 22) after the rewrite
+  'plugin/skills/analyze/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (68 of 68) after the rewrite
+  'plugin/skills/analyze/references/json-shape.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (26 of 26): "e.g." became "for example"
   // re-born 71 -> 66 and contractions 0 -> 1: table cells are now scored. Measured 75 sentences, 51 clean,
   // score 68 (was 37 sentences, score 73). The cell at :25 holds "can't", and the cells carry 14 semicolons.
-  'plugin/skills/analyze/references/reading-the-report.md': { floor: 66, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 1 },
-  'plugin/skills/harness/SKILL.md': { floor: 57, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/harness/references/research-sources.md': { floor: 85, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/.claude-plugin/plugin.json#description': { floor: 0, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  '.claude-plugin/marketplace.json#description': { floor: 65, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  'plugin/skills/analyze/references/reading-the-report.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (116 of 116): the table cells are sentences, and "can't" became "cannot"
+  'plugin/skills/harness/SKILL.md': { floor: 94, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 96 (109 of 114): 5 long sentences hold pinned lists (the 9 change classes, the network-disclosure list, the manifest fields, the per-item disclosure, the "echoing ... just before each invocation" apply rule) under the 1,400-word body ceiling
+  'plugin/skills/harness/references/research-sources.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (34 of 34) after the rewrite
+  'plugin/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (2 of 2): the 28-word sentence became 2
+  '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
   // K: help, every CLI and engine folder under src/, the catalog notes
   'orangu --help': { floor: 90, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 1 },
   'src/adapters': { floor: 86, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
