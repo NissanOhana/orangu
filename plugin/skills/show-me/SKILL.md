@@ -68,7 +68,7 @@ Write the 2 files to `~/.orangu/show-me/<id>/slides.html` and `~/.orangu/show-me
 WARNING: A missed escape can let session text run as script or send the reader to another site. After you write the files, run these counts on each file with the Grep tool and `output_mode: "count"`. Set `-i: true` for counts 2 to 9, and `multiline: true` for count 9:
 
 1. `EXAMPLE|data-sample` counts 0.
-2. `(^|[\s/"'])on[a-z]+\s*=|(=|^)\s*["']?\s*javascript:|&#([^3]|3[^9]|39[^;])|&(tab|newline|colon);|<(iframe|object|embed|base|link|form|frame)\b` counts 0.
+2. `(^|[\s/"'])on[a-z]+\s*=|(=|^)\s*["']?\s*javascript:|&#([^3]|3[^9]|39[^;])|&(tab|newline|colon);|<(iframe|object|embed|base|link|form|frame)\b|attributename\s*=` counts 0.
 3. `<script` counts 1.
 4. `<meta` counts 5.
 5. `http-equiv` counts 1.
