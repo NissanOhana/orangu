@@ -22,11 +22,11 @@ function runtimeErrors(page: Page): string[] {
 
 async function openFirstSuggestion(page: Page, info: TestInfo): Promise<ReturnType<Page['locator']>> {
   await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { level: 1, name: 'Improve the next outcome' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
   const row = page.locator('details.finding').first()
   await expect(row).toBeVisible()
   await row.locator('summary').click()
-  await expect(row.getByRole('button', { name: 'Copy improve command' })).toBeVisible()
+  await expect(row.getByRole('button', { name: 'Copy the Claude Code command' })).toBeVisible()
   return row
 }
 
@@ -81,10 +81,10 @@ test('localhost creates only a copy handoff and never offers automatic model lau
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   const row = await openFirstSuggestion(page, info)
   const posted = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname.endsWith('/api/kickoff'))
-  await row.getByRole('button', { name: 'Copy improve command' }).click()
+  await row.getByRole('button', { name: 'Copy the Claude Code command' }).click()
   const request = await posted
   expect(request.postDataJSON()).toMatchObject({ mode: 'copy' })
-  await expect(row.locator('.kick-msg')).toContainText('Claude command copied')
+  await expect(row.locator('.kick-msg')).toContainText('The command is on your clipboard. Paste it in a terminal')
   await expect(row.getByRole('button', { name: 'Draft proposal' })).toHaveCount(0)
   await expect(row.locator('.status-chip[data-status="running"]')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('/orangu:improve')
@@ -195,7 +195,7 @@ test('the Repo hero CTA keeps the reader in the theme and audience they are in',
   await expect(cta).toBeVisible({ timeout: 20_000 })
   expect(await paintedTheme(page)).toBe(projectTheme(info))
   await cta.click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Improve the next outcome' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
   const hash = await page.evaluate(() => location.hash)
   expect(hash).toContain('scope=repo')
   expect(hash.includes('theme=dark')).toBe(projectTheme(info) === 'dark')

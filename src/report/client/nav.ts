@@ -28,7 +28,7 @@ export const NAV_GROUPS: ReadonlyArray<{ id: NavGroup['id']; label: string }> = 
   { id: 'live', label: 'Live' },
   { id: 'session', label: 'Observe this session' },
   { id: 'across', label: 'Recurring patterns' },
-  { id: 'improve', label: 'Improve the next run' },
+  { id: 'improve', label: 'Improve the next session' },
 ]
 
 export const SCREEN_IDS = ['live', 'overview', 'timeline', 'tools', 'agents', 'context', 'coverage', 'repo', 'global', 'harness', 'suggest'] as const
@@ -129,7 +129,7 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
     { id: 'live', label: 'Live', items: liveItems },
     { id: 'session', label: 'Observe this session', items: sessionItems },
     { id: 'across', label: 'Recurring patterns', items: acrossItems },
-    { id: 'improve', label: 'Improve the next run', items: [{ id: 'suggest', label: 'Suggestions', screen: 'suggest' }] },
+    { id: 'improve', label: 'Improve the next session', items: [{ id: 'suggest', label: 'Improvements', screen: 'suggest' }] },
   ]
 }
 

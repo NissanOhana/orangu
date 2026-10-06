@@ -50,7 +50,7 @@ function aggReport(aggregates: AppData['aggregates']): AppData {
 
 describe('nav model', () => {
   it('has the four design group labels', () => {
-    expect(NAV_GROUPS.map((g) => g.label)).toEqual(['Live', 'Observe this session', 'Recurring patterns', 'Improve the next run'])
+    expect(NAV_GROUPS.map((g) => g.label)).toEqual(['Live', 'Observe this session', 'Recurring patterns', 'Improve the next session'])
   })
 
   it('has the eleven screen ids', () => {

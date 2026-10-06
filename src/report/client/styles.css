@@ -168,6 +168,23 @@ details.finding > summary b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .fcmd { margin-top: 12px; }
 details.finding.top { border-color: var(--border2); margin-bottom: 16px; }
 details.finding.top > summary b { font-size: 15px; }
+/* the improvement line: the last row of a card summary, clamped to 2 lines while the card is closed */
+details.finding > summary { flex-wrap: wrap; }
+details.finding > summary > .sg-lead { flex: 1 1 100%; margin: 2px 0 0 40px; font-size: 13.5px; line-height: 1.45; }
+details.finding > summary .sg-lead b { flex: none; font-size: inherit; }
+/* a clamp clips at the padding box, so the closed line keeps its spacing in transparent borders (the fill paints under them) and no 3rd line shows */
+details.finding:not([open]) > summary > .sg-lead { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; padding-block: 0; border-block: 6px solid transparent; }
+.sg-install { margin: 6px 0 4px; }
+.cmd + .cmd { margin-top: 6px; }
+.btn-primary[aria-busy="true"] { cursor: progress; opacity: 0.75; }
+/* the page-head Show me control and its popover */
+.show-me { position: relative; }
+.show-me > summary { display: inline-flex; align-items: center; }
+.btn-show { color: var(--accent-ink); border-color: var(--accent-ink); font-weight: 700; }
+.btn-show:hover, .show-me[open] > .btn-show { background: var(--accent-weak); }
+.show-me > .card { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: min(440px, calc(100vw - 32px)); box-shadow: 0 5px 20px color-mix(in srgb, var(--ink1) 14%, transparent); }
+.show-me > .card p { margin: 0 0 10px; font-size: 13px; color: var(--ink2); overflow-wrap: anywhere; }
+.show-me > .card .cmd { margin-bottom: 10px; }
 .axis .signals { margin-top: 8px; font-size: 12px; }
 .axis .signals > summary { cursor: pointer; color: var(--ink3); }
 .axis .signals .chiprow { margin: 8px 0 0; gap: 6px; }
@@ -316,7 +333,6 @@ svg { display: block; max-width: 100%; }
 .sg-t { font-size: 14.5px; }
 .sg-ev { margin-bottom: 8px; }
 .sg-ev b { color: var(--ink1); }
-.sg-fix { margin-bottom: 10px; }
 .sg-ex { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .sg-body { padding-left: 56px; }
 .sg-save { font-weight: 700; }
@@ -390,6 +406,9 @@ svg { display: block; max-width: 100%; }
   .overview-hero { padding: 18px; }
   .overview-brand { width: 96px; height: 96px; }
   .overview-brand .logo { width: 82px; height: 82px; }
+  /* the static popover takes the row and never sizes .page-tools: its nowrap command bars would widen the page */
+  .show-me[open] { flex-basis: 100%; }
+  .show-me > .card { position: static; width: 100%; margin-top: 8px; box-shadow: none; contain: inline-size; }
 }
 
 @media (max-width: 560px) {
@@ -419,6 +438,7 @@ svg { display: block; max-width: 100%; }
   .navwrap { flex-wrap: wrap; overflow-x: visible; }
   .navgroup { flex-wrap: wrap; }
   .btn-primary { width: 100%; justify-content: center; }
+  details.finding > summary > .sg-lead { grid-column: 2 / -1; margin-left: 0; }
 }
 
 @media print {
@@ -427,6 +447,7 @@ svg { display: block; max-width: 100%; }
   .app { display: block; height: auto; overflow: visible; }
   .main { overflow: visible; }
   details.turn > .tbody, details.finding > .fbody { display: block !important; }
+  details.finding:not([open]) > summary > .sg-lead { display: block; -webkit-line-clamp: none; }
   .card, .kpi, details { break-inside: avoid; }
   body { font-size: 11px; }
 }

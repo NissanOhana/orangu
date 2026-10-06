@@ -324,7 +324,7 @@ test('generated sample and localhost overview "where to look next" links navigat
     { overview: `${APP}/#overview?s=${SESSION}&audience=plain`, session: SESSION },
   ]
   for (const surface of surfaces) {
-    for (const [screen, heading] of [['timeline', 'Timeline'], ['tools', 'Tools & calls'], ['suggest', 'Improve the next outcome']] as const) {
+    for (const [screen, heading] of [['timeline', 'Timeline'], ['tools', 'Tools & calls'], ['suggest', 'Improvements']] as const) {
       await page.goto(surface.overview, { waitUntil: 'domcontentloaded' })
       await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
       const capability = page.locator(`.where-next a[data-screen="${screen}"]`)
@@ -396,7 +396,7 @@ test('generated repository sample renders the repo scope and the two samples lin
   await expect(page.locator('.rrow')).not.toHaveCount(0)
   await expectNoHorizontalOverflow(page)
   await page.goto(withTheme(`${SITE}/sample.html#suggest?scope=repo`, info), { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { level: 1, name: 'Improve the next outcome' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
   await expect(page.getByText('This scope needs orangu serve')).toHaveCount(0)
   await expect(page.locator('details.finding')).not.toHaveCount(0)
   expect(external).toEqual([])

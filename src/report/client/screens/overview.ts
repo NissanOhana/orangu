@@ -46,17 +46,17 @@ function triptych(a: Analysis): string {
 </div>`
 }
 
-/** The top finding, hoisted: title, fix, savings as a share of the session, the evidence link, the improve command. */
+/** The top finding, hoisted: title, improvement, savings as a share of the session, the evidence link, the improve command and the way to the 3 steps. */
 function topFinding(ctx: Ctx, a: Analysis, ins: Insight | undefined): string {
   if (!ins)
-    return `<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">Nothing stood out. This session ran clean.</span></div>`
+    return `<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">No improvements found. The rules found nothing to change in this session.</span></div>`
   const at = insightLink(ins)
   const link = at?.tool
     ? { href: href(ctx, a, { screen: 'timeline', tool: at.tool }), label: `See the ${at.tool} calls →` }
     : at
       ? { href: href(ctx, a, { screen: 'timeline', turn: at.turn }), label: `See the ${plural(ins.turnIndexes.length, 'turn')} →` }
       : undefined
-  return `<div class="eyebrow mb6">The one thing to improve</div>${findingHtml(ins, ctx.audience, { command: commandForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, ...(link ? { link } : {}) })}`
+  return `<div class="eyebrow mb6">Top improvement</div>${findingHtml(ins, ctx.audience, { command: commandForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, how: href(ctx, a, { screen: 'suggest' }), ...(link ? { link } : {}) })}`
 }
 
 /** 60 px context sparkline (the Context screen's chart, reused); a caption alone when there is no series. */
@@ -76,7 +76,7 @@ function whereNext(ctx: Ctx, a: Analysis): string {
   const links = [
     { screen: 'timeline', label: s.toolErrors ? `Timeline · ${plural(s.toolErrors, 'error')} only` : `Timeline · ${num(s.turns)} turns`, state: s.toolErrors ? { errorsOnly: true } : {} },
     { screen: 'tools', label: `Tools · ${plural(s.toolCalls, 'call')}, ${plural(s.toolErrors, 'error')}`, state: {} },
-    { screen: 'suggest', label: n ? `Suggestions · ${plural(n, 'finding')}` : 'Suggestions · nothing to improve', state: {} },
+    { screen: 'suggest', label: `Improvements · ${n || 'none'}`, state: {} },
   ]
   return `<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${links
     .map((l) => `<a data-screen="${l.screen}" href="${esc(href(ctx, a, { screen: l.screen, ...l.state }))}">${esc(plainSentence(l.label, ctx.audience))} →</a>`)

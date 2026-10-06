@@ -107,10 +107,10 @@ describe('a report about a scope, not a session', () => {
   it('gives the Suggest header the same scope its body defaulted to', () => {
     const sub = (data: AppData, scope?: 'repo' | 'global'): string =>
       screenSub({ data, state: { screen: 'suggest', ...(scope ? { scope } : {}) }, audience: 'dev' } as Parameters<typeof screenSub>[0])
-    expect(sub(aggReport('repo', 'repo orangu'))).toBe('recurring patterns · bounded proposals · whole-harness review')
-    expect(sub(aggReport('global', 'global'))).toBe('recurring patterns · bounded proposals · whole-harness review')
-    expect(sub(appData())).toBe('one finding · one bounded proposal')
-    expect(sub(appData(), 'repo')).toBe('recurring patterns · bounded proposals · whole-harness review')
+    expect(sub(aggReport('repo', 'repo orangu'))).toBe('recurring patterns · one proposal per improvement · whole-harness review')
+    expect(sub(aggReport('global', 'global'))).toBe('recurring patterns · one proposal per improvement · whole-harness review')
+    expect(sub(appData())).toBe('this session · one proposal per improvement')
+    expect(sub(appData(), 'repo')).toBe('recurring patterns · one proposal per improvement · whole-harness review')
   })
 })
 

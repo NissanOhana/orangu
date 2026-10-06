@@ -110,7 +110,7 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     const ctx = await context()
     renderOverview(ctx)
     const top = ctx.a!.insights.find((i) => i.id === ctx.a!.summary.topInsightIds[0])!
-    expect(markup).toContain('The one thing to improve')
+    expect(markup).toContain('Top improvement')
     expect(markup).toContain('<details class="finding top" open>')
     expect(markup).toContain(top.title)
     // the savings pill explains itself: one sentence that names the rule and the figure
@@ -156,9 +156,9 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     for (const row of ['Goal', 'How it ended', 'Tokens &amp; time']) expect(markup).toContain(`<div class="k">${row}</div>`)
     expect(markup).not.toContain('<div class="k">What happened</div>')
     expect(markup).not.toContain('What it produced')
-    expect(markup).toContain('The one thing to improve')
+    expect(markup).toContain('Top improvement')
     expect(markup).toContain('<details class="finding top" open>')
-    expect(markup).toContain('<b>Fix.</b> ')
+    expect(markup).toContain('<span class="rec sg-lead"><b>Improvement:</b> ')
     expect(markup).toContain('class="cmd"')
     expect(markup).not.toContain('class="triptych"')
     expect(markup).not.toContain('sigchip')
@@ -180,7 +180,7 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     renderOverview(ctx)
     expect(markup).toContain('class="cmd"')
     expect(markup).toContain('/orangu:improve sg_')
-    expect(markup).toContain('Draft a proposal')
+    expect(markup).toContain('Get an AI proposal')
     expect(markup).not.toContain('<p></p>')
     expect(markup).toContain('recoverable across')
     expect(markup).toMatch(/title="Rule [\w-]+ (?:estimated|measured) a saving of ≈/)
@@ -201,8 +201,8 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     ctx.a!.insights = []
     ctx.a!.summary.topInsightIds = []
     renderOverview(ctx)
-    expect(markup).toContain('Nothing stood out. This session ran clean.')
-    expect(markup).toContain('Suggestions · nothing to improve')
+    expect(markup).toContain('No improvements found. The rules found nothing to change in this session.')
+    expect(markup).toContain('Improvements · none')
     expect(markup).not.toContain('recoverable across')
   })
 })

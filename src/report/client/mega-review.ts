@@ -9,22 +9,21 @@
  * identically. The .cmd bar stays beside the button because it is the fallback when the clipboard
  * is unavailable: the command must remain visible and selectable.
  */
-import { commandBlock } from './components/command.js'
+import { commandBlock, pasteLine } from './components/command.js'
 import { esc } from './format.js'
 import { harnessCommand } from './suggest-rows.js'
 
-const REVIEW_ONLY = 'Global scope is review only: nothing is applied.'
+const REVIEW_ONLY = 'Global scope is for review only. Claude applies nothing.'
 
 export function megaReview(scope: 'repo' | 'global'): string {
   const command = harnessCommand(scope)
   const repo = scope === 'repo'
-  const title = repo ? 'Improve this repository&#39;s harness in one command.' : 'Review every harness on this machine in one command.'
-  const sub = 'Claude Code reads the deterministic report and its references, ranks a plan of changes to your instructions, skills, hooks, agents and scripts, and waits for your approval.' + (repo ? '' : ` ${REVIEW_ONLY}`)
-  const paste = repo ? 'Paste it in Claude Code, in this repository.' : 'Paste it in Claude Code.'
-  const plan = repo ? 'Review the ranked plan, approve the items you want, and Claude applies them.' : `Review the ranked plan. ${REVIEW_ONLY}`
+  const title = repo ? 'Improve the harness of this repository with one command.' : 'Review every harness on this machine with one command.'
+  const sub = 'Claude Code reads the evidence. It ranks a plan of changes to your instructions, skills, hooks, agents and scripts. Then it waits for your approval.' + (repo ? '' : ` ${REVIEW_ONLY}`)
+  const plan = repo ? 'Review the ranked plan. Approve the items that you want. Claude applies them.' : `Review the ranked plan. ${REVIEW_ONLY}`
   return `<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="herotitle">${title}</div><div class="sg-sub">${sub}</div><ol class="steps" aria-label="Run the whole-harness review">
 <li><div><button type="button" class="btn-primary" data-copy="${esc(command)}" aria-live="polite">Copy the whole-harness command</button><div class="sg-cmd">${commandBlock(command)}</div></div></li>
-<li><span>${paste}</span></li>
+<li><span>${pasteLine(undefined, repo)}</span></li>
 <li><span>${plan}</span></li>
-</ol><p class="small muted sg-foot">It is copy-only here, creates no row status, and keeps its estimate gates inside /orangu:harness.</p></div>`
+</ol><p class="small muted sg-foot">This button only copies text. Claude asks before it reads a large input.</p></div>`
 }

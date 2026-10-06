@@ -1,8 +1,10 @@
 /**
- * Suggest (§5): hero + scope chips + plan items. Each row is one finding with its severity dot, its
- * savings as a share of the session, the evidence, the fix, and the handoff explained as three steps:
- * copy the improve command → paste it in Claude Code in this workspace → the proposal appears under
- * Saved proposals. The report never launches a model process; copying a string queues nothing.
+ * Improvements (§5): hero + scope chips + one explainer + plan items. Each card is one finding with its
+ * severity dot, its savings as a share of the session and its improvement in the summary, so a reader
+ * sees the change while the card is closed; the body holds the evidence, the examples and the copy
+ * button. The explainer above the cards says once how to get an AI proposal: copy the command, paste it
+ * in a terminal (it is a shell command that starts Claude Code), read the proposal where it lands. The
+ * report never launches a model process; copying a string queues nothing.
  * Rows per scope come from suggest-rows.ts (pure): session = this session's insights; repo/global =
  * the aggregate's crossFindings. Status chips prefer canonical v2 identity and retain v1 fallback.
  */
@@ -14,13 +16,13 @@ import { CHANGE_CLASS_LABELS } from '../../../suggest/change-class-labels.js'
 import { esc } from '../format.js'
 import { h, wireCopyButtons } from '../dom.js'
 import { chip } from '../components/chips.js'
-import { fileScope } from '../nav.js'
-import { commandBlock } from '../components/command.js'
+import { cleanHash, fileScope } from '../nav.js'
+import { commandBlock, installLines, pasteLine } from '../components/command.js'
 import { emptyHero } from '../components/empty.js'
+import { improvementLead } from '../components/finding.js'
 import { mascotBox } from '../components/mascot-box.js'
 import { savingsShare } from '../derive.js'
 import {
-  PLUGIN_INSTALL,
   findingForRow,
   kickoffFailureMessage,
   planRows,
@@ -47,9 +49,16 @@ function improveHandoffs(commands: { claude: string }): string {
   return `<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${commandBlock(commands.claude)}</div></div>`
 }
 
-/** Where the proposal shows up after step 2: in the inbox below (serve) or in orangu serve (file). */
-function stepThree(mode: Ctx['data']['mode']): string {
-  return mode === 'serve' ? 'The proposal appears below under Saved proposals.' : 'The proposal is saved under ~/.orangu; open orangu serve to review it.'
+/**
+ * How to get an AI proposal, said once above the cards: each card keeps only its button, its status
+ * and its message. Step 3 names where the proposal lands: the list below (serve) or the store (file).
+ */
+function explainer(paste: string, mode: Ctx['data']['mode']): string {
+  return `<div class="card pad mb16"><div class="eyebrow">Get an AI proposal</div><ol class="steps">
+<li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>
+<li><div><span>${esc(paste)}</span>${installLines()}</div></li>
+<li><span>Claude writes one proposal: the change, its effect, its risk and how to check it. It changes no file in your repository. ${mode === 'serve' ? 'The proposal shows below, in Saved proposals.' : 'The proposal is in ~/.orangu/proposals. Run orangu serve to see it here.'}</span></li>
+</ol></div>`
 }
 
 function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: SuggestionViewRecord | undefined): string {
@@ -58,27 +67,19 @@ function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: Sugges
   const effort = rec?.proposal?.effort
   const state = chipState(rec?.status)
   const failure = kickoffFailureMessage(rec)
-  const cwd = ctx.a?.session.cwd
   const examples = row.sessionIds
-    .map((id) => (ctx.data.mode === 'serve' ? `<a class="exch" href="#overview?s=${esc(id)}">${esc(id.slice(0, 8))}</a>` : `<span class="exch">${esc(id.slice(0, 8))}</span>`))
+    .map((id) => (ctx.data.mode === 'serve' ? `<a class="exch" href="${esc(cleanHash(ctx.state, { screen: 'overview', s: id }))}">${esc(id.slice(0, 8))}</a>` : `<span class="exch">${esc(id.slice(0, 8))}</span>`))
     .join('')
   return `<details class="finding" data-sid="${esc(sid)}" data-rule="${esc(row.ruleId)}">
-<summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span>${row.severity ? `<span class="sev ${esc(row.severity)}" title="${esc(row.severity)}"></span>` : ''}<b class="sg-t">${esc(plainSentence(row.title, aud))}</b>${share ? `<span class="fsave sg-save" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${effort ? `<span class="pill">effort ${esc(effort)}</span>` : ''}</summary>
+<summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span>${row.severity ? `<span class="sev ${esc(row.severity)}" title="${esc(row.severity)}"></span>` : ''}<b class="sg-t">${esc(plainSentence(row.title, aud))}</b>${share ? `<span class="fsave sg-save" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${effort ? `<span class="pill">effort ${esc(effort)}</span>` : ''}${improvementLead(row.recommendation, aud)}</summary>
 <div class="fbody sg-body">
-<div class="sg-ev"><b>Evidence.</b> ${esc(plainSentence(row.detail, aud))} ${aud === 'plain' ? '' : `<span class="pill">${esc(row.ruleId)}</span>`}</div>
-${row.recommendation ? `<div class="rec sg-fix"><b>Fix.</b> ${esc(plainSentence(row.recommendation, aud))}</div>` : ''}
-<div class="sg-ex"><span class="small muted">example sessions:</span>${examples}</div>
+<div class="sg-ev"><b>Evidence:</b> ${esc(plainSentence(row.detail, aud))} ${aud === 'plain' ? '' : `<span class="pill">${esc(row.ruleId)}</span>`}</div>
+<div class="sg-ex"><span class="small muted">Example sessions:</span>${examples}</div>
 ${ctx.proposals?.details(rec) ?? ''}
 <div class="kickrow">
-<span class="mono115">handled by</span>
-<span class="pill">orangu:improve</span>
+<button type="button" class="btn-primary" data-kick-copy="${esc(sid)}">Copy the Claude Code command</button>
 ${statusChip(state, failure, trustedVerification(rec))}
 </div>
-<ol class="steps" aria-label="Hand off to Claude Code">
-<li><button type="button" class="btn-primary" data-kick-copy="${esc(sid)}">Copy improve command</button></li>
-<li><div><span>Paste it in Claude Code${cwd ? ` in <span class="mono">${esc(cwd)}</span>` : ''}.</span><div class="small muted" style="margin:6px 0 4px">Needs the plugin once, typed inside Claude Code:</div>${commandBlock(PLUGIN_INSTALL, '>')}</div></li>
-<li><span>${stepThree(ctx.data.mode)}</span></li>
-</ol>
 <div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
 <div class="kick-msg small muted" aria-live="polite">${esc(failure)}</div>
 </div>
@@ -109,21 +110,23 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
   const activeSessionIds = agg?.sessions.map((session) => session.id) ?? []
   const heroSub = plainSentence(
     scope === 'session'
-      ? 'One finding, one bounded proposal. Verify it on a later run before calling it an improvement.'
+      ? 'Each improvement below comes from the evidence in this session.'
       : scope === 'repo'
-        ? 'Recurring repo patterns for larger harness changes. Apply only after review.'
-        : 'Recurring global patterns. Global suggestions are proposal-only.',
+        ? 'These patterns recur across this repository. Review each proposal before you apply it.'
+        : 'These patterns recur across this machine. Global proposals are for review only.',
     ctx.audience,
   )
+  // the command is a shell command that starts Claude Code; the explainer and the copy message share the line
+  const paste = pasteLine(a?.session.cwd, scope === 'repo')
 
   const items = boundRows.length
-    ? boundRows.map((r, i) => planItem(ctx, r.row, i + 1, r.sid, r.record)).join('')
-    : emptyHero({ title: 'Nothing to improve was found', hint: 'Ran clean. Re-run after your next session.' })
+    ? explainer(paste, ctx.data.mode) + boundRows.map((r, i) => planItem(ctx, r.row, i + 1, r.sid, r.record)).join('')
+    : emptyHero({ title: 'No improvements found', hint: 'The rules found nothing to change. Look again after your next session.' })
 
   // The taxonomy is explanatory copy under a collapsed note, never a status chip and never a header
   // before a proposal exists; the class a proposal actually got shows on the proposal itself. It stays
   // in the app (test/plugin.test.ts pins one taxonomy shared by catalog, plugin and app). The one-time
-  // plugin install lives in step 2 of every handoff strip, where the CLI prints it too.
+  // plugin install lives in step 2 of the explainer above the cards, where the CLI prints it too.
   const types = CHANGE_CLASS_LABELS.map((label) => `<span class="sigchip">${esc(label)}</span>`).join('')
   const install = boundRows.length
     ? `<details class="card pad mb16 sg-note"><summary><span class="chev" aria-hidden="true">▸</span>What a proposal can change</summary><div class="chiprow mt8">${types}</div></details>`
@@ -131,16 +134,16 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
   const mega = scope === 'session' || !agg ? '' : (ctx.megaReview?.(scope) ?? '')
 
   // User-facing nouns only (session · finding · evidence · proposal · apply · verify); no internal vocabulary.
-  const foot = 'The evidence is deterministic; an optional AI skill drafts the proposal. ' + (scope === 'session'
+  const foot = 'orangu measures the evidence. Claude writes the proposal only when you run the command. ' + (scope === 'session'
     ? 'Only later sessions in the same workspace can verify it.'
     : scope === 'repo'
-      ? 'Applied means the reviewed files changed; only later sessions can verify it.'
-      : 'Global suggestions stay proposals; nothing is applied from here.')
+      ? 'Applied means that the reviewed files changed. Only later sessions can verify it.'
+      : 'Global proposals stay proposals. Claude applies nothing from here.')
 
   const el = h(`<section>
 <div class="hero">
 ${mascotBox(48)}
-<div class="grow sg-hero"><div class="herotitle">Improvement plan</div><div class="sg-sub">${esc(heroSub)}</div></div>
+<div class="grow sg-hero herotitle">${esc(heroSub)}</div>
 </div>
 <div class="chiprow">${scopeChips}</div>
 ${mega}
@@ -156,7 +159,6 @@ ${ctx.proposals?.inbox(ctx, scope, activeSessionIds, mapped) ?? ''}
       ctx.go({ scope: s === 'session' ? undefined : s })
     }),
   )
-  const cwd = a?.session.cwd
   const wireAction = (selector: string): void => {
     el.querySelectorAll<HTMLButtonElement>(selector).forEach((button) =>
       button.addEventListener('click', () => {
@@ -169,7 +171,7 @@ ${ctx.proposals?.inbox(ctx, scope, activeSessionIds, mapped) ?? ''}
         const request = { mode: 'copy' as const, suggestionId: sid, finding: row.finding }
         const action = ctx.ds.kickoff(request).then((result) =>
           result.ok
-            ? { kind: 'copied' as const, message: `Claude command copied. Paste it in Claude Code${cwd ? ` in ${cwd}` : ''}.`, response: result.response }
+            ? { kind: 'copied' as const, message: `The command is on your clipboard. ${paste}`, response: result.response }
             : { kind: 'error' as const, message: result.message, ...(result.response ? { response: result.response } : {}) },
         )
         void action.then((result) => {

@@ -11,6 +11,7 @@ import { badgeCopy, mergeOpenIds } from './derive.js'
 import { esc, num } from './format.js'
 import { mascotSvg } from './mascot.js'
 import { h, wireExpandables, wireCopyButtons } from './dom.js'
+import { commandBlock, installLines, pasteLine } from './components/command.js'
 import { plainSentence, type Audience } from './strings.js'
 import { renderLive } from './screens/live.js'
 import { renderOverview } from './screens/overview.js'
@@ -63,13 +64,44 @@ const TITLES: Record<string, string> = {
   repo: 'Repo',
   global: 'Global',
   harness: 'Harness',
-  suggest: 'Improve the next outcome',
+  suggest: 'Improvements',
   agents: 'Agents',
   context: 'Context & tokens',
   coverage: 'Coverage',
 }
-function screenTitle(id: string): string {
+/** Exported for the unit test: the page title and the sidebar item use one noun for one screen. */
+export function screenTitle(id: string): string {
   return TITLES[id] ?? 'Overview'
+}
+
+/**
+ * The argument of the page-head show-me command: the scope on Repo and Global and on a scoped
+ * Improvements screen (the hash, else the file), else the session, else the scope a saved file is
+ * about. Only the Improvements screen reads scope=: the sidebar carries it onto every screen. The
+ * session id lands in a command that a reader pastes in a shell, so an id with any other character
+ * gives no command. '' when the page has nothing to show (serve before its first analysis).
+ */
+function showMeArg(d: AppData, state: RouteState, a?: Analysis): string {
+  const screen = state.screen
+  const scope =
+    screen === 'repo' || screen === 'global' ? screen : screen === 'suggest' && state.scope !== 'session' ? (state.scope ?? fileScope(d)) : a ? undefined : fileScope(d)
+  return scope ? `--scope ${scope}` : a && /^[\w:-]+$/.test(a.session.id) ? a.session.id : ''
+}
+
+/** The copy-only show-me command for what the page shows; '' renders no control. */
+export function showMeCommand(d: AppData, state: RouteState, a?: Analysis): string {
+  const arg = showMeArg(d, state, a)
+  return arg && `claude "/orangu:show-me ${arg}"`
+}
+
+/**
+ * The "Show me" control in the page head: a <details> with an id, so the re-open seam keeps it open
+ * across a live re-render. The command stays visible in its bar: that is the fallback when the
+ * clipboard is not available. Nothing runs from the report.
+ */
+export function showMe(d: AppData, state: RouteState, a?: Analysis): string {
+  const arg = showMeArg(d, state, a)
+  return arg && `<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${commandBlock(`claude "/orangu:show-me ${arg}"`)}<p>${esc(pasteLine(a?.session.cwd, arg === '--scope repo'))} The files open in your browser.</p>${installLines()}</div></details>`
 }
 
 /** Exported for the unit test: the header must never describe a scope the body did not render. */
@@ -101,7 +133,7 @@ export function screenSub(ctx: Ctx): string {
       // the same default the screen itself applies: an unscoped hash in a file with no session is
       // about that file's scope, so the header may not still promise one finding from one session
       const scope = ctx.state.scope ?? fileScope(ctx.data)
-      return scope === 'repo' || scope === 'global' ? 'recurring patterns · bounded proposals · whole-harness review' : 'one finding · one bounded proposal'
+      return scope === 'repo' || scope === 'global' ? 'recurring patterns · one proposal per improvement · whole-harness review' : 'this session · one proposal per improvement'
     }
     case 'agents':
       return a ? `${a.agents.runs.length} runs · up to ${a.agents.maxConcurrency} parallel` : ''
@@ -228,7 +260,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     data = null
   }
   if (!data) {
-    app.innerHTML = `<div class="page"><div class="card"><div class="empty-hero">${mascotSvg(48)}<div class="t">No analysis data in this file.</div><div class="s mono">node dist/orangu.js report</div></div></div></div>`
+    app.innerHTML = `<div class="page"><div class="card"><div class="empty-hero">${mascotSvg(48)}<div class="t">This file has no analysis data.</div><div class="s mono">npx orangu report</div></div></div></div>`
     return
   }
   const d = data
@@ -348,6 +380,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
 <button id="aud-plain" aria-pressed="${aud === 'plain'}">Plain language</button>
 </div>
 <button class="btn" id="btn-export">↓ Export HTML</button>
+${showMe(ctx.data, ctx.state, ctx.a)}
 </div>
 </header>`)
     el.querySelector('#aud-dev')!.addEventListener('click', () => go({ audience: undefined }))

@@ -38,6 +38,7 @@ const analysis = {
 } as unknown as Analysis
 
 const agg = {
+  sessionCount: 5,
   sessions: [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }, { id: 'e' }],
   crossFindings: [
     { ruleId: 'small', title: 'Small', sessions: 2, totalSavingsTokens: 500, totalSavingsMs: 1000, axis: 'tokens', severity: 'low', exampleSessionIds: ['a'] },
@@ -54,8 +55,7 @@ describe('planRows', () => {
     expect(titleForRule('tool-errors')).toBe('Tool errors')
     expect(row.title).toBe('Reread files')
     // the copy admits what redaction removed and names the escape hatch; it never claims evidence it cannot show
-    expect(row.detail).toContain('hidden by redaction')
-    expect(row.detail).toContain('--include-text')
+    expect(row.detail).toBe('orangu hides these details because they quote commands and output. To see them, run the report again with --include-text.')
     expect(findingForRow(row, 'session').title).toBe('Reread files')
   })
 
@@ -70,6 +70,7 @@ describe('planRows', () => {
   // high-severity finding beneath a low-severity finding that reports savings.
   it('a high finding with no savings outranks a low finding that has one', () => {
     const mixed = {
+      sessionCount: 3,
       sessions: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
       crossFindings: [
         { ruleId: 'write-not-edit', title: 'W', sessions: 11, totalSavingsTokens: 900_000, totalSavingsMs: 0, axis: 'tokens', severity: 'low', exampleSessionIds: ['a'] },
@@ -198,8 +199,9 @@ describe('finding identity and status', () => {
 
   it('keeps a persisted workflow failure visible after an SSE rerender', () => {
     expect(kickoffFailureMessage(rec({ status: 'failed', kickoff: { mode: 'serve', command: 'claude x', error: 'spawn claude ENOENT' } }))).toBe(
-      'Improvement workflow failed: spawn claude ENOENT',
+      'Claude could not write the proposal: spawn claude ENOENT',
     )
+    expect(kickoffFailureMessage(rec({ status: 'failed' }))).toBe('Claude could not write the proposal. Copy the command and run it again to see the error.')
     expect(kickoffFailureMessage(rec({ status: 'new' }))).toBe('')
   })
 })

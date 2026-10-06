@@ -17,7 +17,7 @@ export interface PlanRow {
   ruleId: string
   title: string
   detail: string
-  /** insights carry one; crossFindings do not, so the screen omits the Fix box */
+  /** the change the rule suggests; a crossFinding carries the one of its example session, an older aggregate none (the card then has no improvement line) */
   recommendation?: string
   savings?: Insight['savings']
   /** kickoff evidence sessions: the selected session, or the finding's examples */
@@ -42,7 +42,7 @@ export function titleForRule(ruleId: string): string {
  * (src/redact/redact.ts). The fallback says so and names the way back, like Coverage does for
  * hidden record types, instead of asserting that evidence exists where none is shown.
  */
-export const DETAIL_HIDDEN_BY_REDACTION = 'Details hidden by redaction (they quote commands and result previews); re-run with --include-text to see them.'
+export const DETAIL_HIDDEN_BY_REDACTION = 'orangu hides these details because they quote commands and output. To see them, run the report again with --include-text.'
 
 function safeCopy(ruleId: string, title: string, detail: string): { title: string; detail: string } {
   return {
@@ -81,10 +81,12 @@ export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: A
   return [...(agg?.crossFindings ?? [])]
     .sort(compareCrossFindings)
     .map((f) => {
-      const copy = safeCopy(f.ruleId, f.title, `Recurs in ${plural(f.sessions, 'session')}.`)
+      // the count against the scope: the title already says its figures come from one example session
+      const copy = safeCopy(f.ruleId, f.title, `This pattern shows in ${f.sessions} of ${plural(agg!.sessionCount, 'session')}.`)
       return {
         ruleId: f.ruleId,
         ...copy,
+        recommendation: f.recommendation,
         savings: boundedSavings(f),
         sessionIds: f.exampleSessionIds,
         sessions: f.sessions,
@@ -147,7 +149,7 @@ export function harnessCommand(scope: 'repo' | 'global'): string {
 export function kickoffFailureMessage(record: SuggestionRecord | undefined): string {
   if (record?.status !== 'failed') return ''
   const detail = record.kickoff?.error?.trim()
-  return detail ? `Improvement workflow failed: ${detail}` : 'Improvement workflow failed. Copy the command to inspect it in Claude Code.'
+  return detail ? `Claude could not write the proposal: ${detail}` : 'Claude could not write the proposal. Copy the command and run it again to see the error.'
 }
 
 /**

@@ -31,13 +31,22 @@ describe('whole-harness review CTA', () => {
   })
 
   it('names the scope it can act on and never contradicts the global review-only boundary', () => {
-    expect(megaReview('repo')).toContain('Improve this repository')
-    expect(megaReview('repo')).toContain('approve the items you want')
+    expect(megaReview('repo')).toContain('Improve the harness of this repository')
+    expect(megaReview('repo')).toContain('Approve the items that you want. Claude applies them.')
     expect(megaReview('repo')).not.toContain('review only')
     const global = megaReview('global')
     expect(global).toContain('Review every harness on this machine')
     expect(global).not.toContain('Claude applies them')
-    expect((global.match(/Global scope is review only: nothing is applied\./g) ?? []).length).toBe(2)
+    expect((global.match(/Global scope is for review only\. Claude applies nothing\./g) ?? []).length).toBe(2)
+  })
+
+  // the copied text is `claude "/orangu:harness …"`, a shell command that starts Claude Code
+  it.each([
+    ['repo', 'Paste it in a terminal in this repository. It starts Claude Code.'],
+    ['global', 'Paste it in a terminal. It starts Claude Code.'],
+  ] as const)('says to paste the %s command in a terminal', (scope, paste) => {
+    expect(megaReview(scope)).toContain(`<li><span>${paste}</span></li>`)
+    expect(megaReview(scope)).not.toContain('Paste it in Claude Code')
   })
 })
 

@@ -129,10 +129,12 @@ describe('renderSuggest proposal UX', () => {
 
     renderSuggest(serveContext([record]))
 
-    expect(markup).toContain('Copy improve command')
+    expect(markup).toContain('Copy the Claude Code command')
     expect(markup).not.toContain('Draft proposal')
     expect(markup).not.toContain('Run locally')
-    expect(markup).toContain('orangu:improve')
+    // the status chip stays; the "handled by orangu:improve" row that named the skill left the card
+    expect(markup).toContain('data-status="proposed"')
+    expect(markup).not.toContain('handled by')
     expect(markup).toContain('&lt;img src=x onerror=alert(1)&gt;')
     expect(markup).toContain('Measured &lt;b&gt;twice&lt;/b&gt;')
     expect(markup).toContain('Applied &lt;once&gt;')
@@ -230,15 +232,15 @@ describe('renderSuggest proposal UX', () => {
     const foot = (): string => /<p class="small muted sg-foot">([^<]*)<\/p>/.exec(markup)?.[1] ?? ''
     const expected: Record<'session' | 'repo' | 'global', string> = {
       session: 'Only later sessions in the same workspace can verify it.',
-      repo: 'Applied means the reviewed files changed; only later sessions can verify it.',
-      global: 'Global suggestions stay proposals; nothing is applied from here.',
+      repo: 'Applied means that the reviewed files changed. Only later sessions can verify it.',
+      global: 'Global proposals stay proposals. Claude applies nothing from here.',
     }
     for (const scope of ['session', 'repo', 'global'] as const) {
       const ctx = context('serve', [])
       if (scope !== 'session') ctx.state.scope = scope
       renderSuggest(ctx)
       const text = foot()
-      expect(text, scope).toBe(`The evidence is deterministic; an optional AI skill drafts the proposal. ${expected[scope]}`)
+      expect(text, scope).toBe(`orangu measures the evidence. Claude writes the proposal only when you run the command. ${expected[scope]}`)
       for (const internal of ['catalog', 'cohort', 'handoff', 'stay deterministic']) expect(text, `${scope} says "${internal}"`).not.toContain(internal)
     }
   })
@@ -281,27 +283,28 @@ describe('renderSuggest proposal UX', () => {
   it('renders the empty inbox on localhost so the third step has somewhere to point', () => {
     renderSuggest(serveContext([]))
     expect(markup).toContain('Saved proposals · 0')
-    expect(markup).toContain('Nothing yet.')
-    expect(markup).toContain('The proposal appears below under Saved proposals.')
+    expect(markup).toContain('No proposals yet. When /orangu:improve writes a proposal for this scope, it shows here.')
+    expect(markup).toContain('The proposal shows below, in Saved proposals.')
   })
 
+  // The copied text is `claude "/orangu:improve …"`, a shell command that starts Claude Code, so the
+  // paste target is a terminal in the workspace, not a running Claude Code prompt.
   it('walks the handoff in three steps with the workspace, and puts the one-time plugin install inside step 2 (M5)', () => {
     renderSuggest(context('file', []))
-    expect(markup).toContain('aria-label="Hand off to Claude Code"')
-    expect(markup).toContain('Copy improve command')
-    expect(markup).toContain('<span>Paste it in Claude Code in <span class="mono">~/Code/demo</span>.</span>')
-    expect(markup).toContain('open orangu serve to review it')
+    expect(markup).toContain('Copy the Claude Code command')
+    expect(markup).toContain('<span>Paste it in a terminal in ~/Code/demo. It starts Claude Code.</span>')
+    expect(markup).toContain('Run orangu serve to see it here.')
     expect(markup).toContain('/plugin marketplace add NissanOhana/orangu')
     expect(markup).toContain('/plugin install orangu')
     expect(markup).toContain('<span class="p" aria-hidden="true">&gt;</span>')
     // the install line sits between step 2's sentence and step 3, as the CLI prints it under the next step
-    const step2 = markup.indexOf('Paste it in Claude Code in')
+    const step2 = markup.indexOf('Paste it in a terminal in')
     const install = markup.indexOf('/plugin install orangu')
-    const step3 = markup.indexOf('open orangu serve to review it')
+    const step3 = markup.indexOf('Run orangu serve to see it here.')
     expect(step2).toBeLessThan(install)
     expect(install).toBeLessThan(step3)
-    expect(markup).toContain('Needs the plugin once, typed inside Claude Code:')
-    expect(markup).not.toContain('First time?')
+    expect(markup).toContain('First time only, type these 2 lines in Claude Code:')
+    expect(markup).not.toContain('Paste it in Claude Code')
   })
 
   it('shows a severity dot and the savings as a share of the session; no taxonomy chips, no "effort –", no queued chip', () => {
@@ -419,7 +422,7 @@ describe('renderSuggest: each card leads with its improvement, one explainer say
 describe('renderSuggest on a repo/global scope', () => {
   const crossFinding = {
     ruleId: 'reread-files',
-    title: 'e.g. Read the same file 6 times',
+    title: 'In one session: Read the same file 6 times',
     sessions: 3,
     totalSavingsTokens: 30_000,
     totalSavingsMs: 0,
@@ -457,8 +460,8 @@ describe('renderSuggest on a repo/global scope', () => {
   it('keeps the block when the scope has no findings, because the review reads config too', () => {
     renderSuggest(scopeContext('repo', []))
     expect(markup).toContain('Whole-harness review')
-    expect(markup).toContain('Nothing to improve was found')
-    expect(markup.indexOf('Whole-harness review')).toBeLessThan(markup.indexOf('Nothing to improve was found'))
+    expect(markup).toContain('No improvements found')
+    expect(markup.indexOf('Whole-harness review')).toBeLessThan(markup.indexOf('No improvements found'))
   })
 
   it('drops the block when the scope has no aggregate: the block would claim a harness it cannot see', () => {
@@ -475,15 +478,15 @@ describe('renderSuggest on a repo/global scope', () => {
     expect(markup).not.toContain('class="btn-sm" data-kick-copy=')
   })
 
-  // AC16b: the sidebar's Suggestions link carries no scope=, so a file with no session would land on
-  // the session scope and report "Nothing to improve was found" about a session it does not contain.
+  // AC16b: the sidebar's Improvements link carries no scope=, so a file with no session would land on
+  // the session scope and report "No improvements found" about a session it does not contain.
   it.each(['repo', 'global'] as const)('defaults an unscoped hash to the scope the file is about (%s)', (scope) => {
     const ctx = scopeContext(scope)
     ctx.state = { screen: 'suggest' }
     renderSuggest(ctx)
     expect(markup).toContain('Whole-harness review')
-    expect(markup).toContain(scope === 'repo' ? 'Recurring repo patterns' : 'Recurring global patterns')
-    expect(markup).not.toContain('Nothing to improve was found')
+    expect(markup).toContain(scope === 'repo' ? 'These patterns recur across this repository.' : 'These patterns recur across this machine.')
+    expect(markup).not.toContain('No improvements found')
   })
 
   it('keeps the session default for an unscoped hash when the file does have a session', () => {
@@ -493,7 +496,7 @@ describe('renderSuggest on a repo/global scope', () => {
     ctx.a = analysis
     ctx.state = { screen: 'suggest', s: analysis.session.id }
     renderSuggest(ctx)
-    expect(markup).toContain('One finding, one bounded proposal')
+    expect(markup).toContain('Each improvement below comes from the evidence in this session.')
     expect(markup).not.toContain('Whole-harness review')
   })
 
@@ -521,7 +524,7 @@ describe('renderSuggest on a repo/global scope', () => {
   })
 
   it.each(['repo', 'global'] as const)('leads each %s card with the improvement its cross finding carries', (scope) => {
-    renderSuggest(scopeContext(scope, [{ ...crossFinding, recommendation: 'Read each file once.' }]))
+    renderSuggest(scopeContext(scope, [{ ...crossFinding, recommendation: 'Read each file once.' } as typeof crossFinding]))
     const card = firstCard(markup)
     expect(summaryOf(card)).toContain('<span class="rec sg-lead"><b>Improvement:</b> Read each file once.</span>')
     expect(card.indexOf('sg-lead')).toBeLessThan(card.indexOf('data-kick-copy'))
