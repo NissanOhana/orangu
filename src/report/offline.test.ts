@@ -121,7 +121,9 @@ describe('offline report', () => {
     // 2026-10-06 improvement on every card + Show me: the cap goes DOWN from 83,136 to 81,468, the
     // measured 81,455 below plus the 13 B of headroom this cap had at the start of the run (83,123 then).
     // The run spent 1,633 of the 3,301 B the proposals seam freed; the rest leaves the budget for good.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(81_468)
+    // 2026-10-07 close-out (sample note in STE, copy confirmation in body ink): the cap goes DOWN 81,468 ->
+    // 81,457, the measured 81,444 below plus the same 13 B of headroom.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(81_457)
     // 2026-10-06 proposals seam: -3,301 B (83,123 -> 79,822), and this bundle gets the exact pin the
     // session bundle has always had, so a change that moves it has to name the bytes. The stored
     // proposal block and the Saved proposals inbox (proposals-ui.ts) reach the Suggest screen only
@@ -143,7 +145,11 @@ describe('offline report', () => {
     // proposal as a list, the copy) are +272 B; a new screen opening at its top, or at the element a
     // link names (data-to), is +198 B. Run history for this bundle: 83,123 before the run, 79,822 after
     // the seam, 80,016 after the report copy, 81,455 now.
-    expect(CLIENT_JS_AGG.length).toBe(81455)
+    // 2026-10-07 close-out: -11 B (81,455 -> 81,444), re-measured after `npm run build`. The note on the
+    // published samples says "This sample is synthetic." instead of the fragment "Illustrative synthetic
+    // sample." (app.ts, -5 B), and the copy confirmation drops its muted class, which failed AA in light
+    // (screens/suggest.ts, -6 B). Run history: 83,123 before the run, 81,444 at its close.
+    expect(CLIENT_JS_AGG.length).toBe(81444)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -177,7 +183,9 @@ describe('offline report', () => {
     // 2026-10-06 improvement on every card + Show me: the cap goes DOWN from 73,728 (72 KB) to 72,211,
     // the measured 72,185 below plus the 26 B of headroom this cap had at the start of the run (73,702
     // then). The run spent 1,785 of the 3,302 B the proposals seam freed; the rest leaves the budget.
-    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_211)
+    // 2026-10-07 close-out (sample note in STE, copy confirmation in body ink): the cap goes DOWN 72,211 ->
+    // 72,200, the measured 72,174 below plus the same 26 B of headroom.
+    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_200)
     // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
     // 2026-08-27 final client pass 2 (fix/final-client2): −56 B net, cap unchanged. Eight UX fixes cost +1,233 B
     // (the Timeline row's own-facts fallback, folded hidden-error rows on Tools/Repo/Global, the Quality verdict
@@ -242,6 +250,10 @@ describe('offline report', () => {
     // the steps list, the parts of a proposal as a list, the copy) are +286 B; a new screen opening at
     // its top, or at the element a link names (data-to), is +198 B. Run history: 73,702 before the run,
     // 70,400 after the seam, 70,643 after the report copy, 72,185 now.
-    expect(CLIENT_JS.length).toBe(72185)
+    // 2026-10-07 close-out: -11 B (72,185 -> 72,174), re-measured after `npm run build`. The note on the
+    // published samples says "This sample is synthetic." instead of the fragment "Illustrative synthetic
+    // sample." (app.ts, -5 B), and the copy confirmation drops its muted class, which failed AA in light
+    // (screens/suggest.ts, -6 B). Run history: 73,702 before the run, 72,174 at its close.
+    expect(CLIENT_JS.length).toBe(72174)
   })
 })
