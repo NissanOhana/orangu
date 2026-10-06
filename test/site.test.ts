@@ -1043,3 +1043,18 @@ describe('README entry points', () => {
     expect(block).toContain('npx orangu report ')
   })
 })
+
+describe('docs/USAGE.md entry point', () => {
+  const usage = readFileSync(join(root, 'docs/USAGE.md'), 'utf8')
+
+  it('leads the install block with the bare command and keeps the latest-session command second', () => {
+    const install = usage.slice(usage.indexOf('## Install'), usage.indexOf('## Commands'))
+    const block = install.match(/```bash\n([\s\S]*?)```/)?.[1] ?? ''
+    const lines = block.split('\n')
+    expect(lines[0]).toMatch(/^npx orangu\s+#/)
+    expect(lines[1]).toMatch(/^npx orangu report\s+#/)
+    // a pipe or CI is not a TTY: there the bare command prints the latest-session brief instead of the
+    // dashboard (src/cli/commands/pick.ts interactivePrecondition, src/cli/main.ts cmdBrief)
+    expect(install).toContain('In a pipe or in CI, bare `npx orangu` prints a short summary of the latest session.')
+  })
+})
