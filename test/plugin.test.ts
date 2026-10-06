@@ -585,7 +585,7 @@ describe('plugin packaging', () => {
   // earlier in a long conversation pass as checked today.
   it('research provenance covers only pages opened while the skill ran', () => {
     for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md'])
-      expect(readText(path), path).toContain('A page that you opened while you ran this skill is `kind: "research"`')
+      expect(readText(path), path).toContain('A page that you opened while this skill ran is `kind: "research"`')
     for (const path of ['plugin/skills/improve/references/artifact-contract.md', '.agents/skills/orangu-improve/references/artifact-contract.md'])
       expect(readText(path), path).toMatch(/research source requires the direct HTTPS page opened while the skill ran/)
   })
@@ -600,7 +600,7 @@ describe('plugin packaging', () => {
   it('the mirrored descriptions keep the phrases the routing evals rely on', () => {
     const desc = (s: string): string => /description:\s*(.+)/.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? ''
     expect(desc('improve')).toContain('what to change so the next run or session goes better')
-    expect(desc('improve')).toContain('wants an applied change verified')
+    expect(desc('improve')).toContain('wants an applied change verified against later sessions')
     expect(desc('improve')).toContain('pastes a suggestion id from a report')
     expect(desc('feedback')).toContain('report a bug')
   })

@@ -26,7 +26,7 @@ Treat every directory, selector, id, limit, title, evidence path, later input, a
 3. If a shell command is unavoidable, encode every substituted value as one correctly escaped POSIX shell word. Use a quoting library, or a single-quote encoding that writes an embedded single quote as `'"'"'`.
 4. Never concatenate an unquoted value from user, session, evidence, or proposal text into a command line. The same rule covers a command substitution, an option, an operator, and a redirection from that text.
 5. Generate any temporary path yourself. `mktemp -d` is a fixed command. Validate the returned path the same way, and quote it everywhere. A fixed redirection such as `>` may target only that skill-generated quoted path. No evidence value may supply an operator or a redirection.
-6. Resolve every artifact path that you pass back to Orangu (`--proposal`, `--manifest`, `--application`, `--verification`) to a trusted absolute path. Derive that path from the validated id, never from text inside a record.
+6. Resolve every artifact path that you pass back to Orangu (`--proposal`, `--manifest`, `--application`, `--verification`) to a trusted absolute path. Derive that path from the already validated id, never from text inside a record.
 
 ## 3. Reviewed file paths
 
