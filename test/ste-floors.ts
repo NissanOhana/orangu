@@ -89,26 +89,45 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // (was 293 sentences, 268 clean, score 91). The 6 findings left are in the improvement screens (R2).
   'src/report/client': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // B2: rule copy, and every other analyzer string
-  'src/analyze/insights.ts#title': { floor: 91, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/analyze/insights.ts#detail': { floor: 58, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/analyze/insights.ts#recommendation': { floor: 64, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 91 -> 98. Measured 46 sentences, 46 clean, score 100. The rule copy rewrite took out the 2
+  // semicolons (script-candidate, fanout-opportunity) and the progressive "was waiting" (human-wait-dominates).
+  'src/analyze/insights.ts#title': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 58 -> 98. Measured 29 sentences, 29 clean, score 100. Every list in a detail joins with " · ",
+  // not "; ", and each static detail sentence is split at its semicolon. "just" is gone (preamble-weight).
+  'src/analyze/insights.ts#detail': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 64 -> 98. Measured 179 sentences, 179 clean, score 100 (was 108 sentences, score 66). Each
+  // recommendation starts with its fix, one instruction to a sentence, 6 sentences or fewer, no semicolon.
+  'src/analyze/insights.ts#recommendation': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // re-born 86 -> 79 and e.g. 0 -> 1. Measured 16 sentences, 13 clean, score 81 (was 14 clean, score 88).
   // insights.ts:1582 is now read as text: it has a semicolon and 26 words. The label `e.g. ${title}` at
   // aggregate.ts:119 now counts its e.g.
   // B1: floor 79 -> 80 and e.g. 1 -> 0. Measured 17 sentences, 14 clean, score 82. The cross-finding label
   // is now `In one session: ${title}` (aggregate.ts:124): one more scored sentence, clean, and no e.g.
-  'src/analyze': { floor: 80, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 80 -> 98. Measured 23 sentences, 23 clean, score 100. The narrative splits its busy-time clause
+  // into its own sentence (analyze.ts:206), and the fanout-opportunity heuristic and model-for-task
+  // criteria evidence notes are short sentences with no semicolon.
+  'src/analyze': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // B1, B2: the golden emitted copy
-  'test/golden#insight.title': { floor: 90, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'test/golden#insight.detail': { floor: 42, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'test/golden#insight.recommendation': { floor: 66, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 90 -> 98. Measured 12 sentences, 12 clean, score 100. The fanout-opportunity title in
+  // agents-heavy lost its semicolon.
+  'test/golden#insight.title': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 42 -> 98. Measured 11 sentences, 11 clean, score 100. Detail lists join with " · ", and the
+  // unverified-edits detail is 3 sentences instead of 3 clauses joined by semicolons.
+  'test/golden#insight.detail': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 66 -> 98. Measured 40 sentences, 40 clean, score 100 (was 25 sentences, score 68): the
+  // rewritten rule copy, as the 7 golden fixtures emit it.
+  'test/golden#insight.recommendation': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // re-born e.g. 10 -> 11: a label now counts its banned tokens. Measured 11 titles, each with "e.g.". The
   // 11th, "e.g. 1 hook error", has 2 words, and the old extraction dropped it as a fragment.
   // B1: floor 0 -> 89 and e.g. 11 -> 0. Measured 11 sentences, 10 clean, score 91. Every title now starts
   // "In one session: " instead of "e.g. "; the one finding left is a rule-title semicolon (aggregate.json:252).
-  'test/golden#crossFinding.title': { floor: 89, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 89 -> 98. Measured 11 sentences, 11 clean, score 100. That fanout-opportunity title now joins
+  // its clauses with ", so", not a semicolon.
+  'test/golden#crossFinding.title': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // B1: born at measurement. Measured 25 sentences, 17 clean, score 68 (floor 66), 0 banned tokens. The new
   // CrossFinding.recommendation carries the rule copy of the example insight, so it scores like
   // test/golden#insight.recommendation (25 sentences, 68) until B2 rewrites that copy.
-  'test/golden#crossFinding.recommendation': { floor: 66, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B2: floor 66 -> 98. Measured 40 sentences, 40 clean, score 100: the rewritten rule copy of the 11
+  // example insights.
+  'test/golden#crossFinding.recommendation': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
 }
