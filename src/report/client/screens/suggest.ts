@@ -81,7 +81,7 @@ ${ctx.proposals?.details(rec) ?? ''}
 ${statusChip(state, failure, trustedVerification(rec))}
 </div>
 <div class="kick-cmd sg-cmd">${ctx.data.mode === 'serve' && rec && !rec.proposal && state !== 'dismissed' ? improveHandoffs(kickoffCommands(rec, 'serve')) : ''}</div>
-<div class="kick-msg small muted" aria-live="polite">${esc(failure)}</div>
+<div class="kick-msg small" aria-live="polite">${esc(failure)}</div>
 </div>
 </details>`
 }

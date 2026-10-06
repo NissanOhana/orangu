@@ -517,6 +517,13 @@ describe('renderSuggest on a repo/global scope', () => {
     expect(markup).not.toContain('class="btn-sm" data-kick-copy=')
   })
 
+  it('writes the copy confirmation in the body ink: the muted grey fails AA for small text in light', () => {
+    // .muted is --ink3, 3.6:1 on --bg in light. The line carries the paste instruction, so it must be readable.
+    renderSuggest(scopeContext('repo'))
+    expect(markup).toContain('<div class="kick-msg small" aria-live="polite">')
+    expect(markup).not.toMatch(/class="kick-msg[^"]*\bmuted\b/)
+  })
+
   // AC16b: the sidebar's Improvements link carries no scope=, so a file with no session would land on
   // the session scope and report "No improvements found" about a session it does not contain.
   it.each(['repo', 'global'] as const)('defaults an unscoped hash to the scope the file is about (%s)', (scope) => {

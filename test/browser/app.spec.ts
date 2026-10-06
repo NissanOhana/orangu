@@ -85,6 +85,8 @@ test('localhost creates only a copy handoff and never offers automatic model lau
   const request = await posted
   expect(request.postDataJSON()).toMatchObject({ mode: 'copy' })
   await expect(row.locator('.kick-msg')).toContainText('The command is on your clipboard. Paste it in a terminal')
+  // the paste instruction is body text, not the muted grey that fails AA for small text in light
+  await expect(row.locator('.kick-msg')).not.toHaveClass(/\bmuted\b/)
   await expect(row.getByRole('button', { name: 'Draft proposal' })).toHaveCount(0)
   await expect(row.locator('.status-chip[data-status="running"]')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain('/orangu:improve')
