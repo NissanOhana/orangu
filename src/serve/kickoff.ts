@@ -93,7 +93,7 @@ export const kickoffRoutes: RouteFactory = (ctx): Route[] => [
           commands,
           command,
           spawned: false,
-          error: 'automatic model launch is disabled. Copy the command into Claude Code, or use $orangu-improve in Codex.',
+          error: 'automatic model launch is disabled. Paste the command in a terminal. It starts Claude Code. In Codex, use $orangu-improve.',
         } satisfies KickoffResponse)
         return
       }

@@ -145,7 +145,9 @@ describe('POST /api/kickoff copy-only boundary', () => {
 
     expect(response.status).toBe(403)
     expect(response.json).toMatchObject({ spawned: false })
-    expect(response.json.error).toBe('automatic model launch is disabled. Copy the command into Claude Code, or use $orangu-improve in Codex.')
+    // the command is `claude "/orangu:improve …"`, a shell command: it goes in a terminal and starts Claude Code
+    expect(response.json.command).toMatch(/^claude "\/orangu:improve /)
+    expect(response.json.error).toBe('automatic model launch is disabled. Paste the command in a terminal. It starts Claude Code. In Codex, use $orangu-improve.')
     expect(response.json.command).toContain('/orangu:improve')
     expect((await store.get(response.json.record.id))?.status).toBe('new')
     expect(spawnCalls).toHaveLength(0)
