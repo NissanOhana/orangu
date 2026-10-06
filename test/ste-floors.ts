@@ -31,12 +31,12 @@ export const BANNED = ['emDash', 'eg', 'ie', 'etc', 'contractions'] as const
 // One group per owning chunk, one comment line between groups; a row never moves between groups.
 export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // S1: README, the landing, 404 and llms sources, the npm description, the sample page copy
-  'README.md': { floor: 85, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'site/index.src.html': { floor: 90, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 1 },
-  'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'site/llms.src.txt': { floor: 85, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'scripts/build-sample.ts': { floor: 80, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  'README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 after the STE rewrite
+  'site/index.src.html': { floor: 97, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 99 after the STE rewrite
+  'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 after the STE rewrite
+  'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 after the STE rewrite
+  'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 after the STE rewrite
+  'scripts/build-sample.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 after the STE rewrite
   // S2: every user doc in docs/
   'docs/DETERMINISM.md': { floor: 72, emDash: 2, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'docs/README.md': { floor: 92, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
