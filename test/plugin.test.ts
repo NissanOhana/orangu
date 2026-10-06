@@ -165,6 +165,14 @@ describe('plugin packaging', () => {
     const shape = readFileSync(join(root, 'plugin/skills/analyze/references/json-shape.md'), 'utf8')
     expect(shape).toContain('SlimAnalysis')
   })
+  // The aggregate emits CrossFinding.recommendation (the improvement for each recurring finding); the shape
+  // reference that analyze reads lists it, so the skill knows the field exists.
+  it('the analyze JSON reference lists the cross-finding recommendation', () => {
+    const shape = readText('plugin/skills/analyze/references/json-shape.md')
+    const crossFindings = shape.split('\n').find((line) => line.includes('crossFindings:[{')) ?? ''
+    expect(crossFindings, 'json-shape.md has a crossFindings line').not.toBe('')
+    expect(crossFindings).toMatch(/\brecommendation\b/)
+  })
   it('analyze carries the live-session branch: orangu watch for one, orangu serve for several', () => {
     const md = readFileSync(join(root, 'plugin/skills/analyze/SKILL.md'), 'utf8')
     expect(md).toContain('orangu watch')
@@ -450,7 +458,7 @@ describe('plugin packaging', () => {
     for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md']) {
       const text = readText(path)
       expect(text, `${path} rejects global`).toMatch(/global proposals?[^\n]*proposal-only[^\n]*never be applied/i)
-      expect(text, `${path} says applied is not verified`).toMatch(/session or repo scope[^\n]*applied locally, not yet verified; verify after at least three settled later sessions/i)
+      expect(text, `${path} says applied is not verified`).toMatch(/session or repo scope[^\n]*applied locally, not yet verified\. Verify after at least three settled later sessions/i)
       expect(text, `${path} uses plain words`).not.toMatch(/cohort/i)
     }
 
@@ -547,8 +555,8 @@ describe('plugin packaging', () => {
   // build mirrors to Codex, so the file stays host-portable. The list grows until it names every shipped skill.
   const STE_RULES = 'plugin/skills/shared/ste.md'
   const STE_SENTENCE = 'Write all user-facing text in STE, as [the STE rules](../shared/ste.md) direct.'
-  const STE_SKILLS = ['improve', 'apply', 'feedback']
-  it('the mirrored skills tell Claude to write user-facing text in STE, from one shared rules file', () => {
+  const STE_SKILLS = ['improve', 'apply', 'feedback', 'analyze', 'harness']
+  it('the skills tell Claude to write user-facing text in STE, from one shared rules file', () => {
     expect(existsSync(join(root, STE_RULES)), `${STE_RULES} exists`).toBe(true)
     for (const s of STE_SKILLS) {
       const body = readText(`plugin/skills/${s}/SKILL.md`).split('\n---\n')[1] ?? ''
@@ -603,6 +611,18 @@ describe('plugin packaging', () => {
     expect(desc('improve')).toContain('wants an applied change verified against later sessions')
     expect(desc('improve')).toContain('pastes a suggestion id from a report')
     expect(desc('feedback')).toContain('report a bug')
+  })
+
+  // The same guard for the Claude-only skills: each phrase answers a prompt in plugin/evals (analyze-*,
+  // never-reads-a-transcript-directly, harness-*), so an STE rewrite of a description keeps it.
+  it('the Claude-only descriptions keep the phrases the routing evals rely on', () => {
+    const desc = (s: string): string => /description:\s*(.+)/.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? ''
+    for (const phrase of ['what happened in one session', 'where time or tokens went', 'keep a report refreshed while a session runs'])
+      expect(desc('analyze')).toContain(phrase)
+    for (const phrase of [
+      'what your harness declares', 'every session on the machine', 'instruction files, hooks, skills, agents, MCP servers, plugins',
+      'why the same problem keeps recurring', 'wants a repo or global harness review', 'what to change in their setup',
+    ]) expect(desc('harness')).toContain(phrase)
   })
 
   // The build mirrors these four trees to Codex. A Claude-only skill named there becomes a dead command in
@@ -728,12 +748,12 @@ describe('plugin packaging', () => {
     expect(improve).toContain("orangu suggest --set '<id>' verified --json --quiet")
     expect(improve).not.toContain('--verification')
     expect(improve, 'an older `--verify <id> <later-input>` handoff still works').toContain('ignore any later-input after the id')
-    expect(improve, 'the skill chooses no sessions').toContain('Orangu picks the sessions; never choose them.')
+    expect(improve, 'the skill chooses no sessions').toContain('Orangu picks the sessions. Never choose them.')
     expect(improve, 'improve fixes causes instead of pasting the failure').toMatch(/never copy the session's own failing text/)
     expect(improve, 'improve picks attributable checks').toMatch(/the change directly moves, plus one guard/)
     expect(apply).toContain('`record.status` is exactly `proposed`')
     expect(apply).toContain("--set '<id>' applied --application '<application-path>'")
-    expect(apply).toContain('applied locally, not yet verified; verify after at least three settled later sessions')
+    expect(apply).toContain('applied locally, not yet verified. Verify after at least three settled later sessions')
     expect(apply).not.toMatch(/WebSearch|WebFetch|Agent|Task|mcp__/)
   })
 
