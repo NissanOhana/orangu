@@ -283,7 +283,7 @@ test('Show me in the page head copies the session show-me command, opens and clo
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
-  const control = page.locator('.page-head').getByRole('button', { name: 'Show me' })
+  const control = page.locator('.page-head').getByRole('button', { name: 'Show me', exact: true })
   await expect(control).toHaveAttribute('aria-expanded', 'false')
   await control.click()
   await expect(control).toHaveAttribute('aria-expanded', 'true')
@@ -313,7 +313,7 @@ test('Show me copies the scope command on the Repo screen and on a saved reposit
   for (const url of [`${APP}/#repo?s=${SESSION}`, `${SITE}/sample-repo.html#repo`]) {
     await page.goto(withTheme(url, info), { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
-    await page.locator('.page-head').getByRole('button', { name: 'Show me' }).click()
+    await page.locator('.page-head').getByRole('button', { name: 'Show me', exact: true }).click()
     const bar = page.locator('#show-me > .card .cmd').first()
     await expect(bar.locator('.txt')).toHaveText(scoped)
     await bar.locator('.copy').click()
@@ -322,7 +322,7 @@ test('Show me copies the scope command on the Repo screen and on a saved reposit
   }
   // the session sample ships the same bundle and copies its session instead
   await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
-  await page.locator('.page-head').getByRole('button', { name: 'Show me' }).click()
+  await page.locator('.page-head').getByRole('button', { name: 'Show me', exact: true }).click()
   await expect(page.locator('#show-me > .card .cmd .txt').first()).toHaveText(/^claude "\/orangu:show-me [0-9a-f-]+"$/)
   expect(errors).toEqual([])
 })
