@@ -38,10 +38,10 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 after the STE rewrite
   'scripts/build-sample.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 after the STE rewrite
   // S2: every user doc in docs/
-  'docs/DETERMINISM.md': { floor: 72, emDash: 2, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'docs/README.md': { floor: 92, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'docs/USAGE.md': { floor: 80, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'docs/feedback.md': { floor: 93, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  'docs/DETERMINISM.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (205 sentences) after the STE rewrite, was 74 with 2 em dashes
+  'docs/README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (18 sentences) after the STE rewrite, was 94
+  'docs/USAGE.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (109 sentences) after the STE rewrite, was 82
+  'docs/feedback.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (23 sentences) after the STE rewrite, was 95
   // P1a: improve, apply, feedback, shared, and the Codex copy (yaml, manifest, mirror fallback)
   // Raised by the P1a STE rewrite of each file (one instruction per sentence, no semicolon lists, vertical
   // lists, simple tenses, the product nouns). Each row: the measured score, then what still holds it down.
