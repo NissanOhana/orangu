@@ -12,12 +12,12 @@ import { ms, pct, plural, tok } from './format.js'
 const ENDING: Partial<Record<SessionEnding, string>> = {
   clean: 'The last check it ran passed',
   interrupted: 'You stopped it',
-  failing: 'The last test run was failing',
+  failing: 'The last test run failed',
 }
 export function endingWord(ending: SessionEnding, o?: Summary['outcomes']): string {
   const w = ENDING[ending] ?? 'The agent completed its last task'
   // 'clean' = the last check passed; when earlier test runs failed the sentence says so, or it contradicts the headline
-  return ending === 'clean' && o && qualityScope(o) ? `${w}; ${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed earlier` : w
+  return ending === 'clean' && o && qualityScope(o) ? `${w}. ${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed earlier` : w
 }
 
 /** "last run" when the test runs were mixed: the verdict word comes from the last one, so it carries its scope. */
@@ -125,7 +125,7 @@ export function insightLink(ins: Pick<Insight, 'evidence' | 'turnIndexes'>): { t
 export function compactionMarkers(compactions: Array<{ ts?: number; turnIndex: number }>, main: Array<{ ts?: number }>): Array<{ x: number; label: string }> {
   return compactions.map((cp) => {
     const near = main.findIndex((p) => p.ts !== undefined && cp.ts !== undefined && p.ts >= cp.ts)
-    return { x: near < 0 ? Math.max(0, main.length - 1) : near, label: 'compaction @turn ' + cp.turnIndex }
+    return { x: near < 0 ? Math.max(0, main.length - 1) : near, label: 'compaction at turn ' + cp.turnIndex }
   })
 }
 
@@ -147,20 +147,20 @@ export interface SavingsShare {
 
 /**
  * A finding's savings bounded to the session it was measured in: "~38% of this session" when the
- * session total is known and the claim is not larger than it, else the absolute figure. The title
- * states the basis and which rule estimated or measured it.
+ * session total is known and the claim is not larger than it, else the absolute figure. The title is
+ * one sentence with the rule as its actor: which rule estimated or measured the saving, and its basis.
  */
 export function savingsShare(s: Insight['savings'], sessionTotalTokens: number | undefined, ruleId: string): SavingsShare | undefined {
   if (!s || (!s.tokens && !s.ms)) return undefined
-  const how = `${s.estimated ? 'estimated' : 'measured'} by rule ${ruleId}`
+  const how = `Rule ${ruleId} ${s.estimated ? 'estimated' : 'measured'} a saving of ≈`
   if (s.tokens && sessionTotalTokens && s.tokens <= sessionTotalTokens) {
     const share = s.tokens / sessionTotalTokens
     return {
       text: share < 0.005 ? 'under 1% of this session' : `~${pct(share)} of this session`,
-      title: `≈${tok(s.tokens)} tokens of the ${tok(sessionTotalTokens)} this session measured; ${how}`,
+      title: `${how}${tok(s.tokens)} of the ${tok(sessionTotalTokens)} tokens in this session.`,
     }
   }
-  return { text: savingsText(s), title: s.tokens ? `≈${tok(s.tokens)} tokens; ${how}` : `≈${ms(s.ms)}; ${how}` }
+  return { text: savingsText(s), title: `${how}${s.tokens ? tok(s.tokens) + ' tokens' : ms(s.ms)}.` }
 }
 
 /** "≈2.1M tokens recoverable across 7 findings" from the rows actually shown; '' when nothing is claimed. */
@@ -171,20 +171,19 @@ export function recoverableLine(sum: { tokens: number; ms: number }, findings: n
 }
 
 /**
- * The Context screen's one-sentence takeaway from three measured facts. Each clause appears only
- * when its input exists (no context window: no share of it; no subagent tokens: no third clause),
- * so a thin session gets a shorter true sentence, never a placeholder or NaN.
+ * The Context screen's takeaway from three measured facts, one sentence each. Each sentence appears
+ * only when its input exists (no context window: no share of it; no subagent tokens: no third one),
+ * so a thin session gets a shorter true takeaway, never a placeholder or NaN.
  */
 export function contextHeadline(a: Pick<Analysis, 'summary' | 'context' | 'tokens'>): string {
   const s = a.summary
   const c = a.context
   const parts: string[] = []
-  if (c.contextWindow && s.contextPeak) parts.push(`context grew to ${pct(s.contextPeak / c.contextWindow)} of the window`)
+  if (c.contextWindow && s.contextPeak) parts.push(`Context grew to ${pct(s.contextPeak / c.contextWindow)} of the window`)
   if (s.totalTokens) parts.push(`${pct(s.cacheHitRatio)} of tokens were cache reads`)
-  if (s.totalTokens && a.tokens.agents) parts.push(`${pct(a.tokens.agents / s.totalTokens)} went to subagents`)
+  if (s.totalTokens && a.tokens.agents) parts.push(`${pct(a.tokens.agents / s.totalTokens)} of tokens went to subagents`)
   if (!parts.length) return 'No token usage was recorded for this session.'
-  const line = parts.join('; ')
-  return line[0]!.toUpperCase() + line.slice(1) + '.'
+  return parts.join('. ') + '.'
 }
 
 /** Overview Quality axis headline from the quality signals (deterministic word map, no score). */

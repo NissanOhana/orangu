@@ -45,7 +45,7 @@ function idleCard(title: string, idle: string[], count: number, total: number, n
     ? count
       ? `<div class="aval">${count}<span class="anote"> of ${total} ${never}</span></div>${names(idle)}`
       : `<p class="small" style="color:var(--good);margin:0">Every one of ${total} ${did}.</p>`
-    : `<p class="small muted" style="margin:0">None declared in the config that was read.</p>`
+    : `<p class="small muted" style="margin:0">The config that orangu read declares none.</p>`
   return `<div class="card pad"><div class="card-title">${title}</div>${body}</div>`
 }
 
@@ -67,9 +67,9 @@ export function harnessCardHtml(r: HarnessReport | null | undefined, href: strin
 }
 
 export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {
-  if (!r) return h(`<section>${emptyHero({ title: 'The harness report could not be computed.', hint: 'Run the verb directly for the reason.', command: 'orangu harness' })}</section>`)
+  if (!r) return h(`<section>${emptyHero({ title: 'The harness report could not be computed.', hint: 'Run the command directly to see the reason.', command: 'orangu harness' })}</section>`)
   if (nothingDeclared(r))
-    return h(`<section>${emptyHero({ title: 'No harness config found under the scanned roots.', hint: `Looked for settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md under ${r.scope.roots.join(', ')}. Nothing to cross-reference.`, command: 'orangu harness' })}</section>`)
+    return h(`<section>${emptyHero({ title: 'No harness config found under the scanned roots.', hint: `orangu looked for settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md under ${r.scope.roots.join(', ')}. It found nothing to compare.`, command: 'orangu harness' })}</section>`)
   const x = r.crosswalk
   const inv = r.inventory
   const lead = harnessLead(r)
@@ -88,12 +88,12 @@ export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {
     ? `<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th><th class="num">≈ tokens / injection<br><span class="small muted">anywhere in the tree</span></th><th class="num">Subagents ≈ tokens</th><th class="num">Subagent sessions</th></tr></thead><tbody>${[...x.injectedListings]
         .sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession)
         .map((l) => `<tr><td class="mono">${esc(l.type)}</td><td class="num">${esc(num(l.approxTokensPerMainSession))}</td><td class="num">${l.main.sessions}</td><td class="num">${esc(num(l.approxTokensPerInjection))}</td><td class="num">${esc(num(l.subagent.approxTokens))}</td><td class="num">${l.subagent.sessions}</td></tr>`)
-        .join('')}</tbody></table></div><div class="smt8">Recurring context weight, bytes ÷ 4. Per session counts the primary transcript of each session that carried it; the subagent columns are what the agent tree carried, over the sessions that had subagents.</div>`
-    : `<p class="small muted" style="margin:0">No injected listings were measured in these sessions.</p>`
+        .join('')}</tbody></table></div><div class="smt8">Each figure is the recurring context weight, in bytes ÷ 4. The per-session column counts the primary transcript of each session that carried the listing. The subagent columns show what the agent tree carried, over the sessions that had subagents.</div>`
+    : `<p class="small muted" style="margin:0">orangu measured no injected listings in these sessions.</p>`
   const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0)
   const memory = inv.claudeMd.length
     ? `<div class="aval">≈${esc(tok(inv.totals.claudeMdApproxTokens))}<span class="anote"> tokens in ${inv.claudeMd.length} file${inv.claudeMd.length === 1 ? '' : 's'} · ≈${esc(tok(carried))} carried across the window</span></div>${names(inv.claudeMd.map((f) => f.file))}`
-    : `<p class="small muted" style="margin:0">No CLAUDE.md under the scanned roots.</p>`
+    : `<p class="small muted" style="margin:0">The scanned roots hold no CLAUDE.md.</p>`
   const notes = r.notes.length ? `<div class="card pad mb16" style="background:var(--bg2)"><div class="card-title">Notes</div><ul class="small muted" style="margin:0;padding-left:18px">${r.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul></div>` : ''
   const scope = r.scope.global ? `global · ${r.scope.roots.length} root${r.scope.roots.length === 1 ? '' : 's'}` : `repo ${r.scope.cwd}`
   return h(`<section>
@@ -109,9 +109,9 @@ ${idleCard('Agents never dispatched', idleAgents, x.counts.agents.idle, inv.tota
 <div class="card pad mb16"><div class="card-title">Injected listings · per session</div>${listings}</div>
 <div class="two-up">
 <div class="card pad"><div class="card-title">CLAUDE.md</div>${memory}</div>
-<div class="card pad"><div class="card-title">Undeclared · ${undeclaredCount}</div>${undeclaredCount ? `<p class="small muted" style="margin:0 0 8px">Observed in sessions but not found in the config that was read: a source outside this scope, or drift.</p>${names(undeclared)}` : '<p class="small muted" style="margin:0">Everything the sessions used is declared in the config that was read.</p>'}</div>
+<div class="card pad"><div class="card-title">Undeclared · ${undeclaredCount}</div>${undeclaredCount ? `<p class="small muted" style="margin:0 0 8px">The sessions used these, but the config that orangu read does not declare them. They come from a source outside this scope, or the config drifted.</p>${names(undeclared)}` : '<p class="small muted" style="margin:0">The config that orangu read declares everything that the sessions used.</p>'}</div>
 </div>
-<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Turn this into proposals in Claude Code.</div>${commandBlock(harnessCommand(r.scope.global ? 'global' : 'repo'))}<div class="smt8">Copy only; nothing runs here. <span class="mono">orangu harness --json</span> prints this report.</div></div>
+<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Turn this into proposals in Claude Code.</div>${commandBlock(harnessCommand(r.scope.global ? 'global' : 'repo'))}<div class="smt8">This button only copies text. Nothing runs here. <span class="mono">orangu harness --json</span> prints this report.</div></div>
 ${notes}
 </section>`)
 }

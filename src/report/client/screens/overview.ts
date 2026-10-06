@@ -96,7 +96,7 @@ ${recoverable ? `<p class="recoverable"><a href="${esc(href(ctx, a, { screen: 's
 function plainBody(ctx: Ctx, a: Analysis): string {
   const s = a.summary
   const goal = a.turns.find((t) => t.kind === 'human')?.promptPreview.slice(0, 140)
-  const goalText = goal || (a.session.title ? a.session.title : '(prompt text not included in this report)')
+  const goalText = goal || (a.session.title ? a.session.title : '(this report does not include the prompt text)')
   const effort = `${tok(s.totalTokens)} tokens · ${ms(s.wallMs)}, of which ${ms(s.humanWaitMs)} needed your attention`
   const one = a.insights.find((i) => i.id === s.topInsightIds[0]) ?? a.insights[0]
   return `<div class="card mb16" style="overflow:hidden">

@@ -36,6 +36,16 @@ export function plainSentence(s: string, aud: Audience): string {
   return out
 }
 
+/**
+ * A capitalised label ("Cache hits") in the reader's audience. The keys are lowercase, so the label is
+ * mapped in lowercase and capitalised again. Only for a label with no proper noun in it.
+ */
+export function plainLabel(s: string, aud: Audience): string {
+  if (aud !== 'plain') return s
+  const t = plainSentence(s.toLowerCase(), aud)
+  return t[0]!.toUpperCase() + t.slice(1)
+}
+
 /** Abbreviations the narrative uses mid-sentence; a period after one of them ends no sentence. */
 const ABBREVIATIONS = /\b(?:incl|e\.g|i\.e|approx|vs|etc)\.$/i
 

@@ -97,7 +97,7 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('<div class="aval">passing <span class="anote">(last run)</span></div>')
     expect(markup).toContain('8 of 133 test runs failed')
     renderOverview(await mixed('plain'))
-    expect(markup).toContain('<div class="k">How it ended</div><div>The last check it ran passed; 8 of 133 test runs failed earlier</div>')
+    expect(markup).toContain('<div class="k">How it ended</div><div>The last check it ran passed. 8 of 133 test runs failed earlier</div>')
 
     const green = await mixed('dev')
     green.a!.summary.outcomes.testRunsFailed = 0
@@ -113,7 +113,8 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('The one thing to improve')
     expect(markup).toContain('<details class="finding top" open>')
     expect(markup).toContain(top.title)
-    expect(markup).toContain('title="≈')
+    // the savings pill explains itself: one sentence that names the rule and the figure
+    expect(markup).toMatch(/title="Rule [\w-]+ (?:estimated|measured) a saving of ≈/)
     expect(markup).toContain('/orangu:improve sg_')
     expect(markup).toMatch(/See the [^<]+ →/)
     expect(markup).toContain('href="#timeline?')
@@ -182,7 +183,7 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('Draft a proposal')
     expect(markup).not.toContain('<p></p>')
     expect(markup).toContain('recoverable across')
-    expect(markup).toContain('title="≈')
+    expect(markup).toMatch(/title="Rule [\w-]+ (?:estimated|measured) a saving of ≈/)
   })
 
   it('renders the recoverable line above the findings even when only one finding is a top finding', async () => {

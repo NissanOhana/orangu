@@ -13,7 +13,7 @@ const SHOW = 12
 /** static hint map keyed by signature prefix (§2.5) */
 const ERR_HINTS: Array<[RegExp, string]> = [
   [/ENOENT/, 'run the build first, or check the path'],
-  [/old_string not found|String to replace not found/i, 'file changed since last read; re-read before editing'],
+  [/old_string not found|String to replace not found/i, 'the file changed after the last read. Read it again before you edit it.'],
   [/EACCES|permission/i, 'permission problem: check file modes'],
   [/timed? out/i, 'raise the timeout or split the command'],
 ]
@@ -41,7 +41,7 @@ export function renderTools(ctx: Ctx): HTMLElement {
   const maxMs = Math.max(...t.byName.map((s) => s.totalMs), 1)
   // A mean above p95 is honest arithmetic (one 30-minute timeout among 62 quick calls) but reads as a
   // broken statistic next to p95, so the Avg cell says why. Client-only; the Analysis contract is untouched.
-  const outlierWhy = ctx.audience === 'plain' ? 'one or more calls far above the rest' : 'one or more calls far above the rest; p95 is the typical worst case'
+  const outlierWhy = 'One or more calls took far longer than the rest.' + (ctx.audience === 'plain' ? '' : ' p95 is the typical worst case.')
   const avgCell = (s: typeof t.byName[number]): string =>
     s.avgMs > s.p95Ms ? `<td class="num" title="${outlierWhy}">${esc(ms(s.avgMs))}<span class="outlier">outlier</span></td>` : `<td class="num">${esc(ms(s.avgMs))}</td>`
   const toolRows = (rows: typeof t.byName): string =>

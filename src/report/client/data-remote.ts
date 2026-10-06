@@ -102,7 +102,7 @@ export function remoteSource(base = ''): DataSource {
       try {
         r = await fetch(base + '/api/kickoff', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(req) })
       } catch (error) {
-        return { ok: false, kind: 'network', message: error instanceof Error ? error.message : 'localhost request failed' }
+        return { ok: false, kind: 'network', message: error instanceof Error ? error.message : 'The request to localhost failed.' }
       }
       let body: Partial<KickoffResponse> | null = null
       try {
@@ -111,7 +111,7 @@ export function remoteSource(base = ''): DataSource {
         /* retain status below even when a proxy returned a non-JSON body */
       }
       if (!r.ok)
-        return { ok: false, kind: 'http', status: r.status, message: body?.error || `localhost request failed (${r.status})`, ...(body ? { response: body } : {}) }
+        return { ok: false, kind: 'http', status: r.status, message: body?.error || `The request to localhost failed (${r.status}).`, ...(body ? { response: body } : {}) }
       if (
         !body?.record ||
         typeof body.command !== 'string' ||
@@ -121,7 +121,7 @@ export function remoteSource(base = ''): DataSource {
         body.command !== body.commands.claude ||
         body.spawned !== false
       )
-        return { ok: false, kind: 'protocol', status: r.status, message: 'localhost returned an incomplete kickoff response', ...(body ? { response: body } : {}) }
+        return { ok: false, kind: 'protocol', status: r.status, message: 'localhost returned an incomplete response.', ...(body ? { response: body } : {}) }
       return { ok: true, response: body as KickoffResponse }
     },
     async setStatus(id, status: SuggestionStatus) {

@@ -1,6 +1,6 @@
 /**
  * Live (§2.1, §4): session view (banner → KPIs → context → agents swimlane → feed) and the fleet
- * (N live sessions). In file mode the page is a static snapshot: "Watching via orangu watch" only when
+ * (N live sessions). In file mode the page is a static snapshot: "Watching with orangu watch" only when
  * `capabilities.watch` says a running watch rewrites the file, otherwise a plain snapshot banner; the
  * serve states (connecting/reconnecting) arrive with the remote source in Wave C via the same states.
  */
@@ -15,6 +15,7 @@ import { mascotBox } from '../components/mascot-box.js'
 import { ganttRow } from '../charts.js'
 import { badgeCopy, liveFeed } from '../derive.js'
 import { liveRows, shortId } from '../nav.js'
+import { plainLabel, plainSentence } from '../strings.js'
 import type { FeedbackBootstrap } from '../../../feedback/diagnostics.js'
 
 const FEED_MAX = 50
@@ -55,16 +56,16 @@ const DOTS = {
 }
 
 /** static banner copy per state: [dot, title, sub]; live/stalled titles and the ended sub are dynamic */
-const LIVE_ROW: [string, string, string] = [DOTS.pulse, '', 'Refreshes as the transcript grows. Nothing leaves this machine.']
+const LIVE_ROW: [string, string, string] = [DOTS.pulse, '', 'This view refreshes as the transcript grows. Nothing leaves this machine.']
 const BANNER: Record<LiveState, [string, string, string]> = {
-  connecting: [DOTS.static, 'Connecting to orangu serve…', 'Waiting for the first event.'],
+  connecting: [DOTS.static, 'Connecting to orangu serve…', 'The page waits for the first event.'],
   live: LIVE_ROW,
   empty: LIVE_ROW,
-  stalled: [DOTS.hollow, '', 'No transcript growth lately; it may be waiting on you.'],
+  stalled: [DOTS.hollow, '', 'The transcript did not grow recently. The session may need your input.'],
   ended: [DOTS.good, 'Session ended · final numbers', ''],
   reconnecting: [DOTS.hollow, 'Connection lost · retrying', 'The page reconnects on its own.'],
-  file: [DOTS.static, 'Watching via orangu watch', 'Rewritten on every change; reload to refresh.'],
-  snapshot: [DOTS.static, 'Static snapshot', 'This file does not update; orangu watch follows the session live.'],
+  file: [DOTS.static, 'Watching with orangu watch', 'orangu watch rewrites this file on each change. Reload the page to see it.'],
+  snapshot: [DOTS.static, 'Static snapshot', 'This file does not update. To follow the session live, run orangu watch.'],
 }
 
 export function bannerFor(state: LiveState, row: SessionSummaryRow | undefined, a: Analysis | undefined): string {
@@ -99,20 +100,21 @@ function agentsCard(a: Analysis): string {
 
 function sessionView(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis | undefined): HTMLElement {
   const state = liveStateFor(ctx, row, a)
+  const aud = ctx.audience
   const s = a?.summary
   const skel = !a
   const kpis = [
     kpi('Elapsed', s?.wallMs !== undefined ? ms(s.wallMs) : '–', '', { big: true, skeleton: skel }),
     kpi('Tokens so far', s ? tok(s.totalTokens) : '–', '', { big: true, accent: true, skeleton: skel }),
     kpi('Tool calls', s ? String(s.toolCalls) : '–', '', { big: true, skeleton: skel }),
-    kpi('Cache hits', s ? pct(s.cacheHitRatio) : '–', '', { big: true, skeleton: skel }),
+    kpi(plainLabel('Cache hits', aud), s ? pct(s.cacheHitRatio) : '–', '', { big: true, skeleton: skel }),
   ].join('')
   const c = a?.context
   const ctxPct = c?.contextWindow ? c.final / c.contextWindow : undefined
   const ctxCaption =
-    state === 'ended' ? '–' : `${plural(s?.compactions ?? 0, 'compaction')} so far${ctxPct !== undefined && ctxPct >= 0.75 ? ' · compaction likely near 90%' : ''}`
+    state === 'ended' ? '–' : plainSentence(`${plural(s?.compactions ?? 0, 'compaction')} so far${ctxPct !== undefined && ctxPct >= 0.75 ? ' · compaction likely near 90%' : ''}`, aud)
   const ctxCard = `<div class="card pad mb18">
-<div class="ctxhead"><span>Context window</span><span class="mono">${ctxPct !== undefined ? esc(pct(ctxPct)) + ' of ' + esc(tok(c!.contextWindow!)) : c ? esc(tok(c.final)) : '–'}</span></div>
+<div class="ctxhead"><span>${plainLabel('Context window', aud)}</span><span class="mono">${ctxPct !== undefined ? esc(pct(ctxPct)) + ' of ' + esc(tok(c!.contextWindow!)) : c ? esc(tok(c.final)) : '–'}</span></div>
 <div class="ctxbar"><i style="width:${ctxPct !== undefined ? (ctxPct * 100).toFixed(1) : 0}%"></i></div>
 <div class="smt8">${esc(ctxCaption)}</div>
 </div>`

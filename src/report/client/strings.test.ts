@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { currencyHits, moneyHits } from '../../../test/money-vocabulary.js'
-import { PLAIN_TERMS, term, plainSentence, leadSentence } from './strings.js'
+import { PLAIN_TERMS, term, plainSentence, plainLabel, leadSentence } from './strings.js'
 
 describe('plain-language vocabulary', () => {
   it('maps only mechanism terms to plain words', () => {
@@ -45,6 +45,20 @@ describe('plain-language vocabulary', () => {
   it('rewrites a whole sentence in plain audience', () => {
     expect(plainSentence('3 turns used the context window', 'plain')).toBe('3 turns used the working memory')
     expect(plainSentence('3 turns used the context window', 'dev')).toBe('3 turns used the context window')
+  })
+
+  // The map's keys are lowercase, so a capitalised label ("Cache hits") never matched and the Live and
+  // Repo/Global screens showed the Detailed word to a Plain reader. These are the labels the client
+  // passes through plainLabel; each one must come out mapped in Plain and unchanged in Detailed.
+  it('maps a capitalised label in Plain and keeps it exactly in Detailed', () => {
+    const labels: Record<string, string> = { 'Cache hits': 'Reused context', 'Context window': 'Working memory' }
+    for (const [label, plain] of Object.entries(labels)) {
+      expect(plainLabel(label, 'plain')).toBe(plain)
+      expect(plainLabel(label, 'dev')).toBe(label)
+      // every client label that carries a key still carries it in the Detailed copy, so the map keeps matching
+      expect(Object.keys(PLAIN_TERMS)).toContain(label.toLowerCase())
+    }
+    expect(plainLabel('Tool calls', 'plain')).toBe('Tool calls')
   })
 })
 

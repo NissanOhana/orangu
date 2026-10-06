@@ -41,7 +41,8 @@ describe('renderCoverage under redaction', () => {
     expect(markup).not.toContain(STRIPPED_KEY)
     expect(markup).not.toContain('×14')
     expect(markup).toContain('0 unrecognized record types (+14 records with redacted type names)')
-    expect(markup).toContain('14 unrecognized records were counted; their type names are hidden by redaction')
+    // active voice and no semicolon: orangu counted them, redaction hid the names
+    expect(markup).toContain('orangu counted 14 unrecognized records. Redaction hides their type names.')
     expect(markup).not.toContain('14 record type names')
   })
   it('lists real unknown types and adds the hidden-count note beside them', async () => {
@@ -49,11 +50,11 @@ describe('renderCoverage under redaction', () => {
     expect(markup).toContain('1 unrecognized record type (+14 records with redacted type names).')
     expect(markup).toContain('foo ×2')
     expect(markup).not.toContain(STRIPPED_KEY)
-    expect(markup).toContain('hidden by redaction')
+    expect(markup).toContain('Redaction hides their type names')
   })
   it('renders no note and no card when nothing is unknown', async () => {
     renderCoverage(await context({}))
-    expect(markup).not.toContain('hidden by redaction')
+    expect(markup).not.toContain('Redaction hides')
     expect(markup).not.toContain('Unrecognized records')
   })
 })

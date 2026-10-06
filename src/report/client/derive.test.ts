@@ -36,17 +36,19 @@ describe('endingWord', () => {
     expect(endingWord('clean')).toBe('The last check it ran passed')
     expect(endingWord('clean').toLowerCase()).not.toContain('test')
     expect(endingWord('interrupted')).toBe('You stopped it')
-    expect(endingWord('failing')).toContain('failing')
+    // simple past, not the progressive "was failing": the sentence reports what the last run did
+    expect(endingWord('failing')).toBe('The last test run failed')
     expect(endingWord('unknown').toLowerCase()).not.toContain('finished')
   })
 
   it('a clean ending over mixed test runs says so, instead of contradicting the "N of M failed" headline', () => {
     const o = (testRuns: number, testRunsFailed: number) => ({ testRuns, testRunsFailed }) as Summary['outcomes']
-    expect(endingWord('clean', o(133, 8))).toBe('The last check it ran passed; 8 of 133 test runs failed earlier')
+    // two sentences, never a semicolon: the second one carries the earlier failures
+    expect(endingWord('clean', o(133, 8))).toBe('The last check it ran passed. 8 of 133 test runs failed earlier')
     expect(endingWord('clean', o(133, 0))).toBe('The last check it ran passed')
     expect(endingWord('clean', o(0, 0))).toBe('The last check it ran passed')
     // a failing ending already agrees with the headline; interrupted never mentions tests
-    expect(endingWord('failing', o(133, 8))).toBe('The last test run was failing')
+    expect(endingWord('failing', o(133, 8))).toBe('The last test run failed')
     expect(endingWord('interrupted', o(133, 8))).toBe('You stopped it')
   })
 })
@@ -309,22 +311,23 @@ describe('savingsShare (A6b: a bounded, explained savings pill)', () => {
   it('is a share of the session when the total is known and the claim fits inside it', () => {
     const r = savingsShare({ tokens: 1_380_000, estimated: true }, 3_910_000, 'oversized-tool-results')!
     expect(r.text).toBe('~35% of this session')
-    expect(r.title).toBe('≈1.38M tokens of the 3.91M this session measured; estimated by rule oversized-tool-results')
+    // one active sentence that names the rule as the actor, instead of a fragment, a semicolon and a passive
+    expect(r.title).toBe('Rule oversized-tool-results estimated a saving of ≈1.38M of the 3.91M tokens in this session.')
   })
   it('never exceeds 100%: a claim larger than the session falls back to the absolute figure', () => {
     const r = savingsShare({ tokens: 5000, estimated: true }, 4000, 'r')!
     expect(r.text).toBe('save ~5.0k tokens')
-    expect(r.title).toBe('≈5.0k tokens; estimated by rule r')
+    expect(r.title).toBe('Rule r estimated a saving of ≈5.0k tokens.')
   })
   it('falls back to the absolute figure when the session total is unknown or zero', () => {
     expect(savingsShare({ tokens: 500, estimated: false }, 0, 'r')!.text).toBe('save 500 tokens')
-    expect(savingsShare({ tokens: 500, estimated: false }, undefined, 'r')!.title).toBe('≈500 tokens; measured by rule r')
+    expect(savingsShare({ tokens: 500, estimated: false }, undefined, 'r')!.title).toBe('Rule r measured a saving of ≈500 tokens.')
   })
   it('rounds a tiny share to "under 1%" and words a time-only claim in time', () => {
     expect(savingsShare({ tokens: 10, estimated: true }, 1_000_000, 'r')!.text).toBe('under 1% of this session')
     const t = savingsShare({ ms: 125_000, estimated: true }, 1_000_000, 'slow-tools')!
     expect(t.text).toBe('save ~2m 5s')
-    expect(t.title).toBe('≈2m 5s; estimated by rule slow-tools')
+    expect(t.title).toBe('Rule slow-tools estimated a saving of ≈2m 5s.')
   })
   it('is undefined when nothing is claimed', () => {
     expect(savingsShare(undefined, 100, 'r')).toBeUndefined()
@@ -377,21 +380,22 @@ describe('compactionMarkers', () => {
   it('marks the first main-thread point at or after each compaction, clamping to the last point', () => {
     const main = [{ ts: 10 }, { ts: 20 }, { ts: 30 }]
     expect(compactionMarkers([{ ts: 15, turnIndex: 2 }, { ts: 99, turnIndex: 5 }], main)).toEqual([
-      { x: 1, label: 'compaction @turn 2' },
-      { x: 2, label: 'compaction @turn 5' },
+      { x: 1, label: 'compaction at turn 2' },
+      { x: 2, label: 'compaction at turn 5' },
     ])
-    expect(compactionMarkers([{ turnIndex: 1 }], [])).toEqual([{ x: 0, label: 'compaction @turn 1' }])
+    expect(compactionMarkers([{ turnIndex: 1 }], [])).toEqual([{ x: 0, label: 'compaction at turn 1' }])
   })
 })
 
 describe('contextHeadline (A5)', () => {
   const base = { summary: summary({ totalTokens: 100_000, contextPeak: 75_000, cacheHitRatio: 0.97 }), context: { contextWindow: 100_000 }, tokens: { agents: 58_000 } }
-  it('joins the three measured clauses', () => {
-    expect(contextHeadline(base as never)).toBe('Context grew to 75% of the window; 97% of tokens were cache reads; 58% went to subagents.')
+  // each measured fact is its own sentence (no semicolons), and each one names "of tokens" so it reads alone
+  it('writes the three measured facts as three sentences', () => {
+    expect(contextHeadline(base as never)).toBe('Context grew to 75% of the window. 97% of tokens were cache reads. 58% of tokens went to subagents.')
   })
   it('drops every clause whose input is missing, down to a designed empty sentence', () => {
-    expect(contextHeadline({ ...base, context: {} } as never)).toBe('97% of tokens were cache reads; 58% went to subagents.')
-    expect(contextHeadline({ ...base, tokens: { agents: 0 } } as never)).toBe('Context grew to 75% of the window; 97% of tokens were cache reads.')
+    expect(contextHeadline({ ...base, context: {} } as never)).toBe('97% of tokens were cache reads. 58% of tokens went to subagents.')
+    expect(contextHeadline({ ...base, tokens: { agents: 0 } } as never)).toBe('Context grew to 75% of the window. 97% of tokens were cache reads.')
     expect(contextHeadline({ summary: summary({ totalTokens: 0 }), context: {}, tokens: { agents: 0 } } as never)).toBe('No token usage was recorded for this session.')
   })
 })

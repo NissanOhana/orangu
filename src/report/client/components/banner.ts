@@ -13,7 +13,7 @@ export function degradedBanner(a: Analysis, audience: Audience): string {
   const degraded = a.parse.badLines > 0 || !rec.ok
   if (!degraded) return ''
   if (audience === 'plain')
-    return banner('warn', `Some of the transcript could not be read (${num(a.parse.badLines)} lines); the numbers may be low.`)
+    return banner('warn', `orangu could not read ${num(a.parse.badLines)} lines of the transcript. The numbers may be low.`)
   const offPct = rec.matchesWithinPct.toFixed(2)
   return banner(
     'warn',

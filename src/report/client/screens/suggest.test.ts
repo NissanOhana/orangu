@@ -308,7 +308,7 @@ describe('renderSuggest proposal UX', () => {
     renderSuggest(context('file', []))
     expect(markup).toContain('<span class="sev medium" title="medium"></span>')
     expect(markup).toContain('~25% of this session')
-    expect(markup).toContain('title="≈25.0k tokens of the 100k this session measured; estimated by rule reread-files"')
+    expect(markup).toContain('title="Rule reread-files estimated a saving of ≈25.0k of the 100k tokens in this session."')
     // the taxonomy no longer leads the screen; it is explanatory copy under the collapsed trailing note
     expect(markup).not.toContain('Measured → matched → proposed')
     expect(markup).toContain('What a proposal can change')

@@ -57,7 +57,7 @@ describe('renderGlobal (M4: the evidence blocks Repo renders, from the same Aggr
     for (const [scope, render] of [['global', renderGlobal], ['repo', renderRepo]] as const) {
       render(await context(scope))
       expect(markup, scope).toContain('<b>Bash</b> · 78 errors across 2 recurring signatures</span><span class="mono small muted">6+ sessions</span>')
-      expect(markup, scope).toContain('text hidden; re-run with <span class="mono">--include-text</span>')
+      expect(markup, scope).toContain('Redaction hides the text. Run the command again with <span class="mono">--include-text</span>.')
       expect(markup, scope).toContain('<span class="sigline">ENOENT: no such file</span>')
       expect(markup, scope).toContain('2 sessions</span><span class="mono125">×3</span>')
       expect(markup, scope).not.toContain('not included')

@@ -118,4 +118,14 @@ describe('Repo and Global with an aggregate and no Analysis', () => {
     expect(markup).toContain('title="open with: orangu report ')
     expect(markup).not.toContain('href="#overview?s=')
   })
+
+  // The cache KPI used to show its Detailed name to a Plain reader: the Plain map only matched lowercase keys.
+  it('names the cache KPI in the reader audience (Detailed: Cache hits, Plain: Reused context)', async () => {
+    const ctx = await fileContext('repo')
+    renderRepo(ctx)
+    expect(markup).toContain('<div class="label">Cache hits</div>')
+    renderRepo({ ...ctx, audience: 'plain', state: { ...ctx.state, audience: 'plain' } })
+    expect(markup).toContain('<div class="label">Reused context</div>')
+    expect(markup).not.toContain('Cache hits')
+  })
 })

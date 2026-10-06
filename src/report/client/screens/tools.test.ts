@@ -50,7 +50,8 @@ async function context(audience: Ctx['audience'], byName: ToolStat[]): Promise<C
 }
 
 describe('renderTools: the Avg cell when the mean exceeds p95', () => {
-  const WHY = 'one or more calls far above the rest; p95 is the typical worst case'
+  // two sentences: Plain keeps the first, Detailed adds the p95 one
+  const WHY = 'One or more calls took far longer than the rest. p95 is the typical worst case.'
 
   it('marks the outlier row with a visible note and an explanatory title, and leaves ordinary rows bare', async () => {
     const ordinary = stat({ name: 'Read', category: 'read', count: 10, errors: 0, totalMs: 1_200, avgMs: 120, p95Ms: 300, maxMs: 310, mainCount: 10 })
@@ -70,7 +71,7 @@ describe('renderTools: the Avg cell when the mean exceeds p95', () => {
 
   it('Plain audience keeps the note but explains it without naming p95', async () => {
     renderTools(await context('plain', [stat()]))
-    expect(markup).toContain('<td class="num" title="one or more calls far above the rest">29s<span class="outlier">outlier</span></td>')
+    expect(markup).toContain('<td class="num" title="One or more calls took far longer than the rest.">29s<span class="outlier">outlier</span></td>')
     expect(markup).not.toContain('p95 is the typical worst case')
   })
 })
@@ -85,7 +86,7 @@ describe('renderTools: recurring errors under the default redaction', () => {
     renderTools(ctx)
     expect(markup).toContain('<b>Bash</b> · 103 errors across 4 recurring signatures</span>')
     expect(markup).toContain('<b>Edit</b> · 2 errors across 1 recurring signature</span>')
-    expect(markup).toContain('text hidden; re-run with <span class="mono">--include-text</span>')
+    expect(markup).toContain('Redaction hides the text. Run the command again with <span class="mono">--include-text</span>.')
     expect(markup).not.toContain('not included')
     expect(markup.match(/class="rrow"/g)?.length).toBe(2)
     expect(markup).not.toContain('class="sigline"')
@@ -98,7 +99,7 @@ describe('renderTools: recurring errors under the default redaction', () => {
     expect(markup).toContain('<span class="sigline">ENOENT: no such file</span>')
     expect(markup).toContain('run the build first, or check the path')
     expect(markup).toContain('<b>Bash</b> · 5 errors across 1 recurring signature</span>')
-    expect(markup).toContain('no error text was recorded')
+    expect(markup).toContain('No error text was recorded.')
     expect(markup).not.toContain('--include-text')
   })
 })

@@ -322,8 +322,8 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     const liveN = liveRows(d).length
     const foot =
       d.mode === 'serve'
-        ? 'Served from 127.0.0.1<br/>nothing leaves this machine.' + (liveN > 1 ? '<br/>alt+↑↓ switch session' : '')
-        : 'Self-contained report.<br/>0 network requests.'
+        ? 'Local server: 127.0.0.1.<br/>Nothing leaves this machine.' + (liveN > 1 ? '<br/>alt+↑↓ switch session' : '')
+        : 'This report is self-contained.<br/>It makes 0 network requests.'
     const el = h(`<aside class="side">
 <div class="brand">${mascotSvg(26)}<span class="name">orangu</span><span class="ver">v${esc(d.version)}</span></div>
 <div class="sesscard"><div class="eyebrow">${sesscardEyebrow(d)}</div>${serveUi ? serveUi.pickerHtml(d, row) : `<div class="sid">${row ? esc(shortId(row.id)) + ' · ' + esc(row.projectSlug || row.source) : '–'}</div>`}</div>

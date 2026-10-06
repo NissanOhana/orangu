@@ -75,10 +75,10 @@ function feedbackView(): HTMLElement {
     (category) => `<option value="${category}"${state.draft.category === category ? ' selected' : ''}>${category}</option>`,
   ).join('')
   const el = h(`<section class="feedback">
-<div class="banner info"><b>Private until you choose otherwise.</b>&nbsp; Nothing from a session or report is attached. Opening the reviewed composer sends only the preview below to GitHub.</div>
+<div class="banner info"><b>This stays private until you choose to share it.</b>&nbsp; orangu attaches nothing from a session or report. If you open the reviewed composer, it sends only the preview below to GitHub.</div>
 <div class="card pad mb16">
 <div class="card-title">Rant about the beta</div>
-<p class="narrative">Be blunt. What was confusing, broken, slow, or unexpectedly good?</p>
+<p class="narrative">Be blunt. What was unclear, broken, slow, or better than you expected?</p>
 <div class="feedback-grid">
 <label>Short summary<input id="fb-summary" maxlength="240" value="${esc(state.draft.summary)}" placeholder="What should we fix first?"></label>
 <label>Category<select id="fb-category">${categoryOptions}</select></label>
@@ -128,7 +128,7 @@ function feedbackView(): HTMLElement {
     titlePreview.textContent = ''
     bodyPreview.textContent = ''
     fallback.replaceChildren()
-    status.textContent = 'Draft changed. Review the exact report again.'
+    status.textContent = 'The draft changed. Review the exact report again.'
   }
   for (const input of [summary, category, rant, expected, reproduction]) input.addEventListener('input', invalidate)
   category.addEventListener('change', invalidate)
@@ -145,8 +145,8 @@ function feedbackView(): HTMLElement {
     const target = feedbackComposer(report)
     status.textContent =
       target.kind === 'composer'
-        ? `The encoded prefill is ${target.encodedLength.toLocaleString()} characters. Opening it sends this title and body to GitHub.`
-        : `The complete prefill is ${target.encodedLength.toLocaleString()} characters; too large for a reliable URL. Nothing was dropped.`
+        ? `The encoded prefill is ${target.encodedLength.toLocaleString()} characters. If you open it, it sends this title and body to GitHub.`
+        : `The complete prefill is ${target.encodedLength.toLocaleString()} characters. That is too large for a reliable URL. Nothing was dropped.`
     if (target.kind === 'oversized' && state.reviewed) {
       send.disabled = true
       const complete = `${report.title}\n\n${report.body}`
@@ -193,7 +193,7 @@ export function mountFeedback(): void {
   if (!app) return
   app.className = 'app feedback-root'
   app.replaceChildren()
-  const shell = h(`<main class="feedback-shell"><header class="page-head"><div><h1>Beta feedback</h1><div class="sub">rant locally · review exactly what will be shared</div></div><a class="btn" href="#overview">Back to Orangu</a></header></main>`)
+  const shell = h(`<main class="feedback-shell"><header class="page-head"><div><h1>Beta feedback</h1><div class="sub">rant locally · review exactly what you share</div></div><a class="btn" href="#overview">Back to orangu</a></header></main>`)
   shell.appendChild(feedbackView())
   app.appendChild(shell)
   document.title = 'orangu · beta feedback'

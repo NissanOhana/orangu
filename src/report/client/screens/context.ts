@@ -60,7 +60,7 @@ ${kpi('Long-lived cache writes', pct(c.cacheWrite1hShare), 'of cache writes (the
 ${kpi('Fixed weight per request', tok(c.baseline), 'system + tools + CLAUDE.md, every request')}
 ${kpi('Compactions', String(c.compactions.length), c.compactions.length ? 'context was reset' : 'none')}
 </div>
-${card('Context size over the session', `<div class="scroll-x">${ctxLine}</div><div class="legend"><span>Each point is one API request; dashed lines are compactions.</span></div>`, 'mb16')}
+${card('Context size over the session', `<div class="scroll-x">${ctxLine}</div><div class="legend"><span>Each point is one API request. Each dashed line is a compaction.</span></div>`, 'mb16')}
 ${card(`Where the tokens went · ${esc(tok(co.totalTokens))} total`, `${stackedBar(byKind, { height: 22 })}<div class="legend">${byKind.filter((b) => b.value > 0).map((b) => `<span><i class="sw" style="background:${b.color}"></i>${esc(b.label)}</span>`).join('')}</div>${serverTools ? `<div class="smt8">${plural(serverTools, 'server-tool request')} (web search/fetch), counted per request, not in tokens</div>` : ''}`, 'mb16')}
 <details class="more-charts"><summary><span class="chev" aria-hidden="true">▸</span>More charts · composition per request, by model, cumulative</summary><div class="mt8">${more}</div></details>
 </section>`)

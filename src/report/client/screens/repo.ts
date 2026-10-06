@@ -11,6 +11,7 @@ import { hiddenErrorRow } from '../components/errors.js'
 import { savingsText } from '../components/finding.js'
 import { foldHiddenErrors } from '../derive.js'
 import { boundedSavings } from '../suggest-rows.js'
+import { plainLabel } from '../strings.js'
 
 /**
  * The shared "this needs the local viewer" state, reached on the scope a file does not carry and on
@@ -51,7 +52,7 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
     kpi('Total tokens', tok(g.totals.tokens), '', { accent: true }),
     kpi('Per session', tok(g.averages.tokensPerSession)),
     kpi('Per human turn', tok(g.averages.tokensPerHumanTurn)),
-    kpi('Cache hits', pct(g.averages.cacheHitRatio)),
+    kpi(plainLabel('Cache hits', ctx.audience), pct(g.averages.cacheHitRatio)),
     kpi('Tool error rate', pct(g.averages.toolErrorRate, 1), '', { badHint: g.averages.toolErrorRate >= 0.03 }),
   ].join('')
   return `<div class="kpis">${kpis}</div>${aggregateEvidence(g, ctx)}`

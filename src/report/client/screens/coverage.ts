@@ -15,7 +15,7 @@ export function renderCoverage(ctx: Ctx): HTMLElement {
   const hiddenByRedaction = p.unknownRecordTypes[STRIPPED_KEY] ?? 0
   const unknown = unknownEntries.length
   const hiddenNote = hiddenByRedaction
-    ? `<div class="small muted">${plural(hiddenByRedaction, 'unrecognized record')} were counted; their type names are hidden by redaction. Re-run with --include-text to see them.</div>`
+    ? `<div class="small muted">orangu counted ${plural(hiddenByRedaction, 'unrecognized record')}. Redaction hides their type names. To see them, run orangu again with --include-text.</div>`
     : ''
   const skillRows = a.skills.byName.length
     ? `<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${a.skills.byName
@@ -43,10 +43,10 @@ ${banner(rec.ok ? 'info' : 'warn', `<strong>Parse coverage:</strong>&nbsp;${esc(
 <div class="card pad"><div class="card-title">How to read the numbers</div>
 <ul class="small" style="padding-left:18px;line-height:1.7;margin:0">
 <li><strong>Tokens are the only usage metric</strong> orangu reports. They are what the transcript records.</li>
-<li>Token usage is <strong>deduplicated by message id</strong>.</li>
+<li>orangu <strong>deduplicates token usage by message id</strong>.</li>
 <li>Context = fresh input + cache read + cache write.</li>
 <li>~ marks a model matched by family fallback: the name is approximate, the token counts are not.</li>
-<li>No LLM produced any number here; zero network calls.</li>
+<li>No LLM and no network call produced any number here.</li>
 </ul>
 </div>
 </div>
