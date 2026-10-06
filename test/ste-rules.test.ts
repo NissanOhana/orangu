@@ -1,9 +1,11 @@
 /**
  * The STE checker (scripts/ste.mjs): one bad and one good sample for each rule, then the orangu
- * additions and carve-outs. The gate that applies it to every surface is test/ste.test.ts.
+ * additions and carve-outs. Then the extraction of copy from TS sources (scripts/ste-surfaces.ts).
+ * The gate that applies both to every surface is test/ste.test.ts.
  */
 import { describe, expect, it } from 'vitest'
 import { checkBlocks, checkText, frontmatterDescription, htmlToText, proseBlocks, wordCount, wrapCommands } from '../scripts/ste.mjs'
+import { fragmentResult, tsBlocks, type TsOptions } from '../scripts/ste-surfaces.js'
 
 const EM_DASH = String.fromCharCode(0x2014)
 const rules = (text: string, options: Parameters<typeof checkText>[1] = {}): string[] => checkText(text, options).findings.map((f) => f.rule)
@@ -165,5 +167,130 @@ describe('ste checker: a command or a flag is one technical name', () => {
   it('a word from the table inside a code span or a command is not a finding', () => {
     expect(rules('Run `utilize --leverage` now.')).toEqual([])
     expect(rules('Run orangu report --leverage now.')).toEqual([])
+  })
+})
+
+describe('ste surfaces: copy in TS string and template literals', () => {
+  const texts = (source: string, options: TsOptions = {}): string[] => tsBlocks(source, 'x.ts', options).map((b) => b.text)
+
+  it('takes string and template literals, with 3 in place of each ${}', () => {
+    const source = ["const a = 'Open the report in a browser.'", 'const b = `${n} files were read twice`'].join('\n')
+    expect(texts(source)).toEqual(['Open the report in a browser.', '3 files were read twice'])
+  })
+
+  it('skips module specifiers, property keys, element-access keys and case labels', () => {
+    const source = [
+      "import { x } from './a module path with words.js'",
+      "export * from './another module path here.js'",
+      "const o = { 'a key with four words': 'The value is copy.' }",
+      "const v = o['an access key here']",
+      "switch (k) { case 'a case label here': break }",
+    ].join('\n')
+    expect(texts(source)).toEqual(['The value is copy.'])
+  })
+
+  it('skips comparison operands and literal types', () => {
+    const source = [
+      "if (mode === 'a compared value here') f('Stop the run now.')",
+      "if ('a key we test' in o) g()",
+      "type T = 'a literal type here' | 'another literal type here'",
+    ].join('\n')
+    expect(texts(source)).toEqual(['Stop the run now.'])
+  })
+
+  it('skips selectors, attribute names, event names, class names and RegExp sources', () => {
+    const source = [
+      "el.querySelector('.a .b .c')",
+      "el.closest('div p span')",
+      "el.setAttribute('aria-label', 'Copy the command text.')",
+      "el.addEventListener('some event name here', f)",
+      "el.classList.add('one two three', 'four five six')",
+      "const re = new RegExp('a b c d')",
+    ].join('\n')
+    expect(texts(source)).toEqual(['Copy the command text.'])
+  })
+
+  it('skips String.raw templates', () => {
+    expect(texts('const s = String.raw`a raw template; with a semicolon`')).toEqual([])
+  })
+
+  it('lifts title, aria-label and placeholder values, then reads the markup as text', () => {
+    const source = 'const h = `<button title="Copy the improve command">Copy it now</button><code>leverage it; now</code><p>Read the cache first.</p>`'
+    expect(texts(source)).toEqual(['Copy the improve command', 'Copy it now', 'Read the cache first.'])
+  })
+
+  it('makes each line of a multi-line literal its own block, at its source line', () => {
+    const source = ['', 'const help = `usage', '  orangu list    list the sessions here', '  orangu serve   open the local viewer`'].join('\n')
+    expect(tsBlocks(source, 'src/cli/x.ts')).toEqual([
+      { file: 'src/cli/x.ts', line: 2, text: 'usage' },
+      { file: 'src/cli/x.ts', line: 3, text: 'orangu list list the sessions here' },
+      { file: 'src/cli/x.ts', line: 4, text: 'orangu serve open the local viewer' },
+    ])
+  })
+
+  it('measures only the named functions and skips the arguments of the named calls', () => {
+    const source = [
+      "function publish() { return 'The page copy is here.' }",
+      "function story() { return 'Synthetic transcript text here.' }",
+      "function main() { process.stdout.write('built the sample page now'); throw new Error('the sample build failed here') }",
+    ].join('\n')
+    expect(texts(source, { within: ['publish', 'main'], skipCalls: ['process.stdout.write', 'Error'] })).toEqual(['The page copy is here.'])
+  })
+
+  // measured false positives: src/report/client/mascot.ts (an attribute string outside its tag) and
+  // src/report/render.ts (the Content-Security-Policy value)
+  it('skips attribute strings outside a tag and the Content-Security-Policy value', () => {
+    const source = [
+      'const a = `width="${n}" height="${n}" style="display:block"`',
+      "const csp = \"default-src 'none'; script-src 'unsafe-inline'; base-uri 'none'\"",
+      "const b = 'Read the cache first.'",
+    ].join('\n')
+    expect(texts(source)).toEqual(['Read the cache first.'])
+  })
+
+  it('a placeholder or a number is not a word: a fragment needs 3 words with letters', () => {
+    const result = fragmentResult([
+      { line: 1, text: '3 · 3 sessions; 3' },
+      { line: 2, text: 'M 3 3; L 3 3' },
+      { line: 3, text: '3 files were read twice; 3' },
+    ])
+    expect(result).toMatchObject({ sentences: 1, clean: 0 })
+  })
+
+  it('drops a label under 3 words and scores each distinct block once per surface', () => {
+    const result = fragmentResult([
+      { file: 'a.ts', line: 1, text: 'Copy it' },
+      { file: 'a.ts', line: 2, text: 'Run orangu report --open' },
+      { file: 'a.ts', line: 3, text: 'Open the report; then stop.' },
+      { file: 'b.ts', line: 9, text: 'Open the report; then stop.' },
+    ])
+    expect(result).toMatchObject({ sentences: 1, clean: 0 })
+    expect(result.findings).toEqual([expect.objectContaining({ file: 'a.ts', line: 3, rule: 'semicolon' })])
+  })
+})
+
+describe('ste surfaces: rule copy', () => {
+  const texts = (options: TsOptions): string[] => tsBlocks(RULE, 'src/analyze/insights.ts', options).map((b) => b.text)
+  const RULE = [
+    'const rule = (ctx) => {',
+    "  const rec = ok ? 'Run the tests before the commit.' : 'Split the session in two.'",
+    '  return [mk({',
+    "    ruleId: 'some-rule-id',",
+    '    title: `${n} tool errors in this session`,',
+    "    detail: 'the agent stopped mid-turn',",
+    '    recommendation: rec,',
+    "    evidence: { note: 'An evidence string here.' },",
+    '  })]',
+    '}',
+  ].join('\n')
+
+  it('takes each field from its property value, and follows a local constant', () => {
+    expect(texts({ ruleCopy: 'title' })).toEqual(['3 tool errors in this session'])
+    expect(texts({ ruleCopy: 'detail' })).toEqual(['the agent stopped mid-turn'])
+    expect(texts({ ruleCopy: 'recommendation' })).toEqual(['Run the tests before the commit.', 'Split the session in two.'])
+  })
+
+  it('leaves every other string to the analyzer surface, so no string is measured twice', () => {
+    expect(texts({ ruleCopy: 'exclude' })).toEqual(['some-rule-id', 'An evidence string here.'])
   })
 })
