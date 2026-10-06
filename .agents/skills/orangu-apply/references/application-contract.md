@@ -17,10 +17,10 @@ Write valid JSON to `~/.orangu/proposals/<id>.applied.json` only after the chang
 
 Rules:
 
-- `id` must match the filename and proposal id.
-- `files` contains 1-64 relative repository paths actually changed; no absolute path, `.`, `..`, `.git`, or duplicate.
-- `checks` contains 1-32 checks actually run. Every `ok` is literally `true`.
-- Do not include a failed, skipped, inferred, or user-reported check as successful.
-- This receipt is skill-authored: a statement of the files changed and checks run. Orangu validates its schema and exact agreement with the reviewed relative file list; it does not inspect the working-tree diff, independently run a command, or prove filesystem confinement.
-- Staying inside the reviewed files and recording only checks actually run successfully are required by the apply skill contract. This is not a later-session verification receipt.
-- Session- and repo-scope applications may later be verified against later sessions from the same canonical workspace, which Orangu selects itself. Global-scope proposals cannot be applied.
+- `id` must match the filename and the proposal id.
+- `files` contains 1-64 relative repository paths that you changed. It has no absolute path, `.`, `..`, `.git` or duplicate.
+- `checks` contains 1-32 checks that you ran. Every `ok` is literally `true`.
+- Do not include a failed, skipped, inferred or user-reported check as successful.
+- This receipt is skill-authored: a statement of the files changed and the checks run. Orangu validates its schema and its exact agreement with the reviewed relative file list. Orangu does not inspect the working-tree diff, run a command itself, or prove filesystem confinement.
+- The apply skill contract has two requirements: stay inside the reviewed files, and record only the checks that ran successfully. This receipt is not a later-session verification receipt.
+- Session-scope and repo-scope applications may later be verified against later sessions from the same canonical workspace. Orangu selects those sessions itself. Global-scope proposals cannot be applied.

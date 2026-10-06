@@ -43,15 +43,18 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'docs/USAGE.md': { floor: 80, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'docs/feedback.md': { floor: 93, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // P1a: improve, apply, feedback, shared, and the Codex copy (yaml, manifest, mirror fallback)
-  'plugin/skills/apply/SKILL.md': { floor: 77, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/apply/references/application-contract.md': { floor: 67, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/feedback/SKILL.md': { floor: 71, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/improve/SKILL.md': { floor: 56, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/improve/references/artifact-contract.md': { floor: 64, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/shared/interview.md': { floor: 67, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/skills/shared/untrusted-input.md': { floor: 62, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugin/codex/*/openai.yaml': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'plugins/orangu/.codex-plugin/plugin.json#interface': { floor: 81, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // Raised by the P1a STE rewrite of each file (one instruction per sentence, no semicolon lists, vertical
+  // lists, simple tenses, the product nouns). Each row: the measured score, then what still holds it down.
+  'plugin/skills/apply/SKILL.md': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 98 (53 of 54): the pinned "applied locally, not yet verified; verify ..." keeps its semicolon
+  'plugin/skills/apply/references/application-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (16 of 16) after the rewrite
+  'plugin/skills/feedback/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (31 of 31) after the rewrite
+  'plugin/skills/improve/SKILL.md': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 97 (87 of 90): the pinned "Orangu picks the sessions; never choose them.", the 30-word network-disclosure list, and the 26-word routing sentence in the description
+  'plugin/skills/improve/references/artifact-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (56 of 56) after the rewrite
+  'plugin/skills/shared/interview.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (47 of 47) after the rewrite
+  'plugin/skills/shared/ste.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // new surface, measured 100 (86 of 86, table cells included)
+  'plugin/skills/shared/untrusted-input.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (37 of 37) after the rewrite
+  'plugin/codex/*/openai.yaml': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (6 of 6), no change was needed
+  'plugins/orangu/.codex-plugin/plugin.json#interface': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (9 of 9): the 33-word long description became 3 sentences
   'scripts/build.mjs#codex': { floor: 65, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // P1b: analyze, harness, the agents, the skills catalog, the plugin and marketplace descriptions
   'plugin/agents/harness-devex-analyst.md': { floor: 86, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
