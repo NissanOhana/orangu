@@ -23,10 +23,11 @@
  */
 import ts from 'typescript'
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { checkBlocks, checkText, htmlToText, wrapCommands, type SteBlock, type SteResult } from './ste.mjs'
+import type { SteRow } from '../test/ste-floors.js'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 /** the tracked CLI bundle; `npm run build` regenerates it from src/, and verify:generated pins it */
@@ -249,7 +250,8 @@ function walk(root: string, path: string): string[] {
     .flatMap((entry) => walk(root, posix(join(path, entry))))
 }
 
-function tsFiles(root: string, paths: readonly string[], exclude: readonly string[] = []): string[] {
+/** The .ts sources under these paths, without tests, specs and declarations, sorted. */
+export function tsFiles(root: string, paths: readonly string[], exclude: readonly string[] = []): string[] {
   return paths
     .flatMap((path) => walk(root, path))
     .filter((file) => file.endsWith('.ts') && !/\.(test|spec|d)\.ts$/.test(file) && !exclude.some((prefix) => file.startsWith(`${prefix}/`)))
@@ -452,4 +454,62 @@ export interface SurfaceMeasure extends SteResult {
 export function measureAll(root = ROOT): SurfaceMeasure[] {
   const read = reader(root)
   return surfaces(root).map((surface) => ({ id: surface.id, owner: surface.owner, source: surface.source, ...surface.measure(read) }))
+}
+
+// ---------- npm run ste ----------
+
+const BANNED_KEYS = ['emDash', 'eg', 'ie', 'etc', 'contractions'] as const
+const BANNED_LABELS = ['em-dash', 'e.g.', 'i.e.', 'etc.', 'contr.']
+
+function topFindings(surface: SurfaceMeasure): string {
+  const counts = new Map<string, number>()
+  for (const finding of surface.findings) counts.set(finding.rule, (counts.get(finding.rule) ?? 0) + 1)
+  return [...counts]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .map(([rule, count]) => `${rule} ${count}`)
+    .join(', ')
+}
+
+function table(measures: readonly SurfaceMeasure[], floors: Readonly<Record<string, SteRow>>): string[] {
+  const width = Math.max(...measures.map((surface) => surface.id.length))
+  const head = ['surface'.padEnd(width), 'owner ', 'sentences', 'score', 'floor', ...BANNED_LABELS, 'top findings'].join('  ')
+  const rows = measures.map((surface) => {
+    const row = floors[surface.id]
+    const floor = row ? `${row.floor}${surface.score < row.floor ? '!' : ''}` : surface.sentences ? 'none!' : '-'
+    const banned = BANNED_KEYS.map((key, index) => `${surface.banned[key]}${row && surface.banned[key] > row[key] ? '!' : ''}`.padStart(BANNED_LABELS[index]!.length))
+    return [surface.id.padEnd(width), surface.owner.padEnd(6), String(surface.sentences).padStart(9), String(surface.score).padStart(5), floor.padStart(5), ...banned, topFindings(surface)].join('  ').trimEnd()
+  })
+  return [
+    'STE score by surface: the percent of sentences with no finding. The floor and the banned-token ceilings',
+    'come from test/ste-floors.ts. "!" marks a row that fails the gate. Details: npm run ste -- <surface>',
+    '',
+    head,
+    ...rows,
+  ]
+}
+
+function details(measures: readonly SurfaceMeasure[]): string[] {
+  return measures.flatMap((surface) => [
+    `${surface.id} (${surface.owner}, ${surface.source}): ${surface.sentences} sentences, ${surface.clean} clean, STE score ${surface.score}`,
+    ...surface.findings.map((finding) => `  ${finding.file ?? surface.id}:${finding.line}  ${finding.rule}  "${finding.text}"  ${finding.hint}`),
+    '',
+  ])
+}
+
+async function main(argv: readonly string[]): Promise<void> {
+  const { STE_FLOORS } = await import('../test/ste-floors.js')
+  const json = argv.includes('--json')
+  const wanted = argv.filter((arg) => arg !== '--json')
+  const all = measureAll()
+  const measures = wanted.length ? all.filter((surface) => wanted.some((id) => surface.id === id || surface.id.startsWith(id))) : all
+  if (wanted.length && !measures.length) throw new Error(`no surface matches ${wanted.join(', ')}; run npm run ste for the list`)
+  const lines = json ? [JSON.stringify(measures, null, 2)] : wanted.length ? details(measures) : table(measures, STE_FLOORS)
+  process.stdout.write(`${lines.join('\n')}\n`)
+}
+
+if (process.argv[1] && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))) {
+  main(process.argv.slice(2)).catch((error: unknown) => {
+    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`)
+    process.exitCode = 1
+  })
 }
