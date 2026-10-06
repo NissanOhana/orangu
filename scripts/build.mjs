@@ -113,7 +113,7 @@ copyFileSync(join(root, 'design/brand/mascot-main-transparent.png'), join(codexP
 const CODEX_SKILLS = ['improve', 'apply', 'feedback']
 const CLAUDE_SKILLS = ['analyze', 'improve', 'apply', 'harness', 'feedback']
 const CLAUDE_FALLBACK = 'If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs"` with the same arguments.'
-const CODEX_FALLBACK = 'If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`: try `../../bin/orangu.cli.mjs` for an installed plugin, then `../../../dist/orangu.js` for a source checkout, and run the first file that exists with Node.js 20 or newer. Never fetch a package to continue.'
+const CODEX_FALLBACK = 'If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`. For an installed plugin, try `../../bin/orangu.cli.mjs` first. For a source checkout, try `../../../dist/orangu.js` next. Run the first file that exists with Node.js 20 or newer. Never fetch a package to continue.'
 const CODEX_TARGETS = [join(root, '.agents/skills'), join(codexPluginRoot, 'skills')]
 
 // Codex ships no skill for these; a Claude skill that routes to them routes a Codex user to the CLI verb
