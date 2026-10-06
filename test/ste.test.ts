@@ -4,6 +4,7 @@
  * the findings of one surface with file, line and fix.
  */
 import ts from 'typescript'
+import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
@@ -126,5 +127,25 @@ describe('STE gate', () => {
       const rest = tsBlocks(source, file).filter((block) => !spans.some(([from, to]) => block.line >= from && block.line <= to))
       expect(rest.length, `${file} keeps its other copy in the gate`).toBeGreaterThan(0)
     }
+  })
+
+  it('keeps the stored receipt copy byte-identical: a hash of each frozen function', () => {
+    // New words here would demote every verified record on disk (see the case above). To change this text,
+    // version the receipt instead, then record the new hash in the same commit with the reason.
+    const FROZEN: Readonly<Record<string, string>> = {
+      // recorded 2026-10-07 from the source on main b0178f8 (src/suggest unchanged since K)
+      verificationReceiptSummary: '8670c1e673a701142f630b0bed13205f2a0f6fa5eaf6268ac596422b0d39e624',
+      cohortReceiptSummary: '24b130696b9dbc257b5edb99b2272a917553ee2d93e28668b0c0655f897f7c03',
+      checkEvidence: '2f1a0a9483b806a612197db936227225264d24cbe76052c7a8b11970e0cc967b',
+    }
+    const hashes: Record<string, string> = {}
+    for (const [file, { functions }] of Object.entries(STORED_COPY_EXEMPT)) {
+      const sf = ts.createSourceFile(file, readFileSync(join(ROOT, file), 'utf8'), ts.ScriptTarget.Latest, true)
+      for (const name of functions) {
+        const fn = sf.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === name)
+        hashes[name] = createHash('sha256').update(fn!.getText(sf)).digest('hex')
+      }
+    }
+    expect(hashes).toEqual(FROZEN)
   })
 })
