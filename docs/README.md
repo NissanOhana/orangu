@@ -1,6 +1,6 @@
 # Documentation
 
-Everything committed here is public product or contributor documentation. Local planning, research, run logs, and agent-management notes are intentionally excluded from Git.
+Everything committed here is public product or contributor documentation. The repository intentionally keeps local planning, research, run logs, and agent-management notes out of Git.
 
 ## Use Orangu
 
@@ -23,4 +23,4 @@ Everything committed here is public product or contributor documentation. Local 
 - [Beta feedback issue form](../.github/ISSUE_TEMPLATE/beta-feedback.yml): the public fallback intake fields and privacy acknowledgement.
 - [Security](../SECURITY.md): private vulnerability reporting and safe transcript handling.
 
-The shipped workflow instructions live under [`plugin/skills/`](../plugin/skills/) for Claude Code and [`plugins/orangu/`](../plugins/orangu/) for the installable Codex plugin. [`.agents/skills/`](../.agents/skills/) contains byte-identical Codex source-checkout mirrors; both Codex trees are generated from `plugin/skills/` by the build. They are executable product surfaces, not maintainer prompts.
+The shipped workflow instructions live under [`plugin/skills/`](../plugin/skills/) for Claude Code and [`plugins/orangu/`](../plugins/orangu/) for the installable Codex plugin. [`.agents/skills/`](../.agents/skills/) contains byte-identical Codex source-checkout mirrors. The build generates both Codex trees from `plugin/skills/`. They are executable product surfaces, not maintainer prompts.
