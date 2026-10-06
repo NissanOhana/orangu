@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { readFileSync } from 'node:fs'
 import { paintedTheme, projectTheme } from './theme.js'
 
 // The two /orangu:show-me templates render as a complete sample before the skill fills them. Each opens in
@@ -55,6 +56,27 @@ test('a deck link with a slide number opens on that slide', async ({ page }, inf
   await page.keyboard.press('Home')
   await expect(page).toHaveURL(/#n=1/)
   expect(errors).toEqual([])
+})
+
+// The skill escapes session text by hand. If one escape is missed, the page must still run nothing but its own
+// runtime: the CSP pins that script by hash, so an injected <script> or event handler stays inert.
+test('an unescaped injection in a slot runs no script, and the pinned runtime still runs', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'the CSP behaves the same in every project')
+  const template = readFileSync(new URL('../../plugin/skills/show-me/references/slides.html', import.meta.url), 'utf8')
+  const sample = '<h1 class="dp" data-slot="title">EXAMPLE Fix the flaky checkout tests</h1>'
+  expect(template).toContain(sample)
+  const hostile = template.replace(sample, '<h1 class="dp" data-slot="title"><img src="data:," onerror="window.__xss=1"><script>window.__xss=2</script>hostile</h1>')
+  await page.route(`${BASE}/hostile.html`, (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: hostile }))
+  const blocked: string[] = []
+  const pageErrors: string[] = []
+  page.on('console', (message) => message.type() === 'error' && blocked.push(message.text()))
+  page.on('pageerror', (error) => pageErrors.push(error.message))
+  await page.goto(`${BASE}/hostile.html`)
+  await expect(page.locator('#theme')).toHaveText('◐ theme · light')
+  await expect(page.locator('.pg').first()).toHaveText('1 / 6')
+  expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined()
+  expect(blocked.some((text) => /Content Security Policy/.test(text))).toBe(true)
+  expect(pageErrors).toEqual([])
 })
 
 test('the written report opens in its theme and links back to the slides', async ({ page }, info) => {

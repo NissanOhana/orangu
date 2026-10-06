@@ -657,8 +657,9 @@ describe('plugin packaging', () => {
     const body = (): string => md().split('\n---\n')[1] ?? ''
     const grants = (): string[] => (/^allowed-tools:\s*(.+)$/m.exec(md())?.[1] ?? '').split(',').map((grant) => grant.trim())
 
-    it('pre-approves exactly the CLI, a temp directory, reads, and writes under ~/.orangu/show-me', () => {
-      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node *orangu.cli.mjs*)', 'Bash(mktemp:*)', 'Read', 'Write(~/.orangu/show-me/**)'])
+    // Grep is the read-only tool for the post-write check: no shell, and no reach that the Read grant lacks.
+    it('pre-approves exactly the CLI, a temp directory, reads, a read-only check, and writes under ~/.orangu/show-me', () => {
+      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node *orangu.cli.mjs*)', 'Bash(mktemp:*)', 'Read', 'Grep', 'Write(~/.orangu/show-me/**)'])
       // opening the files is a normal permission prompt, never a pre-approval
       expect(grants().join(' ')).not.toMatch(/\b(?:open|xdg-open|start)\b/)
     })
@@ -715,6 +716,17 @@ describe('plugin packaging', () => {
       expect(text).toContain('~/.orangu/show-me/<id>/report.html')
       expect(text).toContain("so a second run never overwrites the first")
       expect(text).toMatch(/search its text for `EXAMPLE`\. The count must be 0\./)
+    })
+
+    // The files carry session text that Claude escapes by hand. A missed escape must not reach a browser: the CSP
+    // pins the one script by hash, and the skill counts what it wrote before it opens anything.
+    it('checks each written file for markup that can run script before it opens it', () => {
+      const text = body()
+      expect(text).toContain('check each file with the Grep tool in count mode')
+      for (const pattern of ['`<script` counts 1', '`<[^>]*\\son[a-z]+\\s*=` counts 0', '`=\\s*["\']?\\s*javascript:` counts 0'])
+        expect(text, pattern).toContain(pattern)
+      expect(text).toContain('If a count is different, delete nothing, report the file and the count, and do not open it.')
+      expect(text.indexOf('check each file with the Grep tool')).toBeLessThan(text.indexOf('Print both absolute paths.'))
     })
 
     it('prints both paths and opens both files with the OS opener', () => {

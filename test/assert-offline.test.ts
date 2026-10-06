@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -66,5 +67,29 @@ describe('assert-offline gate', () => {
     const titled = html.replace(/<title>[^<]*<\/title>/, '<title>fix https://example.com bug</title>')
     expect(titled).not.toBe(html)
     expect(gate(titled, 'titled.html').status).toBe(0)
+  })
+
+  // The show-me files pin their one script by hash instead of 'unsafe-inline'. The gate accepts that form only
+  // when every inline script matches a pinned hash, and only with the rest of the policy unchanged.
+  describe('a CSP that pins its scripts by hash', () => {
+    const script = 'document.title="pinned"'
+    const hash = createHash('sha256').update(script, 'utf8').digest('base64')
+    const page = (scriptSrc: string, body = `<script>${script}</script>`): string =>
+      `<!doctype html><html><head><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src ${scriptSrc}; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/><title>t</title></head><body>${body}</body></html>`
+
+    it('passes when each inline script matches a pinned hash', () => {
+      const r = gate(page(`'sha256-${hash}'`), 'pinned.html')
+      expect(r.out).toContain('offline OK')
+      expect(r.status).toBe(0)
+    })
+
+    it('fails when an inline script is not pinned', () => {
+      expect(gate(page(`'sha256-${hash}'`, `<script>${script}</script><script>alert(1)</script>`), 'unpinned.html').status).not.toBe(0)
+    })
+
+    it('fails when the hash form also allows inline script or another origin', () => {
+      expect(gate(page(`'sha256-${hash}' 'unsafe-inline'`), 'both.html').status).not.toBe(0)
+      expect(gate(page(`'sha256-${hash}' https://cdn.example.com`), 'origin.html').status).not.toBe(0)
+    })
   })
 })

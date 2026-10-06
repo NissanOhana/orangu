@@ -5,6 +5,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,7 +21,18 @@ const NAMES = ['slides', 'report'] as const
 const read = (path: string): string => readFileSync(join(root, path), 'utf8')
 const built = (name: string): string => read(`${DIR}/${name}.html`)
 const source = (name: string): string => read(`${DIR}/${name}.src.html`)
-const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"
+// The report CSP with one change: the script source is the hash of the one runtime, not 'unsafe-inline'. The
+// skill writes these files from session text, so a missed escape must not be able to run a script.
+const cspFor = (hash: string): string => `default-src 'none'; script-src 'sha256-${hash}'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'`
+const sha256 = (text: string): string => createHash('sha256').update(text, 'utf8').digest('base64')
+/** script tags, inline event-handler attributes and javascript: URLs: none may enter through a slot */
+function scriptSurface(html: string): { scripts: number; handlers: string[]; jsUrls: string[] } {
+  return {
+    scripts: html.match(/<script\b/gi)?.length ?? 0,
+    handlers: html.match(/<[^>]*\son[a-z]+\s*=/gi) ?? [],
+    jsUrls: html.match(/=\s*["']?\s*javascript:/gi) ?? [],
+  }
+}
 
 function offline(html: string, name: string): { status: number; out: string } {
   const file = join(mkdtempSync(join(tmpdir(), 'orangu-show-me-')), name)
@@ -28,7 +40,8 @@ function offline(html: string, name: string): { status: number; out: string } {
   const r = spawnSync(process.execPath, [join(root, 'scripts/assert-offline.mjs'), '--file', file], { encoding: 'utf8' })
   return { status: r.status ?? -1, out: r.stdout + r.stderr }
 }
-const scripts = (html: string): string[] => [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]!.trim())
+/** the exact text of each inline script: the CSP hash covers these bytes, so nothing is trimmed */
+const scripts = (html: string): string[] => [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]!)
 const slotNames = (html: string): string[] => [...new Set([...html.matchAll(/\bdata-slot="([^"]+)"/g)].map((m) => m[1]!))]
 
 const WORDS: Words = {
@@ -52,7 +65,7 @@ describe('show-me templates: built, offline, on the tokens', () => {
       expect(html.startsWith('<!doctype html>')).toBe(true)
       expect(html).toContain('<meta charset="utf-8"/>')
       expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1"/>')
-      expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${CSP}"/>`)
+      expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${cspFor(sha256(scripts(html)[0]!))}"/>`)
       expect(html).toContain('<meta name="robots" content="noindex"/>')
       expect(html).toContain(`<meta name="generator" content="orangu ${JSON.parse(read('package.json')).version}"/>`)
       expect(html).not.toMatch(/\{\{[^}]+\}\}|<!-- @[a-z]+ -->/)
@@ -65,6 +78,15 @@ describe('show-me templates: built, offline, on the tokens', () => {
       expect(html.split(read('src/report/client/tokens.css').trim()).length - 1).toBe(1)
       expect(source(name)).toContain('<!-- @tokens -->')
       expect(source(name).match(/#[0-9a-fA-F]{3,8}\b/g), `${name}.src.html hardcodes a colour`).toBeNull()
+    })
+  }
+
+  for (const name of NAMES) {
+    it(`${name}.html pins its one script by hash, and holds no event handler and no javascript: URL`, () => {
+      const html = built(name)
+      expect(scriptSurface(html)).toEqual({ scripts: 1, handlers: [], jsUrls: [] })
+      expect(html).not.toContain("'unsafe-inline'; style-src")
+      expect(html).toContain(`script-src 'sha256-${sha256(scripts(html)[0]!)}'`)
     })
   }
 
@@ -150,6 +172,22 @@ describe('show-me filled from synthetic fixtures', () => {
   const fillBoth = (page: ReturnType<typeof sessionPage>): Record<(typeof NAMES)[number], string> =>
     ({ slides: fillTemplate(built('slides'), page), report: fillTemplate(built('report'), page) })
 
+  // A filled file keeps the template's one script byte for byte, so the pinned hash still matches it.
+  const keepsTheScriptSurface = (html: string, name: string): void => {
+    expect(scriptSurface(html), `${name} script surface`).toEqual({ scripts: 1, handlers: [], jsUrls: [] })
+    expect(html, `${name} keeps the pinned script`).toContain(`script-src 'sha256-${sha256(scripts(html)[0]!)}'`)
+  }
+
+  it('hostile session text stays text: no script, no event handler, no javascript: URL', () => {
+    const hostile = '</title><script>alert(1)</script><img src=x onerror="alert(2)"><a href="javascript:alert(3)">x</a>'
+    const a = golden('errors-and-interrupts')
+    const page = sessionPage(slimAnalysis({ ...a, session: { ...a.session, title: hostile, projectSlug: hostile } }), WORDS)
+    for (const [name, html] of Object.entries(fillBoth(page))) {
+      keepsTheScriptSurface(html, name)
+      expect(html).toContain('&lt;/title&gt;&lt;script&gt;alert(1)&lt;/script&gt;')
+    }
+  })
+
   it('a session with 3 findings: 8 slides, no sample value left, offline', () => {
     const files = fillBoth(sessionPage(slimAnalysis(golden('errors-and-interrupts')), WORDS))
     expect(files.slides.match(/aria-roledescription="slide"/g)).toHaveLength(8)
@@ -160,6 +198,7 @@ describe('show-me filled from synthetic fixtures', () => {
       expect(html, `${name} leaves a number without its CLI value`).not.toContain('data-v=""')
       expect(html).toContain('<html lang="en" data-scope="session" data-live="false" data-caution="false" data-redacted="false">')
       expect(html).toContain('2 of 2 test runs failed')
+      keepsTheScriptSurface(html, name)
       expect(offline(html, `${name}.html`).status).toBe(0)
     }
   })
@@ -183,6 +222,7 @@ describe('show-me filled from synthetic fixtures', () => {
     for (const [name, html] of Object.entries(fillBoth(page))) {
       expect(html).not.toContain('EXAMPLE')
       expect(html).toContain('Recurring patterns in demo')
+      keepsTheScriptSurface(html, name)
       expect(html).toContain('<code>claude "/orangu:harness --scope repo"</code>')
       expect(html).not.toContain('/orangu:improve')
       expect(offline(html, `${name}.html`).status).toBe(0)
