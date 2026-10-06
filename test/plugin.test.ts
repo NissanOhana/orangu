@@ -173,6 +173,14 @@ describe('plugin packaging', () => {
     expect(crossFindings, 'json-shape.md has a crossFindings line').not.toBe('')
     expect(crossFindings).toMatch(/\brecommendation\b/)
   })
+  // The report opens in Detailed. The plain words replace the mechanism names only when the user asks for plain
+  // language, so each swap sentence carries that condition itself.
+  it('analyze swaps to plain words only when the user asks for plain language', () => {
+    const md = readText('plugin/skills/analyze/SKILL.md')
+    expect(md).toContain('When the user asks for plain language, keep the words tool calls and subagents.')
+    expect(md).toContain('In plain language, say reused context for the cache, and working memory for the context window.')
+    expect(md, 'no unconditional swap sentence').not.toMatch(/(?:^|\. )Say reused context/m)
+  })
   it('analyze carries the live-session branch: orangu watch for one, orangu serve for several', () => {
     const md = readFileSync(join(root, 'plugin/skills/analyze/SKILL.md'), 'utf8')
     expect(md).toContain('orangu watch')
@@ -617,8 +625,12 @@ describe('plugin packaging', () => {
   // never-reads-a-transcript-directly, harness-*), so an STE rewrite of a description keeps it.
   it('the Claude-only descriptions keep the phrases the routing evals rely on', () => {
     const desc = (s: string): string => /description:\s*(.+)/.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? ''
-    for (const phrase of ['what happened in one session', 'where time or tokens went', 'keep a report refreshed while a session runs'])
-      expect(desc('analyze')).toContain(phrase)
+    for (const phrase of [
+      'what happened in one session', 'finished or still running', 'where time or tokens went', 'open a visual report',
+      'open the report for the session running right now', 'keep a report refreshed while a session runs',
+    ]) expect(desc('analyze')).toContain(phrase)
+    // each analyze trigger is phrased as a trigger ("Use when", "use it to"), never as a capability ("It can")
+    expect(desc('analyze')).not.toMatch(/\bIt can\b/)
     for (const phrase of [
       'what your harness declares', 'every session on the machine', 'instruction files, hooks, skills, agents, MCP servers, plugins',
       'why the same problem keeps recurring', 'wants a repo or global harness review', 'what to change in their setup',
