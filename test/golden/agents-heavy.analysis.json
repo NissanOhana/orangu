@@ -1588,7 +1588,7 @@
             "longestMs": 800
           }
         ],
-        "heuristic": "Independence: a later prompt shares no 16-character run with the result preview of an earlier agent (about 200 characters). It also names no earlier agent id or name. A stripped result (no preview) counts as independent. The check uses ids and lengths only, never a full-content match. Timing comes from the spawned agent run (start, end, duration), or from the spawn call span when no run is linked."
+        "heuristic": "Independence: a later prompt shares no 16-character run with the result preview of an earlier agent (about 200 characters). It also names no earlier agent id or name. When a result has no preview, only the id and name check applies. No check reads the full content. Timing comes from the spawned agent run (start, end, duration), or from the spawn call span when no run is linked."
       },
       "turnIndexes": [
         0
