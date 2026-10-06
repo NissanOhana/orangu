@@ -64,6 +64,31 @@ async function contrastOnPage(page: Page, selector: string): Promise<number> {
   }, selector)
 }
 
+/**
+ * The Improvements screen shows one card per cross finding the page embeds, and every card names its
+ * improvement while it is closed: the "Improvement:" line, followed by that finding's recommendation.
+ */
+async function expectImprovementOnEveryClosedCard(page: Page, scope: 'repo' | 'global', where: string): Promise<void> {
+  const embedded = await page.evaluate((s) => {
+    const data = (window as unknown as { __ORANGU__: { aggregates: Record<string, { crossFindings: Array<{ recommendation?: string }> } | undefined> } }).__ORANGU__
+    return (data.aggregates[s]?.crossFindings ?? []).map((f) => f.recommendation ?? '')
+  }, scope)
+  expect(embedded.length, `${where}: embedded cross findings`).toBeGreaterThan(0)
+  const cards = page.locator('details.finding')
+  await expect(cards, where).toHaveCount(embedded.length)
+  const shown: string[] = []
+  for (let i = 0; i < embedded.length; i++) {
+    const card = cards.nth(i)
+    await expect(card, `${where} card ${i + 1}`).not.toHaveAttribute('open')
+    const lead = card.locator('summary .sg-lead')
+    await expect(lead, `${where} card ${i + 1}`).toBeVisible()
+    const text = (await lead.textContent()) ?? ''
+    expect(text, `${where} card ${i + 1}`).toMatch(/^Improvement: \S/)
+    shown.push(text.slice('Improvement: '.length))
+  }
+  expect([...shown].sort(), `${where}: each card shows its own finding's improvement`).toEqual([...embedded].sort())
+}
+
 async function rasterBrandSource(page: Page): Promise<string> {
   const brand = page.locator('.brand img.logo').first()
   await expect(brand).toBeVisible()
@@ -400,5 +425,32 @@ test('generated repository sample renders the repo scope and the two samples lin
   await expect(page.getByText('This scope needs orangu serve')).toHaveCount(0)
   await expect(page.locator('details.finding')).not.toHaveCount(0)
   expect(external).toEqual([])
+  expect(errors).toEqual([])
+})
+
+// The repository sample carries the repo aggregate; the session sample carries the repo and global
+// aggregates beside its session. A reader gets to the cards by clicks: the sidebar, then a scope chip.
+test('both samples name the improvement on every closed repo and global card, reached by clicks', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${SITE}/sample-repo.html#repo`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
+  await page.getByRole('link', { name: 'Improvements', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  // a file about the repository opens the screen on its own scope
+  await expect(page.getByRole('button', { name: /^Repo · \d+$/ })).toHaveClass(/\bactive\b/)
+  await expectImprovementOnEveryClosedCard(page, 'repo', 'sample-repo.html repo')
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+
+  await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+  await page.getByRole('link', { name: 'Improvements', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  for (const [scope, label] of [['repo', 'Repo'], ['global', 'Global']] as const) {
+    const chip = page.getByRole('button', { name: new RegExp(`^${label} · \\d+$`) })
+    await chip.click()
+    await expect(chip).toHaveClass(/\bactive\b/)
+    await expectImprovementOnEveryClosedCard(page, scope, `sample.html ${scope}`)
+  }
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
   expect(errors).toEqual([])
 })

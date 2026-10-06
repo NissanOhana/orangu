@@ -4,11 +4,15 @@
  * read "N tool results over N KB". Against the BUILT CLI: every recurring-finding line carries real figures
  * from an example session, marked "In one session:" so they never read as the cross-session total, and the
  * "(N sessions)" count that follows it.
+ *
+ * The HTML report of the same verbs (`--html <file>`) embeds the aggregate after the default redaction. Each
+ * closed repo or global card shows its finding's `recommendation` as the improvement line, so every embedded
+ * cross finding must carry that copy, and it must be the copy of the example session the title names.
  */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { mkdtemp } from 'node:fs/promises'
+import { existsSync, readFileSync } from 'node:fs'
+import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { makeFixtureHome } from '../../test/fixtures/home.js'
@@ -37,6 +41,44 @@ describe.skipIf(!existsSync(CLI))('orangu global: recurring-finding titles (buil
       expect(line).not.toMatch(/\be\.g\./)
       // the marker says the figures come from one example session, before the cross-session count
       expect(line).toMatch(/ {2}In one session: \S.*\(\d+ sessions?\)$/)
+    }
+  })
+})
+
+interface EmbeddedFinding { ruleId: string; title: string; recommendation?: string; exampleSessionIds: string[] }
+interface SessionInsight { ruleId: string; title: string; recommendation: string }
+
+/** The app data a written report carries: one application/json script (src/report/render.ts). */
+function embeddedFindings(html: string, scope: 'repo' | 'global'): EmbeddedFinding[] {
+  const data = /<script type="application\/json" id="orangu-data">([\s\S]*?)<\/script>/.exec(html)
+  expect(data, 'embedded app data').not.toBeNull()
+  const parsed = JSON.parse(data![1]!) as { aggregates: Partial<Record<'repo' | 'global', { crossFindings: EmbeddedFinding[] }>> }
+  expect(parsed.aggregates[scope], `aggregates.${scope}`).toBeDefined()
+  return parsed.aggregates[scope]!.crossFindings
+}
+
+describe.skipIf(!existsSync(CLI))('orangu repo|global --html: the improvement line reaches the written report (built CLI)', () => {
+  it.each(['repo', 'global'] as const)('%s --html embeds each cross finding with its example title and the improvement of that session', async (scope) => {
+    const home = await mkdtemp(join(tmpdir(), `orangu-cli-improvement-${scope}-`))
+    const cwd = join(home, 'project')
+    await mkdir(cwd, { recursive: true })
+    const fx = await makeFixtureHome(join(home, '.claude'), { cwd })
+    const file = join(home, `${scope}.html`)
+    run([scope, ...(scope === 'repo' ? [cwd] : []), '--root', fx.configDir, '--jobs', '1', '--no-cache', '--quiet', '--html', file], home)
+
+    const findings = embeddedFindings(readFileSync(file, 'utf8'), scope)
+    expect(findings.length).toBeGreaterThan(0)
+    // the same session's report, through the same default redaction: what its own card says
+    const insights = new Map<string, SessionInsight[]>()
+    const insightsOf = (id: string): SessionInsight[] => {
+      if (!insights.has(id)) insights.set(id, (JSON.parse(run(['analyze', id, '--root', fx.configDir, '--json', '--no-cache', '--quiet'], home)) as { insights: SessionInsight[] }).insights)
+      return insights.get(id)!
+    }
+    for (const f of findings) {
+      expect(f.title, f.ruleId).toMatch(/^In one session: \S/)
+      expect(f.recommendation?.trim(), `${f.ruleId}: recommendation`).toBeTruthy()
+      const source = f.exampleSessionIds.flatMap(insightsOf).filter((i) => i.ruleId === f.ruleId && `In one session: ${i.title}` === f.title)
+      expect(source.map((i) => i.recommendation), `${f.ruleId}: the improvement of the session the title names`).toContain(f.recommendation)
     }
   })
 })
