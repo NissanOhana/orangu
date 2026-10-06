@@ -78,13 +78,15 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
 
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Turn your AI history into actionable insights.')
-  await expect(page.locator('.hero .hero-lead')).toHaveText("Orangu reads your local AI sessions so you don't have to guess what went right (or wrong).")
+  await expect(page.locator('.hero .hero-lead')).toHaveText('Orangu reads your local AI sessions so you do not have to guess what went right (or wrong).')
   await expect(page.locator('.hero-journey .hero-step')).toHaveText([
-    'Inspect: Dive deep into steps and tool calls from a single run.',
-    'Discover: Spot recurring patterns across your whole repository.',
-    'Improve: Use real evidence to build smarter, faster workflows.',
+    'Inspect: Read the steps and tool calls of one session.',
+    'Discover: Find the patterns that recur across your whole repository.',
+    'Improve: Use real evidence to make your workflows better and faster.',
   ])
-  await expect(page.getByRole('button', { name: /Inspect a session/ }).first()).toBeVisible()
+  await expect(page.getByRole('button', { name: /Choose a report/ }).first()).toBeVisible()
+  await expect(page.locator('.hero .term pre')).toContainText('$ npx orangu\nChoose a report')
+  await expect(page.locator('.hero .term-wrap .fine')).toHaveText('To open only the latest session, run npx orangu report.')
   await expect(page.getByRole('link', { name: /See the observe-to-proposal sample/ })).toBeVisible()
   const sampleLinks = page.locator('a[href="sample.html"]')
   await expect(sampleLinks).toHaveCount(2)
@@ -99,8 +101,9 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/#jobs$/)
 
-  await page.getByRole('button', { name: /Inspect a session/ }).first().click()
+  await page.getByRole('button', { name: /Choose a report/ }).first().click()
   await expect(page.getByRole('button', { name: /Copied/ }).first()).toBeVisible()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npx orangu')
 
   const demo = page.locator('#appdemo')
   const motion = demo.locator('#demoMotion')

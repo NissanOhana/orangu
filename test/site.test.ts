@@ -114,14 +114,33 @@ describe('site/index.src.html (authored landing source)', () => {
   it('turns local AI history into a clear inspect, discover, improve journey in the first viewport', () => {
     const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
     expect(htmlText(hero)).toContain('Turn your AI history into actionable insights.')
-    expect(hero).toContain("Orangu reads your local AI sessions so you don't have to guess what went right (or wrong).")
-    expect(hero).toContain('Inspect:</strong> <span>Dive deep into steps and tool calls from a single run.')
-    expect(hero).toContain('Discover:</strong> <span>Spot recurring patterns across your whole repository.')
-    expect(hero).toContain('Improve:</strong> <span>Use real evidence to build smarter, faster workflows.')
-    expect(hero).toContain('Inspect a session')
-    expect(hero).toContain('npx orangu report')
+    // The lead carries no contraction: the public copy is plain, controlled English.
+    expect(hero).toContain('Orangu reads your local AI sessions so you do not have to guess what went right (or wrong).')
+    expect(htmlText(hero)).not.toMatch(/\b\w+n't\b/)
+    expect(hero).toContain('Inspect:</strong> <span>Read the steps and tool calls of one session.')
+    expect(hero).toContain('Discover:</strong> <span>Find the patterns that recur across your whole repository.')
+    expect(hero).toContain('Improve:</strong> <span>Use real evidence to make your workflows better and faster.')
+    expect(hero).toContain('Choose a report')
     expect(hero).toContain('href="sample.html"')
     expect(hero).toContain('See the observe-to-proposal sample')
+  })
+
+  it('leads with the bare command, which opens the report menu, and keeps the latest-session command second', () => {
+    const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const terminal = hero.match(/<div class="term"[^>]*><pre>([\s\S]*?)<\/pre><\/div>/)?.[1] ?? ''
+    const lines = terminal.replace(/<[^>]+>/g, '').split('\n')
+    expect(lines[0]).toBe('$ npx orangu')
+    // The terminal shows the menu that the bare command prints, so the landing and the CLI use one
+    // name for one thing. These literals live in the dashboard frame and in its choice rows.
+    const dashboard = readFileSync(join(root, 'src/cli/commands/dashboard.ts'), 'utf8')
+    for (const label of ['Choose a report', 'Repository report', 'Global report', 'Browse session reports']) {
+      expect(dashboard, `dashboard no longer prints ${label}`).toContain(label)
+      expect(lines.some((line) => line.trim().startsWith(label)), `terminal does not show ${label}`).toBe(true)
+    }
+    expect(lines[1]).toBe('Choose a report')
+    const wrap = hero.match(/<div class="term-wrap">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? ''
+    expect(wrap).toContain('<p class="fine">To open only the latest session, run <code>npx orangu report</code>.</p>')
+    expect(htmlText(src)).not.toContain('Inspect a session')
   })
 
   it('authors the desktop insights title as two balanced lines and closes the hero gap', () => {
@@ -493,9 +512,12 @@ describe('site/index.src.html (authored landing source)', () => {
 
   it('keeps the primary command and full-sample actions wired', async () => {
     const primaryButtons = src.match(
-      /<button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied">/g,
+      /<button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report<\/span><span class="sep">·<\/span>npx orangu<\/button>/g,
     ) ?? []
     expect(primaryButtons, 'hero and final command buttons').toHaveLength(2)
+    // Every primary call to action copies the bare command; the latest-session command is never primary.
+    const ctas = [...src.matchAll(/<button class="cmd cmd-btn"[^>]*data-cmd="([^"]+)"/g)].map((match) => match[1])
+    expect(ctas).toEqual(['npx orangu', 'npx orangu'])
     const demo = src.match(/<section id="demo"[\s\S]*?<\/section>/)?.[0] ?? ''
     expect(demo).toContain('<a class="ghost" href="sample.html" target="_blank" rel="noopener"')
 
@@ -508,12 +530,12 @@ describe('site/index.src.html (authored landing source)', () => {
       let copied = ''
       let legacyCopy = false
       const timers: Array<() => void> = []
-      const label = { textContent: 'Inspect a session' }
+      const label = { textContent: 'Choose a report' }
       const button = {
         offsetWidth: 180,
         style: { minWidth: '' },
         querySelector: () => label,
-        getAttribute: (name: string) => name === 'data-cmd' ? 'npx orangu report' : name === 'data-copied' ? 'Copied' : null,
+        getAttribute: (name: string) => name === 'data-cmd' ? 'npx orangu' : name === 'data-copied' ? 'Copied' : null,
       }
       const themeButton = { addEventListener: () => {}, setAttribute: () => {} }
       const themeLabel = { textContent: '' }
@@ -540,11 +562,11 @@ describe('site/index.src.html (authored landing source)', () => {
       click!({ target: { closest: () => button } })
       await Promise.resolve()
       await Promise.resolve()
-      if (withClipboard) expect(copied).toBe('npx orangu report')
+      if (withClipboard) expect(copied).toBe('npx orangu')
       else expect(legacyCopy).toBe(true)
       expect(label.textContent).toBe('Copied')
       timers.forEach((timer) => timer())
-      expect(label.textContent).toBe('Inspect a session')
+      expect(label.textContent).toBe('Choose a report')
     }
 
     await exerciseCopy(true)
@@ -655,7 +677,11 @@ describe('site/index.src.html (authored landing source)', () => {
   it('stages inspection and Claude plugin activation in the install section', () => {
     const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
     expect(install.match(/class="card install-card"/g) ?? []).toHaveLength(3)
-    expect(install).toContain('Inspect a session')
+    // The first card leads with the bare command; the latest-session command is its second bar.
+    const first = install.split('<div class="card install-card">')[1] ?? ''
+    expect(first).toContain('<h3>Choose a report</h3>')
+    expect([...first.matchAll(/<button data-cmd="([^"]+)">copy<\/button>/g)].map((match) => match[1])).toEqual(['npx orangu', 'npx orangu report'])
+    expect(first).toContain('<div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button')
     expect(install).toContain('Add the Claude Code plugin')
     expect(install).toContain('/plugin marketplace add NissanOhana/orangu')
     expect(install).toContain('/plugin install orangu')
@@ -822,6 +848,16 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     for (const verb of ['report', 'serve', 'repo', 'global', 'harness', 'analyze']) expect(llms).toContain(`npx orangu ${verb}`)
   })
 
+  it('lists the bare command first, then the latest-session command, in both command lists', () => {
+    const commands = llms.slice(llms.indexOf('Concretely, you can:')).split('\n').filter((line) => line.startsWith('- '))
+    expect(commands[0]).toMatch(/^- `npx orangu` : opens a menu in the terminal\./)
+    expect(commands[1]).toMatch(/^- `npx orangu report` : /)
+    const started = llms.slice(llms.indexOf('## Getting started'), llms.indexOf('## Optional'))
+    const lead = started.split('\n').find((line) => line.includes('npx orangu')) ?? ''
+    expect(lead).toMatch(/^- `npx orangu` /)
+    expect(lead.indexOf('`npx orangu`')).toBeLessThan(lead.indexOf('`npx orangu report`'))
+  })
+
   it('llms-full.txt concatenates README, USAGE, and DETERMINISM verbatim with absolute links, under the 40 KB ratchet', () => {
     expect(full.startsWith('# orangu llms-full.txt')).toBe(true)
     for (const source of ['README.md', 'docs/USAGE.md', 'docs/DETERMINISM.md']) expect(full).toContain(`\n# ${source}\n`)
@@ -980,5 +1016,22 @@ describe('landing SEO surface', () => {
     expect(notFound).toContain('<meta name="robots" content="noindex"/>')
     expect(notFound).toContain('href="/orangu/"')
     expect(notFound).not.toMatch(/https?:\/\//)
+    // The 404 names the bare command first and keeps the latest-session command as the second line.
+    expect(notFound).toContain('To see your own sessions, run <code>npx orangu</code>. To open only the latest session, run <code>npx orangu report</code>.')
+    expect(notFound.indexOf('<code>npx orangu</code>')).toBeLessThan(notFound.indexOf('<code>npx orangu report</code>'))
+  })
+})
+
+describe('README entry points', () => {
+  const readme = readFileSync(join(root, 'README.md'), 'utf8')
+
+  it('shows the bare command in the header links and first in the quick start', () => {
+    const header = readme.split('\n').find((line) => line.includes('[sample report](')) ?? ''
+    expect(header).toContain('`npx orangu`')
+    expect(header).not.toContain('`npx orangu report`')
+    const quick = readme.slice(readme.indexOf('## Quick start'))
+    const block = quick.match(/```bash\n([\s\S]*?)```/)?.[1] ?? ''
+    expect(block.split('\n')[0]).toMatch(/^npx orangu\s+#/)
+    expect(block).toContain('npx orangu report ')
   })
 })

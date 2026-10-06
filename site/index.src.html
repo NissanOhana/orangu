@@ -312,26 +312,27 @@ footer .legal{margin:0;font-size:12.5px}
     <div class="hero-grid">
       <div class="hero-copy">
         <h1><span>Turn your AI history</span> <span>into actionable insights.</span></h1>
-        <p class="hero-lead">Orangu reads your local AI sessions so you don't have to guess what went right (or wrong).</p>
+        <p class="hero-lead">Orangu reads your local AI sessions so you do not have to guess what went right (or wrong).</p>
         <ol class="hero-journey" aria-label="From AI history to better workflows">
-          <li class="hero-step"><strong>Inspect:</strong> <span>Dive deep into steps and tool calls from a single run.</span></li>
-          <li class="hero-step"><strong>Discover:</strong> <span>Spot recurring patterns across your whole repository.</span></li>
-          <li class="hero-step"><strong>Improve:</strong> <span>Use real evidence to build smarter, faster workflows.</span></li>
+          <li class="hero-step"><strong>Inspect:</strong> <span>Read the steps and tool calls of one session.</span></li>
+          <li class="hero-step"><strong>Discover:</strong> <span>Find the patterns that recur across your whole repository.</span></li>
+          <li class="hero-step"><strong>Improve:</strong> <span>Use real evidence to make your workflows better and faster.</span></li>
         </ol>
         <div class="cta-row">
-          <button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Inspect a session</span><span class="sep">·</span>npx orangu report</button>
+          <button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report</span><span class="sep">·</span>npx orangu</button>
           <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See the observe-to-proposal sample (opens in a new tab)">See the observe-to-proposal sample ↗</a>
         </div>
       </div>
       <div class="hero-viz">
-        <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink" role="img" aria-label="The three axes orangu measures: quality up, time down, tokens down. Never a single score."></qtc-triad>
+        <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink" role="img" aria-label="The three axes that orangu measures: quality up, time down, tokens down. Orangu never combines them into one score."></qtc-triad>
       </div>
       <div class="term-wrap">
-        <div class="term" aria-label="orangu workflow"><pre><span class="p">$</span> npx orangu report
-one session  →  steps, tool calls, errors, outcome evidence
-repo/global  →  recurring patterns worth a larger change
-improve skill  →  a structured proposal you review
-scope policy →  session + repo: apply + verify · global: review</pre></div>
+        <div class="term" aria-label="The menu that npx orangu opens"><pre><span class="p">$</span> npx orangu
+Choose a report
+  Repository report       recurring patterns in this repository
+  Global report           recurring patterns on this machine
+  Browse session reports  steps, tool calls and errors of one session</pre></div>
+        <p class="fine">To open only the latest session, run <code>npx orangu report</code>.</p>
       </div>
     </div>
   </div>
@@ -487,7 +488,7 @@ scope policy →  session + repo: apply + verify · global: review</pre></div>
     <h2>Inspect first. Add improvement when you want it.</h2>
     <p class="sec-lead">The CLI creates the local evidence. Claude Code and Codex skills share the same scope-aware proposal, application, and session-verification contracts.</p>
     <div class="grid g300">
-      <div class="card install-card"><h3>Inspect a session</h3><p>No global install. Finds the latest supported session and opens its report.</p><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
+      <div class="card install-card"><h3>Choose a report</h3><p>You do not need a global install. The first command opens a menu in your terminal. Choose this repository, all sessions, or one session. The second command opens the latest session.</p><div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button data-cmd="npx orangu">copy</button></div><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
       <div class="card install-card"><h3>Keep the local app open</h3><p>Use report, analyze, repo, global, serve, and watch without sending session data away.</p><div class="cmd-sm"><span class="p">$</span> npm i -g orangu <button data-cmd="npm i -g orangu">copy</button></div></div>
       <div class="card install-card"><h3>Add the Claude Code plugin</h3><p>Install after you have seen the evidence. The report copies a chat handoff; <code>/orangu:improve</code> drafts and <code>/orangu:apply</code> applies session/repo proposals explicitly.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div></div>
     </div>
@@ -509,9 +510,9 @@ scope policy →  session + repo: apply + verify · global: review</pre></div>
   <div class="wrap">
     <div class="cta">
       <span class="mascot-box"><img src="{{mascot:main}}" width="160" height="160" alt="orangu, the orangutan mascot"></span>
-      <h2>Start with the run in front of you.</h2>
-      <p class="sub">Inspect it locally, then decide whether the next outcome needs a proposal.</p>
-      <button class="cmd cmd-btn" type="button" data-cmd="npx orangu report" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Inspect a session</span><span class="sep">·</span>npx orangu report</button>
+      <h2>Start with the sessions you already have.</h2>
+      <p class="sub">Read the evidence on your machine. Then decide if the next session needs a proposal.</p>
+      <button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report</span><span class="sep">·</span>npx orangu</button>
       <p class="who">Supported today: Claude Code, Cowork, and Desktop sessions stored on your machine.</p>
     </div>
   </div>
