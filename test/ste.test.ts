@@ -8,7 +8,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, helpText, listFiles, measureAll, surfaces, tsBlocks, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
-import { BANNED, STE_FLOORS } from './ste-floors.js'
+import { BANNED, BELOW_TARGET, STE_FLOORS, STE_TARGET } from './ste-floors.js'
 
 let measured = new Map<string, SurfaceMeasure>()
 beforeAll(() => {
@@ -19,6 +19,24 @@ describe('STE gate', () => {
   it('every surface with copy has a floor row, and every row still has copy', () => {
     const present = [...measured.values()].filter((surface) => surface.sentences > 0).map((surface) => surface.id)
     expect(Object.keys(STE_FLOORS).sort(), 'a new surface gets a row at its measured score - 2, in its owner group of test/ste-floors.ts (npm run ste)').toEqual(present.sort())
+  })
+
+  it(`holds the target on every row: a floor of ${STE_TARGET} or more and 0 banned tokens, unless the row is named below target with its reason`, () => {
+    expect(STE_TARGET).toBe(80)
+    const missed: string[] = []
+    for (const [id, row] of Object.entries(STE_FLOORS)) {
+      if (BELOW_TARGET[id] !== undefined) continue
+      if (row.floor < STE_TARGET) missed.push(`${id}: floor ${row.floor}`)
+      for (const key of BANNED) if (row[key] !== 0) missed.push(`${id}: ${key} ${row[key]}`)
+    }
+    expect(missed, 'raise the copy to the target, or name the row in BELOW_TARGET with its measured score and the literals that hold it down').toEqual([])
+    // a named row is a real row that is really below target, and its reason says why
+    for (const [id, reason] of Object.entries(BELOW_TARGET)) {
+      const row = STE_FLOORS[id]
+      expect(row, `${id} is a row`).toBeDefined()
+      expect(row!.floor < STE_TARGET || BANNED.some((key) => row![key] > 0), `${id} is below target`).toBe(true)
+      expect(reason, `${id} names its reason`).toMatch(/\w{4,}.*\w{4,}/)
+    }
   })
 
   it('a floor is a score and a ceiling is a count', () => {

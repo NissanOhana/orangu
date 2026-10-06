@@ -14,6 +14,19 @@ export interface SteRow {
 
 export const BANNED = ['emDash', 'eg', 'ie', 'etc', 'contractions'] as const
 
+/**
+ * The target that test/ste.test.ts holds every row to: a floor of 80 or more and 0 of each banned token.
+ * Asserted since the 2026-10-07 close-out, when every row reached it.
+ */
+export const STE_TARGET = 80
+
+/**
+ * A row that cannot reach the target without changing a pinned or stored literal: its id, then its measured
+ * score and the literals that hold it down. A named row keeps its floor, and its floor still only rises.
+ * Empty at the 2026-10-07 close-out: every row reached the target. Add a row here only with that evidence.
+ */
+export const BELOW_TARGET: Readonly<Record<string, string>> = {}
+
 // Floors and ceilings, not targets: each row is the value MEASURED on the day it landed. A floor may only
 // rise and a banned ceiling may only fall; either change needs nothing. Lowering a floor or raising a
 // ceiling is allowed only in the same commit that measures a deliberate, named reason, with the measured
@@ -26,8 +39,10 @@ export const BANNED = ['emDash', 'eg', 'ie', 'etc', 'contractions'] as const
 // text that it deleted: a TS literal with "<" in prose is now read as text, not stripped as a tag
 // (src/analyze/insights.ts:1582). The three rows that loosened name their measured cause above the row.
 // A chunk that rewrites a surface raises its own rows in its regenerate commit: to max(80, measured - 2)
-// when the score reaches 80, else to measured - 2. The close-out target is a floor of 80 or more and 0
-// banned tokens on every row.
+// when the score reaches 80, else to measured - 2.
+// Close-out, 2026-10-07: every row is at the target (STE_TARGET), and test/ste.test.ts now asserts it. A new
+// row is born at max(80, measured - 2) with the measured banned counts, which must be 0. A surface that
+// cannot get there is named in BELOW_TARGET with its reason; no row is named today.
 // One group per owning chunk, one comment line between groups; a row never moves between groups.
 export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // S1: README, the landing, 404 and llms sources, the npm description, the sample page copy
