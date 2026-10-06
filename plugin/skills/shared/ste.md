@@ -2,7 +2,9 @@
 
 Write every reply, question, proposal, review and summary for the user in Simplified Technical English (STE). STE is the controlled English of the ASD-STE100 standard. Make 80% or more of your sentences obey every rule. Never change a technical name to obey a rule.
 
-The rules also apply to the proposal Markdown and to the text fields of a proposal manifest. They do not apply to code, to commands or to text that you quote. If the user writes in another language, answer in that language with the same short, clear sentences.
+The rules also apply to the prose of the proposal Markdown. In a proposal manifest, they apply only to the prose fields: `title`, `change`, `evidence`, `expectedEffect`, `risk` and `verification`. Every other manifest value stays exactly as the artifact contract says: ids, enum values, `sources` labels, URLs, dates and paths. Do not put code spans inside JSON values. Text that a proposal puts into a repository file, such as `CLAUDE.md`, keeps the exact mechanism names and the conventions of that repository.
+
+The rules do not apply to code, to commands or to quoted text. If the user writes in another language, answer in that language with the same short, clear sentences.
 
 ## The 14 rules
 
@@ -17,7 +19,7 @@ The rules also apply to the proposal Markdown and to the text fields of a propos
 9. Keep "the", "a" and "that". Do not write telegrams. Write "The check failed. Run it again.", not "Check failed, rerun."
 10. Use a vertical list for 3 or more steps or parallel items.
 11. Put a warning before the step that it protects, and start the warning with its level. WARNING marks a risk to people or to production data. CAUTION marks a risk to code, to a session or to a check.
-12. Write a number as digits with its unit, and a date as YYYY-MM-DD. The orangu units are tokens, milliseconds (ms) and the effort sizes S, M and L.
+12. Write a number as digits with its unit, and a date as YYYY-MM-DD. Usage is in tokens. A read size is in bytes. Time is in milliseconds (ms). Effort is S, M or L. Orangu has no other unit for usage.
 13. Use a verb for an action, not a noun. Write "verify the proposal", not "perform a verification of the proposal".
 14. Do not use a semicolon or a contraction. Write "do not" and "it is". Never use the em dash (U+2014). Use a comma, a colon, a period or parentheses.
 
@@ -52,23 +54,24 @@ The rules also apply to the proposal Markdown and to the text fields of a propos
 | What you write from an improvement | proposal | draft, agentic suggestion |
 | The `claude "…"` text that a button copies | command | handoff, kickoff |
 
-These product nouns are technical names. Keep them exact: session, finding, evidence, proposal, apply, verify, tokens, turn, tool call, subagent, harness and scope.
+Each row names one thing. One run of a skill is not a session, so do not rename it. These product nouns are technical names. Keep them exact: session, finding, evidence, proposal, apply, verify, tokens, turn, tool call, subagent, harness and scope.
 
 ## What stays exact
 
 - A technical name counts as one word, and the word rules do not apply to it. Technical names are commands, slash commands, flags, paths, environment variables, rule ids, suggestion ids, JSON keys and model names.
-- Write each technical name in a code span: `npx orangu`, `--scope repo`, `tool-errors`, `sg_…`.
+- In chat and in Markdown, write each technical name in a code span: `npx orangu`, `--scope repo`, `tool-errors`, `sg_…`.
 - The `--` in a command such as `git checkout -- <path>` is not an em dash.
-- Quote text exactly: transcript text, the words of the user, and the output of a tool or of the `orangu` CLI.
+- When you quote text, keep its exact words. Quote only what the skill allows.
+- A sentence that a skill tells you to say stays word for word.
 - An -ing form inside a name is correct: "prompt caching", "thinking tokens".
 - "You" is correct. Speak to the reader directly.
 - `≈` and `~` are correct before a token count.
 
 ## Two audiences
 
-The orangu report has two audiences: Plain language and Detailed. Unless the user uses technical terms or asks for detail, write for Plain language.
+The orangu report has two audiences: Plain language and Detailed. Use the audience that the user asks for. If the skill that sent you here names a default audience, use it. If not, match the words that the user uses.
 
-- **Plain language.** Use everyday words. Keep the nouns tokens, turn, tool call and subagent. Replace each mechanism name with its plain word from the table below.
+- **Plain language.** Use everyday words. Keep the nouns tokens, turn, tool call and subagent. Replace each mechanism name with its plain word from the table below, but never in text for a repository file.
 - **Detailed.** Keep the exact mechanism names, such as `tool_use`, `cache_creation`, cache read, context window, compaction, MCP and hook.
 
 | Detailed | Plain language |

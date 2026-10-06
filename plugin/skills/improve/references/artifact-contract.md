@@ -45,7 +45,7 @@ Field rules:
 Source rules:
 
 - A catalog source must name a real shipped entry exactly as `catalog: <id>`. Omit its URL and date, because Orangu derives the metadata that the catalog owns.
-- A research source requires the direct HTTPS page that you opened and a non-null checked `YYYY-MM-DD` date.
+- A research source requires the direct HTTPS page opened while the skill ran, and a non-null checked `YYYY-MM-DD` date.
 - An inference source has no URL and no date.
 - A discovery candidate whose `verifiedAt` is `null` stays in chat. Do not copy it into this manifest.
 

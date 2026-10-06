@@ -1,6 +1,6 @@
 ---
 name: improve
-description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Use when the user runs /orangu:improve or pastes a suggestion id from a report. Also use when the user asks how to make the next session better, or asks to verify an applied change against later sessions. Never edits the target repository. Not for applying a proposal: /orangu:apply. Not for a repo or global harness review: /orangu:harness.
+description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk and a verification check. Use when the user runs /orangu:improve or pastes a suggestion id from a report. Also use when the user asks what to change so the next run or session goes better, or wants an applied change verified. Never edits the target repository. Not for applying a proposal: /orangu:apply. Not for a repo or global harness review: /orangu:harness.
 allowed-tools: Bash(orangu:*), Bash(node *orangu.cli.mjs*), Read, Write(~/.orangu/proposals/**), WebSearch, WebFetch
 ---
 
@@ -23,7 +23,7 @@ Accept exactly one input:
 
 Never open or parse a `.jsonl` transcript yourself. Pass it to `orangu evidence`. If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs"` with the same arguments. If neither works, report the blocker and stop.
 
-Diagnose any accepted input in chat. Save only inside the lifecycle of its scope:
+Diagnose any input in chat. Save only inside its scope's lifecycle:
 
 - `session`: propose, apply explicitly, then verify against later sessions from the same canonical workspace.
 - `repo`: propose, apply explicitly, then verify the same way.
@@ -56,7 +56,7 @@ Before any online query or URL, reduce the question to generic feature and chang
 Record provenance honestly:
 
 - A catalog match is `kind: "catalog"` with label `catalog: <id>`.
-- A page you opened in this session is `kind: "research"` with its direct HTTPS URL and today's `verifiedAt` date.
+- A page that you opened while you ran this skill is `kind: "research"` with its direct HTTPS URL and today's `verifiedAt` date.
 - Your own synthesis is `kind: "inference"` with no invented URL or date.
 
 ## 4. Save one bounded proposal
