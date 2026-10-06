@@ -588,6 +588,19 @@ export interface SurfaceMeasure extends SteResult {
   source: string
 }
 
+/**
+ * Why a surface fails its row, empty when it passes: the score under its floor, a banned token over its
+ * ceiling, or more findings than its findings ceiling. test/ste.test.ts and the "!" marks of `npm run ste`
+ * both use it, so the table and the gate agree.
+ */
+export function rowFailures(surface: Pick<SteResult, 'score' | 'banned' | 'findings'>, row: SteRow): string[] {
+  const out: string[] = []
+  if (surface.score < row.floor) out.push(`score ${surface.score} is under its floor ${row.floor}`)
+  for (const key of BANNED_KEYS) if (surface.banned[key] > row[key]) out.push(`${key} ${surface.banned[key]} is over its ceiling ${row[key]}`)
+  if (surface.findings.length > row.findings) out.push(`${surface.findings.length} findings is over its findings ceiling ${row.findings}`)
+  return out
+}
+
 /** Measure every surface. A surface with no sentence is still listed; the gate treats it as absent. */
 export function measureAll(root = ROOT): SurfaceMeasure[] {
   const read = reader(root)
@@ -610,16 +623,18 @@ function topFindings(surface: SurfaceMeasure): string {
 
 function table(measures: readonly SurfaceMeasure[], floors: Readonly<Record<string, SteRow>>): string[] {
   const width = Math.max(...measures.map((surface) => surface.id.length))
-  const head = ['surface'.padEnd(width), 'owner ', 'sentences', 'score', 'floor', ...BANNED_LABELS, 'top findings'].join('  ')
+  const head = ['surface'.padEnd(width), 'owner ', 'sentences', 'score', 'floor', ...BANNED_LABELS, 'findings', 'top findings'].join('  ')
   const rows = measures.map((surface) => {
     const row = floors[surface.id]
     const floor = row ? `${row.floor}${surface.score < row.floor ? '!' : ''}` : surface.sentences ? 'none!' : '-'
     const banned = BANNED_KEYS.map((key, index) => `${surface.banned[key]}${row && surface.banned[key] > row[key] ? '!' : ''}`.padStart(BANNED_LABELS[index]!.length))
-    return [surface.id.padEnd(width), surface.owner.padEnd(6), String(surface.sentences).padStart(9), String(surface.score).padStart(5), floor.padStart(5), ...banned, topFindings(surface)].join('  ').trimEnd()
+    const findings = `${surface.findings.length}/${row ? row.findings : '-'}${row && surface.findings.length > row.findings ? '!' : ''}`.padStart(8)
+    return [surface.id.padEnd(width), surface.owner.padEnd(6), String(surface.sentences).padStart(9), String(surface.score).padStart(5), floor.padStart(5), ...banned, findings, topFindings(surface)].join('  ').trimEnd()
   })
   return [
-    'STE score by surface: the percent of sentences with no finding. The floor and the banned-token ceilings',
-    'come from test/ste-floors.ts. "!" marks a row that fails the gate. Details: npm run ste -- <surface>',
+    'STE score by surface: the percent of sentences with no finding. The floor, the banned-token ceilings and the',
+    'findings ceiling (findings: measured/ceiling) come from test/ste-floors.ts. "!" marks a row that fails the',
+    'gate. Details: npm run ste -- <surface>',
     '',
     head,
     ...rows,

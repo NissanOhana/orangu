@@ -7,7 +7,7 @@ import ts from 'typescript'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, helpText, listFiles, measureAll, surfaces, tsBlocks, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
+import { DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, fragmentResult, helpText, listFiles, measureAll, rowFailures, surfaces, tsBlocks, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
 import { BANNED, BELOW_TARGET, STE_FLOORS, STE_TARGET } from './ste-floors.js'
 
 let measured = new Map<string, SurfaceMeasure>()
@@ -43,19 +43,30 @@ describe('STE gate', () => {
     for (const [id, row] of Object.entries(STE_FLOORS)) {
       expect(Number.isInteger(row.floor) && row.floor >= 0 && row.floor <= 100, `${id} floor`).toBe(true)
       for (const key of BANNED) expect(Number.isInteger(row[key]) && row[key] >= 0, `${id} ${key}`).toBe(true)
+      expect(Number.isInteger(row.findings) && row.findings >= 0, `${id} findings`).toBe(true)
     }
   })
 
   for (const [id, row] of Object.entries(STE_FLOORS)) {
-    it(`${id} holds its floor (${row.floor}) and its banned-token ceilings`, () => {
+    it(`${id} holds its floor (${row.floor}), its banned-token ceilings and its findings ceiling (${row.findings})`, () => {
       const surface = measured.get(id)
       expect(surface, `${id} is not a gated surface`).toBeDefined()
-      expect(surface!.score, `${id}: the STE score fell below its floor. Run: npm run ste -- ${id}`).toBeGreaterThanOrEqual(row.floor)
-      for (const key of BANNED) {
-        expect(surface!.banned[key], `${id}: more ${key} than its ceiling. Run: npm run ste -- ${id}`).toBeLessThanOrEqual(row[key])
-      }
+      expect(rowFailures(surface!, row), `${id}. Run: npm run ste -- ${id}`).toEqual([])
     })
   }
+
+  it('fails one bad sentence in a large surface: the findings ceiling, not only the score floor', () => {
+    // The probe from the close-out QA: one 33-word sentence with "prior to" added to the report client. The
+    // score floor alone cannot see it there (330 sentences, 329 clean, score 100, floor 98).
+    const id = 'src/report/client'
+    const blocks = tsFiles(ROOT, [id]).flatMap((file) => tsBlocks(readFileSync(join(ROOT, file), 'utf8'), file))
+    const probe = 'Paste the command in a terminal prior to the review, and then wait while Claude Code reads the evidence, writes the proposal, checks every file it names and saves it under your home folder.'
+    const result = fragmentResult([...blocks, { file: 'src/report/client/screens/suggest.ts', line: 1, text: probe }])
+    const row = STE_FLOORS[id]!
+    expect(result.findings.map((f) => f.rule).sort()).toEqual([...measured.get(id)!.findings.map((f) => f.rule), 'sentence-length', 'ste-word'].sort())
+    expect(result.score, 'the hole: the score floor alone still passes').toBeGreaterThanOrEqual(row.floor)
+    expect(rowFailures(result, row).join(' '), 'the findings ceiling fails it').toMatch(/findings/)
+  })
 
   it('reads the help from the tracked plugin bin, so the gate needs no dist/', () => {
     expect(HELP_BIN).toBe('plugin/bin/orangu.cli.mjs')
