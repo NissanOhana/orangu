@@ -22,7 +22,9 @@ export const BANNED = ['emDash', 'eg', 'ie', 'etc', 'contractions'] as const
 // Born 2026-10-06 on main e09728a, before any copy rewrite: each floor is the measured score minus 2
 // points of headroom (never under 0), and each ceiling is the measured count. Born again the same day,
 // before the first merge, when review found copy the extraction missed (table cells, headings and labels
-// for banned tokens, HTML attributes, meta tags and inline scripts, every src/ folder and user doc).
+// for banned tokens, HTML attributes, meta tags and inline scripts, every src/ folder and user doc), and
+// text that it deleted: a TS literal with "<" in prose is now read as text, not stripped as a tag
+// (src/analyze/insights.ts:1582). The three rows that loosened name their measured cause above the row.
 // A chunk that rewrites a surface raises its own rows in its regenerate commit: to max(80, measured - 2)
 // when the score reaches 80, else to measured - 2. The close-out target is a floor of 80 or more and 0
 // banned tokens on every row.
@@ -58,6 +60,8 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/README.md': { floor: 63, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'plugin/skills/analyze/SKILL.md': { floor: 71, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'plugin/skills/analyze/references/json-shape.md': { floor: 84, emDash: 0, eg: 1, ie: 0, etc: 0, contractions: 0 },
+  // re-born 71 -> 66 and contractions 0 -> 1: table cells are now scored. Measured 75 sentences, 51 clean,
+  // score 68 (was 37 sentences, score 73). The cell at :25 holds "can't", and the cells carry 14 semicolons.
   'plugin/skills/analyze/references/reading-the-report.md': { floor: 66, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 1 },
   'plugin/skills/harness/SKILL.md': { floor: 57, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'plugin/skills/harness/references/research-sources.md': { floor: 85, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
@@ -83,10 +87,15 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'src/analyze/insights.ts#title': { floor: 91, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'src/analyze/insights.ts#detail': { floor: 58, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'src/analyze/insights.ts#recommendation': { floor: 64, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // re-born 86 -> 79 and e.g. 0 -> 1. Measured 16 sentences, 13 clean, score 81 (was 14 clean, score 88).
+  // insights.ts:1582 is now read as text: it has a semicolon and 26 words. The label `e.g. ${title}` at
+  // aggregate.ts:119 now counts its e.g.
   'src/analyze': { floor: 79, emDash: 0, eg: 1, ie: 0, etc: 0, contractions: 0 },
   // B1, B2: the golden emitted copy
   'test/golden#insight.title': { floor: 90, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'test/golden#insight.detail': { floor: 42, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'test/golden#insight.recommendation': { floor: 66, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // re-born e.g. 10 -> 11: a label now counts its banned tokens. Measured 11 titles, each with "e.g.". The
+  // 11th, "e.g. 1 hook error", has 2 words, and the old extraction dropped it as a fragment.
   'test/golden#crossFinding.title': { floor: 0, emDash: 0, eg: 11, ie: 0, etc: 0, contractions: 0 },
 }
