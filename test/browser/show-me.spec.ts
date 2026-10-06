@@ -109,9 +109,12 @@ test('the written report opens in its theme and links back to the slides', async
   await page.goto(`${BASE}/report.html${theme === 'dark' ? '#theme=dark' : ''}`)
   expect(await paintedTheme(page)).toBe(theme)
   await expect(page.getByRole('heading', { level: 1 })).toContainText('EXAMPLE')
-  await expect(page.getByRole('link', { name: 'Open the slides →' })).toHaveAttribute('href', 'slides.html')
+  const back = page.getByRole('link', { name: 'Open the slides →' })
+  await expect(back).toHaveAttribute('href', theme === 'dark' ? 'slides.html#theme=dark' : 'slides.html')
   await page.getByRole('button', { name: `◐ theme · ${theme}` }).click()
   expect(await paintedTheme(page)).toBe(theme === 'dark' ? 'light' : 'dark')
+  // the link follows the theme toggle, so the slides open in the theme the reader chose
+  await expect(back).toHaveAttribute('href', theme === 'dark' ? 'slides.html' : 'slides.html#theme=dark')
   if (info.project.name.startsWith('narrow')) await noHorizontalOverflow(page)
   expect(errors).toEqual([])
 })
