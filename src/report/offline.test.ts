@@ -119,6 +119,13 @@ describe('offline report', () => {
     // dash, and nav.ts counts an embedded global aggregate in any file (+2 B, shared with CLIENT_JS).
     // Named here rather than raised quietly; from here it may only go DOWN.
     expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(83_136)
+    // 2026-10-06 proposals seam: -3,301 B (83,123 -> 79,822), and this bundle gets the exact pin the
+    // session bundle has always had, so a change that moves it has to name the bytes. The stored
+    // proposal block and the Saved proposals inbox (proposals-ui.ts) reach the Suggest screen only
+    // through the optional ServeUi.proposals seam, which only serve-ui.ts provides: a file report
+    // embeds `suggestions: []`, so this bundle never rendered them. The cap above is left as it was;
+    // the run that spends this room lowers it once its own growth is measured.
+    expect(CLIENT_JS_AGG.length).toBe(79822)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -195,6 +202,11 @@ describe('offline report', () => {
     // either version (a noise-checked cohort receipt is v2) instead of only v1, and both footers say
     // "later sessions" now that one session cannot verify anything. A distinct chip label for the older
     // comparison was costed at about +200 B, over the cap, and left out: the receipt summary names the method.
-    expect(CLIENT_JS.length).toBe(73702)
+    // 2026-10-06 proposals seam: -3,302 B (73,702 -> 70,400), re-measured after `npm run build`. The
+    // stored proposal block and the Saved proposals inbox left this bundle for proposals-ui.ts, which
+    // reaches the Suggest screen only through the optional Ctx.proposals seam (the Ctx.megaReview
+    // pattern); only serve-ui.ts provides it, because a file report embeds `suggestions: []` and never
+    // rendered either block. The cap is unchanged; the run that spends this room lowers it.
+    expect(CLIENT_JS.length).toBe(70400)
   })
 })
