@@ -358,6 +358,29 @@ test('the Overview top card leads to the 3 steps on screen and keeps the theme a
   expect(errors).toEqual([])
 })
 
+// The other half of the rule above: a render of the same screen (a live tick, an audience switch) keeps
+// the reader's place, and only a new screen opens at its top.
+test('a re-render of the same screen keeps the scroll position, and a new screen opens at its top', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('wide'), '.main is the scroller only in the wide layout')
+  const errors = runtimeErrors(page)
+  // short enough that both screens scroll in the wide layout
+  await page.setViewportSize({ width: 1440, height: 600 })
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  await page.locator('main.main').evaluate((m) => { m.scrollTop = 160 })
+  const before = await page.locator('main.main').evaluate((m) => m.scrollTop)
+  expect(before).toBeGreaterThan(0)
+  await page.evaluate(() => { location.hash += '&audience=plain' })
+  await expect(page.getByRole('button', { name: 'Plain language' })).toHaveAttribute('aria-pressed', 'true')
+  expect(await page.locator('main.main').evaluate((m) => m.scrollTop)).toBe(before)
+  await page.evaluate(() => { location.hash = location.hash.replace('#suggest', '#overview') })
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+  // the screen is tall enough to have kept the old offset, so 0 is the reset and not a clamp
+  expect(await page.locator('main.main').evaluate((m) => m.scrollHeight - m.clientHeight)).toBeGreaterThan(before)
+  expect(await page.locator('main.main').evaluate((m) => m.scrollTop)).toBe(0)
+  expect(errors).toEqual([])
+})
+
 test('an example session link on a repo improvement keeps the theme and the audience', async ({ page }, info) => {
   const errors = runtimeErrors(page)
   await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}&scope=repo&audience=plain`, info), { waitUntil: 'domcontentloaded' })
