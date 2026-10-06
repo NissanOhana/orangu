@@ -1168,13 +1168,13 @@ async function resolveNamed(id, opts, via) {
   const ref = await resolveSession(id, opts);
   if (ref) return { ref, via };
   throw new Error(
-    `current: session ${id.slice(0, 8)} has no transcript yet (Claude Code writes it asynchronously); try again in a moment, or ${ALTERNATIVES}`
+    `current: session ${id.slice(0, 8)} has no transcript yet. Claude Code writes it asynchronously. Try again in a moment, or ${ALTERNATIVES}.`
   );
 }
 async function resolveCurrentSession(opts, env = process.env, deps = {}) {
   const envId = env["CLAUDE_CODE_SESSION_ID"]?.trim();
   if (envId) {
-    if (!SESSION_ID_RE.test(envId)) throw new Error(`current: CLAUDE_CODE_SESSION_ID is not a session id; ${ALTERNATIVES}`);
+    if (!SESSION_ID_RE.test(envId)) throw new Error(`current: CLAUDE_CODE_SESSION_ID is not a session id. Instead, ${ALTERNATIVES}.`);
     return resolveNamed(envId, opts, "env");
   }
   const pid = Number(env["CLAUDE_PID"]);
@@ -1187,10 +1187,10 @@ async function resolveCurrentSession(opts, env = process.env, deps = {}) {
   if (env["CLAUDECODE"]) {
     const cwd = env["CLAUDE_PROJECT_DIR"]?.trim() || (deps.cwd ?? (() => process.cwd()))();
     const ref = await findLatestSession({ ...opts, cwd });
-    if (!ref) throw new Error(`current: no session for ${cwd} yet; ${ALTERNATIVES}`);
+    if (!ref) throw new Error(`current: orangu found no session for ${cwd} yet. Instead, ${ALTERNATIVES}.`);
     return { ref, via: "cwd", note: `current: guessed ${ref.sessionId.slice(0, 8)} from cwd (no session id in the environment)` };
   }
-  throw new Error(`current: not inside a Claude Code session; ${ALTERNATIVES}`);
+  throw new Error(`current: orangu is not inside a Claude Code session. Instead, ${ALTERNATIVES}.`);
 }
 
 // src/model/session.ts
@@ -2595,14 +2595,14 @@ function isTransientInputChange(error) {
 }
 var STABLE_READ_ATTEMPTS = 3;
 var STABLE_READ_BACKOFF_MS = [20, 80];
-var STILL_WRITING_HINT = "the session is still being written; re-run, or use `orangu watch` to follow it live";
+var STILL_WRITING_HINT = "The session is still open, and its transcript grows. Run the command again, or use `orangu watch` to follow it live.";
 async function withStableSessionRead(path, options, read) {
   for (let attempt = 1; ; attempt++) {
     try {
       return await read(await prevalidateEvidenceSession(path, options));
     } catch (error) {
       if (!isTransientInputChange(error)) throw error;
-      if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}; ${STILL_WRITING_HINT}`);
+      if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
       await new Promise((resolve12) => setTimeout(resolve12, pause));
     }
@@ -7585,9 +7585,9 @@ function sizeLabel(bytes) {
 function buildNotes(inv, x, r, sessionsScanned, sessionsUnreadable, unsplitAnalyses) {
   const notes = [];
   const declaredNothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
-  if (declaredNothing) notes.push("no harness config found under the scanned roots. Nothing to cross-reference");
+  if (declaredNothing) notes.push("orangu found no harness config under the scanned roots. It found nothing to compare");
   if (!inv.usageCounters) {
-    notes.push("~/.claude.json was not read, so client-side usage counters are omitted; declared vs used is classified from session evidence only");
+    notes.push("orangu did not read ~/.claude.json, so the report omits the client-side usage counters. orangu classifies declared vs used from session evidence only");
   }
   if (inv.unreadable.length > 0) {
     notes.push(`${plural(inv.unreadable.length, "configured path")} could not be read. See inventory.unreadable for the reason of each`);
@@ -7601,7 +7601,7 @@ function buildNotes(inv, x, r, sessionsScanned, sessionsUnreadable, unsplitAnaly
   if (unsplitAnalyses > 0) {
     const one = unsplitAnalyses === 1;
     notes.push(
-      `${unsplitAnalyses} ${one ? "session was" : "sessions were"} read from a cache written by an older orangu that did not separate the main transcript from its subagent files, so ${one ? "it is" : "they are"} left out of the injected listings. Re-run with --no-cache to rebuild ${one ? "it" : "them"}`
+      `${unsplitAnalyses} ${one ? "session was" : "sessions were"} read from a cache written by an older orangu. That version did not separate the main transcript from its subagent files, so the injected listings leave ${one ? "it" : "them"} out. Re-run with --no-cache to rebuild ${one ? "it" : "them"}`
     );
   }
   if (sessionsScanned > 0 && x.models.configured && !x.models.matchesConfigured) {
@@ -7612,12 +7612,12 @@ function buildNotes(inv, x, r, sessionsScanned, sessionsUnreadable, unsplitAnaly
   }
   const managedRead = inv.settings.some((s) => s.scope === "managed");
   if (inv.settings.some((s) => s.scope === "managed" && s.allowManagedHooksOnly)) {
-    notes.push("managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run; only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used");
+    notes.push("managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run. Only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used");
   }
   const undeclared = x.counts.skills.undeclared + x.counts.mcpServers.undeclared + x.counts.agents.undeclared + x.counts.hooks.undeclared;
   if (undeclared > 0) {
-    notes.push(`${plural(undeclared, "row")} marked undeclared: observed in sessions but not found in the config that was read (a source outside this scope, or drift)`);
-    if (!managedRead) notes.push("managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console; orangu reads only the managed files on disk, so a policy delivered that way is not in this inventory");
+    notes.push(`${undeclared === 1 ? "1 row is" : `${undeclared} rows are`} marked undeclared. The sessions used ${undeclared === 1 ? "it" : "them"}, but the config that orangu read does not declare ${undeclared === 1 ? "it" : "them"}. The cause is a source outside this scope, or drift`);
+    if (!managedRead) notes.push("managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console. This inventory does not include a policy that arrives that way, because orangu reads only the managed files on disk");
   }
   if (r.expiringSoon.sessions > 0) {
     const one = r.expiringSoon.sessions === 1;
@@ -7933,7 +7933,7 @@ function nextStepLines(caps, step) {
   const lines = [row(caps, "finding", step.finding, { style: "bold" })];
   if (step.storeNote) {
     const head = "unavailable: ";
-    const tail = "; long form follows";
+    const tail = " (full command below)";
     const reason = truncate(step.storeNote, valueBudget(caps) - head.length - tail.length, caps);
     lines.push(row(caps, "store", head + reason + tail, { style: "warn", raw: true }));
   }
@@ -7999,10 +7999,10 @@ function analysisBlock(caps, a, title) {
   lines.push(row(caps, "context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""}${sep3}${plural(s.compactions, "compaction")}`));
   lines.push("", paint(caps, "bold", INDENT + "findings"));
   const bad = a.parse.badLines;
-  if (!a.insights.length) lines.push(bad ? paint(caps, "warn", `    no findings; ${plural(bad, "unparseable line")} skipped`) : paint(caps, "good", "    clean: no findings"));
+  if (!a.insights.length) lines.push(bad ? paint(caps, "warn", `    no findings, but orangu skipped ${plural(bad, "unparseable line")}`) : paint(caps, "good", "    clean: no findings"));
   for (const ins of a.insights.slice(0, 6)) lines.push(findingRow(caps, ins));
   lines.push("", paint(caps, "dim", fit(caps, `${INDENT}run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report`)));
-  if (bad && a.insights.length) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: ${plural(bad, "unparseable line")} skipped`)));
+  if (bad && a.insights.length) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: orangu skipped ${plural(bad, "unparseable line")}`)));
   if (!a.parse.reconciliation.ok) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%`)));
   return lines;
 }
@@ -8026,7 +8026,7 @@ function listRows(caps, refs, o) {
     const project = truncate(basename6(s.projectSlug), Math.max(8, w - displayWidth(lead)), caps);
     lines.push(`${INDENT}${paint(caps, "accent", s.sessionId.slice(0, 8))}  ${paint(caps, "dim", when)}  ${size}  ${paint(caps, "dim", agents)}  ${project}`);
   }
-  if (!o.total) lines.push(paint(caps, "dim", fit(caps, `${INDENT}No sessions found. Is Claude Code installed?`)), paint(caps, "dim", fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)));
+  if (!o.total) lines.push(paint(caps, "dim", fit(caps, `${INDENT}orangu found no sessions. Is Claude Code installed?`)), paint(caps, "dim", fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)));
   else {
     const sep3 = glyphs(caps).sep;
     lines.push("");
@@ -8119,7 +8119,7 @@ var CHANGE_CLASS_DEFINITIONS = [
   { id: "skill-create", label: "Skills to create", description: "Reusable knowledge and workflows specific to this setup." },
   { id: "skill-discover", label: "Skills to discover", description: "Existing capabilities to evaluate before installing." },
   { id: "subagent-agent", label: "Subagents and agents", description: "Isolated or specialized work with clear ownership." },
-  { id: "mcp", label: "MCP servers", description: "External tools and data the work actually needs." },
+  { id: "mcp", label: "MCP servers", description: "External tools and data that the work needs." },
   { id: "plugin", label: "Plugins", description: "A reusable package of related extensions." },
   { id: "workflow-config", label: "Workflow and configuration", description: "How work is sequenced, checked, and repeated." }
 ];
@@ -8173,7 +8173,7 @@ var catalog_default2 = {
       tool: "pdftotext / pdfplumber",
       url: null,
       verifiedAt: "2026-08-23",
-      note: "Extract PDF text with a CLI before it enters context: pdftotext for plain text, pdfplumber when tables matter (one default, not a menu, per the public docs)."
+      note: "Extract PDF text with a CLI before it enters context. Use pdftotext for plain text, and pdfplumber when tables matter. This follows the public docs: one default, not a menu."
     },
     {
       id: "cli-jq",
@@ -8182,7 +8182,7 @@ var catalog_default2 = {
       tool: "jq",
       url: null,
       verifiedAt: "2026-08-23",
-      note: "Slice large JSON at the source (jq '.field', jq -r) instead of reading the whole file into context; same pipe-through guidance as the public docs (head/grep/jq)."
+      note: "Slice large JSON at the source (jq '.field', jq -r). Do not read the whole file into context. The public docs give the same pipe-through guidance (head, grep, jq)."
     },
     {
       id: "cli-ripgrep",
@@ -8191,7 +8191,7 @@ var catalog_default2 = {
       tool: "ripgrep (rg)",
       url: null,
       verifiedAt: "2026-08-23",
-      note: "Repeated grep/find loops over a tree are what ripgrep is for: it is fast, gitignore-aware, and produces bounded text evidence that a later proposal can verify."
+      note: "ripgrep is the tool for repeated grep or find loops over a tree. It is fast and gitignore-aware, and it produces bounded text evidence that a later proposal can verify."
     },
     {
       id: "cli-ast-grep",
@@ -8209,7 +8209,7 @@ var catalog_default2 = {
       tool: "in-repo extraction script",
       url: null,
       verifiedAt: "2026-08-23",
-      note: "Spreadsheet content should never be pasted into context: commit a small script that extracts the needed sheet/cells once and re-run it, so the session reads a short text result."
+      note: "Never paste spreadsheet content into context. Commit a small script that extracts the needed sheet or cells once, and run it again when needed. Then the session reads a short text result."
     },
     {
       id: "cache-tools-changed",
@@ -8218,7 +8218,7 @@ var catalog_default2 = {
       feature: "stable tool prefix (MCP pruning / deferred tools)",
       url: "https://code.claude.com/docs/en/prompt-caching.md",
       verifiedAt: "2026-08-23",
-      note: "cache_miss_reason tools_changed: the tool-definition block heads the cached prefix, so an MCP server connecting, reconnecting, or loading tools mid-session re-writes the whole context into the cache instead of reading it back. Load MCP servers at session start and prune churn-prone ones; deferred MCP tools (the default) do not disturb the cached prefix."
+      note: "cache_miss_reason tools_changed: the tool-definition block is the start of the cached prefix. When an MCP server connects, reconnects or loads tools mid-session, the next request writes the whole context into the cache again. It does not read it back. Load MCP servers at session start, and remove the ones that churn. Deferred MCP tools (the default) do not disturb the cached prefix."
     },
     {
       id: "cache-system-changed",
@@ -8254,7 +8254,7 @@ var catalog_default2 = {
       tool: "committed script",
       url: "https://code.claude.com/docs/en/skills.md",
       verifiedAt: "2026-08-23",
-      note: "A deterministic command sequence re-typed 4+ times belongs in a committed script (repo scripts/ or a skill's bundled script; bundled scripts execute without ever entering context, per the public docs). One script call replaces the whole repeated block."
+      note: "A deterministic command sequence that you type 4 or more times belongs in a committed script. Use repo scripts/ or a bundled script of a skill. Per the public docs, bundled scripts run without ever entering context. One script call replaces the whole repeated block."
     },
     {
       id: "parallel-sequential-reads",
@@ -8263,7 +8263,7 @@ var catalog_default2 = {
       feature: "parallel tool calls / subagent fan-out",
       url: "https://code.claude.com/docs/en/agents.md",
       verifiedAt: "2026-08-23",
-      note: "Independent reads and searches can be issued as one parallel batch in a single message, or fanned out to subagents whose contexts are discarded; serial single-call turns pay a full model round-trip each."
+      note: "You can send independent reads and searches as one parallel batch in a single message. You can also fan them out to subagents, whose contexts are discarded. Each serial turn with a single call takes a full model round-trip."
     },
     {
       id: "trim-preamble",
@@ -8272,7 +8272,7 @@ var catalog_default2 = {
       feature: "CLAUDE.md trim",
       url: "https://code.claude.com/docs/en/memory.md",
       verifiedAt: "2026-08-23",
-      note: "The baseline preamble (system prompt + tool definitions + CLAUDE.md + memory) is re-sent with every request for the whole session. Trim sections that never change an outcome; move rarely-needed procedure into skills that load on demand."
+      note: "The baseline preamble (system prompt + tool definitions + CLAUDE.md + memory) is re-sent with every request for the whole session. Trim sections that never change an outcome. Move procedure that you rarely need into skills that load on demand."
     },
     {
       id: "prune-mcp-servers",
@@ -8281,7 +8281,7 @@ var catalog_default2 = {
       feature: "MCP server pruning",
       url: "https://code.claude.com/docs/en/mcp.md",
       verifiedAt: "2026-08-23",
-      note: "MCP servers whose tools are listed but never called still add their definition tokens to every main-thread request. Remove or scope idle servers; deferred tools stay out of the cached prefix until fetched."
+      note: "MCP servers whose tools are listed but never called still add their definition tokens to every main-thread request. Remove or scope idle servers. Deferred tools stay out of the cached prefix until they are fetched."
     },
     {
       id: "cache-warm-cadence",
@@ -8290,7 +8290,7 @@ var catalog_default2 = {
       feature: "prompt-cache TTL awareness (the cache cliff)",
       url: "https://code.claude.com/docs/en/prompt-caching.md",
       verifiedAt: "2026-08-23",
-      note: "After a long idle gap, a large resumed context can require a fresh cache write. Batch related work while context is reusable, or start a focused session after a long break; verify the effect from the next run rather than assuming a saving."
+      note: "After a long idle gap, a large resumed context can require a fresh cache write. Batch related work while context is reusable, or start a focused session after a long break. Verify the effect from the next session. Do not assume a saving."
     },
     {
       id: "extract-binary-attachments",
@@ -8308,7 +8308,7 @@ var catalog_default2 = {
       skill: "skills.sh candidate discovery",
       url: "https://skills.sh/",
       verifiedAt: "2026-08-25",
-      note: "For a recurring, broadly reusable capability, evaluate an existing skill before creating one. Propose a specific skills.sh or `npx skills find <query>` search for the user to run; compare source reputation, repository evidence, and install count, but never install or fetch from the deterministic catalog runtime. Every discovered skill remains a candidate until reviewed."
+      note: "For a recurring, broadly reusable capability, evaluate an existing skill before you create one. Propose a specific skills.sh or `npx skills find <query>` search for the user to run. Compare source reputation, repository evidence, and install count. Never install or fetch from the deterministic catalog runtime. Every discovered skill remains a candidate until reviewed."
     },
     {
       id: "package-related-extensions",
@@ -8335,7 +8335,7 @@ var features_default = {
       feature: "output styles",
       url: null,
       verifiedAt: "2026-08-23",
-      note: "An output style is part of the system prompt (cached in the prefix, survives compaction, per the public docs). A style that constrains verbosity addresses repeated \u22658k-token output bursts; output tokens are the ones the model has to generate one at a time."
+      note: "An output style is part of the system prompt (cached in the prefix, survives compaction, per the public docs). A style that limits verbosity addresses repeated output bursts of 8k tokens or more. Output tokens are the ones that the model generates one at a time."
     },
     {
       id: "feat-context-fork",
@@ -8344,7 +8344,7 @@ var features_default = {
       feature: "skill frontmatter context: fork",
       url: "https://code.claude.com/docs/en/skills.md",
       verifiedAt: "2026-08-23",
-      note: "context: fork (+ agent, background) runs a skill in a subagent instead of the main thread; fork subagents inherit the conversation and reuse the prompt cache, so a heavy skill stops inflating the main context. Addresses a skill whose per-invocation token weight is a multiple of the median turn."
+      note: "context: fork (+ agent, background) runs a skill in a subagent instead of the main thread. Fork subagents inherit the conversation and reuse the prompt cache, so a heavy skill no longer inflates the main context. This addresses a skill whose token weight per invocation is a multiple of the median turn."
     },
     {
       id: "feat-effort-frontmatter",
@@ -8353,7 +8353,7 @@ var features_default = {
       feature: "effort frontmatter (low|medium|high|xhigh|max)",
       url: "https://code.claude.com/docs/en/skills.md",
       verifiedAt: "2026-08-23",
-      note: "Skills, agents, and --effort accept an effort level; set it low for mechanical steps where thinking tokens are being spent on single-tool requests. Each effort level has its own cache for the same model, so set it per agent/skill rather than toggling mid-session."
+      note: "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. Each effort level has its own cache for the same model. So set it per agent or skill, and do not toggle it mid-session."
     },
     {
       id: "feat-background-agents",
@@ -8362,7 +8362,7 @@ var features_default = {
       feature: "run_in_background (Bash) / background agents",
       url: "https://code.claude.com/docs/en/sub-agents.md",
       verifiedAt: "2026-08-23",
-      note: "Long-running commands can run detached (Bash run_in_background) and agents can carry background frontmatter, so a slow tool stops blocking the turn. Addresses tools with p95 over 30 s that the session waits on serially."
+      note: "Long-running commands can run detached (Bash run_in_background) and agents can carry background frontmatter, so a slow tool stops blocking the turn. This addresses tools with p95 over 30 s that the session waits on serially."
     },
     {
       id: "feat-workflows",
@@ -8371,7 +8371,7 @@ var features_default = {
       feature: "dynamic workflows",
       url: "https://code.claude.com/docs/en/workflows.md",
       verifiedAt: "2026-08-23",
-      note: "Agent trees three levels deep are leaner to run and easier to reason about as a declared workflow: wf_ runs are first-class, with per-run artifacts stored under the session directory, instead of ad-hoc nested spawns."
+      note: "As a declared workflow, an agent tree 3 levels deep is leaner to run and easier to reason about. The wf_ runs are first-class, and the artifacts of each run are stored under the session directory. Use a declared workflow instead of ad-hoc nested spawns."
     },
     {
       id: "feat-skills-over-pasted-prompts",
@@ -8380,7 +8380,7 @@ var features_default = {
       feature: "skills (vs pasted prompts)",
       url: "https://code.claude.com/docs/en/skills.md",
       verifiedAt: "2026-08-23",
-      note: "A procedure re-typed every session belongs in a skill: description-gated loading keeps it out of context until needed, bundled scripts execute without entering context at all, and invoked bodies survive compaction (capped 5k tokens each, per the public docs)."
+      note: "A procedure that you type again in every session belongs in a skill. Its description gates loading, so the skill stays out of context until needed. Bundled scripts run without entering context at all. Invoked bodies survive compaction (capped at 5k tokens each, per the public docs)."
     },
     {
       id: "feat-hooks-verification",
@@ -8389,7 +8389,7 @@ var features_default = {
       feature: "hooks (PostToolUse verification)",
       url: "https://code.claude.com/docs/en/hooks.md",
       verifiedAt: "2026-08-23",
-      note: "A PostToolUse hook can run the project's test/build gate automatically after edits (hooks run as code, not context), addressing sessions that end with edited files and no test or build run."
+      note: "A PostToolUse hook can run the test or build gate of the project automatically after edits. Hooks run as code, not as context. This addresses sessions that end with edited files and no test or build run."
     }
   ]
 };
@@ -9197,7 +9197,7 @@ function sameEvidence(a, b) {
 function assertSafeFindingIdentity(finding) {
   const values = [finding.ruleId, finding.insightId, ...finding.sessionIds].filter((value) => typeof value === "string");
   if (values.some((value) => redactValue(value, { scrub: true }) !== value)) {
-    throw new Error("suggestion identity contains sensitive material; redact the identifier before creating it");
+    throw new Error("suggestion identity contains sensitive material. Redact the identifier before you create the suggestion.");
   }
 }
 function lifecycleError(to, message) {
@@ -9289,7 +9289,7 @@ function validateTransitionPatch(current, to, rawPatch) {
     if (patch.proposal.v === 1) assertStructuredProposal(patch.proposal, to);
   } else if (to === "applied") {
     if (current.scope === "global") {
-      throw lifecycleError(to, "global suggestions cannot be applied; create a repo- or session-scoped suggestion for a concrete change instead");
+      throw lifecycleError(to, "global suggestions cannot be applied. For a concrete change, create a repo or session suggestion instead.");
     }
     assertStructuredProposal(current.proposal, to);
     assertApplication(patch.application, to);
@@ -9299,7 +9299,7 @@ function validateTransitionPatch(current, to, rawPatch) {
       throw lifecycleError(to, "application files must exactly match the reviewed proposal files");
     }
   } else if (to === "verified") {
-    if (current.scope === "global") throw lifecycleError(to, "global suggestions cannot be verified; they are review-only");
+    if (current.scope === "global") throw lifecycleError(to, "global suggestions cannot be verified. They are review-only.");
     assertStructuredProposal(current.proposal, to);
     assertApplication(current.application, to);
     const receipt = patch.verificationReceipt;
@@ -10823,7 +10823,7 @@ var kickoffRoutes = (ctx) => [
           commands,
           command,
           spawned: false,
-          error: "automatic model launch is disabled; copy the command into Claude Code or use $orangu-improve in Codex"
+          error: "automatic model launch is disabled. Copy the command into Claude Code, or use $orangu-improve in Codex."
         });
         return;
       }
@@ -11437,7 +11437,7 @@ function validateAnalysis(value) {
   if (slim) {
     requireRecords(value, ["summary", "tools", "files", "tokens", "agents", "context", "quality", "parse"], "SlimAnalysis");
   } else {
-    if (value["slim"] !== void 0) throw new Error("Analysis.slim must be absent; use true for SlimAnalysis");
+    if (value["slim"] !== void 0) throw new Error("Analysis.slim must be absent. A SlimAnalysis sets it to true.");
     requireRecords(value, ["summary", "tools", "files", "agents", "skills", "hooks", "context", "tokens", "time", "quality", "parse"], "Analysis");
     requireArrays(value, ["turns", "events"], "Analysis");
   }
@@ -11782,7 +11782,7 @@ function verifyConfirmationReceipt(o) {
     return invalid("receipt claims are invalid");
   }
   if (claims.issuedAt > o.now + CLOCK_SKEW_MS) return invalid("receipt was issued in the future");
-  if (claims.expiresAt < o.now) return invalid("receipt has expired");
+  if (claims.expiresAt < o.now) return invalid("receipt expired");
   if (claims.suggestionId !== o.record.id) return invalid("receipt suggestion does not match");
   if (claims.scope !== o.record.scope) return invalid("receipt scope does not match");
   if (claims.sessionsHash !== sessionsHash(o.record)) return invalid("receipt sessions do not match");
@@ -11911,7 +11911,8 @@ function printRetention(r, line, w) {
   const oldest = t.oldestSweepableDays === void 0 ? "" : ` \xB7 oldest ${plural(t.oldestSweepableDays, "day")}`;
   line("retention", `${t.effectiveDays}-day window \xB7 ${plural(t.sweepable.sessions, "session")} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`);
   const dim = (s) => w(paint(out, "dim", "    " + s));
-  dim("sizes count primary transcripts only; each session's subagent and tool-result files are swept with it");
+  dim("sizes count primary transcripts only");
+  dim("the sweep also removes the subagent and tool-result files of each session");
   if (t.source) dim(`set by ${t.source.file} (${SCOPE_LABEL[t.source.scope]})`);
   else if (t.invalidConfigured) dim(`no settings file set a usable cleanupPeriodDays, so Claude Code's default of ${RETENTION_DEFAULT_DAYS} days applies`);
   else dim(`cleanupPeriodDays is unset, so the window is Claude Code's default of ${RETENTION_DEFAULT_DAYS} days`);
@@ -11950,7 +11951,7 @@ function printHarness(r) {
   w();
   const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
   if (nothing) {
-    w(`  no harness config found under ${r.scope.roots.join(", ")}. Nothing to cross-reference`);
+    w(`  orangu found no harness config under ${r.scope.roots.join(", ")}. It found nothing to compare.`);
     w(paint(out, "dim", `
   looked for: settings.json \xB7 skills/ \xB7 agents/ \xB7 plugins/ \xB7 .mcp.json \xB7 CLAUDE.md
 `));
@@ -12034,8 +12035,8 @@ function printHarness(r) {
   if (x.injectedListings.length) {
     w();
     w(paint(out, "bold", "  injected listings (recurring context weight, ranked by tokens per session)"));
-    w(paint(out, "dim", "    per session counts each session's main transcript that carried the listing;"));
-    w(paint(out, "dim", "    the subagent line is summed across the sessions that had subagents"));
+    w(paint(out, "dim", "    per session counts the primary transcript of each session that carried the"));
+    w(paint(out, "dim", "    listing. The subagent line is a sum over the sessions that had subagents."));
     for (const l of printedListings(x.injectedListings)) {
       w(`    ${l.type.padEnd(22)} \u2248${n(l.approxTokensPerMainSession).padStart(8)} tokens/session`);
       w(paint(out, "dim", `      ${plural(l.main.injections, "injection")} in ${plural(l.main.sessions, "session")} \xB7 \u2248${n(l.approxTokensPerInjection)} per injection anywhere in the tree`));
@@ -12051,8 +12052,8 @@ function printHarness(r) {
 }
 
 // src/cli/commands/estimate.ts
-var SLIM_HARNESS = "--slim sizes a session projection; orangu estimate harness sizes the harness report";
-var DEPTH_RETIRED = "orangu estimate has one canonical projection (the evidence bundle); --depth was retired. Use --slim to size an `analyze --json --slim` read.";
+var SLIM_HARNESS = "--slim sizes a session projection. orangu estimate harness sizes the harness report.";
+var DEPTH_RETIRED = "orangu estimate has one canonical projection (the evidence bundle). --depth was retired. Use --slim to size an `analyze --json --slim` read.";
 var slimBytes = (a) => Buffer.byteLength(JSON.stringify(slimAnalysis(a)));
 async function loadAnalysisResult(sel, analyzeOptions = { version: "evidence", now: 0 }) {
   const value = sel.trim();
@@ -12084,7 +12085,7 @@ async function currentSessionPath(flags) {
 }
 async function latestSessionPath() {
   const latest = await findLatestSession({});
-  if (!latest) throw new Error("No sessions found. Try: orangu list");
+  if (!latest) throw new Error("orangu found no sessions. Try: orangu list");
   return latest.path;
 }
 async function expandSelector(sel, flags) {
@@ -12153,7 +12154,7 @@ async function cmdEstimate(positionals, flags) {
   const ids = await targetSessionIds(positionals, flags);
   const est = await estimateFor(ids, (id) => loadAnalysisResult(id), slim ? slimBytes : void 0);
   if (est.sessions === 0 && est.skipped && est.skipped.length > 0) {
-    throw new Error(`no session could be projected:
+    throw new Error(`orangu could not project any session:
 ${est.skipped.map((s) => `  ${s.selector}: ${s.reason}`).join("\n")}`);
   }
   const confirmationReceipt = receiptToken && receiptRecord ? verifyConfirmationReceipt({
@@ -12191,7 +12192,7 @@ function printEstimate(est, label) {
     w(`  under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString("en-US")}-token gate, small enough to read`);
   }
   if (est.skipped && est.skipped.length > 0) {
-    w(`  \u26A0 ${est.skipped.length} session${est.skipped.length === 1 ? "" : "s"} could not be projected and ${est.skipped.length === 1 ? "is" : "are"} not counted above:`);
+    w(`  \u26A0 ${est.skipped.length} session${est.skipped.length === 1 ? "" : "s"} could not be projected. The count above does not include ${est.skipped.length === 1 ? "it" : "them"}:`);
     for (const s of est.skipped) w(`      ${s.selector}: ${s.reason}`);
   }
   w("");
@@ -12221,7 +12222,7 @@ async function resolveEvidenceSession(selector, flags) {
   const options = await selectorOptions(flags);
   if (selector === "latest") {
     const latest = await findLatestSession(options);
-    if (!latest) throw new Error("No sessions found. Is Claude Code installed? Try: orangu list");
+    if (!latest) throw new Error("orangu found no sessions. Is Claude Code installed? Try: orangu list");
     return latest;
   }
   if (selector === "current") {
@@ -12233,7 +12234,7 @@ async function resolveEvidenceSession(selector, flags) {
   const resolved = await resolveSession(selector, options);
   if (resolved) return resolved;
   const candidates = await candidatesForPrefix(selector, options);
-  if (candidates.length > 1) throw new Error(`Ambiguous session "${selector}". ${candidates.length} matches`);
+  if (candidates.length > 1) throw new Error(`"${selector}" matches ${candidates.length} sessions`);
   throw new Error(`No session matches "${selector}". Try: orangu list`);
 }
 async function bundleFromJsonFile(path, options) {
@@ -12253,8 +12254,8 @@ async function cmdEvidence(positionals, flags) {
   if (positionals.length !== 1) {
     throw new Error("usage: orangu evidence <session|latest|current|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate] [--include-text]");
   }
-  if (flagBool(flags, "no-redact")) throw new Error("evidence output is always redacted; --no-redact is not supported");
-  if (flags["depth"] !== void 0) throw new Error("orangu evidence has one canonical bounded projection; --depth is not supported");
+  if (flagBool(flags, "no-redact")) throw new Error("evidence output is always redacted. orangu evidence does not accept --no-redact.");
+  if (flags["depth"] !== void 0) throw new Error("orangu evidence has one canonical bounded projection. It does not accept --depth.");
   const input = positionals[0];
   if (input === void 0) throw new Error("evidence input is required");
   const options = { limit: requestedLimit(flags), scope: aggregateScope(flags) };
@@ -12507,13 +12508,13 @@ function verificationPairs(value, label) {
 }
 function verificationIntents(value, expectedChecks) {
   if (value["before"] !== void 0 || value["after"] !== void 0) {
-    throw artifactError("before and after must be omitted; Orangu computes metrics from resolved sessions");
+    throw artifactError("before and after must be omitted. Orangu computes the metrics from the resolved sessions.");
   }
   if (Array.isArray(value["checks"])) {
     value["checks"].forEach((raw, index) => {
       const item = object(raw, `checks[${index}]`);
       const selfAttested = ["ok", "before", "after", "evidence"].find((field) => item[field] !== void 0);
-      if (selfAttested) throw artifactError(`checks[${index}] must omit ok, before, after, and evidence; Orangu computes them`);
+      if (selfAttested) throw artifactError(`checks[${index}] must omit ok, before, after, and evidence. Orangu computes them.`);
       optionalText(item["name"], `checks[${index}].name`, 300);
     });
   }
@@ -12602,7 +12603,7 @@ var byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 async function measureCohortEffect(record2, others, deps) {
   if (record2.scope === "global") throw new Error(`suggestion ${record2.id}: global suggestions are review-only and cannot be verified`);
   if (record2.status !== "applied" && record2.status !== "verified") {
-    throw new Error(`suggestion ${record2.id} has not been applied (status ${record2.status})`);
+    throw new Error(`suggestion ${record2.id} is not applied (status ${record2.status})`);
   }
   const proposal = record2.proposal;
   const intents = proposal?.verificationChecks;
@@ -12717,7 +12718,7 @@ function nextStep(effect) {
       if (!effect.laterComplete) return `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`;
       return `the later cohort is complete (${effect.later.length >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX}` : `${effect.later.length} sessions, its byte budget is spent`}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal`;
     case "not-enough-sessions":
-      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)${effect.laterComplete ? "; the later cohort is complete, so this record cannot be verified" : ""}`;
+      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)${effect.laterComplete ? ". The later cohort is complete, so this record cannot be verified" : ""}`;
     case "regressed":
       return "a check moved the wrong way beyond chance: review the change, or reject the proposal";
     case "no-directional-check":
@@ -12918,7 +12919,7 @@ async function assertEvidenceWorkspace(rec, workspace) {
       throw new Error(`suggestion ${rec.id} evidence workspace no longer exists: ${cwd}`);
     }
     if (canonical !== workspace.cwd) {
-      throw new Error(`suggestion ${rec.id} evidence belongs to workspace ${canonical}; create the proposal from that exact workspace`);
+      throw new Error(`suggestion ${rec.id} evidence belongs to workspace ${canonical}. Create the proposal from that exact workspace.`);
     }
     if (rec.source === "report" && rec.scope === "session") {
       const rebound = projectEvidence(analysis, { limit: MAX_EVIDENCE_LIMIT }).findings.find((finding) => finding.suggestionId === rec.id);
@@ -12946,14 +12947,14 @@ function canonicalJson2(value) {
 }
 async function assertWorkspaceMatch(rec) {
   if (rec.scope === "global") {
-    throw new Error(`suggestion ${rec.id} is global and proposal-only; global apply is not supported`);
+    throw new Error(`suggestion ${rec.id} is global and proposal-only. Global apply is not supported.`);
   }
   if (rec.status !== "proposed" || rec.proposal?.v !== 1 || !rec.proposal.manifestPath || !rec.proposal.files?.length) {
     throw new Error(`suggestion ${rec.id} is not an apply-ready structured proposal`);
   }
   if (!rec.proposal.workspace) throw new Error(`suggestion ${rec.id} is a legacy unbound proposal and cannot be applied`);
   if (!sameWorkspace(rec.proposal.workspace, await liveWorkspaceIdentity(process.cwd()))) {
-    throw new Error(`suggestion ${rec.id} belongs to workspace ${rec.proposal.workspace.cwd}; run apply from that exact workspace`);
+    throw new Error(`suggestion ${rec.id} belongs to workspace ${rec.proposal.workspace.cwd}. Run apply from that exact workspace.`);
   }
   return rec.proposal;
 }
@@ -12986,7 +12987,7 @@ async function cmdList(store, flags) {
   if (scope) all = all.filter((r) => r.scope === scope);
   if (flagBool(flags, "json")) return emit(visible(all, flags), flags);
   if (!all.length) {
-    process.stdout.write("no suggestions yet. Create one from a report finding or: orangu suggest --rule <r> --scope session --session <id>\n");
+    process.stdout.write("no suggestions yet. Create one from a report finding, or run: orangu suggest --rule <r> --scope session --session <id>\n");
     return;
   }
   for (const rec of all) printRecord(visible(rec, flags));
@@ -13303,8 +13304,9 @@ var EXTRA_HELP = [
     "                                  [--port <n>] [--no-open])"
   ].join("\n"),
   [
-    "  orangu evidence <input>      bounded, redacted findings + matching known fixes",
-    "                               for a session/.jsonl or current Orangu JSON",
+    "  orangu evidence <input>      bounded, redacted findings and the known",
+    "                               improvements that match them, for a",
+    "                               session/.jsonl or current Orangu JSON",
     "                                 ([--scope repo|global] [--limit <n>]",
     "                                  [--estimate] [--json])"
   ].join("\n"),
@@ -13312,8 +13314,8 @@ var EXTRA_HELP = [
     "  orangu estimate [<session>|repo|global|harness]",
     "                               size what a skill would read: bytes and ~tokens",
     "                                 (--suggestion <id> [--receipt <token>]",
-    "                                  | --rule <r> --session <a,b>;",
-    "                                  --slim sizes an analyze --json --slim read)"
+    "                                  | --rule <r> --session <a,b>)",
+    "                                 (--slim sizes an analyze --json --slim read)"
   ].join("\n"),
   [
     "  orangu harness               what your config declares vs what your sessions",
@@ -13331,7 +13333,7 @@ var EXTRA_HELP = [
     "                                    --session <a,b> [--title <t>]",
     "                                  | --show <id> [--for-proposal|--for-apply]",
     "                                  | --effect <id>  (later sessions vs baseline,",
-    "                                    beyond chance; read-only)",
+    "                                    beyond chance, read-only)",
     "                                  | --set <id> <status> [--proposal <path>]",
     "                                    [--manifest <path>]",
     "                                    [--application <path>]",
@@ -13482,7 +13484,7 @@ async function cmdPick(flags, deps) {
   const now = deps.now ?? Date.now();
   const { rows, counts } = await gatherPickRows(flags, { now, ...deps.isAlive ? { isAlive: deps.isAlive } : {} });
   if (flagBool(flags, "json")) deps.stdout.write(JSON.stringify(rows, null, 2) + "\n");
-  if (!rows.length) throw new Error("No sessions found. Is Claude Code installed? Try: orangu list");
+  if (!rows.length) throw new Error("orangu found no sessions. Is Claude Code installed? Try: orangu list");
   if (flagBool(flags, "json")) return;
   if (!interactivePrecondition(deps.stdin, deps.stdout, deps.env, flags)) {
     deps.stdout.write(pickList(deps.out, rows, counts, now).join("\n") + "\n");
@@ -13685,8 +13687,8 @@ function sessionSelector(sel, flags) {
   if (raw === void 0) return sel;
   if (typeof raw !== "string" || !raw.trim()) fail(`--session needs a session selector: ${SELECTOR_FORMS}`);
   const flag = raw.trim();
-  if (flag.includes(",")) fail("--session takes one session here; comma lists belong to estimate and suggest");
-  if (sel !== void 0 && sel !== flag) fail(`--session ${flag} and "${sel}" name different sessions; give one`);
+  if (flag.includes(",")) fail("--session takes one session here. Only estimate and suggest take a comma list.");
+  if (sel !== void 0 && sel !== flag) fail(`--session ${flag} and "${sel}" name different sessions. Give only one.`);
   return flag;
 }
 async function selectSession(sel, flags) {
@@ -13697,7 +13699,7 @@ async function selectSession(sel, flags) {
   if (flags["cwd"]) opts.cwd = String(flags["cwd"]);
   if (!sel || sel === "latest") {
     const s = await findLatestSession(opts);
-    if (!s) fail("No sessions found. Is Claude Code installed? Try: orangu list");
+    if (!s) fail("orangu found no sessions. Is Claude Code installed? Try: orangu list");
     return s;
   }
   if (sel === "current") {
@@ -13709,7 +13711,7 @@ async function selectSession(sel, flags) {
   if (r) return r;
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
-    fail(`Ambiguous session "${sel}". ${cands.length} matches:
+    fail(`"${sel}" matches ${cands.length} sessions:
 ` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename13(c.projectSlug)).join("\n"));
   }
   fail(`No session matches "${sel}". Try: orangu list`);
@@ -13812,7 +13814,7 @@ function pickSessions(flags) {
   });
 }
 var RETIRED_FLAGS = {
-  "max-cost": "--max-cost was removed; use --max-tokens <n>"
+  "max-cost": "--max-cost was removed. Use --max-tokens <n>."
 };
 var SESSION_GATE_FLAGS = ["max-tokens", "fail-on-hook-errors"];
 var SESSION_GATE_VERBS = /* @__PURE__ */ new Set(["report", "html", "analyze", "a"]);
@@ -13833,7 +13835,7 @@ function rejectUnusableFlags(command, flags) {
   if (command !== void 0 && AGGREGATE_VERBS.has(command)) {
     if (flagBool(flags, "json")) {
       for (const flag of AGGREGATE_SIDE_EFFECT_FLAGS) {
-        if (flags[flag] !== void 0) fail(`--${flag} writes the HTML report; --json is a machine read with no side effect. Run them separately.`);
+        if (flags[flag] !== void 0) fail(`--${flag} writes the HTML report. --json is a machine read with no side effect. Run them separately.`);
       }
     }
   } else if (command !== void 0 && flags["html"] !== void 0) {
@@ -13880,7 +13882,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
     scopeLabel = `repo ${basename13(cwd)}`;
   }
-  if (!refs.length) fail(`No sessions found for ${scopeLabel}.`);
+  if (!refs.length) fail(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
   const use = refs.slice(0, Number.isNaN(max) ? refs.length : max);
   const quiet = flagBool(flags, "quiet") || flagBool(flags, "json");
@@ -13989,7 +13991,7 @@ function printAggregate(a, wroteHtml) {
     }
     for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) process.stdout.write(`    ${paint(out2, "bad", String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature}  ${paint(out2, "dim", "(" + plural(e.sessions, "session") + ")")}
 `);
-    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out2, "bad", String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden; use --include-text  ${paint(out2, "dim", "(" + plural(h.sessions, "session") + ")")}
+    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out2, "bad", String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden (add --include-text)  ${paint(out2, "dim", "(" + plural(h.sessions, "session") + ")")}
 `);
   }
   if (a.topReReadFiles.length) {
@@ -13998,7 +14000,7 @@ function printAggregate(a, wroteHtml) {
 `);
   }
   process.stdout.write("\n" + paint(out2, "bold", "  heaviest sessions (by tokens)\n"));
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out2, "dim", s.title ? s.title.slice(0, 50) : "(title hidden; use --include-text)")}
+  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out2, "dim", s.title ? s.title.slice(0, 50) : "(title hidden, add --include-text)")}
 `);
   const offer = wroteHtml ? "--json for the full machine-readable aggregate" : "--open for the HTML report, --json for the full machine-readable aggregate";
   process.stdout.write(paint(out2, "dim", `
@@ -14028,11 +14030,11 @@ async function cmdServe(flags) {
     version: VERSION2,
     maxLive: maxLiveStr !== void 0 ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : void 0
   };
-  if (requestedAutomaticLaunch) process.stderr.write("  --allow-claude is retired: the report now provides copy-only Claude/Codex handoffs.\n");
+  if (requestedAutomaticLaunch) process.stderr.write("  --allow-claude is retired. The report only gives commands to copy, for Claude Code or Codex.\n");
   const srv = await startServe(opts);
   process.stderr.write(
     paint(err2, ["bold", "accent"], "orangu serve") + ` \xB7 ${srv.url}
-` + paint(err2, "dim", `  loopback + private capability \xB7 model handoff: copy-only \xB7 watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions \xB7 ctrl-c stops
+` + paint(err2, "dim", `  loopback + private capability \xB7 model commands: copy only \xB7 watches up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions \xB7 ctrl-c stops
 `)
   );
   if (opts.open) openInBrowser(srv.url);
@@ -14047,7 +14049,7 @@ async function cmdServe(flags) {
 }
 function printHelp() {
   process.stdout.write(`${out2.tty ? "\n" + mascotLines(out2).join("\n") + "\n" : ""}
-${paint(out2, "bold", "orangu")} v${VERSION2}: observe the run, then improve the next outcome.
+${paint(out2, "bold", "orangu")} v${VERSION2}: observe the session, then improve the next outcome.
 Deterministic observability for Claude Code sessions. No network calls.
 
 ${paint(out2, "bold", "usage")}
@@ -14057,7 +14059,7 @@ ${paint(out2, "bold", "usage")}
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
   orangu pick                  choose an open session, open its report
-                               (--json lists; --plain numbers; --limit <n>)
+                               (--json \xB7 --plain \xB7 --limit <n>)
   orangu repo    [<path>]      aggregate every session for a repo (--json/--out)
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report
@@ -14066,7 +14068,7 @@ ${paint(out2, "bold", "usage")}
                                --no-include-text \xB7 --global \xB7 --cwd <dir>${EXTRA_HELP.map((l) => "\n" + l).join("")}
 
 ${paint(out2, "bold", "session")}   a session id, a unique id prefix, a .jsonl path, "latest" (default),
-          or "current" (the session Claude Code is running orangu from)
+          or "current" (the Claude Code session that runs orangu)
 
 ${paint(out2, "bold", "flags")}
   -s, --session <sel>    the session, as a flag (same forms as the positional)
@@ -14074,29 +14076,29 @@ ${paint(out2, "bold", "flags")}
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
   --html <file>          repo/global: write the aggregate HTML report here
-  --open / --no-open     open (or don't) the HTML report (report, repo/global)
+  --open / --no-open     open the HTML report or not (report, repo/global)
   --no-redact            keep secrets/paths in the output (default: redacted)
   --slim                 with analyze --json: the slim projection LLMs read
   --include-text         keep prompt/result previews in report, analyze, watch,
                          evidence, repo/global output and serve's exported HTML
   --no-include-text      serve only: hide previews in the loopback viewer too
   --strip-paths          reduce absolute paths to basenames (home is ~ already)
-  --global               scan all roots incl. Cowork/Desktop
+  --global               scan all roots, Cowork and Desktop too
   --root <dir>           scan only this Claude config dir (comma-separated list)
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
   --verbose              also print the cache diagnostic (stderr)
   --quiet                no progress or hints on stderr (the answer only)
   --plain                pick only: a numbered list instead of the prompt
-  --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
-                         are honoured; NO_COLOR, FORCE_COLOR=0 and
+  --no-color             plain output (orangu obeys NO_COLOR, FORCE_COLOR,
+                         TERM=dumb and CI. NO_COLOR, FORCE_COLOR=0 and
                          ORANGU_NO_ANIMATION=1 also stop the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
   --max-tokens <n>       exit 2 above this token total (CI: analyze/report)
-  --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
+  --fail-on-hook-errors  exit non-zero on any hook error (CI: analyze/report)
   --version, --help
 
-${paint(out2, "dim", "privacy: generated locally, zero network requests, secrets redacted by default.")}
+${paint(out2, "dim", "privacy: local only, no network requests. orangu redacts secrets by default.")}
 `);
 }
 async function main() {

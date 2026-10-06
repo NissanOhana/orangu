@@ -73,19 +73,29 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (2 of 2): the 28-word sentence became 2
   '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
   // K: help, every CLI and engine folder under src/, the catalog notes
-  'orangu --help': { floor: 90, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 1 },
-  'src/adapters': { floor: 86, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/cache': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/cli': { floor: 88, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 1 },
-  'src/discover': { floor: 65, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/feedback': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/harness': { floor: 73, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/redact': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/serve': { floor: 91, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/suggest': { floor: 92, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // Raised by the K STE rewrite (split semicolon pairs, simple tenses, the actor named, one word for one
+  // thing). Each row: the measured score, then what still holds it down and why it stays.
+  'orangu --help': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (75 of 75): "don't" and 4 semicolons gone
+  // measured 90 (37 of 41). The 3 "changed while it was being read" errors stay: the retry regex in
+  // parse.ts parses them. The duplicate_uuid warning (parse.ts:579) is cached Analysis payload copy.
+  'src/adapters': { floor: 88, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  'src/cache': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (10 of 10), no change was needed
+  'src/cli': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (235 of 235): the printHelp template, 20 semicolons, "is running"
+  'src/discover': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (17 of 17): the 4 current-session errors split
+  'src/feedback': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (2 of 2), no change was needed
+  'src/harness': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (21 of 21): the notes split, the no-config note now matches the report
+  'src/redact': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (1 of 1), no change was needed
+  // measured 97 (28 of 29). tail.ts:127 keeps "changed while it was being read", the phrase of the
+  // read-race family that the adapter regex parses (one phrase for one error)
+  'src/serve': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // measured 99 (230 of 233). Kept on purpose: the cohort receipt summary (verification-policy.ts:73)
+  // and the check evidence line (cohort-stats.ts:159) are stored in each verified record and compared
+  // byte for byte on read, and artifacts.ts:196 is the read-race phrase
+  'src/suggest': { floor: 97, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // measured 83 (5 of 6). stable-file.ts:85 is the read-race phrase that the adapter regex parses
   'src/util': { floor: 81, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/suggest/catalog.json#note': { floor: 61, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
-  'src/suggest/features.json#note': { floor: 43, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  'src/suggest/catalog.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (52 of 52): 11 notes rewritten, no claim, id, URL or verifiedAt moved
+  'src/suggest/features.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }, // measured 100 (22 of 22): 7 notes rewritten, no claim, id, URL or verifiedAt moved
   // R1, R2: the report
   // raised 89 -> 96 by the report copy rewrite (R1, 2026-10-06). Measured 310 sentences, 304 clean, score 98
   // (was 293 sentences, 268 clean, score 91). The 6 findings left are in the improvement screens (R2).
