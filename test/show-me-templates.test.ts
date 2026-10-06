@@ -366,6 +366,10 @@ describe('show-me post-write check (SKILL.md, step 4)', () => {
     const titleSlot = '<h1 class="dp" data-slot="title">Run the flaky suite</h1>'
     expect(base).toContain(titleSlot)
     const inSlot = (payload: string): string => base.replace(titleSlot, `<h1 class="dp" data-slot="title">${payload}</h1>`)
+    const svgLinks: Array<[string, string]> = [
+      ['an svg link set by <set>, with no href=', inSlot('<svg><a><set attributeName="href" to="https:evil.example/x"/><text>Open the full report</text></a></svg>')],
+      ['an svg link set by <animate>, with no href=', inSlot('<svg><a><animate attributeName="href" to="https:evil.example/x"/><text>Open the full report</text></a></svg>')],
+    ]
     const variants: Array<[string, string]> = [
       ['meta refresh in the title', base.replace('<title data-slot="title">Run the flaky suite</title>', '<title data-slot="title"></title><meta http-equiv="refresh" content="0;url=https:evil.example/x"></title>')],
       ['meta refresh in the body, no slashes', inSlot('<meta http-equiv="refresh" content="0;url=http:127.0.0.1:9/noslash">')],
@@ -387,11 +391,15 @@ describe('show-me post-write check (SKILL.md, step 4)', () => {
       ['a loosened CSP', base.replace("script-src 'sha256-", "script-src 'unsafe-inline' 'sha256-")],
       ['a leftover sample sentence', inSlot('EXAMPLE The session ran.')],
       ['a chart left at its sample values', base.replace('<svg class="ring" data-chart="cache"', '<svg class="ring" data-chart="cache" data-sample')],
+      ...svgLinks,
     ]
     for (const [name, html] of variants) {
       expect(html, `${name} changes the file`).not.toBe(base)
       for (const by of BY) expect(checksFor(CHECKS, 'slides').some((check) => countCheck(html, check, by) !== check.expected), `${name} passes every count by ${by}`).toBe(true)
     }
+    // Security re-check R2: an SVG <a> gets its link from <set> or <animate>, with no literal href=, and passed all 9
+    // counts (Chromium navigates on click). Count 2 must catch the attribute that sets it.
+    for (const [name, html] of svgLinks) for (const by of BY) expect(countCheck(html, CHECKS[1]!, by), `${name}: count 2 by ${by}`).toBe(1)
   })
 })
 
