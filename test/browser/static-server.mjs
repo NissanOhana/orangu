@@ -14,6 +14,9 @@ const pages = new Map([
   ['/sitemap.xml', join(root, 'site', 'sitemap.xml')],
   ['/llms.txt', join(root, 'site', 'llms.txt')],
   ['/llms-full.txt', join(root, 'site', 'llms-full.txt')],
+  // the /orangu:show-me templates, served side by side so their relative links resolve
+  ['/show-me/slides.html', join(root, 'plugin', 'skills', 'show-me', 'references', 'slides.html')],
+  ['/show-me/report.html', join(root, 'plugin', 'skills', 'show-me', 'references', 'report.html')],
 ])
 const contentType = (file) =>
   file.endsWith('.txt') ? 'text/plain; charset=utf-8' : file.endsWith('.xml') ? 'application/xml; charset=utf-8' : 'text/html; charset=utf-8'

@@ -448,6 +448,7 @@ const pluginFiles = (files: readonly string[]): string[] =>
 function pluginOwner(file: string): string {
   if (/^plugin\/skills\/(improve|apply|feedback|shared)\//.test(file)) return 'P1a'
   if (/^plugin\/skills\/(analyze|harness)\//.test(file) || file === 'plugin/skills/README.md' || file.startsWith('plugin/agents/')) return 'P1b'
+  if (file.startsWith('plugin/skills/show-me/')) return 'P2'
   return 'new'
 }
 
@@ -517,6 +518,8 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     jsonSurface('.claude-plugin/marketplace.json#description', 'P1b', one('.claude-plugin/marketplace.json'), (json) =>
       strings([json['description'], ...list(json['plugins']).map((plugin) => plugin['description'])]),
     ),
+    // P2: the show-me skill, its slot rules and its two template sources
+    ...pluginSurfaces(files, 'P2'),
     // a plugin file no chunk owns yet (a new skill): its chunk adds the row and the owner
     ...pluginSurfaces(files, 'new'),
     // K: help, every CLI and engine folder under src/, the catalog notes

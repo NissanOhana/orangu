@@ -75,6 +75,7 @@ Whole-harness (global) changes stay review-only. A proposal is not an applicatio
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, skills, agents, hooks, MCP, in tokens |
+| `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML |
 | `/orangu:feedback` | Send reviewed beta feedback from a localhost form |
 
 Skills read `orangu ... --json` and `orangu evidence`, never the raw `.jsonl`. Each skill shows a token estimate before a large read. The shipped instructions live in [`plugin/skills/`](plugin/skills/). Codex can also host the improvement skills: `codex plugin marketplace add NissanOhana/orangu` then `codex plugin add orangu@orangu` installs `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback`. orangu does not ingest Codex transcripts.

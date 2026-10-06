@@ -15,6 +15,8 @@ const generated = [
   'site/llms-full.txt',
   'site/sample.html',
   'site/sample-repo.html',
+  'plugin/skills/show-me/references/slides.html',
+  'plugin/skills/show-me/references/report.html',
 ]
 // Generated directories: the Codex skill mirror. Every path under them is compared, so an added or
 // removed mirror file is caught, not only a changed one.

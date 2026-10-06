@@ -1,6 +1,6 @@
 // Build: (1) bundle the report client (browser) into a JS string module, (2) bundle the CLI (node) into dist/orangu.js.
 // Zero runtime dependencies: everything is inlined.
-import { build } from 'esbuild'
+import { build, transform } from 'esbuild'
 import { copyFileSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -180,6 +180,24 @@ for (const target of CODEX_TARGETS) {
     mkdirSync(join(dstDir, 'agents'), { recursive: true })
     copyFileSync(join(root, `plugin/codex/${name}/openai.yaml`), join(dstDir, 'agents/openai.yaml'))
   }
+}
+
+// 4c) /orangu:show-me templates. plugin/skills/show-me/references/{slides,report}.src.html are the sources, and
+// the skill reads only the built {slides,report}.html beside them. They resolve the landing page's placeholders
+// (the canonical tokens, the 96px mascot, the version) plus the one shared runtime, minified; a placeholder left
+// over stops the build. The mascot is wrapped at 76 characters: a URL parser drops the line breaks, and a reader
+// that cuts long lines still sees every byte.
+const SHOW_ME = join(root, 'plugin/skills/show-me/references')
+const showMeRuntime = (await transform(readFileSync(join(SHOW_ME, 'runtime.src.js'), 'utf8'), { minify: true, target: 'es2020', legalComments: 'none', charset: 'utf8' })).code.trim()
+const showMeMascot = `data:image/png;base64,\n${readFileSync(join(root, 'design/brand/mascot-96.png')).toString('base64').match(/.{1,76}/g).join('\n')}`
+for (const name of ['slides', 'report']) {
+  const out = readFileSync(join(SHOW_ME, `${name}.src.html`), 'utf8')
+    .replace('<!-- @tokens -->', () => tokensCss.trim())
+    .replace('<!-- @runtime -->', () => showMeRuntime)
+    .replaceAll('{{mascot:logo}}', () => showMeMascot)
+    .replaceAll('{{version}}', () => pkg.version)
+  for (const left of out.match(/\{\{[^}]+\}\}|<!-- @[a-z]+ -->/g) ?? []) throw new Error(`show-me ${name}: unresolved placeholder ${left}`)
+  writeFileSync(join(SHOW_ME, `${name}.html`), out)
 }
 
 console.log('built CLI + Claude/Codex plugin bundles (client bundle %d bytes, css %d bytes)', clientJs.length, clientCss.length)

@@ -193,7 +193,6 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .demo-evidence,.demo-proposal,.demo-verify{margin-top:7px;font-size:12.5px;color:var(--ink2)}
 .demo-proposal{padding:8px 10px;border-radius:7px;background:var(--accent-weak)}
 .demo-kick{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
-.demo-kick .handled{font-family:var(--mono);font-size:11px;color:var(--ink3)}
 .demo-status{font-family:var(--mono);font-size:10.5px;color:var(--accent-ink);border:1px solid var(--border2);border-radius:999px;padding:2px 7px}
 .demo-grow{flex:1}
 .demo-btn{appearance:none;border:1px solid var(--border2);background:var(--surface);color:var(--ink2);border-radius:7px;padding:5px 8px;font:600 11px var(--sans)}
@@ -245,7 +244,7 @@ h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px
 .verb{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--ink2)}
 .verb b{font-family:var(--mono);color:var(--ink1)}
 .skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px}
-@media (min-width:1000px){.skills{grid-template-columns:repeat(5,1fr)}}
+@media (min-width:1000px){.skills{grid-template-columns:repeat(3,1fr)}}
 .skill{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)}
 .skill b{display:block;font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--accent-ink);margin-bottom:4px}
 .skill div{font-size:13.5px;color:var(--ink2)}
@@ -362,7 +361,7 @@ Choose a report
           <button id="demo-tab-overview" type="button" role="tab" aria-controls="demo-panel-overview" aria-selected="false" tabindex="-1" data-demo-view="overview">Overview</button>
           <button id="demo-tab-timeline" type="button" role="tab" aria-controls="demo-panel-timeline" aria-selected="false" tabindex="-1" data-demo-view="timeline">Timeline</button>
           <button id="demo-tab-tools" type="button" role="tab" aria-controls="demo-panel-tools" aria-selected="false" tabindex="-1" data-demo-view="tools">Tools &amp; calls</button>
-          <button id="demo-tab-suggest" type="button" role="tab" aria-controls="demo-panel-suggest" aria-selected="true" tabindex="0" data-demo-view="suggest" aria-current="page" class="on">Suggestions</button>
+          <button id="demo-tab-suggest" type="button" role="tab" aria-controls="demo-panel-suggest" aria-selected="true" tabindex="0" data-demo-view="suggest" aria-current="page" class="on">Improvements</button>
           </div><a class="rail-link" href="sample-repo.html" target="_blank" rel="noopener" aria-label="Repo / Global: open the repository-level sample (opens in a new tab)">Repo / Global ↗</a>
         </nav>
         <div class="demo-main">
@@ -404,7 +403,7 @@ Choose a report
             <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if failed test runs dropped beyond chance and tool errors did not rise.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report only copies this command.">Claude apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if failed test runs dropped beyond chance and tool errors did not rise.</div><div class="demo-kick"><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report only copies this command.">Claude apply</button></div></div>
             </div>
             <p class="demo-note">Local code measures and matches. An optional skill writes the proposal. The browser only copies a command. A verified session comparison means that its reviewed metrics passed on the selected later evidence. It is not a causal or overall-quality claim.</p>
           </div>
@@ -490,7 +489,7 @@ Choose a report
     <div class="grid g300">
       <div class="card install-card"><h3>Choose a report</h3><p>You do not need a global install. The first command opens a menu in your terminal. Choose this repository, all sessions, or one session. The second command opens the latest session.</p><div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button data-cmd="npx orangu">copy</button></div><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
       <div class="card install-card"><h3>Keep the local app open</h3><p>Use report, analyze, repo, global, serve, and watch without sending session data away.</p><div class="cmd-sm"><span class="p">$</span> npm i -g orangu <button data-cmd="npm i -g orangu">copy</button></div></div>
-      <div class="card install-card"><h3>Add the Claude Code plugin</h3><p>Install after you have seen the evidence. The report copies a chat handoff; <code>/orangu:improve</code> drafts and <code>/orangu:apply</code> applies session/repo proposals explicitly.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div></div>
+      <div class="card install-card"><h3>Add the Claude Code plugin</h3><p>Install it after you see the evidence. <code>/orangu:improve</code> writes a proposal. <code>/orangu:apply</code> applies a session or repo proposal after you approve it. <code>/orangu:show-me</code> writes a slide deck and a written report.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div></div>
     </div>
     <div class="sub">
       <h3>One improvement workflow, explicit stages</h3>
@@ -500,6 +499,7 @@ Choose a report
         <div class="skill"><b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository, run its own checks, and record a receipt. Global proposals are review-only.</div></div>
         <div class="skill"><b>/orangu:analyze</b><div>Explain what happened in one session, finished or still running, from local deterministic evidence, and keep a report refreshed while a session runs.</div></div>
         <div class="skill"><b>/orangu:harness</b><div>Review what your harness declares against what your sessions actually used, across one repository or every session on the machine, and propose ranked changes.</div></div>
+        <div class="skill"><b>/orangu:show-me</b><div>Turn the evidence of one session, one repository or all sessions into a slide deck and a written report. Both are offline HTML files.</div></div>
         <div class="skill"><b>/orangu:feedback</b><div>Send candid beta feedback about Orangu itself through a private localhost form with an exact user-reviewed GitHub preview.</div></div>
       </div>
     </div>

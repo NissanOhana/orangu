@@ -930,7 +930,8 @@ describe('plugin packaging', () => {
     const rows = [...readme.matchAll(/^\| `\/orangu:([a-z-]+)`/gm)].map((m) => m[1]).sort()
     expect(rows).toEqual(dirs)
     expect(readme, 'the harness row says the review interviews the user').toMatch(/interview/)
-    expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 200 words').toBeLessThan(200)
+    // 2026-10-06 200 -> 226: the show-me row, measured 26 words (199 -> 225); the ratchet below says why
+    expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 226 words').toBeLessThan(226)
   })
 
   // Ceilings, not targets: each is the value MEASURED on the day it landed. Lowering one needs nothing.
@@ -962,9 +963,13 @@ describe('plugin packaging', () => {
     // 2026-09-29 noise-aware verification: harness 1402 -> 1401 and improve 1029 -> 1021, lowered to the measured
     // 1,400 / 1,020. Both skills now hand verification to `orangu suggest --effect` (Orangu picks the sessions), which
     // paid for the root-cause, attributable-check, and one-change-at-a-time sentences.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350 }
-    const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360 }
-    const TOTAL_DESC_CEILING = 2200 // was 2,933 across 7 skills on 2026-08-27
+    // 2026-10-06 show-me, a sixth skill: its body (670 words) and description (309 chars) are born at the measured
+    // value, strict, so zero headroom. The resident description total rises once, 2,200 -> 2,509, by exactly that
+    // description (the five others measured 2,144 after their STE rewrite, so the total is 2,453); the catalog cap
+    // rises once, 200 -> 226, by exactly its new row (26 words, 199 -> 225). No other ceiling moves.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350, 'show-me': 671 }
+    const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 310 }
+    const TOTAL_DESC_CEILING = 2509 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
     const split = (name: string): { desc: string; body: string } => {
       const md = readText(`plugin/skills/${name}/SKILL.md`)
@@ -986,7 +991,7 @@ describe('plugin packaging', () => {
       expect(total, 'always-resident description chars').toBeLessThan(TOTAL_DESC_CEILING)
     })
     it('the catalog ships next to the skills, so it is capped too', () => {
-      expect(words(readText('plugin/skills/README.md'))).toBeLessThan(200)
+      expect(words(readText('plugin/skills/README.md'))).toBeLessThan(226)
     })
   })
 

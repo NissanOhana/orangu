@@ -162,11 +162,12 @@ A proposal cannot verify itself, and an application receipt does not prove that 
   - **Stop at the first failure.** Harness applies the approved items in order and halts at the first one that fails. It leaves the working tree as it stands for review and does not continue down the list.
 
   None of this moves the deterministic boundary. No model measures anything, and the evidence is still the bounded deterministic projection. The CLI still validates artifact shape and does not inspect a diff.
+- `/orangu:show-me` turns the evidence of one session, one repository or all sessions into a slide deck and a written report. It reads the same bounded `orangu` output behind the same size gate, and it copies each number from that output. It computes no figure. It writes only 2 offline HTML files under `~/.orangu/show-me/`. It writes no suggestion record and no repository file. It has no Codex mirror.
 - Live observation is a CLI concern. `orangu watch` refreshes one report, and `orangu serve` follows several sessions. Neither performs model reasoning of its own.
 
 ## Claude Code and Codex parity
 
-The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:harness`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. `npm run verify` fails when a mirror is stale.
+The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:harness`, `/orangu:show-me`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. `npm run verify` fails when a mirror is stale.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule. Host parity does not imply transcript parity: the local adapter still supports only the named Claude Code, Cowork, and Desktop session formats.
 
