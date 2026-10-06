@@ -15,6 +15,7 @@ import { mascotSvg } from './mascot.js'
 import { shortId } from './nav.js'
 import { badgeCopy, fleetFeed } from './derive.js'
 import { megaReview } from './mega-review.js'
+import { proposalsUi } from './proposals-ui.js'
 import { renderRepo } from './screens/repo.js'
 import { renderGlobal } from './screens/global.js'
 import { harnessCardHtml, renderHarness } from './screens/harness.js'
@@ -223,4 +224,4 @@ function harnessCard(ds: DataSource, onLoaded: () => void, href: string): string
   return harnessCardHtml(harnessReport, href)
 }
 
-export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview, ensureHarness, invalidateHarness, harnessView, harnessCard }
+export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview, ensureHarness, invalidateHarness, harnessView, harnessCard, proposals: proposalsUi }

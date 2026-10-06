@@ -265,7 +265,10 @@ describe('renderSuggest proposal UX', () => {
   it('draws the stored proposal and the inbox only through the serve seam', () => {
     const row = planRows('session', analysis, undefined)[0]!
     const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
-    const records = [proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId }), proposalRecord('sg_0000000000ac')]
+    const records = [
+      proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId }),
+      proposalRecord('sg_0000000000ac', { proposal: { title: 'Saved elsewhere', change: 'x', effort: 'S', proposalPath: '/tmp/saved.md' } }),
+    ]
     renderSuggest(context('serve', records))
     expect(markup).not.toContain('sg-proposal')
     expect(markup).not.toContain('sg-inbox')

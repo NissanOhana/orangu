@@ -35,6 +35,8 @@ export interface Ctx {
   aggLoading?: boolean
   /** serve-only whole-harness CTA; aggregate screens are unavailable in file mode */
   megaReview?: (scope: 'repo' | 'global') => string
+  /** serve-only stored proposal and Saved proposals inbox; a file report embeds no stored proposal */
+  proposals?: ProposalsUi
   /** serve-only Overview card from the harness report ('' until it has loaded; kicks the fetch) */
   harnessCard?: () => string
   go(next: Partial<RouteState>, opts?: { push?: boolean }): void
@@ -156,6 +158,16 @@ export interface ServeUi {
   harnessView(ctx: Ctx): HTMLElement
   /** the Overview card; `href` is the #harness route carrying the current session key */
   harnessCard(ds: DataSource, onLoaded: () => void, href: string): string
+  /** only serve provides it: file reports embed `suggestions: []` (render.ts), so the file seams leave it out */
+  proposals?: ProposalsUi
+}
+
+/** Serve-only proposal renderers (proposals-ui.ts), injected by serve-ui.ts so both file bundles stay without them. */
+export interface ProposalsUi {
+  /** the proposal block a stored record carries on its plan row; '' when there is none */
+  details(record: import('../../model/app-data.js').SuggestionViewRecord | undefined): string
+  /** the Saved proposals inbox for one scope: stored proposals for the active sessions that no plan row shows */
+  inbox(ctx: Ctx, scope: import('../../suggest/types.js').SuggestionScope, aggregateSessionIds: string[], mapped: import('../../model/app-data.js').SuggestionViewRecord[]): string
 }
 
 /** Refresh persisted suggestion state after an SSE transition without erasing the last good view. */
@@ -269,6 +281,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     conn,
     aggLoading: serveUi ? (state.screen === 'harness' ? serveUi.ensureHarness(ds, scheduleRender) : serveUi.ensureAggregate(d, ds, state, scheduleRender)) : false,
     megaReview: serveUi?.megaReview,
+    proposals: serveUi?.proposals,
     harnessCard: serveUi ? () => serveUi.harnessCard(ds, scheduleRender, cleanHash(state, { screen: 'harness' })) : undefined,
     go,
   })

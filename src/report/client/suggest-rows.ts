@@ -7,23 +7,11 @@
 import type { Analysis, Insight } from '../../model/analysis.js'
 import { plural } from './format.js'
 import { compareCrossFindings, type Aggregate, type CrossFinding } from '../../analyze/aggregate.js'
-import type { Finding, SuggestionProposal, SuggestionRecord, SuggestionScope } from '../../suggest/types.js'
+import type { Finding, SuggestionRecord, SuggestionScope } from '../../suggest/types.js'
 import { kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
-
-export const SAVED_PROPOSAL_LIMIT = 12
-export const PROPOSAL_LIST_LIMIT = 6
 
 /** The one-time plugin install, typed inside Claude Code (not a shell command); the report and the CLI print the same line. */
 export const PLUGIN_INSTALL = '/plugin marketplace add NissanOhana/orangu · /plugin install orangu'
-
-const nonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
-
-/** Runtime guard for append-only records: legacy proposals omit v and structured fields. */
-export function hasValidProposal(record: SuggestionRecord): record is SuggestionRecord & { proposal: SuggestionProposal } {
-  const p = record.proposal as unknown as Record<string, unknown> | undefined
-  return !!p && /^sg_[0-9a-f]{12}$/.test(record.id) && Array.isArray(record.sessionIds) && record.sessionIds.length > 0 && record.sessionIds.every(nonEmptyString) &&
-    nonEmptyString(p['title']) && nonEmptyString(p['change']) && /^[SML]$/.test(String(p['effort'])) && nonEmptyString(p['proposalPath']) && (p['v'] ?? 1) === 1
-}
 
 export interface PlanRow {
   ruleId: string
@@ -178,35 +166,4 @@ export function recordForRow<T extends SuggestionRecord>(records: T[], row: Plan
     if (!best || record.statusAt > best.statusAt) best = record
   }
   return best
-}
-
-function identityKeys(record: SuggestionRecord): string[] {
-  return [record.id, ...(Array.isArray(record.legacyIds) ? record.legacyIds : []), record.proposal?.proposalPath].filter(nonEmptyString)
-}
-
-/**
- * Serve-only inbox selection. Session scope is exact; aggregate scopes require evidence overlap.
- * Mapped rows and migrated/path duplicates are removed before the hard display cap.
- */
-export function savedProposalRecords<T extends SuggestionRecord>(
-  records: T[],
-  scope: SuggestionScope,
-  selectedSessionId: string | undefined,
-  aggregateSessionIds: string[],
-  mappedRecords: T[],
-): T[] {
-  const activeIds = new Set(scope === 'session' ? (selectedSessionId ? [selectedSessionId] : []) : aggregateSessionIds)
-  if (!activeIds.size) return []
-  const seen = new Set(mappedRecords.flatMap(identityKeys))
-  const result: T[] = []
-  const newest = [...records].sort((a, b) => b.statusAt - a.statusAt)
-  for (const record of newest) {
-    if (record.scope !== scope || !hasValidProposal(record) || !record.sessionIds.some((id) => activeIds.has(id))) continue
-    const keys = identityKeys(record)
-    if (keys.some((key) => seen.has(key))) continue
-    keys.forEach((key) => seen.add(key))
-    result.push(record)
-    if (result.length === SAVED_PROPOSAL_LIMIT) break
-  }
-  return result
 }
