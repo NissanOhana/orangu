@@ -444,7 +444,7 @@ ${showMe(ctx.data, ctx.state, ctx.a)}
     screenEl.id = 'screen-' + state.screen
     const page = h('<div class="page"></div>')
     if (d.illustrative)
-      page.appendChild(h('<div class="sample-note" role="note"><b>Illustrative synthetic sample.</b> Its numbers come from made-up input, not a measured customer result.</div>'))
+      page.appendChild(h('<div class="sample-note" role="note"><b>This sample is synthetic.</b> Its numbers come from made-up input, not a measured customer result.</div>'))
     page.appendChild(pageHead(ctx))
     page.appendChild(screenEl)
     const main = h('<main class="main"></main>')

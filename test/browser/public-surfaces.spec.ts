@@ -299,7 +299,7 @@ test('generated sample exposes outcome, timeline, subagent evidence, and both la
   })
   await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
 
-  await expect(page.getByRole('note')).toContainText('Illustrative synthetic sample.')
+  await expect(page.getByRole('note')).toContainText('This sample is synthetic.')
   await expect(page.getByRole('note')).toContainText('made-up input')
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
@@ -386,7 +386,7 @@ test('generated repository sample renders the repo scope and the two samples lin
     if (new URL(request.url()).origin !== 'http://127.0.0.1:4173') external.push(request.url())
   })
   await page.goto(withTheme(`${SITE}/sample-repo.html#repo`, info), { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('note')).toContainText('Illustrative synthetic sample.')
+  await expect(page.getByRole('note')).toContainText('This sample is synthetic.')
   await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
   await expect(page.getByText('Recurring findings', { exact: false }).first()).toBeVisible()
   await expect(page.locator('.rrow')).not.toHaveCount(0)
