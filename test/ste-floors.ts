@@ -90,12 +90,20 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // re-born 86 -> 79 and e.g. 0 -> 1. Measured 16 sentences, 13 clean, score 81 (was 14 clean, score 88).
   // insights.ts:1582 is now read as text: it has a semicolon and 26 words. The label `e.g. ${title}` at
   // aggregate.ts:119 now counts its e.g.
-  'src/analyze': { floor: 79, emDash: 0, eg: 1, ie: 0, etc: 0, contractions: 0 },
+  // B1: floor 79 -> 80 and e.g. 1 -> 0. Measured 17 sentences, 14 clean, score 82. The cross-finding label
+  // is now `In one session: ${title}` (aggregate.ts:124): one more scored sentence, clean, and no e.g.
+  'src/analyze': { floor: 80, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // B1, B2: the golden emitted copy
   'test/golden#insight.title': { floor: 90, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'test/golden#insight.detail': { floor: 42, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'test/golden#insight.recommendation': { floor: 66, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // re-born e.g. 10 -> 11: a label now counts its banned tokens. Measured 11 titles, each with "e.g.". The
   // 11th, "e.g. 1 hook error", has 2 words, and the old extraction dropped it as a fragment.
-  'test/golden#crossFinding.title': { floor: 0, emDash: 0, eg: 11, ie: 0, etc: 0, contractions: 0 },
+  // B1: floor 0 -> 89 and e.g. 11 -> 0. Measured 11 sentences, 10 clean, score 91. Every title now starts
+  // "In one session: " instead of "e.g. "; the one finding left is a rule-title semicolon (aggregate.json:252).
+  'test/golden#crossFinding.title': { floor: 89, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // B1: born at measurement. Measured 25 sentences, 17 clean, score 68 (floor 66), 0 banned tokens. The new
+  // CrossFinding.recommendation carries the rule copy of the example insight, so it scores like
+  // test/golden#insight.recommendation (25 sentences, 68) until B2 rewrites that copy.
+  'test/golden#crossFinding.recommendation': { floor: 66, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
 }
