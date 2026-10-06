@@ -192,7 +192,7 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(demo).toContain('Open the full sample report')
   })
 
-  it('shows the current Suggestions experience first', () => {
+  it('shows the current Improvements experience first', () => {
     const demo = src.match(/<div class="appdemo" id="appdemo">[\s\S]*?<\/section>/)?.[0] ?? ''
     expect(demo).toContain('class="demo-body"')
     expect(demo).toContain('class="demo-rail"')
@@ -222,10 +222,11 @@ describe('site/index.src.html (authored landing source)', () => {
       '<b>Proposal.</b>',
       '<b>Next-session verification.</b>',
       '<b>Explicit apply.</b>',
-      'handled by orangu:improve',
       'Claude apply',
       'Orangu compares later sessions from the same workspace with the sessions before the change',
     ]) expect(demo).toContain(copy)
+    // the report's Improvements cards keep the status chip and drop the "handled by" row; the demo matches
+    expect(demo).not.toContain('handled by orangu:improve')
     expect(demo).not.toContain('Codex apply')
     expect(demo).not.toContain('Run locally')
   })
@@ -233,8 +234,9 @@ describe('site/index.src.html (authored landing source)', () => {
   it('previews the real overview, timeline, and tools-and-calls capabilities', () => {
     const demo = src.match(/<div class="appdemo" id="appdemo">[\s\S]*?<\/section>/)?.[0] ?? ''
     expect(demo).not.toContain('data-demo-view="evidence"')
-    for (const tab of ['Overview', 'Timeline', 'Tools &amp; calls', 'Suggestions'])
+    for (const tab of ['Overview', 'Timeline', 'Tools &amp; calls', 'Improvements'])
       expect(demo, `missing preview tab: ${tab}`).toContain(`>${tab}<`)
+    expect(demo, 'the screen is named Improvements, as in the report').not.toContain('>Suggestions<')
     for (const view of ['overview', 'timeline', 'tools', 'suggest'])
       expect(demo, `missing preview view: ${view}`).toContain(`data-demo-view="${view}"`)
     expect(demo).toContain('role="tablist"')
@@ -697,10 +699,14 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(install).not.toContain('$orangu-')
   })
 
-  it('lists the five shipped skills', () => {
+  it('lists the six shipped skills', () => {
     const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
     const listed = [...install.matchAll(/<div class="skill"><b>\/orangu:([a-z-]+)<\/b>/g)].map((m) => m[1])
-    expect(listed).toEqual(['improve', 'apply', 'analyze', 'harness', 'feedback'])
+    expect(listed).toEqual(['improve', 'apply', 'analyze', 'harness', 'show-me', 'feedback'])
+    expect(install).toContain('<div class="skill"><b>/orangu:show-me</b><div>Turn the evidence of one session, one repository or all sessions into a slide deck and a written report. Both are offline HTML files.</div></div>')
+    expect(install).toContain('<code>/orangu:show-me</code> writes a slide deck and a written report.')
+    // six cards fill two rows of three on a wide screen; five columns would leave one card alone
+    expect(src).toContain('@media (min-width:1000px){.skills{grid-template-columns:repeat(3,1fr)}}')
     for (const retired of ['/orangu:mega', '/orangu:watch', '/orangu:suggest']) expect(src).not.toContain(retired)
     const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => existsSync(join(root, 'plugin/skills', dir, 'SKILL.md'))).sort()
     expect(dirs).toEqual([...listed].sort())
@@ -846,9 +852,9 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     expect(llms).toContain('https://www.npmjs.com/package/orangu')
   })
 
-  it('names only the final five skills and every CLI verb from --help', () => {
+  it('names only the six shipped skills and every CLI verb from --help', () => {
     const skills = [...llms.matchAll(/\/orangu:([a-z-]+)/g)].map((m) => m[1])
-    expect(new Set(skills)).toEqual(new Set(['analyze', 'improve', 'apply', 'harness', 'feedback']))
+    expect(new Set(skills)).toEqual(new Set(['analyze', 'improve', 'apply', 'harness', 'show-me', 'feedback']))
     expect(llms).not.toContain('/orangu:mega')
     for (const verb of ['report', 'serve', 'repo', 'global', 'harness', 'analyze']) expect(llms).toContain(`npx orangu ${verb}`)
   })

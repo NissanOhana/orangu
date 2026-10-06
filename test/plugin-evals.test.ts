@@ -12,7 +12,7 @@ import { currencyHits, moneyHits } from './money-vocabulary.js'
 const root = process.cwd()
 const EVALS = 'plugin/evals'
 const readText = (p: string): string => readFileSync(join(root, p), 'utf8')
-const SKILLS = ['analyze', 'apply', 'feedback', 'harness', 'improve'] as const
+const SKILLS = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'show-me'] as const
 const GRADER_TYPES = ['regex', 'tool_used', 'tool_order', 'file_exists', 'llm', 'baseline']
 // prompt.md frontmatter keys the runner accepts; an unknown key fails the case at load time
 const PROMPT_KEYS = ['schema_version', 'name', 'description', 'tags', 'plugins', 'runs', 'expected_outcome', 'model', 'max_turns', 'timeout_seconds', 'allowed_tools', 'append_system_prompt', 'env']

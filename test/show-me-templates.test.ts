@@ -1,0 +1,191 @@
+/**
+ * The two /orangu:show-me templates. Each is built from its source, offline, typeset on the canonical tokens,
+ * and fillable by the slot rules the skill follows. A deck and a written report filled from synthetic
+ * fixtures pass the same offline gate as an orangu report, with every sample value replaced.
+ */
+import { describe, it, expect } from 'vitest'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { runInNewContext } from 'node:vm'
+import type { Analysis } from '../src/model/analysis.js'
+import { slimAnalysis } from '../src/suggest/slim.js'
+import { projectEvidence } from '../src/suggest/evidence.js'
+import { FORMATS, aggregatePage, fillTemplate, sessionPage, type Words } from './fixtures/show-me-fill.js'
+
+const root = process.cwd()
+const DIR = 'plugin/skills/show-me/references'
+const NAMES = ['slides', 'report'] as const
+const read = (path: string): string => readFileSync(join(root, path), 'utf8')
+const built = (name: string): string => read(`${DIR}/${name}.html`)
+const source = (name: string): string => read(`${DIR}/${name}.src.html`)
+const CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"
+
+function offline(html: string, name: string): { status: number; out: string } {
+  const file = join(mkdtempSync(join(tmpdir(), 'orangu-show-me-')), name)
+  writeFileSync(file, html)
+  const r = spawnSync(process.execPath, [join(root, 'scripts/assert-offline.mjs'), '--file', file], { encoding: 'utf8' })
+  return { status: r.status ?? -1, out: r.stdout + r.stderr }
+}
+const scripts = (html: string): string[] => [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]!.trim())
+const slotNames = (html: string): string[] => [...new Set([...html.matchAll(/\bdata-slot="([^"]+)"/g)].map((m) => m[1]!))]
+
+const WORDS: Words = {
+  verdict: 'The session changed 1 file, and both test runs failed before it ended.',
+  summary: 'The session ran the flaky test suite and changed 1 file. Both test runs failed, and the session ended on the failure. Two tool errors came from Bash.',
+  whys: ['Each failed tool call used a turn and gave the agent no new evidence.', 'The session ended on a failing test run.', 'The model sent its request again.'],
+  improvementsTitle: 'Three changes for the next session',
+}
+const golden = (name: string): Analysis => JSON.parse(read(`test/golden/${name}.analysis.json`)) as Analysis
+
+describe('show-me templates: built, offline, on the tokens', () => {
+  for (const name of NAMES) {
+    it(`${name}.html passes the offline gate`, () => {
+      const r = offline(built(name), `${name}.html`)
+      expect(r.out).toContain('offline OK')
+      expect(r.status).toBe(0)
+    })
+
+    it(`${name}.html carries the report head and no placeholder`, () => {
+      const html = built(name)
+      expect(html.startsWith('<!doctype html>')).toBe(true)
+      expect(html).toContain('<meta charset="utf-8"/>')
+      expect(html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1"/>')
+      expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${CSP}"/>`)
+      expect(html).toContain('<meta name="robots" content="noindex"/>')
+      expect(html).toContain(`<meta name="generator" content="orangu ${JSON.parse(read('package.json')).version}"/>`)
+      expect(html).not.toMatch(/\{\{[^}]+\}\}|<!-- @[a-z]+ -->/)
+    })
+
+    it(`${name} follows the theme only through data-theme, and loads no font`, () => {
+      const html = built(name)
+      expect(html).not.toMatch(/prefers-color-scheme|fonts\.googleapis|@font-face|@import/)
+      // the tokens come from the canonical file, once, and the source repeats none of them
+      expect(html.split(read('src/report/client/tokens.css').trim()).length - 1).toBe(1)
+      expect(source(name)).toContain('<!-- @tokens -->')
+      expect(source(name).match(/#[0-9a-fA-F]{3,8}\b/g), `${name}.src.html hardcodes a colour`).toBeNull()
+    })
+  }
+
+  it('both files run the one shared runtime, minified, in 2 KB or less', () => {
+    const [deck, report] = NAMES.map((name) => scripts(built(name)))
+    expect(deck).toHaveLength(1)
+    expect(report).toEqual(deck)
+    expect(Buffer.byteLength(deck![0]!), 'inline JS bytes').toBeLessThanOrEqual(2048)
+  })
+
+  it('the deck prints one slide per landscape page, and the written report on the default page', () => {
+    expect(built('slides')).toContain('@page{size:13.333in 7.5in;margin:0}')
+    expect(built('slides')).toMatch(/@media print\{[\s\S]*break-after:page/)
+    expect(built('report')).toContain('@page{margin:18mm}')
+  })
+
+  it('the deck has the slide roles, a keyboard focus root and a theme button', () => {
+    const html = built('slides')
+    expect(html).toContain('<main class="deck" tabindex="0" aria-label="Slides">')
+    expect(html.match(/aria-roledescription="slide"/g)).toHaveLength(6)
+    expect(html).toContain('<button class="theme" id="theme" type="button">')
+    expect(html).toContain('href="report.html"')
+    expect(built('report')).toContain('href="slides.html"')
+  })
+})
+
+describe('show-me runtime', () => {
+  // Run the shipped runtime against a minimal document: each number element gets the text that the report's
+  // own formatter gives, so a deck, a written report and an orangu report never disagree.
+  function format(cases: Array<{ f: string; v: string }>): string[] {
+    const elements = cases.map(({ f, v }) => ({ dataset: { f, v }, textContent: 'unset' }))
+    const document = {
+      documentElement: { dataset: {} as Record<string, string> },
+      querySelectorAll: (selector: string) => (selector === '[data-f][data-v]' ? elements : []),
+      getElementById: () => null,
+      addEventListener: () => undefined,
+    }
+    runInNewContext(scripts(built('slides'))[0]!, {
+      document,
+      location: { hash: '' },
+      history: { replaceState: () => undefined },
+      URLSearchParams,
+      IntersectionObserver: class { observe(): void {} },
+    })
+    return elements.map((e) => e.textContent)
+  }
+
+  it('formats tok, ms, pct, num, date and time exactly as src/report/client/format.ts', () => {
+    const cases: Array<{ f: string; v: number }> = []
+    for (const v of [0, 7, 950, 1000, 12_345, 99_999, 100_000, 1_234_567, 12_345_678, 2_000_000_000, 23_000_000_000]) cases.push({ f: 'tok', v }, { f: 'num', v })
+    for (const v of [0, 870, 999, 4_200, 59_400, 65_080, 750_000, 3_599_000, 7_500_000, 90_000_000, 200_000_000]) cases.push({ f: 'ms', v })
+    for (const v of [0, 0.0004, 0.834, 0.836, 0.9997, 1]) cases.push({ f: 'pct', v })
+    for (const v of [0, 1_786_955_400_000, 1_786_701_733_460]) cases.push({ f: 'date', v }, { f: 'time', v })
+    expect(format(cases.map(({ f, v }) => ({ f, v: String(v) })))).toEqual(cases.map(({ f, v }) => FORMATS[f]!(v)))
+  })
+
+  it('adds the parts of a sum, and leaves an empty or unknown value alone', () => {
+    expect(format([{ f: 'num', v: '3+1' }, { f: 'num', v: '' }, { f: 'num', v: 'x' }, { f: 'nope', v: '5' }])).toEqual(['4', 'unset', 'unset', 'unset'])
+  })
+})
+
+describe('show-me slot contract', () => {
+  const rules = read(`${DIR}/slots.md`)
+  const named = new Set([...rules.matchAll(/`([a-z][a-z0-9-]*)`/g)].map((m) => m[1]!))
+
+  for (const name of NAMES) {
+    it(`every slot in ${name}.html is named in the slot rules and holds an EXAMPLE sample`, () => {
+      const html = built(name)
+      for (const slot of slotNames(html)) expect(named.has(slot), `slots.md names ${slot}`).toBe(true)
+      for (const m of html.matchAll(/<([a-z0-9]+)\b[^>]*\bdata-slot="([^"]+)"[^>]*>([^<]*)<\/\1>/g))
+        expect(m[3], `${m[2]} sample value`).toMatch(/^EXAMPLE /)
+      for (const m of html.matchAll(/\bdata-(?:if|chart)="([^"]+)"/g)) expect(named.has(m[1]!), `slots.md names ${m[1]}`).toBe(true)
+    })
+  }
+
+  it('one rule set fills both files: the report adds only its summary and its footer date', () => {
+    const deck = new Set(slotNames(built('slides')))
+    expect(slotNames(built('report')).filter((slot) => !deck.has(slot)).sort()).toEqual(['generated', 'summary'])
+  })
+})
+
+describe('show-me filled from synthetic fixtures', () => {
+  const fillBoth = (page: ReturnType<typeof sessionPage>): Record<(typeof NAMES)[number], string> =>
+    ({ slides: fillTemplate(built('slides'), page), report: fillTemplate(built('report'), page) })
+
+  it('a session with 3 findings: 8 slides, no sample value left, offline', () => {
+    const files = fillBoth(sessionPage(slimAnalysis(golden('errors-and-interrupts')), WORDS))
+    expect(files.slides.match(/aria-roledescription="slide"/g)).toHaveLength(8)
+    expect(files.report.match(/<article class="finding"/g)).toHaveLength(3)
+    for (const name of NAMES) {
+      const html = files[name]
+      expect(html, `${name} keeps a sample value`).not.toContain('EXAMPLE')
+      expect(html, `${name} leaves a number without its CLI value`).not.toContain('data-v=""')
+      expect(html).toContain('<html lang="en" data-scope="session" data-live="false" data-caution="false" data-redacted="false">')
+      expect(html).toContain('2 of 2 test runs failed')
+      expect(offline(html, `${name}.html`).status).toBe(0)
+    }
+  })
+
+  it('a session with no finding: no finding slide, the empty improvement state, offline', () => {
+    const a = golden('single-prompt')
+    const files = fillBoth(sessionPage(slimAnalysis({ ...a, insights: [], summary: { ...a.summary, topInsightIds: [] } }), WORDS))
+    expect(files.slides.match(/aria-roledescription="slide"/g)).toHaveLength(5)
+    for (const name of NAMES) {
+      expect(files[name]).not.toContain('EXAMPLE')
+      expect(files[name]).toContain('No improvements found')
+      expect(files[name]).toContain('<code>npx orangu</code>')
+      expect(files[name]).not.toContain('/orangu:improve')
+      expect(offline(files[name], `${name}.html`).status).toBe(0)
+    }
+  })
+
+  it('a repository aggregate: recurring findings, the harness command, offline', () => {
+    const evidence = projectEvidence(JSON.parse(read('test/golden/aggregate.json')), { scope: 'repo' })
+    const page = aggregatePage(evidence, 'repo', { folder: 'demo', version: '0.0.0-test', words: WORDS })
+    for (const [name, html] of Object.entries(fillBoth(page))) {
+      expect(html).not.toContain('EXAMPLE')
+      expect(html).toContain('Recurring patterns in demo')
+      expect(html).toContain('<code>claude "/orangu:harness --scope repo"</code>')
+      expect(html).not.toContain('/orangu:improve')
+      expect(offline(html, `${name}.html`).status).toBe(0)
+    }
+  })
+})

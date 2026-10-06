@@ -9,18 +9,19 @@ const root = process.cwd()
 const readJson = (p: string) => JSON.parse(readFileSync(join(root, p), 'utf8'))
 const readText = (p: string): string => readFileSync(join(root, p), 'utf8')
 
-function markdownFiles(...dirs: string[]): string[] {
+function filesWith(extensions: readonly string[], ...dirs: string[]): string[] {
   const files: string[] = []
   const walk = (dir: string): void => {
     for (const entry of readdirSync(join(root, dir))) {
       const rel = `${dir}/${entry}`
       if (statSync(join(root, rel)).isDirectory()) walk(rel)
-      else if (rel.endsWith('.md')) files.push(rel)
+      else if (extensions.some((extension) => rel.endsWith(extension))) files.push(rel)
     }
   }
   for (const dir of dirs) walk(dir)
   return files.sort()
 }
+const markdownFiles = (...dirs: string[]): string[] => filesWith(['.md'], ...dirs)
 
 // The normative shell-data and untrusted-content rules live in ONE file; each skill/agent keeps
 // two inline sentences plus a link. Guards read the pair so the guarantee stays reachable.
@@ -34,8 +35,10 @@ const withSharedRules = (path: string): string => {
   return `${text}\n${readText(join(dirname(path), link))}`
 }
 
+// The show-me templates ship under plugin/skills as .html and become the pages a user shares, so the
+// public-copy guards (money, claims, em dash) read them beside the Markdown.
 function pluginPublicCopy(): Array<{ path: string; text: string }> {
-  const markdown = markdownFiles('plugin/skills', 'plugin/agents')
+  const markdown = filesWith(['.md', '.html'], 'plugin/skills', 'plugin/agents')
     .map((path) => ({ path, text: readText(path) }))
   return [
     ...markdown,
@@ -56,8 +59,8 @@ describe('plugin packaging', () => {
     const m = readJson('.claude-plugin/marketplace.json')
     expect(m.plugins.some((x: { name: string; source: string }) => x.name === 'orangu' && x.source === './plugin')).toBe(true)
   })
-  it('ships the five intended /orangu:* commands with valid frontmatter', () => {
-    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve']
+  it('ships the six intended /orangu:* commands with valid frontmatter', () => {
+    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'show-me']
     const namespace = readJson('plugin/.claude-plugin/plugin.json').name
     expect(readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()).toEqual([...skills].sort())
     for (const s of skills) {
@@ -563,7 +566,7 @@ describe('plugin packaging', () => {
   // build mirrors to Codex, so the file stays host-portable. The list grows until it names every shipped skill.
   const STE_RULES = 'plugin/skills/shared/ste.md'
   const STE_SENTENCE = 'Write all user-facing text in STE, as [the STE rules](../shared/ste.md) direct.'
-  const STE_SKILLS = ['improve', 'apply', 'feedback', 'analyze', 'harness']
+  const STE_SKILLS = ['improve', 'apply', 'feedback', 'analyze', 'harness', 'show-me']
   it('the skills tell Claude to write user-facing text in STE, from one shared rules file', () => {
     expect(existsSync(join(root, STE_RULES)), `${STE_RULES} exists`).toBe(true)
     for (const s of STE_SKILLS) {
@@ -642,6 +645,82 @@ describe('plugin packaging', () => {
   it('no mirrored skill file names the Claude-only show-me skill', () => {
     for (const path of markdownFiles('plugin/skills/improve', 'plugin/skills/apply', 'plugin/skills/feedback', 'plugin/skills/shared'))
       expect(readText(path), `${path} names no Claude-only skill`).not.toContain('/orangu:show-me')
+    // Claude-only: no Codex mirror and no CLI verb of the same name
+    for (const target of ['.agents/skills', 'plugins/orangu/skills']) expect(existsSync(join(root, target, 'orangu-show-me'))).toBe(false)
+  })
+
+  // /orangu:show-me turns deterministic evidence into a slide deck and a written report. It may read CLI
+  // output and its own templates, write only under ~/.orangu/show-me, and never measure anything itself.
+  describe('show-me', () => {
+    const SHOW_ME = 'plugin/skills/show-me/SKILL.md'
+    const md = (): string => readText(SHOW_ME)
+    const body = (): string => md().split('\n---\n')[1] ?? ''
+    const grants = (): string[] => (/^allowed-tools:\s*(.+)$/m.exec(md())?.[1] ?? '').split(',').map((grant) => grant.trim())
+
+    it('pre-approves exactly the CLI, a temp directory, reads, and writes under ~/.orangu/show-me', () => {
+      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node *orangu.cli.mjs*)', 'Bash(mktemp:*)', 'Read', 'Write(~/.orangu/show-me/**)'])
+      // opening the files is a normal permission prompt, never a pre-approval
+      expect(grants().join(' ')).not.toMatch(/\b(?:open|xdg-open|start)\b/)
+    })
+
+    it('sizes every read before it reads, and treats a failed size command as a large read', () => {
+      const text = body()
+      const before = (size: string, read: string): void => {
+        expect(text, `names ${size}`).toContain(size)
+        expect(text, `names ${read}`).toContain(read)
+        expect(text.indexOf(size), `${size} comes before ${read}`).toBeLessThan(text.indexOf(read))
+      }
+      before("orangu estimate '<session>' --slim --json", "orangu analyze '<session>' --json --slim")
+      before("orangu evidence '<tmp>/aggregate.json' --scope repo --estimate --quiet", "orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'")
+      expect(text).toMatch(/about 5,000 tokens \(about 20 KB\), ask before you read it/)
+      expect(text).toMatch(/If the size command fails[^.]*treat the read as over the limit/)
+      expect(text).toContain('Never combine `--out` with `--json`.')
+    })
+
+    it('copies numbers, never computes one, and keeps money, scores and rankings out', () => {
+      for (const rule of [
+        'Copy each number from the CLI output. Compute or estimate no new figure.',
+        'Use only tokens, milliseconds (ms) and S, M or L effort as units.',
+        'Show a savings figure only where the rule claims one.',
+        'Show no composite score and no ranking of people.',
+      ]) expect(body(), rule).toContain(rule)
+    })
+
+    // The report's Show me control copies exactly these 3 forms, each as claude "…" for a terminal paste: the
+    // full session id on a session, --scope repo or --scope global on a scope file. Each form must be documented
+    // and must reach its read, and a bare call must pick a session instead of failing.
+    it('accepts the 3 forms that the report copies, and a bare call', () => {
+      const text = body()
+      expect(text).toContain('`claude "/orangu:show-me …"`')
+      for (const form of ['/orangu:show-me <session>', '/orangu:show-me --scope repo', '/orangu:show-me --scope global'])
+        expect(text, `documents ${form}`).toContain(`\`${form}\``)
+      expect(text, 'a full session id is a session').toMatch(/`<session>` is a session id/)
+      expect(text, 'session form reaches its read').toContain("orangu analyze '<session>' --json --slim")
+      expect(text, 'repo form reaches its read').toContain("orangu repo '<dir>' --out '<tmp>/aggregate.json'")
+      expect(text, 'repo form projects its scope').toContain("orangu evidence '<tmp>/aggregate.json' --scope repo --quiet")
+      expect(text, 'global form reaches its read').toContain("orangu global --out '<tmp>/aggregate.json'")
+      expect(text, 'global form projects its scope').toMatch(/the same steps with `orangu global --out '<tmp>\/aggregate\.json'` and `--scope global`/)
+      expect(text, 'a bare call shows the latest session').toContain('With no argument, show `latest`, and tell the user which session id that is.')
+    })
+
+    it('keeps default redaction unless the user asks', () => {
+      expect(body()).toContain('Use default redaction. Add `--no-redact` or `--include-text` only when the user explicitly asks for it.')
+    })
+
+    it('fills the two built templates and writes exactly two files to a new directory each run', () => {
+      const text = body()
+      for (const file of ['references/slides.html', 'references/report.html', 'references/slots.md']) expect(text, file).toContain(file)
+      expect(text, 'the sources are build input, never read by the skill').not.toContain('.src.html')
+      expect(text).toContain('~/.orangu/show-me/<id>/slides.html')
+      expect(text).toContain('~/.orangu/show-me/<id>/report.html')
+      expect(text).toContain("so a second run never overwrites the first")
+      expect(text).toMatch(/search its text for `EXAMPLE`\. The count must be 0\./)
+    })
+
+    it('prints both paths and opens both files with the OS opener', () => {
+      expect(body()).toContain('Print both absolute paths.')
+      for (const opener of ['`open`', '`xdg-open`', '`start`']) expect(body()).toContain(opener)
+    })
   })
 
   it('public plugin and marketplace copy stays role-neutral and claim-safe', () => {
@@ -830,7 +909,7 @@ describe('plugin packaging', () => {
   })
 
   it('every description routes away from a sibling and opens with its own job', () => {
-    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve']
+    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'show-me']
     const descriptions = new Map<string, string>()
     for (const s of skills) {
       const md = readText(`plugin/skills/${s}/SKILL.md`)
@@ -848,7 +927,7 @@ describe('plugin packaging', () => {
   it('plugin/skills/README.md catalogs exactly the shipped skills', () => {
     const readme = readText('plugin/skills/README.md')
     const dirs = readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()
-    const rows = [...readme.matchAll(/^\| `\/orangu:([a-z]+)`/gm)].map((m) => m[1]).sort()
+    const rows = [...readme.matchAll(/^\| `\/orangu:([a-z-]+)`/gm)].map((m) => m[1]).sort()
     expect(rows).toEqual(dirs)
     expect(readme, 'the harness row says the review interviews the user').toMatch(/interview/)
     expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 200 words').toBeLessThan(200)
