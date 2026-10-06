@@ -56,17 +56,7 @@ orangu needs Node.js 20 or newer and no runtime dependency. The [usage guide](do
 3. **Propose.** `/orangu:improve` explains one finding's bounded evidence and drafts a structured proposal. It never edits your project.
 4. **Apply, with a receipt.** `/orangu:apply` applies one explicitly reviewed proposal and records what changed and which checks ran.
 
-Every proposal has one of nine change classes ([data contracts](docs/DATA-CONTRACTS.md)):
-
-- instruction files
-- scripts and CLIs
-- hooks
-- skills to create
-- skills to discover
-- subagents and agents
-- MCP servers
-- plugins
-- workflow and configuration
+Each proposal has one of nine change classes ([data contracts](docs/DATA-CONTRACTS.md)). They are instruction files, scripts and CLIs, hooks, skills to create, skills to discover, subagents and agents, MCP servers, plugins, and workflow and configuration.
 
 You apply a session or repo-wide change on request. orangu then checks it on later sessions from the same workspace. The change counts as verified only when those sessions beat the sessions before it beyond chance. `orangu suggest --effect <id>` shows the comparison.
 
@@ -114,7 +104,7 @@ orangu is not a proxy, an SDK, a hook you install before the session, or a model
 ## Privacy and support
 
 - Redaction is on by default. Add `--strip-paths` before you share a report. Review every export first.
-- orangu counts unknown transcript records and shows them in Coverage. They do not crash the analysis.
+- orangu counts unknown transcript records and shows them in Coverage. They never crash the analysis.
 - Feedback stays on localhost until you review the exact title and body and open GitHub's issue composer yourself.
 
 Read the [privacy model](docs/PRIVACY.md), [supported limits](docs/USAGE.md#supported-inputs-and-limits), and [security policy](SECURITY.md) before sharing a report or JSON export. Are you an LLM? Read [llms.txt](https://nissanohana.github.io/orangu/llms.txt).
