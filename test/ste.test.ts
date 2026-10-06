@@ -3,8 +3,10 @@
  * ceilings from test/ste-floors.ts. `npm run ste` prints the table, and `npm run ste -- <surface>` prints
  * the findings of one surface with file, line and fix.
  */
+import { readdirSync } from 'node:fs'
+import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { HELP_BIN, ROOT, helpText, measureAll, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
+import { DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, helpText, listFiles, measureAll, surfaces, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
 import { BANNED, STE_FLOORS } from './ste-floors.js'
 
 let measured = new Map<string, SurfaceMeasure>()
@@ -45,5 +47,27 @@ describe('STE gate', () => {
     const files = tsFiles(ROOT, ['src/report/client'])
     expect(files).toContain('src/report/client/proposals-ui.ts')
     expect(files.filter((file) => /\.(test|spec)\.ts$/.test(file))).toEqual([])
+  })
+
+  it('measures every top-level src/ folder and the top-level src files; only built output is exempt, with its reason', () => {
+    const ids = new Set(surfaces().map((surface) => surface.id))
+    const dirs = readdirSync(join(ROOT, 'src'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
+    for (const dir of dirs) {
+      if (dir === 'report') expect([ids.has('src/report/client'), ids.has('src/report/*.ts')], 'src/report splits in two rows').toEqual([true, true])
+      else expect(ids.has(`src/${dir}`), `src/${dir} is a surface`).toBe(true)
+    }
+    expect(ids.has('src/*.ts')).toBe(true)
+    expect(SRC_EXEMPT).toEqual({ 'src/report/generated': expect.stringMatching(/built/) })
+  })
+
+  it('measures every user doc at the root and in docs/; a doc left out names its reason', () => {
+    const ids = new Set(surfaces().map((surface) => surface.id))
+    const docs = listFiles(ROOT).filter((file) => /^(?:docs\/)?[^/]+\.md$/.test(file))
+    for (const doc of docs) expect(ids.has(doc) || DOC_EXEMPT[doc] !== undefined, `${doc} is gated or exempt`).toBe(true)
+    for (const doc of ['README.md', 'docs/USAGE.md', 'docs/DETERMINISM.md', 'docs/feedback.md', 'docs/README.md']) expect(ids.has(doc), doc).toBe(true)
+  })
+
+  it('measures the copy that the Codex mirror injects into the mirrored skills', () => {
+    expect(measured.get('scripts/build.mjs#codex')?.sentences ?? 0).toBeGreaterThan(0)
   })
 })

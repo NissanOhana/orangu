@@ -11,17 +11,31 @@
  *
  *   node scripts/ste.mjs <file...|-> [--json] [--lines]
  *
- * orangu adds four things to the rule set it ports:
+ * orangu adds these to the rule set it ports:
  * - a contraction rule. A possessive 's ("Claude's") is not a contraction.
  * - line mode (--lines): every line is its own block, for columnar text such as --help.
+ * - Markdown table cells are scored one cell per block (columnar text). A cell under 3 words is a label.
+ * - a label (a heading, a short cell, a short fragment) is not scored, but its banned tokens are counted.
  * - a command or a flag is one technical name. `npx orangu report --open` counts as one word, and the
- *   "--" in `git checkout -- <ref>` is not an em dash.
+ *   "--" in `git checkout -- <ref>` is not an em dash. A "--" used as a dash after a command still is one.
  * - a count of the banned tokens (em dash, e.g., i.e., etc., contractions), one finding per token.
  * Markdown files also score their frontmatter description as one block.
+ *
+ * Every non-ASCII character in this file's code is built from its code point, so none hides as a space.
  */
 import { readFileSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+
+const ch = (code) => String.fromCharCode(code)
+/** U+2029, the block break that htmlToText puts in place of a block tag */
+export const PARAGRAPH = ch(0x2029)
+const EM = ch(0x2014)
+const LSQUO = ch(0x2018)
+const RSQUO = ch(0x2019)
+const LDQUO = ch(0x201c)
+const RDQUO = ch(0x201d)
+const ELLIPSIS = ch(0x2026)
 
 export const LIMITS = { procedural: 20, descriptive: 25, paragraphSentences: 6 }
 
@@ -94,20 +108,28 @@ const IMPERATIVES = new Set(
 export const ING_NOUNS = new Set(['thing', 'nothing', 'something', 'anything', 'everything', 'during', 'morning', 'evening', 'string', 'ring', 'king', 'bring', 'spring', 'wing', 'ceiling', 'building', 'meaning', 'setting', 'warning', 'booking', 'pending', 'missing', 'funding', 'onboarding', 'bookkeeping', 'billing', 'pricing', 'routing', 'logging', 'testing', 'scheduling', 'matching'])
 export const PROGRESSIVE = /\b(am|is|are|was|were|be|been)\s+(?:not\s+|still\s+|now\s+)?([a-z]+ing)\b/gi
 export const PERFECT = /\b(has|have|had)\s+(?:not\s+|already\s+|never\s+|just\s+|now\s+)?(been|[a-z]+ed|done|gone|seen|made|written|run|taken|given|found|built|sent|shown|known|got|gotten|begun|broken|chosen|left|kept|held|put|set|read)\b/gi
-/** n't, 're, 've, 'll, 'm and 'd, plus the six 's forms that always mean "is" or "us", never a possessive */
-export const CONTRACTION = /\b[A-Za-z]+n['’]t\b|\b[A-Za-z]+['’](?:re|ve|ll|m|d)\b|\b(?:it|that|there|what|here|let)['’]s\b/gi
-const EM_DASH = /—|\s--\s/g
+/** n't, 're, 've, 'll, 'm and 'd, plus the 's forms that always mean "is", "has" or "us", never a possessive */
+export const CONTRACTION = new RegExp(
+  `\\b[A-Za-z]+n['${RSQUO}]t\\b|\\b[A-Za-z]+['${RSQUO}](?:re|ve|ll|m|d)\\b|\\b(?:it|that|there|what|here|let|who|where|how|he|she)['${RSQUO}]s\\b`,
+  'gi',
+)
+const EM_DASH = new RegExp(`${EM}|\\s--\\s`, 'g')
 const ABBREVIATIONS = /\b(e\.g|i\.e|etc|vs|approx|fig)\./gi
-const SENTENCE_END = /(?<=[.!?][*_)"'”’]*)\s+(?=[A-Z0-9"“(`*[_])/g
+const SENTENCE_END = new RegExp(`(?<=[.!?][*_)"'${RDQUO}${RSQUO}]*)\\s+(?=[A-Z0-9"${LDQUO}(\`*[_])`, 'g')
 const LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/
 
 /** The verbs that make `orangu <verb>` a command. "orangu reads the file" is the product noun, not a command. */
 const ORANGU_VERBS = new Set('report analyze list pick repo global watch serve feedback evidence estimate harness suggest help'.split(' '))
 const GIT_VERBS = new Set('add apply blame branch checkout cherry-pick clone commit config diff fetch grep init log merge mv pull push rebase reset restore revert rm show stash status switch tag worktree'.split(' '))
-const FLAG = /^--?[A-Za-z][\w-]*(?:=\S*)?$|^--$/
+/** a flag word; a bare "--" is taken only inside a command, before an argument */
+const FLAG = /^--?[A-Za-z][\w-]*(?:=\S*)?$/
 const PATHISH = /^[\w./~:@=+*-]*[/.~_:=@*\d][\w./~:@=+*-]*$/
-const OPEN_QUOTE = /["“'‘]/
-const CLOSE_QUOTE = /["”'’]/
+const OPEN_QUOTE = new RegExp(`["${LDQUO}'${LSQUO}]`)
+const CLOSE_QUOTE = new RegExp(`["${RDQUO}'${RSQUO}]`)
+const LEAD = new RegExp(`^[(${LDQUO}${LSQUO}"']*`)
+const TRAIL = new RegExp(`[.,;:!?)"${RDQUO}${RSQUO}']*$`)
+const WORD_EDGE = new RegExp(`^[([{"'${LDQUO}${LSQUO}]+|[)\\]}"'${RDQUO}${RSQUO}.,;:!?${ELLIPSIS}]+$`, 'g')
+const WORD = new RegExp(`^[A-Za-z][A-Za-z'${RSQUO}-]*$`)
 
 function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -123,7 +145,7 @@ export function htmlToText(html) {
   return html
     .replace(/<(script|style|svg|pre|code)\b[\s\S]*?<\/\1>/gi, blank)
     .replace(/<!--[\s\S]*?-->/g, blank)
-    .replace(/<\/?(p|li|h[1-6]|div|section|article|td|th|tr|br|ul|ol|header|footer|figcaption|blockquote)\b[^>]*>/gi, ' ')
+    .replace(/<\/?(p|li|h[1-6]|div|section|article|td|th|tr|br|ul|ol|header|footer|figcaption|blockquote)\b[^>]*>/gi, PARAGRAPH)
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -133,7 +155,48 @@ export function htmlToText(html) {
     .replace(/&quot;/g, '"')
 }
 
-/** Prose blocks of Markdown or text. With `lines`, every line closes its block (columnar text). */
+/**
+ * Words with a letter, after a command collapses to one technical name. A placeholder (3), a count
+ * or a path is not a word. A block under 3 such words is a label, not a sentence (carve-out 6).
+ */
+export function proseWords(text) {
+  return wrapCommands(text)
+    .replace(/`[^`]*`/g, 'CODE')
+    .split(/\s+/)
+    .map((token) => token.replace(WORD_EDGE, ''))
+    .filter((token) => WORD.test(token)).length
+}
+
+/** The cells of one Markdown table row; a pipe inside a code span or escaped as \| stays in its cell. */
+function tableCells(line) {
+  if (/^[\s|:-]+$/.test(line) && line.includes('-')) return []
+  const body = line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '')
+  const cells = []
+  let cell = ''
+  let code = false
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index]
+    if (char === '\\' && body[index + 1] === '|') {
+      cell += '|'
+      index += 1
+      continue
+    }
+    if (char === '`') code = !code
+    if (char === '|' && !code) {
+      cells.push(cell)
+      cell = ''
+      continue
+    }
+    cell += char
+  }
+  cells.push(cell)
+  return cells.map((text) => text.trim())
+}
+
+/**
+ * Prose blocks of Markdown or text. With `lines`, every line closes its block (columnar text). A heading
+ * is a label block. Each table cell is its own block: a label under 3 words, dropped when it is only code.
+ */
 export function proseBlocks(text, { lines: lineMode = false } = {}) {
   const lines = text.split('\n')
   const blocks = []
@@ -157,11 +220,25 @@ export function proseBlocks(text, { lines: lineMode = false } = {}) {
       else if (marker && marker[0] === fence) fence = null
       continue
     }
-    if (/^\s*$/.test(line) || /^\s*#{1,6}\s/.test(line) || /^\s*\|/.test(line) || /^\s*>/.test(line)) {
+    if (/^\s*$/.test(line) || /^\s*>/.test(line)) {
       close()
       continue
     }
-    const pieces = line.split(' ')
+    const heading = /^\s*#{1,6}\s+(.*)$/.exec(line)
+    if (heading) {
+      close()
+      blocks.push({ line: index + 1, text: heading[1], label: true })
+      continue
+    }
+    if (/^\s*\|/.test(line)) {
+      close()
+      for (const cell of tableCells(line)) {
+        if (!/[A-Za-z]/.test(cell.replace(/`[^`]*`/g, ''))) continue
+        blocks.push({ line: index + 1, text: cell, label: proseWords(cell) < 3 })
+      }
+      continue
+    }
+    const pieces = line.split(PARAGRAPH)
     pieces.forEach((piece, pieceIndex) => {
       if (pieceIndex > 0) close()
       if (LIST_ITEM.test(piece)) close()
@@ -185,7 +262,12 @@ export function frontmatterDescription(text) {
     const match = /^description:\s*(.*)$/.exec(lines[index])
     if (!match) continue
     let value = match[1].trim()
-    if (value.startsWith('"')) {
+    if (/^[>|][+-]?$/.test(value)) {
+      // a block scalar: folded (>) joins its indented lines with spaces, literal (|) with newlines
+      const body = []
+      for (let next = index + 1; next < end && /^\s+\S/.test(lines[next]); next += 1) body.push(lines[next].trim())
+      value = body.join(value.startsWith('>') ? ' ' : '\n')
+    } else if (value.startsWith('"')) {
       try {
         value = JSON.parse(value)
       } catch {
@@ -200,16 +282,16 @@ export function frontmatterDescription(text) {
 function tokenize(segment) {
   return [...segment.matchAll(/\S+/g)].map((match) => {
     const raw = match[0]
-    const lead = /^[(“‘"']*/.exec(raw)[0]
+    const lead = LEAD.exec(raw)[0]
     const rest = raw.slice(lead.length)
-    const trail = /[.,;:!?)"”’']*$/.exec(rest)[0]
+    const trail = TRAIL.exec(rest)[0]
     const core = rest.slice(0, rest.length - trail.length)
     const coreStart = match.index + lead.length
     return { lead, core, trail, coreStart, coreEnd: coreStart + core.length }
   })
 }
 
-const isArg = (core) => FLAG.test(core) || /^[<[]/.test(core) || PATHISH.test(core) || core === '...' || core === '…'
+const isArg = (core) => FLAG.test(core) || /^[<[]/.test(core) || PATHISH.test(core) || core === '...' || core === ELLIPSIS
 
 /** How many tokens from `i` name a command, or 0 when no command starts there. */
 function commandHead(tokens, i) {
@@ -220,20 +302,19 @@ function commandHead(tokens, i) {
     return token && !token.lead ? token.core : undefined
   }
   const word = tokens[i].core
-  if (word === 'npx' && at(i + 1)) return at(i + 1) === 'orangu' && ORANGU_VERBS.has(at(i + 2)) ? 3 : 2
+  if (word === 'npx' && at(i + 1) && at(i + 1) !== '--') return at(i + 1) === 'orangu' && ORANGU_VERBS.has(at(i + 2)) ? 3 : 2
   if (word === 'orangu' && ORANGU_VERBS.has(at(i + 1))) return 2
   if (word === 'orangu' && FLAG.test(at(i + 1) ?? '')) return 1
   if (word === 'git' && GIT_VERBS.has(at(i + 1))) return 2
-  // a bare git verb before "--", as in "checkout -- <path>" inside a sentence about git
-  if (GIT_VERBS.has(word) && at(i + 1) === '--') return 1
+  // measured (src/analyze/insights.ts, the reverts recommendation): "checkout -- from a named branch ref"
+  if (word === 'checkout' && at(i + 1) === '--') return 2
   if (word === 'claude' && !tokens[i].trail && tokens[i + 1]) {
-    if (/^["“]/.test(tokens[i + 1].lead)) return 1
+    if (new RegExp(`^["${LDQUO}]`).test(tokens[i + 1].lead)) return 1
     if (FLAG.test(at(i + 1) ?? '')) return 1
     if (at(i + 1) === 'plugin' || at(i + 1) === 'mcp') return 2
   }
   if (word.startsWith('/orangu:')) return 1
-  // a lone flag; a bare "--" outside a command is the dash it looks like
-  if (/^--[A-Za-z]/.test(word) && FLAG.test(word)) return 1
+  if (word.startsWith('--') && FLAG.test(word)) return 1
   return 0
 }
 
@@ -262,7 +343,11 @@ function wrapSegment(segment) {
         j = k + 1
         continue
       }
-      if (token.lead || !isArg(token.core)) break
+      if (token.core === '--') {
+        // an end-of-options "--" only when an argument follows it; otherwise it is a dash in the prose
+        const next = tokens[j + 1]
+        if (token.lead || token.trail || !next || next.lead || next.core === '--' || !isArg(next.core)) break
+      } else if (token.lead || !isArg(token.core)) break
       last = j
       end = token.coreEnd
       j += 1
@@ -348,6 +433,9 @@ function sentenceFindings(sentence, line) {
   return findings
 }
 
+const BANNED_WORDS = new Set(['e.g.', 'i.e.', 'etc.'])
+const isBanned = (finding) => finding.rule === 'em-dash' || finding.rule === 'contraction' || (finding.rule === 'plain-word' && BANNED_WORDS.has(finding.text.toLowerCase()))
+
 /** The banned tokens a surface carries: the em dash, e.g., i.e., etc. and contractions. */
 export function bannedCounts(findings) {
   const banned = { emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 }
@@ -364,7 +452,10 @@ export function bannedCounts(findings) {
   return banned
 }
 
-/** Score blocks of prose ({ line, text, file? }). Each finding keeps the file of its block. */
+/**
+ * Score blocks of prose ({ line, text, file?, label? }). Each finding keeps the file of its block. A label
+ * block is not scored: only its banned tokens count.
+ */
 export function checkBlocks(blocks) {
   const findings = []
   let sentences = 0
@@ -372,12 +463,16 @@ export function checkBlocks(blocks) {
   for (const block of blocks) {
     const where = block.file === undefined ? {} : { file: block.file }
     const parts = splitSentences(block.text)
-    if (parts.length > LIMITS.paragraphSentences) {
+    if (!block.label && parts.length > LIMITS.paragraphSentences) {
       findings.push({ ...where, line: block.line, rule: 'paragraph-length', text: excerpt(parts[0].text), hint: `${parts.length} sentences; keep one topic in at most ${LIMITS.paragraphSentences}` })
     }
     for (const part of parts) {
       const line = block.line + (block.text.slice(0, part.offset).match(/\n/g)?.length ?? 0)
       const own = sentenceFindings(part.text, line).map((finding) => ({ ...where, ...finding }))
+      if (block.label) {
+        findings.push(...own.filter(isBanned))
+        continue
+      }
       sentences += 1
       if (own.length === 0) clean += 1
       findings.push(...own)

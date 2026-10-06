@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { checkBlocks, checkText, frontmatterDescription, htmlToText, proseBlocks, wordCount, wrapCommands } from '../scripts/ste.mjs'
-import { fragmentResult, tsBlocks, type TsOptions } from '../scripts/ste-surfaces.js'
+import { fragmentResult, htmlResult, tsBlocks, type TsOptions } from '../scripts/ste-surfaces.js'
 
 const EM_DASH = String.fromCharCode(0x2014)
 const rules = (text: string, options: Parameters<typeof checkText>[1] = {}): string[] => checkText(text, options).findings.map((f) => f.rule)
@@ -74,9 +74,25 @@ describe('ste checker: the ported rules', () => {
     expect(checkText(html, { html: true })).toMatchObject({ sentences: 2, clean: 2 })
   })
 
-  it('skips fences, headings, tables and quotes in Markdown', () => {
+  it('skips fences and quotes, and scores neither a heading nor a table label in Markdown', () => {
     const md = ['# A heading; with a semicolon', '', '```', 'code; here', '```', '', '| a; b | c |', '', '> quoted; text', '', 'Read the cache.'].join('\n')
     expect(checkText(md)).toMatchObject({ sentences: 1, clean: 1 })
+  })
+})
+
+describe('ste checker: table cells and headings (columnar text is scored line by line)', () => {
+  it('scores each table cell of 3 or more words as its own block, and drops a cell that is only code', () => {
+    // measured miss: plugin/skills/analyze/references/reading-the-report.md:25 has "can't" in a table cell
+    const md = ['| Rule | What it means here |', '|---|:---:|', "| `tool-errors` | agents can't see parent context; read it again |", '| `x` | `only code` |'].join('\n')
+    const result = checkText(md)
+    expect(result).toMatchObject({ sentences: 2, clean: 1 })
+    expect(result.findings.map((f) => f.rule).sort()).toEqual(['contraction', 'semicolon'])
+    expect(result.findings[0]).toMatchObject({ line: 3 })
+  })
+
+  it('counts the banned tokens of a heading or a short cell, without scoring it', () => {
+    const md = ["# Don't skip e.g. this", '', '| Ok | Can\'t |', '|---|---|', '', 'Read the cache.'].join('\n')
+    expect(checkText(md)).toMatchObject({ sentences: 1, clean: 1, banned: { emDash: 0, eg: 1, ie: 0, etc: 0, contractions: 2 } })
   })
 })
 
@@ -91,6 +107,19 @@ describe('ste checker: orangu additions', () => {
     for (const bad of ["It's red.", "That's the gate.", "There's one finding.", "What's next.", "Here's the list.", "Let's run it."]) {
       expect(rules(bad), bad).toContain('contraction')
     }
+  })
+
+  it("contraction: who's, where's, how's, he's and she's are findings", () => {
+    for (const bad of ["Who's next.", "Where's the log.", "How's the run.", "He's done.", "She's done."]) {
+      expect(rules(bad), bad).toContain('contraction')
+    }
+  })
+
+  it('reads a folded or literal frontmatter description', () => {
+    const folded = ['---', 'name: demo', 'description: >', '  Read the report;', '  then stop.', 'allowed-tools: Read', '---'].join('\n')
+    expect(frontmatterDescription(folded)).toEqual({ line: 3, text: 'Read the report; then stop.' })
+    const literal = ['---', 'description: |-', '  Read the report.', '  Then stop.', '---'].join('\n')
+    expect(frontmatterDescription(literal)).toEqual({ line: 2, text: 'Read the report.\nThen stop.' })
   })
 
   it("contraction: a possessive 's is not a contraction", () => {
@@ -162,6 +191,13 @@ describe('ste checker: a command or a flag is one technical name', () => {
     // measured false positive, src/analyze/insights.ts (the reverts recommendation): "checkout -- from a named branch ref"
     expect(rules('It skips checkout -- from a named branch ref.')).toEqual([])
     expect(rules('The gate is red -- do not merge.')).toEqual(['em-dash'])
+  })
+
+  it('a " -- " used as a dash after a command is still a dash', () => {
+    expect(rules('Run orangu report -- it opens the file in a browser.')).toEqual(['em-dash'])
+    expect(rules('Run npx orangu -- it needs no install.')).toEqual(['em-dash'])
+    expect(checkText('Then apply -- after you approve it -- the change.').banned.emDash).toBe(2)
+    expect(rules('Run git restore -- src/a.ts to undo it.')).toEqual([])
   })
 
   it('a word from the table inside a code span or a command is not a finding', () => {
@@ -257,6 +293,28 @@ describe('ste surfaces: copy in TS string and template literals', () => {
     expect(result).toMatchObject({ sentences: 1, clean: 0 })
   })
 
+  it('counts the banned tokens of a label, though it scores no label', () => {
+    // a chip or a button is a label (carve-out 6), but the em dash, e.g., i.e., etc. and contractions are banned everywhere
+    const result = fragmentResult([
+      { line: 1, text: "Don't show" },
+      { line: 2, text: "Can't load" },
+      { line: 3, text: 'e.g. 3' },
+      { line: 4, text: 'Tokens -- total' },
+    ])
+    expect(result).toMatchObject({ sentences: 0, banned: { emDash: 1, eg: 1, ie: 0, etc: 0, contractions: 2 } })
+  })
+
+  it('reads a literal as markup only when it holds a tag', () => {
+    // measured: src/analyze/insights.ts:1582 ("< 200 ... >=") lost two semicolons to the tag stripper
+    expect(texts("const s = 'a preview < 200 chars; a share >= 60%'")).toEqual(['a preview < 200 chars; a share >= 60%'])
+    expect(texts("const s = '<p>Read the cache.</p>'")).toEqual(['Read the cache.'])
+  })
+
+  it('measures only the named top-level constants when asked', () => {
+    const source = ["const A = 'Copy the text now.'", "const B = 'Other text is here.'"].join('\n')
+    expect(texts(source, { consts: ['A'] })).toEqual(['Copy the text now.'])
+  })
+
   it('drops a label under 3 words and scores each distinct block once per surface', () => {
     const result = fragmentResult([
       { file: 'a.ts', line: 1, text: 'Copy it' },
@@ -292,5 +350,24 @@ describe('ste surfaces: rule copy', () => {
 
   it('leaves every other string to the analyzer surface, so no string is measured twice', () => {
     expect(texts({ ruleCopy: 'exclude' })).toEqual(['some-rule-id', 'An evidence string here.'])
+  })
+})
+
+describe('ste surfaces: HTML pages', () => {
+  it('measures the meta copy, title, aria-label, alt and placeholder values, inline scripts and JSON-LD descriptions', () => {
+    const html = [
+      '<meta name="description" content="Don&#39;t miss it; it is short."/>',
+      '<meta property="og:title" content="orangu: a report for every session"/>',
+      '<meta property="og:url" content="https://example.com/orangu/"/>',
+      '<p>Read the cache.</p>',
+      '<button aria-label="Copy the install command; then paste it">Copy</button>',
+      '<img alt="The orangu mascot waves; it is happy"/>',
+      "<script>el.textContent = 'Motion is paused; press play'</script>",
+      '<script type="application/ld+json">{"name":"orangu","description":"An offline report; no network."}</script>',
+    ].join('\n')
+    const result = htmlResult(html, 'site/x.html')
+    expect(result.banned.contractions).toBe(1)
+    expect(result.findings.filter((f) => f.rule === 'semicolon').map((f) => f.line).sort((a, b) => a - b)).toEqual([1, 5, 6, 7, 8])
+    expect(result.findings.every((f) => f.file === 'site/x.html')).toBe(true)
   })
 })

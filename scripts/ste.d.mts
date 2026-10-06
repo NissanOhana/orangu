@@ -6,6 +6,8 @@ export interface SteBlock {
   text: string
   /** the file the block came from, carried onto each finding */
   file?: string
+  /** a label (a heading, a short cell or fragment): not scored, but its banned tokens count */
+  label?: boolean
 }
 
 export interface SteFinding {
@@ -39,6 +41,8 @@ export interface SteOptions {
   frontmatter?: boolean
 }
 
+/** U+2029, the block break that htmlToText puts in place of a block tag */
+export const PARAGRAPH: string
 export const LIMITS: { procedural: number; descriptive: number; paragraphSentences: number }
 export const STE_WORDS: Readonly<Record<string, string>>
 export const PLAIN_WORDS: Readonly<Record<string, string>>
@@ -53,6 +57,7 @@ export function frontmatterDescription(text: string): SteBlock | null
 export function wrapCommands(text: string): string
 export function splitSentences(text: string): Array<{ offset: number; text: string }>
 export function wordCount(sentence: string): number
+export function proseWords(text: string): number
 export function bannedCounts(findings: readonly SteFinding[]): SteBanned
 export function checkBlocks(blocks: readonly SteBlock[]): SteResult
 export function checkText(text: string, options?: SteOptions): SteResult
