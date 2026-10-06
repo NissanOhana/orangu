@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src {{script-hash}}; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>
 <meta name="robots" content="noindex"/>
 <meta name="generator" content="orangu {{version}}"/>
 <title data-slot="title">EXAMPLE Fix the flaky checkout tests</title>
@@ -297,8 +297,6 @@ h2::before{content:"";flex:none;width:4px;height:20px;border-radius:2px;backgrou
 
  <footer class="foot"><span>The numbers come from orangu <span data-slot="version">EXAMPLE 0.8.0</span>. Claude wrote the words.</span><span data-if="session" data-slot="generated" data-f="date" data-v="">EXAMPLE 2026-08-17</span></footer>
 </div>
-<script>
-<!-- @runtime -->
-</script>
+<script><!-- @runtime --></script>
 </body>
 </html>

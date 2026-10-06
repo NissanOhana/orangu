@@ -2,6 +2,7 @@
 // Zero runtime dependencies: everything is inlined.
 import { build, transform } from 'esbuild'
 import { copyFileSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -187,13 +188,20 @@ for (const target of CODEX_TARGETS) {
 // (the canonical tokens, the 96px mascot, the version) plus the one shared runtime, minified; a placeholder left
 // over stops the build. The mascot is wrapped at 76 characters: a URL parser drops the line breaks, and a reader
 // that cuts long lines still sees every byte.
+// The CSP is the report's with one change: script-src is the sha256 of the runtime's exact bytes, never
+// 'unsafe-inline'. Claude writes session text into these files, so a missed escape (an onerror attribute, an
+// injected <script>) must stay inert; only the pinned runtime runs. style-src keeps 'unsafe-inline': the charts
+// set raw values in style attributes, a style cannot run script, and img-src data: and default-src 'none' leave
+// it no request to make.
 const SHOW_ME = join(root, 'plugin/skills/show-me/references')
 const showMeRuntime = (await transform(readFileSync(join(SHOW_ME, 'runtime.src.js'), 'utf8'), { minify: true, target: 'es2020', legalComments: 'none', charset: 'utf8' })).code.trim()
+const showMeScriptHash = `'sha256-${createHash('sha256').update(showMeRuntime, 'utf8').digest('base64')}'`
 const showMeMascot = `data:image/png;base64,\n${readFileSync(join(root, 'design/brand/mascot-96.png')).toString('base64').match(/.{1,76}/g).join('\n')}`
 for (const name of ['slides', 'report']) {
   const out = readFileSync(join(SHOW_ME, `${name}.src.html`), 'utf8')
     .replace('<!-- @tokens -->', () => tokensCss.trim())
     .replace('<!-- @runtime -->', () => showMeRuntime)
+    .replace('{{script-hash}}', () => showMeScriptHash)
     .replaceAll('{{mascot:logo}}', () => showMeMascot)
     .replaceAll('{{version}}', () => pkg.version)
   for (const left of out.match(/\{\{[^}]+\}\}|<!-- @[a-z]+ -->/g) ?? []) throw new Error(`show-me ${name}: unresolved placeholder ${left}`)

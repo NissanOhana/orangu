@@ -15,7 +15,7 @@ The two templates, `slides.html` (the slide deck) and `report.html` (the written
 
 On `<html>`, set `data-scope` to `session`, `repo` or `global`. Set `data-live`, `data-caution` and `data-redacted` to `true` or `false`.
 
-Escape each text that you insert: `&` as `&amp;`, `<` as `&lt;`, `>` as `&gt;`, `"` as `&quot;` and `'` as `&#39;`. Do not change the `<style>` and `<script>` blocks or the image data. Do not add an attribute that loads anything. Keep every sentence that has no slot word for word.
+Escape each text that you insert: `&` as `&amp;`, `<` as `&lt;`, `>` as `&gt;`, `"` as `&quot;` and `'` as `&#39;`. Do not change the `<style>` and `<script>` blocks or the image data. The page runs its script only when the script is unchanged, because the page pins it by its hash. Do not add an attribute that loads anything. Keep every sentence that has no slot word for word.
 
 ## Conditions
 

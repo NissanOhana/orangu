@@ -5,6 +5,7 @@
 // Report checks exclude the embedded `#orangu-data` JSON block: data (e.g. outcomes.prLinks) may cite
 // https:// URLs as text — the page itself must still make zero requests.
 import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { readFileSync, existsSync } from 'node:fs'
 
 const args = process.argv.slice(2)
@@ -110,6 +111,21 @@ for (const [re, label] of checks) {
 // exact CSP match (src/report/render.ts CSP const) — a loosened directive fails, not just a missing one
 const EXPECTED_CSP =
   "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"
-if (!html.includes(`<meta http-equiv="Content-Security-Policy" content="${EXPECTED_CSP}"/>`)) fail('missing or loosened CSP', '')
+// The one stricter form: the same policy with script-src pinned to sha256 hashes instead of 'unsafe-inline' (the
+// /orangu:show-me files, which carry hand-escaped session text). It passes only when every inline script that
+// can run matches a pinned hash, so an injected <script> fails here as it fails in the browser.
+const HASH = "'sha256-[A-Za-z0-9+/]{43}='"
+const [beforeScript, afterScript] = EXPECTED_CSP.split("'unsafe-inline'; style-src")
+const escapeRe = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const HASHED_CSP = new RegExp(`<meta http-equiv="Content-Security-Policy" content="${escapeRe(beforeScript)}(${HASH}(?: ${HASH})*); style-src${escapeRe(afterScript)}"/>`)
+const hashed = HASHED_CSP.exec(html)
+if (!html.includes(`<meta http-equiv="Content-Security-Policy" content="${EXPECTED_CSP}"/>`) && !hashed) fail('missing or loosened CSP', '')
+if (hashed) {
+  const pinned = new Set(hashed[1].split(' ').map((source) => source.slice('\'sha256-'.length, -1)))
+  for (const [, attrs, body] of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)) {
+    if (/\btype="application\/json"/.test(attrs)) continue
+    if (!pinned.has(createHash('sha256').update(body, 'utf8').digest('base64'))) fail('inline script not pinned by the CSP hash', body)
+  }
+}
 if (bad) process.exit(1)
 console.log('offline OK: no external references, CSP present, %d KB', Math.round(html.length / 1024))
