@@ -348,6 +348,23 @@ function summaryOf(card: string): string {
   return card.slice(card.indexOf('<summary>'), card.indexOf('</summary>'))
 }
 
+/** The improvement line of a card summary, or '' when the summary has none. */
+function leadOf(summary: string): string {
+  return /<span class="rec sg-lead">[\s\S]*?<\/span>/.exec(summary)?.[0] ?? ''
+}
+
+/**
+ * An improvement that holds two PLAIN_TERMS keys (src/report/client/strings.ts), and what each audience must
+ * read on the closed card: Plain replaces "context window" and "compaction", Detailed keeps them. Each row
+ * is [audience, the line shown, the words that must not show].
+ */
+const JARGON = 'Start a new session before the context window fills and a compaction starts.'
+const PLAIN = 'Start a new session before the working memory fills and a memory refresh starts.'
+const AUDIENCE_LINES = [
+  ['plain', PLAIN, ['context window', 'compaction']],
+  ['dev', JARGON, ['working memory', 'memory refresh']],
+] as const
+
 /**
  * The card names the change before any command, and the way to an AI proposal is explained once, above
  * the cards, not repeated in every card. The copied text is a shell command (`claude "/orangu:improve …"`),
@@ -365,6 +382,18 @@ describe('renderSuggest: each card leads with its improvement, one explainer say
     expect(card).not.toContain('handled by')
     expect(card).not.toContain('<span class="pill">orangu:improve</span>')
     expect(card).not.toContain('<b>Fix.</b>')
+  })
+
+  it.each(AUDIENCE_LINES)('words the improvement line on a closed session card for the %s audience', (audience, shown, hidden) => {
+    const ctx = context('file', [])
+    const a = { ...analysis, insights: [{ ...analysis.insights[0]!, recommendation: JARGON }] } as Analysis
+    ctx.a = a
+    ctx.data.session = a
+    ctx.audience = audience
+    renderSuggest(ctx)
+    const summary = summaryOf(firstCard(markup))
+    expect(leadOf(summary)).toBe(`<span class="rec sg-lead"><b>Improvement:</b> ${shown}</span>`)
+    for (const word of hidden) expect(summary).not.toContain(word)
   })
 
   it.each(['file', 'serve'] as const)('renders exactly one explainer, above the first card and outside every card (%s)', (mode) => {
@@ -540,6 +569,18 @@ describe('renderSuggest on a repo/global scope', () => {
     expect(card.indexOf('sg-lead')).toBeLessThan(card.indexOf('data-kick-copy'))
     expect(card).not.toContain('<ol class="steps"')
   })
+
+  it.each((['repo', 'global'] as const).flatMap((scope) => AUDIENCE_LINES.map(([audience, shown, hidden]) => [scope, audience, shown, hidden] as const)))(
+    'words the improvement line on a closed %s card for the %s audience',
+    (scope, audience, shown, hidden) => {
+      const ctx = scopeContext(scope, [{ ...crossFinding, recommendation: JARGON } as typeof crossFinding])
+      ctx.audience = audience
+      renderSuggest(ctx)
+      const summary = summaryOf(firstCard(markup))
+      expect(leadOf(summary)).toBe(`<span class="rec sg-lead"><b>Improvement:</b> ${shown}</span>`)
+      for (const word of hidden) expect(summary).not.toContain(word)
+    },
+  )
 
   it('shows a card without an improvement line for an older aggregate that has no recommendation', () => {
     renderSuggest(scopeContext('repo'))

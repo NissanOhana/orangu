@@ -241,6 +241,22 @@ describe('renderOverview: the top improvement and the way to an AI proposal', ()
     expect(markup).not.toContain('Draft a proposal')
   })
 
+  // An improvement that holds two PLAIN_TERMS keys (strings.ts): Plain replaces them, Detailed keeps them.
+  it.each([
+    ['plain', 'Start a new session before the working memory fills and a memory refresh starts.', ['context window', 'compaction']],
+    ['dev', 'Start a new session before the context window fills and a compaction starts.', ['working memory', 'memory refresh']],
+  ] as const)('words the improvement line on the top card for the %s audience', async (audience, shown, hidden) => {
+    const ctx = await context({ audience })
+    const top = ctx.a!.insights.find((i) => i.id === ctx.a!.summary.topInsightIds[0])!
+    top.recommendation = 'Start a new session before the context window fills and a compaction starts.'
+    renderOverview(ctx)
+    const start = markup.indexOf('<details class="finding top" open>')
+    expect(start).toBeGreaterThan(-1)
+    const summary = markup.slice(start, markup.indexOf('</summary>', start))
+    expect(/<span class="rec sg-lead">[\s\S]*?<\/span>/.exec(summary)?.[0]).toBe(`<span class="rec sg-lead"><b>Improvement:</b> ${shown}</span>`)
+    for (const word of hidden) expect(summary).not.toContain(word)
+  })
+
   it('keeps the improvement line, the session folder and the link to the 3 steps in Plain language', async () => {
     const ctx = await context({ audience: 'plain' })
     renderOverview(ctx)
