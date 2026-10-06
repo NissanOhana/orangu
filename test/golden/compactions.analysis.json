@@ -83,7 +83,7 @@
       "preamble-weight-2",
       "cache-ttl-churn-3"
     ],
-    "narrative": "In “Long refactor session”, the human made 3 requests over 27s; the agent was busy for 27s of that. It made 0 tool calls, and processed 1.21M tokens. No commits, PRs or test runs were detected. Biggest things to look at: 2 context compactions (peak 175.0k of 1.00M); Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills).",
+    "narrative": "In “Long refactor session”, the human made 3 requests over 27s. The agent was busy for 27s of that. It made 0 tool calls, and processed 1.21M tokens. No commits, PRs or test runs were detected. Biggest things to look at: 2 context compactions (peak 175.0k of 1.00M) · Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills).",
     "ending": "unknown"
   },
   "turns": [
@@ -642,8 +642,8 @@
       "severity": "medium",
       "axis": "context",
       "title": "2 context compactions (peak 175.0k of 1.00M)",
-      "detail": "turn 0 at 165.0k → 22.0k; turn 1 at 172.0k → 19.0k",
-      "recommendation": "Every compaction throws away working memory and the agent re-derives it (extra reads, repeated commands). Split long efforts into sessions with a written handover, keep tool outputs small, push exploration into subagents, and compact deliberately at a milestone rather than letting auto-compact hit mid-task.",
+      "detail": "turn 0 at 165.0k → 22.0k · turn 1 at 172.0k → 19.0k",
+      "recommendation": "Split long work into sessions, with a written handover note for the next session. Run /compact yourself at a milestone, before auto-compaction starts in the middle of a task. Keep tool outputs small, and move exploration into subagents. Every compaction removes working memory, and the agent must build it again (more reads, repeated commands).",
       "evidence": {
         "compactions": [
           {
@@ -682,8 +682,8 @@
       "severity": "low",
       "axis": "tokens",
       "title": "Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills)",
-      "detail": "12 requests × 50.0k ≈ 600.1k cache-read tokens just to carry the preamble",
-      "recommendation": "The baseline is small per request (it is re-read from cache, not re-sent) but it multiplies by every request. Trim CLAUDE.md to rules that bind, defer long docs to on-demand reads, prune MCP servers and skills you do not use in this repo, and check for large SessionStart hook output.",
+      "detail": "12 requests × 50.0k ≈ 600.1k cache-read tokens to carry the preamble",
+      "recommendation": "Trim CLAUDE.md to the rules that bind. Move long docs into files that the agent reads only when it needs them. Remove the MCP servers and skills that you do not use in this repo. Check for large SessionStart hook output. The baseline is small for one request, because the request reads it from the cache and does not send it again. But every request carries it, so it multiplies by the number of requests.",
       "evidence": {
         "baselineTokens": 50005,
         "requests": 12,
@@ -707,8 +707,8 @@
       "severity": "info",
       "axis": "tokens",
       "title": "100% of the 210.0k tokens written to cache went to the 1-hour tier",
-      "detail": "210.0k on the 1h tier vs 0 on the 5m tier; median gap between turns 0ms",
-      "recommendation": "Claude Code can hold your context in the cache for 5 minutes or for 1 hour. Both write the same tokens, so this changes nothing about your usage. But when your turns come faster than every 5 minutes, the short tier keeps the cache just as warm. Nothing to change in the transcript; this is a harness setting worth knowing about.",
+      "detail": "210.0k on the 1h tier vs 0 on the 5m tier · median gap between turns 0ms",
+      "recommendation": "No change needed. Claude Code can hold your context in the cache for 5 minutes or for 1 hour. Both tiers write the same tokens, so the tier changes nothing about your usage. When your turns come more often than every 5 minutes, the short tier keeps the cache as warm as the long one. This is a harness setting that is good to know about.",
       "evidence": {
         "cacheWrite1hTokens": 210000,
         "cacheWrite5mTokens": 0,

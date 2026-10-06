@@ -23,6 +23,10 @@ describe('analyzeSession', () => {
     expect(a.summary.totalTokens).toBeGreaterThan(0)
     expect(a.summary.totalTokens).toBe(a.tokens.totalTokens)
     expect(a.summary.narrative).toContain('2 requests')
+    // STE: no semicolon. The busy time is its own sentence, and the top findings use the client separator.
+    expect(a.summary.narrative).not.toContain(';')
+    expect(a.summary.narrative).toContain('. The agent was busy for ')
+    expect(a.summary.narrative).toMatch(/Biggest things to look at: .+ · .+\.$/)
   })
   it('computes tool stats, quality signals and outcomes deterministically', async () => {
     const a = await canonicalAnalysis()

@@ -1295,11 +1295,11 @@ describe('workflow improvement insight rules', () => {
       b.assistant([{ type: 'text', text: 'done' }])
       return b
     }
-    it('fires low with "Edit beats Write" on 2 same-length rewrites of files already read', async () => {
+    it('fires low and recommends Edit over Write on 2 same-length rewrites of files already read', async () => {
       const ins = find(await analyzeOf(writeAfterRead(2)), 'write-not-edit')!
       expect(ins).toBeDefined()
       expect(ins.severity).toBe('low')
-      expect(ins.recommendation).toContain('Edit beats Write for modifications')
+      expect(ins.recommendation).toContain('Use Edit, not Write, to change a file that already exists')
       expect((ins.evidence['rewrites'] as unknown[]).length).toBe(2)
     })
     it('stays silent on a single occurrence (boundary)', async () => {

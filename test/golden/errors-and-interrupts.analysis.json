@@ -83,7 +83,7 @@
       "unverified-edits-3",
       "api-errors-2"
     ],
-    "narrative": "In “Run the flaky suite”, the human made 3 requests over 1m 40s; the agent was busy for 1m 5s of that. It made 3 tool calls (2 failed), and processed 57.2k tokens. Visible outcomes: 1 file changed, 2 test runs (2 failed). Biggest things to look at: 2 tool errors (66.7% of 3 calls); The last test run failed and the session ended.",
+    "narrative": "In “Run the flaky suite”, the human made 3 requests over 1m 40s. The agent was busy for 1m 5s of that. It made 3 tool calls (2 failed), and processed 57.2k tokens. Visible outcomes: 1 file changed, 2 test runs (2 failed). Biggest things to look at: 2 tool errors (66.7% of 3 calls) · The last test run failed and the session ended.",
     "ending": "failing"
   },
   "turns": [
@@ -759,7 +759,7 @@
       "axis": "quality",
       "title": "2 tool errors (66.7% of 3 calls)",
       "detail": "most in Bash",
-      "recommendation": "A recurring error signature is an environment or instruction problem, not bad luck: fix the root cause once (missing dependency, wrong path, permission, flaky command) or add the correct invocation to CLAUDE.md so the agent stops rediscovering it. Each failed call still burns its output tokens plus a retry turn.",
+      "recommendation": "Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md. A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.",
       "evidence": {
         "errorRate": 0.6667,
         "groups": []
@@ -782,8 +782,8 @@
       "severity": "high",
       "axis": "quality",
       "title": "The last test run failed and the session ended",
-      "detail": "\"npm test\" (turn 0) was the final main-thread test run; 0 of 2 main-thread test runs passed; 1 file edited",
-      "recommendation": "The session closed on a red test, so whatever was delivered is unverified. Re-open, make the suite green (or record why the failure is expected), and make \"tests pass\" an explicit stop condition in the brief.",
+      "detail": "The last main-thread test run was \"npm test\" (turn 0). 0 of 2 main-thread test runs passed. The session edited 1 file.",
+      "recommendation": "Make the test suite pass, or record why the failure is expected. Make \"tests pass\" a clear stop condition in the brief. The session ended on a failed test, so the work that it delivered is not verified.",
       "evidence": {
         "lastTest": {
           "turnIndex": 0,
@@ -810,7 +810,7 @@
       "axis": "time",
       "title": "1 API error / retries",
       "detail": "api_error",
-      "recommendation": "Rate limits and overloads are outside your control; a model fallback silently changes which model answered for the rest of the turn. Check the model column in the timeline.",
+      "recommendation": "Check the model column in the timeline to see which model answered after each error. Rate limits and overloads are outside your control. A model fallback changes the model for the rest of the turn, and no message tells you.",
       "evidence": {
         "apiErrors": 1
       },
@@ -828,7 +828,7 @@
       "axis": "time",
       "title": "92% of the 1m 5s active time went to tool execution",
       "detail": "tools 1m 0s · subagents 0ms · model 5.0s · active 1m 5s",
-      "recommendation": "Tool execution dominates the active time: the model is mostly waiting on commands. Look at the slowest tools (timeouts, caching, narrower scope) or run long commands in the background.",
+      "recommendation": "Fix the slowest tools first: add timeouts, cache their work, or narrow their scope. Run long commands in the background. Tool execution takes most of the active time, so the model mostly waits on commands.",
       "evidence": {
         "activeMs": 65080,
         "toolMs": 60080,

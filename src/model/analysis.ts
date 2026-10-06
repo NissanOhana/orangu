@@ -21,8 +21,11 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  * that silently lacks the new field. Part of the cache directory name, never of the payload.
  *   1 (2026-09-14): parse.primaryAttachmentTypes / primaryAttachmentBytes; hooks.byCommand[].keyedBy and
  *     .events; hook runs counted from run records only, with command and durationMs picked up
+ *   2 (2026-10-06): rule copy rewritten in Simplified Technical English (every insight title, detail and
+ *     recommendation, the summary narrative and two evidence notes), so a cached payload carries the old copy;
+ *     the aggregate's new CrossFinding.recommendation reads that copy from the cached insights
  */
-export const ANALYSIS_PAYLOAD_GENERATION = 1
+export const ANALYSIS_PAYLOAD_GENERATION = 2
 
 export interface AnalysisSessionInfo {
   id: string

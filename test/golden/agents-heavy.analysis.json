@@ -97,7 +97,7 @@
       "fanout-opportunity-3",
       "agent-fanout-1"
     ],
-    "narrative": "In “Fan out: review, test, docs — in parallel”, the human made 1 request over 8.6s; the agent was busy for 8.6s of that. It made 11 tool calls, ran 8 subagents, and processed 351.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 5 subagents did no tool calls; 5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait.",
+    "narrative": "In “Fan out: review, test, docs — in parallel”, the human made 1 request over 8.6s. The agent was busy for 8.6s of that. It made 11 tool calls, ran 8 subagents, and processed 351.0k tokens. No commits, PRs or test runs were detected. Biggest things to look at: 5 subagents did no tool calls · 5 subagents ran one after another in 1 run with no visible dependency, so a parallel fan-out would cut the wait.",
     "ending": "unknown"
   },
   "turns": [
@@ -1461,7 +1461,7 @@
       "axis": "tokens",
       "title": "5 subagents did no tool calls",
       "detail": "test-writer, code-reviewer, test-writer, code-reviewer, orphanworkflow00",
-      "recommendation": "An agent that only answers from its prompt could have been a plain model call in the main thread; or its brief was too thin to act on. Give agents concrete files/commands to act on.",
+      "recommendation": "Give each agent concrete files or commands to act on. If an agent only needs to answer from its prompt, ask the main thread instead. An agent with no tool calls had a brief too thin to act on, or did work that the main thread can do.",
       "evidence": {
         "agents": [
           {
@@ -1550,9 +1550,9 @@
       "ruleId": "fanout-opportunity",
       "severity": "low",
       "axis": "time",
-      "title": "5 subagents ran one-after-another in 1 run with no visible dependency; a parallel fan-out would cut the wait",
+      "title": "5 subagents ran one after another in 1 run with no visible dependency, so a parallel fan-out would cut the wait",
       "detail": "turn 0: 5 serial spawns (test-writer, code-reviewer, test-writer, code-reviewer, agent), 3.8s serial vs 800ms longest",
-      "recommendation": "Independent subagents can be spawned in one message (parallel tool calls) or with run_in_background. The wall-clock time becomes the longest run instead of the sum. Keep serial spawning for agents that consume an earlier agent’s result.",
+      "recommendation": "Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Then the wall-clock time is the longest run, not the sum of the runs. Keep serial spawns for agents that use the result of an earlier agent.",
       "evidence": {
         "runs": [
           {
@@ -1588,7 +1588,7 @@
             "longestMs": 800
           }
         ],
-        "heuristic": "independence = no 16-char overlap between a later prompt and an earlier result preview (~200 chars), and no reference to an earlier agent id/name; stripped results (no preview) are treated as independent; ids/lengths only, never full-content matching. Timing is the spawned agent run (start, end, duration), falling back to the spawn call span when no run is linked"
+        "heuristic": "Independence: a later prompt shares no 16-character run with the result preview of an earlier agent (about 200 characters). It also names no earlier agent id or name. A stripped result (no preview) counts as independent. The check uses ids and lengths only, never a full-content match. Timing comes from the spawned agent run (start, end, duration), or from the spawn call span when no run is linked."
       },
       "turnIndexes": [
         0
@@ -1608,8 +1608,8 @@
       "severity": "info",
       "axis": "tokens",
       "title": "8 subagent runs = 83% of the session's tokens (292.2k), max 1 in parallel",
-      "detail": "general-purpose ×3 188.8k; code-reviewer ×2 41.5k; test-writer ×2 41.5k; unknown ×1 20.4k",
-      "recommendation": "Subagents keep exploration out of your main context and can run in parallel; they are worth it when the returned summary is much smaller than what they read. Watch for agents that re-read what the parent already knew, and for agents whose brief makes them read far more than they report back.",
+      "detail": "general-purpose ×3 188.8k · code-reviewer ×2 41.5k · test-writer ×2 41.5k · unknown ×1 20.4k",
+      "recommendation": "Check that each subagent returns a summary much smaller than what it read. Put what the parent already knows in the brief, so that the agent does not read it again. Narrow a brief that makes an agent read far more than it reports back. Subagents keep exploration out of your main context, and they can run in parallel.",
       "evidence": {
         "byType": [
           {
