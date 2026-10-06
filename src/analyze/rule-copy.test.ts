@@ -14,9 +14,15 @@
  * - The Plain view maps terms by substring (PLAIN_TERMS in src/report/client/strings.ts). Each term that a
  *   rule's copy carried when this test landed is still in that rule's copy, so the Plain view still maps it.
  * - A cached Analysis carries this copy, and the cache key does not read it. So a copy change must move
- *   ANALYSIS_PAYLOAD_GENERATION, or a warm cache serves the old copy. The fingerprint below enforces that. It
- *   also reads the other copy that a cached Analysis carries: the quality signals (src/analyze/quality.ts)
- *   and the parse warnings (src/adapters/claude-code/parse.ts).
+ *   ANALYSIS_PAYLOAD_GENERATION, or a warm cache serves the old copy. The fingerprint below enforces that.
+ *   It reads this copy, and only this copy:
+ *   - the rule sites of insights.ts and narrative() in analyze.ts;
+ *   - quality.ts: the quality signals, and every `label` (the "gh pr create" PR link too);
+ *   - parse.ts: the parse warnings, and every event `label` and block `note` (the model-fallback note
+ *     becomes an event label);
+ *   - the tool-call summaries of summarizeToolInput (src/adapters/claude-code/tools.ts).
+ *   A sweep on 2026-10-06 found no other literal of 2 or more words in src/analyze or
+ *   src/adapters/claude-code that lands in an Analysis. New cached copy elsewhere joins this list.
  */
 import ts from 'typescript'
 import { createHash } from 'node:crypto'
@@ -36,6 +42,8 @@ const QUALITY_FILE = join(HERE, 'quality.ts')
 const QUALITY_SOURCE = ts.createSourceFile(QUALITY_FILE, readFileSync(QUALITY_FILE, 'utf8'), ts.ScriptTarget.Latest, true)
 const PARSE_FILE = join(HERE, '..', 'adapters', 'claude-code', 'parse.ts')
 const PARSE_SOURCE = ts.createSourceFile(PARSE_FILE, readFileSync(PARSE_FILE, 'utf8'), ts.ScriptTarget.Latest, true)
+const TOOLS_FILE = join(HERE, '..', 'adapters', 'claude-code', 'tools.ts')
+const TOOLS_SOURCE = ts.createSourceFile(TOOLS_FILE, readFileSync(TOOLS_FILE, 'utf8'), ts.ScriptTarget.Latest, true)
 
 type Field = 'title' | 'detail' | 'recommendation'
 const FIELDS: readonly Field[] = ['title', 'detail', 'recommendation']
@@ -91,9 +99,10 @@ const INSTRUCTION_WORDS = 20
  * its dated line) and the pair below is recorded again. A branch that already moved the generation above main
  * for its own unmerged copy change records the new fingerprint at that same generation.
  * 2026-10-06, re-recorded at generation 2 with no copy change: the fingerprint now also reads the quality
- * signals and the parse warnings. quality.ts and the warn() calls in parse.ts are byte-identical to main.
+ * signals and labels, the parse warnings, the event labels and block notes, and the tool-call summaries.
+ * quality.ts, adapters/claude-code/tools.ts and every warn(), label and note in parse.ts are byte-identical to main.
  */
-const COPY_FINGERPRINT = { generation: 2, sha256: 'bc3ce5d9383208b9766619723909738f539a096199a9bf61cc076d8a838d8e1d' }
+const COPY_FINGERPRINT = { generation: 2, sha256: 'd48decef70a392dabcba7e8c1e1fce0be4a7ea3865f3ef7d6d475b7a86148f45' }
 /**
  * Born 2026-10-06 at its own count: 45 rule sites, plus one more text each for the two improvements that
  * pick between two fixed texts (time-budget, hidden-iterations). The count only goes up.
@@ -264,13 +273,43 @@ function parseWarningCopy(): string[] {
   return out
 }
 
+/** The static text of every property named in `keys`, anywhere in the source, in source order. */
+function propertyCopy(source: ts.SourceFile, keys: readonly string[]): string[] {
+  const out: string[] = []
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && keys.includes(node.name.text)) out.push(JSON.stringify([node.name.text, staticText(node.initializer)]))
+    ts.forEachChild(node, visit)
+  }
+  visit(source)
+  return out
+}
+
+/** The static text of one top-level function. */
+function functionCopy(source: ts.SourceFile, name: string): string {
+  const fn = source.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === name)
+  return fn ? staticText(fn) : ''
+}
+
 /**
- * sha256 of all copy that a cached Analysis carries: per rule site its id, title, detail, improvements and
- * evidence notes, the narrative, the quality signals and the parse warnings.
+ * sha256 of the copy that a cached Analysis carries, as the header lists it: per rule site its id, title,
+ * detail, improvements and evidence notes, the narrative, the quality signals and labels, the parse warnings,
+ * the event labels and block notes, and the tool-call summaries.
  */
 function copyFingerprint(): string {
   const rules = sites.map((site) => JSON.stringify([site.ruleId, ...FIELDS.map((field) => copyOf(site, field)), ...evidenceNotes(site)])).sort()
-  return createHash('sha256').update(JSON.stringify({ rules, narrative: narrativeCopy(), quality: qualityCopy(), parseWarnings: parseWarningCopy() })).digest('hex')
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        rules,
+        narrative: narrativeCopy(),
+        quality: qualityCopy(),
+        qualityLabels: propertyCopy(QUALITY_SOURCE, ['label']),
+        parseWarnings: parseWarningCopy(),
+        eventLabels: propertyCopy(PARSE_SOURCE, ['label', 'note']),
+        toolSummaries: functionCopy(TOOLS_SOURCE, 'summarizeToolInput'),
+      }),
+    )
+    .digest('hex')
 }
 
 const { calls, sites } = ruleSites()
@@ -342,8 +381,8 @@ describe('rule copy: a copy change moves the payload generation', () => {
     expect(new Set(sites.map((site) => site.ruleId)).size).toBeGreaterThanOrEqual(44)
   })
 
-  it('reads every quality signal and every parse warning into the fingerprint', () => {
-    // quality.signals[] and parse.warnings[] are copy in a cached Analysis too: the report shows both
+  it('reads the quality signals, parse warnings, event labels and tool summaries into the fingerprint', () => {
+    // each of these is copy in a cached Analysis, and the report shows each one
     const quality = qualityCopy().map((entry) => JSON.parse(entry) as string[])
     expect(quality.map(([id]) => id)).toEqual(['tests', 'builds', 'commits', 'prs', 'tool-error-rate', 'corrections', 'interruptions', 'api-errors', 'rework', 'reverts'])
     expect(quality.find(([id]) => id === 'builds')?.[1]).toBe('Build / typecheck / lint runs')
@@ -351,6 +390,14 @@ describe('rule copy: a copy change moves the payload generation', () => {
     const warnings = parseWarningCopy().map((entry) => JSON.parse(entry) as string[])
     expect(warnings.map(([code]) => code).sort()).toEqual(['duplicate_uuid', 'multiple_session_ids', 'orphan_tool_result', 'unresolved_tool_calls'])
     expect(warnings.find(([code]) => code === 'orphan_tool_result')?.[1]).toBe('tool_result without a matching tool_use')
+    const labels = (source: ts.SourceFile, keys: readonly string[]): string[] => propertyCopy(source, keys).map((entry) => (JSON.parse(entry) as string[]).join('='))
+    expect(labels(QUALITY_SOURCE, ['label'])).toContain('label=gh pr create')
+    const events = labels(PARSE_SOURCE, ['label', 'note'])
+    for (const label of ['frame link', 'queued command', 'queued notification queued message', 'Request interrupted by user', 'model fallback', 'away summary']) {
+      expect(events.some((entry) => entry.startsWith('label=') && entry.includes(label)), label).toBe(true)
+    }
+    expect(events.some((entry) => entry.startsWith('note=model fallback 3 → 3')), 'the model-fallback note').toBe(true)
+    expect(functionCopy(TOOLS_SOURCE, 'summarizeToolInput')).toContain('inline script')
   })
 })
 
