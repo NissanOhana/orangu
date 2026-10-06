@@ -97,7 +97,7 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('<div class="aval">passing <span class="anote">(last run)</span></div>')
     expect(markup).toContain('8 of 133 test runs failed')
     renderOverview(await mixed('plain'))
-    expect(markup).toContain('<div class="k">How it ended</div><div>The last check it ran passed. 8 of 133 test runs failed earlier</div>')
+    expect(markup).toContain('<div class="k">How it ended</div><div>The last check it ran passed. 8 of 133 test runs failed earlier.</div>')
 
     const green = await mixed('dev')
     green.a!.summary.outcomes.testRunsFailed = 0

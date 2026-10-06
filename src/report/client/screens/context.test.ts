@@ -60,7 +60,7 @@ describe('renderContext (A5: a takeaway, then the evidence)', () => {
       a.tokens.agents = 0
       a.context.contextWindow = undefined
     })
-    expect(contextHeadline(clean.a!)).toBe('No token usage was recorded for this session.')
+    expect(contextHeadline(clean.a!)).toBe('The transcript records no token usage for this session.')
   })
 
   it('keeps the context curve and "Where the tokens went" open and folds the other three charts under one details', async () => {

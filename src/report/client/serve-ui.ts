@@ -56,7 +56,7 @@ function fleetView(ctx: Ctx, liveIn: SessionSummaryRow[]): HTMLElement {
   const live = stableOrder(liveIn)
   const maxLive = typeof window !== 'undefined' ? window.__ORANGU_SERVE__?.maxLive : undefined
   const watching = maxLive !== undefined && ctx.data.mode === 'serve' ? `<div class="banner info">watching ${Math.min(maxLive, live.length)} of ${live.length} live session${live.length === 1 ? '' : 's'}${live.length > maxLive ? ' · raise with <span class="mono">--max-live</span>' : ''}</div>` : ''
-  const reconn = ctx.conn === 'reconnecting' ? '<div class="banner warn">The connection dropped. The page reconnects on its own.</div>' : ''
+  const reconn = ctx.conn === 'reconnecting' ? '<div class="banner warn">The connection is lost. The page reconnects on its own.</div>' : ''
   const cards = live
     .map((r) => {
       const ctxPct = r.contextWindow && r.contextFinal ? r.contextFinal / r.contextWindow : 0

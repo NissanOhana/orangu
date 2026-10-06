@@ -153,7 +153,7 @@ test('localhost #harness renders the populated harness view and the Overview car
   await expect(page.locator('.herotitle', { hasText: '1 of 1 skills never fired' })).toBeVisible({ timeout: 20_000 })
   await expect(page.locator('.scroll-x table.grid td.mono', { hasText: 'skill_listing' })).toBeVisible()
   await expect(page.locator('[data-copy=\'claude "/orangu:harness --scope repo"\']')).toBeVisible()
-  await expect(page.getByText('No harness config found')).toHaveCount(0)
+  await expect(page.getByText('found no harness config')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
   await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
   // the card links through cleanHash, so it carries whatever theme the current view is in

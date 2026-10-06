@@ -58,14 +58,14 @@ describe('the Overview harness card (M3)', () => {
     expect(onLoaded).toHaveBeenCalledTimes(1)
     const loaded = serveUi.harnessCard(ds, onLoaded, '#harness?s=abc')
     expect(loaded).not.toContain('aria-busy')
-    expect(loaded).toContain('no harness config found under the scanned roots')
+    expect(loaded).toContain('orangu found no harness config under the scanned roots')
 
     vi.resetModules()
     const fresh = (await import('./serve-ui.js')).serveUi
     const failing = { harness: vi.fn(async () => { throw new Error('502') }) } as unknown as Parameters<typeof fresh.harnessCard>[0]
     expect(fresh.harnessCard(failing, onLoaded, '#harness')).toContain('aria-busy="true"')
     await new Promise((r) => setTimeout(r, 0))
-    expect(fresh.harnessCard(failing, onLoaded, '#harness')).toContain('could not be computed')
+    expect(fresh.harnessCard(failing, onLoaded, '#harness')).toContain('orangu could not compute the harness report.')
   })
 })
 

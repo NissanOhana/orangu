@@ -59,17 +59,17 @@ export function harnessCardHtml(r: HarnessReport | null | undefined, href: strin
     r === undefined
       ? { title: 'Comparing what your config declares with what these sessions used…', sub: 'a cold cache takes a moment' }
       : r === null
-        ? { title: 'The harness report could not be computed.', sub: 'orangu harness prints the reason' }
+        ? { title: 'orangu could not compute the harness report.', sub: 'orangu harness prints the reason' }
         : nothingDeclared(r)
-          ? { title: 'no harness config found under the scanned roots', sub: 'settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md' }
+          ? { title: 'orangu found no harness config under the scanned roots', sub: 'settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md' }
           : harnessLead(r)
   return `<a class="card pad mb16 harness-card" href="${esc(href)}"${r === undefined ? ' aria-busy="true"' : ''}><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${esc(lead.title)}</div><div class="small muted">${esc(lead.sub)} · open the harness view →</div></a>`
 }
 
 export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {
-  if (!r) return h(`<section>${emptyHero({ title: 'The harness report could not be computed.', hint: 'Run the command directly to see the reason.', command: 'orangu harness' })}</section>`)
+  if (!r) return h(`<section>${emptyHero({ title: 'orangu could not compute the harness report.', hint: 'Run the command directly to see the reason.', command: 'orangu harness' })}</section>`)
   if (nothingDeclared(r))
-    return h(`<section>${emptyHero({ title: 'No harness config found under the scanned roots.', hint: `orangu looked for settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md under ${r.scope.roots.join(', ')}. It found nothing to compare.`, command: 'orangu harness' })}</section>`)
+    return h(`<section>${emptyHero({ title: 'orangu found no harness config under the scanned roots.', hint: `orangu looked for settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md under ${r.scope.roots.join(', ')}. It found nothing to compare.`, command: 'orangu harness' })}</section>`)
   const x = r.crosswalk
   const inv = r.inventory
   const lead = harnessLead(r)
@@ -88,7 +88,7 @@ export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {
     ? `<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">≈ tokens / session</th><th class="num">Sessions</th><th class="num">≈ tokens / injection<br><span class="small muted">anywhere in the tree</span></th><th class="num">Subagents ≈ tokens</th><th class="num">Subagent sessions</th></tr></thead><tbody>${[...x.injectedListings]
         .sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession)
         .map((l) => `<tr><td class="mono">${esc(l.type)}</td><td class="num">${esc(num(l.approxTokensPerMainSession))}</td><td class="num">${l.main.sessions}</td><td class="num">${esc(num(l.approxTokensPerInjection))}</td><td class="num">${esc(num(l.subagent.approxTokens))}</td><td class="num">${l.subagent.sessions}</td></tr>`)
-        .join('')}</tbody></table></div><div class="smt8">Each figure is the recurring context weight, in bytes ÷ 4. The per-session column counts the primary transcript of each session that carried the listing. The subagent columns show what the agent tree carried, over the sessions that had subagents.</div>`
+        .join('')}</tbody></table></div><div class="smt8">Each ≈ tokens figure is the recurring context weight, in bytes ÷ 4. The per-session column counts the primary transcript of each session that carried the listing. The subagent columns show what the agent tree carried, over the sessions that had subagents.</div>`
     : `<p class="small muted" style="margin:0">orangu measured no injected listings in these sessions.</p>`
   const carried = x.claudeMd.reduce((s, c) => s + c.approxTokensCarried, 0)
   const memory = inv.claudeMd.length

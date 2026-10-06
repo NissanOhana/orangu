@@ -17,7 +17,7 @@ const ENDING: Partial<Record<SessionEnding, string>> = {
 export function endingWord(ending: SessionEnding, o?: Summary['outcomes']): string {
   const w = ENDING[ending] ?? 'The agent completed its last task'
   // 'clean' = the last check passed; when earlier test runs failed the sentence says so, or it contradicts the headline
-  return ending === 'clean' && o && qualityScope(o) ? `${w}. ${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed earlier` : w
+  return ending === 'clean' && o && qualityScope(o) ? `${w}. ${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed earlier.` : w
 }
 
 /** "last run" when the test runs were mixed: the verdict word comes from the last one, so it carries its scope. */
@@ -182,7 +182,7 @@ export function contextHeadline(a: Pick<Analysis, 'summary' | 'context' | 'token
   if (c.contextWindow && s.contextPeak) parts.push(`Context grew to ${pct(s.contextPeak / c.contextWindow)} of the window`)
   if (s.totalTokens) parts.push(`${pct(s.cacheHitRatio)} of tokens were cache reads`)
   if (s.totalTokens && a.tokens.agents) parts.push(`${pct(a.tokens.agents / s.totalTokens)} of tokens went to subagents`)
-  if (!parts.length) return 'No token usage was recorded for this session.'
+  if (!parts.length) return 'The transcript records no token usage for this session.'
   return parts.join('. ') + '.'
 }
 

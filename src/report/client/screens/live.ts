@@ -64,7 +64,7 @@ const BANNER: Record<LiveState, [string, string, string]> = {
   stalled: [DOTS.hollow, '', 'The transcript did not grow recently. The session may need your input.'],
   ended: [DOTS.good, 'Session ended · final numbers', ''],
   reconnecting: [DOTS.hollow, 'Connection lost · retrying', 'The page reconnects on its own.'],
-  file: [DOTS.static, 'Watching with orangu watch', 'orangu watch rewrites this file on each change. Reload the page to see it.'],
+  file: [DOTS.static, 'Watching with orangu watch', 'orangu watch rewrites this file on each change. Reload the page to see the latest numbers.'],
   snapshot: [DOTS.static, 'Static snapshot', 'This file does not update. To follow the session live, run orangu watch.'],
 }
 
@@ -156,6 +156,6 @@ export function renderLive(ctx: Ctx): HTMLElement {
   const fleet = typeof window !== 'undefined' ? window.__ORANGU_FLEET__ : undefined
   if (live.length > 1 && !explicitS && fleet) return fleet(ctx, live)
   const row = ctx.data.sessions.find((r) => r.id === (ctx.state.s ?? ctx.data.selectedId)) ?? ctx.data.sessions[0]
-  if (!row) return h(`<section>${emptyHero({ title: 'No sessions discovered.', command: 'orangu serve' })}</section>`)
+  if (!row) return h(`<section>${emptyHero({ title: 'orangu found no sessions.', command: 'orangu serve' })}</section>`)
   return sessionView(ctx, row, ctx.a)
 }

@@ -81,6 +81,9 @@ describe('renderHarness (A8, serve-only)', () => {
     // the subagent figure names its own population: its sessions are not the main-context sessions
     expect(markup).toContain('<th class="num">Subagent sessions</th>')
     expect(markup).toContain('<td class="num">400,000</td><td class="num">3</td>')
+    // the caption speaks only for the ≈ tokens columns: Sessions and Subagent sessions are counts, not a weight
+    expect(markup).toContain('Each ≈ tokens figure is the recurring context weight, in bytes ÷ 4.')
+    expect(markup).not.toContain('Each figure is')
     // the listings table scrolls inside its own container at 390 px (tools/repo/agents do the same)
     expect(markup).toContain('<div class="scroll-x"><table class="grid">')
     expect(markup).toContain('</table></div>')
@@ -92,10 +95,11 @@ describe('renderHarness (A8, serve-only)', () => {
   it('renders the designed empty state when the inventory declares nothing, and a degraded state without a report', () => {
     const empty = report({ inventory: { ...report().inventory, claudeMd: [], totals: { ...report().inventory.totals, skills: 0 } } })
     renderHarness(ctx(), empty)
-    expect(markup).toContain('No harness config found under the scanned roots.')
+    // active voice, orangu as the actor (the old titles were a telegram and a passive)
+    expect(markup).toContain('orangu found no harness config under the scanned roots.')
     expect(markup).toContain('~/.claude')
     renderHarness(ctx(), null)
-    expect(markup).toContain('could not be computed')
+    expect(markup).toContain('orangu could not compute the harness report.')
     expect(markup).toContain('data-copy="orangu harness"')
   })
 
@@ -105,7 +109,7 @@ describe('renderHarness (A8, serve-only)', () => {
     expect(card).toContain('84 of 85 skills never fired')
     expect(card).toContain('skill_listing ≈10,417 tokens per session')
     const none = harnessCardHtml(report({ inventory: { ...report().inventory, claudeMd: [] }, crosswalk: { ...report().crosswalk, skills: [] } }), '#harness')
-    expect(none).toContain('no harness config found')
+    expect(none).toContain('orangu found no harness config')
     expect(none).toContain('href="#harness"')
   })
 
@@ -117,7 +121,7 @@ describe('renderHarness (A8, serve-only)', () => {
     expect(loading).toContain('open the harness view →')
     const failed = harnessCardHtml(null, '#harness?s=abc')
     expect(failed).not.toContain('aria-busy')
-    expect(failed).toContain('The harness report could not be computed.')
+    expect(failed).toContain('orangu could not compute the harness report.')
     expect(failed).toContain('orangu harness prints the reason')
     for (const html of [loading, failed]) expect(html).toMatch(/^<a class="card pad mb16 harness-card"/)
   })

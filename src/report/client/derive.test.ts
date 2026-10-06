@@ -44,7 +44,7 @@ describe('endingWord', () => {
   it('a clean ending over mixed test runs says so, instead of contradicting the "N of M failed" headline', () => {
     const o = (testRuns: number, testRunsFailed: number) => ({ testRuns, testRunsFailed }) as Summary['outcomes']
     // two sentences, never a semicolon: the second one carries the earlier failures
-    expect(endingWord('clean', o(133, 8))).toBe('The last check it ran passed. 8 of 133 test runs failed earlier')
+    expect(endingWord('clean', o(133, 8))).toBe('The last check it ran passed. 8 of 133 test runs failed earlier.')
     expect(endingWord('clean', o(133, 0))).toBe('The last check it ran passed')
     expect(endingWord('clean', o(0, 0))).toBe('The last check it ran passed')
     // a failing ending already agrees with the headline; interrupted never mentions tests
@@ -396,6 +396,6 @@ describe('contextHeadline (A5)', () => {
   it('drops every clause whose input is missing, down to a designed empty sentence', () => {
     expect(contextHeadline({ ...base, context: {} } as never)).toBe('97% of tokens were cache reads. 58% of tokens went to subagents.')
     expect(contextHeadline({ ...base, tokens: { agents: 0 } } as never)).toBe('Context grew to 75% of the window. 97% of tokens were cache reads.')
-    expect(contextHeadline({ summary: summary({ totalTokens: 0 }), context: {}, tokens: { agents: 0 } } as never)).toBe('No token usage was recorded for this session.')
+    expect(contextHeadline({ summary: summary({ totalTokens: 0 }), context: {}, tokens: { agents: 0 } } as never)).toBe('The transcript records no token usage for this session.')
   })
 })
