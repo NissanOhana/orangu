@@ -54,10 +54,10 @@ function improveHandoffs(commands: { claude: string }): string {
  * and its message. Step 3 names where the proposal lands: the list below (serve) or the store (file).
  */
 function explainer(paste: string, mode: Ctx['data']['mode']): string {
-  return `<div class="card pad mb16"><div class="eyebrow">Get an AI proposal</div><ol class="steps">
+  return `<div class="card pad mb16"><div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">
 <li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>
 <li><div><span>${esc(paste)}</span>${installLines()}</div></li>
-<li><span>Claude writes one proposal: the change, its effect, its risk and how to check it. It changes no file in your repository. ${mode === 'serve' ? 'The proposal shows below, in Saved proposals.' : 'The proposal is in ~/.orangu/proposals. Run orangu serve to see it here.'}</span></li>
+<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository. ${mode === 'serve' ? 'The proposal shows below, in Saved proposals.' : 'The proposal is in ~/.orangu/proposals. Run orangu serve to see it here.'}</span></div></li>
 </ol></div>`
 }
 

@@ -201,7 +201,7 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     ctx.a!.insights = []
     ctx.a!.summary.topInsightIds = []
     renderOverview(ctx)
-    expect(markup).toContain('No improvements found. The rules found nothing to change in this session.')
+    expect(markup).toContain('<span class="muted">The rules found nothing to change in this session.</span>')
     expect(markup).toContain('Improvements · none')
     expect(markup).not.toContain('recoverable across')
   })
@@ -235,7 +235,8 @@ describe('renderOverview: the top improvement and the way to an AI proposal', ()
     expect(captions).toBe(ctx.a!.summary.topInsightIds.length)
     expect(markup).not.toContain('Paste it in a terminal. It starts Claude Code.')
     expect(markup.split('aria-label="copy the Claude Code command"').length - 1).toBe(ctx.a!.summary.topInsightIds.length)
-    expect(markup).toContain(`<a href="#suggest?s=${ctx.state.s}&amp;audience=dev&amp;theme=dark">See the 3 steps →</a>`)
+    // data-to: the Improvements screen opens at the steps (#ai-steps), not at the Overview's scroll offset
+    expect(markup).toContain(`<a href="#suggest?s=${ctx.state.s}&amp;audience=dev&amp;theme=dark" data-to="ai-steps">See the 3 steps →</a>`)
     expect(markup.split('See the 3 steps').length - 1).toBe(1)
     expect(markup).not.toContain('Draft a proposal')
   })

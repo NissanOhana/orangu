@@ -283,7 +283,7 @@ describe('renderSuggest proposal UX', () => {
   it('renders the empty inbox on localhost so the third step has somewhere to point', () => {
     renderSuggest(serveContext([]))
     expect(markup).toContain('Saved proposals · 0')
-    expect(markup).toContain('No proposals yet. When /orangu:improve writes a proposal for this scope, it shows here.')
+    expect(markup).toContain('This scope has no proposal yet. When /orangu:improve writes one, it shows here.')
     expect(markup).toContain('The proposal shows below, in Saved proposals.')
   })
 
@@ -379,7 +379,8 @@ describe('renderSuggest: each card leads with its improvement, one explainer say
   it('walks the 3 steps once: the button, the paste in a terminal with 2 install lines, and what Claude writes', () => {
     renderSuggest(context('file', []))
     const box = markup.slice(markup.indexOf('Get an AI proposal'), markup.indexOf('<details class="finding"'))
-    expect((box.match(/<li>/g) ?? []).length).toBe(3)
+    // 3 steps; the 4 parts of a proposal are a list inside step 3, so count only the step items
+    expect((box.match(/<li><(?:span|div)>/g) ?? []).length).toBe(3)
     expect(box).toContain('Open an improvement. Click <b>Copy the Claude Code command</b>.')
     expect(box).toContain('Paste it in a terminal in ~/Code/demo. It starts Claude Code.')
     expect(box).toContain('First time only, type these 2 lines in Claude Code:')
@@ -388,7 +389,8 @@ describe('renderSuggest: each card leads with its improvement, one explainer say
     expect(box).toContain('data-copy="/plugin install orangu"')
     expect(box.split('<span class="p" aria-hidden="true">&gt;</span>').length - 1).toBe(2)
     expect(markup).not.toContain('NissanOhana/orangu · /plugin install orangu')
-    expect(box).toContain('Claude writes one proposal: the change, its effect, its risk and how to check it. It changes no file in your repository.')
+    expect(box).toContain('Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul>')
+    expect(box).toContain('It changes no file in your repository.')
     expect(box).toContain('The proposal is in ~/.orangu/proposals. Run orangu serve to see it here.')
     const paste = box.indexOf('Paste it in a terminal')
     const install = box.indexOf('/plugin install orangu')

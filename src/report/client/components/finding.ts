@@ -32,6 +32,8 @@ export interface FindingOpts {
   link?: { href: string; label: string }
   /** the top card only: a link to the 3 steps on the Improvements screen (built by the hash writer) */
   how?: string
+  /** the session folder: /orangu:improve refuses evidence from another workspace, so the caption names it */
+  cwd?: string
 }
 
 export function findingHtml(ins: Insight, audience: Audience, opts: FindingOpts = {}): string {
@@ -45,7 +47,7 @@ export function findingHtml(ins: Insight, audience: Audience, opts: FindingOpts 
   // Under the default redaction Insight.detail is '' (transcript-derived copy); never render an empty <p>.
   const detail = ins.detail ? `<p>${esc(plainSentence(ins.detail, audience))}</p>` : ''
   const cmd = opts.command
-    ? `<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${commandBlock(opts.command)}<div class="small">${pasteLine()}${opts.how ? ` <a href="${esc(opts.how)}">See the 3 steps →</a>` : ''}</div></div>`
+    ? `<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${commandBlock(opts.command, '$', 'the Claude Code command')}<div class="small">${esc(pasteLine(opts.cwd))}${opts.how ? ` <a href="${esc(opts.how)}" data-to="ai-steps">See the 3 steps →</a>` : ''}</div></div>`
     : ''
   const link = opts.link ? `<div style="margin-top:10px"><a class="btn-sm" href="${esc(opts.link.href)}">${esc(opts.link.label)}</a></div>` : ''
   return `<details class="finding${opts.open ? ' top' : ''}"${opts.open ? ' open' : ''}>

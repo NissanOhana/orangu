@@ -175,6 +175,10 @@ details.finding > summary .sg-lead b { flex: none; font-size: inherit; }
 /* a clamp clips at the padding box, so the closed line keeps its spacing in transparent borders (the fill paints under them) and no 3rd line shows */
 details.finding:not([open]) > summary > .sg-lead { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; padding-block: 0; border-block: 6px solid transparent; }
 .sg-install { margin: 6px 0 4px; }
+/* "See the 3 steps" opens the Improvements screen at this heading: keep the card's top padding (.pad) in view */
+#ai-steps { scroll-margin-top: 16px; }
+/* a list inside a step (the parts of a proposal): .steps sets list-style none, which the nested list inherits */
+.steps ul { list-style: disc; margin: 4px 0 6px; padding-left: 18px; }
 .cmd + .cmd { margin-top: 6px; }
 .btn-primary[aria-busy="true"] { cursor: progress; opacity: 0.75; }
 /* the page-head Show me control and its popover */

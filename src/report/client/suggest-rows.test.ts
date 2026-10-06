@@ -201,7 +201,7 @@ describe('finding identity and status', () => {
     expect(kickoffFailureMessage(rec({ status: 'failed', kickoff: { mode: 'serve', command: 'claude x', error: 'spawn claude ENOENT' } }))).toBe(
       'Claude could not write the proposal: spawn claude ENOENT',
     )
-    expect(kickoffFailureMessage(rec({ status: 'failed' }))).toBe('Claude could not write the proposal. Copy the command and run it again to see the error.')
+    expect(kickoffFailureMessage(rec({ status: 'failed' }))).toBe('Claude could not write the proposal. Copy the command. Run it again to see the error.')
     expect(kickoffFailureMessage(rec({ status: 'new' }))).toBe('')
   })
 })

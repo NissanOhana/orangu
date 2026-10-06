@@ -149,7 +149,7 @@ export function harnessCommand(scope: 'repo' | 'global'): string {
 export function kickoffFailureMessage(record: SuggestionRecord | undefined): string {
   if (record?.status !== 'failed') return ''
   const detail = record.kickoff?.error?.trim()
-  return detail ? `Claude could not write the proposal: ${detail}` : 'Claude could not write the proposal. Copy the command and run it again to see the error.'
+  return detail ? `Claude could not write the proposal: ${detail}` : 'Claude could not write the proposal. Copy the command. Run it again to see the error.'
 }
 
 /**

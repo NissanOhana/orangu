@@ -111,7 +111,7 @@ function savedProposalInbox(records: SuggestionViewRecord[], mode: Ctx['data']['
   if (mode !== 'serve') return ''
   const body = records.length
     ? records.map(savedProposalItem).join('')
-    : '<p class="small muted" style="margin:0">No proposals yet. When /orangu:improve writes a proposal for this scope, it shows here.</p>'
+    : '<p class="small muted" style="margin:0">This scope has no proposal yet. When /orangu:improve writes one, it shows here.</p>'
   return `<section class="sg-inbox card pad mb16" aria-label="Saved proposals"><div class="sg-inbox-head"><div class="card-title">Saved proposals · ${records.length}</div><span class="eyebrow">Localhost only</span></div>${body}</section>`
 }
 

@@ -49,14 +49,14 @@ function triptych(a: Analysis): string {
 /** The top finding, hoisted: title, improvement, savings as a share of the session, the evidence link, the improve command and the way to the 3 steps. */
 function topFinding(ctx: Ctx, a: Analysis, ins: Insight | undefined): string {
   if (!ins)
-    return `<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">No improvements found. The rules found nothing to change in this session.</span></div>`
+    return `<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">The rules found nothing to change in this session.</span></div>`
   const at = insightLink(ins)
   const link = at?.tool
     ? { href: href(ctx, a, { screen: 'timeline', tool: at.tool }), label: `See the ${at.tool} calls →` }
     : at
       ? { href: href(ctx, a, { screen: 'timeline', turn: at.turn }), label: `See the ${plural(ins.turnIndexes.length, 'turn')} →` }
       : undefined
-  return `<div class="eyebrow mb6">Top improvement</div>${findingHtml(ins, ctx.audience, { command: commandForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, how: href(ctx, a, { screen: 'suggest' }), ...(link ? { link } : {}) })}`
+  return `<div class="eyebrow mb6">Top improvement</div>${findingHtml(ins, ctx.audience, { command: commandForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, how: href(ctx, a, { screen: 'suggest' }), cwd: a.session.cwd, ...(link ? { link } : {}) })}`
 }
 
 /** 60 px context sparkline (the Context screen's chart, reused); a caption alone when there is no series. */
@@ -85,7 +85,7 @@ function whereNext(ctx: Ctx, a: Analysis): string {
 
 function detailedBody(ctx: Ctx, a: Analysis): string {
   const top = a.summary.topInsightIds.map((id) => a.insights.find((i) => i.id === id)).filter((i): i is Insight => !!i)
-  const rest = top.slice(1).map((i) => findingHtml(i, 'dev', { command: commandForInsight(i, a.session.id), sessionTotalTokens: a.summary.totalTokens })).join('')
+  const rest = top.slice(1).map((i) => findingHtml(i, 'dev', { command: commandForInsight(i, a.session.id), sessionTotalTokens: a.summary.totalTokens, cwd: a.session.cwd })).join('')
   const recoverable = recoverableLine(recoverableFrom(planRows('session', a, undefined)), a.insights.length)
   return `${triptych(a)}${topFinding(ctx, a, top[0])}
 <div class="two-up mb16">${contextSpark(a)}${whereNext(ctx, a)}</div>

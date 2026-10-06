@@ -332,21 +332,27 @@ test('Show me copies the scope command on the Repo screen and on a saved reposit
 test('the Overview top card leads to the 3 steps on screen and keeps the theme and the audience', async ({ page }, info) => {
   const errors = runtimeErrors(page)
   const sizes = info.project.name.startsWith('wide') ? [{ width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 1366, height: 768 }] : [{ width: 390, height: 844 }]
-  for (const size of sizes) {
-    for (const audience of ['dev', 'plain']) {
-      await page.setViewportSize(size)
-      await page.goto(withTheme(`${APP}/#overview?s=${SESSION}&audience=${audience}`, info), { waitUntil: 'domcontentloaded' })
-      const top = page.locator('details.finding.top')
-      await expect(top.locator('summary .sg-lead')).toBeVisible()
-      await expect(top).toContainText('It starts Claude Code.')
-      await top.getByRole('link', { name: 'See the 3 steps →' }).click()
-      await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
-      const steps = page.getByRole('list', { name: 'Get an AI proposal' })
-      await expect(steps, `${size.width}x${size.height} ${audience}`).toBeInViewport()
-      const hash = await page.evaluate(() => location.hash)
-      expect(hash).toContain(`audience=${audience}`)
-      expect(hash.includes('theme=dark')).toBe(projectTheme(info) === 'dark')
-      expect(await paintedTheme(page)).toBe(projectTheme(info))
+  // the served app and the published sample (a longer Overview, so the link sits further down)
+  for (const overview of [`${APP}/#overview?s=${SESSION}`, `${SITE}/sample.html#overview`]) {
+    for (const size of sizes) {
+      for (const audience of ['dev', 'plain']) {
+        const where = `${overview} ${size.width}x${size.height} ${audience}`
+        await page.setViewportSize(size)
+        // a fresh document each time: a hash-only goto would keep the last screen's scroll
+        await page.goto('about:blank')
+        await page.goto(withTheme(`${overview}${overview.includes('?') ? '&' : '?'}audience=${audience}`, info), { waitUntil: 'domcontentloaded' })
+        const top = page.locator('details.finding.top')
+        await expect(top.locator('summary .sg-lead'), where).toBeVisible()
+        await expect(top, where).toContainText('It starts Claude Code.')
+        await top.getByRole('link', { name: 'See the 3 steps →' }).click()
+        await expect(page.getByRole('heading', { level: 1, name: 'Improvements' }), where).toBeVisible()
+        // the whole list, not one pixel of it: a list scrolled above the viewport can still overlap it
+        await expect(page.getByRole('list', { name: 'Get an AI proposal' }), where).toBeInViewport({ ratio: 1 })
+        const hash = await page.evaluate(() => location.hash)
+        expect(hash, where).toContain(`audience=${audience}`)
+        expect(hash.includes('theme=dark'), where).toBe(projectTheme(info) === 'dark')
+        expect(await paintedTheme(page), where).toBe(projectTheme(info))
+      }
     }
   }
   expect(errors).toEqual([])

@@ -101,7 +101,7 @@ export function showMeCommand(d: AppData, state: RouteState, a?: Analysis): stri
  */
 export function showMe(d: AppData, state: RouteState, a?: Analysis): string {
   const arg = showMeArg(d, state, a)
-  return arg && `<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${commandBlock(`claude "/orangu:show-me ${arg}"`)}<p>${esc(pasteLine(a?.session.cwd, arg === '--scope repo'))} The files open in your browser.</p>${installLines()}</div></details>`
+  return arg && `<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${commandBlock(`claude "/orangu:show-me ${arg}"`, '$', 'the show me command')}<p>${esc(pasteLine(a?.session.cwd, arg === '--scope repo'))} The files open in your browser.</p>${installLines()}</div></details>`
 }
 
 /** Exported for the unit test: the header must never describe a scope the body did not render. */
@@ -412,6 +412,9 @@ ${showMe(ctx.data, ctx.state, ctx.a)}
   const builtMs: Record<string, number> = {}
   const EXPANDABLE = 'details[data-sid],details[id]'
   const keyOf = (el: HTMLElement): string => el.dataset['sid'] ?? el.id
+  // the screen the last render drew, and the element a clicked link (data-to) asks the next screen to open at
+  let drawn: string | undefined
+  let jumpTo: string | undefined
 
   async function render(nav?: boolean): Promise<void> {
     lastRenderMs = Date.now()
@@ -458,9 +461,17 @@ ${showMe(ctx.data, ctx.state, ctx.a)}
     app!.querySelectorAll<HTMLDetailsElement>(EXPANDABLE).forEach((el) => {
       if (openIds.includes(keyOf(el))) el.open = true
     })
-    main.scrollTop = scrollTop
+    // A live re-render keeps the reader's place. A new screen opens at its top, or at the element the
+    // clicked link named. scrollIntoView and scrollTo also move the document, which scrolls in the narrow layout.
+    const target = jumpTo && document.getElementById(jumpTo)
+    jumpTo = undefined
+    if (target) target.scrollIntoView()
+    else if (state.screen === drawn) main.scrollTop = scrollTop
+    else scrollTo(0, 0)
+    drawn = state.screen
     wireExpandables(app!)
     wireCopyButtons(app!)
+    app!.querySelectorAll<HTMLElement>('[data-to]').forEach((a) => a.addEventListener('click', () => (jumpTo = a.dataset['to'])))
     // cross-screen jumps: any [data-turns] button opens the timeline at its first turn
     app!.querySelectorAll<HTMLElement>('[data-turns]').forEach((b) =>
       b.addEventListener('click', (e) => {

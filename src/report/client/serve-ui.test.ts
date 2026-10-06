@@ -32,6 +32,7 @@ describe('whole-harness review CTA', () => {
 
   it('names the scope it can act on and never contradicts the global review-only boundary', () => {
     expect(megaReview('repo')).toContain('Improve the harness of this repository')
+    expect(megaReview('repo')).toContain('It ranks a plan of changes to your harness and your scripts. Then it waits until you approve the plan.')
     expect(megaReview('repo')).toContain('Approve the items that you want. Claude applies them.')
     expect(megaReview('repo')).not.toContain('review only')
     const global = megaReview('global')
