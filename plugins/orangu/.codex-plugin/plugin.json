@@ -20,7 +20,7 @@
   "interface": {
     "displayName": "Orangu",
     "shortDescription": "Improve agent outcomes from local evidence.",
-    "longDescription": "Orangu bundles its own skills for turning deterministic local session evidence into a reviewable proposal, applying an explicitly approved session or repository change with local checks, and opening a private localhost feedback form.",
+    "longDescription": "Orangu bundles three skills of its own. One turns deterministic local session evidence into a reviewable proposal. One applies an explicitly approved session or repository change and runs local checks. One opens a private localhost feedback form.",
     "developerName": "Nissan Ohana",
     "category": "Productivity",
     "capabilities": [

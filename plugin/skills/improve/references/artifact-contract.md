@@ -1,6 +1,6 @@
 # Orangu proposal and verification artifacts
 
-Write valid JSON, not JSON with comments. Use the exact suggestion id in each filename and `id` field. Keep project paths relative; never include an absolute path, `..`, or `.git`.
+Write valid JSON, not JSON with comments. Use the exact suggestion id in each filename and `id` field. Keep project paths relative. Never include an absolute path, `..`, or `.git`.
 
 ## Proposal Markdown
 
@@ -34,22 +34,42 @@ Write valid JSON, not JSON with comments. Use the exact suggestion id in each fi
 }
 ```
 
-Allowed `changeClass`: `instruction`, `script-cli`, `hook`, `skill-create`, `skill-discover`, `subagent-agent`, `mcp`, `plugin`, `workflow-config`. `effort` is `S`, `M`, or `L`. `files` contains 1-64 reviewed relative project paths. `verificationChecks` contains 1-32 unique metric/comparison pairs from the supported lists below. `sources` and `rank` may be omitted only when they genuinely do not apply. A catalog source must name a real shipped entry exactly as `catalog: <id>`; omit its URL and date because Orangu derives the catalog-owned metadata. A research source requires the direct HTTPS page actually opened and a non-null checked `YYYY-MM-DD` date. An inference source has neither URL nor date. A discovery candidate whose `verifiedAt` is `null` stays in chat and must not be copied into this manifest.
+Field rules:
 
-`/orangu:harness` proposals are ranked structured reviews. Repo-scope proposals are apply-compatible; global-scope proposals use the same manifest for review but are proposal-only. They must include `rank`, a nonempty `files` list, and a nonempty `sources` list in addition to every required evidence, effect, risk, and verification field above. A recommendation without a concrete relative repository file or honest source remains a chat recommendation rather than a `proposed` record.
+- `changeClass` is one of `instruction`, `script-cli`, `hook`, `skill-create`, `skill-discover`, `subagent-agent`, `mcp`, `plugin`, `workflow-config`.
+- `effort` is `S`, `M`, or `L`.
+- `files` contains 1-64 reviewed relative project paths.
+- `verificationChecks` contains 1-32 unique metric/comparison pairs from the supported lists below.
+- Omit `sources` and `rank` only when they do not apply.
 
-Lifecycle authority is scope-specific: session and repo proposals may be applied and later verified; global proposals are review-only and may not be applied or verified.
+Source rules:
+
+- A catalog source must name a real shipped entry exactly as `catalog: <id>`. Omit its URL and date, because Orangu derives the metadata that the catalog owns.
+- A research source requires the direct HTTPS page that you opened and a non-null checked `YYYY-MM-DD` date.
+- An inference source has no URL and no date.
+- A discovery candidate whose `verifiedAt` is `null` stays in chat. Do not copy it into this manifest.
+
+`/orangu:harness` proposals are ranked structured reviews. Repo-scope proposals are apply-compatible. Global-scope proposals use the same manifest for review, but they are proposal-only. A harness proposal must include `rank`, a nonempty `files` list and a nonempty `sources` list. It must also include every required evidence, effect, risk and verification field above. A recommendation without a concrete relative repository file or an honest source stays a chat recommendation, not a `proposed` record.
+
+Lifecycle authority depends on the scope. Session and repo proposals may be applied and later verified. Global proposals are review-only, and they may not be applied or verified.
 
 ## Verification
 
-Verification needs no skill-written file: Orangu computes it. `orangu suggest --effect <id>` is read-only; `orangu suggest --set <id> verified` records the result only when the verdict is `verified`. An older `<id>.verified.json` intent is still accepted but chooses nothing; do not write one.
+Verification needs no skill-written file, because Orangu computes it. `orangu suggest --effect <id>` is read-only. `orangu suggest --set <id> verified` records the result only when the verdict is `verified`. Orangu still accepts an older `<id>.verified.json` intent, but that file chooses nothing. Do not write one.
 
-Orangu picks both sides from the proposal's canonical workspace, cut at the recorded application time: the baseline is up to ten settled sessions that ended before it, leaving out the finding's own sessions (they were chosen for going badly), and the later side is up to ten settled sessions that started after it. A session that spans the application, or that ran orangu itself (such as a verify check-in), counts on neither side; settled means quiet for at least 30 minutes with no partial line.
+Orangu picks both sides from the canonical workspace of the proposal, and it cuts them at the recorded application time:
 
-Each reviewed check is graded with an exact rank test. A `decreased` or `increased` check must beat chance at p ≤ 0.05 and a guard (`not-increased`, `not-decreased`, `equal`) must not move the wrong way beyond chance, with at least three sessions on each side. The verdict is `verified`, `within-noise`, `regressed`, `not-enough-sessions`, or `no-directional-check`; only `verified` changes state. Other changes applied in the same workspace inside the measured window are named in `confoundedBy`. A `verified` result says later sessions beat the baseline beyond chance; it does not prove the change caused it.
+- The baseline is up to 10 settled sessions that ended before that time, leaving out the finding's own sessions. Orangu leaves them out because they were chosen for going badly.
+- The later side is up to 10 settled sessions that started after that time.
+- A session that spans the application time counts on neither side. A session that ran orangu itself (such as a verify check-in) also counts on neither side.
+- A settled session is quiet for at least 30 minutes and has no partial line.
+
+An exact rank test grades each reviewed check. A `decreased` or `increased` check must beat chance at p ≤ 0.05. A guard (`not-increased`, `not-decreased`, `equal`) must not move the wrong way beyond chance. Both kinds need at least three sessions on each side. The verdict is `verified`, `within-noise`, `regressed`, `not-enough-sessions` or `no-directional-check`. Only `verified` changes state.
+
+Orangu names in `confoundedBy` the other changes applied in the same workspace inside the measured window. A `verified` result says that later sessions beat the baseline beyond chance. It does not prove the change caused it.
 
 Supported metrics: `avgTotalTokens`, `avgToolCalls`, `avgToolErrors`, `avgActiveMs`, `avgContextPeak`, `avgTestRunsFailed`, `avgBuildRunsFailed`, `avgInterruptions`.
 
 Supported comparisons: `decreased`, `not-increased`, `increased`, `not-decreased`, `equal`.
 
-Choose checks the change directly moves, plus one guard for what must not get worse. Every directional check must clear noise, so a check the change cannot move only makes verification harder.
+Choose checks that the change directly moves, plus one guard for what must not get worse. Every directional check must clear the noise. A check that the change cannot move only makes verification harder.
