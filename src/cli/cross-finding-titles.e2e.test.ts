@@ -2,7 +2,8 @@
  * `orangu global` / `orangu repo` print the aggregate's cross-findings verbatim (printAggregate in
  * src/cli/main.ts). Those titles used to be the rule's title with every number replaced by N, so a person
  * read "N tool results over N KB". Against the BUILT CLI: every recurring-finding line carries real figures
- * from an example session and the "(N sessions)" count that follows it.
+ * from an example session, marked "In one session:" so they never read as the cross-session total, and the
+ * "(N sessions)" count that follows it.
  */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
@@ -33,7 +34,9 @@ describe.skipIf(!existsSync(CLI))('orangu global: recurring-finding titles (buil
     expect(lines.length).toBeGreaterThan(0)
     for (const line of lines) {
       expect(line).not.toMatch(/\bN\b/)
-      expect(line).toMatch(/ {2}e\.g\. \S.*\(\d+ sessions?\)$/)
+      expect(line).not.toMatch(/\be\.g\./)
+      // the marker says the figures come from one example session, before the cross-session count
+      expect(line).toMatch(/ {2}In one session: \S.*\(\d+ sessions?\)$/)
     }
   })
 })

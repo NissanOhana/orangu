@@ -114,17 +114,22 @@ function titlePatternOf(title: string): string {
   return title.replace(/\d[\d.,kM%×]*/g, 'N')
 }
 
-/** A per-session title, prefixed so it reads honestly once the renderers add "(N sessions)" after it. */
+/**
+ * A per-session title, marked as the figures of one example session. Every reader prints it beside a
+ * cross-session count ("(N sessions)"), so without the marker one session's figures would read as the total.
+ * The marker lives here, once, so the terminal, the Repo and Global rows and the Suggest card stay honest
+ * together. An empty title stays empty: a bare marker would say nothing.
+ */
 function exampleTitle(title: string): string {
-  return title ? `e.g. ${title}` : ''
+  return title ? `In one session: ${title}` : ''
 }
 
 export interface CrossFinding {
   ruleId: string
   /**
    * User-facing. The title of the example session (one of `exampleSessionIds`) with the largest
-   * savings claim for this rule, prefixed `e.g. `: real figures from one real session, which the
-   * renderers follow with the "(N sessions)" count. Ties keep the first session seen.
+   * savings claim for this rule, prefixed `In one session: `: real figures from one real session, which
+   * the renderers follow with the "(N sessions)" count. Ties keep the first session seen.
    */
   title: string
   /**
@@ -133,6 +138,13 @@ export interface CrossFinding {
    * Optional in the type so older aggregate JSON still validates; the aggregate always emits it.
    */
   titlePattern?: string
+  /**
+   * Additive (v2 unchanged), user-facing: the improvement the rule suggests, from the same example insight
+   * whose title `title` carries (same tie rule), so the advice and the figures belong to one session. Rule
+   * copy, never transcript text, so default redaction keeps it. Required here because the aggregate always
+   * emits it; `orangu evidence` still accepts older aggregate JSON without it.
+   */
+  recommendation: string
   sessions: number
   totalSavingsTokens: number
   totalSavingsMs: number
@@ -260,18 +272,20 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
     for (const ins of a.insights) {
       const claimTokens = ins.savings?.tokens ?? 0
       const claimMs = ins.savings?.ms ?? 0
-      const f = findings.get(ins.ruleId) ?? { ruleId: ins.ruleId, title: exampleTitle(ins.title), titlePattern: titlePatternOf(ins.title), sessions: 0, totalSavingsTokens: 0, totalSavingsMs: 0, axis: ins.axis, severity: ins.severity, exampleSessionIds: [] }
+      const f = findings.get(ins.ruleId) ?? { ruleId: ins.ruleId, title: exampleTitle(ins.title), titlePattern: titlePatternOf(ins.title), recommendation: ins.recommendation, sessions: 0, totalSavingsTokens: 0, totalSavingsMs: 0, axis: ins.axis, severity: ins.severity, exampleSessionIds: [] }
       f.sessions++
       f.totalSavingsTokens += claimTokens
       f.totalSavingsMs += claimMs
       if (f.exampleSessionIds.length < EXAMPLE_SESSIONS) {
         f.exampleSessionIds.push(sid)
         // the title follows the example session with the largest claim (tokens, then ms; ties keep the
-        // first seen), so the figures a person reads belong to a session they can open from the examples
+        // first seen), so the figures a person reads belong to a session they can open from the examples;
+        // the recommendation moves with it, so the advice is the one that session's insight gave
         const best = exampleClaim.get(ins.ruleId)
         if (!best) exampleClaim.set(ins.ruleId, { tokens: claimTokens, ms: claimMs })
         else if (claimTokens > best.tokens || (claimTokens === best.tokens && claimMs > best.ms)) {
           f.title = exampleTitle(ins.title)
+          f.recommendation = ins.recommendation
           exampleClaim.set(ins.ruleId, { tokens: claimTokens, ms: claimMs })
         }
       }

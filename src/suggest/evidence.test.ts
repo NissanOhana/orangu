@@ -87,6 +87,67 @@ describe('projectEvidence', () => {
     ).toThrow(/must belong to Aggregate\.sessions/)
   })
 
+  it('projects the cross-finding recommendation into repo and global rows, scrubbed of secrets', async () => {
+    const analysis = await canonical()
+    const input = aggregate([analysis], 'repo demo', 0)
+    for (const scope of ['repo', 'global'] as const) {
+      const bundle = projectEvidence(input, { scope, limit: MAX_EVIDENCE_LIMIT })
+      expect(bundle.findings.length).toBeGreaterThan(0)
+      for (const row of bundle.findings) {
+        const source = input.crossFindings.find((f) => f.ruleId === row.finding.ruleId)!
+        expect(row.recommendation).toMatch(/\S/)
+        expect(row.recommendation).toBe(source.recommendation)
+      }
+    }
+    const secret = 'sk-ant-api03-abc123def456ghi789'
+    const planted = { ...input, crossFindings: input.crossFindings.map((f) => ({ ...f, recommendation: `Remove ${secret}` })) }
+    const json = JSON.stringify(projectEvidence(planted, { scope: 'global' }))
+    expect(json).not.toContain(secret)
+    expect(json).toContain('‹anthropic-key›')
+  })
+
+  it('accepts older Aggregate JSON without a cross-finding recommendation and leaves the field out', async () => {
+    const analysis = await canonical()
+    const input = aggregate([analysis], 'repo demo', 0)
+    const legacy = JSON.parse(JSON.stringify(input)) as { crossFindings: Array<Record<string, unknown>> }
+    for (const f of legacy.crossFindings) delete f['recommendation']
+    const bundle = parseEvidenceArtifact(JSON.stringify(legacy), { scope: 'repo' })
+    expect(bundle.findings.length).toBeGreaterThan(0)
+    for (const row of bundle.findings) expect('recommendation' in row).toBe(false)
+    // the field is copy, not identity: the same findings keep the same suggestion ids with or without it
+    expect(bundle.findings.map((row) => row.suggestionId)).toEqual(projectEvidence(input, { scope: 'repo' }).findings.map((row) => row.suggestionId))
+  })
+
+  it('rejects a cross-finding recommendation that is not a bounded string', async () => {
+    const analysis = await canonical()
+    const input = aggregate([analysis], 'repo demo', 0)
+    const finding = input.crossFindings[0]!
+    expect(() => projectEvidence({ ...input, crossFindings: [{ ...finding, recommendation: 42 }] }, { scope: 'repo' })).toThrow(
+      /crossFindings\[0\]\.recommendation must be/,
+    )
+    expect(() => projectEvidence({ ...input, crossFindings: [{ ...finding, recommendation: 'x'.repeat(16_385) }] }, { scope: 'repo' })).toThrow(
+      /crossFindings\[0\]\.recommendation exceeds/,
+    )
+  })
+
+  it('states the recurrence against the cohort total, never as a bare "Recurs in" count', async () => {
+    const analysis = await canonical()
+    const cohort = (withFinding: number) =>
+      aggregate(
+        Array.from({ length: 7 }, (_, i) => ({ ...analysis, session: { ...analysis.session, id: `cohort-${i}` }, insights: i < withFinding ? analysis.insights : [] })),
+        'repo demo',
+        0,
+      )
+    const details = (input: unknown) => projectEvidence(input, { scope: 'repo', limit: MAX_EVIDENCE_LIMIT }).findings.map((row) => row.detail)
+    const once = details(cohort(1))
+    const thrice = details(cohort(3))
+    expect(once.length).toBeGreaterThan(0)
+    expect(new Set(once)).toEqual(new Set(['This pattern shows in 1 of 7 sessions.']))
+    expect(new Set(thrice)).toEqual(new Set(['This pattern shows in 3 of 7 sessions.']))
+    expect(new Set(details(aggregate([analysis], 'repo demo', 0)))).toEqual(new Set(['This pattern shows in 1 of 1 session.']))
+    for (const detail of [...once, ...thrice]) expect(detail).not.toMatch(/Recurs in/)
+  })
+
   it('keeps curated catalog matches first, bounded, and linked to canonical suggestions', async () => {
     const analysis = await canonical()
     const base = analysis.insights[0]!

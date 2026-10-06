@@ -6,6 +6,7 @@ import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 import { goldenCorpus } from '../../test/fixtures/corpus.js'
 import { aggregateBody } from '../report/client/screens/repo.js'
 import type { Ctx } from '../report/client/app.js'
+import { prepareAggregateForOutput } from '../cli/json-out.js'
 
 async function two() {
   const a1 = analyzeSession(await parseClaudeCodeSession({ records: buildCanonicalSession().toRecords(), noSidecar: true }), { version: 't', now: 0 })
@@ -128,37 +129,43 @@ describe('crossFindings title: a real example session, not a number-stripped tem
     }))
     return aggregate(analyses, 'repo test', 0).crossFindings.find((f) => f.ruleId === 'one-rule')!
   }
-  it('carries the title of the highest-savings example session, prefixed e.g.', async () => {
+  it('carries the title of the highest-savings example session, marked as the figures of one session', async () => {
     const f = await titled([
       { tokens: 10, title: '10 tool results over 4 KB carried in context' },
       { tokens: 1000, title: '35 tool results over 40 KB, 1.38M tokens carried in context' },
       { tokens: 5, title: '5 tool results over 1 KB carried in context' },
     ])
-    expect(f.title).toBe('e.g. 35 tool results over 40 KB, 1.38M tokens carried in context')
+    expect(f.title).toBe('In one session: 35 tool results over 40 KB, 1.38M tokens carried in context')
     expect(f.titlePattern).toBe('N tool results over N KB carried in context')
     expect(f.titlePattern).not.toMatch(/\d/)
     expect(f.title).not.toMatch(/\bN\b/)
+    expect(f.title).not.toMatch(/\be\.g\./)
   })
   it('breaks a token tie on ms, then keeps the first session seen', async () => {
     const byMs = await titled([{ tokens: 10, ms: 100, title: 'first' }, { tokens: 10, ms: 900, title: 'second' }])
-    expect(byMs.title).toBe('e.g. second')
+    expect(byMs.title).toBe('In one session: second')
     const tie = await titled([{ tokens: 10, ms: 5, title: 'first' }, { tokens: 10, ms: 5, title: 'second' }])
-    expect(tie.title).toBe('e.g. first')
+    expect(tie.title).toBe('In one session: first')
   })
   it('chooses among the example sessions only, so the figures belong to a session the reader can open', async () => {
     const claims = [1, 2, 3, 4, 5, 100, 200].map((tokens) => ({ tokens, title: `${tokens} tokens wasted` }))
     const f = await titled(claims)
     expect(f.exampleSessionIds).toEqual(['sess-0', 'sess-1', 'sess-2', 'sess-3', 'sess-4'])
-    expect(f.title).toBe('e.g. 5 tokens wasted')
+    expect(f.title).toBe('In one session: 5 tokens wasted')
     expect(f.sessions).toBe(7)
     expect(f.totalSavingsTokens).toBe(315)
+  })
+  it('keeps an empty example title empty instead of a bare marker', async () => {
+    const f = await titled([{ tokens: 10, title: '' }])
+    expect(f.title).toBe('')
   })
   it('never renders a template N in the repo screen over the whole golden corpus', async () => {
     const { aggregateJson } = await goldenCorpus()
     const agg = JSON.parse(aggregateJson) as ReturnType<typeof aggregate>
     expect(agg.crossFindings.length).toBeGreaterThan(3)
     for (const f of agg.crossFindings) {
-      expect(f.title, f.ruleId).toMatch(/^e\.g\. \S/)
+      expect(f.title, f.ruleId).toMatch(/^In one session: \S/)
+      expect(f.title, f.ruleId).not.toMatch(/\be\.g\./)
       expect(f.title, f.ruleId).not.toMatch(/\bN\b/)
       expect(typeof f.titlePattern).toBe('string')
     }
@@ -167,6 +174,87 @@ describe('crossFindings title: a real example session, not a number-stripped tem
     expect(rendered.length).toBe(Math.min(8, agg.crossFindings.length))
     for (const title of rendered) expect(title).not.toMatch(/\bN\b/)
     // the "(N sessions)" count the screen adds still follows every title
-    expect(html).toMatch(/<span class="grow">e\.g\. [^<]*<\/span><span class="mono small muted">\d+ sessions<\/span>/)
+    expect(html).toMatch(/<span class="grow">In one session: [^<]*<\/span><span class="mono small muted">\d+ sessions<\/span>/)
+  })
+})
+
+describe('crossFindings recommendation: the improvement of the example insight whose title the finding carries', () => {
+  async function recommended(claims: Array<{ tokens: number; ms?: number; title: string; recommendation: string }>) {
+    const base = analyzeSession(await parseClaudeCodeSession({ records: buildCanonicalSession().toRecords(), noSidecar: true }), { version: 't', now: 0 })
+    const analyses = claims.map((c, i) => ({
+      ...base,
+      session: { ...base.session, id: `sess-${i}` },
+      insights: [
+        {
+          ...base.insights[0]!,
+          id: `ins-${i}`,
+          ruleId: 'one-rule',
+          title: c.title,
+          recommendation: c.recommendation,
+          savings: { tokens: c.tokens, ms: c.ms ?? 0, estimated: true },
+        },
+      ],
+    }))
+    return aggregate(analyses, 'repo test', 0).crossFindings.find((f) => f.ruleId === 'one-rule')!
+  }
+  it('takes the recommendation from the same insight as the title (the largest claim)', async () => {
+    const f = await recommended([
+      { tokens: 10, title: 'small', recommendation: 'Do the small thing.' },
+      { tokens: 1000, title: 'large', recommendation: 'Do the large thing.' },
+      { tokens: 5, title: 'tiny', recommendation: 'Do the tiny thing.' },
+    ])
+    expect(f.title).toBe('In one session: large')
+    expect(f.recommendation).toBe('Do the large thing.')
+  })
+  it('follows the title through the ms tie-break and the first-seen tie', async () => {
+    const byMs = await recommended([
+      { tokens: 10, ms: 100, title: 'first', recommendation: 'First advice.' },
+      { tokens: 10, ms: 900, title: 'second', recommendation: 'Second advice.' },
+    ])
+    expect(byMs.recommendation).toBe('Second advice.')
+    const tie = await recommended([
+      { tokens: 10, ms: 5, title: 'first', recommendation: 'First advice.' },
+      { tokens: 10, ms: 5, title: 'second', recommendation: 'Second advice.' },
+    ])
+    expect(tie.recommendation).toBe('First advice.')
+  })
+  it('chooses among the example sessions only, like the title', async () => {
+    const claims = [1, 2, 3, 4, 5, 100, 200].map((tokens) => ({ tokens, title: `${tokens} tokens wasted`, recommendation: `Advice for ${tokens}.` }))
+    const f = await recommended(claims)
+    expect(f.title).toBe('In one session: 5 tokens wasted')
+    expect(f.recommendation).toBe('Advice for 5.')
+  })
+  it('is the same bytes for the same input (no order or clock dependence)', async () => {
+    const claims = [
+      { tokens: 7, title: 'a', recommendation: 'Advice A.' },
+      { tokens: 7, title: 'b', recommendation: 'Advice B.' },
+    ]
+    const one = await recommended(claims)
+    const two = await recommended(claims)
+    expect(JSON.stringify(two)).toBe(JSON.stringify(one))
+  })
+  it('matches an example insight, on every cross finding of the golden corpus', async () => {
+    const { files, aggregateJson } = await goldenCorpus()
+    const agg = JSON.parse(aggregateJson) as ReturnType<typeof aggregate>
+    const analyses = files.map((f) => JSON.parse(f.json) as { session: { id: string }; insights: Array<{ ruleId: string; title: string; recommendation: string }> })
+    for (const f of agg.crossFindings) {
+      expect(typeof f.recommendation, f.ruleId).toBe('string')
+      expect(f.recommendation.trim(), f.ruleId).not.toBe('')
+      const source = analyses
+        .filter((a) => f.exampleSessionIds.includes(a.session.id))
+        .flatMap((a) => a.insights)
+        .find((ins) => ins.ruleId === f.ruleId && `In one session: ${ins.title}` === f.title)
+      expect(source, f.ruleId).toBeDefined()
+      expect(f.recommendation, f.ruleId).toBe(source!.recommendation)
+    }
+  })
+  it('survives the default output redaction, which keeps rule copy and strips transcript text', async () => {
+    const agg = await two()
+    expect(agg.crossFindings.length).toBeGreaterThan(0)
+    const out = prepareAggregateForOutput(agg, {})
+    for (let i = 0; i < agg.crossFindings.length; i++) {
+      expect(agg.crossFindings[i]!.recommendation).toMatch(/\S/)
+      expect(out.crossFindings[i]!.recommendation).toBe(agg.crossFindings[i]!.recommendation)
+    }
   })
 })

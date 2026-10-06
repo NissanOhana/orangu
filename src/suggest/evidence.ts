@@ -122,7 +122,12 @@ interface EvidenceAnalysisInput extends MatchableAnalysis {
   insights: Insight[]
 }
 
-type ValidatedCrossFinding = Omit<CrossFinding, 'axis' | 'severity'> & { axis: Insight['axis']; severity: InsightSeverity }
+/** `recommendation` is optional here, unlike in `CrossFinding`: older aggregate JSON omits it and still validates. */
+type ValidatedCrossFinding = Omit<CrossFinding, 'axis' | 'severity' | 'recommendation'> & {
+  axis: Insight['axis']
+  severity: InsightSeverity
+  recommendation?: string
+}
 
 interface EvidenceAggregateInput {
   schemaVersion: string
@@ -323,6 +328,11 @@ function validateCrossFinding(value: unknown, index: number): ValidatedCrossFind
   if (!isRecord(value)) throw new Error(`Aggregate.crossFindings[${index}] must be an object`)
   const ruleId = boundedId(value['ruleId'], `Aggregate.crossFindings[${index}].ruleId`, MAX_RULE_ID_CHARS)
   const title = boundedString(value['title'], `Aggregate.crossFindings[${index}].title`, MAX_TITLE_CHARS, true)
+  // Additive (aggregate v2): older JSON omits the recommendation; its row then carries none, as before.
+  const recommendation =
+    value['recommendation'] === undefined
+      ? undefined
+      : boundedString(value['recommendation'], `Aggregate.crossFindings[${index}].recommendation`, MAX_INPUT_TEXT_CHARS, true)
   const sessions = finiteNonNegative(value['sessions'], `Aggregate.crossFindings[${index}].sessions`)
   if (!Number.isInteger(sessions) || sessions < 1 || sessions > MAX_EVIDENCE_INPUT_SESSIONS) {
     throw new Error(`Aggregate.crossFindings[${index}].sessions is out of range`)
@@ -335,7 +345,19 @@ function validateCrossFinding(value: unknown, index: number): ValidatedCrossFind
   const axis = insightAxis(value['axis'], `Aggregate.crossFindings[${index}].axis`)
   const severity = insightSeverity(value['severity'], `Aggregate.crossFindings[${index}].severity`)
   const exampleSessionIds = validateSessionIds(value['exampleSessionIds'], `Aggregate.crossFindings[${index}].exampleSessionIds`)
-  return { ruleId, title, sessions, totalSavingsTokens, totalSavingsMs, boundedSavingsTokens, boundedSavingsMs, axis, severity, exampleSessionIds }
+  return {
+    ruleId,
+    title,
+    ...(recommendation !== undefined ? { recommendation } : {}),
+    sessions,
+    totalSavingsTokens,
+    totalSavingsMs,
+    boundedSavingsTokens,
+    boundedSavingsMs,
+    axis,
+    severity,
+    exampleSessionIds,
+  }
 }
 
 function validateAggregate(value: Record<string, unknown>): ValidatedAggregate {
@@ -442,13 +464,24 @@ function rowsFromAnalysis(a: EvidenceAnalysisInput): ProjectedRow[] {
   }))
 }
 
+/**
+ * `compareCrossFindings` takes a full `CrossFinding`. Older aggregate JSON can lack `recommendation`, which the
+ * rank never reads, so it is filled for the comparison only: the order is unchanged and no cast hides the gap.
+ */
+function rankCrossFindings(a: ValidatedCrossFinding, b: ValidatedCrossFinding): number {
+  return compareCrossFindings({ ...a, recommendation: a.recommendation ?? '' }, { ...b, recommendation: b.recommendation ?? '' })
+}
+
 function rowsFromAggregate(a: EvidenceAggregateInput, scope: AggregateScope): ProjectedRow[] {
   const cohortFingerprint = sessionCohortFingerprint(a.sessionIds)
-  return [...a.crossFindings].sort(compareCrossFindings).map((finding) => ({
+  // the recurrence reads against the whole cohort ("1 of 7 sessions"), never as a bare count
+  const total = a.sessionIds.length
+  return [...a.crossFindings].sort(rankCrossFindings).map((finding) => ({
     finding: findingFromCrossFinding(finding, scope, cohortFingerprint),
     axis: finding.axis,
     severity: finding.severity,
-    detail: `Recurs in ${finding.sessions} session${finding.sessions === 1 ? '' : 's'}.`,
+    detail: `This pattern shows in ${finding.sessions} of ${total} session${total === 1 ? '' : 's'}.`,
+    ...(finding.recommendation !== undefined ? { recommendation: outputText(finding.recommendation, MAX_OUTPUT_DETAIL_CHARS) } : {}),
     catalogMatches: matchRule(finding.ruleId).slice(0, MAX_CATALOG_MATCHES_PER_FINDING),
   }))
 }
