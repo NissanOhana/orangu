@@ -108,7 +108,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // R1, R2: the report
   // raised 89 -> 96 by the report copy rewrite (R1, 2026-10-06). Measured 310 sentences, 304 clean, score 98
   // (was 293 sentences, 268 clean, score 91). The 6 findings left are in the improvement screens (R2).
-  'src/report/client': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // raised 96 -> 98 by the improvement screens rewrite (R2, 2026-10-06). Measured 329 sentences, 329 clean,
+  // score 100 (was 310 sentences, 304 clean, score 98). The 6 findings (5 semicolons, 1 long sentence) are gone.
+  'src/report/client': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // B2: rule copy, and every other analyzer string
   // B2: floor 91 -> 98. Measured 46 sentences, 46 clean, score 100. The rule copy rewrite took out the 2
   // semicolons (script-candidate, fanout-opportunity) and the progressive "was waiting" (human-wait-dominates).

@@ -118,7 +118,10 @@ describe('offline report', () => {
     // card when the file has a session (the same markup the session bundle draws inline) instead of a
     // dash, and nav.ts counts an embedded global aggregate in any file (+2 B, shared with CLIENT_JS).
     // Named here rather than raised quietly; from here it may only go DOWN.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(83_136)
+    // 2026-10-06 improvement on every card + Show me: the cap goes DOWN from 83,136 to 81,468, the
+    // measured 81,455 below plus the 13 B of headroom this cap had at the start of the run (83,123 then).
+    // The run spent 1,633 of the 3,301 B the proposals seam freed; the rest leaves the budget for good.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(81_468)
     // 2026-10-06 proposals seam: -3,301 B (83,123 -> 79,822), and this bundle gets the exact pin the
     // session bundle has always had, so a change that moves it has to name the bytes. The stored
     // proposal block and the Saved proposals inbox (proposals-ui.ts) reach the Suggest screen only
@@ -130,7 +133,17 @@ describe('offline report', () => {
     // fragment, a period where it had a semicolon, paid down by the Repo/Global hero, which lost its
     // 7-item inline list); the Plain audience on the Repo/Global KPI strip and the Live screen is
     // +155 B (plainLabel() and its call sites). 3,120 B of the cap stay free.
-    expect(CLIENT_JS_AGG.length).toBe(80016)
+    // 2026-10-06 improvement on every card + Show me: +1,439 B (80,016 -> 81,455), re-measured after
+    // `npm run build`. Costed by builds without each part: the Show me control (the show-me command for
+    // the scope or the session, its popover, the paste line and the 2 install bars) is +628 B; the
+    // improvement line in every card summary, the one explainer that replaces the 3 steps in every card,
+    // the terminal paste line, the 2 install bars, the "N of M sessions" count and the copy of the
+    // Improvements screen and the whole-harness block are +341 B; the review fixes (the session folder
+    // in the Overview caption, a name for each copy button and for the steps list, the parts of a
+    // proposal as a list, the copy) are +272 B; a new screen opening at its top, or at the element a
+    // link names (data-to), is +198 B. Run history for this bundle: 83,123 before the run, 79,822 after
+    // the seam, 80,016 after the report copy, 81,455 now.
+    expect(CLIENT_JS_AGG.length).toBe(81455)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -161,7 +174,10 @@ describe('offline report', () => {
     // verify): +1 B.
     // Tools table: the Avg cell says "outlier" (with a title that explains it) when the mean sits above p95,
     // so one 30-minute timeout among quick calls no longer reads as a broken statistic: +252 B.
-    expect(CLIENT_JS.length).toBeLessThanOrEqual(72 * 1024)
+    // 2026-10-06 improvement on every card + Show me: the cap goes DOWN from 73,728 (72 KB) to 72,211,
+    // the measured 72,185 below plus the 26 B of headroom this cap had at the start of the run (73,702
+    // then). The run spent 1,785 of the 3,302 B the proposals seam freed; the rest leaves the budget.
+    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_211)
     // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
     // 2026-08-27 final client pass 2 (fix/final-client2): −56 B net, cap unchanged. Eight UX fixes cost +1,233 B
     // (the Timeline row's own-facts fallback, folded hidden-error rows on Tools/Repo/Global, the Quality verdict
@@ -217,6 +233,15 @@ describe('offline report', () => {
     // subjects); the Plain audience on the Live screen (plainLabel() maps "Cache hits" and "Context
     // window", plainSentence the compaction caption) is +140 B. 3,085 B of the cap stay free for the
     // improvement screens.
-    expect(CLIENT_JS.length).toBe(70643)
+    // 2026-10-06 improvement on every card + Show me: +1,542 B (70,643 -> 72,185), re-measured after
+    // `npm run build`. Costed by builds without each part: the Show me control is +626 B; the
+    // improvement line in every card summary, the one explainer above the cards (it replaces the 3
+    // steps, the "handled by" row and the install bar that each card repeated), the terminal paste line,
+    // the 2 install bars, the "N of M sessions" count and the Improvements and Overview copy are +432 B;
+    // the review fixes (the session folder in the Overview caption, a name for each copy button and for
+    // the steps list, the parts of a proposal as a list, the copy) are +286 B; a new screen opening at
+    // its top, or at the element a link names (data-to), is +198 B. Run history: 73,702 before the run,
+    // 70,400 after the seam, 70,643 after the report copy, 72,185 now.
+    expect(CLIENT_JS.length).toBe(72185)
   })
 })
