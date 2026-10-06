@@ -562,6 +562,43 @@ describe('plugin packaging', () => {
     expect(rules).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
   })
 
+  // The STE rules shape prose only. Values that Orangu validates, text that a proposal writes into a
+  // repository, and sentences a skill fixes word for word stay exact; the audience follows the skill and the
+  // user, never a default of its own (the report itself opens in Detailed).
+  it('the shared STE rules leave validated values, repository text, fixed sentences and the audience alone', () => {
+    const rules = readText(STE_RULES)
+    for (const field of ['`title`', '`change`', '`evidence`', '`expectedEffect`', '`risk`', '`verification`'])
+      expect(rules, `STE reaches the manifest prose field ${field}`).toContain(field)
+    expect(rules).not.toContain('the text fields of a proposal manifest')
+    expect(rules).toContain('Do not put code spans inside JSON values.')
+    expect(rules).toMatch(/repository file[^\n]*keeps the exact mechanism names/)
+    expect(rules).toContain('A sentence that a skill tells you to say stays word for word.')
+    expect(rules, 'no order to quote transcript text').not.toMatch(/Quote text exactly: transcript/)
+    expect(rules).toContain('If the skill that sent you here names a default audience, use it.')
+    expect(rules, 'no audience default of its own').not.toMatch(/write for Plain language/i)
+    expect(rules, 'the unit list covers read sizes').toMatch(/\bbytes\b/)
+    // improve researches online itself; the researcher-only rule is scoped to the harness review
+    expect(readText(SHARED_RULES)).toContain('In the harness review, only the researcher builds network queries.')
+  })
+
+  // A page counts as research only when this invocation opened it: "this session" would let a page from
+  // earlier in a long conversation pass as checked today.
+  it('research provenance covers only pages opened while the skill ran', () => {
+    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md'])
+      expect(readText(path), path).toContain('A page that you opened while you ran this skill is `kind: "research"`')
+    for (const path of ['plugin/skills/improve/references/artifact-contract.md', '.agents/skills/orangu-improve/references/artifact-contract.md'])
+      expect(readText(path), path).toMatch(/research source requires the direct HTTPS page opened while the skill ran/)
+  })
+
+  // The descriptions keep the phrases that the routing cases in plugin/evals send.
+  it('the mirrored descriptions keep the phrases the routing evals rely on', () => {
+    const desc = (s: string): string => /description:\s*(.+)/.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? ''
+    expect(desc('improve')).toContain('what to change so the next run or session goes better')
+    expect(desc('improve')).toContain('wants an applied change verified')
+    expect(desc('improve')).toContain('pastes a suggestion id from a report')
+    expect(desc('feedback')).toContain('report a bug')
+  })
+
   // The build mirrors these four trees to Codex. A Claude-only skill named there becomes a dead command in
   // the mirror (a SKILL.md stops the build; a shared or reference file would copy it silently).
   it('no mirrored skill file names the Claude-only show-me skill', () => {
