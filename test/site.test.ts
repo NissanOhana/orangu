@@ -179,7 +179,7 @@ describe('site/index.src.html (authored landing source)', () => {
 
   it('shows the complete session observe-to-verified sequence in order', () => {
     const demo = src.match(/<section id="demo"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const steps = ['Tool call', 'Local evidence', 'Recurring pattern', 'Draft proposal', 'Explicit apply', 'Next-run verification']
+    const steps = ['Tool call', 'Local evidence', 'Recurring pattern', 'Draft proposal', 'Explicit apply', 'Next-session verification']
     let last = -1
     for (const step of steps) {
       const at = demo.indexOf(step)
@@ -218,7 +218,7 @@ describe('site/index.src.html (authored landing source)', () => {
     for (const copy of [
       '<b>Evidence.</b>',
       '<b>Proposal.</b>',
-      '<b>Next-run verification.</b>',
+      '<b>Next-session verification.</b>',
       '<b>Explicit apply.</b>',
       'handled by orangu:improve',
       'Claude apply',
@@ -490,7 +490,7 @@ describe('site/index.src.html (authored landing source)', () => {
     runInNewContext(interaction, { document: staticDocument, window: staticWindow })
     expect(staticMotionButton.disabled).toBe(true)
     expect(staticMotionButton.textContent).toBe('Static')
-    expect(staticMotionAttrs.get('aria-label')).toBe('Automatic preview unavailable in this browser')
+    expect(staticMotionAttrs.get('aria-label')).toBe('This browser cannot play the automatic preview')
     expect(staticTimers.size).toBe(0)
   })
 
@@ -649,7 +649,7 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(trust).toContain("receipt's shape and file list")
     expect(src).not.toMatch(/attestation|preflight/i)
     expect(trust).not.toContain('edits the declared repository files')
-    expect(trust).toContain('No instrumentation')
+    expect(trust).toContain('you need no instrumentation')
     expect(trust).toContain('no upload')
     expect(trust).not.toMatch(/\b(?:versus|vs\.)\b/i)
   })
@@ -657,8 +657,8 @@ describe('site/index.src.html (authored landing source)', () => {
   it('states the conservative lifecycle without broadening repo or global authority', () => {
     const text = htmlText(src)
     expect(text).toContain('Session: proposed -> applied -> verified · Repo: proposed -> applied -> verified · Global: proposed')
-    expect(text).toContain('repo may be applied explicitly and verified on later sessions. global is proposal-only.')
-    expect(text).toContain('Session and repo can propose, apply, and verify; global stays proposal-only.')
+    expect(text).toContain('You apply a repo change explicitly, and orangu verifies it on later sessions. A global change stays a proposal.')
+    expect(text).toContain('The session and repo scopes can propose, apply, and verify. The global scope stays proposal-only.')
     expect(text).toContain('later verification beyond chance')
     expect(text, 'no claim that one later session verifies a change').not.toMatch(/\ba later session\b/i)
     expect(text).not.toMatch(/\bglobal\b[^.]{0,80}\b(?:can|may) be (?:applied|verified)\b/i)
@@ -798,7 +798,7 @@ describe('site/index.html (generated landing)', () => {
 })
 
 // C3: the page leans on privacy/determinism/security promises, so the footer links the documents that
-// make them and discloses the one thing the page itself loads (Google Fonts; generated reports load nothing).
+// make them and discloses the one thing the page itself loads (Google Fonts). Generated reports load nothing.
 describe('landing footer', () => {
   const src = readFileSync(join(root, 'site/index.src.html'), 'utf8')
   const footer = src.match(/<footer>[\s\S]*?<\/footer>/)?.[0] ?? ''
@@ -808,7 +808,7 @@ describe('landing footer', () => {
     }
   })
   it('discloses the font load and the report promise', () => {
-    expect(footer).toContain('This page loads Google Fonts; generated reports load nothing.')
+    expect(footer).toContain('This page loads Google Fonts. Generated reports load nothing.')
   })
 })
 

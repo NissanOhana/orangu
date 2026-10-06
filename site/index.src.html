@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>orangu: turn your Claude Code history into actionable insights</title>
-<meta name="description" content="Open-source CLI that turns local Claude Code sessions into an offline HTML report: tool calls, tokens, time, errors, subagents, and evidence for what to change next."/>
+<meta name="description" content="orangu is an open-source CLI. It turns local Claude Code sessions into an offline HTML report: tool calls, tokens, time, errors, subagents, and evidence for what to change next."/>
 <meta name="robots" content="index,follow,max-image-preview:large"/>
 <meta name="author" content="Nissan Ohana"/>
 <link rel="canonical" href="https://nissanohana.github.io/orangu/"/>
@@ -12,7 +12,7 @@
 <meta property="og:site_name" content="orangu"/>
 <meta property="og:locale" content="en_US"/>
 <meta property="og:title" content="orangu: turn your Claude Code history into actionable insights"/>
-<meta property="og:description" content="Inspect one Claude Code session step by step, discover recurring patterns across a repository, and improve the next run with local, offline evidence."/>
+<meta property="og:description" content="Inspect one Claude Code session step by step. Find the patterns that recur across a repository. Improve the next session with local, offline evidence."/>
 <meta property="og:url" content="https://nissanohana.github.io/orangu/"/>
 <meta property="og:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
 <meta property="og:image:width" content="1200"/>
@@ -20,12 +20,12 @@
 <meta property="og:image:alt" content="orangu: the three axes it measures, quality up, time down, tokens down"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="orangu: turn your Claude Code history into actionable insights"/>
-<meta name="twitter:description" content="Inspect one Claude Code session, discover recurring patterns across a repository, and improve the next run with local, offline evidence."/>
+<meta name="twitter:description" content="Inspect one Claude Code session. Find the patterns that recur across a repository. Improve the next session with local, offline evidence."/>
 <meta name="twitter:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
 <meta name="twitter:image:alt" content="orangu: the three axes it measures, quality up, time down, tokens down"/>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
-{"@type":"SoftwareApplication","@id":"https://nissanohana.github.io/orangu/#software","name":"orangu","url":"https://nissanohana.github.io/orangu/","description":"Deterministic, offline observability for Claude Code sessions: one self-contained HTML report per session, repository-wide aggregates, and reviewed proposals for the next run.","applicationCategory":"DeveloperApplication","applicationSubCategory":"Developer tools","operatingSystem":"macOS, Linux, Windows","softwareVersion":"{{version}}","isAccessibleForFree":true,"license":"https://github.com/NissanOhana/orangu/blob/main/LICENSE","downloadUrl":"https://www.npmjs.com/package/orangu","installUrl":"https://www.npmjs.com/package/orangu","screenshot":"https://nissanohana.github.io/orangu/assets/og.png","softwareHelp":{"@type":"CreativeWork","url":"https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md"},"author":{"@type":"Person","name":"Nissan Ohana","url":"https://github.com/NissanOhana"},"keywords":"Claude Code, session report, tokens, subagents, observability, CLI, offline","sameAs":["https://github.com/NissanOhana/orangu","https://www.npmjs.com/package/orangu"]},
+{"@type":"SoftwareApplication","@id":"https://nissanohana.github.io/orangu/#software","name":"orangu","url":"https://nissanohana.github.io/orangu/","description":"orangu is deterministic, offline observability for Claude Code sessions. It gives one self-contained HTML report for each session, repository-wide aggregates, and reviewed proposals for the next session.","applicationCategory":"DeveloperApplication","applicationSubCategory":"Developer tools","operatingSystem":"macOS, Linux, Windows","softwareVersion":"{{version}}","isAccessibleForFree":true,"license":"https://github.com/NissanOhana/orangu/blob/main/LICENSE","downloadUrl":"https://www.npmjs.com/package/orangu","installUrl":"https://www.npmjs.com/package/orangu","screenshot":"https://nissanohana.github.io/orangu/assets/og.png","softwareHelp":{"@type":"CreativeWork","url":"https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md"},"author":{"@type":"Person","name":"Nissan Ohana","url":"https://github.com/NissanOhana"},"keywords":"Claude Code, session report, tokens, subagents, observability, CLI, offline","sameAs":["https://github.com/NissanOhana/orangu","https://www.npmjs.com/package/orangu"]},
 {"@type":"WebSite","@id":"https://nissanohana.github.io/orangu/#website","url":"https://nissanohana.github.io/orangu/","name":"orangu","description":"Turn your Claude Code history into actionable insights.","inLanguage":"en","publisher":{"@id":"https://nissanohana.github.io/orangu/#software"}}
 ]}
 </script>
@@ -341,11 +341,11 @@ Choose a report
 <section id="jobs" class="sec">
   <div class="wrap">
     <div class="kicker">Two jobs, one evidence trail</div>
-    <h2>Diagnose one run. Improve repeated work.</h2>
+    <h2>Diagnose one session. Improve repeated work.</h2>
     <p class="sec-lead">A session explains what happened. Repo and global views show which patterns deserve a change to the way future work runs.</p>
     <div class="grid g300">
-      <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a run.</div></div>
-      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result"><code>repo</code> may be applied explicitly and verified on later sessions. <code>global</code> is proposal-only.</div></div>
+      <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a session.</div></div>
+      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result">You apply a <code>repo</code> change explicitly, and orangu verifies it on later sessions. A <code>global</code> change stays a proposal.</div></div>
     </div>
   </div>
 </section>
@@ -353,7 +353,7 @@ Choose a report
 <section id="demo" class="sec">
   <div class="wrap">
     <div class="kicker">The observe-to-proposal sample</div>
-    <h2>Follow evidence from one step to the next run.</h2>
+    <h2>Follow the evidence from one step to the next session.</h2>
     <p class="sec-lead">This illustrative flow shows what each layer owns. It is not a measured customer result.</p>
     <div class="appdemo" id="appdemo">
       <div class="demo-bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>orangu report · illustrative supported session</span><button class="demo-motion" id="demoMotion" type="button" aria-pressed="true" aria-label="Automatic preview is static" disabled>Static</button></div>
@@ -369,14 +369,14 @@ Choose a report
           <div class="demo-view" id="demo-panel-overview" data-demo-view="overview" role="tabpanel" aria-labelledby="demo-tab-overview" hidden>
             <div class="demo-overview-hero">
               <div class="demo-pulse" aria-hidden="true">↗</div>
-              <div><em>One local evidence trail</em><strong>Understand the run. Improve what happens next.</strong><p>Outcome evidence stays connected to steps, parent and subagent work, time, tokens, context, and tool results.</p></div>
+              <div><em>One local evidence trail</em><strong>Understand the session. Improve what happens next.</strong><p>Outcome evidence stays connected to steps, parent and subagent work, time, tokens, context, and tool results.</p></div>
             </div>
             <div class="demo-kpis">
               <div class="demo-kpi"><em>Observe</em><b class="accent">Every tool call</b><span>input, result, error, and duration</span></div>
               <div class="demo-kpi"><em>Connect</em><b>Parent + subagents</b><span>one ordered session timeline</span></div>
               <div class="demo-kpi"><em>Improve</em><b>Review proposals</b><span>verify changes on later sessions</span></div>
             </div>
-            <div class="demo-line">Session scope diagnoses one run. Repo and global scopes find recurring patterns worth a larger harness change.</div>
+            <div class="demo-line">The session scope diagnoses one session. The repo and global scopes find recurring patterns that need a larger change to the harness.</div>
           </div>
           <div class="demo-view" id="demo-panel-timeline" data-demo-view="timeline" role="tabpanel" aria-labelledby="demo-tab-timeline" hidden>
             <div class="demo-view-head"><div><em>Tool calls in order</em><b>Follow the parent and delegated work step by step.</b></div><span class="demo-status">local</span></div>
@@ -404,9 +404,9 @@ Choose a report
             <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> A Claude Code or Codex skill contract requires staying within reviewed files and records a skill-authored receipt of the checks it ran. Orangu validates the receipt's shape and file-list agreement, not the diff itself. <b>Next-run verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change, and records verified only if failed test runs dropped beyond chance without tool errors rising.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="Copy-only handoff in the full report">Claude apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if failed test runs dropped beyond chance and tool errors did not rise.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report copies this command.">Claude apply</button></div></div>
             </div>
-            <p class="demo-note">Local code measures and matches. An optional skill drafts. The browser only copies a handoff. A verified session comparison means its reviewed metrics passed on selected later evidence; it is not a causal or overall-quality claim.</p>
+            <p class="demo-note">Local code measures and matches. An optional skill writes the draft. The browser only copies a command. A verified session comparison means that its reviewed metrics passed on the selected later evidence. It is not a causal or overall-quality claim.</p>
           </div>
         </div>
       </div>
@@ -418,8 +418,8 @@ Choose a report
 <section id="improve" class="sec">
   <div class="wrap">
     <div class="kicker">Change the right layer</div>
-    <h2>A suggestion should name what needs to change.</h2>
-    <p class="sec-lead">Deterministic matches narrow the options. <code>/orangu:improve</code> drafts the smallest useful change for review; <code>/orangu:apply</code> performs reviewed session/repo changes only when invoked.</p>
+    <h2>An improvement must name what to change.</h2>
+    <p class="sec-lead">Deterministic matches narrow the options. The <code>/orangu:improve</code> skill drafts the smallest useful change for review. The <code>/orangu:apply</code> skill makes a reviewed session or repo change, and only when you run it.</p>
     <div class="change-grid">
       <div class="card change-card"><h3>Instruction files</h3><p>Persistent project guidance and conventions.</p></div>
       <div class="card change-card"><h3>Scripts and CLIs</h3><p>Repeatable actions with checkable output.</p></div>
@@ -427,7 +427,7 @@ Choose a report
       <div class="card change-card"><h3>Skills to create</h3><p>Reusable knowledge and workflows for your setup.</p></div>
       <div class="card change-card"><h3>Skills to discover</h3><p>Existing capabilities to evaluate before installing.</p></div>
       <div class="card change-card"><h3>Subagents and agents</h3><p>Isolated or specialized work with clear ownership.</p></div>
-      <div class="card change-card"><h3>MCP servers</h3><p>External tools and data the work actually needs.</p></div>
+      <div class="card change-card"><h3>MCP servers</h3><p>External tools and data that the work needs.</p></div>
       <div class="card change-card"><h3>Plugins</h3><p>A reusable package of related extensions.</p></div>
       <div class="card change-card"><h3>Workflow and configuration</h3><p>How work is sequenced, checked, and repeated.</p></div>
     </div>
@@ -452,17 +452,17 @@ Choose a report
     <div class="panel">
       <div class="kicker">One system, clear ownership</div>
       <h2>Local evidence first. Optional interpretation on top.</h2>
-      <p class="sec-lead">No instrumentation, no account, no upload, and no telemetry are required to inspect supported sessions already on disk.</p>
+      <p class="sec-lead">To inspect supported sessions already on disk, you need no instrumentation, no account, no upload, and no telemetry.</p>
       <div class="grid g300" style="margin-bottom:22px">
         <div class="card"><h3>Bounded local evidence</h3><p><code>orangu evidence</code> accepts a supported session or current Orangu Analysis, SlimAnalysis, or Aggregate output. It redacts, bounds, matches, and ranks without a model or network request.</p></div>
         <div class="card"><h3>Optional AI interpretation</h3><p><code>/orangu:improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
-        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for session/repo proposals after review. Its contract requires staying within declared files and truthfully recording local checks; Orangu validates the receipt's shape and file list. Later sessions, compared beyond chance with the sessions before the change, own the verification claim.</p></div>
-        <div class="card"><h3>Evidence with an expiry date</h3><p>Claude Code deletes session transcripts once they pass its <code>cleanupPeriodDays</code> window, which defaults to 30 days. <code>orangu harness</code> measures how much history is inside that window, what is within a week of the cutoff, and which Desktop or Cowork transcripts the window does not reach. Reported sizes count primary transcripts; each session's subagent and tool-result files are deleted along with it. A longer window leaves more history to read, and leaves plain-text transcripts on disk for longer. Orangu reports both and picks neither.</p></div>
+        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for a session or repo proposal, after review. Its contract requires it to stay within the declared files and to record its local checks truthfully. Orangu validates the receipt's shape and file list. The verification claim comes from later sessions, which orangu compares beyond chance with the sessions before the change.</p></div>
+        <div class="card"><h3>Evidence with an expiry date</h3><p>Claude Code deletes a session transcript after it passes the <code>cleanupPeriodDays</code> window, which is 30 days by default. The <code>orangu harness</code> command measures how much history is inside that window. It also shows what is within a week of the cutoff, and which Desktop or Cowork transcripts the window does not reach. The reported sizes count only the primary transcripts, but each deletion also removes the subagent and tool-result files of the session. A longer window leaves more history to read, and leaves plain-text transcripts on disk for longer. Orangu reports both and picks neither.</p></div>
       </div>
       <div class="compare" aria-label="How Orangu turns local evidence into improvement">
         <div class="compare-row"><b>Raw transcripts</b><span>Contain the record, but leave the reading and synthesis to you.</span></div>
         <div class="compare-row"><b>Local usage counters</b><span>Summarize usage across time and sources.</span></div>
-        <div class="compare-row"><b>Instrumented trace platforms</b><span>Capture applications that have been wired to send traces and evaluations.</span></div>
+        <div class="compare-row"><b>Instrumented trace platforms</b><span>Capture traces and evaluations from applications that you instrument.</span></div>
         <div class="compare-row"><b>orangu</b><span>Connects supported local evidence to a reviewable draft, explicit session/repo application, and later verification beyond chance.</span></div>
       </div>
     </div>
@@ -472,10 +472,10 @@ Choose a report
 <section id="scope" class="sec">
   <div class="wrap">
     <div class="kicker">Choose the scope of the decision</div>
-    <h2>One run for diagnosis. More runs for larger changes.</h2>
+    <h2>One session for diagnosis. More sessions for larger changes.</h2>
     <p class="sec-lead">Scope controls the question, not the honesty of the evidence.</p>
     <div class="scope-ladder">
-      <div class="scope-card"><code>session</code><h3>What happened here?</h3><p>Inspect the run and draft one bounded proposal from one finding.</p></div>
+      <div class="scope-card"><code>session</code><h3>What happened here?</h3><p>Inspect the session. Draft one bounded proposal from one finding.</p></div>
       <div class="scope-card"><code>repo</code><h3>What keeps happening here?</h3><p>Connect recurring project patterns to example sessions and a focused change.</p></div>
       <div class="scope-card"><code>global</code><h3>What should change in the harness?</h3><p>Review patterns across supported sessions and start a separately labeled whole-harness analysis.</p></div>
     </div>
@@ -494,7 +494,7 @@ Choose a report
     </div>
     <div class="sub">
       <h3>One improvement workflow, explicit stages</h3>
-      <p class="sub-lead">Measurement stays in the local CLI. Session and repo can propose, apply, and verify; global stays proposal-only.</p>
+      <p class="sub-lead">Measurement stays in the local CLI. The session and repo scopes can propose, apply, and verify. The global scope stays proposal-only.</p>
       <div class="skills">
         <div class="skill"><b>/orangu:improve</b><div>Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. Never edits the target repository.</div></div>
         <div class="skill"><b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository, run its own checks, and record a receipt. Global proposals are review-only.</div></div>
@@ -522,8 +522,8 @@ Choose a report
 
 <footer>
   <p>MIT © Nissan Ohana · the mascot is CC0, put orangu on a sticker · <a href="https://github.com/NissanOhana/orangu">github.com/NissanOhana/orangu</a></p>
-  <p class="legal">The promises in full: <a href="https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md">privacy</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md">determinism</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/SECURITY.md">security</a>. This page loads Google Fonts; generated reports load nothing.</p>
-  <p class="legal">For humans and for machines: <a href="llms.txt">llms.txt</a> is the short index for agents that read this page; <a href="llms-full.txt">llms-full.txt</a> inlines the docs.</p>
+  <p class="legal">The promises in full: <a href="https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md">privacy</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md">determinism</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/SECURITY.md">security</a>. This page loads Google Fonts. Generated reports load nothing.</p>
+  <p class="legal">For humans and for machines: <a href="llms.txt">llms.txt</a> is the short index for agents that read this page. The <a href="llms-full.txt">llms-full.txt</a> file inlines the docs.</p>
   <p class="legal">orangu is not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.</p>
 </footer>
 
@@ -555,14 +555,14 @@ Choose a report
       motionButton.disabled = true
       motionButton.textContent = 'Motion off'
       motionButton.setAttribute('aria-pressed', 'true')
-      motionButton.setAttribute('aria-label', 'Automatic preview disabled by reduced motion preference')
+      motionButton.setAttribute('aria-label', 'The automatic preview is off because you prefer reduced motion')
       return
     }
     if (!observerSupported) {
       motionButton.disabled = true
       motionButton.textContent = 'Static'
       motionButton.setAttribute('aria-pressed', 'true')
-      motionButton.setAttribute('aria-label', 'Automatic preview unavailable in this browser')
+      motionButton.setAttribute('aria-label', 'This browser cannot play the automatic preview')
       return
     }
     motionButton.disabled = false

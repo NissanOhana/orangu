@@ -521,7 +521,7 @@ function publish(html: string, o: { description: string; ogTitle: string; url: s
   const withHead = html.slice(0, close) + xlink + html.slice(close)
   return withHead
     .replace(robots, head)
-    .replace(mount, `${mount}<noscript><p style="max-width:640px;margin:48px auto;padding:0 24px;font-family:system-ui,sans-serif">This sample report is rendered by a script that ships inside this one file. Nothing is fetched from anywhere. Enable JavaScript for this page to read it.</p></noscript>`)
+    .replace(mount, `${mount}<noscript><p style="max-width:640px;margin:48px auto;padding:0 24px;font-family:system-ui,sans-serif">A script inside this one file draws this sample report. The page fetches nothing from anywhere. Enable JavaScript for this page to read it.</p></noscript>`)
 }
 
 async function main(): Promise<void> {
@@ -542,16 +542,16 @@ async function main(): Promise<void> {
   // both across-session screens have evidence, the way a serve session does, without a server.
   const session = renderReport(feature, { title: 'orangu · sample report: one Claude Code session', illustrative: true, aggregates: { repo: agg, global: globalAgg } })
   const sessionHtml = publish(session.html, {
-    description: 'A synthetic Claude Code session, analysed by orangu: every tool call, subagent, test run, token and minute, and the ranked findings with a concrete fix for each.',
+    description: 'orangu analyzes a synthetic Claude Code session. See every tool call, subagent, test run, token and minute, and the ranked findings, each with an improvement.',
     ogTitle: 'orangu sample report: one Claude Code session, step by step',
     url: `${SITE}sample.html`,
     crossLink: { href: 'sample-repo.html', screen: 'repo', label: 'See the repository as its own file →' },
   })
   writeFileSync(join(ROOT, 'site/sample.html'), sessionHtml)
 
-  const repo = renderAggregateReport(agg, { scope: 'repo', scopeLabel: agg.scope, includeText: true, illustrative: true, title: 'orangu · sample repository report: seven sessions' })
+  const repo = renderAggregateReport(agg, { scope: 'repo', scopeLabel: agg.scope, includeText: true, illustrative: true, title: 'orangu · sample repository report: 7 sessions' })
   const repoHtml = publish(repo.html, {
-    description: 'Seven synthetic Claude Code sessions in one repository, aggregated by orangu: the findings that recur, the files read again and again, the one environment error every session hits.',
+    description: 'orangu aggregates 7 synthetic Claude Code sessions from one repository. See the findings that recur, the files that sessions read again and again, and the one environment error that every session hits.',
     ogTitle: 'orangu sample: recurring patterns across a repository',
     url: `${SITE}sample-repo.html`,
     crossLink: { href: 'sample.html', screen: 'overview', label: 'See one session step by step →' },

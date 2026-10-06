@@ -1,33 +1,36 @@
 # orangu
 
-> Local, offline, deterministic observability for coding-agent sessions (Claude Code, Cowork and
-> Desktop). orangu {{version}} reads the `.jsonl` transcripts already on your disk and turns them into a
-> self-contained HTML report, a stable JSON API, cross-session aggregates, and a harness report of what your config declares vs what your sessions used
-> (what your config declares vs what your sessions actually used). Optional Claude Code skills turn
-> that evidence into reviewable proposals and receipts. The loop is observe -> see -> improve.
+> orangu is local, offline, deterministic observability for coding-agent sessions (Claude Code, Cowork
+> and Desktop). The orangu {{version}} CLI reads the `.jsonl` transcripts that are already on your disk.
+> It turns them into a self-contained HTML report, a stable JSON API, cross-session aggregates, and a
+> harness report. The harness report compares what your config declares with what your sessions used.
+> Optional Claude Code skills turn that evidence into reviewable proposals and receipts. The loop is
+> observe, see, improve.
 
 Concretely, you can:
 
 - `npx orangu` : opens a menu in the terminal. Choose this repository, all sessions, or one session.
 - `npx orangu report` : builds and opens a self-contained HTML report for the latest session. `orangu report <id>` opens another session, and `orangu report current` opens the current Claude Code session.
-- `npx orangu serve` : a loopback (127.0.0.1) live viewer over every local session.
-- `npx orangu repo` / `npx orangu global` : aggregate every session for one repository, or everywhere.
-- `npx orangu harness` : declared skills, MCP servers, agents and hooks vs what sessions used or left idle, in tokens.
-- `npx orangu analyze <id> --json` : the full analysis object (`--slim` for the projection LLM consumers read).
-- `npx orangu pick` : choose a session from a list, running ones first, and open its report.
-- `npx orangu list` / `watch` / `evidence` / `estimate` / `suggest` / `feedback` : listing, live-tail, bounded evidence for skills, sizing what an LLM would read, suggestion records, and a localhost feedback form.
+- `npx orangu serve` : opens a live viewer on loopback (127.0.0.1) over every local session.
+- `npx orangu repo` / `npx orangu global` : aggregates every session of one repository, or of the whole machine.
+- `npx orangu harness` : compares the declared skills, MCP servers, agents and hooks with what sessions used or left idle, in tokens.
+- `npx orangu analyze <id> --json` : prints the full analysis object. `--slim` prints the projection that LLM consumers read.
+- `npx orangu pick` : lists the sessions, the running ones first, and opens the report of the one you choose.
+- `npx orangu list` / `watch` : list the sessions, or tail a live session.
+- `npx orangu evidence` / `estimate` : give bounded evidence to skills, or size what an LLM would read.
+- `npx orangu suggest` / `feedback` : keep the suggestion records, or open a localhost feedback form.
 - In Claude Code, after `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`: `/orangu:analyze`, `/orangu:improve latest`, `/orangu:apply <sg_id>`, `/orangu:harness`, `/orangu:feedback`.
 
 Facts an LLM should not get wrong:
 
 - Tokens only. orangu never converts tokens into any other unit: no rates, no estimates in another unit, nothing with a symbol in front of it. Input, cache-read, cache-write and output tokens are its only usage metric because they are the only one the transcript records.
-- No model in the measurement path. Parsing, redaction, counting, reconciliation, matching and ranking are plain code; the same transcript in gives byte-identical analysis out.
-- Reports make zero network requests and ship `default-src 'none'`. Nothing is uploaded; there is no account, proxy, instrumentation, or telemetry.
-- Redaction is on by default. Prompt and result text are omitted from shareable output unless `--include-text` is requested.
+- No model in the measurement path. Parsing, redaction, counting, reconciliation, matching and ranking are plain code. The same transcript in gives byte-identical analysis out.
+- Reports make zero network requests and ship `default-src 'none'`. orangu uploads nothing. There is no account, proxy, instrumentation, or telemetry.
+- Redaction is on by default. Shareable output omits prompt and result text unless you ask for `--include-text`.
 - Skills read `orangu ... --json` / `orangu evidence`, never the raw `.jsonl`.
-- Proposals are never auto-applied. `/orangu:apply` runs only on an explicitly reviewed session or repo proposal; global (whole-harness) proposals are review-only.
-- Quality, time and tokens are reported as separate axes. There is no composite score.
-- It reads history retroactively: every session already on disk is analyzable the minute it is installed.
+- orangu never applies a proposal automatically. `/orangu:apply` runs only on an explicitly reviewed session or repo proposal. Global (whole-harness) proposals are review-only.
+- orangu reports quality, time and tokens as separate axes. There is no composite score.
+- orangu reads history retroactively. It can analyze every session on your disk from the minute you install it.
 
 ## Docs
 
@@ -41,7 +44,7 @@ Facts an LLM should not get wrong:
 
 ## Getting started
 
-- Requires Node.js 20 or newer. Zero runtime dependencies.
+- orangu needs Node.js 20 or newer. It has zero runtime dependencies.
 - `npx orangu` opens a menu: this repository, all sessions, or one session. `npx orangu report` opens the latest local session. `npx orangu serve` follows all of them live.
 - Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`.
 - [Sample report](https://nissanohana.github.io/orangu/sample.html): a synthetic, deterministic report you can open without installing anything.
