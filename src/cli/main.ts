@@ -536,7 +536,7 @@ ${paint(out, 'bold', 'usage')}
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
   orangu pick                  choose an open session, open its report
-                               (--json · --plain · --limit <n>)
+                               (--json prints the list · --plain · --limit <n>)
   orangu repo    [<path>]      aggregate every session for a repo (--json/--out)
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report

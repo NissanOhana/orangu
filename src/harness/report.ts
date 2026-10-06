@@ -80,7 +80,7 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetent
   if (unsplitAnalyses > 0) {
     const one = unsplitAnalyses === 1
     notes.push(
-      `${unsplitAnalyses} ${one ? 'session was' : 'sessions were'} read from a cache written by an older orangu. That version did not separate the main transcript from its subagent files, so the injected listings leave ${one ? 'it' : 'them'} out. Re-run with --no-cache to rebuild ${one ? 'it' : 'them'}`,
+      `${unsplitAnalyses} ${one ? 'session was' : 'sessions were'} read from a cache written by an older orangu. That version did not separate the primary transcript from its subagent files, so the injected listings leave ${one ? 'it' : 'them'} out. Re-run with --no-cache to rebuild ${one ? 'it' : 'them'}`,
     )
   }
   // drift is a statement about what the sessions used; over zero sessions there is nothing to disagree with

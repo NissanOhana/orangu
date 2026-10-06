@@ -64,7 +64,8 @@ describe('parseClaudeCodeSession: bounded retry when the transcript is appended 
     await expect(parseClaudeCodeSession({ path })).rejects.toThrow(
       new RegExp(`^session input changed while it was being read: .*\\. ${STILL_WRITING_HINT.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`),
     )
-    expect(STILL_WRITING_HINT).toBe('The session is still open, and its transcript grows. Run the command again, or use `orangu watch` to follow it live.')
+    // the retry also fires on a sidecar directory or tree change, so the hint names the writer, not the transcript
+    expect(STILL_WRITING_HINT).toBe('Claude Code still writes to this session. Run the command again, or use `orangu watch` to follow it live.')
     expect(prevalidate).toHaveBeenCalledTimes(STABLE_READ_ATTEMPTS)
     expect(read).toHaveBeenCalledTimes(STABLE_READ_ATTEMPTS)
   })

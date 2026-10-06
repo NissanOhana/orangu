@@ -163,7 +163,7 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     delete analyses[0]!.parse.primaryAttachmentTypes
     delete analyses[0]!.parse.primaryAttachmentBytes
     const r = buildHarnessReport(inv, analyses, agg, opts())
-    expect(r.notes).toContain('1 session was read from a cache written by an older orangu. That version did not separate the main transcript from its subagent files, so the injected listings leave it out. Re-run with --no-cache to rebuild it')
+    expect(r.notes).toContain('1 session was read from a cache written by an older orangu. That version did not separate the primary transcript from its subagent files, so the injected listings leave it out. Re-run with --no-cache to rebuild it')
     const fresh = buildHarnessReport(inv, (await fixture()).analyses, agg, opts())
     expect(fresh.notes.some((n) => n.includes('older orangu'))).toBe(false)
   })

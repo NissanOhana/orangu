@@ -978,6 +978,8 @@ describe.skipIf(!existsSync(CLI))('orangu CLI regressions from the 0.7.0 QA pass
     expect(h).not.toMatch(/n't\b/)
     expect(h).toContain('observe the session, then improve the next outcome')
     expect(h).toContain('or "current" (the Claude Code session that runs orangu)')
+    // pick's own meaning of --json: it prints the list instead of opening the chooser
+    expect(h).toMatch(/^ {31}\(--json prints the list · --plain · --limit <n>\)$/m)
   })
 
   it('list says when --limit cut the rows, like pick does', async () => {
