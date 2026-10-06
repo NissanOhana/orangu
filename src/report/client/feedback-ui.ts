@@ -146,7 +146,7 @@ function feedbackView(): HTMLElement {
     status.textContent =
       target.kind === 'composer'
         ? `The encoded prefill is ${target.encodedLength.toLocaleString()} characters. If you open it, it sends this title and body to GitHub.`
-        : `The complete prefill is ${target.encodedLength.toLocaleString()} characters. That is too large for a reliable URL. Nothing was dropped.`
+        : `The complete prefill is ${target.encodedLength.toLocaleString()} characters. That is too large for a reliable URL. The form keeps the complete report.`
     if (target.kind === 'oversized' && state.reviewed) {
       send.disabled = true
       const complete = `${report.title}\n\n${report.body}`

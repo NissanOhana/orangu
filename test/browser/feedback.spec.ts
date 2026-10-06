@@ -74,7 +74,8 @@ test('oversized feedback is never truncated and falls back to complete copy plus
   await page.locator('#fb-rant').fill(rant)
   await page.locator('#fb-preview').click()
   expect(await page.locator('#fb-body-preview').textContent()).toContain(rant.slice(0, 1_000))
-  await expect(page.locator('#fb-review-status')).toContainText('Nothing was dropped')
+  // the status names the actor that keeps the whole report (STE: active voice), and the copy button below proves it
+  await expect(page.locator('#fb-review-status')).toContainText('The form keeps the complete report.')
   await page.locator('#fb-reviewed').check()
   await expect(page.getByRole('button', { name: 'Copy complete report' })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Open blank GitHub issue' })).toBeVisible()
