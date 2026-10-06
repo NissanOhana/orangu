@@ -13,7 +13,7 @@ import { runInNewContext } from 'node:vm'
 import type { Analysis } from '../src/model/analysis.js'
 import { slimAnalysis } from '../src/suggest/slim.js'
 import { projectEvidence } from '../src/suggest/evidence.js'
-import { FORMATS, aggregatePage, countCheck, fillTemplate, sessionPage, showMeChecks, type Words } from './fixtures/show-me-fill.js'
+import { FORMATS, aggregatePage, checksFor, countCheck, fillTemplate, sessionPage, showMeChecks, type Words } from './fixtures/show-me-fill.js'
 
 const root = process.cwd()
 const DIR = 'plugin/skills/show-me/references'
@@ -274,8 +274,57 @@ function filledFiles(): Array<[string, string]> {
 }
 
 describe('show-me post-write check (SKILL.md, step 4)', () => {
-  it('is 7 counts: no sample, no active markup, 1 script, 5 metas, 1 http-equiv, 1 link, the exact CSP line', () => {
-    expect(CHECKS.map(({ expected }) => expected)).toEqual([0, 0, 1, 5, 1, 1, 1])
+  it('is 9 counts, 8 on each file: no sample, no active markup, 1 script, 5 metas, 1 http-equiv, 1 link, the exact link, the fixed head', () => {
+    expect(CHECKS.map(({ expected }) => expected)).toEqual([0, 0, 1, 5, 1, 1, 1, 1, 1])
+    expect(CHECKS.map(({ file }) => file ?? 'both')).toEqual(['both', 'both', 'both', 'both', 'both', 'both', 'slides', 'report', 'both'])
+    expect(CHECKS.map(({ multiline }) => multiline)).toEqual([false, false, false, false, false, false, false, false, true])
+    for (const name of NAMES) expect(checksFor(CHECKS, name)).toHaveLength(8)
+  })
+
+  // The last count pins the exact hash. A rebuild that changes the runtime changes the hash in both templates, and
+  // this test stays red until SKILL.md carries the new hash (with + escaped for the pattern).
+  it('the hash in the SKILL.md head count is the sha256 of the one script in each built template', () => {
+    const head = CHECKS.find((check) => check.multiline)
+    const pinned = /'sha256-((?:\\\+|[A-Za-z0-9/=])+)'/.exec(head?.pattern ?? '')?.[1]?.replaceAll('\\+', '+')
+    expect(pinned, 'the exact hash, not a class').toMatch(/^[A-Za-z0-9+/]{43}=$/)
+    for (const name of NAMES) {
+      const scripts = [...built(name).matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!)
+      expect(scripts, `${name}.html has one script`).toHaveLength(1)
+      expect(sha256(scripts[0]!), `${name}.html runtime`).toBe(pinned)
+    }
+  })
+
+  // Security re-check R1: a steered model changes bytes that the template fixes, and the old 7 counts all passed.
+  // Each attack is applied to the current build, so the test stays valid after a rebuild. Chromium ran the script
+  // in the first 3 (scratchpad probe); a link needs one click.
+  it('a swapped script, a moved or swallowed CSP, and a retargeted or extra link each fail a count', () => {
+    const slides = built('slides')
+    const report = built('report')
+    const head = CHECKS.find((check) => check.multiline)!
+    const exact = (file: 'slides' | 'report') => CHECKS.find((check) => check.file === file)!
+    for (const [name, html] of [['slides', slides], ['report', report]] as const)
+      for (const by of BY) {
+        expect(countCheck(html, head, by), `${name}.html head by ${by}`).toBe(1)
+        expect(countCheck(html, exact(name), by), `${name}.html link by ${by}`).toBe(1)
+      }
+    const runtime = /<script>([\s\S]*?)<\/script>/.exec(slides)![1]!
+    const swap = "document.title='x'"
+    const cspLine = /^<meta http-equiv="Content-Security-Policy"[^\n]*\n/m.exec(slides)![0]
+    const attacks: Array<[string, string, typeof head]> = [
+      ['the runtime swapped, with its own hash in the CSP', slides.replace(/script-src 'sha256-[^']+'/, `script-src 'sha256-${sha256(swap)}'`).replace(runtime, swap), head],
+      ['the exact CSP line moved under <body>', slides.replace(cspLine, '').replace(/<body[^>]*>\n/, (m) => m + cspLine).replace(runtime, swap), head],
+      ["an open ' in <html> that swallows the head and the CSP", slides.replace('<html lang="en" ', `<html lang="en" data-x=' `).replace(runtime, swap), head],
+      ['markup before <html>', slides.replace('<html', '<img src="x">\n<html'), head],
+      ['the one link retargeted', report.replace('href="slides.html"', 'href="https:evil.example/?d=x"'), exact('report')],
+      ['the one link retargeted in the slides', slides.replace('href="report.html"', 'href="https:evil.example/?d=x"'), exact('slides')],
+    ]
+    for (const [name, html, check] of attacks) {
+      expect(html !== slides && html !== report, `${name} changes the file`).toBe(true)
+      for (const by of BY) expect(countCheck(html, check, by), `${name} by ${by}`).toBe(0)
+    }
+    // A second link whose attribute is split over 2 lines. ripgrep reads one line at a time, so `href\s*=` missed it.
+    const split = report.replace('<div><a class="open" href="slides.html">', '<div><a href\n="https:evil.example/?d=x">x</a><a class="open" href="slides.html">')
+    for (const by of BY) expect(countCheck(split, CHECKS[5]!, by), `split link by ${by}`).toBe(2)
   })
 
   // Grep in count mode may count lines, not matches. The templates put each counted tag alone on a line with no
@@ -283,8 +332,9 @@ describe('show-me post-write check (SKILL.md, step 4)', () => {
   for (const name of NAMES) {
     it(`${name}.html keeps each counted tag alone on a line with no slot, and has no active markup`, () => {
       const html = built(name)
-      for (const check of CHECKS.slice(2)) {
+      for (const check of checksFor(CHECKS, name).slice(2)) {
         for (const by of BY) expect(countCheck(html, check, by), `${check.pattern} by ${by}`).toBe(check.expected)
+        if (check.multiline) continue
         for (const line of html.split('\n').filter((l) => new RegExp(check.pattern, 'i').test(l))) {
           expect(line, check.pattern).not.toContain('data-slot')
           expect(line.match(new RegExp(check.pattern, 'gi'))?.length, `one ${check.pattern} on its line`).toBe(1)
@@ -295,8 +345,10 @@ describe('show-me post-write check (SKILL.md, step 4)', () => {
   }
 
   it('every filled shape passes every count, by lines and by matches', () => {
-    for (const [name, html] of filledFiles())
-      for (const check of CHECKS) for (const by of BY) expect(countCheck(html, check, by), `${name}: ${check.pattern} by ${by}`).toBe(check.expected)
+    for (const [name, html] of filledFiles()) {
+      const checks = checksFor(CHECKS, name.endsWith(' slides') ? 'slides' : 'report')
+      for (const check of checks) for (const by of BY) expect(countCheck(html, check, by), `${name}: ${check.pattern} by ${by}`).toBe(check.expected)
+    }
   })
 
   // A regex cannot tell an onerror attribute from the words " onerror=" in escaped text. The check fails closed:
@@ -338,7 +390,7 @@ describe('show-me post-write check (SKILL.md, step 4)', () => {
     ]
     for (const [name, html] of variants) {
       expect(html, `${name} changes the file`).not.toBe(base)
-      for (const by of BY) expect(CHECKS.some((check) => countCheck(html, check, by) !== check.expected), `${name} passes every count by ${by}`).toBe(true)
+      for (const by of BY) expect(checksFor(CHECKS, 'slides').some((check) => countCheck(html, check, by) !== check.expected), `${name} passes every count by ${by}`).toBe(true)
     }
   })
 })

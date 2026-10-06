@@ -745,11 +745,15 @@ describe('plugin packaging', () => {
     // The files carry session text that Claude escapes by hand. A missed escape must not run script or send the
     // reader anywhere: the CSP pins the one script by hash, and the skill counts what it wrote before it opens it. The
     // patterns live once, in SKILL.md; test/show-me-templates.test.ts runs them on filled files and on hostile ones.
-    it('counts each written file before it opens it: samples, script, meta, links and the exact CSP line', () => {
+    // The Grep tool parameters are named exactly: the head count needs multiline mode, and ripgrep refuses its `\n`
+    // without it, so a missed parameter fails closed.
+    it('counts each written file before it opens it: samples, script, meta, links, the exact link and the fixed head', () => {
       const text = body()
-      expect(text).toContain('run these counts with the Grep tool in count mode on each file. Use case-insensitive mode for all but the first:')
-      expect(showMeChecks(md()).map(({ expected }) => expected)).toEqual([0, 0, 1, 5, 1, 1, 1])
-      expect(showMeChecks(md())[0]).toEqual({ pattern: 'EXAMPLE|data-sample', expected: 0, caseSensitive: true })
+      expect(text).toContain('run these counts on each file with the Grep tool and `output_mode: "count"`. Set `-i: true` for counts 2 to 9, and `multiline: true` for count 9:')
+      expect(showMeChecks(md()).map(({ expected }) => expected)).toEqual([0, 0, 1, 5, 1, 1, 1, 1, 1])
+      expect(showMeChecks(md())[0]).toEqual({ pattern: 'EXAMPLE|data-sample', expected: 0, caseSensitive: true, multiline: false })
+      expect(showMeChecks(md()).map(({ multiline }) => multiline).lastIndexOf(true)).toBe(8)
+      expect(showMeChecks(md()).filter(({ multiline }) => multiline)).toHaveLength(1)
       expect(text).toContain('The templates keep each counted tag on its own line, so a count of lines and a count of matches agree.')
       expect(text).toContain('If a count is different, delete nothing, report the file and the count, and do not open it.')
       expect(text.indexOf('run these counts with the Grep tool')).toBeLessThan(text.indexOf('Print both absolute paths.'))
