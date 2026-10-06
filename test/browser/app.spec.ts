@@ -263,8 +263,10 @@ test('each Improvements card names its improvement while closed, and one explain
   await expect(explainer).toContainText('It starts Claude Code.')
   const bars = explainer.locator('.cmd')
   await expect(bars).toHaveCount(2)
-  await bars.last().locator('.copy').click()
+  await explainer.getByRole('button', { name: 'copy the install command' }).click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('/plugin install orangu')
+  await explainer.getByRole('button', { name: 'copy the marketplace command' }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('/plugin marketplace add NissanOhana/orangu')
   const row = page.locator('details.finding').first()
   await expect(row).not.toHaveAttribute('open', '')
   await expect(row.locator('summary .sg-lead')).toBeVisible()
@@ -291,7 +293,7 @@ test('Show me in the page head copies the session show-me command, opens and clo
   const command = `claude "/orangu:show-me ${SESSION}"`
   const bar = popover.locator('.cmd').first()
   await expect(bar.locator('.txt')).toHaveText(command)
-  await bar.locator('.copy').click()
+  await popover.getByRole('button', { name: 'copy the show me command' }).click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(command)
   await expect(popover.locator('.cmd')).toHaveCount(3)
   await noHorizontalOverflow(page)
@@ -325,19 +327,28 @@ test('Show me copies the scope command on the Repo screen and on a saved reposit
   expect(errors).toEqual([])
 })
 
-test('the Overview top card leads to the 3 steps and keeps the theme and the audience', async ({ page }, info) => {
+// The link sits below the fold on common laptop and phone viewports, so the click scrolls first. A new
+// screen opens at its top: the steps have to be on screen, not only in the DOM (toBeVisible cannot see that).
+test('the Overview top card leads to the 3 steps on screen and keeps the theme and the audience', async ({ page }, info) => {
   const errors = runtimeErrors(page)
-  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}&audience=plain`, info), { waitUntil: 'domcontentloaded' })
-  const top = page.locator('details.finding.top')
-  await expect(top.locator('summary .sg-lead')).toBeVisible()
-  await expect(top).toContainText('It starts Claude Code.')
-  await top.getByRole('link', { name: 'See the 3 steps →' }).click()
-  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
-  await expect(page.locator('.eyebrow', { hasText: 'Get an AI proposal' })).toBeVisible()
-  const hash = await page.evaluate(() => location.hash)
-  expect(hash).toContain('audience=plain')
-  expect(hash.includes('theme=dark')).toBe(projectTheme(info) === 'dark')
-  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  const sizes = info.project.name.startsWith('wide') ? [{ width: 1440, height: 900 }, { width: 1280, height: 720 }, { width: 1366, height: 768 }] : [{ width: 390, height: 844 }]
+  for (const size of sizes) {
+    for (const audience of ['dev', 'plain']) {
+      await page.setViewportSize(size)
+      await page.goto(withTheme(`${APP}/#overview?s=${SESSION}&audience=${audience}`, info), { waitUntil: 'domcontentloaded' })
+      const top = page.locator('details.finding.top')
+      await expect(top.locator('summary .sg-lead')).toBeVisible()
+      await expect(top).toContainText('It starts Claude Code.')
+      await top.getByRole('link', { name: 'See the 3 steps →' }).click()
+      await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+      const steps = page.getByRole('list', { name: 'Get an AI proposal' })
+      await expect(steps, `${size.width}x${size.height} ${audience}`).toBeInViewport()
+      const hash = await page.evaluate(() => location.hash)
+      expect(hash).toContain(`audience=${audience}`)
+      expect(hash.includes('theme=dark')).toBe(projectTheme(info) === 'dark')
+      expect(await paintedTheme(page)).toBe(projectTheme(info))
+    }
+  }
   expect(errors).toEqual([])
 })
 

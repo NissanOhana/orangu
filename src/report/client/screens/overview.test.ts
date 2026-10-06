@@ -224,22 +224,27 @@ describe('renderOverview: the top improvement and the way to an AI proposal', ()
     expect(markup).toContain('<div class="eyebrow mb6">Top improvement</div>')
   })
 
-  it('says to paste the command in a terminal and links the top card only to the 3 steps, keeping theme and audience', async () => {
+  // /orangu:improve refuses evidence from another workspace, so the caption names the session folder
+  it('says to paste the command in a terminal in the session folder and links the top card only to the 3 steps, keeping theme and audience', async () => {
     const ctx = await context({ mode: 'serve', dirtyRoute: true })
     expect(ctx.a!.summary.topInsightIds.length).toBeGreaterThan(1)
+    expect(ctx.a!.session.cwd).toBeTruthy()
     renderOverview(ctx)
     expect(markup).toContain('<div class="eyebrow">Get an AI proposal</div>')
-    const captions = markup.split('<div class="small">Paste it in a terminal. It starts Claude Code.').length - 1
+    const captions = markup.split(`<div class="small">Paste it in a terminal in ${esc(ctx.a!.session.cwd!)}. It starts Claude Code.`).length - 1
     expect(captions).toBe(ctx.a!.summary.topInsightIds.length)
+    expect(markup).not.toContain('Paste it in a terminal. It starts Claude Code.')
+    expect(markup.split('aria-label="copy the Claude Code command"').length - 1).toBe(ctx.a!.summary.topInsightIds.length)
     expect(markup).toContain(`<a href="#suggest?s=${ctx.state.s}&amp;audience=dev&amp;theme=dark">See the 3 steps →</a>`)
     expect(markup.split('See the 3 steps').length - 1).toBe(1)
     expect(markup).not.toContain('Draft a proposal')
   })
 
-  it('keeps the improvement line and the link to the 3 steps in Plain language', async () => {
+  it('keeps the improvement line, the session folder and the link to the 3 steps in Plain language', async () => {
     const ctx = await context({ audience: 'plain' })
     renderOverview(ctx)
     expect(markup).toContain('<span class="rec sg-lead"><b>Improvement:</b> ')
+    expect(markup).toContain(`Paste it in a terminal in ${esc(ctx.a!.session.cwd!)}. It starts Claude Code.`)
     expect(markup).toContain('See the 3 steps →</a>')
     expect(markup).toContain('audience=plain')
   })

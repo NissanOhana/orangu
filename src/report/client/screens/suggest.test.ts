@@ -397,6 +397,14 @@ describe('renderSuggest: each card leads with its improvement, one explainer say
     expect(install).toBeLessThan(writes)
   })
 
+  // a screen reader announces the list by its heading, and each copy button by what it copies
+  it('names the steps list by its heading and gives each install copy button its own name', () => {
+    renderSuggest(context('file', []))
+    expect(markup).toContain('<div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">')
+    expect(markup).toContain('data-copy="/plugin marketplace add NissanOhana/orangu" aria-label="copy the marketplace command"')
+    expect(markup).toContain('data-copy="/plugin install orangu" aria-label="copy the install command"')
+  })
+
   it('says the proposal shows below on localhost, where the Saved proposals list is', () => {
     renderSuggest(serveContext([]))
     expect(markup).toContain('The proposal shows below, in Saved proposals.')
@@ -547,6 +555,22 @@ describe('renderSuggest on a repo/global scope', () => {
     expect(block).toBeLessThan(explainer)
     expect(explainer).toBeLessThan(markup.indexOf('<details class="finding"'))
     expect(markup.slice(explainer, markup.indexOf('<details class="finding"'))).toContain(paste)
+  })
+
+  it.each(['repo', 'global'] as const)('renders exactly one explainer, outside every card, in a served %s scope with the session folder', (scope) => {
+    const ctx = scopeContext(scope)
+    ctx.data.mode = 'serve'
+    ctx.a = analysis
+    renderSuggest(ctx)
+    expect(markup.split('Get an AI proposal').length - 1).toBe(1)
+    const at = markup.indexOf('Get an AI proposal')
+    const before = markup.slice(0, at)
+    expect((before.match(/<details/g) ?? []).length).toBe((before.match(/<\/details>/g) ?? []).length)
+    const first = markup.indexOf('<details class="finding"')
+    expect(at).toBeLessThan(first)
+    const box = markup.slice(at, first)
+    expect(box).toContain('Paste it in a terminal in ~/Code/demo. It starts Claude Code.')
+    expect(box).toContain('The proposal shows below, in Saved proposals.')
   })
 
   it('counts the sessions that show the pattern against the sessions in the scope', () => {
