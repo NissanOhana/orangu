@@ -1070,6 +1070,25 @@ describe('docs/USAGE.md entry point', () => {
     expect(shareable).toContain('That text includes session titles, previews, tool-error text, and finding details built from commands.')
     expect(shareable).toMatch(/`--include-text` keeps all of it[^.\n]*secrets[^.\n]*scrubbed/)
   })
+
+  it('says that a guessed current session is announced only on human output', () => {
+    // --json and --quiet print no guess line (src/cli/e2e.test.ts "current resolves the surrounding Claude Code session")
+    expect(usage).not.toContain('never guessed silently')
+    expect(usage).toContain('If orangu guesses it from the cwd, it says so on stderr, but not with `--json` or `--quiet`.')
+  })
+
+  it('lists every input that keeps bare orangu on the latest-session brief', () => {
+    // src/cli/commands/pick.ts interactivePrecondition and src/cli/commands/dashboard.ts TARGETED_BARE_FLAGS
+    const bare = usage.slice(usage.indexOf('bare `orangu` draws'), usage.indexOf('`orangu repo` and `orangu global` print'))
+    for (const input of ['a pipe', '`CI`', '`TERM=dumb`', '`ORANGU_NO_ANIMATION=1`', '`--plain`', '`--quiet`', '`--session`', '`--global`', '`--cwd`', '`--max-tokens`', '`--fail-on-hook-errors`']) {
+      expect(bare, input).toContain(input)
+    }
+  })
+
+  it('uses the help word for the catalog matches: known improvements', () => {
+    expect(usage).toContain('- Improvements: matching known improvements,')
+    expect(usage).not.toMatch(/known (fixes|changes)/)
+  })
 })
 
 describe('docs/DETERMINISM.md workflow diagram', () => {
