@@ -139,7 +139,8 @@ function fillSlot(el: string, value: SlotValue): string {
   return setAttr(head, 'data-v', String(value.v)) + escapeHtml(format(value.v)) + tail
 }
 
-function drawChart(el: string, chart: Chart): string {
+function drawChart(sample: string, chart: Chart): string {
+  const el = sample.replace(/ data-sample(?:="[^"]*")?/, '')
   const label = (html: string): string => html.replace(/(<[^>]*\brole="img"[^>]*\baria-label=)"[^"]*"/, `$1"${escapeHtml(chart.label)}"`)
   if (chart.kind === 'bars') {
     let out = el
@@ -192,8 +193,8 @@ function qualityValue(o: SlimAnalysis['summary']['outcomes']): string {
   const parts: string[] = []
   if (o.prLinks.length) parts.push(plural(o.prLinks.length, 'PR'))
   if (o.gitCommits) parts.push(plural(o.gitCommits, 'commit'))
-  const changed = o.filesEdited + o.filesWritten
-  if (changed) parts.push(`${plural(changed, 'file')} changed`)
+  if (o.filesEdited) parts.push(`${plural(o.filesEdited, 'file')} edited`)
+  if (o.filesWritten) parts.push(`${plural(o.filesWritten, 'file')} written`)
   if (o.buildRunsFailed) parts.push(`${o.buildRunsFailed} of ${plural(o.buildRuns, 'build run')} failed`)
   if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural(o.testRuns, 'test run')} failed` : `${plural(o.testRuns, 'test run')} green`)
   return parts.length ? parts.join(' · ') : 'No commits, PRs or test runs'
@@ -231,7 +232,7 @@ export function sessionPage(a: SlimAnalysis, words: Words): Page {
         'f-sev': insight.severity,
         'f-title': insight.title,
         'f-evidence': insight.detail || REDACTED_DETAIL,
-        'f-turns': insight.turnIndexes.slice(0, 5).join(', '),
+        'f-turns': insight.turnIndexes.slice(0, 5).map((t) => `#${t}`).join(', '),
         'f-rule': insight.ruleId,
         'f-why': words.whys[index] ?? '',
         'f-improvement': insight.recommendation,
@@ -239,7 +240,7 @@ export function sessionPage(a: SlimAnalysis, words: Words): Page {
       },
       conditions: [...(insight.turnIndexes.length ? ['turns'] : []), ...saving.conditions],
       lists: { turn: insight.turnIndexes.slice(0, 50).map((x) => ({ attrs: { x: String(x) } })) },
-      charts: { turns: { kind: 'turns', turns: s.turns, label: `Turns ${insight.turnIndexes.slice(0, 5).join(', ')} of ${s.turns}` } },
+      charts: { turns: { kind: 'turns', turns: s.turns, label: `In turns ${insight.turnIndexes.slice(0, 5).map((t) => `#${t}`).join(', ')} of ${s.turns}` } },
     }
   })
   const improvements: Item[] = [...top, ...rest]
@@ -256,7 +257,7 @@ export function sessionPage(a: SlimAnalysis, words: Words): Page {
   const live = a.session.live
   return {
     root: { 'data-scope': 'session', 'data-live': String(live), 'data-caution': String(!ok), 'data-redacted': String(redacted) },
-    conditions: ['session', ...(live ? ['live'] : []), ok ? 'reconciled' : 'caution', ...(redacted ? ['redacted'] : []), ...(improvements.length ? ['improvements'] : [])],
+    conditions: ['session', ...(live ? ['live'] : []), ok ? 'reconciled' : 'caution', ...(redacted ? ['redacted'] : []), ...(improvements.length ? ['improvements'] : []), ...(findings.length ? ['findings'] : [])],
     slots: {
       title: a.session.title || `Session ${a.session.id.slice(0, 8)}`,
       project: a.session.projectSlug ?? null,
@@ -276,6 +277,7 @@ export function sessionPage(a: SlimAnalysis, words: Words): Page {
       cache: { v: s.cacheHitRatio },
       output: { v: k.output },
       'turn-count': { v: s.turns },
+      'turn-noun': s.turns === 1 ? 'turn' : 'turns',
       'caution-pct': String(a.parse.reconciliation.matchesWithinPct),
       'improvements-title': words.improvementsTitle,
       cwd: a.session.cwd ?? 'the project directory',
@@ -331,11 +333,12 @@ export function aggregatePage(e: EvidenceBundle, scope: 'repo' | 'global', o: { 
   const redacted = top.some((f) => !f.detail)
   return {
     root: { 'data-scope': scope, 'data-live': 'false', 'data-caution': 'false', 'data-redacted': String(redacted) },
-    conditions: [scope, 'aggregate', 'reconciled', ...(redacted ? ['redacted'] : []), ...(improvements.length ? ['improvements'] : [])],
+    conditions: [scope, 'aggregate', 'reconciled', ...(redacted ? ['redacted'] : []), ...(improvements.length ? ['improvements'] : []), ...(findings.length ? ['findings'] : [])],
     slots: {
       title: scope === 'repo' ? `Recurring patterns in ${o.folder}` : 'Recurring patterns on this machine',
       sessions: { v: n },
       'kpi-sessions': { v: n },
+      'session-noun': n === 1 ? 'session' : 'sessions',
       'kpi-findings': { v: e.totalFindings },
       ...(first ? { 'kpi-top-n': { v: seen(first) }, 'kpi-top-rule': first.finding.ruleId } : {}),
       version: o.version,
@@ -346,4 +349,30 @@ export function aggregatePage(e: EvidenceBundle, scope: 'repo' | 'global', o: { 
     lists: { finding: findings, improvement: improvements },
     charts: first ? { share: { kind: 'ring', value: seen(first), of: n, label: `${seen(first)} of ${n} sessions` } } : {},
   }
+}
+
+// ---------- the post-write check of SKILL.md, as code ----------
+
+export interface ShowMeCheck {
+  pattern: string
+  expected: number
+  caseSensitive: boolean
+}
+
+/** The numbered Grep counts in SKILL.md, one per line: a number, the pattern in a code span, then "counts <k>.". The first is case-sensitive. */
+export function showMeChecks(skillMd: string): ShowMeCheck[] {
+  return [...skillMd.matchAll(/^\d+\. `(.+)` counts (\d+)\.$/gm)].map((m, index) => ({ pattern: m[1]!, expected: Number(m[2]), caseSensitive: index === 0 }))
+}
+
+/**
+ * One check on one file. Grep in count mode may count lines with a match, or matches: the check must hold either
+ * way, so the tests run both. The patterns use only syntax that ripgrep and JavaScript read the same way.
+ */
+export function countCheck(text: string, check: ShowMeCheck, by: 'lines' | 'matches'): number {
+  const flags = check.caseSensitive ? '' : 'i'
+  if (by === 'lines') {
+    const re = new RegExp(check.pattern, flags)
+    return text.split('\n').filter((line) => re.test(line)).length
+  }
+  return text.match(new RegExp(check.pattern, `${flags}gm`))?.length ?? 0
 }

@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
 import { CHANGE_CLASS_DEFINITIONS } from '../src/suggest/change-classes.js'
 import { allEntries } from '../src/suggest/catalog.js'
+import { showMeChecks } from './fixtures/show-me-fill.js'
 
 const root = process.cwd()
 const readJson = (p: string) => JSON.parse(readFileSync(join(root, p), 'utf8'))
@@ -105,6 +106,30 @@ describe('plugin packaging', () => {
     // the only grant that can reach a repository edit is the apply skill itself, one approved id per call
     const harness = /^allowed-tools:\s*(.+)$/m.exec(readText('plugin/skills/harness/SKILL.md'))?.[1] ?? ''
     expect(harness, 'harness may invoke apply through the Skill tool').toContain('Skill(orangu:apply)')
+  })
+  // A `*` in a Bash rule matches any text, so only the text before the first `*` limits it. `node *orangu.cli.mjs*`
+  // also matched `node -e "<code>" …/orangu.cli.mjs`, which ran injected code with no prompt. A node grant now names the
+  // plugin's CLI file before its `*`, so node can run only that file.
+  it('no skill pre-approves a node command that can run code other than the plugin CLI', () => {
+    const PLUGIN_CLI = 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" '
+    const probes = ['node -e "x"', 'node --eval "x"', 'node -p "x"', 'node --print "x"', 'node -r ./x.js y', 'node --require ./x.js y', 'node --import ./x.mjs y', 'node ./evil.mjs', 'node /tmp/x/orangu.cli.mjs.js']
+    const skills = readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))
+    let nodeGrants = 0
+    for (const s of skills) {
+      const allowed = (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
+      for (const grant of allowed) {
+        const rule = /^Bash\((.*)\)$/.exec(grant)?.[1]
+        if (rule === undefined) continue
+        const star = rule.indexOf('*')
+        const prefix = rule.endsWith(':*') ? rule.slice(0, -2) : star === -1 ? rule : rule.slice(0, star)
+        for (const probe of probes) expect(probe.startsWith(prefix), `${s}: ${grant} pre-approves ${probe}`).toBe(false)
+        if (rule.startsWith('node')) {
+          nodeGrants += 1
+          expect(grant.startsWith(PLUGIN_CLI), `${s} names the plugin CLI before its *: ${grant}`).toBe(true)
+        }
+      }
+    }
+    expect(nodeGrants, 'analyze, feedback, harness, improve and show-me keep the CLI fallback').toBe(5)
   })
   it('the localhost handoff is copy-only and cannot spawn a model process', () => {
     const source = readText('src/serve/kickoff.ts')
@@ -659,7 +684,7 @@ describe('plugin packaging', () => {
 
     // Grep is the read-only tool for the post-write check: no shell, and no reach that the Read grant lacks.
     it('pre-approves exactly the CLI, a temp directory, reads, a read-only check, and writes under ~/.orangu/show-me', () => {
-      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node *orangu.cli.mjs*)', 'Bash(mktemp:*)', 'Read', 'Grep', 'Write(~/.orangu/show-me/**)'])
+      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *)', 'Bash(mktemp:*)', 'Read', 'Grep', 'Write(~/.orangu/show-me/**)'])
       // opening the files is a normal permission prompt, never a pre-approval
       expect(grants().join(' ')).not.toMatch(/\b(?:open|xdg-open|start)\b/)
     })
@@ -673,7 +698,7 @@ describe('plugin packaging', () => {
       }
       before("orangu estimate '<session>' --slim --json", "orangu analyze '<session>' --json --slim")
       before("orangu evidence '<tmp>/aggregate.json' --scope repo --estimate --quiet", "orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'")
-      expect(text).toMatch(/about 5,000 tokens \(about 20 KB\), ask before you read it/)
+      expect(text).toMatch(/more than about 5,000 tokens \(about 20 KB\), so ask once before you read anything/)
       expect(text).toMatch(/If the size command fails[^.]*treat the read as over the limit/)
       expect(text).toContain('Never combine `--out` with `--json`.')
     })
@@ -715,18 +740,35 @@ describe('plugin packaging', () => {
       expect(text).toContain('~/.orangu/show-me/<id>/slides.html')
       expect(text).toContain('~/.orangu/show-me/<id>/report.html')
       expect(text).toContain("so a second run never overwrites the first")
-      expect(text).toMatch(/search its text for `EXAMPLE`\. The count must be 0\./)
     })
 
-    // The files carry session text that Claude escapes by hand. A missed escape must not reach a browser: the CSP
-    // pins the one script by hash, and the skill counts what it wrote before it opens anything.
-    it('checks each written file for markup that can run script before it opens it', () => {
+    // The files carry session text that Claude escapes by hand. A missed escape must not run script or send the
+    // reader anywhere: the CSP pins the one script by hash, and the skill counts what it wrote before it opens it. The
+    // patterns live once, in SKILL.md; test/show-me-templates.test.ts runs them on filled files and on hostile ones.
+    it('counts each written file before it opens it: samples, script, meta, links and the exact CSP line', () => {
       const text = body()
-      expect(text).toContain('check each file with the Grep tool in count mode')
-      for (const pattern of ['`<script` counts 1', '`<[^>]*\\son[a-z]+\\s*=` counts 0', '`=\\s*["\']?\\s*javascript:` counts 0'])
-        expect(text, pattern).toContain(pattern)
+      expect(text).toContain('run these counts with the Grep tool in count mode on each file. Use case-insensitive mode for all but the first:')
+      expect(showMeChecks(md()).map(({ expected }) => expected)).toEqual([0, 0, 1, 5, 1, 1, 1])
+      expect(showMeChecks(md())[0]).toEqual({ pattern: 'EXAMPLE|data-sample', expected: 0, caseSensitive: true })
+      expect(text).toContain('The templates keep each counted tag on its own line, so a count of lines and a count of matches agree.')
       expect(text).toContain('If a count is different, delete nothing, report the file and the count, and do not open it.')
-      expect(text.indexOf('check each file with the Grep tool')).toBeLessThan(text.indexOf('Print both absolute paths.'))
+      expect(text.indexOf('run these counts with the Grep tool')).toBeLessThan(text.indexOf('Print both absolute paths.'))
+    })
+
+    // One estimate for the whole run, before any read: the fixed template and slot-rule reads, the evidence read, and
+    // the 2 files to write. test/show-me-templates.test.ts holds the stated sizes to the built files.
+    it('states the cost of the whole run and asks once before any read', () => {
+      const text = body()
+      expect(text).toMatch(/The 2 templates and the slot rules are about \d+ KB to read \(about \d+k tokens\)\. The 2 files are about \d+ KB to write \(about \d+k tokens\)\./)
+      expect(text.indexOf('about 20 KB')).toBeLessThan(text.indexOf("orangu analyze '<session>' --json --slim"))
+      expect(text.indexOf('about 20 KB')).toBeLessThan(text.indexOf('Read [the slot rules]'))
+    })
+
+    // A user who asks what happened in a session wants /orangu:analyze; show-me answers a request for a deck.
+    it('routes a deck request here and leaves the diagnosis phrases to analyze', () => {
+      const desc = /description:\s*(.+)/.exec(md())?.[1] ?? ''
+      for (const phrase of ['what happened', 'review a run', 'trace what the agent did']) expect(desc).not.toContain(phrase)
+      expect(desc).toMatch(/slides/)
     })
 
     it('prints both paths and opens both files with the OS opener', () => {

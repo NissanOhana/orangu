@@ -91,5 +91,28 @@ describe('assert-offline gate', () => {
       expect(gate(page(`'sha256-${hash}' 'unsafe-inline'`), 'both.html').status).not.toBe(0)
       expect(gate(page(`'sha256-${hash}' https://cdn.example.com`), 'origin.html').status).not.toBe(0)
     })
+
+    // Each case below passed the gate at the first version of this branch (security review, probes d to f).
+    it('fails when the CSP pins a hash that no inline script has', () => {
+      const extra = createHash('sha256').update('alert(1)', 'utf8').digest('base64')
+      expect(gate(page(`'sha256-${hash}' 'sha256-${extra}'`), 'extra-hash.html').status).not.toBe(0)
+    })
+
+    it('treats a script as data only when its own type attribute says JSON', () => {
+      const disguised = `<script>${script}</script><script data-x='type="application/json"'>alert(1)</script>`
+      expect(gate(page(`'sha256-${hash}'`, disguised), 'disguised.html').status).not.toBe(0)
+    })
+
+    it('fails on a meta refresh, or any http-equiv but the CSP, in either CSP form', () => {
+      const refresh = '<meta http-equiv="refresh" content="0;url=https:evil.example/x">'
+      expect(gate(page(`'sha256-${hash}'`, `<script>${script}</script>${refresh}`), 'refresh-hashed.html').status).not.toBe(0)
+      expect(gate(html.replace('</head>', `${refresh}</head>`), 'refresh-report.html').status).not.toBe(0)
+      expect(gate(html.replace('</head>', '<meta http-equiv="set-cookie" content="a=b"></head>'), 'set-cookie.html').status).not.toBe(0)
+    })
+
+    it('fails on an http or https URL written without slashes', () => {
+      expect(gate(page(`'sha256-${hash}'`, `<script>${script}</script><a href="https:evil.example/x">x</a>`), 'noslash.html').status).not.toBe(0)
+      expect(gate(html.replace('</body>', '<a href="http:127.0.0.1.evil/x">x</a></body>'), 'noslash-report.html').status).not.toBe(0)
+    })
   })
 })

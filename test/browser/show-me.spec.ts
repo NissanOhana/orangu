@@ -79,6 +79,30 @@ test('an unescaped injection in a slot runs no script, and the pinned runtime st
   expect(pageErrors).toEqual([])
 })
 
+// A link that drops #theme=dark turns a dark reader light on the click; the check has to click, not read the href.
+test('the links between the slide deck and the written report keep the dark theme', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-dark', 'one dark click path is enough')
+  const errors = runtimeErrors(page)
+  await page.goto(`${BASE}/slides.html#theme=dark`)
+  await page.getByRole('link', { name: 'Read the written report →' }).click()
+  await expect(page).toHaveURL(/report\.html#theme=dark$/)
+  expect(await paintedTheme(page)).toBe('dark')
+  await page.getByRole('link', { name: 'Open the slides →' }).click()
+  await expect(page).toHaveURL(/slides\.html#.*theme=dark/)
+  expect(await paintedTheme(page)).toBe('dark')
+  expect(errors).toEqual([])
+})
+
+test('Space on the focused theme button presses the button and keeps the slide', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'one keyboard path is enough')
+  await page.goto(`${BASE}/slides.html`)
+  await expect(page).toHaveURL(/#n=1$/)
+  await page.locator('#theme').focus()
+  await page.keyboard.press(' ')
+  await expect(page.locator('#theme')).toHaveText('◐ theme · dark')
+  await expect(page).toHaveURL(/#n=1&theme=dark$/)
+})
+
 test('the written report opens in its theme and links back to the slides', async ({ page }, info) => {
   const theme = projectTheme(info)
   const errors = runtimeErrors(page)
