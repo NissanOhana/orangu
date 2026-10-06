@@ -193,8 +193,13 @@ const PROJECT_KEYS = new Set(['projectSlug', 'project'])
  * clause so the rest of the sentence survives without touching the analyzer or the golden corpus.
  * "you made" is the analyzer's wording since 2026-10-07 (STE); "the human made" is the older wording, which an
  * Analysis JSON from an older engine still carries into `orangu evidence`. Both titles are stripped.
+ * The match is GREEDY and ends at the analyzer's own clause ("”, you made <n> request"), so it ends at the LAST
+ * such clause. A title (the first prompt) that holds "”, you made " or a whole look-alike clause is stripped
+ * whole. The text after that clause is generated (counts, outcomes, rule titles): if it ever held a look-alike,
+ * the strip would remove more text, never less. An opening with a quoted title that matches no known clause is
+ * dropped with the whole narrative (fail-closed, below).
  */
-const NARRATIVE_TITLE_RE = /^In “[\s\S]*?”, (?=(?:you|the human) made )/
+const NARRATIVE_TITLE_RE = /^In “[\s\S]*”, (?=(?:you|the human) made \d[\d,]* requests?\b)/
 const PRIVATE_STRING_ARRAY_KEYS = new Set(['gitBranches'])
 const UNKNOWN_COUNT_MAP_KEYS = new Set([
   'unknownRecordTypes',
@@ -333,7 +338,9 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
         continue
       }
       if (opts.stripText && k === 'narrative' && typeof v === 'string') {
-        out.set(k, scrubOne(v.replace(NARRATIVE_TITLE_RE, 'In this session, '), opts))
+        const stripped = v.replace(NARRATIVE_TITLE_RE, 'In this session, ')
+        // fail closed: a quoted title in an opening this redactor cannot parse goes with the whole narrative
+        out.set(k, stripped === v && v.startsWith('In “') ? '' : scrubOne(stripped, opts))
         continue
       }
       if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === 'string' && (v.includes('/') || v.includes('\\'))) {

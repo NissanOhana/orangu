@@ -245,6 +245,53 @@ describe('redactAnalysis', () => {
     expect(redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative).toBe('In this session, the human made 3 requests over 2m.')
   })
 
+  it('strips the whole title even when the title itself looks like the clause after it', () => {
+    // The title is the first prompt, so it can hold "”, you made " or a whole fake clause. The strip must end
+    // at the analyzer's own clause, never at a look-alike inside the title, or the rest of the title leaks.
+    const strip = (narrative: string): string => {
+      const a = full()
+      a.summary.narrative = narrative
+      return redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative
+    }
+    const tail = 'you made 2 requests (3 turns including commands and automation) over 1m. The agent was busy for 40s of that. It made 1 tool call, and processed 2.0k tokens. Orangu found no commits, PRs or test runs.'
+    const oldTail = 'the human made 1 request (2 turns incl. commands/automation) over 30s. The agent was busy for 9.9s of that. It made 2 tool calls, and processed 29.0k tokens. No commits, PRs or test runs were detected.'
+    const titles = [
+      `fix “this”, you made a typo in ${MARKER}`,
+      `fix “this”, the human made a typo in ${MARKER}`,
+      `fix “this”, you made 3 requests to ${MARKER}`,
+      `fix “this”, the human made 3 requests to ${MARKER}`,
+      `first line\n“second”, you made 1 request ${MARKER}`,
+      `“outer “inner ${MARKER}” outer”`,
+    ]
+    for (const title of titles) {
+      for (const [opening, rest] of [[tail, tail], [oldTail, oldTail]] as const) {
+        const out = strip(`In “${title}”, ${opening}`)
+        expect(out, JSON.stringify(title)).toBe(`In this session, ${rest}`)
+        expect(out).not.toContain(MARKER)
+        expect(out).not.toContain('fix “this”')
+      }
+    }
+    // a narrative that opens with a quoted title in a structure the redactor does not know is dropped, not
+    // passed through: no title text can leak from a wording it cannot parse
+    expect(strip(`In “${MARKER}”, someone did 3 things.`)).toBe('')
+    // no title, nothing to strip: unchanged
+    expect(strip(`In this session, ${tail}`)).toBe(`In this session, ${tail}`)
+  })
+
+  it('end to end: a first prompt that holds a look-alike clause leaves no title text in the redacted narrative', async () => {
+    const b = new SessionBuilder()
+    b.userPrompt(`fix “this”, you made 3 requests to ${MARKER}`)
+    b.tick(100)
+    b.userPrompt('and again')
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    const a = analyzeSession(s, { version: 'test', now: 0 })
+    expect(a.summary.narrative).toContain(MARKER)
+    const out = redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative
+    expect(out).toMatch(/^In this session, you made 2 requests over /)
+    expect(out).not.toContain(MARKER)
+    expect(out).not.toContain('fix “this”')
+  })
+
   it('keeps rule-generated copy under stripText while transcript-authored strings are still blanked', () => {
     const out = redactAnalysis(full(), { stripText: true, home: '' }).analysis
     // orangu's own rules wrote these: they survive
