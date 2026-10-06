@@ -1,6 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { HARNESS_REFRESH_MS, ensureHarness, invalidateHarness } from './serve-ui.js'
+import { HARNESS_REFRESH_MS, ensureHarness, invalidateHarness, serveUi } from './serve-ui.js'
 import { megaReview } from './mega-review.js'
+import { proposalsUi } from './proposals-ui.js'
+
+describe('the serve-only proposals seam', () => {
+  it('serve provides the stored-proposal block and the Saved proposals inbox', () => {
+    expect(serveUi.proposals).toBe(proposalsUi)
+  })
+})
 
 describe('whole-harness review CTA', () => {
   it.each(['repo', 'global'] as const)('is an exact copy-only %s command with no row lifecycle', (scope) => {

@@ -76,4 +76,8 @@ describe('the aggregate report seam', () => {
     expect(aggUi.megaReview('repo')).toBe(megaReview('repo'))
     expect(aggUi.megaReview('global')).toBe(megaReview('global'))
   })
+
+  it('provides no proposal renderers: a saved file embeds no stored proposal to show', () => {
+    expect('proposals' in aggUi).toBe(false)
+  })
 })

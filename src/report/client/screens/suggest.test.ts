@@ -5,6 +5,7 @@ import { suggestionIdV2, suggestionKey } from '../../../suggest/id.js'
 import type { Ctx } from '../app.js'
 import type { Aggregate } from '../../../analyze/aggregate.js'
 import { megaReview } from '../mega-review.js'
+import { proposalsUi } from '../proposals-ui.js'
 import { findingForRow, planRows } from '../suggest-rows.js'
 import { renderSuggest } from './suggest.js'
 
@@ -69,6 +70,11 @@ function context(mode: AppData['mode'], suggestions: SuggestionViewRecord[]): Ct
   return { data, a: analysis, ds: {} as Ctx['ds'], state: { screen: 'suggest', s: analysis.session.id }, audience: 'dev', go: vi.fn() }
 }
 
+/** The served app: serve-entry.ts injects serve-ui.ts, whose ServeUi.proposals reaches the screen as Ctx.proposals. */
+function serveContext(suggestions: SuggestionViewRecord[]): Ctx {
+  return { ...context('serve', suggestions), proposals: proposalsUi }
+}
+
 describe('renderSuggest proposal UX', () => {
   it('renders a persisted localhost kickoff handoff after an SSE tree replacement', () => {
     const row = planRows('session', analysis, undefined)[0]!
@@ -121,7 +127,7 @@ describe('renderSuggest proposal UX', () => {
       application: { v: 1, summary: 'Applied <once>', files: ['CLAUDE.md'], checks: [{ name: 'unit <test>', command: 'npm test', ok: true }], receiptPath: '/tmp/apply.json' },
     })
 
-    renderSuggest(context('serve', [record]))
+    renderSuggest(serveContext([record]))
 
     expect(markup).toContain('Copy improve command')
     expect(markup).not.toContain('Draft proposal')
@@ -159,7 +165,7 @@ describe('renderSuggest proposal UX', () => {
       },
       effect: { before: { avgToolCalls: 8 }, after: { avgToolCalls: 4 }, measuredSessionIds: ['later-session'] },
     }
-    renderSuggest(context('serve', [record]))
+    renderSuggest(serveContext([record]))
 
     expect(markup).toContain('data-status="verified"')
     expect(markup).toContain('verified comparison ✓')
@@ -194,7 +200,7 @@ describe('renderSuggest proposal UX', () => {
       },
       effect: { before: { avgToolCalls: 12 }, after: { avgToolCalls: 8 }, measuredSessionIds: ['l1', 'l2', 'l3'] },
     }
-    renderSuggest(context('serve', [record]))
+    renderSuggest(serveContext([record]))
     expect(markup).toContain('data-status="verified"')
     expect(markup).toContain('verified comparison ✓')
     expect(markup).not.toContain('Not verified under the current deterministic contract.')
@@ -213,7 +219,7 @@ describe('renderSuggest proposal UX', () => {
         receiptPath: '/tmp/legacy.json',
       },
     })
-    renderSuggest(context('serve', [record]))
+    renderSuggest(serveContext([record]))
     expect(markup).toContain('data-status="legacy"')
     expect(markup).toContain('legacy unverified')
     expect(markup).toContain('Not verified under the current deterministic contract.')
@@ -240,7 +246,7 @@ describe('renderSuggest proposal UX', () => {
   it('shows only selected-session, unmapped proposals in the localhost inbox', () => {
     const saved = proposalRecord('sg_0000000000ac')
     const other = proposalRecord('sg_0000000000ad', { sessionIds: ['another-session'], proposal: { title: 'Wrong session', change: 'x', effort: 'S', proposalPath: '/tmp/other.md' } })
-    renderSuggest(context('serve', [saved, other]))
+    renderSuggest(serveContext([saved, other]))
 
     expect(markup).toContain('Saved proposals · 1')
     expect(markup).toContain('Bounded proposal')
@@ -254,9 +260,23 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).not.toContain('$orangu-apply')
   })
 
+  // The file bundles carry no proposal renderer: the screen draws a stored proposal and the inbox only
+  // through Ctx.proposals, which serve alone provides. Same records, with and without the seam.
+  it('draws the stored proposal and the inbox only through the serve seam', () => {
+    const row = planRows('session', analysis, undefined)[0]!
+    const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
+    const records = [proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId }), proposalRecord('sg_0000000000ac')]
+    renderSuggest(context('serve', records))
+    expect(markup).not.toContain('sg-proposal')
+    expect(markup).not.toContain('sg-inbox')
+    renderSuggest(serveContext(records))
+    expect(markup).toContain('<div class="sg-proposal">')
+    expect(markup).toContain('Saved proposals · 1')
+  })
+
   // A4: the screen explains its own handoff instead of ending at a bare button.
   it('renders the empty inbox on localhost so the third step has somewhere to point', () => {
-    renderSuggest(context('serve', []))
+    renderSuggest(serveContext([]))
     expect(markup).toContain('Saved proposals · 0')
     expect(markup).toContain('Nothing yet.')
     expect(markup).toContain('The proposal appears below under Saved proposals.')
@@ -296,13 +316,13 @@ describe('renderSuggest proposal UX', () => {
     // the change class still shows where one exists: on a proposal
     const row = planRows('session', analysis, undefined)[0]!
     const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
-    renderSuggest(context('serve', [proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId })]))
+    renderSuggest(serveContext([proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId })]))
     expect(markup).toContain('<span class="pill">instruction</span>')
     expect(markup).toContain('<span class="pill">effort S</span>')
   })
 
   it('does not offer apply for an unstructured legacy proposal', () => {
-    renderSuggest(context('serve', [proposalRecord('sg_0000000000af', {
+    renderSuggest(serveContext([proposalRecord('sg_0000000000af', {
       proposal: { title: 'Legacy proposal', change: 'Do it', effort: 'S', proposalPath: '/tmp/legacy.md' },
     })]))
     expect(markup).toContain('Legacy proposal')

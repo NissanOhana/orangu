@@ -188,3 +188,24 @@ describe('ratchet: the whole-harness block reaches the screen only through the s
     expect(countIn(file, /mega-review/g), 'suggest.ts names mega-review').toBe(0)
   })
 })
+
+/**
+ * The ServeUi.proposals seam keeps the stored-proposal block and the Saved proposals inbox out of both
+ * file bundles: a file report embeds `suggestions: []`, so that code never renders there. One import
+ * from the file side (the screen, the aggregate seam, or either file entry) would bring its bytes back
+ * into every saved report with no failing behaviour test.
+ */
+describe('ratchet: the proposal renderers reach the screen only through the serve seam', () => {
+  it('serve-ui.ts names proposals-ui, so the module this ratchet guards exists under that name', () => {
+    expect(countIn(join(ROOT, 'src/report/client/serve-ui.ts'), /proposals-ui/g)).toBeGreaterThan(0)
+  })
+
+  it.each([
+    'src/report/client/screens/suggest.ts',
+    'src/report/client/agg-ui.ts',
+    'src/report/client/agg-entry.ts',
+    'src/report/client/main.ts',
+  ])('%s does not name proposals-ui', (rel) => {
+    expect(countIn(join(ROOT, rel), /proposals-ui/g), `${rel} names proposals-ui`).toBe(0)
+  })
+})

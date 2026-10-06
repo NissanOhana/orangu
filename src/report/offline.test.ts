@@ -70,6 +70,18 @@ describe('offline report', () => {
     expect(CLIENT_JS_AGG).not.toContain('github.com/NissanOhana/orangu/issues/new')
   })
 
+  it('the stored proposal and the Saved proposals inbox ship only in the serve bundle', () => {
+    // A file report always embeds `suggestions: []` (render.ts), so neither block can render from a
+    // file. serve-ui.ts injects proposals-ui.ts through the optional ServeUi.proposals seam, the way the
+    // whole-harness block reaches the screen through Ctx.megaReview. Each marker is that module's markup.
+    const markers = ['sg-inbox', 'saved-proposal', 'sg-proposal', 'sg-pfield', 'Copy only. Nothing runs here.', 'Computed comparisons', 'Localhost only']
+    for (const marker of markers) {
+      expect(CLIENT_JS, `CLIENT_JS carries ${marker}`).not.toContain(marker)
+      expect(CLIENT_JS_AGG, `CLIENT_JS_AGG carries ${marker}`).not.toContain(marker)
+      expect(CLIENT_JS_SERVE, `CLIENT_JS_SERVE lost ${marker}`).toContain(marker)
+    }
+  })
+
   it('the aggregate bundle stays inside its own size ratchet', () => {
     // Ratchet born 2026-08-28 with the cta chunk at its MEASURED landing value, not a round number
     // and not a target: same rule as CLIENT_JS above, it may only go DOWN. A chunk that needs more

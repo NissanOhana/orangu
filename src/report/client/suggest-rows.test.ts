@@ -9,9 +9,7 @@ import { embeddedSource } from './data.js'
 import type { SuggestionRecord } from '../../suggest/types.js'
 import { suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import {
-  SAVED_PROPOSAL_LIMIT,
   findingForRow,
-  hasValidProposal,
   kickoffFailureMessage,
   boundedSavings,
   commandForInsight,
@@ -19,9 +17,9 @@ import {
   planRows,
   recoverableFrom,
   recordForRow,
-  savedProposalRecords,
   titleForRule,
 } from './suggest-rows.js'
+import { SAVED_PROPOSAL_LIMIT, hasValidProposal, savedProposalRecords } from './proposals-ui.js'
 
 const analysis = {
   session: { id: 'sess-1' },
