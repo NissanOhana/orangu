@@ -102,7 +102,7 @@ describe('Codex plugin packaging', () => {
       expect(readText(`plugins/orangu/skills/orangu-${name}/agents/openai.yaml`)).toBe(readText(`plugin/codex/${name}/openai.yaml`))
     }
     // references and the shared rules ride along so relative links resolve in both hosts
-    for (const ref of ['orangu-improve/references/artifact-contract.md', 'orangu-apply/references/application-contract.md', 'shared/untrusted-input.md', 'shared/interview.md']) {
+    for (const ref of ['orangu-improve/references/artifact-contract.md', 'orangu-apply/references/application-contract.md', 'shared/untrusted-input.md', 'shared/interview.md', 'shared/ste.md']) {
       expect(existsSync(join(root, 'plugins/orangu/skills', ref)), ref).toBe(true)
       expect(readText(`plugins/orangu/skills/${ref}`)).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
     }

@@ -542,6 +542,33 @@ describe('plugin packaging', () => {
     }
   })
 
+  // Every skill tells Claude to write what the user reads in STE (Simplified Technical English), with one
+  // sentence and a link to one shared rules file. The rules live once, in plugin/skills/shared/, which the
+  // build mirrors to Codex, so the file stays host-portable. The list grows until it names every shipped skill.
+  const STE_RULES = 'plugin/skills/shared/ste.md'
+  const STE_SENTENCE = 'Write all user-facing text in STE, as [the STE rules](../shared/ste.md) direct.'
+  const STE_SKILLS = ['improve', 'apply', 'feedback']
+  it('the mirrored skills tell Claude to write user-facing text in STE, from one shared rules file', () => {
+    expect(existsSync(join(root, STE_RULES)), `${STE_RULES} exists`).toBe(true)
+    for (const s of STE_SKILLS) {
+      const body = readText(`plugin/skills/${s}/SKILL.md`).split('\n---\n')[1] ?? ''
+      expect(body, `${s} carries the STE sentence`).toContain(STE_SENTENCE)
+      expect(body.split('](../shared/ste.md)').length - 1, `${s} links the STE rules once`).toBe(1)
+    }
+    const rules = readText(STE_RULES)
+    for (const literal of ['20 words or fewer', '25 words or fewer', 'active voice', 'One word for one thing', 'semicolon', 'contraction', 'em dash', 'Plain language', 'Detailed'])
+      expect(rules, `the STE rules say: ${literal}`).toContain(literal)
+    // portable to the generated Codex mirror: no slash command, no plugin root variable
+    expect(rules).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
+  })
+
+  // The build mirrors these four trees to Codex. A Claude-only skill named there becomes a dead command in
+  // the mirror (a SKILL.md stops the build; a shared or reference file would copy it silently).
+  it('no mirrored skill file names the Claude-only show-me skill', () => {
+    for (const path of markdownFiles('plugin/skills/improve', 'plugin/skills/apply', 'plugin/skills/feedback', 'plugin/skills/shared'))
+      expect(readText(path), `${path} names no Claude-only skill`).not.toContain('/orangu:show-me')
+  })
+
   it('public plugin and marketplace copy stays role-neutral and claim-safe', () => {
     const forbidden: Array<[string, RegExp]> = [
       ['software-versus-model framing', /software\s*[,;:]?\s*not (?:an?\s+)?model|not (?:an?\s+)?model\s*[,;:]?\s*(?:it(?:'s| is)\s+)?software/i],
