@@ -1071,10 +1071,20 @@ describe('docs/USAGE.md entry point', () => {
     expect(shareable).toMatch(/`--include-text` keeps all of it[^.\n]*secrets[^.\n]*scrubbed/)
   })
 
-  it('says that a guessed current session is announced only on human output', () => {
-    // --json and --quiet print no guess line (src/cli/e2e.test.ts "current resolves the surrounding Claude Code session")
+  it('says which flags hide a guessed current session, verb by verb, as the code does', () => {
+    // The guess line has one gate per resolver. main.ts (report, analyze, watch) and estimate.ts hide it on
+    // --quiet or --json. evidence.ts hides it on --quiet only, so `evidence current --json` still prints it.
+    // If a gate changes, this sentence changes with it.
+    const gate = (file: string): string[] => readFileSync(join(root, file), 'utf8').split('\n').filter((line) => line.includes('found.note &&'))
+    for (const file of ['src/cli/main.ts', 'src/cli/commands/estimate.ts']) {
+      expect(gate(file), file).toHaveLength(1)
+      expect(gate(file)[0], file).toContain("!flagBool(flags, 'quiet') && !flagBool(flags, 'json')")
+    }
+    expect(gate('src/cli/commands/evidence.ts')).toHaveLength(1)
+    expect(gate('src/cli/commands/evidence.ts')[0]).toContain("!flagBool(flags, 'quiet')")
+    expect(gate('src/cli/commands/evidence.ts')[0]).not.toContain("'json'")
     expect(usage).not.toContain('never guessed silently')
-    expect(usage).toContain('If orangu guesses it from the cwd, it says so on stderr, but not with `--json` or `--quiet`.')
+    expect(usage).toContain('If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch` and `estimate`.')
   })
 
   it('lists every input that keeps bare orangu on the latest-session brief', () => {

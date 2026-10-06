@@ -41,7 +41,7 @@ node dist/orangu.js report
 | `orangu harness` | Compare declared harness configuration with observed use |
 | `orangu suggest` | Inspect and transition validated suggestion records |
 
-A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment. If orangu guesses it from the cwd, it says so on stderr, but not with `--json` or `--quiet`. Outside Claude Code, `current` is an error. `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
+A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment. If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch` and `estimate`. Outside Claude Code, `current` is an error. `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
 
 On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. These keep bare `orangu` on the latest-session brief, which never waits for input:
 
