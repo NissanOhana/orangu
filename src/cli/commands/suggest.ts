@@ -69,7 +69,7 @@ async function assertEvidenceWorkspace(
       throw new Error(`suggestion ${rec.id} evidence workspace no longer exists: ${cwd}`)
     }
     if (canonical !== workspace.cwd) {
-      throw new Error(`suggestion ${rec.id} evidence belongs to workspace ${canonical}; create the proposal from that exact workspace`)
+      throw new Error(`suggestion ${rec.id} evidence belongs to workspace ${canonical}. Create the proposal from that exact workspace.`)
     }
     if (rec.source === 'report' && rec.scope === 'session') {
       const rebound = projectEvidence(analysis, { limit: MAX_EVIDENCE_LIMIT }).findings.find((finding) => finding.suggestionId === rec.id)
@@ -107,14 +107,14 @@ type ApplyReadyProposal = SuggestionProposal & {
 
 async function assertWorkspaceMatch(rec: SuggestionRecord): Promise<ApplyReadyProposal> {
   if (rec.scope === 'global') {
-    throw new Error(`suggestion ${rec.id} is global and proposal-only; global apply is not supported`)
+    throw new Error(`suggestion ${rec.id} is global and proposal-only. Global apply is not supported.`)
   }
   if (rec.status !== 'proposed' || rec.proposal?.v !== 1 || !rec.proposal.manifestPath || !rec.proposal.files?.length) {
     throw new Error(`suggestion ${rec.id} is not an apply-ready structured proposal`)
   }
   if (!rec.proposal.workspace) throw new Error(`suggestion ${rec.id} is a legacy unbound proposal and cannot be applied`)
   if (!sameWorkspace(rec.proposal.workspace, await liveWorkspaceIdentity(process.cwd()))) {
-    throw new Error(`suggestion ${rec.id} belongs to workspace ${rec.proposal.workspace.cwd}; run apply from that exact workspace`)
+    throw new Error(`suggestion ${rec.id} belongs to workspace ${rec.proposal.workspace.cwd}. Run apply from that exact workspace.`)
   }
   return rec.proposal as ApplyReadyProposal
 }
@@ -156,7 +156,7 @@ async function cmdList(store: SuggestionStore, flags: Record<string, string | bo
   if (scope) all = all.filter((r) => r.scope === scope)
   if (flagBool(flags, 'json')) return emit(visible(all, flags), flags) as unknown as void
   if (!all.length) {
-    process.stdout.write('no suggestions yet. Create one from a report finding or: orangu suggest --rule <r> --scope session --session <id>\n')
+    process.stdout.write('no suggestions yet. Create one from a report finding, or run: orangu suggest --rule <r> --scope session --session <id>\n')
     return
   }
   for (const rec of all) printRecord(visible(rec, flags))

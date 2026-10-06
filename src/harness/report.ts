@@ -63,10 +63,10 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetent
 
   const declaredNothing =
     inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0
-  if (declaredNothing) notes.push('no harness config found under the scanned roots. Nothing to cross-reference')
+  if (declaredNothing) notes.push('orangu found no harness config under the scanned roots. It found nothing to compare')
 
   if (!inv.usageCounters) {
-    notes.push('~/.claude.json was not read, so client-side usage counters are omitted; declared vs used is classified from session evidence only')
+    notes.push('orangu did not read ~/.claude.json, so the report omits the client-side usage counters. orangu classifies declared vs used from session evidence only')
   }
   if (inv.unreadable.length > 0) {
     notes.push(`${plural(inv.unreadable.length, 'configured path')} could not be read. See inventory.unreadable for the reason of each`)
@@ -80,7 +80,7 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetent
   if (unsplitAnalyses > 0) {
     const one = unsplitAnalyses === 1
     notes.push(
-      `${unsplitAnalyses} ${one ? 'session was' : 'sessions were'} read from a cache written by an older orangu that did not separate the main transcript from its subagent files, so ${one ? 'it is' : 'they are'} left out of the injected listings. Re-run with --no-cache to rebuild ${one ? 'it' : 'them'}`,
+      `${unsplitAnalyses} ${one ? 'session was' : 'sessions were'} read from a cache written by an older orangu. That version did not separate the main transcript from its subagent files, so the injected listings leave ${one ? 'it' : 'them'} out. Re-run with --no-cache to rebuild ${one ? 'it' : 'them'}`,
     )
   }
   // drift is a statement about what the sessions used; over zero sessions there is nothing to disagree with
@@ -92,14 +92,14 @@ function buildNotes(inv: HarnessInventory, x: HarnessCrosswalk, r: HarnessRetent
   }
   const managedRead = inv.settings.some((s) => s.scope === 'managed')
   if (inv.settings.some((s) => s.scope === 'managed' && s.allowManagedHooksOnly)) {
-    notes.push('managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run; only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used')
+    notes.push('managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run. Only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used')
   }
   // counted over the full population (`counts`), never over the capped row arrays
   const undeclared = x.counts.skills.undeclared + x.counts.mcpServers.undeclared + x.counts.agents.undeclared + x.counts.hooks.undeclared
   if (undeclared > 0) {
-    notes.push(`${plural(undeclared, 'row')} marked undeclared: observed in sessions but not found in the config that was read (a source outside this scope, or drift)`)
+    notes.push(`${undeclared === 1 ? '1 row is' : `${undeclared} rows are`} marked undeclared. The sessions used ${undeclared === 1 ? 'it' : 'them'}, but the config that orangu read does not declare ${undeclared === 1 ? 'it' : 'them'}. The cause is a source outside this scope, or drift`)
     // the files on disk are the third of four managed sources Claude Code consults; say so where an operator is already looking at an unexplained row
-    if (!managedRead) notes.push('managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console; orangu reads only the managed files on disk, so a policy delivered that way is not in this inventory')
+    if (!managedRead) notes.push('managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console. This inventory does not include a policy that arrives that way, because orangu reads only the managed files on disk')
   }
   if (r.expiringSoon.sessions > 0) {
     const one = r.expiringSoon.sessions === 1

@@ -165,10 +165,10 @@ describe('cmdPick', () => {
   it('no sessions: throws the same message as the other verbs (exit 1 through main); --json still prints []', async () => {
     const empty = await mkdtemp(join(tmpdir(), 'orangu-pick-empty-'))
     const plain = deps()
-    await expect(cmdPick({ root: empty }, plain)).rejects.toThrow(/No sessions found/)
+    await expect(cmdPick({ root: empty }, plain)).rejects.toThrow(/orangu found no sessions\. Is Claude Code installed\? Try: orangu list/)
     expect(plain.stdout.text).toBe('')
     const json = deps()
-    await expect(cmdPick({ root: empty, json: true }, json)).rejects.toThrow(/No sessions found/)
+    await expect(cmdPick({ root: empty, json: true }, json)).rejects.toThrow(/orangu found no sessions\. Is Claude Code installed\? Try: orangu list/)
     expect(json.stdout.text).toBe('[]\n')
   })
 })

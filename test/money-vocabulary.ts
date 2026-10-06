@@ -17,7 +17,7 @@
  * spell the dead flag. Stripped by exact literal before checking, so any OTHER money string added to
  * the same file still fails the guard.
  */
-export const RETIRED_FLAG_LITERALS = ["'max-cost'", '--max-cost was removed; use --max-tokens <n>', '--max-cost']
+export const RETIRED_FLAG_LITERALS = ["'max-cost'", '--max-cost was removed. Use --max-tokens <n>.', '--max-cost']
 
 /** Currency amounts: a symbol next to a number. */
 export const CURRENCY_AMOUNT = /[$£€¥]\s?\d/

@@ -114,9 +114,9 @@ describe('summary renderers fit the layout', () => {
 
   it('the store fallback is the single line allowed past 80 columns, and it says why', () => {
     const lines = nextStepLines(capsAt(80), FALLBACK).map(stripAnsi)
-    expect(lines[1]).toBe('  store    unavailable: EACCES: permission denied, mkdir; long form follows')
+    expect(lines[1]).toBe('  store    unavailable: EACCES: permission denied, mkdir (full command below)')
     const long = nextStepLines(capsAt(80), { ...FALLBACK, storeNote: 'EEXIST: file already exists, mkdir ' + '/x'.repeat(40) }).map(stripAnsi)
-    expect(long[1]).toMatch(/^  store {4}unavailable: EEXIST.*…; long form follows$/)
+    expect(long[1]).toMatch(/^  store {4}unavailable: EEXIST.*… \(full command below\)$/)
     expect(displayWidth(long[1]!)).toBe(80)
     expect(lines[2]).toContain(' --finding ')
     expect(displayWidth(lines[2]!)).toBeGreaterThan(80)

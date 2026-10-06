@@ -105,8 +105,8 @@ function sessionSelector(sel: string | undefined, flags: Record<string, string |
   if (raw === undefined) return sel
   if (typeof raw !== 'string' || !raw.trim()) fail(`--session needs a session selector: ${SELECTOR_FORMS}`)
   const flag = (raw as string).trim()
-  if (flag.includes(',')) fail('--session takes one session here; comma lists belong to estimate and suggest')
-  if (sel !== undefined && sel !== flag) fail(`--session ${flag} and "${sel}" name different sessions; give one`)
+  if (flag.includes(',')) fail('--session takes one session here. Only estimate and suggest take a comma list.')
+  if (sel !== undefined && sel !== flag) fail(`--session ${flag} and "${sel}" name different sessions. Give only one.`)
   return flag
 }
 
@@ -118,7 +118,7 @@ async function selectSession(sel: string | undefined, flags: Record<string, stri
   if (flags['cwd']) opts.cwd = String(flags['cwd'])
   if (!sel || sel === 'latest') {
     const s = await findLatestSession(opts)
-    if (!s) fail('No sessions found. Is Claude Code installed? Try: orangu list')
+    if (!s) fail('orangu found no sessions. Is Claude Code installed? Try: orangu list')
     return s!
   }
   if (sel === 'current') {
@@ -131,7 +131,7 @@ async function selectSession(sel: string | undefined, flags: Record<string, stri
   if (r) return r
   const cands = await candidatesForPrefix(sel, opts)
   if (cands.length > 1) {
-    fail(`Ambiguous session "${sel}". ${cands.length} matches:\n` + cands.slice(0, 8).map((c) => '  ' + c.sessionId + '  ' + (basename(c.projectSlug))).join('\n'))
+    fail(`"${sel}" matches ${cands.length} sessions:\n` + cands.slice(0, 8).map((c) => '  ' + c.sessionId + '  ' + (basename(c.projectSlug))).join('\n'))
   }
   fail(`No session matches "${sel}". Try: orangu list`)
   throw new Error('unreachable')
@@ -262,7 +262,7 @@ function pickSessions(flags: Record<string, string | boolean>): Promise<void> {
 
 /** Flags that were removed but would otherwise be ignored in silence, turning a CI gate into a no-op. */
 const RETIRED_FLAGS: Record<string, string> = {
-  'max-cost': '--max-cost was removed; use --max-tokens <n>',
+  'max-cost': '--max-cost was removed. Use --max-tokens <n>.',
 }
 
 /** The CI gate flags read by thresholdExit; they gate ONE session, so only the session verbs accept them. */
@@ -296,7 +296,7 @@ function rejectUnusableFlags(command: string | undefined, flags: Record<string, 
     // read, rather than writing a file the caller piping JSON never asked for.
     if (flagBool(flags, 'json')) {
       for (const flag of AGGREGATE_SIDE_EFFECT_FLAGS) {
-        if (flags[flag] !== undefined) fail(`--${flag} writes the HTML report; --json is a machine read with no side effect. Run them separately.`)
+        if (flags[flag] !== undefined) fail(`--${flag} writes the HTML report. --json is a machine read with no side effect. Run them separately.`)
       }
     }
   } else if (command !== undefined && flags['html'] !== undefined) {
@@ -352,7 +352,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd })
     scopeLabel = `repo ${basename(cwd)}`
   }
-  if (!refs.length) fail(`No sessions found for ${scopeLabel}.`)
+  if (!refs.length) fail(`orangu found no sessions for ${scopeLabel}.`)
   const max = Number(flagStr(flags, 'limit') ?? (scope === 'global' ? '500' : '200'))
   const use = refs.slice(0, Number.isNaN(max) ? refs.length : max)
   const quiet = flagBool(flags, 'quiet') || flagBool(flags, 'json')
@@ -470,14 +470,14 @@ function printAggregate(a: ReturnType<typeof aggregate>, wroteHtml: boolean): vo
       hidden.set(e.tool, h)
     }
     for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) process.stdout.write(`    ${paint(out, 'bad', String(e.total).padStart(4))}×  ${e.tool}: ${e.signature}  ${paint(out, 'dim', '(' + plural(e.sessions, 'session') + ')')}\n`)
-    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out, 'bad', String(h.total).padStart(4))}×  ${tool}: ${plural(h.groups, 'recurring signature')}, text hidden; use --include-text  ${paint(out, 'dim', '(' + plural(h.sessions, 'session') + ')')}\n`)
+    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out, 'bad', String(h.total).padStart(4))}×  ${tool}: ${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)  ${paint(out, 'dim', '(' + plural(h.sessions, 'session') + ')')}\n`)
   }
   if (a.topReReadFiles.length) {
     process.stdout.write('\n' + paint(out, 'bold', '  most re-read files (context weight)\n'))
     for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(out, 'dim', '(' + plural(f.sessions, 'session') + ')')}\n`)
   }
   process.stdout.write('\n' + paint(out, 'bold', '  heaviest sessions (by tokens)\n'))
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, 'dim', s.title ? s.title.slice(0, 50) : '(title hidden; use --include-text)')}\n`)
+  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, 'dim', s.title ? s.title.slice(0, 50) : '(title hidden, add --include-text)')}\n`)
   // --open already did what it offers: once the report is written and handed to a browser, repeating
   // the flag that wrote it is noise. The machine-readable half is still news either way.
   const offer = wroteHtml ? '--json for the full machine-readable aggregate' : '--open for the HTML report, --json for the full machine-readable aggregate'
@@ -507,12 +507,12 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
     version: VERSION,
     maxLive: maxLiveStr !== undefined ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : undefined,
   }
-  if (requestedAutomaticLaunch) process.stderr.write('  --allow-claude is retired: the report now provides copy-only Claude/Codex handoffs.\n')
+  if (requestedAutomaticLaunch) process.stderr.write('  --allow-claude is retired. The report only gives commands to copy, for Claude Code or Codex.\n')
   const srv = await startServe(opts)
   process.stderr.write(
     paint(err, ['bold', 'accent'], 'orangu serve') +
       ` · ${srv.url}\n` +
-      paint(err, 'dim', `  loopback + private capability · model handoff: copy-only · watching up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions · ctrl-c stops\n`),
+      paint(err, 'dim', `  loopback + private capability · model commands: copy only · watches up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions · ctrl-c stops\n`),
   )
   if (opts.open) openInBrowser(srv.url)
   process.on('SIGINT', () => {
@@ -526,7 +526,7 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
 
 function printHelp(): void {
   process.stdout.write(`${out.tty ? '\n' + mascotLines(out).join('\n') + '\n' : ''}
-${paint(out, 'bold', 'orangu')} v${VERSION}: observe the run, then improve the next outcome.
+${paint(out, 'bold', 'orangu')} v${VERSION}: observe the session, then improve the next outcome.
 Deterministic observability for Claude Code sessions. No network calls.
 
 ${paint(out, 'bold', 'usage')}
@@ -536,7 +536,7 @@ ${paint(out, 'bold', 'usage')}
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
   orangu pick                  choose an open session, open its report
-                               (--json lists; --plain numbers; --limit <n>)
+                               (--json · --plain · --limit <n>)
   orangu repo    [<path>]      aggregate every session for a repo (--json/--out)
   orangu global                aggregate every session everywhere    (--json)
   orangu watch   [<session>]   live-tail a session, refresh the report
@@ -545,7 +545,7 @@ ${paint(out, 'bold', 'usage')}
                                --no-include-text · --global · --cwd <dir>${EXTRA_HELP.map((l) => '\n' + l).join('')}
 
 ${paint(out, 'bold', 'session')}   a session id, a unique id prefix, a .jsonl path, "latest" (default),
-          or "current" (the session Claude Code is running orangu from)
+          or "current" (the Claude Code session that runs orangu)
 
 ${paint(out, 'bold', 'flags')}
   -s, --session <sel>    the session, as a flag (same forms as the positional)
@@ -553,29 +553,29 @@ ${paint(out, 'bold', 'flags')}
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
   --html <file>          repo/global: write the aggregate HTML report here
-  --open / --no-open     open (or don't) the HTML report (report, repo/global)
+  --open / --no-open     open the HTML report or not (report, repo/global)
   --no-redact            keep secrets/paths in the output (default: redacted)
   --slim                 with analyze --json: the slim projection LLMs read
   --include-text         keep prompt/result previews in report, analyze, watch,
                          evidence, repo/global output and serve's exported HTML
   --no-include-text      serve only: hide previews in the loopback viewer too
   --strip-paths          reduce absolute paths to basenames (home is ~ already)
-  --global               scan all roots incl. Cowork/Desktop
+  --global               scan all roots, Cowork and Desktop too
   --root <dir>           scan only this Claude config dir (comma-separated list)
   --limit <n>            cap sessions scanned (repo/global) or listed
   --no-cache             skip the analysis cache under ~/.orangu/cache
   --verbose              also print the cache diagnostic (stderr)
   --quiet                no progress or hints on stderr (the answer only)
   --plain                pick only: a numbered list instead of the prompt
-  --no-color             plain output (NO_COLOR, FORCE_COLOR, TERM=dumb and CI
-                         are honoured; NO_COLOR, FORCE_COLOR=0 and
+  --no-color             plain output (orangu obeys NO_COLOR, FORCE_COLOR,
+                         TERM=dumb and CI. NO_COLOR, FORCE_COLOR=0 and
                          ORANGU_NO_ANIMATION=1 also stop the spinner)
   --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
   --max-tokens <n>       exit 2 above this token total (CI: analyze/report)
-  --fail-on-hook-errors  exit non-zero if any hook errored (CI; analyze, report)
+  --fail-on-hook-errors  exit non-zero on any hook error (CI: analyze/report)
   --version, --help
 
-${paint(out, 'dim', 'privacy: generated locally, zero network requests, secrets redacted by default.')}
+${paint(out, 'dim', 'privacy: local only, no network requests. orangu redacts secrets by default.')}
 `)
 }
 

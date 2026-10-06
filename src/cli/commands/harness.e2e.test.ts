@@ -210,7 +210,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(out).toMatch(/^ {2}hooks\s+\d+ configured · [\d,]+ runs · \d+ errors · [\d,]+ ms mean$/m)
     // one count for "undeclared": the headline row lists hooks like the note below it counts them
     const headline = /undeclared\s+(\d+) observed but not in the config read/.exec(out)
-    const note = /(\d+) rows? marked undeclared/.exec(out)
+    const note = /(\d+) rows? (?:is|are) marked undeclared\./.exec(out)
     expect(headline, 'headline undeclared count').not.toBeNull()
     expect(note, 'undeclared note').not.toBeNull()
     expect(headline![1]).toBe(note![1])
@@ -278,8 +278,10 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const bare = await mkdtemp(join(tmpdir(), 'orangu-harness-bare-'))
     const emptyRepo = await mkdtemp(join(tmpdir(), 'orangu-harness-bare-repo-'))
     const out = run(['harness', '--cwd', emptyRepo, '--root', join(bare, '.claude'), '--quiet'], bare)
-    expect(out).toContain('no harness config found under')
-    expect(out).toContain('Nothing to cross-reference')
+    expect(out).toContain('orangu found no harness config under')
+    expect(out).toContain('It found nothing to compare.')
+    expect(out).toContain('  looked for: settings.json')
+    expect(out).not.toContain('cross-reference')
     expect(out).not.toContain('$')
   })
 
@@ -305,7 +307,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
   it('prints the retention block and names the setting without recommending a value', () => {
     const out = run(['harness', '--global', '--cwd', fx.repo, '--quiet'], fx.home)
     expect(out).toMatch(/^ {2}retention\s+30-day window · \d+ sessions? \([\d.]+ KB\) in reach of the sweep · oldest 28 days$/m)
-    expect(out).toContain("sizes count primary transcripts only; each session's subagent and tool-result files are swept with it")
+    expect(out).toMatch(/^ {4}sizes count primary transcripts only\n {4}the sweep also removes the subagent and tool-result files of each session$/m)
     expect(out).toContain("cleanupPeriodDays is unset, so the window is Claude Code's default of 30 days")
     expect(out).toMatch(/^ {4}1 session \([\d.]+ KB\) is within 7 days of the cutoff$/m)
     expect(out).toMatch(/^ {4}1 Desktop\/Cowork session \([\d.]+ KB\) is kept at any age by default$/m)

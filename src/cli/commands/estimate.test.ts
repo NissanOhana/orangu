@@ -63,12 +63,12 @@ describe('orangu estimate (in-process)', () => {
     const linked = join(mkdtempSync(join(tmpdir(), 'orangu-linked-')), 'aaaaaaaa-0000-4000-8000-00000000dead.jsonl')
     symlinkSync(fixturePath, linked)
     await expect(cmdEvidence([linked], { estimate: true, json: true })).rejects.toThrow(/symbolic links/)
-    await expect(cmdEstimate([linked], { json: true })).rejects.toThrow(/no session could be projected[\s\S]*symbolic links/)
+    await expect(cmdEstimate([linked], { json: true })).rejects.toThrow(/orangu could not project any session:[\s\S]*symbolic links/)
     expect(stdout()).toBe('')
     const missing = join(mkdtempSync(join(tmpdir(), 'orangu-missing-')), 'aaaaaaaa-0000-4000-8000-00000000beef.jsonl')
     mkdirSync(missing)
     await expect(cmdEvidence([missing], { estimate: true, json: true })).rejects.toThrow(/No session matches/)
-    await expect(cmdEstimate([missing], { json: true })).rejects.toThrow(/no session could be projected[\s\S]*no such session/)
+    await expect(cmdEstimate([missing], { json: true })).rejects.toThrow(/orangu could not project any session:[\s\S]*no such session/)
   })
 
   it('names the sessions it skipped beside the ones it sized', async () => {
@@ -82,7 +82,7 @@ describe('orangu estimate (in-process)', () => {
     expect(est.skipped[0].selector).toBe(missing)
     out = []
     await cmdEstimate([], { session: `${fixturePath},${missing}` })
-    expect(stdout()).toContain('1 session could not be projected')
+    expect(stdout()).toContain('1 session could not be projected. The count above does not include it:')
     expect(stdout()).toContain(missing)
   })
 

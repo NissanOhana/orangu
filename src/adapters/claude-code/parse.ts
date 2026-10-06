@@ -266,7 +266,7 @@ export function isTransientInputChange(error: unknown): boolean {
 export const STABLE_READ_ATTEMPTS = 3
 /** pause before attempt 2 and before attempt 3 (ms): an appending writer finishes a line in far less */
 const STABLE_READ_BACKOFF_MS = [20, 80] as const
-export const STILL_WRITING_HINT = 'the session is still being written; re-run, or use `orangu watch` to follow it live'
+export const STILL_WRITING_HINT = 'The session is still open, and its transcript grows. Run the command again, or use `orangu watch` to follow it live.'
 
 /**
  * Run the prevalidate + read pair, retrying the WHOLE pair when a live transcript is appended between the
@@ -285,7 +285,7 @@ export async function withStableSessionRead<T>(
       return await read(await prevalidateEvidenceSession(path, options))
     } catch (error) {
       if (!isTransientInputChange(error)) throw error
-      if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${(error as Error).message}; ${STILL_WRITING_HINT}`)
+      if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${(error as Error).message}. ${STILL_WRITING_HINT}`)
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1]!
       await new Promise<void>((resolve) => setTimeout(resolve, pause))
     }

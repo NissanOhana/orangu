@@ -30,8 +30,8 @@ import { flagBool, flagStr } from '../args.js'
 import { runHarness } from './harness.js'
 import type { Analysis } from '../../model/analysis.js'
 
-const SLIM_HARNESS = '--slim sizes a session projection; orangu estimate harness sizes the harness report'
-const DEPTH_RETIRED = 'orangu estimate has one canonical projection (the evidence bundle); --depth was retired. Use --slim to size an `analyze --json --slim` read.'
+const SLIM_HARNESS = '--slim sizes a session projection. orangu estimate harness sizes the harness report.'
+const DEPTH_RETIRED = 'orangu estimate has one canonical projection (the evidence bundle). --depth was retired. Use --slim to size an `analyze --json --slim` read.'
 
 /** the `analyze --json --slim` read; the default projection is the evidence bundle (see suggest/estimate.ts) */
 const slimBytes: SizeProjection = (a) => Buffer.byteLength(JSON.stringify(slimAnalysis(a)))
@@ -81,7 +81,7 @@ async function currentSessionPath(flags: Record<string, string | boolean>): Prom
 
 async function latestSessionPath(): Promise<string> {
   const latest = await findLatestSession({})
-  if (!latest) throw new Error('No sessions found. Try: orangu list')
+  if (!latest) throw new Error('orangu found no sessions. Try: orangu list')
   return latest.path
 }
 
@@ -163,7 +163,7 @@ export async function cmdEstimate(positionals: string[], flags: Record<string, s
   // Nothing sized means the gate has no answer. Fail the way `orangu evidence --estimate` fails on the
   // same input, so the two gates never disagree; a clean 0 would read as "small enough".
   if (est.sessions === 0 && est.skipped && est.skipped.length > 0) {
-    throw new Error(`no session could be projected:\n${est.skipped.map((s) => `  ${s.selector}: ${s.reason}`).join('\n')}`)
+    throw new Error(`orangu could not project any session:\n${est.skipped.map((s) => `  ${s.selector}: ${s.reason}`).join('\n')}`)
   }
 
   const confirmationReceipt: ConfirmationReceiptResult | undefined =
@@ -206,7 +206,7 @@ function printEstimate(est: Estimate, label: string): void {
     w(`  under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate, small enough to read`)
   }
   if (est.skipped && est.skipped.length > 0) {
-    w(`  ⚠ ${est.skipped.length} session${est.skipped.length === 1 ? '' : 's'} could not be projected and ${est.skipped.length === 1 ? 'is' : 'are'} not counted above:`)
+    w(`  ⚠ ${est.skipped.length} session${est.skipped.length === 1 ? '' : 's'} could not be projected. The count above does not include ${est.skipped.length === 1 ? 'it' : 'them'}:`)
     for (const s of est.skipped) w(`      ${s.selector}: ${s.reason}`)
   }
   w('')

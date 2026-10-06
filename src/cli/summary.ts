@@ -88,7 +88,7 @@ export function nextStepLines(caps: Caps, step: NextStep): string[] {
   if (step.storeNote) {
     // the reason is cut, never the promise that the long form follows
     const head = 'unavailable: '
-    const tail = '; long form follows'
+    const tail = ' (full command below)'
     const reason = truncate(step.storeNote, valueBudget(caps) - head.length - tail.length, caps)
     lines.push(row(caps, 'store', head + reason + tail, { style: 'warn', raw: true }))
   }
@@ -166,11 +166,11 @@ export function analysisBlock(caps: Caps, a: Analysis, title: string): string[] 
   lines.push(row(caps, 'context', `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? ' of ' + fmtTokens(a.context.contextWindow) : ''}${sep}${plural(s.compactions, 'compaction')}`))
   lines.push('', paint(caps, 'bold', INDENT + 'findings'))
   const bad = a.parse.badLines
-  if (!a.insights.length) lines.push(bad ? paint(caps, 'warn', `    no findings; ${plural(bad, 'unparseable line')} skipped`) : paint(caps, 'good', '    clean: no findings'))
+  if (!a.insights.length) lines.push(bad ? paint(caps, 'warn', `    no findings, but orangu skipped ${plural(bad, 'unparseable line')}`) : paint(caps, 'good', '    clean: no findings'))
   for (const ins of a.insights.slice(0, 6)) lines.push(findingRow(caps, ins))
   lines.push('', paint(caps, 'dim', fit(caps, `${INDENT}run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report`)))
   // a transcript that did not parse is not a clean session: say what was skipped
-  if (bad && a.insights.length) lines.push(paint(caps, 'warn', fit(caps, `${INDENT}warning: ${plural(bad, 'unparseable line')} skipped`)))
+  if (bad && a.insights.length) lines.push(paint(caps, 'warn', fit(caps, `${INDENT}warning: orangu skipped ${plural(bad, 'unparseable line')}`)))
   if (!a.parse.reconciliation.ok) lines.push(paint(caps, 'warn', fit(caps, `${INDENT}warning: token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%`)))
   return lines
 }
@@ -198,7 +198,7 @@ export function listRows(caps: Caps, refs: SessionRef[], o: { total: number; glo
     const project = truncate(basename(s.projectSlug), Math.max(8, w - displayWidth(lead)), caps)
     lines.push(`${INDENT}${paint(caps, 'accent', s.sessionId.slice(0, 8))}  ${paint(caps, 'dim', when)}  ${size}  ${paint(caps, 'dim', agents)}  ${project}`)
   }
-  if (!o.total) lines.push(paint(caps, 'dim', fit(caps, `${INDENT}No sessions found. Is Claude Code installed?`)), paint(caps, 'dim', fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)))
+  if (!o.total) lines.push(paint(caps, 'dim', fit(caps, `${INDENT}orangu found no sessions. Is Claude Code installed?`)), paint(caps, 'dim', fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)))
   else {
     const sep = glyphs(caps).sep
     lines.push('')

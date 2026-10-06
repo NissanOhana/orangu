@@ -156,7 +156,8 @@ function printRetention(r: HarnessReport, line: (l: string, v: string) => void, 
   // `${n}-day window` is an attributive compound, not a count, so it does not take the plural helper
   line('retention', `${t.effectiveDays}-day window · ${plural(t.sweepable.sessions, 'session')} (${sizeLabel(t.sweepable.bytes)}) in reach of the sweep${oldest}`)
   const dim = (s: string) => w(paint(out, 'dim', '    ' + s))
-  dim("sizes count primary transcripts only; each session's subagent and tool-result files are swept with it")
+  dim('sizes count primary transcripts only')
+  dim('the sweep also removes the subagent and tool-result files of each session')
   // Three states, because `isDefault` means "no USABLE value", not "no value": a rejected setting is set.
   if (t.source) dim(`set by ${t.source.file} (${SCOPE_LABEL[t.source.scope]})`)
   else if (t.invalidConfigured) dim(`no settings file set a usable cleanupPeriodDays, so Claude Code's default of ${RETENTION_DEFAULT_DAYS} days applies`)
@@ -203,7 +204,7 @@ function printHarness(r: HarnessReport): void {
   // designed empty state: never a blank report
   const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0
   if (nothing) {
-    w(`  no harness config found under ${r.scope.roots.join(', ')}. Nothing to cross-reference`)
+    w(`  orangu found no harness config under ${r.scope.roots.join(', ')}. It found nothing to compare.`)
     w(paint(out, 'dim', `\n  looked for: settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md\n`))
     return
   }
@@ -309,8 +310,8 @@ function printHarness(r: HarnessReport): void {
   if (x.injectedListings.length) {
     w()
     w(paint(out, 'bold', '  injected listings (recurring context weight, ranked by tokens per session)'))
-    w(paint(out, 'dim', "    per session counts each session's main transcript that carried the listing;"))
-    w(paint(out, 'dim', '    the subagent line is summed across the sessions that had subagents'))
+    w(paint(out, 'dim', '    per session counts the primary transcript of each session that carried the'))
+    w(paint(out, 'dim', '    listing. The subagent line is a sum over the sessions that had subagents.'))
     for (const l of printedListings(x.injectedListings)) {
       w(`    ${l.type.padEnd(22)} ≈${n(l.approxTokensPerMainSession).padStart(8)} tokens/session`)
       w(paint(out, 'dim', `      ${plural(l.main.injections, 'injection')} in ${plural(l.main.sessions, 'session')} · ≈${n(l.approxTokensPerInjection)} per injection anywhere in the tree`))

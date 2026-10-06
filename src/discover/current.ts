@@ -131,14 +131,14 @@ async function resolveNamed(id: string, opts: DiscoverOptions, via: 'env' | 'pid
   const ref = await resolveSession(id, opts)
   if (ref) return { ref, via }
   throw new Error(
-    `current: session ${id.slice(0, 8)} has no transcript yet (Claude Code writes it asynchronously); try again in a moment, or ${ALTERNATIVES}`,
+    `current: session ${id.slice(0, 8)} has no transcript yet. Claude Code writes it asynchronously. Try again in a moment, or ${ALTERNATIVES}.`,
   )
 }
 
 export async function resolveCurrentSession(opts: DiscoverOptions, env: Env = process.env, deps: CurrentDeps = {}): Promise<CurrentSession> {
   const envId = env['CLAUDE_CODE_SESSION_ID']?.trim()
   if (envId) {
-    if (!SESSION_ID_RE.test(envId)) throw new Error(`current: CLAUDE_CODE_SESSION_ID is not a session id; ${ALTERNATIVES}`)
+    if (!SESSION_ID_RE.test(envId)) throw new Error(`current: CLAUDE_CODE_SESSION_ID is not a session id. Instead, ${ALTERNATIVES}.`)
     return resolveNamed(envId, opts, 'env')
   }
   const pid = Number(env['CLAUDE_PID'])
@@ -151,8 +151,8 @@ export async function resolveCurrentSession(opts: DiscoverOptions, env: Env = pr
   if (env['CLAUDECODE']) {
     const cwd = env['CLAUDE_PROJECT_DIR']?.trim() || (deps.cwd ?? (() => process.cwd()))()
     const ref = await findLatestSession({ ...opts, cwd })
-    if (!ref) throw new Error(`current: no session for ${cwd} yet; ${ALTERNATIVES}`)
+    if (!ref) throw new Error(`current: orangu found no session for ${cwd} yet. Instead, ${ALTERNATIVES}.`)
     return { ref, via: 'cwd', note: `current: guessed ${ref.sessionId.slice(0, 8)} from cwd (no session id in the environment)` }
   }
-  throw new Error(`current: not inside a Claude Code session; ${ALTERNATIVES}`)
+  throw new Error(`current: orangu is not inside a Claude Code session. Instead, ${ALTERNATIVES}.`)
 }

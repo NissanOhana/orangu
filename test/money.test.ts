@@ -63,7 +63,7 @@ describe('money guard: the executable text of everything we ship', () => {
 describe('money guard: the compatibility exception', () => {
   it('the retired --max-cost migration message is still present and still the only exception', () => {
     const main = read('src/cli/main.ts')
-    expect(main, 'a removed gate flag must still name itself').toContain('--max-cost was removed; use --max-tokens <n>')
+    expect(main, 'a removed gate flag must still name itself').toContain('--max-cost was removed. Use --max-tokens <n>.')
     // everything else in that file must be clean once the literal is removed
     expect(moneyHits(stripRetiredFlagLiterals(stripComments(main)))).toEqual([])
   })

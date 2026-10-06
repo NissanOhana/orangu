@@ -60,7 +60,7 @@ async function resolveEvidenceSession(selector: string, flags: Record<string, st
   const options = await selectorOptions(flags)
   if (selector === 'latest') {
     const latest = await findLatestSession(options)
-    if (!latest) throw new Error('No sessions found. Is Claude Code installed? Try: orangu list')
+    if (!latest) throw new Error('orangu found no sessions. Is Claude Code installed? Try: orangu list')
     return latest
   }
   if (selector === 'current') {
@@ -71,7 +71,7 @@ async function resolveEvidenceSession(selector: string, flags: Record<string, st
   const resolved = await resolveSession(selector, options)
   if (resolved) return resolved
   const candidates = await candidatesForPrefix(selector, options)
-  if (candidates.length > 1) throw new Error(`Ambiguous session "${selector}". ${candidates.length} matches`)
+  if (candidates.length > 1) throw new Error(`"${selector}" matches ${candidates.length} sessions`)
   throw new Error(`No session matches "${selector}". Try: orangu list`)
 }
 
@@ -98,8 +98,8 @@ export async function cmdEvidence(positionals: string[], flags: Record<string, s
   if (positionals.length !== 1) {
     throw new Error('usage: orangu evidence <session|latest|current|path.jsonl|analysis.json> [--scope repo|global] [--limit <n>] [--estimate] [--include-text]')
   }
-  if (flagBool(flags, 'no-redact')) throw new Error('evidence output is always redacted; --no-redact is not supported')
-  if (flags['depth'] !== undefined) throw new Error('orangu evidence has one canonical bounded projection; --depth is not supported')
+  if (flagBool(flags, 'no-redact')) throw new Error('evidence output is always redacted. orangu evidence does not accept --no-redact.')
+  if (flags['depth'] !== undefined) throw new Error('orangu evidence has one canonical bounded projection. It does not accept --depth.')
   const input = positionals[0]
   if (input === undefined) throw new Error('evidence input is required')
   const options: ProjectEvidenceOptions = { limit: requestedLimit(flags), scope: aggregateScope(flags) }

@@ -147,7 +147,8 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     const { inv, analyses, agg } = await fixture()
     const r = buildHarnessReport(inv, analyses, agg, opts())
     expect(r.crosswalk.counts.mcpServers.undeclared + r.crosswalk.counts.skills.undeclared).toBeGreaterThan(0)
-    expect(r.notes).toContain('managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console; orangu reads only the managed files on disk, so a policy delivered that way is not in this inventory')
+    expect(r.notes.some((n) => /^\d+ rows? (?:is|are) marked undeclared\. The sessions used (?:it|them), but the config that orangu read does not declare (?:it|them)\. The cause is a source outside this scope, or drift$/.test(n))).toBe(true)
+    expect(r.notes).toContain('managed settings can also arrive by MDM, a macOS configuration profile, or the claude.ai console. This inventory does not include a policy that arrives that way, because orangu reads only the managed files on disk')
     const withManaged = buildHarnessReport(
       { ...inv, settings: [...inv.settings, { scope: 'managed', file: '/Library/Application Support/ClaudeCode/managed-settings.json', keys: [], permissions: { allow: 0, deny: 0, ask: 0 }, hooks: [], env: { count: 0, names: [] }, statusLine: false, enabledPlugins: [] }] },
       analyses,
@@ -162,7 +163,7 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     delete analyses[0]!.parse.primaryAttachmentTypes
     delete analyses[0]!.parse.primaryAttachmentBytes
     const r = buildHarnessReport(inv, analyses, agg, opts())
-    expect(r.notes).toContain('1 session was read from a cache written by an older orangu that did not separate the main transcript from its subagent files, so it is left out of the injected listings. Re-run with --no-cache to rebuild it')
+    expect(r.notes).toContain('1 session was read from a cache written by an older orangu. That version did not separate the main transcript from its subagent files, so the injected listings leave it out. Re-run with --no-cache to rebuild it')
     const fresh = buildHarnessReport(inv, (await fixture()).analyses, agg, opts())
     expect(fresh.notes.some((n) => n.includes('older orangu'))).toBe(false)
   })
@@ -181,7 +182,7 @@ describe('buildHarnessReport: notes instead of throwing', () => {
       allowManagedHooksOnly: true,
     })
     const r = buildHarnessReport(inv, analyses, agg, opts())
-    expect(r.notes).toContain('managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run; only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used')
+    expect(r.notes).toContain('managed settings set allowManagedHooksOnly, so hook commands from user, project, local and plugin settings do not run. Only managed hooks, and hooks from plugins that managed enabledPlugins force-enables, can be used')
     const plain = buildHarnessReport({ ...inv, settings: inv.settings.filter((s) => s.scope !== 'managed') }, analyses, agg, opts())
     expect(plain.notes.some((n) => n.includes('allowManagedHooksOnly'))).toBe(false)
   })
@@ -190,7 +191,7 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     const { inv, analyses, agg } = await fixture()
     const r = buildHarnessReport(inv, analyses, agg, opts())
     expect(r.inventory.usageCounters).toBeUndefined()
-    expect(r.notes.some((n) => n.includes('.claude.json'))).toBe(true)
+    expect(r.notes).toContain('orangu did not read ~/.claude.json, so the report omits the client-side usage counters. orangu classifies declared vs used from session evidence only')
   })
 
   it('notes sessions that could not be analyzed rather than failing the run', async () => {
@@ -211,7 +212,7 @@ describe('buildHarnessReport: notes instead of throwing', () => {
     const home = await mkdtemp(join(tmpdir(), 'orangu-hr-empty-'))
     const inv = await collectInventory({ cwd: home, roots: [], home })
     const r = buildHarnessReport(inv, [], aggregate([], 'test', 0), opts())
-    expect(r.notes.some((n) => n.includes('no harness config'))).toBe(true)
+    expect(r.notes).toContain('orangu found no harness config under the scanned roots. It found nothing to compare')
     expect(r.scope.sessionsScanned).toBe(0)
   })
 })

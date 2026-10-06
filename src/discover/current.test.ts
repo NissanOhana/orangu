@@ -32,13 +32,13 @@ describe('resolveCurrentSession', () => {
   it('step 1: a set id without a transcript is a precise error, never a different session', async () => {
     const h = await home()
     await expect(resolveCurrentSession({ configDir: h.configDir }, { CLAUDE_CODE_SESSION_ID: ABSENT_ID, CLAUDECODE: '1' })).rejects.toThrow(
-      /current: session 99999999 has no transcript yet/,
+      /^current: session 99999999 has no transcript yet\. Claude Code writes it asynchronously\. Try again in a moment, or use latest, an id, or orangu pick\.$/,
     )
   })
   it('step 1: a malformed id is an error, not a fall-through', async () => {
     const h = await home()
     await expect(resolveCurrentSession({ configDir: h.configDir }, { CLAUDE_CODE_SESSION_ID: 'latest', CLAUDECODE: '1' })).rejects.toThrow(
-      /CLAUDE_CODE_SESSION_ID is not a session id/,
+      /^current: CLAUDE_CODE_SESSION_ID is not a session id\. Instead, use latest, an id, or orangu pick\.$/,
     )
   })
   it('step 2: CLAUDE_PID reads <configDir>/sessions/<pid>.json', async () => {
@@ -79,11 +79,11 @@ describe('resolveCurrentSession', () => {
   })
   it('step 3: no session for the cwd is an error naming the cwd', async () => {
     const h = await home()
-    await expect(resolveCurrentSession({ configDir: h.configDir }, { CLAUDECODE: '1' }, { cwd: () => '/nowhere' })).rejects.toThrow(/no session for \/nowhere yet/)
+    await expect(resolveCurrentSession({ configDir: h.configDir }, { CLAUDECODE: '1' }, { cwd: () => '/nowhere' })).rejects.toThrow(/^current: orangu found no session for \/nowhere yet\. Instead, use latest, an id, or orangu pick\.$/)
   })
   it('step 4: outside Claude Code the error names the alternatives', async () => {
     const h = await home()
-    await expect(resolveCurrentSession({ configDir: h.configDir }, {})).rejects.toThrow(/not inside a Claude Code session; use latest, an id, or orangu pick/)
+    await expect(resolveCurrentSession({ configDir: h.configDir }, {})).rejects.toThrow(/^current: orangu is not inside a Claude Code session\. Instead, use latest, an id, or orangu pick\.$/)
   })
   it('never returns an alias: the ref is a concrete session', async () => {
     const h = await home()
