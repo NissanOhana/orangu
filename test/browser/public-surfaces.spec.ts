@@ -50,6 +50,20 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   expect(report.document, JSON.stringify(report)).toBeLessThanOrEqual(report.viewport + 1)
 }
 
+/** WCAG contrast ratio between an element's text colour and the page background, as painted. */
+async function contrastOnPage(page: Page, selector: string): Promise<number> {
+  return page.evaluate((sel) => {
+    const rgb = (value: string) => (value.match(/\d+(?:\.\d+)?/g) ?? []).slice(0, 3).map(Number)
+    const luminance = ([r, g, b]: number[]) => {
+      const lin = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 }
+      return 0.2126 * lin(r!) + 0.7152 * lin(g!) + 0.0722 * lin(b!)
+    }
+    const text = luminance(rgb(getComputedStyle(document.querySelector(sel)!).color))
+    const ground = luminance(rgb(getComputedStyle(document.body).backgroundColor))
+    return (Math.max(text, ground) + 0.05) / (Math.min(text, ground) + 0.05)
+  }, selector)
+}
+
 async function rasterBrandSource(page: Page): Promise<string> {
   const brand = page.locator('.brand img.logo').first()
   await expect(brand).toBeVisible()
@@ -87,6 +101,9 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await expect(page.getByRole('button', { name: /Choose a report/ }).first()).toBeVisible()
   await expect(page.locator('.hero .term pre')).toContainText('$ npx orangu\nChoose a report')
   await expect(page.locator('.hero .term-wrap .fine')).toHaveText('To open only the latest session, run npx orangu report.')
+  // The second line is the only place in the hero that names the latest-session command, so it is
+  // meaningful text: 13 px must reach WCAG AA (4.5:1) against the page in the theme being painted.
+  expect(await contrastOnPage(page, '.hero .term-wrap .fine')).toBeGreaterThanOrEqual(4.5)
   await expect(page.getByRole('link', { name: /See the observe-to-proposal sample/ })).toBeVisible()
   const sampleLinks = page.locator('a[href="sample.html"]')
   await expect(sampleLinks).toHaveCount(2)

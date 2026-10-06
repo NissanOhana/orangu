@@ -9,7 +9,7 @@
 
 Concretely, you can:
 
-- `npx orangu` : opens a menu in the terminal. Choose this repository, all sessions, or one session.
+- `npx orangu` : opens a menu in the terminal. Choose this repository, all sessions, or one session. In a pipe or in CI, it prints a short summary of the latest session.
 - `npx orangu report` : builds and opens a self-contained HTML report for the latest session. `orangu report <id>` opens another session, and `orangu report current` opens the current Claude Code session.
 - `npx orangu serve` : opens a live viewer on loopback (127.0.0.1) over every local session.
 - `npx orangu repo` / `npx orangu global` : aggregates every session of one repository, or of the whole machine.
@@ -18,7 +18,7 @@ Concretely, you can:
 - `npx orangu pick` : lists the sessions, the running ones first, and opens the report of the one you choose.
 - `npx orangu list` / `watch` : list the sessions, or tail a live session.
 - `npx orangu evidence` / `estimate` : give bounded evidence to skills, or size what an LLM would read.
-- `npx orangu suggest` / `feedback` : keep the suggestion records, or open a localhost feedback form.
+- `npx orangu suggest` / `feedback` : read and write the suggestion records in `~/.orangu`, or open a localhost feedback form.
 - In Claude Code, after `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`: `/orangu:analyze`, `/orangu:improve latest`, `/orangu:apply <sg_id>`, `/orangu:harness`, `/orangu:feedback`.
 
 Facts an LLM should not get wrong:
@@ -45,7 +45,7 @@ Facts an LLM should not get wrong:
 ## Getting started
 
 - orangu needs Node.js 20 or newer. It has zero runtime dependencies.
-- `npx orangu` opens a menu: this repository, all sessions, or one session. `npx orangu report` opens the latest local session. `npx orangu serve` follows all of them live.
+- `npx orangu` opens a menu: this repository, all sessions, or one session. In a pipe or in CI, it prints a short summary of the latest session. `npx orangu report` opens the latest local session. `npx orangu serve` follows all of them live.
 - Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`.
 - [Sample report](https://nissanohana.github.io/orangu/sample.html): a synthetic, deterministic report you can open without installing anything.
 - [Repository sample](https://nissanohana.github.io/orangu/sample-repo.html): the same synthetic corpus aggregated across sessions, as `npx orangu repo --html` writes it.

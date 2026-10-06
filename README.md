@@ -30,7 +30,7 @@ ccusage counts your token usage. orangu tells you what to change.
 **Read-only.** orangu reads the session files already on your disk and writes one HTML file. It needs no SDK, proxy, account, instrumentation, upload, or telemetry. It can analyze your whole history from the minute you install it, not only new sessions.
 
 ```bash
-npx orangu                 # orange terminal dashboard -> repo, global, or open session reports
+npx orangu                 # report dashboard -> repo, global, or one session
 npx orangu report          # latest session -> self-contained HTML report, opened in your browser
 npx orangu pick            # choose a session (running ones first), Enter opens its report
 npx orangu report current  # the session Claude Code is running you in; or -s <id> for any
@@ -58,7 +58,7 @@ orangu needs Node.js 20 or newer and no runtime dependency. The [usage guide](do
 
 Each proposal has one of nine change classes ([data contracts](docs/DATA-CONTRACTS.md)). They are instruction files, scripts and CLIs, hooks, skills to create, skills to discover, subagents and agents, MCP servers, plugins, and workflow and configuration.
 
-You apply a session or repo-wide change on request. orangu then checks it on later sessions from the same workspace. The change counts as verified only when those sessions beat the sessions before it beyond chance. `orangu suggest --effect <id>` shows the comparison.
+When you ask, `/orangu:apply` applies a session or repo-wide change. orangu then checks it on later sessions from the same workspace. The change counts as verified only when those sessions beat the sessions before it beyond chance. `orangu suggest --effect <id>` shows the comparison.
 
 Whole-harness (global) changes stay review-only. A proposal is not an application, and a later comparison is not causal proof. The full boundary is in [determinism and skill authority](docs/DETERMINISM.md).
 
@@ -87,7 +87,7 @@ orangu is not a proxy, an SDK, a hook you install before the session, or a model
 
 - **No model in the measurement path.** Counting, reconciling, and ranking are plain code. Skills only interpret the result.
 - **Zero network from reports.** Every report ships `default-src 'none'` and makes no request. `serve` binds to `127.0.0.1` and places every route behind a fresh process capability in its launched URL.
-- **Redacted by default.** orangu scrubs secrets and omits prompt text unless you ask with `--include-text`.
+- **Redacted by default.** orangu scrubs secrets. It omits prompt text unless you ask with `--include-text`.
 - **Same transcript in, byte-identical analysis out.** The analyzer uses no clock, no randomness, and no network.
 - **Components, never a composite score.** Quality, time, and tokens stay separate. orangu never ranks people.
 - **Tokens only.** orangu counts input, cache-read, cache-write, and output tokens. It never converts them into another unit.

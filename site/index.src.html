@@ -110,7 +110,7 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .term{background:var(--cmd);color:var(--cmd-ink);border:1px solid var(--border2);border-radius:12px;padding:18px 22px;font-family:var(--mono);font-size:14px;line-height:1.75;overflow-x:auto}
 .term pre{margin:0;font:inherit;white-space:pre}
 .term .p,.term .dot{color:var(--accent)}
-.term-wrap .fine{margin-top:10px}
+.term-wrap .fine{margin-top:10px;color:var(--ink2)}
 @media (max-width:640px){.term{font-size:12.5px;padding:14px 16px}}
 
 /* app demo: an interactive report window for the current observe-to-proposal flow */
@@ -345,7 +345,7 @@ Choose a report
     <p class="sec-lead">A session explains what happened. Repo and global views show which patterns deserve a change to the way future work runs.</p>
     <div class="grid g300">
       <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a session.</div></div>
-      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result">You apply a <code>repo</code> change explicitly, and orangu verifies it on later sessions. A <code>global</code> change stays a proposal.</div></div>
+      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result">You apply a <code>repo</code> change explicitly, and orangu checks it on later sessions. A <code>global</code> change stays a proposal.</div></div>
     </div>
   </div>
 </section>
@@ -376,7 +376,7 @@ Choose a report
               <div class="demo-kpi"><em>Connect</em><b>Parent + subagents</b><span>one ordered session timeline</span></div>
               <div class="demo-kpi"><em>Improve</em><b>Review proposals</b><span>verify changes on later sessions</span></div>
             </div>
-            <div class="demo-line">The session scope diagnoses one session. The repo and global scopes find recurring patterns that need a larger change to the harness.</div>
+            <div class="demo-line">The session scope diagnoses one session. The repo and global scopes find recurring patterns worth a larger change to the harness.</div>
           </div>
           <div class="demo-view" id="demo-panel-timeline" data-demo-view="timeline" role="tabpanel" aria-labelledby="demo-tab-timeline" hidden>
             <div class="demo-view-head"><div><em>Tool calls in order</em><b>Follow the parent and delegated work step by step.</b></div><span class="demo-status">local</span></div>
@@ -404,9 +404,9 @@ Choose a report
             <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if failed test runs dropped beyond chance and tool errors did not rise.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report copies this command.">Claude apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if failed test runs dropped beyond chance and tool errors did not rise.</div><div class="demo-kick"><span class="handled">handled by orangu:improve</span><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report only copies this command.">Claude apply</button></div></div>
             </div>
-            <p class="demo-note">Local code measures and matches. An optional skill writes the draft. The browser only copies a command. A verified session comparison means that its reviewed metrics passed on the selected later evidence. It is not a causal or overall-quality claim.</p>
+            <p class="demo-note">Local code measures and matches. An optional skill writes the proposal. The browser only copies a command. A verified session comparison means that its reviewed metrics passed on the selected later evidence. It is not a causal or overall-quality claim.</p>
           </div>
         </div>
       </div>

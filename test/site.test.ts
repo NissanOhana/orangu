@@ -140,6 +140,8 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(lines[1]).toBe('Choose a report')
     const wrap = hero.match(/<div class="term-wrap">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? ''
     expect(wrap).toContain('<p class="fine">To open only the latest session, run <code>npx orangu report</code>.</p>')
+    // This line carries meaning, so it uses --ink2 (AA in both themes), not the muted --ink3 of .fine.
+    expect(src).toContain('.term-wrap .fine{margin-top:10px;color:var(--ink2)}')
     expect(htmlText(src)).not.toContain('Inspect a session')
   })
 
@@ -657,7 +659,10 @@ describe('site/index.src.html (authored landing source)', () => {
   it('states the conservative lifecycle without broadening repo or global authority', () => {
     const text = htmlText(src)
     expect(text).toContain('Session: proposed -> applied -> verified · Repo: proposed -> applied -> verified · Global: proposed')
-    expect(text).toContain('You apply a repo change explicitly, and orangu verifies it on later sessions. A global change stays a proposal.')
+    // "checks", not "verifies": verified is a status that a change reaches only when its later sessions
+    // beat the earlier ones beyond chance, so an applied repo change is not promised that status.
+    expect(text).toContain('You apply a repo change explicitly, and orangu checks it on later sessions. A global change stays a proposal.')
+    expect(text).not.toMatch(/\borangu verifies it\b/)
     expect(text).toContain('The session and repo scopes can propose, apply, and verify. The global scope stays proposal-only.')
     expect(text).toContain('later verification beyond chance')
     expect(text, 'no claim that one later session verifies a change').not.toMatch(/\ba later session\b/i)
@@ -856,6 +861,9 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     const lead = started.split('\n').find((line) => line.includes('npx orangu')) ?? ''
     expect(lead).toMatch(/^- `npx orangu` /)
     expect(lead.indexOf('`npx orangu`')).toBeLessThan(lead.indexOf('`npx orangu report`'))
+    // llms.txt is read by agents, whose shell is not a TTY: there the bare command prints the
+    // latest-session brief instead of the menu (src/cli/commands/pick.ts interactivePrecondition).
+    for (const line of [commands[0]!, lead]) expect(line).toContain('In a pipe or in CI, it prints a short summary of the latest session.')
   })
 
   it('llms-full.txt concatenates README, USAGE, and DETERMINISM verbatim with absolute links, under the 40 KB ratchet', () => {
