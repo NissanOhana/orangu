@@ -14,6 +14,21 @@ function find(a: Analysis, ruleId: string) {
 }
 
 describe('core insight rules', () => {
+  describe('tool-errors', () => {
+    it('writes one tool error and one call in the singular', async () => {
+      const b = new SessionBuilder()
+      b.userPrompt('run it')
+      b.toolCall('Bash', { command: 'make' }, 'make: *** No rule to make target', { isError: true })
+      const one = find(await analyzeOf(b), 'tool-errors')!
+      expect(one.title).toBe('1 tool error (100% of 1 call)')
+      const c = new SessionBuilder()
+      c.userPrompt('run it')
+      c.toolCall('Bash', { command: 'make' }, 'make: *** No rule to make target', { isError: true })
+      c.toolCall('Bash', { command: 'make all' }, 'make: *** No rule to make target', { isError: true })
+      expect(find(await analyzeOf(c), 'tool-errors')!.title).toBe('2 tool errors (100% of 2 calls)')
+    })
+  })
+
   describe('unverified-edits', () => {
     it('fires medium when files were edited but no test/build ran', async () => {
       const b = new SessionBuilder()

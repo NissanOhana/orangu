@@ -91,7 +91,7 @@
       "tool-errors-1",
       "agent-fanout-2"
     ],
-    "narrative": "In “Fix foo test”, you made 2 requests over 2m 13s. The agent was busy for 13s of that. It made 6 tool calls (1 failed), ran 1 subagent, and processed 179.7k tokens. Orangu found these outcomes: 1 file changed, 2 test runs (1 failed). Look at these first: 1 tool errors (16.7% of 6 calls) · 1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel.",
+    "narrative": "In “Fix foo test”, you made 2 requests over 2m 13s. The agent was busy for 13s of that. It made 6 tool calls (1 failed), ran 1 subagent, and processed 179.7k tokens. Orangu found these outcomes: 1 file changed, 2 test runs (1 failed). Look at these first: 1 tool error (16.7% of 6 calls) · 1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel.",
     "ending": "clean"
   },
   "turns": [
@@ -1038,7 +1038,7 @@
       "ruleId": "tool-errors",
       "severity": "medium",
       "axis": "quality",
-      "title": "1 tool errors (16.7% of 6 calls)",
+      "title": "1 tool error (16.7% of 6 calls)",
       "detail": "most in Bash",
       "recommendation": "Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md. A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.",
       "evidence": {

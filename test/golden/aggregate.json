@@ -185,7 +185,7 @@
     {
       "ruleId": "tool-errors",
       "title": "In one session: 2 tool errors (66.7% of 3 calls)",
-      "titlePattern": "N tool errors (N of N calls)",
+      "titlePattern": "N tool error (N of N calls)",
       "recommendation": "Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md. A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.",
       "sessions": 2,
       "totalSavingsTokens": 24,

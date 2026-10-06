@@ -133,7 +133,7 @@ const toolErrors: Rule = (ctx) => {
         ruleId: 'tool-errors',
         severity: rate >= 0.2 || (groups[0]?.count ?? 0) >= 6 ? 'high' : rate >= 0.1 || groups.length ? 'medium' : 'low',
         axis: 'quality',
-        title: `${errs.length} tool errors (${round(rate * 100, 1)}% of ${total} calls)${groups.length ? `, ${groups.length} recurring signature${groups.length > 1 ? 's' : ''}` : ''}`,
+        title: `${errs.length} tool error${errs.length > 1 ? 's' : ''} (${round(rate * 100, 1)}% of ${total} call${total > 1 ? 's' : ''})${groups.length ? `, ${groups.length} recurring signature${groups.length > 1 ? 's' : ''}` : ''}`,
         detail: groups.length ? groups.map((g) => `${g.name}: "${g.signature}" ×${g.count}`).join(' · ') : `most in ${errs[0]!.name}`,
         recommendation: 'Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md. A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.',
         evidence: { errorRate: round(rate, 4), groups },

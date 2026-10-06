@@ -25,7 +25,8 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *     recommendation, the summary narrative and two evidence notes), so a cached payload carries the old copy;
  *     the aggregate's new CrossFinding.recommendation reads that copy from the cached insights
  *   3 (2026-10-07): the summary narrative rewritten in Simplified Technical English ("you made", "including",
- *     "orangu found these outcomes", "Look at these first"), so a cached payload carries the old narrative
+ *     "Orangu found these outcomes", "Look at these first"), and "1 tool call" / "1 tool error" in the singular
+ *     (the narrative and the tool-errors title), so a cached payload carries the old copy
  */
 export const ANALYSIS_PAYLOAD_GENERATION = 3
 

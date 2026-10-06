@@ -102,9 +102,10 @@ const INSTRUCTION_WORDS = 20
  * signals and labels, the parse warnings, the event labels and block notes, and the tool-call summaries.
  * quality.ts, adapters/claude-code/tools.ts and every warn(), label and note in parse.ts are byte-identical to main.
  * 2026-10-07, generation 3: the narrative in STE (analyze.ts narrative()), and "1 tool call" in the singular. The
- * copy changed, so the generation moved.
+ * copy changed, so the generation moved. Re-recorded at 3 on the same unmerged branch: the tool-errors title says
+ * "1 tool error (100% of 1 call)" in the singular.
  */
-const COPY_FINGERPRINT = { generation: 3, sha256: 'ac5efbe27f72be92c0daa0feb17f4a8fa0512ddef57801c4ed63df4af6201c92' }
+const COPY_FINGERPRINT = { generation: 3, sha256: 'd0cc1f29c96a54443516e6b7b34569ba46fd06e4225584163a9dc8d3165c31c0' }
 /**
  * Born 2026-10-06 at its own count: 45 rule sites, plus one more text each for the two improvements that
  * pick between two fixed texts (time-budget, hidden-iterations). The count only goes up.
