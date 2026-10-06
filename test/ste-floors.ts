@@ -56,7 +56,10 @@ export const BELOW_TARGET: Readonly<Record<string, string>> = {}
 export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // S1: README, the landing, 404 and llms sources, the npm description, the sample page copy
   'README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
-  'site/index.src.html': { floor: 97, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 2 }, // measured 99 after the STE rewrite
+  // Z: floor 97 -> 98, findings 2 -> 1. Measured 100 (242 of 243) after the skill cards in STE ("actually" gone).
+  // The 1 finding is the plugin install card (:492): its sentences start with a code span, which the checker
+  // blanks, so it reads two sentences as one of 28 words.
+  'site/index.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 1 },
   'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite

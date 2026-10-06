@@ -705,6 +705,15 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(listed).toEqual(['improve', 'apply', 'analyze', 'harness', 'show-me', 'feedback'])
     expect(install).toContain('<div class="skill"><b>/orangu:show-me</b><div>Turn the evidence of one session, one repository or all sessions into a slide deck and a written report. Both are offline HTML files.</div></div>')
     expect(install).toContain('<code>/orangu:show-me</code> writes a slide deck and a written report.')
+    // the other five cards in STE: one instruction to a sentence, no telegram, no "actually", no long noun
+    // cluster. Every claim of the old card stays (scope words: exactly one, session or repo, never, review-only).
+    for (const card of [
+      '<b>/orangu:improve</b><div>Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. It never edits the target repository.</div>',
+      "<b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository. It runs the repository's own checks and records a receipt. Global proposals are review-only.</div>",
+      '<b>/orangu:analyze</b><div>Explain what happened in one session, finished or still running, from local deterministic evidence. Keep a report refreshed while a session runs.</div>',
+      '<b>/orangu:harness</b><div>Review what your harness declares against what your sessions used, in one repository or in every session on the machine. Then propose ranked changes.</div>',
+      '<b>/orangu:feedback</b><div>Send candid beta feedback about Orangu itself through a private localhost form. The form shows you the exact GitHub issue to review before you open it.</div>',
+    ]) expect(install).toContain(`<div class="skill">${card}</div>`)
     // six cards fill two rows of three on a wide screen; five columns would leave one card alone
     expect(src).toContain('@media (min-width:1000px){.skills{grid-template-columns:repeat(3,1fr)}}')
     for (const retired of ['/orangu:mega', '/orangu:watch', '/orangu:suggest']) expect(src).not.toContain(retired)
