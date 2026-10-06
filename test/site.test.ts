@@ -1057,4 +1057,30 @@ describe('docs/USAGE.md entry point', () => {
     // dashboard (src/cli/commands/pick.ts interactivePrecondition, src/cli/main.ts cmdBrief)
     expect(install).toContain('In a pipe or in CI, bare `npx orangu` prints a short summary of the latest session.')
   })
+
+  it('gives examples of the stripped text, not a full list, and says --include-text restores all of it', () => {
+    // the default strip also blanks commands, arguments, URLs, branches, team and agent names
+    // (src/redact/redact.ts TEXT_KEYS, PRIVATE_STRING_ARRAY_KEYS); --include-text turns the strip off, not the scrub
+    const shareable = usage.slice(usage.indexOf('## Shareable output'), usage.indexOf('## Supported inputs'))
+    expect(shareable).toContain('That text includes session titles, previews, tool-error text, and finding details built from commands.')
+    expect(shareable).toMatch(/`--include-text` keeps all of it[^.\n]*secrets[^.\n]*scrubbed/)
+  })
+})
+
+describe('docs/DETERMINISM.md workflow diagram', () => {
+  const doc = readFileSync(join(root, 'docs/DETERMINISM.md'), 'utf8')
+  const rows = (doc.slice(doc.indexOf('## The workflow')).match(/```text\n([\s\S]*?)```/)?.[1] ?? '').split('\n')
+
+  // The diagram is the picture of the deterministic/LLM line: the AI skill reads only the bounded output of
+  // orangu evidence, never the raw inputs. The box glyphs are single UTF-16 units, so string columns line up.
+  it('feeds orangu-improve from the bounded findings that orangu evidence emits', () => {
+    const node = rows.findIndex((row) => row.includes('orangu-improve'))
+    expect(node).toBeGreaterThan(0)
+    const at = rows[node]!.indexOf('orangu-improve')
+    let above = node - 1
+    expect(rows[above]?.[at]).toBe('▼')
+    while (above > 0 && ['│', '▼'].includes(rows[above]?.[at] ?? '')) above -= 1
+    expect(rows[above]?.slice(at)).toMatch(/^catalog matches \+ bounded findings$/)
+    expect(rows[above - 1]?.slice(at)).toMatch(/^orangu evidence$/)
+  })
 })
