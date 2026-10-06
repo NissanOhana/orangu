@@ -4,7 +4,7 @@ Read this only after you consult the deterministic catalog and the user explicit
 
 ## Nondisclosure boundary
 
-Evidence file paths, item ids, project context, and proposal content are local-only inputs. Online queries and opened URLs use generic feature and change-class terms only. Never send local prompts, paths, session or suggestion ids, or project/repository/customer names to a network service. The same rule covers evidence content, proposal text, code, and local error text. Never place them in a URL. Join generic research results to local evidence only after returning offline.
+Evidence file paths, item ids, project context, and proposal content are local-only inputs. Online queries and opened URLs use generic feature and change-class terms only. Never send local prompts, paths, session or suggestion ids, or project/repository/customer names to a network service. The same rule covers evidence content, proposal text, code, and local error text. For all of these values, never place them in a URL. Join generic research results to local evidence only after returning offline.
 
 ## Provenance rule
 
