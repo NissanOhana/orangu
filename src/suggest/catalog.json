@@ -10,7 +10,7 @@
       "tool": "pdftotext / pdfplumber",
       "url": null,
       "verifiedAt": "2026-08-23",
-      "note": "Extract PDF text with a CLI before it enters context: pdftotext for plain text, pdfplumber when tables matter (one default, not a menu, per the public docs)."
+      "note": "Extract PDF text with a CLI before it enters context. Use pdftotext for plain text, and pdfplumber when tables matter. This follows the public docs: one default, not a menu."
     },
     {
       "id": "cli-jq",
@@ -19,7 +19,7 @@
       "tool": "jq",
       "url": null,
       "verifiedAt": "2026-08-23",
-      "note": "Slice large JSON at the source (jq '.field', jq -r) instead of reading the whole file into context; same pipe-through guidance as the public docs (head/grep/jq)."
+      "note": "Slice large JSON at the source (jq '.field', jq -r). Do not read the whole file into context. The public docs give the same pipe-through guidance (head, grep, jq)."
     },
     {
       "id": "cli-ripgrep",
@@ -28,7 +28,7 @@
       "tool": "ripgrep (rg)",
       "url": null,
       "verifiedAt": "2026-08-23",
-      "note": "Repeated grep/find loops over a tree are what ripgrep is for: it is fast, gitignore-aware, and produces bounded text evidence that a later proposal can verify."
+      "note": "ripgrep is the tool for repeated grep or find loops over a tree. It is fast and gitignore-aware, and it produces bounded text evidence that a later proposal can verify."
     },
     {
       "id": "cli-ast-grep",
@@ -46,7 +46,7 @@
       "tool": "in-repo extraction script",
       "url": null,
       "verifiedAt": "2026-08-23",
-      "note": "Spreadsheet content should never be pasted into context: commit a small script that extracts the needed sheet/cells once and re-run it, so the session reads a short text result."
+      "note": "Never paste spreadsheet content into context. Commit a small script that extracts the needed sheet or cells once, and run it again when needed. Then the session reads a short text result."
     },
     {
       "id": "cache-tools-changed",
@@ -55,7 +55,7 @@
       "feature": "stable tool prefix (MCP pruning / deferred tools)",
       "url": "https://code.claude.com/docs/en/prompt-caching.md",
       "verifiedAt": "2026-08-23",
-      "note": "cache_miss_reason tools_changed: the tool-definition block heads the cached prefix, so an MCP server connecting, reconnecting, or loading tools mid-session re-writes the whole context into the cache instead of reading it back. Load MCP servers at session start and prune churn-prone ones; deferred MCP tools (the default) do not disturb the cached prefix."
+      "note": "cache_miss_reason tools_changed: the tool-definition block is the start of the cached prefix. When an MCP server connects, reconnects or loads tools mid-session, the next request writes the whole context into the cache again. It does not read it back. Load MCP servers at session start, and remove the ones that churn. Deferred MCP tools (the default) do not disturb the cached prefix."
     },
     {
       "id": "cache-system-changed",
@@ -91,7 +91,7 @@
       "tool": "committed script",
       "url": "https://code.claude.com/docs/en/skills.md",
       "verifiedAt": "2026-08-23",
-      "note": "A deterministic command sequence re-typed 4+ times belongs in a committed script (repo scripts/ or a skill's bundled script; bundled scripts execute without ever entering context, per the public docs). One script call replaces the whole repeated block."
+      "note": "A deterministic command sequence that you type 4 or more times belongs in a committed script. Use repo scripts/ or a bundled script of a skill. Per the public docs, bundled scripts run without ever entering context. One script call replaces the whole repeated block."
     },
     {
       "id": "parallel-sequential-reads",
@@ -100,7 +100,7 @@
       "feature": "parallel tool calls / subagent fan-out",
       "url": "https://code.claude.com/docs/en/agents.md",
       "verifiedAt": "2026-08-23",
-      "note": "Independent reads and searches can be issued as one parallel batch in a single message, or fanned out to subagents whose contexts are discarded; serial single-call turns pay a full model round-trip each."
+      "note": "You can send independent reads and searches as one parallel batch in a single message. You can also fan them out to subagents, whose contexts are discarded. Each serial turn with a single call takes a full model round-trip."
     },
     {
       "id": "trim-preamble",
@@ -109,7 +109,7 @@
       "feature": "CLAUDE.md trim",
       "url": "https://code.claude.com/docs/en/memory.md",
       "verifiedAt": "2026-08-23",
-      "note": "The baseline preamble (system prompt + tool definitions + CLAUDE.md + memory) is re-sent with every request for the whole session. Trim sections that never change an outcome; move rarely-needed procedure into skills that load on demand."
+      "note": "The baseline preamble (system prompt + tool definitions + CLAUDE.md + memory) is re-sent with every request for the whole session. Trim sections that never change an outcome. Move procedure that you rarely need into skills that load on demand."
     },
     {
       "id": "prune-mcp-servers",
@@ -118,7 +118,7 @@
       "feature": "MCP server pruning",
       "url": "https://code.claude.com/docs/en/mcp.md",
       "verifiedAt": "2026-08-23",
-      "note": "MCP servers whose tools are listed but never called still add their definition tokens to every main-thread request. Remove or scope idle servers; deferred tools stay out of the cached prefix until fetched."
+      "note": "MCP servers whose tools are listed but never called still add their definition tokens to every main-thread request. Remove or scope idle servers. Deferred tools stay out of the cached prefix until they are fetched."
     },
     {
       "id": "cache-warm-cadence",
@@ -127,7 +127,7 @@
       "feature": "prompt-cache TTL awareness (the cache cliff)",
       "url": "https://code.claude.com/docs/en/prompt-caching.md",
       "verifiedAt": "2026-08-23",
-      "note": "After a long idle gap, a large resumed context can require a fresh cache write. Batch related work while context is reusable, or start a focused session after a long break; verify the effect from the next run rather than assuming a saving."
+      "note": "After a long idle gap, a large resumed context can require a fresh cache write. Batch related work while context is reusable, or start a focused session after a long break. Verify the effect from the next session. Do not assume a saving."
     },
     {
       "id": "extract-binary-attachments",
@@ -145,7 +145,7 @@
       "skill": "skills.sh candidate discovery",
       "url": "https://skills.sh/",
       "verifiedAt": "2026-08-25",
-      "note": "For a recurring, broadly reusable capability, evaluate an existing skill before creating one. Propose a specific skills.sh or `npx skills find <query>` search for the user to run; compare source reputation, repository evidence, and install count, but never install or fetch from the deterministic catalog runtime. Every discovered skill remains a candidate until reviewed."
+      "note": "For a recurring, broadly reusable capability, evaluate an existing skill before you create one. Propose a specific skills.sh or `npx skills find <query>` search for the user to run. Compare source reputation, repository evidence, and install count. Never install or fetch from the deterministic catalog runtime. Every discovered skill remains a candidate until reviewed."
     },
     {
       "id": "package-related-extensions",

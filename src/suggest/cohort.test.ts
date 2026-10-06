@@ -273,7 +273,7 @@ describe('measureCohortEffect: preconditions', () => {
   it('refuses global scope, records that were never applied, and an unknown application time', async () => {
     const deps = fakeDeps(separated(3))
     await expect(measureCohortEffect(appliedRecord({ scope: 'global' }), [], deps)).rejects.toThrow(/global suggestions are review-only/)
-    await expect(measureCohortEffect(appliedRecord({ status: 'proposed', appliedAt: undefined }), [], deps)).rejects.toThrow(/has not been applied/)
+    await expect(measureCohortEffect(appliedRecord({ status: 'proposed', appliedAt: undefined }), [], deps)).rejects.toThrow(/^suggestion sg_[0-9a-f]{12} is not applied \(status proposed\)$/)
     await expect(measureCohortEffect(appliedRecord({ status: 'verified', appliedAt: undefined }), [], deps)).rejects.toThrow(/application time is unknown/)
   })
 })

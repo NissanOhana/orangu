@@ -474,7 +474,7 @@ describe('SuggestionStore', () => {
     await store.transition(global.record.id, 'proposed', { proposal: structuredProposal(global.record.id) })
     await expect(
       store.transition(global.record.id, 'applied', { application: applicationReceipt(global.record.id) }),
-    ).rejects.toThrow(/global suggestions cannot be applied.*repo- or session-scoped/)
+    ).rejects.toThrow(/global suggestions cannot be applied\. For a concrete change, create a repo or session suggestion instead\./)
 
     const repo = await store.upsertNew(finding({ scope: 'repo', cohortFingerprint: '2222222222222222' }), 'report')
     await store.transition(repo.record.id, 'kicked-off')
@@ -489,7 +489,7 @@ describe('SuggestionStore', () => {
     // A hand-written applied global line still cannot become verified.
     const globalApplied: SuggestionRecord = { ...(await store.get(global.record.id))!, status: 'applied', application: applicationReceipt(global.record.id), statusAt: 50 }
     appendFileSync(join(home, 'suggestions.jsonl'), `${JSON.stringify(globalApplied)}\n`)
-    await expect(store.transition(global.record.id, 'verified', cohortPatch(50))).rejects.toThrow(/global suggestions cannot be verified; they are review-only/)
+    await expect(store.transition(global.record.id, 'verified', cohortPatch(50))).rejects.toThrow(/global suggestions cannot be verified\. They are review-only\./)
   })
 
   it('accepts a workspace with a creation time and rejects a malformed one', async () => {

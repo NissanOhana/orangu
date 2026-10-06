@@ -10,7 +10,7 @@
       "feature": "output styles",
       "url": null,
       "verifiedAt": "2026-08-23",
-      "note": "An output style is part of the system prompt (cached in the prefix, survives compaction, per the public docs). A style that constrains verbosity addresses repeated ≥8k-token output bursts; output tokens are the ones the model has to generate one at a time."
+      "note": "An output style is part of the system prompt (cached in the prefix, survives compaction, per the public docs). A style that limits verbosity addresses repeated output bursts of 8k tokens or more. Output tokens are the ones that the model generates one at a time."
     },
     {
       "id": "feat-context-fork",
@@ -19,7 +19,7 @@
       "feature": "skill frontmatter context: fork",
       "url": "https://code.claude.com/docs/en/skills.md",
       "verifiedAt": "2026-08-23",
-      "note": "context: fork (+ agent, background) runs a skill in a subagent instead of the main thread; fork subagents inherit the conversation and reuse the prompt cache, so a heavy skill stops inflating the main context. Addresses a skill whose per-invocation token weight is a multiple of the median turn."
+      "note": "context: fork (+ agent, background) runs a skill in a subagent instead of the main thread. Fork subagents inherit the conversation and reuse the prompt cache, so a heavy skill no longer inflates the main context. This addresses a skill whose token weight per invocation is a multiple of the median turn."
     },
     {
       "id": "feat-effort-frontmatter",
@@ -28,7 +28,7 @@
       "feature": "effort frontmatter (low|medium|high|xhigh|max)",
       "url": "https://code.claude.com/docs/en/skills.md",
       "verifiedAt": "2026-08-23",
-      "note": "Skills, agents, and --effort accept an effort level; set it low for mechanical steps where thinking tokens are being spent on single-tool requests. Each effort level has its own cache for the same model, so set it per agent/skill rather than toggling mid-session."
+      "note": "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. Each effort level has its own cache for the same model. So set it per agent or skill, and do not toggle it mid-session."
     },
     {
       "id": "feat-background-agents",
@@ -37,7 +37,7 @@
       "feature": "run_in_background (Bash) / background agents",
       "url": "https://code.claude.com/docs/en/sub-agents.md",
       "verifiedAt": "2026-08-23",
-      "note": "Long-running commands can run detached (Bash run_in_background) and agents can carry background frontmatter, so a slow tool stops blocking the turn. Addresses tools with p95 over 30 s that the session waits on serially."
+      "note": "Long-running commands can run detached (Bash run_in_background) and agents can carry background frontmatter, so a slow tool stops blocking the turn. This addresses tools with p95 over 30 s that the session waits on serially."
     },
     {
       "id": "feat-workflows",
@@ -46,7 +46,7 @@
       "feature": "dynamic workflows",
       "url": "https://code.claude.com/docs/en/workflows.md",
       "verifiedAt": "2026-08-23",
-      "note": "Agent trees three levels deep are leaner to run and easier to reason about as a declared workflow: wf_ runs are first-class, with per-run artifacts stored under the session directory, instead of ad-hoc nested spawns."
+      "note": "As a declared workflow, an agent tree 3 levels deep is leaner to run and easier to reason about. The wf_ runs are first-class, and the artifacts of each run are stored under the session directory. Use a declared workflow instead of ad-hoc nested spawns."
     },
     {
       "id": "feat-skills-over-pasted-prompts",
@@ -55,7 +55,7 @@
       "feature": "skills (vs pasted prompts)",
       "url": "https://code.claude.com/docs/en/skills.md",
       "verifiedAt": "2026-08-23",
-      "note": "A procedure re-typed every session belongs in a skill: description-gated loading keeps it out of context until needed, bundled scripts execute without entering context at all, and invoked bodies survive compaction (capped 5k tokens each, per the public docs)."
+      "note": "A procedure that you type again in every session belongs in a skill. Its description gates loading, so the skill stays out of context until needed. Bundled scripts run without entering context at all. Invoked bodies survive compaction (capped at 5k tokens each, per the public docs)."
     },
     {
       "id": "feat-hooks-verification",
@@ -64,7 +64,7 @@
       "feature": "hooks (PostToolUse verification)",
       "url": "https://code.claude.com/docs/en/hooks.md",
       "verifiedAt": "2026-08-23",
-      "note": "A PostToolUse hook can run the project's test/build gate automatically after edits (hooks run as code, not context), addressing sessions that end with edited files and no test or build run."
+      "note": "A PostToolUse hook can run the test or build gate of the project automatically after edits. Hooks run as code, not as context. This addresses sessions that end with edited files and no test or build run."
     }
   ]
 }

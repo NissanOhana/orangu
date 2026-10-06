@@ -138,7 +138,7 @@ export function verifyConfirmationReceipt(o: {
     return invalid('receipt claims are invalid')
   }
   if (claims.issuedAt > o.now + CLOCK_SKEW_MS) return invalid('receipt was issued in the future')
-  if (claims.expiresAt < o.now) return invalid('receipt has expired')
+  if (claims.expiresAt < o.now) return invalid('receipt expired')
   if (claims.suggestionId !== o.record.id) return invalid('receipt suggestion does not match')
   if (claims.scope !== o.record.scope) return invalid('receipt scope does not match')
   if (claims.sessionsHash !== sessionsHash(o.record)) return invalid('receipt sessions do not match')

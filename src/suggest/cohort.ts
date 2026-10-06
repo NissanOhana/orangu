@@ -165,7 +165,7 @@ export async function measureCohortEffect(
 ): Promise<CohortEffect> {
   if (record.scope === 'global') throw new Error(`suggestion ${record.id}: global suggestions are review-only and cannot be verified`)
   if (record.status !== 'applied' && record.status !== 'verified') {
-    throw new Error(`suggestion ${record.id} has not been applied (status ${record.status})`)
+    throw new Error(`suggestion ${record.id} is not applied (status ${record.status})`)
   }
   const proposal = record.proposal
   const intents = proposal?.verificationChecks
@@ -293,7 +293,7 @@ export function nextStep(effect: Pick<CohortEffect, 'id' | 'status' | 'verdict' 
       if (!effect.laterComplete) return `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`
       return `the later cohort is complete (${effect.later.length >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX}` : `${effect.later.length} sessions, its byte budget is spent`}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal`
     case 'not-enough-sessions':
-      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)${effect.laterComplete ? '; the later cohort is complete, so this record cannot be verified' : ''}`
+      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)${effect.laterComplete ? '. The later cohort is complete, so this record cannot be verified' : ''}`
     case 'regressed':
       return 'a check moved the wrong way beyond chance: review the change, or reject the proposal'
     case 'no-directional-check':

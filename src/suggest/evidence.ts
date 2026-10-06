@@ -308,7 +308,7 @@ function validateAnalysis(value: Record<string, unknown>): ValidatedAnalysis {
   if (slim) {
     requireRecords(value, ['summary', 'tools', 'files', 'tokens', 'agents', 'context', 'quality', 'parse'], 'SlimAnalysis')
   } else {
-    if (value['slim'] !== undefined) throw new Error('Analysis.slim must be absent; use true for SlimAnalysis')
+    if (value['slim'] !== undefined) throw new Error('Analysis.slim must be absent. A SlimAnalysis sets it to true.')
     requireRecords(value, ['summary', 'tools', 'files', 'agents', 'skills', 'hooks', 'context', 'tokens', 'time', 'quality', 'parse'], 'Analysis')
     requireArrays(value, ['turns', 'events'], 'Analysis')
   }

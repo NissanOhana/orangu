@@ -537,7 +537,7 @@ function sameEvidence(a: unknown, b: unknown): boolean {
 function assertSafeFindingIdentity(finding: Finding): void {
   const values = [finding.ruleId, finding.insightId, ...finding.sessionIds].filter((value): value is string => typeof value === 'string')
   if (values.some((value) => redactValue(value, { scrub: true }) !== value)) {
-    throw new Error('suggestion identity contains sensitive material; redact the identifier before creating it')
+    throw new Error('suggestion identity contains sensitive material. Redact the identifier before you create the suggestion.')
   }
 }
 
@@ -723,7 +723,7 @@ function validateTransitionPatch(current: SuggestionRecord, to: SuggestionStatus
     if (patch.proposal.v === 1) assertStructuredProposal(patch.proposal, to)
   } else if (to === 'applied') {
     if (current.scope === 'global') {
-      throw lifecycleError(to, 'global suggestions cannot be applied; create a repo- or session-scoped suggestion for a concrete change instead')
+      throw lifecycleError(to, 'global suggestions cannot be applied. For a concrete change, create a repo or session suggestion instead.')
     }
     assertStructuredProposal(current.proposal, to)
     assertApplication(patch.application, to)
@@ -733,7 +733,7 @@ function validateTransitionPatch(current: SuggestionRecord, to: SuggestionStatus
       throw lifecycleError(to, 'application files must exactly match the reviewed proposal files')
     }
   } else if (to === 'verified') {
-    if (current.scope === 'global') throw lifecycleError(to, 'global suggestions cannot be verified; they are review-only')
+    if (current.scope === 'global') throw lifecycleError(to, 'global suggestions cannot be verified. They are review-only.')
     assertStructuredProposal(current.proposal, to)
     assertApplication(current.application, to)
     const receipt = patch.verificationReceipt

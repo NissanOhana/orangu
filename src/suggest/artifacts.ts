@@ -333,13 +333,13 @@ function verificationPairs(value: unknown, label: string): SuggestionVerificatio
 
 function verificationIntents(value: JsonObject, expectedChecks: SuggestionVerificationIntent[]): SuggestionVerificationIntent[] {
   if (value['before'] !== undefined || value['after'] !== undefined) {
-    throw artifactError('before and after must be omitted; Orangu computes metrics from resolved sessions')
+    throw artifactError('before and after must be omitted. Orangu computes the metrics from the resolved sessions.')
   }
   if (Array.isArray(value['checks'])) {
     value['checks'].forEach((raw, index) => {
       const item = object(raw, `checks[${index}]`)
       const selfAttested = ['ok', 'before', 'after', 'evidence'].find((field) => item[field] !== undefined)
-      if (selfAttested) throw artifactError(`checks[${index}] must omit ok, before, after, and evidence; Orangu computes them`)
+      if (selfAttested) throw artifactError(`checks[${index}] must omit ok, before, after, and evidence. Orangu computes them.`)
       optionalText(item['name'], `checks[${index}].name`, 300)
     })
   }
