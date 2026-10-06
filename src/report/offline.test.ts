@@ -125,7 +125,12 @@ describe('offline report', () => {
     // through the optional ServeUi.proposals seam, which only serve-ui.ts provides: a file report
     // embeds `suggestions: []`, so this bundle never rendered them. The cap above is left as it was;
     // the run that spends this room lowers it once its own growth is measured.
-    expect(CLIENT_JS_AGG.length).toBe(79822)
+    // 2026-10-06 report copy in STE: +194 B (79,822 -> 80,016), cap unchanged. Costed: the rewrite of
+    // the copy outside the improvement screens is +39 B (a named actor where the old copy had a
+    // fragment, a period where it had a semicolon, paid down by the Repo/Global hero, which lost its
+    // 7-item inline list); the Plain audience on the Repo/Global KPI strip and the Live screen is
+    // +155 B (plainLabel() and its call sites). 3,120 B of the cap stay free.
+    expect(CLIENT_JS_AGG.length).toBe(80016)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -207,6 +212,11 @@ describe('offline report', () => {
     // reaches the Suggest screen only through the optional Ctx.proposals seam (the Ctx.megaReview
     // pattern); only serve-ui.ts provides it, because a file report embeds `suggestions: []` and never
     // rendered either block. The cap is unchanged; the run that spends this room lowers it.
-    expect(CLIENT_JS.length).toBe(70400)
+    // 2026-10-06 report copy in STE: +243 B (70,400 -> 70,643), re-measured after `npm run build`, cap
+    // unchanged. Costed: the copy rewrite is +103 B (the old copy was short because it dropped its
+    // subjects); the Plain audience on the Live screen (plainLabel() maps "Cache hits" and "Context
+    // window", plainSentence the compaction caption) is +140 B. 3,085 B of the cap stay free for the
+    // improvement screens.
+    expect(CLIENT_JS.length).toBe(70643)
   })
 })

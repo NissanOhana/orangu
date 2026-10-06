@@ -85,7 +85,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'src/suggest/catalog.json#note': { floor: 61, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'src/suggest/features.json#note': { floor: 43, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // R1, R2: the report
-  'src/report/client': { floor: 89, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // raised 89 -> 96 by the report copy rewrite (R1, 2026-10-06). Measured 310 sentences, 304 clean, score 98
+  // (was 293 sentences, 268 clean, score 91). The 6 findings left are in the improvement screens (R2).
+  'src/report/client': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   // B2: rule copy, and every other analyzer string
   'src/analyze/insights.ts#title': { floor: 91, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
   'src/analyze/insights.ts#detail': { floor: 58, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
