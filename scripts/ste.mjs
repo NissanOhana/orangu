@@ -84,6 +84,7 @@ export const PLAIN_WORDS = {
   'e.g.': 'for example',
   'i.e.': 'that is',
   'etc.': 'the full list',
+  'incl.': 'including',
   via: 'through, or with',
   whilst: 'while',
   seamless: 'nothing, or the measured fact',

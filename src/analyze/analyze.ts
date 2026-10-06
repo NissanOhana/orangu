@@ -203,15 +203,15 @@ function sessionEnding(s: Session, quality: QualityAnalysis): SessionEnding {
 function narrative(s: Session, sum: Summary, top: string[]): string {
   const parts: string[] = []
   const what = s.meta.title ? `“${s.meta.title.slice(0, 80)}”` : 'this session'
-  parts.push(`In ${what}, the human made ${sum.humanTurns} request${sum.humanTurns === 1 ? '' : 's'}${sum.turns > sum.humanTurns ? ` (${sum.turns} turns incl. commands/automation)` : ''} over ${sum.wallMs ? fmtMs(sum.wallMs) : 'an unknown span'}. The agent was busy for ${fmtMs(sum.activeMs)} of that.`)
-  parts.push(`It made ${sum.toolCalls} tool calls${sum.toolErrors ? ` (${sum.toolErrors} failed)` : ''}${sum.agents ? `, ran ${sum.agents} subagent${sum.agents > 1 ? 's' : ''}` : ''}${sum.skills ? `, used ${sum.skills} skill/command invocation${sum.skills > 1 ? 's' : ''}` : ''}, and processed ${fmtTokens(usageTotal(sum.tokens))} tokens.`)
+  parts.push(`In ${what}, you made ${sum.humanTurns} request${sum.humanTurns === 1 ? '' : 's'}${sum.turns > sum.humanTurns ? ` (${sum.turns} turns including commands and automation)` : ''} over ${sum.wallMs ? fmtMs(sum.wallMs) : 'an unknown span'}. The agent was busy for ${fmtMs(sum.activeMs)} of that.`)
+  parts.push(`It made ${sum.toolCalls} tool call${sum.toolCalls === 1 ? '' : 's'}${sum.toolErrors ? ` (${sum.toolErrors} failed)` : ''}${sum.agents ? `, ran ${sum.agents} subagent${sum.agents > 1 ? 's' : ''}` : ''}${sum.skills ? `, used ${sum.skills} skill/command invocation${sum.skills > 1 ? 's' : ''}` : ''}, and processed ${fmtTokens(usageTotal(sum.tokens))} tokens.`)
   const o = sum.outcomes
   const outs: string[] = []
   if (o.prLinks.length) outs.push(`${o.prLinks.length} PR${o.prLinks.length > 1 ? 's' : ''}`)
   if (o.gitCommits) outs.push(`${o.gitCommits} commit${o.gitCommits > 1 ? 's' : ''}`)
   if (o.filesEdited || o.filesWritten) outs.push(`${o.filesEdited + o.filesWritten} file${o.filesEdited + o.filesWritten > 1 ? 's' : ''} changed`)
   if (o.testRuns) outs.push(`${o.testRuns} test run${o.testRuns > 1 ? 's' : ''}${o.testRunsFailed ? ` (${o.testRunsFailed} failed)` : ''}`)
-  parts.push(outs.length ? `Visible outcomes: ${outs.join(', ')}.` : 'No commits, PRs or test runs were detected.')
-  if (top.length) parts.push(`Biggest things to look at: ${top.join(' · ')}.`)
+  parts.push(outs.length ? `Orangu found these outcomes: ${outs.join(', ')}.` : 'Orangu found no commits, PRs or test runs.')
+  if (top.length) parts.push(`Look at these first: ${top.join(' · ')}.`)
   return parts.join(' ')
 }

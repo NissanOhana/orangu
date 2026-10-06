@@ -168,4 +168,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // B2: floor 66 -> 98. Measured 40 sentences, 40 clean, score 100: the rewritten rule copy of the 11
   // example insights.
   'test/golden#crossFinding.recommendation': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
+  // Z: the emitted session narrative, the first prose on every session report
+  // Born 2026-10-07 after the narrative rewrite: measured 97 (32 of 33), floor 95. The one finding is the
+  // "Look at these first: <title> · <title>." list in agents-heavy (31 words): two rule titles, each measured
+  // on its own row, joined by the client separator.
+  'test/golden#summary.narrative': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 },
 }

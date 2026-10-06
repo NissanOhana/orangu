@@ -24,8 +24,10 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *   2 (2026-10-06): rule copy rewritten in Simplified Technical English (every insight title, detail and
  *     recommendation, the summary narrative and two evidence notes), so a cached payload carries the old copy;
  *     the aggregate's new CrossFinding.recommendation reads that copy from the cached insights
+ *   3 (2026-10-07): the summary narrative rewritten in Simplified Technical English ("you made", "including",
+ *     "orangu found these outcomes", "Look at these first"), so a cached payload carries the old narrative
  */
-export const ANALYSIS_PAYLOAD_GENERATION = 2
+export const ANALYSIS_PAYLOAD_GENERATION = 3
 
 export interface AnalysisSessionInfo {
   id: string

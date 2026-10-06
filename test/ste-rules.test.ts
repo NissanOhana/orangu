@@ -36,6 +36,9 @@ describe('ste checker: the ported rules', () => {
   it('plain-word: the house word table', () => {
     expect(rules('Leverage the cache.')).toEqual(['plain-word'])
     expect(rules('Read the cache, for example the first entry.')).toEqual([])
+    // "incl." is the abbreviation the session narrative used ("26 turns incl. commands"): write "including"
+    expect(rules('It made 26 turns incl. commands.')).toEqual(['plain-word'])
+    expect(rules('It made 26 turns, including commands.')).toEqual([])
   })
 
   it('progressive: the simple present, not "is ranking"', () => {

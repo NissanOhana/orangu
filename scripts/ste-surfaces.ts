@@ -512,7 +512,20 @@ function goldenSurface(kind: 'insight' | 'crossFinding', field: RuleField): Surf
   return { ...jsonSurface(`test/golden#${kind}.${field}`, 'B1, B2', files, (json) => strings(list(json[key]).map((item) => item[field]))), source: `emitted ${kind} ${field}s` }
 }
 
-const SAMPLE_PAGE: TsOptions = { within: ['publish', 'main'], skipCalls: ['process.stdout.write', 'process.stderr.write', 'Error'] }
+/**
+ * The session narrative each golden fixture emits: the first prose of every session report. It is built from
+ * many template parts, so a short part ("(3 turns including ...)") is a label in the src/analyze row and only
+ * the assembled text is scored as sentences. The quoted session title is transcript text, not copy, so its
+ * clause is read as "In this session, " (the redactor's own rewrite).
+ */
+const goldenNarrativeSurface: Surface = {
+  ...jsonSurface('test/golden#summary.narrative', 'Z', (read) => read.files.filter((file) => file.startsWith(GOLDEN) && file.endsWith('.analysis.json')), (json) =>
+    strings([((json['summary'] ?? {}) as Json)['narrative']]).map((text) => text.replace(/^In “[\s\S]*?”, /, 'In this session, ')),
+  ),
+  source: 'emitted session narratives, the title clause read as "In this session"',
+}
+
+const SAMPLE_PAGE: TsOptions ={ within: ['publish', 'main'], skipCalls: ['process.stdout.write', 'process.stderr.write', 'Error'] }
 
 /** Every gated surface, grouped by the chunk that owns it, in the order of test/ste-floors.ts. */
 export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)): Surface[] {
@@ -564,6 +577,8 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     goldenSurface('insight', 'recommendation'),
     goldenSurface('crossFinding', 'title'),
     goldenSurface('crossFinding', 'recommendation'),
+    // Z: the emitted session narrative
+    goldenNarrativeSurface,
   ]
 }
 

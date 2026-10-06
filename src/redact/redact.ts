@@ -191,8 +191,10 @@ const PROJECT_KEYS = new Set(['projectSlug', 'project'])
  * summary.narrative is generated copy except for its opening clause, where the analyzer quotes the session
  * title (the first user prompt, src/analyze/analyze.ts narrative()). The default strip rewrites only that
  * clause so the rest of the sentence survives without touching the analyzer or the golden corpus.
+ * "you made" is the analyzer's wording since 2026-10-07 (STE); "the human made" is the older wording, which an
+ * Analysis JSON from an older engine still carries into `orangu evidence`. Both titles are stripped.
  */
-const NARRATIVE_TITLE_RE = /^In “[\s\S]*?”, (?=the human made )/
+const NARRATIVE_TITLE_RE = /^In “[\s\S]*?”, (?=(?:you|the human) made )/
 const PRIVATE_STRING_ARRAY_KEYS = new Set(['gitBranches'])
 const UNKNOWN_COUNT_MAP_KEYS = new Set([
   'unknownRecordTypes',

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from './analyze.js'
 import { aggregate } from './aggregate.js'
@@ -26,7 +28,28 @@ describe('analyzeSession', () => {
     // STE: no semicolon. The busy time is its own sentence, and the top findings use the client separator.
     expect(a.summary.narrative).not.toContain(';')
     expect(a.summary.narrative).toContain('. The agent was busy for ')
-    expect(a.summary.narrative).toMatch(/Biggest things to look at: .+ · .+\.$/)
+    expect(a.summary.narrative).toMatch(/ Look at these first: .+ · .+\.$/)
+  })
+  it('writes the narrative in STE: the reader is "you", the actor is named, every part is a full sentence', async () => {
+    // The narrative is the first prose on every session report ("What happened") and on the public sample.
+    // The checker cannot see a passive, a telegram or "the human", so these frames are pinned here.
+    const a = await canonicalAnalysis()
+    expect(a.summary.narrative).toMatch(/^In “Fix foo test”, you made 2 requests over [^.]+\. The agent was busy for [^.]+ of that\. /)
+    expect(a.summary.narrative).toContain(' Orangu found these outcomes: 1 file changed, 2 test runs (1 failed). Look at these first: ')
+    // every narrative the golden corpus emits, in each of its forms (a title or none, commands and automation
+    // counted or not, outcomes or none, findings or none)
+    const golden = join(process.cwd(), 'test/golden')
+    const files = readdirSync(golden).filter((file) => file.endsWith('.analysis.json'))
+    expect(files.length).toBeGreaterThanOrEqual(7)
+    for (const file of files) {
+      const n = (JSON.parse(readFileSync(join(golden, file), 'utf8')) as { summary: { narrative: string } }).summary.narrative
+      expect(n, file).toMatch(/^In (“[\s\S]*?”|this session), you made \d+ requests?( \(\d+ turns including commands and automation\))? over /)
+      expect(n, file).toMatch(/ Orangu found (these outcomes: [^.]+|no commits, PRs or test runs)\.( Look at these first: .+\.)?$/)
+      for (const old of ['incl.', 'the human', 'were detected', 'Visible outcomes', 'Biggest things']) expect(n, `${file}: ${old}`).not.toContain(old)
+      expect(n, `${file}: one tool call is singular`).not.toMatch(/\b1 tool calls\b/)
+    }
+    // live-partial makes exactly 1 tool call
+    expect((JSON.parse(readFileSync(join(golden, 'live-partial.analysis.json'), 'utf8')) as { summary: { narrative: string } }).summary.narrative).toContain('It made 1 tool call, and processed ')
   })
   it('computes tool stats, quality signals and outcomes deterministically', async () => {
     const a = await canonicalAnalysis()

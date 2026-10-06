@@ -232,6 +232,19 @@ describe('redactAnalysis', () => {
     expect(redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative).toBe(`In this session, ${tail}`)
   })
 
+  it('blanks the quoted title in the STE narrative too, and still in the older wording', () => {
+    // The analyzer now writes "you made" (STE: address the reader). An Analysis JSON that an older engine wrote
+    // ("the human made") can still reach the redactor through `orangu evidence`, so both openings are stripped.
+    const a = full()
+    const tail = 'you made 3 requests over 2m. The agent was busy for 1m of that. It made 4 tool calls.'
+    a.summary.narrative = `In “${MARKER} with a ”stray” quote”, ${tail}`
+    const out = redactAnalysis(a, { stripText: true, home: '' }).analysis
+    expect(out.summary.narrative).toBe(`In this session, ${tail}`)
+    expect(out.summary.narrative).not.toContain(MARKER)
+    a.summary.narrative = `In “${MARKER}”, the human made 3 requests over 2m.`
+    expect(redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative).toBe('In this session, the human made 3 requests over 2m.')
+  })
+
   it('keeps rule-generated copy under stripText while transcript-authored strings are still blanked', () => {
     const out = redactAnalysis(full(), { stripText: true, home: '' }).analysis
     // orangu's own rules wrote these: they survive

@@ -101,8 +101,10 @@ const INSTRUCTION_WORDS = 20
  * 2026-10-06, re-recorded at generation 2 with no copy change: the fingerprint now also reads the quality
  * signals and labels, the parse warnings, the event labels and block notes, and the tool-call summaries.
  * quality.ts, adapters/claude-code/tools.ts and every warn(), label and note in parse.ts are byte-identical to main.
+ * 2026-10-07, generation 3: the narrative in STE (analyze.ts narrative()), and "1 tool call" in the singular. The
+ * copy changed, so the generation moved.
  */
-const COPY_FINGERPRINT = { generation: 2, sha256: 'd48decef70a392dabcba7e8c1e1fce0be4a7ea3865f3ef7d6d475b7a86148f45' }
+const COPY_FINGERPRINT = { generation: 3, sha256: 'ac5efbe27f72be92c0daa0feb17f4a8fa0512ddef57801c4ed63df4af6201c92' }
 /**
  * Born 2026-10-06 at its own count: 45 rule sites, plus one more text each for the two improvements that
  * pick between two fixed texts (time-budget, hidden-iterations). The count only goes up.
@@ -377,7 +379,7 @@ describe('rule copy: a copy change moves the payload generation', () => {
   })
 
   it('reads the narrative and every rule site into the fingerprint', () => {
-    expect(narrativeCopy()).toContain('Biggest things to look at: ')
+    expect(narrativeCopy()).toContain('Look at these first: ')
     expect(new Set(sites.map((site) => site.ruleId)).size).toBeGreaterThanOrEqual(44)
   })
 
