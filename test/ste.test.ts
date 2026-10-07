@@ -8,12 +8,20 @@ import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
-import { DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, fragmentResult, helpText, listFiles, measureAll, rowFailures, surfaces, tsBlocks, tsFiles, type SurfaceMeasure } from '../scripts/ste-surfaces.js'
+import {
+  DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, aggregateReportBlocks, fragmentResult, helpText, listFiles, measureAll, renderedHtmlBlocks, rowFailures, surfaces,
+  terminalBlocks, tsBlocks, tsFiles, type SurfaceMeasure,
+} from '../scripts/ste-surfaces.js'
+import type { Aggregate } from '../src/analyze/aggregate.js'
+import type { Analysis } from '../src/model/analysis.js'
+import { aggregateBlock, analysisBlock, nextStepLines } from '../src/cli/summary.js'
+import { MACHINE_CAPS, glyphs, wrapWords } from '../src/cli/tty.js'
+import { HIDDEN_ITERATIONS_FIXTURE, hiddenIterationsAggregate, hiddenIterationsAnalysis } from './fixtures/hidden-iterations.js'
 import { BANNED, BELOW_TARGET, STE_FLOORS, STE_TARGET } from './ste-floors.js'
 
 let measured = new Map<string, SurfaceMeasure>()
-beforeAll(() => {
-  measured = new Map(measureAll().map((surface) => [surface.id, surface]))
+beforeAll(async () => {
+  measured = new Map((await measureAll()).map((surface) => [surface.id, surface]))
 })
 
 describe('STE gate', () => {
@@ -67,6 +75,73 @@ describe('STE gate', () => {
     expect(result.findings.map((f) => f.rule).sort()).toEqual([...measured.get(id)!.findings.map((f) => f.rule), 'sentence-length', 'ste-word'].sort())
     expect(result.score, 'the hole: the score floor alone still passes').toBeGreaterThanOrEqual(row.floor)
     expect(rowFailures(result, row).join(' '), 'the findings ceiling fails it').toMatch(/findings/)
+  })
+
+  it('sees what orangu composes at run time: the "In one session: " marker in front of a 23-word rule title is 1 long sentence, and the shipped example title is clean', async () => {
+    const agg = await hiddenIterationsAggregate()
+    const finding = agg.crossFindings.find((f) => f.ruleId === 'hidden-iterations')!
+    expect(finding.title).toBe(`In one session: ${finding.exampleTitle}`)
+    // the shipped composition: each view shows the example title, and one caption says the marker once
+    expect(fragmentResult(aggregateReportBlocks(HIDDEN_ITERATIONS_FIXTURE, agg)).findings).toEqual([])
+    // the 0.9.0 composition: a cross finding had no example title, so every row and card showed the marked title
+    const before: Aggregate = { ...agg, crossFindings: agg.crossFindings.map(({ exampleTitle: _, ...rest }) => rest) }
+    const findings = fragmentResult(aggregateReportBlocks(HIDDEN_ITERATIONS_FIXTURE, before)).findings
+    expect(findings.map((f) => f.rule)).toEqual(['sentence-length'])
+    expect(findings[0]!.text).toMatch(/^In one session: 2 hidden iterations used 41\.2k tokens/)
+    expect(findings[0]!.hint).toMatch(/^26 words/)
+  })
+
+  it('reads rendered markup as a reader sees it: each cell is a block, an inline tag stays in its sentence, and a closed disclosure counts', () => {
+    const html = [
+      '<details class="finding"><summary><span class="rank">1</span><b class="sg-t">A title with no end mark</b><span class="fsave" title="the share of this session">12%</span>',
+      '<span class="rec sg-lead"><b>Improvement:</b> Do the thing.</span></summary>',
+      '<div class="fbody"><details class="why"><summary>Why</summary><p>It costs\ntokens.</p></details>',
+      '<p>Click <b>Copy</b>. Then paste it.</p><div class="cmd"><code>orangu report</code></div><svg><title>chart</title></svg></div></details>',
+    ].join('\n')
+    expect(renderedHtmlBlocks(html, 'x').map((b) => [b.line, b.text])).toEqual([
+      [1, 'the share of this session'],
+      [1, '1'],
+      [1, 'A title with no end mark'],
+      [1, '12%'],
+      [2, 'Improvement: Do the thing.'],
+      [3, 'Why'],
+      [3, 'It costs tokens.'],
+      [5, 'Click Copy. Then paste it.'],
+    ])
+  })
+
+  it('joins each terminal wrap back to its cell: a title, its improvement and each list row reach the checker whole and apart', async () => {
+    const a: Analysis = await hiddenIterationsAnalysis()
+    const top = a.insights[0]!
+    const step = { finding: top.title, improvement: top.improvement, next: 'claude "/orangu:improve sg_0123456789ab"' }
+    const golden = (name: string): unknown => JSON.parse(readFileSync(join(ROOT, 'test/golden', name), 'utf8'))
+    const heavy = golden('agents-heavy.analysis.json') as Analysis
+    for (const columns of [40, 60, 80]) {
+      const caps = { ...MACHINE_CAPS, columns }
+      const lines = nextStepLines(caps, step)
+      expect(lines.filter((line) => line.startsWith(' '.repeat(11))).length, `the title and the improvement wrap at ${columns} columns`).toBeGreaterThan(1)
+      expect(terminalBlocks(lines, 'next', columns).map((b) => b.text)).toEqual(expect.arrayContaining([top.title, `Improvement: ${top.improvement}`]))
+      // a list under a heading: each row stays its own block
+      const rows = terminalBlocks(analysisBlock(caps, heavy, 'title'), 'analyze', columns).map((b) => b.text)
+      for (const ins of heavy.insights.slice(0, 6)) expect(rows, `${columns} columns`).toContain(`${glyphs(caps).mark} ${ins.title}`)
+    }
+    // each recurring row at the gate's 80 columns: the example title, then the session count and the improvement apart
+    const agg = golden('aggregate.json') as Aggregate
+    const lines = aggregateBlock(MACHINE_CAPS, agg)
+    expect(lines.filter((line) => /^ {14}\S/.test(line)).length, 'titles and improvements wrap').toBeGreaterThan(agg.crossFindings.length)
+    const texts = terminalBlocks(lines, 'aggregate').map((b) => b.text)
+    for (const f of agg.crossFindings.slice(0, 8)) {
+      expect(texts).toContain(f.exampleTitle)
+      expect(texts).toContain(`Improvement: ${f.improvement}`)
+      expect(texts).toContain(`(${f.sessions} session${f.sessions === 1 ? '' : 's'})`)
+    }
+    // a free line keeps its indent when it wraps: the line above is full, so the 2 lines are one sentence;
+    // 2 short lines at the same indent stay 2 blocks
+    const sentence = 'Orangu reads the transcript on disk and writes one report that you can open with no network.'
+    const wrapped = wrapWords(sentence, 40).map((part) => `  ${part}`)
+    expect(wrapped.length, 'the sentence wraps at 42 columns').toBe(3)
+    const free = ['orangu  title', '', '  A short heading', ...wrapped, '  Another short line.']
+    expect(terminalBlocks(free, 'free', 42).map((b) => b.text)).toEqual(['orangu', 'title', 'A short heading', sentence, 'Another short line.'])
   })
 
   it('reads the help from the tracked plugin bin, so the gate needs no dist/', () => {

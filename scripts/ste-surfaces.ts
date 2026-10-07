@@ -21,6 +21,9 @@
  *   text (improvement, why, method), one row each, following a local constant. The src/analyze row measures
  *   every other string, so no string counts twice.
  * - JSON and YAML copy fields, catalog notes and the golden emitted copy: each value is a block.
+ * - Rendered output (the rendered#* rows): the golden fixtures and test/fixtures/hidden-iterations.ts drawn
+ *   through the real report screen builders and the real terminal line builders, with real values and the
+ *   default redaction, as a reader sees them. See renderedHtmlBlocks and terminalBlocks for the blocks.
  * A fragment (anything but the page text of a file, and the help) under 3 words is a label: its banned
  * tokens count, but it is not scored. Each distinct fragment counts once per surface.
  *
@@ -34,6 +37,21 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { PARAGRAPH, checkBlocks, htmlToText, proseBlocks, proseWords, frontmatterDescription, type SteBlock, type SteResult } from '../src/ste/index.js'
+import type { Aggregate } from '../src/analyze/aggregate.js'
+import type { Analysis } from '../src/model/analysis.js'
+import { APP_DATA_VERSION, type AppData } from '../src/model/app-data.js'
+import { redactAnalysis, type RedactOptions } from '../src/redact/redact.js'
+import type { Ctx } from '../src/report/client/app.js'
+import { overviewScreenHtml } from '../src/report/client/screens/overview.js'
+import { suggestScreenHtml } from '../src/report/client/screens/suggest.js'
+import { renderRepo } from '../src/report/client/screens/repo.js'
+import { renderGlobal } from '../src/report/client/screens/global.js'
+import { prepareAggregateForOutput } from '../src/cli/json-out.js'
+import { persistNextStep } from '../src/cli/next-step.js'
+import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines } from '../src/cli/summary.js'
+import { MACHINE_CAPS, displayWidth, stripAnsi } from '../src/cli/tty.js'
+import { suggestionIdV2, suggestionKey } from '../src/suggest/id.js'
+import { HIDDEN_ITERATIONS_FIXTURE, hiddenIterationsAggregate, hiddenIterationsAnalysis } from '../test/fixtures/hidden-iterations.js'
 import type { SteRow } from '../test/ste-floors.js'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -318,6 +336,8 @@ interface Reader {
   files: readonly string[]
   text(path: string): string
   sourceFile(path: string): ts.SourceFile
+  /** the fixtures the rendered rows draw, loaded once */
+  fixtures(): Promise<RenderFixtures>
 }
 
 function reader(root: string): Reader {
@@ -331,7 +351,10 @@ function reader(root: string): Reader {
     if (!parsed.has(path)) parsed.set(path, parse(path, text(path)))
     return parsed.get(path)!
   }
-  return { root, files: listFiles(root), text, sourceFile }
+  const files = listFiles(root)
+  let loaded: Promise<RenderFixtures> | undefined
+  const fixtures = (): Promise<RenderFixtures> => (loaded ??= renderFixtures(files, text))
+  return { root, files, text, sourceFile, fixtures }
 }
 
 export interface Surface {
@@ -341,7 +364,7 @@ export interface Surface {
   owner: string
   /** what is measured, in a few words */
   source: string
-  measure(read: Reader): SteResult
+  measure(read: Reader): SteResult | Promise<SteResult>
 }
 
 const under = (file: string, path: string): boolean => file === path || file.startsWith(`${path}/`)
@@ -533,6 +556,243 @@ const goldenNarrativeSurface: Surface = {
   source: 'emitted session narratives, the title clause read as "In this session"',
 }
 
+// ---------- rendered output ----------
+//
+// The rows above score copy as it is written: a literal with 3 in place of each ${}, or one emitted JSON value.
+// Neither sees what orangu composes at run time from 2 of them, for example the "In one session: " marker in
+// front of a 23-word rule title. These rows draw the fixtures through the real builders and score what a
+// reader sees. Each finding names its fixture and the screen or block it came from.
+
+/** The fixtures the rendered rows draw: each golden session and aggregate, plus the hidden-iterations session. */
+export interface RenderFixtures {
+  sessions: Array<{ source: string; analysis: Analysis }>
+  aggregates: Array<{ source: string; aggregate: Aggregate }>
+}
+
+async function renderFixtures(files: readonly string[], text: (path: string) => string): Promise<RenderFixtures> {
+  const golden = files.filter((file) => file.startsWith(GOLDEN))
+  return {
+    sessions: [
+      ...golden.filter((file) => file.endsWith('.analysis.json')).map((file) => ({ source: file, analysis: JSON.parse(text(file)) as Analysis })),
+      { source: HIDDEN_ITERATIONS_FIXTURE, analysis: await hiddenIterationsAnalysis() },
+    ],
+    aggregates: [
+      ...golden.filter((file) => file.endsWith('/aggregate.json')).map((file) => ({ source: file, aggregate: JSON.parse(text(file)) as Aggregate })),
+      { source: HIDDEN_ITERATIONS_FIXTURE, aggregate: await hiddenIterationsAggregate() },
+    ],
+  }
+}
+
+/** The redaction `orangu report`, `analyze` and bare `orangu` apply by default (src/cli/main.ts redactOptions). */
+const CLI_REDACTION: RedactOptions = { scrub: true, stripText: true, stripPaths: false }
+
+type Audience = Ctx['audience']
+const AUDIENCES: ReadonlyArray<[Audience, string]> = [['dev', 'detailed'], ['plain', 'plain']]
+
+/** Tags that sit inside a sentence: their text stays in the sentence. Every other tag ends a block. */
+const INLINE_TAG = /^(?:b|strong|i|em)$/i
+const blankOf = (match: string): string => match.replace(/[^\n]/g, '')
+
+/**
+ * The blocks of rendered report markup, as a reader sees them. Every element boundary ends a block, except
+ * the inline tags inside a sentence (b, strong, i, em): so a card's title, its savings pill and its
+ * improvement are 3 blocks, as on the screen, and "Click <b>Copy the Claude Code command</b>." stays one
+ * sentence. The text of a closed disclosure (Why) is in the markup, so it is scored. Script, style, SVG and
+ * code hold no prose. The title, aria-label, alt and placeholder values are blocks of their own.
+ */
+export function renderedHtmlBlocks(html: string, file: string): SteBlock[] {
+  const blocks: SteBlock[] = []
+  for (const match of html.matchAll(HTML_LIFTED)) blocks.push(...lineBlocks(htmlToText(match[1] ?? match[2] ?? ''), lineAtIndex(html, match.index ?? 0), file))
+  const text = htmlToText(
+    html
+      .replace(/<(script|style|svg|pre|code)\b[\s\S]*?<\/\1>/gi, blankOf)
+      .replace(/<!--[\s\S]*?-->/g, blankOf)
+      .replace(/<\/?([A-Za-z][\w-]*)\b[^>]*>/g, (tag, name: string) => (INLINE_TAG.test(name) ? '' : PARAGRAPH) + blankOf(tag)),
+  )
+  let line = 1
+  for (const piece of text.split(PARAGRAPH)) {
+    const lead = piece.slice(0, piece.length - piece.trimStart().length)
+    const flat = piece.replace(/\s+/g, ' ').trim()
+    if (flat) blocks.push({ file, line: line + (lead.match(/\n/g)?.length ?? 0), text: flat })
+    line += piece.match(/\n/g)?.length ?? 0
+  }
+  return blocks
+}
+
+/** The label that opens the improvement under a title, in the terminal (src/cli/summary.ts). */
+const IMPROVEMENT_LABEL = 'Improvement: '
+
+/** A leading mark in a cell (the severity glyph and its space): the cell's text starts after it. */
+const CELL_MARK = /^[^\p{L}\p{N}\s]+ /u
+
+/**
+ * The blocks of terminal lines, as a reader reads them. A run of 2 or more spaces separates cells: a row
+ * label from its value, a title from its savings, a figure from its title, a title from its session count.
+ * A line continues a cell of the row above it in 2 cases, so a wrap never splits a sentence:
+ * - a hanging wrap: it is indented deeper than the first line of its row, and its text starts at the column
+ *   where the text of a cell in that row starts (an item in a list under a heading starts at no such column);
+ * - a flush wrap (a free line that keeps its indent): one cell at the same column as the one-cell line above,
+ *   and that line plus a space and this line's first word is wider than `width`. The builders wrap greedily
+ *   (wrapWords), so a wrapped line is exactly a line that the next word did not fit.
+ * The "Improvement: " label opens a new block at its column, because it starts a new item for the reader. A
+ * blank line ends the row. Where the layout cannot tell 2 cells apart (a session count on a line of its own
+ * under a title), they join: such a join only adds words to a sentence, so it can add a finding, never hide one.
+ */
+export function terminalBlocks(lines: readonly string[], file: string, width = layoutWidth(MACHINE_CAPS)): SteBlock[] {
+  const blocks: SteBlock[] = []
+  let rowIndent = -1
+  let open = new Map<number, SteBlock>()
+  let above: { row: string; cells: number; start: number } | undefined
+  lines.flatMap((text) => stripAnsi(text).split('\n')).forEach((row, index) => {
+    if (!row.trim()) {
+      rowIndent = -1
+      open = new Map()
+      above = undefined
+      return
+    }
+    const cells = [...row.matchAll(/\S+(?: \S+)*/g)].map((match) => ({ text: match[0], start: match.index, at: match.index + (CELL_MARK.exec(match[0])?.[0].length ?? 0) }))
+    const first = cells[0]!
+    const hanging = rowIndent >= 0 && first.start > rowIndent && open.has(first.start)
+    const flush = above !== undefined && above.cells === 1 && cells.length === 1 && above.start === first.start && displayWidth(above.row.trimEnd()) + 1 + displayWidth(first.text.split(' ')[0]!) > width
+    const wrap = hanging || flush
+    if (!wrap) {
+      rowIndent = first.start
+      open = new Map()
+    }
+    above = { row, cells: cells.length, start: first.start }
+    cells.forEach((cell, position) => {
+      const target = wrap && position === 0 && !cell.text.startsWith(IMPROVEMENT_LABEL) ? open.get(cell.start) : undefined
+      if (target) {
+        target.text += ` ${cell.text}`
+        return
+      }
+      const block: SteBlock = { file, line: index + 1, text: cell.text }
+      blocks.push(block)
+      open.set(cell.start, block)
+      open.set(cell.at, block)
+    })
+  })
+  return blocks
+}
+
+/** A session report's AppData, as renderReport builds it under the default redaction (src/report/render.ts). */
+function sessionData(a: Analysis): AppData {
+  return {
+    v: APP_DATA_VERSION, mode: 'file', version: 'golden', generatedAt: 0,
+    capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: false },
+    selectedId: a.session.id, session: a, sessions: [], aggregates: {}, suggestions: [],
+  }
+}
+
+/** A repo or global report's AppData, as renderAggregateReport builds it (src/report/render.ts). */
+function aggregateData(g: Aggregate, scope: 'repo' | 'global'): AppData {
+  return {
+    v: APP_DATA_VERSION, mode: 'file', version: 'golden', generatedAt: 0,
+    capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false },
+    selectedId: undefined, session: undefined, sessions: [], aggregates: { [scope]: g }, suggestions: [],
+  }
+}
+
+const ctxOf = (data: AppData, audience: Audience, state: Ctx['state'], a?: Analysis): Ctx => ({
+  data, ...(a ? { a } : {}), ds: {} as Ctx['ds'], state: { ...state, ...(audience === 'plain' ? { audience } : {}) }, audience, go: () => undefined,
+})
+
+/**
+ * The markup a DOM renderer draws, read through a stub document that keeps what the renderer writes to
+ * innerHTML (the screen tests use the same seam). For the Repo and Global screens, which have no pure builder.
+ */
+function drawnMarkup(render: () => unknown): string {
+  const scope = globalThis as { document?: unknown }
+  const had = 'document' in scope
+  const saved = scope.document
+  let markup = ''
+  scope.document = {
+    getElementById: () => null,
+    createElement: () => ({ content: { firstElementChild: null }, set innerHTML(value: string) { markup = value } }),
+  }
+  try {
+    render()
+  } finally {
+    if (had) scope.document = saved
+    else delete scope.document
+  }
+  return markup
+}
+
+/** The Overview and the Improvements screen of one session, in both audiences, under the default redaction. */
+export function sessionReportBlocks(source: string, analysis: Analysis): SteBlock[] {
+  const a = redactAnalysis(analysis, CLI_REDACTION).analysis
+  return AUDIENCES.flatMap(([audience, name]) => [
+    ...renderedHtmlBlocks(overviewScreenHtml(ctxOf(sessionData(a), audience, { screen: 'overview', s: a.session.id }, a)), `${source}#overview.${name}`),
+    ...renderedHtmlBlocks(suggestScreenHtml(ctxOf(sessionData(a), audience, { screen: 'suggest', s: a.session.id }, a)), `${source}#improvements.${name}`),
+  ])
+}
+
+/** The Repo and Global screens and their Improvements screens of one aggregate, in both audiences, past the output boundary. */
+export function aggregateReportBlocks(source: string, aggregate: Aggregate): SteBlock[] {
+  const g = prepareAggregateForOutput(aggregate, {})
+  return (['repo', 'global'] as const).flatMap((scope) =>
+    AUDIENCES.flatMap(([audience, name]) => {
+      const ctx = (screen: string): Ctx => ctxOf(aggregateData(g, scope), audience, { screen, scope })
+      const screen = drawnMarkup(() => (scope === 'repo' ? renderRepo(ctx('repo')) : renderGlobal(ctx('global'))))
+      return [...renderedHtmlBlocks(screen, `${source}#${scope}.${name}`), ...renderedHtmlBlocks(suggestScreenHtml(ctx('suggest')), `${source}#${scope}-improvements.${name}`)]
+    }),
+  )
+}
+
+/** A store in memory: the next step gets its short command, and the gate writes nothing to ~/.orangu. */
+const memoryStore = {
+  upsertNew: async (finding: Parameters<typeof suggestionKey>[0]) => {
+    const key = suggestionKey(finding, 'report')
+    return { record: { id: suggestionIdV2(key), ...finding, sessionIds: key.sessionIds, source: 'report' as const } }
+  },
+}
+
+/**
+ * Bare `orangu`, `orangu analyze` and its next step, at MACHINE_CAPS (80 columns, no colour). The header title
+ * is the session title, which the transcript wrote, not orangu: it is read as the id fallback that the CLI
+ * prints for a session with no title (src/cli/main.ts displayTitle).
+ */
+export async function sessionTerminalBlocks(source: string, a: Analysis): Promise<SteBlock[]> {
+  const step = await persistNextStep(a, CLI_REDACTION, { store: () => memoryStore as never })
+  const title = a.session.id.slice(0, 12)
+  return [
+    ...terminalBlocks(briefBlock(MACHINE_CAPS, a, title, step, { hint: true }), `${source}#brief`),
+    ...terminalBlocks(analysisBlock(MACHINE_CAPS, a, title), `${source}#analyze`),
+    ...terminalBlocks(nextStepLines(MACHINE_CAPS, step), `${source}#next-step`),
+  ]
+}
+
+/** `orangu repo` and `orangu global` text at MACHINE_CAPS, past the output boundary. */
+export function aggregateTerminalBlocks(source: string, aggregate: Aggregate): SteBlock[] {
+  return terminalBlocks(aggregateBlock(MACHINE_CAPS, prepareAggregateForOutput(aggregate, {})), `${source}#aggregate`)
+}
+
+const renderedSessionSurface: Surface = {
+  id: 'rendered#report.session',
+  owner: 'C10',
+  source: 'Overview and Improvements of each golden session and the hidden-iterations session, both audiences',
+  measure: async (read) => fragmentResult((await read.fixtures()).sessions.flatMap(({ source, analysis }) => sessionReportBlocks(source, analysis))),
+}
+
+const renderedAggregateSurface: Surface = {
+  id: 'rendered#report.aggregate',
+  owner: 'C10',
+  source: 'Repo, Global and their Improvements of the golden and hidden-iterations aggregates, both audiences',
+  measure: async (read) => fragmentResult((await read.fixtures()).aggregates.flatMap(({ source, aggregate }) => aggregateReportBlocks(source, aggregate))),
+}
+
+const renderedTerminalSurface: Surface = {
+  id: 'rendered#terminal',
+  owner: 'C10',
+  source: 'briefBlock, analysisBlock, nextStepLines and aggregateBlock at MACHINE_CAPS, wraps joined',
+  measure: async (read) => {
+    const { sessions, aggregates } = await read.fixtures()
+    const perSession = await Promise.all(sessions.map(({ source, analysis }) => sessionTerminalBlocks(source, analysis)))
+    return fragmentResult([...perSession.flat(), ...aggregates.flatMap(({ source, aggregate }) => aggregateTerminalBlocks(source, aggregate))])
+  },
+}
+
 const SAMPLE_PAGE: TsOptions ={ within: ['publish', 'main'], skipCalls: ['process.stdout.write', 'process.stderr.write', 'Error'] }
 
 /** Every gated surface, grouped by the chunk that owns it, in the order of test/ste-floors.ts. */
@@ -596,6 +856,10 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     goldenSurface('crossFinding', 'method'),
     // Z: the emitted session narrative
     goldenNarrativeSurface,
+    // C10: rendered output, with real values through the real builders
+    renderedSessionSurface,
+    renderedAggregateSurface,
+    renderedTerminalSurface,
   ]
 }
 
@@ -619,9 +883,9 @@ export function rowFailures(surface: Pick<SteResult, 'score' | 'banned' | 'findi
 }
 
 /** Measure every surface. A surface with no sentence is still listed; the gate treats it as absent. */
-export function measureAll(root = ROOT): SurfaceMeasure[] {
+export async function measureAll(root = ROOT): Promise<SurfaceMeasure[]> {
   const read = reader(root)
-  return surfaces(root, read.files).map((surface) => ({ id: surface.id, owner: surface.owner, source: surface.source, ...surface.measure(read) }))
+  return Promise.all(surfaces(root, read.files).map(async (surface) => ({ id: surface.id, owner: surface.owner, source: surface.source, ...(await surface.measure(read)) })))
 }
 
 // ---------- npm run ste ----------
@@ -670,7 +934,7 @@ async function main(argv: readonly string[]): Promise<void> {
   const { STE_FLOORS } = await import('../test/ste-floors.js')
   const json = argv.includes('--json')
   const wanted = argv.filter((arg) => arg !== '--json')
-  const all = measureAll()
+  const all = await measureAll()
   const measures = wanted.length ? all.filter((surface) => wanted.some((id) => surface.id === id || surface.id.startsWith(id))) : all
   if (wanted.length && !measures.length) throw new Error(`no surface matches ${wanted.join(', ')}; run npm run ste for the list`)
   const lines = json ? [JSON.stringify(measures, null, 2)] : wanted.length ? details(measures) : table(measures, STE_FLOORS)
