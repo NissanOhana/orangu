@@ -44,7 +44,7 @@ import { cmdDashboard } from './commands/dashboard.js'
 import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson, type PreparedAggregate } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
-import { openInBrowser } from './open-browser.js'
+import { openHtmlFile, openInBrowser } from './open-browser.js'
 import { rawOutputRefusal } from './raw-output.js'
 import { VERSION } from '../version.js'
 
@@ -204,8 +204,8 @@ async function cmdReport(sel: string | undefined, flags: Record<string, string |
   }
   const path = outPath(flags, ref.sessionId)
   await writePrivateOutput(path, html)
-  const opened = !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || out.tty)
-  if (opened) openInBrowser(path)
+  // only a .html path reaches the OS opener: -o takes any name (src/cli/open-browser.ts)
+  const opened = !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || out.tty) && openHtmlFile(path)
   process.stdout.write(path + '\n')
   if (!flagBool(flags, 'quiet') && !flagBool(flags, 'json')) {
     process.stderr.write(doneLine(err, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + '\n')
@@ -434,9 +434,10 @@ async function writeAggregateHtml(scope: 'repo' | 'global', a: PreparedAggregate
   const includeText = flagBool(flags, 'no-redact') || flagBool(flags, 'include-text')
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText })
   await writePrivateOutput(path, html)
-  if (open) openInBrowser(path)
+  // only a .html path reaches the OS opener: --html takes any name (src/cli/open-browser.ts)
+  const opened = open && openHtmlFile(path)
   if (!flagBool(flags, 'quiet')) {
-    process.stderr.write(row(err, 'report', path, { raw: true }) + (open ? paint(err, 'dim', '  (opened)') : '') + '\n')
+    process.stderr.write(row(err, 'report', path, { raw: true }) + (opened ? paint(err, 'dim', '  (opened)') : '') + '\n')
   }
   return true
 }
@@ -595,7 +596,7 @@ async function main(): Promise<void> {
       return cmdAggregate('global', sel, flags)
     case 'watch': {
       const ref = await selectSession(sel, flags)
-      return watchSession(ref, flags, { version: VERSION, openInBrowser, outPath: (id) => outPath(flags, id) })
+      return watchSession(ref, flags, { version: VERSION, openInBrowser: openHtmlFile, outPath: (id) => outPath(flags, id) })
     }
     case 'serve':
       return cmdServe(flags)

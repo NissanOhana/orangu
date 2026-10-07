@@ -287,6 +287,36 @@ syncBuiltinESMExports()
     expect(temp.stdout.trim().startsWith(tmpdir()), temp.stdout).toBe(true)
   })
 
+  // -o and --html take any file name, and a steered model can choose it. The OS opener runs a file by its type, so
+  // --open hands only a .html path to the opener, and prints any other path.
+  it('--open opens only a .html output, and prints any other path', async () => {
+    const dir = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-open-')))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const bin = join(dir, 'bin')
+    await mkdir(bin)
+    const openLog = join(dir, 'opened.log')
+    for (const name of ['open', 'xdg-open']) await writeFile(join(bin, name), `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(openLog)}\n`, { mode: 0o755 })
+    const env = { ...process.env, PATH: `${bin}:${process.env['PATH'] ?? ''}` }
+    const runOpen = (args: string[]) => spawnSync('node', [CLI, ...args, '--root', home.configDir, '--no-cache', '--open'], { encoding: 'utf8', env })
+    const opened = (): string[] => (existsSync(openLog) ? readFileSync(openLog, 'utf8').trim().split('\n') : [])
+
+    const command = join(dir, 'x.command')
+    const report = runOpen(['report', home.endedId, '-o', command])
+    expect(report.status, report.stderr).toBe(0)
+    expect(report.stderr).toContain(`orangu opens only a .html file. Open it by hand: ${command}`)
+    const app = join(dir, 'x.app')
+    const scope = runOpen(['repo', cwd, '--jobs', '1', '--html', app])
+    expect(scope.status, scope.stderr).toBe(0)
+    expect(scope.stderr).toContain(`Open it by hand: ${app}`)
+
+    const html = join(dir, 'report.html')
+    expect(runOpen(['report', home.endedId, '-o', html]).status).toBe(0)
+    await until(() => opened().length === 1, 10_000, 'the stub opener')
+    expect(opened(), 'only the .html file reached the opener').toEqual([html])
+  })
+
   it('repo honours --root: only the named config dir is scanned', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-repo-root-'))
     const cwd = join(dir, 'project')

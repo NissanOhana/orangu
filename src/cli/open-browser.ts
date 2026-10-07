@@ -1,5 +1,5 @@
 import { spawn as nodeSpawn, type SpawnOptions } from 'node:child_process'
-import { stripAnsi } from './tty.js'
+import { oneLine, stripAnsi } from './tty.js'
 
 /** The parts of the process that the handoff uses, so a test can stub the platform and the spawn. */
 export interface OpenDeps {
@@ -38,4 +38,17 @@ export function openInBrowser(target: string, deps: OpenDeps = {}): boolean {
     /* Headless hosts can use the printed URL. */
   }
   return true
+}
+
+/**
+ * Open a file that orangu wrote, only when its name ends in .html. -o, --out and --html take any file name, and a
+ * steered model can choose it. The OS opener runs a file by its type (x.command runs in Terminal on macOS), so any
+ * other path is printed for the user to open by hand. It returns false then.
+ */
+export function openHtmlFile(path: string, deps: OpenDeps = {}): boolean {
+  if (!path.endsWith('.html')) {
+    ;(deps.stderr ?? process.stderr).write(`  orangu opens only a .html file. Open it by hand: ${oneLine(path)}\n`)
+    return false
+  }
+  return openInBrowser(path, deps)
 }

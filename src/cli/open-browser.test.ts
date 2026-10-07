@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { openInBrowser, type OpenDeps } from './open-browser.js'
+import { openHtmlFile, openInBrowser, type OpenDeps } from './open-browser.js'
 
 /** a stub spawn and stderr that record the call, so no browser and no shell ever runs */
 function stub(platform: NodeJS.Platform) {
@@ -44,5 +44,29 @@ describe('openInBrowser', () => {
       expect(openInBrowser(target, deps)).toBe(true)
       expect(calls).toEqual([{ command, args: [target] }])
     }
+  })
+})
+
+describe('openHtmlFile', () => {
+  // -o, --out and --html take any file name, and a steered model can choose it. The OS opener runs a file by its
+  // type (x.command runs in Terminal on macOS), so orangu opens only a .html file and prints any other path.
+  it('opens only a path that ends in .html, and prints any other path on one line', () => {
+    for (const path of ['/tmp/x.command', '/tmp/x.app', '/tmp/notes.md', '/tmp/x.html.command', '/tmp/x', '/tmp/X.HTML', '/tmp/a\x1b[2J\nb.sh']) {
+      const { deps, calls, errors } = stub('darwin')
+      expect(openHtmlFile(path, deps), path).toBe(false)
+      expect(calls, path).toEqual([])
+      expect(errors.join(''), path).toContain('orangu opens only a .html file. Open it by hand: ')
+      expect(errors.join('').trimEnd(), path).not.toMatch(/[\x00-\x1f\x7f]/)
+    }
+    const { deps, calls, errors } = stub('darwin')
+    expect(openHtmlFile('/tmp/orangu-aaaaaaaa.html', deps)).toBe(true)
+    expect(calls).toEqual([{ command: 'open', args: ['/tmp/orangu-aaaaaaaa.html'] }])
+    expect(errors).toEqual([])
+  })
+
+  it('keeps the Windows refusal for a .html path that holds a character that cmd reads', () => {
+    const { deps, calls } = stub('win32')
+    expect(openHtmlFile('C:\\x&calc&.html', deps)).toBe(false)
+    expect(calls).toEqual([])
   })
 })
