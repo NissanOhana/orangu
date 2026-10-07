@@ -38,6 +38,7 @@ describe('analyzeAllPooled', () => {
     const limit = Math.max(1, cpus().length)
     const r = await run(limit * 3 + 2, 5000)
     expect(started.count).toBe(limit)
+    expect(r.workers, 'the result names the count that the pool used').toBe(limit)
     expect(r.failed, 'each session still runs once').toBe(limit * 3 + 2)
   })
 

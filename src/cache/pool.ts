@@ -71,6 +71,8 @@ export interface PoolRunResult {
   failed: number
   hits: number
   misses: number
+  /** the workers that the pool started: --jobs, capped by the session count and the CPU count */
+  workers: number
 }
 
 /**
@@ -138,5 +140,5 @@ export async function analyzeAllPooled(
     finishIfDone()
   })
   const analyses = results.filter((a): a is Analysis => a !== undefined)
-  return { analyses, failed, hits, misses: refs.length - failed - hits }
+  return { analyses, failed, hits, misses: refs.length - failed - hits, workers: n }
 }

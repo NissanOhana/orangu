@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { cpus, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
@@ -315,6 +315,19 @@ syncBuiltinESMExports()
     expect(runOpen(['report', home.endedId, '-o', html]).status).toBe(0)
     await until(() => opened().length === 1, 10_000, 'the stub opener')
     expect(opened(), 'only the .html file reached the opener').toEqual([html])
+  })
+
+  // The pool starts at most one worker for each CPU and one for each session, so the --verbose row prints the count
+  // that the pool used, not the --jobs value that the command line asked for.
+  it('--verbose prints the worker count that the pool used', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-jobs-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const r = spawnSync('node', [CLI, 'repo', cwd, '--root', home.configDir, '--no-cache', '--jobs', '5000', '--verbose'], { encoding: 'utf8' })
+    expect(r.status, r.stderr).toBe(0)
+    const used = Math.min(home.sessions.length, Math.max(1, cpus().length))
+    expect(r.stderr).toMatch(new RegExp(`^ {2}jobs +${used}$`, 'm'))
   })
 
   it('repo honours --root: only the named config dir is scanned', async () => {

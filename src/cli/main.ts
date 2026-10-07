@@ -378,7 +378,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
     sp.stop(quiet ? undefined : doneLine(err, { sizeBytes: use.reduce((n, ref) => n + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }))
     progress = undefined
     if (!flagBool(flags, 'quiet') && flagBool(flags, 'verbose')) {
-      process.stderr.write(row(err, 'jobs', String(jobsN), { style: 'dim' }) + '\n')
+      process.stderr.write(row(err, 'jobs', String(r.workers), { style: 'dim' }) + '\n')
       if (cacheEnabled) process.stderr.write(row(err, 'cache', `${r.hits} hits, ${r.misses} misses`, { style: 'dim' }) + '\n')
     }
   } else {
