@@ -3,7 +3,8 @@ import { appendFileSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync, ut
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession, SessionBuilder } from '../../../test/fixtures/session-builder.js'
-import { cmdSuggest } from './suggest.js'
+import { cmdSuggest, recordLines } from './suggest.js'
+import { displayWidth } from '../tty.js'
 import { encodeFinding, kickoffCommand, normalizeSessionIds, sessionCohortFingerprint, suggestionId, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import type { Finding, SuggestionRecord } from '../../suggest/types.js'
 import { parseArgs } from '../args.js'
@@ -553,5 +554,30 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
   it('rejects a bad scope and a missing rule', async () => {
     await expect(cmdSuggest([], { rule: 'x', scope: 'universe', session: 'a' })).rejects.toThrow(/--scope/)
     await expect(cmdSuggest([], { scope: 'session', session: 'a' })).rejects.toThrow(/usage/)
+  })
+})
+
+describe('orangu suggest --list record lines', () => {
+  const base = { id: 'sg_0123456789ab', v: 2, ruleId: 'reread-files', scope: 'session', sessionIds: ['aaaaaaaa-0000-4000-8000-000000000001'], status: 'new', statusAt: 0, source: 'report' }
+  const title = '3 files re-read within one context (12 redundant reads, 3.92M tokens) in the same \x1b]52;c;SGVsbG8=\x07long \x1b[2Jsession'
+  const rec = { ...base, title } as unknown as SuggestionRecord
+  /** the 26 columns before the title: 2 spaces, the id, 2 spaces, [new], 2 spaces */
+  const COLUMN = 26
+
+  it('wraps the title under itself at whole words, inside the line measure, with nothing cut', () => {
+    for (const width of [40, 60, 80]) {
+      const lines = recordLines(rec, width)
+      const rule = lines.findIndex((l) => l.startsWith('    rule '))
+      const titleLines = lines.slice(0, rule)
+      expect(titleLines[0], String(width)).toMatch(/^ {2}sg_0123456789ab {2}\[new\] {2}3 files/)
+      for (const l of titleLines.slice(1)) expect(l, String(width)).toMatch(/^ {26}\S/)
+      for (const l of titleLines) expect(displayWidth(l), `${width}: ${l}`).toBeLessThanOrEqual(Math.max(width, COLUMN + 20))
+      expect(titleLines.map((l) => l.slice(COLUMN)).join(' '), String(width)).toBe('3 files re-read within one context (12 redundant reads, 3.92M tokens) in the same long session')
+      expect(lines[rule]).toBe('    rule reread-files · scope session · sessions aaaaaaaa')
+    }
+  })
+
+  it('strips terminal escapes from a stored title before it prints', () => {
+    for (const l of recordLines(rec, 80)) expect(l).not.toMatch(/[\x1b\x07\x80-\x9f]/)
   })
 })

@@ -41,6 +41,8 @@ import {
 } from '../../suggest/types.js'
 import { createDiscoveredClaudeAnalysisLoader } from '../../adapters/claude-code/discovered-analysis.js'
 import { flagBool, flagStr } from '../args.js'
+import { layoutWidth } from '../summary.js'
+import { detectCaps, displayWidth, wrapWords } from '../tty.js'
 import { loadAnalysisBySelector } from './estimate.js'
 import { VERSION } from '../../version.js'
 
@@ -133,12 +135,27 @@ function terminal(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
 }
 
-function printRecord(rec: SuggestionRecord): void {
-  const w = (s: string) => process.stdout.write(s + '\n')
+/** The narrowest title column: below it, the line runs past the measure rather than print a word per line. */
+const MIN_TITLE_COLUMNS = 20
+
+/**
+ * One record as terminal lines. The title wraps under itself at whole words inside `width` and is never
+ * cut; wrapWords strips escapes and control bytes, because a stored title can carry transcript text.
+ */
+export function recordLines(rec: SuggestionRecord, width: number): string[] {
   const status = rec.status === 'verified' && !isTrustedComputedVerification(rec) ? 'legacy-unverified' : rec.status
-  w(`  ${terminal(rec.id)}  [${terminal(status)}]  ${terminal(rec.title)}`)
-  w(`    rule ${terminal(rec.ruleId)} · scope ${terminal(rec.scope)} · sessions ${rec.sessionIds.map((s) => terminal(s.slice(0, 8))).join(', ')}`)
-  if (rec.proposal) w(`    proposal: ${terminal(rec.proposal.proposalPath)}`)
+  const head = `  ${terminal(rec.id)}  [${terminal(status)}]  `
+  const column = displayWidth(head)
+  const [first = '', ...rest] = wrapWords(rec.title, Math.max(MIN_TITLE_COLUMNS, width - column))
+  const lines = [head + first, ...rest.map((t) => ' '.repeat(column) + t)]
+  lines.push(`    rule ${terminal(rec.ruleId)} · scope ${terminal(rec.scope)} · sessions ${rec.sessionIds.map((s) => terminal(s.slice(0, 8))).join(', ')}`)
+  if (rec.proposal) lines.push(`    proposal: ${terminal(rec.proposal.proposalPath)}`)
+  return lines
+}
+
+function printRecord(rec: SuggestionRecord): void {
+  const width = layoutWidth(detectCaps(process.stdout, process.env))
+  for (const l of recordLines(rec, width)) process.stdout.write(l + '\n')
 }
 
 // Curated deterministic, offline catalog: known tool, skill, and feature entries for this finding.
