@@ -7,6 +7,7 @@ import { cmdEvidence } from './evidence.js'
 import { cmdHarness } from './harness.js'
 import { cmdSuggest } from './suggest.js'
 import { cmdFeedback } from './feedback.js'
+import { cmdSte } from './ste.js'
 
 export type CommandFn = (positionals: string[], flags: Record<string, string | boolean>) => Promise<void>
 
@@ -16,6 +17,7 @@ export const EXTRA_COMMANDS: Record<string, CommandFn> = {
   estimate: cmdEstimate,
   harness: cmdHarness,
   suggest: cmdSuggest,
+  ste: cmdSte,
 }
 
 export const EXTRA_HELP: string[] = [
@@ -61,5 +63,10 @@ export const EXTRA_HELP: string[] = [
     '                                    [--application <path>]',
     '                                    [--verification <path>]',
     '                                  | --list)',
+  ].join('\n'),
+  [
+    '  orangu ste <file...|->       score Markdown, HTML or text against the STE',
+    '                               writing rules (- reads stdin, no pass mark)',
+    '                                 ([--json] [--lines])',
   ].join('\n'),
 ]

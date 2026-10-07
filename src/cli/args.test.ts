@@ -59,6 +59,20 @@ describe('suggest/estimate flags ', () => {
   })
 })
 
+describe('orangu ste flags', () => {
+  it('--lines is a known boolean flag and never takes the file after it', () => {
+    const p = parseArgs(['ste', '--lines', 'help.txt', '--json'])
+    expect(p.flags['lines']).toBe(true)
+    expect(p.positionals).toEqual(['help.txt'])
+    expect(unknownFlags(p.flags)).toEqual([])
+  })
+  it('a lone - is a positional (stdin), not a flag', () => {
+    const p = parseArgs(['ste', '--json', '-'])
+    expect(p.positionals).toEqual(['-'])
+    expect(p.flags['json']).toBe(true)
+  })
+})
+
 describe('--html (the aggregate report file)', () => {
   it('takes the next token as its path and is a known flag, so a typo still fails', () => {
     const p = parseArgs(['repo', '--html', '/tmp/repo.html'])

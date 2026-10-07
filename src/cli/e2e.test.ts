@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
+import { checkText } from '../ste/index.js'
 import { MASCOT_STACKED } from './mascot-ascii.js'
 import { displayWidth } from './tty.js'
 
@@ -99,7 +100,7 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     expect(h.split('\n').find((l) => l.includes('--open / --no-open'))).toContain('repo/global')
     // Hard-assert the suggest-layer verbs here because suggest.e2e.test.ts skips when they are
     // missing, so this unconditional test is the guard that keeps the registry wired and documented
-    for (const f of ['orangu estimate', 'orangu harness', 'orangu suggest', '--slim']) expect(h).toContain(f)
+    for (const f of ['orangu estimate', 'orangu harness', 'orangu suggest', 'orangu ste <file...|->', '--slim']) expect(h).toContain(f)
     expect(h).toContain('orangu feedback')
     expect(h).toContain('--context session|repo|global|report|app')
     // the selector forms and the flag alias are promised in one place; every help line fits 80 columns
@@ -946,6 +947,68 @@ syncBuiltinESMExports()
       await gone
     }
   }, 45_000)
+
+  describe('orangu ste', () => {
+    // the fixture has one 26-word description: one sentence-length finding, never a nonzero exit
+    const fixtures = join(process.cwd(), 'test', 'fixtures', 'ste')
+    const ste = (args: string[], input?: string) => spawnSync('node', [CLI, 'ste', ...args], { encoding: 'utf8', cwd: fixtures, ...(input === undefined ? {} : { input }) })
+    const markdown = readFileSync(join(fixtures, 'long-sentence.md'), 'utf8')
+    const finding = (name: string) => new RegExp(`^${name}:3  sentence-length  "The checker reads this file as Markdown .*"  26 words: split it \\(limit 25\\)$`, 'm')
+
+    it('prints one line per finding and a summary line, and exits 0 with a finding', () => {
+      const r = ste(['long-sentence.md'])
+      expect(r.status, r.stderr).toBe(0)
+      expect(r.stdout).toMatch(finding('long-sentence\\.md'))
+      expect(r.stdout.trimEnd().split('\n').at(-1)).toBe('long-sentence.md: 2 sentences, 1 clean, STE score 50%, 1 findings')
+      expect(r.stderr).toBe('')
+    })
+
+    it('reads the same text from stdin when the file is -', () => {
+      const r = ste(['-'], markdown)
+      expect(r.status, r.stderr).toBe(0)
+      expect(r.stdout).toMatch(finding('-'))
+      expect(r.stdout.trimEnd().split('\n').at(-1)).toBe('-: 2 sentences, 1 clean, STE score 50%, 1 findings')
+    })
+
+    it('--json prints the result that checkText gives in process', () => {
+      const r = ste(['long-sentence.md', '--json'])
+      expect(r.status, r.stderr).toBe(0)
+      const [result] = JSON.parse(r.stdout) as Array<{ file: string; score: number; findings: Array<{ rule: string }> }>
+      const own = checkText(markdown, { frontmatter: true })
+      expect(result).toEqual({ file: 'long-sentence.md', ...own })
+      expect(result!.score).toBe(own.score)
+      expect(result!.findings.map((f) => f.rule)).toEqual(['sentence-length'])
+    })
+
+    it('scores an .html file as HTML: a script is code, a paragraph tag ends a block', () => {
+      const html = readFileSync(join(fixtures, 'page.html'), 'utf8')
+      const r = ste(['page.html', '--json'])
+      expect(r.status, r.stderr).toBe(0)
+      const [result] = JSON.parse(r.stdout) as Array<{ findings: Array<{ rule: string; text: string }> }>
+      expect(result).toEqual({ file: 'page.html', ...checkText(html, { html: true }) })
+      expect(result!.findings.map((f) => `${f.rule} ${f.text}`)).toEqual(['ste-word utilize'])
+      // as text, the script's semicolon would be a finding
+      expect(checkText(html).findings.map((f) => f.rule)).toContain('semicolon')
+    })
+
+    it('exits 1 on a file that does not exist, and prints nothing on stdout', () => {
+      const r = ste(['long-sentence.md', 'no-such-file.md'])
+      expect(r.status).toBe(1)
+      expect(r.stdout).toBe('')
+      expect(r.stderr).toMatch(/cannot read no-such-file\.md/)
+    })
+
+    it('exits 1 on an unknown flag: it has no --min and no pass mark', () => {
+      const unknown = ste(['long-sentence.md', '--min', '80'])
+      expect(unknown.status).toBe(1)
+      expect(unknown.stderr).toMatch(/unknown flag --min/)
+      // a flag of another verb is also refused, never ignored
+      const other = ste(['long-sentence.md', '--open'])
+      expect(other.status).toBe(1)
+      expect(other.stdout).toBe('')
+      expect(other.stderr).toMatch(/--open is not an orangu ste flag/)
+    })
+  })
 })
 
 describe.skipIf(!existsSync(CLI))('orangu CLI regressions from the 0.7.0 QA pass', () => {

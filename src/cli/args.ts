@@ -36,6 +36,7 @@ const BOOL_FLAGS = new Set([
   'verbose',
   'no-color',
   'plain',
+  'lines',
 ])
 
 /**
