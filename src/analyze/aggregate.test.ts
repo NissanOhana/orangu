@@ -173,8 +173,11 @@ describe('crossFindings title: a real example session, not a number-stripped tem
     const rendered = [...html.matchAll(/<span class="grow">([^<]*)<\/span>/g)].map((m) => m[1]!)
     expect(rendered.length).toBe(Math.min(8, agg.crossFindings.length))
     for (const title of rendered) expect(title).not.toMatch(/\bN\b/)
+    // each row shows the example title, and the "In one session" marker is said once, as a caption above the rows
+    expect(rendered).toEqual(agg.crossFindings.slice(0, 8).map((f) => f.exampleTitle))
+    expect(html.split('Each title shows the figures of one example session.').length - 1).toBe(1)
     // the "(N sessions)" count the screen adds still follows every title
-    expect(html).toMatch(/<span class="grow">In one session: [^<]*<\/span><span class="mono small muted">\d+ sessions<\/span>/)
+    expect(html).toMatch(/<span class="grow">[^<]+<\/span><span class="mono small muted">\d+ sessions<\/span>/)
   })
 })
 
