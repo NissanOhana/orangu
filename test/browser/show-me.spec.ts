@@ -74,6 +74,22 @@ test('a deck link with a slide number opens on that slide', async ({ page }, inf
   expect(errors).toEqual([])
 })
 
+// No length cap on content: the deck shows each improvement, each finding title and the improvements title whole.
+// A line clamp would hide the rest of the text, so the box of each one holds all of its text (4 px for rounding).
+test('the deck shows each improvement, title and improvement text whole, with no line clamp', async ({ page }, info) => {
+  await page.goto(`${BASE}/slides.html${projectTheme(info) === 'dark' ? '#theme=dark' : ''}`)
+  const cut = await page.evaluate(() =>
+    Object.fromEntries(
+      ['.it', '.st', '.rec .tx'].map((selector) => {
+        const all = [...document.querySelectorAll<HTMLElement>(selector)]
+        return [selector, `${all.filter((el) => el.scrollHeight > el.clientHeight + 4).length} of ${all.length}`]
+      }),
+    ),
+  )
+  expect(Number(/of (\d+)/.exec(cut['.it']!)![1]), 'the fixture has improvements').toBeGreaterThan(0)
+  expect(cut).toEqual(Object.fromEntries(Object.entries(cut).map(([selector, value]) => [selector, value.replace(/^\d+/, '0')])))
+})
+
 // The words that Claude wrote are hostile here. orangu wrote them as text, so the page shows each one, runs no
 // script of theirs, and makes no CSP report: there is nothing to block.
 test('the hostile words show as text, and only the pinned runtime runs', async ({ page }, info) => {
