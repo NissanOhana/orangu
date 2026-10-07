@@ -80,7 +80,7 @@ describe('STE gate', () => {
     expect(files.filter((file) => /\.(test|spec)\.ts$/.test(file))).toEqual([])
   })
 
-  it('measures every top-level src/ folder and the top-level src files; only built output is exempt, with its reason', () => {
+  it('measures every top-level src/ folder and the top-level src files; only built output and the checker word tables are exempt, with their reasons', () => {
     const ids = new Set(surfaces().map((surface) => surface.id))
     const dirs = readdirSync(join(ROOT, 'src'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name)
     for (const dir of dirs) {
@@ -88,7 +88,7 @@ describe('STE gate', () => {
       else expect(ids.has(`src/${dir}`), `src/${dir} is a surface`).toBe(true)
     }
     expect(ids.has('src/*.ts')).toBe(true)
-    expect(SRC_EXEMPT).toEqual({ 'src/report/generated': expect.stringMatching(/built/) })
+    expect(SRC_EXEMPT).toEqual({ 'src/report/generated': expect.stringMatching(/built/), 'src/ste/words.ts': expect.stringMatching(/word tables/) })
   })
 
   it('measures every user doc at the root and in docs/; a doc left out names its reason', () => {

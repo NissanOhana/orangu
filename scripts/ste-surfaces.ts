@@ -1,6 +1,6 @@
 /**
  * The STE gate's surfaces: which user-visible copy orangu measures, how each kind of source becomes
- * blocks of prose for scripts/ste.mjs, and which chunk of work owns each row. test/ste.test.ts holds
+ * blocks of prose for the checker in src/ste, and which chunk of work owns each row. test/ste.test.ts holds
  * every row to its floor in test/ste-floors.ts.
  *
  * Dev-only. It reads the repository (the files git tracks, plus new files git does not ignore) and parses
@@ -33,7 +33,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, realpathSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { PARAGRAPH, checkBlocks, htmlToText, proseBlocks, proseWords, frontmatterDescription, type SteBlock, type SteResult } from './ste.mjs'
+import { PARAGRAPH, checkBlocks, htmlToText, proseBlocks, proseWords, frontmatterDescription, type SteBlock, type SteResult } from '../src/ste/index.js'
 import type { SteRow } from '../test/ste-floors.js'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -43,6 +43,7 @@ export const HELP_BIN = 'plugin/bin/orangu.cli.mjs'
 /** Paths under src/ that are not gated, with the reason. Everything else under src/ is a surface. */
 export const SRC_EXEMPT: Readonly<Record<string, string>> = {
   'src/report/generated': 'built output of src/report/client (scripts/build.mjs); its sources are measured',
+  'src/ste/words.ts': 'the word tables of the STE checker: data that holds the words it flags, not copy. The rest of src/ste is measured',
 }
 
 /** Markdown at the root and in docs/ that is not gated, with the reason. Every other doc is a surface. */
@@ -495,7 +496,7 @@ function docSurfaces(files: readonly string[], where: 'root' | 'docs'): Surface[
 
 /** K owns the CLI and engine folders; a new src/ folder has no owner until its chunk names one. */
 const SRC_OWNERS: Readonly<Record<string, string>> = Object.fromEntries(
-  ['adapters', 'cache', 'cli', 'discover', 'feedback', 'harness', 'model', 'models', 'redact', 'serve', 'suggest', 'util'].map((dir) => [dir, 'K']),
+  ['adapters', 'cache', 'cli', 'discover', 'feedback', 'harness', 'model', 'models', 'redact', 'serve', 'ste', 'suggest', 'util'].map((dir) => [dir, 'K']),
 )
 /** split into their own rows below: report (client and renderer) and analyze (rule copy and the rest) */
 const SRC_SPLIT = new Set(['report', 'analyze'])

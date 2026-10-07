@@ -123,6 +123,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // measured 97 (28 of 29). tail.ts:127 keeps "changed while it was being read": one phrase for every
   // read-race error. The adapter retry regex (parse.ts:261) parses only the evidence-input.ts messages
   'src/serve': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 1 },
+  // new surface, the STE checker moved from scripts/: measured 100 (7 of 7) once its 2 hints use a colon,
+  // not a semicolon. Its word tables (src/ste/words.ts) are data, exempt in SRC_EXEMPT.
+  'src/ste': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // measured 99 (230 of 233). Kept on purpose: the cohort receipt summary (verification-policy.ts:73)
   // and the check evidence line (cohort-stats.ts:159) are stored in each verified record and compared
   // byte for byte on read, and artifacts.ts:196 is the read-race phrase

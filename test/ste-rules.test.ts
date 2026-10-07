@@ -1,10 +1,10 @@
 /**
- * The STE checker (scripts/ste.mjs): one bad and one good sample for each rule, then the orangu
+ * The STE checker (src/ste): one bad and one good sample for each rule, then the orangu
  * additions and carve-outs. Then the extraction of copy from TS sources (scripts/ste-surfaces.ts).
  * The gate that applies both to every surface is test/ste.test.ts.
  */
 import { describe, expect, it } from 'vitest'
-import { checkBlocks, checkText, frontmatterDescription, htmlToText, proseBlocks, wordCount, wrapCommands } from '../scripts/ste.mjs'
+import { checkBlocks, checkText, frontmatterDescription, htmlToText, proseBlocks, wordCount, wrapCommands } from '../src/ste/index.js'
 import { fragmentResult, htmlResult, tsBlocks, type TsOptions } from '../scripts/ste-surfaces.js'
 
 const EM_DASH = String.fromCharCode(0x2014)
