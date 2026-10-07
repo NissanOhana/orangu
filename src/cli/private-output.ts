@@ -18,11 +18,20 @@ export const OUTPUT_HEAD_BYTES = 4096
  */
 const HTML_MARKER = /^<!doctype html>\s*<html\b[^>]*>\s*<head>(?:\s*<meta\b[^>]*>)*?\s*<meta name="generator" content="orangu [^"<>]*"\/?>/
 /**
- * The marker of an orangu JSON output: `schemaVersion` is the first key and holds a string, and the second key is one
- * that orangu writes there (aggregate `generatedAt`, harness and slim `generator`, evidence `source`). A file that only
- * has a `schemaVersion` key, such as a container manifest, is not an orangu output.
+ * The marker of an orangu JSON output: `schemaVersion` is the first key and holds a string, and the keys after it are
+ * the exact shape that one orangu writer emits (each unchanged since the first public version):
+ * - the aggregate (repo/global --out): `generatedAt` holds a number, then `scope` (src/analyze/aggregate.ts)
+ * - the analysis, its slim projection and the harness report: `generator` opens with `"name": "orangu"`
+ *   (src/analyze/analyze.ts, src/suggest/slim.ts, src/harness/report.ts)
+ * - the evidence bundle (show-me data.json): `source` opens with an orangu input kind, then `schemaVersion`
+ *   (src/suggest/evidence.ts)
+ * A container manifest, or a file with sorted keys whose second key is `source` or `generator`, is not an orangu output.
  */
-const JSON_MARKER = /^\{\s*"schemaVersion"\s*:\s*"[^"\\]*"\s*,\s*"(?:generatedAt|generator|source)"\s*:/
+const JSON_MARKER = new RegExp(
+  '^\\{\\s*"schemaVersion"\\s*:\\s*"[^"\\\\]*"\\s*,\\s*(?:' +
+    ['"generatedAt"\\s*:\\s*\\d+\\s*,\\s*"scope"\\s*:\\s*"', '"generator"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"orangu"\\s*[,}]', '"source"\\s*:\\s*\\{\\s*"kind"\\s*:\\s*"(?:analysis|slim-analysis|aggregate)"\\s*,\\s*"schemaVersion"\\s*:'].join('|') +
+    ')',
+)
 
 /** True when `head`, the start of a file, carries the marker that orangu writes at the start of each output. */
 export function isOranguOutput(head: string): boolean {

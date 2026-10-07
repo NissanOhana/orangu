@@ -4,6 +4,11 @@ import { link, mkdir, mkdtemp, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { OUTPUT_HEAD_BYTES, PrivateOutputError, isOranguOutput, writePrivateOutput } from './private-output.js'
+import type { Aggregate } from '../analyze/aggregate.js'
+import type { Analysis } from '../model/analysis.js'
+import { projectEvidence } from '../suggest/evidence.js'
+import { slimAnalysis } from '../suggest/slim.js'
+import { prepareAggregateForOutput, renderPreparedAggregateJson } from './json-out.js'
 
 async function tempPath(name: string): Promise<string> {
   return join(await mkdtemp(join(tmpdir(), 'orangu-private-output-')), name)
@@ -119,10 +124,27 @@ describe('isOranguOutput', () => {
       '<!doctype html>\n<html lang="en" data-scope="session">\n<head>\n<meta charset="utf-8"/>\n<meta name="robots" content="noindex"/>\n<meta name="generator" content="orangu 0.9.0"/>\n<title data-slot="title">x</title>',
       ORANGU_JSON,
       '{\n  "schemaVersion": "2",\n  "generator": {\n    "name": "orangu",',
-      '{\n  "schemaVersion": "1",\n  "source": {\n    "kind": "aggregate",',
+      '{\n  "schemaVersion": "1",\n  "source": {\n    "kind": "aggregate",\n    "schemaVersion": "2",',
       '{"schemaVersion":"2","generatedAt":1,"scope":"global"}',
     ]
     for (const head of heads) expect(isOranguOutput(head), head).toBe(true)
+  })
+
+  // Each JSON file that orangu writes, built by its real writer from the golden corpus: analyze --json (pretty and
+  // compact), the slim projection, the aggregate (repo/global --out) and both evidence bundles (show-me data.json).
+  // The harness report is checked on the built CLI (src/cli/commands/harness.e2e.test.ts).
+  it('accepts the head of each JSON output that orangu writes, from its real writer', () => {
+    const analysis = JSON.parse(readFileSync(join(process.cwd(), 'test/golden/canonical.analysis.json'), 'utf8')) as Analysis
+    const agg = JSON.parse(readFileSync(join(process.cwd(), 'test/golden/aggregate.json'), 'utf8')) as Aggregate
+    const outputs: Record<string, string> = {
+      'analyze --json': JSON.stringify(analysis, null, 2),
+      'analyze --json --quiet': JSON.stringify(analysis),
+      'analyze --json --slim': JSON.stringify(slimAnalysis(analysis), null, 2),
+      'repo --out': renderPreparedAggregateJson(prepareAggregateForOutput(agg, {}), {}, { pretty: true, trailingNewline: false }),
+      'evidence (session)': JSON.stringify(projectEvidence(analysis), null, 2),
+      'evidence (repo)': JSON.stringify(projectEvidence(agg, { scope: 'repo' }), null, 2),
+    }
+    for (const [name, text] of Object.entries(outputs)) expect(isOranguOutput(text.slice(0, OUTPUT_HEAD_BYTES)), name).toBe(true)
   })
 
   it('accepts the head of both built show-me templates, so a rendered deck or report is an orangu output too', () => {
@@ -148,8 +170,23 @@ describe('isOranguOutput', () => {
       '{\n  "name": "x",\n  "schemaVersion": "2",\n  "generatedAt": 1',
       '[{"schemaVersion":"2","generatedAt":1}]',
       'alias x=1 # {"schemaVersion":"2","generatedAt":1}',
+      // a file with sorted keys, or another tool's generator: orangu writes none of these shapes
+      '{"schemaVersion":"1.0","source":{"url":"https://example.com"}}',
+      '{\n  "schemaVersion": "1.0",\n  "source": "src",\n  "target": "dist"\n}',
+      '{"schemaVersion":"1.0","generator":{"name":"other-tool","version":"1"}}',
+      '{"schemaVersion":"1.0","generator":"other-tool"}',
+      '{"schemaVersion":"1.0","generatedAt":"2026-10-07","owner":"x"}',
+      '{"schemaVersion":"1.0","generatedAt":1}',
     ]
     for (const head of heads) expect(isOranguOutput(head), head).toBe(false)
+  })
+
+  it('refuses to replace a JSON file with sorted keys that orangu did not write', async () => {
+    const path = await tempPath('config.json')
+    const text = '{"schemaVersion":"1.0","source":{"url":"https://example.com"}}\n'
+    writeFileSync(path, text, { mode: 0o644 })
+    await expect(writePrivateOutput(path, ORANGU_JSON)).rejects.toThrow(/is not an orangu output/)
+    expect(readFileSync(path, 'utf8')).toBe(text)
   })
 
   it('reads the marker only inside the bounded head', () => {
