@@ -52,4 +52,4 @@ The receipt is skill-authored. Orangu validates its shape, and it checks that th
 
 Return the changed files, check results, and receipt path. For session or repo scope, say: "applied locally, not yet verified. Verify after at least three settled later sessions with `/orangu:improve --verify <id>`." Never offer verification for global scope.
 
-Before you send this reply, write it to `~/.orangu/drafts/apply.md`. If that file exists, read it first. Then run `orangu ste '<draft-path>'`.
+Before you send this reply, write it to a new file `~/.orangu/drafts/apply-<random>.md`. Then run `orangu ste '<draft-path>'`.

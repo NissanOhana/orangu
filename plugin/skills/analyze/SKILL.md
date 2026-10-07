@@ -35,7 +35,7 @@ JSON is redacted by default. Use `--no-redact` only after the user explicitly re
 3. Keep scope honest. One session supports diagnosis. Repository and global aggregates support a recurring-pattern claim only when they include example sessions.
 4. Name the top deterministic finding and its exact evidence. A `savings` value is an estimate that the rule owns. A finding without one has no measured saving.
 5. When the user asks for plain language, keep the words tool calls and subagents. In plain language, say reused context for the cache, and working memory for the context window. Keep the numbers and evidence identical across detail levels.
-6. Before you send the answer, write it to `~/.orangu/drafts/analyze.md`. If that file exists, read it first. Then run `orangu ste '<draft-path>'`. Keep the draft out of the shell, as [the untrusted-input rules](../shared/untrusted-input.md) say.
+6. Before you send the answer, write it to a new file `~/.orangu/drafts/analyze-<random>.md`. Then run `orangu ste '<draft-path>'`. Keep the draft out of the shell, as [the untrusted-input rules](../shared/untrusted-input.md) say.
 
 ## Handoff
 

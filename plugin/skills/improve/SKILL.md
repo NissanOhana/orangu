@@ -73,7 +73,7 @@ Write no proposal when evidence is missing, already addressed, or too weak. Say 
 
 Return a short ranked summary: the change, expected outcome, what happened, evidence, risks, later verification, sources, the saved proposal id and path. Name the next action: `/orangu:apply <id>` for session/repo proposals, review only for global. Say that you applied nothing.
 
-Before you send the summary, write it to `~/.orangu/drafts/improve.md`. If that file exists, read it first. Then run `orangu ste '<draft-path>'`. Then offer `/orangu:feedback` once. Never launch it unless the user accepts.
+Before you send the summary, write it to a new file `~/.orangu/drafts/improve-<random>.md`. Then run `orangu ste '<draft-path>'`. Then offer `/orangu:feedback` once. Never launch it unless the user accepts.
 
 ## 6. Verify only with later evidence
 

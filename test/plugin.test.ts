@@ -674,7 +674,8 @@ describe('plugin packaging', () => {
     const checkStep = rules.slice(check)
     for (const step of [
       "1. If you wrote the text to a file, run `orangu ste '<path>'`.",
-      "2. If the text goes to chat, first write the draft to `~/.orangu/drafts/<skill>.md`. `<skill>` is the skill that sent you here. If that file exists, read it first. Then run `orangu ste '<draft-path>'`, where `<draft-path>` is the absolute path of that file. Never pass a draft through the shell, as [the untrusted-input rules](untrusted-input.md) say.",
+      "2. If the text goes to chat, first write the draft to a new file, `~/.orangu/drafts/<skill>-<random>.md`. `<skill>` is the skill that sent you here, and `<random>` is 8 random lowercase hex characters. Never read or reuse an earlier draft. Then run `orangu ste '<draft-path>'`, where `<draft-path>` is the absolute path of that file. Never pass a draft through the shell, as [the untrusted-input rules](untrusted-input.md) say.",
+      '`~/.orangu/drafts/` holds checked drafts, and the user can delete it at any time.',
       '3. Fix each finding that is real. Do not rewrite a correct sentence to clear a finding. Do not chase a score.',
     ]) expect(checkStep, step).toContain(step)
     // the point-first rule is said once, in its own section
@@ -699,7 +700,7 @@ describe('plugin packaging', () => {
       const rules = readText(path)
       const boundary = rules.slice(rules.indexOf('## 2. The shell-data boundary'), rules.indexOf('## 3. '))
       expect(boundary, path).toContain('7. Never put a draft in a command, an argument, a here-document or a here-string.')
-      expect(boundary, path).toContain('To check a draft, write it to its file under `~/.orangu/drafts/`. Pass only that path to `orangu ste`.')
+      expect(boundary, path).toContain('To check a draft, write it to a new file under `~/.orangu/drafts/`. Pass only that path to `orangu ste`.')
     }
   })
   it('no skill passes text to orangu ste through the shell', () => {
@@ -716,8 +717,17 @@ describe('plugin packaging', () => {
   // file only after a Read, so the step reads an earlier draft first. analyze, improve and harness pre-approve the
   // draft write: the drafts directory is outside the repository and holds only the skill's own draft. apply
   // pre-approves no write at all, so its draft write asks like each of its edits.
+  // Each check writes a new file with a random name: a fixed file would carry a draft (and the text it quotes) from
+  // one session or repository into the next, and 2 sessions at the same time would check each other's text.
   const draftStep = (skill: string, lead: string): string =>
-    `${lead}, write it to \`~/.orangu/drafts/${skill}.md\`. If that file exists, read it first. Then run \`orangu ste '<draft-path>'\`.`
+    `${lead}, write it to a new file \`~/.orangu/drafts/${skill}-<random>.md\`. Then run \`orangu ste '<draft-path>'\`.`
+  it('each check writes a new draft file and never reads or reuses an earlier one', () => {
+    for (const path of filesWith(['.md'], 'plugin/skills', '.agents/skills', 'plugins/orangu/skills')) {
+      const text = readText(path)
+      expect(text, `${path} names no fixed draft file`).not.toMatch(/drafts\/[a-z<>]+\.md/)
+      expect(text, `${path} reads no earlier draft`).not.toContain('If that file exists')
+    }
+  })
   it('analyze, improve and harness pre-approve an edit of their drafts directory and nothing else, and no other skill pre-approves an edit', () => {
     const edits = (s: string): string[] =>
       (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim()).filter((grant) => /^Edit\b/.test(grant))
@@ -1188,15 +1198,15 @@ describe('plugin packaging', () => {
     // 2026-10-06 show-me security re-check R1: body 769 -> 794, measured 793 words (+25). The 7 counts become 9, 8 on
     // each file: the exact link in each file (2 items), the fixed head of the file with the exact runtime hash in place
     // of the line that took any hash anywhere, and the exact Grep parameters (`output_mode`, `-i`, `multiline`).
-    // 2026-10-07 the orangu ste check step: harness 1401 -> 1429 and improve 1021 -> 1049, each by exactly the
-    // measured words of its 2 check steps, +28 each (measured 1,400 -> 1,428 and 1,020 -> 1,048). The proposal
+    // 2026-10-07 the orangu ste check step: harness 1401 -> 1425 and improve 1021 -> 1045, each by exactly the
+    // measured words of its 2 check steps, +24 each (measured 1,400 -> 1,424 and 1,020 -> 1,044). The proposal
     // check, "Check the proposal with `orangu ste '<proposal-path>'`. Then run", is +7 after the write and before
-    // `--set … proposed`. The chat check is +21: "Before you send this report, write it to
-    // `~/.orangu/drafts/harness.md`. If that file exists, read it first. Then run `orangu ste '<draft-path>'`." in
-    // harness stage 6, and the same 3 sentences for the summary in improve step 5. A chat draft goes to a file, never
-    // through the shell. The rules for the check live once, in shared/ste.md and shared/untrusted-input.md. analyze
-    // (692) and apply (611) grew under their ceiling of 700, which does not move.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1429, improve: 1049, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
+    // `--set … proposed`. The chat check is +17: "Before you send this report, write it to a new file
+    // `~/.orangu/drafts/harness-<random>.md`. Then run `orangu ste '<draft-path>'`." in harness stage 6, and the same
+    // 2 sentences for the summary in improve step 5. A chat draft goes to a new file, never through the shell. The
+    // rules for the check live once, in shared/ste.md and shared/untrusted-input.md. analyze (688) and apply (607)
+    // grew under their ceiling of 700, which does not move.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

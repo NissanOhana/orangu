@@ -95,8 +95,10 @@ Read the text again. Fix each sentence that breaks a rule.
 Run this check at each step where your skill names `orangu ste`.
 
 1. If you wrote the text to a file, run `orangu ste '<path>'`.
-2. If the text goes to chat, first write the draft to `~/.orangu/drafts/<skill>.md`. `<skill>` is the skill that sent you here. If that file exists, read it first. Then run `orangu ste '<draft-path>'`, where `<draft-path>` is the absolute path of that file. Never pass a draft through the shell, as [the untrusted-input rules](untrusted-input.md) say.
+2. If the text goes to chat, first write the draft to a new file, `~/.orangu/drafts/<skill>-<random>.md`. `<skill>` is the skill that sent you here, and `<random>` is 8 random lowercase hex characters. Never read or reuse an earlier draft. Then run `orangu ste '<draft-path>'`, where `<draft-path>` is the absolute path of that file. Never pass a draft through the shell, as [the untrusted-input rules](untrusted-input.md) say.
 3. Fix each finding that is real. Do not rewrite a correct sentence to clear a finding. Do not chase a score.
+
+`~/.orangu/drafts/` holds checked drafts, and the user can delete it at any time.
 
 `orangu ste` has no pass mark. It cannot see the passive voice or a long noun cluster, so a clean result does not prove that the text obeys every rule.
 
