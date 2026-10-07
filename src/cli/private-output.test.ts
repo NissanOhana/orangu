@@ -108,6 +108,27 @@ describe('writePrivateOutput', () => {
     expect(readFileSync(path, 'utf8')).toBe('user data\n')
   })
 
+  // A model can choose the -o path, and the CLI prints each error on the terminal: every refusal names the path on
+  // one line, so a file name cannot clear the screen, set a link or forge a line of output.
+  it.skipIf(process.platform === 'win32')('names a hostile path on one line in each refusal: symlink, hard link and directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-private-output-hostile-'))
+    const hostile = (kind: string) => join(dir, `${kind}\x1b[2J\x1b]8;;https:x\x07\nerror: forged\tline`)
+    const outside = join(dir, 'outside.html')
+    writeFileSync(outside, ORANGU_HTML)
+    await symlink(outside, hostile('link'))
+    await link(outside, hostile('hard'))
+    await mkdir(hostile('dir'))
+    for (const kind of ['link', 'hard', 'dir']) {
+      const message = await writePrivateOutput(hostile(kind), 'secret').then(
+        () => '',
+        (error: unknown) => (error as Error).message,
+      )
+      expect(message, kind).toMatch(/symbolic link|changed during access|multiple hard links|regular file|written safely/)
+      expect(message, kind).not.toMatch(/[\x00-\x1f\x7f]/)
+    }
+    expect(readFileSync(outside, 'utf8')).toBe(ORANGU_HTML)
+  })
+
   it('replaces an orangu JSON output in its compact form too', async () => {
     const path = await tempPath('harness.json')
     writeFileSync(path, '{"schemaVersion":"2","generator":{"name":"orangu"}}', { mode: 0o600 })

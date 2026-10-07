@@ -47,15 +47,15 @@ function sameInode(a: BigIntStats, b: BigIntStats): boolean {
 }
 
 function assertSafeOutput(stat: BigIntStats, path: string): void {
-  if (!stat.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`)
+  if (!stat.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${oneLine(path)}`)
   // A second hard link would let the output overwrite or disclose bytes through another path.
-  if (stat.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`)
+  if (stat.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${oneLine(path)}`)
 }
 
 async function assertPathStillNamesHandle(path: string, opened: BigIntStats): Promise<void> {
   const current = await lstat(path, { bigint: true })
   if (current.isSymbolicLink() || !current.isFile() || !sameInode(current, opened)) {
-    throw new PrivateOutputError(`private output target changed during access: ${path}`)
+    throw new PrivateOutputError(`private output target changed during access: ${oneLine(path)}`)
   }
 }
 
@@ -87,7 +87,7 @@ async function openOutput(path: string): Promise<{ handle: FileHandle; created: 
     return { handle: await open(path, baseFlags | constants.O_RDWR), created: false }
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ELOOP') {
-      throw new PrivateOutputError(`private output target must not be a symbolic link: ${path}`)
+      throw new PrivateOutputError(`private output target must not be a symbolic link: ${oneLine(path)}`)
     }
     throw error
   }
@@ -113,7 +113,7 @@ export async function writePrivateOutput(path: string, data: string | Uint8Array
       const secured = await handle.stat({ bigint: true })
       assertSafeOutput(secured, outputPath)
       if (process.platform !== 'win32' && Number(secured.mode & 0o777n) !== PRIVATE_FILE_MODE) {
-        throw new PrivateOutputError(`private output permissions could not be secured: ${outputPath}`)
+        throw new PrivateOutputError(`private output permissions could not be secured: ${oneLine(outputPath)}`)
       }
       await assertPathStillNamesHandle(outputPath, secured)
 
@@ -128,6 +128,6 @@ export async function writePrivateOutput(path: string, data: string | Uint8Array
     }
   } catch (error) {
     if (error instanceof PrivateOutputError) throw error
-    throw new PrivateOutputError(`private output could not be written safely: ${outputPath}`)
+    throw new PrivateOutputError(`private output could not be written safely: ${oneLine(outputPath)}`)
   }
 }
