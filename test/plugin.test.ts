@@ -922,6 +922,9 @@ describe('plugin packaging', () => {
         'When the user agrees, read `data.json` and [the slot rules](references/slots.md).',
       ])
       expect(text, 'reads no template').not.toMatch(/references\/(?:slides|report)\.html|\.src\.html/)
+      // data.json is redacted by default, not always: --no-redact keeps everything
+      expect(text).toContain('writes the evidence to `data.json` in it, redacted unless the user asked for `--no-redact`.')
+      expect(text).not.toContain('writes the redacted evidence')
     })
 
     // Orangu writes every byte of HTML. Claude writes one file of 3 values, and the render escapes each value. So the
@@ -952,6 +955,8 @@ describe('plugin packaging', () => {
         'Print both absolute paths.',
       ])
       expect(text).toContain('If it refuses `words.json`, fix the file as the error says, and run it again.')
+      // the stop rule leaves room for that fix: a words.json refusal is not a stop
+      expect(text).toContain('If an `orangu` command fails, report its error and stop, except a `words.json` refusal in step 5.')
       // the render checks the values: no chat draft and no orangu ste run on them
       expect(text).not.toContain('orangu ste')
     })
@@ -1230,7 +1235,10 @@ describe('plugin packaging', () => {
     // --open. The description (304 chars) and the resident total do not move.
     // 2026-10-07 show-me security fix: body 536 -> 545, measured 535 -> 544 words (+9). The Edit grant on words.json
     // went, so the write asks, and the body says so once: "The words.json write asks for permission. This is expected."
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 545 }
+    // 2026-10-07 show-me review fixes: body 545 -> 558, measured 544 -> 557 words (+13). The stop rule names its one
+    // exception, "except a `words.json` refusal in step 5." (+7), and data.json is "redacted unless the user asked for
+    // `--no-redact`" in place of "the redacted evidence" (+6).
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 558 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
