@@ -726,14 +726,16 @@ describe('plugin packaging', () => {
       expect(text, `${path} reads no earlier draft`).not.toContain('If that file exists')
     }
   })
-  // show-me pre-approves the edit of one file, words.json, in a run directory. It writes no other file. Orangu writes
-  // the HTML, so a steered model cannot write a page with no prompt.
-  it('analyze, improve and harness pre-approve an edit of their drafts directory, show-me of its words.json, and no other skill pre-approves an edit', () => {
-    const edits = (s: string): string[] =>
-      (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim()).filter((grant) => /^Edit\b/.test(grant))
+  // show-me pre-approves no write at all. A path rule that matches a directory also matches every file under it, so
+  // Edit(~/.orangu/show-me/*/words.json) also matched a page at <run>/words.json/report.html. Its words.json write asks.
+  it('analyze, improve and harness pre-approve an edit of their drafts directory, and no other skill pre-approves an edit', () => {
+    const allowed = (s: string): string[] =>
+      (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
+    const edits = (s: string): string[] => allowed(s).filter((grant) => /^Edit\b/.test(grant))
     for (const s of ['analyze', 'improve', 'harness']) expect(edits(s), `${s} edits only its drafts`).toEqual(['Edit(~/.orangu/drafts/**)'])
-    expect(edits('show-me'), 'show-me edits only its words.json').toEqual(['Edit(~/.orangu/show-me/*/words.json)'])
-    for (const s of ['apply', 'feedback']) expect(edits(s), `${s} has no edit grant`).toEqual([])
+    for (const s of ['apply', 'feedback', 'show-me']) expect(edits(s), `${s} has no edit grant`).toEqual([])
+    expect(allowed('show-me').filter((grant) => /^Write\b/.test(grant)), 'show-me has no write grant').toEqual([])
+    expect(allowed('show-me'), 'show-me has no bare orangu grant').not.toContain('Bash(orangu:*)')
   })
   const between = (text: string, from: string, to: string): string => {
     const start = text.indexOf(from)
@@ -852,17 +854,18 @@ describe('plugin packaging', () => {
       for (let i = 1; i < steps.length; i++) expect(text.indexOf(steps[i - 1]!), `${steps[i - 1]} comes before ${steps[i]}`).toBeLessThan(text.indexOf(steps[i]!))
     }
 
-    // Claude Code checks a Write against Edit(path) rules and never consults a Write(path) rule. So the one write that
-    // runs with no prompt is words.json, by its file name, one run directory deep. A grant on ~/.orangu/show-me/**
-    // would let a steered model write its own report.html or slides.html (no CSP) with no prompt.
-    const SHOW_ME_GRANTS = 'allowed-tools: Bash(orangu show-me:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *), Read, Edit(~/.orangu/show-me/*/words.json)'
-    it('pre-approves exactly the CLI, reads and an edit of words.json, and no grant reaches an HTML file', () => {
+    // Claude Code checks a Write against Edit(path) rules and never consults a Write(path) rule. A path rule that
+    // matches a directory also matches every file under it, so even Edit(~/.orangu/show-me/*/words.json) let a steered
+    // model write <run>/words.json/report.html (a page with a script and no CSP) with no prompt. So show-me
+    // pre-approves no write: the words.json write asks, and orangu writes the HTML.
+    const SHOW_ME_GRANTS = 'allowed-tools: Bash(orangu show-me:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *), Read'
+    it('pre-approves exactly the show-me verb and reads, and no write', () => {
       expect(md().split('\n')[3]).toBe(SHOW_ME_GRANTS)
-      expect(grants()).toEqual(['Bash(orangu show-me:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *)', 'Read', 'Edit(~/.orangu/show-me/*/words.json)'])
+      expect(grants()).toEqual(['Bash(orangu show-me:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *)', 'Read'])
       for (const grant of grants()) {
-        expect(grant, 'no grant on the whole show-me tree').not.toContain('~/.orangu/show-me/**')
+        expect(grant, 'no grant on the show-me tree').not.toContain('~/.orangu/show-me')
         expect(grant, 'no grant names an HTML file').not.toMatch(/slides\.html|report\.html|\.html\b/)
-        expect(grant, 'no Write rule: Claude Code never consults one').not.toMatch(/^Write\b/)
+        expect(grant, 'no Edit or Write rule').not.toMatch(/^(?:Edit|Write)\b/)
       }
       // no Grep count, no temp directory, and opening the files is the CLI's --open, never a pre-approved opener
       expect(grants().join(' ')).not.toMatch(/\bGrep\b|\bmktemp\b|\b(?:open|xdg-open|start)\b/)
@@ -927,6 +930,10 @@ describe('plugin packaging', () => {
       const text = body()
       expect(text).toContain('Write only `<dir>/words.json`. Never write or edit another file.')
       expect(text).toContain('Write `<dir>/words.json`: one JSON object with exactly the keys `verdict`, `summary` and `improvementsTitle`. Each value is plain text on one line, and none is empty.')
+      // no write is pre-approved, so the body says once that the write asks, before the first render
+      const PERMISSION = 'The words.json write asks for permission. This is expected.'
+      expect(text.split(PERMISSION).length - 1, 'said once').toBe(1)
+      expect(text.indexOf(PERMISSION), 'said at the write step').toBeLessThan(text.indexOf("Run `orangu show-me --render '<dir>' --json`."))
       expect(md().match(/output_mode/g), 'no Grep count').toBeNull()
       expect(text, 'no Grep tool').not.toMatch(/\bGrep\b/)
       expect(text, 'no meta count').not.toContain('<meta')
@@ -1221,7 +1228,9 @@ describe('plugin packaging', () => {
     // run and writes both HTML files. So the template reads, the 9 Grep counts, the escape warning and the opener list
     // went. The skill now prepares, asks once, writes the 3 values of words.json, renders, fixes, and renders with
     // --open. The description (304 chars) and the resident total do not move.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 536 }
+    // 2026-10-07 show-me security fix: body 536 -> 545, measured 535 -> 544 words (+9). The Edit grant on words.json
+    // went, so the write asks, and the body says so once: "The words.json write asks for permission. This is expected."
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 545 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

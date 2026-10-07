@@ -1,7 +1,7 @@
 ---
 name: show-me
 description: Turn the evidence of one session, one repository or all sessions into a slide deck and a written report, as offline HTML files. Use when the user asks for slides, a deck or a report to present or share with a team. Not for a diagnosis in chat: /orangu:analyze. Not for a change proposal: /orangu:improve.
-allowed-tools: Bash(orangu show-me:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *), Read, Edit(~/.orangu/show-me/*/words.json)
+allowed-tools: Bash(orangu show-me:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *), Read
 ---
 
 # /orangu:show-me
@@ -48,7 +48,7 @@ When the user agrees, read `data.json` and [the slot rules](references/slots.md)
 
 ## 4. Write the words
 
-Write `<dir>/words.json`: one JSON object with exactly the keys `verdict`, `summary` and `improvementsTitle`. Each value is plain text on one line, and none is empty. Write each one as the slot rules say:
+Write `<dir>/words.json`: one JSON object with exactly the keys `verdict`, `summary` and `improvementsTitle`. Each value is plain text on one line, and none is empty. The words.json write asks for permission. This is expected. Write each value as the slot rules say:
 
 1. Copy each number from `data.json`. Compute or estimate no new figure.
 2. Use only tokens, milliseconds (ms) and S, M or L effort as units.
