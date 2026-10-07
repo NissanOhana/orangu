@@ -10,7 +10,7 @@ import type { Analysis } from '../model/analysis.js'
 import type { SessionRef } from '../discover/discover.js'
 import { SuggestionStore } from '../suggest/store.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi, type Caps } from './tty.js'
-import { aggregateBlock, analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, rows, valueBudget, type NextStep, type PickRow } from './summary.js'
+import { aggregateBlock, aggregateOffer, analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, rows, valueBudget, type NextStep, type PickRow } from './summary.js'
 import { persistNextStep } from './next-step.js'
 import { aggregate } from '../analyze/aggregate.js'
 import { outcomeHeadline } from '../report/client/derive.js'
@@ -376,6 +376,20 @@ describe('aggregateBlock', () => {
       })
       for (const l of block) expect(displayWidth(l), `${label}: ${l}`).toBeLessThanOrEqual(Math.min(caps.columns, 80))
     }
+  })
+
+  it('the closing flag hint wraps at whole words, and drops --open once the report is written', () => {
+    const text = 'add --open for the HTML report, --json for the full machine-readable aggregate'
+    // at 80 columns it is exactly one line, as before
+    expect(aggregateOffer(capsAt(80, { color: 0 }), false)).toEqual(['', '  ' + text])
+    const narrow = aggregateOffer(capsAt(60, { color: 0 }), false)
+    expect(narrow.length).toBeGreaterThan(2)
+    for (const l of narrow.slice(1)) {
+      expect(l).toMatch(/^ {2}\S/)
+      expect(displayWidth(l)).toBeLessThanOrEqual(60)
+    }
+    expect(narrow.slice(1).map((l) => l.trim()).join(' ')).toBe(text)
+    expect(aggregateOffer(capsAt(80, { color: 0 }), true)).toEqual(['', '  add --json for the full machine-readable aggregate'])
   })
 
   it('falls back to the marked title when an older aggregate has no example title, and skips an absent improvement', async () => {

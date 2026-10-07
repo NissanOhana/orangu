@@ -31,7 +31,7 @@ import { fmtTokens } from '../analyze/util.js'
 import { redactValue, type RedactOptions } from '../redact/redact.js'
 import { watchSession } from './watch.js'
 import { MACHINE_CAPS, detectCaps, paint, spinner, type Caps, type Spinner } from './tty.js'
-import { aggregateBlock, analysisBlock, betaLine, briefBlock, doneLine, fmtBytes, listRows, nextStepLines, reportFooter, row, type NextStep } from './summary.js'
+import { aggregateBlock, aggregateOffer, analysisBlock, betaLine, briefBlock, doneLine, fmtBytes, listRows, nextStepLines, reportFooter, row, type NextStep } from './summary.js'
 import { persistNextStep } from './next-step.js'
 import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
@@ -407,11 +407,7 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
     process.stdout.write(renderPreparedAggregateJson(outputAggregate, flags))
     return
   }
-  process.stdout.write(aggregateBlock(out, outputAggregate).join('\n') + '\n')
-  // --open already did what it offers: once the report is written and handed to a browser, repeating
-  // the flag that wrote it is noise. The machine-readable half is still news either way.
-  const offer = wroteHtml ? '--json for the full machine-readable aggregate' : '--open for the HTML report, --json for the full machine-readable aggregate'
-  process.stdout.write(paint(out, 'dim', `\n  add ${offer}\n`))
+  process.stdout.write([...aggregateBlock(out, outputAggregate), ...aggregateOffer(out, wroteHtml)].join('\n') + '\n')
   if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
 }
 

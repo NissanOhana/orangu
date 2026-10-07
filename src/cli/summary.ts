@@ -247,6 +247,16 @@ export function listRows(caps: Caps, refs: SessionRef[], o: { total: number; glo
   return lines
 }
 
+/**
+ * The closing hint of `orangu repo` and `orangu global`, wrapped at whole words. --open already did what it
+ * offers: once the report is written and handed to a browser, repeating the flag that wrote it is noise. The
+ * machine-readable half is still news either way.
+ */
+export function aggregateOffer(caps: Caps, wroteHtml: boolean): string[] {
+  const offer = wroteHtml ? '--json for the full machine-readable aggregate' : '--open for the HTML report, --json for the full machine-readable aggregate'
+  return ['', ...fit(caps, `${INDENT}add ${offer}`, 'dim')]
+}
+
 /** The one-session marker, said once above the recurring findings instead of before each title. */
 const ONE_SESSION_CAPTION = 'In one session: each title shows the figures of one example session.'
 /** Columns before a recurring finding's title: the 4-space indent, the 8-column token figure, 2 spaces. */
