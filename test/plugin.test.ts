@@ -188,15 +188,53 @@ describe('plugin packaging', () => {
       }
     }
   })
+  // The verbs that a text runs are the orangu commands in its code: each fenced code block, and each inline code span
+  // outside a fence, in the PATH form (`orangu <verb>`) or the plugin CLI form (`orangu.cli.mjs" <verb>`). Prose such
+  // as "the orangu report" is not a command. A skill runs the verbs of its own files (SKILL.md and references/), and
+  // the verbs of each plugin file that it links (shared rules, another skill's reference), followed link by link.
+  // Limit: a verb that only a linked file names counts as run unless a linked file scopes it. The one scope rule is the
+  // sentence "Run this check at each step where your skill names `orangu <verb>`." (shared/ste.md), so feedback and
+  // show-me link ste.md and grant no `ste`. The check reads files: a command that the model builds from other words,
+  // or that a page outside plugin/skills names, is out of its reach.
+  const fences = /^```[^\n]*\n([\s\S]*?)^```/gm
+  const commandVerbs = (text: string): string[] =>
+    [...[...text.matchAll(fences)].map((m) => m[1]!), ...[...text.replace(fences, '').matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!)].flatMap((code) =>
+      [...code.matchAll(/(?:^|[\s$(|;&])orangu ([a-z][a-z-]*)|orangu\.cli\.mjs"? ([a-z][a-z-]*)/gm)].map((m) => (m[1] ?? m[2])!),
+    )
+  const linkedFiles = (own: string[]): string[] => {
+    const seen = new Set<string>(own)
+    const queue = [...own]
+    const linked: string[] = []
+    while (queue.length) {
+      const from = queue.shift()!
+      for (const m of readText(from).matchAll(/\]\(([^)#\s]+\.md)(?:#[^)]*)?\)/g)) {
+        const target = join(dirname(from), m[1]!).replace(/\\/g, '/')
+        if (!target.startsWith('plugin/skills/') || seen.has(target) || !existsSync(join(root, target))) continue
+        seen.add(target)
+        linked.push(target)
+        queue.push(target)
+      }
+    }
+    return linked.sort()
+  }
   it('each skill pre-approves exactly the orangu verbs that its text runs, in both the PATH form and the plugin CLI form', () => {
     for (const s of ['analyze', 'improve', 'harness', 'apply', 'feedback', 'show-me']) {
       const refs = join(root, 'plugin/skills', s, 'references')
-      const texts = [readText(`plugin/skills/${s}/SKILL.md`), ...(existsSync(refs) ? readdirSync(refs).filter((f) => f.endsWith('.md')).map((f) => readText(`plugin/skills/${s}/references/${f}`)) : [])]
-      const runs = [...new Set(texts.flatMap((text) => [...text.matchAll(/`orangu ([a-z][a-z-]*)/g)].map((m) => m[1]!)))].sort()
+      const own = [`plugin/skills/${s}/SKILL.md`, ...(existsSync(refs) ? readdirSync(refs).filter((f) => f.endsWith('.md')).map((f) => `plugin/skills/${s}/references/${f}`) : [])]
+      const runs = [...new Set(own.flatMap((path) => commandVerbs(readText(path))))].sort()
       const grants = grantsOf(s)
       const verbs = (re: RegExp): string[] => grants.map((g) => re.exec(g)?.[1]).filter((v): v is string => v !== undefined).sort()
       expect(verbs(PATH_VERB), `${s} PATH grants`).toEqual(runs)
       expect(verbs(PLUGIN_CLI_VERB), `${s} plugin CLI grants`).toEqual(runs)
+      // a linked file that names a verb outside the grant must scope it to the skills that name it
+      const linked = linkedFiles(own)
+      expect(linked.length, `${s} links at least the shared rules`).toBeGreaterThan(0)
+      const scoped = (verb: string): boolean => linked.some((path) => readText(path).includes(`Run this check at each step where your skill names \`orangu ${verb}\`.`))
+      for (const path of linked) {
+        for (const verb of new Set(commandVerbs(readText(path)))) {
+          expect(runs.includes(verb) || scoped(verb), `${s} links ${path}, which runs orangu ${verb}: grant it or scope it`).toBe(true)
+        }
+      }
     }
   })
 
