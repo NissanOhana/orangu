@@ -42,8 +42,10 @@ describe('show-me session page', () => {
     const order = [quiet, top[0]!, top[1]!, ...a.insights.filter((i) => i !== top[0] && i !== top[1])]
     expect(items).toEqual(order.filter((i) => !i.improvement.startsWith(NO_CHANGE)).map((i) => escapeHtml(i.improvement)).slice(0, 5))
     expect(items.some((text) => text.startsWith(NO_CHANGE))).toBe(false)
-    // the finding with no why has no why element; the others keep theirs
-    expect(slotTexts(slides!, 'f-why')).toHaveLength(top.slice(0, 2).filter((i) => i.why !== undefined).length)
+    // the finding with no why has no why element and no "Why it matters" label; the others keep both
+    const withWhy = top.slice(0, 2).filter((i) => i.why !== undefined).length
+    expect(slotTexts(slides!, 'f-why')).toHaveLength(withWhy)
+    expect(slides!.match(/>Why it matters</g) ?? []).toHaveLength(withWhy)
   })
 
   it('falls back to the recommendation when an older analysis has no improvement', () => {
@@ -84,6 +86,7 @@ describe('show-me repo and global pages', () => {
       expect(slotTexts(html, 'f-title').slice(0, 2)).toEqual([escapeHtml(top[0]!.finding.title), escapeHtml(top[1]!.finding.title)])
       expect(slotTexts(html, 'f-improvement').slice(0, 2)).toEqual([escapeHtml(top[0]!.recommendation!), 'No improvement text in this evidence.'])
       expect(slotTexts(html, 'f-why')).toHaveLength(top.length - 2)
+      expect(html.match(/>Why it matters</g) ?? []).toHaveLength(html.includes('class="deck"') ? top.length - 2 : 0)
     }
   })
 })

@@ -30,6 +30,7 @@ Escape each text that you insert: `&` as `&amp;`, `<` as `&lt;`, `>` as `&gt;`, 
 | `findings` | the list `finding` has 1 item or more |
 | `improvements` | the list `improvement` has 1 item or more |
 | `turns` | the finding has 1 turn index or more (per finding) |
+| `why` | the finding has a reason in `why` (per finding) |
 | `savings` | the item has a token saving over 0 (per item) |
 | `savings-ms` | the item has a time saving over 0 (per item) |
 

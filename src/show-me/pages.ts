@@ -37,6 +37,9 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n.toLoca
 /** The change a rule asks for: `improvement`, else the older joined `recommendation`. */
 const improvementOf = (o: { improvement?: string; recommendation?: string }): string | undefined => o.improvement ?? o.recommendation
 
+/** The reason of a finding, when it has one: the `why` condition and the f-why slot go together. */
+const reasonOf = (o: { why?: string }): string | undefined => (o.why?.trim() ? o.why : undefined)
+
 /** An improvement item names a change: a rule text that starts with the shared verdict "No change needed." is not one. */
 const isChange = (text: string | undefined): text is string => text !== undefined && text.trim() !== '' && !text.startsWith(NO_CHANGE)
 
@@ -85,11 +88,11 @@ export function sessionPage(a: SessionData, words: Words): Page {
         'f-evidence': insight.detail || REDACTED_DETAIL,
         'f-turns': turnList(insight.turnIndexes),
         'f-rule': insight.ruleId,
-        'f-why': insight.why ?? null,
+        'f-why': reasonOf(insight) ?? null,
         'f-improvement': improvementOf(insight) ?? NO_IMPROVEMENT_TEXT,
         ...saving.slots,
       },
-      conditions: [...(insight.turnIndexes.length ? ['turns'] : []), ...saving.conditions],
+      conditions: [...(insight.turnIndexes.length ? ['turns'] : []), ...(reasonOf(insight) ? ['why'] : []), ...saving.conditions],
       lists: { turn: insight.turnIndexes.slice(0, TURN_MARKERS).map((x) => ({ attrs: { x } })) },
       charts: { turns: { kind: 'turns', turns: s.turns, label: `In turns ${turnList(insight.turnIndexes)} of ${s.turns}` } },
     }
@@ -168,11 +171,11 @@ export function aggregatePage(e: AggregateData, scope: 'repo' | 'global', o: { f
         'f-shows': { v: seen(f) },
         'f-examples': f.finding.sessionIds.slice(0, EXAMPLE_SESSIONS).map((id) => id.slice(0, ID_PREFIX)).join(', '),
         'f-rule': f.finding.ruleId,
-        'f-why': f.why ?? null,
+        'f-why': reasonOf(f) ?? null,
         'f-improvement': improvementOf(f) ?? NO_IMPROVEMENT_TEXT,
         ...saving.slots,
       },
-      conditions: saving.conditions,
+      conditions: [...(reasonOf(f) ? ['why'] : []), ...saving.conditions],
       charts: { share: { kind: 'ring', value: seen(f), of: n, label: `${seen(f)} of ${n} sessions` } },
     }
   })
