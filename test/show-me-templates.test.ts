@@ -13,6 +13,7 @@ import { runInNewContext } from 'node:vm'
 import type { Analysis } from '../src/model/analysis.js'
 import { slimAnalysis } from '../src/suggest/slim.js'
 import { projectEvidence } from '../src/suggest/evidence.js'
+import { REPORT_HTML, SCRIPT_HASH, SLIDES_HTML } from '../src/show-me/generated/templates.js'
 import { FORMATS, aggregatePage, checksFor, countCheck, fillTemplate, sessionPage, showMeChecks, type Words } from './fixtures/show-me-fill.js'
 
 const root = process.cwd()
@@ -110,6 +111,37 @@ describe('show-me templates: built, offline, on the tokens', () => {
     expect(html).toContain('<button class="theme" id="theme" type="button">')
     expect(html).toContain('href="report.html"')
     expect(built('report')).toContain('href="slides.html"')
+  })
+})
+
+// The CLI fills the templates from a generated module, so no input names a template path. The module must hold
+// the same bytes as the built files that the offline gate and the tests above check.
+describe('show-me templates: embedded in the CLI build', () => {
+  const EMBEDDED: Record<(typeof NAMES)[number], string> = { slides: SLIDES_HTML, report: REPORT_HTML }
+
+  for (const name of NAMES) {
+    it(`the generated module holds ${name}.html byte for byte`, () => {
+      const file = readFileSync(join(root, `${DIR}/${name}.html`))
+      expect(Buffer.byteLength(EMBEDDED[name]), `${name} bytes`).toBe(file.length)
+      expect(Buffer.from(EMBEDDED[name], 'utf8').equals(file), `${name} bytes differ`).toBe(true)
+    })
+
+    it(`SCRIPT_HASH is the sha256 of the one script in the embedded ${name}, and its CSP pins it`, () => {
+      const html = EMBEDDED[name]
+      expect(scripts(html)).toHaveLength(1)
+      expect(sha256(scripts(html)[0]!)).toBe(SCRIPT_HASH)
+      expect(html).toContain(`<meta http-equiv="Content-Security-Policy" content="${cspFor(SCRIPT_HASH)}"/>`)
+    })
+  }
+
+  it('verify:generated compares the module, and the build writes it before the CLI bundle', () => {
+    expect(read('scripts/assert-generated.mjs')).toContain("'src/show-me/generated/templates.ts'")
+    const build = read('scripts/build.mjs')
+    const moduleAt = build.indexOf("join(root, 'src/show-me/generated/templates.ts')")
+    const cliAt = build.indexOf("entryPoints: [join(root, 'src/cli/main.ts')]")
+    expect(moduleAt, 'the build writes the module').toBeGreaterThan(-1)
+    expect(cliAt, 'the build bundles the CLI').toBeGreaterThan(-1)
+    expect(moduleAt, 'the module is written before the CLI bundle').toBeLessThan(cliAt)
   })
 })
 

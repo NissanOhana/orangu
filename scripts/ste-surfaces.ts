@@ -44,6 +44,7 @@ export const HELP_BIN = 'plugin/bin/orangu.cli.mjs'
 export const SRC_EXEMPT: Readonly<Record<string, string>> = {
   'src/report/generated': 'built output of src/report/client (scripts/build.mjs); its sources are measured',
   'src/ste/words.ts': 'the word tables of the STE checker: the words it flags and the word lists it reads. Data, not copy.',
+  'src/show-me/generated': 'built output of the show-me templates (scripts/build.mjs); their .src.html sources are measured',
 }
 
 /** Markdown at the root and in docs/ that is not gated, with the reason. Every other doc is a surface. */

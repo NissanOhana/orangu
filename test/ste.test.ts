@@ -88,7 +88,11 @@ describe('STE gate', () => {
       else expect(ids.has(`src/${dir}`), `src/${dir} is a surface`).toBe(true)
     }
     expect(ids.has('src/*.ts')).toBe(true)
-    expect(SRC_EXEMPT).toEqual({ 'src/report/generated': expect.stringMatching(/built/), 'src/ste/words.ts': expect.stringMatching(/word tables/) })
+    expect(SRC_EXEMPT).toEqual({
+      'src/report/generated': expect.stringMatching(/built/),
+      'src/ste/words.ts': expect.stringMatching(/word tables/),
+      'src/show-me/generated': expect.stringMatching(/built/),
+    })
   })
 
   it('measures every user doc at the root and in docs/; a doc left out names its reason', () => {
