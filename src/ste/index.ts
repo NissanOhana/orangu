@@ -455,8 +455,15 @@ export function checkBlocks(blocks: readonly SteBlock[]): SteResult {
     if (!block.label && parts.length > LIMITS.paragraphSentences) {
       findings.push({ ...where, line: block.line, rule: 'paragraph-length', text: excerpt(parts[0]!.text), hint: `${parts.length} sentences: keep one topic in at most ${LIMITS.paragraphSentences}` })
     }
+    // the newlines before each sentence, counted with a cursor that only moves forward: one pass per block
+    let newlines = 0
+    let nextNewline = block.text.indexOf('\n')
     for (const part of parts) {
-      const line = block.line + (block.text.slice(0, part.offset).match(/\n/g)?.length ?? 0)
+      while (nextNewline !== -1 && nextNewline < part.offset) {
+        newlines += 1
+        nextNewline = block.text.indexOf('\n', nextNewline + 1)
+      }
+      const line = block.line + newlines
       const own = sentenceFindings(part.text, line).map((finding) => ({ ...where, ...finding }))
       if (block.label) {
         findings.push(...own.filter(isBanned))

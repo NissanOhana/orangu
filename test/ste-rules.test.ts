@@ -3,7 +3,7 @@
  * additions and carve-outs. Then the extraction of copy from TS sources (scripts/ste-surfaces.ts).
  * The gate that applies both to every surface is test/ste.test.ts.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { checkBlocks, checkText, frontmatterDescription, htmlToText, proseBlocks, wordCount, wrapCommands } from '../src/ste/index.js'
 import { fragmentResult, htmlResult, tsBlocks, type TsOptions } from '../scripts/ste-surfaces.js'
 
@@ -163,6 +163,35 @@ describe('ste checker: orangu additions', () => {
     ])
     expect(result).toMatchObject({ sentences: 2, clean: 1, score: 50 })
     expect(result.findings).toEqual([expect.objectContaining({ file: 'src/a.ts', line: 4, rule: 'semicolon' })])
+  })
+
+  it('gives each finding the line where its sentence starts, in one block of many lines', () => {
+    const text = [
+      'The gate reads the file. It is red; do not merge.', // line 10: 2 sentences
+      'The branch', // line 11: a sentence over 2 lines
+      'has merged.',
+      'Run it.', // line 13
+      '',
+      'The agent is ranking the files.', // line 15, after an empty line
+    ].join('\n')
+    const result = checkBlocks([{ line: 10, text }])
+    expect(result.findings.map((f) => `${f.line} ${f.rule}`)).toEqual(['10 semicolon', '11 perfect', '15 progressive'])
+    expect(result.sentences).toBe(5)
+  })
+
+  it('finds the line of each sentence in one pass: the text before a sentence is not read again for it', () => {
+    // The cost of a long block. Before, each sentence sliced and scanned the block from its start, so 1 MiB in
+    // 1 paragraph took about 20 s. The proof counts the characters that String#slice hands back, never the time.
+    const text = Array.from({ length: 2000 }, (_, index) => `The gate reads sentence ${index}.${index % 7 === 6 ? '\n' : ' '}`).join('').trimEnd()
+    const slice = vi.spyOn(String.prototype, 'slice')
+    let read = 0
+    try {
+      checkBlocks([{ line: 1, text }])
+      for (const result of slice.mock.results) if (result.type === 'return' && typeof result.value === 'string') read += result.value.length
+    } finally {
+      slice.mockRestore()
+    }
+    expect(read / text.length).toBeLessThan(20)
   })
 })
 
