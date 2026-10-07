@@ -190,11 +190,8 @@ async function render(positionals: string[], flags: Record<string, string | bool
   if (typeof dir !== 'string' || !dir.trim()) throw new Error(`--render needs the run directory that orangu show-me printed. ${USAGE}`)
   if (positionals.length) throw new Error(`orangu show-me --render takes only the run directory. ${USAGE}`)
   const result = await renderShowMe(dir)
-  const open = flagBool(flags, 'open')
-  if (open) {
-    openInBrowser(result.slides)
-    openInBrowser(result.report)
-  }
+  // both handoffs run: a refused one prints its path on stderr, and only 2 handoffs make the "opened" row
+  const open = flagBool(flags, 'open') && [openInBrowser(result.slides), openInBrowser(result.report)].every(Boolean)
   if (flagBool(flags, 'json')) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`)
     return
