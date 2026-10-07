@@ -918,6 +918,8 @@ describe('plugin packaging', () => {
       inOrder(text, [
         "`orangu show-me '<session>' --json`",
         'Give the user one estimate of the read: `data.bytes` and `data.approxTokens` from that output.',
+        // a repo or global scan can leave out a session that orangu cannot read: the question says so
+        'If prepare reports skipped sessions, say how many and why.',
         'Ask once before you read anything.',
         'When the user agrees, read `data.json` and [the slot rules](references/slots.md).',
       ])
@@ -925,6 +927,7 @@ describe('plugin packaging', () => {
       // data.json is redacted by default, not always: --no-redact keeps everything
       expect(text).toContain('writes the evidence to `data.json` in it, redacted unless the user asked for `--no-redact`.')
       expect(text).not.toContain('writes the redacted evidence')
+      expect(text).toContain('It prints `{ dir, data: { path, bytes, approxTokens, overThreshold }, skipped, skippedReason }`.')
     })
 
     // Orangu writes every byte of HTML. Claude writes one file of 3 values, and the render escapes each value. So the
@@ -1238,7 +1241,10 @@ describe('plugin packaging', () => {
     // 2026-10-07 show-me review fixes: body 545 -> 558, measured 544 -> 557 words (+13). The stop rule names its one
     // exception, "except a `words.json` refusal in step 5." (+7), and data.json is "redacted unless the user asked for
     // `--no-redact`" in place of "the redacted evidence" (+6).
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 558 }
+    // 2026-10-07 show-me skipped sessions: body 558 -> 570, measured 557 -> 569 words (+12). Step 3 says "If prepare
+    // reports skipped sessions, say how many and why." (+10), and the prepare output shape names `skipped,
+    // skippedReason` (+2).
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 570 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

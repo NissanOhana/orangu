@@ -1160,6 +1160,27 @@ syncBuiltinESMExports()
       }
     })
 
+    // A repo or global scan leaves out a session that orangu cannot read. The aggregate says so only in its scope text,
+    // which data.json drops. So prepare prints the count and the reason, and the skill tells the user.
+    it('prepare reports a session that it could not read: skipped 1 with its reason, in the JSON and the text output', async () => {
+      const { home, showMe } = await showMeHome()
+      // one session with a line over the 8 MiB line cap: discovery lists it, and the analyzer refuses it
+      const project = join(home.configDir, 'projects', '-Users-test-Code-demo')
+      await writeFile(join(project, 'cccccccc-0000-4000-8000-00000000cccc.jsonl'), `${'x'.repeat(8 * 1024 * 1024 + 16)}\n`)
+      const json = showMe(['--scope', 'global', '--json'])
+      expect(json.status, json.stderr).toBe(0)
+      const run = JSON.parse(json.stdout) as { skipped: number; skippedReason?: string }
+      expect(run.skipped).toBe(1)
+      expect(run.skippedReason).toMatch(/could not read/)
+      const text = showMe(['--scope', 'global'])
+      expect(text.status, text.stderr).toBe(0)
+      expect(text.stdout).toMatch(/^ {2}skipped {2}1 session left out of data\.json: orangu could not read/m)
+      // one session has nothing to skip
+      const one = JSON.parse(showMe([home.endedId, '--json']).stdout) as { skipped: number; skippedReason?: string }
+      expect(one.skipped).toBe(0)
+      expect(one.skippedReason).toBeUndefined()
+    })
+
     it('refuses a usage error with exit 1: a flag of the other step, a session with --scope repo, --render with no directory', async () => {
       const { home, showMe } = await showMeHome()
       for (const [args, message] of [

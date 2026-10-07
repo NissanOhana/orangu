@@ -38,11 +38,11 @@ Run the command for the scope:
 - Repo: `orangu show-me --scope repo --cwd '<cwd>' --json`.
 - Global: `orangu show-me --scope global --json`.
 
-It makes a new run directory, `<dir>`, and writes the evidence to `data.json` in it, redacted unless the user asked for `--no-redact`. It prints `{ dir, data: { path, bytes, approxTokens, overThreshold } }`. A second run never overwrites the first.
+It makes a new run directory, `<dir>`, and writes the evidence to `data.json` in it, redacted unless the user asked for `--no-redact`. It prints `{ dir, data: { path, bytes, approxTokens, overThreshold }, skipped, skippedReason }`. A second run never overwrites the first.
 
 ## 3. Ask once, then read
 
-Give the user one estimate of the read: `data.bytes` and `data.approxTokens` from that output. Add about 1 KB (about 300 tokens) for the slot rules. Ask once before you read anything.
+Give the user one estimate of the read: `data.bytes` and `data.approxTokens` from that output. Add about 1 KB (about 300 tokens) for the slot rules. If prepare reports skipped sessions, say how many and why. Ask once before you read anything.
 
 When the user agrees, read `data.json` and [the slot rules](references/slots.md).
 

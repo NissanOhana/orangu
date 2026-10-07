@@ -5,7 +5,8 @@
  *   orangu show-me [<session>] | --scope repo [--cwd <dir>] | --scope global  [--json]
  *     PREPARE: a new run directory <orangu home>/show-me/<scope>-<name>-<random>/ (mode 0700) with data.json, the
  *     redacted slim analysis of the session, or the evidence bundle of the scope with the folder and the version.
- *     It prints the directory and the size of data.json in bytes and about tokens.
+ *     It prints the directory, the size of data.json in bytes and about tokens, and the sessions that a scan could
+ *     not read (skipped).
  *   orangu show-me --render <dir> [--open] [--json]
  *     RENDER: validate words.json and data.json, fill both embedded templates, check each file, then write
  *     slides.html and report.html (mode 0600). It prints both paths and the STE findings on the 3 words.
@@ -82,11 +83,12 @@ const cacheFor = (flags: Record<string, string | boolean>): AnalysisCache | null
   flags['no-cache'] !== undefined || process.env['ORANGU_NO_CACHE'] === '1' ? null : new AnalysisCache({ version: VERSION })
 
 /** data.json of one session: exactly what `orangu analyze <session> --json --slim` prints, with its redaction. */
-async function sessionData(selector: string | undefined, flags: Record<string, string | boolean>, err: Caps): Promise<{ name: string; json: string }> {
+async function sessionData(selector: string | undefined, flags: Record<string, string | boolean>, err: Caps): Promise<{ name: string; json: string; skipped: number }> {
   const ref = await selectSession(selector, flags, err)
   const analysis = await analyzeRefCached(ref, { cache: cacheFor(flags), version: VERSION, now: Date.now() })
   const json = renderAnalysisJson(analysis, { slim: true, 'no-redact': flagBool(flags, 'no-redact'), 'include-text': flagBool(flags, 'include-text'), 'strip-paths': flagBool(flags, 'strip-paths') })
-  return { name: ref.sessionId.slice(0, 8), json }
+  // one session is read or the step fails: it never skips one
+  return { name: ref.sessionId.slice(0, 8), json, skipped: 0 }
 }
 
 /**
@@ -94,7 +96,7 @@ async function sessionData(selector: string | undefined, flags: Record<string, s
  * `orangu evidence --scope` make it), with the folder name and the orangu version. Same session list, limits and
  * cache as `orangu repo` and `orangu global`.
  */
-async function aggregateData(scope: 'repo' | 'global', flags: Record<string, string | boolean>, err: Caps): Promise<{ name: string; json: string }> {
+async function aggregateData(scope: 'repo' | 'global', flags: Record<string, string | boolean>, err: Caps): Promise<{ name: string; json: string; skipped: number }> {
   const rootArg = flagStr(flags, 'root', 'r')
   const cwd = resolve(flagStr(flags, 'cwd') ?? process.cwd())
   const refs = scope === 'global' ? await listSessions({ roots: await claudeRoots(rootArg) }) : await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd })
@@ -132,7 +134,8 @@ async function aggregateData(scope: 'repo' | 'global', flags: Record<string, str
   const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, flags))) as unknown, { scope })
   const folder = scope === 'repo' ? (flagBool(flags, 'no-redact') ? basename(cwd) : redactValue(basename(cwd), { scrub: true })) : undefined
   const json = `${JSON.stringify({ ...bundle, ...(folder !== undefined ? { folder } : {}), version: VERSION }, null, 2)}\n`
-  return { name: scope === 'global' ? 'machine' : basename(cwd), json }
+  // the evidence projection drops agg.scope, so the count leaves through the prepare output instead
+  return { name: scope === 'global' ? 'machine' : basename(cwd), json, skipped: failed }
 }
 
 function printPrepared(run: PreparedRun, out: Caps): void {
@@ -143,6 +146,9 @@ function printPrepared(run: PreparedRun, out: Caps): void {
       ? row(out, 'gate', `over the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate. Ask the user before you read data.json into a model.`, { style: 'warn' })
       : row(out, 'gate', `under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate`, { style: 'dim' }),
   ]
+  if (run.skipped > 0) {
+    lines.push(row(out, 'skipped', `${run.skipped.toLocaleString('en-US')} session${run.skipped === 1 ? '' : 's'} left out of data.json: ${run.skippedReason ?? ''}`, { style: 'warn' }))
+  }
   process.stdout.write(`${lines.join('\n')}\n`)
 }
 
@@ -157,8 +163,8 @@ async function prepare(positionals: string[], flags: Record<string, string | boo
   if (scope === 'global' && flags['cwd'] !== undefined) throw new Error('--cwd goes with a session or --scope repo. --scope global reads every session on this machine.')
   const scan = SCAN_FLAGS.find((name) => flags[name] !== undefined)
   if (scope === 'session' && scan) throw new Error(`${flagName(scan)} goes with --scope repo or --scope global. One session needs no scan limit.`)
-  const { name, json } = scope === 'session' ? await sessionData(positionals[0], flags, err) : await aggregateData(scope, flags, err)
-  const run = await prepareRun(scope, name, json)
+  const { name, json, skipped } = scope === 'session' ? await sessionData(positionals[0], flags, err) : await aggregateData(scope, flags, err)
+  const run = await prepareRun(scope, name, json, { skipped })
   if (flagBool(flags, 'json')) {
     process.stdout.write(`${JSON.stringify(run, null, 2)}\n`)
     return
