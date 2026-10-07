@@ -90,6 +90,21 @@ test('the deck shows each improvement, title and improvement text whole, with no
   expect(cut).toEqual(Object.fromEntries(Object.entries(cut).map(([selector, value]) => [selector, value.replace(/^\d+/, '0')])))
 })
 
+// The deck is a fixed 16:9 frame that clips. With no line clamp, the longest texts that the rules ship must still fit:
+// the long deck holds the 5 longest improvement texts of src/analyze/insights.ts (test/browser/show-me-render.ts),
+// on the 3 finding slides and the Improvements slide. A rule rewrite that makes a slide overflow fails here.
+test('the 5 longest shipped improvements fit each 16:9 slide at 1440x900 and 1280x720', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'the frame is the same in each theme, and a phone card grows with its text')
+  for (const viewport of [{ width: 1440, height: 900 }, { width: 1280, height: 720 }]) {
+    await page.setViewportSize(viewport)
+    await page.goto(`${BASE}-long/slides.html`)
+    await expect(page.locator('.it')).toHaveCount(5)
+    const over = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('.frame')).map((frame) => frame.scrollHeight - frame.clientHeight))
+    expect(over.length, `${viewport.width}x${viewport.height} slides`).toBe(8)
+    expect(over.map((px, i) => `slide ${i + 1}: ${px > 4 ? `${px} px over` : 'fits'}`), `${viewport.width}x${viewport.height}`).toEqual(over.map((_, i) => `slide ${i + 1}: fits`))
+  }
+})
+
 // The words that Claude wrote are hostile here. orangu wrote them as text, so the page shows each one, runs no
 // script of theirs, and makes no CSP report: there is nothing to block.
 test('the hostile words show as text, and only the pinned runtime runs', async ({ page }, info) => {

@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
 // the /orangu:show-me files: rendered by the built CLI before the server listens (test/browser/show-me-render.ts)
-const showMe = execFileSync(process.execPath, ['--import', 'tsx', join(root, 'test', 'browser', 'show-me-render.ts')], { cwd: root, encoding: 'utf8' }).trim()
+const showMe = JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', join(root, 'test', 'browser', 'show-me-render.ts')], { cwd: root, encoding: 'utf8' }))
 const pages = new Map([
   ['/', join(root, 'site', 'index.html')],
   ['/index.html', join(root, 'site', 'index.html')],
@@ -19,9 +19,12 @@ const pages = new Map([
   ['/llms-full.txt', join(root, 'site', 'llms-full.txt')],
   // the 2 files that `orangu show-me --render` wrote, side by side so their relative links resolve, and the
   // words it rendered, so the spec can look for each one as text
-  ['/show-me/slides.html', join(showMe, 'slides.html')],
-  ['/show-me/report.html', join(showMe, 'report.html')],
-  ['/show-me/words.json', join(showMe, 'words.json')],
+  ['/show-me/slides.html', join(showMe.hostile, 'slides.html')],
+  ['/show-me/report.html', join(showMe.hostile, 'report.html')],
+  ['/show-me/words.json', join(showMe.hostile, 'words.json')],
+  // a deck of the 5 longest improvement texts that the rules ship
+  ['/show-me-long/slides.html', join(showMe.long, 'slides.html')],
+  ['/show-me-long/report.html', join(showMe.long, 'report.html')],
 ])
 const contentType = (file) =>
   file.endsWith('.txt') ? 'text/plain; charset=utf-8'
