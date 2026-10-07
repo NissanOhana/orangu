@@ -113,6 +113,35 @@ describe('orangu ste', () => {
     expect(stdout()).toBe('')
   })
 
+  it('strips terminal escapes from the quoted input and the file name, and still prints the finding line', async () => {
+    const ESC = String.fromCharCode(0x1b)
+    const BEL = String.fromCharCode(0x07)
+    const CSI8 = String.fromCharCode(0x9b) // a bare 8-bit CSI
+    // OSC 52 writes the clipboard, OSC 0 sets the window title, CSI 2J clears the screen
+    const hostile = `The ${ESC}]52;c;SGVsbG8=${BEL} gate ${ESC}]0;pwned${BEL} reads ${ESC}[2J this ${CSI8} file and finds one sentence in it that has more words than the limit of twenty-five words for a description of it here.`
+    const name = at(`evil${ESC}]0;title${BEL}.md`)
+    const shown = at('evil.md')
+    const UNSAFE = /[\x1b\x07\x7f-\x9f]/
+    writeFileSync(name, `${hostile}\n`)
+    await cmdSte([name, '-'], {}, io(hostile))
+    expect(stdout()).not.toMatch(UNSAFE)
+    const quoted = 'sentence-length  "The  gate  reads  this  file and finds one sentence'
+    expect(stdout().trimEnd().split('\n')).toEqual([
+      expect.stringMatching(new RegExp(`^${shown.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:1  ${quoted}.*"  30 words: split it \\(limit 25\\)$`)),
+      `${shown}: 1 sentences, 0 clean, STE score 0%, 1 findings`,
+      expect.stringMatching(new RegExp(`^-:1  ${quoted}.*"  30 words: split it \\(limit 25\\)$`)),
+      '-: 1 sentences, 0 clean, STE score 0%, 1 findings',
+    ])
+    // --json keeps every value: the escapes are \u escapes in the output and come back whole on parse
+    written = []
+    await cmdSte([name], { json: true }, io())
+    expect(stdout()).not.toMatch(UNSAFE)
+    expect(JSON.parse(stdout())).toEqual([{ file: name, ...checkText(`${hostile}\n`, { frontmatter: true }) }])
+    // an error message names the file without its escapes too
+    const gone = at(`gone${ESC}[2J.md`)
+    await expect(cmdSte([gone], {}, io())).rejects.toThrow(`orangu ste cannot read ${at('gone.md')}: the file does not exist.`)
+  })
+
   it('reads an input at the bound whole', async () => {
     writeFileSync(at('edge.txt'), '')
     truncateSync(at('edge.txt'), MAX_EVIDENCE_ARTIFACT_BYTES)

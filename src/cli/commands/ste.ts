@@ -16,6 +16,7 @@ import { resolve } from 'node:path'
 import { checkText, type SteResult } from '../../ste/index.js'
 import { MAX_EVIDENCE_ARTIFACT_BYTES } from '../../suggest/evidence.js'
 import { flagBool } from '../args.js'
+import { stripAnsi } from '../tty.js'
 
 export interface SteIo {
   stdin: AsyncIterable<Buffer | string>
@@ -29,9 +30,20 @@ const OWN_FLAGS = new Set(['json', 'lines', 'quiet', 'no-color'])
 
 type Checked = { file: string } & SteResult
 
-const overBound = (name: string): Error => new Error(`${name} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu ste reads.`)
+// The input is untrusted: a file in a cloned repository, or a draft on stdin. Its name and its quoted text go
+// through stripAnsi before they are printed, so that an OSC or CSI sequence (clipboard, window title, link,
+// screen clear) or a C0/C1 control character in the input cannot act on the tty that shows the output.
+const overBound = (name: string): Error => new Error(`${stripAnsi(name)} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu ste reads.`)
 
-const cannotRead = (name: string, reason: string): Error => new Error(`orangu ste cannot read ${name}: ${reason}.`)
+const cannotRead = (name: string, reason: string): Error => new Error(`orangu ste cannot read ${stripAnsi(name)}: ${reason}.`)
+
+/**
+ * JSON.stringify escapes the C0 controls (ESC and BEL too) but not DEL or the C1 controls (U+0080 to U+009F).
+ * Those can only stand inside a JSON string here, so a \u escape keeps the JSON valid and each parsed value
+ * the same, and no control byte of the input reaches the tty raw.
+ */
+const C1_OR_DEL = /[\x7f-\x9f]/g
+const escapeC1 = (json: string): string => json.replace(C1_OR_DEL, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`)
 
 /** An error from the file system becomes "cannot read", with its cause. Our own errors pass through. */
 function readError(name: string, error: unknown): Error {
@@ -75,8 +87,9 @@ function flagName(name: string): string {
 }
 
 function report(result: Checked): string[] {
-  const lines = result.findings.map((finding) => `${result.file}:${finding.line}  ${finding.rule}  "${finding.text}"  ${finding.hint}`)
-  lines.push(`${result.file}: ${result.sentences} sentences, ${result.clean} clean, STE score ${result.score}%, ${result.findings.length} findings`)
+  const file = stripAnsi(result.file)
+  const lines = result.findings.map((finding) => `${file}:${finding.line}  ${finding.rule}  "${stripAnsi(finding.text)}"  ${stripAnsi(finding.hint)}`)
+  lines.push(`${file}: ${result.sentences} sentences, ${result.clean} clean, STE score ${result.score}%, ${result.findings.length} findings`)
   return lines
 }
 
@@ -92,6 +105,6 @@ export async function cmdSte(positionals: string[], flags: Record<string, string
     const text = file === STDIN ? await readBounded(io.stdin, file) : await readNamedFile(file)
     results.push({ file, ...checkText(text, { html: /\.html?$/i.test(file), lines, frontmatter: /\.md$/i.test(file) }) })
   }
-  const output = flagBool(flags, 'json') ? [JSON.stringify(results, null, 2)] : results.flatMap(report)
+  const output = flagBool(flags, 'json') ? [escapeC1(JSON.stringify(results, null, 2))] : results.flatMap(report)
   io.stdout.write(`${output.join('\n')}\n`)
 }
