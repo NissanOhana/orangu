@@ -29,6 +29,8 @@ Read the current repository instructions before you change anything. Treat propo
 
 ## 2. Apply the smallest change
 
+Each edit, each check, the receipt write and the draft write can ask the user for permission. This is expected.
+
 Inspect only the named files and the minimum nearby context that a safe edit needs. Keep unrelated user changes. Implement the intent of the proposal with the existing conventions of the repository. If the proposal is ambiguous, stale, in conflict with current code, or needs files outside its declared scope, stop and explain. Do not make the change broader.
 
 Do not modify `.git`, credentials, lockfiles unrelated to the requested change, global configuration, or files outside the current repository.
@@ -48,3 +50,5 @@ After all named checks pass, derive a trusted absolute `<application-path>` from
 The receipt is skill-authored. Orangu validates its shape, and it checks that the relative file list exactly matches the reviewed manifest for this invocation. Orangu does not inspect the working-tree diff, run the checks again, or prove filesystem confinement. Two requirements of this skill contract remain: stay inside the declared files, and report checks truthfully.
 
 Return the changed files, check results, and receipt path. For session or repo scope, say: "applied locally, not yet verified. Verify after at least three settled later sessions with `$orangu-improve --verify <id>`." Never offer verification for global scope.
+
+Before you send this reply, write it to a new file `~/.orangu/drafts/apply-<random>.md`. Then run `orangu ste '<draft-path>'`.
