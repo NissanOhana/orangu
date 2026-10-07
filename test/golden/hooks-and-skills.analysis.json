@@ -684,6 +684,8 @@
       "title": "1 hook error",
       "detail": "lint-gate.sh ×1",
       "recommendation": "Fix or remove the failing hooks in settings.json. A failing hook adds noise to every turn, and it can stop the session from continuing.",
+      "improvement": "Fix or remove the failing hooks in settings.json.",
+      "why": "A failing hook adds noise to every turn, and it can stop the session from continuing.",
       "evidence": {
         "byCommand": [
           {

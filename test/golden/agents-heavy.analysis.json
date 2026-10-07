@@ -1462,6 +1462,8 @@
       "title": "5 subagents did no tool calls",
       "detail": "test-writer, code-reviewer, test-writer, code-reviewer, orphanworkflow00",
       "recommendation": "Give each agent concrete files or commands to act on. If an agent only needs to answer from its prompt, ask the main thread instead. An agent with no tool calls had a brief too thin to act on, or did work that the main thread can do.",
+      "improvement": "Give each agent concrete files or commands to act on. If an agent only needs to answer from its prompt, ask the main thread instead.",
+      "why": "An agent with no tool calls had a brief too thin to act on, or did work that the main thread can do.",
       "evidence": {
         "agents": [
           {
@@ -1552,7 +1554,9 @@
       "axis": "time",
       "title": "5 subagents ran one after another in 1 run with no visible dependency, so a parallel fan-out would cut the wait",
       "detail": "turn 0: 5 serial spawns (test-writer, code-reviewer, test-writer, code-reviewer, agent), 3.8s serial vs 800ms longest",
-      "recommendation": "Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Then the wall-clock time is the longest run, not the sum of the runs. Keep serial spawns for agents that use the result of an earlier agent.",
+      "recommendation": "Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Keep serial spawns for agents that use the result of an earlier agent. Then the wall-clock time is the longest run, not the sum of the runs.",
+      "improvement": "Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Keep serial spawns for agents that use the result of an earlier agent.",
+      "why": "Then the wall-clock time is the longest run, not the sum of the runs.",
       "evidence": {
         "runs": [
           {
@@ -1610,6 +1614,8 @@
       "title": "8 subagent runs = 83% of the session's tokens (292.2k), max 1 in parallel",
       "detail": "general-purpose ×3 188.8k · code-reviewer ×2 41.5k · test-writer ×2 41.5k · unknown ×1 20.4k",
       "recommendation": "Check that each subagent returns a summary much smaller than what it read. Put what the parent already knows in the brief, so that the agent does not read it again. Narrow a brief that makes an agent read far more than it reports back. Subagents keep exploration out of your main context, and they can run in parallel.",
+      "improvement": "Check that each subagent returns a summary much smaller than what it read. Put what the parent already knows in the brief, so that the agent does not read it again. Narrow a brief that makes an agent read far more than it reports back.",
+      "why": "Subagents keep exploration out of your main context, and they can run in parallel.",
       "evidence": {
         "byType": [
           {

@@ -1041,6 +1041,8 @@
       "title": "1 tool error (16.7% of 6 calls)",
       "detail": "most in Bash",
       "recommendation": "Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md. A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.",
+      "improvement": "Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md.",
+      "why": "A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.",
       "evidence": {
         "errorRate": 0.1667,
         "groups": []
@@ -1065,6 +1067,8 @@
       "title": "1 subagent run = 42% of the session's tokens (76.0k), max 1 in parallel",
       "detail": "code-reviewer ×1 76.0k",
       "recommendation": "Check that each subagent returns a summary much smaller than what it read. Put what the parent already knows in the brief, so that the agent does not read it again. Narrow a brief that makes an agent read far more than it reports back. Subagents keep exploration out of your main context, and they can run in parallel.",
+      "improvement": "Check that each subagent returns a summary much smaller than what it read. Put what the parent already knows in the brief, so that the agent does not read it again. Narrow a brief that makes an agent read far more than it reports back.",
+      "why": "Subagents keep exploration out of your main context, and they can run in parallel.",
       "evidence": {
         "byType": [
           {

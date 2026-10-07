@@ -760,6 +760,8 @@
       "title": "2 tool errors (66.7% of 3 calls)",
       "detail": "most in Bash",
       "recommendation": "Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md. A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.",
+      "improvement": "Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md.",
+      "why": "A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.",
       "evidence": {
         "errorRate": 0.6667,
         "groups": []
@@ -784,6 +786,8 @@
       "title": "The last test run failed and the session ended",
       "detail": "The last main-thread test run was \"npm test\" (turn 0). 0 of 2 main-thread test runs passed. The session edited 1 file.",
       "recommendation": "Make the test suite pass, or record why the failure is expected. Make \"tests pass\" a clear stop condition in the brief. The session ended on a failed test, so the work that it delivered is not verified.",
+      "improvement": "Make the test suite pass, or record why the failure is expected. Make \"tests pass\" a clear stop condition in the brief.",
+      "why": "The session ended on a failed test, so the work that it delivered is not verified.",
       "evidence": {
         "lastTest": {
           "turnIndex": 0,
@@ -811,6 +815,8 @@
       "title": "1 API error / retries",
       "detail": "api_error",
       "recommendation": "Check the model column in the timeline to see which model answered after each error. Rate limits and overloads are outside your control. A model fallback changes the model for the rest of the turn, and no message tells you.",
+      "improvement": "Check the model column in the timeline to see which model answered after each error.",
+      "why": "Rate limits and overloads are outside your control. A model fallback changes the model for the rest of the turn, and no message tells you.",
       "evidence": {
         "apiErrors": 1
       },
@@ -829,6 +835,8 @@
       "title": "92% of the 1m 5s active time went to tool execution",
       "detail": "tools 1m 0s · subagents 0ms · model 5.0s · active 1m 5s",
       "recommendation": "Fix the slowest tools first: add timeouts, cache their work, or narrow their scope. Run long commands in the background. Tool execution takes most of the active time, so the model mostly waits on commands.",
+      "improvement": "Fix the slowest tools first: add timeouts, cache their work, or narrow their scope. Run long commands in the background.",
+      "why": "Tool execution takes most of the active time, so the model mostly waits on commands.",
       "evidence": {
         "activeMs": 65080,
         "toolMs": 60080,

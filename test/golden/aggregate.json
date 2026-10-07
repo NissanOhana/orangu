@@ -251,7 +251,7 @@
       "ruleId": "fanout-opportunity",
       "title": "In one session: 5 subagents ran one after another in 1 run with no visible dependency, so a parallel fan-out would cut the wait",
       "titlePattern": "N subagents ran one after another in N run with no visible dependency, so a parallel fan-out would cut the wait",
-      "recommendation": "Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Then the wall-clock time is the longest run, not the sum of the runs. Keep serial spawns for agents that use the result of an earlier agent.",
+      "recommendation": "Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Keep serial spawns for agents that use the result of an earlier agent. Then the wall-clock time is the longest run, not the sum of the runs.",
       "sessions": 1,
       "totalSavingsTokens": 0,
       "totalSavingsMs": 3000,

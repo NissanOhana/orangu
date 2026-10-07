@@ -644,6 +644,8 @@
       "title": "2 context compactions (peak 175.0k of 1.00M)",
       "detail": "turn 0 at 165.0k → 22.0k · turn 1 at 172.0k → 19.0k",
       "recommendation": "Split long work into sessions, with a written handover note for the next session. Run /compact yourself at a milestone, before auto-compaction starts in the middle of a task. Keep tool outputs small, and move exploration into subagents. Every compaction removes working memory, and the agent must build it again (more reads, repeated commands).",
+      "improvement": "Split long work into sessions, with a written handover note for the next session. Run /compact yourself at a milestone, before auto-compaction starts in the middle of a task. Keep tool outputs small, and move exploration into subagents.",
+      "why": "Every compaction removes working memory, and the agent must build it again (more reads, repeated commands).",
       "evidence": {
         "compactions": [
           {
@@ -684,6 +686,8 @@
       "title": "Every request starts from a 50.0k-token baseline (system prompt, tools, CLAUDE.md, skills)",
       "detail": "12 requests × 50.0k ≈ 600.1k cache-read tokens to carry the preamble",
       "recommendation": "Trim CLAUDE.md to the rules that bind. Move long docs into files that the agent reads only when it needs them. Remove the MCP servers and skills that you do not use in this repo. Check for large SessionStart hook output. The baseline is small for one request, because the request reads it from the cache and does not send it again. But every request carries it, so it multiplies by the number of requests.",
+      "improvement": "Trim CLAUDE.md to the rules that bind. Move long docs into files that the agent reads only when it needs them. Remove the MCP servers and skills that you do not use in this repo. Check for large SessionStart hook output.",
+      "why": "The baseline is small for one request, because the request reads it from the cache and does not send it again. But every request carries it, so it multiplies by the number of requests.",
       "evidence": {
         "baselineTokens": 50005,
         "requests": 12,
@@ -709,6 +713,9 @@
       "title": "100% of the 210.0k tokens written to cache went to the 1-hour tier",
       "detail": "210.0k on the 1h tier vs 0 on the 5m tier · median gap between turns 0ms",
       "recommendation": "No change needed. Claude Code can hold your context in the cache for 5 minutes or for 1 hour. Both tiers write the same tokens, so the tier changes nothing about your usage. When your turns come more often than every 5 minutes, the short tier keeps the cache as warm as the long one. This is a harness setting that is good to know about.",
+      "improvement": "No change needed.",
+      "why": "Claude Code can hold your context in the cache for 5 minutes or for 1 hour. Both tiers write the same tokens, so the tier changes nothing about your usage. When your turns come more often than every 5 minutes, the short tier keeps the cache as warm as the long one.",
+      "method": "This is a harness setting that is good to know about.",
       "evidence": {
         "cacheWrite1hTokens": 210000,
         "cacheWrite5mTokens": 0,
