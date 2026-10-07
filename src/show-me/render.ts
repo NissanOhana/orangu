@@ -3,8 +3,8 @@
  *
  * 1. The directory resolves (after realpath) to a run directory directly under the show-me base, and it holds a
  *    data.json (confined paths).
- * 2. words.json holds exactly 3 strings (src/show-me/words.ts). data.json passes its shape again
- *    (src/show-me/data.ts). Each file is read through one bounded, no-symlink read.
+ * 2. words.json holds exactly 3 strings (src/show-me/words.ts), and each one passes the default redaction.
+ *    data.json passes its shape again (src/show-me/data.ts). Each file is read through one bounded, no-symlink read.
  * 3. Both templates come from the generated module, from a fixed list. No input names a template path.
  * 4. Each filled file passes the self-check (src/show-me/check.ts).
  * 5. Only then are both files written, at mode 0600, through src/cli/private-output.ts. A failure at any step
@@ -23,7 +23,7 @@ import { validateShowMeData } from './data.js'
 import { fillTemplate } from './fill.js'
 import { REPORT_HTML, SLIDES_HTML } from './generated/templates.js'
 import { aggregatePage, sessionPage } from './pages.js'
-import { ShowMeInputError, validateWords, wordFindings, type WordFinding } from './words.js'
+import { ShowMeInputError, redactWords, validateWords, wordFindings, type WordFinding } from './words.js'
 
 /** The 2 files of a run, from the generated module only: the list is fixed, and no flag or data key picks one. */
 export const TEMPLATES: ReadonlyArray<{ readonly file: 'slides.html' | 'report.html'; readonly html: string }> = Object.freeze([
@@ -130,7 +130,7 @@ async function writeBoth(dir: string, files: ReadonlyArray<{ file: string; html:
 /** Render the run directory `dir`: validate, fill, check, then write both files. */
 export async function renderShowMe(dir: string, o: { base?: string } = {}): Promise<RenderResult> {
   const run = await confinedRunDir(dir, o.base)
-  const words = validateWords(await readJson(run, 'words.json'))
+  const words = redactWords(validateWords(await readJson(run, 'words.json')))
   const data = validateShowMeData(await readJson(run, 'data.json'))
   const page = data.kind === 'session' ? sessionPage(data.value, words) : aggregatePage(data.value, data.scope, { ...(data.folder !== undefined ? { folder: data.folder } : {}), version: data.version, words })
   const files = TEMPLATES.map(({ file, html: template }) => {

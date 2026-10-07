@@ -329,6 +329,24 @@ describe('the 2 probes that broke the old fixture fill', () => {
   })
 })
 
+// A steered model can read a secret with Read and write it into a value. The render scrubs the 3 values with the
+// default redaction of the data, so a key never reaches a file or a printed finding.
+describe('the 3 values pass the default redaction', () => {
+  it('redacts a key planted in the summary: no file and no STE finding holds it', async () => {
+    const base = tempBase()
+    const key = `sk-ant-api03-${'A1b2C3d4'.repeat(6)}`
+    const planted = `The session read the config file and printed the key ${key} in the output of a tool call that ran for the whole session without a stop.`
+    const dir = await run(base, session(), { ...WORDS, summary: planted })
+    const result = await renderShowMe(dir, { base })
+    const report = readFileSync(result.report, 'utf8')
+    expect(report).not.toContain(key)
+    expect(report).toContain('‹anthropic-key›')
+    expect(readFileSync(result.slides, 'utf8')).not.toContain(key)
+    expect(result.findings.filter((f) => f.slot === 'summary').length, 'the long sentence still gets its finding').toBeGreaterThan(0)
+    expect(JSON.stringify(result.findings)).not.toContain(key)
+  })
+})
+
 describe('9. hostile words, 8. offline', () => {
   it('9. each hostile word renders as escaped text, a 10,000-character sentence renders whole, and 8. each file passes the offline gate', async () => {
     const base = tempBase()

@@ -5,6 +5,7 @@
  * The validation is strict on structure and has no length cap: a 10,000-character sentence renders whole. The STE
  * sentence rules give findings on the words (src/ste), and those findings never refuse a render.
  */
+import { redactValue } from '../redact/redact.js'
 import { checkText, type SteFinding } from '../ste/index.js'
 
 /** The 3 strings that Claude writes in words.json. Every other slot value comes from orangu data. */
@@ -48,6 +49,15 @@ export function validateWords(raw: unknown): Words {
     words[key] = value
   }
   return words as Words
+}
+
+/**
+ * The 3 values after the default redaction of the data: a secret, a key or a home path that a model copied into a
+ * value is masked before the fill and before the STE findings. data.json does not record a --no-redact choice, so
+ * the render always redacts. Redaction only removes information.
+ */
+export function redactWords(words: Words): Words {
+  return { verdict: redactValue(words.verdict), summary: redactValue(words.summary), improvementsTitle: redactValue(words.improvementsTitle) }
 }
 
 /** One STE finding on one word slot: advisory, never a reason to refuse the render. */
