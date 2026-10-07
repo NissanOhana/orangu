@@ -4,7 +4,8 @@ import type { Analysis } from '../model/analysis.js'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { renderReport } from '../report/render.js'
-import { renderAnalysisJson } from '../cli/json-out.js'
+import { prepareAggregateForOutput, renderAnalysisJson } from '../cli/json-out.js'
+import type { Aggregate } from '../analyze/aggregate.js'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
 
 describe('scrubStr', () => {
@@ -318,6 +319,33 @@ describe('redactAnalysis', () => {
     expect(out.events[0]!.detail).toBe('')
     expect((out.insights[0]!.evidence as { command: string }).command).toBe('')
     expect(JSON.stringify(out)).not.toContain(MARKER)
+  })
+
+  it('keeps the rule text parts and the example title of an insight and of a cross finding under the default redaction', () => {
+    const parts = { improvement: `${GENERATED}-improvement`, why: `${GENERATED}-why`, method: `${GENERATED}-method` }
+    const a = full()
+    Object.assign(a.insights[0]!, parts)
+    for (const out of [
+      redactAnalysis(a, { scrub: true, stripText: true, home: '' }).analysis,
+      // the default flags of `analyze --json`: scrub, and strip transcript text
+      JSON.parse(renderAnalysisJson(a, {})) as Analysis,
+    ]) {
+      expect(out.insights[0]).toMatchObject(parts)
+      // the strip ran: the same record loses its transcript-quoting detail
+      expect(out.insights[0]!.detail).toBe('')
+    }
+
+    const cross = { ruleId: 'rule-1', severity: 'low', axis: 'quality', title: `In one session: ${GENERATED}`, exampleTitle: GENERATED, recommendation: GENERATED, ...parts, exampleSessionIds: ['session-id'] }
+    const aggregate = { crossFindings: [cross], sessions: [{ id: 'session-id', title: MARKER }] }
+    for (const out of [
+      redactValue(aggregate, { scrub: true, stripText: true, home: '' }),
+      // the default flags of `repo --json` and `global --json`
+      prepareAggregateForOutput(aggregate as unknown as Aggregate, {}) as unknown as typeof aggregate,
+    ]) {
+      expect(out.crossFindings[0]).toMatchObject({ title: cross.title, exampleTitle: GENERATED, recommendation: GENERATED, ...parts })
+      // the strip ran: the session title is the first prompt, so it is gone
+      expect(out.sessions[0]!.title).toBe('')
+    }
   })
 
   it('keeps event labels only for kinds the adapter labels from a fixed string', () => {
