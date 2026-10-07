@@ -16,7 +16,7 @@ import { resolve } from 'node:path'
 import { checkText, type SteResult } from '../../ste/index.js'
 import { MAX_EVIDENCE_ARTIFACT_BYTES } from '../../suggest/evidence.js'
 import { flagBool } from '../args.js'
-import { stripAnsi } from '../tty.js'
+import { oneLine } from '../tty.js'
 
 export interface SteIo {
   stdin: AsyncIterable<Buffer | string>
@@ -31,11 +31,12 @@ const OWN_FLAGS = new Set(['json', 'lines', 'quiet', 'no-color'])
 type Checked = { file: string } & SteResult
 
 // The input is untrusted: a file in a cloned repository, or a draft on stdin. Its name and its quoted text go
-// through stripAnsi before they are printed, so that an OSC or CSI sequence (clipboard, window title, link,
-// screen clear) or a C0/C1 control character in the input cannot act on the tty that shows the output.
-const overBound = (name: string): Error => new Error(`${stripAnsi(name)} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu ste reads.`)
+// through oneLine before they are printed, so that an OSC or CSI sequence (clipboard, window title, link,
+// screen clear) or a C0/C1 control character in the input cannot act on the tty that shows the output, and a
+// newline or a tab in a file name cannot start a forged line of output.
+const overBound = (name: string): Error => new Error(`${oneLine(name)} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu ste reads.`)
 
-const cannotRead = (name: string, reason: string): Error => new Error(`orangu ste cannot read ${stripAnsi(name)}: ${reason}.`)
+const cannotRead = (name: string, reason: string): Error => new Error(`orangu ste cannot read ${oneLine(name)}: ${reason}.`)
 
 /**
  * JSON.stringify escapes the C0 controls (ESC and BEL too) but not DEL or the C1 controls (U+0080 to U+009F).
@@ -87,8 +88,8 @@ function flagName(name: string): string {
 }
 
 function report(result: Checked): string[] {
-  const file = stripAnsi(result.file)
-  const lines = result.findings.map((finding) => `${file}:${finding.line}  ${finding.rule}  "${stripAnsi(finding.text)}"  ${stripAnsi(finding.hint)}`)
+  const file = oneLine(result.file)
+  const lines = result.findings.map((finding) => `${file}:${finding.line}  ${finding.rule}  "${oneLine(finding.text)}"  ${oneLine(finding.hint)}`)
   lines.push(`${file}: ${result.sentences} sentences, ${result.clean} clean, STE score ${result.score}%, ${result.findings.length} findings`)
   return lines
 }

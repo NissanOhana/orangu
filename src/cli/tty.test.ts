@@ -8,6 +8,7 @@ import {
   displayWidth,
   fileLink,
   glyphs,
+  oneLine,
   onceOnExit,
   padCell,
   paint,
@@ -189,6 +190,13 @@ describe('truncate', () => {
       expect(displayWidth(t)).toBeLessThanOrEqual(budget)
     }
     expect(truncate(title, 68, { unicode: true })).not.toContain('token')
+  })
+  it('keeps a label cell on one line: a newline, a carriage return or a tab from the input becomes a space', () => {
+    expect(truncate('title\nforged line', 80, { unicode: true })).toBe('title forged line')
+    expect(truncate('a\tb\r\nc', 80, { unicode: true })).toBe('a b c')
+    expect(truncate('one\ntwo three four', 12, { unicode: true })).toBe('one two…')
+    expect(oneLine('x\x1b[2J\ny\tz\r')).toBe('x y z')
+    expect(oneLine('plain')).toBe('plain')
   })
   it('counts wide glyphs and never cuts inside an escape sequence', () => {
     const t = truncate('日本語テキスト', 7, { unicode: true })

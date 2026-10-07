@@ -142,6 +142,22 @@ describe('orangu ste', () => {
     await expect(cmdSte([gone], {}, io())).rejects.toThrow(`orangu ste cannot read ${at('gone.md')}: the file does not exist.`)
   })
 
+  it('prints a file name that holds a newline or a tab on one line, so that it cannot forge a summary line', async () => {
+    const name = at('nl\nREADME.md: 9 sentences, 9 clean, STE score 100%, 0 findings')
+    writeFileSync(name, 'Run the check.\n')
+    await cmdSte([name], {}, io())
+    const out = stdout().trimEnd().split('\n')
+    expect(out).toHaveLength(1)
+    expect(out[0]).toBe(`${at('nl README.md: 9 sentences, 9 clean, STE score 100%, 0 findings')}: 1 sentences, 1 clean, STE score 100%, 0 findings`)
+    // the error messages name such a file on one line too
+    await expect(cmdSte([at('gone\tname\r\nREADME.md')], {}, io())).rejects.toThrow(`orangu ste cannot read ${at('gone name README.md')}: the file does not exist.`)
+    const big = at('big\nREADME.md')
+    writeFileSync(big, '')
+    truncateSync(big, MAX_EVIDENCE_ARTIFACT_BYTES + 1)
+    await expect(cmdSte([big], {}, io())).rejects.toThrow(`${at('big README.md')} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes`)
+    expect(stdout().trimEnd().split('\n')).toHaveLength(1)
+  })
+
   it('reads an input at the bound whole', async () => {
     writeFileSync(at('edge.txt'), '')
     truncateSync(at('edge.txt'), MAX_EVIDENCE_ARTIFACT_BYTES)

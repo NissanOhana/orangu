@@ -166,6 +166,15 @@ export function stripAnsi(s: string): string {
   return s.replace(ANSI_OR_OSC, '').replace(CONTROL, '')
 }
 
+/**
+ * stripAnsi, then each newline, carriage return and tab becomes one space. stripAnsi keeps the newline and
+ * the tab, so a value from input (a file name, a title, a path) could still start a line of its own and forge
+ * a line of output. Use this for every one-line value from input.
+ */
+export function oneLine(s: string): string {
+  return stripAnsi(s).replace(/[\n\r\t]/g, ' ')
+}
+
 /** Terminal columns a string occupies: escapes 0, ASCII 1, combining/format 0, CJK and emoji 2. */
 export function displayWidth(s: string): number {
   let w = 0
@@ -186,10 +195,11 @@ export function displayWidth(s: string): number {
  * goes on after truncation and a cut can never land inside a sequence. The cut falls at the last space
  * inside the budget, so the text ends on a whole word; text with no space inside the budget (one long
  * word, a path, an id) is cut at the last grapheme that fits. Only label cells and lines drawn again in
- * place use this; prose wraps with wrapWords instead.
+ * place use this; prose wraps with wrapWords instead. A cell is one line: a newline or a tab in the input
+ * becomes a space (oneLine).
  */
 export function truncate(s: string, budget: number, caps: Pick<Caps, 'unicode'>): string {
-  const plain = stripAnsi(s)
+  const plain = oneLine(s)
   if (displayWidth(plain) <= budget) return plain
   const ell = glyphs(caps).ellipsis
   const room = budget - displayWidth(ell)

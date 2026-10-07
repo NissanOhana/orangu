@@ -11,7 +11,8 @@
  * reason, the list and pick cells and the heaviest-session title. A path or a command a paste must
  * carry whole (the report path, the next and plugin rows, the store fallback) is never cut or wrapped
  * here: below 80 columns the terminal wraps it. Text from a transcript reaches the terminal only through
- * wrapWords or truncate, which strip escapes and control bytes first. ASCII in every aligned cell; the
+ * wrapWords, truncate or oneLine, which strip escapes and control bytes first; truncate and oneLine also turn
+ * a newline or a tab into a space, so that a one-line value stays one line. ASCII in every aligned cell; the
  * audited glyphs (mark, check, middle dot) appear only in a leading position or inside a trailing
  * value, and swap to ASCII when `caps.unicode` is off. Colour is painted after padding, wrapping and
  * truncation, never before.
@@ -24,7 +25,7 @@ import { fmtMs, fmtTokens } from '../analyze/util.js'
 import { plural } from '../harness/report.js'
 import { outcomeHeadline } from '../report/client/derive.js'
 import { PLUGIN_INSTALL } from '../report/client/suggest-rows.js'
-import { displayWidth, fileLink, glyphs, padCell, paint, stripAnsi, truncate, wrapValue, wrapWords, type Caps, type Style } from './tty.js'
+import { displayWidth, fileLink, glyphs, padCell, oneLine, paint, truncate, wrapValue, wrapWords, type Caps, type Style } from './tty.js'
 
 /** Readable measure: wider terminals still get an 80-column layout. */
 export const LAYOUT_MAX = 80
@@ -259,10 +260,10 @@ const AGG_SESSION_COLUMN = 25
  * prints the bounded token figure, the example title wrapped at whole words, the session count, then the
  * improvement as continuation lines (repo and global text has no footer, so each row carries its own).
  * Every value from a transcript (a title, a path, a model id, an error signature) passes through
- * stripAnsi, inside wrapWords and truncate or directly.
+ * oneLine (stripAnsi, and a newline or a tab becomes a space), inside wrapWords and truncate or directly.
  */
 export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
-  const lines = ['', paint(caps, ['bold', 'accent'], 'orangu') + '  ' + paint(caps, 'bold', stripAnsi(a.scope)), paint(caps, 'dim', `${INDENT}${plural(a.sessionCount, 'session')}`), '']
+  const lines = ['', paint(caps, ['bold', 'accent'], 'orangu') + '  ' + paint(caps, 'bold', oneLine(a.scope)), paint(caps, 'dim', `${INDENT}${plural(a.sessionCount, 'session')}`), '']
   const line = (l: string, v: string) => lines.push(INDENT + l.padEnd(20) + v)
   line('total tokens', fmtTokens(a.totals.tokens))
   line('tool calls', `${a.totals.toolCalls} (${a.totals.toolErrors} errors, ${(a.averages.toolErrorRate * 100).toFixed(1)}%)`)
@@ -273,7 +274,7 @@ export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
   line('cache hit ratio', (a.averages.cacheHitRatio * 100).toFixed(1) + '%')
   if (a.byModel.length) {
     lines.push('', paint(caps, 'bold', `${INDENT}tokens by model`))
-    for (const m of a.byModel.slice(0, 6)) lines.push(`    ${stripAnsi(m.key).padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${plural(m.count, 'session')}`)
+    for (const m of a.byModel.slice(0, 6)) lines.push(`    ${oneLine(m.key).padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${plural(m.count, 'session')}`)
   }
   if (a.crossFindings.length) {
     lines.push('', paint(caps, 'bold', `${INDENT}recurring findings (across sessions)`))
@@ -304,17 +305,17 @@ export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
       h.sessions = Math.max(h.sessions, e.sessions)
       hidden.set(e.tool, h)
     }
-    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) lines.push(`    ${paint(caps, 'bad', String(e.total).padStart(4))}×  ${stripAnsi(e.tool)}: ${stripAnsi(e.signature)}  ${paint(caps, 'dim', '(' + plural(e.sessions, 'session') + ')')}`)
-    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(`    ${paint(caps, 'bad', String(h.total).padStart(4))}×  ${stripAnsi(tool)}: ${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)  ${paint(caps, 'dim', '(' + plural(h.sessions, 'session') + ')')}`)
+    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) lines.push(`    ${paint(caps, 'bad', String(e.total).padStart(4))}×  ${oneLine(e.tool)}: ${oneLine(e.signature)}  ${paint(caps, 'dim', '(' + plural(e.sessions, 'session') + ')')}`)
+    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(`    ${paint(caps, 'bad', String(h.total).padStart(4))}×  ${oneLine(tool)}: ${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)  ${paint(caps, 'dim', '(' + plural(h.sessions, 'session') + ')')}`)
   }
   if (a.topReReadFiles.length) {
     lines.push('', paint(caps, 'bold', `${INDENT}most re-read files (context weight)`))
-    for (const f of a.topReReadFiles.slice(0, 6)) lines.push(`    ${String(f.totalReads).padStart(4)} reads  ${stripAnsi(f.path)}  ${paint(caps, 'dim', '(' + plural(f.sessions, 'session') + ')')}`)
+    for (const f of a.topReReadFiles.slice(0, 6)) lines.push(`    ${String(f.totalReads).padStart(4)} reads  ${oneLine(f.path)}  ${paint(caps, 'dim', '(' + plural(f.sessions, 'session') + ')')}`)
   }
   lines.push('', paint(caps, 'bold', `${INDENT}heaviest sessions (by tokens)`))
   // the title is a label column (transcript text): cut at its last whole word; the report shows it whole
   const titleBudget = layoutWidth(caps) - AGG_SESSION_COLUMN
-  for (const s of a.topSessions.slice(0, 8)) lines.push(`    ${fmtTokens(s.tokens).padStart(9)}  ${stripAnsi(s.id).slice(0, 8)}  ${paint(caps, 'dim', s.title ? truncate(s.title, titleBudget, caps) : '(title hidden, add --include-text)')}`)
+  for (const s of a.topSessions.slice(0, 8)) lines.push(`    ${fmtTokens(s.tokens).padStart(9)}  ${oneLine(s.id).slice(0, 8)}  ${paint(caps, 'dim', s.title ? truncate(s.title, titleBudget, caps) : '(title hidden, add --include-text)')}`)
   return lines
 }
 

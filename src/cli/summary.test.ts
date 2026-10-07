@@ -158,6 +158,14 @@ describe('summary renderers fit the layout', () => {
     expect(lines[0]).toBe('  finding  Fix the title')
   })
 
+  it('keeps the header title on one line when the session title holds a newline or a tab', async () => {
+    const a = await analyzed(heavyBuilder())
+    for (const lines of [analysisBlock(capsAt(80, { color: 0 }), a, 'first\nsecond\tthird'), briefBlock(capsAt(80, { color: 0 }), a, 'first\nsecond\tthird', STEP, { hint: false })]) {
+      expect(lines[1]).toBe('orangu  first second third')
+      for (const l of lines) expect(l).not.toMatch(/[\n\r\t]/)
+    }
+  })
+
   it('the store fallback is the single line allowed past 80 columns, and it says why', () => {
     const lines = nextStepLines(capsAt(80), FALLBACK).map(stripAnsi)
     const store = lines.findIndex((l) => l.startsWith('  store    '))
@@ -388,12 +396,14 @@ describe('aggregateBlock', () => {
       scope: 'repo \x1b[2Jdemo',
       crossFindings: [{ ...a.crossFindings[0]!, exampleTitle: HOSTILE }],
       topSessions: [{ ...a.topSessions[0]!, title: long }, { ...a.topSessions[0]!, title: HOSTILE }],
-      topReReadFiles: [{ path: '/repo/\x1b]52;c;SGVsbG8=\x07a.ts', sessions: 2, totalReads: 9 }],
-      recurringErrors: [{ signature: 'boom \x1b[2J', tool: 'Bash\x07', sessions: 2, total: 4 }],
-      byModel: [{ key: 'model\x1b[31m', count: 1, tokens: 10 }],
+      topReReadFiles: [{ path: '/repo/\x1b]52;c;SGVsbG8=\x07a.ts\n  forged line', sessions: 2, totalReads: 9 }],
+      recurringErrors: [{ signature: 'boom \x1b[2J\r\n', tool: 'Bash\x07\t', sessions: 2, total: 4 }],
+      byModel: [{ key: 'model\x1b[31m\n', count: 1, tokens: 10 }],
     }
     for (const [label, caps] of VARIANTS) {
       const lines = aggregateBlock(caps, hostile)
+      // a newline or a tab from the input never starts a line of its own
+      for (const l of lines) expect(l, `${label}: ${JSON.stringify(l)}`).not.toMatch(/[\n\r\t]/)
       // with colour off, orangu writes no escape at all, so any escape byte would be the transcript's own
       if (caps.color === 0) for (const l of lines) expect(l, `${label}: ${JSON.stringify(l)}`).not.toMatch(ESCAPE_BYTES)
       for (const l of lines) expect(l, `${label}: no OSC, no BEL, no screen clear`).not.toMatch(/\x1b\]|\x07|\x1b\[2J/)
