@@ -198,6 +198,56 @@ syncBuiltinESMExports()
     }
   })
 
+  // A steered model can run a pre-approved `orangu report … -o <path>`. Each verb that writes a named file replaces
+  // only a file that orangu wrote, and no flag forces it. A new path, and a run again on the same path, still work.
+  it('report -o, repo --out and repo --html replace only a file that orangu wrote', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-no-overwrite-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const rc = join(dir, '.zshrc')
+    const rcText = 'export PATH="$HOME/bin:$PATH"\n'
+    writeFileSync(rc, rcText, { mode: 0o644 })
+    const report = (out: string) =>
+      spawnSync('node', [CLI, 'report', home.endedId, '--root', home.configDir, '-o', out, '--no-open', '--no-cache', '--quiet', '--no-redact', '--include-text'], { encoding: 'utf8' })
+
+    const refused = report(rc)
+    expect(refused.status, refused.stderr).toBe(1)
+    expect(refused.stderr).toContain(`${rc} is not an orangu output, so orangu did not change it.`)
+    expect(refused.stderr).toContain('Choose a new path, or delete the file by hand and run the command again.')
+    expect(refused.stdout).toBe('')
+    expect(readFileSync(rc, 'utf8')).toBe(rcText)
+    if (process.platform !== 'win32') expect(statSync(rc).mode & 0o777).toBe(0o644)
+
+    const fresh = join(dir, 'report.html')
+    expect(report(fresh).status, 'a new path').toBe(0)
+    const again = report(fresh)
+    expect(again.status, `a run again on its own output\n${again.stderr}`).toBe(0)
+    expect(readFileSync(fresh, 'utf8')).toContain('orangu-data')
+
+    const repo = (extra: string[]) => spawnSync('node', [CLI, 'repo', cwd, '--root', home.configDir, '--jobs', '1', '--no-cache', '--quiet', ...extra], { encoding: 'utf8' })
+    const pkg = join(cwd, 'package.json')
+    const pkgText = '{\n  "name": "x",\n  "schemaVersion": "2"\n}\n'
+    writeFileSync(pkg, pkgText)
+    const json = repo(['--out', pkg])
+    expect(json.status, json.stderr).toBe(1)
+    expect(json.stderr).toContain(`${pkg} is not an orangu output`)
+    expect(readFileSync(pkg, 'utf8')).toBe(pkgText)
+    const agg = join(dir, 'aggregate.json')
+    expect(repo(['--out', agg]).status, 'a new path').toBe(0)
+    expect(repo(['--out', agg]).status, 'a run again on its own output').toBe(0)
+    expect((JSON.parse(readFileSync(agg, 'utf8')) as { schemaVersion: string }).schemaVersion).toBe('2')
+
+    const html = join(dir, 'repo.html')
+    expect(repo(['--html', html]).status, 'a new path').toBe(0)
+    expect(repo(['--html', html]).status, 'a run again on its own output').toBe(0)
+    // one orangu output replaces another: the report file is an orangu output too
+    expect(repo(['--html', fresh]).status).toBe(0)
+    const html2 = repo(['--html', rc])
+    expect(html2.status, html2.stderr).toBe(1)
+    expect(readFileSync(rc, 'utf8')).toBe(rcText)
+  })
+
   it('repo honours --root: only the named config dir is scanned', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-repo-root-'))
     const cwd = join(dir, 'project')

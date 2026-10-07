@@ -7,7 +7,7 @@
  * the harness config below is written inline on top of `makeFixtureHome`.
  */
 import { describe, it, expect, beforeAll } from 'vitest'
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { existsSync, readFileSync, statSync } from 'node:fs'
 import { mkdtemp, mkdir, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -103,12 +103,18 @@ async function makeHarnessFixture(): Promise<Fixture> {
 
 let fx: Fixture
 // ORANGU_CLAUDE_MANAGED_DIRS is set EMPTY so the machine's real managed policy, if any, never enters a fixture run
+const env = (home: string, extraEnv: Record<string, string> = {}) => ({
+  ...process.env,
+  HOME: home,
+  ORANGU_NO_CACHE: '1',
+  ORANGU_HOME: join(home, '.orangu'),
+  ORANGU_CLAUDE_ROOTS: '',
+  CLAUDE_CONFIG_DIR: '',
+  ORANGU_CLAUDE_MANAGED_DIRS: '',
+  ...extraEnv,
+})
 const run = (args: string[], home: string, extraEnv: Record<string, string> = {}) =>
-  execFileSync('node', [CLI, ...args], {
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, HOME: home, ORANGU_NO_CACHE: '1', ORANGU_HOME: join(home, '.orangu'), ORANGU_CLAUDE_ROOTS: '', CLAUDE_CONFIG_DIR: '', ORANGU_CLAUDE_MANAGED_DIRS: '', ...extraEnv },
-  })
+  execFileSync('node', [CLI, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: env(home, extraEnv) })
 
 describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
   beforeAll(async () => {
@@ -401,6 +407,23 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const printed = run(['harness', '--global', '--cwd', fx.repo, '--out', both, '--json', '--quiet'], fx.home)
     expect(JSON.parse(printed).schemaVersion).toBe('2')
     expect(JSON.parse(readFileSync(both, 'utf8')).schemaVersion).toBe('2')
+  })
+
+  // A steered model can run a pre-approved `orangu harness --out <path>`. The writer replaces only a file that orangu
+  // wrote: a run again on its own output works, and a repository file stays as it was.
+  it('--out replaces only a file that orangu wrote', async () => {
+    const dest = join(await mkdtemp(join(tmpdir(), 'orangu-harness-out3-')), 'harness.json')
+    const args = (out: string) => ['harness', '--global', '--cwd', fx.repo, '--out', out, '--quiet']
+    expect(run(args(dest), fx.home), 'a new path').toBe('')
+    expect(run(args(dest), fx.home), 'a run again on its own output').toBe('')
+    expect(JSON.parse(readFileSync(dest, 'utf8')).schemaVersion).toBe('2')
+
+    const claudeMd = join(fx.repo, 'CLAUDE.md')
+    const before = readFileSync(claudeMd, 'utf8')
+    const refused = spawnSync('node', [CLI, ...args(claudeMd)], { encoding: 'utf8', env: env(fx.home) })
+    expect(refused.status, refused.stderr).toBe(1)
+    expect(refused.stderr).toContain(`${claudeMd} is not an orangu output, so orangu did not change it.`)
+    expect(readFileSync(claudeMd, 'utf8')).toBe(before)
   })
 
   it('orangu estimate harness sizes the report in tokens, with no currency figure', () => {
