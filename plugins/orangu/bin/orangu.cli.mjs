@@ -1335,7 +1335,7 @@ function aggregate(analyses, scope, now) {
   const findings = /* @__PURE__ */ new Map();
   const perSessionSavings = /* @__PURE__ */ new Map();
   const example = /* @__PURE__ */ new Map();
-  const rows = [];
+  const rows2 = [];
   const t = { tokens: 0, toolCalls: 0, toolErrors: 0, agents: 0, turns: 0, humanTurns: 0, wallMs: 0, activeMs: 0, compactions: 0, prs: 0, commits: 0 };
   let cacheRatioSum = 0;
   let cacheRatioN = 0;
@@ -1395,7 +1395,7 @@ function aggregate(analyses, scope, now) {
       per.ms.push(ins.savings?.ms ?? 0);
       perSessionSavings.set(ins.ruleId, per);
     }
-    rows.push({
+    rows2.push({
       id: sid,
       title: a.session.title,
       project: proj,
@@ -1418,7 +1418,7 @@ function aggregate(analyses, scope, now) {
       topInsightRuleId: a.insights[0]?.ruleId
     });
   }
-  rows.sort((a, b) => b.tokens - a.tokens);
+  rows2.sort((a, b) => b.tokens - a.tokens);
   const n2 = analyses.length || 1;
   return {
     schemaVersion: AGGREGATE_SCHEMA_VERSION,
@@ -1432,7 +1432,7 @@ function aggregate(analyses, scope, now) {
       toolErrorRate: t.toolCalls ? round(t.toolErrors / t.toolCalls, 4) : 0,
       cacheHitRatio: cacheRatioN ? round(cacheRatioSum / cacheRatioN, 4) : 0,
       agentsPerSession: round(t.agents / n2, 2),
-      contextPeak: round(rows.reduce((a, r) => a + r.contextPeak, 0) / n2, 0)
+      contextPeak: round(rows2.reduce((a, r) => a + r.contextPeak, 0) / n2, 0)
     },
     byModel: sortRollup(byModel),
     byProject: sortRollup(byProject),
@@ -1458,9 +1458,9 @@ function aggregate(analyses, scope, now) {
         boundedSavingsMs: round(Math.min(f.totalSavingsMs, median(per.ms) * f.sessions), 0)
       };
     }).sort(compareCrossFindings),
-    sessions: rows,
-    topSessions: rows.slice(0, 15),
-    byWeek: byWeekOf(rows)
+    sessions: rows2,
+    topSessions: rows2.slice(0, 15),
+    byWeek: byWeekOf(rows2)
   };
 }
 
@@ -5629,22 +5629,22 @@ var outputBurst = (ctx) => {
     if (m.role !== "assistant" || !m.providerMessageId) continue;
     for (const b of m.blocks) if (b.kind === "tool_use" && EDIT_TOOLS.has(b.name)) editToolByProviderMsg.set(m.providerMessageId, b.name);
   }
-  const rows = bursts.map((u) => {
+  const rows2 = bursts.map((u) => {
     const pid = msgByUuid.get(u.messageUuid)?.providerMessageId;
     return { turnIndex: u.turnIndex, outputTokens: u.usage.output, model: u.model, writeTool: pid ? editToolByProviderMsg.get(pid) : void 0, agentId: u.agentId };
   });
-  const scripted = rows.filter((r) => r.writeTool);
+  const scripted = rows2.filter((r) => r.writeTool);
   return [
     mk({
       ruleId: "output-burst",
       severity: scripted.length >= 3 ? "low" : "info",
       axis: "tokens",
       title: `${bursts.length} message${bursts.length === 1 ? "" : "s"} wrote over 8k output tokens${scripted.length ? ` (${scripted.length} generating file content)` : ""}`,
-      detail: rows.sort((a, b) => b.outputTokens - a.outputTokens).slice(0, 5).map((r) => `turn ${r.turnIndex}: ${fmtTokens(r.outputTokens)} tokens${r.writeTool ? ` (${r.writeTool})` : ""}`).join(" \xB7 "),
+      detail: rows2.sort((a, b) => b.outputTokens - a.outputTokens).slice(0, 5).map((r) => `turn ${r.turnIndex}: ${fmtTokens(r.outputTokens)} tokens${r.writeTool ? ` (${r.writeTool})` : ""}`).join(" \xB7 "),
       improvement: "Generate large file content (a big Write or Edit) with a script or a template where you can. A burst of prose or plan text is usually the work itself, so keep it.",
       why: "Output is the one kind of token that the model must produce one at a time. This makes a burst the slowest part of a turn.",
-      evidence: { bursts: rows.slice(0, 10), writeBursts: scripted.length },
-      turnIndexes: [...new Set(rows.map((r) => r.turnIndex))].slice(0, 30),
+      evidence: { bursts: rows2.slice(0, 10), writeBursts: scripted.length },
+      turnIndexes: [...new Set(rows2.map((r) => r.turnIndex))].slice(0, 30),
       personas: ["developer", "lead"]
     })
   ];
@@ -6970,6 +6970,9 @@ var segmenter = new Intl.Segmenter(void 0, { granularity: "grapheme" });
 function stripAnsi(s) {
   return s.replace(ANSI_OR_OSC, "").replace(CONTROL, "");
 }
+function oneLine2(s) {
+  return stripAnsi(s).replace(/[\n\r\t]/g, " ");
+}
 function displayWidth(s) {
   let w = 0;
   for (const { segment } of segmenter.segment(stripAnsi(s))) {
@@ -6984,24 +6987,86 @@ function displayWidth(s) {
   return w;
 }
 function truncate(s, budget, caps) {
-  const plain = stripAnsi(s);
+  const plain = oneLine2(s);
   if (displayWidth(plain) <= budget) return plain;
   const ell = glyphs(caps).ellipsis;
   const room = budget - displayWidth(ell);
   if (room <= 0) return ell.slice(0, Math.max(0, budget));
   let out3 = "";
   let w = 0;
+  let atBoundary = false;
   for (const { segment } of segmenter.segment(plain)) {
     const sw = displayWidth(segment);
-    if (w + sw > room) break;
+    if (w + sw > room) {
+      atBoundary = /^\s/.test(segment);
+      break;
+    }
     out3 += segment;
     w += sw;
   }
-  return out3 + ell;
+  if (!atBoundary) {
+    const space = out3.search(/\s\S*$/);
+    if (space > 0) out3 = out3.slice(0, space);
+  }
+  const kept = out3.trimEnd();
+  return (kept || out3) + ell;
 }
 function padCell(s, width, align = "l") {
   const pad = Math.max(0, width - displayWidth(s));
   return align === "l" ? s + " ".repeat(pad) : " ".repeat(pad) + s;
+}
+function wrapValue(v, budget, sep3 = " \xB7 ") {
+  const parts = v.split(sep3);
+  const lines = [];
+  let cur = "";
+  for (const part of parts) {
+    const next = cur ? cur + sep3 + part : part;
+    if (cur && displayWidth(next) > budget) {
+      lines.push(cur);
+      cur = part;
+    } else cur = next;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+function wrapWords(text2, width) {
+  const room = Math.max(1, Math.floor(width));
+  const words2 = stripAnsi(text2).split(/[ \t\n]+/).filter(Boolean);
+  const lines = [];
+  let cur = "";
+  let curWidth = 0;
+  for (const word of words2) {
+    const ww = displayWidth(word);
+    if (ww > room) {
+      if (cur) lines.push(cur);
+      cur = "";
+      curWidth = 0;
+      let piece = "";
+      let pw = 0;
+      for (const { segment } of segmenter.segment(word)) {
+        const sw = displayWidth(segment);
+        if (piece && pw + sw > room) {
+          lines.push(piece);
+          piece = "";
+          pw = 0;
+        }
+        piece += segment;
+        pw += sw;
+      }
+      if (piece) lines.push(piece);
+      continue;
+    }
+    if (cur && curWidth + 1 + ww <= room) {
+      cur += " " + word;
+      curWidth += 1 + ww;
+    } else {
+      if (cur) lines.push(cur);
+      cur = word;
+      curWidth = ww;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines;
 }
 function fileLink(absPath, caps, host = hostname()) {
   if (!caps.hyperlinks) return absPath;
@@ -7227,14 +7292,14 @@ function argv0Basename(command) {
 // src/harness/precedence.ts
 var SCOPE_PRECEDENCE = ["managed", "repo-local", "repo", "global-local", "global"];
 var isDropIn = (file) => /[\\/]managed-settings\.d[\\/][^\\/]+$/.test(file);
-function managedOrder(rows) {
-  const dropIns = rows.filter((r) => isDropIn(r.file)).sort((a, b) => a.file < b.file ? 1 : a.file > b.file ? -1 : 0);
-  return [...dropIns, ...rows.filter((r) => !isDropIn(r.file))];
+function managedOrder(rows2) {
+  const dropIns = rows2.filter((r) => isDropIn(r.file)).sort((a, b) => a.file < b.file ? 1 : a.file > b.file ? -1 : 0);
+  return [...dropIns, ...rows2.filter((r) => !isDropIn(r.file))];
 }
 function byPrecedence(settings) {
   return SCOPE_PRECEDENCE.flatMap((scope) => {
-    const rows = settings.filter((s) => s.scope === scope);
-    return scope === "managed" ? managedOrder(rows) : rows;
+    const rows2 = settings.filter((s) => s.scope === scope);
+    return scope === "managed" ? managedOrder(rows2) : rows2;
   });
 }
 
@@ -7245,13 +7310,13 @@ function statusOf(declared2, observations) {
   if (!declared2) return "undeclared";
   return observations > 0 ? "used" : "idle";
 }
-function countStatus(rows) {
+function countStatus(rows2) {
   const c = { used: 0, idle: 0, undeclared: 0 };
-  for (const r of rows) c[r.status]++;
+  for (const r of rows2) c[r.status]++;
   return c;
 }
-function ranked(rows, n2, k) {
-  return rows.slice().sort((a, b) => n2(b) - n2(a) || (k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0)).slice(0, HARNESS_ROW_CAP);
+function ranked(rows2, n2, k) {
+  return rows2.slice().sort((a, b) => n2(b) - n2(a) || (k(a) < k(b) ? -1 : k(a) > k(b) ? 1 : 0)).slice(0, HARNESS_ROW_CAP);
 }
 function parseMcpToolName(name) {
   if (!name.startsWith("mcp__")) return null;
@@ -7970,6 +8035,7 @@ function kickoffCommand(rec, mode) {
 
 // src/report/client/suggest-rows.ts
 var PLUGIN_INSTALL = "/plugin marketplace add NissanOhana/orangu \xB7 /plugin install orangu";
+var EXAMPLE_TITLE_CAPTION = "Each title shows the figures of one example session.";
 function titleForRule(ruleId) {
   const words2 = ruleId.trim().replace(/[-_]+/g, " ") || "finding";
   return words2[0].toUpperCase() + words2.slice(1);
@@ -8023,16 +8089,27 @@ function layoutWidth(caps) {
 function valueBudget(caps) {
   return layoutWidth(caps) - GUTTER;
 }
+function wrapJoined(caps, text2, width) {
+  const plain = wrapWords(text2, Infinity)[0] ?? "";
+  return wrapValue(plain, width, glyphs(caps).sep).flatMap((l) => displayWidth(l) > width ? wrapWords(l, width) : [l]);
+}
+function rows(caps, label, value, o = {}) {
+  const head = INDENT + padCell(label, LABEL_WIDTH) + " ";
+  const budget = valueBudget(caps);
+  const parts = o.raw ? [value] : o.joined ? wrapJoined(caps, value, budget) : wrapWords(value, budget);
+  if (!parts.length) parts.push("");
+  return parts.map((p, i) => (i ? " ".repeat(GUTTER) : head) + (o.style ? paint(caps, o.style, p) : p));
+}
 function row(caps, label, value, o = {}) {
-  const v = o.raw ? value : truncate(value, valueBudget(caps), caps);
-  return INDENT + padCell(label, LABEL_WIDTH) + " " + (o.style ? paint(caps, o.style, v) : v);
+  return rows(caps, label, value, o).join("\n");
 }
 function continuation(caps, value, style) {
-  const v = truncate(value, valueBudget(caps), caps);
-  return " ".repeat(GUTTER) + (style ? paint(caps, style, v) : v);
+  return wrapWords(value, valueBudget(caps)).map((p) => " ".repeat(GUTTER) + (style ? paint(caps, style, p) : p));
 }
-function fit(caps, line) {
-  return truncate(line, layoutWidth(caps), caps);
+function fit(caps, line, style, joined = false) {
+  const indent = /^ */.exec(line)[0];
+  const width = layoutWidth(caps) - indent.length;
+  return (joined ? wrapJoined(caps, line, width) : wrapWords(line, width)).map((p) => style ? paint(caps, style, indent + p) : indent + p);
 }
 function fmtBytes(bytes) {
   return (bytes / 1e6).toFixed(1) + " MB";
@@ -8041,11 +8118,14 @@ function doneLine(caps, o) {
   const g = glyphs(caps);
   let s = `analyzed ${fmtBytes(o.sizeBytes)} in ${fmtMs(o.elapsedMs)}`;
   if (o.redactions) s += `${g.sep}${plural(o.redactions, "redaction")}`;
-  return INDENT + paint(caps, "good", g.ok) + " " + truncate(s, layoutWidth(caps) - INDENT.length - displayWidth(g.ok) - 1, caps);
+  const pad = " ".repeat(INDENT.length + displayWidth(g.ok) + 1);
+  const lead = INDENT + paint(caps, "good", g.ok) + " ";
+  return wrapJoined(caps, s, layoutWidth(caps) - pad.length).map((p, i) => (i ? pad : lead) + p).join("\n");
 }
 function nextStepLines(caps, step) {
-  if (!step.finding) return [row(caps, "finding", "none: this session ran clean", { style: "good" })];
-  const lines = [row(caps, "finding", step.finding, { style: "bold" })];
+  if (!step.finding) return rows(caps, "finding", "none: this session ran clean", { style: "good" });
+  const lines = rows(caps, "finding", step.finding, { style: "bold" });
+  if (step.improvement) lines.push(...continuation(caps, `Improvement: ${step.improvement}`));
   if (step.storeNote) {
     const head = "unavailable: ";
     const tail = " (full command below)";
@@ -8058,7 +8138,7 @@ function nextStepLines(caps, step) {
   if (install) {
     const note = "(once, inside Claude Code)";
     const fits = install.length + 4 + note.length <= valueBudget(caps);
-    lines.push(continuation(caps, install) + (fits ? "    " + paint(caps, "dim", note) : ""));
+    lines.push(" ".repeat(GUTTER) + install + (fits ? "    " + paint(caps, "dim", note) : ""));
   }
   return lines;
 }
@@ -8090,44 +8170,44 @@ function qualityLine(a, sep3) {
   if (o.filesEdited + o.filesWritten) bits.push(`${o.filesEdited + o.filesWritten} files changed`);
   return bits.join(sep3) || "no commits/PRs/tests detected";
 }
-function findingRow(caps, ins) {
+function findingRows(caps, ins) {
   const g = glyphs(caps);
   const w = layoutWidth(caps);
   const save = ins.savings?.tokens ? `save ~${fmtTokens(ins.savings.tokens)} tokens` : ins.savings?.ms ? `save ~${fmtMs(ins.savings.ms)}` : "";
   const lead = "    ";
   const budget = w - lead.length - 2 - (save ? displayWidth(save) + 2 : 0);
-  const title = truncate(ins.title, budget, caps);
+  const [first = "", ...rest] = wrapWords(ins.title, budget);
   const mark2 = paint(caps, ins.severity === "high" ? "bad" : ins.severity === "medium" ? "warn" : "dim", g.mark);
-  const gap = save ? " ".repeat(Math.max(2, w - lead.length - 2 - displayWidth(title) - displayWidth(save))) : "";
-  return lead + mark2 + " " + title + gap + paint(caps, "accent", save);
+  const gap = save ? " ".repeat(Math.max(2, w - lead.length - 2 - displayWidth(first) - displayWidth(save))) : "";
+  return [lead + mark2 + " " + first + gap + paint(caps, "accent", save), ...rest.map((p) => lead + "  " + p)];
 }
 function analysisBlock(caps, a, title) {
   const s = a.summary;
   const sep3 = glyphs(caps).sep;
   const lines = header(caps, title, `${a.session.source}${sep3}${a.session.id}`);
-  lines.push(row(caps, "quality", qualityLine(a, sep3)));
-  lines.push(row(caps, "time", `${fmtMs(s.wallMs)} wall${sep3}${fmtMs(s.activeMs)} active${sep3}${fmtMs(s.humanWaitMs)} waiting`));
-  lines.push(row(caps, "tokens", `${fmtTokens(s.totalTokens)}${sep3}${(s.cacheHitRatio * 100).toFixed(0)}% cache${sep3}${fmtTokens(a.tokens.byKind.output)} output`));
-  lines.push(row(caps, "turns", `${s.turns} (${s.humanTurns} human)`));
-  lines.push(row(caps, "tools", `${s.toolCalls} calls${sep3}${s.toolErrors} errors`));
-  if (s.agents) lines.push(row(caps, "agents", `${s.agents} runs${sep3}${a.agents.maxConcurrency} max parallel${sep3}${fmtTokens(a.tokens.agents)} tokens`));
-  lines.push(row(caps, "context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""}${sep3}${plural(s.compactions, "compaction")}`));
+  lines.push(...rows(caps, "quality", qualityLine(a, sep3), { joined: true }));
+  lines.push(...rows(caps, "time", `${fmtMs(s.wallMs)} wall${sep3}${fmtMs(s.activeMs)} active${sep3}${fmtMs(s.humanWaitMs)} waiting`, { joined: true }));
+  lines.push(...rows(caps, "tokens", `${fmtTokens(s.totalTokens)}${sep3}${(s.cacheHitRatio * 100).toFixed(0)}% cache${sep3}${fmtTokens(a.tokens.byKind.output)} output`, { joined: true }));
+  lines.push(...rows(caps, "turns", `${s.turns} (${s.humanTurns} human)`));
+  lines.push(...rows(caps, "tools", `${s.toolCalls} calls${sep3}${s.toolErrors} errors`, { joined: true }));
+  if (s.agents) lines.push(...rows(caps, "agents", `${s.agents} runs${sep3}${a.agents.maxConcurrency} max parallel${sep3}${fmtTokens(a.tokens.agents)} tokens`, { joined: true }));
+  lines.push(...rows(caps, "context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""}${sep3}${plural(s.compactions, "compaction")}`, { joined: true }));
   lines.push("", paint(caps, "bold", INDENT + "findings"));
   const bad = a.parse.badLines;
   if (!a.insights.length) lines.push(bad ? paint(caps, "warn", `    no findings, but orangu skipped ${plural(bad, "unparseable line")}`) : paint(caps, "good", "    clean: no findings"));
-  for (const ins of a.insights.slice(0, 6)) lines.push(findingRow(caps, ins));
-  lines.push("", paint(caps, "dim", fit(caps, `${INDENT}run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report`)));
-  if (bad && a.insights.length) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: orangu skipped ${plural(bad, "unparseable line")}`)));
-  if (!a.parse.reconciliation.ok) lines.push(paint(caps, "warn", fit(caps, `${INDENT}warning: token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%`)));
+  for (const ins of a.insights.slice(0, 6)) lines.push(...findingRows(caps, ins));
+  lines.push("", ...fit(caps, `${INDENT}run 'orangu report ${a.session.id.slice(0, 8)}' for the full visual report`, "dim"));
+  if (bad && a.insights.length) lines.push(...fit(caps, `${INDENT}warning: orangu skipped ${plural(bad, "unparseable line")}`, "warn"));
+  if (!a.parse.reconciliation.ok) lines.push(...fit(caps, `${INDENT}warning: token totals reconcile within ${a.parse.reconciliation.matchesWithinPct}%`, "warn"));
   return lines;
 }
 function briefBlock(caps, a, title, step, o) {
   const s = a.summary;
   const sep3 = glyphs(caps).sep;
   const lines = header(caps, title, `latest${sep3}${a.session.id.slice(0, 8)}${sep3}${s.turns} turns${sep3}${fmtTokens(s.totalTokens)} tokens${sep3}${fmtMs(s.activeMs)} active`);
-  lines.push(fit(caps, INDENT + outcomeHeadline(s)), "");
+  lines.push(...fit(caps, INDENT + outcomeHeadline(s)), "");
   lines.push(...nextStepLines(caps, step));
-  if (o.hint) lines.push("", paint(caps, "dim", fit(caps, `${INDENT}orangu report for the full picture${sep3}orangu --help for every command`)));
+  if (o.hint) lines.push("", ...fit(caps, `${INDENT}orangu report for the full picture${sep3}orangu --help for every command`, "dim", true));
   return lines;
 }
 function listRows(caps, refs, o) {
@@ -8141,13 +8221,71 @@ function listRows(caps, refs, o) {
     const project = truncate(basename6(s.projectSlug), Math.max(8, w - displayWidth(lead)), caps);
     lines.push(`${INDENT}${paint(caps, "accent", s.sessionId.slice(0, 8))}  ${paint(caps, "dim", when)}  ${size}  ${paint(caps, "dim", agents)}  ${project}`);
   }
-  if (!o.total) lines.push(paint(caps, "dim", fit(caps, `${INDENT}orangu found no sessions. Is Claude Code installed?`)), paint(caps, "dim", fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`)));
+  if (!o.total) lines.push(...fit(caps, `${INDENT}orangu found no sessions. Is Claude Code installed?`, "dim"), ...fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`, "dim"));
   else {
     const sep3 = glyphs(caps).sep;
     lines.push("");
-    if (refs.length < o.total) lines.push(paint(caps, "dim", fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep3}--limit <n> for more`)));
-    lines.push(paint(caps, "dim", fit(caps, `${INDENT}orangu report <id>${sep3}orangu analyze <id>${sep3}orangu harness`)));
+    if (refs.length < o.total) lines.push(...fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep3}--limit <n> for more`, "dim", true));
+    lines.push(...fit(caps, `${INDENT}orangu report <id>${sep3}orangu analyze <id>${sep3}orangu harness`, "dim", true));
   }
+  return lines;
+}
+function aggregateOffer(caps, wroteHtml) {
+  const offer = wroteHtml ? "--json for the full machine-readable aggregate" : "--open for the HTML report, --json for the full machine-readable aggregate";
+  return ["", ...fit(caps, `${INDENT}add ${offer}`, "dim")];
+}
+var AGG_TITLE_COLUMN = 14;
+var AGG_SESSION_COLUMN = 25;
+function aggregateBlock(caps, a) {
+  const lines = ["", paint(caps, ["bold", "accent"], "orangu") + "  " + paint(caps, "bold", oneLine2(a.scope)), paint(caps, "dim", `${INDENT}${plural(a.sessionCount, "session")}`), ""];
+  const line = (l, v) => lines.push(INDENT + l.padEnd(20) + v);
+  line("total tokens", fmtTokens(a.totals.tokens));
+  line("tool calls", `${a.totals.toolCalls} (${a.totals.toolErrors} errors, ${(a.averages.toolErrorRate * 100).toFixed(1)}%)`);
+  line("subagent runs", String(a.totals.agents));
+  line("PRs / commits", `${a.totals.prs} / ${a.totals.commits}`);
+  line("tokens / session", fmtTokens(a.averages.tokensPerSession));
+  line("tokens / human turn", fmtTokens(a.averages.tokensPerHumanTurn));
+  line("cache hit ratio", (a.averages.cacheHitRatio * 100).toFixed(1) + "%");
+  if (a.byModel.length) {
+    lines.push("", paint(caps, "bold", `${INDENT}tokens by model`));
+    for (const m of a.byModel.slice(0, 6)) lines.push(`    ${oneLine2(m.key).padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${plural(m.count, "session")}`);
+  }
+  if (a.crossFindings.length) {
+    lines.push("", paint(caps, "bold", `${INDENT}recurring findings (across sessions)`));
+    lines.push(...fit(caps, INDENT + EXAMPLE_TITLE_CAPTION, "dim"));
+    const pad = " ".repeat(AGG_TITLE_COLUMN);
+    const budget = layoutWidth(caps) - AGG_TITLE_COLUMN;
+    for (const f of a.crossFindings.slice(0, 8)) {
+      const figure = paint(caps, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8));
+      const count2 = `(${plural(f.sessions, "session")})`;
+      const title = wrapWords(f.exampleTitle || f.title, budget);
+      const last = title.at(-1);
+      const body = last !== void 0 && displayWidth(last) + 2 + count2.length <= budget ? [...title.slice(0, -1), last + "  " + paint(caps, "dim", count2)] : [...title, paint(caps, "dim", count2)];
+      const improvement = f.improvement ? wrapWords(`Improvement: ${f.improvement}`, budget) : [];
+      [...body, ...improvement].forEach((p, i) => lines.push((i ? pad : `    ${figure}  `) + p));
+    }
+  }
+  if (a.recurringErrors.length) {
+    lines.push("", paint(caps, "bold", `${INDENT}recurring tool errors (environment problems)`));
+    const hidden = /* @__PURE__ */ new Map();
+    for (const e of a.recurringErrors) {
+      if (e.signature) continue;
+      const h = hidden.get(e.tool) ?? { total: 0, groups: 0, sessions: 0 };
+      h.total += e.total;
+      h.groups += 1;
+      h.sessions = Math.max(h.sessions, e.sessions);
+      hidden.set(e.tool, h);
+    }
+    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) lines.push(`    ${paint(caps, "bad", String(e.total).padStart(4))}\xD7  ${oneLine2(e.tool)}: ${oneLine2(e.signature)}  ${paint(caps, "dim", "(" + plural(e.sessions, "session") + ")")}`);
+    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(`    ${paint(caps, "bad", String(h.total).padStart(4))}\xD7  ${oneLine2(tool)}: ${plural(h.groups, "recurring signature")}, text hidden (add --include-text)  ${paint(caps, "dim", "(" + plural(h.sessions, "session") + ")")}`);
+  }
+  if (a.topReReadFiles.length) {
+    lines.push("", paint(caps, "bold", `${INDENT}most re-read files (context weight)`));
+    for (const f of a.topReReadFiles.slice(0, 6)) lines.push(`    ${String(f.totalReads).padStart(4)} reads  ${oneLine2(f.path)}  ${paint(caps, "dim", "(" + plural(f.sessions, "session") + ")")}`);
+  }
+  lines.push("", paint(caps, "bold", `${INDENT}heaviest sessions (by tokens)`));
+  const titleBudget = layoutWidth(caps) - AGG_SESSION_COLUMN;
+  for (const s of a.topSessions.slice(0, 8)) lines.push(`    ${fmtTokens(s.tokens).padStart(9)}  ${oneLine2(s.id).slice(0, 8)}  ${paint(caps, "dim", s.title ? truncate(s.title, titleBudget, caps) : "(title hidden, add --include-text)")}`);
   return lines;
 }
 function fmtAge(mtimeMs, now) {
@@ -8188,34 +8326,34 @@ function pickHeader(caps, shown, counts) {
   const gap = w - INDENT.length - displayWidth(left) - displayWidth(right);
   return INDENT + left + (gap >= 2 ? " ".repeat(gap) + paint(caps, "dim", right) : "");
 }
-function pickFrame(caps, rows, view, counts, now) {
+function pickFrame(caps, rows2, view, counts, now) {
   const g = glyphs(caps);
-  const lines = [pickHeader(caps, rows.length, counts), ""];
-  const end = Math.min(rows.length, view.start + view.size);
+  const lines = [pickHeader(caps, rows2.length, counts), ""];
+  const end = Math.min(rows2.length, view.start + view.size);
   for (let i = view.start; i < end; i++) {
-    const r = rows[i];
+    const r = rows2[i];
     const cursor = i === view.cursor;
     const mark2 = r.running ? paint(caps, "good", g.mark) : " ";
     const lead = `${INDENT}${cursor ? paint(caps, "accent", ">") : " "} ${mark2} `;
     lines.push(lead + pickCells(caps, r, now, INDENT.length + 4));
   }
-  if (view.start > 0 || end < rows.length) lines.push(paint(caps, "dim", `${INDENT}    ${g.up}${g.down} ${rows.length - (end - view.start)} more`));
+  if (view.start > 0 || end < rows2.length) lines.push(paint(caps, "dim", `${INDENT}    ${g.up}${g.down} ${rows2.length - (end - view.start)} more`));
   else lines.push("");
   const keys = caps.unicode ? "\u2191\u2193 or j k move \xB7 enter opens the report \xB7 q quits" : "up/down or j k move | enter opens the report | q quits";
-  const more = rows.length < counts.total ? `${g.sep}--limit <n> for more` : "";
+  const more = rows2.length < counts.total ? `${g.sep}--limit <n> for more` : "";
   lines.push(paint(caps, "dim", truncate(INDENT + keys + more, layoutWidth(caps), caps)));
   return lines;
 }
-function pickList(caps, rows, counts, now) {
+function pickList(caps, rows2, counts, now) {
   const g = glyphs(caps);
-  const numWidth = String(rows.length).length + 2;
-  const lines = [pickHeader(caps, rows.length, counts), ""];
-  rows.forEach((r, i) => {
+  const numWidth = String(rows2.length).length + 2;
+  const lines = [pickHeader(caps, rows2.length, counts), ""];
+  rows2.forEach((r, i) => {
     const mark2 = r.running ? paint(caps, "good", g.mark) : " ";
     const lead = `${INDENT}${padCell(`[${i + 1}]`, numWidth)} ${mark2} `;
     lines.push(lead + pickCells(caps, r, now, INDENT.length + numWidth + 3));
   });
-  const hint = rows.length < counts.total ? `--limit <n> for more${g.sep}interactive on a terminal` : "the picker is interactive on a terminal";
+  const hint = rows2.length < counts.total ? `--limit <n> for more${g.sep}interactive on a terminal` : "the picker is interactive on a terminal";
   lines.push("", paint(caps, "dim", truncate(`${INDENT}run: orangu report <id>${g.sep}${hint}`, layoutWidth(caps), caps)));
   return lines;
 }
@@ -9693,16 +9831,18 @@ async function persistNextStep(a, redact, deps = {}) {
   const row2 = planRowForInsight(top, a.session.id);
   const title = redact ? redactValue(row2.title, { scrub: redact.scrub, stripPaths: redact.stripPaths }) : row2.title;
   const finding = findingForRow({ ...row2, title }, "session");
+  const improvement = top.improvement;
   try {
     const store = deps.store ? deps.store() : new SuggestionStore();
     const { record: record2 } = await store.upsertNew(finding, "report");
-    return { finding: title, next: kickoffCommands(record2, "serve").claude };
+    return { finding: title, improvement, next: kickoffCommands(record2, "serve").claude };
   } catch (e) {
     const key = suggestionKey(finding, "report");
     const id = suggestionIdV2(key);
     const reason = (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "unknown error";
     return {
       finding: title,
+      improvement,
       storeNote: reason,
       next: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: "report" }, "file").claude
     };
@@ -10560,8 +10700,8 @@ function redacted(ctx, a) {
 var MAX_REPO_CWD_BYTES = 4096;
 var MAX_AGGREGATE_JOBS = 16;
 var MAX_AGGREGATE_CONCURRENCY = 2;
-function aggregateRegistryFingerprint(rows) {
-  return rows.map((row2) => JSON.stringify([row2.source, row2.id, row2.path, row2.mtimeMs, row2.sizeBytes, row2.cwd ?? ""])).sort().join("\n");
+function aggregateRegistryFingerprint(rows2) {
+  return rows2.map((row2) => JSON.stringify([row2.source, row2.id, row2.path, row2.mtimeMs, row2.sizeBytes, row2.cwd ?? ""])).sort().join("\n");
 }
 var AggregateRunner = class {
   constructor(ctx) {
@@ -10573,8 +10713,8 @@ var AggregateRunner = class {
   active = 0;
   cwdCache;
   cwdRefresh;
-  fingerprint(rows = this.ctx.registry.list()) {
-    return aggregateRegistryFingerprint(rows);
+  fingerprint(rows2 = this.ctx.registry.list()) {
+    return aggregateRegistryFingerprint(rows2);
   }
   evictIdleJob() {
     let oldest;
@@ -10617,8 +10757,8 @@ var AggregateRunner = class {
     }
   }
   async aliasesForDiscoveredCwds() {
-    const rows = this.ctx.registry.list();
-    const fingerprint = this.fingerprint(rows);
+    const rows2 = this.ctx.registry.list();
+    const fingerprint = this.fingerprint(rows2);
     if (this.cwdCache?.fingerprint === fingerprint) return this.cwdCache.aliases;
     if (this.cwdRefresh?.fingerprint === fingerprint) return this.cwdRefresh.promise;
     const promise = (async () => {
@@ -10628,7 +10768,7 @@ var AggregateRunner = class {
         const prior = aliases.get(alias);
         aliases.set(alias, prior === void 0 || prior === raw ? raw : null);
       };
-      for (const row2 of rows) {
+      for (const row2 of rows2) {
         const analysis = await this.ctx.registry.analysis(row2.id);
         const raw = analysis?.session.cwd;
         if (!raw) continue;
@@ -10665,11 +10805,11 @@ var AggregateRunner = class {
     return json(res, 202, { progress: { done: job.done, total: job.total } });
   }
   async compute(job, scope, cwd, fp) {
-    const rows = this.ctx.registry.list();
-    job.total = rows.length;
+    const rows2 = this.ctx.registry.list();
+    job.total = rows2.length;
     job.done = 0;
     const analyses = [];
-    for (const row2 of rows) {
+    for (const row2 of rows2) {
       const a = await this.ctx.registry.analysis(row2.id);
       job.done++;
       if (!a) continue;
@@ -10706,12 +10846,12 @@ var HarnessRunner = class {
     return json(res, 202, { progress: { done: this.done, total: this.total } });
   }
   async compute(fp) {
-    const rows = this.ctx.registry.list();
-    this.total = rows.length;
+    const rows2 = this.ctx.registry.list();
+    this.total = rows2.length;
     this.done = 0;
     const analyses = [];
     let unreadable = 0;
-    for (const row2 of rows) {
+    for (const row2 of rows2) {
       const a = await this.ctx.registry.analysis(row2.id);
       this.done++;
       if (a) analyses.push(a);
@@ -10726,9 +10866,9 @@ var HarnessRunner = class {
     const report2 = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : "global", now), {
       version: this.ctx.opts.version,
       now,
-      scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home },
+      scope: { cwd, roots, global: !repoCwd, limit: rows2.length, sessionsUnreadable: unreadable, home },
       // the registry rows already carry what retention measures: path, size and mtime of each transcript
-      sessions: rows.map((row2) => ({ path: row2.path, sizeBytes: row2.sizeBytes, mtimeMs: row2.mtimeMs }))
+      sessions: rows2.map((row2) => ({ path: row2.path, sizeBytes: row2.sizeBytes, mtimeMs: row2.mtimeMs }))
     });
     this.result = redactValue(report2, { scrub: true, home });
     this.fingerprint = fp;
@@ -10740,8 +10880,8 @@ function coreRoutes(ctx, hub) {
   const harness = new HarnessRunner(ctx);
   const maxLive = ctx.opts.maxLive ?? DEFAULT_MAX_LIVE;
   const appData = async (s) => {
-    const rows = ctx.registry.list();
-    const selectedId = s && rows.some((r) => r.id === s) ? s : rows[0]?.id;
+    const rows2 = ctx.registry.list();
+    const selectedId = s && rows2.some((r) => r.id === s) ? s : rows2[0]?.id;
     const raw = selectedId ? await ctx.registry.analysis(selectedId) : void 0;
     const red = raw ? redacted(ctx, raw) : void 0;
     return {
@@ -10752,7 +10892,7 @@ function coreRoutes(ctx, hub) {
       capabilities: capabilitiesOf(ctx),
       selectedId,
       session: red?.analysis,
-      sessions: rows,
+      sessions: rows2,
       aggregates: {},
       suggestions: publicSuggestions(await ctx.store.all()),
       redaction: red ? { applied: red.applied, strippedText: red.strippedText, strippedPaths: red.strippedPaths } : void 0
@@ -11361,10 +11501,10 @@ var MINI = [...FACE.map((line) => [{ text: line, style: FACE_STYLE }]), [{ text:
 function plainRow(row2) {
   return row2.map((segment) => segment.text).join("");
 }
-function artWidth(rows) {
-  return Math.max(...rows.map((row2) => displayWidth(plainRow(row2))));
+function artWidth(rows2) {
+  return Math.max(...rows2.map((row2) => displayWidth(plainRow(row2))));
 }
-var TIERS = [WIDE, STACKED, MINI].map((rows) => ({ rows, width: artWidth(rows) }));
+var TIERS = [WIDE, STACKED, MINI].map((rows2) => ({ rows: rows2, width: artWidth(rows2) }));
 var MASCOT_WIDE = WIDE.map(plainRow);
 var MASCOT_STACKED = STACKED.map(plainRow);
 var MASCOT_MINI = MINI.map(plainRow);
@@ -11373,11 +11513,11 @@ function mascotArt(width) {
 }
 function mascotLines(caps) {
   const width = layoutWidth(caps);
-  const rows = mascotArt(width);
-  const widest = artWidth(rows);
+  const rows2 = mascotArt(width);
+  const widest = artWidth(rows2);
   const indent = " ".repeat(Math.max(INDENT2.length, Math.floor((width - widest) / 2)));
   const budget = width - indent.length;
-  return rows.map((row2) => {
+  return rows2.map((row2) => {
     const text2 = plainRow(row2);
     if (displayWidth(text2) > budget) return indent + paint(caps, FACE_STYLE, truncate(text2, budget, caps));
     return indent + row2.map((segment) => paint(caps, segment.style, segment.text)).join("");
@@ -11783,17 +11923,17 @@ function projectEvidence(value, options = {}) {
   if (input.kind === "aggregate" && options.scope === void 0) throw new Error("Aggregate evidence requires explicit --scope repo|global");
   if (input.kind !== "aggregate" && options.scope !== void 0) throw new Error("--scope is only valid for Aggregate evidence");
   let scope = "session";
-  let rows;
+  let rows2;
   if (input.kind === "aggregate") {
     const aggregateScope2 = options.scope;
     if (aggregateScope2 === void 0) throw new Error("Aggregate evidence requires explicit --scope repo|global");
     scope = aggregateScope2;
-    rows = rowsFromAggregate(input.value, aggregateScope2);
+    rows2 = rowsFromAggregate(input.value, aggregateScope2);
   } else {
-    rows = rowsFromAnalysis(input.value);
+    rows2 = rowsFromAnalysis(input.value);
   }
   const seen = /* @__PURE__ */ new Set();
-  for (const row2 of rows) {
+  for (const row2 of rows2) {
     const id = suggestionIdV2(suggestionKey(row2.finding, "report"));
     if (seen.has(id)) throw new Error(`duplicate canonical suggestion identity ${id}`);
     seen.add(id);
@@ -11808,13 +11948,13 @@ function projectEvidence(value, options = {}) {
       sessions,
       ...input.kind === "aggregate" ? { cohortFingerprint: sessionCohortFingerprint(input.value.sessionIds) } : {}
     },
-    totalFindings: rows.length,
+    totalFindings: rows2.length,
     selectedFindings: 0,
-    truncated: rows.length > 0,
+    truncated: rows2.length > 0,
     catalogMatches: [],
     findings: []
   };
-  for (const row2 of rows.slice(0, limit)) {
+  for (const row2 of rows2.slice(0, limit)) {
     const suggestionId2 = suggestionIdV2(suggestionKey(row2.finding, "report"));
     const matches = row2.catalogMatches.map((match) => catalogOutput(suggestionId2, match));
     const finding = {
@@ -11836,7 +11976,7 @@ function projectEvidence(value, options = {}) {
     bundle.catalogMatches.push(...matches);
     bundle.findings.push(finding);
     bundle.selectedFindings = bundle.findings.length;
-    bundle.truncated = bundle.selectedFindings < rows.length;
+    bundle.truncated = bundle.selectedFindings < rows2.length;
     if (utf8Bytes(JSON.stringify(bundle)) > MAX_EVIDENCE_OUTPUT_BYTES) {
       bundle.catalogMatches.splice(catalogStart);
       bundle.findings.pop();
@@ -11994,8 +12134,8 @@ function detectStreams(flags) {
 }
 var n = (x) => x.toLocaleString("en-US");
 var SCOPE_LABEL = { managed: "managed settings", global: "user", "global-local": "user local", repo: "shared project", "repo-local": "project local" };
-function printedListings(rows, n2 = 6) {
-  return [...rows].sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession || (a.type < b.type ? -1 : a.type > b.type ? 1 : 0)).slice(0, n2);
+function printedListings(rows2, n2 = 6) {
+  return [...rows2].sort((a, b) => b.approxTokensPerMainSession - a.approxTokensPerMainSession || (a.type < b.type ? -1 : a.type > b.type ? 1 : 0)).slice(0, n2);
 }
 async function runHarness(flags) {
   detectStreams(flags);
@@ -13130,12 +13270,20 @@ function visible(value, flags) {
 function terminal(value) {
   return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ");
 }
-function printRecord(rec) {
-  const w = (s) => process.stdout.write(s + "\n");
+var MIN_TITLE_COLUMNS = 20;
+function recordLines(rec, width) {
   const status = rec.status === "verified" && !isTrustedComputedVerification(rec) ? "legacy-unverified" : rec.status;
-  w(`  ${terminal(rec.id)}  [${terminal(status)}]  ${terminal(rec.title)}`);
-  w(`    rule ${terminal(rec.ruleId)} \xB7 scope ${terminal(rec.scope)} \xB7 sessions ${rec.sessionIds.map((s) => terminal(s.slice(0, 8))).join(", ")}`);
-  if (rec.proposal) w(`    proposal: ${terminal(rec.proposal.proposalPath)}`);
+  const head = `  ${terminal(rec.id)}  [${terminal(status)}]  `;
+  const column = displayWidth(head);
+  const [first = "", ...rest] = wrapWords(rec.title, Math.max(MIN_TITLE_COLUMNS, width - column));
+  const lines = [head + first, ...rest.map((t) => " ".repeat(column) + t)];
+  lines.push(`    rule ${terminal(rec.ruleId)} \xB7 scope ${terminal(rec.scope)} \xB7 sessions ${rec.sessionIds.map((s) => terminal(s.slice(0, 8))).join(", ")}`);
+  if (rec.proposal) lines.push(`    proposal: ${terminal(rec.proposal.proposalPath)}`);
+  return lines;
+}
+function printRecord(rec) {
+  const width = layoutWidth(detectCaps(process.stdout, process.env));
+  for (const l of recordLines(rec, width)) process.stdout.write(l + "\n");
 }
 function printCatalog(matches) {
   const w = (s) => process.stdout.write(s + "\n");
@@ -13855,8 +14003,8 @@ function checkText(text2, { html = false, lines = false, frontmatter = false } =
 var USAGE = "usage: orangu ste <file...|-> [--json] [--lines]";
 var STDIN = "-";
 var OWN_FLAGS = /* @__PURE__ */ new Set(["json", "lines", "quiet", "no-color"]);
-var overBound = (name) => new Error(`${stripAnsi(name)} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu ste reads.`);
-var cannotRead = (name, reason) => new Error(`orangu ste cannot read ${stripAnsi(name)}: ${reason}.`);
+var overBound = (name) => new Error(`${oneLine2(name)} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu ste reads.`);
+var cannotRead = (name, reason) => new Error(`orangu ste cannot read ${oneLine2(name)}: ${reason}.`);
 var C1_OR_DEL = /[\x7f-\x9f]/g;
 var escapeC1 = (json2) => json2.replace(C1_OR_DEL, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 function readError(name, error) {
@@ -13893,8 +14041,8 @@ function flagName(name) {
   return `${name.length === 1 ? "-" : "--"}${name}`;
 }
 function report(result) {
-  const file = stripAnsi(result.file);
-  const lines = result.findings.map((finding) => `${file}:${finding.line}  ${finding.rule}  "${stripAnsi(finding.text)}"  ${stripAnsi(finding.hint)}`);
+  const file = oneLine2(result.file);
+  const lines = result.findings.map((finding) => `${file}:${finding.line}  ${finding.rule}  "${oneLine2(finding.text)}"  ${oneLine2(finding.hint)}`);
   lines.push(`${file}: ${result.sentences} sentences, ${result.clean} clean, STE score ${result.score}%, ${result.findings.length} findings`);
   return lines;
 }
@@ -14094,7 +14242,7 @@ async function gatherPickRows(flags, deps = {}) {
   const limitStr = flagStr(flags, "limit", "l");
   const limit = limitStr !== void 0 && Number.isFinite(Number(limitStr)) && Number(limitStr) > 0 ? Math.floor(Number(limitStr)) : DEFAULT_PICK_LIMIT;
   const redact = !flagBool(flags, "no-redact");
-  const rows = await Promise.all(
+  const rows2 = await Promise.all(
     ordered.slice(0, limit).map(async ({ r, running }) => {
       const head = await peekHead(r.path);
       const title = head.title && redact ? redactValue(head.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head.title;
@@ -14111,21 +14259,21 @@ async function gatherPickRows(flags, deps = {}) {
       };
     })
   );
-  return { rows, counts: { total: refs.length, running: ordered.filter((x) => x.running).length } };
+  return { rows: rows2, counts: { total: refs.length, running: ordered.filter((x) => x.running).length } };
 }
 async function cmdPick(flags, deps) {
   const now = deps.now ?? Date.now();
-  const { rows, counts } = await gatherPickRows(flags, { now, ...deps.isAlive ? { isAlive: deps.isAlive } : {} });
-  if (flagBool(flags, "json")) deps.stdout.write(JSON.stringify(rows, null, 2) + "\n");
-  if (!rows.length) throw new Error("orangu found no sessions. Is Claude Code installed? Try: orangu list");
+  const { rows: rows2, counts } = await gatherPickRows(flags, { now, ...deps.isAlive ? { isAlive: deps.isAlive } : {} });
+  if (flagBool(flags, "json")) deps.stdout.write(JSON.stringify(rows2, null, 2) + "\n");
+  if (!rows2.length) throw new Error("orangu found no sessions. Is Claude Code installed? Try: orangu list");
   if (flagBool(flags, "json")) return;
   if (!interactivePrecondition(deps.stdin, deps.stdout, deps.env, flags)) {
-    deps.stdout.write(pickList(deps.out, rows, counts, now).join("\n") + "\n");
+    deps.stdout.write(pickList(deps.out, rows2, counts, now).join("\n") + "\n");
     return;
   }
   const result = await select({
-    count: rows.length,
-    render: (view) => pickFrame({ ...deps.out, columns: view.columns }, rows, view, counts, now),
+    count: rows2.length,
+    render: (view) => pickFrame({ ...deps.out, columns: view.columns }, rows2, view, counts, now),
     input: deps.stdin,
     output: deps.stdout,
     caps: deps.out,
@@ -14136,7 +14284,7 @@ async function cmdPick(flags, deps) {
     else deps.stderr.write(paint(deps.err, "dim", "  cancelled") + "\n");
     return;
   }
-  await deps.openReport(rows[result.index].sessionId);
+  await deps.openReport(rows2[result.index].sessionId);
 }
 
 // src/cli/commands/dashboard.ts
@@ -14176,7 +14324,7 @@ function dashboardChoices(data) {
 function count(value, noun) {
   return `${value} ${noun}${value === 1 ? "" : "s"}`;
 }
-function oneLine2(value) {
+function oneLine3(value) {
   return value.replace(/\s+/g, " ").trim();
 }
 function choiceText(choice, data, now, sep3) {
@@ -14188,7 +14336,7 @@ function choiceText(choice, data, now, sep3) {
     case "browse":
       return { tag: "SESSION", text: `Browse session reports${sep3}${count(data.globalSessions, "session")}`, live: false };
     case "session": {
-      const title = oneLine2(choice.row.title ?? choice.row.sessionId.slice(0, 8));
+      const title = oneLine3(choice.row.title ?? choice.row.sessionId.slice(0, 8));
       return { tag: "LIVE", text: `${title}${sep3}${choice.row.project}${sep3}${fmtAge(choice.row.mtimeMs, now)}`, live: true };
     }
   }
@@ -14495,12 +14643,12 @@ async function cmdList2(flags) {
   const cwd = flags["cwd"] ? { cwd: String(flags["cwd"]) } : {};
   const all = flagBool(flags, "global") ? await listSessions({ roots: await claudeRoots(configArg), ...cwd }) : await listSessions({ ...configArg ? { configDir: configArg } : {}, ...cwd });
   const limit = Number(flagStr(flags, "limit", "l") ?? "40");
-  const rows = all.slice(0, Number.isNaN(limit) ? 40 : limit);
+  const rows2 = all.slice(0, Number.isNaN(limit) ? 40 : limit);
   if (flagBool(flags, "json")) {
-    process.stdout.write(JSON.stringify(rows, null, 2) + "\n");
+    process.stdout.write(JSON.stringify(rows2, null, 2) + "\n");
     return;
   }
-  process.stdout.write(listRows(out2, rows, { total: all.length, global: flagBool(flags, "global") }).join("\n") + "\n");
+  process.stdout.write(listRows(out2, rows2, { total: all.length, global: flagBool(flags, "global") }).join("\n") + "\n");
 }
 async function cmdAggregate(scope, selOrPath, flags) {
   let refs;
@@ -14569,7 +14717,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     process.stdout.write(renderPreparedAggregateJson(outputAggregate, flags));
     return;
   }
-  printAggregate(outputAggregate, wroteHtml);
+  process.stdout.write([...aggregateBlock(out2, outputAggregate), ...aggregateOffer(out2, wroteHtml)].join("\n") + "\n");
   if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
 }
 async function writeAggregateHtml(scope, a, flags) {
@@ -14587,58 +14735,6 @@ ${a.generatedAt}`).digest("hex").slice(0, 8);
     process.stderr.write(row(err2, "report", path, { raw: true }) + (open11 ? paint(err2, "dim", "  (opened)") : "") + "\n");
   }
   return true;
-}
-function printAggregate(a, wroteHtml) {
-  process.stdout.write("\n" + paint(out2, ["bold", "accent"], "orangu") + "  " + paint(out2, "bold", a.scope) + "\n");
-  process.stdout.write(paint(out2, "dim", `  ${plural(a.sessionCount, "session")}
-
-`));
-  const line = (l, v) => process.stdout.write("  " + l.padEnd(20) + v + "\n");
-  line("total tokens", fmtTokens(a.totals.tokens));
-  line("tool calls", `${a.totals.toolCalls} (${a.totals.toolErrors} errors, ${(a.averages.toolErrorRate * 100).toFixed(1)}%)`);
-  line("subagent runs", String(a.totals.agents));
-  line("PRs / commits", `${a.totals.prs} / ${a.totals.commits}`);
-  line("tokens / session", fmtTokens(a.averages.tokensPerSession));
-  line("tokens / human turn", fmtTokens(a.averages.tokensPerHumanTurn));
-  line("cache hit ratio", (a.averages.cacheHitRatio * 100).toFixed(1) + "%");
-  if (a.byModel.length) {
-    process.stdout.write("\n" + paint(out2, "bold", "  tokens by model\n"));
-    for (const m of a.byModel.slice(0, 6)) process.stdout.write(`    ${m.key.padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${m.count} session${m.count === 1 ? "" : "s"}
-`);
-  }
-  if (a.crossFindings.length) {
-    process.stdout.write("\n" + paint(out2, "bold", "  recurring findings (across sessions)\n"));
-    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(out2, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8))}  ${f.title}  ${paint(out2, "dim", "(" + plural(f.sessions, "session") + ")")}
-`);
-  }
-  if (a.recurringErrors.length) {
-    process.stdout.write("\n" + paint(out2, "bold", "  recurring tool errors (environment problems)\n"));
-    const hidden = /* @__PURE__ */ new Map();
-    for (const e of a.recurringErrors) {
-      if (e.signature) continue;
-      const h = hidden.get(e.tool) ?? { total: 0, groups: 0, sessions: 0 };
-      h.total += e.total;
-      h.groups += 1;
-      h.sessions = Math.max(h.sessions, e.sessions);
-      hidden.set(e.tool, h);
-    }
-    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) process.stdout.write(`    ${paint(out2, "bad", String(e.total).padStart(4))}\xD7  ${e.tool}: ${e.signature}  ${paint(out2, "dim", "(" + plural(e.sessions, "session") + ")")}
-`);
-    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out2, "bad", String(h.total).padStart(4))}\xD7  ${tool}: ${plural(h.groups, "recurring signature")}, text hidden (add --include-text)  ${paint(out2, "dim", "(" + plural(h.sessions, "session") + ")")}
-`);
-  }
-  if (a.topReReadFiles.length) {
-    process.stdout.write("\n" + paint(out2, "bold", "  most re-read files (context weight)\n"));
-    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(out2, "dim", "(" + plural(f.sessions, "session") + ")")}
-`);
-  }
-  process.stdout.write("\n" + paint(out2, "bold", "  heaviest sessions (by tokens)\n"));
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out2, "dim", s.title ? s.title.slice(0, 50) : "(title hidden, add --include-text)")}
-`);
-  const offer = wroteHtml ? "--json for the full machine-readable aggregate" : "--open for the HTML report, --json for the full machine-readable aggregate";
-  process.stdout.write(paint(out2, "dim", `
-  add ${offer}
-`));
 }
 async function cmdServe(flags) {
   const portStr = flagStr(flags, "port", "p");
