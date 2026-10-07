@@ -24,7 +24,8 @@ import type { SessionRef } from '../discover/discover.js'
 import { fmtMs, fmtTokens } from '../analyze/util.js'
 import { plural } from '../harness/report.js'
 import { outcomeHeadline } from '../report/client/derive.js'
-import { PLUGIN_INSTALL } from '../report/client/suggest-rows.js'
+// the caption above the recurring findings is the report's own sentence: one thing gets one sentence everywhere
+import { EXAMPLE_TITLE_CAPTION, PLUGIN_INSTALL } from '../report/client/suggest-rows.js'
 import { displayWidth, fileLink, glyphs, padCell, oneLine, paint, truncate, wrapValue, wrapWords, type Caps, type Style } from './tty.js'
 
 /** Readable measure: wider terminals still get an 80-column layout. */
@@ -257,11 +258,6 @@ export function aggregateOffer(caps: Caps, wroteHtml: boolean): string[] {
   return ['', ...fit(caps, `${INDENT}add ${offer}`, 'dim')]
 }
 
-/**
- * Said once above the recurring findings instead of a marker before each title. The same sentence as the
- * caption of the report's Repo and Global lists: one thing gets one sentence everywhere.
- */
-const EXAMPLE_TITLE_CAPTION = 'Each title shows the figures of one example session.'
 /** Columns before a recurring finding's title: the 4-space indent, the 8-column token figure, 2 spaces. */
 const AGG_TITLE_COLUMN = 14
 /** Columns before a heaviest-session title: the indent, the 9-column token figure, the 8-character id, 2 gaps. */
