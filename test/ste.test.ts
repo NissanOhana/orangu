@@ -91,22 +91,28 @@ describe('STE gate', () => {
     expect(findings[0]!.hint).toMatch(/^26 words/)
   })
 
-  it('reads rendered markup as a reader sees it: each cell is a block, an inline tag stays in its sentence, and a closed disclosure counts', () => {
+  it('reads rendered markup as a reader sees it: touching tags are cells, a phrase inside a sentence stays in it, and a closed disclosure counts', () => {
     const html = [
-      '<details class="finding"><summary><span class="rank">1</span><b class="sg-t">A title with no end mark</b><span class="fsave" title="the share of this session">12%</span>',
-      '<span class="rec sg-lead"><b>Improvement:</b> Do the thing.</span></summary>',
+      '<details class="finding"><summary><span class="rank">1</span><b class="sg-t">A title with no end mark</b><span class="fsave" title="the share of this session">12%</span><span class="rec sg-lead"><b>Improvement:</b> Do the thing.</span></summary>',
       '<div class="fbody"><details class="why"><summary>Why</summary><p>It costs\ntokens.</p></details>',
       '<p>Click <b>Copy</b>. Then paste it.</p><div class="cmd"><code>orangu report</code></div><svg><title>chart</title></svg></div></details>',
+      '<p>The numbers come from orangu <span class="v">0.9.0</span>. Claude wrote the words.</p><div><span class="pill">a-rule</span><span class="grow">A second title</span></div>',
+      '<p>Paste this command in a terminal in <code data-slot="cwd">~/Code/demo</code>. It starts Claude Code.</p>',
     ].join('\n')
     expect(renderedHtmlBlocks(html, 'x').map((b) => [b.line, b.text])).toEqual([
       [1, 'the share of this session'],
       [1, '1'],
       [1, 'A title with no end mark'],
       [1, '12%'],
-      [2, 'Improvement: Do the thing.'],
-      [3, 'Why'],
-      [3, 'It costs tokens.'],
-      [5, 'Click Copy. Then paste it.'],
+      [1, 'Improvement: Do the thing.'],
+      [2, 'Why'],
+      [2, 'It costs tokens.'],
+      [4, 'Click Copy. Then paste it.'],
+      [4, 'CODE'],
+      [5, 'The numbers come from orangu 0.9.0. Claude wrote the words.'],
+      [5, 'a-rule'],
+      [5, 'A second title'],
+      [6, 'Paste this command in a terminal in CODE. It starts Claude Code.'],
     ])
   })
 

@@ -220,17 +220,21 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // on its own row, joined by the client separator.
   'test/golden#summary.narrative': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 1 },
   // C10: rendered output. The golden fixtures and test/fixtures/hidden-iterations.ts drawn through the real report
-  // screen builders and terminal line builders, with real values and the default redaction. Born 2026-10-07 at
-  // max(80, measured - 2), 0 banned tokens, findings at the measured count.
-  // Measured 217 sentences, 215 clean, score 99. The 2 findings are one composition of shipped words, kept as
+  // screen builders, terminal line builders and show-me fill, with real values and the default redaction. Born
+  // 2026-10-07 at max(80, measured - 2), 0 banned tokens, findings at the measured count.
+  // Measured 244 sentences, 242 clean, score 99. The 2 findings are one composition of shipped words, kept as
   // they are (no copy change in this row's chunk): the narrative list "Look at these first: <title> · <title>."
   // (src/analyze/analyze.ts:215) with rule titles in it. With the hidden-iterations title (insights.ts:1155,
   // 23 words) it is 27 words, and with the 2 agents-heavy titles it is 31 words (the same finding as the
   // test/golden#summary.narrative row). Both are on the Overview, in both audiences.
   'rendered#report.session': { floor: 97, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 2 },
-  // Measured 135 sentences, 135 clean, score 100. It shows the hidden-iterations title without the
+  // Measured 147 sentences, 147 clean, score 100. It shows the hidden-iterations title without the
   // "In one session: " marker (23 words) and the marker once, in the caption above the list.
   'rendered#report.aggregate': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Measured 96 sentences, 96 clean, score 100, with each wrapped title and improvement joined back whole.
   'rendered#terminal': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Measured 185 sentences, 185 clean, score 100: both files of a session run per session fixture and of a repo
+  // and a global run per aggregate fixture, with 3 fixed sample words. The deck shows the "In one session" label
+  // once and the 23-word example title under it.
+  'rendered#show-me': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
 }

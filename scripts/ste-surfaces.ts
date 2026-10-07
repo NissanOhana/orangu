@@ -22,8 +22,8 @@
  *   every other string, so no string counts twice.
  * - JSON and YAML copy fields, catalog notes and the golden emitted copy: each value is a block.
  * - Rendered output (the rendered#* rows): the golden fixtures and test/fixtures/hidden-iterations.ts drawn
- *   through the real report screen builders and the real terminal line builders, with real values and the
- *   default redaction, as a reader sees them. See renderedHtmlBlocks and terminalBlocks for the blocks.
+ *   through the real report screen builders, the real terminal line builders and the show-me fill, with real
+ *   values and the default redaction, as a reader sees them. See renderedHtmlBlocks and terminalBlocks.
  * A fragment (anything but the page text of a file, and the help) under 3 words is a label: its banned
  * tokens count, but it is not scored. Each distinct fragment counts once per surface.
  *
@@ -46,7 +46,14 @@ import { overviewScreenHtml } from '../src/report/client/screens/overview.js'
 import { suggestScreenHtml } from '../src/report/client/screens/suggest.js'
 import { renderRepo } from '../src/report/client/screens/repo.js'
 import { renderGlobal } from '../src/report/client/screens/global.js'
-import { prepareAggregateForOutput } from '../src/cli/json-out.js'
+import { prepareAggregateForOutput, renderAnalysisJson } from '../src/cli/json-out.js'
+import { validateShowMeData, type ShowMeData } from '../src/show-me/data.js'
+import { fillTemplate } from '../src/show-me/fill.js'
+import { aggregatePage, sessionPage } from '../src/show-me/pages.js'
+import { TEMPLATES } from '../src/show-me/render.js'
+import type { Words } from '../src/show-me/words.js'
+import { projectEvidence } from '../src/suggest/evidence.js'
+import { VERSION } from '../src/version.js'
 import { persistNextStep } from '../src/cli/next-step.js'
 import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines } from '../src/cli/summary.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi } from '../src/cli/tty.js'
@@ -589,25 +596,32 @@ const CLI_REDACTION: RedactOptions = { scrub: true, stripText: true, stripPaths:
 type Audience = Ctx['audience']
 const AUDIENCES: ReadonlyArray<[Audience, string]> = [['dev', 'detailed'], ['plain', 'plain']]
 
-/** Tags that sit inside a sentence: their text stays in the sentence. Every other tag ends a block. */
-const INLINE_TAG = /^(?:b|strong|i|em)$/i
+/** Tags that can sit inside a sentence (phrasing content). Every other tag ends a block. */
+const PHRASING_TAG = /^(?:a|abbr|b|cite|em|i|kbd|label|mark|q|s|small|span|strong|sub|sup|time|u|var)$/i
 const blankOf = (match: string): string => match.replace(/[^\n]/g, '')
 
 /**
- * The blocks of rendered report markup, as a reader sees them. Every element boundary ends a block, except
- * the inline tags inside a sentence (b, strong, i, em): so a card's title, its savings pill and its
- * improvement are 3 blocks, as on the screen, and "Click <b>Copy the Claude Code command</b>." stays one
- * sentence. The text of a closed disclosure (Why) is in the markup, so it is scored. Script, style, SVG and
- * code hold no prose. The title, aria-label, alt and placeholder values are blocks of their own.
+ * The blocks of rendered markup, as a reader sees them. A block tag (div, p, li, details, summary, button...)
+ * ends a block. A phrasing tag (span, a, b...) stays inside its sentence, unless it touches another tag with
+ * no text or space between them: that is how a component lays out its cells. So a card's title, its savings
+ * pill and its improvement are 3 blocks, as on the screen, while "Click <b>Copy</b>." and "from orangu
+ * <span>0.9.0</span>. Claude wrote the words." stay one sentence each. The text of a closed disclosure (Why) is
+ * in the markup, so it is scored. Script, style, SVG and pre hold no prose. A code element is one technical
+ * name, CODE, as inline code is in Markdown, so "in <code>~/Code/demo</code>." keeps its word. The title,
+ * aria-label, alt and placeholder values are blocks of their own.
  */
 export function renderedHtmlBlocks(html: string, file: string): SteBlock[] {
   const blocks: SteBlock[] = []
   for (const match of html.matchAll(HTML_LIFTED)) blocks.push(...lineBlocks(htmlToText(match[1] ?? match[2] ?? ''), lineAtIndex(html, match.index ?? 0), file))
   const text = htmlToText(
     html
-      .replace(/<(script|style|svg|pre|code)\b[\s\S]*?<\/\1>/gi, blankOf)
+      .replace(/<(script|style|svg|pre)\b[\s\S]*?<\/\1>/gi, blankOf)
+      .replace(/<code\b[^>]*>[\s\S]*?<\/code>/gi, (code) => `CODE${blankOf(code)}`)
       .replace(/<!--[\s\S]*?-->/g, blankOf)
-      .replace(/<\/?([A-Za-z][\w-]*)\b[^>]*>/g, (tag, name: string) => (INLINE_TAG.test(name) ? '' : PARAGRAPH) + blankOf(tag)),
+      .replace(/<\/?([A-Za-z][\w-]*)\b[^>]*>/g, (tag: string, name: string, at: number, whole: string) => {
+        const touching = whole[at - 1] === '>' || whole[at + tag.length] === '<'
+        return (PHRASING_TAG.test(name) && !touching ? '' : PARAGRAPH) + blankOf(tag)
+      }),
   )
   let line = 1
   for (const piece of text.split(PARAGRAPH)) {
@@ -768,6 +782,37 @@ export function aggregateTerminalBlocks(source: string, aggregate: Aggregate): S
   return terminalBlocks(aggregateBlock(MACHINE_CAPS, prepareAggregateForOutput(aggregate, {})), `${source}#aggregate`)
 }
 
+/**
+ * The 3 words that Claude writes for a show-me run, fixed, so the row measures what orangu writes around them.
+ * They are scored too, and they are clean.
+ */
+const SHOW_ME_WORDS: Words = {
+  verdict: 'Orangu found the changes below in this evidence.',
+  summary: 'Each change comes with its reason and the sessions that show it.',
+  improvementsTitle: 'Changes for the next session',
+}
+
+/** The folder name that `orangu show-me --scope repo` prints: the last segment of the fixtures' working directory. */
+const SHOW_ME_FOLDER = 'demo'
+
+/** data.json of a session run, as the prepare step writes it: `orangu analyze <session> --json --slim`, redacted by default. */
+export const showMeSessionData = (a: Analysis): ShowMeData => validateShowMeData(JSON.parse(renderAnalysisJson(a, { slim: true })))
+
+/** data.json of a repo or global run, as the prepare step writes it: the evidence bundle of the prepared aggregate. */
+export function showMeAggregateData(aggregate: Aggregate, scope: 'repo' | 'global'): ShowMeData {
+  const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(aggregate, {}))) as unknown, { scope })
+  return validateShowMeData({ ...bundle, ...(scope === 'repo' ? { folder: SHOW_ME_FOLDER } : {}), version: VERSION })
+}
+
+/** Both show-me files of one run, filled from its data and the fixed words, as `orangu show-me --render` fills them. */
+export function showMeBlocks(source: string, data: ShowMeData): SteBlock[] {
+  const page = data.kind === 'session'
+    ? sessionPage(data.value, SHOW_ME_WORDS)
+    : aggregatePage(data.value, data.scope, { ...(data.folder !== undefined ? { folder: data.folder } : {}), version: data.version, words: SHOW_ME_WORDS })
+  const scope = data.kind === 'session' ? 'session' : data.scope
+  return TEMPLATES.flatMap(({ file, html }) => renderedHtmlBlocks(fillTemplate(html, page), `${source}#${scope}.${file}`))
+}
+
 const renderedSessionSurface: Surface = {
   id: 'rendered#report.session',
   owner: 'C10',
@@ -790,6 +835,19 @@ const renderedTerminalSurface: Surface = {
     const { sessions, aggregates } = await read.fixtures()
     const perSession = await Promise.all(sessions.map(({ source, analysis }) => sessionTerminalBlocks(source, analysis)))
     return fragmentResult([...perSession.flat(), ...aggregates.flatMap(({ source, aggregate }) => aggregateTerminalBlocks(source, aggregate))])
+  },
+}
+
+const renderedShowMeSurface: Surface = {
+  id: 'rendered#show-me',
+  owner: 'C10',
+  source: 'slides.html and report.html of each session, repo and global run of the same fixtures, with fixed words',
+  measure: async (read) => {
+    const { sessions, aggregates } = await read.fixtures()
+    return fragmentResult([
+      ...sessions.flatMap(({ source, analysis }) => showMeBlocks(source, showMeSessionData(analysis))),
+      ...aggregates.flatMap(({ source, aggregate }) => (['repo', 'global'] as const).flatMap((scope) => showMeBlocks(source, showMeAggregateData(aggregate, scope)))),
+    ])
   },
 }
 
@@ -860,6 +918,7 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     renderedSessionSurface,
     renderedAggregateSurface,
     renderedTerminalSurface,
+    renderedShowMeSurface,
   ]
 }
 
