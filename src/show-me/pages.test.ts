@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { IN_ONE_SESSION } from '../analyze/aggregate.js'
 import { NO_CHANGE } from '../analyze/insights.js'
 import type { Analysis } from '../model/analysis.js'
 import { projectEvidence } from '../suggest/evidence.js'
@@ -83,7 +84,10 @@ describe('show-me repo and global pages', () => {
     }
     const older = { ...e, findings: [strip(top[0]!, 'recommendation'), strip(top[1]!, 'none'), ...e.findings.slice(2)] }
     for (const html of both(aggregatePage(older, 'repo', { folder: 'demo', version: '1', words: WORDS }))) {
-      expect(slotTexts(html, 'f-title').slice(0, 2)).toEqual([escapeHtml(top[0]!.finding.title), escapeHtml(top[1]!.finding.title)])
+      // the fallback title drops its marker: the label above it says "In one session" once
+      expect(top.slice(0, 2).every((f) => f.finding.title.startsWith(IN_ONE_SESSION))).toBe(true)
+      expect(slotTexts(html, 'f-title').slice(0, 2)).toEqual(top.slice(0, 2).map((f) => escapeHtml(f.finding.title.slice(IN_ONE_SESSION.length))))
+      expect(html).not.toContain(`>${IN_ONE_SESSION}`)
       expect(slotTexts(html, 'f-improvement').slice(0, 2)).toEqual([escapeHtml(top[0]!.recommendation!), 'No improvement text in this evidence.'])
       expect(slotTexts(html, 'f-why')).toHaveLength(top.length - 2)
       expect(html.match(/>Why it matters</g) ?? []).toHaveLength(html.includes('class="deck"') ? top.length - 2 : 0)

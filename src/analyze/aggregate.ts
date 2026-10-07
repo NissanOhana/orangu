@@ -114,6 +114,9 @@ function titlePatternOf(title: string): string {
   return title.replace(/\d[\d.,kM%×]*/g, 'N')
 }
 
+/** The marker of a cross-finding title, byte for byte. A view that shows it once as a label removes it with this. */
+export const IN_ONE_SESSION = 'In one session: '
+
 /**
  * A per-session title, marked as the figures of one example session. Every reader prints it beside a
  * cross-session count ("(N sessions)"), so without the marker one session's figures would read as the total.
@@ -121,7 +124,7 @@ function titlePatternOf(title: string): string {
  * together. An empty title stays empty: a bare marker would say nothing.
  */
 function markedTitle(title: string): string {
-  return title ? `In one session: ${title}` : ''
+  return title ? `${IN_ONE_SESSION}${title}` : ''
 }
 
 /** The text fields that a cross finding copies from its example insight. They always move together. */

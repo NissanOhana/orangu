@@ -6,6 +6,7 @@
  * The page reads only the fields of SessionData and AggregateData (src/show-me/data.ts). A SlimAnalysis and an
  * EvidenceBundle have those fields, so the same builders fill the pages of the tests.
  */
+import { IN_ONE_SESSION } from '../analyze/aggregate.js'
 import { NO_CHANGE } from '../analyze/insights.js'
 import { ms, num, pct } from '../report/client/format.js'
 import type { AggregateData, SessionData } from './data.js'
@@ -36,6 +37,12 @@ const plural = (n: number, one: string, many = `${one}s`): string => `${n.toLoca
 
 /** The change a rule asks for: `improvement`, else the older joined `recommendation`. */
 const improvementOf = (o: { improvement?: string; recommendation?: string }): string | undefined => o.improvement ?? o.recommendation
+
+/**
+ * A cross-finding title without its leading marker. An evidence bundle with no exampleTitle has only the marked title,
+ * and the fixed "In one session" label above it already says the marker once.
+ */
+const unmarked = (title: string): string => (title.startsWith(IN_ONE_SESSION) ? title.slice(IN_ONE_SESSION.length) : title)
 
 /** The reason of a finding, when it has one: the `why` condition and the f-why slot go together. */
 const reasonOf = (o: { why?: string }): string | undefined => (o.why?.trim() ? o.why : undefined)
@@ -166,7 +173,7 @@ export function aggregatePage(e: AggregateData, scope: 'repo' | 'global', o: { f
         'f-i': String(index + 1),
         'f-k': String(top.length),
         'f-sev': f.severity,
-        'f-title': f.exampleTitle ?? f.finding.title,
+        'f-title': f.exampleTitle ?? unmarked(f.finding.title),
         'f-evidence': f.detail || REDACTED_DETAIL,
         'f-shows': { v: seen(f) },
         'f-examples': f.finding.sessionIds.slice(0, EXAMPLE_SESSIONS).map((id) => id.slice(0, ID_PREFIX)).join(', '),
