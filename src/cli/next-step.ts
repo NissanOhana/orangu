@@ -29,16 +29,19 @@ export async function persistNextStep(a: Analysis, redact: RedactOptions | false
   const row = planRowForInsight(top, a.session.id)
   const title = redact ? redactValue(row.title, { scrub: redact.scrub, stripPaths: redact.stripPaths }) : row.title
   const finding = findingForRow({ ...row, title }, 'session')
+  // read from the Insight itself, not the plan row: the improvement is fixed rule copy, so it needs no redaction
+  const improvement = top.improvement
   try {
     const store = deps.store ? deps.store() : new SuggestionStore()
     const { record } = await store.upsertNew(finding, 'report')
-    return { finding: title, next: kickoffCommands(record, 'serve').claude }
+    return { finding: title, improvement, next: kickoffCommands(record, 'serve').claude }
   } catch (e) {
     const key = suggestionKey(finding, 'report')
     const id = suggestionIdV2(key)
     const reason = (e instanceof Error ? e.message : String(e)).split('\n')[0] ?? 'unknown error'
     return {
       finding: title,
+      improvement,
       storeNote: reason,
       next: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: 'report' }, 'file').claude,
     }

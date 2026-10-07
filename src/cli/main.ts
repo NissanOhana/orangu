@@ -31,7 +31,7 @@ import { fmtTokens } from '../analyze/util.js'
 import { redactValue, type RedactOptions } from '../redact/redact.js'
 import { watchSession } from './watch.js'
 import { MACHINE_CAPS, detectCaps, paint, spinner, type Caps, type Spinner } from './tty.js'
-import { analysisBlock, betaLine, briefBlock, doneLine, fmtBytes, listRows, nextStepLines, reportFooter, row, type NextStep } from './summary.js'
+import { aggregateBlock, analysisBlock, betaLine, briefBlock, doneLine, fmtBytes, listRows, nextStepLines, reportFooter, row, type NextStep } from './summary.js'
 import { persistNextStep } from './next-step.js'
 import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
@@ -407,7 +407,11 @@ async function cmdAggregate(scope: 'repo' | 'global', selOrPath: string | undefi
     process.stdout.write(renderPreparedAggregateJson(outputAggregate, flags))
     return
   }
-  printAggregate(outputAggregate, wroteHtml)
+  process.stdout.write(aggregateBlock(out, outputAggregate).join('\n') + '\n')
+  // --open already did what it offers: once the report is written and handed to a browser, repeating
+  // the flag that wrote it is noise. The machine-readable half is still news either way.
+  const offer = wroteHtml ? '--json for the full machine-readable aggregate' : '--open for the HTML report, --json for the full machine-readable aggregate'
+  process.stdout.write(paint(out, 'dim', `\n  add ${offer}\n`))
   if (!flagBool(flags, 'quiet')) offerBetaFeedback(scope)
 }
 
@@ -435,53 +439,6 @@ async function writeAggregateHtml(scope: 'repo' | 'global', a: PreparedAggregate
     process.stderr.write(row(err, 'report', path, { raw: true }) + (open ? paint(err, 'dim', '  (opened)') : '') + '\n')
   }
   return true
-}
-
-function printAggregate(a: ReturnType<typeof aggregate>, wroteHtml: boolean): void {
-  process.stdout.write('\n' + paint(out, ['bold', 'accent'], 'orangu') + '  ' + paint(out, 'bold', a.scope) + '\n')
-  process.stdout.write(paint(out, 'dim', `  ${plural(a.sessionCount, 'session')}\n\n`))
-  const line = (l: string, v: string) => process.stdout.write('  ' + l.padEnd(20) + v + '\n')
-  line('total tokens', fmtTokens(a.totals.tokens))
-  line('tool calls', `${a.totals.toolCalls} (${a.totals.toolErrors} errors, ${(a.averages.toolErrorRate * 100).toFixed(1)}%)`)
-  line('subagent runs', String(a.totals.agents))
-  line('PRs / commits', `${a.totals.prs} / ${a.totals.commits}`)
-  line('tokens / session', fmtTokens(a.averages.tokensPerSession))
-  line('tokens / human turn', fmtTokens(a.averages.tokensPerHumanTurn))
-  line('cache hit ratio', (a.averages.cacheHitRatio * 100).toFixed(1) + '%')
-  if (a.byModel.length) {
-    process.stdout.write('\n' + paint(out, 'bold', '  tokens by model\n'))
-    for (const m of a.byModel.slice(0, 6)) process.stdout.write(`    ${m.key.padEnd(24)} ${fmtTokens(m.tokens).padStart(9)}  ${m.count} session${m.count === 1 ? '' : 's'}\n`)
-  }
-  if (a.crossFindings.length) {
-    process.stdout.write('\n' + paint(out, 'bold', '  recurring findings (across sessions)\n'))
-    // The bounded figure (median per session × sessions) so one outlier session cannot inflate the claim.
-    for (const f of a.crossFindings.slice(0, 8)) process.stdout.write(`    ${paint(out, 'accent', (f.boundedSavingsTokens ? '~' + fmtTokens(f.boundedSavingsTokens) : '–').padStart(8))}  ${f.title}  ${paint(out, 'dim', '(' + plural(f.sessions, 'session') + ')')}\n`)
-  }
-  if (a.recurringErrors.length) {
-    process.stdout.write('\n' + paint(out, 'bold', '  recurring tool errors (environment problems)\n'))
-    // Under the default strip every signature is blank, so N identical rows would say nothing: collapse per tool.
-    const hidden = new Map<string, { total: number; groups: number; sessions: number }>()
-    for (const e of a.recurringErrors) {
-      if (e.signature) continue
-      const h = hidden.get(e.tool) ?? { total: 0, groups: 0, sessions: 0 }
-      h.total += e.total
-      h.groups += 1
-      h.sessions = Math.max(h.sessions, e.sessions)
-      hidden.set(e.tool, h)
-    }
-    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) process.stdout.write(`    ${paint(out, 'bad', String(e.total).padStart(4))}×  ${e.tool}: ${e.signature}  ${paint(out, 'dim', '(' + plural(e.sessions, 'session') + ')')}\n`)
-    for (const [tool, h] of [...hidden].slice(0, 6)) process.stdout.write(`    ${paint(out, 'bad', String(h.total).padStart(4))}×  ${tool}: ${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)  ${paint(out, 'dim', '(' + plural(h.sessions, 'session') + ')')}\n`)
-  }
-  if (a.topReReadFiles.length) {
-    process.stdout.write('\n' + paint(out, 'bold', '  most re-read files (context weight)\n'))
-    for (const f of a.topReReadFiles.slice(0, 6)) process.stdout.write(`    ${String(f.totalReads).padStart(4)} reads  ${f.path}  ${paint(out, 'dim', '(' + plural(f.sessions, 'session') + ')')}\n`)
-  }
-  process.stdout.write('\n' + paint(out, 'bold', '  heaviest sessions (by tokens)\n'))
-  for (const s of a.topSessions.slice(0, 8)) process.stdout.write(`    ${fmtTokens(s.tokens).padStart(9)}  ${s.id.slice(0, 8)}  ${paint(out, 'dim', s.title ? s.title.slice(0, 50) : '(title hidden, add --include-text)')}\n`)
-  // --open already did what it offers: once the report is written and handed to a browser, repeating
-  // the flag that wrote it is noise. The machine-readable half is still news either way.
-  const offer = wroteHtml ? '--json for the full machine-readable aggregate' : '--open for the HTML report, --json for the full machine-readable aggregate'
-  process.stdout.write(paint(out, 'dim', `\n  add ${offer}\n`))
 }
 
 async function cmdServe(flags: Record<string, string | boolean>): Promise<void> {

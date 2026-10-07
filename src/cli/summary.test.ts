@@ -10,8 +10,10 @@ import type { Analysis } from '../model/analysis.js'
 import type { SessionRef } from '../discover/discover.js'
 import { SuggestionStore } from '../suggest/store.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi, type Caps } from './tty.js'
-import { analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, valueBudget, type NextStep, type PickRow } from './summary.js'
+import { aggregateBlock, analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, rows, valueBudget, type NextStep, type PickRow } from './summary.js'
 import { persistNextStep } from './next-step.js'
+import { aggregate } from '../analyze/aggregate.js'
+import { outcomeHeadline } from '../report/client/derive.js'
 
 async function analyzed(b: SessionBuilder): Promise<Analysis> {
   const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
@@ -46,12 +48,18 @@ const VARIANTS: Array<[string, Caps]> = [
   ['machine', MACHINE_CAPS],
 ]
 
-const STEP: NextStep = { finding: 'Subagent results re-read in full', next: 'claude "/orangu:improve sg_0f0f0f0f0f0f"' }
+const IMPROVEMENT = 'Read each file once in a context. Keep notes on what it holds. To find a part of it again, use Grep with line ranges.'
+const STEP: NextStep = { finding: 'Subagent results re-read in full', improvement: IMPROVEMENT, next: 'claude "/orangu:improve sg_0f0f0f0f0f0f"' }
 const FALLBACK: NextStep = {
   finding: 'Subagent results re-read in full',
+  improvement: IMPROVEMENT,
   storeNote: 'EACCES: permission denied, mkdir',
   next: 'claude "/orangu:improve sg_0f0f0f0f0f0f --finding ' + 'eyJ'.repeat(160) + '"',
 }
+/** the value column of a labelled row: 2-space indent, 8-column label, 1 space */
+const GUTTER = ' '.repeat(11)
+const HOSTILE = 'Fix \x1b]52;c;SGVsbG8=\x07the \x1b[2Jtitle'
+const ESCAPE_BYTES = /[\x1b\x07\x80-\x9f]/
 
 /** rows a paste must carry whole (the paths, the next, plugin and beta commands) wrap below 80 columns */
 const RAW_ROWS = /^ {2}(report|next|plugin|written|beta) {2,}\S/
@@ -83,7 +91,7 @@ describe('summary renderers fit the layout', () => {
     // the list's fixed cells (id, when, size, agents) need 52 columns; the project cell yields first
     if (caps.columns >= 60) assertFits(listRows(caps, refs, { total: 2, global: false }), caps, label + ' listRows')
     assertFits(listRows(caps, [], { total: 0, global: true }), caps, label + ' listRows empty')
-    assertFits([doneLine(caps, { sizeBytes: 7_200_000, elapsedMs: 1400, redactions: 3 }), betaLine(caps, 'report')], caps, label + ' done/beta')
+    assertFits([...doneLine(caps, { sizeBytes: 7_200_000, elapsedMs: 1400, redactions: 3 }).split('\n'), betaLine(caps, 'report')], caps, label + ' done/beta')
   })
 
   it('a clean session says so and names no command', () => {
@@ -103,24 +111,70 @@ describe('summary renderers fit the layout', () => {
 
   it('below 51 columns the next and plugin commands wrap whole instead of being cut', () => {
     const lines = nextStepLines(capsAt(40, { color: 0 }), STEP)
-    expect(lines[1]).toBe('  next     claude "/orangu:improve sg_0f0f0f0f0f0f"')
-    expect(lines[2]).toBe('  plugin   /plugin marketplace add NissanOhana/orangu')
+    const next = lines.findIndex((l) => l.startsWith('  next     '))
+    expect(lines[next]).toBe('  next     claude "/orangu:improve sg_0f0f0f0f0f0f"')
+    expect(lines[next + 1]).toBe('  plugin   /plugin marketplace add NissanOhana/orangu')
     // the install continuation fits at 40 columns on its own, so it drops only its dim note
-    expect(lines[3]).toBe('           /plugin install orangu')
-    expect(lines[0]).toBe('  finding  Subagent results re-read in …')
+    expect(lines[next + 2]).toBe('           /plugin install orangu')
+    // the finding title wraps under itself at the 29-column budget: no word is cut, no ellipsis
+    expect(lines.slice(0, 2)).toEqual(['  finding  Subagent results re-read in', GUTTER + 'full'])
     // the beta hint is a command too: whole at 40 columns, and wider than the 29-column budget
     expect(stripAnsi(betaLine(capsAt(40), 'report'))).toBe('  beta     orangu feedback --context report')
   })
 
+  it('the finding row prints the whole title and no ellipsis, at every width', () => {
+    const title = '3 files re-read within one context (12 redundant reads, 3.92M tokens)'
+    for (const [label, caps] of VARIANTS) {
+      const lines = nextStepLines(caps, { ...STEP, finding: title }).map(stripAnsi)
+      const improvement = lines.findIndex((l) => l.startsWith(GUTTER + 'Improvement: '))
+      const titleLines = lines.slice(0, improvement)
+      expect(titleLines[0], label).toMatch(/^ {2}finding {2}\S/)
+      for (const l of titleLines.slice(1)) expect(l, label).toMatch(/^ {11}\S/)
+      expect(titleLines.map((l) => l.slice(11)).join(' '), label).toBe(title)
+      expect(titleLines.join('\n'), label).not.toMatch(/…|\.\.\./)
+    }
+  })
+
+  it('prints the improvement as continuation lines directly above the next row', () => {
+    for (const [label, caps] of VARIANTS) {
+      const lines = nextStepLines(caps, STEP).map(stripAnsi)
+      const next = lines.findIndex((l) => l.startsWith('  next     '))
+      const first = lines.findIndex((l) => l.startsWith(GUTTER + 'Improvement: '))
+      expect(first, label).toBeGreaterThan(0)
+      // every line from the first Improvement line up to the next row is one continuation of it
+      const block = lines.slice(first, next)
+      for (const l of block) expect(l, label).toMatch(/^ {11}\S/)
+      expect(block.map((l) => l.slice(11)).join(' '), label).toBe('Improvement: ' + IMPROVEMENT)
+      expect(lines[next - 1], label).toBe(block.at(-1))
+    }
+    // without an improvement, the next row follows the title directly
+    const bare = nextStepLines(capsAt(80, { color: 0 }), { finding: 'Short title', next: STEP.next })
+    expect(bare.slice(0, 2)).toEqual(['  finding  Short title', '  next     claude "/orangu:improve sg_0f0f0f0f0f0f"'])
+  })
+
+  it('strips escapes from a transcript title before the finding row prints it', () => {
+    const lines = nextStepLines(capsAt(40, { color: 0 }), { ...STEP, finding: HOSTILE })
+    for (const l of lines) expect(l).not.toMatch(ESCAPE_BYTES)
+    expect(lines[0]).toBe('  finding  Fix the title')
+  })
+
   it('the store fallback is the single line allowed past 80 columns, and it says why', () => {
     const lines = nextStepLines(capsAt(80), FALLBACK).map(stripAnsi)
-    expect(lines[1]).toBe('  store    unavailable: EACCES: permission denied, mkdir (full command below)')
+    const store = lines.findIndex((l) => l.startsWith('  store    '))
+    const next = lines.findIndex((l) => l.startsWith('  next     '))
+    // the store row explains the long command, so it stays directly above it; the improvement stays under the title
+    expect(next).toBe(store + 1)
+    expect(lines[1]).toBe(GUTTER + 'Improvement: Read each file once in a context. Keep notes on what it')
+    expect(lines.slice(1, store).map((l) => l.slice(11)).join(' ')).toBe('Improvement: ' + IMPROVEMENT)
+    expect(lines[store]).toBe('  store    unavailable: EACCES: permission denied, mkdir (full command below)')
     const long = nextStepLines(capsAt(80), { ...FALLBACK, storeNote: 'EEXIST: file already exists, mkdir ' + '/x'.repeat(40) }).map(stripAnsi)
-    expect(long[1]).toMatch(/^  store {4}unavailable: EEXIST.*… \(full command below\)$/)
-    expect(displayWidth(long[1]!)).toBe(80)
-    expect(lines[2]).toContain(' --finding ')
-    expect(displayWidth(lines[2]!)).toBeGreaterThan(80)
-    for (const l of lines.filter((_, i) => i !== 2)) expect(displayWidth(l)).toBeLessThanOrEqual(80)
+    const longStore = long.find((l) => l.startsWith('  store    '))!
+    // the reason is a label cell: cut at its last whole word, before the promise that the long form follows
+    expect(longStore).toBe('  store    unavailable: EEXIST: file already exists, mkdir… (full command below)')
+    expect(displayWidth(longStore)).toBeLessThanOrEqual(80)
+    expect(lines[next]).toContain(' --finding ')
+    expect(displayWidth(lines[next]!)).toBeGreaterThan(80)
+    for (const l of lines.filter((_, i) => i !== next)) expect(displayWidth(l)).toBeLessThanOrEqual(80)
   })
 
   it('report path: OSC 8 link when the terminal can, plain path otherwise, same visible text', () => {
@@ -140,7 +194,66 @@ describe('summary renderers fit the layout', () => {
     expect(valueBudget(capsAt(80))).toBe(69)
     expect(valueBudget(capsAt(40))).toBe(29)
     expect(valueBudget(capsAt(300))).toBe(69)
-    expect(stripAnsi(row(capsAt(40), 'finding', 'a'.repeat(50)))).toBe('  finding  ' + 'a'.repeat(28) + '…')
+    // a value wider than the budget wraps under itself; a word wider than the line breaks at the width
+    expect(rows(capsAt(40), 'finding', 'a'.repeat(50)).map(stripAnsi)).toEqual(['  finding  ' + 'a'.repeat(29), GUTTER + 'a'.repeat(21)])
+    // a separator-joined value breaks at its separators first, so a figure stays with its unit
+    expect(rows(capsAt(40, { color: 0 }), 'quality', '1 PR · 12 commits · 30 test runs (3 failed) · 25 files changed')).toEqual([
+      '  quality  1 PR · 12 commits',
+      GUTTER + '30 test runs (3 failed)',
+      GUTTER + '25 files changed',
+    ])
+    // a part still wider than the budget then wraps at whole words, and the next part starts its own line
+    expect(rows(capsAt(40, { color: 0 }), 'note', 'one two three four five six seven eight · nine')).toEqual([
+      '  note     one two three four five six',
+      GUTTER + 'seven eight',
+      GUTTER + 'nine',
+    ])
+    // row() is the same lines joined, for a caller that writes one string to a stream
+    expect(row(capsAt(40, { color: 0 }), 'finding', 'a'.repeat(50))).toBe('  finding  ' + 'a'.repeat(29) + '\n' + GUTTER + 'a'.repeat(21))
+  })
+
+  it('free lines wrap whole: the outcome sentence, the hints and the done line keep every word at 40 columns', async () => {
+    const a = await analyzed(heavyBuilder())
+    const caps = capsAt(40, { color: 0 })
+    const brief = briefBlock(caps, a, 'T', STEP, { hint: true })
+    const headline = outcomeHeadline(a.summary)
+    const at = brief.findIndex((l) => l.startsWith('  ' + headline.split(' ')[0]))
+    const sentence: string[] = []
+    for (let i = at; brief[i]; i++) sentence.push(brief[i]!)
+    expect(sentence.map((l) => l.slice(2)).join(' ')).toBe(headline)
+    // the header above is a label cell and may still cut; nothing from the sentence down does
+    expect(brief.slice(at).join('\n')).not.toContain('…')
+    // the trailing hint follows the last blank line, wrapped whole at the indent
+    const hint = brief.slice(brief.lastIndexOf('') + 1)
+    for (const l of hint) expect(l).toMatch(/^ {2}\S/)
+    // the line break takes the place of the separator
+    expect(hint.map((l) => l.trim()).join(' · ')).toBe('orangu report for the full picture · orangu --help for every command')
+    const done = doneLine(caps, { sizeBytes: 999_900_000, elapsedMs: 3_599_000, redactions: 99_999 }).split('\n')
+    expect(done.length).toBeGreaterThan(1)
+    for (const l of done) expect(displayWidth(l)).toBeLessThanOrEqual(40)
+    expect(done.join(' ')).not.toContain('…')
+    expect(done[0]).toMatch(/^ {2}✓ analyzed 999\.9 MB in \S+/)
+    for (const l of done.slice(1)) expect(l).toMatch(/^ {4}\S/)
+    expect(done.map((l) => l.trim()).join(' · ')).toMatch(/^✓ analyzed 999\.9 MB in .+ · 99999 redactions$/)
+  })
+
+  it('the analyze findings list wraps each title under itself, savings on its first line, and no improvement', async () => {
+    const a = await analyzed(heavyBuilder())
+    const title = '3 files re-read within one context (12 redundant reads, 3.92M tokens) in the same long session'
+    const one: Analysis = { ...a, insights: [{ ...a.insights[0]!, title, severity: 'high', savings: { tokens: 3_920_000, estimated: true } }] }
+    for (const [label, caps] of VARIANTS) {
+      const lines = analysisBlock(caps, one, 'T').map(stripAnsi)
+      const head = lines.findIndex((l) => /^ {4}(●|\*) /.test(l))
+      expect(lines[head], label).toMatch(/\S {2,}save ~3\.92M tokens$/)
+      const rest: string[] = []
+      for (let i = head + 1; lines[i]; i++) rest.push(lines[i]!)
+      for (const l of rest) expect(l, label).toMatch(/^ {6}\S/)
+      const firstText = lines[head]!.slice(6).replace(/ {2,}save ~3\.92M tokens$/, '')
+      expect([firstText, ...rest.map((l) => l.slice(6))].join(' '), label).toBe(title)
+      expect(lines.join('\n'), label).not.toContain('Improvement')
+      expect(lines.slice(head, head + 1 + rest.length).join('\n'), label).not.toMatch(/…|\.\.\./)
+      assertFits(analysisBlock(caps, one, 'T'), caps, label)
+    }
   })
 
   it('glyphs swap to ASCII when unicode is off', () => {
@@ -173,6 +286,10 @@ describe('persistNextStep', () => {
     const store = () => new SuggestionStore({ home })
     const first = await persistNextStep(a, { scrub: true, stripText: true }, { store })
     expect(first.finding).toBeTruthy()
+    // the footer's Improvement line is the top insight's own improvement, read from the Insight
+    const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0]!
+    expect(top.improvement).toBeTruthy()
+    expect(first.improvement).toBe(top.improvement)
     expect(first.storeNote).toBeUndefined()
     expect(first.next).toMatch(/^claude "\/orangu:improve sg_[0-9a-f]{12}"$/)
     const second = await persistNextStep(a, { scrub: true, stripText: true }, { store })
@@ -192,6 +309,8 @@ describe('persistNextStep', () => {
     })
     expect(step.storeNote).toBe('EACCES: permission denied, mkdir')
     expect(step.next).toMatch(/^claude "\/orangu:improve sg_[0-9a-f]{12} --finding [A-Za-z0-9_-]+"$/)
+    const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0]!
+    expect(step.improvement).toBe(top.improvement)
   })
 
   it('a clean session yields no finding and touches no store', async () => {
@@ -204,6 +323,86 @@ describe('persistNextStep', () => {
     const step = await persistNextStep(a, false, { store: () => ((touched = true), new SuggestionStore({ home: '/nonexistent' })) })
     expect(step).toEqual({})
     expect(touched).toBe(false)
+  })
+})
+
+describe('aggregateBlock', () => {
+  const CAPTION = /In one session/
+  const sessions = (n: number) => `${n} session${n === 1 ? '' : 's'}`
+  async function sample() {
+    const one = await analyzed(heavyBuilder())
+    const two = await analyzed(new SessionBuilder({ sessionId: 'dddddddd-0000-4000-8000-000000000004', startAt: '2026-08-15T09:00:00.000Z' }).userPrompt('a second session').tick(10).assistant([{ type: 'text', text: 'ok' }], { usage: { input_tokens: 4, output_tokens: 4 } }))
+    return aggregate([one, two], 'repo demo', 0)
+  }
+  /** the lines between the recurring findings heading and the next blank line */
+  function findingsBlock(lines: string[]): string[] {
+    const at = lines.findIndex((l) => stripAnsi(l) === '  recurring findings (across sessions)')
+    expect(at).toBeGreaterThan(0)
+    const block: string[] = []
+    for (let i = at + 1; lines[i]; i++) block.push(stripAnsi(lines[i]!))
+    return block
+  }
+
+  it('says the one-session marker once, as a caption, and prints the example title, the count and the improvement per row', async () => {
+    const a = await sample()
+    expect(a.crossFindings.length).toBeGreaterThan(0)
+    for (const [label, caps] of VARIANTS) {
+      const lines = aggregateBlock(caps, a)
+      const block = findingsBlock(lines)
+      // one caption for the whole list, and no title carries the marker
+      expect(lines.map(stripAnsi).filter((l) => CAPTION.test(l)), label).toHaveLength(1)
+      expect(block[0], label).toMatch(/^ {2}In one session: \S/)
+      const rows = block.slice(1)
+      const heads = rows.map((l, i) => (/^ {4} *(~\S+|–) {2}\S/.test(l) ? i : -1)).filter((i) => i >= 0)
+      expect(heads, label).toHaveLength(Math.min(8, a.crossFindings.length))
+      heads.forEach((h, n) => {
+        const f = a.crossFindings[n]!
+        const end = heads[n + 1] ?? rows.length
+        const text = rows.slice(h, end).map((l) => l.slice(14))
+        for (const l of rows.slice(h + 1, end)) expect(l, label).toMatch(/^ {14}\S/)
+        const improvement = text.findIndex((l) => l.startsWith('Improvement: '))
+        // the example title wraps whole, then the count: on the last title line when it fits, else on its own
+        const titleAndCount = text.slice(0, improvement).join(' ').replace(/ {2}\(/, ' (')
+        expect(titleAndCount, label).toBe(`${f.exampleTitle} (${sessions(f.sessions)})`)
+        expect(text.slice(improvement).join(' '), label).toBe('Improvement: ' + f.improvement)
+      })
+      for (const l of block) expect(displayWidth(l), `${label}: ${l}`).toBeLessThanOrEqual(Math.min(caps.columns, 80))
+    }
+  })
+
+  it('falls back to the marked title when an older aggregate has no example title, and skips an absent improvement', async () => {
+    const a = await sample()
+    const f = a.crossFindings[0]!
+    const { exampleTitle: _e, improvement: _i, ...older } = f
+    const lines = aggregateBlock(capsAt(80, { color: 0 }), { ...a, crossFindings: [older] })
+    const block = findingsBlock(lines)
+    expect(block.slice(1).map((l) => l.slice(14)).join(' ')).toContain(f.title)
+    expect(block.join('\n')).not.toContain('Improvement:')
+  })
+
+  it('cuts the heaviest-session title at a whole word, and strips escapes from every transcript value', async () => {
+    const a = await sample()
+    const long = 'refactor every module and run the tests until green and then do it all again for the docs'
+    const hostile = {
+      ...a,
+      scope: 'repo \x1b[2Jdemo',
+      crossFindings: [{ ...a.crossFindings[0]!, exampleTitle: HOSTILE }],
+      topSessions: [{ ...a.topSessions[0]!, title: long }, { ...a.topSessions[0]!, title: HOSTILE }],
+      topReReadFiles: [{ path: '/repo/\x1b]52;c;SGVsbG8=\x07a.ts', sessions: 2, totalReads: 9 }],
+      recurringErrors: [{ signature: 'boom \x1b[2J', tool: 'Bash\x07', sessions: 2, total: 4 }],
+      byModel: [{ key: 'model\x1b[31m', count: 1, tokens: 10 }],
+    }
+    for (const [label, caps] of VARIANTS) {
+      const lines = aggregateBlock(caps, hostile)
+      // with colour off, orangu writes no escape at all, so any escape byte would be the transcript's own
+      if (caps.color === 0) for (const l of lines) expect(l, `${label}: ${JSON.stringify(l)}`).not.toMatch(ESCAPE_BYTES)
+      for (const l of lines) expect(l, `${label}: no OSC, no BEL, no screen clear`).not.toMatch(/\x1b\]|\x07|\x1b\[2J/)
+      const heavy = lines.map(stripAnsi).filter((l) => /^ {4} *\S+ {2}[0-9a-f]{8} {2}/.test(l))
+      expect(heavy, label).toHaveLength(2)
+      expect(heavy[0], label).toMatch(/ (refactor|every|module|and|run|the|tests|until|green|then|do|it|all|again|for|docs)(…|\.\.\.)$/)
+      expect(displayWidth(heavy[0]!), label).toBeLessThanOrEqual(Math.min(caps.columns, 80))
+      expect(heavy[1], label).toMatch(/ {2}Fix the title$/)
+    }
   })
 })
 

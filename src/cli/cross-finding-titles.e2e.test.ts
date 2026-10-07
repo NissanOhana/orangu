@@ -39,8 +39,8 @@ describe.skipIf(!existsSync(CLI))('orangu global: recurring-finding titles (buil
     for (const line of lines) {
       expect(line).not.toMatch(/\bN\b/)
       expect(line).not.toMatch(/\be\.g\./)
-      // the marker says the figures come from one example session, before the cross-session count
-      expect(line).toMatch(/ {2}In one session: \S.*\(\d+ sessions?\)$/)
+      // the marker is said once, as the caption above the rows; then each row head, or a continuation under its title
+      expect(line).toMatch(line === lines[0] ? /^ {2}In one session: \S/ : /^ {4} *(~\S+|–) {2}\S|^ {14}\S/)
     }
   })
 })
