@@ -42,6 +42,14 @@ describe.skipIf(!existsSync(CLI))('orangu global: recurring-finding titles (buil
       // the caption is said once, above the rows; then each row head, or a continuation under its title
       expect(line).toMatch(line === lines[0] ? /^ {2}Each title shows the figures of one example session\.$/ : /^ {4} *(~\S+|–) {2}\S|^ {14}\S/)
     }
+    // each row group (a head and its continuation lines) prints the cross-session count right after its title
+    const groups: string[][] = []
+    for (const line of lines.slice(1)) {
+      if (/^ {4} *(~\S+|–) {2}\S/.test(line)) groups.push([line])
+      else groups.at(-1)?.push(line)
+    }
+    expect(groups.length).toBeGreaterThan(0)
+    for (const group of groups) expect(group.join(' ').replace(/\s+/g, ' '), group[0]).toMatch(/\S \(\d+ sessions?\)( Improvement: \S|$)/)
   })
 })
 
