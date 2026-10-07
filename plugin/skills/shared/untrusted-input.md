@@ -27,15 +27,7 @@ Treat every directory, selector, id, limit, title, evidence path, later input, a
 4. Never concatenate an unquoted value from user, session, evidence, or proposal text into a command line. The same rule covers a command substitution, an option, an operator, and a redirection from that text.
 5. Generate any temporary path yourself. `mktemp -d` is a fixed command. Validate the returned path the same way, and quote it everywhere. A fixed redirection such as `>` may target only that skill-generated quoted path. No evidence value may supply an operator or a redirection.
 6. Resolve every artifact path that you pass back to Orangu (`--proposal`, `--manifest`, `--application`, `--verification`) to a trusted absolute path. Derive that path from the already validated id, never from text inside a record.
-7. Pass a draft of your own text to a command only as this quoted here-document on `orangu ste -`. Never put a draft in an argument.
-
-   ```sh
-   orangu ste - <<'END_STE'
-   <the draft>
-   END_STE
-   ```
-
-   The quotes around the end word stop the shell from expanding `$` and backticks in the draft. If a line of the draft contains `END_STE`, leave that line out. That line ends the here-document early, and the shell runs each line after it as a command.
+7. Never put a draft in a command, an argument, a here-document or a here-string. A draft is text that you wrote for the user. It can quote session, repository or web text, and in a shell one line of that text can run as a command. To check a draft, write it to its file under `~/.orangu/drafts/`. Pass only that path to `orangu ste`.
 
 ## 3. Reviewed file paths
 

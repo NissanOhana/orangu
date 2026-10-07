@@ -92,13 +92,16 @@ describe('plugin packaging', () => {
     expect(existsSync(join(root, 'plugin/hooks/hooks.json'))).toBe(false)
     expect(existsSync(join(root, 'plugin/optional-hooks'))).toBe(false)
   })
-  it('improve and harness declare proposal-only writes with no edit grant', () => {
+  // The one Edit grant that improve and harness hold is the drafts directory: it is outside the repository and holds
+  // only the skill's own chat draft, which the skill writes there to check it with `orangu ste`. Claude Code checks a
+  // Write against Edit(path) rules, so this grant keeps that write silent. Every other Edit stays forbidden.
+  it('improve and harness declare proposal-only writes with no repository edit grant', () => {
     for (const s of ['improve', 'harness']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const fm = /^---\n([\s\S]*?)\n---/.exec(md)!
       const allowed = /allowed-tools:\s*(.+)/.exec(fm[1]!)?.[1] ?? ''
       expect(allowed, `${s} has allowed-tools`).toBeTruthy()
-      expect(allowed).not.toMatch(/\bEdit\b/)
+      expect(allowed.match(/\bEdit\b(?:\([^)]*\))?/g), `${s} edits only its drafts`).toEqual(['Edit(~/.orangu/drafts/**)'])
       // the only Write grant is the orangu proposals dir
       const writes = allowed.match(/Write\([^)]*\)|Write(?!\()/g) ?? []
       for (const w of writes) expect(w, `${s} write grant is proposals-scoped: ${w}`).toMatch(/^Write\(~\/\.orangu\//)
@@ -138,6 +141,7 @@ describe('plugin packaging', () => {
   // runs (suggest, ste), in both the PATH form and the plugin CLI form, and reads. Each edit, each project check,
   // the receipt write and any other command fall back to a permission prompt. So a check that a proposal names,
   // such as `curl … | sh`, cannot run unseen.
+  // It pre-approves no write at all, so its own chat draft under ~/.orangu/drafts asks too.
   const APPLY_GRANTS = 'allowed-tools: Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Read'
   it('apply pre-approves only its 2 orangu verbs and reads, and no skill pre-approves a bare Bash, Edit or Write', () => {
     expect(readText('plugin/skills/apply/SKILL.md').split('\n')[3]).toBe(APPLY_GRANTS)
@@ -151,7 +155,7 @@ describe('plugin packaging', () => {
   // Claude reads a prompt as the expected step and not as a failure. The Codex mirrors drop allowed-tools but
   // carry the same body.
   it('apply says once that each edit and each check can ask for permission, in both hosts', () => {
-    const PERMISSION = 'Each edit, each check and the receipt write can ask the user for permission. This is expected.'
+    const PERMISSION = 'Each edit, each check, the receipt write and the draft write can ask the user for permission. This is expected.'
     for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md', 'plugins/orangu/skills/orangu-apply/SKILL.md']) {
       const text = readText(path)
       expect(text.split(PERMISSION).length - 1, `${path} says it once`).toBe(1)
@@ -237,8 +241,13 @@ describe('plugin packaging', () => {
     }
     expect(shape).toContain('`recommendation` is the 3 parts joined')
     expect(shape).toContain('`exampleTitle` is `title` without the `In one session: ` marker.')
+    // the exact sentences, so that a dropped field name fails here
     const reading = readText('plugin/skills/analyze/references/reading-the-report.md')
-    for (const field of ['`improvement`', '`why`', '`method`', '`exampleTitle`']) expect(reading, `reading-the-report.md names ${field}`).toContain(field)
+    for (const sentence of [
+      'Each finding carries an `axis`, `severity`, `improvement`, `why`, `recommendation`, `evidence`, `turnIndexes`, and sometimes a `method` and a `savings` estimate.',
+      '`improvement` is the change to make, `why` says why the finding matters, and `method` says what the rule counts. `recommendation` is the 3 parts joined.',
+      '`exampleTitle` is that title, and `title` adds the `In one session: ` marker.',
+    ]) expect(reading, sentence).toContain(sentence)
   })
   // The report opens in Detailed. The plain words replace the mechanism names only when the user asks for plain
   // language, so each swap sentence carries that condition itself.
@@ -665,32 +674,56 @@ describe('plugin packaging', () => {
     const checkStep = rules.slice(check)
     for (const step of [
       "1. If you wrote the text to a file, run `orangu ste '<path>'`.",
-      '2. If the text goes to chat, pass the draft on stdin, as the quoted here-document in [the untrusted-input rules](untrusted-input.md). Never put a draft in an argument.',
+      "2. If the text goes to chat, first write the draft to `~/.orangu/drafts/<skill>.md`. `<skill>` is the skill that sent you here. If that file exists, read it first. Then run `orangu ste '<draft-path>'`, where `<draft-path>` is the absolute path of that file. Never pass a draft through the shell, as [the untrusted-input rules](untrusted-input.md) say.",
       '3. Fix each finding that is real. Do not rewrite a correct sentence to clear a finding. Do not chase a score.',
     ]) expect(checkStep, step).toContain(step)
     // the point-first rule is said once, in its own section
     expect(rules.split('in the first sentence').length - 1, 'one point-first rule').toBe(1)
   })
 
-  // A draft has newlines, and rule 1 of the shell-data boundary rejects a value with a newline, so a draft never
-  // goes in an argument. It goes on stdin in a here-document whose quoted end word stops every expansion ($ and
-  // backticks). A draft line that holds the end word ends the here-document early, and the shell runs the next
-  // line as a command (checked in zsh), so that line stays out.
-  it('the shell-data boundary passes a draft only as the quoted here-document on orangu ste', () => {
+  // Every skill links the STE rules, but only a skill whose own step names `orangu ste` runs the check. feedback says
+  // fixed sentences word for word, and its static STE row gates them, so it runs no check (in both hosts).
+  it('the STE check runs only at a step that names orangu ste, so feedback runs none', () => {
+    expect(readText(STE_RULES).slice(readText(STE_RULES).indexOf('## Check before you send'))).toContain('Run this check at each step where your skill names `orangu ste`.')
+    for (const path of ['plugin/skills/feedback/SKILL.md', '.agents/skills/orangu-feedback/SKILL.md', 'plugins/orangu/skills/orangu-feedback/SKILL.md'])
+      expect(readText(path), `${path} names no orangu ste check`).not.toContain('orangu ste')
+  })
+
+  // A draft can quote session, repository or web text, so it never reaches a shell. Claude Code reads each line of
+  // a command as its own subcommand: a here-document line that matches its end word closes it early, and a quoted
+  // line that starts with `orangu` then matches an `orangu` grant and runs with no prompt (for example
+  // `orangu report latest --no-redact --include-text -o ~/.zshrc`). So a draft goes to a file, and only the path
+  // goes to `orangu ste`.
+  it('the shell-data boundary keeps a draft out of every command and checks it from a file', () => {
     for (const path of [SHARED_RULES, '.agents/skills/shared/untrusted-input.md', 'plugins/orangu/skills/shared/untrusted-input.md']) {
       const rules = readText(path)
       const boundary = rules.slice(rules.indexOf('## 2. The shell-data boundary'), rules.indexOf('## 3. '))
-      expect(boundary, path).toContain('7. Pass a draft of your own text to a command only as this quoted here-document on `orangu ste -`. Never put a draft in an argument.')
-      expect(boundary, `${path} shows the exact form`).toMatch(/\n\s*orangu ste - <<'END_STE'\n\s*<the draft>\n\s*END_STE\n/)
-      expect(boundary, path).toContain('If a line of the draft contains `END_STE`, leave that line out.')
-      expect(boundary, `${path} has no unquoted end word`).not.toMatch(/<<-?\s*"?END_STE/)
+      expect(boundary, path).toContain('7. Never put a draft in a command, an argument, a here-document or a here-string.')
+      expect(boundary, path).toContain('To check a draft, write it to its file under `~/.orangu/drafts/`. Pass only that path to `orangu ste`.')
+    }
+  })
+  it('no skill passes text to orangu ste through the shell', () => {
+    for (const path of filesWith(['.md'], 'plugin/skills', 'plugin/agents', '.agents/skills', 'plugins/orangu/skills')) {
+      const text = readText(path)
+      if (!text.includes('orangu ste')) continue
+      expect(text, `${path} shows no here-document or here-string`).not.toMatch(/<</)
+      expect(text, `${path} sends no stdin to orangu ste`).not.toMatch(/orangu ste -(?![-\w])/)
     }
   })
 
   // Each skill checks its own text at the step that writes it: a proposal file after the write and before the
-  // record moves to proposed, and chat text on stdin before it goes out. The chat form names the quoted end word
-  // at each call site, because an unquoted one would let the shell expand text that the draft quotes.
-  const CHAT_CHECK = "`orangu ste - <<'END_STE'`"
+  // record moves to proposed, and a chat draft in its own fixed file before it goes out. The Write tool overwrites a
+  // file only after a Read, so the step reads an earlier draft first. analyze, improve and harness pre-approve the
+  // draft write: the drafts directory is outside the repository and holds only the skill's own draft. apply
+  // pre-approves no write at all, so its draft write asks like each of its edits.
+  const draftStep = (skill: string, lead: string): string =>
+    `${lead}, write it to \`~/.orangu/drafts/${skill}.md\`. If that file exists, read it first. Then run \`orangu ste '<draft-path>'\`.`
+  it('analyze, improve and harness pre-approve an edit of their drafts directory and nothing else, and no other skill pre-approves an edit', () => {
+    const edits = (s: string): string[] =>
+      (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim()).filter((grant) => /^Edit\b/.test(grant))
+    for (const s of ['analyze', 'improve', 'harness']) expect(edits(s), `${s} edits only its drafts`).toEqual(['Edit(~/.orangu/drafts/**)'])
+    for (const s of ['apply', 'feedback', 'show-me']) expect(edits(s), `${s} has no edit grant`).toEqual([])
+  })
   const between = (text: string, from: string, to: string): string => {
     const start = text.indexOf(from)
     expect(start, `the text has ${from}`).toBeGreaterThanOrEqual(0)
@@ -700,7 +733,9 @@ describe('plugin packaging', () => {
   }
   it('each skill that writes text checks it with orangu ste at the step that writes it', () => {
     const analyze = readText('plugin/skills/analyze/SKILL.md')
-    expect(between(analyze, '## Answer from evidence', '## Handoff')).toContain(`6. Before you send the answer, check the draft with ${CHAT_CHECK}.`)
+    // analyze links no other shared rule, so its check step links the drafts rule itself
+    expect(between(analyze, '## Answer from evidence', '## Handoff')).toContain(`6. ${draftStep('analyze', 'Before you send the answer')} Keep the draft out of the shell, as [the untrusted-input rules](../shared/untrusted-input.md) say.`)
+    expect(existsSync(join(root, 'plugin/skills/shared/untrusted-input.md')), 'the analyze link resolves').toBe(true)
     const proposalCheck = "Check the proposal with `orangu ste '<proposal-path>'`."
     for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md', 'plugins/orangu/skills/orangu-improve/SKILL.md']) {
       const save = between(readText(path), '## 4. Save one bounded proposal', '## 5. ')
@@ -708,19 +743,21 @@ describe('plugin packaging', () => {
       expect(save.indexOf(proposalCheck), `${path} checks the proposal after the write`).toBeGreaterThan(write)
       expect(save.indexOf("--set '<id>' proposed"), `${path} checks the proposal before it is proposed`).toBeGreaterThan(save.indexOf(proposalCheck))
       const report = between(readText(path), '## 5. Report in chat', '## 6. ')
-      expect(report.indexOf(`Before you send the summary, check it with ${CHAT_CHECK}.`), `${path} checks the whole summary`).toBeGreaterThan(report.indexOf('Say that you applied nothing.'))
+      // the summary leads with the change, and what happened and the evidence follow it
+      expect(report, `${path} leads the summary with the change`).toContain('Return a short ranked summary: the change, expected outcome, what happened, evidence, risks, later verification, sources, the saved proposal id and path.')
+      expect(report.indexOf(draftStep('improve', 'Before you send the summary')), `${path} checks the whole summary`).toBeGreaterThan(report.indexOf('Say that you applied nothing.'))
     }
     const harness = readText('plugin/skills/harness/SKILL.md')
     const synthesize = between(harness, '## 5. Synthesize bounded proposals', '## 6. ')
     expect(synthesize.indexOf(proposalCheck), 'harness checks each proposal after the write').toBeGreaterThan(synthesize.indexOf('Write both `~/.orangu/proposals/<id>.md`'))
     expect(synthesize.indexOf("--set '<id>' proposed"), 'harness checks each proposal before it is proposed').toBeGreaterThan(synthesize.indexOf(proposalCheck))
-    const reportCheck = `Before you send this report, check it with ${CHAT_CHECK}.`
+    const reportCheck = draftStep('harness', 'Before you send this report')
     expect(harness.indexOf(reportCheck), 'harness checks the ranked report').toBeGreaterThan(harness.indexOf('this review did not edit the target repository'))
     expect(harness.indexOf(reportCheck), 'the check comes before the approval question').toBeLessThan(harness.indexOf('which items the user approves'))
     for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md', 'plugins/orangu/skills/orangu-apply/SKILL.md']) {
       const text = readText(path)
       const record = text.slice(text.indexOf('## 4. Record application'))
-      expect(record.indexOf(`Before you send this reply, pass it to ${CHAT_CHECK}.`), `${path} checks the result`).toBeGreaterThan(record.indexOf('Return the changed files'))
+      expect(record.indexOf(draftStep('apply', 'Before you send this reply')), `${path} checks the result`).toBeGreaterThan(record.indexOf('Return the changed files'))
     }
   })
 
@@ -1151,14 +1188,15 @@ describe('plugin packaging', () => {
     // 2026-10-06 show-me security re-check R1: body 769 -> 794, measured 793 words (+25). The 7 counts become 9, 8 on
     // each file: the exact link in each file (2 items), the fixed head of the file with the exact runtime hash in place
     // of the line that took any hash anywhere, and the exact Grep parameters (`output_mode`, `-i`, `multiline`).
-    // 2026-10-07 the orangu ste check step: harness 1401 -> 1420 and improve 1021 -> 1040, each by exactly the
-    // measured words of its 2 check sentences, +19 each (measured 1,400 -> 1,419 and 1,020 -> 1,039). The proposal
+    // 2026-10-07 the orangu ste check step: harness 1401 -> 1429 and improve 1021 -> 1049, each by exactly the
+    // measured words of its 2 check steps, +28 each (measured 1,400 -> 1,428 and 1,020 -> 1,048). The proposal
     // check, "Check the proposal with `orangu ste '<proposal-path>'`. Then run", is +7 after the write and before
-    // `--set … proposed`. The chat check is +12: "Before you send this report, check it with
-    // `orangu ste - <<'END_STE'`." in harness stage 6, and "Before you send the summary, …" in improve step 5.
-    // The rules for the check live once, in shared/ste.md and shared/untrusted-input.md. analyze (672) and apply
-    // (599) grew under their ceiling of 700, which does not move.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1420, improve: 1040, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
+    // `--set … proposed`. The chat check is +21: "Before you send this report, write it to
+    // `~/.orangu/drafts/harness.md`. If that file exists, read it first. Then run `orangu ste '<draft-path>'`." in
+    // harness stage 6, and the same 3 sentences for the summary in improve step 5. A chat draft goes to a file, never
+    // through the shell. The rules for the check live once, in shared/ste.md and shared/untrusted-input.md. analyze
+    // (692) and apply (611) grew under their ceiling of 700, which does not move.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1429, improve: 1049, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

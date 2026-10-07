@@ -1,7 +1,7 @@
 ---
 name: improve
 description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk and a verification check. Use when the user runs /orangu:improve or pastes a suggestion id from a report. Also use when the user asks what to change so the next run or session goes better, or wants an applied change verified against later sessions. Never edits the target repository. Not for applying a proposal: /orangu:apply. Not for a repo or global harness review: /orangu:harness.
-allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Read, Write(~/.orangu/proposals/**), WebSearch, WebFetch
+allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Read, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/**), WebSearch, WebFetch
 ---
 
 # /orangu:improve
@@ -71,7 +71,9 @@ Write no proposal when evidence is missing, already addressed, or too weak. Say 
 
 ## 5. Report in chat
 
-Return a short ranked summary: what happened, evidence, the change, expected outcome, risks, later verification, sources, the saved proposal id and path. Name the next action: `/orangu:apply <id>` for session/repo proposals, review only for global. Say that you applied nothing. Before you send the summary, check it with `orangu ste - <<'END_STE'`. Then offer `/orangu:feedback` once. Never launch it unless the user accepts.
+Return a short ranked summary: the change, expected outcome, what happened, evidence, risks, later verification, sources, the saved proposal id and path. Name the next action: `/orangu:apply <id>` for session/repo proposals, review only for global. Say that you applied nothing.
+
+Before you send the summary, write it to `~/.orangu/drafts/improve.md`. If that file exists, read it first. Then run `orangu ste '<draft-path>'`. Then offer `/orangu:feedback` once. Never launch it unless the user accepts.
 
 ## 6. Verify only with later evidence
 
