@@ -213,6 +213,17 @@ describe('show-me security properties', () => {
     }
   })
 
+  // Chromium reads a <style> inside <svg> as SVG markup, so a <set> or a link in it is a real element. The tag checks
+  // of the self-check skip style blocks, so the count of <style is the check that sees this one.
+  it('5. the self-check refuses an svg style block that holds a set and a link (Chromium builds both)', () => {
+    const [, slides] = fillBoth(sessionPage(session(), WORDS))[0]!
+    const probe = slides.replace('</main>', '<svg><style><set attributeName="href" to="https:x"/><a href="https://x">x</a></style></svg></main>')
+    expect(probe).not.toBe(slides)
+    expect(() => selfCheck(probe, SLIDES_HTML, 'slides.html')).toThrow(SelfCheckError)
+    const upper = slides.replace('</main>', '<svg><STYLE><a href="https://x">x</a></STYLE></svg></main>')
+    expect(() => selfCheck(upper, SLIDES_HTML, 'slides.html')).toThrow(SelfCheckError)
+  })
+
   it('6. --render accepts only a run directory directly under the show-me base that holds a data.json', async () => {
     const base = tempBase()
     const good = await run(base, session())

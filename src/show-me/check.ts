@@ -8,7 +8,8 @@
  * 2. The bytes before `<html`, the bytes between the tag and `<head>`, and `<head>` up to and including the
  *    `/>` of the CSP meta equal the template byte for byte.
  * 3. The whole head equals the template head, with the text of the one `<title>` slot left out.
- * 4. There is exactly one `<script`, and the sha256 of its raw body is the build hash (SCRIPT_HASH).
+ * 4. There is exactly one `<script`, and the sha256 of its raw body is the build hash (SCRIPT_HASH). The `<style`
+ *    count is the template's: Chromium reads a `<style>` inside `<svg>` as markup, and the checks 5 to 7 skip styles.
  * 5. In the tags, exactly one `http-equiv`, and it is the CSP. A refresh navigates, and the CSP cannot stop it.
  * 6. The `href` values of the tags equal those of the template (the one sibling link), and the `<meta` count is
  *    the template's.
@@ -80,6 +81,9 @@ export function selfCheck(out: string, template: string, what = 'the file'): voi
   if (mine.masked !== theirs.masked) fail('the head differs from the template')
 
   if (count(out, /<script\b/gi) !== 1 || count(out, /<\/script/gi) !== 1) fail('it must hold exactly one script')
+  // the tag checks below skip style blocks, and Chromium reads a <style> in an <svg> as markup: only the head style
+  // of the template may stand in the file
+  if (count(out, /<style\b/gi) !== count(template, /<style\b/gi) || count(out, /<\/style/gi) !== count(template, /<\/style/gi)) fail('it must hold only the style of the template')
   const body = SCRIPT.exec(out)?.[1]
   if (body === undefined || createHash('sha256').update(body, 'utf8').digest('base64') !== SCRIPT_HASH) fail('the script is not the pinned runtime')
 
