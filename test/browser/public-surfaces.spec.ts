@@ -65,28 +65,35 @@ async function contrastOnPage(page: Page, selector: string): Promise<number> {
 }
 
 /**
- * The Improvements screen shows one card per cross finding the page embeds, and every card names its
- * improvement while it is closed: the "Improvement:" line, followed by that finding's recommendation.
+ * The Improvements screen shows one card per cross finding the page embeds. Every card names its
+ * improvement while it is closed: the "Improvement:" line, followed by that finding's `improvement` (its
+ * whole `recommendation` only for an aggregate written before the rule text had parts). Each title is the
+ * example title, and one caption above the cards says that its figures come from one example session.
  */
 async function expectImprovementOnEveryClosedCard(page: Page, scope: 'repo' | 'global', where: string): Promise<void> {
   const embedded = await page.evaluate((s) => {
-    const data = (window as unknown as { __ORANGU__: { aggregates: Record<string, { crossFindings: Array<{ recommendation?: string }> } | undefined> } }).__ORANGU__
-    return (data.aggregates[s]?.crossFindings ?? []).map((f) => f.recommendation ?? '')
+    const data = (window as unknown as { __ORANGU__: { aggregates: Record<string, { crossFindings: Array<{ title: string; exampleTitle?: string; improvement?: string; recommendation?: string }> } | undefined> } }).__ORANGU__
+    return (data.aggregates[s]?.crossFindings ?? []).map((f) => ({ lead: f.improvement || f.recommendation || '', title: f.exampleTitle || f.title }))
   }, scope)
   expect(embedded.length, `${where}: embedded cross findings`).toBeGreaterThan(0)
   const cards = page.locator('details.finding')
   await expect(cards, where).toHaveCount(embedded.length)
   const shown: string[] = []
+  const titles: string[] = []
   for (let i = 0; i < embedded.length; i++) {
     const card = cards.nth(i)
     await expect(card, `${where} card ${i + 1}`).not.toHaveAttribute('open')
-    const lead = card.locator('summary .sg-lead')
+    const lead = card.locator(':scope > summary .sg-lead')
     await expect(lead, `${where} card ${i + 1}`).toBeVisible()
     const text = (await lead.textContent()) ?? ''
     expect(text, `${where} card ${i + 1}`).toMatch(/^Improvement: \S/)
     shown.push(text.slice('Improvement: '.length))
+    titles.push((await card.locator(':scope > summary > b').textContent()) ?? '')
   }
-  expect([...shown].sort(), `${where}: each card shows its own finding's improvement`).toEqual([...embedded].sort())
+  expect([...shown].sort(), `${where}: each card shows its own finding's improvement`).toEqual(embedded.map((f) => f.lead).sort())
+  expect([...titles].sort(), `${where}: each card shows its example title`).toEqual(embedded.map((f) => f.title).sort())
+  expect(titles.join('\n'), `${where}: no title repeats the marker`).not.toContain('In one session')
+  await expect(page.getByText('Each title shows the figures of one example session.'), `${where}: one caption`).toHaveCount(1)
 }
 
 async function rasterBrandSource(page: Page): Promise<string> {

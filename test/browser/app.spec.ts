@@ -25,9 +25,54 @@ async function openFirstSuggestion(page: Page, info: TestInfo): Promise<ReturnTy
   await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
   const row = page.locator('details.finding').first()
   await expect(row).toBeVisible()
-  await row.locator('summary').click()
+  // the card's own summary: the Why disclosure inside the body has one too
+  await row.locator(':scope > summary').click()
   await expect(row.getByRole('button', { name: 'Copy the Claude Code command' })).toBeVisible()
   return row
+}
+
+/**
+ * The first Improvements card, by clicks and the keyboard. Closed, its summary names the change and never
+ * the reason. Open, its body starts with a closed Why. Why opens to the reason, and to the method in the
+ * muted style when the rule has one. A re-render of the same screen (the audience switch rebuilds every
+ * node) keeps the card and Why open, because both carry an id. Enter on the focused Why closes it.
+ */
+async function expectWhyOpensAndSurvivesARerender(page: Page, where: string, method: boolean): Promise<void> {
+  const card = page.locator('details.finding').first()
+  const why = card.locator('details.why')
+  const toggle = why.getByRole('button', { name: 'Why', exact: true })
+  const reason = why.locator(':scope > p:not(.muted)')
+  await expect(why, where).toHaveCount(1)
+  const reasonText = ((await reason.textContent()) ?? '').trim()
+  expect(reasonText.length, `${where}: the reason`).toBeGreaterThan(0)
+  await expect(card, where).not.toHaveAttribute('open')
+  await expect(card.locator(':scope > summary .sg-lead'), where).toContainText('Improvement:')
+  await expect(card.locator(':scope > summary'), where).not.toContainText(reasonText)
+
+  await card.locator(':scope > summary').click()
+  await expect(toggle, where).toBeVisible()
+  await expect(toggle, where).toHaveAttribute('aria-expanded', 'false')
+  await expect(reason, where).toBeHidden()
+  await toggle.click()
+  await expect(toggle, where).toHaveAttribute('aria-expanded', 'true')
+  await expect(reason, where).toBeVisible()
+  await expect(why.locator(':scope > p.muted'), where).toHaveCount(method ? 1 : 0)
+  if (method) await expect(why.locator(':scope > p.muted'), where).toBeVisible()
+
+  // mark the drawn node, then switch the audience: the screen is built again from nothing
+  await why.evaluate((el) => el.setAttribute('data-drawn-before', ''))
+  await page.evaluate(() => { location.hash += (location.hash.includes('?') ? '&' : '?') + 'audience=plain' })
+  await expect(page.getByRole('button', { name: 'Plain language' }), where).toHaveAttribute('aria-pressed', 'true')
+  await expect(why, `${where}: a new node`).not.toHaveAttribute('data-drawn-before')
+  await expect(card, `${where}: the card after the re-render`).toHaveAttribute('open', '')
+  await expect(why, `${where}: Why after the re-render`).toHaveAttribute('open', '')
+  await expect(toggle, `${where}: Why after the re-render`).toHaveAttribute('aria-expanded', 'true')
+  await expect(reason, where).toBeVisible()
+
+  await toggle.focus()
+  await page.keyboard.press('Enter')
+  await expect(toggle, `${where}: Enter closes Why`).toHaveAttribute('aria-expanded', 'false')
+  await expect(reason, where).toBeHidden()
 }
 
 test('localhost fixture is readable at the release viewport and theme', async ({ page }, info) => {
@@ -252,9 +297,11 @@ test('a sidebar click is acknowledged before the new screen is built', async ({ 
 /**
  * Each Improvements card names its change while closed, and the way to an AI proposal is explained
  * once, above the cards. The plugin install is 2 lines typed in Claude Code, so each line has its own
- * bar: one bar with both copied a line that does not run.
+ * bar: one bar with both copied a line that does not run. The reason and the method wait behind one Why
+ * disclosure, and a re-render of the same screen keeps it open: on localhost (the serve bundle) and on
+ * the published sample (the file bundle, whose first finding also has a method).
  */
-test('each Improvements card names its improvement while closed, and one explainer copies one install line per bar', async ({ page, context }, info) => {
+test('each Improvements card names its improvement while closed, opens its reason under Why, keeps Why open on a re-render, and one explainer copies one install line per bar', async ({ page, context }, info) => {
   const errors = runtimeErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
@@ -274,6 +321,14 @@ test('each Improvements card names its improvement while closed, and one explain
   await expect(row.locator('summary .sg-lead')).toBeVisible()
   await expect(row.locator('summary .sg-lead')).toContainText('Improvement:')
   await expect(row.locator('.steps')).toHaveCount(0)
+  await noHorizontalOverflow(page)
+  await expectWhyOpensAndSurvivesARerender(page, 'localhost session', false)
+  await noHorizontalOverflow(page)
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+
+  await page.goto(withTheme(`${SITE}/sample.html#suggest`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  await expectWhyOpensAndSurvivesARerender(page, 'sample.html session', true)
   await noHorizontalOverflow(page)
   expect(await paintedTheme(page)).toBe(projectTheme(info))
   expect(errors).toEqual([])
@@ -389,7 +444,7 @@ test('an example session link on a repo improvement keeps the theme and the audi
   await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
   const row = page.locator('details.finding').first()
   await expect(row).toBeVisible({ timeout: 20_000 })
-  await row.locator('summary').click()
+  await row.locator(':scope > summary').click()
   await row.locator('a.exch').first().click()
   await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
   const hash = await page.evaluate(() => location.hash)
