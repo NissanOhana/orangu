@@ -17,9 +17,9 @@
  * - Copy in TS string and template literals: every literal outside a non-copy position (see notCopy),
  *   with 3 in place of each ${}. When a literal holds markup, the values of title=, aria-label= and
  *   placeholder= are lifted out and the markup is read as text. Each line is one block.
- * - Rule copy: the title, detail and recommendation property values in src/analyze/insights.ts, one row
- *   each, following a local constant. The src/analyze row measures every other string, so no string
- *   counts twice.
+ * - Rule copy: the title and detail property values in src/analyze/insights.ts, and the 3 parts of the rule
+ *   text (improvement, why, method), one row each, following a local constant. The src/analyze row measures
+ *   every other string, so no string counts twice.
  * - JSON and YAML copy fields, catalog notes and the golden emitted copy: each value is a block.
  * A fragment (anything but the page text of a file, and the help) under 3 words is a label: its banned
  * tokens count, but it is not scored. Each distinct fragment counts once per surface.
@@ -73,8 +73,11 @@ export const STORED_COPY_EXEMPT: Readonly<Record<string, { functions: readonly s
   },
 }
 
-export type RuleField = 'title' | 'detail' | 'recommendation'
-const RULE_FIELDS: readonly RuleField[] = ['title', 'detail', 'recommendation']
+/** The rule copy fields a rule site passes: the title, the detail and the 3 parts of the rule text. */
+export type RuleField = 'title' | 'detail' | 'improvement' | 'why' | 'method'
+const RULE_FIELDS: readonly RuleField[] = ['title', 'detail', 'improvement', 'why', 'method']
+/** An emitted insight also carries `recommendation`, the parts joined, which older readers read. */
+type GoldenField = RuleField | 'recommendation'
 
 export interface TsOptions {
   /** measure only the strings inside these top-level function declarations (and `consts`, when given) */
@@ -506,7 +509,7 @@ function srcSurfaces(files: readonly string[]): Surface[] {
 
 const GOLDEN = 'test/golden/'
 
-function goldenSurface(kind: 'insight' | 'crossFinding', field: RuleField): Surface {
+function goldenSurface(kind: 'insight' | 'crossFinding', field: GoldenField): Surface {
   const files = (read: Reader): string[] => read.files.filter((file) => file.startsWith(GOLDEN) && (kind === 'insight' ? file.endsWith('.analysis.json') : file.endsWith('/aggregate.json')))
   const key = kind === 'insight' ? 'insights' : 'crossFindings'
   return { ...jsonSurface(`test/golden#${kind}.${field}`, 'B1, B2', files, (json) => strings(list(json[key]).map((item) => item[field]))), source: `emitted ${kind} ${field}s` }
@@ -569,12 +572,17 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     // B2: rule copy, and every other analyzer string
     ruleSurface('title'),
     ruleSurface('detail'),
-    ruleSurface('recommendation'),
+    ruleSurface('improvement'),
+    ruleSurface('why'),
+    ruleSurface('method'),
     tsSurface('src/analyze', 'B2', ['src/analyze'], { for: (file) => (file === INSIGHTS ? { ruleCopy: 'exclude' } : {}) }),
     // B1, B2: the golden emitted copy, the one place where copy built from parts at run time is measured
     goldenSurface('insight', 'title'),
     goldenSurface('insight', 'detail'),
     goldenSurface('insight', 'recommendation'),
+    goldenSurface('insight', 'improvement'),
+    goldenSurface('insight', 'why'),
+    goldenSurface('insight', 'method'),
     goldenSurface('crossFinding', 'title'),
     goldenSurface('crossFinding', 'recommendation'),
     // Z: the emitted session narrative

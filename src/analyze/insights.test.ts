@@ -4,6 +4,7 @@ import { analyzeSession } from './analyze.js'
 import { buildCanonicalSession, fakeToolUseId, SessionBuilder } from '../../test/fixtures/session-builder.js'
 import { resolveModel } from '../models/catalog.js'
 import type { Analysis } from '../model/analysis.js'
+import { GOLDEN_FIXTURES, goldenAnalysis } from '../../test/fixtures/corpus.js'
 
 async function analyzeOf(b: SessionBuilder, extra: Partial<ParseInput> = {}): Promise<Analysis> {
   const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true, ...extra })
@@ -1326,5 +1327,28 @@ describe('workflow improvement insight rules', () => {
     it('stays silent on small files (< 1 KB read)', async () => {
       expect(find(await analyzeOf(writeAfterRead(2, { readChars: 600, writeChars: 610 })), 'write-not-edit')).toBeUndefined()
     })
+  })
+})
+
+describe('rule text parts', () => {
+  it('builds the recommendation from the improvement, the reason and the method, in that order', async () => {
+    let checked = 0
+    for (const fixture of GOLDEN_FIXTURES) {
+      const a = await goldenAnalysis(fixture)
+      for (const insight of a.insights) {
+        const label = `${fixture.name} ${insight.id}`
+        expect(insight.improvement, label).toBeTruthy()
+        expect(insight.why, label).toBeTruthy()
+        // absent parts are skipped, the rest join with one space
+        expect(insight.recommendation, label).toBe([insight.improvement, insight.why, insight.method].filter((part) => part !== undefined).join(' '))
+        // the parts follow the joined text in the JSON, so a stored or golden payload reads in that order
+        const keys = Object.keys(insight)
+        const at = keys.indexOf('recommendation')
+        const parts = insight.method === undefined ? ['improvement', 'why'] : ['improvement', 'why', 'method']
+        expect(keys.slice(at, at + 1 + parts.length), label).toEqual(['recommendation', ...parts])
+        checked++
+      }
+    }
+    expect(checked).toBeGreaterThan(10)
   })
 })

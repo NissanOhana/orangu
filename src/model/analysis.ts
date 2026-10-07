@@ -27,8 +27,12 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *   3 (2026-10-07): the summary narrative rewritten in Simplified Technical English ("you made", "including",
  *     "Orangu found these outcomes", "Look at these first"), and "1 tool call" / "1 tool error" in the singular
  *     (the narrative and the tool-errors title), so a cached payload carries the old copy
+ *   4 (2026-10-07): Insight.improvement, Insight.why and Insight.method, the rule text in 3 parts, and
+ *     recommendation is now their join. The words did not change, but 3 texts put their sentences in a new
+ *     order (human-wait-dominates, the no-change text of hidden-iterations, fanout-opportunity), so a cached
+ *     payload lacks the parts and carries the old order
  */
-export const ANALYSIS_PAYLOAD_GENERATION = 3
+export const ANALYSIS_PAYLOAD_GENERATION = 4
 
 export interface AnalysisSessionInfo {
   id: string
@@ -382,7 +386,14 @@ export interface Insight {
   axis: 'quality' | 'time' | 'tokens' | 'context'
   title: string
   detail: string
+  /** the whole rule text: improvement, why and method, absent parts skipped, joined with one space */
   recommendation: string
+  /** the change to make, or the verdict "No change needed." and any conditional advice after it */
+  improvement: string
+  /** what the finding costs or means. Every rule sets it; optional only so that an older payload still reads. */
+  why?: string
+  /** what the rule counts and skips, and how to read the finding */
+  method?: string
   evidence: Record<string, unknown>
   turnIndexes: number[]
   savings?: { tokens?: number; ms?: number; estimated: boolean }

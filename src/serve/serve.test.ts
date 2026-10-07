@@ -131,6 +131,7 @@ const analyzeWithPrivateMarker: typeof analyzeSession = (session, options) => {
     title: generated,
     detail: text,
     recommendation: generated,
+    improvement: generated,
     evidence: { command: text, template: text, sample: text },
     turnIndexes: [0],
     personas: ['anyone'],

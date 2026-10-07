@@ -49,10 +49,35 @@ function mainModel(ctx: RuleContext): string | undefined {
   const m = ctx.tokens.byModel[0]?.model
   return m ?? ctx.s.meta.models[0]
 }
+/**
+ * The verdict that leads the improvement of a rule whose finding is not a problem by itself. A view that
+ * skips a no-change improvement reads this one constant.
+ */
+export const NO_CHANGE = 'No change needed.'
+
+/**
+ * What a rule site passes: the rule text in its 3 parts, never the joined `recommendation`. Every rule
+ * gives a reason, so `why` is required here, though older payloads may lack it.
+ */
+type RuleInsight = Omit<Insight, 'id' | 'recommendation' | 'why'> & { why: string }
+
 let seq = 0
-function mk(partial: Omit<Insight, 'id'>): Insight {
+function mk(partial: RuleInsight): Insight {
   seq++
-  return { id: `${partial.ruleId}-${seq}`, ...partial }
+  const { ruleId, severity, axis, title, detail, improvement, why, method, ...rest } = partial
+  return {
+    id: `${ruleId}-${seq}`,
+    ruleId,
+    severity,
+    axis,
+    title,
+    detail,
+    recommendation: [improvement, why, method].filter((part) => part !== undefined).join(' '),
+    improvement,
+    why,
+    ...(method !== undefined ? { method } : {}),
+    ...rest,
+  }
 }
 export function resetInsightIds(): void {
   seq = 0
@@ -80,8 +105,10 @@ const rereadFiles: Rule = (ctx) => {
       axis: 'tokens',
       title: `${rr.length} file${rr.length > 1 ? 's' : ''} re-read within one context (${totalReReads} redundant reads, ${fmtTokens(carriedTokens)} tokens)`,
       detail: top.map((f) => `${f.path} ×${f.reads} (${f.redundantReads} redundant${f.agentReads ? `, ${f.agentReads} in agents` : ''})`).join(' · '),
-      recommendation:
-        'Read each file once in a context. Keep notes on what it holds. To find a part of it again, use Grep with line ranges. For a large file, read only the lines that you need (offset and limit). A re-read sends the file again as fresh input, and every later request carries it. Subagents cannot see the parent context, so reads inside agents are expected.',
+      improvement:
+        'Read each file once in a context. Keep notes on what it holds. To find a part of it again, use Grep with line ranges. For a large file, read only the lines that you need (offset and limit).',
+      why: 'A re-read sends the file again as fresh input, and every later request carries it.',
+      method: 'Subagents cannot see the parent context, so reads inside agents are expected.',
       evidence: { files: top.map((f) => ({ path: f.path, reads: f.reads, redundantReads: f.redundantReads, bytesRead: f.bytesRead, turns: f.turnIndexes.slice(0, 20) })), wastedTokensEstimate: wastedTokens, carriedTokensEstimate: carriedTokens },
       turnIndexes: [...new Set(top.flatMap((f) => f.turnIndexes))].slice(0, 30),
       savings: { tokens: carriedTokens, estimated: true },
@@ -112,7 +139,9 @@ const repeatedCommands: Rule = (ctx) => {
       axis: 'time',
       title: `${rep.length} identical shell command${rep.length > 1 ? 's' : ''} repeated 4+ times`,
       detail: rep.map(([cmd, e]) => `"${cmd.slice(0, 60)}${cmd.length > 60 ? '…' : ''}" ×${e.n}${e.errors ? ` (${e.errors} failed)` : ''}`).join(' · '),
-      recommendation: 'Replace each polling loop with one command that waits for the result. If the same command keeps failing, fix the environment once instead of retrying it. Repeated identical commands are usually a verify loop (tests or build) or a polling loop. A verify loop is healthy when each run follows a change.',
+      improvement: 'Replace each polling loop with one command that waits for the result. If the same command keeps failing, fix the environment once instead of retrying it.',
+      why: 'Repeated identical commands are usually a verify loop (tests or build) or a polling loop.',
+      method: 'A verify loop is healthy when each run follows a change.',
       evidence: { commands: rep.map(([cmd, e]) => ({ command: cmd.slice(0, 200), count: e.n, errors: e.errors, turns: e.turns.slice(0, 20) })) },
       turnIndexes: [...new Set(rep.flatMap(([, e]) => e.turns))].slice(0, 30),
       personas: ['developer'],
@@ -135,7 +164,8 @@ const toolErrors: Rule = (ctx) => {
         axis: 'quality',
         title: `${errs.length} tool error${errs.length > 1 ? 's' : ''} (${round(rate * 100, 1)}% of ${total} call${total > 1 ? 's' : ''})${groups.length ? `, ${groups.length} recurring signature${groups.length > 1 ? 's' : ''}` : ''}`,
         detail: groups.length ? groups.map((g) => `${g.name}: "${g.signature}" ×${g.count}`).join(' · ') : `most in ${errs[0]!.name}`,
-        recommendation: 'Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md. A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.',
+        improvement: 'Fix the root cause of each recurring error once (a missing dependency, wrong path, permission or flaky command). If the agent uses a wrong command, add the correct command to CLAUDE.md.',
+        why: 'A recurring error signature comes from the environment or the instructions, not from bad luck. Each failed call still uses its output tokens, and the retry uses one more turn.',
         evidence: { errorRate: round(rate, 4), groups },
         turnIndexes: [...new Set(errs.map((c) => c.turnIndex))].slice(0, 30),
         savings: { tokens: Math.round(errs.reduce((a, c) => a + (c.resultBytes ?? 0), 0) / BYTES_PER_TOKEN), estimated: true },
@@ -165,7 +195,8 @@ const oversizedResults: Rule = (ctx) => {
       axis: 'context',
       title: `${big.length} tool result${big.length > 1 ? 's' : ''} over 40 KB, ${fmtTokens(tokens)} tokens carried in context`,
       detail: top.map((c) => `${c.inputSummary} → ${Math.round((c.resultBytes ?? 0) / 1024)} KB${c.agentId ? ' (agent)' : ''}`).join(' · '),
-      recommendation: 'Trim large outputs at the source: pipe them through head, tail or grep, or use offset and limit on Read. You can also ask for a summary, or run the noisy step in a subagent, which drops its context when it returns. A large output stays in context for the rest of the session, and every request reads it again.',
+      improvement: 'Trim large outputs at the source: pipe them through head, tail or grep, or use offset and limit on Read. You can also ask for a summary, or run the noisy step in a subagent, which drops its context when it returns.',
+      why: 'A large output stays in context for the rest of the session, and every request reads it again.',
       evidence: { calls: top.map((c) => ({ tool: c.name, summary: c.inputSummary, bytes: c.resultBytes, turnIndex: c.turnIndex, agentId: c.agentId })), totalBytes: bytes, carriedTokensEstimate: carriedTokens },
       turnIndexes: [...new Set(top.map((c) => c.turnIndex))],
       savings: { tokens: carriedTokens, estimated: true },
@@ -218,7 +249,8 @@ const sequentialReads: Rule = (ctx) => {
       axis: 'time',
       title: `${totalCalls} read/search calls issued one-by-one in ${totalRuns} run${totalRuns > 1 ? 's' : ''} of 4+`,
       detail: `Each sequential call is a full model round-trip. Turns: ${[...runsPerTurn.keys()].slice(0, 12).join(', ')}`,
-      recommendation: 'Send independent reads and searches in one message, as parallel tool calls. You can also give them to an Explore subagent that returns a summary. This removes one model round-trip for each call. It also keeps the raw file contents out of the main context.',
+      improvement: 'Send independent reads and searches in one message, as parallel tool calls. You can also give them to an Explore subagent that returns a summary.',
+      why: 'This removes one model round-trip for each call. It also keeps the raw file contents out of the main context.',
       evidence: { runs: totalRuns, calls: totalCalls, turns: [...runsPerTurn.entries()] },
       turnIndexes: [...runsPerTurn.keys()].slice(0, 30),
       savings: { ms: Math.round(ms * 0.6), estimated: true },
@@ -241,7 +273,8 @@ const contextPressure: Rule = (ctx) => {
         axis: 'context',
         title: `${comps} context compaction${comps > 1 ? 's' : ''}${win ? ` (peak ${fmtTokens(peak)} of ${fmtTokens(win)})` : ''}`,
         detail: ctx.context.compactions.map((c) => `turn ${c.turnIndex}${c.contextBefore ? ` at ${fmtTokens(c.contextBefore)}` : ''}${c.contextAfter ? ` → ${fmtTokens(c.contextAfter)}` : ''}`).join(' · '),
-        recommendation: 'Split long work into sessions, with a written handover note for the next session. Run /compact yourself at a milestone, before auto-compaction starts in the middle of a task. Keep tool outputs small, and move exploration into subagents. Every compaction removes working memory, and the agent must build it again (more reads, repeated commands).',
+        improvement: 'Split long work into sessions, with a written handover note for the next session. Run /compact yourself at a milestone, before auto-compaction starts in the middle of a task. Keep tool outputs small, and move exploration into subagents.',
+        why: 'Every compaction removes working memory, and the agent must build it again (more reads, repeated commands).',
         evidence: { compactions: ctx.context.compactions, requestsPerSegment: ctx.context.requestsPerCompaction },
         turnIndexes: ctx.context.compactions.map((c) => c.turnIndex),
         personas: ['developer', 'anyone'],
@@ -255,7 +288,8 @@ const contextPressure: Rule = (ctx) => {
         axis: 'context',
         title: `Context reached ${round((peak / win) * 100, 0)}% of the ${fmtTokens(win)} window`,
         detail: `peak ${fmtTokens(peak)} tokens · baseline (system prompt + tools + CLAUDE.md) ${fmtTokens(ctx.context.baseline)}`,
-        recommendation: 'Start a new session for the next part of the work, after you finish the current milestone. Write a handover note for the new session. To stay in this session, trim large tool outputs. The context is close to auto-compaction.',
+        improvement: 'Start a new session for the next part of the work, after you finish the current milestone. Write a handover note for the new session. To stay in this session, trim large tool outputs.',
+        why: 'The context is close to auto-compaction.',
         evidence: { peak, window: win, baseline: ctx.context.baseline },
         turnIndexes: [],
         personas: ['developer', 'anyone'],
@@ -277,7 +311,8 @@ const preambleWeight: Rule = (ctx) => {
       axis: 'tokens',
       title: `Every request starts from a ${fmtTokens(base)}-token baseline (system prompt, tools, CLAUDE.md, skills)`,
       detail: `${reqs} requests × ${fmtTokens(base)} ≈ ${fmtTokens(carried)} cache-read tokens to carry the preamble`,
-      recommendation: 'Trim CLAUDE.md to the rules that bind. Move long docs into files that the agent reads only when it needs them. Remove the MCP servers and skills that you do not use in this repo. Check for large SessionStart hook output. The baseline is small for one request, because the request reads it from the cache and does not send it again. But every request carries it, so it multiplies by the number of requests.',
+      improvement: 'Trim CLAUDE.md to the rules that bind. Move long docs into files that the agent reads only when it needs them. Remove the MCP servers and skills that you do not use in this repo. Check for large SessionStart hook output.',
+      why: 'The baseline is small for one request, because the request reads it from the cache and does not send it again. But every request carries it, so it multiplies by the number of requests.',
       evidence: { baselineTokens: base, requests: reqs, carriedTokens: carried },
       turnIndexes: [0],
       savings: { tokens: Math.round(carried * 0.3), estimated: true },
@@ -299,7 +334,9 @@ const cacheHealth: Rule = (ctx) => {
         axis: 'tokens',
         title: `Prompt cache hit ratio is ${round(ratio * 100, 0)}%`,
         detail: `${fmtTokens(ctx.context.totalCacheRead)} read from cache vs ${fmtTokens(ctx.context.totalCacheWrite)} written and ${fmtTokens(ctx.context.totalFreshInput)} fresh input`,
-        recommendation: 'Do not edit the system prompt or CLAUDE.md during a session. Keep a steady pace during a task, so that requests stay inside the cache TTL. The TTL is 5 min by default, or 1 h when enabled. A low ratio means that the prompt prefix changes, or that requests are farther apart than the cache TTL. Then the context is written again instead of read again. Expect low ratios in short sessions.',
+        improvement: 'Do not edit the system prompt or CLAUDE.md during a session. Keep a steady pace during a task, so that requests stay inside the cache TTL.',
+        why: 'The TTL is 5 min by default, or 1 h when enabled. A low ratio means that the prompt prefix changes, or that requests are farther apart than the cache TTL. Then the context is written again instead of read again.',
+        method: 'Expect low ratios in short sessions.',
         evidence: { cacheHitRatio: ratio, totalCacheRead: ctx.context.totalCacheRead, totalCacheWrite: ctx.context.totalCacheWrite, freshInput: ctx.context.totalFreshInput },
         turnIndexes: [],
         personas: ['developer', 'lead'],
@@ -321,7 +358,8 @@ const humanWait: Rule = (ctx) => {
       axis: 'time',
       title: `The agent waited for the human for ${round(share * 100, 0)}% of the ${fmtMs(wall)} wall time`,
       detail: `assistant active ${fmtMs(ctx.time.activeMs)} · longest gap ${fmtMs(ctx.time.longestGaps[0]?.gapMs ?? 0)} before turn ${ctx.time.longestGaps[0]?.turnIndex ?? '-'}`,
-      recommendation: 'No change needed. A long wait is not a problem by itself: the agent was idle for most of the session. If you want more throughput, give the agent a longer brief with clear stop conditions. You can also batch your requests, or run agents in the background.',
+      improvement: 'No change needed. If you want more throughput, give the agent a longer brief with clear stop conditions. You can also batch your requests, or run agents in the background.',
+      why: 'A long wait is not a problem by itself: the agent was idle for most of the session.',
       evidence: { wallMs: wall, activeMs: ctx.time.activeMs, humanWaitMs: ctx.time.humanWaitMs },
       turnIndexes: ctx.time.longestGaps.map((g) => g.turnIndex),
       personas: ['anyone', 'lead'],
@@ -343,7 +381,8 @@ const agentEconomics: Rule = (ctx) => {
       axis: 'tokens',
       title: `${a.runs.length} subagent run${a.runs.length > 1 ? 's' : ''} = ${round(share * 100, 0)}% of the session's tokens (${fmtTokens(a.totals.totalTokens)}), max ${a.maxConcurrency} in parallel`,
       detail: a.byType.slice(0, 5).map((t) => `${t.agentType} ×${t.count} ${fmtTokens(t.tokens)}`).join(' · ') + (noTranscript ? ` · ${noTranscript} run${noTranscript > 1 ? 's' : ''} without a local transcript (usage from parent summary only)` : ''),
-      recommendation: 'Check that each subagent returns a summary much smaller than what it read. Put what the parent already knows in the brief, so that the agent does not read it again. Narrow a brief that makes an agent read far more than it reports back. Subagents keep exploration out of your main context, and they can run in parallel.',
+      improvement: 'Check that each subagent returns a summary much smaller than what it read. Put what the parent already knows in the brief, so that the agent does not read it again. Narrow a brief that makes an agent read far more than it reports back.',
+      why: 'Subagents keep exploration out of your main context, and they can run in parallel.',
       evidence: { byType: a.byType, byModel: a.byModel, concurrentMs: a.concurrentMs, maxConcurrency: a.maxConcurrency },
       turnIndexes: [...new Set(a.runs.map((r) => r.turnIndex).filter((x): x is number => x !== undefined))].slice(0, 30),
       personas: ['developer', 'lead'],
@@ -357,7 +396,8 @@ const agentEconomics: Rule = (ctx) => {
         axis: 'tokens',
         title: `${idle.length} subagent${idle.length > 1 ? 's' : ''} did no tool calls`,
         detail: idle.slice(0, 5).map((r) => r.agentType ?? r.name ?? r.agentId).join(', '),
-        recommendation: 'Give each agent concrete files or commands to act on. If an agent only needs to answer from its prompt, ask the main thread instead. An agent with no tool calls had a brief too thin to act on, or did work that the main thread can do.',
+        improvement: 'Give each agent concrete files or commands to act on. If an agent only needs to answer from its prompt, ask the main thread instead.',
+        why: 'An agent with no tool calls had a brief too thin to act on, or did work that the main thread can do.',
         evidence: { agents: idle.map((r) => ({ agentId: r.agentId, type: r.agentType, tokens: r.tokens })) },
         turnIndexes: [],
         personas: ['developer'],
@@ -378,7 +418,8 @@ const hooksOverhead: Rule = (ctx) => {
         axis: 'quality',
         title: `${h.errors} hook error${h.errors > 1 ? 's' : ''}`,
         detail: h.byCommand.filter((c) => c.errors).slice(0, 5).map((c) => `${c.command.slice(0, 50)} ×${c.errors}`).join(' · '),
-        recommendation: 'Fix or remove the failing hooks in settings.json. A failing hook adds noise to every turn, and it can stop the session from continuing.',
+        improvement: 'Fix or remove the failing hooks in settings.json.',
+        why: 'A failing hook adds noise to every turn, and it can stop the session from continuing.',
         evidence: { byCommand: h.byCommand.filter((c) => c.errors) },
         turnIndexes: [],
         personas: ['developer'],
@@ -393,7 +434,8 @@ const hooksOverhead: Rule = (ctx) => {
         axis: 'time',
         title: `Hooks consumed ${fmtMs(h.totalMs)} across ${h.runs} runs`,
         detail: h.byCommand.slice(0, 5).map((c) => `${c.command.slice(0, 50)} ${fmtMs(c.totalMs)}`).join(' · '),
-        recommendation: 'Make each slow hook async: run it in the background with &. You can also cache its work, or attach it only to the events that need it. A slow hook runs on every turn of its event (Stop, UserPromptSubmit, SessionStart, PostToolUse).',
+        improvement: 'Make each slow hook async: run it in the background with &. You can also cache its work, or attach it only to the events that need it.',
+        why: 'A slow hook runs on every turn of its event (Stop, UserPromptSubmit, SessionStart, PostToolUse).',
         evidence: { totalMs: h.totalMs, byCommand: h.byCommand.slice(0, 5) },
         turnIndexes: [],
         savings: { ms: Math.round(h.totalMs * 0.8), estimated: true },
@@ -415,7 +457,8 @@ const interruptionsAndErrors: Rule = (ctx) => {
         axis: 'quality',
         title: `${q.interruptions} interruptions by the user`,
         detail: 'The user stopped the agent during a turn, and the work in progress was lost.',
-        recommendation: 'Ask the agent for a short plan before it starts, or set clear stop conditions in the brief. Frequent interruptions usually mean that the brief left out details, or that the agent left the plan.',
+        improvement: 'Ask the agent for a short plan before it starts, or set clear stop conditions in the brief.',
+        why: 'Frequent interruptions usually mean that the brief left out details, or that the agent left the plan.',
         evidence: { interruptions: q.interruptions },
         turnIndexes: ctx.s.events.filter((e) => e.kind === 'interrupt').map((e) => e.turnIndex),
         personas: ['anyone'],
@@ -430,7 +473,8 @@ const interruptionsAndErrors: Rule = (ctx) => {
         axis: 'quality',
         title: `${q.userCorrections.length} correction prompts ("no / wrong / again / revert")`,
         detail: q.userCorrections.slice(0, 4).map((c) => `turn ${c.turnIndex}: ${c.preview.slice(0, 60)}`).join(' · '),
-        recommendation: 'Add the rule that the agent missed to CLAUDE.md. Tell the agent to run the check before it says that the work is done, or use a reviewer subagent. Each correction is a lost round trip. It can also mean that the instructions or the agent\'s own checks are weak.',
+        improvement: 'Add the rule that the agent missed to CLAUDE.md. Tell the agent to run the check before it says that the work is done, or use a reviewer subagent.',
+        why: 'Each correction is a lost round trip. It can also mean that the instructions or the agent\'s own checks are weak.',
         evidence: { corrections: q.userCorrections },
         turnIndexes: q.userCorrections.map((c) => c.turnIndex),
         personas: ['anyone', 'lead'],
@@ -445,7 +489,8 @@ const interruptionsAndErrors: Rule = (ctx) => {
         axis: 'time',
         title: `${q.apiErrors} API error${q.apiErrors > 1 ? 's' : ''} / retries`,
         detail: ctx.s.events.filter((e) => e.kind === 'api_error').slice(0, 3).map((e) => `${e.label}${e.detail ? ': ' + e.detail.slice(0, 60) : ''}`).join(' · '),
-        recommendation: 'Check the model column in the timeline to see which model answered after each error. Rate limits and overloads are outside your control. A model fallback changes the model for the rest of the turn, and no message tells you.',
+        improvement: 'Check the model column in the timeline to see which model answered after each error.',
+        why: 'Rate limits and overloads are outside your control. A model fallback changes the model for the rest of the turn, and no message tells you.',
         evidence: { apiErrors: q.apiErrors },
         turnIndexes: ctx.s.events.filter((e) => e.kind === 'api_error').map((e) => e.turnIndex),
         personas: ['developer'],
@@ -461,7 +506,8 @@ const interruptionsAndErrors: Rule = (ctx) => {
         axis: 'quality',
         title: `Model fell back ${fb.length} time${fb.length > 1 ? 's' : ''}`,
         detail: [...new Set(fb.map((e) => e.label))].join(' · '),
-        recommendation: 'Run the quality-critical steps again on the model that you chose, when it is available again. A fallback means that your model was not available, and the replacement can behave differently.',
+        improvement: 'Run the quality-critical steps again on the model that you chose, when it is available again.',
+        why: 'A fallback means that your model was not available, and the replacement can behave differently.',
         evidence: { events: fb },
         turnIndexes: fb.map((e) => e.turnIndex),
         personas: ['developer', 'lead'],
@@ -490,7 +536,8 @@ const outputHeavyWrites: Rule = (ctx) => {
       axis: 'tokens',
       title: `${big.length} large Write/Edit call${big.length > 1 ? 's' : ''} generated ${fmtTokens(tokens)} output tokens`,
       detail: big.slice(0, 5).map((b) => `${b.summary} ${Math.round(b.bytes / 1024)} KB`).join(' · '),
-      recommendation: 'Use targeted Edit calls instead of rewriting whole files. Generate boilerplate with a script or a template. Never send large data through the model. The model must produce every generated file as output tokens, and output is the slowest thing that it does.',
+      improvement: 'Use targeted Edit calls instead of rewriting whole files. Generate boilerplate with a script or a template. Never send large data through the model.',
+      why: 'The model must produce every generated file as output tokens, and output is the slowest thing that it does.',
       evidence: { calls: big.slice(0, 10), totalWriteBytes: bytes, outputTokensEstimate: tokens },
       turnIndexes: [...new Set(big.map((b) => b.turnIndex))],
       savings: { tokens: Math.round(capSavings(ctx, tokens * 0.5)), estimated: true },
@@ -509,7 +556,8 @@ const slowFirstResponse: Rule = (ctx) => {
       axis: 'time',
       title: `p95 time-to-first-response is ${fmtMs(p95)}`,
       detail: `p50 ${fmtMs(ctx.time.firstResponse.p50)}, max ${fmtMs(ctx.time.firstResponse.max)}. Large contexts and long thinking both add latency before the first token.`,
-      recommendation: 'Keep the context small. Lower the effort for mechanical steps, and use a faster model for simple turns. Latency grows with the context size and the effort level.',
+      improvement: 'Keep the context small. Lower the effort for mechanical steps, and use a faster model for simple turns.',
+      why: 'Latency grows with the context size and the effort level.',
       evidence: ctx.time.firstResponse,
       turnIndexes: [],
       personas: ['developer'],
@@ -527,7 +575,8 @@ const unresolvedTools: Rule = (ctx) => {
       axis: 'quality',
       title: `${un.length} tool call${un.length > 1 ? 's' : ''} never received a result`,
       detail: un.slice(0, 5).map((c) => c.inputSummary).join(' · '),
-      recommendation: 'If unresolved calls recur with the same tool, check for a hanging command (a missing timeout or an interactive prompt). One unresolved call usually comes from an interruption or a crash during the tool.',
+      improvement: 'If unresolved calls recur with the same tool, check for a hanging command (a missing timeout or an interactive prompt).',
+      why: 'One unresolved call usually comes from an interruption or a crash during the tool.',
       evidence: { calls: un.slice(0, 10).map((c) => ({ tool: c.name, summary: c.inputSummary, turnIndex: c.turnIndex })) },
       turnIndexes: [...new Set(un.map((c) => c.turnIndex))],
       personas: ['developer'],
@@ -556,7 +605,8 @@ const unverifiedEdits: Rule = (ctx) => {
         axis: 'quality',
         title: 'The last test run failed and the session ended',
         detail: `The last main-thread test run was "${lastTest.command}" (turn ${lastTest.turnIndex}). ${mainTests.filter((t) => t.ok).length} of ${mainTests.length} main-thread test runs passed. The session edited ${edited.length} file${edited.length === 1 ? '' : 's'}.`,
-        recommendation: 'Make the test suite pass, or record why the failure is expected. Make "tests pass" a clear stop condition in the brief. The session ended on a failed test, so the work that it delivered is not verified.',
+        improvement: 'Make the test suite pass, or record why the failure is expected. Make "tests pass" a clear stop condition in the brief.',
+        why: 'The session ended on a failed test, so the work that it delivered is not verified.',
         evidence: { lastTest, testRuns: mainTests.length, testRunsFailed: mainTests.filter((t) => !t.ok).length, filesEdited: edited.length },
         turnIndexes: [lastTest.turnIndex],
         personas: ['qa', 'developer', 'pm'],
@@ -572,7 +622,8 @@ const unverifiedEdits: Rule = (ctx) => {
         axis: 'quality',
         title: `${edited.length} file${edited.length === 1 ? '' : 's'} edited but no test or build ran`,
         detail: top.map((f) => `${f.path} (${f.edits} edit${f.edits === 1 ? '' : 's'})`).join(' · '),
-        recommendation: 'Ask the agent to run the project check (test, build or typecheck) after it edits. Put that command in CLAUDE.md, so that the agent does not have to find it again. No test, build or typecheck ran over these edits, so they are not verified.',
+        improvement: 'Ask the agent to run the project check (test, build or typecheck) after it edits. Put that command in CLAUDE.md, so that the agent does not have to find it again.',
+        why: 'No test, build or typecheck ran over these edits, so they are not verified.',
         evidence: { filesEdited: edited.length, files: top.map((f) => ({ path: f.path, edits: f.edits })), testRuns: 0, buildRuns: 0 },
         turnIndexes: [...new Set(top.flatMap((f) => f.turnIndexes))].slice(0, 30),
         personas: ['qa', 'developer', 'pm'],
@@ -643,7 +694,9 @@ const editChurn: Rule = (ctx) => {
       detail: (top.length ? top : thrashed.map(([path, n]) => ({ path, edits: n, turnIndexes: [] as number[] })))
         .map((f) => `${f.path} ×${f.edits} edit${f.edits === 1 ? '' : 's'}${quickByPath.get(f.path) ? ` (${quickByPath.get(f.path)} quick re-edit${quickByPath.get(f.path) === 1 ? '' : 's'})` : ''}`)
         .join(' · '),
-      recommendation: 'Plan the change first, or ask the agent for a short plan. Then write the whole block in one edit. Repeated edits to the same file mean that the agent designed the change while it wrote it. New edits to lines that it wrote minutes earlier show this most clearly. Churn uses output tokens and review attention. The rule counts edits for each context and skips .md files, so fan-out from many agents and living documents do not count.',
+      improvement: 'Plan the change first, or ask the agent for a short plan. Then write the whole block in one edit.',
+      why: 'Repeated edits to the same file mean that the agent designed the change while it wrote it. New edits to lines that it wrote minutes earlier show this most clearly. Churn uses output tokens and review attention.',
+      method: 'The rule counts edits for each context and skips .md files, so fan-out from many agents and living documents do not count.',
       evidence: { files: top.map((f) => ({ path: f.path, edits: f.edits, quickReEdits: quickByPath.get(f.path) ?? 0 })), thrashedFiles: thrashed.map(([path, n]) => ({ path, quickReEdits: n })) },
       turnIndexes: [...new Set(top.flatMap((f) => f.turnIndexes))].slice(0, 30),
       personas: ['developer', 'qa'],
@@ -749,7 +802,10 @@ const reverts: Rule = (ctx) => {
       axis: 'quality',
       title: `${pairs + revertCalls.length} revert${pairs + revertCalls.length === 1 ? '' : 's'} (${pairs} edit-then-revert pair${pairs === 1 ? '' : 's'}, ${revertCalls.length} git revert-like command${revertCalls.length === 1 ? '' : 's'})${afterFail.length ? ' after a failed test' : ''}`,
       detail: revertCalls.slice(0, 5).map((r) => `turn ${r.turnIndex}: "${r.command.slice(0, 60)}"${r.afterFailedTest ? ' (after a failed test)' : ''}`).join(' · ') || 'an Edit restored the exact string a previous Edit replaced',
-      recommendation: 'Tell the agent to run the test before it chooses an approach. It can also try the approach in a worktree or branch that it can delete. Reverted work is done twice, and a revert right after a failed test means that the change went in unchecked. The rule does not count setup or protocol commands as undo: git restore --staged, git checkout <branch> -- <path>, or a git checkout of the same pathspec 3 or more times. It also skips a stash made before any edit or in a worktree, and a stash that is popped or applied later. It skips git reset --hard to main, master or origin/* in a worktree or in the first 3 turns.',
+      improvement: 'Tell the agent to run the test before it chooses an approach. It can also try the approach in a worktree or branch that it can delete.',
+      why: 'Reverted work is done twice, and a revert right after a failed test means that the change went in unchecked.',
+      method:
+        'The rule does not count setup or protocol commands as undo: git restore --staged, git checkout <branch> -- <path>, or a git checkout of the same pathspec 3 or more times. It also skips a stash made before any edit or in a worktree, and a stash that is popped or applied later. It skips git reset --hard to main, master or origin/* in a worktree or in the first 3 turns.',
       evidence: { editedThenReverted: pairs, revertCommands: revertCalls.slice(0, 10).map((r) => ({ command: r.command, turnIndex: r.turnIndex, afterFailedTest: r.afterFailedTest })), afterFailedTest: afterFail.length },
       turnIndexes: [...new Set(revertCalls.map((r) => r.turnIndex))].slice(0, 30),
       personas: ['qa', 'developer'],
@@ -776,7 +832,8 @@ const cacheDominatesTokens: Rule = (ctx) => {
       axis: 'tokens',
       title: `The context was carried through the model ${round(carried, 0)}×: ${fmtTokens(total)} tokens, ${round(share * 100, 0)}% of them context re-read or re-written`,
       detail: `cache read ${fmtTokens(k.cacheRead)} + cache write ${fmtTokens(k.cacheWrite5m + k.cacheWrite1h)} against a ${fmtTokens(peak)}-token peak. Output is only ${round((k.output / total) * 100, 1)}% of the total, because every call reads the whole context again before it writes a single token.`,
-      recommendation: 'Batch tool calls into fewer, larger steps. Run scans in subagents that start with a small, fresh context. Run /compact yourself when the work changes shape. Each API call reads the whole context again, so the context size, not the output, decides where your tokens go.',
+      improvement: 'Batch tool calls into fewer, larger steps. Run scans in subagents that start with a small, fresh context. Run /compact yourself when the work changes shape.',
+      why: 'Each API call reads the whole context again, so the context size, not the output, decides where your tokens go.',
       evidence: { byKind: k, reReadMultiplier: carried, cacheShare: round(share, 4), outputShare: round(k.output / total, 4), peakContext: peak, totalTokens: total },
       turnIndexes: [],
       personas: ['developer', 'pm', 'anyone'],
@@ -799,7 +856,8 @@ const slowTools: Rule = (ctx) => {
       axis: 'time',
       title: `${top.name} is slow: p95 ${fmtMs(top.p95Ms)} over ${top.count} calls`,
       detail: slow.slice(0, 3).map((t) => `${t.name}: p95 ${fmtMs(t.p95Ms)}, max ${fmtMs(t.maxMs)}, ${fmtMs(t.totalMs)} total across ${t.count} calls`).join(' · '),
-      recommendation: 'Time the slow command outside the session to find what makes it slow. Cache or pre-build what it computes again on each call, or narrow its scope. You can also run it in the background and check on it, so that it does not block the turn. A consistently slow tool stalls every turn that uses it.',
+      improvement: 'Time the slow command outside the session to find what makes it slow. Cache or pre-build what it computes again on each call, or narrow its scope. You can also run it in the background and check on it, so that it does not block the turn.',
+      why: 'A consistently slow tool stalls every turn that uses it.',
       evidence: { tools: slow.slice(0, 5).map((t) => ({ name: t.name, count: t.count, p95Ms: t.p95Ms, maxMs: t.maxMs, totalMs: t.totalMs })) },
       turnIndexes: [],
       personas: ['developer'],
@@ -825,7 +883,9 @@ const agentHealth: Rule = (ctx) => {
         axis: 'quality',
         title: `${failed.length} subagent run${failed.length === 1 ? '' : 's'} did not finish (${killed.length ? `${killed.length} killed` : ''}${killed.length && hardFailed.length ? ', ' : ''}${hardFailed.length ? `${hardFailed.length} errored` : ''})`,
         detail: failed.slice(0, 5).map((r) => `${r.agentType ?? r.name ?? r.agentId} (${r.status}${r.toolErrors ? `, ${r.toolErrors} tool errors` : ''}) ${fmtTokens(r.totalTokens)}`).join(' · '),
-        recommendation: 'Read the last output of each failed agent to find why it stopped. Tighten its brief with concrete files, commands and stop conditions. Find the reason for the failure before you retry the agent. A killed or errored agent uses its tokens without a usable result, and the parent usually does the work again itself. A deliberate kill of a background agent that you no longer need is fine. This finding is a pointer, not an alarm.',
+        improvement: 'Read the last output of each failed agent to find why it stopped. Tighten its brief with concrete files, commands and stop conditions. Find the reason for the failure before you retry the agent.',
+        why: 'A killed or errored agent uses its tokens without a usable result, and the parent usually does the work again itself.',
+        method: 'A deliberate kill of a background agent that you no longer need is fine. This finding is a pointer, not an alarm.',
         evidence: { failed: failed.slice(0, 10).map((r) => ({ agentId: r.agentId, agentType: r.agentType, name: r.name, status: r.status, toolErrors: r.toolErrors, tokens: r.totalTokens })) },
         turnIndexes: [...new Set(failed.map((r) => r.turnIndex).filter((x): x is number => x !== undefined))].slice(0, 30),
         personas: ['developer', 'qa'],
@@ -840,7 +900,8 @@ const agentHealth: Rule = (ctx) => {
         axis: 'tokens',
         title: `Agents spawned agents ${ctx.agents.maxDepth} levels deep`,
         detail: `${ctx.agents.runs.length} run${ctx.agents.runs.length === 1 ? '' : 's'}, max depth ${ctx.agents.maxDepth}, max ${ctx.agents.maxConcurrency} concurrent`,
-        recommendation: 'Spawn agents from the main thread in a flat fan-out, with a tight brief for each agent. Use deeper trees only for work that is recursive. A deep agent tree multiplies the context baselines, and it makes a failure hard to trace to its agent.',
+        improvement: 'Spawn agents from the main thread in a flat fan-out, with a tight brief for each agent. Use deeper trees only for work that is recursive.',
+        why: 'A deep agent tree multiplies the context baselines, and it makes a failure hard to trace to its agent.',
         evidence: { maxDepth: ctx.agents.maxDepth, runs: ctx.agents.runs.length, maxConcurrency: ctx.agents.maxConcurrency },
         turnIndexes: [],
         personas: ['developer', 'lead'],
@@ -884,7 +945,8 @@ const skillTokenWeight: Rule = (ctx) => {
       axis: 'tokens',
       title: `Skill ${top.name} moves ${fmtTokens(top.perInvocationTokens)} tokens per invocation, over 2× the median turn (${fmtTokens(Math.round(mid))})`,
       detail: heavy.slice(0, 5).map((c) => `${c.name}: ${fmtTokens(c.tokens)} over ${c.invocations} invocation${c.invocations === 1 ? '' : 's'} (${fmtTokens(c.perInvocationTokens)} each)`).join(' · '),
-      recommendation: 'Trim the instructions of the skill. Move its reference docs into files that it reads only when it needs them. You can also set a smaller model or a lower effort in its frontmatter. A heavy skill usually means that its body and the files it loads fill the context for every step that it runs.',
+      improvement: 'Trim the instructions of the skill. Move its reference docs into files that it reads only when it needs them. You can also set a smaller model or a lower effort in its frontmatter.',
+      why: 'A heavy skill usually means that its body and the files it loads fill the context for every step that it runs.',
       evidence: { skills: heavy.slice(0, 10), medianHumanTurnTokens: Math.round(mid) },
       turnIndexes: [],
       personas: ['developer', 'lead'],
@@ -907,10 +969,12 @@ const timeBudget: Rule = (ctx) => {
     .filter((p) => p.share >= 0.75)
   if (!parts.length) return []
   const dominant = parts.sort((a, b) => b.share - a.share)[0]!
-  const rec =
-    dominant.key === 'tool execution'
-      ? 'Fix the slowest tools first: add timeouts, cache their work, or narrow their scope. Run long commands in the background. Tool execution takes most of the active time, so the model mostly waits on commands.'
-      : 'Spawn agents in parallel or in the background, so that the parent keeps working. Tighten the brief of each agent, so that it finishes sooner. Subagent wall time takes most of the active time.'
+  const tools = dominant.key === 'tool execution'
+  // each part picks between its 2 texts the same way
+  const improvementText = tools
+    ? 'Fix the slowest tools first: add timeouts, cache their work, or narrow their scope. Run long commands in the background.'
+    : 'Spawn agents in parallel or in the background, so that the parent keeps working. Tighten the brief of each agent, so that it finishes sooner.'
+  const whyText = tools ? 'Tool execution takes most of the active time, so the model mostly waits on commands.' : 'Subagent wall time takes most of the active time.'
   return [
     mk({
       ruleId: 'time-budget',
@@ -918,7 +982,8 @@ const timeBudget: Rule = (ctx) => {
       axis: 'time',
       title: `${round(dominant.share * 100, 0)}% of the ${fmtMs(active)} active time went to ${dominant.key}`,
       detail: `tools ${fmtMs(ctx.time.toolMs)} · subagents ${fmtMs(ctx.time.agentMs)} · model ${fmtMs(ctx.time.modelMs)} · active ${fmtMs(active)}`,
-      recommendation: rec,
+      improvement: improvementText,
+      why: whyText,
       evidence: { activeMs: active, toolMs: ctx.time.toolMs, agentMs: ctx.time.agentMs, modelMs: ctx.time.modelMs, dominant: dominant.key },
       turnIndexes: [],
       personas: ['pm', 'developer', 'anyone'],
@@ -964,8 +1029,9 @@ const cacheInvalidation: Rule = (ctx) => {
       axis: 'tokens',
       title: `${misses.length} cache invalidation event${misses.length === 1 ? '' : 's'} re-wrote ${fmtTokens(missedTotal)} tokens into the cache`,
       detail: [...byType.entries()].sort((a, b) => b[1].missedTokens - a[1].missedTokens).map(([t, g]) => `${t} ×${g.events}${g.missedTokens ? ` (${fmtTokens(g.missedTokens)} tokens)` : ''}`).join(' · '),
-      recommendation:
-        'Load MCP tools at the start of the session. Do not switch models (/model) during a long session. For a different model, start a new session. A model switch or new tools in the middle of a session invalidate the prompt cache. Then the whole context is written again instead of read back, and a re-write is slower than a cache hit. `unavailable` and `previous_message_not_found` misses come from the provider side, and there is nothing to change for them.',
+      improvement: 'Load MCP tools at the start of the session. Do not switch models (/model) during a long session. For a different model, start a new session.',
+      why: 'A model switch or new tools in the middle of a session invalidate the prompt cache. Then the whole context is written again instead of read back, and a re-write is slower than a cache hit.',
+      method: '`unavailable` and `previous_message_not_found` misses come from the provider side, and there is nothing to change for them.',
       evidence: {
         byType: [...byType.entries()].map(([type, g]) => ({ type, events: g.events, missedTokens: g.missedTokens })),
         events: misses.slice(0, 10).map((e) => ({ turnIndex: e.turnIndex, type: e.type, missedInputTokens: e.missedInputTokens, model: e.model, agentId: e.agentId })),
@@ -996,8 +1062,9 @@ const cacheTtlChurn: Rule = (ctx) => {
       axis: 'tokens',
       title: `${round(share * 100, 0)}% of the ${fmtTokens(writes)} tokens written to cache went to the 1-hour tier`,
       detail: `${fmtTokens(k.cacheWrite1h)} on the 1h tier vs ${fmtTokens(k.cacheWrite5m)} on the 5m tier${medianGap !== undefined ? ` · median gap between turns ${fmtMs(medianGap)}` : ''}`,
-      recommendation:
-        'No change needed. Claude Code can hold your context in the cache for 5 minutes or for 1 hour. Both tiers write the same tokens, so the tier changes nothing about your usage. When your turns come more often than every 5 minutes, the short tier keeps the cache as warm as the long one. This is a harness setting that is good to know about.',
+      improvement: 'No change needed.',
+      why: 'Claude Code can hold your context in the cache for 5 minutes or for 1 hour. Both tiers write the same tokens, so the tier changes nothing about your usage. When your turns come more often than every 5 minutes, the short tier keeps the cache as warm as the long one.',
+      method: 'This is a harness setting that is good to know about.',
       evidence: { cacheWrite1hTokens: k.cacheWrite1h, cacheWrite5mTokens: k.cacheWrite5m, cacheWrites: writes, cacheWrite1hShareOfWrites: round(share, 4), medianTurnGapMs: medianGap, quickCadence },
       turnIndexes: [],
       personas: ['lead', 'pm', 'developer'],
@@ -1028,8 +1095,8 @@ const blockingQuestions: Rule = (ctx) => {
       axis: 'time',
       title: `${asks.length} question${asks.length === 1 ? '' : 's'} to the human blocked the session for ${fmtMs(totalMs)} (longest ${fmtMs(longest.durationMs ?? 0)})`,
       detail: asks.slice(0, 5).map((c) => `turn ${c.turnIndex}: ${fmtMs(c.durationMs ?? 0)}${overlapsAgent(c) ? ' (subagents kept working)' : ''}`).join(' · '),
-      recommendation:
-        'Put the decisions in the brief before the session starts. Give the agent a default (“if unsure, do X”). You can also tell it to park the question and continue with independent work. A blocking question stops the agent until someone answers.',
+      improvement: 'Put the decisions in the brief before the session starts. Give the agent a default (“if unsure, do X”). You can also tell it to park the question and continue with independent work.',
+      why: 'A blocking question stops the agent until someone answers.',
       evidence: { asks: asks.slice(0, 10).map((c) => ({ turnIndex: c.turnIndex, durationMs: c.durationMs, backgroundWork: overlapsAgent(c) })), totalBlockedMs: totalMs },
       turnIndexes: [...new Set(asks.map((c) => c.turnIndex))].slice(0, 30),
       savings: { ms: totalMs, estimated: true },
@@ -1061,8 +1128,8 @@ const truncatedReadsRule: Rule = (ctx) => {
       axis: 'context',
       title: `${trunc.length} Read result${trunc.length === 1 ? '' : 's'} hit the token cap${repeat.length ? ` (${repeat.length} file${repeat.length === 1 ? '' : 's'} capped twice)` : ''}`,
       detail: [...byFile.entries()].sort((a, b) => b[1].count - a[1].count).slice(0, 5).map(([p, e]) => `${p} ×${e.count}`).join(' · '),
-      recommendation:
-        'Use offset and limit, or grep, to read only the part of the file that you need. A capped Read used its tokens and still did not return the whole file. A second capped read of the same file doubles that.',
+      improvement: 'Use offset and limit, or grep, to read only the part of the file that you need.',
+      why: 'A capped Read used its tokens and still did not return the whole file. A second capped read of the same file doubles that.',
       evidence: { files: [...byFile.entries()].slice(0, 10).map(([path, e]) => ({ path, count: e.count })), truncationNotices: ctx.s.meta.truncatedReads },
       turnIndexes: [...new Set(trunc.map((c) => c.turnIndex))].slice(0, 30),
       personas: ['developer'],
@@ -1087,9 +1154,11 @@ const hiddenIterationsRule: Rule = (ctx) => {
       axis: 'tokens',
       title: `${hidden.length} hidden iteration${hidden.length === 1 ? '' : 's'} used ${fmtTokens(tokens)} tokens you never saw as a message${sessionScoped ? ': a refusal switched the model for the rest of the session' : ''}`,
       detail: hidden.slice(0, 5).map((u) => `turn ${u.turnIndex}: ${u.hiddenIteration!.type ?? 'iteration'} on ${u.model}`).join(' · '),
-      recommendation: sessionScoped
-        ? 'Start a new session to use the model that you chose again. A safety classifier declined one request, and Claude Code fell back to another model for the rest of the session. That model is not the one you chose, and its quality can be different.'
-        : 'No change needed. These attempts used tokens, but they never showed as messages (a first try that was refused or retried). If fallbacks recur, check the model column in the timeline.',
+      // each part picks between its 2 texts the same way
+      improvement: sessionScoped ? 'Start a new session to use the model that you chose again.' : 'No change needed. If fallbacks recur, check the model column in the timeline.',
+      why: sessionScoped
+        ? 'A safety classifier declined one request, and Claude Code fell back to another model for the rest of the session. That model is not the one you chose, and its quality can be different.'
+        : 'These attempts used tokens, but they never showed as messages (a first try that was refused or retried).',
       evidence: { count: hidden.length, tokens, fallbackMessages: fallbacks.length, sessionScopedFallback: sessionScoped, rollup: ctx.tokens.hiddenIterations },
       turnIndexes: [...new Set(hidden.map((u) => u.turnIndex))].slice(0, 30),
       personas: ['developer', 'pm'],
@@ -1115,7 +1184,8 @@ const binaryAttachments: Rule = (ctx) => {
       axis: 'context',
       title: `${big.length} binary attachment${big.length === 1 ? '' : 's'} over 500 KB in the transcript (${Math.round(bytes / 1024)} KB total)`,
       detail: big.slice(0, 5).map((b) => `${b.kind} ${Math.round(b.bytes / 1024)} KB at turn ${b.turnIndex}`).join(' · '),
-      recommendation: 'Convert a PDF or an image to text before you paste it, or paste only the pages that you need. Keep large binary files out of the conversation. A pasted PDF or image is sent again with every call.',
+      improvement: 'Convert a PDF or an image to text before you paste it, or paste only the pages that you need. Keep large binary files out of the conversation.',
+      why: 'A pasted PDF or image is sent again with every call.',
       evidence: { blocks: big.slice(0, 10), totalBytes: bytes, estimatedTokens: tokens },
       turnIndexes: [...new Set(big.map((b) => b.turnIndex))].slice(0, 30),
       savings: { tokens, estimated: true },
@@ -1142,8 +1212,9 @@ const queuedPrompts: Rule = (ctx) => {
       axis: 'time',
       title: `${human} prompt${human === 1 ? '' : 's'} queued while the agent worked${away ? ` (${away} away summar${away === 1 ? 'y' : 'ies'})` : ''}`,
       detail: `queue operations: ${Object.entries(q ?? {}).map(([op, n]) => `${op} ×${n}`).join(', ') || 'none'}${notification ? ` · ${notification} machine notification${notification === 1 ? '' : 's'} (task or system), not counted as prompts` : ''}`,
-      recommendation:
-        'No change needed. Queued prompts keep the agent busy between your visits, instead of idle. This shows the session working well. An away summary means that Claude Code caught you up after time away.',
+      improvement: 'No change needed.',
+      why: 'Queued prompts keep the agent busy between your visits, instead of idle. This shows the session working well.',
+      method: 'An away summary means that Claude Code caught you up after time away.',
       evidence: { queueOperations: q ?? {}, humanEnqueues: human, notificationEnqueues: notification, awaySummaries: away },
       turnIndexes: [],
       personas: ['pm', 'anyone'],
@@ -1190,8 +1261,8 @@ const thinkingOnMechanical: Rule = (ctx) => {
       axis: 'tokens',
       title: `${hits.length} mechanical single-tool call${hits.length === 1 ? '' : 's'} spent over 2k thinking tokens each (${fmtTokens(wasted)} total)`,
       detail: hits.slice(0, 5).map((h) => `turn ${h.turnIndex}: ${h.tool} with ${fmtTokens(h.thinkingTokens)} thinking tokens`).join(' · '),
-      recommendation:
-        'Lower the effort for mechanical steps: use /effort medium, or set effort in the frontmatter of the agent. Keep high effort for the hard steps, where thinking is the point. Thinking tokens are output tokens. The model generates them one at a time, so they add latency as well as tokens. A routine Read or status check rarely needs them.',
+      improvement: 'Lower the effort for mechanical steps: use /effort medium, or set effort in the frontmatter of the agent. Keep high effort for the hard steps, where thinking is the point.',
+      why: 'Thinking tokens are output tokens. The model generates them one at a time, so they add latency as well as tokens. A routine Read or status check rarely needs them.',
       evidence: { calls: hits.slice(0, 10), wastedThinkingTokens: wasted, sessionThinkingTokens: totalThinking },
       turnIndexes: [...new Set(hits.map((h) => h.turnIndex))].slice(0, 30),
       savings: { tokens: Math.round(capSavings(ctx, wasted)), estimated: true },
@@ -1225,8 +1296,8 @@ const outputBurst: Rule = (ctx) => {
       axis: 'tokens',
       title: `${bursts.length} message${bursts.length === 1 ? '' : 's'} wrote over 8k output tokens${scripted.length ? ` (${scripted.length} generating file content)` : ''}`,
       detail: rows.sort((a, b) => b.outputTokens - a.outputTokens).slice(0, 5).map((r) => `turn ${r.turnIndex}: ${fmtTokens(r.outputTokens)} tokens${r.writeTool ? ` (${r.writeTool})` : ''}`).join(' · '),
-      recommendation:
-        'Generate large file content (a big Write or Edit) with a script or a template where you can. A burst of prose or plan text is usually the work itself, so keep it. Output is the one kind of token that the model must produce one at a time. This makes a burst the slowest part of a turn.',
+      improvement: 'Generate large file content (a big Write or Edit) with a script or a template where you can. A burst of prose or plan text is usually the work itself, so keep it.',
+      why: 'Output is the one kind of token that the model must produce one at a time. This makes a burst the slowest part of a turn.',
       evidence: { bursts: rows.slice(0, 10), writeBursts: scripted.length },
       turnIndexes: [...new Set(rows.map((r) => r.turnIndex))].slice(0, 30),
       personas: ['developer', 'lead'],
@@ -1267,8 +1338,8 @@ const mcpDefinitionWeight: Rule = (ctx) => {
       axis: 'context',
       title: `${idle.length} MCP server${idle.length === 1 ? '' : 's'} listed ${idleTools} tools that were never called (≈ ${fmtTokens(estTokens)} tokens carried, estimated)`,
       detail: idle.slice(0, 5).map(([server, n]) => `${server}: ${n} tools, 0 calls`).join(' · '),
-      recommendation:
-        'Disable the MCP servers that you do not use in this repo (in the project .mcp.json or the settings). You can also keep them deferred and unloaded. Every connected MCP server puts its tool listing into the session, and loading its schemas adds more.',
+      improvement: 'Disable the MCP servers that you do not use in this repo (in the project .mcp.json or the settings). You can also keep them deferred and unloaded.',
+      why: 'Every connected MCP server puts its tool listing into the session, and loading its schemas adds more.',
       evidence: { servers: idle.map(([server, tools]) => ({ server, tools, calls: 0 })), listedMcpTools: roster.length, mainRequests, estimatedCarriedTokens: estTokens, estimatedTokensPerRequest: idleTools * TOKENS_PER_LISTED_TOOL, estimated: true },
       turnIndexes: [],
       personas: ['developer', 'lead'],
@@ -1381,8 +1452,8 @@ const scriptCandidate: Rule = (ctx) => {
         ...tpl.map(([t, e]) => `"${t.slice(0, 80)}${t.length > 80 ? '…' : ''}" ×${e.count} (${e.raws.size >= 12 ? '12+' : e.raws.size} variants)`),
         ...grams.map((g) => `${g.gram} ×${g.count}`),
       ].join(' · '),
-      recommendation:
-        'Ask the agent to write a script that loops over the changing path or number. Run the script as one Bash call, so that the batch takes one model turn instead of n. A command shape or tool sequence that repeats n times can run as one script.',
+      improvement: 'Ask the agent to write a script that loops over the changing path or number. Run the script as one Bash call, so that the batch takes one model turn instead of n.',
+      why: 'A command shape or tool sequence that repeats n times can run as one script.',
       evidence: {
         templates: tpl.map(([t, e]) => ({ template: t, count: e.count, distinctCommands: e.raws.size, sample: e.sample.slice(0, 160), turns: [...new Set([...e.turns].map(turnOf))].slice(0, 20) })),
         sequences: grams.map((g) => ({ gram: g.gram, count: g.count, turns: [...new Set([...g.turns].map(turnOf))].slice(0, 20) })),
@@ -1492,8 +1563,8 @@ const fanoutOpportunity: Rule = (ctx) => {
       axis: 'time',
       title: `${agentsInRuns} subagents ran one after another in ${runs.length} run${runs.length > 1 ? 's' : ''} with no visible dependency, so a parallel fan-out would cut the wait`,
       detail: evRuns.map((r) => `turn ${r.turnIndex}: ${r.agents.length} serial spawns (${r.agents.map((a) => a.type || 'agent').join(', ')}), ${fmtMs(r.serialMs)} serial vs ${fmtMs(r.longestMs)} longest`).join(' · '),
-      recommendation:
-        'Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Then the wall-clock time is the longest run, not the sum of the runs. Keep serial spawns for agents that use the result of an earlier agent.',
+      improvement: 'Spawn independent subagents in one message (parallel tool calls) or with run_in_background. Keep serial spawns for agents that use the result of an earlier agent.',
+      why: 'Then the wall-clock time is the longest run, not the sum of the runs.',
       evidence: {
         runs: evRuns,
         heuristic:
@@ -1568,8 +1639,8 @@ const modelForTask: Rule = (ctx) => {
         .slice(0, 5)
         .map((g) => `${g.agentType} on ${resolveModel(g.model).displayName}: ${g.mech}/${g.requests} mechanical requests, ${fmtTokens(g.mechTokens)} tokens`)
         .join(' · '),
-      recommendation:
-        'Set model: haiku in the frontmatter of that agent type, or in its Agent call. A mostly mechanical agent (one tool call, small output, no thinking) does not need the frontier model. It sends the same tokens on either model. You get a faster turn, and the big model stays free for the agents that need judgment.',
+      improvement: 'Set model: haiku in the frontmatter of that agent type, or in its Agent call.',
+      why: 'A mostly mechanical agent (one tool call, small output, no thinking) does not need the frontier model. It sends the same tokens on either model. You get a faster turn, and the big model stays free for the agents that need judgment.',
       evidence: {
         agentTypes: qual.slice(0, 5).map((g) => ({
           agentType: g.agentType,
@@ -1624,8 +1695,8 @@ const writeNotEdit: Rule = (ctx) => {
         .slice(0, 5)
         .map((r) => `${shortPath(r.path)}: read ${Math.round(r.readBytes / 1024)} KB → wrote ${Math.round(r.writtenChars / 1024)} KB (turn ${r.turnIndex})`)
         .join(' · '),
-      recommendation:
-        'Use Edit, not Write, to change a file that already exists. Keep Write for new files and real full rewrites. Write emits the whole file again as output tokens, and the model must generate them one at a time. Edit sends only the changed hunk.',
+      improvement: 'Use Edit, not Write, to change a file that already exists. Keep Write for new files and real full rewrites.',
+      why: 'Write emits the whole file again as output tokens, and the model must generate them one at a time. Edit sends only the changed hunk.',
       evidence: { rewrites: rewrites.slice(0, 10), tolerance: 'written length within ±30% of the last read length, reads >= 1 KB, same context (main thread or the same agent)' },
       turnIndexes: [...new Set(rewrites.map((r) => r.turnIndex))].slice(0, 30),
       savings: { tokens: saved, estimated: true },

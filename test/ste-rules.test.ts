@@ -334,12 +334,14 @@ describe('ste surfaces: rule copy', () => {
   const texts = (options: TsOptions): string[] => tsBlocks(RULE, 'src/analyze/insights.ts', options).map((b) => b.text)
   const RULE = [
     'const rule = (ctx) => {',
-    "  const rec = ok ? 'Run the tests before the commit.' : 'Split the session in two.'",
+    "  const change = ok ? 'Run the tests before the commit.' : 'Split the session in two.'",
     '  return [mk({',
     "    ruleId: 'some-rule-id',",
     '    title: `${n} tool errors in this session`,',
     "    detail: 'the agent stopped mid-turn',",
-    '    recommendation: rec,',
+    '    improvement: change,',
+    "    why: 'A failed commit costs one more turn.',",
+    "    method: 'The rule counts only shell calls.',",
     "    evidence: { note: 'An evidence string here.' },",
     '  })]',
     '}',
@@ -348,7 +350,9 @@ describe('ste surfaces: rule copy', () => {
   it('takes each field from its property value, and follows a local constant', () => {
     expect(texts({ ruleCopy: 'title' })).toEqual(['3 tool errors in this session'])
     expect(texts({ ruleCopy: 'detail' })).toEqual(['the agent stopped mid-turn'])
-    expect(texts({ ruleCopy: 'recommendation' })).toEqual(['Run the tests before the commit.', 'Split the session in two.'])
+    expect(texts({ ruleCopy: 'improvement' })).toEqual(['Run the tests before the commit.', 'Split the session in two.'])
+    expect(texts({ ruleCopy: 'why' })).toEqual(['A failed commit costs one more turn.'])
+    expect(texts({ ruleCopy: 'method' })).toEqual(['The rule counts only shell calls.'])
   })
 
   it('leaves every other string to the analyzer surface, so no string is measured twice', () => {

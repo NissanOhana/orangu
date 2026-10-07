@@ -148,9 +148,16 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // B2: floor 58 -> 98. Measured 29 sentences, 29 clean, score 100. Every list in a detail joins with " · ",
   // not "; ", and each static detail sentence is split at its semicolon. "just" is gone (preamble-weight).
   'src/analyze/insights.ts#detail': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
-  // B2: floor 64 -> 98. Measured 179 sentences, 179 clean, score 100 (was 108 sentences, score 66). Each
-  // recommendation starts with its fix, one instruction to a sentence, 6 sentences or fewer, no semicolon.
-  'src/analyze/insights.ts#recommendation': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // The rule text in 3 parts, born 2026-10-07 when each recommendation split into improvement, why and method
+  // with no word changed. They replace the src/analyze/insights.ts#recommendation row (179 sentences, 179
+  // clean, score 100), because no rule site passes a recommendation now. The 3 rows hold 178 sentences: the
+  // improvement "No change needed." is now a whole block in 2 rules, and a distinct block counts once.
+  // Born at measured - 2. Measured 98 sentences, 98 clean, score 100.
+  'src/analyze/insights.ts#improvement': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Born at measured - 2. Measured 68 sentences, 68 clean, score 100.
+  'src/analyze/insights.ts#why': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Born at measured - 2. Measured 12 sentences, 12 clean, score 100.
+  'src/analyze/insights.ts#method': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // re-born 86 -> 79 and e.g. 0 -> 1. Measured 16 sentences, 13 clean, score 81 (was 14 clean, score 88).
   // insights.ts:1582 is now read as text: it has a semicolon and 26 words. The label `e.g. ${title}` at
   // aggregate.ts:119 now counts its e.g.
@@ -170,6 +177,13 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // B2: floor 66 -> 98. Measured 40 sentences, 40 clean, score 100 (was 25 sentences, score 68): the
   // rewritten rule copy, as the 7 golden fixtures emit it.
   'test/golden#insight.recommendation': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // The emitted parts of the rule text, born 2026-10-07 at measured - 2, as the 7 golden fixtures emit them.
+  // Measured 23 sentences, 23 clean, score 100.
+  'test/golden#insight.improvement': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Measured 16 sentences, 16 clean, score 100.
+  'test/golden#insight.why': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Measured 1 sentence, 1 clean, score 100 (only cache-ttl-churn emits a method in the corpus).
+  'test/golden#insight.method': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // re-born e.g. 10 -> 11: a label now counts its banned tokens. Measured 11 titles, each with "e.g.". The
   // 11th, "e.g. 1 hook error", has 2 words, and the old extraction dropped it as a fragment.
   // B1: floor 0 -> 89 and e.g. 11 -> 0. Measured 11 sentences, 10 clean, score 91. Every title now starts

@@ -2,14 +2,18 @@
  * Rule copy, read from the source of src/analyze/insights.ts (its TypeScript AST), not from a run. A rule
  * that never fires on a fixture still has its copy checked.
  *
- * Each rule writes three texts for a finding: a title, a detail and the improvement (`recommendation`).
- * - The improvement is fixed rule text. Default redaction keeps it (src/redact/redact.ts), and the session
- *   report, the repo and global outputs, `--json` and `orangu evidence` all carry it
- *   (CrossFinding.recommendation). An improvement built from session data would leak that data into all of
- *   them, so every value must be a string literal, a conditional of literals, or a local constant of those.
+ * Each rule writes a title and a detail for a finding, and its rule text in 3 parts: the `improvement` (the
+ * change to make), the `why` (what the finding costs or means) and, where the rule needs one, the `method`
+ * (what the rule counts and skips, and how to read the finding). mk() joins the parts, in that order, into
+ * `recommendation`, which older readers still read.
+ * - The parts are fixed rule text. Default redaction keeps them (src/redact/redact.ts), and the session
+ *   report, the repo and global outputs, `--json` and `orangu evidence` all carry them
+ *   (CrossFinding.recommendation). A part built from session data would leak that data into all of them,
+ *   so every value must be a string literal, a conditional of literals, or a local constant of those.
  * - The improvement starts with the change: an imperative verb from the list below, or a condition and then
  *   that verb ("If <condition>, <verb> ...", STE rule 6). Its first sentence is one short instruction. A rule
- *   whose finding is not a problem by itself starts with its verdict, "No change needed."
+ *   whose finding is not a problem by itself starts with its verdict, "No change needed." No sentence of
+ *   the why or the method gives a change.
  * - Rule copy uses no semicolon. A list in a detail uses the client separator " · ".
  * - The Plain view maps terms by substring (PLAIN_TERMS in src/report/client/strings.ts). Each term that a
  *   rule's copy carried when this test landed is still in that rule's copy, so the Plain view still maps it.
@@ -32,6 +36,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { ANALYSIS_PAYLOAD_GENERATION } from '../model/analysis.js'
 import { PLAIN_TERMS } from '../report/client/strings.js'
+import { NO_CHANGE } from './insights.js'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const FILE = join(HERE, 'insights.ts')
@@ -45,8 +50,11 @@ const PARSE_SOURCE = ts.createSourceFile(PARSE_FILE, readFileSync(PARSE_FILE, 'u
 const TOOLS_FILE = join(HERE, '..', 'adapters', 'claude-code', 'tools.ts')
 const TOOLS_SOURCE = ts.createSourceFile(TOOLS_FILE, readFileSync(TOOLS_FILE, 'utf8'), ts.ScriptTarget.Latest, true)
 
-type Field = 'title' | 'detail' | 'recommendation'
-const FIELDS: readonly Field[] = ['title', 'detail', 'recommendation']
+/** The 3 parts of a rule text, in the order mk() joins them into `recommendation`. */
+type Part = 'improvement' | 'why' | 'method'
+const PARTS: readonly Part[] = ['improvement', 'why', 'method']
+type Field = 'title' | 'detail' | Part
+const FIELDS: readonly Field[] = ['title', 'detail', ...PARTS]
 
 /** The first word of every improvement that advises a change. Add a verb here only with the copy that uses it. */
 const IMPROVEMENT_VERBS = new Set([
@@ -79,11 +87,11 @@ const IMPROVEMENT_VERBS = new Set([
   'Trim',
   'Use',
 ])
-const NO_CHANGE = 'No change needed.'
 /**
- * The rules whose finding is not a problem by itself, and how many of their texts lead with NO_CHANGE. A card
- * and a show-me slide show only the lead, so the verdict must come first there, and any advice after it is
- * conditional. hidden-iterations has 2 texts; the one for a session-wide fallback leads with its fix.
+ * The rules whose finding is not a problem by itself, and how many of their improvement texts lead with
+ * NO_CHANGE. A card and a show-me slide show the improvement first, so the verdict must come first there,
+ * and any advice after it is conditional. hidden-iterations has 2 texts; the one for a session-wide fallback
+ * leads with its fix.
  */
 const VERDICT_FIRST: Readonly<Record<string, number>> = {
   'human-wait-dominates': 1,
@@ -104,8 +112,31 @@ const INSTRUCTION_WORDS = 20
  * 2026-10-07, generation 3: the narrative in STE (analyze.ts narrative()), and "1 tool call" in the singular. The
  * copy changed, so the generation moved. Re-recorded at 3 on the same unmerged branch: the tool-errors title says
  * "1 tool error (100% of 1 call)" in the singular.
+ * 2026-10-07, generation 4: each rule text is 3 parts (improvement, why, method), and the fingerprint reads each
+ * part. The words are the 0.9.0 words (the test "the split keeps every 0.9.0 word" proves it), but 3 texts now
+ * put their sentences in a new order, so `recommendation` changed for them and the generation moved.
  */
-const COPY_FINGERPRINT = { generation: 3, sha256: 'd0cc1f29c96a54443516e6b7b34569ba46fd06e4225584163a9dc8d3165c31c0' }
+const COPY_FINGERPRINT = { generation: 4, sha256: '7c7d12b69bf53766d45a3820a12a877837262f5785df61943fce0774bfc11907' }
+/**
+ * The generation 3 fingerprint, as `git show v0.9.0:src/analyze/rule-copy.test.ts` records it. The split of each
+ * rule text into its 3 parts must rebuild this value exactly, so no word, title or detail changed in the split.
+ * A later copy rewrite deletes this constant and its test, and runs its own qualifier audit.
+ */
+const COPY_FINGERPRINT_0_9_0 = 'd0cc1f29c96a54443516e6b7b34569ba46fd06e4225584163a9dc8d3165c31c0'
+/**
+ * The texts whose parts do not join in their 0.9.0 sentence order: a conditional instruction came after the
+ * reason, and it now moves into the improvement. Each entry gives the opening words of each sentence, in the
+ * 0.9.0 order. The key is the rule id, with `#<n>` for the n-th text of a rule that picks between texts.
+ * Every other text joins as improvement, then why, then method, which was its 0.9.0 order.
+ */
+const ORDER_0_9_0: Readonly<Record<string, readonly string[]>> = {
+  // 0.9.0: verdict, reason, then the 2 conditional instructions. Now: improvement = verdict and the 2 instructions.
+  'human-wait-dominates': ['No change needed.', 'A long wait is not a problem by itself', 'If you want more throughput', 'You can also batch'],
+  // the no-change text. 0.9.0: verdict, reason, then the conditional check. Now: improvement = verdict and the check.
+  'hidden-iterations#2': ['No change needed.', 'These attempts used tokens', 'If fallbacks recur'],
+  // 0.9.0: the instruction, the reason, then the exception. Now: improvement = the instruction and the exception.
+  'fanout-opportunity': ['Spawn independent subagents', 'Then the wall-clock time', 'Keep serial spawns'],
+}
 /**
  * Born 2026-10-06 at its own count: 45 rule sites, plus one more text each for the two improvements that
  * pick between two fixed texts (time-budget, hidden-iterations). The count only goes up.
@@ -115,10 +146,11 @@ const IMPROVEMENT_TEXTS_FLOOR = 47
 /**
  * The PLAIN_TERMS keys that each rule's copy carried on 2026-10-06, before the copy rewrite. The Plain view
  * replaces them by substring, so each one must stay in the same rule and field, or the map must change too.
+ * 2026-10-07: the recommendation terms now sit in the part that holds them.
  */
 const PLAIN_TERMS_IN_RULE_COPY: Readonly<Record<string, Partial<Record<Field, readonly string[]>>>> = {
-  compactions: { title: ['compaction'], recommendation: ['compaction'] },
-  'context-near-limit': { recommendation: ['compaction'] },
+  compactions: { title: ['compaction'], improvement: ['compaction'], why: ['compaction'] },
+  'context-near-limit': { why: ['compaction'] },
   'cache-dominates-tokens': { detail: ['cache read', 'cache write'] },
 }
 
@@ -198,17 +230,29 @@ function staticText(node: ts.Node): string {
   return parts.join(' ')
 }
 
+const isPart = (field: Field): field is Part => (PARTS as readonly string[]).includes(field)
+
 function copyOf(site: Site, field: Field): string {
   const value = site.props.get(field)
   if (!value) return ''
-  if (field === 'recommendation') return (fixedTexts(value) ?? []).join(' ')
+  if (isPart(field)) return (fixedTexts(value) ?? []).join(' ')
   return staticText(value)
 }
 
+/** The texts of one part of a site, one for each text the rule can pick, or [] when the site has no such part. */
+function partTexts(site: Site, part: Part): string[] {
+  const value = site.props.get(part)
+  return value ? (fixedTexts(value) ?? []) : []
+}
+
+/** A sentence ends at a `.`, `!` or `?` that a space and a capital, a digit or a quote follow. */
+const SENTENCE_END = /(?<=[.!?])\s+(?=[A-Z0-9"“(`])/
+
+const sentencesOf = (text: string): string[] => text.split(SENTENCE_END)
+
 /** The first sentence: up to the first `.`, `!` or `?` that a space and a capital, a digit or a quote follow. */
 function firstSentence(text: string): string {
-  const end = /[.!?](?=\s+[A-Z0-9"“(`])/.exec(text)
-  return end ? text.slice(0, end.index + 1) : text
+  return sentencesOf(text)[0] ?? text
 }
 
 const words = (sentence: string): number => sentence.split(/\s+/).filter((token) => /[A-Za-z0-9]/.test(token)).length
@@ -216,9 +260,12 @@ const words = (sentence: string): number => sentence.split(/\s+/).filter((token)
 /** STE rule 6 puts the condition first: "If <condition>, <verb> ...". The condition ends at its first comma. */
 const CONDITION = /^If [^,.]+, /
 
+/** True when the text is the verdict, alone or with conditional advice after it. */
+const isVerdict = (text: string): boolean => text === NO_CHANGE || text.startsWith(`${NO_CHANGE} `)
+
 /** True when the text leads with the change: a listed verb, a condition and then that verb, or the verdict. */
 function startsWithChange(text: string): boolean {
-  if (text.startsWith(`${NO_CHANGE} `)) return true
+  if (isVerdict(text)) return true
   const word = text.replace(CONDITION, '').split(/\s+/)[0] ?? ''
   return IMPROVEMENT_VERBS.has(word.charAt(0).toUpperCase() + word.slice(1))
 }
@@ -295,11 +342,52 @@ function functionCopy(source: ts.SourceFile, name: string): string {
 
 /**
  * sha256 of the copy that a cached Analysis carries, as the header lists it: per rule site its id, title,
- * detail, improvements and evidence notes, the narrative, the quality signals and labels, the parse warnings,
- * the event labels and block notes, and the tool-call summaries.
+ * detail, the 3 parts of its rule text and its evidence notes, the narrative, the quality signals and labels,
+ * the parse warnings, the event labels and block notes, and the tool-call summaries.
  */
 function copyFingerprint(): string {
-  const rules = sites.map((site) => JSON.stringify([site.ruleId, ...FIELDS.map((field) => copyOf(site, field)), ...evidenceNotes(site)])).sort()
+  return fingerprintOf(sites.map((site) => JSON.stringify([site.ruleId, ...FIELDS.map((field) => copyOf(site, field)), ...evidenceNotes(site)])))
+}
+
+/**
+ * The 0.9.0 recommendation of a site, rebuilt from its parts: per text the parts join as improvement, why,
+ * method, or in the sentence order of ORDER_0_9_0, and the texts of a rule that picks join with one space
+ * (as the 0.9.0 fingerprint read a conditional). Each part has one text per pick, or one text for every pick.
+ */
+function legacyRecommendation(site: Site): string {
+  const parts = PARTS.map((part) => partTexts(site, part))
+  const picks = Math.max(...parts.map((texts) => texts.length))
+  const texts: string[] = []
+  for (let pick = 0; pick < picks; pick++) {
+    const joined = parts.flatMap((texts) => {
+      if (texts.length !== 0 && texts.length !== 1 && texts.length !== picks) throw new Error(`${site.ruleId} (insights.ts:${site.line}): a part picks ${texts.length} ways, the others ${picks}`)
+      const text = texts.length === 1 ? texts[0]! : texts[pick]
+      return text ? [text] : []
+    })
+    const order = ORDER_0_9_0[picks > 1 ? `${site.ruleId}#${pick + 1}` : site.ruleId]
+    texts.push(order ? inOrder(joined.flatMap(sentencesOf), order, site.ruleId) : joined.join(' '))
+  }
+  return texts.join(' ')
+}
+
+/** The sentences in the order of their openings. Each opening names exactly one sentence, and each sentence is named once. */
+function inOrder(sentences: string[], openings: readonly string[], ruleId: string): string {
+  const ordered = openings.map((opening) => {
+    const named = sentences.filter((sentence) => sentence.startsWith(opening))
+    if (named.length !== 1) throw new Error(`${ruleId}: "${opening}" opens ${named.length} sentences`)
+    return named[0]!
+  })
+  if (new Set(ordered).size !== sentences.length) throw new Error(`${ruleId}: the 0.9.0 order names ${new Set(ordered).size} of ${sentences.length} sentences`)
+  return ordered.join(' ')
+}
+
+/** The generation 3 fingerprint function of v0.9.0: per rule site its id, title, detail, the recommendation and its evidence notes. */
+function legacyCopyFingerprint(): string {
+  return fingerprintOf(sites.map((site) => JSON.stringify([site.ruleId, copyOf(site, 'title'), copyOf(site, 'detail'), legacyRecommendation(site), ...evidenceNotes(site)])))
+}
+
+function fingerprintOf(ruleCopy: string[]): string {
+  const rules = [...ruleCopy].sort()
   return createHash('sha256')
     .update(
       JSON.stringify({
@@ -316,23 +404,30 @@ function copyFingerprint(): string {
 }
 
 const { calls, sites } = ruleSites()
-const improvements = sites.flatMap((site) => (fixedTexts(site.props.get('recommendation')!) ?? []).map((text) => ({ ruleId: site.ruleId, line: site.line, text })))
+const textsOf = (part: Part) => sites.flatMap((site) => partTexts(site, part).map((text) => ({ ruleId: site.ruleId, line: site.line, text })))
+const improvements = textsOf('improvement')
 
-describe('rule copy: the improvement is fixed rule text', () => {
+describe('rule copy: the rule text is fixed text in 3 parts', () => {
   it('reads every rule site: each mk() call passes an object literal with a literal ruleId', () => {
     expect(calls).toBeGreaterThan(0)
     expect(sites.length).toBe(calls)
   })
 
-  it('builds every recommendation from string literals, never from session data', () => {
-    const built = sites.filter((site) => {
-      const value = site.props.get('recommendation')
-      return !value || fixedTexts(value) === undefined
-    })
-    expect(
-      built.map((site) => `${site.ruleId} (insights.ts:${site.line})`),
-      'a recommendation must be a string literal, a conditional of literals, or a local const of those',
-    ).toEqual([])
+  it('passes the parts, never the joined recommendation, at every rule site', () => {
+    expect(sites.filter((site) => site.props.has('recommendation')).map((site) => `${site.ruleId} (insights.ts:${site.line})`)).toEqual([])
+  })
+
+  it('builds a non-empty improvement and why, and any method, from string literals, never from session data', () => {
+    const bad = sites.flatMap((site) =>
+      PARTS.flatMap((part) => {
+        const value = site.props.get(part)
+        if (!value) return part === 'method' ? [] : [`${site.ruleId}.${part} (insights.ts:${site.line}): missing`]
+        const texts = fixedTexts(value)
+        if (texts === undefined) return [`${site.ruleId}.${part} (insights.ts:${site.line}): not fixed text`]
+        return texts.some((text) => !text.trim()) ? [`${site.ruleId}.${part} (insights.ts:${site.line}): empty`] : []
+      }),
+    )
+    expect(bad, 'a part must be a non-empty string literal, a conditional of literals, or a local const of those').toEqual([])
   })
 
   it(`counts at least ${IMPROVEMENT_TEXTS_FLOOR} improvement texts`, () => {
@@ -345,6 +440,7 @@ describe('rule copy: each improvement starts with the change', () => {
     expect(startsWithChange('Fix the failing hooks in settings.json.')).toBe(true)
     expect(startsWithChange('If unresolved calls recur with the same tool, check for a hanging command.')).toBe(true)
     expect(startsWithChange('No change needed. The session worked well.')).toBe(true)
+    expect(startsWithChange('No change needed.')).toBe(true)
     expect(startsWithChange('If the tool hangs again, the agent waits.')).toBe(false)
     expect(startsWithChange('A slow tool stalls every turn that uses it.')).toBe(false)
     expect(startsWithChange('No change needed, probably.')).toBe(false)
@@ -357,17 +453,45 @@ describe('rule copy: each improvement starts with the change', () => {
 
   it('leads with "No change needed." exactly where the finding is not a problem by itself', () => {
     const verdicts: Record<string, number> = {}
-    for (const { ruleId, text } of improvements) if (text.startsWith(`${NO_CHANGE} `)) verdicts[ruleId] = (verdicts[ruleId] ?? 0) + 1
+    for (const { ruleId, text } of improvements) if (isVerdict(text)) verdicts[ruleId] = (verdicts[ruleId] ?? 0) + 1
     expect(verdicts).toEqual(VERDICT_FIRST)
-    // human-wait-dominates: the verdict, then advice that is conditional, never an order
+    // human-wait-dominates: the verdict, then advice that is conditional, never an order. The reason says why
+    // no change is needed.
     const [wait] = improvements.filter(({ ruleId }) => ruleId === 'human-wait-dominates')
-    expect(wait?.text).toMatch(/^No change needed\. A long wait is not a problem by itself\b/)
-    expect(wait?.text).toContain('If you want more throughput, ')
+    expect(wait?.text).toMatch(/^No change needed\. If you want more throughput, /)
+    const [waitWhy] = textsOf('why').filter(({ ruleId }) => ruleId === 'human-wait-dominates')
+    expect(waitWhy?.text).toMatch(/^A long wait is not a problem by itself\b/)
   })
 
   it(`opens with one instruction of ${INSTRUCTION_WORDS} words or fewer`, () => {
     const long = improvements.filter(({ text }) => words(firstSentence(text)) > INSTRUCTION_WORDS)
     expect(long.map(({ ruleId, line, text }) => `${ruleId} (insights.ts:${line}): ${words(firstSentence(text))} words: ${firstSentence(text)}`)).toEqual([])
+  })
+
+  it('gives no change in the why or the method: no sentence there starts with a listed verb or "If ..., <verb>"', () => {
+    const orders = (['why', 'method'] as const).flatMap((part) =>
+      textsOf(part).flatMap(({ ruleId, line, text }) => sentencesOf(text).filter(startsWithChange).map((sentence) => `${ruleId}.${part} (insights.ts:${line}): ${sentence}`)),
+    )
+    expect(orders).toEqual([])
+  })
+})
+
+describe('rule copy: the split into parts moved sentences and changed no word', () => {
+  it('the split keeps every 0.9.0 word', () => {
+    // the parts, joined in their 0.9.0 sentence order, give back the 0.9.0 copy fingerprint exactly
+    expect(legacyCopyFingerprint()).toBe(COPY_FINGERPRINT_0_9_0)
+  })
+
+  it('names in ORDER_0_9_0 only texts that do not join in their 0.9.0 order', () => {
+    for (const key of Object.keys(ORDER_0_9_0)) {
+      const [ruleId, pick] = key.split('#')
+      const own = sites.filter((site) => site.ruleId === ruleId)
+      expect(own.length, key).toBe(1)
+      const parts = PARTS.map((part) => partTexts(own[0]!, part)).map((texts) => (texts.length === 1 ? texts[0]! : (texts[Number(pick ?? 1) - 1] ?? '')))
+      // joined as improvement, why, method, the text differs from the 0.9.0 order, so the entry is needed
+      const joined = parts.filter((text) => text).join(' ')
+      expect(inOrder(sentencesOf(joined), ORDER_0_9_0[key]!, key), key).not.toBe(joined)
+    }
   })
 })
 

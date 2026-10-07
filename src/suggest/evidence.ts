@@ -263,7 +263,7 @@ function validateInsight(value: unknown, index: number): Insight {
       ...(rawSavings['ms'] !== undefined ? { ms: finiteNonNegative(rawSavings['ms'], `insights[${index}].savings.ms`) } : {}),
     }
   }
-  return { id, ruleId, title, detail, recommendation, axis, severity, evidence, turnIndexes, ...(savings ? { savings } : {}), personas }
+  return { id, ruleId, title, detail, recommendation, improvement: recommendation, axis, severity, evidence, turnIndexes, ...(savings ? { savings } : {}), personas }
 }
 
 function matchableFiles(value: Record<string, unknown>): MatchableAnalysis['files'] {
