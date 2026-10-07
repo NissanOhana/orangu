@@ -183,7 +183,10 @@ export function displayWidth(s: string): number {
 
 /**
  * Cut plain text to `budget` columns, ending with an ellipsis. Escapes are stripped first, so colour
- * goes on after truncation and a cut can never land inside a sequence.
+ * goes on after truncation and a cut can never land inside a sequence. The cut falls at the last space
+ * inside the budget, so the text ends on a whole word; text with no space inside the budget (one long
+ * word, a path, an id) is cut at the last grapheme that fits. Only label cells and lines drawn again in
+ * place use this; prose wraps with wrapWords instead.
  */
 export function truncate(s: string, budget: number, caps: Pick<Caps, 'unicode'>): string {
   const plain = stripAnsi(s)
@@ -193,13 +196,22 @@ export function truncate(s: string, budget: number, caps: Pick<Caps, 'unicode'>)
   if (room <= 0) return ell.slice(0, Math.max(0, budget))
   let out = ''
   let w = 0
+  let atBoundary = false
   for (const { segment } of segmenter.segment(plain)) {
     const sw = displayWidth(segment)
-    if (w + sw > room) break
+    if (w + sw > room) {
+      atBoundary = /^\s/.test(segment)
+      break
+    }
     out += segment
     w += sw
   }
-  return out + ell
+  if (!atBoundary) {
+    const space = out.search(/\s\S*$/)
+    if (space > 0) out = out.slice(0, space)
+  }
+  const kept = out.trimEnd()
+  return (kept || out) + ell
 }
 
 /** Pad to `width` display columns (never cuts; truncate first). Pad after painting is wrong: pad, then paint. */
@@ -222,6 +234,54 @@ export function wrapValue(v: string, budget: number, sep = ' · '): string[] {
       lines.push(cur)
       cur = part
     } else cur = next
+  }
+  if (cur) lines.push(cur)
+  return lines
+}
+
+/**
+ * Wrap prose into lines of at most `width` display columns, breaking only at whitespace (a run of
+ * spaces, tabs or newlines counts as one break). Escapes and control bytes are stripped first, as
+ * truncate does, so transcript text cannot reach the terminal as a sequence and colour goes on after.
+ * A word wider than the line is the one exception: it stands on its own lines and breaks at the width,
+ * with every character kept. Nothing is dropped except the whitespace at a break.
+ */
+export function wrapWords(text: string, width: number): string[] {
+  const room = Math.max(1, Math.floor(width))
+  const words = stripAnsi(text).split(/[ \t\n]+/).filter(Boolean)
+  const lines: string[] = []
+  let cur = ''
+  let curWidth = 0
+  for (const word of words) {
+    const ww = displayWidth(word)
+    if (ww > room) {
+      if (cur) lines.push(cur)
+      cur = ''
+      curWidth = 0
+      let piece = ''
+      let pw = 0
+      for (const { segment } of segmenter.segment(word)) {
+        const sw = displayWidth(segment)
+        // a grapheme wider than the whole line (a CJK glyph at width 1) still gets a line of its own
+        if (piece && pw + sw > room) {
+          lines.push(piece)
+          piece = ''
+          pw = 0
+        }
+        piece += segment
+        pw += sw
+      }
+      if (piece) lines.push(piece)
+      continue
+    }
+    if (cur && curWidth + 1 + ww <= room) {
+      cur += ' ' + word
+      curWidth += 1 + ww
+    } else {
+      if (cur) lines.push(cur)
+      cur = word
+      curWidth = ww
+    }
   }
   if (cur) lines.push(cur)
   return lines

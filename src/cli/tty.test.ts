@@ -17,6 +17,7 @@ import {
   supportsHyperlinks,
   truncate,
   wrapValue,
+  wrapWords,
   type Caps,
 } from './tty.js'
 
@@ -167,15 +168,27 @@ describe('displayWidth', () => {
 })
 
 describe('truncate', () => {
-  it('leaves short text alone, cuts long text to the budget with an ellipsis', () => {
+  it('leaves short text alone, cuts long text at the last space inside the budget, then adds the ellipsis', () => {
     expect(truncate('short', 10, { unicode: true })).toBe('short')
     expect(truncate('exactly ten', 11, { unicode: true })).toBe('exactly ten')
     const t = truncate('a much longer title than fits', 12, { unicode: true })
-    expect(t).toBe('a much long…')
-    expect(displayWidth(t)).toBe(12)
+    expect(t).toBe('a much…')
+    expect(displayWidth(t)).toBeLessThanOrEqual(12)
     const a = truncate('a much longer title than fits', 12, { unicode: false })
-    expect(a).toBe('a much lo...')
-    expect(displayWidth(a)).toBe(12)
+    expect(a).toBe('a much...')
+    expect(displayWidth(a)).toBeLessThanOrEqual(12)
+    // the budget ends exactly before a space: the whole last word stays
+    expect(truncate('one two three', 8, { unicode: true })).toBe('one two…')
+  })
+  it('never ends on a part of a word when a space is inside the budget', () => {
+    const title = '3 files re-read within one context (12 redundant reads, 3.92M tokens)'
+    // 68 columns leave room for "3.92M token", which the grapheme cut used to print
+    for (const budget of [63, 65, 67, 68]) {
+      const t = truncate(title, budget, { unicode: true })
+      expect(t, String(budget)).toBe('3 files re-read within one context (12 redundant reads, 3.92M…')
+      expect(displayWidth(t)).toBeLessThanOrEqual(budget)
+    }
+    expect(truncate(title, 68, { unicode: true })).not.toContain('token')
   })
   it('counts wide glyphs and never cuts inside an escape sequence', () => {
     const t = truncate('日本語テキスト', 7, { unicode: true })
@@ -203,6 +216,46 @@ describe('padCell / wrapValue', () => {
     expect(wrapValue('a · b · c', 80)).toEqual(['a · b · c'])
     expect(wrapValue('a · b · c', 5)).toEqual(['a · b', 'c'])
     expect(wrapValue('', 5)).toEqual([])
+  })
+})
+
+describe('wrapWords', () => {
+  const SENTENCE = 'Read each file once in a context. Keep notes on what it holds. To find a part of it again, use Grep with line ranges.'
+  it('keeps every word that fits a line whole, and each line inside the width', () => {
+    for (const width of [10, 17, 29, 49, 69]) {
+      const lines = wrapWords(SENTENCE, width)
+      expect(lines.join(' '), String(width)).toBe(SENTENCE)
+      for (const l of lines) expect(displayWidth(l), `${width}: ${l}`).toBeLessThanOrEqual(width)
+      // no line starts or ends inside a word: every line is a run of the original words
+      const words = SENTENCE.split(' ')
+      for (const l of lines) for (const w of l.split(' ')) expect(words, `${width}: ${l}`).toContain(w)
+    }
+    expect(wrapWords('a b c', 80)).toEqual(['a b c'])
+  })
+  it('breaks a word wider than the line at the width, keeps every character, and gives it its own lines', () => {
+    expect(wrapWords('a'.repeat(25), 10)).toEqual(['a'.repeat(10), 'a'.repeat(10), 'a'.repeat(5)])
+    expect(wrapWords('ab ' + 'x'.repeat(12) + ' cd', 5)).toEqual(['ab', 'xxxxx', 'xxxxx', 'xx', 'cd'])
+    const path = '/var/folders/1x/5tq6y5g95l5c2vxg2l7nzf9w0000gn/T/orangu-bbbbbbbb.html'
+    expect(wrapWords(`open ${path} now`, 20).join('')).toBe(`open${path}now`)
+  })
+  it('measures CJK and emoji by their display width', () => {
+    expect(wrapWords('日本語 テキスト 🙂🙂', 6)).toEqual(['日本語', 'テキス', 'ト', '🙂🙂'])
+    expect(wrapWords('日本語', 5)).toEqual(['日本', '語'])
+    expect(wrapWords('🙂 🙂 🙂', 5)).toEqual(['🙂 🙂', '🙂'])
+    for (const l of wrapWords('日本語のタイトル: refactor every module 🙂 and run the tests', 9)) expect(displayWidth(l)).toBeLessThanOrEqual(9)
+  })
+  it('breaks at any run of spaces, tabs or newlines, and returns no line for empty text', () => {
+    expect(wrapWords('one  two\tthree\nfour', 80)).toEqual(['one two three four'])
+    expect(wrapWords('   ', 10)).toEqual([])
+    expect(wrapWords('', 10)).toEqual([])
+    // a width below one column still makes progress
+    expect(wrapWords('ab', 0)).toEqual(['a', 'b'])
+  })
+  it('strips terminal escapes and control bytes from transcript text before it wraps', () => {
+    const hostile = 'Fix \x1b]52;c;SGVsbG8=\x07the \x1b[2Jtitle\x85 and \x1b[31mred\x1b[0m text'
+    const lines = wrapWords(hostile, 10)
+    expect(lines.join(' ')).toBe('Fix the title and red text')
+    for (const l of lines) expect(l).not.toMatch(/[\x1b\x07\x80-\x9f]/)
   })
 })
 
