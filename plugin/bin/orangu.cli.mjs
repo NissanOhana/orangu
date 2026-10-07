@@ -14860,6 +14860,9 @@ function validateWords(raw) {
   }
   return words2;
 }
+function redactWords(words2) {
+  return { verdict: redactValue(words2.verdict), summary: redactValue(words2.summary), improvementsTitle: redactValue(words2.improvementsTitle) };
+}
 function wordFindings(words2) {
   return WORD_KEYS.flatMap((slot) => checkText(words2[slot]).findings.map(({ line, rule, text: text3, hint }) => ({ slot, line, rule, text: text3, hint })));
 }
@@ -15452,7 +15455,7 @@ async function writeBoth(dir, files2) {
 }
 async function renderShowMe(dir, o = {}) {
   const run = await confinedRunDir(dir, o.base);
-  const words2 = validateWords(await readJson2(run, "words.json"));
+  const words2 = redactWords(validateWords(await readJson2(run, "words.json")));
   const data = validateShowMeData(await readJson2(run, "data.json"));
   const page = data.kind === "session" ? sessionPage(data.value, words2) : aggregatePage(data.value, data.scope, { ...data.folder !== void 0 ? { folder: data.folder } : {}, version: data.version, words: words2 });
   const files2 = TEMPLATES.map(({ file, html: template }) => {
@@ -15465,6 +15468,7 @@ async function renderShowMe(dir, o = {}) {
 }
 
 // src/show-me/prepare.ts
+var SKIPPED_REASON = "orangu could not read these session files, for example a file over an input cap.";
 var MAX_NAME_CHARS = 64;
 function runName(name) {
   const safe = name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+|-+$/g, "").slice(0, MAX_NAME_CHARS);
@@ -15478,7 +15482,8 @@ async function prepareRun(scope, name, json2, o = {}) {
   await writePrivateOutput(path, json2);
   const bytes = Buffer.byteLength(json2);
   const approxTokens3 = Math.ceil(bytes / 4);
-  return { dir, data: { path, bytes, approxTokens: approxTokens3, overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD } };
+  const skipped = o.skipped ?? 0;
+  return { dir, data: { path, bytes, approxTokens: approxTokens3, overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD }, skipped, ...skipped > 0 ? { skippedReason: SKIPPED_REASON } : {} };
 }
 
 // src/cli/json-out.ts
@@ -15548,7 +15553,7 @@ async function sessionData2(selector, flags, err3) {
   const ref = await selectSession(selector, flags, err3);
   const analysis = await analyzeRefCached(ref, { cache: cacheFor(flags), version: VERSION2, now: Date.now() });
   const json2 = renderAnalysisJson(analysis, { slim: true, "no-redact": flagBool(flags, "no-redact"), "include-text": flagBool(flags, "include-text"), "strip-paths": flagBool(flags, "strip-paths") });
-  return { name: ref.sessionId.slice(0, 8), json: json2 };
+  return { name: ref.sessionId.slice(0, 8), json: json2, skipped: 0 };
 }
 async function aggregateData2(scope, flags, err3) {
   const rootArg = flagStr(flags, "root", "r");
@@ -15588,7 +15593,7 @@ async function aggregateData2(scope, flags, err3) {
   const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename11(cwd) : redactValue(basename11(cwd), { scrub: true }) : void 0;
   const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION2 }, null, 2)}
 `;
-  return { name: scope === "global" ? "machine" : basename11(cwd), json: json2 };
+  return { name: scope === "global" ? "machine" : basename11(cwd), json: json2, skipped: failed };
 }
 function printPrepared(run, out3) {
   const lines = [
@@ -15596,6 +15601,9 @@ function printPrepared(run, out3) {
     row(out3, "data", `${oneLine2(run.data.path)} \xB7 ${run.data.bytes.toLocaleString("en-US")} bytes \xB7 about ${run.data.approxTokens.toLocaleString("en-US")} tokens`, { raw: true }),
     run.data.overThreshold ? row(out3, "gate", `over the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString("en-US")}-token gate. Ask the user before you read data.json into a model.`, { style: "warn" }) : row(out3, "gate", `under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString("en-US")}-token gate`, { style: "dim" })
   ];
+  if (run.skipped > 0) {
+    lines.push(row(out3, "skipped", `${run.skipped.toLocaleString("en-US")} session${run.skipped === 1 ? "" : "s"} left out of data.json: ${run.skippedReason ?? ""}`, { style: "warn" }));
+  }
   process.stdout.write(`${lines.join("\n")}
 `);
 }
@@ -15610,8 +15618,8 @@ async function prepare(positionals, flags) {
   if (scope === "global" && flags["cwd"] !== void 0) throw new Error("--cwd goes with a session or --scope repo. --scope global reads every session on this machine.");
   const scan = SCAN_FLAGS.find((name2) => flags[name2] !== void 0);
   if (scope === "session" && scan) throw new Error(`${flagName2(scan)} goes with --scope repo or --scope global. One session needs no scan limit.`);
-  const { name, json: json2 } = scope === "session" ? await sessionData2(positionals[0], flags, err3) : await aggregateData2(scope, flags, err3);
-  const run = await prepareRun(scope, name, json2);
+  const { name, json: json2, skipped } = scope === "session" ? await sessionData2(positionals[0], flags, err3) : await aggregateData2(scope, flags, err3);
+  const run = await prepareRun(scope, name, json2, { skipped });
   if (flagBool(flags, "json")) {
     process.stdout.write(`${JSON.stringify(run, null, 2)}
 `);
