@@ -855,10 +855,10 @@ describe('plugin packaging', () => {
     // Claude Code checks a Write against Edit(path) rules and never consults a Write(path) rule. So the one write that
     // runs with no prompt is words.json, by its file name, one run directory deep. A grant on ~/.orangu/show-me/**
     // would let a steered model write its own report.html or slides.html (no CSP) with no prompt.
-    const SHOW_ME_GRANTS = 'allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Read, Edit(~/.orangu/show-me/*/words.json)'
+    const SHOW_ME_GRANTS = 'allowed-tools: Bash(orangu show-me:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *), Read, Edit(~/.orangu/show-me/*/words.json)'
     it('pre-approves exactly the CLI, reads and an edit of words.json, and no grant reaches an HTML file', () => {
       expect(md().split('\n')[3]).toBe(SHOW_ME_GRANTS)
-      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *)', 'Read', 'Edit(~/.orangu/show-me/*/words.json)'])
+      expect(grants()).toEqual(['Bash(orangu show-me:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *)', 'Read', 'Edit(~/.orangu/show-me/*/words.json)'])
       for (const grant of grants()) {
         expect(grant, 'no grant on the whole show-me tree').not.toContain('~/.orangu/show-me/**')
         expect(grant, 'no grant names an HTML file').not.toMatch(/slides\.html|report\.html|\.html\b/)
@@ -866,6 +866,18 @@ describe('plugin packaging', () => {
       }
       // no Grep count, no temp directory, and opening the files is the CLI's --open, never a pre-approved opener
       expect(grants().join(' ')).not.toMatch(/\bGrep\b|\bmktemp\b|\b(?:open|xdg-open|start)\b/)
+    })
+
+    // data.json can carry text that steers Claude (a tool name, a path, transcript text under --include-text). A bare
+    // Bash(orangu:*) grant then runs `orangu report … -o <any path>` with no prompt and replaces that file. So each
+    // Bash grant names the show-me verb, and each command in the body is that verb: the narrow grant costs 0 prompts.
+    it('pre-approves only the show-me verb, and the body runs no other orangu verb', () => {
+      const bash = grants().filter((grant) => grant.startsWith('Bash('))
+      expect(bash).toEqual(['Bash(orangu show-me:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *)'])
+      expect(grants(), 'no bare orangu grant').not.toContain('Bash(orangu:*)')
+      const commands = [...body().matchAll(/`orangu ([^`]*)`/g)].map((m) => m[1]!)
+      expect(commands.length, 'the body names its commands').toBeGreaterThan(0)
+      for (const command of commands) expect(command, `${command} is the show-me verb`).toMatch(/^show-me\b/)
     })
 
     it('copies numbers, never computes one, and keeps money, scores and rankings out', () => {
