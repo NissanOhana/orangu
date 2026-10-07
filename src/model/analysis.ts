@@ -31,6 +31,11 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *     recommendation is now their join. The words did not change, but 3 texts put their sentences in a new
  *     order (human-wait-dominates, the no-change text of hidden-iterations, fanout-opportunity), so a cached
  *     payload lacks the parts and carries the old order
+ *     4 also carries the narrative composition (2026-10-07): the top finding titles are a second paragraph after
+ *     one blank line ("\n\n"), "Look at these first." and then each title as its own sentence, in place of one
+ *     list sentence joined by " · ". The quoted session title is on one line. No word changed. 4 is not
+ *     released yet: the 0.10.0 release moves the engine segment of the cache directory, so no shipped cache
+ *     holds a generation 4 entry
  */
 export const ANALYSIS_PAYLOAD_GENERATION = 4
 
@@ -98,7 +103,11 @@ export interface Summary {
   outcomes: Outcomes
   /** the 3 highest-impact insights, by id */
   topInsightIds: string[]
-  /** one-paragraph deterministic narrative for non-technical readers */
+  /**
+   * deterministic narrative for non-technical readers: a paragraph of facts and, when the rules found something,
+   * a second paragraph with the top finding titles. One blank line ("\n\n") splits them, and the text holds no
+   * other line break.
+   */
   narrative: string
   /**
    * How the session ended (additive, v1). Precedence: interrupted > failing > clean > unknown.

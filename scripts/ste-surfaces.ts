@@ -555,11 +555,12 @@ function goldenSurface(kind: 'insight' | 'crossFinding', field: GoldenField): Su
  * The session narrative each golden fixture emits: the first prose of every session report. It is built from
  * many template parts, so a short part ("(3 turns including ...)") is a label in the src/analyze row and only
  * the assembled text is scored as sentences. The quoted session title is transcript text, not copy, so its
- * clause is read as "In this session, " (the redactor's own rewrite).
+ * clause is read as "In this session, " (the redactor's own rewrite). The narrative has up to 2 paragraphs, split
+ * by one blank line, and the report shows each in its own block, so each paragraph is its own block here too.
  */
 const goldenNarrativeSurface: Surface = {
   ...jsonSurface('test/golden#summary.narrative', 'Z', (read) => read.files.filter((file) => file.startsWith(GOLDEN) && file.endsWith('.analysis.json')), (json) =>
-    strings([((json['summary'] ?? {}) as Json)['narrative']]).map((text) => text.replace(/^In “[\s\S]*?”, /, 'In this session, ')),
+    strings([((json['summary'] ?? {}) as Json)['narrative']]).flatMap((text) => text.replace(/^In “[\s\S]*?”, /, 'In this session, ').split('\n\n')),
   ),
   source: 'emitted session narratives, the title clause read as "In this session"',
 }

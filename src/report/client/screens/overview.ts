@@ -28,8 +28,10 @@ function href(ctx: Ctx, a: Analysis, next: Partial<RouteState>): string {
   return cleanHash(ctx.state, { s: ctx.state.s ?? a.session.id, ...next })
 }
 
+/** The hero: the outcome headline, then each paragraph of the narrative in its own block (it splits them at a blank line). */
 function outcome(a: Analysis, audience: Ctx['audience']): string {
-  return `<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${mascotSvg(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${esc(outcomeHeadline(a.summary))}</div><div class="sg-sub">${esc(plainSentence(a.summary.narrative, audience))}</div></div></div>`
+  const paragraphs = a.summary.narrative.split('\n\n').map((p) => `<div class="sg-sub">${esc(plainSentence(p, audience))}</div>`)
+  return `<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${mascotSvg(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${esc(outcomeHeadline(a.summary))}</div>${paragraphs.join('')}</div></div>`
 }
 
 function triptych(a: Analysis): string {

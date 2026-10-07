@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from './analyze.js'
 import { aggregate } from './aggregate.js'
+import type { Rule } from './insights.js'
 import { buildCanonicalSession, fakeToolUseId, SessionBuilder } from '../../test/fixtures/session-builder.js'
 
 async function canonicalAnalysis() {
@@ -25,17 +26,58 @@ describe('analyzeSession', () => {
     expect(a.summary.totalTokens).toBeGreaterThan(0)
     expect(a.summary.totalTokens).toBe(a.tokens.totalTokens)
     expect(a.summary.narrative).toContain('2 requests')
-    // STE: no semicolon. The busy time is its own sentence, and the top findings use the client separator.
+    // STE: no semicolon. The busy time is its own sentence, and each top finding title is its own sentence in a
+    // second paragraph, after one blank line.
     expect(a.summary.narrative).not.toContain(';')
     expect(a.summary.narrative).toContain('. The agent was busy for ')
-    expect(a.summary.narrative).toMatch(/ Look at these first: .+ · .+\.$/)
+    const titles = a.insights.slice(0, 2).map((i) => i.title)
+    expect(titles).toHaveLength(2)
+    const [facts, first, ...more] = a.summary.narrative.split('\n\n')
+    expect(more).toEqual([])
+    expect(facts).toMatch(/^In “Fix foo test”, [^\n]+ Orangu found these outcomes: [^\n]+\.$/)
+    expect(first).toBe(`Look at these first. ${titles.map((title) => `${title}.`).join(' ')}`)
+    expect(a.summary.narrative).not.toContain(' · ')
+  })
+  it('puts the top finding titles in a paragraph of their own, each title its own sentence with a period only where it has no end mark', async () => {
+    // 0.9.0 joined the top titles into one list sentence ("Look at these first: <title> · <title>."), and two
+    // long titles made a sentence of 31 words. Each title is now a sentence of its own, and no title word changes.
+    // The titles are a second paragraph, so that each paragraph has 6 sentences or fewer (STE rule 3).
+    const b = buildCanonicalSession()
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), path: '/tmp/x/' + b.sessionId + '.jsonl', noSidecar: true })
+    const finding = (title: string): Rule => () => [
+      { id: '', ruleId: 'test', severity: 'high', axis: 'time', title, detail: '', recommendation: '', improvement: '', evidence: {}, turnIndexes: [], personas: [] },
+    ]
+    const cases: Array<[string[], string]> = [
+      [['Ends with no mark', 'Ends with a question?'], 'Look at these first. Ends with no mark. Ends with a question?'],
+      [['Ends with a period.', 'Ends with a bang!'], 'Look at these first. Ends with a period. Ends with a bang!'],
+      [['The only finding (1 of 1)'], 'Look at these first. The only finding (1 of 1).'],
+    ]
+    for (const [titles, paragraph] of cases) {
+      const a = analyzeSession(s, { version: 'test', now: 0, rules: titles.map(finding) })
+      expect(a.summary.narrative.split('\n\n'), titles.join(' | ')).toEqual([expect.stringMatching(/ Orangu found these outcomes: [^\n]+\.$/), paragraph])
+    }
+    // with no finding the narrative is one paragraph and ends at the outcomes, as before
+    const none = analyzeSession(s, { version: 'test', now: 0, rules: [] }).summary.narrative
+    expect(none).toMatch(/ Orangu found these outcomes: [^.]+\.$/)
+    expect(none).not.toContain('\n')
+  })
+  it('keeps the session title on one line, so the only blank line in the narrative is the paragraph break', async () => {
+    // A custom or AI title is not a prompt preview, and it can hold line breaks. The report splits the
+    // narrative into paragraphs at a blank line, so a blank line in the title would cut the first paragraph.
+    const b = buildCanonicalSession()
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), path: '/tmp/x/' + b.sessionId + '.jsonl', noSidecar: true })
+    s.meta.title = 'Fix the\n\nflaky   test\n'
+    const a = analyzeSession(s, { version: 'test', now: 0 })
+    expect(a.summary.narrative).toMatch(/^In “Fix the flaky test”, you made 2 requests /)
+    expect(a.summary.narrative.split('\n\n')).toHaveLength(2)
+    expect(a.summary.narrative.split('\n')).toHaveLength(3)
   })
   it('writes the narrative in STE: the reader is "you", the actor is named, every part is a full sentence', async () => {
     // The narrative is the first prose on every session report ("What happened") and on the public sample.
     // The checker cannot see a passive, a telegram or "the human", so these frames are pinned here.
     const a = await canonicalAnalysis()
     expect(a.summary.narrative).toMatch(/^In “Fix foo test”, you made 2 requests over [^.]+\. The agent was busy for [^.]+ of that\. /)
-    expect(a.summary.narrative).toContain(' Orangu found these outcomes: 1 file changed, 2 test runs (1 failed). Look at these first: ')
+    expect(a.summary.narrative).toContain(' Orangu found these outcomes: 1 file changed, 2 test runs (1 failed).\n\nLook at these first. ')
     // every narrative the golden corpus emits, in each of its forms (a title or none, commands and automation
     // counted or not, outcomes or none, findings or none)
     const golden = join(process.cwd(), 'test/golden')
@@ -44,7 +86,12 @@ describe('analyzeSession', () => {
     for (const file of files) {
       const n = (JSON.parse(readFileSync(join(golden, file), 'utf8')) as { summary: { narrative: string } }).summary.narrative
       expect(n, file).toMatch(/^In (“[\s\S]*?”|this session), you made \d+ requests?( \(\d+ turns including commands and automation\))? over /)
-      expect(n, file).toMatch(/ Orangu found (these outcomes: [^.]+|no commits, PRs or test runs)\.( Look at these first: .+\.)?$/)
+      expect(n, file).toMatch(/ Orangu found (these outcomes: [^.]+|no commits, PRs or test runs)\.(\n\nLook at these first\.( \S.*[.!?])+)?$/)
+      // each top title is its own sentence in a second paragraph: no list separator, no colon after "Look at
+      // these first", and no line break other than the one blank line between the 2 paragraphs
+      expect(n, file).not.toContain(' · ')
+      expect(n, file).not.toContain('Look at these first:')
+      expect(n.replace('\n\n', ' '), file).not.toContain('\n')
       for (const old of ['incl.', 'the human', 'were detected', 'Visible outcomes', 'Biggest things']) expect(n, `${file}: ${old}`).not.toContain(old)
       expect(n, `${file}: one tool call is singular`).not.toMatch(/\b1 tool calls\b/)
     }

@@ -218,7 +218,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // Born 2026-10-07 after the narrative rewrite: measured 97 (32 of 33), floor 95. The one finding is the
   // "Look at these first: <title> · <title>." list in agents-heavy (31 words): two rule titles, each measured
   // on its own row, joined by the client separator.
-  'test/golden#summary.narrative': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 1 },
+  // C10b: floor 95 -> 98, findings 1 -> 0. Measured 42 sentences, 42 clean, score 100. The top finding titles are
+  // a second paragraph after one blank line, each title its own sentence, and each paragraph is its own block.
+  'test/golden#summary.narrative': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // C10: rendered output. The golden fixtures and test/fixtures/hidden-iterations.ts drawn through the real report
   // screen builders, terminal line builders and show-me fill, with real values and the default redaction. Born
   // 2026-10-07 at max(80, measured - 2), 0 banned tokens, findings at the measured count.
@@ -227,7 +229,10 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // (src/analyze/analyze.ts:215) with rule titles in it. With the hidden-iterations title (insights.ts:1155,
   // 23 words) it is 27 words, and with the 2 agents-heavy titles it is 31 words (the same finding as the
   // test/golden#summary.narrative row). Both are on the Overview, in both audiences.
-  'rendered#report.session': { floor: 97, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 2 },
+  // C10b: floor 97 -> 98, findings 2 -> 0. Measured 252 sentences, 252 clean, score 100. The Overview hero shows
+  // the narrative in 2 blocks: the facts, then "Look at these first." and each top title as its own sentence.
+  // Each block has 6 sentences or fewer, and no sentence has more than 25 words.
+  'rendered#report.session': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Measured 147 sentences, 147 clean, score 100. It shows the hidden-iterations title without the
   // "In one session: " marker (23 words) and the marker once, in the caption above the list.
   'rendered#report.aggregate': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },

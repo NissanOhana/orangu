@@ -305,6 +305,7 @@ table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: 
 .overview-copy { position: relative; z-index: 1; min-width: 0; }
 .overview-copy .herotitle { margin-top: 2px; font-size: clamp(24px, 3vw, 34px); letter-spacing: -0.02em; }
 .overview-copy .sg-sub { max-width: 680px; font-size: 14px; line-height: 1.55; }
+.overview-copy .sg-sub + .sg-sub { margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .overview-brand::before, .overview-brand .logo { animation: none !important; transition: none !important; } }
 .rank { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-ink); color: var(--bg); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
 .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }

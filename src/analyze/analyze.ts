@@ -202,7 +202,8 @@ function sessionEnding(s: Session, quality: QualityAnalysis): SessionEnding {
 
 function narrative(s: Session, sum: Summary, top: string[]): string {
   const parts: string[] = []
-  const what = s.meta.title ? `“${s.meta.title.slice(0, 80)}”` : 'this session'
+  // the title is on one line, so a blank line in the narrative is only ever the paragraph break below
+  const what = s.meta.title ? `“${s.meta.title.replace(/\s+/g, ' ').trim().slice(0, 80)}”` : 'this session'
   parts.push(`In ${what}, you made ${sum.humanTurns} request${sum.humanTurns === 1 ? '' : 's'}${sum.turns > sum.humanTurns ? ` (${sum.turns} turns including commands and automation)` : ''} over ${sum.wallMs ? fmtMs(sum.wallMs) : 'an unknown span'}. The agent was busy for ${fmtMs(sum.activeMs)} of that.`)
   parts.push(`It made ${sum.toolCalls} tool call${sum.toolCalls === 1 ? '' : 's'}${sum.toolErrors ? ` (${sum.toolErrors} failed)` : ''}${sum.agents ? `, ran ${sum.agents} subagent${sum.agents > 1 ? 's' : ''}` : ''}${sum.skills ? `, used ${sum.skills} skill/command invocation${sum.skills > 1 ? 's' : ''}` : ''}, and processed ${fmtTokens(usageTotal(sum.tokens))} tokens.`)
   const o = sum.outcomes
@@ -212,6 +213,11 @@ function narrative(s: Session, sum: Summary, top: string[]): string {
   if (o.filesEdited || o.filesWritten) outs.push(`${o.filesEdited + o.filesWritten} file${o.filesEdited + o.filesWritten > 1 ? 's' : ''} changed`)
   if (o.testRuns) outs.push(`${o.testRuns} test run${o.testRuns > 1 ? 's' : ''}${o.testRunsFailed ? ` (${o.testRunsFailed} failed)` : ''}`)
   parts.push(outs.length ? `Orangu found these outcomes: ${outs.join(', ')}.` : 'Orangu found no commits, PRs or test runs.')
-  if (top.length) parts.push(`Look at these first: ${top.join(' · ')}.`)
-  return parts.join(' ')
+  const facts = parts.join(' ')
+  if (!top.length) return facts
+  // The top findings are a paragraph of their own, after one blank line: STE gives a paragraph one topic and
+  // 6 sentences or fewer. Each title is its own sentence, with its words unchanged, and gets a period only
+  // when it has no end mark.
+  const first = ['Look at these first.', ...top.map((title) => (/[.!?]$/.test(title) ? title : `${title}.`))]
+  return [facts, first.join(' ')].join('\n\n')
 }

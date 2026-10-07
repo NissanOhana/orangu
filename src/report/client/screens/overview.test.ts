@@ -132,6 +132,23 @@ describe('renderOverview (A1: what happened · what matters · what next)', () =
     expect(markup).toContain('peak ')
   })
 
+  it('shows each narrative paragraph in its own block, in both audiences, with no raw line break', async () => {
+    // The narrative puts the top finding titles in a second paragraph after one blank line (STE: a paragraph has
+    // 6 sentences or fewer). The hero shows each paragraph in its own .sg-sub block, so none is lost or run on.
+    for (const audience of ['dev', 'plain'] as const) {
+      const ctx = await context({ audience })
+      const [facts, first] = ctx.a!.summary.narrative.split('\n\n')
+      expect(first, audience).toMatch(/^Look at these first\. /)
+      const subs = [...overviewScreenHtml(ctx).matchAll(/<div class="sg-sub">([^<]*)<\/div>/g)].map((m) => m[1])
+      expect(subs, audience).toEqual([esc(plainSentence(facts!, audience)), esc(plainSentence(first!, audience))])
+      expect(subs.join(''), audience).not.toContain('\n')
+    }
+    // a narrative of one paragraph (no finding, or an Analysis from an older engine) is one block
+    const ctx = await context()
+    ctx.a!.summary.narrative = 'In this session, you made 1 request over 1s. Orangu found no commits, PRs or test runs.'
+    expect([...overviewScreenHtml(ctx).matchAll(/<div class="sg-sub">/g)]).toHaveLength(1)
+  })
+
   it('headlines the hero from the counted outcomes, never from the ending enum', async () => {
     const ctx = await context()
     renderOverview(ctx)

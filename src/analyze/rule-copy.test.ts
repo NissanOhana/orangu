@@ -115,11 +115,16 @@ const INSTRUCTION_WORDS = 20
  * 2026-10-07, generation 4: each rule text is 3 parts (improvement, why, method), and the fingerprint reads each
  * part. The words are the 0.9.0 words (the test "the split keeps every 0.9.0 word" proves it), but 3 texts now
  * put their sentences in a new order, so `recommendation` changed for them and the generation moved.
+ * 2026-10-07, generation 4 again: the narrative puts its top finding titles in a second paragraph, each title its
+ * own sentence, and keeps the session title on one line (NARRATIVE_0_9_0). Re-recorded at 4, because generation 4
+ * is not released: 0.9.0 ships generation 3, and the 0.10.0 release moves the engine segment of the cache
+ * directory, so no shipped cache holds a generation 4 entry.
  */
-const COPY_FINGERPRINT = { generation: 4, sha256: '7c7d12b69bf53766d45a3820a12a877837262f5785df61943fce0774bfc11907' }
+const COPY_FINGERPRINT = { generation: 4, sha256: '5fd967f5e2d749c4472f840d6a699c69d5efc13c09ae37dd61a1e3a6c21e3534' }
 /**
  * The generation 3 fingerprint, as `git show v0.9.0:src/analyze/rule-copy.test.ts` records it. The split of each
- * rule text into its 3 parts must rebuild this value exactly, so no word, title or detail changed in the split.
+ * rule text into its 3 parts, and the narrative with its NARRATIVE_0_9_0 literals put back, must rebuild this
+ * value exactly. So no word, title or detail changed in the split, and no narrative word changed.
  * A later copy rewrite deletes this constant and its test, and runs its own qualifier audit.
  */
 const COPY_FINGERPRINT_0_9_0 = 'd0cc1f29c96a54443516e6b7b34569ba46fd06e4225584163a9dc8d3165c31c0'
@@ -137,6 +142,21 @@ const ORDER_0_9_0: Readonly<Record<string, readonly string[]>> = {
   // 0.9.0: the instruction, the reason, then the exception. Now: improvement = the instruction and the exception.
   'fanout-opportunity': ['Spawn independent subagents', 'Then the wall-clock time', 'Keep serial spawns'],
 }
+/**
+ * The narrative literals that changed after 0.9.0, as staticParts reads them (a substitution reads as "3"): the
+ * 0.9.0 run of parts and the run that replaced it. 0.9.0 joined the top finding titles into one list sentence at
+ * the end of one paragraph. Now the titles are a second paragraph, after one blank line: "Look at these first." is
+ * its own sentence, and so is each title, with a period added only where the title has no end mark. The quoted
+ * session title is on one line, so that blank line is the only one. Every other narrative literal is the 0.9.0
+ * literal, and no word changed.
+ */
+const NARRATIVE_0_9_0: ReadonlyArray<{ readonly was: readonly string[]; readonly now: readonly string[] }> = [
+  // 0.9.0: `“${s.meta.title.slice(0, 80)}”`. Now the title first joins its whitespace with ' '.
+  { was: ['“3”', 'this session'], now: ['“3”', ' ', 'this session'] },
+  // 0.9.0: `Look at these first: ${top.join(' · ')}.`, then `return parts.join(' ')`. Now: `facts = parts.join(' ')`,
+  // then 'Look at these first.' and `${title}.` for each title, joined with ' ', and the 2 paragraphs joined with '\n\n'.
+  { was: ['Look at these first: 3.', ' · ', ' '], now: [' ', 'Look at these first.', '3.', ' ', '\n\n'] },
+]
 /**
  * Born 2026-10-06 at its own count: 45 rule sites, plus one more text each for the two improvements that
  * pick between two fixed texts (time-budget, hidden-iterations). The count only goes up.
@@ -216,8 +236,8 @@ function fixedTexts(node: ts.Expression): string[] | undefined {
   return undefined
 }
 
-/** The static text of a title or detail: every string literal part, each substitution read as "3". */
-function staticText(node: ts.Node): string {
+/** The literal parts of a node, in source order: every string literal part, each substitution read as "3". */
+function staticParts(node: ts.Node): string[] {
   const parts: string[] = []
   const visit = (n: ts.Node): void => {
     if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) parts.push(n.text)
@@ -227,7 +247,12 @@ function staticText(node: ts.Node): string {
     } else ts.forEachChild(n, visit)
   }
   visit(node)
-  return parts.join(' ')
+  return parts
+}
+
+/** The static text of a title or detail: its literal parts, joined with one space. */
+function staticText(node: ts.Node): string {
+  return staticParts(node).join(' ')
 }
 
 const isPart = (field: Field): field is Part => (PARTS as readonly string[]).includes(field)
@@ -277,10 +302,33 @@ function evidenceNotes(site: Site): string[] {
   return evidence.properties.flatMap((p) => (ts.isPropertyAssignment(p) && ts.isIdentifier(p.name) && ts.isStringLiteral(p.initializer) ? [`${p.name.text}=${p.initializer.text}`] : []))
 }
 
-/** The static text of narrative() in analyze.ts: the summary sentence every Analysis carries. */
-function narrativeCopy(): string {
+/** The literal parts of narrative() in analyze.ts: the summary sentence every Analysis carries. */
+function narrativeParts(): string[] {
   const fn = ANALYZE_SOURCE.statements.find((s): s is ts.FunctionDeclaration => ts.isFunctionDeclaration(s) && s.name?.text === 'narrative')
-  return fn ? staticText(fn) : ''
+  return fn ? staticParts(fn) : []
+}
+
+/** The static text of narrative() in analyze.ts. */
+function narrativeCopy(): string {
+  return narrativeParts().join(' ')
+}
+
+/** Each index in `parts` where the whole run `run` starts. */
+function runsOf(parts: readonly string[], run: readonly string[]): number[] {
+  const out: number[] = []
+  for (let i = 0; i + run.length <= parts.length; i++) if (run.every((part, k) => parts[i + k] === part)) out.push(i)
+  return out
+}
+
+/** The 0.9.0 static text of narrative(): its literal parts, with each NARRATIVE_0_9_0 entry put back in its 0.9.0 form. */
+function legacyNarrativeCopy(): string {
+  let parts = narrativeParts()
+  for (const { was, now } of NARRATIVE_0_9_0) {
+    const at = runsOf(parts, now)
+    if (at.length !== 1) throw new Error(`NARRATIVE_0_9_0: ${JSON.stringify(now)} is in narrative() ${at.length} times`)
+    parts = [...parts.slice(0, at[0]), ...was, ...parts.slice(at[0]! + now.length)]
+  }
+  return parts.join(' ')
 }
 
 /** The copy of quality.signals[] in quality.ts: per signal its id and the static text of its label, value and detail. */
@@ -381,18 +429,24 @@ function inOrder(sentences: string[], openings: readonly string[], ruleId: strin
   return ordered.join(' ')
 }
 
-/** The generation 3 fingerprint function of v0.9.0: per rule site its id, title, detail, the recommendation and its evidence notes. */
+/**
+ * The generation 3 fingerprint function of v0.9.0: per rule site its id, title, detail, the recommendation and its
+ * evidence notes, and the narrative with its 0.9.0 literals.
+ */
 function legacyCopyFingerprint(): string {
-  return fingerprintOf(sites.map((site) => JSON.stringify([site.ruleId, copyOf(site, 'title'), copyOf(site, 'detail'), legacyRecommendation(site), ...evidenceNotes(site)])))
+  return fingerprintOf(
+    sites.map((site) => JSON.stringify([site.ruleId, copyOf(site, 'title'), copyOf(site, 'detail'), legacyRecommendation(site), ...evidenceNotes(site)])),
+    legacyNarrativeCopy(),
+  )
 }
 
-function fingerprintOf(ruleCopy: string[]): string {
+function fingerprintOf(ruleCopy: string[], narrative: string = narrativeCopy()): string {
   const rules = [...ruleCopy].sort()
   return createHash('sha256')
     .update(
       JSON.stringify({
         rules,
-        narrative: narrativeCopy(),
+        narrative,
         quality: qualityCopy(),
         qualityLabels: propertyCopy(QUALITY_SOURCE, ['label']),
         parseWarnings: parseWarningCopy(),
@@ -476,10 +530,19 @@ describe('rule copy: each improvement starts with the change', () => {
   })
 })
 
-describe('rule copy: the split into parts moved sentences and changed no word', () => {
+describe('rule copy: since 0.9.0, sentences moved and no word changed', () => {
   it('the split keeps every 0.9.0 word', () => {
-    // the parts, joined in their 0.9.0 sentence order, give back the 0.9.0 copy fingerprint exactly
+    // the parts, joined in their 0.9.0 sentence order, and the narrative with its NARRATIVE_0_9_0 literals in
+    // their 0.9.0 form, give back the 0.9.0 copy fingerprint exactly
     expect(legacyCopyFingerprint()).toBe(COPY_FINGERPRINT_0_9_0)
+  })
+
+  it('names in NARRATIVE_0_9_0 only narrative literals that changed, each once', () => {
+    const parts = narrativeParts()
+    for (const { was, now } of NARRATIVE_0_9_0) {
+      expect(runsOf(parts, now), `${JSON.stringify(now)} is in narrative() once`).toHaveLength(1)
+      expect(runsOf(parts, was), `${JSON.stringify(was)} is no longer in narrative()`).toEqual([])
+    }
   })
 
   it('names in ORDER_0_9_0 only texts that do not join in their 0.9.0 order', () => {
@@ -504,7 +567,7 @@ describe('rule copy: a copy change moves the payload generation', () => {
   })
 
   it('reads the narrative and every rule site into the fingerprint', () => {
-    expect(narrativeCopy()).toContain('Look at these first: ')
+    expect(narrativeCopy()).toContain('Look at these first.')
     expect(new Set(sites.map((site) => site.ruleId)).size).toBeGreaterThanOrEqual(44)
   })
 

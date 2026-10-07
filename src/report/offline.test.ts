@@ -125,7 +125,9 @@ describe('offline report', () => {
     // 81,457, the measured 81,444 below plus the same 13 B of headroom.
     // 2026-10-07 Why disclosure: the cap goes UP 81,457 -> 82,056, the measured 82,043 below plus the same
     // 13 B of headroom. A named, measured growth: the pin below gives the bytes of each part and the reason.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_056)
+    // 2026-10-07 narrative paragraphs: the cap goes UP 82,056 -> 82,100, the measured 82,087 below plus the same
+    // 13 B of headroom. A named, measured growth: the narrative shows its 2 paragraphs, each 6 sentences or fewer.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_100)
     // 2026-10-06 proposals seam: -3,301 B (83,123 -> 79,822), and this bundle gets the exact pin the
     // session bundle has always had, so a change that moves it has to name the bytes. The stored
     // proposal block and the Saved proposals inbox (proposals-ui.ts) reach the Suggest screen only
@@ -161,7 +163,11 @@ describe('offline report', () => {
     // findings rows ship only in this bundle); the pure Overview and Improvements builders are +72 B; the
     // improvement with its recommendation fallback is +38 B net of the old row copy; keying the Overview
     // Why by the sg_ id is -50 B, because the commandForInsight wrapper and its 2 call sites left.
-    expect(CLIENT_JS_AGG.length).toBe(82043)
+    // 2026-10-07 narrative paragraphs: +44 B (82,043 -> 82,087), re-measured after `npm run build`. The narrative
+    // shows its 2 paragraphs, each 6 sentences or fewer: the analyzer puts the top finding titles in a second
+    // paragraph after one blank line, and the Overview hero (screens/overview.ts, shared with the session
+    // bundle) splits the narrative there and shows each paragraph in its own .sg-sub block.
+    expect(CLIENT_JS_AGG.length).toBe(82087)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -199,7 +205,9 @@ describe('offline report', () => {
     // 72,200, the measured 72,174 below plus the same 26 B of headroom.
     // 2026-10-07 Why disclosure: the cap goes UP 72,200 -> 72,753, the measured 72,727 below plus the same
     // 26 B of headroom. A named, measured growth: the pin below gives the bytes of each part and the reason.
-    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_753)
+    // 2026-10-07 narrative paragraphs: the cap goes UP 72,753 -> 72,797, the measured 72,771 below plus the same
+    // 26 B of headroom. A named, measured growth: the narrative shows its 2 paragraphs, each 6 sentences or fewer.
+    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_797)
     // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
     // 2026-08-27 final client pass 2 (fix/final-client2): −56 B net, cap unchanged. Eight UX fixes cost +1,233 B
     // (the Timeline row's own-facts fallback, folded hidden-error rows on Tools/Repo/Global, the Quality verdict
@@ -277,6 +285,10 @@ describe('offline report', () => {
     // +343 B; the example title and the caption are +150 B; the pure Overview and Improvements builders are
     // +72 B; the improvement with its recommendation fallback is +38 B net of the old row copy; keying the
     // Overview Why by the sg_ id is -50 B, because the commandForInsight wrapper and its 2 call sites left.
-    expect(CLIENT_JS.length).toBe(72727)
+    // 2026-10-07 narrative paragraphs: +44 B (72,727 -> 72,771), re-measured after `npm run build`. The narrative
+    // shows its 2 paragraphs, each 6 sentences or fewer: the analyzer puts the top finding titles in a second
+    // paragraph after one blank line, and the Overview hero splits the narrative there and shows each paragraph
+    // in its own .sg-sub block (the split, the map and the join are the whole cost).
+    expect(CLIENT_JS.length).toBe(72771)
   })
 })

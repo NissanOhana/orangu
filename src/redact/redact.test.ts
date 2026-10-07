@@ -246,6 +246,17 @@ describe('redactAnalysis', () => {
     expect(redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative).toBe('In this session, the human made 3 requests over 2m.')
   })
 
+  it('keeps the blank line and the second paragraph of the narrative when it strips the title', () => {
+    // The narrative puts the top finding titles in a second paragraph after one blank line. The strip rewrites
+    // only the opening clause, so the paragraph break and every finding title stay.
+    const a = full()
+    const facts = 'you made 2 requests over 2m. The agent was busy for 1m of that. It made 4 tool calls, and processed 2.0k tokens. Orangu found no commits, PRs or test runs.'
+    const first = 'Look at these first. 1 tool error (25.0% of 4 calls). 1 hook error.'
+    a.summary.narrative = `In “${MARKER}”, ${facts}\n\n${first}`
+    expect(redactAnalysis(a, { stripText: true, home: '' }).analysis.summary.narrative).toBe(`In this session, ${facts}\n\n${first}`)
+    expect(redactAnalysis(a, { stripText: false, home: '' }).analysis.summary.narrative).toBe(`In “${MARKER}”, ${facts}\n\n${first}`)
+  })
+
   it('strips the whole title even when the title itself looks like the clause after it', () => {
     // The title is the first prompt, so it can hold "”, you made " or a whole fake clause. The strip must end
     // at the analyzer's own clause, never at a look-alike inside the title, or the rest of the title leaks.
