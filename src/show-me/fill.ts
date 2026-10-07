@@ -1,6 +1,7 @@
 /**
  * The show-me fill: one built template and one page of values in, one HTML file out. It applies the slot rules
- * of plugin/skills/show-me/references/slots.md as code, so no model writes markup.
+ * as code, so no model writes markup. plugin/skills/show-me/references/slots.md holds only the rules of the 3 values
+ * that Claude writes in words.json.
  *
  * Every value reaches the HTML in one of 3 forms, and nothing else in src/show-me writes a value into the HTML:
  * - text: through escapeHtml only, so a value can make a text node and never markup (the node form of textContent)
@@ -15,7 +16,7 @@ import { ms, num, pct, tok, ts } from '../report/client/format.js'
 /** Text, a raw number that the element's data-f formats, or null to delete the element (a missing source). */
 export type SlotValue = string | { v: number } | null
 
-/** The number formats of the templates: the report's own formatters (slots.md, Number formats). */
+/** The number formats of the templates (each element's data-f): the report's own formatters. */
 export const FORMATS: Readonly<Record<string, (v: number) => string>> = {
   tok,
   ms,

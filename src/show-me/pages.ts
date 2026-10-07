@@ -1,5 +1,5 @@
 /**
- * The rules of plugin/skills/show-me/references/slots.md, as code: one page of values for a session, a repository
+ * The slot rules of the show-me templates, as code: one page of values for a session, a repository
  * or the machine. Claude writes only the 3 Words. Every other value comes from orangu data, and the fill writes
  * each one as escaped text, a checked enum or a finite number (src/show-me/fill.ts).
  *
@@ -15,11 +15,11 @@ import type { Words } from './words.js'
 
 /** The finding slides of a page: the template repeats the finding element up to this count (its data-max). */
 const FINDINGS_SHOWN = 3
-/** "each of the first 5 values of insight.turnIndexes" (slots.md): a list length, not a cut of a text */
+/** each of the first 5 values of insight.turnIndexes: a list length, not a cut of a text */
 const TURNS_NAMED = 5
 /** one turn marker for each turn index, up to the data-max of the strip */
 const TURN_MARKERS = 50
-/** "the first 8 characters of each of the first 5 finding.sessionIds" (slots.md): list length and id prefix */
+/** the first 8 characters of each of the first 5 finding.sessionIds: list length and id prefix */
 const EXAMPLE_SESSIONS = 5
 const ID_PREFIX = 8
 
