@@ -713,8 +713,7 @@ describe('plugin packaging', () => {
   })
 
   // Each skill checks its own text at the step that writes it: a proposal file after the write and before the
-  // record moves to proposed, and a chat draft in its own fixed file before it goes out. The Write tool overwrites a
-  // file only after a Read, so the step reads an earlier draft first. analyze, improve and harness pre-approve the
+  // record moves to proposed, and a chat draft before it goes out. analyze, improve and harness pre-approve the
   // draft write: the drafts directory is outside the repository and holds only the skill's own draft. apply
   // pre-approves no write at all, so its draft write asks like each of its edits.
   // Each check writes a new file with a random name: a fixed file would carry a draft (and the text it quotes) from
