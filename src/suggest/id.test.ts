@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { decodeFinding, encodeFinding, isSuggestionId, kickoffCommand, kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, sha1Hex, suggestionId, suggestionIdV2, suggestionKey } from './id.js'
 import type { Finding, SuggestionRecord } from './types.js'
+import type { Aggregate } from '../analyze/aggregate.js'
+import { findingForRow, planRowForInsight, planRows } from '../report/client/suggest-rows.js'
+import { GOLDEN_FIXTURES, goldenAnalysis, goldenCorpus } from '../../test/fixtures/corpus.js'
 
 describe('sha1Hex', () => {
   it('matches the standard test vectors', () => {
@@ -131,6 +134,34 @@ describe('kickoffCommand', () => {
     expect(decodeFinding(token!).finding).toMatchObject({ title: 'Exact title', insightId: 'i-1', evidence: { estimated: false, savingsMs: 456 } })
     expect(commands.claude).toBe(command)
     expect(commands.codex).toBe(`$orangu-improve sg_abc --finding ${token}`)
+  })
+})
+
+/**
+ * A stored suggestion record and the --finding token carry the finding title, and the suggestion id is
+ * hashed from the finding identity. So the rule copy of a golden finding must give the same id and the
+ * same token as the 0.9.0 engine did. These values were computed on v0.9.0 from the golden corpus. A rule
+ * text that moves between its parts changes neither.
+ */
+describe('stored identity of golden findings', () => {
+  it('keeps the 0.9.0 suggestion id and finding token of a golden session finding', async () => {
+    const canonical = await goldenAnalysis(GOLDEN_FIXTURES.find((fixture) => fixture.name === 'canonical')!)
+    const insight = canonical.insights.find((i) => i.ruleId === 'tool-errors')!
+    const finding = findingForRow(planRowForInsight(insight, canonical.session.id), 'session')
+    expect(suggestionIdV2(suggestionKey(finding, 'report'))).toBe('sg_dc478e051aae')
+    expect(encodeFinding(finding, 'report')).toBe(
+      'eyJmaW5kaW5nIjp7ImV2aWRlbmNlIjp7ImVzdGltYXRlZCI6dHJ1ZSwic2F2aW5nc1Rva2VucyI6Nywic2Vzc2lvbnMiOjF9LCJpbnNpZ2h0SWQiOiJ0b29sLWVycm9ycy0xIiwicnVsZUlkIjoidG9vbC1lcnJvcnMiLCJzY29wZSI6InNlc3Npb24iLCJzZXNzaW9uSWRzIjpbImFhYWFhYWFhLTAwMDAtNDAwMC04MDAwLTAwMDAwMDAwMDAwMSJdLCJ0aXRsZSI6IjEgdG9vbCBlcnJvciAoMTYuNyUgb2YgNiBjYWxscykifSwic291cmNlIjoicmVwb3J0IiwidiI6Mn0',
+    )
+  })
+
+  it('keeps the 0.9.0 suggestion id and finding token of a golden repo finding', async () => {
+    const { aggregateJson } = await goldenCorpus()
+    const row = planRows('repo', undefined, JSON.parse(aggregateJson) as Aggregate).find((r) => r.ruleId === 'fanout-opportunity')!
+    const finding = findingForRow(row, 'repo')
+    expect(suggestionIdV2(suggestionKey(finding, 'report'))).toBe('sg_dec2bbe6eaca')
+    expect(encodeFinding(finding, 'report')).toBe(
+      'eyJmaW5kaW5nIjp7ImNvaG9ydEZpbmdlcnByaW50IjoiYzQwN2JkYzgzNDkwZWRmOCIsImV2aWRlbmNlIjp7ImVzdGltYXRlZCI6dHJ1ZSwic2F2aW5nc01zIjozMDAwLCJzZXNzaW9ucyI6MX0sInJ1bGVJZCI6ImZhbm91dC1vcHBvcnR1bml0eSIsInNjb3BlIjoicmVwbyIsInNlc3Npb25JZHMiOlsiYmJiYmJiYmItMDAwMC00MDAwLTgwMDAtMDAwMDAwMDAwMDAyIl0sInRpdGxlIjoiSW4gb25lIHNlc3Npb246IDUgc3ViYWdlbnRzIHJhbiBvbmUgYWZ0ZXIgYW5vdGhlciBpbiAxIHJ1biB3aXRoIG5vIHZpc2libGUgZGVwZW5kZW5jeSwgc28gYSBwYXJhbGxlbCBmYW4tb3V0IHdvdWxkIGN1dCB0aGUgd2FpdCJ9LCJzb3VyY2UiOiJyZXBvcnQiLCJ2IjoyfQ',
+    )
   })
 })
 
