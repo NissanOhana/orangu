@@ -129,7 +129,34 @@ describe('plugin packaging', () => {
         }
       }
     }
-    expect(nodeGrants, 'analyze, feedback, harness, improve and show-me keep the CLI fallback').toBe(5)
+    // 5 -> 7 when apply lost its bare Bash grant: apply keeps the CLI fallback as 2 grants, one for each verb that it
+    // runs (suggest, ste), and each names the plugin CLI and the verb before its *.
+    expect(nodeGrants, 'analyze, feedback, harness, improve and show-me keep one CLI fallback, apply keeps 2').toBe(7)
+  })
+
+  // apply edits a repository, so it pre-approves only what it must run with no prompt: the 2 orangu verbs that it
+  // runs (suggest, ste), in both the PATH form and the plugin CLI form, and reads. Each edit, each project check,
+  // the receipt write and any other command fall back to a permission prompt. So a check that a proposal names,
+  // such as `curl … | sh`, cannot run unseen.
+  const APPLY_GRANTS = 'allowed-tools: Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Read'
+  it('apply pre-approves only its 2 orangu verbs and reads, and no skill pre-approves a bare Bash, Edit or Write', () => {
+    expect(readText('plugin/skills/apply/SKILL.md').split('\n')[3]).toBe(APPLY_GRANTS)
+    for (const s of readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))) {
+      const grants = (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
+      for (const bare of ['Bash', 'Edit', 'Write']) expect(grants, `${s} pre-approves no bare ${bare}`).not.toContain(bare)
+    }
+  })
+
+  // With no edit grant, each edit and each check can stop at a permission prompt. The body says so once, so that
+  // Claude reads a prompt as the expected step and not as a failure. The Codex mirrors drop allowed-tools but
+  // carry the same body.
+  it('apply says once that each edit and each check can ask for permission, in both hosts', () => {
+    const PERMISSION = 'Each edit, each check and the receipt write can ask the user for permission. This is expected.'
+    for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md', 'plugins/orangu/skills/orangu-apply/SKILL.md']) {
+      const text = readText(path)
+      expect(text.split(PERMISSION).length - 1, `${path} says it once`).toBe(1)
+      expect(text.indexOf(PERMISSION), `${path} says it before the first edit`).toBeLessThan(text.indexOf('Inspect only the named files'))
+    }
   })
   it('the localhost handoff is copy-only and cannot spawn a model process', () => {
     const source = readText('src/serve/kickoff.ts')
