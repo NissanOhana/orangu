@@ -152,6 +152,29 @@ describe('summary renderers fit the layout', () => {
     expect(bare.slice(0, 2)).toEqual(['  finding  Short title', '  next     claude "/orangu:improve sg_0f0f0f0f0f0f"'])
   })
 
+  it('wraps a title and an improvement at whole words only, so a separator glyph inside them is never dropped', async () => {
+    // the probe: in ASCII the separator is " | ", and a title that holds it used to lose it at the line break
+    const title = "Agent type 'build | lint' is the most used · subagent type in this session"
+    const improvement = "Split the 'build | lint' agent · into one agent per step, and run each one alone."
+    const a = await analyzed(heavyBuilder())
+    const { savings: _savings, ...first } = a.insights[0]!
+    const one: Analysis = { ...a, insights: [{ ...first, title }] }
+    for (const caps of [capsAt(40, { unicode: false, color: 0 }), capsAt(40, { color: 0 })]) {
+      const label = caps.unicode ? 'unicode' : 'ascii'
+      const lines = nextStepLines(caps, { finding: title, improvement, next: STEP.next })
+      const imp = lines.findIndex((l) => l.startsWith(GUTTER + 'Improvement: '))
+      const next = lines.findIndex((l) => l.startsWith('  next     '))
+      expect(lines.slice(0, imp).map((l) => l.slice(11)).join(' '), label).toBe(title)
+      expect(lines.slice(imp, next).map((l) => l.slice(11)).join(' '), label).toBe('Improvement: ' + improvement)
+      // the analyze findings list
+      const block = analysisBlock(caps, one, 'T')
+      const head = block.findIndex((l) => /^ {4}(●|\*) /.test(l))
+      const titleLines = [block[head]!.slice(6)]
+      for (let i = head + 1; block[i]; i++) titleLines.push(block[i]!.slice(6))
+      expect(titleLines.join(' '), label).toBe(title)
+    }
+  })
+
   it('strips escapes from a transcript title before the finding row prints it', () => {
     const lines = nextStepLines(capsAt(40, { color: 0 }), { ...STEP, finding: HOSTILE })
     for (const l of lines) expect(l).not.toMatch(ESCAPE_BYTES)
@@ -204,18 +227,21 @@ describe('summary renderers fit the layout', () => {
     expect(valueBudget(capsAt(300))).toBe(69)
     // a value wider than the budget wraps under itself; a word wider than the line breaks at the width
     expect(rows(capsAt(40), 'finding', 'a'.repeat(50)).map(stripAnsi)).toEqual(['  finding  ' + 'a'.repeat(29), GUTTER + 'a'.repeat(21)])
-    // a separator-joined value breaks at its separators first, so a figure stays with its unit
-    expect(rows(capsAt(40, { color: 0 }), 'quality', '1 PR · 12 commits · 30 test runs (3 failed) · 25 files changed')).toEqual([
+    // a value that orangu joined with its separator breaks at the separators first, so a figure stays with its unit
+    const quality = '1 PR · 12 commits · 30 test runs (3 failed) · 25 files changed'
+    expect(rows(capsAt(40, { color: 0 }), 'quality', quality, { joined: true })).toEqual([
       '  quality  1 PR · 12 commits',
       GUTTER + '30 test runs (3 failed)',
       GUTTER + '25 files changed',
     ])
     // a part still wider than the budget then wraps at whole words, and the next part starts its own line
-    expect(rows(capsAt(40, { color: 0 }), 'note', 'one two three four five six seven eight · nine')).toEqual([
+    expect(rows(capsAt(40, { color: 0 }), 'note', 'one two three four five six seven eight · nine', { joined: true })).toEqual([
       '  note     one two three four five six',
       GUTTER + 'seven eight',
       GUTTER + 'nine',
     ])
+    // any other value is prose: it wraps at whole words alone and keeps every separator glyph
+    expect(rows(capsAt(40, { color: 0 }), 'quality', quality).map((l) => l.slice(11)).join(' ')).toBe(quality)
     // row() is the same lines joined, for a caller that writes one string to a stream
     expect(row(capsAt(40, { color: 0 }), 'finding', 'a'.repeat(50))).toBe('  finding  ' + 'a'.repeat(29) + '\n' + GUTTER + 'a'.repeat(21))
   })
@@ -395,6 +421,30 @@ describe('aggregateBlock', () => {
     }
     expect(narrow.slice(1).map((l) => l.trim()).join(' ')).toBe(text)
     expect(aggregateOffer(capsAt(80, { color: 0 }), true)).toEqual(['', '  add --json for the full machine-readable aggregate'])
+  })
+
+  it('wraps the example title and the improvement at whole words only, so a separator glyph inside them is never dropped', async () => {
+    const a = await sample()
+    const f = a.crossFindings[0]!
+    const title = "Agent type 'build | lint' is the most used · subagent type in this session"
+    const improvement = "Split the 'build | lint' agent · into one agent per step, and run each one alone."
+    const one = { ...a, crossFindings: [{ ...f, exampleTitle: title, improvement }] }
+    for (const caps of [capsAt(40, { unicode: false, color: 0 }), capsAt(40, { color: 0 })]) {
+      const label = caps.unicode ? 'unicode' : 'ascii'
+      const block = findingsBlock(aggregateBlock(caps, one))
+      const head = block.findIndex((l) => /^ {4} *(~\S+|–) {2}\S/.test(l))
+      const text = block.slice(head).map((l) => l.slice(14))
+      const imp = text.findIndex((l) => l.startsWith('Improvement: '))
+      expect(text.slice(0, imp).join(' ').replace(/ {2}\(/, ' ('), label).toBe(`${title} (${sessions(f.sessions)})`)
+      expect(text.slice(imp).join(' '), label).toBe('Improvement: ' + improvement)
+    }
+  })
+
+  it('falls back to the marked title when the example title is empty, as the report does', async () => {
+    const a = await sample()
+    const f = a.crossFindings[0]!
+    const block = findingsBlock(aggregateBlock(capsAt(80, { color: 0 }), { ...a, crossFindings: [{ ...f, exampleTitle: '' }] }))
+    expect(block.slice(1).map((l) => l.slice(14)).join(' ')).toContain(f.title)
   })
 
   it('falls back to the marked title when an older aggregate has no example title, and skips an absent improvement', async () => {

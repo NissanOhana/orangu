@@ -44,11 +44,13 @@ export function valueBudget(caps: Pick<Caps, 'columns'>): number {
 }
 
 /**
- * Wrap a value at its separators first (` · `, or ` | ` in ASCII), so that a figure stays with its unit,
- * then at whole words inside a part that is still too wide. The line break takes the place of the
- * separator. wrapWords strips escapes and control bytes, so the result is safe to print.
+ * Wrap a value that orangu joined with its separator (` · `, or ` | ` in ASCII) at the separators first, so
+ * that a figure stays with its unit, then at whole words inside a part that is still too wide. The line
+ * break takes the place of the separator, so this is only for orangu's own joined values: prose (a title,
+ * an improvement, a sentence) can hold the separator glyph as text, and wraps with wrapWords alone. Both
+ * strip escapes and control bytes first, so the result is safe to print.
  */
-function wrapText(caps: Pick<Caps, 'unicode'>, text: string, width: number): string[] {
+function wrapJoined(caps: Pick<Caps, 'unicode'>, text: string, width: number): string[] {
   const plain = wrapWords(text, Infinity)[0] ?? ''
   return wrapValue(plain, width, glyphs(caps).sep).flatMap((l) => (displayWidth(l) > width ? wrapWords(l, width) : [l]))
 }
@@ -58,12 +60,15 @@ export interface RowOptions {
   style?: Style | Style[]
   /** the value is a path or a command a paste must carry whole: one line, never cut or wrapped (the documented exceptions) */
   raw?: boolean
+  /** the value is orangu's own separator-joined list (time, tokens, tools): break at the separators first */
+  joined?: boolean
 }
 
 /** `  label     value` as lines: the value wraps under itself at whole words, or stays one line when `raw`. */
 export function rows(caps: Caps, label: string, value: string, o: RowOptions = {}): string[] {
   const head = INDENT + padCell(label, LABEL_WIDTH) + ' '
-  const parts = o.raw ? [value] : wrapText(caps, value, valueBudget(caps))
+  const budget = valueBudget(caps)
+  const parts = o.raw ? [value] : o.joined ? wrapJoined(caps, value, budget) : wrapWords(value, budget)
   if (!parts.length) parts.push('')
   return parts.map((p, i) => (i ? ' '.repeat(GUTTER) : head) + (o.style ? paint(caps, o.style, p) : p))
 }
@@ -73,15 +78,19 @@ export function row(caps: Caps, label: string, value: string, o: RowOptions = {}
   return rows(caps, label, value, o).join('\n')
 }
 
-/** Continuation lines under a labelled row (same value column, no label), wrapped at whole words. */
+/** Continuation lines of prose under a labelled row (same value column, no label), wrapped at whole words. */
 export function continuation(caps: Caps, value: string, style?: Style | Style[]): string[] {
-  return wrapText(caps, value, valueBudget(caps)).map((p) => ' '.repeat(GUTTER) + (style ? paint(caps, style, p) : p))
+  return wrapWords(value, valueBudget(caps)).map((p) => ' '.repeat(GUTTER) + (style ? paint(caps, style, p) : p))
 }
 
-/** A free-form line (hint, sentence) wrapped at whole words to the layout width; each line keeps its indent. */
-function fit(caps: Caps, line: string, style?: Style | Style[]): string[] {
+/**
+ * A free-form line (a sentence, or a hint that orangu joined with its separator when `joined`) wrapped to the
+ * layout width; each line keeps its indent.
+ */
+function fit(caps: Caps, line: string, style?: Style | Style[], joined = false): string[] {
   const indent = /^ */.exec(line)![0]
-  return wrapText(caps, line, layoutWidth(caps) - indent.length).map((p) => (style ? paint(caps, style, indent + p) : indent + p))
+  const width = layoutWidth(caps) - indent.length
+  return (joined ? wrapJoined(caps, line, width) : wrapWords(line, width)).map((p) => (style ? paint(caps, style, indent + p) : indent + p))
 }
 
 export function fmtBytes(bytes: number): string {
@@ -95,7 +104,7 @@ export function doneLine(caps: Caps, o: { sizeBytes: number; elapsedMs: number; 
   if (o.redactions) s += `${g.sep}${plural(o.redactions, 'redaction')}`
   const pad = ' '.repeat(INDENT.length + displayWidth(g.ok) + 1)
   const lead = INDENT + paint(caps, 'good', g.ok) + ' '
-  return wrapText(caps, s, layoutWidth(caps) - pad.length).map((p, i) => (i ? pad : lead) + p).join('\n')
+  return wrapJoined(caps, s, layoutWidth(caps) - pad.length).map((p, i) => (i ? pad : lead) + p).join('\n')
 }
 
 /** What the analysis says to do next; produced by src/cli/next-step.ts, rendered here. */
@@ -185,7 +194,7 @@ function findingRows(caps: Caps, ins: Analysis['insights'][number]): string[] {
   const save = ins.savings?.tokens ? `save ~${fmtTokens(ins.savings.tokens)} tokens` : ins.savings?.ms ? `save ~${fmtMs(ins.savings.ms)}` : ''
   const lead = '    '
   const budget = w - lead.length - 2 - (save ? displayWidth(save) + 2 : 0)
-  const [first = '', ...rest] = wrapText(caps, ins.title, budget)
+  const [first = '', ...rest] = wrapWords(ins.title, budget)
   const mark = paint(caps, ins.severity === 'high' ? 'bad' : ins.severity === 'medium' ? 'warn' : 'dim', g.mark)
   const gap = save ? ' '.repeat(Math.max(2, w - lead.length - 2 - displayWidth(first) - displayWidth(save))) : ''
   return [lead + mark + ' ' + first + gap + paint(caps, 'accent', save), ...rest.map((p) => lead + '  ' + p)]
@@ -196,13 +205,13 @@ export function analysisBlock(caps: Caps, a: Analysis, title: string): string[] 
   const s = a.summary
   const sep = glyphs(caps).sep
   const lines = header(caps, title, `${a.session.source}${sep}${a.session.id}`)
-  lines.push(...rows(caps, 'quality', qualityLine(a, sep)))
-  lines.push(...rows(caps, 'time', `${fmtMs(s.wallMs)} wall${sep}${fmtMs(s.activeMs)} active${sep}${fmtMs(s.humanWaitMs)} waiting`))
-  lines.push(...rows(caps, 'tokens', `${fmtTokens(s.totalTokens)}${sep}${(s.cacheHitRatio * 100).toFixed(0)}% cache${sep}${fmtTokens(a.tokens.byKind.output)} output`))
+  lines.push(...rows(caps, 'quality', qualityLine(a, sep), { joined: true }))
+  lines.push(...rows(caps, 'time', `${fmtMs(s.wallMs)} wall${sep}${fmtMs(s.activeMs)} active${sep}${fmtMs(s.humanWaitMs)} waiting`, { joined: true }))
+  lines.push(...rows(caps, 'tokens', `${fmtTokens(s.totalTokens)}${sep}${(s.cacheHitRatio * 100).toFixed(0)}% cache${sep}${fmtTokens(a.tokens.byKind.output)} output`, { joined: true }))
   lines.push(...rows(caps, 'turns', `${s.turns} (${s.humanTurns} human)`))
-  lines.push(...rows(caps, 'tools', `${s.toolCalls} calls${sep}${s.toolErrors} errors`))
-  if (s.agents) lines.push(...rows(caps, 'agents', `${s.agents} runs${sep}${a.agents.maxConcurrency} max parallel${sep}${fmtTokens(a.tokens.agents)} tokens`))
-  lines.push(...rows(caps, 'context', `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? ' of ' + fmtTokens(a.context.contextWindow) : ''}${sep}${plural(s.compactions, 'compaction')}`))
+  lines.push(...rows(caps, 'tools', `${s.toolCalls} calls${sep}${s.toolErrors} errors`, { joined: true }))
+  if (s.agents) lines.push(...rows(caps, 'agents', `${s.agents} runs${sep}${a.agents.maxConcurrency} max parallel${sep}${fmtTokens(a.tokens.agents)} tokens`, { joined: true }))
+  lines.push(...rows(caps, 'context', `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? ' of ' + fmtTokens(a.context.contextWindow) : ''}${sep}${plural(s.compactions, 'compaction')}`, { joined: true }))
   lines.push('', paint(caps, 'bold', INDENT + 'findings'))
   const bad = a.parse.badLines
   if (!a.insights.length) lines.push(bad ? paint(caps, 'warn', `    no findings, but orangu skipped ${plural(bad, 'unparseable line')}`) : paint(caps, 'good', '    clean: no findings'))
@@ -221,7 +230,7 @@ export function briefBlock(caps: Caps, a: Analysis, title: string, step: NextSte
   const lines = header(caps, title, `latest${sep}${a.session.id.slice(0, 8)}${sep}${s.turns} turns${sep}${fmtTokens(s.totalTokens)} tokens${sep}${fmtMs(s.activeMs)} active`)
   lines.push(...fit(caps, INDENT + outcomeHeadline(s)), '')
   lines.push(...nextStepLines(caps, step))
-  if (o.hint) lines.push('', ...fit(caps, `${INDENT}orangu report for the full picture${sep}orangu --help for every command`, 'dim'))
+  if (o.hint) lines.push('', ...fit(caps, `${INDENT}orangu report for the full picture${sep}orangu --help for every command`, 'dim', true))
   return lines
 }
 
@@ -242,8 +251,8 @@ export function listRows(caps: Caps, refs: SessionRef[], o: { total: number; glo
     const sep = glyphs(caps).sep
     lines.push('')
     // the default cap is 40: say so, like pick does, so a JSON-less reader knows the list is cut
-    if (refs.length < o.total) lines.push(...fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep}--limit <n> for more`, 'dim'))
-    lines.push(...fit(caps, `${INDENT}orangu report <id>${sep}orangu analyze <id>${sep}orangu harness`, 'dim'))
+    if (refs.length < o.total) lines.push(...fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep}--limit <n> for more`, 'dim', true))
+    lines.push(...fit(caps, `${INDENT}orangu report <id>${sep}orangu analyze <id>${sep}orangu harness`, 'dim', true))
   }
   return lines
 }
@@ -294,11 +303,11 @@ export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
     for (const f of a.crossFindings.slice(0, 8)) {
       const figure = paint(caps, 'accent', (f.boundedSavingsTokens ? '~' + fmtTokens(f.boundedSavingsTokens) : '–').padStart(8))
       const count = `(${plural(f.sessions, 'session')})`
-      const title = wrapText(caps, f.exampleTitle ?? f.title, budget)
+      const title = wrapWords(f.exampleTitle || f.title, budget)
       const last = title.at(-1)
       // the count joins the last title line when it fits there, else it takes a line of its own
       const body = last !== undefined && displayWidth(last) + 2 + count.length <= budget ? [...title.slice(0, -1), last + '  ' + paint(caps, 'dim', count)] : [...title, paint(caps, 'dim', count)]
-      const improvement = f.improvement ? wrapText(caps, `Improvement: ${f.improvement}`, budget) : []
+      const improvement = f.improvement ? wrapWords(`Improvement: ${f.improvement}`, budget) : []
       ;[...body, ...improvement].forEach((p, i) => lines.push((i ? pad : `    ${figure}  `) + p))
     }
   }
