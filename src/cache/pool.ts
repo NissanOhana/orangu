@@ -58,6 +58,14 @@ export function defaultJobs(): number {
   return Math.max(1, cpus().length - 1)
 }
 
+/**
+ * The most workers that one scan starts: one for each CPU. A pre-approved `orangu global --jobs 5000` can come from a
+ * steered model, so a --jobs value above this does no harm. The default (CPUs - 1) is below it.
+ */
+function maxJobs(): number {
+  return Math.max(1, cpus().length)
+}
+
 export interface PoolRunResult {
   analyses: Analysis[]
   failed: number
@@ -79,7 +87,7 @@ export async function analyzeAllPooled(
   let hits = 0
   let next = 0
   let done = 0
-  const n = Math.max(1, Math.min(o.jobs, refs.length))
+  const n = Math.max(1, Math.min(o.jobs, refs.length, maxJobs()))
   await new Promise<void>((resolveAll, rejectAll) => {
     let alive = 0
     const finishIfDone = (): boolean => {
