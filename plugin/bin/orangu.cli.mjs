@@ -1,6 +1,6 @@
 // src/cli/main.ts
-import { createHash as createHash4 } from "node:crypto";
-import { basename as basename13, join as join10, resolve as resolve12 } from "node:path";
+import { createHash as createHash5 } from "node:crypto";
+import { basename as basename14, join as join12, resolve as resolve13 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -72,7 +72,8 @@ var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   "manifest",
   "application",
   "verification",
-  "cohort"
+  "cohort",
+  "render"
 ]);
 function unknownFlags(flags) {
   return Object.keys(flags).filter((k) => !KNOWN_FLAGS.has(k)).map((k) => (k.length === 1 ? "-" : "--") + k);
@@ -627,9 +628,9 @@ function readStableText(file, remainingBytes) {
     return { value: buffer.subarray(0, offset).toString("utf8"), bytesRead: offset };
   });
 }
-function jsonObject(text2) {
+function jsonObject(text3) {
   try {
-    const value = JSON.parse(text2);
+    const value = JSON.parse(text3);
     return value !== null && typeof value === "object" && !Array.isArray(value) ? value : void 0;
   } catch {
     return void 0;
@@ -937,8 +938,8 @@ function oneLine(s) {
   const flat = s.replace(/\s+/g, " ").trim();
   return flat.length > TITLE_MAX ? flat.slice(0, TITLE_MAX - 1) + "\u2026" : flat;
 }
-function promptTitle(text2) {
-  const t = text2.trim();
+function promptTitle(text3) {
+  const t = text3.trim();
   if (!t) return void 0;
   if (/^<command-(?:message|name)>/.test(t)) {
     const name = COMMAND_NAME_RE.exec(t)?.[1]?.trim();
@@ -968,12 +969,12 @@ async function peekHead(path) {
       if (read.bytesRead === 0) break;
       offset += read.bytesRead;
     }
-    const head = buffer.subarray(0, offset).toString("utf8");
+    const head2 = buffer.subarray(0, offset).toString("utf8");
     let custom;
     let ai;
     let prompt;
     let bareCommand;
-    for (const line of head.split("\n")) {
+    for (const line of head2.split("\n")) {
       if (!line.startsWith("{")) continue;
       let r;
       try {
@@ -990,9 +991,9 @@ async function peekHead(path) {
         const content = message && typeof message === "object" ? message.content : void 0;
         const hasToolResult = Array.isArray(content) && content.some((b) => b && typeof b === "object" && b.type === "tool_result");
         if (!hasToolResult) {
-          const text2 = textOfContent(content);
-          const candidate = promptTitle(text2);
-          if (candidate !== void 0 && /^<command-(?:message|name)>/.test(text2.trim()) && !COMMAND_ARGS_RE.exec(text2)?.[1]?.trim()) {
+          const text3 = textOfContent(content);
+          const candidate = promptTitle(text3);
+          if (candidate !== void 0 && /^<command-(?:message|name)>/.test(text3.trim()) && !COMMAND_ARGS_RE.exec(text3)?.[1]?.trim()) {
             if (bareCommand === void 0) bareCommand = candidate;
           } else prompt = candidate;
         }
@@ -1273,8 +1274,8 @@ function median(values) {
 }
 var WEEK_MS = 7 * 864e5;
 var DAY_MS = 864e5;
-function isoWeekStartUtc(ts2) {
-  const dayStart = Math.floor(ts2 / DAY_MS) * DAY_MS;
+function isoWeekStartUtc(ts3) {
+  const dayStart = Math.floor(ts3 / DAY_MS) * DAY_MS;
   const dow = new Date(dayStart).getUTCDay();
   const sinceMonday = (dow + 6) % 7;
   return dayStart - sinceMonday * DAY_MS;
@@ -1301,8 +1302,9 @@ var EXAMPLE_SESSIONS = 5;
 function titlePatternOf(title) {
   return title.replace(/\d[\d.,kM%×]*/g, "N");
 }
+var IN_ONE_SESSION = "In one session: ";
 function markedTitle(title) {
-  return title ? `In one session: ${title}` : "";
+  return title ? `${IN_ONE_SESSION}${title}` : "";
 }
 function exampleText(ins) {
   return {
@@ -1444,13 +1446,13 @@ function aggregate(analyses, scope, now) {
     crossFindings: [...findings.values()].map((f) => {
       const per = perSessionSavings.get(f.ruleId) ?? { tokens: [], ms: [] };
       const { ruleId, titlePattern, ...counts } = f;
-      const { title, exampleTitle, ...parts } = exampleText(example.get(ruleId).insight);
+      const { title, exampleTitle, ...parts2 } = exampleText(example.get(ruleId).insight);
       return {
         ruleId,
         title,
         exampleTitle,
         titlePattern,
-        ...parts,
+        ...parts2,
         ...counts,
         totalSavingsTokens: round(f.totalSavingsTokens, 0),
         totalSavingsMs: round(f.totalSavingsMs, 0),
@@ -1466,8 +1468,8 @@ function aggregate(analyses, scope, now) {
 
 // src/report/generated/client-bundle.ts
 var CLIENT_JS = '"use strict";(()=>{var Xt=["live","overview","timeline","tools","agents","context","coverage","repo","global","harness","suggest"];function G(e){return e.slice(0,8)}function Z(e){return e.mode==="file"&&!e.capabilities.watch?[]:e.sessions.filter(t=>t.badge==="live")}function H(e){if(!(e.mode!=="file"||e.session))return e.aggregates.repo?"repo":e.aggregates.global?"global":void 0}function Ge(e){return e.mode==="serve"?Z(e).length>1?"live":"overview":H(e)??"overview"}function Ke(e,t){let n=t.audience==="plain"?"plain":"dev",s=Z(e),o=[];s.length>1&&o.push({id:"live-all",label:`All live \\xB7 ${s.length}`,screen:"live",dot:"pulse"});for(let v of s)o.push({id:"live-"+v.id,label:s.length>1?`${G(v.id)} \\xB7 ${v.projectSlug}`:`Watch \\xB7 ${G(v.id)}`,screen:"live",s:v.id,dot:"pulse"});let a=[];H(e)===void 0&&(a.push({id:"overview",label:"Overview",screen:"overview"},{id:"timeline",label:"Timeline",screen:"timeline"},{id:"tools",label:"Tools & calls",screen:"tools"}),n==="dev"&&((e.session?.agents.runs.length??0)>0&&a.push({id:"agents",label:"Agents",screen:"agents"}),a.push({id:"context",label:"Context & tokens",screen:"context"}),a.push({id:"coverage",label:"Coverage",screen:"coverage"})));let i=e.aggregates.repo?.sessionCount,l=e.mode==="file"?e.aggregates.global?.sessionCount:void 0,d=e.mode==="file"?"needs orangu serve":void 0,u=[{id:"repo",label:i!==void 0?`Repo \\xB7 ${i} sessions`:"Repo",screen:"repo",hint:i===void 0?d:void 0},{id:"global",label:l!==void 0?`Global \\xB7 ${l} sessions`:"Global \\xB7 all time",screen:"global",hint:l===void 0?d:void 0},{id:"harness",label:"Harness",screen:"harness",hint:d}];return[{id:"live",label:"Live",items:o},{id:"session",label:"Observe this session",items:a},{id:"across",label:"Recurring patterns",items:u},{id:"improve",label:"Improve the next session",items:[{id:"suggest",label:"Improvements",screen:"suggest"}]}]}function Ve(e){let t={screen:"overview"},n=e.replace(/^#/,""),[s,o]=n.split("?");if(s&&Xt.includes(s)&&(t.screen=s),o)for(let a of o.split("&")){let i=a.indexOf("=");if(i<0)continue;let l=a.slice(0,i),d=decodeURIComponent(a.slice(i+1));l==="s"?t.s=d:l==="scope"&&(d==="session"||d==="repo"||d==="global")?t.scope=d:l==="tool"?t.tool=d:l==="cat"?t.cat=d:l==="agent"?t.agent=d:l==="turn"?t.turn=Number(d):l==="err"?t.errorsOnly=d==="1":l==="filter"&&(d==="all"||d==="errors"||d==="agents"||d==="human")?t.filter=d:l==="theme"?t.theme=d:l==="audience"&&(d==="dev"||d==="plain")&&(t.audience=d)}return t}function ee(e,t){return Ce({...e,scope:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0,filter:void 0,...t})}function Ce(e){let t=[];return e.s&&t.push("s="+encodeURIComponent(e.s)),e.scope&&t.push("scope="+e.scope),e.tool&&t.push("tool="+encodeURIComponent(e.tool)),e.cat&&t.push("cat="+encodeURIComponent(e.cat)),e.agent&&t.push("agent="+encodeURIComponent(e.agent)),e.turn!==void 0&&t.push("turn="+e.turn),e.errorsOnly&&t.push("err=1"),e.filter&&t.push("filter="+e.filter),e.audience&&t.push("audience="+e.audience),e.theme&&t.push("theme="+e.theme),"#"+e.screen+(t.length?"?"+t.join("&"):"")}function $(e){return e>=1e9?(e/1e9).toFixed(e>=1e10?0:1)+"B":e>=1e6?(e/1e6).toFixed(e>=1e7?0:2)+"M":e>=1e3?(e/1e3).toFixed(e>=1e5?0:1)+"k":String(Math.round(e))}function R(e){if(e===void 0||!isFinite(e))return"\\u2013";if(e<1e3)return Math.round(e)+"ms";let t=e/1e3;if(t<60)return t.toFixed(t<10?1:0)+"s";let n=Math.floor(t/60);if(n<60)return n+"m "+Math.round(t%60)+"s";let s=Math.floor(n/60);return s<24?s+"h "+n%60+"m":Math.floor(s/24)+"d "+s%24+"h"}function L(e,t=0){return(e*100).toFixed(t)+"%"}function S(e,t,n=t+"s"){return`${N(e)} ${e===1?t:n}`}function N(e){return e.toLocaleString("en-US")}function ze(e){return e===void 0?"\\u2013":new Date(e).toISOString().slice(0,16).replace("T"," ")}function Ye(e){return e===void 0?"--:--:--":new Date(e).toISOString().slice(11,19)}function ge(e){return e>=1<<20?(e/(1<<20)).toFixed(1)+" MB":e>=1024?Math.round(e/1024)+" KB":e+" B"}function r(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\'/g,"&#39;")}var se={read:"Read",search:"Search",edit:"Edit",write:"Write",exec:"Shell",agent:"Agents",skill:"Skills",web:"Web",plan:"Plan",ask:"Ask",mcp:"MCP",task:"Tasks",notebook:"Notebook",other:"Other"},Qt=["read","search","edit","write","exec","agent","skill","web","other"];function j(e){return`var(--cat-${Qt.includes(e)?e:"other"}, var(--cat-other))`}var Zt={clean:"The last check it ran passed",interrupted:"You stopped it",failing:"The last test run failed"};function Xe(e,t){let n=Zt[e]??"The agent completed its last task";return e==="clean"&&t&&Ee(t)?`${n}. ${t.testRunsFailed} of ${S(t.testRuns,"test run")} failed earlier.`:n}function Ee(e){return e.testRunsFailed&&e.testRunsFailed<e.testRuns?"last run":""}function Me(e,t){let n=[],s=new Map;for(let o of e){if(o.signature){n.push(o);continue}let{tool:a,total:i,sessions:l=0}=t(o),d=s.get(a)??{tool:a,total:0,signatures:0,sessions:0};d.total+=i,d.signatures++,d.sessions=Math.max(d.sessions,l),s.set(a,d)}return{kept:n,hidden:[...s.values()].sort((o,a)=>a.total-o.total)}}function Qe(e){if(e.ending==="interrupted")return`Stopped by you after ${S(e.turns,"turn")}`;let t=Le(e);if(t.length)return t.join(" \\xB7 ");let n=S(e.humanTurns,"request");return e.toolCalls>0?`${n}, ${e.agents?S(e.agents,"subagent")+", ":""}nothing committed`:`${n}, no tool calls recorded`}function Le(e){let t=e.outcomes,n=[];t.prLinks.length&&n.push(S(t.prLinks.length,"PR")),t.gitCommits&&n.push(S(t.gitCommits,"commit"));let s=t.filesEdited+t.filesWritten;return s&&n.push(S(s,"file")+" changed"),t.buildRunsFailed&&n.push(`${t.buildRunsFailed} of ${S(t.buildRuns,"build run")} failed`),t.testRuns&&n.push(t.testRunsFailed?`${t.testRunsFailed} of ${S(t.testRuns,"test run")} failed`:`${S(t.testRuns,"test run")} green`),n}function Ze(e){return{value:R(e.activeMs),note:e.wallMs!==void 0?`over ${R(e.wallMs)} wall \\xB7 ${R(e.humanWaitMs)} waiting for you`:"single-message session"}}function et(e){let t=e.evidence,n=t.calls?.[0],s=n?.tool??n?.name??t.tools?.[0]?.name;if(typeof s=="string"&&s)return{tool:s};if(e.turnIndexes.length)return{turn:e.turnIndexes[0]}}function fe(e,t){return e.map(n=>{let s=t.findIndex(o=>o.ts!==void 0&&n.ts!==void 0&&o.ts>=n.ts);return{x:s<0?Math.max(0,t.length-1):s,label:"compaction at turn "+n.turnIndex}})}function Fe(e){if(!e)return"";let t=e.estimated?"~":"";return e.tokens?`save ${t}${$(e.tokens)} tokens`:e.ms?`save ${t}${R(e.ms)}`:""}function he(e,t,n){if(!e||!e.tokens&&!e.ms)return;let s=`Rule ${n} ${e.estimated?"estimated":"measured"} a saving of \\u2248`;if(e.tokens&&t&&e.tokens<=t){let o=e.tokens/t;return{text:o<.005?"under 1% of this session":`~${L(o)} of this session`,title:`${s}${$(e.tokens)} of the ${$(t)} tokens in this session.`}}return{text:Fe(e),title:`${s}${e.tokens?$(e.tokens)+" tokens":R(e.ms)}.`}}function tt(e,t){return!t||!e.tokens&&!e.ms?"":`${e.tokens?`\\u2248${$(e.tokens)} tokens`:`\\u2248${R(e.ms)}`} recoverable across ${S(t,"finding")}`}function nt(e){let t=e.summary,n=e.context,s=[];return n.contextWindow&&t.contextPeak&&s.push(`Context grew to ${L(t.contextPeak/n.contextWindow)} of the window`),t.totalTokens&&s.push(`${L(t.cacheHitRatio)} of tokens were cache reads`),t.totalTokens&&e.tokens.agents&&s.push(`${L(e.tokens.agents/t.totalTokens)} of tokens went to subagents`),s.length?s.join(". ")+".":"The transcript records no token usage for this session."}function st(e){let t=e.find(s=>s.id==="tests");return t?.tone==="good"?"passing":t?.tone==="bad"?"failing":e.some(s=>(s.id==="commits"||s.id==="prs")&&Number(s.value)>0)?"shipped":"\\u2013"}function oe(e,t,n){return e.filter(s=>s.turnIndex===t&&(!n||s.agentId===n))}function ot(e,t,n){let s=oe(e,t,n);if(!s.length)return[];let o=new Map;for(let a of s)o.set(a.category,(o.get(a.category)??0)+1);return[...o.entries()].map(([a,i])=>({cat:a,pct:i/s.length*100}))}function rt(e,t){let n=[...t].sort((a,i)=>a.turnIndex-i.turnIndex).filter(a=>a.turnIndex>(e[0]?.index??0)&&a.turnIndex<=(e[e.length-1]?.index??0)),s=[],o=e;for(let a of n){let i=o.filter(l=>l.index<a.turnIndex);o=o.filter(l=>l.index>=a.turnIndex),s.push({turns:i,after:a})}return s.push({turns:o,after:void 0}),s}function it(e,t){let n=[];for(let s of e.tools.calls)n.push({ts:s.startTs,name:s.name,category:s.category,summary:s.summary,durationMs:s.durationMs,isError:s.isError,agentType:s.agentId?"agent":void 0,key:s.toolUseId});for(let s of e.events)n.push({ts:s.ts,name:s.kind,category:"other",summary:s.label,key:"ev-"+s.turnIndex+"-"+s.kind});for(let s of e.agents.runs)n.push({ts:s.startTs,name:s.agentType||s.name||s.agentId,category:"agent",summary:s.taskKind??s.description??"subagent run",durationMs:s.durationMs,key:s.agentId});return n.sort((s,o)=>(s.ts??1/0)-(o.ts??1/0)||(s.key<o.key?-1:s.key>o.key?1:0)),n.slice(-t)}function Je(e){let t=Math.max(0,Math.round(e/1e3));if(t<60)return t+"s";let n=Math.floor(t/60);return n<60?n+"m":Math.floor(n/60)+"h"}function ve(e){return e.badge!=="ended"&&e.possiblyLive?"Watching \\xB7 possibly live":e.badge==="ended"?"ended \\xB7 updated "+Je(e.ageMs)+" ago":"updated "+Je(e.ageMs)+" ago"}function at(e){if(!e.length)return 1/0;let t=e.map(s=>s.totalTokens).sort((s,o)=>o-s),n=Math.max(1,Math.floor(t.length*.2));return t[n-1]}function lt(e,t){let n=new Set(t.map(a=>a.id)),s=e.filter(a=>!n.has(a)),o=t.filter(a=>a.open).map(a=>a.id);return[...new Set([...s,...o])]}var dt="orangu-brand-icon";var en=/^data:image\\/png;base64,[A-Za-z0-9+/]+={0,2}$/;function q(e=30){let t=`width="${e}" height="${e}" style="display:block"`,n=typeof document>"u"?void 0:document.getElementById(dt)?.getAttribute("href");return!n||!en.test(n)?`<span class="logo" ${t} role="img" aria-label="orangu"></span>`:`<img class="logo" src="${n}" ${t} alt="orangu" draggable="false">`}function I(e){let t=document.createElement("template");return t.innerHTML=e.trim(),t.content.firstElementChild}function be(e){e.querySelectorAll("details").forEach(t=>{let n=t.querySelector("summary");n&&(n.setAttribute("role","button"),n.setAttribute("aria-expanded",String(t.open)),t.addEventListener("toggle",()=>n.setAttribute("aria-expanded",String(t.open))))})}function ye(e){e.querySelectorAll("[data-copy]").forEach(t=>{t.addEventListener("click",()=>{let n=t.getAttribute("data-copy")??"",s=()=>{let o=t.textContent;t.textContent="copied",setTimeout(()=>t.textContent=o,1200)};if(navigator.clipboard?.writeText)navigator.clipboard.writeText(n).then(s,s);else{let o=document.createElement("textarea");o.value=n,document.body.appendChild(o),o.select();try{document.execCommand("copy")}catch{}o.remove(),s()}})})}var ct={high:3,medium:2,low:1,info:0};function ut(e,t){return(ct[t.severity]??0)-(ct[e.severity]??0)||t.totalSavingsTokens-e.totalSavingsTokens||t.sessions-e.sessions||e.ruleId.localeCompare(t.ruleId)}var ds=7*864e5;function pt(e){return new TextEncoder().encode(e)}function mt(e){let t=pt(e),n=t.length,s=(n+8>>6)+1,o=new Uint32Array(s*16);for(let g=0;g<n;g++)o[g>>2]|=t[g]<<24-(g&3)*8;o[n>>2]|=128<<24-(n&3)*8;let a=n*8;o[s*16-1]=a>>>0,o[s*16-2]=Math.floor(a/4294967296)>>>0;let i=1732584193,l=4023233417,d=2562383102,u=271733878,v=3285377520,x=new Uint32Array(80),T=(g,f)=>g<<f|g>>>32-f;for(let g=0;g<o.length;g+=16){for(let c=0;c<16;c++)x[c]=o[g+c];for(let c=16;c<80;c++)x[c]=T(x[c-3]^x[c-8]^x[c-14]^x[c-16],1);let f=i,w=l,b=d,m=u,p=v;for(let c=0;c<80;c++){let E,A;c<20?(E=w&b|~w&m,A=1518500249):c<40?(E=w^b^m,A=1859775393):c<60?(E=w&b|w&m|b&m,A=2400959708):(E=w^b^m,A=3395469782);let W=T(f,5)+E+p+A+x[c]>>>0;p=m,m=b,b=T(w,30)>>>0,w=f,f=W}i=i+f>>>0,l=l+w>>>0,d=d+b>>>0,u=u+m>>>0,v=v+p>>>0}let h=g=>g.toString(16).padStart(8,"0");return h(i)+h(l)+h(d)+h(u)+h(v)}function te(e){return[...new Set(e.map(t=>t.trim().replace(/\\\\/g,"/")).filter(Boolean))].sort()}function gt(e){return mt(JSON.stringify(te(e))).slice(0,16)}function ft(e,t="finding"){let n=e.cohortFingerprint;if(e.scope==="session"){if(n!==void 0)throw new Error(`${t} session scope must omit cohortFingerprint`);return}if(typeof n!="string"||!/^[0-9a-f]{16}$/.test(n))throw new Error(`${t} repo/global scope requires a 16-hex cohortFingerprint`)}function re(e,t){return ft(e),{v:2,source:t,scope:e.scope,ruleId:e.ruleId,sessionIds:te(e.sessionIds),...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}}}function ie(e){let t=JSON.stringify({v:2,source:e.source,scope:e.scope,ruleId:e.ruleId,sessionIds:te(e.sessionIds),insightId:e.insightId??null,...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}});return"sg_"+mt(t).slice(0,12)}function tn(e){return btoa(Array.from(e,t=>String.fromCharCode(t)).join("")).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"")}function nn(e){return JSON.stringify(e,(t,n)=>n&&typeof n=="object"&&!Array.isArray(n)?Object.fromEntries(Object.entries(n).sort(([s],[o])=>s<o?-1:s>o?1:0)):n)}var us=256*1024;function sn(e,t="report"){ft(e);let n={...e,sessionIds:te(e.sessionIds)};return tn(pt(nn({v:2,source:t,finding:n})))}function on(e,t){if(t==="serve")return e.id;if(e.title&&e.evidence){let s={ruleId:e.ruleId,title:e.title,scope:e.scope,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:e.evidence};return`${e.id} --finding ${sn(s,e.source??"report")}`}let n=[...e.sessionIds].sort().join(",");return`${e.id} --rule ${e.ruleId} --scope ${e.scope} --session ${n}`}function ae(e,t){let n=on(e,t);return{claude:`claude "/orangu:improve ${n}"`,codex:`$orangu-improve ${n}`}}var ht="/plugin marketplace add NissanOhana/orangu \\xB7 /plugin install orangu",Pe="Each title shows the figures of one example session.";function rn(e){let t=e.trim().replace(/[-_]+/g," ")||"finding";return t[0].toUpperCase()+t.slice(1)}var an="orangu hides these details because they quote commands and output. To see them, run the report again with --include-text.";function vt(e,t,n){return{title:t.trim()||rn(e),detail:n.trim()||an}}function bt(e){let t=e.boundedSavingsTokens??e.totalSavingsTokens,n=e.boundedSavingsMs??e.totalSavingsMs;return{...t?{tokens:t}:{},...n?{ms:n}:{},estimated:!0}}function yt(e,t){let n=vt(e.ruleId,e.title,e.detail);return{ruleId:e.ruleId,...n,improvement:e.improvement||e.recommendation,why:e.why,method:e.method,savings:e.savings,sessionIds:t?[t]:[],insightId:e.id,severity:e.severity}}function ce(e,t,n){if(e==="session")return(t?.insights??[]).map(o=>yt(o,t?.session.id));let s=n?gt(n.sessions.map(o=>o.id)):void 0;return[...n?.crossFindings??[]].sort(ut).map(o=>{let a=vt(o.ruleId,o.title,`This pattern shows in ${o.sessions} of ${S(n.sessionCount,"session")}.`);return{ruleId:o.ruleId,...a,displayTitle:o.exampleTitle,improvement:o.improvement||o.recommendation,why:o.why,method:o.method,savings:bt(o),sessionIds:o.exampleSessionIds,sessions:o.sessions,severity:o.severity,...s?{cohortFingerprint:s}:{}}})}function je(e,t){let n=He(yt(e,t),"session"),s=re(n,"report"),o=ie(s);return{id:o,command:ae({id:o,...n,sessionIds:s.sessionIds,source:"report"},"file").claude}}function $t(e){let t=0,n=0;for(let s of e)t+=s.savings?.tokens??0,n+=s.savings?.ms??0;return{tokens:t,ms:n}}function He(e,t){return{ruleId:e.ruleId,title:e.title,scope:t,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:{estimated:e.savings?.estimated??!0,sessions:e.sessions??1,...e.savings?.tokens!==void 0?{savingsTokens:e.savings.tokens}:{},...e.savings?.ms!==void 0?{savingsMs:e.savings.ms}:{}}}}function xt(e){if(e?.status!=="failed")return"";let t=e.kickoff?.error?.trim();return t?`Claude could not write the proposal: ${t}`:"Claude could not write the proposal. Copy the command. Run it again to see the error."}function kt(e,t,n,s){let o,a=te(t.sessionIds).join(`\n`);for(let i of e){if(!Array.isArray(i.sessionIds)||!i.sessionIds.every(u=>typeof u=="string"))continue;let l=i.id===s||Array.isArray(i.legacyIds)&&i.legacyIds.includes(s),d=i.v===1&&i.ruleId===t.ruleId&&i.scope===n&&te(i.sessionIds).join(`\n`)===a&&(!t.insightId||!i.insightId||t.insightId===i.insightId);!l&&!d||(!o||i.statusAt>o.statusAt)&&(o=i)}return o}function X(e,t="$",n="command"){return`<div class="cmd"><span class="p" aria-hidden="true">${r(t)}</span><span class="txt">${r(e)}</span><button class="copy" data-copy="${r(e)}" aria-label="copy ${n}">copy</button></div>`}function le(e,t){return`Paste it in a terminal${e?` in ${e}`:t?" in this repository":""}. It starts Claude Code.`}function $e(){return`<div class="small sg-install">First time only, type these 2 lines in Claude Code:</div>${ht.split(" \\xB7 ").map((e,t)=>X(e,">",t?"the install command":"the marketplace command")).join("")}`}var wt={"context window":"working memory","cache reads":"reused context","cache read":"reused context","cache writes":"saved context","cache write":"saved context","cache hits":"reused context",compactions:"memory refreshes",compaction:"memory refresh"};var ln=Object.keys(wt).sort((e,t)=>t.length-e.length);function C(e,t){if(t!=="plain")return e;let n=e;for(let s of ln)n=n.split(s).join(wt[s]);return n}function xe(e,t){if(t!=="plain")return e;let n=C(e.toLowerCase(),t);return n[0].toUpperCase()+n.slice(1)}function O(e,t,n="",s={}){let o=s.estimated?\'<span class="est" title="estimated: derived from bytes, not reported by the API">~</span>\':"";return`<div class="kpi${s.big?" big":""}${s.skeleton?" skel":""}"${s.title?` title="${r(s.title)}"`:""}>\n<div class="label">${r(e)}</div>\n<div class="val${s.accent?" accent":""}">${s.skeleton?"\\xB7\\xB7\\xB7":r(t)+o}</div>\n${n?`<div class="hint${s.badHint?" bad":""}">${r(n)}</div>`:""}\n</div>`}function D(e){return`<div class="card"><div class="empty-hero">\n${q(e.mascotSize??48)}\n<div class="t">${r(e.title)}</div>\n${e.hint?`<div class="s">${r(e.hint)}</div>`:""}\n${e.command?X(e.command):""}\n</div></div>`}function K(){return I(`<section>${D({title:"No session selected."})}</section>`)}function ke(e){return`<span class="mascot" style="display:block;width:${e}px;flex:none" aria-hidden="true">${q(e)}</span>`}function St(e,t={}){let n=e.reduce((i,l)=>i+l.value,0)||1,s=t.height??14,o=0,a=e.filter(i=>i.value>0).map(i=>{let l=i.value/n*100,d=`<rect x="${o}%" y="0" width="${l}%" height="${s}" fill="${i.color}"><title>${r(i.label)}</title></rect>`;return o+=l,d}).join("");return`<svg width="100%" height="${s}" viewBox="0 0 100 ${s}" preserveAspectRatio="none" role="img"${t.title?` aria-label="${r(t.title)}"`:""}>${a}</svg>`}function Tt(e,t,n={}){let s=n.width??720,o=n.height??160,a={l:4,r:4,t:8,b:16},i=e[0]?.length??0;if(i===0)return\'<div class="chart-empty">no data points yet</div>\';let l=s-a.l-a.r,d=o-a.t-a.b,u=new Array(i).fill(0),v=0;for(let m of e)for(let p=0;p<i;p++)v=Math.max(v,u[p]+(m[p]??0));let x=new Array(i).fill(0);for(let m of e)for(let p=0;p<i;p++)x[p]+=m[p]??0;v=n.yMaxOverride??Math.max(...x,1);let T=m=>a.l+(i===1?l/2:m/(i-1)*l),h=m=>a.t+d-m/v*d,g=new Array(i).fill(0),f=[];e.forEach((m,p)=>{let c=m.map((A,W)=>g[W]+(A??0)),E=`M ${T(0).toFixed(1)} ${h(g[0]).toFixed(1)}`;for(let A=0;A<i;A++)E+=` L ${T(A).toFixed(1)} ${h(c[A]).toFixed(1)}`;for(let A=i-1;A>=0;A--)E+=` L ${T(A).toFixed(1)} ${h(g[A]).toFixed(1)}`;E+=" Z",f.push(`<path d="${E}" fill="${t[p]??"var(--cat-other)"}" opacity="0.85"><title>${r(n.labels?.[p]??"")}</title></path>`);for(let A=0;A<i;A++)g[A]=c[A]});let w=(n.markers??[]).map(m=>{let p=T(m.x);return`<line x1="${p.toFixed(1)}" y1="${a.t}" x2="${p.toFixed(1)}" y2="${a.t+d}" stroke="${m.color??"var(--bad)"}" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(m.label)}</title></line>`}).join(""),b=`<line x1="${a.l}" y1="${a.t+d}" x2="${a.l+l}" y2="${a.t+d}" stroke="var(--border2)" stroke-width="1"/>`;return`<svg width="100%" viewBox="0 0 ${s} ${o}" role="img" aria-label="stacked area">${f.join("")}${w}${b}</svg>`}function ue(e,t={}){let n=t.width??720,s=t.height??150,o={l:4,r:4,t:8,b:14},a=e.length;if(!a)return\'<div class="chart-empty">no data points yet</div>\';let i=n-o.l-o.r,l=s-o.t-o.b,d=t.yMax??Math.max(...e,1),u=b=>o.l+(a===1?i/2:b/(a-1)*i),v=b=>o.t+l-b/d*l,x="";e.forEach((b,m)=>{x+=(m===0?"M":"L")+" "+u(m).toFixed(1)+" "+v(b).toFixed(1)+" "});let T=t.color??"var(--accent-ink)",h=t.threshold?`<line x1="${o.l}" y1="${v(t.threshold.y).toFixed(1)}" x2="${o.l+i}" y2="${v(t.threshold.y).toFixed(1)}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 3"><title>${r(t.threshold.label)}</title></line>`:"",g=(t.markers??[]).map(b=>`<line x1="${u(b.x).toFixed(1)}" y1="${o.t}" x2="${u(b.x).toFixed(1)}" y2="${o.t+l}" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(b.label)}</title></line>`).join(""),f=t.fmtY,w=f?`<text x="${o.l+2}" y="${o.t+8}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(f(d))}</text><text x="${o.l+2}" y="${o.t+l-3}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(f(0))}</text>`:"";return`<svg width="100%" viewBox="0 0 ${n} ${s}" role="img" aria-label="line chart">${h}<path d="${x}" fill="none" stroke="${T}" stroke-width="2" stroke-linejoin="round"/>${g}<line x1="${o.l}" y1="${o.t+l}" x2="${o.l+i}" y2="${o.t+l}" stroke="var(--border2)"/><line x1="${o.l}" y1="${o.t}" x2="${o.l}" y2="${o.t+l}" stroke="var(--border2)"/>${w}</svg>`}function Rt(e,t,n,s,o,a){let i=s-n||1,l=(e-n)/i*100,d=Math.max(.6,(t-e)/i*100);return`<svg width="100%" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><rect x="${l.toFixed(2)}" y="3" width="${d.toFixed(2)}" height="8" rx="3" fill="${o}"><title>${r(a)}</title></rect></svg>`}function we(e,t){let n=Math.max(...e.map(s=>s.value),1);return e.map(s=>`<div class="proprow" style="display:grid;grid-template-columns:130px 1fr 72px;gap:10px;align-items:center;padding:3px 0">\n<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r(s.label)}${s.sub?` <span class="muted">${r(s.sub)}</span>`:""}</div>\n<span class="trough"><i style="width:${(s.value/n*100).toFixed(1)}%;background:${s.color}"></i></span>\n<div class="right mono small">${r(t(s.value))}</div>\n</div>`).join("")}var Se=50,It=12;function dn(e,t,n){return t?e.conn==="reconnecting"?"reconnecting":t.badge==="ended"?"ended":n&&n.summary.toolCalls===0?"empty":e.data.mode==="file"?e.data.capabilities.watch?"file":"snapshot":t.badge==="idle"?"stalled":"live":"connecting"}function Te(e,t){return`<span class="bdot ${e}"${e==="p"?\' data-pulse="1"\':""} aria-hidden="true"></span>${t?`<span class="vh">${t}</span>`:""}`}var ne={pulse:Te("p","live"),hollow:Te("h","quiet"),good:Te("g","ended"),static:Te("s")},At=[ne.pulse,"","This view refreshes as the transcript grows. Nothing leaves this machine."],cn={connecting:[ne.static,"Connecting to orangu serve\\u2026","The page waits for the first event."],live:At,empty:At,stalled:[ne.hollow,"","The transcript did not grow recently. The session may need your input."],ended:[ne.good,"Session ended \\xB7 final numbers",""],reconnecting:[ne.hollow,"Connection lost \\xB7 retrying","The page reconnects on its own."],file:[ne.static,"Watching with orangu watch","orangu watch rewrites this file on each change. Reload the page to see the latest numbers."],snapshot:[ne.static,"Static snapshot","This file does not update. To follow the session live, run orangu watch."]};function un(e,t,n){let s=n?`turn <b style="color:var(--ink1)">${n.summary.turns}</b>${e==="ended"||e==="snapshot"?"":" in progress"}`:"",[o,a,i]=cn[e],l=a,d=i;return e==="live"||e==="empty"?l=t?.possiblyLive?"Watching \\xB7 possibly live":"Watching a running session":e==="stalled"?l=`Watching \\xB7 quiet for ${Math.max(1,Math.round((t?.ageMs??0)/6e4))}m`:e==="ended"&&(d=t?ve(t):""),`<div class="livebanner">${ke(44)}<div class="grow"><div class="lt">${o}<span aria-live="polite">${r(l)}</span></div><div class="ls">${r(d)}</div></div><div class="lr">${s}</div></div>`}function Re(e,t,n){let s=e.startTs!==void 0&&isFinite(t)?Rt(e.startTs,e.endTs??n,t,n||t+1,j("agent"),`${e.agentType??e.name??e.agentId} \\xB7 ${R(e.durationMs)} \\xB7 ${$(e.totalTokens)} tokens`):\'<div class="small muted">no timing</div>\';return`<div class="swimrow"><div class="alabel">${"\\xB7 ".repeat(e.spawnDepth)}${r(e.agentType||e.name||e.agentId.slice(0,10))} <small>${r(e.model??"")}</small></div><div${e.status==="running"?"":\' class="dim"\'}>${s}</div></div>`}function pn(e){let t=e.agents.runs;if(!t.length)return"";let n=t.filter(l=>l.status==="running"),s=Math.min(...t.map(l=>l.startTs??1/0).filter(isFinite)),o=Math.max(...t.map(l=>l.endTs??-1/0).filter(isFinite)),a=[...n,...t.filter(l=>l.status!=="running")].slice(0,It),i=t.length>It?`<div class="pagefoot"><button data-all-lanes="1">show all ${t.length} agents</button></div>`:"";return`<div class="card pad mb18"><div class="card-title">Agents \\xB7 ${n.length} running \\xB7 ${t.length-n.length} done</div><div class="agent-lanes">${a.map(l=>Re(l,s,o)).join("")}</div>${i}</div>`}function mn(e,t,n){let s=dn(e,t,n),o=e.audience,a=n?.summary,i=!n,l=[O("Elapsed",a?.wallMs!==void 0?R(a.wallMs):"\\u2013","",{big:!0,skeleton:i}),O("Tokens so far",a?$(a.totalTokens):"\\u2013","",{big:!0,accent:!0,skeleton:i}),O("Tool calls",a?String(a.toolCalls):"\\u2013","",{big:!0,skeleton:i}),O(xe("Cache hits",o),a?L(a.cacheHitRatio):"\\u2013","",{big:!0,skeleton:i})].join(""),d=n?.context,u=d?.contextWindow?d.final/d.contextWindow:void 0,v=s==="ended"?"\\u2013":C(`${S(a?.compactions??0,"compaction")} so far${u!==void 0&&u>=.75?" \\xB7 compaction likely near 90%":""}`,o),x=`<div class="card pad mb18">\n<div class="ctxhead"><span>${xe("Context window",o)}</span><span class="mono">${u!==void 0?r(L(u))+" of "+r($(d.contextWindow)):d?r($(d.final)):"\\u2013"}</span></div>\n<div class="ctxbar"><i style="width:${u!==void 0?(u*100).toFixed(1):0}%"></i></div>\n<div class="smt8">${r(v)}</div>\n</div>`,T=n?it(n,Se+1):[],h=T.length>Se,g=T.slice(-Se).map(c=>`<div class="feedrow">${c.agentType?\'<span style="width:2px;align-self:stretch;background:var(--cat-agent);flex:none"></span>\':""}<span class="ft">${r(Ye(c.ts))}</span><span class="sw" style="background:${j(c.category)}"></span><span class="fn">${r(c.name)}</span><span class="fw">${r(c.summary)}</span><span class="fd">${c.durationMs!==void 0?r(R(c.durationMs)):""}${c.isError?" \\xB7 error":""}</span></div>`).join(""),f=s==="connecting"?\'<div class="feedrow muted">Waiting for the first event\\u2026</div>\':\'<div class="feedrow muted">No tool calls yet.</div>\',w=[];t&&w.push(`streaming from \\u2026/${G(t.id)}.jsonl`),s==="ended"&&w.push("transcript closed"),h&&n&&w.push(`showing last ${Se} of ${n.tools.calls.length+n.events.length+n.agents.runs.length} \\xB7 full list in Timeline`);let b=s==="ended"?`<a class="btn-sm" href="#overview${t?"?s="+r(t.id):""}" style="display:inline-block;margin-left:10px">Open Overview \\u2192</a>`:"",m=`<div class="feed" aria-live="off"><div class="card-head">Live feed</div>${g||f}<div class="feedfoot">${r(w.join(" \\xB7 "))}${b}</div></div>`,p=I(`<section>${un(s,t,n)}<div class="kpis k4">${l}</div>${x}${n?pn(n):""}${m}</section>`);return p.querySelector("[data-all-lanes]")?.addEventListener("click",c=>{if(!n)return;let E=p.querySelector(".agent-lanes");E.classList.add("swimbox");let A=Math.min(...n.agents.runs.map(Q=>Q.startTs??1/0).filter(isFinite)),W=Math.max(...n.agents.runs.map(Q=>Q.endTs??-1/0).filter(isFinite));E.innerHTML=n.agents.runs.map(Q=>Re(Q,A,W)).join(""),c.currentTarget.parentElement?.remove()}),p}function Ct(e){let t=Z(e.data),n=/[?&]s=/.test(location.hash),s=typeof window<"u"?window.__ORANGU_FLEET__:void 0;if(t.length>1&&!n&&s)return s(e,t);let o=e.data.sessions.find(a=>a.id===(e.state.s??e.data.selectedId))??e.data.sessions[0];return o?mn(e,o,e.a):I(`<section>${D({title:"orangu found no sessions.",command:"orangu serve"})}</section>`)}function Ie(e,t){return`<div class="banner ${e}">${t}</div>`}function V(e,t){let n=e.parse.reconciliation;if(!(e.parse.badLines>0||!n.ok))return"";if(t==="plain")return Ie("warn",`orangu could not read ${N(e.parse.badLines)} lines of the transcript. The numbers may be low.`);let o=n.matchesWithinPct.toFixed(2);return Ie("warn",`Parsed ${r(N(e.parse.totalLines-e.parse.badLines))} of ${r(N(e.parse.totalLines))} records \\xB7 token totals off by ${r(o)}% \\xB7 <a href="#coverage">see Coverage</a>`)}function _(e,t={}){let n=Object.entries(t.data??{}).map(([i,l])=>` data-${i}="${r(l)}"`).join(""),s="chip"+(t.active?" active":""),o=t.disabled?\' aria-disabled="true" tabindex="-1"\':"",a=t.removable?\'<button class="x" aria-label="remove filter">\\xD7</button>\':"";return`<button type="button" class="${s}"${o}${t.title?` title="${r(t.title)}"`:""}${n}>${r(e)}${a}</button>`}function Et(e){if(!e.length)return"";let t=e.map(n=>`<span class="sigchip">${r(n.label)} <b class="${r(n.tone)}"${n.detail?` title="${r(n.detail)}"`:""}>${r(String(n.value))}</b></span>`).join("");return`<details class="signals"><summary>${e.length} signals</summary><div class="chiprow">${t}</div></details>`}function Ne(e,t){return e?`<span class="rec sg-lead"><b>Improvement:</b> ${r(C(e,t))}</span>`:""}function _e(e,t,n,s){return t||n?`<details class="why" id="why-${r(e)}"><summary><span class="chev" aria-hidden="true">\\u25B8</span>Why</summary>${t?`<p>${r(C(t,s))}</p>`:""}${n?`<p class="muted">${r(C(n,s))}</p>`:""}</details>`:""}function Be(e,t,n={}){let s=he(e.savings,n.sessionTotalTokens,e.ruleId),o=t==="plain"?"":`<span class="pill">${r(e.ruleId)}</span>`,a=e.turnIndexes.length&&t!=="plain"&&!n.link?`<div style="margin-top:10px"><button class="btn-sm" data-turns="${r(e.turnIndexes.join(","))}">Show ${S(e.turnIndexes.length,"turn")} \\u2192</button></div>`:"",i=e.detail?`<p>${r(C(e.detail,t))}</p>`:"",l=n.command?`<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${X(n.command,"$","the Claude Code command")}<div class="small">${r(le(n.cwd))}${n.how?` <a href="${r(n.how)}" data-to="ai-steps">See the 3 steps \\u2192</a>`:""}</div></div>`:"",d=n.link?`<div style="margin-top:10px"><a class="btn-sm" href="${r(n.link.href)}">${r(n.link.label)}</a></div>`:"",u=e.improvement||e.recommendation;return`<details class="finding${n.open?" top":""}"${n.open?" open":""}>\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="sev ${r(e.severity)}" title="${r(e.severity)}"></span><b>${r(C(e.title,t))}</b>${s?`<span class="fsave" title="${r(s.title)}">${r(s.text)}</span>`:""}${o}${Ne(u,t)}</summary>\n<div class="fbody">\n${_e(n.id??e.id,e.why,e.method,t)}${i}\n${d}${a}\n${l}\n</div>\n</details>`}function pe(e,t,n){return ee(e.state,{s:e.state.s??t.session.id,...n})}function gn(e,t){return`<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${q(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${r(Qe(e.summary))}</div><div class="sg-sub">${r(C(e.summary.narrative,t))}</div></div></div>`}function fn(e){let t=e.summary,n=Le(t).join(" \\xB7 ")||"no commits, PRs or test runs detected",s=Ze(t),o=t.totalTokens?`${L(t.cacheHitRatio)} read from cache \\xB7 ${$(e.tokens.byKind.output)} generated`:"no usage recorded",a=Ee(t.outcomes);return`<div class="triptych">\n<div class="axis q"><div class="aname">Quality \\u2191</div><div class="aval">${r(st(e.quality.signals))}${a?` <span class="anote">(${a})</span>`:""}</div><div class="anote">${r(n)}</div>${Et(e.quality.signals)}</div>\n<div class="axis t"><div class="aname">Time \\u2193</div><div class="aval">${r(s.value)}</div><div class="anote">${r(s.note)}</div></div>\n<div class="axis c"><div class="aname">Tokens \\u2193</div><div class="aval">${r($(t.totalTokens))}</div><div class="anote">${r(o)}</div></div>\n</div>`}function Mt(e,t,n){if(!n)return`<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${q(22)}<span class="muted">The rules found nothing to change in this session.</span></div>`;let s=et(n),o=s?.tool?{href:pe(e,t,{screen:"timeline",tool:s.tool}),label:`See the ${s.tool} calls \\u2192`}:s?{href:pe(e,t,{screen:"timeline",turn:s.turn}),label:`See the ${S(n.turnIndexes.length,"turn")} \\u2192`}:void 0;return`<div class="eyebrow mb6">Top improvement</div>${Be(n,e.audience,{...je(n,t.session.id),sessionTotalTokens:t.summary.totalTokens,open:!0,how:pe(e,t,{screen:"suggest"}),cwd:t.session.cwd,...o?{link:o}:{}})}`}function hn(e){let t=e.context,n=t.series.filter(i=>!i.agentId),o=`${t.contextWindow?`peak ${L(e.summary.contextPeak/t.contextWindow)} of the window`:`peak ${$(e.summary.contextPeak)}`} \\xB7 ${S(e.summary.compactions,"compaction")}`;return`<div class="card pad"><div class="card-title">Context</div>${n.length?`<div class="spark">${ue(n.map(i=>i.contextSize),{width:320,height:60,markers:fe(t.compactions,n),yMax:t.contextWindow})}</div>`:""}<div class="small muted">${r(o)}</div></div>`}function Lt(e,t){let n=t.summary,s=ce("session",t,void 0).length;return`<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${[{screen:"timeline",label:n.toolErrors?`Timeline \\xB7 ${S(n.toolErrors,"error")} only`:`Timeline \\xB7 ${N(n.turns)} turns`,state:n.toolErrors?{errorsOnly:!0}:{}},{screen:"tools",label:`Tools \\xB7 ${S(n.toolCalls,"call")}, ${S(n.toolErrors,"error")}`,state:{}},{screen:"suggest",label:`Improvements \\xB7 ${s||"none"}`,state:{}}].map(a=>`<a data-screen="${a.screen}" href="${r(pe(e,t,{screen:a.screen,...a.state}))}">${r(C(a.label,e.audience))} \\u2192</a>`).join("")}</nav>`}function vn(e,t){let n=t.summary.topInsightIds.map(a=>t.insights.find(i=>i.id===a)).filter(a=>!!a),s=n.slice(1).map(a=>Be(a,"dev",{...je(a,t.session.id),sessionTotalTokens:t.summary.totalTokens,cwd:t.session.cwd})).join(""),o=tt($t(ce("session",t,void 0)),t.insights.length);return`${fn(t)}${Mt(e,t,n[0])}\n<div class="two-up mb16">${hn(t)}${Lt(e,t)}</div>\n${e.harnessCard?.()??""}\n${o?`<p class="recoverable"><a href="${r(pe(e,t,{screen:"suggest"}))}">${r(o)} \\u2192</a></p>`:""}${s?`<h3 style="margin:4px 0 10px">More findings</h3>${s}`:""}`}function bn(e,t){let n=t.summary,o=t.turns.find(l=>l.kind==="human")?.promptPreview.slice(0,140)||(t.session.title?t.session.title:"(this report does not include the prompt text)"),a=`${$(n.totalTokens)} tokens \\xB7 ${R(n.wallMs)}, of which ${R(n.humanWaitMs)} needed your attention`,i=t.insights.find(l=>l.id===n.topInsightIds[0])??t.insights[0];return`<div class="card mb16" style="overflow:hidden">\n<div class="card-head">${q(22)}What happened here</div>\n<div class="plaingrid">\n<div class="k">Goal</div><div>${r(o)}</div>\n<div class="k">How it ended</div><div>${r(Xe(n.ending,n.outcomes))}</div>\n<div class="k">Tokens &amp; time</div><div>${r(a)}</div>\n</div>\n</div>\n${Mt(e,t,i)}\n${Lt(e,t)}`}function yn(e){let t=e.a;if(!t)return`<section>${D({title:"No session selected.",hint:H(e.data)?"This report covers a scope, not a session.":"Pick a session from the sidebar."})}</section>`;let n=e.audience==="plain"?bn(e,t):vn(e,t);return`<section>${V(t,e.audience)}${gn(t,e.audience)}${n}</section>`}function Oe(e){return I(yn(e))}var Ft=10;function $n(e,t,n){let s=n.state;if(s.turn!==void 0&&t.index!==s.turn)return!1;let o=oe(e.tools.calls,t.index,s.agent);return!(s.filter==="errors"&&!o.some(a=>a.isError)||s.filter==="agents"&&t.agents.length===0&&!o.some(a=>a.agentId)||s.filter==="human"&&t.kind!=="human"||s.agent&&!t.agents.includes(s.agent)&&!o.length||(s.tool||s.cat||s.errorsOnly)&&(s.tool&&!o.some(a=>a.name===s.tool)||s.cat&&!o.some(a=>a.category===s.cat)||s.errorsOnly&&!o.some(a=>a.isError)))}function xn(e){let t=e.isCommand?"cmd":e.kind==="human"?"human":e.autoContinuations>0?"auto":e.kind;return`<span class="kind ${e.isCommand?"kcmd":e.kind==="human"?"khuman":""}">${r(t)}</span>`}function kn(e,t){let n=e.promptPreview||e.commandName;return n?{text:n,own:!1}:{text:[e.promptChars?`${$(e.promptChars)}-char prompt`:"",e.activity].filter(Boolean).join(" \\xB7 ")||(t?"(no prompt)":"(prompt text not included)"),own:!0}}function wn(e,t,n,s,o){let i=ot(e.tools.calls,t.index,n.state.agent).map(f=>`<i style="width:${f.pct.toFixed(1)}%;background:${j(f.cat)}"></i>`).join(""),{text:l,own:d}=kn(t,n.data.capabilities.includeText),u=d?\' style="color:var(--ink3)"\':"",v=oe(e.tools.calls,t.index,n.state.agent),x=v.map(f=>{let w=f.agentId?e.agents.runs.find(m=>m.agentId===f.agentId):void 0,b=f.agentId?w?.agentType||w?.name||f.agentId.slice(0,8):"main";return`<div class="evline"><span class="sw" style="background:${j(f.category)}"></span><span class="pill">${r(b)}</span><span class="en">${r(f.name)}</span><span class="ew">${r(f.summary)}</span><span class="tag ${f.isError?"bad":"good"}">${f.isError?"error":"ok"}</span><span class="ex">${[f.durationMs!==void 0?R(f.durationMs):"",f.resultBytes?ge(f.resultBytes):"",f.errorHint??""].filter(Boolean).map(r).join(" \\xB7 ")}</span></div>`}).join(""),T=t.agents.map(f=>{let w=e.agents.runs.find(m=>m.agentId===f);if(!w)return"";let b=w.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\';return`<button class="btn-sm" data-agent-jump="${r(f)}">\\u25B8 ${r(w.agentType||w.name||f.slice(0,8))} \\xB7 ${r($(w.totalTokens))} tokens${b}</button>`}).join(" "),h=[t.firstResponseMs!==void 0?`first response ${R(t.firstResponseMs)}`:"",t.humanGapMs?`waited ${R(t.humanGapMs)}`:"",t.autoContinuations?`${t.autoContinuations} auto-continuations`:"",t.models.length?t.models.join(", "):"","context end "+(t.contextEnd?$(t.contextEnd):"\\u2013")].filter(Boolean).join(" \\xB7 "),g=R(t.durationMs??t.reportedDurationMs);return`<details class="turn${t.interrupted?" interrupted":""}" id="turn-${t.index}"${o?" open":""}>\n<summary>\n<span class="tnum">#${t.index}</span>\n<span class="tprompt"${u}>${xn(t)}${r(l)}</span>\n<span class="mixbar" title="tool mix">${i}</span>\n<span class="tcell">${v.length}\\u2699</span>\n<span class="tcell">${r(g)}</span>\n<span class="tcell${t.totalTokens>=s&&t.totalTokens>0?" hot":""}">${r($(t.totalTokens))}</span>\n</summary>\n<div class="tbody">\n<div class="tmeta">${r(h)}</div>\n${x||\'<p class="small muted" style="margin:0">No tool calls in this turn.</p>\'}\n${T?`<div class="pill-row">${T}</div>`:""}\n</div>\n</details>`}function Pt(e,t,n,s){return rt(t,e.context.compactions).map(o=>{let a=o.turns.map(l=>wn(e,l,n,s,n.state.turn===l.index)).join(""),i=o.after?`<div class="divider"><span class="mono">\\u21C5 context compacted at turn ${o.after.turnIndex}${o.after.contextBefore&&o.after.contextAfter?` \\xB7 ${$(o.after.contextBefore)} \\u2192 ${$(o.after.contextAfter)}`:""}</span></div>`:"";return a+i}).join("")}function Ht(e){let t=e.a;if(!t)return K();let n=e.state,s=t.turns,o={all:s.length,errors:s.filter(m=>oe(t.tools.calls,m.index).some(p=>p.isError)).length,agents:s.filter(m=>m.agents.length>0||oe(t.tools.calls,m.index).some(p=>p.agentId)).length,human:s.filter(m=>m.kind==="human").length},a=n.filter??"all",i=[_(`All turns \\xB7 ${o.all}`,{active:a==="all",data:{filter:"all"}}),_(`Errors only \\xB7 ${o.errors}`,{active:a==="errors",data:{filter:"errors"}}),_(`With agents \\xB7 ${o.agents}`,{active:a==="agents",data:{filter:"agents"}}),_(`Human turns \\xB7 ${o.human}`,{active:a==="human",data:{filter:"human"}})].join(""),l=[];n.tool&&l.push(_("tool: "+n.tool,{active:!0,removable:!0,data:{clear:"tool"}})),n.cat&&l.push(_("category: "+n.cat,{active:!0,removable:!0,data:{clear:"cat"}})),n.agent&&l.push(_("agent: "+n.agent.slice(0,12),{active:!0,removable:!0,data:{clear:"agent"}})),n.turn!==void 0&&l.push(_("turn "+n.turn,{active:!0,removable:!0,data:{clear:"turn"}})),n.errorsOnly&&l.push(_("errors only",{active:!0,removable:!0,data:{clear:"err"}}));let d=s.filter(m=>$n(t,m,e)),u=at(s),v=d.length<=Ft||n.turn!==void 0||!!(n.tool||n.cat||n.agent||n.errorsOnly||n.filter&&n.filter!=="all"),x=v?d:d.slice(0,Ft),T=new Set(x.map(m=>m.index)),h=Pt(t,x,e,u),g=d.length?"":`<div class="card pad" style="background:var(--bg2);text-align:center"><p class="muted" style="margin:0 0 10px">No turns match \\xB7 ${r(a==="all"?"these filters":a)}</p><button class="btn-sm" data-clearall="1">Clear filters</button></div>`,f=v?"":`<div class="pagefoot">showing ${x.length} of ${d.length} turns \\xB7 <button data-showall="1">show all</button></div>`,w=C("Open a turn to see every parent and subagent call. The URL saves this view.",e.audience),b=I(`<section>\n${V(t,e.audience)}\n<div class="chiprow">${i}${l.join("")}<span class="small muted" style="margin-left:auto">${r(w)}</span></div>\n<div id="turnlist">${h}${g}${f}</div>\n</section>`);return b.querySelectorAll("[data-filter]").forEach(m=>m.addEventListener("click",()=>{let p=m.dataset.filter;e.go({filter:p==="all"?void 0:p,turn:void 0})})),b.querySelectorAll("[data-clear]").forEach(m=>m.addEventListener("click",()=>{let p=m.dataset.clear;p==="err"?e.go({errorsOnly:void 0}):p==="tool"?e.go({tool:void 0}):p==="cat"?e.go({cat:void 0}):p==="agent"?e.go({agent:void 0}):e.go({turn:void 0})})),b.querySelector("[data-clearall]")?.addEventListener("click",()=>e.go({filter:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0})),b.querySelector("[data-showall]")?.addEventListener("click",()=>{let m=b.querySelector("#turnlist");m.innerHTML=Pt(t,d,e,u),be(m),jt(m,e)}),jt(b,e),n.turn!==void 0&&T.has(n.turn)&&setTimeout(()=>b.querySelector("#turn-"+n.turn)?.scrollIntoView({block:"center"}),0),b}function jt(e,t){e.querySelectorAll("[data-agent-jump]").forEach(n=>n.addEventListener("click",()=>t.go({screen:"agents",agent:n.dataset.agentJump},{push:!0})))}function De(e,t,n=""){let s=t?"No error text was recorded.":\'Redaction hides the text. Run the command again with <span class="mono">--include-text</span>.\';return`<div class="rrow"${n?` style="${n}"`:""}><span class="grow"><b>${r(e.tool)}</b> \\xB7 ${S(e.total,"error")} across ${S(e.signatures,"recurring signature")}</span>${e.sessions?`<span class="mono small muted">${e.sessions}+ sessions</span>`:""}<span class="small muted">${s}</span></div>`}var Nt=12,Sn=[[/ENOENT/,"run the build first, or check the path"],[/old_string not found|String to replace not found/i,"the file changed after the last read. Read it again before you edit it."],[/EACCES|permission/i,"permission problem: check file modes"],[/timed? out/i,"raise the timeout or split the command"]];function Tn(e){for(let[t,n]of Sn)if(t.test(e))return n;return""}function _t(e){let t=e.a;if(!t)return K();let n=t.tools,s=t.summary.toolCalls,o=n.byCategory.map(p=>`<span style="width:${s?(p.count/s*100).toFixed(1):0}%;background:${j(p.category)}" title="${r(se[p.category]??p.category)} \\xB7 ${p.count}"></span>`).join(""),a=n.byCategory.map(p=>`<span><i class="sw" style="background:${j(p.category)}"></i>${r(se[p.category]??p.category)} \\xB7 ${p.count}</span>`).join(""),i=n.parallelism,l=i.groups?`${i.parallelGroups} of ${i.groups} batches ran in parallel \\xB7 max ${i.maxGroupSize} at once`:"",d=Math.max(...n.byName.map(p=>p.totalMs),1),u="One or more calls took far longer than the rest."+(e.audience==="plain"?"":" p95 is the typical worst case."),v=p=>p.avgMs>p.p95Ms?`<td class="num" title="${u}">${r(R(p.avgMs))}<span class="outlier">outlier</span></td>`:`<td class="num">${r(R(p.avgMs))}</td>`,x=p=>p.map(c=>`<tr class="tool-row" data-tool="${r(c.name)}" title="${r(`${ge(c.resultBytesTotal)} output \\xB7 ${c.mainCount} main / ${c.agentCount} agent`)}">\n<td><i class="swd" style="background:${j(c.category)}"></i><span class="mono125">${r(c.name)}</span></td>\n<td class="num">${N(c.count)}</td>\n<td class="num"${c.errors?\' style="color:var(--bad)"\':\' style="color:var(--ink3)"\'}>${c.errors}</td>\n${v(c)}\n<td class="num p95col">${r(R(c.p95Ms))}</td>\n<td><span class="trough"><i style="width:${(c.totalMs/d*100).toFixed(1)}%;background:${j(c.category)}"></i></span></td>\n</tr>`).join(""),T=`<tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg</th><th class="num p95col">${e.audience==="plain"?"":"p95"}</th><th>Share of tool time</th></tr>`,h=n.byName.length>Nt?`<div class="pagefoot"><button data-more-tools="1">show all ${n.byName.length} tools</button></div>`:"",{kept:g,hidden:f}=Me(n.errorGroups,p=>({tool:p.name,total:p.count})),w=n.errorGroups.length?f.map(p=>De(p,e.data.capabilities.includeText)).join("")+g.slice(0,8).map(p=>{let c=p.sampleHint||Tn(p.signature);return`<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${r(p.signature)}</span><span class="mono115" style="margin-left:auto">\\xD7${p.count}</span></div><div class="small muted" style="margin-top:2px">${r(p.name)}${c?" \\xB7 "+r(c):""}</div></div>`}).join(""):\'<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>\',b=I(`<section>\n${V(t,e.audience)}\n<div class="card pad mb16">\n<div class="card-title">${r(C(`Calls by category \\xB7 ${s} total`,e.audience))}</div>\n<div class="catbar">${o}</div>\n<div class="legend">${a}</div>\n${l?`<div class="smt8">${r(l)} \\xB7 ${r(L(i.parallelCallShare))} of calls in a parallel batch</div>`:""}\n</div>\n<div class="card scroll-x mb16">\n<table class="grid"><thead>${T}</thead><tbody id="toolbody">${x(n.byName.slice(0,Nt))}</tbody></table>\n${h}\n</div>\n<div class="card pad"><div class="card-title">Recurring errors in this session</div>${w}</div>\n</section>`),m=p=>{e.audience==="plain"&&p.querySelectorAll(".p95col").forEach(c=>c.remove()),p.querySelectorAll(".tool-row").forEach(c=>c.addEventListener("click",()=>e.go({screen:"timeline",tool:c.dataset.tool},{push:!0})))};return m(b),b.querySelector("[data-more-tools]")?.addEventListener("click",p=>{let c=b.querySelector("#toolbody");c.innerHTML=x(n.byName),m(c),p.currentTarget.parentElement?.remove()}),b}function Bt(e,t){let n=e==="repo"?"analyse this repository":e==="global"?"analyse everything on this machine":"compare your Claude Code config with what your sessions used",s=H(t)?"This report carries one scope, not a session.":"This single-file report carries one session.";return D({title:"Across-session views need orangu serve",hint:`${s} Start the local viewer to ${n}. Nothing leaves your machine.`,command:"orangu serve"})}var Ot=["Instruction files","Scripts and CLIs","Hooks","Skills to create","Skills to discover","Subagents and agents","MCP servers","Plugins","Workflow and configuration"];var Rn=e=>e?.verificationTrusted===!0;function In(e){return e==="kicked-off"?"running":e==="rejected"?"dismissed":e??"new"}function An(e,t="",n=!1){let s=e!=="verified"||n,o=s?e==="verified"?"verified comparison":e:"legacy unverified";return`<span class="status-chip" data-status="${s?e:"legacy"}" aria-live="polite"${t?` title="${r(t)}"`:""}>${o}${e==="verified"&&s?" \\u2713":""}</span>`}function Dt(e){return`<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${X(e.claude)}</div></div>`}function Cn(e,t){return`<div class="card pad mb16"><div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">\n<li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>\n<li><div><span>${r(e)}</span>${$e()}</div></li>\n<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository. ${t==="serve"?"The proposal shows below, in Saved proposals.":"The proposal is in ~/.orangu/proposals. Run orangu serve to see it here."}</span></div></li>\n</ol></div>`}function En(e,t,n,s,o){let a=e.audience,i=he(t.savings,e.state.scope===void 0||e.state.scope==="session"?e.a?.summary.totalTokens:void 0,t.ruleId),l=o?.proposal?.effort,d=In(o?.status),u=xt(o),v=t.sessionIds.map(x=>e.data.mode==="serve"?`<a class="exch" href="${r(ee(e.state,{screen:"overview",s:x}))}">${r(x.slice(0,8))}</a>`:`<span class="exch">${r(x.slice(0,8))}</span>`).join("");return`<details class="finding" data-sid="${r(s)}" data-rule="${r(t.ruleId)}">\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="rank">${n}</span>${t.severity?`<span class="sev ${r(t.severity)}" title="${r(t.severity)}"></span>`:""}<b class="sg-t">${r(C(t.displayTitle||t.title,a))}</b>${i?`<span class="fsave sg-save" title="${r(i.title)}">${r(i.text)}</span>`:""}${l?`<span class="pill">effort ${r(l)}</span>`:""}${Ne(t.improvement,a)}</summary>\n<div class="fbody sg-body">\n${_e(s,t.why,t.method,a)}<div class="sg-ev"><b>Evidence:</b> ${r(C(t.detail,a))} ${a==="plain"?"":`<span class="pill">${r(t.ruleId)}</span>`}</div>\n<div class="sg-ex"><span class="small muted">Example sessions:</span>${v}</div>\n${e.proposals?.details(o)??""}\n<div class="kickrow">\n<button type="button" class="btn-primary" data-kick-copy="${r(s)}">Copy the Claude Code command</button>\n${An(d,u,Rn(o))}\n</div>\n<div class="kick-cmd sg-cmd">${e.data.mode==="serve"&&o&&!o.proposal&&d!=="dismissed"?Dt(ae(o,"serve")):""}</div>\n<div class="kick-msg small" aria-live="polite">${r(u)}</div>\n</div>\n</details>`}function Mn(e){let t=e.a,n=e.state.scope??H(e.data)??"session",s=e.data.aggregates.repo?.sessionCount,o=e.data.aggregates.global?.sessionCount,a=[_("This session",{active:n==="session",disabled:!t,title:t?"":"no session is selected",data:{scope:"session"}}),_(s!==void 0?`Repo \\xB7 ${s}`:"Repo",{active:n==="repo",disabled:s===void 0,title:s===void 0?"run orangu serve":"",data:{scope:"repo"}}),_(o!==void 0?`Global \\xB7 ${o}`:"Global",{active:n==="global",disabled:o===void 0,title:o===void 0?"run orangu serve":"",data:{scope:"global"}})].join(""),i=n==="session"?void 0:e.data.aggregates[n],l=ce(n,t,i).map(c=>{let E=He(c,n);return{row:c,finding:E,sid:ie(re(E,"report"))}}),d=new Map(l.map(c=>[c.sid,c])),u=l.map(c=>({...c,record:kt(e.data.suggestions,c.row,n,c.sid)})),v=u.flatMap(({record:c})=>c?[c]:[]),x=i?.sessions.map(c=>c.id)??[],T=C(n==="session"?"Each improvement below comes from the evidence in this session.":n==="repo"?"These patterns recur across this repository. Review each proposal before you apply it.":"These patterns recur across this machine. Global proposals are for review only.",e.audience),h=le(t?.session.cwd,n==="repo"),g=u.length?Cn(h,e.data.mode)+(n==="session"?"":`<p class="sg-cap">${Pe}</p>`)+u.map((c,E)=>En(e,c.row,E+1,c.sid,c.record)).join(""):D({title:"No improvements found",hint:"The rules found nothing to change. Look again after your next session."}),f=Ot.map(c=>`<span class="sigchip">${r(c)}</span>`).join(""),w=u.length?`<details class="card pad mb16 sg-note"><summary><span class="chev" aria-hidden="true">\\u25B8</span>What a proposal can change</summary><div class="chiprow mt8">${f}</div></details>`:"",b=n==="session"||!i?"":e.megaReview?.(n)??"",m="orangu measures the evidence. Claude writes the proposal only when you run the command. "+(n==="session"?"Only later sessions in the same workspace can verify it.":n==="repo"?"Applied means that the reviewed files changed. Only later sessions can verify it.":"Global proposals stay proposals. Claude applies nothing from here.");return[`<section>\n<div class="hero">\n${ke(48)}\n<div class="grow sg-hero herotitle">${r(T)}</div>\n</div>\n<div class="chiprow">${a}</div>\n${b}\n${n!=="session"&&!i?D({title:"This scope needs orangu serve",command:"orangu serve"}):g+w}\n${e.proposals?.inbox(e,n,x,v)??""}\n<p class="small muted sg-foot">${m}</p>\n</section>`,d,h]}function qt(e){let[t,n,s]=Mn(e),o=I(t);return o.querySelectorAll("[data-scope]").forEach(i=>i.addEventListener("click",()=>{if(i.getAttribute("aria-disabled")==="true")return;let l=i.dataset.scope;e.go({scope:l==="session"?void 0:l})})),(i=>{o.querySelectorAll(i).forEach(l=>l.addEventListener("click",()=>{let d=l.closest("details"),u=d.querySelector(".kick-msg"),v=l.dataset.kickCopy,x=v?n.get(v):void 0;if(!x)return;l.setAttribute("aria-busy","true");let T={mode:"copy",suggestionId:v,finding:x.finding};e.ds.kickoff(T).then(g=>g.ok?{kind:"copied",message:`The command is on your clipboard. ${s}`,response:g.response}:{kind:"error",message:g.message,...g.response?{response:g.response}:{}}).then(g=>{if(l.removeAttribute("aria-busy"),u.textContent=g.message,"response"in g&&g.response?.commands){let f=d.querySelector(".kick-cmd");f.innerHTML=Dt(g.response.commands),ye(f),g.kind==="copied"&&f.querySelector("[data-copy]")?.click()}})}))})("[data-kick-copy]"),o}var qe=24;function Wt(e){let t=e.a;if(!t)return K();let n=t.agents;if(!n.runs.length)return I(`<section>${D({title:"No subagents in this session.",hint:"This session ran entirely on the main thread."})}</section>`);let s=Math.min(...n.runs.map(u=>u.startTs??1/0).filter(isFinite)),o=Math.max(...n.runs.map(u=>u.endTs??-1/0).filter(isFinite)),a=n.runs.slice(0,qe).map(u=>Re(u,s,o)).join(""),i=we(n.byType.map(u=>({label:u.agentType,value:u.tokens,color:j("agent"),sub:"\\xD7"+u.count})),u=>$(u)),l=n.runs.map(u=>`<tr data-agent="${r(u.agentId)}" class="agent-row"${e.state.agent===u.agentId?\' style="background:var(--accent-weak)"\':""}>\n<td>${"\\xB7 ".repeat(u.spawnDepth)}${r(u.agentType||u.name||u.agentId.slice(0,8))}${u.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\'}</td>\n<td>${r(u.model??"\\u2013")}</td>\n<td class="num">${r(R(u.durationMs))}</td>\n<td class="num">${u.toolCallCount}${u.toolErrors?` <span class="tag bad">${u.toolErrors}</span>`:""}</td>\n<td class="num">${r($(u.totalTokens))}</td>\n</tr>`).join(""),d=I(`<section>\n${V(t,e.audience)}\n<div class="card pad" style="margin-bottom:16px">\n<div class="card-title">${n.runs.length} subagent runs \\xB7 ${r(L(1-n.mainThreadShare.tokens))} of tokens \\xB7 max depth ${n.maxDepth} \\xB7 up to ${n.maxConcurrency} parallel</div>\n<div class="swimbox">${a}</div>\n${n.runs.length>qe?`<div class="pagefoot muted small">showing ${qe} of ${n.runs.length} lanes \\xB7 all runs in the table below</div>`:""}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by agent type</div>${i}</div>\n<div class="card scroll-x"><table class="grid"><thead><tr><th>Agent</th><th>Model</th><th class="num">Duration</th><th class="num">Tools</th><th class="num">Tokens</th></tr></thead><tbody>${l}</tbody></table></div>\n</div>\n</section>`);return d.querySelectorAll("[data-agent]").forEach(u=>u.addEventListener("click",()=>e.go({screen:"timeline",agent:u.dataset.agent},{push:!0}))),d}function de(e,t,n=""){return`<div class="card pad${n?" "+n:""}"><div class="card-title">${e}</div>${t}</div>`}function Ut(e){let t=e.a;if(!t)return K();let n=t.context,s=n.series.filter(h=>!h.agentId),o=fe(n.compactions,s),a=ue(s.map(h=>h.contextSize),{threshold:n.contextWindow?{y:n.contextWindow,label:"window "+$(n.contextWindow)}:void 0,markers:o,yMax:n.contextWindow,fmtY:$}),i=Tt([s.map(h=>h.cacheRead),s.map(h=>h.cacheWrite),s.map(h=>h.input),s.map(h=>h.output)],["var(--cat-read)","var(--cat-edit)","var(--cat-write)","var(--cat-agent)"],{markers:o,labels:["cache read","cache write","fresh input","output"]}),l=t.tokens,d=[{value:l.byKind.cacheRead,color:"var(--cat-read)",label:"cache read "+$(l.byKind.cacheRead)},{value:l.byKind.cacheWrite5m,color:"var(--cat-skill)",label:"cache write 5m "+$(l.byKind.cacheWrite5m)},{value:l.byKind.cacheWrite1h,color:"var(--cat-edit)",label:"cache write 1h "+$(l.byKind.cacheWrite1h)},{value:l.byKind.input,color:"var(--cat-write)",label:"fresh input "+$(l.byKind.input)},{value:l.byKind.output,color:"var(--cat-agent)",label:"output "+$(l.byKind.output)}],u=we(l.byModel.map(h=>({label:h.displayName,value:h.totalTokens,color:j("edit"),sub:h.estimatedMatch?"~est. match":""})),h=>$(h)),v=l.serverToolRequests.webSearch+l.serverToolRequests.webFetch,x=ue(l.byTurn.map(h=>h.cumulativeTokens),{color:"var(--accent-ink)",fmtY:$}),T=[de("Token composition per request",`<div class="scroll-x">${i}</div><div class="legend">${["read","edit","write","agent"].map((h,g)=>`<span><i class="sw" style="background:var(--cat-${h})"></i>${["cache read","cache write","fresh input","output"][g]}</span>`).join("")}</div>`,"mb16"),de("By model",`${u}<p class="small muted" style="margin-top:8px">Main thread ${r($(l.mainThread))} \\xB7 agents ${r($(l.agents))}</p>`,"mb16"),de("Cumulative tokens over turns",`<div class="scroll-x">${x}</div>`)].join("");return I(`<section>\n${V(t,e.audience)}\n<p class="ctx-lead">${r(nt(t))}</p>\n<div class="kpis">\n${O("Peak context",$(n.peak),n.contextWindow?L(n.peak/n.contextWindow)+" of "+$(n.contextWindow):"")}\n${O("Cache hit ratio",L(n.cacheHitRatio,1),"context re-read rather than re-sent")}\n${O("Context re-read",n.reReadMultiplier.toFixed(1)+"\\xD7","context carried \\xF7 peak")}\n${O("Long-lived cache writes",L(n.cacheWrite1hShare),"of cache writes (the 1h tier)")}\n${O("Fixed weight per request",$(n.baseline),"system + tools + CLAUDE.md, every request")}\n${O("Compactions",String(n.compactions.length),n.compactions.length?"context was reset":"none")}\n</div>\n${de("Context size over the session",`<div class="scroll-x">${a}</div><div class="legend"><span>Each point is one API request. Each dashed line is a compaction.</span></div>`,"mb16")}\n${de(`Where the tokens went \\xB7 ${r($(l.totalTokens))} total`,`${St(d,{height:22})}<div class="legend">${d.filter(h=>h.value>0).map(h=>`<span><i class="sw" style="background:${h.color}"></i>${r(h.label)}</span>`).join("")}</div>${v?`<div class="smt8">${S(v,"server-tool request")} (web search/fetch), counted per request, not in tokens</div>`:""}`,"mb16")}\n<details class="more-charts"><summary><span class="chev" aria-hidden="true">\\u25B8</span>More charts \\xB7 composition per request, by model, cumulative</summary><div class="mt8">${T}</div></details>\n</section>`)}var We="\\u2039stripped\\u203A";function Gt(e){let t=e.a;if(!t)return K();let n=t.parse,s=n.reconciliation,o=Object.entries(n.unknownRecordTypes).filter(([g])=>g!==We),a=n.unknownRecordTypes[We]??0,i=o.length,l=a?`<div class="small muted">orangu counted ${S(a,"unrecognized record")}. Redaction hides their type names. To see them, run orangu again with --include-text.</div>`:"",d=t.skills.byName.length?`<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${t.skills.byName.map(g=>`<span class="sigchip">${r(g.name)} <span class="muted">\\xD7${g.count} ${r(g.via.join("/"))}</span></span>`).join("")}</div></div>`:"",u=t.hooks.runs?`<div class="card pad mt16"><div class="card-title">Hooks</div><p class="small muted" style="margin:0">${t.hooks.runs} hook runs \\xB7 ${t.hooks.errors} errors \\xB7 ${r(R(t.hooks.totalMs))} total</p></div>`:"",v=I(`<section>\n${Ie(s.ok?"info":"warn",`<strong>Parse coverage:</strong>&nbsp;${r(N(n.totalLines))} records, ${n.badLines} unreadable, ${S(i,"unrecognized record type")}${a?` (+${a} record${a===1?"":"s"} with redacted type names)`:""}. Token totals reconcile to within ${r(s.matchesWithinPct.toFixed(2))}% ${s.ok?"\\u2713":"(review)"}.`)}\n<div class="two-up">\n<div class="card pad"><div class="card-title">Session</div>\n<table class="grid"><tbody>\n<tr><td>ID</td><td class="mono small">${r(t.session.id)}</td></tr>\n<tr><td>Source</td><td>${r(t.session.source)}</td></tr>\n<tr><td>Project</td><td class="mono small">${r(t.session.cwd??t.session.projectSlug??"\\u2013")}</td></tr>\n<tr><td>Started</td><td>${r(ze(t.session.startedAt))}</td></tr>\n<tr><td>Client</td><td>${r(t.session.clientVersions.join(", "))}</td></tr>\n<tr><td>Models</td><td>${t.session.models.map(g=>r(g.displayName)+(g.estimatedMatch?" ~":"")).join(", ")}</td></tr>\n<tr><td>Branches</td><td class="mono small">${r(t.session.gitBranches.join(", ")||"\\u2013")}</td></tr>\n<tr><td>Generated</td><td>orangu v${r(t.generator.version)} \\xB7 model catalog ${r(t.generator.modelCatalogUpdatedAt)}</td></tr>\n</tbody></table>\n</div>\n<div class="card pad"><div class="card-title">How to read the numbers</div>\n<ul class="small" style="padding-left:18px;line-height:1.7;margin:0">\n<li><strong>Tokens are the only usage metric</strong> orangu reports. They are what the transcript records.</li>\n<li>orangu <strong>deduplicates token usage by message id</strong>.</li>\n<li>Context = fresh input + cache read + cache write.</li>\n<li>~ marks a model matched by family fallback: the name is approximate, the token counts are not.</li>\n<li>No LLM and no network call produced any number here.</li>\n</ul>\n</div>\n</div>\n${i||a?`<div class="card pad mt16"><div class="card-title">Unrecognized records (counted, not dropped)</div>${i?`<div class="pill-row">${o.map(([g,f])=>`<span class="pill">${r(g)} \\xD7${f}</span>`).join("")}</div>`:""}${l}</div>`:""}\n${d}\n${u}\n<div class="card pad mt16">\n<div class="card-title">Raw explorer</div>\n<div class="raw-filter no-print">\n<input type="text" id="raw-q" placeholder="filter by text\\u2026" aria-label="filter calls by text" />\n<select id="raw-cat" aria-label="filter by category"><option value="">all categories</option>${Object.keys(se).map(g=>`<option value="${r(g)}">${r(se[g])}</option>`).join("")}</select>\n<label class="small"><input type="checkbox" id="raw-err" /> errors only</label>\n<span class="small muted" id="raw-count"></span>\n</div>\n<div id="raw-list" style="max-height:480px;overflow:auto;border-top:1px solid var(--border)"></div>\n</div>\n</section>`),x=v.querySelector("#raw-list"),T=v.querySelector("#raw-count"),h=()=>{let g=v.querySelector("#raw-q").value.toLowerCase(),f=v.querySelector("#raw-cat").value,w=v.querySelector("#raw-err").checked,b=t.tools.calls.filter(m=>(!f||m.category===f)&&(!w||m.isError)&&(!g||m.summary.toLowerCase().includes(g)||m.name.toLowerCase().includes(g)));T.textContent=b.length+" of "+t.tools.calls.length+" calls",x.innerHTML=b.slice(0,2e3).map(m=>`<div class="rawrow"><span class="rt">${r(m.name)}</span><span class="muted">#${m.turnIndex}${m.agentId?" agent":""}${m.isError?" \\u26A0":""}</span><span class="rp">${r(m.summary)}${m.durationMs!==void 0?" \\xB7 "+r(R(m.durationMs)):""}</span></div>`).join("")+(b.length>2e3?`<div class="rawrow muted">\\u2026${b.length-2e3} more (narrow the filter)</div>`:""),b.length||(x.innerHTML=\'<div class="rawrow muted">no calls match</div>\')};return v.querySelector("#raw-q").addEventListener("input",h),v.querySelector("#raw-cat").addEventListener("change",h),v.querySelector("#raw-err").addEventListener("change",h),h(),v}var Ln={live:Ct,overview:Oe,timeline:Ht,tools:_t,suggest:qt,agents:Wt,context:Ut,coverage:Gt},Fn={live:"Live",overview:"Overview",timeline:"Timeline",tools:"Tools & calls",repo:"Repo",global:"Global",harness:"Harness",suggest:"Improvements",agents:"Agents",context:"Context & tokens",coverage:"Coverage"};function Pn(e){return Fn[e]??"Overview"}function jn(e,t,n){let s=t.screen,o=s==="repo"||s==="global"?s:s==="suggest"&&t.scope!=="session"?t.scope??H(e):n?void 0:H(e);return o?`--scope ${o}`:n&&/^[\\w:-]+$/.test(n.session.id)?n.session.id:""}function Hn(e,t,n){let s=jn(e,t,n);return s&&`<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${X(`claude "/orangu:show-me ${s}"`,"$","the show me command")}<p>${r(le(n?.session.cwd,s==="--scope repo"))} The files open in your browser.</p>${$e()}</div></details>`}function Nn(e){let t=e.a,n=e.audience;switch(e.state.screen){case"live":{let s=Z(e.data);if(s.length>1)return`${s.length} running sessions \\xB7 ${s.reduce((a,i)=>a+(i.agentsRunning??0),0)} agents active`;let o=e.data.sessions.find(a=>a.id===(e.state.s??e.data.selectedId));return o?`${G(o.id)} \\xB7 ${ve(o)}`:""}case"overview":return t?C(`outcome and evidence \\xB7 ${G(t.session.id)} \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolCalls} tool calls`,n):"";case"timeline":return t?C(`every step and tool call \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolErrors} errors`,n):"";case"tools":return t?C(`${t.summary.toolCalls} tool calls \\xB7 ${t.tools.byName.length} tools`,n):"";case"repo":return`${e.data.aggregates.repo?e.data.aggregates.repo.sessionCount+" sessions \\xB7 ":""}recurring evidence in this repository`;case"global":return`${e.data.aggregates.global?e.data.aggregates.global.sessionCount+" sessions \\xB7 ":""}recurring evidence across this machine`;case"harness":return"declared vs used, in tokens";case"suggest":{let s=e.state.scope??H(e.data);return s==="repo"||s==="global"?"recurring patterns \\xB7 one proposal per improvement \\xB7 whole-harness review":"this session \\xB7 one proposal per improvement"}case"agents":return t?`${t.agents.runs.length} runs \\xB7 up to ${t.agents.maxConcurrency} parallel`:"";case"context":return t?`peak ${N(t.context.peak)} \\xB7 ${t.context.compactions.length} compactions`:"";case"coverage":return t?`${N(t.parse.totalLines)} records \\xB7 ${t.parse.badLines} unreadable`:"";default:return""}}var _n=600;function Bn(e,t,n){return e?0:Math.max(0,t+_n-n)}var On=80;function Dn(e){return(e??1/0)>On}async function Kt(e,t,n,s){try{e.suggestions=await t.suggestions(),n&&s()}catch{}}async function qn(e,t,n,s,o){e.type==="connection"&&e.state==="connected"&&await Kt(t,n,s,o)}function Ue(e){return e==="dark"?"dark":"light"}function Wn(e){return Ue(e)==="dark"?void 0:"dark"}function Un(e){return H(e)===void 0?"Session":"Scope"}function Gn(e,t,n){let s=H(e);return"orangu \\xB7 "+(t?.session.title||G(n??"")||s&&e.aggregates[s]?.scope||"report")}async function Vt(e,t){let n=document.getElementById("app");if(!n)return;let s=null;try{s=await e.load()}catch{s=null}if(!s){n.innerHTML=`<div class="page"><div class="card"><div class="empty-hero">${q(48)}<div class="t">This file has no analysis data.</div><div class="s mono">npx orangu report</div></div></div></div>`;return}let o=s,a=y=>{let k=Ve(y);return y.replace(/^#/,"")||(k.screen=Ge(o)),k.s||(k.s=o.selectedId),k},i=a(location.hash),l=async y=>{if(!y)return o.session;if(o.mode!=="serve")return o.session&&o.session.session.id===y?o.session:await e.session(y)??o.session;let k=await e.session(y);return k||(o.session&&o.session.session.id===y?o.session:void 0)},d=()=>{let y=document.documentElement;Ue(i.theme)==="dark"?y.setAttribute("data-theme","dark"):y.removeAttribute("data-theme")},u=(y,k={})=>{i={...i,...y};let M=Ce(i);k.push?history.pushState(null,"",M):history.replaceState(null,"",M),f(!0)},v,x=async()=>({data:o,a:await l(i.s),ds:e,state:i,audience:i.audience==="plain"?"plain":"dev",conn:v,aggLoading:t?i.screen==="harness"?t.ensureHarness(e,f):t.ensureAggregate(o,e,i,f):!1,megaReview:t?.megaReview,proposals:t?.proposals,harnessCard:t?()=>t.harnessCard(e,f,ee(i,{screen:"harness"})):void 0,go:u}),T=!1,h,g=0;function f(y){let k=Bn(y===!0,g,Date.now());if(y)clearTimeout(h);else if(T)return;T=!0,h=setTimeout(()=>{T=!1,Q(y)},k)}function w(y){let k=Ke(o,i),M=o.sessions.find(J=>J.id===i.s)??o.sessions[0],U=k.filter(J=>J.items.length).map(J=>`<div class="navgroup"><div class="navgroup-label">${r(J.label)}</div>${J.items.map(F=>{let me=ee(i,{screen:F.screen,s:F.s??i.s,scope:i.scope}),P=i.screen===F.screen&&(F.s===void 0||F.s===i.s),Ae=F.dot?`<span class="ldot${F.dot==="hollow"?" hollow":F.dot==="ended"?" done":""}"${F.dot==="pulse"?\' data-pulse="1"\':""} aria-hidden="true"></span><span class="vh">${F.dot==="pulse"?"live":F.dot==="hollow"?"quiet":"ended"}</span>`:"";return`<a class="navitem" href="${r(me)}"${P?\' aria-current="page"\':""}>${Ae}${r(F.label)}${F.hint?`<span class="hint">${r(F.hint)}</span>`:""}</a>`}).join("")}</div>`).join(""),z=Z(o).length,Y=o.mode==="serve"?"Local server: 127.0.0.1.<br/>Nothing leaves this machine."+(z>1?"<br/>alt+\\u2191\\u2193 switch session":""):"This report is self-contained.<br/>It makes 0 network requests.",B=I(`<aside class="side">\n<div class="brand">${q(26)}<span class="name">orangu</span><span class="ver">v${r(o.version)}</span></div>\n<div class="sesscard"><div class="eyebrow">${Un(o)}</div>${t?t.pickerHtml(o,M):`<div class="sid">${M?r(G(M.id))+" \\xB7 "+r(M.projectSlug||M.source):"\\u2013"}</div>`}</div>\n<div class="navwrap"><nav aria-label="Report">${U}</nav></div>\n<div class="side-foot">\n<button class="themebtn" id="btn-theme">\\u25D0 theme \\xB7 ${Ue(i.theme)}</button>\n<div class="note">${Y}</div>\n</div>\n</aside>`);return B.querySelector("#btn-theme").addEventListener("click",()=>u({theme:Wn(i.theme)})),t?.wirePicker(B,u),B}function b(y){let k=y.audience,M=I(`<header class="page-head">\n<div><h1>${r(Pn(i.screen))}</h1><div class="sub">${r(Nn(y))}</div></div>\n<div class="page-tools">\n<div class="aud" role="group" aria-label="Detail level">\n<button id="aud-dev" aria-pressed="${k==="dev"}">Detailed</button>\n<button id="aud-plain" aria-pressed="${k==="plain"}">Plain language</button>\n</div>\n<button class="btn" id="btn-export">\\u2193 Export HTML</button>\n${Hn(y.data,y.state,y.a)}\n</div>\n</header>`);return M.querySelector("#aud-dev").addEventListener("click",()=>u({audience:void 0})),M.querySelector("#aud-plain").addEventListener("click",()=>u({audience:"plain"})),M.querySelector("#btn-export").addEventListener("click",()=>{let U=e.exportHref(i.s??"");if(U){location.href=U;return}let z=new Blob([`<!doctype html>\n`+document.documentElement.outerHTML],{type:"text/html"}),Y=URL.createObjectURL(z),B=document.createElement("a");B.href=Y,B.download=`orangu-${G(i.s??"report")}.html`,document.body.appendChild(B),B.click(),B.remove(),setTimeout(()=>URL.revokeObjectURL(Y),2e3)}),M}let m=[],p={},c="details[data-sid],details[id]",E=y=>y.dataset.sid??y.id,A,W;async function Q(y){g=Date.now(),d(),y&&Dn(p[i.screen])&&(n.querySelector(".main")?.setAttribute("aria-busy","true"),await new Promise(P=>requestAnimationFrame(()=>setTimeout(P))));let k=await x();document.title=Gn(o,k.a,i.s);let M=Ln[i.screen]??Oe,U=i.screen==="repo"||i.screen==="global"||i.screen==="harness"?i.screen:void 0,z=k.aggLoading&&t?t.aggScreen():U?t?U==="harness"?t.harnessView(k):t.aggregateView(k):I(`<section>${Bt(U,o)}</section>`):M(k);z.classList.add("screen"),z.id="screen-"+i.screen;let Y=I(\'<div class="page"></div>\');o.illustrative&&Y.appendChild(I(\'<div class="sample-note" role="note"><b>This sample is synthetic.</b> Its numbers come from made-up input, not a measured customer result.</div>\')),Y.appendChild(b(k)),Y.appendChild(z);let B=I(\'<main class="main"></main>\');B.appendChild(Y);let J=[];n.querySelectorAll(c).forEach(P=>J.push({id:E(P),open:P.open})),m=lt(m,J);let F=n.querySelector(".main")?.scrollTop??0;n.innerHTML="",n.appendChild(w(k)),n.appendChild(B),n.querySelectorAll(c).forEach(P=>{m.includes(E(P))&&(P.open=!0)});let me=W&&document.getElementById(W);W=void 0,me?me.scrollIntoView():i.screen===A?B.scrollTop=F:scrollTo(0,0),A=i.screen,be(n),ye(n),n.querySelectorAll("[data-to]").forEach(P=>P.addEventListener("click",()=>W=P.dataset.to)),n.querySelectorAll("[data-turns]").forEach(P=>P.addEventListener("click",Ae=>{Ae.preventDefault();let Jt=Number(P.dataset.turns.split(",")[0]);u({screen:"timeline",turn:Jt},{push:!0})})),p[i.screen]=Date.now()-g}window.addEventListener("hashchange",()=>{i=a(location.hash),f(!0)}),window.addEventListener("keydown",y=>{if(!y.altKey||y.key!=="ArrowUp"&&y.key!=="ArrowDown"||i.screen!=="live")return;let k=Z(o);if(k.length<2)return;let M=k.findIndex(z=>z.id===i.s),U=k[(M+(y.key==="ArrowDown"?1:k.length-1))%k.length];y.preventDefault(),u({s:U.id},{push:!0})}),e.subscribe(y=>{if(y.type==="session-updated"){let k=o.sessions.findIndex(M=>M.id===y.id);k>=0&&(o.sessions[k]=y.row),t?.invalidateHarness(),(i.s===y.id||i.screen==="live")&&f()}else if(y.type==="session-added")o.sessions.push(y.row),t?.invalidateHarness(),f();else if(y.type==="session-live"){let k=o.sessions.find(M=>M.id===y.id);k&&(k.badge=y.badge,k.ageMs=y.ageMs),i.screen==="live"&&f()}else if(y.type==="suggestion-updated")Kt(o,e,i.screen==="suggest",f);else if(y.type==="connection"){let k=v;v=y.state,qn(y,o,e,i.screen==="suggest",f),k!==v&&f()}}),await Q()}function zt(){let e=null,t=()=>{if(e)return e;if(window.__ORANGU__)return e=window.__ORANGU__,e;let n=document.getElementById("orangu-data");if(!n)return null;try{e=JSON.parse(n.textContent||"null")}catch{e=null}return e};return{mode:"file",async load(){let n=t();if(!n)throw new Error("no embedded data");return n},async session(n){let s=t();return s?.session&&s.session.session.id===n?s.session:null},async aggregate(){return null},async harness(){return null},async suggestions(){return t()?.suggestions??[]},async kickoff(n){let s=n.finding,o=re(s,"report"),a={id:n.suggestionId??ie(o),v:2,key:o,createdAt:0,source:"report",scope:s.scope,sessionIds:o.sessionIds,ruleId:s.ruleId,title:s.title,insightId:s.insightId,cohortFingerprint:s.cohortFingerprint,evidence:s.evidence,status:"new",statusAt:0},i=ae(a,"file");return{ok:!0,response:{record:a,commands:i,command:i.claude,spawned:!1}}},async setStatus(){return null},subscribe(){return()=>{}},exportHref(){return null}}}function Yt(){Vt(zt())}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",Yt):Yt();})();\n';
-var CLIENT_JS_SERVE = '"use strict";(()=>{var Zn=["live","overview","timeline","tools","agents","context","coverage","repo","global","harness","suggest"];function B(e){return e.slice(0,8)}function te(e){return e.mode==="file"&&!e.capabilities.watch?[]:e.sessions.filter(t=>t.badge==="live")}function W(e){if(!(e.mode!=="file"||e.session))return e.aggregates.repo?"repo":e.aggregates.global?"global":void 0}function kt(e){return e.mode==="serve"?te(e).length>1?"live":"overview":W(e)??"overview"}function xt(e,t){let n=t.audience==="plain"?"plain":"dev",s=te(e),o=[];s.length>1&&o.push({id:"live-all",label:`All live \\xB7 ${s.length}`,screen:"live",dot:"pulse"});for(let m of s)o.push({id:"live-"+m.id,label:s.length>1?`${B(m.id)} \\xB7 ${m.projectSlug}`:`Watch \\xB7 ${B(m.id)}`,screen:"live",s:m.id,dot:"pulse"});let l=[];W(e)===void 0&&(l.push({id:"overview",label:"Overview",screen:"overview"},{id:"timeline",label:"Timeline",screen:"timeline"},{id:"tools",label:"Tools & calls",screen:"tools"}),n==="dev"&&((e.session?.agents.runs.length??0)>0&&l.push({id:"agents",label:"Agents",screen:"agents"}),l.push({id:"context",label:"Context & tokens",screen:"context"}),l.push({id:"coverage",label:"Coverage",screen:"coverage"})));let i=e.aggregates.repo?.sessionCount,a=e.mode==="file"?e.aggregates.global?.sessionCount:void 0,d=e.mode==="file"?"needs orangu serve":void 0,c=[{id:"repo",label:i!==void 0?`Repo \\xB7 ${i} sessions`:"Repo",screen:"repo",hint:i===void 0?d:void 0},{id:"global",label:a!==void 0?`Global \\xB7 ${a} sessions`:"Global \\xB7 all time",screen:"global",hint:a===void 0?d:void 0},{id:"harness",label:"Harness",screen:"harness",hint:d}];return[{id:"live",label:"Live",items:o},{id:"session",label:"Observe this session",items:l},{id:"across",label:"Recurring patterns",items:c},{id:"improve",label:"Improve the next session",items:[{id:"suggest",label:"Improvements",screen:"suggest"}]}]}function wt(e){let t={screen:"overview"},n=e.replace(/^#/,""),[s,o]=n.split("?");if(s&&Zn.includes(s)&&(t.screen=s),o)for(let l of o.split("&")){let i=l.indexOf("=");if(i<0)continue;let a=l.slice(0,i),d=decodeURIComponent(l.slice(i+1));a==="s"?t.s=d:a==="scope"&&(d==="session"||d==="repo"||d==="global")?t.scope=d:a==="tool"?t.tool=d:a==="cat"?t.cat=d:a==="agent"?t.agent=d:a==="turn"?t.turn=Number(d):a==="err"?t.errorsOnly=d==="1":a==="filter"&&(d==="all"||d==="errors"||d==="agents"||d==="human")?t.filter=d:a==="theme"?t.theme=d:a==="audience"&&(d==="dev"||d==="plain")&&(t.audience=d)}return t}function Z(e,t){return ze({...e,scope:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0,filter:void 0,...t})}function ze(e){let t=[];return e.s&&t.push("s="+encodeURIComponent(e.s)),e.scope&&t.push("scope="+e.scope),e.tool&&t.push("tool="+encodeURIComponent(e.tool)),e.cat&&t.push("cat="+encodeURIComponent(e.cat)),e.agent&&t.push("agent="+encodeURIComponent(e.agent)),e.turn!==void 0&&t.push("turn="+e.turn),e.errorsOnly&&t.push("err=1"),e.filter&&t.push("filter="+e.filter),e.audience&&t.push("audience="+e.audience),e.theme&&t.push("theme="+e.theme),"#"+e.screen+(t.length?"?"+t.join("&"):"")}function y(e){return e>=1e9?(e/1e9).toFixed(e>=1e10?0:1)+"B":e>=1e6?(e/1e6).toFixed(e>=1e7?0:2)+"M":e>=1e3?(e/1e3).toFixed(e>=1e5?0:1)+"k":String(Math.round(e))}function C(e){if(e===void 0||!isFinite(e))return"\\u2013";if(e<1e3)return Math.round(e)+"ms";let t=e/1e3;if(t<60)return t.toFixed(t<10?1:0)+"s";let n=Math.floor(t/60);if(n<60)return n+"m "+Math.round(t%60)+"s";let s=Math.floor(n/60);return s<24?s+"h "+n%60+"m":Math.floor(s/24)+"d "+s%24+"h"}function A(e,t=0){return(e*100).toFixed(t)+"%"}function R(e,t,n=t+"s"){return`${H(e)} ${e===1?t:n}`}function H(e){return e.toLocaleString("en-US")}function St(e){return e===void 0?"\\u2013":new Date(e).toISOString().slice(0,16).replace("T"," ")}function xe(e){return e===void 0?"--:--:--":new Date(e).toISOString().slice(11,19)}function we(e){return e>=1<<20?(e/(1<<20)).toFixed(1)+" MB":e>=1024?Math.round(e/1024)+" KB":e+" B"}function r(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\'/g,"&#39;")}var ce={read:"Read",search:"Search",edit:"Edit",write:"Write",exec:"Shell",agent:"Agents",skill:"Skills",web:"Web",plan:"Plan",ask:"Ask",mcp:"MCP",task:"Tasks",notebook:"Notebook",other:"Other"},es=["read","search","edit","write","exec","agent","skill","web","other"];function P(e){return`var(--cat-${es.includes(e)?e:"other"}, var(--cat-other))`}var ts={clean:"The last check it ran passed",interrupted:"You stopped it",failing:"The last test run failed"};function Rt(e,t){let n=ts[e]??"The agent completed its last task";return e==="clean"&&t&&Ye(t)?`${n}. ${t.testRunsFailed} of ${R(t.testRuns,"test run")} failed earlier.`:n}function Ye(e){return e.testRunsFailed&&e.testRunsFailed<e.testRuns?"last run":""}function Se(e,t){let n=[],s=new Map;for(let o of e){if(o.signature){n.push(o);continue}let{tool:l,total:i,sessions:a=0}=t(o),d=s.get(l)??{tool:l,total:0,signatures:0,sessions:0};d.total+=i,d.signatures++,d.sessions=Math.max(d.sessions,a),s.set(l,d)}return{kept:n,hidden:[...s.values()].sort((o,l)=>l.total-o.total)}}function Et(e){if(e.ending==="interrupted")return`Stopped by you after ${R(e.turns,"turn")}`;let t=Je(e);if(t.length)return t.join(" \\xB7 ");let n=R(e.humanTurns,"request");return e.toolCalls>0?`${n}, ${e.agents?R(e.agents,"subagent")+", ":""}nothing committed`:`${n}, no tool calls recorded`}function Je(e){let t=e.outcomes,n=[];t.prLinks.length&&n.push(R(t.prLinks.length,"PR")),t.gitCommits&&n.push(R(t.gitCommits,"commit"));let s=t.filesEdited+t.filesWritten;return s&&n.push(R(s,"file")+" changed"),t.buildRunsFailed&&n.push(`${t.buildRunsFailed} of ${R(t.buildRuns,"build run")} failed`),t.testRuns&&n.push(t.testRunsFailed?`${t.testRunsFailed} of ${R(t.testRuns,"test run")} failed`:`${R(t.testRuns,"test run")} green`),n}function Ct(e){return{value:C(e.activeMs),note:e.wallMs!==void 0?`over ${C(e.wallMs)} wall \\xB7 ${C(e.humanWaitMs)} waiting for you`:"single-message session"}}function At(e){let t=e.evidence,n=t.calls?.[0],s=n?.tool??n?.name??t.tools?.[0]?.name;if(typeof s=="string"&&s)return{tool:s};if(e.turnIndexes.length)return{turn:e.turnIndexes[0]}}function Te(e,t){return e.map(n=>{let s=t.findIndex(o=>o.ts!==void 0&&n.ts!==void 0&&o.ts>=n.ts);return{x:s<0?Math.max(0,t.length-1):s,label:"compaction at turn "+n.turnIndex}})}function Re(e){if(!e)return"";let t=e.estimated?"~":"";return e.tokens?`save ${t}${y(e.tokens)} tokens`:e.ms?`save ${t}${C(e.ms)}`:""}function Ee(e,t,n){if(!e||!e.tokens&&!e.ms)return;let s=`Rule ${n} ${e.estimated?"estimated":"measured"} a saving of \\u2248`;if(e.tokens&&t&&e.tokens<=t){let o=e.tokens/t;return{text:o<.005?"under 1% of this session":`~${A(o)} of this session`,title:`${s}${y(e.tokens)} of the ${y(t)} tokens in this session.`}}return{text:Re(e),title:`${s}${e.tokens?y(e.tokens)+" tokens":C(e.ms)}.`}}function It(e,t){return!t||!e.tokens&&!e.ms?"":`${e.tokens?`\\u2248${y(e.tokens)} tokens`:`\\u2248${C(e.ms)}`} recoverable across ${R(t,"finding")}`}function Mt(e){let t=e.summary,n=e.context,s=[];return n.contextWindow&&t.contextPeak&&s.push(`Context grew to ${A(t.contextPeak/n.contextWindow)} of the window`),t.totalTokens&&s.push(`${A(t.cacheHitRatio)} of tokens were cache reads`),t.totalTokens&&e.tokens.agents&&s.push(`${A(e.tokens.agents/t.totalTokens)} of tokens went to subagents`),s.length?s.join(". ")+".":"The transcript records no token usage for this session."}function Lt(e){let t=e.find(s=>s.id==="tests");return t?.tone==="good"?"passing":t?.tone==="bad"?"failing":e.some(s=>(s.id==="commits"||s.id==="prs")&&Number(s.value)>0)?"shipped":"\\u2013"}function de(e,t,n){return e.filter(s=>s.turnIndex===t&&(!n||s.agentId===n))}function Ft(e,t,n){let s=de(e,t,n);if(!s.length)return[];let o=new Map;for(let l of s)o.set(l.category,(o.get(l.category)??0)+1);return[...o.entries()].map(([l,i])=>({cat:l,pct:i/s.length*100}))}function jt(e,t){let n=[...t].sort((l,i)=>l.turnIndex-i.turnIndex).filter(l=>l.turnIndex>(e[0]?.index??0)&&l.turnIndex<=(e[e.length-1]?.index??0)),s=[],o=e;for(let l of n){let i=o.filter(a=>a.index<l.turnIndex);o=o.filter(a=>a.index>=l.turnIndex),s.push({turns:i,after:l})}return s.push({turns:o,after:void 0}),s}function Ht(e,t=600,n=104,s=8){let o=e.length;if(!o)return"";let l=Math.max(...e.map(i=>i.tokens),1e-4);return e.map((i,a)=>{let d=o===1?t/2:a/(o-1)*t,c=n-i.tokens/l*(n-s);return`${Math.round(d*10)/10},${Math.round(c*10)/10}`}).join(" ")}var ns={"claude-code":"Claude Code",cowork:"Cowork",desktop:"Desktop"};function Pt(e){return ns[e]??e}function _t(e,t){let n=[];for(let s of e.tools.calls)n.push({ts:s.startTs,name:s.name,category:s.category,summary:s.summary,durationMs:s.durationMs,isError:s.isError,agentType:s.agentId?"agent":void 0,key:s.toolUseId});for(let s of e.events)n.push({ts:s.ts,name:s.kind,category:"other",summary:s.label,key:"ev-"+s.turnIndex+"-"+s.kind});for(let s of e.agents.runs)n.push({ts:s.startTs,name:s.agentType||s.name||s.agentId,category:"agent",summary:s.taskKind??s.description??"subagent run",durationMs:s.durationMs,key:s.agentId});return n.sort((s,o)=>(s.ts??1/0)-(o.ts??1/0)||(s.key<o.key?-1:s.key>o.key?1:0)),n.slice(-t)}function Tt(e){let t=Math.max(0,Math.round(e/1e3));if(t<60)return t+"s";let n=Math.floor(t/60);return n<60?n+"m":Math.floor(n/60)+"h"}function ue(e){return e.badge!=="ended"&&e.possiblyLive?"Watching \\xB7 possibly live":e.badge==="ended"?"ended \\xB7 updated "+Tt(e.ageMs)+" ago":"updated "+Tt(e.ageMs)+" ago"}function Nt(e){if(!e.length)return 1/0;let t=e.map(s=>s.totalTokens).sort((s,o)=>o-s),n=Math.max(1,Math.floor(t.length*.2));return t[n-1]}function Dt(e,t){let n=new Set(t.map(l=>l.id)),s=e.filter(l=>!n.has(l)),o=t.filter(l=>l.open).map(l=>l.id);return[...new Set([...s,...o])]}function Bt(e,t){let n=[];for(let s of e)for(let o of s.lastEvents??[])n.push({...o,sid:s.id});return n.sort((s,o)=>(s.ts??1/0)-(o.ts??1/0)||(s.sid<o.sid?-1:s.sid>o.sid?1:0)),n.slice(-t)}var Ot="orangu-brand-icon";var ss=/^data:image\\/png;base64,[A-Za-z0-9+/]+={0,2}$/;function V(e=30){let t=`width="${e}" height="${e}" style="display:block"`,n=typeof document>"u"?void 0:document.getElementById(Ot)?.getAttribute("href");return!n||!ss.test(n)?`<span class="logo" ${t} role="img" aria-label="orangu"></span>`:`<img class="logo" src="${n}" ${t} alt="orangu" draggable="false">`}function w(e){let t=document.createElement("template");return t.innerHTML=e.trim(),t.content.firstElementChild}function Ce(e){e.querySelectorAll("details").forEach(t=>{let n=t.querySelector("summary");n&&(n.setAttribute("role","button"),n.setAttribute("aria-expanded",String(t.open)),t.addEventListener("toggle",()=>n.setAttribute("aria-expanded",String(t.open))))})}function Ae(e){e.querySelectorAll("[data-copy]").forEach(t=>{t.addEventListener("click",()=>{let n=t.getAttribute("data-copy")??"",s=()=>{let o=t.textContent;t.textContent="copied",setTimeout(()=>t.textContent=o,1200)};if(navigator.clipboard?.writeText)navigator.clipboard.writeText(n).then(s,s);else{let o=document.createElement("textarea");o.value=n,document.body.appendChild(o),o.select();try{document.execCommand("copy")}catch{}o.remove(),s()}})})}var qt={high:3,medium:2,low:1,info:0};function Wt(e,t){return(qt[t.severity]??0)-(qt[e.severity]??0)||t.totalSavingsTokens-e.totalSavingsTokens||t.sessions-e.sessions||e.ruleId.localeCompare(t.ruleId)}var Fo=7*864e5;function Ut(e){return new TextEncoder().encode(e)}function Gt(e){let t=Ut(e),n=t.length,s=(n+8>>6)+1,o=new Uint32Array(s*16);for(let h=0;h<n;h++)o[h>>2]|=t[h]<<24-(h&3)*8;o[n>>2]|=128<<24-(n&3)*8;let l=n*8;o[s*16-1]=l>>>0,o[s*16-2]=Math.floor(l/4294967296)>>>0;let i=1732584193,a=4023233417,d=2562383102,c=271733878,m=3285377520,b=new Uint32Array(80),S=(h,u)=>h<<u|h>>>32-u;for(let h=0;h<o.length;h+=16){for(let g=0;g<16;g++)b[g]=o[h+g];for(let g=16;g<80;g++)b[g]=S(b[g-3]^b[g-8]^b[g-14]^b[g-16],1);let u=i,x=a,$=d,f=c,p=m;for(let g=0;g<80;g++){let L,E;g<20?(L=x&$|~x&f,E=1518500249):g<40?(L=x^$^f,E=1859775393):g<60?(L=x&$|x&f|$&f,E=2400959708):(L=x^$^f,E=3395469782);let _=S(u,5)+L+p+E+b[g]>>>0;p=f,f=$,$=S(x,30)>>>0,x=u,u=_}i=i+u>>>0,a=a+x>>>0,d=d+$>>>0,c=c+f>>>0,m=m+p>>>0}let v=h=>h.toString(16).padStart(8,"0");return v(i)+v(a)+v(d)+v(c)+v(m)}function oe(e){return[...new Set(e.map(t=>t.trim().replace(/\\\\/g,"/")).filter(Boolean))].sort()}function Vt(e){return Gt(JSON.stringify(oe(e))).slice(0,16)}function Kt(e,t="finding"){let n=e.cohortFingerprint;if(e.scope==="session"){if(n!==void 0)throw new Error(`${t} session scope must omit cohortFingerprint`);return}if(typeof n!="string"||!/^[0-9a-f]{16}$/.test(n))throw new Error(`${t} repo/global scope requires a 16-hex cohortFingerprint`)}function Ie(e,t){return Kt(e),{v:2,source:t,scope:e.scope,ruleId:e.ruleId,sessionIds:oe(e.sessionIds),...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}}}function Me(e){let t=JSON.stringify({v:2,source:e.source,scope:e.scope,ruleId:e.ruleId,sessionIds:oe(e.sessionIds),insightId:e.insightId??null,...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}});return"sg_"+Gt(t).slice(0,12)}function os(e){return btoa(Array.from(e,t=>String.fromCharCode(t)).join("")).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"")}function rs(e){return JSON.stringify(e,(t,n)=>n&&typeof n=="object"&&!Array.isArray(n)?Object.fromEntries(Object.entries(n).sort(([s],[o])=>s<o?-1:s>o?1:0)):n)}var Ho=256*1024;function is(e,t="report"){Kt(e);let n={...e,sessionIds:oe(e.sessionIds)};return os(Ut(rs({v:2,source:t,finding:n})))}function as(e,t){if(t==="serve")return e.id;if(e.title&&e.evidence){let s={ruleId:e.ruleId,title:e.title,scope:e.scope,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:e.evidence};return`${e.id} --finding ${is(s,e.source??"report")}`}let n=[...e.sessionIds].sort().join(",");return`${e.id} --rule ${e.ruleId} --scope ${e.scope} --session ${n}`}function Le(e,t){let n=as(e,t);return{claude:`claude "/orangu:improve ${n}"`,codex:`$orangu-improve ${n}`}}var zt="/plugin marketplace add NissanOhana/orangu \\xB7 /plugin install orangu",Fe="Each title shows the figures of one example session.";function ls(e){let t=e.trim().replace(/[-_]+/g," ")||"finding";return t[0].toUpperCase()+t.slice(1)}var cs="orangu hides these details because they quote commands and output. To see them, run the report again with --include-text.";function Yt(e,t,n){return{title:t.trim()||ls(e),detail:n.trim()||cs}}function Xe(e){let t=e.boundedSavingsTokens??e.totalSavingsTokens,n=e.boundedSavingsMs??e.totalSavingsMs;return{...t?{tokens:t}:{},...n?{ms:n}:{},estimated:!0}}function Jt(e,t){let n=Yt(e.ruleId,e.title,e.detail);return{ruleId:e.ruleId,...n,improvement:e.improvement||e.recommendation,why:e.why,method:e.method,savings:e.savings,sessionIds:t?[t]:[],insightId:e.id,severity:e.severity}}function ge(e,t,n){if(e==="session")return(t?.insights??[]).map(o=>Jt(o,t?.session.id));let s=n?Vt(n.sessions.map(o=>o.id)):void 0;return[...n?.crossFindings??[]].sort(Wt).map(o=>{let l=Yt(o.ruleId,o.title,`This pattern shows in ${o.sessions} of ${R(n.sessionCount,"session")}.`);return{ruleId:o.ruleId,...l,displayTitle:o.exampleTitle,improvement:o.improvement||o.recommendation,why:o.why,method:o.method,savings:Xe(o),sessionIds:o.exampleSessionIds,sessions:o.sessions,severity:o.severity,...s?{cohortFingerprint:s}:{}}})}function Qe(e,t){let n=Ze(Jt(e,t),"session"),s=Ie(n,"report"),o=Me(s);return{id:o,command:Le({id:o,...n,sessionIds:s.sessionIds,source:"report"},"file").claude}}function Xt(e){let t=0,n=0;for(let s of e)t+=s.savings?.tokens??0,n+=s.savings?.ms??0;return{tokens:t,ms:n}}function Ze(e,t){return{ruleId:e.ruleId,title:e.title,scope:t,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:{estimated:e.savings?.estimated??!0,sessions:e.sessions??1,...e.savings?.tokens!==void 0?{savingsTokens:e.savings.tokens}:{},...e.savings?.ms!==void 0?{savingsMs:e.savings.ms}:{}}}}function je(e){return`claude "/orangu:harness --scope ${e}"`}function Qt(e){if(e?.status!=="failed")return"";let t=e.kickoff?.error?.trim();return t?`Claude could not write the proposal: ${t}`:"Claude could not write the proposal. Copy the command. Run it again to see the error."}function Zt(e,t,n,s){let o,l=oe(t.sessionIds).join(`\n`);for(let i of e){if(!Array.isArray(i.sessionIds)||!i.sessionIds.every(c=>typeof c=="string"))continue;let a=i.id===s||Array.isArray(i.legacyIds)&&i.legacyIds.includes(s),d=i.v===1&&i.ruleId===t.ruleId&&i.scope===n&&oe(i.sessionIds).join(`\n`)===l&&(!t.insightId||!i.insightId||t.insightId===i.insightId);!a&&!d||(!o||i.statusAt>o.statusAt)&&(o=i)}return o}function O(e,t="$",n="command"){return`<div class="cmd"><span class="p" aria-hidden="true">${r(t)}</span><span class="txt">${r(e)}</span><button class="copy" data-copy="${r(e)}" aria-label="copy ${n}">copy</button></div>`}function ne(e,t){return`Paste it in a terminal${e?` in ${e}`:t?" in this repository":""}. It starts Claude Code.`}function He(){return`<div class="small sg-install">First time only, type these 2 lines in Claude Code:</div>${zt.split(" \\xB7 ").map((e,t)=>O(e,">",t?"the install command":"the marketplace command")).join("")}`}var en={"context window":"working memory","cache reads":"reused context","cache read":"reused context","cache writes":"saved context","cache write":"saved context","cache hits":"reused context",compactions:"memory refreshes",compaction:"memory refresh"};var ds=Object.keys(en).sort((e,t)=>t.length-e.length);function M(e,t){if(t!=="plain")return e;let n=e;for(let s of ds)n=n.split(s).join(en[s]);return n}function fe(e,t){if(t!=="plain")return e;let n=M(e.toLowerCase(),t);return n[0].toUpperCase()+n.slice(1)}function I(e,t,n="",s={}){let o=s.estimated?\'<span class="est" title="estimated: derived from bytes, not reported by the API">~</span>\':"";return`<div class="kpi${s.big?" big":""}${s.skeleton?" skel":""}"${s.title?` title="${r(s.title)}"`:""}>\n<div class="label">${r(e)}</div>\n<div class="val${s.accent?" accent":""}">${s.skeleton?"\\xB7\\xB7\\xB7":r(t)+o}</div>\n${n?`<div class="hint${s.badHint?" bad":""}">${r(n)}</div>`:""}\n</div>`}function q(e){return`<div class="card"><div class="empty-hero">\n${V(e.mascotSize??48)}\n<div class="t">${r(e.title)}</div>\n${e.hint?`<div class="s">${r(e.hint)}</div>`:""}\n${e.command?O(e.command):""}\n</div></div>`}function re(e){return`<div class="chart-empty">${r(e)}</div>`}function z(){return w(`<section>${q({title:"No session selected."})}</section>`)}function pe(e){return`<span class="mascot" style="display:block;width:${e}px;flex:none" aria-hidden="true">${V(e)}</span>`}function tn(e,t={}){let n=e.reduce((i,a)=>i+a.value,0)||1,s=t.height??14,o=0,l=e.filter(i=>i.value>0).map(i=>{let a=i.value/n*100,d=`<rect x="${o}%" y="0" width="${a}%" height="${s}" fill="${i.color}"><title>${r(i.label)}</title></rect>`;return o+=a,d}).join("");return`<svg width="100%" height="${s}" viewBox="0 0 100 ${s}" preserveAspectRatio="none" role="img"${t.title?` aria-label="${r(t.title)}"`:""}>${l}</svg>`}function nn(e,t,n={}){let s=n.width??720,o=n.height??160,l={l:4,r:4,t:8,b:16},i=e[0]?.length??0;if(i===0)return\'<div class="chart-empty">no data points yet</div>\';let a=s-l.l-l.r,d=o-l.t-l.b,c=new Array(i).fill(0),m=0;for(let f of e)for(let p=0;p<i;p++)m=Math.max(m,c[p]+(f[p]??0));let b=new Array(i).fill(0);for(let f of e)for(let p=0;p<i;p++)b[p]+=f[p]??0;m=n.yMaxOverride??Math.max(...b,1);let S=f=>l.l+(i===1?a/2:f/(i-1)*a),v=f=>l.t+d-f/m*d,h=new Array(i).fill(0),u=[];e.forEach((f,p)=>{let g=f.map((E,_)=>h[_]+(E??0)),L=`M ${S(0).toFixed(1)} ${v(h[0]).toFixed(1)}`;for(let E=0;E<i;E++)L+=` L ${S(E).toFixed(1)} ${v(g[E]).toFixed(1)}`;for(let E=i-1;E>=0;E--)L+=` L ${S(E).toFixed(1)} ${v(h[E]).toFixed(1)}`;L+=" Z",u.push(`<path d="${L}" fill="${t[p]??"var(--cat-other)"}" opacity="0.85"><title>${r(n.labels?.[p]??"")}</title></path>`);for(let E=0;E<i;E++)h[E]=g[E]});let x=(n.markers??[]).map(f=>{let p=S(f.x);return`<line x1="${p.toFixed(1)}" y1="${l.t}" x2="${p.toFixed(1)}" y2="${l.t+d}" stroke="${f.color??"var(--bad)"}" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(f.label)}</title></line>`}).join(""),$=`<line x1="${l.l}" y1="${l.t+d}" x2="${l.l+a}" y2="${l.t+d}" stroke="var(--border2)" stroke-width="1"/>`;return`<svg width="100%" viewBox="0 0 ${s} ${o}" role="img" aria-label="stacked area">${u.join("")}${x}${$}</svg>`}function he(e,t={}){let n=t.width??720,s=t.height??150,o={l:4,r:4,t:8,b:14},l=e.length;if(!l)return\'<div class="chart-empty">no data points yet</div>\';let i=n-o.l-o.r,a=s-o.t-o.b,d=t.yMax??Math.max(...e,1),c=$=>o.l+(l===1?i/2:$/(l-1)*i),m=$=>o.t+a-$/d*a,b="";e.forEach(($,f)=>{b+=(f===0?"M":"L")+" "+c(f).toFixed(1)+" "+m($).toFixed(1)+" "});let S=t.color??"var(--accent-ink)",v=t.threshold?`<line x1="${o.l}" y1="${m(t.threshold.y).toFixed(1)}" x2="${o.l+i}" y2="${m(t.threshold.y).toFixed(1)}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 3"><title>${r(t.threshold.label)}</title></line>`:"",h=(t.markers??[]).map($=>`<line x1="${c($.x).toFixed(1)}" y1="${o.t}" x2="${c($.x).toFixed(1)}" y2="${o.t+a}" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="3 2"><title>${r($.label)}</title></line>`).join(""),u=t.fmtY,x=u?`<text x="${o.l+2}" y="${o.t+8}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(u(d))}</text><text x="${o.l+2}" y="${o.t+a-3}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(u(0))}</text>`:"";return`<svg width="100%" viewBox="0 0 ${n} ${s}" role="img" aria-label="line chart">${v}<path d="${b}" fill="none" stroke="${S}" stroke-width="2" stroke-linejoin="round"/>${h}<line x1="${o.l}" y1="${o.t+a}" x2="${o.l+i}" y2="${o.t+a}" stroke="var(--border2)"/><line x1="${o.l}" y1="${o.t}" x2="${o.l}" y2="${o.t+a}" stroke="var(--border2)"/>${x}</svg>`}function sn(e,t,n,s,o,l){let i=s-n||1,a=(e-n)/i*100,d=Math.max(.6,(t-e)/i*100);return`<svg width="100%" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><rect x="${a.toFixed(2)}" y="3" width="${d.toFixed(2)}" height="8" rx="3" fill="${o}"><title>${r(l)}</title></rect></svg>`}function Pe(e,t){let n=Math.max(...e.map(s=>s.value),1);return e.map(s=>`<div class="proprow" style="display:grid;grid-template-columns:130px 1fr 72px;gap:10px;align-items:center;padding:3px 0">\n<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r(s.label)}${s.sub?` <span class="muted">${r(s.sub)}</span>`:""}</div>\n<span class="trough"><i style="width:${(s.value/n*100).toFixed(1)}%;background:${s.color}"></i></span>\n<div class="right mono small">${r(t(s.value))}</div>\n</div>`).join("")}var _e=50,on=12;function us(e,t,n){return t?e.conn==="reconnecting"?"reconnecting":t.badge==="ended"?"ended":n&&n.summary.toolCalls===0?"empty":e.data.mode==="file"?e.data.capabilities.watch?"file":"snapshot":t.badge==="idle"?"stalled":"live":"connecting"}function Ne(e,t){return`<span class="bdot ${e}"${e==="p"?\' data-pulse="1"\':""} aria-hidden="true"></span>${t?`<span class="vh">${t}</span>`:""}`}var ie={pulse:Ne("p","live"),hollow:Ne("h","quiet"),good:Ne("g","ended"),static:Ne("s")},rn=[ie.pulse,"","This view refreshes as the transcript grows. Nothing leaves this machine."],ps={connecting:[ie.static,"Connecting to orangu serve\\u2026","The page waits for the first event."],live:rn,empty:rn,stalled:[ie.hollow,"","The transcript did not grow recently. The session may need your input."],ended:[ie.good,"Session ended \\xB7 final numbers",""],reconnecting:[ie.hollow,"Connection lost \\xB7 retrying","The page reconnects on its own."],file:[ie.static,"Watching with orangu watch","orangu watch rewrites this file on each change. Reload the page to see the latest numbers."],snapshot:[ie.static,"Static snapshot","This file does not update. To follow the session live, run orangu watch."]};function ms(e,t,n){let s=n?`turn <b style="color:var(--ink1)">${n.summary.turns}</b>${e==="ended"||e==="snapshot"?"":" in progress"}`:"",[o,l,i]=ps[e],a=l,d=i;return e==="live"||e==="empty"?a=t?.possiblyLive?"Watching \\xB7 possibly live":"Watching a running session":e==="stalled"?a=`Watching \\xB7 quiet for ${Math.max(1,Math.round((t?.ageMs??0)/6e4))}m`:e==="ended"&&(d=t?ue(t):""),`<div class="livebanner">${pe(44)}<div class="grow"><div class="lt">${o}<span aria-live="polite">${r(a)}</span></div><div class="ls">${r(d)}</div></div><div class="lr">${s}</div></div>`}function De(e,t,n){let s=e.startTs!==void 0&&isFinite(t)?sn(e.startTs,e.endTs??n,t,n||t+1,P("agent"),`${e.agentType??e.name??e.agentId} \\xB7 ${C(e.durationMs)} \\xB7 ${y(e.totalTokens)} tokens`):\'<div class="small muted">no timing</div>\';return`<div class="swimrow"><div class="alabel">${"\\xB7 ".repeat(e.spawnDepth)}${r(e.agentType||e.name||e.agentId.slice(0,10))} <small>${r(e.model??"")}</small></div><div${e.status==="running"?"":\' class="dim"\'}>${s}</div></div>`}function gs(e){let t=e.agents.runs;if(!t.length)return"";let n=t.filter(a=>a.status==="running"),s=Math.min(...t.map(a=>a.startTs??1/0).filter(isFinite)),o=Math.max(...t.map(a=>a.endTs??-1/0).filter(isFinite)),l=[...n,...t.filter(a=>a.status!=="running")].slice(0,on),i=t.length>on?`<div class="pagefoot"><button data-all-lanes="1">show all ${t.length} agents</button></div>`:"";return`<div class="card pad mb18"><div class="card-title">Agents \\xB7 ${n.length} running \\xB7 ${t.length-n.length} done</div><div class="agent-lanes">${l.map(a=>De(a,s,o)).join("")}</div>${i}</div>`}function fs(e,t,n){let s=us(e,t,n),o=e.audience,l=n?.summary,i=!n,a=[I("Elapsed",l?.wallMs!==void 0?C(l.wallMs):"\\u2013","",{big:!0,skeleton:i}),I("Tokens so far",l?y(l.totalTokens):"\\u2013","",{big:!0,accent:!0,skeleton:i}),I("Tool calls",l?String(l.toolCalls):"\\u2013","",{big:!0,skeleton:i}),I(fe("Cache hits",o),l?A(l.cacheHitRatio):"\\u2013","",{big:!0,skeleton:i})].join(""),d=n?.context,c=d?.contextWindow?d.final/d.contextWindow:void 0,m=s==="ended"?"\\u2013":M(`${R(l?.compactions??0,"compaction")} so far${c!==void 0&&c>=.75?" \\xB7 compaction likely near 90%":""}`,o),b=`<div class="card pad mb18">\n<div class="ctxhead"><span>${fe("Context window",o)}</span><span class="mono">${c!==void 0?r(A(c))+" of "+r(y(d.contextWindow)):d?r(y(d.final)):"\\u2013"}</span></div>\n<div class="ctxbar"><i style="width:${c!==void 0?(c*100).toFixed(1):0}%"></i></div>\n<div class="smt8">${r(m)}</div>\n</div>`,S=n?_t(n,_e+1):[],v=S.length>_e,h=S.slice(-_e).map(g=>`<div class="feedrow">${g.agentType?\'<span style="width:2px;align-self:stretch;background:var(--cat-agent);flex:none"></span>\':""}<span class="ft">${r(xe(g.ts))}</span><span class="sw" style="background:${P(g.category)}"></span><span class="fn">${r(g.name)}</span><span class="fw">${r(g.summary)}</span><span class="fd">${g.durationMs!==void 0?r(C(g.durationMs)):""}${g.isError?" \\xB7 error":""}</span></div>`).join(""),u=s==="connecting"?\'<div class="feedrow muted">Waiting for the first event\\u2026</div>\':\'<div class="feedrow muted">No tool calls yet.</div>\',x=[];t&&x.push(`streaming from \\u2026/${B(t.id)}.jsonl`),s==="ended"&&x.push("transcript closed"),v&&n&&x.push(`showing last ${_e} of ${n.tools.calls.length+n.events.length+n.agents.runs.length} \\xB7 full list in Timeline`);let $=s==="ended"?`<a class="btn-sm" href="#overview${t?"?s="+r(t.id):""}" style="display:inline-block;margin-left:10px">Open Overview \\u2192</a>`:"",f=`<div class="feed" aria-live="off"><div class="card-head">Live feed</div>${h||u}<div class="feedfoot">${r(x.join(" \\xB7 "))}${$}</div></div>`,p=w(`<section>${ms(s,t,n)}<div class="kpis k4">${a}</div>${b}${n?gs(n):""}${f}</section>`);return p.querySelector("[data-all-lanes]")?.addEventListener("click",g=>{if(!n)return;let L=p.querySelector(".agent-lanes");L.classList.add("swimbox");let E=Math.min(...n.agents.runs.map(ee=>ee.startTs??1/0).filter(isFinite)),_=Math.max(...n.agents.runs.map(ee=>ee.endTs??-1/0).filter(isFinite));L.innerHTML=n.agents.runs.map(ee=>De(ee,E,_)).join(""),g.currentTarget.parentElement?.remove()}),p}function an(e){let t=te(e.data),n=/[?&]s=/.test(location.hash),s=typeof window<"u"?window.__ORANGU_FLEET__:void 0;if(t.length>1&&!n&&s)return s(e,t);let o=e.data.sessions.find(l=>l.id===(e.state.s??e.data.selectedId))??e.data.sessions[0];return o?fs(e,o,e.a):w(`<section>${q({title:"orangu found no sessions.",command:"orangu serve"})}</section>`)}function Be(e,t){return`<div class="banner ${e}">${t}</div>`}function Y(e,t){let n=e.parse.reconciliation;if(!(e.parse.badLines>0||!n.ok))return"";if(t==="plain")return Be("warn",`orangu could not read ${H(e.parse.badLines)} lines of the transcript. The numbers may be low.`);let o=n.matchesWithinPct.toFixed(2);return Be("warn",`Parsed ${r(H(e.parse.totalLines-e.parse.badLines))} of ${r(H(e.parse.totalLines))} records \\xB7 token totals off by ${r(o)}% \\xB7 <a href="#coverage">see Coverage</a>`)}function U(e,t={}){let n=Object.entries(t.data??{}).map(([i,a])=>` data-${i}="${r(a)}"`).join(""),s="chip"+(t.active?" active":""),o=t.disabled?\' aria-disabled="true" tabindex="-1"\':"",l=t.removable?\'<button class="x" aria-label="remove filter">\\xD7</button>\':"";return`<button type="button" class="${s}"${o}${t.title?` title="${r(t.title)}"`:""}${n}>${r(e)}${l}</button>`}function ln(e){if(!e.length)return"";let t=e.map(n=>`<span class="sigchip">${r(n.label)} <b class="${r(n.tone)}"${n.detail?` title="${r(n.detail)}"`:""}>${r(String(n.value))}</b></span>`).join("");return`<details class="signals"><summary>${e.length} signals</summary><div class="chiprow">${t}</div></details>`}function et(e,t){return e?`<span class="rec sg-lead"><b>Improvement:</b> ${r(M(e,t))}</span>`:""}function tt(e,t,n,s){return t||n?`<details class="why" id="why-${r(e)}"><summary><span class="chev" aria-hidden="true">\\u25B8</span>Why</summary>${t?`<p>${r(M(t,s))}</p>`:""}${n?`<p class="muted">${r(M(n,s))}</p>`:""}</details>`:""}function nt(e,t,n={}){let s=Ee(e.savings,n.sessionTotalTokens,e.ruleId),o=t==="plain"?"":`<span class="pill">${r(e.ruleId)}</span>`,l=e.turnIndexes.length&&t!=="plain"&&!n.link?`<div style="margin-top:10px"><button class="btn-sm" data-turns="${r(e.turnIndexes.join(","))}">Show ${R(e.turnIndexes.length,"turn")} \\u2192</button></div>`:"",i=e.detail?`<p>${r(M(e.detail,t))}</p>`:"",a=n.command?`<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${O(n.command,"$","the Claude Code command")}<div class="small">${r(ne(n.cwd))}${n.how?` <a href="${r(n.how)}" data-to="ai-steps">See the 3 steps \\u2192</a>`:""}</div></div>`:"",d=n.link?`<div style="margin-top:10px"><a class="btn-sm" href="${r(n.link.href)}">${r(n.link.label)}</a></div>`:"",c=e.improvement||e.recommendation;return`<details class="finding${n.open?" top":""}"${n.open?" open":""}>\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="sev ${r(e.severity)}" title="${r(e.severity)}"></span><b>${r(M(e.title,t))}</b>${s?`<span class="fsave" title="${r(s.title)}">${r(s.text)}</span>`:""}${o}${et(c,t)}</summary>\n<div class="fbody">\n${tt(n.id??e.id,e.why,e.method,t)}${i}\n${d}${l}\n${a}\n</div>\n</details>`}function ve(e,t,n){return Z(e.state,{s:e.state.s??t.session.id,...n})}function hs(e,t){return`<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${V(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${r(Et(e.summary))}</div><div class="sg-sub">${r(M(e.summary.narrative,t))}</div></div></div>`}function vs(e){let t=e.summary,n=Je(t).join(" \\xB7 ")||"no commits, PRs or test runs detected",s=Ct(t),o=t.totalTokens?`${A(t.cacheHitRatio)} read from cache \\xB7 ${y(e.tokens.byKind.output)} generated`:"no usage recorded",l=Ye(t.outcomes);return`<div class="triptych">\n<div class="axis q"><div class="aname">Quality \\u2191</div><div class="aval">${r(Lt(e.quality.signals))}${l?` <span class="anote">(${l})</span>`:""}</div><div class="anote">${r(n)}</div>${ln(e.quality.signals)}</div>\n<div class="axis t"><div class="aname">Time \\u2193</div><div class="aval">${r(s.value)}</div><div class="anote">${r(s.note)}</div></div>\n<div class="axis c"><div class="aname">Tokens \\u2193</div><div class="aval">${r(y(t.totalTokens))}</div><div class="anote">${r(o)}</div></div>\n</div>`}function cn(e,t,n){if(!n)return`<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${V(22)}<span class="muted">The rules found nothing to change in this session.</span></div>`;let s=At(n),o=s?.tool?{href:ve(e,t,{screen:"timeline",tool:s.tool}),label:`See the ${s.tool} calls \\u2192`}:s?{href:ve(e,t,{screen:"timeline",turn:s.turn}),label:`See the ${R(n.turnIndexes.length,"turn")} \\u2192`}:void 0;return`<div class="eyebrow mb6">Top improvement</div>${nt(n,e.audience,{...Qe(n,t.session.id),sessionTotalTokens:t.summary.totalTokens,open:!0,how:ve(e,t,{screen:"suggest"}),cwd:t.session.cwd,...o?{link:o}:{}})}`}function bs(e){let t=e.context,n=t.series.filter(i=>!i.agentId),o=`${t.contextWindow?`peak ${A(e.summary.contextPeak/t.contextWindow)} of the window`:`peak ${y(e.summary.contextPeak)}`} \\xB7 ${R(e.summary.compactions,"compaction")}`;return`<div class="card pad"><div class="card-title">Context</div>${n.length?`<div class="spark">${he(n.map(i=>i.contextSize),{width:320,height:60,markers:Te(t.compactions,n),yMax:t.contextWindow})}</div>`:""}<div class="small muted">${r(o)}</div></div>`}function dn(e,t){let n=t.summary,s=ge("session",t,void 0).length;return`<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${[{screen:"timeline",label:n.toolErrors?`Timeline \\xB7 ${R(n.toolErrors,"error")} only`:`Timeline \\xB7 ${H(n.turns)} turns`,state:n.toolErrors?{errorsOnly:!0}:{}},{screen:"tools",label:`Tools \\xB7 ${R(n.toolCalls,"call")}, ${R(n.toolErrors,"error")}`,state:{}},{screen:"suggest",label:`Improvements \\xB7 ${s||"none"}`,state:{}}].map(l=>`<a data-screen="${l.screen}" href="${r(ve(e,t,{screen:l.screen,...l.state}))}">${r(M(l.label,e.audience))} \\u2192</a>`).join("")}</nav>`}function ys(e,t){let n=t.summary.topInsightIds.map(l=>t.insights.find(i=>i.id===l)).filter(l=>!!l),s=n.slice(1).map(l=>nt(l,"dev",{...Qe(l,t.session.id),sessionTotalTokens:t.summary.totalTokens,cwd:t.session.cwd})).join(""),o=It(Xt(ge("session",t,void 0)),t.insights.length);return`${vs(t)}${cn(e,t,n[0])}\n<div class="two-up mb16">${bs(t)}${dn(e,t)}</div>\n${e.harnessCard?.()??""}\n${o?`<p class="recoverable"><a href="${r(ve(e,t,{screen:"suggest"}))}">${r(o)} \\u2192</a></p>`:""}${s?`<h3 style="margin:4px 0 10px">More findings</h3>${s}`:""}`}function $s(e,t){let n=t.summary,o=t.turns.find(a=>a.kind==="human")?.promptPreview.slice(0,140)||(t.session.title?t.session.title:"(this report does not include the prompt text)"),l=`${y(n.totalTokens)} tokens \\xB7 ${C(n.wallMs)}, of which ${C(n.humanWaitMs)} needed your attention`,i=t.insights.find(a=>a.id===n.topInsightIds[0])??t.insights[0];return`<div class="card mb16" style="overflow:hidden">\n<div class="card-head">${V(22)}What happened here</div>\n<div class="plaingrid">\n<div class="k">Goal</div><div>${r(o)}</div>\n<div class="k">How it ended</div><div>${r(Rt(n.ending,n.outcomes))}</div>\n<div class="k">Tokens &amp; time</div><div>${r(l)}</div>\n</div>\n</div>\n${cn(e,t,i)}\n${dn(e,t)}`}function ks(e){let t=e.a;if(!t)return`<section>${q({title:"No session selected.",hint:W(e.data)?"This report covers a scope, not a session.":"Pick a session from the sidebar."})}</section>`;let n=e.audience==="plain"?$s(e,t):ys(e,t);return`<section>${Y(t,e.audience)}${hs(t,e.audience)}${n}</section>`}function st(e){return w(ks(e))}var un=10;function xs(e,t,n){let s=n.state;if(s.turn!==void 0&&t.index!==s.turn)return!1;let o=de(e.tools.calls,t.index,s.agent);return!(s.filter==="errors"&&!o.some(l=>l.isError)||s.filter==="agents"&&t.agents.length===0&&!o.some(l=>l.agentId)||s.filter==="human"&&t.kind!=="human"||s.agent&&!t.agents.includes(s.agent)&&!o.length||(s.tool||s.cat||s.errorsOnly)&&(s.tool&&!o.some(l=>l.name===s.tool)||s.cat&&!o.some(l=>l.category===s.cat)||s.errorsOnly&&!o.some(l=>l.isError)))}function ws(e){let t=e.isCommand?"cmd":e.kind==="human"?"human":e.autoContinuations>0?"auto":e.kind;return`<span class="kind ${e.isCommand?"kcmd":e.kind==="human"?"khuman":""}">${r(t)}</span>`}function Ss(e,t){let n=e.promptPreview||e.commandName;return n?{text:n,own:!1}:{text:[e.promptChars?`${y(e.promptChars)}-char prompt`:"",e.activity].filter(Boolean).join(" \\xB7 ")||(t?"(no prompt)":"(prompt text not included)"),own:!0}}function Ts(e,t,n,s,o){let i=Ft(e.tools.calls,t.index,n.state.agent).map(u=>`<i style="width:${u.pct.toFixed(1)}%;background:${P(u.cat)}"></i>`).join(""),{text:a,own:d}=Ss(t,n.data.capabilities.includeText),c=d?\' style="color:var(--ink3)"\':"",m=de(e.tools.calls,t.index,n.state.agent),b=m.map(u=>{let x=u.agentId?e.agents.runs.find(f=>f.agentId===u.agentId):void 0,$=u.agentId?x?.agentType||x?.name||u.agentId.slice(0,8):"main";return`<div class="evline"><span class="sw" style="background:${P(u.category)}"></span><span class="pill">${r($)}</span><span class="en">${r(u.name)}</span><span class="ew">${r(u.summary)}</span><span class="tag ${u.isError?"bad":"good"}">${u.isError?"error":"ok"}</span><span class="ex">${[u.durationMs!==void 0?C(u.durationMs):"",u.resultBytes?we(u.resultBytes):"",u.errorHint??""].filter(Boolean).map(r).join(" \\xB7 ")}</span></div>`}).join(""),S=t.agents.map(u=>{let x=e.agents.runs.find(f=>f.agentId===u);if(!x)return"";let $=x.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\';return`<button class="btn-sm" data-agent-jump="${r(u)}">\\u25B8 ${r(x.agentType||x.name||u.slice(0,8))} \\xB7 ${r(y(x.totalTokens))} tokens${$}</button>`}).join(" "),v=[t.firstResponseMs!==void 0?`first response ${C(t.firstResponseMs)}`:"",t.humanGapMs?`waited ${C(t.humanGapMs)}`:"",t.autoContinuations?`${t.autoContinuations} auto-continuations`:"",t.models.length?t.models.join(", "):"","context end "+(t.contextEnd?y(t.contextEnd):"\\u2013")].filter(Boolean).join(" \\xB7 "),h=C(t.durationMs??t.reportedDurationMs);return`<details class="turn${t.interrupted?" interrupted":""}" id="turn-${t.index}"${o?" open":""}>\n<summary>\n<span class="tnum">#${t.index}</span>\n<span class="tprompt"${c}>${ws(t)}${r(a)}</span>\n<span class="mixbar" title="tool mix">${i}</span>\n<span class="tcell">${m.length}\\u2699</span>\n<span class="tcell">${r(h)}</span>\n<span class="tcell${t.totalTokens>=s&&t.totalTokens>0?" hot":""}">${r(y(t.totalTokens))}</span>\n</summary>\n<div class="tbody">\n<div class="tmeta">${r(v)}</div>\n${b||\'<p class="small muted" style="margin:0">No tool calls in this turn.</p>\'}\n${S?`<div class="pill-row">${S}</div>`:""}\n</div>\n</details>`}function pn(e,t,n,s){return jt(t,e.context.compactions).map(o=>{let l=o.turns.map(a=>Ts(e,a,n,s,n.state.turn===a.index)).join(""),i=o.after?`<div class="divider"><span class="mono">\\u21C5 context compacted at turn ${o.after.turnIndex}${o.after.contextBefore&&o.after.contextAfter?` \\xB7 ${y(o.after.contextBefore)} \\u2192 ${y(o.after.contextAfter)}`:""}</span></div>`:"";return l+i}).join("")}function gn(e){let t=e.a;if(!t)return z();let n=e.state,s=t.turns,o={all:s.length,errors:s.filter(f=>de(t.tools.calls,f.index).some(p=>p.isError)).length,agents:s.filter(f=>f.agents.length>0||de(t.tools.calls,f.index).some(p=>p.agentId)).length,human:s.filter(f=>f.kind==="human").length},l=n.filter??"all",i=[U(`All turns \\xB7 ${o.all}`,{active:l==="all",data:{filter:"all"}}),U(`Errors only \\xB7 ${o.errors}`,{active:l==="errors",data:{filter:"errors"}}),U(`With agents \\xB7 ${o.agents}`,{active:l==="agents",data:{filter:"agents"}}),U(`Human turns \\xB7 ${o.human}`,{active:l==="human",data:{filter:"human"}})].join(""),a=[];n.tool&&a.push(U("tool: "+n.tool,{active:!0,removable:!0,data:{clear:"tool"}})),n.cat&&a.push(U("category: "+n.cat,{active:!0,removable:!0,data:{clear:"cat"}})),n.agent&&a.push(U("agent: "+n.agent.slice(0,12),{active:!0,removable:!0,data:{clear:"agent"}})),n.turn!==void 0&&a.push(U("turn "+n.turn,{active:!0,removable:!0,data:{clear:"turn"}})),n.errorsOnly&&a.push(U("errors only",{active:!0,removable:!0,data:{clear:"err"}}));let d=s.filter(f=>xs(t,f,e)),c=Nt(s),m=d.length<=un||n.turn!==void 0||!!(n.tool||n.cat||n.agent||n.errorsOnly||n.filter&&n.filter!=="all"),b=m?d:d.slice(0,un),S=new Set(b.map(f=>f.index)),v=pn(t,b,e,c),h=d.length?"":`<div class="card pad" style="background:var(--bg2);text-align:center"><p class="muted" style="margin:0 0 10px">No turns match \\xB7 ${r(l==="all"?"these filters":l)}</p><button class="btn-sm" data-clearall="1">Clear filters</button></div>`,u=m?"":`<div class="pagefoot">showing ${b.length} of ${d.length} turns \\xB7 <button data-showall="1">show all</button></div>`,x=M("Open a turn to see every parent and subagent call. The URL saves this view.",e.audience),$=w(`<section>\n${Y(t,e.audience)}\n<div class="chiprow">${i}${a.join("")}<span class="small muted" style="margin-left:auto">${r(x)}</span></div>\n<div id="turnlist">${v}${h}${u}</div>\n</section>`);return $.querySelectorAll("[data-filter]").forEach(f=>f.addEventListener("click",()=>{let p=f.dataset.filter;e.go({filter:p==="all"?void 0:p,turn:void 0})})),$.querySelectorAll("[data-clear]").forEach(f=>f.addEventListener("click",()=>{let p=f.dataset.clear;p==="err"?e.go({errorsOnly:void 0}):p==="tool"?e.go({tool:void 0}):p==="cat"?e.go({cat:void 0}):p==="agent"?e.go({agent:void 0}):e.go({turn:void 0})})),$.querySelector("[data-clearall]")?.addEventListener("click",()=>e.go({filter:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0})),$.querySelector("[data-showall]")?.addEventListener("click",()=>{let f=$.querySelector("#turnlist");f.innerHTML=pn(t,d,e,c),Ce(f),mn(f,e)}),mn($,e),n.turn!==void 0&&S.has(n.turn)&&setTimeout(()=>$.querySelector("#turn-"+n.turn)?.scrollIntoView({block:"center"}),0),$}function mn(e,t){e.querySelectorAll("[data-agent-jump]").forEach(n=>n.addEventListener("click",()=>t.go({screen:"agents",agent:n.dataset.agentJump},{push:!0})))}function Oe(e,t,n=""){let s=t?"No error text was recorded.":\'Redaction hides the text. Run the command again with <span class="mono">--include-text</span>.\';return`<div class="rrow"${n?` style="${n}"`:""}><span class="grow"><b>${r(e.tool)}</b> \\xB7 ${R(e.total,"error")} across ${R(e.signatures,"recurring signature")}</span>${e.sessions?`<span class="mono small muted">${e.sessions}+ sessions</span>`:""}<span class="small muted">${s}</span></div>`}var fn=12,Rs=[[/ENOENT/,"run the build first, or check the path"],[/old_string not found|String to replace not found/i,"the file changed after the last read. Read it again before you edit it."],[/EACCES|permission/i,"permission problem: check file modes"],[/timed? out/i,"raise the timeout or split the command"]];function Es(e){for(let[t,n]of Rs)if(t.test(e))return n;return""}function hn(e){let t=e.a;if(!t)return z();let n=t.tools,s=t.summary.toolCalls,o=n.byCategory.map(p=>`<span style="width:${s?(p.count/s*100).toFixed(1):0}%;background:${P(p.category)}" title="${r(ce[p.category]??p.category)} \\xB7 ${p.count}"></span>`).join(""),l=n.byCategory.map(p=>`<span><i class="sw" style="background:${P(p.category)}"></i>${r(ce[p.category]??p.category)} \\xB7 ${p.count}</span>`).join(""),i=n.parallelism,a=i.groups?`${i.parallelGroups} of ${i.groups} batches ran in parallel \\xB7 max ${i.maxGroupSize} at once`:"",d=Math.max(...n.byName.map(p=>p.totalMs),1),c="One or more calls took far longer than the rest."+(e.audience==="plain"?"":" p95 is the typical worst case."),m=p=>p.avgMs>p.p95Ms?`<td class="num" title="${c}">${r(C(p.avgMs))}<span class="outlier">outlier</span></td>`:`<td class="num">${r(C(p.avgMs))}</td>`,b=p=>p.map(g=>`<tr class="tool-row" data-tool="${r(g.name)}" title="${r(`${we(g.resultBytesTotal)} output \\xB7 ${g.mainCount} main / ${g.agentCount} agent`)}">\n<td><i class="swd" style="background:${P(g.category)}"></i><span class="mono125">${r(g.name)}</span></td>\n<td class="num">${H(g.count)}</td>\n<td class="num"${g.errors?\' style="color:var(--bad)"\':\' style="color:var(--ink3)"\'}>${g.errors}</td>\n${m(g)}\n<td class="num p95col">${r(C(g.p95Ms))}</td>\n<td><span class="trough"><i style="width:${(g.totalMs/d*100).toFixed(1)}%;background:${P(g.category)}"></i></span></td>\n</tr>`).join(""),S=`<tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg</th><th class="num p95col">${e.audience==="plain"?"":"p95"}</th><th>Share of tool time</th></tr>`,v=n.byName.length>fn?`<div class="pagefoot"><button data-more-tools="1">show all ${n.byName.length} tools</button></div>`:"",{kept:h,hidden:u}=Se(n.errorGroups,p=>({tool:p.name,total:p.count})),x=n.errorGroups.length?u.map(p=>Oe(p,e.data.capabilities.includeText)).join("")+h.slice(0,8).map(p=>{let g=p.sampleHint||Es(p.signature);return`<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${r(p.signature)}</span><span class="mono115" style="margin-left:auto">\\xD7${p.count}</span></div><div class="small muted" style="margin-top:2px">${r(p.name)}${g?" \\xB7 "+r(g):""}</div></div>`}).join(""):\'<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>\',$=w(`<section>\n${Y(t,e.audience)}\n<div class="card pad mb16">\n<div class="card-title">${r(M(`Calls by category \\xB7 ${s} total`,e.audience))}</div>\n<div class="catbar">${o}</div>\n<div class="legend">${l}</div>\n${a?`<div class="smt8">${r(a)} \\xB7 ${r(A(i.parallelCallShare))} of calls in a parallel batch</div>`:""}\n</div>\n<div class="card scroll-x mb16">\n<table class="grid"><thead>${S}</thead><tbody id="toolbody">${b(n.byName.slice(0,fn))}</tbody></table>\n${v}\n</div>\n<div class="card pad"><div class="card-title">Recurring errors in this session</div>${x}</div>\n</section>`),f=p=>{e.audience==="plain"&&p.querySelectorAll(".p95col").forEach(g=>g.remove()),p.querySelectorAll(".tool-row").forEach(g=>g.addEventListener("click",()=>e.go({screen:"timeline",tool:g.dataset.tool},{push:!0})))};return f($),$.querySelector("[data-more-tools]")?.addEventListener("click",p=>{let g=$.querySelector("#toolbody");g.innerHTML=b(n.byName),f(g),p.currentTarget.parentElement?.remove()}),$}function be(e,t){let n=e==="repo"?"analyse this repository":e==="global"?"analyse everything on this machine":"compare your Claude Code config with what your sessions used",s=W(t)?"This report carries one scope, not a session.":"This single-file report carries one session.";return q({title:"Across-session views need orangu serve",hint:`${s} Start the local viewer to ${n}. Nothing leaves your machine.`,command:"orangu serve"})}function ot(e,t){return`<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${e==="repo"?"this repository":"supported sessions on this machine"} link back to example sessions. Review them before you change your harness or your scripts.</div></div><a class="btn-primary" href="${r(Z(t,{screen:"suggest",scope:e}))}">Review ${e} improvements \\u2192</a></div>`}function vn(e){let t=e.data.aggregates.repo;return t?w(`<section>${ot("repo",e.state)}${Cs(t,e)}</section>`):w(`<section>${be("repo",e.data)}</section>`)}function Cs(e,t){return`<div class="kpis">${[I("Sessions",String(e.sessionCount)),I("Total tokens",y(e.totals.tokens),"",{accent:!0}),I("Per session",y(e.averages.tokensPerSession)),I("Per human turn",y(e.averages.tokensPerHumanTurn)),I(fe("Cache hits",t.audience),A(e.averages.cacheHitRatio)),I("Tool error rate",A(e.averages.toolErrorRate,1),"",{badHint:e.averages.toolErrorRate>=.03})].join("")}</div>${rt(e,t)}`}function rt(e,t){let n=e.crossFindings.length?`<p class="sg-cap">${Fe}</p>`+e.crossFindings.slice(0,8).map(c=>`<div class="rrow"><span class="pill">${r(c.ruleId)}</span><span class="grow">${r(c.exampleTitle||c.title)}</span><span class="mono small muted">${R(c.sessions,"session")}</span><span class="saveval">${r(Re(Xe(c)))}</span></div>`).join(""):re(e.sessionCount<2?"Patterns appear from 2 sessions on.":`No recurring findings across ${e.sessionCount} sessions.`),s=Math.max(...e.topReReadFiles.map(c=>c.totalReads),1),o=e.topReReadFiles.length?e.topReReadFiles.slice(0,8).map(c=>`<div class="rerow"><div class="rehead"><span class="mono grow ellip">${r(c.path)}</span><span class="mono115">${c.sessions} sess</span><span class="saveval">${c.totalReads} reads</span></div><span class="trough" style="height:6px;margin-top:5px"><i style="width:${(c.totalReads/s*100).toFixed(1)}%"></i></span></div>`).join(""):re("No heavily re-read files."),{kept:l,hidden:i}=Se(e.recurringErrors,c=>({tool:c.tool,total:c.total,sessions:c.sessions})),a=e.recurringErrors.length?`<div class="card mb16" style="overflow:hidden"><div class="card-head">Recurring errors \\xB7 environment problems to fix once</div>${i.map(c=>Oe(c,t.data.capabilities.includeText,"padding:10px 18px")).join("")}${l.slice(0,8).map(c=>`<div class="rrow" style="padding:10px 18px"><span class="sigline">${r(c.signature)}</span><span class="kind">${r(c.tool)}</span><span class="mono small muted">${R(c.sessions,"session")}</span><span class="mono125">\\xD7${c.total}</span></div>`).join("")}</div>`:"",d=e.topSessions.slice(0,10).map(c=>{let m=[c.prs?`${c.prs} PR`:"",c.commits?`${c.commits} commits`:"",c.interruptions?`interrupted \\xD7${c.interruptions}`:""].filter(Boolean).join(" \\xB7 ")||"\\u2013";return`<tr>\n<td><a class="mono" style="font-size:12px" ${t.data.mode==="serve"?`href="#overview?s=${r(c.id)}"`:`href="#" title="open with: orangu report ${r(c.id.slice(0,8))}" aria-disabled="true" onclick="return false"`}>${r(c.id.slice(0,8))}</a></td>\n<td class="ellip" style="max-width:280px;color:var(--ink2)">${r(c.title??"")}</td>\n<td class="num">${c.turns}</td>\n<td class="num">${c.toolCalls}</td>\n<td class="num"${c.toolErrors?\' style="color:var(--bad)"\':""}>${c.toolErrors}</td>\n<td class="num" style="font-weight:700">${r(y(c.tokens))}</td>\n<td class="small muted">${r(m)}</td>\n</tr>`}).join("");return`<div class="two-up">\n<div class="card pad"><div class="card-title">Recurring findings \\xB7 ranked by evidence</div><div class="cardsub">patterns one session cannot establish</div>${n}</div>\n<div class="card pad"><div class="card-title">Most re-read files</div><div class="cardsub">context carried again and again \\xB7 trim or index these</div>${o}</div>\n</div>\n${a}\n<div class="card scroll-x">\n<div class="card-head"><span>Heaviest sessions</span><span style="margin-left:auto;font-weight:400;font-size:12px;color:var(--ink3)">sorted by tokens</span></div>\n<table class="grid"><thead><tr><th>Session</th><th>Title</th><th class="num">Turns</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th>Outcome</th></tr></thead><tbody>${d}</tbody></table>\n</div>\n${e.sessionCount?"":`<div style="margin-top:16px">${re("Analysing sessions\\u2026")}</div>`}\n<p class="small muted" style="margin-top:12px">${R(e.sessionCount,"session")} \\xB7 every figure is a token count reported by the API.</p>`}var bn=["Instruction files","Scripts and CLIs","Hooks","Skills to create","Skills to discover","Subagents and agents","MCP servers","Plugins","Workflow and configuration"];var qe=e=>e?.verificationTrusted===!0;function it(e){return e==="kicked-off"?"running":e==="rejected"?"dismissed":e??"new"}function at(e,t="",n=!1){let s=e!=="verified"||n,o=s?e==="verified"?"verified comparison":e:"legacy unverified";return`<span class="status-chip" data-status="${s?e:"legacy"}" aria-live="polite"${t?` title="${r(t)}"`:""}>${o}${e==="verified"&&s?" \\u2713":""}</span>`}function yn(e){return`<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${O(e.claude)}</div></div>`}function As(e,t){return`<div class="card pad mb16"><div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">\n<li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>\n<li><div><span>${r(e)}</span>${He()}</div></li>\n<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository. ${t==="serve"?"The proposal shows below, in Saved proposals.":"The proposal is in ~/.orangu/proposals. Run orangu serve to see it here."}</span></div></li>\n</ol></div>`}function Is(e,t,n,s,o){let l=e.audience,i=Ee(t.savings,e.state.scope===void 0||e.state.scope==="session"?e.a?.summary.totalTokens:void 0,t.ruleId),a=o?.proposal?.effort,d=it(o?.status),c=Qt(o),m=t.sessionIds.map(b=>e.data.mode==="serve"?`<a class="exch" href="${r(Z(e.state,{screen:"overview",s:b}))}">${r(b.slice(0,8))}</a>`:`<span class="exch">${r(b.slice(0,8))}</span>`).join("");return`<details class="finding" data-sid="${r(s)}" data-rule="${r(t.ruleId)}">\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="rank">${n}</span>${t.severity?`<span class="sev ${r(t.severity)}" title="${r(t.severity)}"></span>`:""}<b class="sg-t">${r(M(t.displayTitle||t.title,l))}</b>${i?`<span class="fsave sg-save" title="${r(i.title)}">${r(i.text)}</span>`:""}${a?`<span class="pill">effort ${r(a)}</span>`:""}${et(t.improvement,l)}</summary>\n<div class="fbody sg-body">\n${tt(s,t.why,t.method,l)}<div class="sg-ev"><b>Evidence:</b> ${r(M(t.detail,l))} ${l==="plain"?"":`<span class="pill">${r(t.ruleId)}</span>`}</div>\n<div class="sg-ex"><span class="small muted">Example sessions:</span>${m}</div>\n${e.proposals?.details(o)??""}\n<div class="kickrow">\n<button type="button" class="btn-primary" data-kick-copy="${r(s)}">Copy the Claude Code command</button>\n${at(d,c,qe(o))}\n</div>\n<div class="kick-cmd sg-cmd">${e.data.mode==="serve"&&o&&!o.proposal&&d!=="dismissed"?yn(Le(o,"serve")):""}</div>\n<div class="kick-msg small" aria-live="polite">${r(c)}</div>\n</div>\n</details>`}function Ms(e){let t=e.a,n=e.state.scope??W(e.data)??"session",s=e.data.aggregates.repo?.sessionCount,o=e.data.aggregates.global?.sessionCount,l=[U("This session",{active:n==="session",disabled:!t,title:t?"":"no session is selected",data:{scope:"session"}}),U(s!==void 0?`Repo \\xB7 ${s}`:"Repo",{active:n==="repo",disabled:s===void 0,title:s===void 0?"run orangu serve":"",data:{scope:"repo"}}),U(o!==void 0?`Global \\xB7 ${o}`:"Global",{active:n==="global",disabled:o===void 0,title:o===void 0?"run orangu serve":"",data:{scope:"global"}})].join(""),i=n==="session"?void 0:e.data.aggregates[n],a=ge(n,t,i).map(g=>{let L=Ze(g,n);return{row:g,finding:L,sid:Me(Ie(L,"report"))}}),d=new Map(a.map(g=>[g.sid,g])),c=a.map(g=>({...g,record:Zt(e.data.suggestions,g.row,n,g.sid)})),m=c.flatMap(({record:g})=>g?[g]:[]),b=i?.sessions.map(g=>g.id)??[],S=M(n==="session"?"Each improvement below comes from the evidence in this session.":n==="repo"?"These patterns recur across this repository. Review each proposal before you apply it.":"These patterns recur across this machine. Global proposals are for review only.",e.audience),v=ne(t?.session.cwd,n==="repo"),h=c.length?As(v,e.data.mode)+(n==="session"?"":`<p class="sg-cap">${Fe}</p>`)+c.map((g,L)=>Is(e,g.row,L+1,g.sid,g.record)).join(""):q({title:"No improvements found",hint:"The rules found nothing to change. Look again after your next session."}),u=bn.map(g=>`<span class="sigchip">${r(g)}</span>`).join(""),x=c.length?`<details class="card pad mb16 sg-note"><summary><span class="chev" aria-hidden="true">\\u25B8</span>What a proposal can change</summary><div class="chiprow mt8">${u}</div></details>`:"",$=n==="session"||!i?"":e.megaReview?.(n)??"",f="orangu measures the evidence. Claude writes the proposal only when you run the command. "+(n==="session"?"Only later sessions in the same workspace can verify it.":n==="repo"?"Applied means that the reviewed files changed. Only later sessions can verify it.":"Global proposals stay proposals. Claude applies nothing from here.");return[`<section>\n<div class="hero">\n${pe(48)}\n<div class="grow sg-hero herotitle">${r(S)}</div>\n</div>\n<div class="chiprow">${l}</div>\n${$}\n${n!=="session"&&!i?q({title:"This scope needs orangu serve",command:"orangu serve"}):h+x}\n${e.proposals?.inbox(e,n,b,m)??""}\n<p class="small muted sg-foot">${f}</p>\n</section>`,d,v]}function $n(e){let[t,n,s]=Ms(e),o=w(t);return o.querySelectorAll("[data-scope]").forEach(i=>i.addEventListener("click",()=>{if(i.getAttribute("aria-disabled")==="true")return;let a=i.dataset.scope;e.go({scope:a==="session"?void 0:a})})),(i=>{o.querySelectorAll(i).forEach(a=>a.addEventListener("click",()=>{let d=a.closest("details"),c=d.querySelector(".kick-msg"),m=a.dataset.kickCopy,b=m?n.get(m):void 0;if(!b)return;a.setAttribute("aria-busy","true");let S={mode:"copy",suggestionId:m,finding:b.finding};e.ds.kickoff(S).then(h=>h.ok?{kind:"copied",message:`The command is on your clipboard. ${s}`,response:h.response}:{kind:"error",message:h.message,...h.response?{response:h.response}:{}}).then(h=>{if(a.removeAttribute("aria-busy"),c.textContent=h.message,"response"in h&&h.response?.commands){let u=d.querySelector(".kick-cmd");u.innerHTML=yn(h.response.commands),Ae(u),h.kind==="copied"&&u.querySelector("[data-copy]")?.click()}})}))})("[data-kick-copy]"),o}var lt=24;function kn(e){let t=e.a;if(!t)return z();let n=t.agents;if(!n.runs.length)return w(`<section>${q({title:"No subagents in this session.",hint:"This session ran entirely on the main thread."})}</section>`);let s=Math.min(...n.runs.map(c=>c.startTs??1/0).filter(isFinite)),o=Math.max(...n.runs.map(c=>c.endTs??-1/0).filter(isFinite)),l=n.runs.slice(0,lt).map(c=>De(c,s,o)).join(""),i=Pe(n.byType.map(c=>({label:c.agentType,value:c.tokens,color:P("agent"),sub:"\\xD7"+c.count})),c=>y(c)),a=n.runs.map(c=>`<tr data-agent="${r(c.agentId)}" class="agent-row"${e.state.agent===c.agentId?\' style="background:var(--accent-weak)"\':""}>\n<td>${"\\xB7 ".repeat(c.spawnDepth)}${r(c.agentType||c.name||c.agentId.slice(0,8))}${c.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\'}</td>\n<td>${r(c.model??"\\u2013")}</td>\n<td class="num">${r(C(c.durationMs))}</td>\n<td class="num">${c.toolCallCount}${c.toolErrors?` <span class="tag bad">${c.toolErrors}</span>`:""}</td>\n<td class="num">${r(y(c.totalTokens))}</td>\n</tr>`).join(""),d=w(`<section>\n${Y(t,e.audience)}\n<div class="card pad" style="margin-bottom:16px">\n<div class="card-title">${n.runs.length} subagent runs \\xB7 ${r(A(1-n.mainThreadShare.tokens))} of tokens \\xB7 max depth ${n.maxDepth} \\xB7 up to ${n.maxConcurrency} parallel</div>\n<div class="swimbox">${l}</div>\n${n.runs.length>lt?`<div class="pagefoot muted small">showing ${lt} of ${n.runs.length} lanes \\xB7 all runs in the table below</div>`:""}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by agent type</div>${i}</div>\n<div class="card scroll-x"><table class="grid"><thead><tr><th>Agent</th><th>Model</th><th class="num">Duration</th><th class="num">Tools</th><th class="num">Tokens</th></tr></thead><tbody>${a}</tbody></table></div>\n</div>\n</section>`);return d.querySelectorAll("[data-agent]").forEach(c=>c.addEventListener("click",()=>e.go({screen:"timeline",agent:c.dataset.agent},{push:!0}))),d}function me(e,t,n=""){return`<div class="card pad${n?" "+n:""}"><div class="card-title">${e}</div>${t}</div>`}function xn(e){let t=e.a;if(!t)return z();let n=t.context,s=n.series.filter(v=>!v.agentId),o=Te(n.compactions,s),l=he(s.map(v=>v.contextSize),{threshold:n.contextWindow?{y:n.contextWindow,label:"window "+y(n.contextWindow)}:void 0,markers:o,yMax:n.contextWindow,fmtY:y}),i=nn([s.map(v=>v.cacheRead),s.map(v=>v.cacheWrite),s.map(v=>v.input),s.map(v=>v.output)],["var(--cat-read)","var(--cat-edit)","var(--cat-write)","var(--cat-agent)"],{markers:o,labels:["cache read","cache write","fresh input","output"]}),a=t.tokens,d=[{value:a.byKind.cacheRead,color:"var(--cat-read)",label:"cache read "+y(a.byKind.cacheRead)},{value:a.byKind.cacheWrite5m,color:"var(--cat-skill)",label:"cache write 5m "+y(a.byKind.cacheWrite5m)},{value:a.byKind.cacheWrite1h,color:"var(--cat-edit)",label:"cache write 1h "+y(a.byKind.cacheWrite1h)},{value:a.byKind.input,color:"var(--cat-write)",label:"fresh input "+y(a.byKind.input)},{value:a.byKind.output,color:"var(--cat-agent)",label:"output "+y(a.byKind.output)}],c=Pe(a.byModel.map(v=>({label:v.displayName,value:v.totalTokens,color:P("edit"),sub:v.estimatedMatch?"~est. match":""})),v=>y(v)),m=a.serverToolRequests.webSearch+a.serverToolRequests.webFetch,b=he(a.byTurn.map(v=>v.cumulativeTokens),{color:"var(--accent-ink)",fmtY:y}),S=[me("Token composition per request",`<div class="scroll-x">${i}</div><div class="legend">${["read","edit","write","agent"].map((v,h)=>`<span><i class="sw" style="background:var(--cat-${v})"></i>${["cache read","cache write","fresh input","output"][h]}</span>`).join("")}</div>`,"mb16"),me("By model",`${c}<p class="small muted" style="margin-top:8px">Main thread ${r(y(a.mainThread))} \\xB7 agents ${r(y(a.agents))}</p>`,"mb16"),me("Cumulative tokens over turns",`<div class="scroll-x">${b}</div>`)].join("");return w(`<section>\n${Y(t,e.audience)}\n<p class="ctx-lead">${r(Mt(t))}</p>\n<div class="kpis">\n${I("Peak context",y(n.peak),n.contextWindow?A(n.peak/n.contextWindow)+" of "+y(n.contextWindow):"")}\n${I("Cache hit ratio",A(n.cacheHitRatio,1),"context re-read rather than re-sent")}\n${I("Context re-read",n.reReadMultiplier.toFixed(1)+"\\xD7","context carried \\xF7 peak")}\n${I("Long-lived cache writes",A(n.cacheWrite1hShare),"of cache writes (the 1h tier)")}\n${I("Fixed weight per request",y(n.baseline),"system + tools + CLAUDE.md, every request")}\n${I("Compactions",String(n.compactions.length),n.compactions.length?"context was reset":"none")}\n</div>\n${me("Context size over the session",`<div class="scroll-x">${l}</div><div class="legend"><span>Each point is one API request. Each dashed line is a compaction.</span></div>`,"mb16")}\n${me(`Where the tokens went \\xB7 ${r(y(a.totalTokens))} total`,`${tn(d,{height:22})}<div class="legend">${d.filter(v=>v.value>0).map(v=>`<span><i class="sw" style="background:${v.color}"></i>${r(v.label)}</span>`).join("")}</div>${m?`<div class="smt8">${R(m,"server-tool request")} (web search/fetch), counted per request, not in tokens</div>`:""}`,"mb16")}\n<details class="more-charts"><summary><span class="chev" aria-hidden="true">\\u25B8</span>More charts \\xB7 composition per request, by model, cumulative</summary><div class="mt8">${S}</div></details>\n</section>`)}var ct="\\u2039stripped\\u203A";function wn(e){let t=e.a;if(!t)return z();let n=t.parse,s=n.reconciliation,o=Object.entries(n.unknownRecordTypes).filter(([h])=>h!==ct),l=n.unknownRecordTypes[ct]??0,i=o.length,a=l?`<div class="small muted">orangu counted ${R(l,"unrecognized record")}. Redaction hides their type names. To see them, run orangu again with --include-text.</div>`:"",d=t.skills.byName.length?`<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${t.skills.byName.map(h=>`<span class="sigchip">${r(h.name)} <span class="muted">\\xD7${h.count} ${r(h.via.join("/"))}</span></span>`).join("")}</div></div>`:"",c=t.hooks.runs?`<div class="card pad mt16"><div class="card-title">Hooks</div><p class="small muted" style="margin:0">${t.hooks.runs} hook runs \\xB7 ${t.hooks.errors} errors \\xB7 ${r(C(t.hooks.totalMs))} total</p></div>`:"",m=w(`<section>\n${Be(s.ok?"info":"warn",`<strong>Parse coverage:</strong>&nbsp;${r(H(n.totalLines))} records, ${n.badLines} unreadable, ${R(i,"unrecognized record type")}${l?` (+${l} record${l===1?"":"s"} with redacted type names)`:""}. Token totals reconcile to within ${r(s.matchesWithinPct.toFixed(2))}% ${s.ok?"\\u2713":"(review)"}.`)}\n<div class="two-up">\n<div class="card pad"><div class="card-title">Session</div>\n<table class="grid"><tbody>\n<tr><td>ID</td><td class="mono small">${r(t.session.id)}</td></tr>\n<tr><td>Source</td><td>${r(t.session.source)}</td></tr>\n<tr><td>Project</td><td class="mono small">${r(t.session.cwd??t.session.projectSlug??"\\u2013")}</td></tr>\n<tr><td>Started</td><td>${r(St(t.session.startedAt))}</td></tr>\n<tr><td>Client</td><td>${r(t.session.clientVersions.join(", "))}</td></tr>\n<tr><td>Models</td><td>${t.session.models.map(h=>r(h.displayName)+(h.estimatedMatch?" ~":"")).join(", ")}</td></tr>\n<tr><td>Branches</td><td class="mono small">${r(t.session.gitBranches.join(", ")||"\\u2013")}</td></tr>\n<tr><td>Generated</td><td>orangu v${r(t.generator.version)} \\xB7 model catalog ${r(t.generator.modelCatalogUpdatedAt)}</td></tr>\n</tbody></table>\n</div>\n<div class="card pad"><div class="card-title">How to read the numbers</div>\n<ul class="small" style="padding-left:18px;line-height:1.7;margin:0">\n<li><strong>Tokens are the only usage metric</strong> orangu reports. They are what the transcript records.</li>\n<li>orangu <strong>deduplicates token usage by message id</strong>.</li>\n<li>Context = fresh input + cache read + cache write.</li>\n<li>~ marks a model matched by family fallback: the name is approximate, the token counts are not.</li>\n<li>No LLM and no network call produced any number here.</li>\n</ul>\n</div>\n</div>\n${i||l?`<div class="card pad mt16"><div class="card-title">Unrecognized records (counted, not dropped)</div>${i?`<div class="pill-row">${o.map(([h,u])=>`<span class="pill">${r(h)} \\xD7${u}</span>`).join("")}</div>`:""}${a}</div>`:""}\n${d}\n${c}\n<div class="card pad mt16">\n<div class="card-title">Raw explorer</div>\n<div class="raw-filter no-print">\n<input type="text" id="raw-q" placeholder="filter by text\\u2026" aria-label="filter calls by text" />\n<select id="raw-cat" aria-label="filter by category"><option value="">all categories</option>${Object.keys(ce).map(h=>`<option value="${r(h)}">${r(ce[h])}</option>`).join("")}</select>\n<label class="small"><input type="checkbox" id="raw-err" /> errors only</label>\n<span class="small muted" id="raw-count"></span>\n</div>\n<div id="raw-list" style="max-height:480px;overflow:auto;border-top:1px solid var(--border)"></div>\n</div>\n</section>`),b=m.querySelector("#raw-list"),S=m.querySelector("#raw-count"),v=()=>{let h=m.querySelector("#raw-q").value.toLowerCase(),u=m.querySelector("#raw-cat").value,x=m.querySelector("#raw-err").checked,$=t.tools.calls.filter(f=>(!u||f.category===u)&&(!x||f.isError)&&(!h||f.summary.toLowerCase().includes(h)||f.name.toLowerCase().includes(h)));S.textContent=$.length+" of "+t.tools.calls.length+" calls",b.innerHTML=$.slice(0,2e3).map(f=>`<div class="rawrow"><span class="rt">${r(f.name)}</span><span class="muted">#${f.turnIndex}${f.agentId?" agent":""}${f.isError?" \\u26A0":""}</span><span class="rp">${r(f.summary)}${f.durationMs!==void 0?" \\xB7 "+r(C(f.durationMs)):""}</span></div>`).join("")+($.length>2e3?`<div class="rawrow muted">\\u2026${$.length-2e3} more (narrow the filter)</div>`:""),$.length||(b.innerHTML=\'<div class="rawrow muted">no calls match</div>\')};return m.querySelector("#raw-q").addEventListener("input",v),m.querySelector("#raw-cat").addEventListener("change",v),m.querySelector("#raw-err").addEventListener("change",v),v(),m}var Ls={live:an,overview:st,timeline:gn,tools:hn,suggest:$n,agents:kn,context:xn,coverage:wn},Fs={live:"Live",overview:"Overview",timeline:"Timeline",tools:"Tools & calls",repo:"Repo",global:"Global",harness:"Harness",suggest:"Improvements",agents:"Agents",context:"Context & tokens",coverage:"Coverage"};function js(e){return Fs[e]??"Overview"}function Hs(e,t,n){let s=t.screen,o=s==="repo"||s==="global"?s:s==="suggest"&&t.scope!=="session"?t.scope??W(e):n?void 0:W(e);return o?`--scope ${o}`:n&&/^[\\w:-]+$/.test(n.session.id)?n.session.id:""}function Ps(e,t,n){let s=Hs(e,t,n);return s&&`<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${O(`claude "/orangu:show-me ${s}"`,"$","the show me command")}<p>${r(ne(n?.session.cwd,s==="--scope repo"))} The files open in your browser.</p>${He()}</div></details>`}function _s(e){let t=e.a,n=e.audience;switch(e.state.screen){case"live":{let s=te(e.data);if(s.length>1)return`${s.length} running sessions \\xB7 ${s.reduce((l,i)=>l+(i.agentsRunning??0),0)} agents active`;let o=e.data.sessions.find(l=>l.id===(e.state.s??e.data.selectedId));return o?`${B(o.id)} \\xB7 ${ue(o)}`:""}case"overview":return t?M(`outcome and evidence \\xB7 ${B(t.session.id)} \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolCalls} tool calls`,n):"";case"timeline":return t?M(`every step and tool call \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolErrors} errors`,n):"";case"tools":return t?M(`${t.summary.toolCalls} tool calls \\xB7 ${t.tools.byName.length} tools`,n):"";case"repo":return`${e.data.aggregates.repo?e.data.aggregates.repo.sessionCount+" sessions \\xB7 ":""}recurring evidence in this repository`;case"global":return`${e.data.aggregates.global?e.data.aggregates.global.sessionCount+" sessions \\xB7 ":""}recurring evidence across this machine`;case"harness":return"declared vs used, in tokens";case"suggest":{let s=e.state.scope??W(e.data);return s==="repo"||s==="global"?"recurring patterns \\xB7 one proposal per improvement \\xB7 whole-harness review":"this session \\xB7 one proposal per improvement"}case"agents":return t?`${t.agents.runs.length} runs \\xB7 up to ${t.agents.maxConcurrency} parallel`:"";case"context":return t?`peak ${H(t.context.peak)} \\xB7 ${t.context.compactions.length} compactions`:"";case"coverage":return t?`${H(t.parse.totalLines)} records \\xB7 ${t.parse.badLines} unreadable`:"";default:return""}}var Ns=600;function Ds(e,t,n){return e?0:Math.max(0,t+Ns-n)}var Bs=80;function Os(e){return(e??1/0)>Bs}async function Sn(e,t,n,s){try{e.suggestions=await t.suggestions(),n&&s()}catch{}}async function qs(e,t,n,s,o){e.type==="connection"&&e.state==="connected"&&await Sn(t,n,s,o)}function dt(e){return e==="dark"?"dark":"light"}function Ws(e){return dt(e)==="dark"?void 0:"dark"}function Us(e){return W(e)===void 0?"Session":"Scope"}function Gs(e,t,n){let s=W(e);return"orangu \\xB7 "+(t?.session.title||B(n??"")||s&&e.aggregates[s]?.scope||"report")}async function Tn(e,t){let n=document.getElementById("app");if(!n)return;let s=null;try{s=await e.load()}catch{s=null}if(!s){n.innerHTML=`<div class="page"><div class="card"><div class="empty-hero">${V(48)}<div class="t">This file has no analysis data.</div><div class="s mono">npx orangu report</div></div></div></div>`;return}let o=s,l=k=>{let T=wt(k);return k.replace(/^#/,"")||(T.screen=kt(o)),T.s||(T.s=o.selectedId),T},i=l(location.hash),a=async k=>{if(!k)return o.session;if(o.mode!=="serve")return o.session&&o.session.session.id===k?o.session:await e.session(k)??o.session;let T=await e.session(k);return T||(o.session&&o.session.session.id===k?o.session:void 0)},d=()=>{let k=document.documentElement;dt(i.theme)==="dark"?k.setAttribute("data-theme","dark"):k.removeAttribute("data-theme")},c=(k,T={})=>{i={...i,...k};let j=ze(i);T.push?history.pushState(null,"",j):history.replaceState(null,"",j),u(!0)},m,b=async()=>({data:o,a:await a(i.s),ds:e,state:i,audience:i.audience==="plain"?"plain":"dev",conn:m,aggLoading:t?i.screen==="harness"?t.ensureHarness(e,u):t.ensureAggregate(o,e,i,u):!1,megaReview:t?.megaReview,proposals:t?.proposals,harnessCard:t?()=>t.harnessCard(e,u,Z(i,{screen:"harness"})):void 0,go:c}),S=!1,v,h=0;function u(k){let T=Ds(k===!0,h,Date.now());if(k)clearTimeout(v);else if(S)return;S=!0,v=setTimeout(()=>{S=!1,ee(k)},T)}function x(k){let T=xt(o,i),j=o.sessions.find(Q=>Q.id===i.s)??o.sessions[0],K=T.filter(Q=>Q.items.length).map(Q=>`<div class="navgroup"><div class="navgroup-label">${r(Q.label)}</div>${Q.items.map(N=>{let ke=Z(i,{screen:N.screen,s:N.s??i.s,scope:i.scope}),D=i.screen===N.screen&&(N.s===void 0||N.s===i.s),Ke=N.dot?`<span class="ldot${N.dot==="hollow"?" hollow":N.dot==="ended"?" done":""}"${N.dot==="pulse"?\' data-pulse="1"\':""} aria-hidden="true"></span><span class="vh">${N.dot==="pulse"?"live":N.dot==="hollow"?"quiet":"ended"}</span>`:"";return`<a class="navitem" href="${r(ke)}"${D?\' aria-current="page"\':""}>${Ke}${r(N.label)}${N.hint?`<span class="hint">${r(N.hint)}</span>`:""}</a>`}).join("")}</div>`).join(""),J=te(o).length,X=o.mode==="serve"?"Local server: 127.0.0.1.<br/>Nothing leaves this machine."+(J>1?"<br/>alt+\\u2191\\u2193 switch session":""):"This report is self-contained.<br/>It makes 0 network requests.",G=w(`<aside class="side">\n<div class="brand">${V(26)}<span class="name">orangu</span><span class="ver">v${r(o.version)}</span></div>\n<div class="sesscard"><div class="eyebrow">${Us(o)}</div>${t?t.pickerHtml(o,j):`<div class="sid">${j?r(B(j.id))+" \\xB7 "+r(j.projectSlug||j.source):"\\u2013"}</div>`}</div>\n<div class="navwrap"><nav aria-label="Report">${K}</nav></div>\n<div class="side-foot">\n<button class="themebtn" id="btn-theme">\\u25D0 theme \\xB7 ${dt(i.theme)}</button>\n<div class="note">${X}</div>\n</div>\n</aside>`);return G.querySelector("#btn-theme").addEventListener("click",()=>c({theme:Ws(i.theme)})),t?.wirePicker(G,c),G}function $(k){let T=k.audience,j=w(`<header class="page-head">\n<div><h1>${r(js(i.screen))}</h1><div class="sub">${r(_s(k))}</div></div>\n<div class="page-tools">\n<div class="aud" role="group" aria-label="Detail level">\n<button id="aud-dev" aria-pressed="${T==="dev"}">Detailed</button>\n<button id="aud-plain" aria-pressed="${T==="plain"}">Plain language</button>\n</div>\n<button class="btn" id="btn-export">\\u2193 Export HTML</button>\n${Ps(k.data,k.state,k.a)}\n</div>\n</header>`);return j.querySelector("#aud-dev").addEventListener("click",()=>c({audience:void 0})),j.querySelector("#aud-plain").addEventListener("click",()=>c({audience:"plain"})),j.querySelector("#btn-export").addEventListener("click",()=>{let K=e.exportHref(i.s??"");if(K){location.href=K;return}let J=new Blob([`<!doctype html>\n`+document.documentElement.outerHTML],{type:"text/html"}),X=URL.createObjectURL(J),G=document.createElement("a");G.href=X,G.download=`orangu-${B(i.s??"report")}.html`,document.body.appendChild(G),G.click(),G.remove(),setTimeout(()=>URL.revokeObjectURL(X),2e3)}),j}let f=[],p={},g="details[data-sid],details[id]",L=k=>k.dataset.sid??k.id,E,_;async function ee(k){h=Date.now(),d(),k&&Os(p[i.screen])&&(n.querySelector(".main")?.setAttribute("aria-busy","true"),await new Promise(D=>requestAnimationFrame(()=>setTimeout(D))));let T=await b();document.title=Gs(o,T.a,i.s);let j=Ls[i.screen]??st,K=i.screen==="repo"||i.screen==="global"||i.screen==="harness"?i.screen:void 0,J=T.aggLoading&&t?t.aggScreen():K?t?K==="harness"?t.harnessView(T):t.aggregateView(T):w(`<section>${be(K,o)}</section>`):j(T);J.classList.add("screen"),J.id="screen-"+i.screen;let X=w(\'<div class="page"></div>\');o.illustrative&&X.appendChild(w(\'<div class="sample-note" role="note"><b>This sample is synthetic.</b> Its numbers come from made-up input, not a measured customer result.</div>\')),X.appendChild($(T)),X.appendChild(J);let G=w(\'<main class="main"></main>\');G.appendChild(X);let Q=[];n.querySelectorAll(g).forEach(D=>Q.push({id:L(D),open:D.open})),f=Dt(f,Q);let N=n.querySelector(".main")?.scrollTop??0;n.innerHTML="",n.appendChild(x(T)),n.appendChild(G),n.querySelectorAll(g).forEach(D=>{f.includes(L(D))&&(D.open=!0)});let ke=_&&document.getElementById(_);_=void 0,ke?ke.scrollIntoView():i.screen===E?G.scrollTop=N:scrollTo(0,0),E=i.screen,Ce(n),Ae(n),n.querySelectorAll("[data-to]").forEach(D=>D.addEventListener("click",()=>_=D.dataset.to)),n.querySelectorAll("[data-turns]").forEach(D=>D.addEventListener("click",Ke=>{Ke.preventDefault();let Qn=Number(D.dataset.turns.split(",")[0]);c({screen:"timeline",turn:Qn},{push:!0})})),p[i.screen]=Date.now()-h}window.addEventListener("hashchange",()=>{i=l(location.hash),u(!0)}),window.addEventListener("keydown",k=>{if(!k.altKey||k.key!=="ArrowUp"&&k.key!=="ArrowDown"||i.screen!=="live")return;let T=te(o);if(T.length<2)return;let j=T.findIndex(J=>J.id===i.s),K=T[(j+(k.key==="ArrowDown"?1:T.length-1))%T.length];k.preventDefault(),c({s:K.id},{push:!0})}),e.subscribe(k=>{if(k.type==="session-updated"){let T=o.sessions.findIndex(j=>j.id===k.id);T>=0&&(o.sessions[T]=k.row),t?.invalidateHarness(),(i.s===k.id||i.screen==="live")&&u()}else if(k.type==="session-added")o.sessions.push(k.row),t?.invalidateHarness(),u();else if(k.type==="session-live"){let T=o.sessions.find(j=>j.id===k.id);T&&(T.badge=k.badge,T.ageMs=k.ageMs),i.screen==="live"&&u()}else if(k.type==="suggestion-updated")Sn(o,e,i.screen==="suggest",u);else if(k.type==="connection"){let T=m;m=k.state,qs(k,o,e,i.screen==="suggest",u),T!==m&&u()}}),await ee()}function En(e){return e.length>1&&e.endsWith("/")?e.slice(0,-1):e}async function We(e){try{let t=await fetch(e,{headers:{accept:"application/json"}});return!t.ok&&t.status!==202?{status:t.status,body:null}:{status:t.status,body:await t.json()}}catch{return{status:0,body:null}}}async function Rn(e){let t=Date.now();for(;;){let{status:n,body:s}=await We(e);if(n===200&&s)return s;if(n!==202||Date.now()-t>12e4)return null;await new Promise(o=>setTimeout(o,800))}}function Cn(e=""){let t=new Map,n=new Set,s=null,o=i=>{for(let a of n)a(i)},l=()=>{if(!s){s=new EventSource(e+"/events"),s.onopen=()=>o({type:"connection",state:"connected"}),s.onerror=()=>o({type:"connection",state:"reconnecting"});for(let i of["hello","session-updated","session-live","session-added","suggestion-updated"])s.addEventListener(i,a=>{try{o(JSON.parse(a.data))}catch{}})}};return{mode:"serve",async load(){let i=/[?&#]s=([^&]+)/.exec(location.hash)?.[1],{body:a}=await We(e+"/api/app"+(i?`?s=${encodeURIComponent(i)}`:""));if(!a)throw new Error("orangu serve unreachable");return a.session&&t.set(a.session.session.id,{at:Date.now(),analysis:a.session}),a},async session(i){let a=Date.now(),d=t.get(i);if(d?.inflight)return d.inflight;if(d&&a-d.at<2e3)return d.analysis;let c=We(e+"/api/session/"+encodeURIComponent(i)).then(({body:m})=>(t.set(i,{at:Date.now(),analysis:m}),m));return t.set(i,{at:a,analysis:d?.analysis??null,inflight:c}),c},async aggregate(i,a){return Rn(i==="repo"?e+"/api/repo"+(a?`?cwd=${encodeURIComponent(a)}`:""):e+"/api/global")},async harness(){return Rn(e+"/api/harness")},async suggestions(){let{body:i}=await We(e+"/api/suggestions");return i??[]},async kickoff(i){let a;try{a=await fetch(e+"/api/kickoff",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(i)})}catch(c){return{ok:!1,kind:"network",message:c instanceof Error?c.message:"The request to localhost failed."}}let d=null;try{d=await a.json()}catch{}return a.ok?!d?.record||typeof d.command!="string"||!d.commands||typeof d.commands.claude!="string"||typeof d.commands.codex!="string"||d.command!==d.commands.claude||d.spawned!==!1?{ok:!1,kind:"protocol",status:a.status,message:"localhost returned an incomplete response.",...d?{response:d}:{}}:{ok:!0,response:d}:{ok:!1,kind:"http",status:a.status,message:d?.error||`The request to localhost failed (${a.status}).`,...d?{response:d}:{}}},async setStatus(i,a){try{let d=await fetch(e+"/api/suggestions/"+encodeURIComponent(i)+"/status",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({status:a})});return d.ok?await d.json():null}catch{return null}},subscribe(i){return n.add(i),l(),()=>{n.delete(i)}},exportHref(i){return i?e+"/export/"+encodeURIComponent(i)+".html":null}}}var An="Global scope is for review only. Claude applies nothing.";function In(e){let t=je(e),n=e==="repo",s=n?"Improve the harness of this repository with one command.":"Review every harness on this machine with one command.",o="Claude Code reads the evidence. It ranks a plan of changes to your harness and your scripts. Then it waits until you approve the plan."+(n?"":` ${An}`),l=n?"Review the ranked plan. Approve the items that you want. Claude applies them.":`Review the ranked plan. ${An}`;return`<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="herotitle">${s}</div><div class="sg-sub">${o}</div><ol class="steps" aria-label="Run the whole-harness review">\n<li><div><button type="button" class="btn-primary" data-copy="${r(t)}" aria-live="polite">Copy the whole-harness command</button><div class="sg-cmd">${O(t)}</div></div></li>\n<li><span>${ne(void 0,n)}</span></li>\n<li><span>${l}</span></li>\n</ol><p class="small muted sg-foot">This button only copies text. Claude asks before it reads a large input.</p></div>`}var Vs=12,ut=6,ye=e=>typeof e=="string"&&e.trim().length>0;function Ln(e){let t=e.proposal;return!!t&&/^sg_[0-9a-f]{12}$/.test(e.id)&&Array.isArray(e.sessionIds)&&e.sessionIds.length>0&&e.sessionIds.every(ye)&&ye(t.title)&&ye(t.change)&&/^[SML]$/.test(String(t.effort))&&ye(t.proposalPath)&&(t.v??1)===1}function ae(e){return typeof e!="string"?"":e.trim().slice(0,600)}function se(e,t){let n=ae(t);return n?`<div class="sg-pfield"><b>${e}.</b> ${r(n)}</div>`:""}function Ue(e,t,n){if(!Array.isArray(t))return"";let s=t.slice(0,ut).map(o=>n&&o&&typeof o=="object"?n.map(l=>ae(o[l])).filter(Boolean).join(" \\xB7 "):ae(o)).filter(Boolean);return s.length?`<div class="sg-pfield"><b>${e}.</b><ul>${s.map(o=>`<li>${r(o)}</li>`).join("")}${t.length>ut?`<li class="muted">+${t.length-ut} more</li>`:""}</ul></div>`:""}function Ks(e){let t=e.proposal;return e.scope==="global"||e.status!=="proposed"||t?.v!==1||!ae(t.manifestPath)||!ae(t.workspace?.cwd)||!Array.isArray(t.files)||t.files.length===0?"":`<div class="sg-handoffs" aria-label="Apply handoff"><div class="small muted">Copy only. Nothing runs here.</div><div class="sg-hand"><span>Claude</span>${O(`claude "/orangu:apply ${e.id}"`)}</div></div>`}function Fn(e){if(!e||!Ln(e))return"";let t=e.proposal,n=e.verificationReceipt,o=qe(e)&&n?se("Later evidence",n.summary)+Ue("Computed comparisons",n.checks,["name","evidence"]):e.status==="verified"?se("Legacy state","Not verified under the current deterministic contract."):e.application?.v===1?se("Applied",e.application.summary):"";return`<div class="sg-proposal"><div class="sg-phead"><span class="eyebrow">Proposal</span>${t.changeClass?`<span class="pill">${r(t.changeClass)}</span>`:""}<span class="pill">effort ${r(t.effort)}</span></div><div class="sg-ptitle">${r(ae(t.title))}</div>${se("Change",t.change)}${se("Evidence",t.evidence)}${se("Expected effect",t.expectedEffect)}${se("Risk",t.risk)}${se("Verification",t.verification)}${Ue("Reviewed comparisons",t.verificationChecks,["metric","comparison"])}${Ue("Files",t.files)}${Ue("Sources",t.sources,["kind","label","url","verifiedAt"])}${o}${Ks(e)}</div>`}function zs(e){return`<details class="saved-proposal" id="saved-${r(e.id)}"><summary><span class="chev" aria-hidden="true">\\u25B8</span><b>${r(ae(e.proposal?.title))}</b>${at(it(e.status),"",qe(e))}</summary><div class="saved-proposal-body">${Fn(e)}</div></details>`}function Mn(e){return[e.id,...Array.isArray(e.legacyIds)?e.legacyIds:[],e.proposal?.proposalPath].filter(ye)}function Ys(e,t,n,s,o){let l=new Set(t==="session"?n?[n]:[]:s);if(!l.size)return[];let i=new Set(o.flatMap(Mn)),a=[],d=[...e].sort((c,m)=>m.statusAt-c.statusAt);for(let c of d){if(c.scope!==t||!Ln(c)||!c.sessionIds.some(b=>l.has(b)))continue;let m=Mn(c);if(!m.some(b=>i.has(b))&&(m.forEach(b=>i.add(b)),a.push(c),a.length===Vs))break}return a}function Js(e,t){if(t!=="serve")return"";let n=e.length?e.map(zs).join(""):\'<p class="small muted" style="margin:0">This scope has no proposal yet. When /orangu:improve writes one, it shows here.</p>\';return`<section class="sg-inbox card pad mb16" aria-label="Saved proposals"><div class="sg-inbox-head"><div class="card-title">Saved proposals \\xB7 ${e.length}</div><span class="eyebrow">Localhost only</span></div>${n}</section>`}function Xs(e,t,n,s){let o=e.data.mode==="serve"?Ys(e.data.suggestions,t,e.a?.session.id??e.state.s??e.data.selectedId,n,s):[];return Js(o,e.data.mode)}var jn={details:Fn,inbox:Xs};function Hn(e){let t=e.data.aggregates.global;if(!t)return w(`<section>${be("global",e.data)}</section>`);let n=new Map;for(let m of t.sessions)n.set(m.source,(n.get(m.source)??0)+1);let s=[I("Sessions",String(t.sessionCount),R(n.size,"source")),I("Total tokens",y(t.totals.tokens),A(t.averages.cacheHitRatio)+" read from cache",{accent:!0}),I("Per session",y(t.averages.tokensPerSession)),I("Active time",C(t.totals.activeMs),"of "+C(t.totals.wallMs)+" wall"),I("Per human turn",y(t.averages.tokensPerHumanTurn)),I("Shipped",`${t.totals.prs} PRs`,`${t.totals.commits} commits`)].join(""),o=t.byWeek.filter(m=>m.sessions>0).length,l=t.byWeek.map(m=>m.tokens).filter(m=>m>0),i=l.length?`${y(Math.min(...l))} \\u2013 ${y(Math.max(...l))} / week`:"",a=o>=2?`<svg viewBox="0 0 600 110" style="width:100%;height:110px;display:block" preserveAspectRatio="none" role="img"><title>Weekly token trend</title><polyline points="${Ht(t.byWeek)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"></polyline><line x1="0" y1="104" x2="600" y2="104" stroke="var(--border2)" stroke-width="1"></line></svg>\n<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:4px"><span>12w ago</span><span>8w</span><span>4w</span><span>this week</span></div>`:re("not enough history for a trend"),d=(m,b)=>{if(!m.length)return re("nothing here yet");let S=Math.max(...m.map(v=>v.tokens),1e-4);return m.slice(0,6).map(v=>`<div class="rollrow"><div class="rollhead"><span class="mono">${r(v.key)}</span><span class="muted" style="font-size:11.5px">${R(v.count,"session")}</span><span class="mono" style="margin-left:auto;font-weight:700">${r(y(v.tokens))}</span></div><span class="trough" style="margin-top:5px"><i style="width:${(v.tokens/S*100).toFixed(1)}%;background:${b}"></i></span></div>`).join("")},c=[...n.entries()].sort((m,b)=>b[1]-m[1]).map(([m,b])=>`<span class="sigchip">${r(Pt(m))} \\xB7 ${b}</span>`).join("");return w(`<section>${ot("global",e.state)}\n<div class="kpis">${s}</div>\n<div class="card pad mb16">\n<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><span style="font-weight:700;font-size:13.5px">Weekly tokens \\xB7 last 12 weeks</span><span class="mono small muted">${r(i)}</span></div>\n${a}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by model</div>${d(t.byModel,"var(--accent)")}</div>\n<div class="card pad"><div class="card-title">Tokens by project</div>${d(t.byProject,"var(--cat-agent)")}</div>\n</div>\n<div class="chiprow mb16">${c}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>\n${rt(t,e)}\n</section>`)}var pt=12,Pn=e=>{let t=e.inventory;return!t.settings.length&&!t.skills.length&&!t.agents.length&&!t.plugins.length&&!t.mcpServers.length&&!t.claudeMd.length};function _n(e){let t=e.crosswalk,n=t.counts.skills.idle,s=e.inventory.totals.skills,o=s?n?`${n} of ${s} skills never fired`:`every one of ${s} skills fired`:"no skills installed",l=[...t.injectedListings].sort((a,d)=>d.approxTokensPerMainSession-a.approxTokensPerMainSession)[0],i=l?`${l.type} \\u2248${H(l.approxTokensPerMainSession)} tokens per session in the main context`:`${H(e.scope.sessionsScanned)} sessions scanned`;return{title:o,sub:i}}function gt(e){return e.length?`<div class="pill-row">${e.slice(0,pt).map(n=>`<span class="pill">${r(n)}</span>`).join("")}${e.length>pt?`<span class="small muted">+${e.length-pt} more</span>`:""}</div>`:""}function mt(e,t,n,s,o,l){let i=s?n?`<div class="aval">${n}<span class="anote"> of ${s} ${o}</span></div>${gt(t)}`:`<p class="small" style="color:var(--good);margin:0">Every one of ${s} ${l}.</p>`:\'<p class="small muted" style="margin:0">The config that orangu read declares none.</p>\';return`<div class="card pad"><div class="card-title">${e}</div>${i}</div>`}function Nn(e,t){let n=e===void 0?{title:"Comparing what your config declares with what these sessions used\\u2026",sub:"a cold cache takes a moment"}:e===null?{title:"orangu could not compute the harness report.",sub:"orangu harness prints the reason"}:Pn(e)?{title:"orangu found no harness config under the scanned roots",sub:"settings.json \\xB7 skills/ \\xB7 agents/ \\xB7 plugins/ \\xB7 .mcp.json \\xB7 CLAUDE.md"}:_n(e);return`<a class="card pad mb16 harness-card" href="${r(t)}"${e===void 0?\' aria-busy="true"\':""}><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${r(n.title)}</div><div class="small muted">${r(n.sub)} \\xB7 open the harness view \\u2192</div></a>`}function Dn(e,t){if(!t)return w(`<section>${q({title:"orangu could not compute the harness report.",hint:"Run the command directly to see the reason.",command:"orangu harness"})}</section>`);if(Pn(t))return w(`<section>${q({title:"orangu found no harness config under the scanned roots.",hint:`orangu looked for settings.json \\xB7 skills/ \\xB7 agents/ \\xB7 plugins/ \\xB7 .mcp.json \\xB7 CLAUDE.md under ${t.scope.roots.join(", ")}. It found nothing to compare.`,command:"orangu harness"})}</section>`);let n=t.crosswalk,s=t.inventory,o=_n(t),l=n.skills.filter(u=>u.status==="idle").map(u=>u.name),i=n.mcpServers.filter(u=>u.status==="idle").map(u=>u.name),a=n.agents.filter(u=>u.status==="idle").map(u=>u.name),d=[...n.skills.filter(u=>u.status==="undeclared").map(u=>"skill "+u.name),...n.mcpServers.filter(u=>u.status==="undeclared").map(u=>"mcp "+u.name),...n.agents.filter(u=>u.status==="undeclared").map(u=>"agent "+u.name),...n.hooks.filter(u=>u.status==="undeclared").map(u=>"hook "+(u.commandBasename??u.event))],c=n.counts.skills.undeclared+n.counts.mcpServers.undeclared+n.counts.agents.undeclared+n.counts.hooks.undeclared,m=n.injectedListings.length?`<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">\\u2248 tokens / session</th><th class="num">Sessions</th><th class="num">\\u2248 tokens / injection<br><span class="small muted">anywhere in the tree</span></th><th class="num">Subagents \\u2248 tokens</th><th class="num">Subagent sessions</th></tr></thead><tbody>${[...n.injectedListings].sort((u,x)=>x.approxTokensPerMainSession-u.approxTokensPerMainSession).map(u=>`<tr><td class="mono">${r(u.type)}</td><td class="num">${r(H(u.approxTokensPerMainSession))}</td><td class="num">${u.main.sessions}</td><td class="num">${r(H(u.approxTokensPerInjection))}</td><td class="num">${r(H(u.subagent.approxTokens))}</td><td class="num">${u.subagent.sessions}</td></tr>`).join("")}</tbody></table></div><div class="smt8">Each \\u2248 tokens figure is the recurring context weight, in bytes \\xF7 4. The per-session column counts the primary transcript of each session that carried the listing. The subagent columns show what the agent tree carried, over the sessions that had subagents.</div>`:\'<p class="small muted" style="margin:0">orangu measured no injected listings in these sessions.</p>\',b=n.claudeMd.reduce((u,x)=>u+x.approxTokensCarried,0),S=s.claudeMd.length?`<div class="aval">\\u2248${r(y(s.totals.claudeMdApproxTokens))}<span class="anote"> tokens in ${s.claudeMd.length} file${s.claudeMd.length===1?"":"s"} \\xB7 \\u2248${r(y(b))} carried across the window</span></div>${gt(s.claudeMd.map(u=>u.file))}`:\'<p class="small muted" style="margin:0">The scanned roots hold no CLAUDE.md.</p>\',v=t.notes.length?`<div class="card pad mb16" style="background:var(--bg2)"><div class="card-title">Notes</div><ul class="small muted" style="margin:0;padding-left:18px">${t.notes.map(u=>`<li>${r(u)}</li>`).join("")}</ul></div>`:"",h=t.scope.global?`global \\xB7 ${t.scope.roots.length} root${t.scope.roots.length===1?"":"s"}`:`repo ${t.scope.cwd}`;return w(`<section>\n<div class="hero">\n${pe(48)}\n<div class="grow"><div class="eyebrow">Declared vs used</div><div class="herotitle">${r(o.title)}</div><div class="sg-sub">${r(o.sub)} \\xB7 ${r(h)} \\xB7 ${H(t.scope.sessionsScanned)} sessions scanned</div></div>\n</div>\n<div class="kpis">\n${mt("Idle skills",l,n.counts.skills.idle,s.totals.skills,"skills never fired","skills fired")}\n${mt("Idle MCP servers",i,n.counts.mcpServers.idle,s.totals.mcpServers,"servers never called","servers was called")}\n${mt("Agents never dispatched",a,n.counts.agents.idle,s.totals.agents,"agents never dispatched","agents was dispatched")}\n</div>\n<div class="card pad mb16"><div class="card-title">Injected listings \\xB7 per session</div>${m}</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">CLAUDE.md</div>${S}</div>\n<div class="card pad"><div class="card-title">Undeclared \\xB7 ${c}</div>${c?`<p class="small muted" style="margin:0 0 8px">The sessions used these, but the config that orangu read does not declare them. They come from a source outside this scope, or the config drifted.</p>${gt(d)}`:\'<p class="small muted" style="margin:0">The config that orangu read declares everything that the sessions used.</p>\'}</div>\n</div>\n<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Turn this into proposals in Claude Code.</div>${O(je(t.scope.global?"global":"repo"))}<div class="smt8">This button only copies text. Nothing runs here. <span class="mono">orangu harness --json</span> prints this report.</div></div>\n${v}\n</section>`)}var Qs=50;function Zs(e){let t=Bt(e,Qs);return t.length?`<div class="feed" style="margin-top:18px" aria-live="off"><div class="card-head">Fleet feed</div>${t.map(s=>`<div class="feedrow"><span class="ft">${r(B(s.sid))}</span><span class="ft">${r(xe(s.ts))}</span><span class="sw" style="background:${P(s.category)}"></span><span class="fn">${r(s.name)}</span><span class="fw">${r(s.summary)}</span></div>`).join("")}<div class="feedfoot">last ${t.length} events across the live sessions</div></div>`:""}var Ge=[],Bn=0;function eo(e){let t=new Map(e.map(i=>[i.id,i])),n=Ge.length===e.length&&Ge.every(i=>t.has(i)),s=typeof matchMedia=="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches,o=Date.now()-Bn<5e3;if(n&&(o||s))return Ge.map(i=>t.get(i));let l=[...e].sort((i,a)=>a.mtimeMs-i.mtimeMs);return Ge=l.map(i=>i.id),Bn=Date.now(),l}function to(e,t){let n=eo(t),s=typeof window<"u"?window.__ORANGU_SERVE__?.maxLive:void 0,o=s!==void 0&&e.data.mode==="serve"?`<div class="banner info">watching ${Math.min(s,n.length)} of ${n.length} live session${n.length===1?"":"s"}${n.length>s?\' \\xB7 raise with <span class="mono">--max-live</span>\':""}</div>`:"",l=e.conn==="reconnecting"?\'<div class="banner warn">The connection is lost. The page reconnects on its own.</div>\':"",i=n.map(a=>{let d=a.contextWindow&&a.contextFinal?a.contextFinal/a.contextWindow:0,c=Math.min(a.agentsRunning??0,8),m=c?`<div class="agentstrip">${"<i></i>".repeat(c)}${(a.agentsRunning??0)>8?`<span class="more">+${(a.agentsRunning??0)-8}</span>`:""}</div>`:"",b=a.lastEvent?`last: ${a.lastEvent.name} \\xB7 ${a.lastEvent.summary}`:ue(a);return`<a class="fleetcard" href="#live?s=${r(a.id)}">\n<div class="fh"><span class="ldot" data-pulse="1" aria-hidden="true"></span><span>${r(B(a.id))}</span><span class="proj">${r(a.projectSlug)}</span><span class="muted">turn ${a.turns??"\\u2013"}</span></div>\n<div class="fk"><span>${a.startedAt!==void 0&&a.mtimeMs>a.startedAt?r(C(a.mtimeMs-a.startedAt)):"\\u2013"}</span><span style="color:var(--accent-ink)">${a.tokens!==void 0?r(y(a.tokens)):"\\u2013"}</span><span>${a.toolCalls??"\\u2013"}\\u2699</span><span>${d?r(A(d)):"\\u2013"} ctx</span></div>\n<span class="trough" style="height:6px"><i style="width:${(d*100).toFixed(1)}%"></i></span>\n<div class="fl">${r(b)}</div>\n${m}\n</a>`}).join("");return w(`<section>${l}${o}<div class="fleet">${i}</div>${Zs(n)}<p class="small muted">Each card is one running session. Click a card to watch it.</p></section>`)}typeof window<"u"&&(window.__ORANGU_FLEET__=to);function no(e,t){let n=t?r(B(t.id))+" \\xB7 "+r(t.projectSlug||t.source):"\\u2013";if(e.sessions.length<2)return`<div class="sid">${n}</div>`;let s=e.sessions.map(o=>{let l=o.badge==="live"?\'<span class="ldot" data-pulse="1" aria-hidden="true"></span>\':o.badge==="idle"?\'<span class="ldot hollow" aria-hidden="true"></span>\':\'<span class="ldot done" aria-hidden="true"></span>\';return`<div role="option" tabindex="-1" data-id="${r(o.id)}" aria-selected="${o.id===t?.id}">${l}<span class="mono">${r(B(o.id))}</span><span class="proj">${r(o.projectSlug)}</span></div>`}).join("");return`<button class="sid pick" id="btn-pick" aria-haspopup="listbox" aria-expanded="false">${n} \\u25BE</button>\n<div class="picklist" id="pick-list" role="listbox" aria-label="Sessions" hidden>${s}</div>`}function so(e,t){let n=e.querySelector("#btn-pick"),s=e.querySelector("#pick-list");if(!n||!s)return;let o=Array.prototype.slice.call(s.querySelectorAll(\'[role="option"]\')),l=()=>{s.hidden=!0,n.setAttribute("aria-expanded","false")};n.addEventListener("click",()=>{let i=s.hidden;s.hidden=!i,n.setAttribute("aria-expanded",String(i)),i&&(o.find(a=>a.getAttribute("aria-selected")==="true")??o[0])?.focus()}),s.addEventListener("keydown",i=>{let a=o.indexOf(document.activeElement);i.key==="Escape"?(l(),n.focus()):i.key==="ArrowDown"||i.key==="ArrowUp"?(i.preventDefault(),o[(a+(i.key==="ArrowDown"?1:o.length-1))%o.length]?.focus()):(i.key==="Enter"||i.key===" ")&&(i.preventDefault(),document.activeElement?.click())});for(let i of o)i.addEventListener("click",()=>{l(),t({s:i.dataset.id},{push:!0})})}var $e=new Set;function oo(e,t,n,s){let o;if(n.screen==="repo"?o="repo":n.screen==="global"?o="global":n.screen==="suggest"&&(n.scope==="repo"||n.scope==="global")&&(o=n.scope),!o||e.aggregates[o])return!1;if(!$e.has(o)){let l=o;$e.add(l);let i=e.sessions.find(a=>a.id===n.s)??e.sessions[0];t.aggregate(l,l==="repo"?i?.cwd:void 0).then(a=>{$e.delete(l),a&&(e.aggregates[l]=a,s())}).catch(()=>$e.delete(l))}return $e.has(o)}function ro(){return w(`<section><div class="card"><div class="empty-hero">${V(48)}<div class="t">Analysing sessions\\u2026</div><div class="s">A cold cache takes a moment. The numbers appear when they are ready.</div></div></div></section>`)}function io(e){return e.state.screen==="global"?Hn(e):vn(e)}var ao=3e4,le,Ve=!1,ft=!1,On=0;function lo(){ft=!0}function qn(e,t){let n=ft&&Date.now()-On>=ao;return le!==void 0&&!n?!1:(Ve||(Ve=!0,ft=!1,e.harness().then(s=>{le=s},()=>{le===void 0&&(le=null)}).finally(()=>{Ve=!1,On=Date.now(),t()})),Ve&&le===void 0)}function co(e){return Dn(e,le??null)}function uo(e,t,n){return qn(e,t),Nn(le,n)}var Wn={pickerHtml:no,wirePicker:so,ensureAggregate:oo,aggScreen:ro,aggregateView:io,megaReview:In,ensureHarness:qn,invalidateHarness:lo,harnessView:co,harnessCard:uo,proposals:jn};var po=["session","repo","global","report","app"],vt=["bug","confusing","missing","slow","delight","other"],Un="https://github.com/NissanOhana/orangu/issues/new";function Gn(e){return typeof e=="string"&&po.includes(e)}function bt(){return{summary:"",category:"bug",rant:"",expected:"",reproduction:""}}function Vn(e){return e.replace(/\\r\\n?/g,`\n`).trim()}function ht(e,t){let n=Vn(t);return`## ${e}\n\n${n||"_Not provided._"}`}function Kn(e,t){let n=Vn(e.summary).replace(/\\s+/g," "),s=`${e.category} \\xB7 ${t.context}`,o=`[beta feedback] ${[...n||s].slice(0,160).join("")}`,l=[ht("Experience",e.rant),ht("What I expected",e.expected),ht("How to reproduce",e.reproduction),`## Context\n\n- Area: ${t.context}\n- Category: ${e.category}`,`## Diagnostics (reviewed)\n\n- Orangu: ${t.version}\n- Node: ${t.nodeMajor}\n- OS: ${t.osFamily}\n- Architecture: ${t.arch}\n- Surface: ${t.surface}`].join(`\n\n`);return{title:o,body:l}}function yt(e,t=7500){let n=new URLSearchParams({title:e.title,body:e.body}).toString(),s=`${Un}?${n}`,o=s.length;return o>t?{kind:"oversized",blankUrl:Un,encodedLength:o,report:e}:{kind:"composer",url:s,encodedLength:o,report:e}}var F={context:"app",draft:bt(),reviewed:!1};function mo(){let e=/(?:[?&])context=([^&]+)/.exec(location.hash),t="app";try{e?.[1]&&(t=decodeURIComponent(e[1]))}catch{}return Gn(t)?t:"app"}function zn(e){window.open(e,"_blank","noopener,noreferrer")}function go(e,t){let n=()=>{let s=t.textContent;t.textContent="copied",setTimeout(()=>t.textContent=s,1200)};if(navigator.clipboard?.writeText)navigator.clipboard.writeText(e).then(n,n);else{let s=document.createElement("textarea");s.value=e,document.body.appendChild(s),s.select();try{document.execCommand("copy")}catch{}s.remove(),n()}}function fo(){let e=mo();F.context!==e&&(F={context:e,draft:bt(),reviewed:!1});let t=window.__ORANGU_SERVE__?.feedback,n={version:t?.version??window.__ORANGU_SERVE__?.version??"unknown",nodeMajor:t?.nodeMajor??"unknown",osFamily:t?.osFamily??"other",arch:t?.arch??"other",surface:"localhost",context:e},s=vt.map(p=>`<option value="${p}"${F.draft.category===p?" selected":""}>${p}</option>`).join(""),o=w(`<section class="feedback">\n<div class="banner info"><b>This stays private until you choose to share it.</b>&nbsp; orangu attaches nothing from a session or report. If you open the reviewed composer, it sends only the preview below to GitHub.</div>\n<div class="card pad mb16">\n<div class="card-title">Rant about the beta</div>\n<p class="narrative">Be blunt. What was unclear, broken, slow, or better than you expected?</p>\n<div class="feedback-grid">\n<label>Short summary<input id="fb-summary" maxlength="240" value="${r(F.draft.summary)}" placeholder="What should we fix first?"></label>\n<label>Category<select id="fb-category">${s}</select></label>\n</div>\n<label>Your experience<textarea id="fb-rant" rows="7" placeholder="Rant here\\u2026">${r(F.draft.rant)}</textarea></label>\n<label>What did you expect?<textarea id="fb-expected" rows="3">${r(F.draft.expected)}</textarea></label>\n<label>How can we reproduce it? <span class="muted">optional</span><textarea id="fb-reproduction" rows="3">${r(F.draft.reproduction)}</textarea></label>\n<button type="button" class="btn" id="fb-preview">Review exact report</button>\n</div>\n<div class="card pad mb16" id="fb-review">\n<div class="card-title">Exact GitHub prefill</div>\n<p class="small muted" id="fb-review-status">Review the title, body, and generic diagnostics before anything can leave localhost.</p>\n<div class="eyebrow">Title</div><pre class="feedback-preview" id="fb-title-preview"></pre>\n<div class="eyebrow">Body</div><pre class="feedback-preview" id="fb-body-preview"></pre>\n<label class="feedback-check"><input type="checkbox" id="fb-reviewed"> I reviewed this exact report and want to send its prefill to GitHub.</label>\n<button type="button" class="btn" id="fb-send">Send reviewed prefill to GitHub</button>\n<div id="fb-fallback"></div>\n</div>\n</section>`),l=o.querySelector("#fb-summary"),i=o.querySelector("#fb-category"),a=o.querySelector("#fb-rant"),d=o.querySelector("#fb-expected"),c=o.querySelector("#fb-reproduction"),m=o.querySelector("#fb-reviewed"),b=o.querySelector("#fb-send"),S=o.querySelector("#fb-title-preview"),v=o.querySelector("#fb-body-preview"),h=o.querySelector("#fb-review-status"),u=o.querySelector("#fb-fallback"),x=()=>({summary:l.value,category:vt.includes(i.value)?i.value:"other",rant:a.value,expected:d.value,reproduction:c.value}),$=()=>{F.draft=x(),F.preview=void 0,F.reviewed=!1,m.checked=!1,m.disabled=!0,b.disabled=!0,S.textContent="",v.textContent="",u.replaceChildren(),h.textContent="The draft changed. Review the exact report again."};for(let p of[l,i,a,d,c])p.addEventListener("input",$);i.addEventListener("change",$);let f=()=>{let p=F.preview;if(S.textContent=p?.title??"",v.textContent=p?.body??"",m.disabled=!p,m.checked=!!(p&&F.reviewed),b.disabled=!p||!F.reviewed,u.replaceChildren(),!p)return;let g=yt(p);if(h.textContent=g.kind==="composer"?`The encoded prefill is ${g.encodedLength.toLocaleString()} characters. If you open it, it sends this title and body to GitHub.`:`The complete prefill is ${g.encodedLength.toLocaleString()} characters. That is too large for a reliable URL. The form keeps the complete report.`,g.kind==="oversized"&&F.reviewed){b.disabled=!0;let L=`${p.title}\n\n${p.body}`,E=document.createElement("button");E.type="button",E.className="btn-sm",E.textContent="Copy complete report",E.addEventListener("click",()=>go(L,E));let _=document.createElement("button");_.type="button",_.className="btn-sm",_.textContent="Open blank GitHub issue",_.addEventListener("click",()=>zn(g.blankUrl)),u.append(E,_)}return g};return o.querySelector("#fb-preview").addEventListener("click",()=>{F.draft=x(),F.preview=Kn(F.draft,n),F.reviewed=!1,f()}),m.addEventListener("change",()=>{F.reviewed=!!(F.preview&&m.checked),f()}),b.addEventListener("click",()=>{if(!F.reviewed||!F.preview)return;let p=yt(F.preview);p.kind==="composer"&&zn(p.url)}),f(),o}function $t(){return/^#feedback(?:[?]|$)/.test(location.hash)}function Yn(){let e=document.getElementById("app");if(!e)return;e.className="app feedback-root",e.replaceChildren();let t=w(\'<main class="feedback-shell"><header class="page-head"><div><h1>Beta feedback</h1><div class="sub">rant locally \\xB7 review exactly what you share</div></div><a class="btn" href="#overview">Back to orangu</a></header></main>\');t.appendChild(fo()),e.appendChild(t),document.title="orangu \\xB7 beta feedback"}function Jn(){if(document.getElementById("feedback-launch"))return;let e=document.createElement("a");e.id="feedback-launch",e.className="feedback-launch",e.href="#feedback?context=app",e.textContent="Beta feedback",e.setAttribute("aria-label","Open beta feedback"),document.body.appendChild(e)}function Xn(){let e=$t();e?Yn():Tn(Cn(En(location.pathname)),Wn).then(Jn),window.addEventListener("hashchange",()=>{$t()!==e&&location.reload()})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",Xn):Xn();})();\n';
-var CLIENT_JS_AGG = '"use strict";(()=>{var dn=["live","overview","timeline","tools","agents","context","coverage","repo","global","harness","suggest"];function O(e){return e.slice(0,8)}function ee(e){return e.mode==="file"&&!e.capabilities.watch?[]:e.sessions.filter(t=>t.badge==="live")}function P(e){if(!(e.mode!=="file"||e.session))return e.aggregates.repo?"repo":e.aggregates.global?"global":void 0}function Je(e){return e.mode==="serve"?ee(e).length>1?"live":"overview":P(e)??"overview"}function Xe(e,t){let n=t.audience==="plain"?"plain":"dev",s=ee(e),o=[];s.length>1&&o.push({id:"live-all",label:`All live \\xB7 ${s.length}`,screen:"live",dot:"pulse"});for(let m of s)o.push({id:"live-"+m.id,label:s.length>1?`${O(m.id)} \\xB7 ${m.projectSlug}`:`Watch \\xB7 ${O(m.id)}`,screen:"live",s:m.id,dot:"pulse"});let a=[];P(e)===void 0&&(a.push({id:"overview",label:"Overview",screen:"overview"},{id:"timeline",label:"Timeline",screen:"timeline"},{id:"tools",label:"Tools & calls",screen:"tools"}),n==="dev"&&((e.session?.agents.runs.length??0)>0&&a.push({id:"agents",label:"Agents",screen:"agents"}),a.push({id:"context",label:"Context & tokens",screen:"context"}),a.push({id:"coverage",label:"Coverage",screen:"coverage"})));let i=e.aggregates.repo?.sessionCount,l=e.mode==="file"?e.aggregates.global?.sessionCount:void 0,c=e.mode==="file"?"needs orangu serve":void 0,d=[{id:"repo",label:i!==void 0?`Repo \\xB7 ${i} sessions`:"Repo",screen:"repo",hint:i===void 0?c:void 0},{id:"global",label:l!==void 0?`Global \\xB7 ${l} sessions`:"Global \\xB7 all time",screen:"global",hint:l===void 0?c:void 0},{id:"harness",label:"Harness",screen:"harness",hint:c}];return[{id:"live",label:"Live",items:o},{id:"session",label:"Observe this session",items:a},{id:"across",label:"Recurring patterns",items:d},{id:"improve",label:"Improve the next session",items:[{id:"suggest",label:"Improvements",screen:"suggest"}]}]}function Qe(e){let t={screen:"overview"},n=e.replace(/^#/,""),[s,o]=n.split("?");if(s&&dn.includes(s)&&(t.screen=s),o)for(let a of o.split("&")){let i=a.indexOf("=");if(i<0)continue;let l=a.slice(0,i),c=decodeURIComponent(a.slice(i+1));l==="s"?t.s=c:l==="scope"&&(c==="session"||c==="repo"||c==="global")?t.scope=c:l==="tool"?t.tool=c:l==="cat"?t.cat=c:l==="agent"?t.agent=c:l==="turn"?t.turn=Number(c):l==="err"?t.errorsOnly=c==="1":l==="filter"&&(c==="all"||c==="errors"||c==="agents"||c==="human")?t.filter=c:l==="theme"?t.theme=c:l==="audience"&&(c==="dev"||c==="plain")&&(t.audience=c)}return t}function Q(e,t){return Pe({...e,scope:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0,filter:void 0,...t})}function Pe(e){let t=[];return e.s&&t.push("s="+encodeURIComponent(e.s)),e.scope&&t.push("scope="+e.scope),e.tool&&t.push("tool="+encodeURIComponent(e.tool)),e.cat&&t.push("cat="+encodeURIComponent(e.cat)),e.agent&&t.push("agent="+encodeURIComponent(e.agent)),e.turn!==void 0&&t.push("turn="+e.turn),e.errorsOnly&&t.push("err=1"),e.filter&&t.push("filter="+e.filter),e.audience&&t.push("audience="+e.audience),e.theme&&t.push("theme="+e.theme),"#"+e.screen+(t.length?"?"+t.join("&"):"")}function y(e){return e>=1e9?(e/1e9).toFixed(e>=1e10?0:1)+"B":e>=1e6?(e/1e6).toFixed(e>=1e7?0:2)+"M":e>=1e3?(e/1e3).toFixed(e>=1e5?0:1)+"k":String(Math.round(e))}function I(e){if(e===void 0||!isFinite(e))return"\\u2013";if(e<1e3)return Math.round(e)+"ms";let t=e/1e3;if(t<60)return t.toFixed(t<10?1:0)+"s";let n=Math.floor(t/60);if(n<60)return n+"m "+Math.round(t%60)+"s";let s=Math.floor(n/60);return s<24?s+"h "+n%60+"m":Math.floor(s/24)+"d "+s%24+"h"}function E(e,t=0){return(e*100).toFixed(t)+"%"}function w(e,t,n=t+"s"){return`${_(e)} ${e===1?t:n}`}function _(e){return e.toLocaleString("en-US")}function Ze(e){return e===void 0?"\\u2013":new Date(e).toISOString().slice(0,16).replace("T"," ")}function et(e){return e===void 0?"--:--:--":new Date(e).toISOString().slice(11,19)}function ve(e){return e>=1<<20?(e/(1<<20)).toFixed(1)+" MB":e>=1024?Math.round(e/1024)+" KB":e+" B"}function r(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\'/g,"&#39;")}var ie={read:"Read",search:"Search",edit:"Edit",write:"Write",exec:"Shell",agent:"Agents",skill:"Skills",web:"Web",plan:"Plan",ask:"Ask",mcp:"MCP",task:"Tasks",notebook:"Notebook",other:"Other"},cn=["read","search","edit","write","exec","agent","skill","web","other"];function N(e){return`var(--cat-${cn.includes(e)?e:"other"}, var(--cat-other))`}var un={clean:"The last check it ran passed",interrupted:"You stopped it",failing:"The last test run failed"};function nt(e,t){let n=un[e]??"The agent completed its last task";return e==="clean"&&t&&He(t)?`${n}. ${t.testRunsFailed} of ${w(t.testRuns,"test run")} failed earlier.`:n}function He(e){return e.testRunsFailed&&e.testRunsFailed<e.testRuns?"last run":""}function ye(e,t){let n=[],s=new Map;for(let o of e){if(o.signature){n.push(o);continue}let{tool:a,total:i,sessions:l=0}=t(o),c=s.get(a)??{tool:a,total:0,signatures:0,sessions:0};c.total+=i,c.signatures++,c.sessions=Math.max(c.sessions,l),s.set(a,c)}return{kept:n,hidden:[...s.values()].sort((o,a)=>a.total-o.total)}}function st(e){if(e.ending==="interrupted")return`Stopped by you after ${w(e.turns,"turn")}`;let t=Ne(e);if(t.length)return t.join(" \\xB7 ");let n=w(e.humanTurns,"request");return e.toolCalls>0?`${n}, ${e.agents?w(e.agents,"subagent")+", ":""}nothing committed`:`${n}, no tool calls recorded`}function Ne(e){let t=e.outcomes,n=[];t.prLinks.length&&n.push(w(t.prLinks.length,"PR")),t.gitCommits&&n.push(w(t.gitCommits,"commit"));let s=t.filesEdited+t.filesWritten;return s&&n.push(w(s,"file")+" changed"),t.buildRunsFailed&&n.push(`${t.buildRunsFailed} of ${w(t.buildRuns,"build run")} failed`),t.testRuns&&n.push(t.testRunsFailed?`${t.testRunsFailed} of ${w(t.testRuns,"test run")} failed`:`${w(t.testRuns,"test run")} green`),n}function ot(e){return{value:I(e.activeMs),note:e.wallMs!==void 0?`over ${I(e.wallMs)} wall \\xB7 ${I(e.humanWaitMs)} waiting for you`:"single-message session"}}function rt(e){let t=e.evidence,n=t.calls?.[0],s=n?.tool??n?.name??t.tools?.[0]?.name;if(typeof s=="string"&&s)return{tool:s};if(e.turnIndexes.length)return{turn:e.turnIndexes[0]}}function be(e,t){return e.map(n=>{let s=t.findIndex(o=>o.ts!==void 0&&n.ts!==void 0&&o.ts>=n.ts);return{x:s<0?Math.max(0,t.length-1):s,label:"compaction at turn "+n.turnIndex}})}function $e(e){if(!e)return"";let t=e.estimated?"~":"";return e.tokens?`save ${t}${y(e.tokens)} tokens`:e.ms?`save ${t}${I(e.ms)}`:""}function xe(e,t,n){if(!e||!e.tokens&&!e.ms)return;let s=`Rule ${n} ${e.estimated?"estimated":"measured"} a saving of \\u2248`;if(e.tokens&&t&&e.tokens<=t){let o=e.tokens/t;return{text:o<.005?"under 1% of this session":`~${E(o)} of this session`,title:`${s}${y(e.tokens)} of the ${y(t)} tokens in this session.`}}return{text:$e(e),title:`${s}${e.tokens?y(e.tokens)+" tokens":I(e.ms)}.`}}function it(e,t){return!t||!e.tokens&&!e.ms?"":`${e.tokens?`\\u2248${y(e.tokens)} tokens`:`\\u2248${I(e.ms)}`} recoverable across ${w(t,"finding")}`}function at(e){let t=e.summary,n=e.context,s=[];return n.contextWindow&&t.contextPeak&&s.push(`Context grew to ${E(t.contextPeak/n.contextWindow)} of the window`),t.totalTokens&&s.push(`${E(t.cacheHitRatio)} of tokens were cache reads`),t.totalTokens&&e.tokens.agents&&s.push(`${E(e.tokens.agents/t.totalTokens)} of tokens went to subagents`),s.length?s.join(". ")+".":"The transcript records no token usage for this session."}function lt(e){let t=e.find(s=>s.id==="tests");return t?.tone==="good"?"passing":t?.tone==="bad"?"failing":e.some(s=>(s.id==="commits"||s.id==="prs")&&Number(s.value)>0)?"shipped":"\\u2013"}function ae(e,t,n){return e.filter(s=>s.turnIndex===t&&(!n||s.agentId===n))}function dt(e,t,n){let s=ae(e,t,n);if(!s.length)return[];let o=new Map;for(let a of s)o.set(a.category,(o.get(a.category)??0)+1);return[...o.entries()].map(([a,i])=>({cat:a,pct:i/s.length*100}))}function ct(e,t){let n=[...t].sort((a,i)=>a.turnIndex-i.turnIndex).filter(a=>a.turnIndex>(e[0]?.index??0)&&a.turnIndex<=(e[e.length-1]?.index??0)),s=[],o=e;for(let a of n){let i=o.filter(l=>l.index<a.turnIndex);o=o.filter(l=>l.index>=a.turnIndex),s.push({turns:i,after:a})}return s.push({turns:o,after:void 0}),s}function ut(e,t=600,n=104,s=8){let o=e.length;if(!o)return"";let a=Math.max(...e.map(i=>i.tokens),1e-4);return e.map((i,l)=>{let c=o===1?t/2:l/(o-1)*t,d=n-i.tokens/a*(n-s);return`${Math.round(c*10)/10},${Math.round(d*10)/10}`}).join(" ")}var pn={"claude-code":"Claude Code",cowork:"Cowork",desktop:"Desktop"};function pt(e){return pn[e]??e}function mt(e,t){let n=[];for(let s of e.tools.calls)n.push({ts:s.startTs,name:s.name,category:s.category,summary:s.summary,durationMs:s.durationMs,isError:s.isError,agentType:s.agentId?"agent":void 0,key:s.toolUseId});for(let s of e.events)n.push({ts:s.ts,name:s.kind,category:"other",summary:s.label,key:"ev-"+s.turnIndex+"-"+s.kind});for(let s of e.agents.runs)n.push({ts:s.startTs,name:s.agentType||s.name||s.agentId,category:"agent",summary:s.taskKind??s.description??"subagent run",durationMs:s.durationMs,key:s.agentId});return n.sort((s,o)=>(s.ts??1/0)-(o.ts??1/0)||(s.key<o.key?-1:s.key>o.key?1:0)),n.slice(-t)}function tt(e){let t=Math.max(0,Math.round(e/1e3));if(t<60)return t+"s";let n=Math.floor(t/60);return n<60?n+"m":Math.floor(n/60)+"h"}function ke(e){return e.badge!=="ended"&&e.possiblyLive?"Watching \\xB7 possibly live":e.badge==="ended"?"ended \\xB7 updated "+tt(e.ageMs)+" ago":"updated "+tt(e.ageMs)+" ago"}function gt(e){if(!e.length)return 1/0;let t=e.map(s=>s.totalTokens).sort((s,o)=>o-s),n=Math.max(1,Math.floor(t.length*.2));return t[n-1]}function ft(e,t){let n=new Set(t.map(a=>a.id)),s=e.filter(a=>!n.has(a)),o=t.filter(a=>a.open).map(a=>a.id);return[...new Set([...s,...o])]}var ht="orangu-brand-icon";var mn=/^data:image\\/png;base64,[A-Za-z0-9+/]+={0,2}$/;function q(e=30){let t=`width="${e}" height="${e}" style="display:block"`,n=typeof document>"u"?void 0:document.getElementById(ht)?.getAttribute("href");return!n||!mn.test(n)?`<span class="logo" ${t} role="img" aria-label="orangu"></span>`:`<img class="logo" src="${n}" ${t} alt="orangu" draggable="false">`}function T(e){let t=document.createElement("template");return t.innerHTML=e.trim(),t.content.firstElementChild}function we(e){e.querySelectorAll("details").forEach(t=>{let n=t.querySelector("summary");n&&(n.setAttribute("role","button"),n.setAttribute("aria-expanded",String(t.open)),t.addEventListener("toggle",()=>n.setAttribute("aria-expanded",String(t.open))))})}function Se(e){e.querySelectorAll("[data-copy]").forEach(t=>{t.addEventListener("click",()=>{let n=t.getAttribute("data-copy")??"",s=()=>{let o=t.textContent;t.textContent="copied",setTimeout(()=>t.textContent=o,1200)};if(navigator.clipboard?.writeText)navigator.clipboard.writeText(n).then(s,s);else{let o=document.createElement("textarea");o.value=n,document.body.appendChild(o),o.select();try{document.execCommand("copy")}catch{}o.remove(),s()}})})}var vt={high:3,medium:2,low:1,info:0};function yt(e,t){return(vt[t.severity]??0)-(vt[e.severity]??0)||t.totalSavingsTokens-e.totalSavingsTokens||t.sessions-e.sessions||e.ruleId.localeCompare(t.ruleId)}var Rs=7*864e5;function bt(e){return new TextEncoder().encode(e)}function $t(e){let t=bt(e),n=t.length,s=(n+8>>6)+1,o=new Uint32Array(s*16);for(let f=0;f<n;f++)o[f>>2]|=t[f]<<24-(f&3)*8;o[n>>2]|=128<<24-(n&3)*8;let a=n*8;o[s*16-1]=a>>>0,o[s*16-2]=Math.floor(a/4294967296)>>>0;let i=1732584193,l=4023233417,c=2562383102,d=271733878,m=3285377520,x=new Uint32Array(80),R=(f,v)=>f<<v|f>>>32-v;for(let f=0;f<o.length;f+=16){for(let u=0;u<16;u++)x[u]=o[f+u];for(let u=16;u<80;u++)x[u]=R(x[u-3]^x[u-8]^x[u-14]^x[u-16],1);let v=i,S=l,b=c,g=d,p=m;for(let u=0;u<80;u++){let L,C;u<20?(L=S&b|~S&g,C=1518500249):u<40?(L=S^b^g,C=1859775393):u<60?(L=S&b|S&g|b&g,C=2400959708):(L=S^b^g,C=3395469782);let G=R(v,5)+L+p+C+x[u]>>>0;p=g,g=b,b=R(S,30)>>>0,S=v,v=G}i=i+v>>>0,l=l+S>>>0,c=c+b>>>0,d=d+g>>>0,m=m+p>>>0}let h=f=>f.toString(16).padStart(8,"0");return h(i)+h(l)+h(c)+h(d)+h(m)}function ne(e){return[...new Set(e.map(t=>t.trim().replace(/\\\\/g,"/")).filter(Boolean))].sort()}function xt(e){return $t(JSON.stringify(ne(e))).slice(0,16)}function kt(e,t="finding"){let n=e.cohortFingerprint;if(e.scope==="session"){if(n!==void 0)throw new Error(`${t} session scope must omit cohortFingerprint`);return}if(typeof n!="string"||!/^[0-9a-f]{16}$/.test(n))throw new Error(`${t} repo/global scope requires a 16-hex cohortFingerprint`)}function le(e,t){return kt(e),{v:2,source:t,scope:e.scope,ruleId:e.ruleId,sessionIds:ne(e.sessionIds),...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}}}function de(e){let t=JSON.stringify({v:2,source:e.source,scope:e.scope,ruleId:e.ruleId,sessionIds:ne(e.sessionIds),insightId:e.insightId??null,...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}});return"sg_"+$t(t).slice(0,12)}function gn(e){return btoa(Array.from(e,t=>String.fromCharCode(t)).join("")).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"")}function fn(e){return JSON.stringify(e,(t,n)=>n&&typeof n=="object"&&!Array.isArray(n)?Object.fromEntries(Object.entries(n).sort(([s],[o])=>s<o?-1:s>o?1:0)):n)}var Cs=256*1024;function hn(e,t="report"){kt(e);let n={...e,sessionIds:ne(e.sessionIds)};return gn(bt(fn({v:2,source:t,finding:n})))}function vn(e,t){if(t==="serve")return e.id;if(e.title&&e.evidence){let s={ruleId:e.ruleId,title:e.title,scope:e.scope,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:e.evidence};return`${e.id} --finding ${hn(s,e.source??"report")}`}let n=[...e.sessionIds].sort().join(",");return`${e.id} --rule ${e.ruleId} --scope ${e.scope} --session ${n}`}function ce(e,t){let n=vn(e,t);return{claude:`claude "/orangu:improve ${n}"`,codex:`$orangu-improve ${n}`}}var wt="/plugin marketplace add NissanOhana/orangu \\xB7 /plugin install orangu",Te="Each title shows the figures of one example session.";function yn(e){let t=e.trim().replace(/[-_]+/g," ")||"finding";return t[0].toUpperCase()+t.slice(1)}var bn="orangu hides these details because they quote commands and output. To see them, run the report again with --include-text.";function St(e,t,n){return{title:t.trim()||yn(e),detail:n.trim()||bn}}function _e(e){let t=e.boundedSavingsTokens??e.totalSavingsTokens,n=e.boundedSavingsMs??e.totalSavingsMs;return{...t?{tokens:t}:{},...n?{ms:n}:{},estimated:!0}}function Tt(e,t){let n=St(e.ruleId,e.title,e.detail);return{ruleId:e.ruleId,...n,improvement:e.improvement||e.recommendation,why:e.why,method:e.method,savings:e.savings,sessionIds:t?[t]:[],insightId:e.id,severity:e.severity}}function pe(e,t,n){if(e==="session")return(t?.insights??[]).map(o=>Tt(o,t?.session.id));let s=n?xt(n.sessions.map(o=>o.id)):void 0;return[...n?.crossFindings??[]].sort(yt).map(o=>{let a=St(o.ruleId,o.title,`This pattern shows in ${o.sessions} of ${w(n.sessionCount,"session")}.`);return{ruleId:o.ruleId,...a,displayTitle:o.exampleTitle,improvement:o.improvement||o.recommendation,why:o.why,method:o.method,savings:_e(o),sessionIds:o.exampleSessionIds,sessions:o.sessions,severity:o.severity,...s?{cohortFingerprint:s}:{}}})}function Be(e,t){let n=De(Tt(e,t),"session"),s=le(n,"report"),o=de(s);return{id:o,command:ce({id:o,...n,sessionIds:s.sessionIds,source:"report"},"file").claude}}function Rt(e){let t=0,n=0;for(let s of e)t+=s.savings?.tokens??0,n+=s.savings?.ms??0;return{tokens:t,ms:n}}function De(e,t){return{ruleId:e.ruleId,title:e.title,scope:t,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:{estimated:e.savings?.estimated??!0,sessions:e.sessions??1,...e.savings?.tokens!==void 0?{savingsTokens:e.savings.tokens}:{},...e.savings?.ms!==void 0?{savingsMs:e.savings.ms}:{}}}}function It(e){return`claude "/orangu:harness --scope ${e}"`}function Ct(e){if(e?.status!=="failed")return"";let t=e.kickoff?.error?.trim();return t?`Claude could not write the proposal: ${t}`:"Claude could not write the proposal. Copy the command. Run it again to see the error."}function At(e,t,n,s){let o,a=ne(t.sessionIds).join(`\n`);for(let i of e){if(!Array.isArray(i.sessionIds)||!i.sessionIds.every(d=>typeof d=="string"))continue;let l=i.id===s||Array.isArray(i.legacyIds)&&i.legacyIds.includes(s),c=i.v===1&&i.ruleId===t.ruleId&&i.scope===n&&ne(i.sessionIds).join(`\n`)===a&&(!t.insightId||!i.insightId||t.insightId===i.insightId);!l&&!c||(!o||i.statusAt>o.statusAt)&&(o=i)}return o}function U(e,t="$",n="command"){return`<div class="cmd"><span class="p" aria-hidden="true">${r(t)}</span><span class="txt">${r(e)}</span><button class="copy" data-copy="${r(e)}" aria-label="copy ${n}">copy</button></div>`}function te(e,t){return`Paste it in a terminal${e?` in ${e}`:t?" in this repository":""}. It starts Claude Code.`}function Re(){return`<div class="small sg-install">First time only, type these 2 lines in Claude Code:</div>${wt.split(" \\xB7 ").map((e,t)=>U(e,">",t?"the install command":"the marketplace command")).join("")}`}var Et={"context window":"working memory","cache reads":"reused context","cache read":"reused context","cache writes":"saved context","cache write":"saved context","cache hits":"reused context",compactions:"memory refreshes",compaction:"memory refresh"};var $n=Object.keys(Et).sort((e,t)=>t.length-e.length);function M(e,t){if(t!=="plain")return e;let n=e;for(let s of $n)n=n.split(s).join(Et[s]);return n}function me(e,t){if(t!=="plain")return e;let n=M(e.toLowerCase(),t);return n[0].toUpperCase()+n.slice(1)}function A(e,t,n="",s={}){let o=s.estimated?\'<span class="est" title="estimated: derived from bytes, not reported by the API">~</span>\':"";return`<div class="kpi${s.big?" big":""}${s.skeleton?" skel":""}"${s.title?` title="${r(s.title)}"`:""}>\n<div class="label">${r(e)}</div>\n<div class="val${s.accent?" accent":""}">${s.skeleton?"\\xB7\\xB7\\xB7":r(t)+o}</div>\n${n?`<div class="hint${s.badHint?" bad":""}">${r(n)}</div>`:""}\n</div>`}function W(e){return`<div class="card"><div class="empty-hero">\n${q(e.mascotSize??48)}\n<div class="t">${r(e.title)}</div>\n${e.hint?`<div class="s">${r(e.hint)}</div>`:""}\n${e.command?U(e.command):""}\n</div></div>`}function se(e){return`<div class="chart-empty">${r(e)}</div>`}function K(){return T(`<section>${W({title:"No session selected."})}</section>`)}function Ie(e){return`<span class="mascot" style="display:block;width:${e}px;flex:none" aria-hidden="true">${q(e)}</span>`}function Mt(e,t={}){let n=e.reduce((i,l)=>i+l.value,0)||1,s=t.height??14,o=0,a=e.filter(i=>i.value>0).map(i=>{let l=i.value/n*100,c=`<rect x="${o}%" y="0" width="${l}%" height="${s}" fill="${i.color}"><title>${r(i.label)}</title></rect>`;return o+=l,c}).join("");return`<svg width="100%" height="${s}" viewBox="0 0 100 ${s}" preserveAspectRatio="none" role="img"${t.title?` aria-label="${r(t.title)}"`:""}>${a}</svg>`}function Lt(e,t,n={}){let s=n.width??720,o=n.height??160,a={l:4,r:4,t:8,b:16},i=e[0]?.length??0;if(i===0)return\'<div class="chart-empty">no data points yet</div>\';let l=s-a.l-a.r,c=o-a.t-a.b,d=new Array(i).fill(0),m=0;for(let g of e)for(let p=0;p<i;p++)m=Math.max(m,d[p]+(g[p]??0));let x=new Array(i).fill(0);for(let g of e)for(let p=0;p<i;p++)x[p]+=g[p]??0;m=n.yMaxOverride??Math.max(...x,1);let R=g=>a.l+(i===1?l/2:g/(i-1)*l),h=g=>a.t+c-g/m*c,f=new Array(i).fill(0),v=[];e.forEach((g,p)=>{let u=g.map((C,G)=>f[G]+(C??0)),L=`M ${R(0).toFixed(1)} ${h(f[0]).toFixed(1)}`;for(let C=0;C<i;C++)L+=` L ${R(C).toFixed(1)} ${h(u[C]).toFixed(1)}`;for(let C=i-1;C>=0;C--)L+=` L ${R(C).toFixed(1)} ${h(f[C]).toFixed(1)}`;L+=" Z",v.push(`<path d="${L}" fill="${t[p]??"var(--cat-other)"}" opacity="0.85"><title>${r(n.labels?.[p]??"")}</title></path>`);for(let C=0;C<i;C++)f[C]=u[C]});let S=(n.markers??[]).map(g=>{let p=R(g.x);return`<line x1="${p.toFixed(1)}" y1="${a.t}" x2="${p.toFixed(1)}" y2="${a.t+c}" stroke="${g.color??"var(--bad)"}" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(g.label)}</title></line>`}).join(""),b=`<line x1="${a.l}" y1="${a.t+c}" x2="${a.l+l}" y2="${a.t+c}" stroke="var(--border2)" stroke-width="1"/>`;return`<svg width="100%" viewBox="0 0 ${s} ${o}" role="img" aria-label="stacked area">${v.join("")}${S}${b}</svg>`}function ge(e,t={}){let n=t.width??720,s=t.height??150,o={l:4,r:4,t:8,b:14},a=e.length;if(!a)return\'<div class="chart-empty">no data points yet</div>\';let i=n-o.l-o.r,l=s-o.t-o.b,c=t.yMax??Math.max(...e,1),d=b=>o.l+(a===1?i/2:b/(a-1)*i),m=b=>o.t+l-b/c*l,x="";e.forEach((b,g)=>{x+=(g===0?"M":"L")+" "+d(g).toFixed(1)+" "+m(b).toFixed(1)+" "});let R=t.color??"var(--accent-ink)",h=t.threshold?`<line x1="${o.l}" y1="${m(t.threshold.y).toFixed(1)}" x2="${o.l+i}" y2="${m(t.threshold.y).toFixed(1)}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 3"><title>${r(t.threshold.label)}</title></line>`:"",f=(t.markers??[]).map(b=>`<line x1="${d(b.x).toFixed(1)}" y1="${o.t}" x2="${d(b.x).toFixed(1)}" y2="${o.t+l}" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(b.label)}</title></line>`).join(""),v=t.fmtY,S=v?`<text x="${o.l+2}" y="${o.t+8}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(v(c))}</text><text x="${o.l+2}" y="${o.t+l-3}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(v(0))}</text>`:"";return`<svg width="100%" viewBox="0 0 ${n} ${s}" role="img" aria-label="line chart">${h}<path d="${x}" fill="none" stroke="${R}" stroke-width="2" stroke-linejoin="round"/>${f}<line x1="${o.l}" y1="${o.t+l}" x2="${o.l+i}" y2="${o.t+l}" stroke="var(--border2)"/><line x1="${o.l}" y1="${o.t}" x2="${o.l}" y2="${o.t+l}" stroke="var(--border2)"/>${S}</svg>`}function Ft(e,t,n,s,o,a){let i=s-n||1,l=(e-n)/i*100,c=Math.max(.6,(t-e)/i*100);return`<svg width="100%" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><rect x="${l.toFixed(2)}" y="3" width="${c.toFixed(2)}" height="8" rx="3" fill="${o}"><title>${r(a)}</title></rect></svg>`}function Ce(e,t){let n=Math.max(...e.map(s=>s.value),1);return e.map(s=>`<div class="proprow" style="display:grid;grid-template-columns:130px 1fr 72px;gap:10px;align-items:center;padding:3px 0">\n<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r(s.label)}${s.sub?` <span class="muted">${r(s.sub)}</span>`:""}</div>\n<span class="trough"><i style="width:${(s.value/n*100).toFixed(1)}%;background:${s.color}"></i></span>\n<div class="right mono small">${r(t(s.value))}</div>\n</div>`).join("")}var Ae=50,jt=12;function xn(e,t,n){return t?e.conn==="reconnecting"?"reconnecting":t.badge==="ended"?"ended":n&&n.summary.toolCalls===0?"empty":e.data.mode==="file"?e.data.capabilities.watch?"file":"snapshot":t.badge==="idle"?"stalled":"live":"connecting"}function Ee(e,t){return`<span class="bdot ${e}"${e==="p"?\' data-pulse="1"\':""} aria-hidden="true"></span>${t?`<span class="vh">${t}</span>`:""}`}var oe={pulse:Ee("p","live"),hollow:Ee("h","quiet"),good:Ee("g","ended"),static:Ee("s")},Pt=[oe.pulse,"","This view refreshes as the transcript grows. Nothing leaves this machine."],kn={connecting:[oe.static,"Connecting to orangu serve\\u2026","The page waits for the first event."],live:Pt,empty:Pt,stalled:[oe.hollow,"","The transcript did not grow recently. The session may need your input."],ended:[oe.good,"Session ended \\xB7 final numbers",""],reconnecting:[oe.hollow,"Connection lost \\xB7 retrying","The page reconnects on its own."],file:[oe.static,"Watching with orangu watch","orangu watch rewrites this file on each change. Reload the page to see the latest numbers."],snapshot:[oe.static,"Static snapshot","This file does not update. To follow the session live, run orangu watch."]};function wn(e,t,n){let s=n?`turn <b style="color:var(--ink1)">${n.summary.turns}</b>${e==="ended"||e==="snapshot"?"":" in progress"}`:"",[o,a,i]=kn[e],l=a,c=i;return e==="live"||e==="empty"?l=t?.possiblyLive?"Watching \\xB7 possibly live":"Watching a running session":e==="stalled"?l=`Watching \\xB7 quiet for ${Math.max(1,Math.round((t?.ageMs??0)/6e4))}m`:e==="ended"&&(c=t?ke(t):""),`<div class="livebanner">${Ie(44)}<div class="grow"><div class="lt">${o}<span aria-live="polite">${r(l)}</span></div><div class="ls">${r(c)}</div></div><div class="lr">${s}</div></div>`}function Me(e,t,n){let s=e.startTs!==void 0&&isFinite(t)?Ft(e.startTs,e.endTs??n,t,n||t+1,N("agent"),`${e.agentType??e.name??e.agentId} \\xB7 ${I(e.durationMs)} \\xB7 ${y(e.totalTokens)} tokens`):\'<div class="small muted">no timing</div>\';return`<div class="swimrow"><div class="alabel">${"\\xB7 ".repeat(e.spawnDepth)}${r(e.agentType||e.name||e.agentId.slice(0,10))} <small>${r(e.model??"")}</small></div><div${e.status==="running"?"":\' class="dim"\'}>${s}</div></div>`}function Sn(e){let t=e.agents.runs;if(!t.length)return"";let n=t.filter(l=>l.status==="running"),s=Math.min(...t.map(l=>l.startTs??1/0).filter(isFinite)),o=Math.max(...t.map(l=>l.endTs??-1/0).filter(isFinite)),a=[...n,...t.filter(l=>l.status!=="running")].slice(0,jt),i=t.length>jt?`<div class="pagefoot"><button data-all-lanes="1">show all ${t.length} agents</button></div>`:"";return`<div class="card pad mb18"><div class="card-title">Agents \\xB7 ${n.length} running \\xB7 ${t.length-n.length} done</div><div class="agent-lanes">${a.map(l=>Me(l,s,o)).join("")}</div>${i}</div>`}function Tn(e,t,n){let s=xn(e,t,n),o=e.audience,a=n?.summary,i=!n,l=[A("Elapsed",a?.wallMs!==void 0?I(a.wallMs):"\\u2013","",{big:!0,skeleton:i}),A("Tokens so far",a?y(a.totalTokens):"\\u2013","",{big:!0,accent:!0,skeleton:i}),A("Tool calls",a?String(a.toolCalls):"\\u2013","",{big:!0,skeleton:i}),A(me("Cache hits",o),a?E(a.cacheHitRatio):"\\u2013","",{big:!0,skeleton:i})].join(""),c=n?.context,d=c?.contextWindow?c.final/c.contextWindow:void 0,m=s==="ended"?"\\u2013":M(`${w(a?.compactions??0,"compaction")} so far${d!==void 0&&d>=.75?" \\xB7 compaction likely near 90%":""}`,o),x=`<div class="card pad mb18">\n<div class="ctxhead"><span>${me("Context window",o)}</span><span class="mono">${d!==void 0?r(E(d))+" of "+r(y(c.contextWindow)):c?r(y(c.final)):"\\u2013"}</span></div>\n<div class="ctxbar"><i style="width:${d!==void 0?(d*100).toFixed(1):0}%"></i></div>\n<div class="smt8">${r(m)}</div>\n</div>`,R=n?mt(n,Ae+1):[],h=R.length>Ae,f=R.slice(-Ae).map(u=>`<div class="feedrow">${u.agentType?\'<span style="width:2px;align-self:stretch;background:var(--cat-agent);flex:none"></span>\':""}<span class="ft">${r(et(u.ts))}</span><span class="sw" style="background:${N(u.category)}"></span><span class="fn">${r(u.name)}</span><span class="fw">${r(u.summary)}</span><span class="fd">${u.durationMs!==void 0?r(I(u.durationMs)):""}${u.isError?" \\xB7 error":""}</span></div>`).join(""),v=s==="connecting"?\'<div class="feedrow muted">Waiting for the first event\\u2026</div>\':\'<div class="feedrow muted">No tool calls yet.</div>\',S=[];t&&S.push(`streaming from \\u2026/${O(t.id)}.jsonl`),s==="ended"&&S.push("transcript closed"),h&&n&&S.push(`showing last ${Ae} of ${n.tools.calls.length+n.events.length+n.agents.runs.length} \\xB7 full list in Timeline`);let b=s==="ended"?`<a class="btn-sm" href="#overview${t?"?s="+r(t.id):""}" style="display:inline-block;margin-left:10px">Open Overview \\u2192</a>`:"",g=`<div class="feed" aria-live="off"><div class="card-head">Live feed</div>${f||v}<div class="feedfoot">${r(S.join(" \\xB7 "))}${b}</div></div>`,p=T(`<section>${wn(s,t,n)}<div class="kpis k4">${l}</div>${x}${n?Sn(n):""}${g}</section>`);return p.querySelector("[data-all-lanes]")?.addEventListener("click",u=>{if(!n)return;let L=p.querySelector(".agent-lanes");L.classList.add("swimbox");let C=Math.min(...n.agents.runs.map(Z=>Z.startTs??1/0).filter(isFinite)),G=Math.max(...n.agents.runs.map(Z=>Z.endTs??-1/0).filter(isFinite));L.innerHTML=n.agents.runs.map(Z=>Me(Z,C,G)).join(""),u.currentTarget.parentElement?.remove()}),p}function Ht(e){let t=ee(e.data),n=/[?&]s=/.test(location.hash),s=typeof window<"u"?window.__ORANGU_FLEET__:void 0;if(t.length>1&&!n&&s)return s(e,t);let o=e.data.sessions.find(a=>a.id===(e.state.s??e.data.selectedId))??e.data.sessions[0];return o?Tn(e,o,e.a):T(`<section>${W({title:"orangu found no sessions.",command:"orangu serve"})}</section>`)}function Le(e,t){return`<div class="banner ${e}">${t}</div>`}function z(e,t){let n=e.parse.reconciliation;if(!(e.parse.badLines>0||!n.ok))return"";if(t==="plain")return Le("warn",`orangu could not read ${_(e.parse.badLines)} lines of the transcript. The numbers may be low.`);let o=n.matchesWithinPct.toFixed(2);return Le("warn",`Parsed ${r(_(e.parse.totalLines-e.parse.badLines))} of ${r(_(e.parse.totalLines))} records \\xB7 token totals off by ${r(o)}% \\xB7 <a href="#coverage">see Coverage</a>`)}function B(e,t={}){let n=Object.entries(t.data??{}).map(([i,l])=>` data-${i}="${r(l)}"`).join(""),s="chip"+(t.active?" active":""),o=t.disabled?\' aria-disabled="true" tabindex="-1"\':"",a=t.removable?\'<button class="x" aria-label="remove filter">\\xD7</button>\':"";return`<button type="button" class="${s}"${o}${t.title?` title="${r(t.title)}"`:""}${n}>${r(e)}${a}</button>`}function Nt(e){if(!e.length)return"";let t=e.map(n=>`<span class="sigchip">${r(n.label)} <b class="${r(n.tone)}"${n.detail?` title="${r(n.detail)}"`:""}>${r(String(n.value))}</b></span>`).join("");return`<details class="signals"><summary>${e.length} signals</summary><div class="chiprow">${t}</div></details>`}function Oe(e,t){return e?`<span class="rec sg-lead"><b>Improvement:</b> ${r(M(e,t))}</span>`:""}function We(e,t,n,s){return t||n?`<details class="why" id="why-${r(e)}"><summary><span class="chev" aria-hidden="true">\\u25B8</span>Why</summary>${t?`<p>${r(M(t,s))}</p>`:""}${n?`<p class="muted">${r(M(n,s))}</p>`:""}</details>`:""}function qe(e,t,n={}){let s=xe(e.savings,n.sessionTotalTokens,e.ruleId),o=t==="plain"?"":`<span class="pill">${r(e.ruleId)}</span>`,a=e.turnIndexes.length&&t!=="plain"&&!n.link?`<div style="margin-top:10px"><button class="btn-sm" data-turns="${r(e.turnIndexes.join(","))}">Show ${w(e.turnIndexes.length,"turn")} \\u2192</button></div>`:"",i=e.detail?`<p>${r(M(e.detail,t))}</p>`:"",l=n.command?`<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${U(n.command,"$","the Claude Code command")}<div class="small">${r(te(n.cwd))}${n.how?` <a href="${r(n.how)}" data-to="ai-steps">See the 3 steps \\u2192</a>`:""}</div></div>`:"",c=n.link?`<div style="margin-top:10px"><a class="btn-sm" href="${r(n.link.href)}">${r(n.link.label)}</a></div>`:"",d=e.improvement||e.recommendation;return`<details class="finding${n.open?" top":""}"${n.open?" open":""}>\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="sev ${r(e.severity)}" title="${r(e.severity)}"></span><b>${r(M(e.title,t))}</b>${s?`<span class="fsave" title="${r(s.title)}">${r(s.text)}</span>`:""}${o}${Oe(d,t)}</summary>\n<div class="fbody">\n${We(n.id??e.id,e.why,e.method,t)}${i}\n${c}${a}\n${l}\n</div>\n</details>`}function fe(e,t,n){return Q(e.state,{s:e.state.s??t.session.id,...n})}function Rn(e,t){return`<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${q(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${r(st(e.summary))}</div><div class="sg-sub">${r(M(e.summary.narrative,t))}</div></div></div>`}function In(e){let t=e.summary,n=Ne(t).join(" \\xB7 ")||"no commits, PRs or test runs detected",s=ot(t),o=t.totalTokens?`${E(t.cacheHitRatio)} read from cache \\xB7 ${y(e.tokens.byKind.output)} generated`:"no usage recorded",a=He(t.outcomes);return`<div class="triptych">\n<div class="axis q"><div class="aname">Quality \\u2191</div><div class="aval">${r(lt(e.quality.signals))}${a?` <span class="anote">(${a})</span>`:""}</div><div class="anote">${r(n)}</div>${Nt(e.quality.signals)}</div>\n<div class="axis t"><div class="aname">Time \\u2193</div><div class="aval">${r(s.value)}</div><div class="anote">${r(s.note)}</div></div>\n<div class="axis c"><div class="aname">Tokens \\u2193</div><div class="aval">${r(y(t.totalTokens))}</div><div class="anote">${r(o)}</div></div>\n</div>`}function _t(e,t,n){if(!n)return`<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${q(22)}<span class="muted">The rules found nothing to change in this session.</span></div>`;let s=rt(n),o=s?.tool?{href:fe(e,t,{screen:"timeline",tool:s.tool}),label:`See the ${s.tool} calls \\u2192`}:s?{href:fe(e,t,{screen:"timeline",turn:s.turn}),label:`See the ${w(n.turnIndexes.length,"turn")} \\u2192`}:void 0;return`<div class="eyebrow mb6">Top improvement</div>${qe(n,e.audience,{...Be(n,t.session.id),sessionTotalTokens:t.summary.totalTokens,open:!0,how:fe(e,t,{screen:"suggest"}),cwd:t.session.cwd,...o?{link:o}:{}})}`}function Cn(e){let t=e.context,n=t.series.filter(i=>!i.agentId),o=`${t.contextWindow?`peak ${E(e.summary.contextPeak/t.contextWindow)} of the window`:`peak ${y(e.summary.contextPeak)}`} \\xB7 ${w(e.summary.compactions,"compaction")}`;return`<div class="card pad"><div class="card-title">Context</div>${n.length?`<div class="spark">${ge(n.map(i=>i.contextSize),{width:320,height:60,markers:be(t.compactions,n),yMax:t.contextWindow})}</div>`:""}<div class="small muted">${r(o)}</div></div>`}function Bt(e,t){let n=t.summary,s=pe("session",t,void 0).length;return`<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${[{screen:"timeline",label:n.toolErrors?`Timeline \\xB7 ${w(n.toolErrors,"error")} only`:`Timeline \\xB7 ${_(n.turns)} turns`,state:n.toolErrors?{errorsOnly:!0}:{}},{screen:"tools",label:`Tools \\xB7 ${w(n.toolCalls,"call")}, ${w(n.toolErrors,"error")}`,state:{}},{screen:"suggest",label:`Improvements \\xB7 ${s||"none"}`,state:{}}].map(a=>`<a data-screen="${a.screen}" href="${r(fe(e,t,{screen:a.screen,...a.state}))}">${r(M(a.label,e.audience))} \\u2192</a>`).join("")}</nav>`}function An(e,t){let n=t.summary.topInsightIds.map(a=>t.insights.find(i=>i.id===a)).filter(a=>!!a),s=n.slice(1).map(a=>qe(a,"dev",{...Be(a,t.session.id),sessionTotalTokens:t.summary.totalTokens,cwd:t.session.cwd})).join(""),o=it(Rt(pe("session",t,void 0)),t.insights.length);return`${In(t)}${_t(e,t,n[0])}\n<div class="two-up mb16">${Cn(t)}${Bt(e,t)}</div>\n${e.harnessCard?.()??""}\n${o?`<p class="recoverable"><a href="${r(fe(e,t,{screen:"suggest"}))}">${r(o)} \\u2192</a></p>`:""}${s?`<h3 style="margin:4px 0 10px">More findings</h3>${s}`:""}`}function En(e,t){let n=t.summary,o=t.turns.find(l=>l.kind==="human")?.promptPreview.slice(0,140)||(t.session.title?t.session.title:"(this report does not include the prompt text)"),a=`${y(n.totalTokens)} tokens \\xB7 ${I(n.wallMs)}, of which ${I(n.humanWaitMs)} needed your attention`,i=t.insights.find(l=>l.id===n.topInsightIds[0])??t.insights[0];return`<div class="card mb16" style="overflow:hidden">\n<div class="card-head">${q(22)}What happened here</div>\n<div class="plaingrid">\n<div class="k">Goal</div><div>${r(o)}</div>\n<div class="k">How it ended</div><div>${r(nt(n.ending,n.outcomes))}</div>\n<div class="k">Tokens &amp; time</div><div>${r(a)}</div>\n</div>\n</div>\n${_t(e,t,i)}\n${Bt(e,t)}`}function Mn(e){let t=e.a;if(!t)return`<section>${W({title:"No session selected.",hint:P(e.data)?"This report covers a scope, not a session.":"Pick a session from the sidebar."})}</section>`;let n=e.audience==="plain"?En(e,t):An(e,t);return`<section>${z(t,e.audience)}${Rn(t,e.audience)}${n}</section>`}function Ue(e){return T(Mn(e))}var Dt=10;function Ln(e,t,n){let s=n.state;if(s.turn!==void 0&&t.index!==s.turn)return!1;let o=ae(e.tools.calls,t.index,s.agent);return!(s.filter==="errors"&&!o.some(a=>a.isError)||s.filter==="agents"&&t.agents.length===0&&!o.some(a=>a.agentId)||s.filter==="human"&&t.kind!=="human"||s.agent&&!t.agents.includes(s.agent)&&!o.length||(s.tool||s.cat||s.errorsOnly)&&(s.tool&&!o.some(a=>a.name===s.tool)||s.cat&&!o.some(a=>a.category===s.cat)||s.errorsOnly&&!o.some(a=>a.isError)))}function Fn(e){let t=e.isCommand?"cmd":e.kind==="human"?"human":e.autoContinuations>0?"auto":e.kind;return`<span class="kind ${e.isCommand?"kcmd":e.kind==="human"?"khuman":""}">${r(t)}</span>`}function jn(e,t){let n=e.promptPreview||e.commandName;return n?{text:n,own:!1}:{text:[e.promptChars?`${y(e.promptChars)}-char prompt`:"",e.activity].filter(Boolean).join(" \\xB7 ")||(t?"(no prompt)":"(prompt text not included)"),own:!0}}function Pn(e,t,n,s,o){let i=dt(e.tools.calls,t.index,n.state.agent).map(v=>`<i style="width:${v.pct.toFixed(1)}%;background:${N(v.cat)}"></i>`).join(""),{text:l,own:c}=jn(t,n.data.capabilities.includeText),d=c?\' style="color:var(--ink3)"\':"",m=ae(e.tools.calls,t.index,n.state.agent),x=m.map(v=>{let S=v.agentId?e.agents.runs.find(g=>g.agentId===v.agentId):void 0,b=v.agentId?S?.agentType||S?.name||v.agentId.slice(0,8):"main";return`<div class="evline"><span class="sw" style="background:${N(v.category)}"></span><span class="pill">${r(b)}</span><span class="en">${r(v.name)}</span><span class="ew">${r(v.summary)}</span><span class="tag ${v.isError?"bad":"good"}">${v.isError?"error":"ok"}</span><span class="ex">${[v.durationMs!==void 0?I(v.durationMs):"",v.resultBytes?ve(v.resultBytes):"",v.errorHint??""].filter(Boolean).map(r).join(" \\xB7 ")}</span></div>`}).join(""),R=t.agents.map(v=>{let S=e.agents.runs.find(g=>g.agentId===v);if(!S)return"";let b=S.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\';return`<button class="btn-sm" data-agent-jump="${r(v)}">\\u25B8 ${r(S.agentType||S.name||v.slice(0,8))} \\xB7 ${r(y(S.totalTokens))} tokens${b}</button>`}).join(" "),h=[t.firstResponseMs!==void 0?`first response ${I(t.firstResponseMs)}`:"",t.humanGapMs?`waited ${I(t.humanGapMs)}`:"",t.autoContinuations?`${t.autoContinuations} auto-continuations`:"",t.models.length?t.models.join(", "):"","context end "+(t.contextEnd?y(t.contextEnd):"\\u2013")].filter(Boolean).join(" \\xB7 "),f=I(t.durationMs??t.reportedDurationMs);return`<details class="turn${t.interrupted?" interrupted":""}" id="turn-${t.index}"${o?" open":""}>\n<summary>\n<span class="tnum">#${t.index}</span>\n<span class="tprompt"${d}>${Fn(t)}${r(l)}</span>\n<span class="mixbar" title="tool mix">${i}</span>\n<span class="tcell">${m.length}\\u2699</span>\n<span class="tcell">${r(f)}</span>\n<span class="tcell${t.totalTokens>=s&&t.totalTokens>0?" hot":""}">${r(y(t.totalTokens))}</span>\n</summary>\n<div class="tbody">\n<div class="tmeta">${r(h)}</div>\n${x||\'<p class="small muted" style="margin:0">No tool calls in this turn.</p>\'}\n${R?`<div class="pill-row">${R}</div>`:""}\n</div>\n</details>`}function Ot(e,t,n,s){return ct(t,e.context.compactions).map(o=>{let a=o.turns.map(l=>Pn(e,l,n,s,n.state.turn===l.index)).join(""),i=o.after?`<div class="divider"><span class="mono">\\u21C5 context compacted at turn ${o.after.turnIndex}${o.after.contextBefore&&o.after.contextAfter?` \\xB7 ${y(o.after.contextBefore)} \\u2192 ${y(o.after.contextAfter)}`:""}</span></div>`:"";return a+i}).join("")}function qt(e){let t=e.a;if(!t)return K();let n=e.state,s=t.turns,o={all:s.length,errors:s.filter(g=>ae(t.tools.calls,g.index).some(p=>p.isError)).length,agents:s.filter(g=>g.agents.length>0||ae(t.tools.calls,g.index).some(p=>p.agentId)).length,human:s.filter(g=>g.kind==="human").length},a=n.filter??"all",i=[B(`All turns \\xB7 ${o.all}`,{active:a==="all",data:{filter:"all"}}),B(`Errors only \\xB7 ${o.errors}`,{active:a==="errors",data:{filter:"errors"}}),B(`With agents \\xB7 ${o.agents}`,{active:a==="agents",data:{filter:"agents"}}),B(`Human turns \\xB7 ${o.human}`,{active:a==="human",data:{filter:"human"}})].join(""),l=[];n.tool&&l.push(B("tool: "+n.tool,{active:!0,removable:!0,data:{clear:"tool"}})),n.cat&&l.push(B("category: "+n.cat,{active:!0,removable:!0,data:{clear:"cat"}})),n.agent&&l.push(B("agent: "+n.agent.slice(0,12),{active:!0,removable:!0,data:{clear:"agent"}})),n.turn!==void 0&&l.push(B("turn "+n.turn,{active:!0,removable:!0,data:{clear:"turn"}})),n.errorsOnly&&l.push(B("errors only",{active:!0,removable:!0,data:{clear:"err"}}));let c=s.filter(g=>Ln(t,g,e)),d=gt(s),m=c.length<=Dt||n.turn!==void 0||!!(n.tool||n.cat||n.agent||n.errorsOnly||n.filter&&n.filter!=="all"),x=m?c:c.slice(0,Dt),R=new Set(x.map(g=>g.index)),h=Ot(t,x,e,d),f=c.length?"":`<div class="card pad" style="background:var(--bg2);text-align:center"><p class="muted" style="margin:0 0 10px">No turns match \\xB7 ${r(a==="all"?"these filters":a)}</p><button class="btn-sm" data-clearall="1">Clear filters</button></div>`,v=m?"":`<div class="pagefoot">showing ${x.length} of ${c.length} turns \\xB7 <button data-showall="1">show all</button></div>`,S=M("Open a turn to see every parent and subagent call. The URL saves this view.",e.audience),b=T(`<section>\n${z(t,e.audience)}\n<div class="chiprow">${i}${l.join("")}<span class="small muted" style="margin-left:auto">${r(S)}</span></div>\n<div id="turnlist">${h}${f}${v}</div>\n</section>`);return b.querySelectorAll("[data-filter]").forEach(g=>g.addEventListener("click",()=>{let p=g.dataset.filter;e.go({filter:p==="all"?void 0:p,turn:void 0})})),b.querySelectorAll("[data-clear]").forEach(g=>g.addEventListener("click",()=>{let p=g.dataset.clear;p==="err"?e.go({errorsOnly:void 0}):p==="tool"?e.go({tool:void 0}):p==="cat"?e.go({cat:void 0}):p==="agent"?e.go({agent:void 0}):e.go({turn:void 0})})),b.querySelector("[data-clearall]")?.addEventListener("click",()=>e.go({filter:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0})),b.querySelector("[data-showall]")?.addEventListener("click",()=>{let g=b.querySelector("#turnlist");g.innerHTML=Ot(t,c,e,d),we(g),Wt(g,e)}),Wt(b,e),n.turn!==void 0&&R.has(n.turn)&&setTimeout(()=>b.querySelector("#turn-"+n.turn)?.scrollIntoView({block:"center"}),0),b}function Wt(e,t){e.querySelectorAll("[data-agent-jump]").forEach(n=>n.addEventListener("click",()=>t.go({screen:"agents",agent:n.dataset.agentJump},{push:!0})))}function Fe(e,t,n=""){let s=t?"No error text was recorded.":\'Redaction hides the text. Run the command again with <span class="mono">--include-text</span>.\';return`<div class="rrow"${n?` style="${n}"`:""}><span class="grow"><b>${r(e.tool)}</b> \\xB7 ${w(e.total,"error")} across ${w(e.signatures,"recurring signature")}</span>${e.sessions?`<span class="mono small muted">${e.sessions}+ sessions</span>`:""}<span class="small muted">${s}</span></div>`}var Ut=12,Hn=[[/ENOENT/,"run the build first, or check the path"],[/old_string not found|String to replace not found/i,"the file changed after the last read. Read it again before you edit it."],[/EACCES|permission/i,"permission problem: check file modes"],[/timed? out/i,"raise the timeout or split the command"]];function Nn(e){for(let[t,n]of Hn)if(t.test(e))return n;return""}function Gt(e){let t=e.a;if(!t)return K();let n=t.tools,s=t.summary.toolCalls,o=n.byCategory.map(p=>`<span style="width:${s?(p.count/s*100).toFixed(1):0}%;background:${N(p.category)}" title="${r(ie[p.category]??p.category)} \\xB7 ${p.count}"></span>`).join(""),a=n.byCategory.map(p=>`<span><i class="sw" style="background:${N(p.category)}"></i>${r(ie[p.category]??p.category)} \\xB7 ${p.count}</span>`).join(""),i=n.parallelism,l=i.groups?`${i.parallelGroups} of ${i.groups} batches ran in parallel \\xB7 max ${i.maxGroupSize} at once`:"",c=Math.max(...n.byName.map(p=>p.totalMs),1),d="One or more calls took far longer than the rest."+(e.audience==="plain"?"":" p95 is the typical worst case."),m=p=>p.avgMs>p.p95Ms?`<td class="num" title="${d}">${r(I(p.avgMs))}<span class="outlier">outlier</span></td>`:`<td class="num">${r(I(p.avgMs))}</td>`,x=p=>p.map(u=>`<tr class="tool-row" data-tool="${r(u.name)}" title="${r(`${ve(u.resultBytesTotal)} output \\xB7 ${u.mainCount} main / ${u.agentCount} agent`)}">\n<td><i class="swd" style="background:${N(u.category)}"></i><span class="mono125">${r(u.name)}</span></td>\n<td class="num">${_(u.count)}</td>\n<td class="num"${u.errors?\' style="color:var(--bad)"\':\' style="color:var(--ink3)"\'}>${u.errors}</td>\n${m(u)}\n<td class="num p95col">${r(I(u.p95Ms))}</td>\n<td><span class="trough"><i style="width:${(u.totalMs/c*100).toFixed(1)}%;background:${N(u.category)}"></i></span></td>\n</tr>`).join(""),R=`<tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg</th><th class="num p95col">${e.audience==="plain"?"":"p95"}</th><th>Share of tool time</th></tr>`,h=n.byName.length>Ut?`<div class="pagefoot"><button data-more-tools="1">show all ${n.byName.length} tools</button></div>`:"",{kept:f,hidden:v}=ye(n.errorGroups,p=>({tool:p.name,total:p.count})),S=n.errorGroups.length?v.map(p=>Fe(p,e.data.capabilities.includeText)).join("")+f.slice(0,8).map(p=>{let u=p.sampleHint||Nn(p.signature);return`<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${r(p.signature)}</span><span class="mono115" style="margin-left:auto">\\xD7${p.count}</span></div><div class="small muted" style="margin-top:2px">${r(p.name)}${u?" \\xB7 "+r(u):""}</div></div>`}).join(""):\'<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>\',b=T(`<section>\n${z(t,e.audience)}\n<div class="card pad mb16">\n<div class="card-title">${r(M(`Calls by category \\xB7 ${s} total`,e.audience))}</div>\n<div class="catbar">${o}</div>\n<div class="legend">${a}</div>\n${l?`<div class="smt8">${r(l)} \\xB7 ${r(E(i.parallelCallShare))} of calls in a parallel batch</div>`:""}\n</div>\n<div class="card scroll-x mb16">\n<table class="grid"><thead>${R}</thead><tbody id="toolbody">${x(n.byName.slice(0,Ut))}</tbody></table>\n${h}\n</div>\n<div class="card pad"><div class="card-title">Recurring errors in this session</div>${S}</div>\n</section>`),g=p=>{e.audience==="plain"&&p.querySelectorAll(".p95col").forEach(u=>u.remove()),p.querySelectorAll(".tool-row").forEach(u=>u.addEventListener("click",()=>e.go({screen:"timeline",tool:u.dataset.tool},{push:!0})))};return g(b),b.querySelector("[data-more-tools]")?.addEventListener("click",p=>{let u=b.querySelector("#toolbody");u.innerHTML=x(n.byName),g(u),p.currentTarget.parentElement?.remove()}),b}function re(e,t){let n=e==="repo"?"analyse this repository":e==="global"?"analyse everything on this machine":"compare your Claude Code config with what your sessions used",s=P(t)?"This report carries one scope, not a session.":"This single-file report carries one session.";return W({title:"Across-session views need orangu serve",hint:`${s} Start the local viewer to ${n}. Nothing leaves your machine.`,command:"orangu serve"})}function Ge(e,t){return`<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${e==="repo"?"this repository":"supported sessions on this machine"} link back to example sessions. Review them before you change your harness or your scripts.</div></div><a class="btn-primary" href="${r(Q(t,{screen:"suggest",scope:e}))}">Review ${e} improvements \\u2192</a></div>`}function Vt(e){let t=e.data.aggregates.repo;return t?T(`<section>${Ge("repo",e.state)}${_n(t,e)}</section>`):T(`<section>${re("repo",e.data)}</section>`)}function _n(e,t){return`<div class="kpis">${[A("Sessions",String(e.sessionCount)),A("Total tokens",y(e.totals.tokens),"",{accent:!0}),A("Per session",y(e.averages.tokensPerSession)),A("Per human turn",y(e.averages.tokensPerHumanTurn)),A(me("Cache hits",t.audience),E(e.averages.cacheHitRatio)),A("Tool error rate",E(e.averages.toolErrorRate,1),"",{badHint:e.averages.toolErrorRate>=.03})].join("")}</div>${Ve(e,t)}`}function Ve(e,t){let n=e.crossFindings.length?`<p class="sg-cap">${Te}</p>`+e.crossFindings.slice(0,8).map(d=>`<div class="rrow"><span class="pill">${r(d.ruleId)}</span><span class="grow">${r(d.exampleTitle||d.title)}</span><span class="mono small muted">${w(d.sessions,"session")}</span><span class="saveval">${r($e(_e(d)))}</span></div>`).join(""):se(e.sessionCount<2?"Patterns appear from 2 sessions on.":`No recurring findings across ${e.sessionCount} sessions.`),s=Math.max(...e.topReReadFiles.map(d=>d.totalReads),1),o=e.topReReadFiles.length?e.topReReadFiles.slice(0,8).map(d=>`<div class="rerow"><div class="rehead"><span class="mono grow ellip">${r(d.path)}</span><span class="mono115">${d.sessions} sess</span><span class="saveval">${d.totalReads} reads</span></div><span class="trough" style="height:6px;margin-top:5px"><i style="width:${(d.totalReads/s*100).toFixed(1)}%"></i></span></div>`).join(""):se("No heavily re-read files."),{kept:a,hidden:i}=ye(e.recurringErrors,d=>({tool:d.tool,total:d.total,sessions:d.sessions})),l=e.recurringErrors.length?`<div class="card mb16" style="overflow:hidden"><div class="card-head">Recurring errors \\xB7 environment problems to fix once</div>${i.map(d=>Fe(d,t.data.capabilities.includeText,"padding:10px 18px")).join("")}${a.slice(0,8).map(d=>`<div class="rrow" style="padding:10px 18px"><span class="sigline">${r(d.signature)}</span><span class="kind">${r(d.tool)}</span><span class="mono small muted">${w(d.sessions,"session")}</span><span class="mono125">\\xD7${d.total}</span></div>`).join("")}</div>`:"",c=e.topSessions.slice(0,10).map(d=>{let m=[d.prs?`${d.prs} PR`:"",d.commits?`${d.commits} commits`:"",d.interruptions?`interrupted \\xD7${d.interruptions}`:""].filter(Boolean).join(" \\xB7 ")||"\\u2013";return`<tr>\n<td><a class="mono" style="font-size:12px" ${t.data.mode==="serve"?`href="#overview?s=${r(d.id)}"`:`href="#" title="open with: orangu report ${r(d.id.slice(0,8))}" aria-disabled="true" onclick="return false"`}>${r(d.id.slice(0,8))}</a></td>\n<td class="ellip" style="max-width:280px;color:var(--ink2)">${r(d.title??"")}</td>\n<td class="num">${d.turns}</td>\n<td class="num">${d.toolCalls}</td>\n<td class="num"${d.toolErrors?\' style="color:var(--bad)"\':""}>${d.toolErrors}</td>\n<td class="num" style="font-weight:700">${r(y(d.tokens))}</td>\n<td class="small muted">${r(m)}</td>\n</tr>`}).join("");return`<div class="two-up">\n<div class="card pad"><div class="card-title">Recurring findings \\xB7 ranked by evidence</div><div class="cardsub">patterns one session cannot establish</div>${n}</div>\n<div class="card pad"><div class="card-title">Most re-read files</div><div class="cardsub">context carried again and again \\xB7 trim or index these</div>${o}</div>\n</div>\n${l}\n<div class="card scroll-x">\n<div class="card-head"><span>Heaviest sessions</span><span style="margin-left:auto;font-weight:400;font-size:12px;color:var(--ink3)">sorted by tokens</span></div>\n<table class="grid"><thead><tr><th>Session</th><th>Title</th><th class="num">Turns</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th>Outcome</th></tr></thead><tbody>${c}</tbody></table>\n</div>\n${e.sessionCount?"":`<div style="margin-top:16px">${se("Analysing sessions\\u2026")}</div>`}\n<p class="small muted" style="margin-top:12px">${w(e.sessionCount,"session")} \\xB7 every figure is a token count reported by the API.</p>`}var Kt=["Instruction files","Scripts and CLIs","Hooks","Skills to create","Skills to discover","Subagents and agents","MCP servers","Plugins","Workflow and configuration"];var Bn=e=>e?.verificationTrusted===!0;function Dn(e){return e==="kicked-off"?"running":e==="rejected"?"dismissed":e??"new"}function On(e,t="",n=!1){let s=e!=="verified"||n,o=s?e==="verified"?"verified comparison":e:"legacy unverified";return`<span class="status-chip" data-status="${s?e:"legacy"}" aria-live="polite"${t?` title="${r(t)}"`:""}>${o}${e==="verified"&&s?" \\u2713":""}</span>`}function zt(e){return`<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${U(e.claude)}</div></div>`}function Wn(e,t){return`<div class="card pad mb16"><div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">\n<li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>\n<li><div><span>${r(e)}</span>${Re()}</div></li>\n<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository. ${t==="serve"?"The proposal shows below, in Saved proposals.":"The proposal is in ~/.orangu/proposals. Run orangu serve to see it here."}</span></div></li>\n</ol></div>`}function qn(e,t,n,s,o){let a=e.audience,i=xe(t.savings,e.state.scope===void 0||e.state.scope==="session"?e.a?.summary.totalTokens:void 0,t.ruleId),l=o?.proposal?.effort,c=Dn(o?.status),d=Ct(o),m=t.sessionIds.map(x=>e.data.mode==="serve"?`<a class="exch" href="${r(Q(e.state,{screen:"overview",s:x}))}">${r(x.slice(0,8))}</a>`:`<span class="exch">${r(x.slice(0,8))}</span>`).join("");return`<details class="finding" data-sid="${r(s)}" data-rule="${r(t.ruleId)}">\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="rank">${n}</span>${t.severity?`<span class="sev ${r(t.severity)}" title="${r(t.severity)}"></span>`:""}<b class="sg-t">${r(M(t.displayTitle||t.title,a))}</b>${i?`<span class="fsave sg-save" title="${r(i.title)}">${r(i.text)}</span>`:""}${l?`<span class="pill">effort ${r(l)}</span>`:""}${Oe(t.improvement,a)}</summary>\n<div class="fbody sg-body">\n${We(s,t.why,t.method,a)}<div class="sg-ev"><b>Evidence:</b> ${r(M(t.detail,a))} ${a==="plain"?"":`<span class="pill">${r(t.ruleId)}</span>`}</div>\n<div class="sg-ex"><span class="small muted">Example sessions:</span>${m}</div>\n${e.proposals?.details(o)??""}\n<div class="kickrow">\n<button type="button" class="btn-primary" data-kick-copy="${r(s)}">Copy the Claude Code command</button>\n${On(c,d,Bn(o))}\n</div>\n<div class="kick-cmd sg-cmd">${e.data.mode==="serve"&&o&&!o.proposal&&c!=="dismissed"?zt(ce(o,"serve")):""}</div>\n<div class="kick-msg small" aria-live="polite">${r(d)}</div>\n</div>\n</details>`}function Un(e){let t=e.a,n=e.state.scope??P(e.data)??"session",s=e.data.aggregates.repo?.sessionCount,o=e.data.aggregates.global?.sessionCount,a=[B("This session",{active:n==="session",disabled:!t,title:t?"":"no session is selected",data:{scope:"session"}}),B(s!==void 0?`Repo \\xB7 ${s}`:"Repo",{active:n==="repo",disabled:s===void 0,title:s===void 0?"run orangu serve":"",data:{scope:"repo"}}),B(o!==void 0?`Global \\xB7 ${o}`:"Global",{active:n==="global",disabled:o===void 0,title:o===void 0?"run orangu serve":"",data:{scope:"global"}})].join(""),i=n==="session"?void 0:e.data.aggregates[n],l=pe(n,t,i).map(u=>{let L=De(u,n);return{row:u,finding:L,sid:de(le(L,"report"))}}),c=new Map(l.map(u=>[u.sid,u])),d=l.map(u=>({...u,record:At(e.data.suggestions,u.row,n,u.sid)})),m=d.flatMap(({record:u})=>u?[u]:[]),x=i?.sessions.map(u=>u.id)??[],R=M(n==="session"?"Each improvement below comes from the evidence in this session.":n==="repo"?"These patterns recur across this repository. Review each proposal before you apply it.":"These patterns recur across this machine. Global proposals are for review only.",e.audience),h=te(t?.session.cwd,n==="repo"),f=d.length?Wn(h,e.data.mode)+(n==="session"?"":`<p class="sg-cap">${Te}</p>`)+d.map((u,L)=>qn(e,u.row,L+1,u.sid,u.record)).join(""):W({title:"No improvements found",hint:"The rules found nothing to change. Look again after your next session."}),v=Kt.map(u=>`<span class="sigchip">${r(u)}</span>`).join(""),S=d.length?`<details class="card pad mb16 sg-note"><summary><span class="chev" aria-hidden="true">\\u25B8</span>What a proposal can change</summary><div class="chiprow mt8">${v}</div></details>`:"",b=n==="session"||!i?"":e.megaReview?.(n)??"",g="orangu measures the evidence. Claude writes the proposal only when you run the command. "+(n==="session"?"Only later sessions in the same workspace can verify it.":n==="repo"?"Applied means that the reviewed files changed. Only later sessions can verify it.":"Global proposals stay proposals. Claude applies nothing from here.");return[`<section>\n<div class="hero">\n${Ie(48)}\n<div class="grow sg-hero herotitle">${r(R)}</div>\n</div>\n<div class="chiprow">${a}</div>\n${b}\n${n!=="session"&&!i?W({title:"This scope needs orangu serve",command:"orangu serve"}):f+S}\n${e.proposals?.inbox(e,n,x,m)??""}\n<p class="small muted sg-foot">${g}</p>\n</section>`,c,h]}function Yt(e){let[t,n,s]=Un(e),o=T(t);return o.querySelectorAll("[data-scope]").forEach(i=>i.addEventListener("click",()=>{if(i.getAttribute("aria-disabled")==="true")return;let l=i.dataset.scope;e.go({scope:l==="session"?void 0:l})})),(i=>{o.querySelectorAll(i).forEach(l=>l.addEventListener("click",()=>{let c=l.closest("details"),d=c.querySelector(".kick-msg"),m=l.dataset.kickCopy,x=m?n.get(m):void 0;if(!x)return;l.setAttribute("aria-busy","true");let R={mode:"copy",suggestionId:m,finding:x.finding};e.ds.kickoff(R).then(f=>f.ok?{kind:"copied",message:`The command is on your clipboard. ${s}`,response:f.response}:{kind:"error",message:f.message,...f.response?{response:f.response}:{}}).then(f=>{if(l.removeAttribute("aria-busy"),d.textContent=f.message,"response"in f&&f.response?.commands){let v=c.querySelector(".kick-cmd");v.innerHTML=zt(f.response.commands),Se(v),f.kind==="copied"&&v.querySelector("[data-copy]")?.click()}})}))})("[data-kick-copy]"),o}var Ke=24;function Jt(e){let t=e.a;if(!t)return K();let n=t.agents;if(!n.runs.length)return T(`<section>${W({title:"No subagents in this session.",hint:"This session ran entirely on the main thread."})}</section>`);let s=Math.min(...n.runs.map(d=>d.startTs??1/0).filter(isFinite)),o=Math.max(...n.runs.map(d=>d.endTs??-1/0).filter(isFinite)),a=n.runs.slice(0,Ke).map(d=>Me(d,s,o)).join(""),i=Ce(n.byType.map(d=>({label:d.agentType,value:d.tokens,color:N("agent"),sub:"\\xD7"+d.count})),d=>y(d)),l=n.runs.map(d=>`<tr data-agent="${r(d.agentId)}" class="agent-row"${e.state.agent===d.agentId?\' style="background:var(--accent-weak)"\':""}>\n<td>${"\\xB7 ".repeat(d.spawnDepth)}${r(d.agentType||d.name||d.agentId.slice(0,8))}${d.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\'}</td>\n<td>${r(d.model??"\\u2013")}</td>\n<td class="num">${r(I(d.durationMs))}</td>\n<td class="num">${d.toolCallCount}${d.toolErrors?` <span class="tag bad">${d.toolErrors}</span>`:""}</td>\n<td class="num">${r(y(d.totalTokens))}</td>\n</tr>`).join(""),c=T(`<section>\n${z(t,e.audience)}\n<div class="card pad" style="margin-bottom:16px">\n<div class="card-title">${n.runs.length} subagent runs \\xB7 ${r(E(1-n.mainThreadShare.tokens))} of tokens \\xB7 max depth ${n.maxDepth} \\xB7 up to ${n.maxConcurrency} parallel</div>\n<div class="swimbox">${a}</div>\n${n.runs.length>Ke?`<div class="pagefoot muted small">showing ${Ke} of ${n.runs.length} lanes \\xB7 all runs in the table below</div>`:""}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by agent type</div>${i}</div>\n<div class="card scroll-x"><table class="grid"><thead><tr><th>Agent</th><th>Model</th><th class="num">Duration</th><th class="num">Tools</th><th class="num">Tokens</th></tr></thead><tbody>${l}</tbody></table></div>\n</div>\n</section>`);return c.querySelectorAll("[data-agent]").forEach(d=>d.addEventListener("click",()=>e.go({screen:"timeline",agent:d.dataset.agent},{push:!0}))),c}function ue(e,t,n=""){return`<div class="card pad${n?" "+n:""}"><div class="card-title">${e}</div>${t}</div>`}function Xt(e){let t=e.a;if(!t)return K();let n=t.context,s=n.series.filter(h=>!h.agentId),o=be(n.compactions,s),a=ge(s.map(h=>h.contextSize),{threshold:n.contextWindow?{y:n.contextWindow,label:"window "+y(n.contextWindow)}:void 0,markers:o,yMax:n.contextWindow,fmtY:y}),i=Lt([s.map(h=>h.cacheRead),s.map(h=>h.cacheWrite),s.map(h=>h.input),s.map(h=>h.output)],["var(--cat-read)","var(--cat-edit)","var(--cat-write)","var(--cat-agent)"],{markers:o,labels:["cache read","cache write","fresh input","output"]}),l=t.tokens,c=[{value:l.byKind.cacheRead,color:"var(--cat-read)",label:"cache read "+y(l.byKind.cacheRead)},{value:l.byKind.cacheWrite5m,color:"var(--cat-skill)",label:"cache write 5m "+y(l.byKind.cacheWrite5m)},{value:l.byKind.cacheWrite1h,color:"var(--cat-edit)",label:"cache write 1h "+y(l.byKind.cacheWrite1h)},{value:l.byKind.input,color:"var(--cat-write)",label:"fresh input "+y(l.byKind.input)},{value:l.byKind.output,color:"var(--cat-agent)",label:"output "+y(l.byKind.output)}],d=Ce(l.byModel.map(h=>({label:h.displayName,value:h.totalTokens,color:N("edit"),sub:h.estimatedMatch?"~est. match":""})),h=>y(h)),m=l.serverToolRequests.webSearch+l.serverToolRequests.webFetch,x=ge(l.byTurn.map(h=>h.cumulativeTokens),{color:"var(--accent-ink)",fmtY:y}),R=[ue("Token composition per request",`<div class="scroll-x">${i}</div><div class="legend">${["read","edit","write","agent"].map((h,f)=>`<span><i class="sw" style="background:var(--cat-${h})"></i>${["cache read","cache write","fresh input","output"][f]}</span>`).join("")}</div>`,"mb16"),ue("By model",`${d}<p class="small muted" style="margin-top:8px">Main thread ${r(y(l.mainThread))} \\xB7 agents ${r(y(l.agents))}</p>`,"mb16"),ue("Cumulative tokens over turns",`<div class="scroll-x">${x}</div>`)].join("");return T(`<section>\n${z(t,e.audience)}\n<p class="ctx-lead">${r(at(t))}</p>\n<div class="kpis">\n${A("Peak context",y(n.peak),n.contextWindow?E(n.peak/n.contextWindow)+" of "+y(n.contextWindow):"")}\n${A("Cache hit ratio",E(n.cacheHitRatio,1),"context re-read rather than re-sent")}\n${A("Context re-read",n.reReadMultiplier.toFixed(1)+"\\xD7","context carried \\xF7 peak")}\n${A("Long-lived cache writes",E(n.cacheWrite1hShare),"of cache writes (the 1h tier)")}\n${A("Fixed weight per request",y(n.baseline),"system + tools + CLAUDE.md, every request")}\n${A("Compactions",String(n.compactions.length),n.compactions.length?"context was reset":"none")}\n</div>\n${ue("Context size over the session",`<div class="scroll-x">${a}</div><div class="legend"><span>Each point is one API request. Each dashed line is a compaction.</span></div>`,"mb16")}\n${ue(`Where the tokens went \\xB7 ${r(y(l.totalTokens))} total`,`${Mt(c,{height:22})}<div class="legend">${c.filter(h=>h.value>0).map(h=>`<span><i class="sw" style="background:${h.color}"></i>${r(h.label)}</span>`).join("")}</div>${m?`<div class="smt8">${w(m,"server-tool request")} (web search/fetch), counted per request, not in tokens</div>`:""}`,"mb16")}\n<details class="more-charts"><summary><span class="chev" aria-hidden="true">\\u25B8</span>More charts \\xB7 composition per request, by model, cumulative</summary><div class="mt8">${R}</div></details>\n</section>`)}var ze="\\u2039stripped\\u203A";function Qt(e){let t=e.a;if(!t)return K();let n=t.parse,s=n.reconciliation,o=Object.entries(n.unknownRecordTypes).filter(([f])=>f!==ze),a=n.unknownRecordTypes[ze]??0,i=o.length,l=a?`<div class="small muted">orangu counted ${w(a,"unrecognized record")}. Redaction hides their type names. To see them, run orangu again with --include-text.</div>`:"",c=t.skills.byName.length?`<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${t.skills.byName.map(f=>`<span class="sigchip">${r(f.name)} <span class="muted">\\xD7${f.count} ${r(f.via.join("/"))}</span></span>`).join("")}</div></div>`:"",d=t.hooks.runs?`<div class="card pad mt16"><div class="card-title">Hooks</div><p class="small muted" style="margin:0">${t.hooks.runs} hook runs \\xB7 ${t.hooks.errors} errors \\xB7 ${r(I(t.hooks.totalMs))} total</p></div>`:"",m=T(`<section>\n${Le(s.ok?"info":"warn",`<strong>Parse coverage:</strong>&nbsp;${r(_(n.totalLines))} records, ${n.badLines} unreadable, ${w(i,"unrecognized record type")}${a?` (+${a} record${a===1?"":"s"} with redacted type names)`:""}. Token totals reconcile to within ${r(s.matchesWithinPct.toFixed(2))}% ${s.ok?"\\u2713":"(review)"}.`)}\n<div class="two-up">\n<div class="card pad"><div class="card-title">Session</div>\n<table class="grid"><tbody>\n<tr><td>ID</td><td class="mono small">${r(t.session.id)}</td></tr>\n<tr><td>Source</td><td>${r(t.session.source)}</td></tr>\n<tr><td>Project</td><td class="mono small">${r(t.session.cwd??t.session.projectSlug??"\\u2013")}</td></tr>\n<tr><td>Started</td><td>${r(Ze(t.session.startedAt))}</td></tr>\n<tr><td>Client</td><td>${r(t.session.clientVersions.join(", "))}</td></tr>\n<tr><td>Models</td><td>${t.session.models.map(f=>r(f.displayName)+(f.estimatedMatch?" ~":"")).join(", ")}</td></tr>\n<tr><td>Branches</td><td class="mono small">${r(t.session.gitBranches.join(", ")||"\\u2013")}</td></tr>\n<tr><td>Generated</td><td>orangu v${r(t.generator.version)} \\xB7 model catalog ${r(t.generator.modelCatalogUpdatedAt)}</td></tr>\n</tbody></table>\n</div>\n<div class="card pad"><div class="card-title">How to read the numbers</div>\n<ul class="small" style="padding-left:18px;line-height:1.7;margin:0">\n<li><strong>Tokens are the only usage metric</strong> orangu reports. They are what the transcript records.</li>\n<li>orangu <strong>deduplicates token usage by message id</strong>.</li>\n<li>Context = fresh input + cache read + cache write.</li>\n<li>~ marks a model matched by family fallback: the name is approximate, the token counts are not.</li>\n<li>No LLM and no network call produced any number here.</li>\n</ul>\n</div>\n</div>\n${i||a?`<div class="card pad mt16"><div class="card-title">Unrecognized records (counted, not dropped)</div>${i?`<div class="pill-row">${o.map(([f,v])=>`<span class="pill">${r(f)} \\xD7${v}</span>`).join("")}</div>`:""}${l}</div>`:""}\n${c}\n${d}\n<div class="card pad mt16">\n<div class="card-title">Raw explorer</div>\n<div class="raw-filter no-print">\n<input type="text" id="raw-q" placeholder="filter by text\\u2026" aria-label="filter calls by text" />\n<select id="raw-cat" aria-label="filter by category"><option value="">all categories</option>${Object.keys(ie).map(f=>`<option value="${r(f)}">${r(ie[f])}</option>`).join("")}</select>\n<label class="small"><input type="checkbox" id="raw-err" /> errors only</label>\n<span class="small muted" id="raw-count"></span>\n</div>\n<div id="raw-list" style="max-height:480px;overflow:auto;border-top:1px solid var(--border)"></div>\n</div>\n</section>`),x=m.querySelector("#raw-list"),R=m.querySelector("#raw-count"),h=()=>{let f=m.querySelector("#raw-q").value.toLowerCase(),v=m.querySelector("#raw-cat").value,S=m.querySelector("#raw-err").checked,b=t.tools.calls.filter(g=>(!v||g.category===v)&&(!S||g.isError)&&(!f||g.summary.toLowerCase().includes(f)||g.name.toLowerCase().includes(f)));R.textContent=b.length+" of "+t.tools.calls.length+" calls",x.innerHTML=b.slice(0,2e3).map(g=>`<div class="rawrow"><span class="rt">${r(g.name)}</span><span class="muted">#${g.turnIndex}${g.agentId?" agent":""}${g.isError?" \\u26A0":""}</span><span class="rp">${r(g.summary)}${g.durationMs!==void 0?" \\xB7 "+r(I(g.durationMs)):""}</span></div>`).join("")+(b.length>2e3?`<div class="rawrow muted">\\u2026${b.length-2e3} more (narrow the filter)</div>`:""),b.length||(x.innerHTML=\'<div class="rawrow muted">no calls match</div>\')};return m.querySelector("#raw-q").addEventListener("input",h),m.querySelector("#raw-cat").addEventListener("change",h),m.querySelector("#raw-err").addEventListener("change",h),h(),m}var Gn={live:Ht,overview:Ue,timeline:qt,tools:Gt,suggest:Yt,agents:Jt,context:Xt,coverage:Qt},Vn={live:"Live",overview:"Overview",timeline:"Timeline",tools:"Tools & calls",repo:"Repo",global:"Global",harness:"Harness",suggest:"Improvements",agents:"Agents",context:"Context & tokens",coverage:"Coverage"};function Kn(e){return Vn[e]??"Overview"}function zn(e,t,n){let s=t.screen,o=s==="repo"||s==="global"?s:s==="suggest"&&t.scope!=="session"?t.scope??P(e):n?void 0:P(e);return o?`--scope ${o}`:n&&/^[\\w:-]+$/.test(n.session.id)?n.session.id:""}function Yn(e,t,n){let s=zn(e,t,n);return s&&`<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${U(`claude "/orangu:show-me ${s}"`,"$","the show me command")}<p>${r(te(n?.session.cwd,s==="--scope repo"))} The files open in your browser.</p>${Re()}</div></details>`}function Jn(e){let t=e.a,n=e.audience;switch(e.state.screen){case"live":{let s=ee(e.data);if(s.length>1)return`${s.length} running sessions \\xB7 ${s.reduce((a,i)=>a+(i.agentsRunning??0),0)} agents active`;let o=e.data.sessions.find(a=>a.id===(e.state.s??e.data.selectedId));return o?`${O(o.id)} \\xB7 ${ke(o)}`:""}case"overview":return t?M(`outcome and evidence \\xB7 ${O(t.session.id)} \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolCalls} tool calls`,n):"";case"timeline":return t?M(`every step and tool call \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolErrors} errors`,n):"";case"tools":return t?M(`${t.summary.toolCalls} tool calls \\xB7 ${t.tools.byName.length} tools`,n):"";case"repo":return`${e.data.aggregates.repo?e.data.aggregates.repo.sessionCount+" sessions \\xB7 ":""}recurring evidence in this repository`;case"global":return`${e.data.aggregates.global?e.data.aggregates.global.sessionCount+" sessions \\xB7 ":""}recurring evidence across this machine`;case"harness":return"declared vs used, in tokens";case"suggest":{let s=e.state.scope??P(e.data);return s==="repo"||s==="global"?"recurring patterns \\xB7 one proposal per improvement \\xB7 whole-harness review":"this session \\xB7 one proposal per improvement"}case"agents":return t?`${t.agents.runs.length} runs \\xB7 up to ${t.agents.maxConcurrency} parallel`:"";case"context":return t?`peak ${_(t.context.peak)} \\xB7 ${t.context.compactions.length} compactions`:"";case"coverage":return t?`${_(t.parse.totalLines)} records \\xB7 ${t.parse.badLines} unreadable`:"";default:return""}}var Xn=600;function Qn(e,t,n){return e?0:Math.max(0,t+Xn-n)}var Zn=80;function es(e){return(e??1/0)>Zn}async function Zt(e,t,n,s){try{e.suggestions=await t.suggestions(),n&&s()}catch{}}async function ts(e,t,n,s,o){e.type==="connection"&&e.state==="connected"&&await Zt(t,n,s,o)}function Ye(e){return e==="dark"?"dark":"light"}function ns(e){return Ye(e)==="dark"?void 0:"dark"}function ss(e){return P(e)===void 0?"Session":"Scope"}function os(e,t,n){let s=P(e);return"orangu \\xB7 "+(t?.session.title||O(n??"")||s&&e.aggregates[s]?.scope||"report")}async function en(e,t){let n=document.getElementById("app");if(!n)return;let s=null;try{s=await e.load()}catch{s=null}if(!s){n.innerHTML=`<div class="page"><div class="card"><div class="empty-hero">${q(48)}<div class="t">This file has no analysis data.</div><div class="s mono">npx orangu report</div></div></div></div>`;return}let o=s,a=$=>{let k=Qe($);return $.replace(/^#/,"")||(k.screen=Je(o)),k.s||(k.s=o.selectedId),k},i=a(location.hash),l=async $=>{if(!$)return o.session;if(o.mode!=="serve")return o.session&&o.session.session.id===$?o.session:await e.session($)??o.session;let k=await e.session($);return k||(o.session&&o.session.session.id===$?o.session:void 0)},c=()=>{let $=document.documentElement;Ye(i.theme)==="dark"?$.setAttribute("data-theme","dark"):$.removeAttribute("data-theme")},d=($,k={})=>{i={...i,...$};let F=Pe(i);k.push?history.pushState(null,"",F):history.replaceState(null,"",F),v(!0)},m,x=async()=>({data:o,a:await l(i.s),ds:e,state:i,audience:i.audience==="plain"?"plain":"dev",conn:m,aggLoading:t?i.screen==="harness"?t.ensureHarness(e,v):t.ensureAggregate(o,e,i,v):!1,megaReview:t?.megaReview,proposals:t?.proposals,harnessCard:t?()=>t.harnessCard(e,v,Q(i,{screen:"harness"})):void 0,go:d}),R=!1,h,f=0;function v($){let k=Qn($===!0,f,Date.now());if($)clearTimeout(h);else if(R)return;R=!0,h=setTimeout(()=>{R=!1,Z($)},k)}function S($){let k=Xe(o,i),F=o.sessions.find(X=>X.id===i.s)??o.sessions[0],V=k.filter(X=>X.items.length).map(X=>`<div class="navgroup"><div class="navgroup-label">${r(X.label)}</div>${X.items.map(j=>{let he=Q(i,{screen:j.screen,s:j.s??i.s,scope:i.scope}),H=i.screen===j.screen&&(j.s===void 0||j.s===i.s),je=j.dot?`<span class="ldot${j.dot==="hollow"?" hollow":j.dot==="ended"?" done":""}"${j.dot==="pulse"?\' data-pulse="1"\':""} aria-hidden="true"></span><span class="vh">${j.dot==="pulse"?"live":j.dot==="hollow"?"quiet":"ended"}</span>`:"";return`<a class="navitem" href="${r(he)}"${H?\' aria-current="page"\':""}>${je}${r(j.label)}${j.hint?`<span class="hint">${r(j.hint)}</span>`:""}</a>`}).join("")}</div>`).join(""),Y=ee(o).length,J=o.mode==="serve"?"Local server: 127.0.0.1.<br/>Nothing leaves this machine."+(Y>1?"<br/>alt+\\u2191\\u2193 switch session":""):"This report is self-contained.<br/>It makes 0 network requests.",D=T(`<aside class="side">\n<div class="brand">${q(26)}<span class="name">orangu</span><span class="ver">v${r(o.version)}</span></div>\n<div class="sesscard"><div class="eyebrow">${ss(o)}</div>${t?t.pickerHtml(o,F):`<div class="sid">${F?r(O(F.id))+" \\xB7 "+r(F.projectSlug||F.source):"\\u2013"}</div>`}</div>\n<div class="navwrap"><nav aria-label="Report">${V}</nav></div>\n<div class="side-foot">\n<button class="themebtn" id="btn-theme">\\u25D0 theme \\xB7 ${Ye(i.theme)}</button>\n<div class="note">${J}</div>\n</div>\n</aside>`);return D.querySelector("#btn-theme").addEventListener("click",()=>d({theme:ns(i.theme)})),t?.wirePicker(D,d),D}function b($){let k=$.audience,F=T(`<header class="page-head">\n<div><h1>${r(Kn(i.screen))}</h1><div class="sub">${r(Jn($))}</div></div>\n<div class="page-tools">\n<div class="aud" role="group" aria-label="Detail level">\n<button id="aud-dev" aria-pressed="${k==="dev"}">Detailed</button>\n<button id="aud-plain" aria-pressed="${k==="plain"}">Plain language</button>\n</div>\n<button class="btn" id="btn-export">\\u2193 Export HTML</button>\n${Yn($.data,$.state,$.a)}\n</div>\n</header>`);return F.querySelector("#aud-dev").addEventListener("click",()=>d({audience:void 0})),F.querySelector("#aud-plain").addEventListener("click",()=>d({audience:"plain"})),F.querySelector("#btn-export").addEventListener("click",()=>{let V=e.exportHref(i.s??"");if(V){location.href=V;return}let Y=new Blob([`<!doctype html>\n`+document.documentElement.outerHTML],{type:"text/html"}),J=URL.createObjectURL(Y),D=document.createElement("a");D.href=J,D.download=`orangu-${O(i.s??"report")}.html`,document.body.appendChild(D),D.click(),D.remove(),setTimeout(()=>URL.revokeObjectURL(J),2e3)}),F}let g=[],p={},u="details[data-sid],details[id]",L=$=>$.dataset.sid??$.id,C,G;async function Z($){f=Date.now(),c(),$&&es(p[i.screen])&&(n.querySelector(".main")?.setAttribute("aria-busy","true"),await new Promise(H=>requestAnimationFrame(()=>setTimeout(H))));let k=await x();document.title=os(o,k.a,i.s);let F=Gn[i.screen]??Ue,V=i.screen==="repo"||i.screen==="global"||i.screen==="harness"?i.screen:void 0,Y=k.aggLoading&&t?t.aggScreen():V?t?V==="harness"?t.harnessView(k):t.aggregateView(k):T(`<section>${re(V,o)}</section>`):F(k);Y.classList.add("screen"),Y.id="screen-"+i.screen;let J=T(\'<div class="page"></div>\');o.illustrative&&J.appendChild(T(\'<div class="sample-note" role="note"><b>This sample is synthetic.</b> Its numbers come from made-up input, not a measured customer result.</div>\')),J.appendChild(b(k)),J.appendChild(Y);let D=T(\'<main class="main"></main>\');D.appendChild(J);let X=[];n.querySelectorAll(u).forEach(H=>X.push({id:L(H),open:H.open})),g=ft(g,X);let j=n.querySelector(".main")?.scrollTop??0;n.innerHTML="",n.appendChild(S(k)),n.appendChild(D),n.querySelectorAll(u).forEach(H=>{g.includes(L(H))&&(H.open=!0)});let he=G&&document.getElementById(G);G=void 0,he?he.scrollIntoView():i.screen===C?D.scrollTop=j:scrollTo(0,0),C=i.screen,we(n),Se(n),n.querySelectorAll("[data-to]").forEach(H=>H.addEventListener("click",()=>G=H.dataset.to)),n.querySelectorAll("[data-turns]").forEach(H=>H.addEventListener("click",je=>{je.preventDefault();let ln=Number(H.dataset.turns.split(",")[0]);d({screen:"timeline",turn:ln},{push:!0})})),p[i.screen]=Date.now()-f}window.addEventListener("hashchange",()=>{i=a(location.hash),v(!0)}),window.addEventListener("keydown",$=>{if(!$.altKey||$.key!=="ArrowUp"&&$.key!=="ArrowDown"||i.screen!=="live")return;let k=ee(o);if(k.length<2)return;let F=k.findIndex(Y=>Y.id===i.s),V=k[(F+($.key==="ArrowDown"?1:k.length-1))%k.length];$.preventDefault(),d({s:V.id},{push:!0})}),e.subscribe($=>{if($.type==="session-updated"){let k=o.sessions.findIndex(F=>F.id===$.id);k>=0&&(o.sessions[k]=$.row),t?.invalidateHarness(),(i.s===$.id||i.screen==="live")&&v()}else if($.type==="session-added")o.sessions.push($.row),t?.invalidateHarness(),v();else if($.type==="session-live"){let k=o.sessions.find(F=>F.id===$.id);k&&(k.badge=$.badge,k.ageMs=$.ageMs),i.screen==="live"&&v()}else if($.type==="suggestion-updated")Zt(o,e,i.screen==="suggest",v);else if($.type==="connection"){let k=m;m=$.state,ts($,o,e,i.screen==="suggest",v),k!==m&&v()}}),await Z()}var tn="Global scope is for review only. Claude applies nothing.";function nn(e){let t=It(e),n=e==="repo",s=n?"Improve the harness of this repository with one command.":"Review every harness on this machine with one command.",o="Claude Code reads the evidence. It ranks a plan of changes to your harness and your scripts. Then it waits until you approve the plan."+(n?"":` ${tn}`),a=n?"Review the ranked plan. Approve the items that you want. Claude applies them.":`Review the ranked plan. ${tn}`;return`<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="herotitle">${s}</div><div class="sg-sub">${o}</div><ol class="steps" aria-label="Run the whole-harness review">\n<li><div><button type="button" class="btn-primary" data-copy="${r(t)}" aria-live="polite">Copy the whole-harness command</button><div class="sg-cmd">${U(t)}</div></div></li>\n<li><span>${te(void 0,n)}</span></li>\n<li><span>${a}</span></li>\n</ol><p class="small muted sg-foot">This button only copies text. Claude asks before it reads a large input.</p></div>`}function sn(e){let t=e.data.aggregates.global;if(!t)return T(`<section>${re("global",e.data)}</section>`);let n=new Map;for(let m of t.sessions)n.set(m.source,(n.get(m.source)??0)+1);let s=[A("Sessions",String(t.sessionCount),w(n.size,"source")),A("Total tokens",y(t.totals.tokens),E(t.averages.cacheHitRatio)+" read from cache",{accent:!0}),A("Per session",y(t.averages.tokensPerSession)),A("Active time",I(t.totals.activeMs),"of "+I(t.totals.wallMs)+" wall"),A("Per human turn",y(t.averages.tokensPerHumanTurn)),A("Shipped",`${t.totals.prs} PRs`,`${t.totals.commits} commits`)].join(""),o=t.byWeek.filter(m=>m.sessions>0).length,a=t.byWeek.map(m=>m.tokens).filter(m=>m>0),i=a.length?`${y(Math.min(...a))} \\u2013 ${y(Math.max(...a))} / week`:"",l=o>=2?`<svg viewBox="0 0 600 110" style="width:100%;height:110px;display:block" preserveAspectRatio="none" role="img"><title>Weekly token trend</title><polyline points="${ut(t.byWeek)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"></polyline><line x1="0" y1="104" x2="600" y2="104" stroke="var(--border2)" stroke-width="1"></line></svg>\n<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:4px"><span>12w ago</span><span>8w</span><span>4w</span><span>this week</span></div>`:se("not enough history for a trend"),c=(m,x)=>{if(!m.length)return se("nothing here yet");let R=Math.max(...m.map(h=>h.tokens),1e-4);return m.slice(0,6).map(h=>`<div class="rollrow"><div class="rollhead"><span class="mono">${r(h.key)}</span><span class="muted" style="font-size:11.5px">${w(h.count,"session")}</span><span class="mono" style="margin-left:auto;font-weight:700">${r(y(h.tokens))}</span></div><span class="trough" style="margin-top:5px"><i style="width:${(h.tokens/R*100).toFixed(1)}%;background:${x}"></i></span></div>`).join("")},d=[...n.entries()].sort((m,x)=>x[1]-m[1]).map(([m,x])=>`<span class="sigchip">${r(pt(m))} \\xB7 ${x}</span>`).join("");return T(`<section>${Ge("global",e.state)}\n<div class="kpis">${s}</div>\n<div class="card pad mb16">\n<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><span style="font-weight:700;font-size:13.5px">Weekly tokens \\xB7 last 12 weeks</span><span class="mono small muted">${r(i)}</span></div>\n${l}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by model</div>${c(t.byModel,"var(--accent)")}</div>\n<div class="card pad"><div class="card-title">Tokens by project</div>${c(t.byProject,"var(--cat-agent)")}</div>\n</div>\n<div class="chiprow mb16">${d}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>\n${Ve(t,e)}\n</section>`)}function rs(e,t){let n=P(e);if(!n)return`<div class="sid">${t?r(O(t.id))+" \\xB7 "+r(t.projectSlug||t.source):"\\u2013"}</div>`;let s=e.aggregates[n];return`<div class="sid">${s?r(`${s.scope} \\xB7 ${s.sessionCount} sessions`):"\\u2013"}</div>`}function is(e){return e.state.screen==="global"?sn(e):Vt(e)}function as(e){return T(`<section>${re("harness",e.data)}</section>`)}function ls(){return T("<section></section>")}var on={pickerHtml:rs,wirePicker:()=>{},ensureAggregate:()=>!1,aggScreen:ls,aggregateView:is,megaReview:nn,ensureHarness:()=>!1,invalidateHarness:()=>{},harnessView:as,harnessCard:()=>""};function rn(){let e=null,t=()=>{if(e)return e;if(window.__ORANGU__)return e=window.__ORANGU__,e;let n=document.getElementById("orangu-data");if(!n)return null;try{e=JSON.parse(n.textContent||"null")}catch{e=null}return e};return{mode:"file",async load(){let n=t();if(!n)throw new Error("no embedded data");return n},async session(n){let s=t();return s?.session&&s.session.session.id===n?s.session:null},async aggregate(){return null},async harness(){return null},async suggestions(){return t()?.suggestions??[]},async kickoff(n){let s=n.finding,o=le(s,"report"),a={id:n.suggestionId??de(o),v:2,key:o,createdAt:0,source:"report",scope:s.scope,sessionIds:o.sessionIds,ruleId:s.ruleId,title:s.title,insightId:s.insightId,cohortFingerprint:s.cohortFingerprint,evidence:s.evidence,status:"new",statusAt:0},i=ce(a,"file");return{ok:!0,response:{record:a,commands:i,command:i.claude,spawned:!1}}},async setStatus(){return null},subscribe(){return()=>{}},exportHref(){return null}}}function an(){en(rn(),on)}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",an):an();})();\n';
+var CLIENT_JS_SERVE = '"use strict";(()=>{var Zn=["live","overview","timeline","tools","agents","context","coverage","repo","global","harness","suggest"];function B(e){return e.slice(0,8)}function te(e){return e.mode==="file"&&!e.capabilities.watch?[]:e.sessions.filter(t=>t.badge==="live")}function W(e){if(!(e.mode!=="file"||e.session))return e.aggregates.repo?"repo":e.aggregates.global?"global":void 0}function kt(e){return e.mode==="serve"?te(e).length>1?"live":"overview":W(e)??"overview"}function xt(e,t){let n=t.audience==="plain"?"plain":"dev",s=te(e),o=[];s.length>1&&o.push({id:"live-all",label:`All live \\xB7 ${s.length}`,screen:"live",dot:"pulse"});for(let m of s)o.push({id:"live-"+m.id,label:s.length>1?`${B(m.id)} \\xB7 ${m.projectSlug}`:`Watch \\xB7 ${B(m.id)}`,screen:"live",s:m.id,dot:"pulse"});let l=[];W(e)===void 0&&(l.push({id:"overview",label:"Overview",screen:"overview"},{id:"timeline",label:"Timeline",screen:"timeline"},{id:"tools",label:"Tools & calls",screen:"tools"}),n==="dev"&&((e.session?.agents.runs.length??0)>0&&l.push({id:"agents",label:"Agents",screen:"agents"}),l.push({id:"context",label:"Context & tokens",screen:"context"}),l.push({id:"coverage",label:"Coverage",screen:"coverage"})));let i=e.aggregates.repo?.sessionCount,a=e.mode==="file"?e.aggregates.global?.sessionCount:void 0,d=e.mode==="file"?"needs orangu serve":void 0,c=[{id:"repo",label:i!==void 0?`Repo \\xB7 ${i} sessions`:"Repo",screen:"repo",hint:i===void 0?d:void 0},{id:"global",label:a!==void 0?`Global \\xB7 ${a} sessions`:"Global \\xB7 all time",screen:"global",hint:a===void 0?d:void 0},{id:"harness",label:"Harness",screen:"harness",hint:d}];return[{id:"live",label:"Live",items:o},{id:"session",label:"Observe this session",items:l},{id:"across",label:"Recurring patterns",items:c},{id:"improve",label:"Improve the next session",items:[{id:"suggest",label:"Improvements",screen:"suggest"}]}]}function wt(e){let t={screen:"overview"},n=e.replace(/^#/,""),[s,o]=n.split("?");if(s&&Zn.includes(s)&&(t.screen=s),o)for(let l of o.split("&")){let i=l.indexOf("=");if(i<0)continue;let a=l.slice(0,i),d=decodeURIComponent(l.slice(i+1));a==="s"?t.s=d:a==="scope"&&(d==="session"||d==="repo"||d==="global")?t.scope=d:a==="tool"?t.tool=d:a==="cat"?t.cat=d:a==="agent"?t.agent=d:a==="turn"?t.turn=Number(d):a==="err"?t.errorsOnly=d==="1":a==="filter"&&(d==="all"||d==="errors"||d==="agents"||d==="human")?t.filter=d:a==="theme"?t.theme=d:a==="audience"&&(d==="dev"||d==="plain")&&(t.audience=d)}return t}function Z(e,t){return ze({...e,scope:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0,filter:void 0,...t})}function ze(e){let t=[];return e.s&&t.push("s="+encodeURIComponent(e.s)),e.scope&&t.push("scope="+e.scope),e.tool&&t.push("tool="+encodeURIComponent(e.tool)),e.cat&&t.push("cat="+encodeURIComponent(e.cat)),e.agent&&t.push("agent="+encodeURIComponent(e.agent)),e.turn!==void 0&&t.push("turn="+e.turn),e.errorsOnly&&t.push("err=1"),e.filter&&t.push("filter="+e.filter),e.audience&&t.push("audience="+e.audience),e.theme&&t.push("theme="+e.theme),"#"+e.screen+(t.length?"?"+t.join("&"):"")}function y(e){return e>=1e9?(e/1e9).toFixed(e>=1e10?0:1)+"B":e>=1e6?(e/1e6).toFixed(e>=1e7?0:2)+"M":e>=1e3?(e/1e3).toFixed(e>=1e5?0:1)+"k":String(Math.round(e))}function C(e){if(e===void 0||!isFinite(e))return"\\u2013";if(e<1e3)return Math.round(e)+"ms";let t=e/1e3;if(t<60)return t.toFixed(t<10?1:0)+"s";let n=Math.floor(t/60);if(n<60)return n+"m "+Math.round(t%60)+"s";let s=Math.floor(n/60);return s<24?s+"h "+n%60+"m":Math.floor(s/24)+"d "+s%24+"h"}function I(e,t=0){return(e*100).toFixed(t)+"%"}function R(e,t,n=t+"s"){return`${H(e)} ${e===1?t:n}`}function H(e){return e.toLocaleString("en-US")}function St(e){return e===void 0?"\\u2013":new Date(e).toISOString().slice(0,16).replace("T"," ")}function xe(e){return e===void 0?"--:--:--":new Date(e).toISOString().slice(11,19)}function we(e){return e>=1<<20?(e/(1<<20)).toFixed(1)+" MB":e>=1024?Math.round(e/1024)+" KB":e+" B"}function r(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\'/g,"&#39;")}var ce={read:"Read",search:"Search",edit:"Edit",write:"Write",exec:"Shell",agent:"Agents",skill:"Skills",web:"Web",plan:"Plan",ask:"Ask",mcp:"MCP",task:"Tasks",notebook:"Notebook",other:"Other"},es=["read","search","edit","write","exec","agent","skill","web","other"];function P(e){return`var(--cat-${es.includes(e)?e:"other"}, var(--cat-other))`}var ts={clean:"The last check it ran passed",interrupted:"You stopped it",failing:"The last test run failed"};function Rt(e,t){let n=ts[e]??"The agent completed its last task";return e==="clean"&&t&&Ye(t)?`${n}. ${t.testRunsFailed} of ${R(t.testRuns,"test run")} failed earlier.`:n}function Ye(e){return e.testRunsFailed&&e.testRunsFailed<e.testRuns?"last run":""}function Se(e,t){let n=[],s=new Map;for(let o of e){if(o.signature){n.push(o);continue}let{tool:l,total:i,sessions:a=0}=t(o),d=s.get(l)??{tool:l,total:0,signatures:0,sessions:0};d.total+=i,d.signatures++,d.sessions=Math.max(d.sessions,a),s.set(l,d)}return{kept:n,hidden:[...s.values()].sort((o,l)=>l.total-o.total)}}function Et(e){if(e.ending==="interrupted")return`Stopped by you after ${R(e.turns,"turn")}`;let t=Je(e);if(t.length)return t.join(" \\xB7 ");let n=R(e.humanTurns,"request");return e.toolCalls>0?`${n}, ${e.agents?R(e.agents,"subagent")+", ":""}nothing committed`:`${n}, no tool calls recorded`}function Je(e){let t=e.outcomes,n=[];t.prLinks.length&&n.push(R(t.prLinks.length,"PR")),t.gitCommits&&n.push(R(t.gitCommits,"commit"));let s=t.filesEdited+t.filesWritten;return s&&n.push(R(s,"file")+" changed"),t.buildRunsFailed&&n.push(`${t.buildRunsFailed} of ${R(t.buildRuns,"build run")} failed`),t.testRuns&&n.push(t.testRunsFailed?`${t.testRunsFailed} of ${R(t.testRuns,"test run")} failed`:`${R(t.testRuns,"test run")} green`),n}function Ct(e){return{value:C(e.activeMs),note:e.wallMs!==void 0?`over ${C(e.wallMs)} wall \\xB7 ${C(e.humanWaitMs)} waiting for you`:"single-message session"}}function It(e){let t=e.evidence,n=t.calls?.[0],s=n?.tool??n?.name??t.tools?.[0]?.name;if(typeof s=="string"&&s)return{tool:s};if(e.turnIndexes.length)return{turn:e.turnIndexes[0]}}function Te(e,t){return e.map(n=>{let s=t.findIndex(o=>o.ts!==void 0&&n.ts!==void 0&&o.ts>=n.ts);return{x:s<0?Math.max(0,t.length-1):s,label:"compaction at turn "+n.turnIndex}})}function Re(e){if(!e)return"";let t=e.estimated?"~":"";return e.tokens?`save ${t}${y(e.tokens)} tokens`:e.ms?`save ${t}${C(e.ms)}`:""}function Ee(e,t,n){if(!e||!e.tokens&&!e.ms)return;let s=`Rule ${n} ${e.estimated?"estimated":"measured"} a saving of \\u2248`;if(e.tokens&&t&&e.tokens<=t){let o=e.tokens/t;return{text:o<.005?"under 1% of this session":`~${I(o)} of this session`,title:`${s}${y(e.tokens)} of the ${y(t)} tokens in this session.`}}return{text:Re(e),title:`${s}${e.tokens?y(e.tokens)+" tokens":C(e.ms)}.`}}function At(e,t){return!t||!e.tokens&&!e.ms?"":`${e.tokens?`\\u2248${y(e.tokens)} tokens`:`\\u2248${C(e.ms)}`} recoverable across ${R(t,"finding")}`}function Mt(e){let t=e.summary,n=e.context,s=[];return n.contextWindow&&t.contextPeak&&s.push(`Context grew to ${I(t.contextPeak/n.contextWindow)} of the window`),t.totalTokens&&s.push(`${I(t.cacheHitRatio)} of tokens were cache reads`),t.totalTokens&&e.tokens.agents&&s.push(`${I(e.tokens.agents/t.totalTokens)} of tokens went to subagents`),s.length?s.join(". ")+".":"The transcript records no token usage for this session."}function Lt(e){let t=e.find(s=>s.id==="tests");return t?.tone==="good"?"passing":t?.tone==="bad"?"failing":e.some(s=>(s.id==="commits"||s.id==="prs")&&Number(s.value)>0)?"shipped":"\\u2013"}function de(e,t,n){return e.filter(s=>s.turnIndex===t&&(!n||s.agentId===n))}function Ft(e,t,n){let s=de(e,t,n);if(!s.length)return[];let o=new Map;for(let l of s)o.set(l.category,(o.get(l.category)??0)+1);return[...o.entries()].map(([l,i])=>({cat:l,pct:i/s.length*100}))}function jt(e,t){let n=[...t].sort((l,i)=>l.turnIndex-i.turnIndex).filter(l=>l.turnIndex>(e[0]?.index??0)&&l.turnIndex<=(e[e.length-1]?.index??0)),s=[],o=e;for(let l of n){let i=o.filter(a=>a.index<l.turnIndex);o=o.filter(a=>a.index>=l.turnIndex),s.push({turns:i,after:l})}return s.push({turns:o,after:void 0}),s}function Ht(e,t=600,n=104,s=8){let o=e.length;if(!o)return"";let l=Math.max(...e.map(i=>i.tokens),1e-4);return e.map((i,a)=>{let d=o===1?t/2:a/(o-1)*t,c=n-i.tokens/l*(n-s);return`${Math.round(d*10)/10},${Math.round(c*10)/10}`}).join(" ")}var ns={"claude-code":"Claude Code",cowork:"Cowork",desktop:"Desktop"};function Pt(e){return ns[e]??e}function _t(e,t){let n=[];for(let s of e.tools.calls)n.push({ts:s.startTs,name:s.name,category:s.category,summary:s.summary,durationMs:s.durationMs,isError:s.isError,agentType:s.agentId?"agent":void 0,key:s.toolUseId});for(let s of e.events)n.push({ts:s.ts,name:s.kind,category:"other",summary:s.label,key:"ev-"+s.turnIndex+"-"+s.kind});for(let s of e.agents.runs)n.push({ts:s.startTs,name:s.agentType||s.name||s.agentId,category:"agent",summary:s.taskKind??s.description??"subagent run",durationMs:s.durationMs,key:s.agentId});return n.sort((s,o)=>(s.ts??1/0)-(o.ts??1/0)||(s.key<o.key?-1:s.key>o.key?1:0)),n.slice(-t)}function Tt(e){let t=Math.max(0,Math.round(e/1e3));if(t<60)return t+"s";let n=Math.floor(t/60);return n<60?n+"m":Math.floor(n/60)+"h"}function ue(e){return e.badge!=="ended"&&e.possiblyLive?"Watching \\xB7 possibly live":e.badge==="ended"?"ended \\xB7 updated "+Tt(e.ageMs)+" ago":"updated "+Tt(e.ageMs)+" ago"}function Nt(e){if(!e.length)return 1/0;let t=e.map(s=>s.totalTokens).sort((s,o)=>o-s),n=Math.max(1,Math.floor(t.length*.2));return t[n-1]}function Dt(e,t){let n=new Set(t.map(l=>l.id)),s=e.filter(l=>!n.has(l)),o=t.filter(l=>l.open).map(l=>l.id);return[...new Set([...s,...o])]}function Bt(e,t){let n=[];for(let s of e)for(let o of s.lastEvents??[])n.push({...o,sid:s.id});return n.sort((s,o)=>(s.ts??1/0)-(o.ts??1/0)||(s.sid<o.sid?-1:s.sid>o.sid?1:0)),n.slice(-t)}var Ot="orangu-brand-icon";var ss=/^data:image\\/png;base64,[A-Za-z0-9+/]+={0,2}$/;function V(e=30){let t=`width="${e}" height="${e}" style="display:block"`,n=typeof document>"u"?void 0:document.getElementById(Ot)?.getAttribute("href");return!n||!ss.test(n)?`<span class="logo" ${t} role="img" aria-label="orangu"></span>`:`<img class="logo" src="${n}" ${t} alt="orangu" draggable="false">`}function w(e){let t=document.createElement("template");return t.innerHTML=e.trim(),t.content.firstElementChild}function Ce(e){e.querySelectorAll("details").forEach(t=>{let n=t.querySelector("summary");n&&(n.setAttribute("role","button"),n.setAttribute("aria-expanded",String(t.open)),t.addEventListener("toggle",()=>n.setAttribute("aria-expanded",String(t.open))))})}function Ie(e){e.querySelectorAll("[data-copy]").forEach(t=>{t.addEventListener("click",()=>{let n=t.getAttribute("data-copy")??"",s=()=>{let o=t.textContent;t.textContent="copied",setTimeout(()=>t.textContent=o,1200)};if(navigator.clipboard?.writeText)navigator.clipboard.writeText(n).then(s,s);else{let o=document.createElement("textarea");o.value=n,document.body.appendChild(o),o.select();try{document.execCommand("copy")}catch{}o.remove(),s()}})})}var qt={high:3,medium:2,low:1,info:0};function Wt(e,t){return(qt[t.severity]??0)-(qt[e.severity]??0)||t.totalSavingsTokens-e.totalSavingsTokens||t.sessions-e.sessions||e.ruleId.localeCompare(t.ruleId)}var Fo=7*864e5;function Ut(e){return new TextEncoder().encode(e)}function Gt(e){let t=Ut(e),n=t.length,s=(n+8>>6)+1,o=new Uint32Array(s*16);for(let h=0;h<n;h++)o[h>>2]|=t[h]<<24-(h&3)*8;o[n>>2]|=128<<24-(n&3)*8;let l=n*8;o[s*16-1]=l>>>0,o[s*16-2]=Math.floor(l/4294967296)>>>0;let i=1732584193,a=4023233417,d=2562383102,c=271733878,m=3285377520,b=new Uint32Array(80),S=(h,u)=>h<<u|h>>>32-u;for(let h=0;h<o.length;h+=16){for(let g=0;g<16;g++)b[g]=o[h+g];for(let g=16;g<80;g++)b[g]=S(b[g-3]^b[g-8]^b[g-14]^b[g-16],1);let u=i,x=a,$=d,f=c,p=m;for(let g=0;g<80;g++){let L,E;g<20?(L=x&$|~x&f,E=1518500249):g<40?(L=x^$^f,E=1859775393):g<60?(L=x&$|x&f|$&f,E=2400959708):(L=x^$^f,E=3395469782);let _=S(u,5)+L+p+E+b[g]>>>0;p=f,f=$,$=S(x,30)>>>0,x=u,u=_}i=i+u>>>0,a=a+x>>>0,d=d+$>>>0,c=c+f>>>0,m=m+p>>>0}let v=h=>h.toString(16).padStart(8,"0");return v(i)+v(a)+v(d)+v(c)+v(m)}function oe(e){return[...new Set(e.map(t=>t.trim().replace(/\\\\/g,"/")).filter(Boolean))].sort()}function Vt(e){return Gt(JSON.stringify(oe(e))).slice(0,16)}function Kt(e,t="finding"){let n=e.cohortFingerprint;if(e.scope==="session"){if(n!==void 0)throw new Error(`${t} session scope must omit cohortFingerprint`);return}if(typeof n!="string"||!/^[0-9a-f]{16}$/.test(n))throw new Error(`${t} repo/global scope requires a 16-hex cohortFingerprint`)}function Ae(e,t){return Kt(e),{v:2,source:t,scope:e.scope,ruleId:e.ruleId,sessionIds:oe(e.sessionIds),...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}}}function Me(e){let t=JSON.stringify({v:2,source:e.source,scope:e.scope,ruleId:e.ruleId,sessionIds:oe(e.sessionIds),insightId:e.insightId??null,...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}});return"sg_"+Gt(t).slice(0,12)}function os(e){return btoa(Array.from(e,t=>String.fromCharCode(t)).join("")).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"")}function rs(e){return JSON.stringify(e,(t,n)=>n&&typeof n=="object"&&!Array.isArray(n)?Object.fromEntries(Object.entries(n).sort(([s],[o])=>s<o?-1:s>o?1:0)):n)}var Ho=256*1024;function is(e,t="report"){Kt(e);let n={...e,sessionIds:oe(e.sessionIds)};return os(Ut(rs({v:2,source:t,finding:n})))}function as(e,t){if(t==="serve")return e.id;if(e.title&&e.evidence){let s={ruleId:e.ruleId,title:e.title,scope:e.scope,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:e.evidence};return`${e.id} --finding ${is(s,e.source??"report")}`}let n=[...e.sessionIds].sort().join(",");return`${e.id} --rule ${e.ruleId} --scope ${e.scope} --session ${n}`}function Le(e,t){let n=as(e,t);return{claude:`claude "/orangu:improve ${n}"`,codex:`$orangu-improve ${n}`}}var zt="/plugin marketplace add NissanOhana/orangu \\xB7 /plugin install orangu",Fe="Each title shows the figures of one example session.";function ls(e){let t=e.trim().replace(/[-_]+/g," ")||"finding";return t[0].toUpperCase()+t.slice(1)}var cs="orangu hides these details because they quote commands and output. To see them, run the report again with --include-text.";function Yt(e,t,n){return{title:t.trim()||ls(e),detail:n.trim()||cs}}function Xe(e){let t=e.boundedSavingsTokens??e.totalSavingsTokens,n=e.boundedSavingsMs??e.totalSavingsMs;return{...t?{tokens:t}:{},...n?{ms:n}:{},estimated:!0}}function Jt(e,t){let n=Yt(e.ruleId,e.title,e.detail);return{ruleId:e.ruleId,...n,improvement:e.improvement||e.recommendation,why:e.why,method:e.method,savings:e.savings,sessionIds:t?[t]:[],insightId:e.id,severity:e.severity}}function ge(e,t,n){if(e==="session")return(t?.insights??[]).map(o=>Jt(o,t?.session.id));let s=n?Vt(n.sessions.map(o=>o.id)):void 0;return[...n?.crossFindings??[]].sort(Wt).map(o=>{let l=Yt(o.ruleId,o.title,`This pattern shows in ${o.sessions} of ${R(n.sessionCount,"session")}.`);return{ruleId:o.ruleId,...l,displayTitle:o.exampleTitle,improvement:o.improvement||o.recommendation,why:o.why,method:o.method,savings:Xe(o),sessionIds:o.exampleSessionIds,sessions:o.sessions,severity:o.severity,...s?{cohortFingerprint:s}:{}}})}function Qe(e,t){let n=Ze(Jt(e,t),"session"),s=Ae(n,"report"),o=Me(s);return{id:o,command:Le({id:o,...n,sessionIds:s.sessionIds,source:"report"},"file").claude}}function Xt(e){let t=0,n=0;for(let s of e)t+=s.savings?.tokens??0,n+=s.savings?.ms??0;return{tokens:t,ms:n}}function Ze(e,t){return{ruleId:e.ruleId,title:e.title,scope:t,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:{estimated:e.savings?.estimated??!0,sessions:e.sessions??1,...e.savings?.tokens!==void 0?{savingsTokens:e.savings.tokens}:{},...e.savings?.ms!==void 0?{savingsMs:e.savings.ms}:{}}}}function je(e){return`claude "/orangu:harness --scope ${e}"`}function Qt(e){if(e?.status!=="failed")return"";let t=e.kickoff?.error?.trim();return t?`Claude could not write the proposal: ${t}`:"Claude could not write the proposal. Copy the command. Run it again to see the error."}function Zt(e,t,n,s){let o,l=oe(t.sessionIds).join(`\n`);for(let i of e){if(!Array.isArray(i.sessionIds)||!i.sessionIds.every(c=>typeof c=="string"))continue;let a=i.id===s||Array.isArray(i.legacyIds)&&i.legacyIds.includes(s),d=i.v===1&&i.ruleId===t.ruleId&&i.scope===n&&oe(i.sessionIds).join(`\n`)===l&&(!t.insightId||!i.insightId||t.insightId===i.insightId);!a&&!d||(!o||i.statusAt>o.statusAt)&&(o=i)}return o}function O(e,t="$",n="command"){return`<div class="cmd"><span class="p" aria-hidden="true">${r(t)}</span><span class="txt">${r(e)}</span><button class="copy" data-copy="${r(e)}" aria-label="copy ${n}">copy</button></div>`}function ne(e,t){return`Paste it in a terminal${e?` in ${e}`:t?" in this repository":""}. It starts Claude Code.`}function He(){return`<div class="small sg-install">First time only, type these 2 lines in Claude Code:</div>${zt.split(" \\xB7 ").map((e,t)=>O(e,">",t?"the install command":"the marketplace command")).join("")}`}var en={"context window":"working memory","cache reads":"reused context","cache read":"reused context","cache writes":"saved context","cache write":"saved context","cache hits":"reused context",compactions:"memory refreshes",compaction:"memory refresh"};var ds=Object.keys(en).sort((e,t)=>t.length-e.length);function M(e,t){if(t!=="plain")return e;let n=e;for(let s of ds)n=n.split(s).join(en[s]);return n}function fe(e,t){if(t!=="plain")return e;let n=M(e.toLowerCase(),t);return n[0].toUpperCase()+n.slice(1)}function A(e,t,n="",s={}){let o=s.estimated?\'<span class="est" title="estimated: derived from bytes, not reported by the API">~</span>\':"";return`<div class="kpi${s.big?" big":""}${s.skeleton?" skel":""}"${s.title?` title="${r(s.title)}"`:""}>\n<div class="label">${r(e)}</div>\n<div class="val${s.accent?" accent":""}">${s.skeleton?"\\xB7\\xB7\\xB7":r(t)+o}</div>\n${n?`<div class="hint${s.badHint?" bad":""}">${r(n)}</div>`:""}\n</div>`}function q(e){return`<div class="card"><div class="empty-hero">\n${V(e.mascotSize??48)}\n<div class="t">${r(e.title)}</div>\n${e.hint?`<div class="s">${r(e.hint)}</div>`:""}\n${e.command?O(e.command):""}\n</div></div>`}function re(e){return`<div class="chart-empty">${r(e)}</div>`}function z(){return w(`<section>${q({title:"No session selected."})}</section>`)}function pe(e){return`<span class="mascot" style="display:block;width:${e}px;flex:none" aria-hidden="true">${V(e)}</span>`}function tn(e,t={}){let n=e.reduce((i,a)=>i+a.value,0)||1,s=t.height??14,o=0,l=e.filter(i=>i.value>0).map(i=>{let a=i.value/n*100,d=`<rect x="${o}%" y="0" width="${a}%" height="${s}" fill="${i.color}"><title>${r(i.label)}</title></rect>`;return o+=a,d}).join("");return`<svg width="100%" height="${s}" viewBox="0 0 100 ${s}" preserveAspectRatio="none" role="img"${t.title?` aria-label="${r(t.title)}"`:""}>${l}</svg>`}function nn(e,t,n={}){let s=n.width??720,o=n.height??160,l={l:4,r:4,t:8,b:16},i=e[0]?.length??0;if(i===0)return\'<div class="chart-empty">no data points yet</div>\';let a=s-l.l-l.r,d=o-l.t-l.b,c=new Array(i).fill(0),m=0;for(let f of e)for(let p=0;p<i;p++)m=Math.max(m,c[p]+(f[p]??0));let b=new Array(i).fill(0);for(let f of e)for(let p=0;p<i;p++)b[p]+=f[p]??0;m=n.yMaxOverride??Math.max(...b,1);let S=f=>l.l+(i===1?a/2:f/(i-1)*a),v=f=>l.t+d-f/m*d,h=new Array(i).fill(0),u=[];e.forEach((f,p)=>{let g=f.map((E,_)=>h[_]+(E??0)),L=`M ${S(0).toFixed(1)} ${v(h[0]).toFixed(1)}`;for(let E=0;E<i;E++)L+=` L ${S(E).toFixed(1)} ${v(g[E]).toFixed(1)}`;for(let E=i-1;E>=0;E--)L+=` L ${S(E).toFixed(1)} ${v(h[E]).toFixed(1)}`;L+=" Z",u.push(`<path d="${L}" fill="${t[p]??"var(--cat-other)"}" opacity="0.85"><title>${r(n.labels?.[p]??"")}</title></path>`);for(let E=0;E<i;E++)h[E]=g[E]});let x=(n.markers??[]).map(f=>{let p=S(f.x);return`<line x1="${p.toFixed(1)}" y1="${l.t}" x2="${p.toFixed(1)}" y2="${l.t+d}" stroke="${f.color??"var(--bad)"}" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(f.label)}</title></line>`}).join(""),$=`<line x1="${l.l}" y1="${l.t+d}" x2="${l.l+a}" y2="${l.t+d}" stroke="var(--border2)" stroke-width="1"/>`;return`<svg width="100%" viewBox="0 0 ${s} ${o}" role="img" aria-label="stacked area">${u.join("")}${x}${$}</svg>`}function he(e,t={}){let n=t.width??720,s=t.height??150,o={l:4,r:4,t:8,b:14},l=e.length;if(!l)return\'<div class="chart-empty">no data points yet</div>\';let i=n-o.l-o.r,a=s-o.t-o.b,d=t.yMax??Math.max(...e,1),c=$=>o.l+(l===1?i/2:$/(l-1)*i),m=$=>o.t+a-$/d*a,b="";e.forEach(($,f)=>{b+=(f===0?"M":"L")+" "+c(f).toFixed(1)+" "+m($).toFixed(1)+" "});let S=t.color??"var(--accent-ink)",v=t.threshold?`<line x1="${o.l}" y1="${m(t.threshold.y).toFixed(1)}" x2="${o.l+i}" y2="${m(t.threshold.y).toFixed(1)}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 3"><title>${r(t.threshold.label)}</title></line>`:"",h=(t.markers??[]).map($=>`<line x1="${c($.x).toFixed(1)}" y1="${o.t}" x2="${c($.x).toFixed(1)}" y2="${o.t+a}" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="3 2"><title>${r($.label)}</title></line>`).join(""),u=t.fmtY,x=u?`<text x="${o.l+2}" y="${o.t+8}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(u(d))}</text><text x="${o.l+2}" y="${o.t+a-3}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(u(0))}</text>`:"";return`<svg width="100%" viewBox="0 0 ${n} ${s}" role="img" aria-label="line chart">${v}<path d="${b}" fill="none" stroke="${S}" stroke-width="2" stroke-linejoin="round"/>${h}<line x1="${o.l}" y1="${o.t+a}" x2="${o.l+i}" y2="${o.t+a}" stroke="var(--border2)"/><line x1="${o.l}" y1="${o.t}" x2="${o.l}" y2="${o.t+a}" stroke="var(--border2)"/>${x}</svg>`}function sn(e,t,n,s,o,l){let i=s-n||1,a=(e-n)/i*100,d=Math.max(.6,(t-e)/i*100);return`<svg width="100%" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><rect x="${a.toFixed(2)}" y="3" width="${d.toFixed(2)}" height="8" rx="3" fill="${o}"><title>${r(l)}</title></rect></svg>`}function Pe(e,t){let n=Math.max(...e.map(s=>s.value),1);return e.map(s=>`<div class="proprow" style="display:grid;grid-template-columns:130px 1fr 72px;gap:10px;align-items:center;padding:3px 0">\n<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r(s.label)}${s.sub?` <span class="muted">${r(s.sub)}</span>`:""}</div>\n<span class="trough"><i style="width:${(s.value/n*100).toFixed(1)}%;background:${s.color}"></i></span>\n<div class="right mono small">${r(t(s.value))}</div>\n</div>`).join("")}var _e=50,on=12;function us(e,t,n){return t?e.conn==="reconnecting"?"reconnecting":t.badge==="ended"?"ended":n&&n.summary.toolCalls===0?"empty":e.data.mode==="file"?e.data.capabilities.watch?"file":"snapshot":t.badge==="idle"?"stalled":"live":"connecting"}function Ne(e,t){return`<span class="bdot ${e}"${e==="p"?\' data-pulse="1"\':""} aria-hidden="true"></span>${t?`<span class="vh">${t}</span>`:""}`}var ie={pulse:Ne("p","live"),hollow:Ne("h","quiet"),good:Ne("g","ended"),static:Ne("s")},rn=[ie.pulse,"","This view refreshes as the transcript grows. Nothing leaves this machine."],ps={connecting:[ie.static,"Connecting to orangu serve\\u2026","The page waits for the first event."],live:rn,empty:rn,stalled:[ie.hollow,"","The transcript did not grow recently. The session may need your input."],ended:[ie.good,"Session ended \\xB7 final numbers",""],reconnecting:[ie.hollow,"Connection lost \\xB7 retrying","The page reconnects on its own."],file:[ie.static,"Watching with orangu watch","orangu watch rewrites this file on each change. Reload the page to see the latest numbers."],snapshot:[ie.static,"Static snapshot","This file does not update. To follow the session live, run orangu watch."]};function ms(e,t,n){let s=n?`turn <b style="color:var(--ink1)">${n.summary.turns}</b>${e==="ended"||e==="snapshot"?"":" in progress"}`:"",[o,l,i]=ps[e],a=l,d=i;return e==="live"||e==="empty"?a=t?.possiblyLive?"Watching \\xB7 possibly live":"Watching a running session":e==="stalled"?a=`Watching \\xB7 quiet for ${Math.max(1,Math.round((t?.ageMs??0)/6e4))}m`:e==="ended"&&(d=t?ue(t):""),`<div class="livebanner">${pe(44)}<div class="grow"><div class="lt">${o}<span aria-live="polite">${r(a)}</span></div><div class="ls">${r(d)}</div></div><div class="lr">${s}</div></div>`}function De(e,t,n){let s=e.startTs!==void 0&&isFinite(t)?sn(e.startTs,e.endTs??n,t,n||t+1,P("agent"),`${e.agentType??e.name??e.agentId} \\xB7 ${C(e.durationMs)} \\xB7 ${y(e.totalTokens)} tokens`):\'<div class="small muted">no timing</div>\';return`<div class="swimrow"><div class="alabel">${"\\xB7 ".repeat(e.spawnDepth)}${r(e.agentType||e.name||e.agentId.slice(0,10))} <small>${r(e.model??"")}</small></div><div${e.status==="running"?"":\' class="dim"\'}>${s}</div></div>`}function gs(e){let t=e.agents.runs;if(!t.length)return"";let n=t.filter(a=>a.status==="running"),s=Math.min(...t.map(a=>a.startTs??1/0).filter(isFinite)),o=Math.max(...t.map(a=>a.endTs??-1/0).filter(isFinite)),l=[...n,...t.filter(a=>a.status!=="running")].slice(0,on),i=t.length>on?`<div class="pagefoot"><button data-all-lanes="1">show all ${t.length} agents</button></div>`:"";return`<div class="card pad mb18"><div class="card-title">Agents \\xB7 ${n.length} running \\xB7 ${t.length-n.length} done</div><div class="agent-lanes">${l.map(a=>De(a,s,o)).join("")}</div>${i}</div>`}function fs(e,t,n){let s=us(e,t,n),o=e.audience,l=n?.summary,i=!n,a=[A("Elapsed",l?.wallMs!==void 0?C(l.wallMs):"\\u2013","",{big:!0,skeleton:i}),A("Tokens so far",l?y(l.totalTokens):"\\u2013","",{big:!0,accent:!0,skeleton:i}),A("Tool calls",l?String(l.toolCalls):"\\u2013","",{big:!0,skeleton:i}),A(fe("Cache hits",o),l?I(l.cacheHitRatio):"\\u2013","",{big:!0,skeleton:i})].join(""),d=n?.context,c=d?.contextWindow?d.final/d.contextWindow:void 0,m=s==="ended"?"\\u2013":M(`${R(l?.compactions??0,"compaction")} so far${c!==void 0&&c>=.75?" \\xB7 compaction likely near 90%":""}`,o),b=`<div class="card pad mb18">\n<div class="ctxhead"><span>${fe("Context window",o)}</span><span class="mono">${c!==void 0?r(I(c))+" of "+r(y(d.contextWindow)):d?r(y(d.final)):"\\u2013"}</span></div>\n<div class="ctxbar"><i style="width:${c!==void 0?(c*100).toFixed(1):0}%"></i></div>\n<div class="smt8">${r(m)}</div>\n</div>`,S=n?_t(n,_e+1):[],v=S.length>_e,h=S.slice(-_e).map(g=>`<div class="feedrow">${g.agentType?\'<span style="width:2px;align-self:stretch;background:var(--cat-agent);flex:none"></span>\':""}<span class="ft">${r(xe(g.ts))}</span><span class="sw" style="background:${P(g.category)}"></span><span class="fn">${r(g.name)}</span><span class="fw">${r(g.summary)}</span><span class="fd">${g.durationMs!==void 0?r(C(g.durationMs)):""}${g.isError?" \\xB7 error":""}</span></div>`).join(""),u=s==="connecting"?\'<div class="feedrow muted">Waiting for the first event\\u2026</div>\':\'<div class="feedrow muted">No tool calls yet.</div>\',x=[];t&&x.push(`streaming from \\u2026/${B(t.id)}.jsonl`),s==="ended"&&x.push("transcript closed"),v&&n&&x.push(`showing last ${_e} of ${n.tools.calls.length+n.events.length+n.agents.runs.length} \\xB7 full list in Timeline`);let $=s==="ended"?`<a class="btn-sm" href="#overview${t?"?s="+r(t.id):""}" style="display:inline-block;margin-left:10px">Open Overview \\u2192</a>`:"",f=`<div class="feed" aria-live="off"><div class="card-head">Live feed</div>${h||u}<div class="feedfoot">${r(x.join(" \\xB7 "))}${$}</div></div>`,p=w(`<section>${ms(s,t,n)}<div class="kpis k4">${a}</div>${b}${n?gs(n):""}${f}</section>`);return p.querySelector("[data-all-lanes]")?.addEventListener("click",g=>{if(!n)return;let L=p.querySelector(".agent-lanes");L.classList.add("swimbox");let E=Math.min(...n.agents.runs.map(ee=>ee.startTs??1/0).filter(isFinite)),_=Math.max(...n.agents.runs.map(ee=>ee.endTs??-1/0).filter(isFinite));L.innerHTML=n.agents.runs.map(ee=>De(ee,E,_)).join(""),g.currentTarget.parentElement?.remove()}),p}function an(e){let t=te(e.data),n=/[?&]s=/.test(location.hash),s=typeof window<"u"?window.__ORANGU_FLEET__:void 0;if(t.length>1&&!n&&s)return s(e,t);let o=e.data.sessions.find(l=>l.id===(e.state.s??e.data.selectedId))??e.data.sessions[0];return o?fs(e,o,e.a):w(`<section>${q({title:"orangu found no sessions.",command:"orangu serve"})}</section>`)}function Be(e,t){return`<div class="banner ${e}">${t}</div>`}function Y(e,t){let n=e.parse.reconciliation;if(!(e.parse.badLines>0||!n.ok))return"";if(t==="plain")return Be("warn",`orangu could not read ${H(e.parse.badLines)} lines of the transcript. The numbers may be low.`);let o=n.matchesWithinPct.toFixed(2);return Be("warn",`Parsed ${r(H(e.parse.totalLines-e.parse.badLines))} of ${r(H(e.parse.totalLines))} records \\xB7 token totals off by ${r(o)}% \\xB7 <a href="#coverage">see Coverage</a>`)}function U(e,t={}){let n=Object.entries(t.data??{}).map(([i,a])=>` data-${i}="${r(a)}"`).join(""),s="chip"+(t.active?" active":""),o=t.disabled?\' aria-disabled="true" tabindex="-1"\':"",l=t.removable?\'<button class="x" aria-label="remove filter">\\xD7</button>\':"";return`<button type="button" class="${s}"${o}${t.title?` title="${r(t.title)}"`:""}${n}>${r(e)}${l}</button>`}function ln(e){if(!e.length)return"";let t=e.map(n=>`<span class="sigchip">${r(n.label)} <b class="${r(n.tone)}"${n.detail?` title="${r(n.detail)}"`:""}>${r(String(n.value))}</b></span>`).join("");return`<details class="signals"><summary>${e.length} signals</summary><div class="chiprow">${t}</div></details>`}function et(e,t){return e?`<span class="rec sg-lead"><b>Improvement:</b> ${r(M(e,t))}</span>`:""}function tt(e,t,n,s){return t||n?`<details class="why" id="why-${r(e)}"><summary><span class="chev" aria-hidden="true">\\u25B8</span>Why</summary>${t?`<p>${r(M(t,s))}</p>`:""}${n?`<p class="muted">${r(M(n,s))}</p>`:""}</details>`:""}function nt(e,t,n={}){let s=Ee(e.savings,n.sessionTotalTokens,e.ruleId),o=t==="plain"?"":`<span class="pill">${r(e.ruleId)}</span>`,l=e.turnIndexes.length&&t!=="plain"&&!n.link?`<div style="margin-top:10px"><button class="btn-sm" data-turns="${r(e.turnIndexes.join(","))}">Show ${R(e.turnIndexes.length,"turn")} \\u2192</button></div>`:"",i=e.detail?`<p>${r(M(e.detail,t))}</p>`:"",a=n.command?`<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${O(n.command,"$","the Claude Code command")}<div class="small">${r(ne(n.cwd))}${n.how?` <a href="${r(n.how)}" data-to="ai-steps">See the 3 steps \\u2192</a>`:""}</div></div>`:"",d=n.link?`<div style="margin-top:10px"><a class="btn-sm" href="${r(n.link.href)}">${r(n.link.label)}</a></div>`:"",c=e.improvement||e.recommendation;return`<details class="finding${n.open?" top":""}"${n.open?" open":""}>\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="sev ${r(e.severity)}" title="${r(e.severity)}"></span><b>${r(M(e.title,t))}</b>${s?`<span class="fsave" title="${r(s.title)}">${r(s.text)}</span>`:""}${o}${et(c,t)}</summary>\n<div class="fbody">\n${tt(n.id??e.id,e.why,e.method,t)}${i}\n${d}${l}\n${a}\n</div>\n</details>`}function ve(e,t,n){return Z(e.state,{s:e.state.s??t.session.id,...n})}function hs(e,t){return`<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${V(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${r(Et(e.summary))}</div><div class="sg-sub">${r(M(e.summary.narrative,t))}</div></div></div>`}function vs(e){let t=e.summary,n=Je(t).join(" \\xB7 ")||"no commits, PRs or test runs detected",s=Ct(t),o=t.totalTokens?`${I(t.cacheHitRatio)} read from cache \\xB7 ${y(e.tokens.byKind.output)} generated`:"no usage recorded",l=Ye(t.outcomes);return`<div class="triptych">\n<div class="axis q"><div class="aname">Quality \\u2191</div><div class="aval">${r(Lt(e.quality.signals))}${l?` <span class="anote">(${l})</span>`:""}</div><div class="anote">${r(n)}</div>${ln(e.quality.signals)}</div>\n<div class="axis t"><div class="aname">Time \\u2193</div><div class="aval">${r(s.value)}</div><div class="anote">${r(s.note)}</div></div>\n<div class="axis c"><div class="aname">Tokens \\u2193</div><div class="aval">${r(y(t.totalTokens))}</div><div class="anote">${r(o)}</div></div>\n</div>`}function cn(e,t,n){if(!n)return`<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${V(22)}<span class="muted">The rules found nothing to change in this session.</span></div>`;let s=It(n),o=s?.tool?{href:ve(e,t,{screen:"timeline",tool:s.tool}),label:`See the ${s.tool} calls \\u2192`}:s?{href:ve(e,t,{screen:"timeline",turn:s.turn}),label:`See the ${R(n.turnIndexes.length,"turn")} \\u2192`}:void 0;return`<div class="eyebrow mb6">Top improvement</div>${nt(n,e.audience,{...Qe(n,t.session.id),sessionTotalTokens:t.summary.totalTokens,open:!0,how:ve(e,t,{screen:"suggest"}),cwd:t.session.cwd,...o?{link:o}:{}})}`}function bs(e){let t=e.context,n=t.series.filter(i=>!i.agentId),o=`${t.contextWindow?`peak ${I(e.summary.contextPeak/t.contextWindow)} of the window`:`peak ${y(e.summary.contextPeak)}`} \\xB7 ${R(e.summary.compactions,"compaction")}`;return`<div class="card pad"><div class="card-title">Context</div>${n.length?`<div class="spark">${he(n.map(i=>i.contextSize),{width:320,height:60,markers:Te(t.compactions,n),yMax:t.contextWindow})}</div>`:""}<div class="small muted">${r(o)}</div></div>`}function dn(e,t){let n=t.summary,s=ge("session",t,void 0).length;return`<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${[{screen:"timeline",label:n.toolErrors?`Timeline \\xB7 ${R(n.toolErrors,"error")} only`:`Timeline \\xB7 ${H(n.turns)} turns`,state:n.toolErrors?{errorsOnly:!0}:{}},{screen:"tools",label:`Tools \\xB7 ${R(n.toolCalls,"call")}, ${R(n.toolErrors,"error")}`,state:{}},{screen:"suggest",label:`Improvements \\xB7 ${s||"none"}`,state:{}}].map(l=>`<a data-screen="${l.screen}" href="${r(ve(e,t,{screen:l.screen,...l.state}))}">${r(M(l.label,e.audience))} \\u2192</a>`).join("")}</nav>`}function ys(e,t){let n=t.summary.topInsightIds.map(l=>t.insights.find(i=>i.id===l)).filter(l=>!!l),s=n.slice(1).map(l=>nt(l,"dev",{...Qe(l,t.session.id),sessionTotalTokens:t.summary.totalTokens,cwd:t.session.cwd})).join(""),o=At(Xt(ge("session",t,void 0)),t.insights.length);return`${vs(t)}${cn(e,t,n[0])}\n<div class="two-up mb16">${bs(t)}${dn(e,t)}</div>\n${e.harnessCard?.()??""}\n${o?`<p class="recoverable"><a href="${r(ve(e,t,{screen:"suggest"}))}">${r(o)} \\u2192</a></p>`:""}${s?`<h3 style="margin:4px 0 10px">More findings</h3>${s}`:""}`}function $s(e,t){let n=t.summary,o=t.turns.find(a=>a.kind==="human")?.promptPreview.slice(0,140)||(t.session.title?t.session.title:"(this report does not include the prompt text)"),l=`${y(n.totalTokens)} tokens \\xB7 ${C(n.wallMs)}, of which ${C(n.humanWaitMs)} needed your attention`,i=t.insights.find(a=>a.id===n.topInsightIds[0])??t.insights[0];return`<div class="card mb16" style="overflow:hidden">\n<div class="card-head">${V(22)}What happened here</div>\n<div class="plaingrid">\n<div class="k">Goal</div><div>${r(o)}</div>\n<div class="k">How it ended</div><div>${r(Rt(n.ending,n.outcomes))}</div>\n<div class="k">Tokens &amp; time</div><div>${r(l)}</div>\n</div>\n</div>\n${cn(e,t,i)}\n${dn(e,t)}`}function ks(e){let t=e.a;if(!t)return`<section>${q({title:"No session selected.",hint:W(e.data)?"This report covers a scope, not a session.":"Pick a session from the sidebar."})}</section>`;let n=e.audience==="plain"?$s(e,t):ys(e,t);return`<section>${Y(t,e.audience)}${hs(t,e.audience)}${n}</section>`}function st(e){return w(ks(e))}var un=10;function xs(e,t,n){let s=n.state;if(s.turn!==void 0&&t.index!==s.turn)return!1;let o=de(e.tools.calls,t.index,s.agent);return!(s.filter==="errors"&&!o.some(l=>l.isError)||s.filter==="agents"&&t.agents.length===0&&!o.some(l=>l.agentId)||s.filter==="human"&&t.kind!=="human"||s.agent&&!t.agents.includes(s.agent)&&!o.length||(s.tool||s.cat||s.errorsOnly)&&(s.tool&&!o.some(l=>l.name===s.tool)||s.cat&&!o.some(l=>l.category===s.cat)||s.errorsOnly&&!o.some(l=>l.isError)))}function ws(e){let t=e.isCommand?"cmd":e.kind==="human"?"human":e.autoContinuations>0?"auto":e.kind;return`<span class="kind ${e.isCommand?"kcmd":e.kind==="human"?"khuman":""}">${r(t)}</span>`}function Ss(e,t){let n=e.promptPreview||e.commandName;return n?{text:n,own:!1}:{text:[e.promptChars?`${y(e.promptChars)}-char prompt`:"",e.activity].filter(Boolean).join(" \\xB7 ")||(t?"(no prompt)":"(prompt text not included)"),own:!0}}function Ts(e,t,n,s,o){let i=Ft(e.tools.calls,t.index,n.state.agent).map(u=>`<i style="width:${u.pct.toFixed(1)}%;background:${P(u.cat)}"></i>`).join(""),{text:a,own:d}=Ss(t,n.data.capabilities.includeText),c=d?\' style="color:var(--ink3)"\':"",m=de(e.tools.calls,t.index,n.state.agent),b=m.map(u=>{let x=u.agentId?e.agents.runs.find(f=>f.agentId===u.agentId):void 0,$=u.agentId?x?.agentType||x?.name||u.agentId.slice(0,8):"main";return`<div class="evline"><span class="sw" style="background:${P(u.category)}"></span><span class="pill">${r($)}</span><span class="en">${r(u.name)}</span><span class="ew">${r(u.summary)}</span><span class="tag ${u.isError?"bad":"good"}">${u.isError?"error":"ok"}</span><span class="ex">${[u.durationMs!==void 0?C(u.durationMs):"",u.resultBytes?we(u.resultBytes):"",u.errorHint??""].filter(Boolean).map(r).join(" \\xB7 ")}</span></div>`}).join(""),S=t.agents.map(u=>{let x=e.agents.runs.find(f=>f.agentId===u);if(!x)return"";let $=x.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\';return`<button class="btn-sm" data-agent-jump="${r(u)}">\\u25B8 ${r(x.agentType||x.name||u.slice(0,8))} \\xB7 ${r(y(x.totalTokens))} tokens${$}</button>`}).join(" "),v=[t.firstResponseMs!==void 0?`first response ${C(t.firstResponseMs)}`:"",t.humanGapMs?`waited ${C(t.humanGapMs)}`:"",t.autoContinuations?`${t.autoContinuations} auto-continuations`:"",t.models.length?t.models.join(", "):"","context end "+(t.contextEnd?y(t.contextEnd):"\\u2013")].filter(Boolean).join(" \\xB7 "),h=C(t.durationMs??t.reportedDurationMs);return`<details class="turn${t.interrupted?" interrupted":""}" id="turn-${t.index}"${o?" open":""}>\n<summary>\n<span class="tnum">#${t.index}</span>\n<span class="tprompt"${c}>${ws(t)}${r(a)}</span>\n<span class="mixbar" title="tool mix">${i}</span>\n<span class="tcell">${m.length}\\u2699</span>\n<span class="tcell">${r(h)}</span>\n<span class="tcell${t.totalTokens>=s&&t.totalTokens>0?" hot":""}">${r(y(t.totalTokens))}</span>\n</summary>\n<div class="tbody">\n<div class="tmeta">${r(v)}</div>\n${b||\'<p class="small muted" style="margin:0">No tool calls in this turn.</p>\'}\n${S?`<div class="pill-row">${S}</div>`:""}\n</div>\n</details>`}function pn(e,t,n,s){return jt(t,e.context.compactions).map(o=>{let l=o.turns.map(a=>Ts(e,a,n,s,n.state.turn===a.index)).join(""),i=o.after?`<div class="divider"><span class="mono">\\u21C5 context compacted at turn ${o.after.turnIndex}${o.after.contextBefore&&o.after.contextAfter?` \\xB7 ${y(o.after.contextBefore)} \\u2192 ${y(o.after.contextAfter)}`:""}</span></div>`:"";return l+i}).join("")}function gn(e){let t=e.a;if(!t)return z();let n=e.state,s=t.turns,o={all:s.length,errors:s.filter(f=>de(t.tools.calls,f.index).some(p=>p.isError)).length,agents:s.filter(f=>f.agents.length>0||de(t.tools.calls,f.index).some(p=>p.agentId)).length,human:s.filter(f=>f.kind==="human").length},l=n.filter??"all",i=[U(`All turns \\xB7 ${o.all}`,{active:l==="all",data:{filter:"all"}}),U(`Errors only \\xB7 ${o.errors}`,{active:l==="errors",data:{filter:"errors"}}),U(`With agents \\xB7 ${o.agents}`,{active:l==="agents",data:{filter:"agents"}}),U(`Human turns \\xB7 ${o.human}`,{active:l==="human",data:{filter:"human"}})].join(""),a=[];n.tool&&a.push(U("tool: "+n.tool,{active:!0,removable:!0,data:{clear:"tool"}})),n.cat&&a.push(U("category: "+n.cat,{active:!0,removable:!0,data:{clear:"cat"}})),n.agent&&a.push(U("agent: "+n.agent.slice(0,12),{active:!0,removable:!0,data:{clear:"agent"}})),n.turn!==void 0&&a.push(U("turn "+n.turn,{active:!0,removable:!0,data:{clear:"turn"}})),n.errorsOnly&&a.push(U("errors only",{active:!0,removable:!0,data:{clear:"err"}}));let d=s.filter(f=>xs(t,f,e)),c=Nt(s),m=d.length<=un||n.turn!==void 0||!!(n.tool||n.cat||n.agent||n.errorsOnly||n.filter&&n.filter!=="all"),b=m?d:d.slice(0,un),S=new Set(b.map(f=>f.index)),v=pn(t,b,e,c),h=d.length?"":`<div class="card pad" style="background:var(--bg2);text-align:center"><p class="muted" style="margin:0 0 10px">No turns match \\xB7 ${r(l==="all"?"these filters":l)}</p><button class="btn-sm" data-clearall="1">Clear filters</button></div>`,u=m?"":`<div class="pagefoot">showing ${b.length} of ${d.length} turns \\xB7 <button data-showall="1">show all</button></div>`,x=M("Open a turn to see every parent and subagent call. The URL saves this view.",e.audience),$=w(`<section>\n${Y(t,e.audience)}\n<div class="chiprow">${i}${a.join("")}<span class="small muted" style="margin-left:auto">${r(x)}</span></div>\n<div id="turnlist">${v}${h}${u}</div>\n</section>`);return $.querySelectorAll("[data-filter]").forEach(f=>f.addEventListener("click",()=>{let p=f.dataset.filter;e.go({filter:p==="all"?void 0:p,turn:void 0})})),$.querySelectorAll("[data-clear]").forEach(f=>f.addEventListener("click",()=>{let p=f.dataset.clear;p==="err"?e.go({errorsOnly:void 0}):p==="tool"?e.go({tool:void 0}):p==="cat"?e.go({cat:void 0}):p==="agent"?e.go({agent:void 0}):e.go({turn:void 0})})),$.querySelector("[data-clearall]")?.addEventListener("click",()=>e.go({filter:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0})),$.querySelector("[data-showall]")?.addEventListener("click",()=>{let f=$.querySelector("#turnlist");f.innerHTML=pn(t,d,e,c),Ce(f),mn(f,e)}),mn($,e),n.turn!==void 0&&S.has(n.turn)&&setTimeout(()=>$.querySelector("#turn-"+n.turn)?.scrollIntoView({block:"center"}),0),$}function mn(e,t){e.querySelectorAll("[data-agent-jump]").forEach(n=>n.addEventListener("click",()=>t.go({screen:"agents",agent:n.dataset.agentJump},{push:!0})))}function Oe(e,t,n=""){let s=t?"No error text was recorded.":\'Redaction hides the text. Run the command again with <span class="mono">--include-text</span>.\';return`<div class="rrow"${n?` style="${n}"`:""}><span class="grow"><b>${r(e.tool)}</b> \\xB7 ${R(e.total,"error")} across ${R(e.signatures,"recurring signature")}</span>${e.sessions?`<span class="mono small muted">${e.sessions}+ sessions</span>`:""}<span class="small muted">${s}</span></div>`}var fn=12,Rs=[[/ENOENT/,"run the build first, or check the path"],[/old_string not found|String to replace not found/i,"the file changed after the last read. Read it again before you edit it."],[/EACCES|permission/i,"permission problem: check file modes"],[/timed? out/i,"raise the timeout or split the command"]];function Es(e){for(let[t,n]of Rs)if(t.test(e))return n;return""}function hn(e){let t=e.a;if(!t)return z();let n=t.tools,s=t.summary.toolCalls,o=n.byCategory.map(p=>`<span style="width:${s?(p.count/s*100).toFixed(1):0}%;background:${P(p.category)}" title="${r(ce[p.category]??p.category)} \\xB7 ${p.count}"></span>`).join(""),l=n.byCategory.map(p=>`<span><i class="sw" style="background:${P(p.category)}"></i>${r(ce[p.category]??p.category)} \\xB7 ${p.count}</span>`).join(""),i=n.parallelism,a=i.groups?`${i.parallelGroups} of ${i.groups} batches ran in parallel \\xB7 max ${i.maxGroupSize} at once`:"",d=Math.max(...n.byName.map(p=>p.totalMs),1),c="One or more calls took far longer than the rest."+(e.audience==="plain"?"":" p95 is the typical worst case."),m=p=>p.avgMs>p.p95Ms?`<td class="num" title="${c}">${r(C(p.avgMs))}<span class="outlier">outlier</span></td>`:`<td class="num">${r(C(p.avgMs))}</td>`,b=p=>p.map(g=>`<tr class="tool-row" data-tool="${r(g.name)}" title="${r(`${we(g.resultBytesTotal)} output \\xB7 ${g.mainCount} main / ${g.agentCount} agent`)}">\n<td><i class="swd" style="background:${P(g.category)}"></i><span class="mono125">${r(g.name)}</span></td>\n<td class="num">${H(g.count)}</td>\n<td class="num"${g.errors?\' style="color:var(--bad)"\':\' style="color:var(--ink3)"\'}>${g.errors}</td>\n${m(g)}\n<td class="num p95col">${r(C(g.p95Ms))}</td>\n<td><span class="trough"><i style="width:${(g.totalMs/d*100).toFixed(1)}%;background:${P(g.category)}"></i></span></td>\n</tr>`).join(""),S=`<tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg</th><th class="num p95col">${e.audience==="plain"?"":"p95"}</th><th>Share of tool time</th></tr>`,v=n.byName.length>fn?`<div class="pagefoot"><button data-more-tools="1">show all ${n.byName.length} tools</button></div>`:"",{kept:h,hidden:u}=Se(n.errorGroups,p=>({tool:p.name,total:p.count})),x=n.errorGroups.length?u.map(p=>Oe(p,e.data.capabilities.includeText)).join("")+h.slice(0,8).map(p=>{let g=p.sampleHint||Es(p.signature);return`<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${r(p.signature)}</span><span class="mono115" style="margin-left:auto">\\xD7${p.count}</span></div><div class="small muted" style="margin-top:2px">${r(p.name)}${g?" \\xB7 "+r(g):""}</div></div>`}).join(""):\'<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>\',$=w(`<section>\n${Y(t,e.audience)}\n<div class="card pad mb16">\n<div class="card-title">${r(M(`Calls by category \\xB7 ${s} total`,e.audience))}</div>\n<div class="catbar">${o}</div>\n<div class="legend">${l}</div>\n${a?`<div class="smt8">${r(a)} \\xB7 ${r(I(i.parallelCallShare))} of calls in a parallel batch</div>`:""}\n</div>\n<div class="card scroll-x mb16">\n<table class="grid"><thead>${S}</thead><tbody id="toolbody">${b(n.byName.slice(0,fn))}</tbody></table>\n${v}\n</div>\n<div class="card pad"><div class="card-title">Recurring errors in this session</div>${x}</div>\n</section>`),f=p=>{e.audience==="plain"&&p.querySelectorAll(".p95col").forEach(g=>g.remove()),p.querySelectorAll(".tool-row").forEach(g=>g.addEventListener("click",()=>e.go({screen:"timeline",tool:g.dataset.tool},{push:!0})))};return f($),$.querySelector("[data-more-tools]")?.addEventListener("click",p=>{let g=$.querySelector("#toolbody");g.innerHTML=b(n.byName),f(g),p.currentTarget.parentElement?.remove()}),$}function be(e,t){let n=e==="repo"?"analyse this repository":e==="global"?"analyse everything on this machine":"compare your Claude Code config with what your sessions used",s=W(t)?"This report carries one scope, not a session.":"This single-file report carries one session.";return q({title:"Across-session views need orangu serve",hint:`${s} Start the local viewer to ${n}. Nothing leaves your machine.`,command:"orangu serve"})}function ot(e,t){return`<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${e==="repo"?"this repository":"supported sessions on this machine"} link back to example sessions. Review them before you change your harness or your scripts.</div></div><a class="btn-primary" href="${r(Z(t,{screen:"suggest",scope:e}))}">Review ${e} improvements \\u2192</a></div>`}function vn(e){let t=e.data.aggregates.repo;return t?w(`<section>${ot("repo",e.state)}${Cs(t,e)}</section>`):w(`<section>${be("repo",e.data)}</section>`)}function Cs(e,t){return`<div class="kpis">${[A("Sessions",String(e.sessionCount)),A("Total tokens",y(e.totals.tokens),"",{accent:!0}),A("Per session",y(e.averages.tokensPerSession)),A("Per human turn",y(e.averages.tokensPerHumanTurn)),A(fe("Cache hits",t.audience),I(e.averages.cacheHitRatio)),A("Tool error rate",I(e.averages.toolErrorRate,1),"",{badHint:e.averages.toolErrorRate>=.03})].join("")}</div>${rt(e,t)}`}function rt(e,t){let n=e.crossFindings.length?`<p class="sg-cap">${Fe}</p>`+e.crossFindings.slice(0,8).map(c=>`<div class="rrow"><span class="pill">${r(c.ruleId)}</span><span class="grow">${r(c.exampleTitle||c.title)}</span><span class="mono small muted">${R(c.sessions,"session")}</span><span class="saveval">${r(Re(Xe(c)))}</span></div>`).join(""):re(e.sessionCount<2?"Patterns appear from 2 sessions on.":`No recurring findings across ${e.sessionCount} sessions.`),s=Math.max(...e.topReReadFiles.map(c=>c.totalReads),1),o=e.topReReadFiles.length?e.topReReadFiles.slice(0,8).map(c=>`<div class="rerow"><div class="rehead"><span class="mono grow ellip">${r(c.path)}</span><span class="mono115">${c.sessions} sess</span><span class="saveval">${c.totalReads} reads</span></div><span class="trough" style="height:6px;margin-top:5px"><i style="width:${(c.totalReads/s*100).toFixed(1)}%"></i></span></div>`).join(""):re("No heavily re-read files."),{kept:l,hidden:i}=Se(e.recurringErrors,c=>({tool:c.tool,total:c.total,sessions:c.sessions})),a=e.recurringErrors.length?`<div class="card mb16" style="overflow:hidden"><div class="card-head">Recurring errors \\xB7 environment problems to fix once</div>${i.map(c=>Oe(c,t.data.capabilities.includeText,"padding:10px 18px")).join("")}${l.slice(0,8).map(c=>`<div class="rrow" style="padding:10px 18px"><span class="sigline">${r(c.signature)}</span><span class="kind">${r(c.tool)}</span><span class="mono small muted">${R(c.sessions,"session")}</span><span class="mono125">\\xD7${c.total}</span></div>`).join("")}</div>`:"",d=e.topSessions.slice(0,10).map(c=>{let m=[c.prs?`${c.prs} PR`:"",c.commits?`${c.commits} commits`:"",c.interruptions?`interrupted \\xD7${c.interruptions}`:""].filter(Boolean).join(" \\xB7 ")||"\\u2013";return`<tr>\n<td><a class="mono" style="font-size:12px" ${t.data.mode==="serve"?`href="#overview?s=${r(c.id)}"`:`href="#" title="open with: orangu report ${r(c.id.slice(0,8))}" aria-disabled="true" onclick="return false"`}>${r(c.id.slice(0,8))}</a></td>\n<td class="ellip" style="max-width:280px;color:var(--ink2)">${r(c.title??"")}</td>\n<td class="num">${c.turns}</td>\n<td class="num">${c.toolCalls}</td>\n<td class="num"${c.toolErrors?\' style="color:var(--bad)"\':""}>${c.toolErrors}</td>\n<td class="num" style="font-weight:700">${r(y(c.tokens))}</td>\n<td class="small muted">${r(m)}</td>\n</tr>`}).join("");return`<div class="two-up">\n<div class="card pad"><div class="card-title">Recurring findings \\xB7 ranked by evidence</div><div class="cardsub">patterns one session cannot establish</div>${n}</div>\n<div class="card pad"><div class="card-title">Most re-read files</div><div class="cardsub">context carried again and again \\xB7 trim or index these</div>${o}</div>\n</div>\n${a}\n<div class="card scroll-x">\n<div class="card-head"><span>Heaviest sessions</span><span style="margin-left:auto;font-weight:400;font-size:12px;color:var(--ink3)">sorted by tokens</span></div>\n<table class="grid"><thead><tr><th>Session</th><th>Title</th><th class="num">Turns</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th>Outcome</th></tr></thead><tbody>${d}</tbody></table>\n</div>\n${e.sessionCount?"":`<div style="margin-top:16px">${re("Analysing sessions\\u2026")}</div>`}\n<p class="small muted" style="margin-top:12px">${R(e.sessionCount,"session")} \\xB7 every figure is a token count reported by the API.</p>`}var bn=["Instruction files","Scripts and CLIs","Hooks","Skills to create","Skills to discover","Subagents and agents","MCP servers","Plugins","Workflow and configuration"];var qe=e=>e?.verificationTrusted===!0;function it(e){return e==="kicked-off"?"running":e==="rejected"?"dismissed":e??"new"}function at(e,t="",n=!1){let s=e!=="verified"||n,o=s?e==="verified"?"verified comparison":e:"legacy unverified";return`<span class="status-chip" data-status="${s?e:"legacy"}" aria-live="polite"${t?` title="${r(t)}"`:""}>${o}${e==="verified"&&s?" \\u2713":""}</span>`}function yn(e){return`<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${O(e.claude)}</div></div>`}function Is(e,t){return`<div class="card pad mb16"><div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">\n<li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>\n<li><div><span>${r(e)}</span>${He()}</div></li>\n<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository. ${t==="serve"?"The proposal shows below, in Saved proposals.":"The proposal is in ~/.orangu/proposals. Run orangu serve to see it here."}</span></div></li>\n</ol></div>`}function As(e,t,n,s,o){let l=e.audience,i=Ee(t.savings,e.state.scope===void 0||e.state.scope==="session"?e.a?.summary.totalTokens:void 0,t.ruleId),a=o?.proposal?.effort,d=it(o?.status),c=Qt(o),m=t.sessionIds.map(b=>e.data.mode==="serve"?`<a class="exch" href="${r(Z(e.state,{screen:"overview",s:b}))}">${r(b.slice(0,8))}</a>`:`<span class="exch">${r(b.slice(0,8))}</span>`).join("");return`<details class="finding" data-sid="${r(s)}" data-rule="${r(t.ruleId)}">\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="rank">${n}</span>${t.severity?`<span class="sev ${r(t.severity)}" title="${r(t.severity)}"></span>`:""}<b class="sg-t">${r(M(t.displayTitle||t.title,l))}</b>${i?`<span class="fsave sg-save" title="${r(i.title)}">${r(i.text)}</span>`:""}${a?`<span class="pill">effort ${r(a)}</span>`:""}${et(t.improvement,l)}</summary>\n<div class="fbody sg-body">\n${tt(s,t.why,t.method,l)}<div class="sg-ev"><b>Evidence:</b> ${r(M(t.detail,l))} ${l==="plain"?"":`<span class="pill">${r(t.ruleId)}</span>`}</div>\n<div class="sg-ex"><span class="small muted">Example sessions:</span>${m}</div>\n${e.proposals?.details(o)??""}\n<div class="kickrow">\n<button type="button" class="btn-primary" data-kick-copy="${r(s)}">Copy the Claude Code command</button>\n${at(d,c,qe(o))}\n</div>\n<div class="kick-cmd sg-cmd">${e.data.mode==="serve"&&o&&!o.proposal&&d!=="dismissed"?yn(Le(o,"serve")):""}</div>\n<div class="kick-msg small" aria-live="polite">${r(c)}</div>\n</div>\n</details>`}function Ms(e){let t=e.a,n=e.state.scope??W(e.data)??"session",s=e.data.aggregates.repo?.sessionCount,o=e.data.aggregates.global?.sessionCount,l=[U("This session",{active:n==="session",disabled:!t,title:t?"":"no session is selected",data:{scope:"session"}}),U(s!==void 0?`Repo \\xB7 ${s}`:"Repo",{active:n==="repo",disabled:s===void 0,title:s===void 0?"run orangu serve":"",data:{scope:"repo"}}),U(o!==void 0?`Global \\xB7 ${o}`:"Global",{active:n==="global",disabled:o===void 0,title:o===void 0?"run orangu serve":"",data:{scope:"global"}})].join(""),i=n==="session"?void 0:e.data.aggregates[n],a=ge(n,t,i).map(g=>{let L=Ze(g,n);return{row:g,finding:L,sid:Me(Ae(L,"report"))}}),d=new Map(a.map(g=>[g.sid,g])),c=a.map(g=>({...g,record:Zt(e.data.suggestions,g.row,n,g.sid)})),m=c.flatMap(({record:g})=>g?[g]:[]),b=i?.sessions.map(g=>g.id)??[],S=M(n==="session"?"Each improvement below comes from the evidence in this session.":n==="repo"?"These patterns recur across this repository. Review each proposal before you apply it.":"These patterns recur across this machine. Global proposals are for review only.",e.audience),v=ne(t?.session.cwd,n==="repo"),h=c.length?Is(v,e.data.mode)+(n==="session"?"":`<p class="sg-cap">${Fe}</p>`)+c.map((g,L)=>As(e,g.row,L+1,g.sid,g.record)).join(""):q({title:"No improvements found",hint:"The rules found nothing to change. Look again after your next session."}),u=bn.map(g=>`<span class="sigchip">${r(g)}</span>`).join(""),x=c.length?`<details class="card pad mb16 sg-note"><summary><span class="chev" aria-hidden="true">\\u25B8</span>What a proposal can change</summary><div class="chiprow mt8">${u}</div></details>`:"",$=n==="session"||!i?"":e.megaReview?.(n)??"",f="orangu measures the evidence. Claude writes the proposal only when you run the command. "+(n==="session"?"Only later sessions in the same workspace can verify it.":n==="repo"?"Applied means that the reviewed files changed. Only later sessions can verify it.":"Global proposals stay proposals. Claude applies nothing from here.");return[`<section>\n<div class="hero">\n${pe(48)}\n<div class="grow sg-hero herotitle">${r(S)}</div>\n</div>\n<div class="chiprow">${l}</div>\n${$}\n${n!=="session"&&!i?q({title:"This scope needs orangu serve",command:"orangu serve"}):h+x}\n${e.proposals?.inbox(e,n,b,m)??""}\n<p class="small muted sg-foot">${f}</p>\n</section>`,d,v]}function $n(e){let[t,n,s]=Ms(e),o=w(t);return o.querySelectorAll("[data-scope]").forEach(i=>i.addEventListener("click",()=>{if(i.getAttribute("aria-disabled")==="true")return;let a=i.dataset.scope;e.go({scope:a==="session"?void 0:a})})),(i=>{o.querySelectorAll(i).forEach(a=>a.addEventListener("click",()=>{let d=a.closest("details"),c=d.querySelector(".kick-msg"),m=a.dataset.kickCopy,b=m?n.get(m):void 0;if(!b)return;a.setAttribute("aria-busy","true");let S={mode:"copy",suggestionId:m,finding:b.finding};e.ds.kickoff(S).then(h=>h.ok?{kind:"copied",message:`The command is on your clipboard. ${s}`,response:h.response}:{kind:"error",message:h.message,...h.response?{response:h.response}:{}}).then(h=>{if(a.removeAttribute("aria-busy"),c.textContent=h.message,"response"in h&&h.response?.commands){let u=d.querySelector(".kick-cmd");u.innerHTML=yn(h.response.commands),Ie(u),h.kind==="copied"&&u.querySelector("[data-copy]")?.click()}})}))})("[data-kick-copy]"),o}var lt=24;function kn(e){let t=e.a;if(!t)return z();let n=t.agents;if(!n.runs.length)return w(`<section>${q({title:"No subagents in this session.",hint:"This session ran entirely on the main thread."})}</section>`);let s=Math.min(...n.runs.map(c=>c.startTs??1/0).filter(isFinite)),o=Math.max(...n.runs.map(c=>c.endTs??-1/0).filter(isFinite)),l=n.runs.slice(0,lt).map(c=>De(c,s,o)).join(""),i=Pe(n.byType.map(c=>({label:c.agentType,value:c.tokens,color:P("agent"),sub:"\\xD7"+c.count})),c=>y(c)),a=n.runs.map(c=>`<tr data-agent="${r(c.agentId)}" class="agent-row"${e.state.agent===c.agentId?\' style="background:var(--accent-weak)"\':""}>\n<td>${"\\xB7 ".repeat(c.spawnDepth)}${r(c.agentType||c.name||c.agentId.slice(0,8))}${c.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\'}</td>\n<td>${r(c.model??"\\u2013")}</td>\n<td class="num">${r(C(c.durationMs))}</td>\n<td class="num">${c.toolCallCount}${c.toolErrors?` <span class="tag bad">${c.toolErrors}</span>`:""}</td>\n<td class="num">${r(y(c.totalTokens))}</td>\n</tr>`).join(""),d=w(`<section>\n${Y(t,e.audience)}\n<div class="card pad" style="margin-bottom:16px">\n<div class="card-title">${n.runs.length} subagent runs \\xB7 ${r(I(1-n.mainThreadShare.tokens))} of tokens \\xB7 max depth ${n.maxDepth} \\xB7 up to ${n.maxConcurrency} parallel</div>\n<div class="swimbox">${l}</div>\n${n.runs.length>lt?`<div class="pagefoot muted small">showing ${lt} of ${n.runs.length} lanes \\xB7 all runs in the table below</div>`:""}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by agent type</div>${i}</div>\n<div class="card scroll-x"><table class="grid"><thead><tr><th>Agent</th><th>Model</th><th class="num">Duration</th><th class="num">Tools</th><th class="num">Tokens</th></tr></thead><tbody>${a}</tbody></table></div>\n</div>\n</section>`);return d.querySelectorAll("[data-agent]").forEach(c=>c.addEventListener("click",()=>e.go({screen:"timeline",agent:c.dataset.agent},{push:!0}))),d}function me(e,t,n=""){return`<div class="card pad${n?" "+n:""}"><div class="card-title">${e}</div>${t}</div>`}function xn(e){let t=e.a;if(!t)return z();let n=t.context,s=n.series.filter(v=>!v.agentId),o=Te(n.compactions,s),l=he(s.map(v=>v.contextSize),{threshold:n.contextWindow?{y:n.contextWindow,label:"window "+y(n.contextWindow)}:void 0,markers:o,yMax:n.contextWindow,fmtY:y}),i=nn([s.map(v=>v.cacheRead),s.map(v=>v.cacheWrite),s.map(v=>v.input),s.map(v=>v.output)],["var(--cat-read)","var(--cat-edit)","var(--cat-write)","var(--cat-agent)"],{markers:o,labels:["cache read","cache write","fresh input","output"]}),a=t.tokens,d=[{value:a.byKind.cacheRead,color:"var(--cat-read)",label:"cache read "+y(a.byKind.cacheRead)},{value:a.byKind.cacheWrite5m,color:"var(--cat-skill)",label:"cache write 5m "+y(a.byKind.cacheWrite5m)},{value:a.byKind.cacheWrite1h,color:"var(--cat-edit)",label:"cache write 1h "+y(a.byKind.cacheWrite1h)},{value:a.byKind.input,color:"var(--cat-write)",label:"fresh input "+y(a.byKind.input)},{value:a.byKind.output,color:"var(--cat-agent)",label:"output "+y(a.byKind.output)}],c=Pe(a.byModel.map(v=>({label:v.displayName,value:v.totalTokens,color:P("edit"),sub:v.estimatedMatch?"~est. match":""})),v=>y(v)),m=a.serverToolRequests.webSearch+a.serverToolRequests.webFetch,b=he(a.byTurn.map(v=>v.cumulativeTokens),{color:"var(--accent-ink)",fmtY:y}),S=[me("Token composition per request",`<div class="scroll-x">${i}</div><div class="legend">${["read","edit","write","agent"].map((v,h)=>`<span><i class="sw" style="background:var(--cat-${v})"></i>${["cache read","cache write","fresh input","output"][h]}</span>`).join("")}</div>`,"mb16"),me("By model",`${c}<p class="small muted" style="margin-top:8px">Main thread ${r(y(a.mainThread))} \\xB7 agents ${r(y(a.agents))}</p>`,"mb16"),me("Cumulative tokens over turns",`<div class="scroll-x">${b}</div>`)].join("");return w(`<section>\n${Y(t,e.audience)}\n<p class="ctx-lead">${r(Mt(t))}</p>\n<div class="kpis">\n${A("Peak context",y(n.peak),n.contextWindow?I(n.peak/n.contextWindow)+" of "+y(n.contextWindow):"")}\n${A("Cache hit ratio",I(n.cacheHitRatio,1),"context re-read rather than re-sent")}\n${A("Context re-read",n.reReadMultiplier.toFixed(1)+"\\xD7","context carried \\xF7 peak")}\n${A("Long-lived cache writes",I(n.cacheWrite1hShare),"of cache writes (the 1h tier)")}\n${A("Fixed weight per request",y(n.baseline),"system + tools + CLAUDE.md, every request")}\n${A("Compactions",String(n.compactions.length),n.compactions.length?"context was reset":"none")}\n</div>\n${me("Context size over the session",`<div class="scroll-x">${l}</div><div class="legend"><span>Each point is one API request. Each dashed line is a compaction.</span></div>`,"mb16")}\n${me(`Where the tokens went \\xB7 ${r(y(a.totalTokens))} total`,`${tn(d,{height:22})}<div class="legend">${d.filter(v=>v.value>0).map(v=>`<span><i class="sw" style="background:${v.color}"></i>${r(v.label)}</span>`).join("")}</div>${m?`<div class="smt8">${R(m,"server-tool request")} (web search/fetch), counted per request, not in tokens</div>`:""}`,"mb16")}\n<details class="more-charts"><summary><span class="chev" aria-hidden="true">\\u25B8</span>More charts \\xB7 composition per request, by model, cumulative</summary><div class="mt8">${S}</div></details>\n</section>`)}var ct="\\u2039stripped\\u203A";function wn(e){let t=e.a;if(!t)return z();let n=t.parse,s=n.reconciliation,o=Object.entries(n.unknownRecordTypes).filter(([h])=>h!==ct),l=n.unknownRecordTypes[ct]??0,i=o.length,a=l?`<div class="small muted">orangu counted ${R(l,"unrecognized record")}. Redaction hides their type names. To see them, run orangu again with --include-text.</div>`:"",d=t.skills.byName.length?`<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${t.skills.byName.map(h=>`<span class="sigchip">${r(h.name)} <span class="muted">\\xD7${h.count} ${r(h.via.join("/"))}</span></span>`).join("")}</div></div>`:"",c=t.hooks.runs?`<div class="card pad mt16"><div class="card-title">Hooks</div><p class="small muted" style="margin:0">${t.hooks.runs} hook runs \\xB7 ${t.hooks.errors} errors \\xB7 ${r(C(t.hooks.totalMs))} total</p></div>`:"",m=w(`<section>\n${Be(s.ok?"info":"warn",`<strong>Parse coverage:</strong>&nbsp;${r(H(n.totalLines))} records, ${n.badLines} unreadable, ${R(i,"unrecognized record type")}${l?` (+${l} record${l===1?"":"s"} with redacted type names)`:""}. Token totals reconcile to within ${r(s.matchesWithinPct.toFixed(2))}% ${s.ok?"\\u2713":"(review)"}.`)}\n<div class="two-up">\n<div class="card pad"><div class="card-title">Session</div>\n<table class="grid"><tbody>\n<tr><td>ID</td><td class="mono small">${r(t.session.id)}</td></tr>\n<tr><td>Source</td><td>${r(t.session.source)}</td></tr>\n<tr><td>Project</td><td class="mono small">${r(t.session.cwd??t.session.projectSlug??"\\u2013")}</td></tr>\n<tr><td>Started</td><td>${r(St(t.session.startedAt))}</td></tr>\n<tr><td>Client</td><td>${r(t.session.clientVersions.join(", "))}</td></tr>\n<tr><td>Models</td><td>${t.session.models.map(h=>r(h.displayName)+(h.estimatedMatch?" ~":"")).join(", ")}</td></tr>\n<tr><td>Branches</td><td class="mono small">${r(t.session.gitBranches.join(", ")||"\\u2013")}</td></tr>\n<tr><td>Generated</td><td>orangu v${r(t.generator.version)} \\xB7 model catalog ${r(t.generator.modelCatalogUpdatedAt)}</td></tr>\n</tbody></table>\n</div>\n<div class="card pad"><div class="card-title">How to read the numbers</div>\n<ul class="small" style="padding-left:18px;line-height:1.7;margin:0">\n<li><strong>Tokens are the only usage metric</strong> orangu reports. They are what the transcript records.</li>\n<li>orangu <strong>deduplicates token usage by message id</strong>.</li>\n<li>Context = fresh input + cache read + cache write.</li>\n<li>~ marks a model matched by family fallback: the name is approximate, the token counts are not.</li>\n<li>No LLM and no network call produced any number here.</li>\n</ul>\n</div>\n</div>\n${i||l?`<div class="card pad mt16"><div class="card-title">Unrecognized records (counted, not dropped)</div>${i?`<div class="pill-row">${o.map(([h,u])=>`<span class="pill">${r(h)} \\xD7${u}</span>`).join("")}</div>`:""}${a}</div>`:""}\n${d}\n${c}\n<div class="card pad mt16">\n<div class="card-title">Raw explorer</div>\n<div class="raw-filter no-print">\n<input type="text" id="raw-q" placeholder="filter by text\\u2026" aria-label="filter calls by text" />\n<select id="raw-cat" aria-label="filter by category"><option value="">all categories</option>${Object.keys(ce).map(h=>`<option value="${r(h)}">${r(ce[h])}</option>`).join("")}</select>\n<label class="small"><input type="checkbox" id="raw-err" /> errors only</label>\n<span class="small muted" id="raw-count"></span>\n</div>\n<div id="raw-list" style="max-height:480px;overflow:auto;border-top:1px solid var(--border)"></div>\n</div>\n</section>`),b=m.querySelector("#raw-list"),S=m.querySelector("#raw-count"),v=()=>{let h=m.querySelector("#raw-q").value.toLowerCase(),u=m.querySelector("#raw-cat").value,x=m.querySelector("#raw-err").checked,$=t.tools.calls.filter(f=>(!u||f.category===u)&&(!x||f.isError)&&(!h||f.summary.toLowerCase().includes(h)||f.name.toLowerCase().includes(h)));S.textContent=$.length+" of "+t.tools.calls.length+" calls",b.innerHTML=$.slice(0,2e3).map(f=>`<div class="rawrow"><span class="rt">${r(f.name)}</span><span class="muted">#${f.turnIndex}${f.agentId?" agent":""}${f.isError?" \\u26A0":""}</span><span class="rp">${r(f.summary)}${f.durationMs!==void 0?" \\xB7 "+r(C(f.durationMs)):""}</span></div>`).join("")+($.length>2e3?`<div class="rawrow muted">\\u2026${$.length-2e3} more (narrow the filter)</div>`:""),$.length||(b.innerHTML=\'<div class="rawrow muted">no calls match</div>\')};return m.querySelector("#raw-q").addEventListener("input",v),m.querySelector("#raw-cat").addEventListener("change",v),m.querySelector("#raw-err").addEventListener("change",v),v(),m}var Ls={live:an,overview:st,timeline:gn,tools:hn,suggest:$n,agents:kn,context:xn,coverage:wn},Fs={live:"Live",overview:"Overview",timeline:"Timeline",tools:"Tools & calls",repo:"Repo",global:"Global",harness:"Harness",suggest:"Improvements",agents:"Agents",context:"Context & tokens",coverage:"Coverage"};function js(e){return Fs[e]??"Overview"}function Hs(e,t,n){let s=t.screen,o=s==="repo"||s==="global"?s:s==="suggest"&&t.scope!=="session"?t.scope??W(e):n?void 0:W(e);return o?`--scope ${o}`:n&&/^[\\w:-]+$/.test(n.session.id)?n.session.id:""}function Ps(e,t,n){let s=Hs(e,t,n);return s&&`<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${O(`claude "/orangu:show-me ${s}"`,"$","the show me command")}<p>${r(ne(n?.session.cwd,s==="--scope repo"))} The files open in your browser.</p>${He()}</div></details>`}function _s(e){let t=e.a,n=e.audience;switch(e.state.screen){case"live":{let s=te(e.data);if(s.length>1)return`${s.length} running sessions \\xB7 ${s.reduce((l,i)=>l+(i.agentsRunning??0),0)} agents active`;let o=e.data.sessions.find(l=>l.id===(e.state.s??e.data.selectedId));return o?`${B(o.id)} \\xB7 ${ue(o)}`:""}case"overview":return t?M(`outcome and evidence \\xB7 ${B(t.session.id)} \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolCalls} tool calls`,n):"";case"timeline":return t?M(`every step and tool call \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolErrors} errors`,n):"";case"tools":return t?M(`${t.summary.toolCalls} tool calls \\xB7 ${t.tools.byName.length} tools`,n):"";case"repo":return`${e.data.aggregates.repo?e.data.aggregates.repo.sessionCount+" sessions \\xB7 ":""}recurring evidence in this repository`;case"global":return`${e.data.aggregates.global?e.data.aggregates.global.sessionCount+" sessions \\xB7 ":""}recurring evidence across this machine`;case"harness":return"declared vs used, in tokens";case"suggest":{let s=e.state.scope??W(e.data);return s==="repo"||s==="global"?"recurring patterns \\xB7 one proposal per improvement \\xB7 whole-harness review":"this session \\xB7 one proposal per improvement"}case"agents":return t?`${t.agents.runs.length} runs \\xB7 up to ${t.agents.maxConcurrency} parallel`:"";case"context":return t?`peak ${H(t.context.peak)} \\xB7 ${t.context.compactions.length} compactions`:"";case"coverage":return t?`${H(t.parse.totalLines)} records \\xB7 ${t.parse.badLines} unreadable`:"";default:return""}}var Ns=600;function Ds(e,t,n){return e?0:Math.max(0,t+Ns-n)}var Bs=80;function Os(e){return(e??1/0)>Bs}async function Sn(e,t,n,s){try{e.suggestions=await t.suggestions(),n&&s()}catch{}}async function qs(e,t,n,s,o){e.type==="connection"&&e.state==="connected"&&await Sn(t,n,s,o)}function dt(e){return e==="dark"?"dark":"light"}function Ws(e){return dt(e)==="dark"?void 0:"dark"}function Us(e){return W(e)===void 0?"Session":"Scope"}function Gs(e,t,n){let s=W(e);return"orangu \\xB7 "+(t?.session.title||B(n??"")||s&&e.aggregates[s]?.scope||"report")}async function Tn(e,t){let n=document.getElementById("app");if(!n)return;let s=null;try{s=await e.load()}catch{s=null}if(!s){n.innerHTML=`<div class="page"><div class="card"><div class="empty-hero">${V(48)}<div class="t">This file has no analysis data.</div><div class="s mono">npx orangu report</div></div></div></div>`;return}let o=s,l=k=>{let T=wt(k);return k.replace(/^#/,"")||(T.screen=kt(o)),T.s||(T.s=o.selectedId),T},i=l(location.hash),a=async k=>{if(!k)return o.session;if(o.mode!=="serve")return o.session&&o.session.session.id===k?o.session:await e.session(k)??o.session;let T=await e.session(k);return T||(o.session&&o.session.session.id===k?o.session:void 0)},d=()=>{let k=document.documentElement;dt(i.theme)==="dark"?k.setAttribute("data-theme","dark"):k.removeAttribute("data-theme")},c=(k,T={})=>{i={...i,...k};let j=ze(i);T.push?history.pushState(null,"",j):history.replaceState(null,"",j),u(!0)},m,b=async()=>({data:o,a:await a(i.s),ds:e,state:i,audience:i.audience==="plain"?"plain":"dev",conn:m,aggLoading:t?i.screen==="harness"?t.ensureHarness(e,u):t.ensureAggregate(o,e,i,u):!1,megaReview:t?.megaReview,proposals:t?.proposals,harnessCard:t?()=>t.harnessCard(e,u,Z(i,{screen:"harness"})):void 0,go:c}),S=!1,v,h=0;function u(k){let T=Ds(k===!0,h,Date.now());if(k)clearTimeout(v);else if(S)return;S=!0,v=setTimeout(()=>{S=!1,ee(k)},T)}function x(k){let T=xt(o,i),j=o.sessions.find(Q=>Q.id===i.s)??o.sessions[0],K=T.filter(Q=>Q.items.length).map(Q=>`<div class="navgroup"><div class="navgroup-label">${r(Q.label)}</div>${Q.items.map(N=>{let ke=Z(i,{screen:N.screen,s:N.s??i.s,scope:i.scope}),D=i.screen===N.screen&&(N.s===void 0||N.s===i.s),Ke=N.dot?`<span class="ldot${N.dot==="hollow"?" hollow":N.dot==="ended"?" done":""}"${N.dot==="pulse"?\' data-pulse="1"\':""} aria-hidden="true"></span><span class="vh">${N.dot==="pulse"?"live":N.dot==="hollow"?"quiet":"ended"}</span>`:"";return`<a class="navitem" href="${r(ke)}"${D?\' aria-current="page"\':""}>${Ke}${r(N.label)}${N.hint?`<span class="hint">${r(N.hint)}</span>`:""}</a>`}).join("")}</div>`).join(""),J=te(o).length,X=o.mode==="serve"?"Local server: 127.0.0.1.<br/>Nothing leaves this machine."+(J>1?"<br/>alt+\\u2191\\u2193 switch session":""):"This report is self-contained.<br/>It makes 0 network requests.",G=w(`<aside class="side">\n<div class="brand">${V(26)}<span class="name">orangu</span><span class="ver">v${r(o.version)}</span></div>\n<div class="sesscard"><div class="eyebrow">${Us(o)}</div>${t?t.pickerHtml(o,j):`<div class="sid">${j?r(B(j.id))+" \\xB7 "+r(j.projectSlug||j.source):"\\u2013"}</div>`}</div>\n<div class="navwrap"><nav aria-label="Report">${K}</nav></div>\n<div class="side-foot">\n<button class="themebtn" id="btn-theme">\\u25D0 theme \\xB7 ${dt(i.theme)}</button>\n<div class="note">${X}</div>\n</div>\n</aside>`);return G.querySelector("#btn-theme").addEventListener("click",()=>c({theme:Ws(i.theme)})),t?.wirePicker(G,c),G}function $(k){let T=k.audience,j=w(`<header class="page-head">\n<div><h1>${r(js(i.screen))}</h1><div class="sub">${r(_s(k))}</div></div>\n<div class="page-tools">\n<div class="aud" role="group" aria-label="Detail level">\n<button id="aud-dev" aria-pressed="${T==="dev"}">Detailed</button>\n<button id="aud-plain" aria-pressed="${T==="plain"}">Plain language</button>\n</div>\n<button class="btn" id="btn-export">\\u2193 Export HTML</button>\n${Ps(k.data,k.state,k.a)}\n</div>\n</header>`);return j.querySelector("#aud-dev").addEventListener("click",()=>c({audience:void 0})),j.querySelector("#aud-plain").addEventListener("click",()=>c({audience:"plain"})),j.querySelector("#btn-export").addEventListener("click",()=>{let K=e.exportHref(i.s??"");if(K){location.href=K;return}let J=new Blob([`<!doctype html>\n`+document.documentElement.outerHTML],{type:"text/html"}),X=URL.createObjectURL(J),G=document.createElement("a");G.href=X,G.download=`orangu-${B(i.s??"report")}.html`,document.body.appendChild(G),G.click(),G.remove(),setTimeout(()=>URL.revokeObjectURL(X),2e3)}),j}let f=[],p={},g="details[data-sid],details[id]",L=k=>k.dataset.sid??k.id,E,_;async function ee(k){h=Date.now(),d(),k&&Os(p[i.screen])&&(n.querySelector(".main")?.setAttribute("aria-busy","true"),await new Promise(D=>requestAnimationFrame(()=>setTimeout(D))));let T=await b();document.title=Gs(o,T.a,i.s);let j=Ls[i.screen]??st,K=i.screen==="repo"||i.screen==="global"||i.screen==="harness"?i.screen:void 0,J=T.aggLoading&&t?t.aggScreen():K?t?K==="harness"?t.harnessView(T):t.aggregateView(T):w(`<section>${be(K,o)}</section>`):j(T);J.classList.add("screen"),J.id="screen-"+i.screen;let X=w(\'<div class="page"></div>\');o.illustrative&&X.appendChild(w(\'<div class="sample-note" role="note"><b>This sample is synthetic.</b> Its numbers come from made-up input, not a measured customer result.</div>\')),X.appendChild($(T)),X.appendChild(J);let G=w(\'<main class="main"></main>\');G.appendChild(X);let Q=[];n.querySelectorAll(g).forEach(D=>Q.push({id:L(D),open:D.open})),f=Dt(f,Q);let N=n.querySelector(".main")?.scrollTop??0;n.innerHTML="",n.appendChild(x(T)),n.appendChild(G),n.querySelectorAll(g).forEach(D=>{f.includes(L(D))&&(D.open=!0)});let ke=_&&document.getElementById(_);_=void 0,ke?ke.scrollIntoView():i.screen===E?G.scrollTop=N:scrollTo(0,0),E=i.screen,Ce(n),Ie(n),n.querySelectorAll("[data-to]").forEach(D=>D.addEventListener("click",()=>_=D.dataset.to)),n.querySelectorAll("[data-turns]").forEach(D=>D.addEventListener("click",Ke=>{Ke.preventDefault();let Qn=Number(D.dataset.turns.split(",")[0]);c({screen:"timeline",turn:Qn},{push:!0})})),p[i.screen]=Date.now()-h}window.addEventListener("hashchange",()=>{i=l(location.hash),u(!0)}),window.addEventListener("keydown",k=>{if(!k.altKey||k.key!=="ArrowUp"&&k.key!=="ArrowDown"||i.screen!=="live")return;let T=te(o);if(T.length<2)return;let j=T.findIndex(J=>J.id===i.s),K=T[(j+(k.key==="ArrowDown"?1:T.length-1))%T.length];k.preventDefault(),c({s:K.id},{push:!0})}),e.subscribe(k=>{if(k.type==="session-updated"){let T=o.sessions.findIndex(j=>j.id===k.id);T>=0&&(o.sessions[T]=k.row),t?.invalidateHarness(),(i.s===k.id||i.screen==="live")&&u()}else if(k.type==="session-added")o.sessions.push(k.row),t?.invalidateHarness(),u();else if(k.type==="session-live"){let T=o.sessions.find(j=>j.id===k.id);T&&(T.badge=k.badge,T.ageMs=k.ageMs),i.screen==="live"&&u()}else if(k.type==="suggestion-updated")Sn(o,e,i.screen==="suggest",u);else if(k.type==="connection"){let T=m;m=k.state,qs(k,o,e,i.screen==="suggest",u),T!==m&&u()}}),await ee()}function En(e){return e.length>1&&e.endsWith("/")?e.slice(0,-1):e}async function We(e){try{let t=await fetch(e,{headers:{accept:"application/json"}});return!t.ok&&t.status!==202?{status:t.status,body:null}:{status:t.status,body:await t.json()}}catch{return{status:0,body:null}}}async function Rn(e){let t=Date.now();for(;;){let{status:n,body:s}=await We(e);if(n===200&&s)return s;if(n!==202||Date.now()-t>12e4)return null;await new Promise(o=>setTimeout(o,800))}}function Cn(e=""){let t=new Map,n=new Set,s=null,o=i=>{for(let a of n)a(i)},l=()=>{if(!s){s=new EventSource(e+"/events"),s.onopen=()=>o({type:"connection",state:"connected"}),s.onerror=()=>o({type:"connection",state:"reconnecting"});for(let i of["hello","session-updated","session-live","session-added","suggestion-updated"])s.addEventListener(i,a=>{try{o(JSON.parse(a.data))}catch{}})}};return{mode:"serve",async load(){let i=/[?&#]s=([^&]+)/.exec(location.hash)?.[1],{body:a}=await We(e+"/api/app"+(i?`?s=${encodeURIComponent(i)}`:""));if(!a)throw new Error("orangu serve unreachable");return a.session&&t.set(a.session.session.id,{at:Date.now(),analysis:a.session}),a},async session(i){let a=Date.now(),d=t.get(i);if(d?.inflight)return d.inflight;if(d&&a-d.at<2e3)return d.analysis;let c=We(e+"/api/session/"+encodeURIComponent(i)).then(({body:m})=>(t.set(i,{at:Date.now(),analysis:m}),m));return t.set(i,{at:a,analysis:d?.analysis??null,inflight:c}),c},async aggregate(i,a){return Rn(i==="repo"?e+"/api/repo"+(a?`?cwd=${encodeURIComponent(a)}`:""):e+"/api/global")},async harness(){return Rn(e+"/api/harness")},async suggestions(){let{body:i}=await We(e+"/api/suggestions");return i??[]},async kickoff(i){let a;try{a=await fetch(e+"/api/kickoff",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(i)})}catch(c){return{ok:!1,kind:"network",message:c instanceof Error?c.message:"The request to localhost failed."}}let d=null;try{d=await a.json()}catch{}return a.ok?!d?.record||typeof d.command!="string"||!d.commands||typeof d.commands.claude!="string"||typeof d.commands.codex!="string"||d.command!==d.commands.claude||d.spawned!==!1?{ok:!1,kind:"protocol",status:a.status,message:"localhost returned an incomplete response.",...d?{response:d}:{}}:{ok:!0,response:d}:{ok:!1,kind:"http",status:a.status,message:d?.error||`The request to localhost failed (${a.status}).`,...d?{response:d}:{}}},async setStatus(i,a){try{let d=await fetch(e+"/api/suggestions/"+encodeURIComponent(i)+"/status",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({status:a})});return d.ok?await d.json():null}catch{return null}},subscribe(i){return n.add(i),l(),()=>{n.delete(i)}},exportHref(i){return i?e+"/export/"+encodeURIComponent(i)+".html":null}}}var In="Global scope is for review only. Claude applies nothing.";function An(e){let t=je(e),n=e==="repo",s=n?"Improve the harness of this repository with one command.":"Review every harness on this machine with one command.",o="Claude Code reads the evidence. It ranks a plan of changes to your harness and your scripts. Then it waits until you approve the plan."+(n?"":` ${In}`),l=n?"Review the ranked plan. Approve the items that you want. Claude applies them.":`Review the ranked plan. ${In}`;return`<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="herotitle">${s}</div><div class="sg-sub">${o}</div><ol class="steps" aria-label="Run the whole-harness review">\n<li><div><button type="button" class="btn-primary" data-copy="${r(t)}" aria-live="polite">Copy the whole-harness command</button><div class="sg-cmd">${O(t)}</div></div></li>\n<li><span>${ne(void 0,n)}</span></li>\n<li><span>${l}</span></li>\n</ol><p class="small muted sg-foot">This button only copies text. Claude asks before it reads a large input.</p></div>`}var Vs=12,ut=6,ye=e=>typeof e=="string"&&e.trim().length>0;function Ln(e){let t=e.proposal;return!!t&&/^sg_[0-9a-f]{12}$/.test(e.id)&&Array.isArray(e.sessionIds)&&e.sessionIds.length>0&&e.sessionIds.every(ye)&&ye(t.title)&&ye(t.change)&&/^[SML]$/.test(String(t.effort))&&ye(t.proposalPath)&&(t.v??1)===1}function ae(e){return typeof e!="string"?"":e.trim().slice(0,600)}function se(e,t){let n=ae(t);return n?`<div class="sg-pfield"><b>${e}.</b> ${r(n)}</div>`:""}function Ue(e,t,n){if(!Array.isArray(t))return"";let s=t.slice(0,ut).map(o=>n&&o&&typeof o=="object"?n.map(l=>ae(o[l])).filter(Boolean).join(" \\xB7 "):ae(o)).filter(Boolean);return s.length?`<div class="sg-pfield"><b>${e}.</b><ul>${s.map(o=>`<li>${r(o)}</li>`).join("")}${t.length>ut?`<li class="muted">+${t.length-ut} more</li>`:""}</ul></div>`:""}function Ks(e){let t=e.proposal;return e.scope==="global"||e.status!=="proposed"||t?.v!==1||!ae(t.manifestPath)||!ae(t.workspace?.cwd)||!Array.isArray(t.files)||t.files.length===0?"":`<div class="sg-handoffs" aria-label="Apply handoff"><div class="small muted">Copy only. Nothing runs here.</div><div class="sg-hand"><span>Claude</span>${O(`claude "/orangu:apply ${e.id}"`)}</div></div>`}function Fn(e){if(!e||!Ln(e))return"";let t=e.proposal,n=e.verificationReceipt,o=qe(e)&&n?se("Later evidence",n.summary)+Ue("Computed comparisons",n.checks,["name","evidence"]):e.status==="verified"?se("Legacy state","Not verified under the current deterministic contract."):e.application?.v===1?se("Applied",e.application.summary):"";return`<div class="sg-proposal"><div class="sg-phead"><span class="eyebrow">Proposal</span>${t.changeClass?`<span class="pill">${r(t.changeClass)}</span>`:""}<span class="pill">effort ${r(t.effort)}</span></div><div class="sg-ptitle">${r(ae(t.title))}</div>${se("Change",t.change)}${se("Evidence",t.evidence)}${se("Expected effect",t.expectedEffect)}${se("Risk",t.risk)}${se("Verification",t.verification)}${Ue("Reviewed comparisons",t.verificationChecks,["metric","comparison"])}${Ue("Files",t.files)}${Ue("Sources",t.sources,["kind","label","url","verifiedAt"])}${o}${Ks(e)}</div>`}function zs(e){return`<details class="saved-proposal" id="saved-${r(e.id)}"><summary><span class="chev" aria-hidden="true">\\u25B8</span><b>${r(ae(e.proposal?.title))}</b>${at(it(e.status),"",qe(e))}</summary><div class="saved-proposal-body">${Fn(e)}</div></details>`}function Mn(e){return[e.id,...Array.isArray(e.legacyIds)?e.legacyIds:[],e.proposal?.proposalPath].filter(ye)}function Ys(e,t,n,s,o){let l=new Set(t==="session"?n?[n]:[]:s);if(!l.size)return[];let i=new Set(o.flatMap(Mn)),a=[],d=[...e].sort((c,m)=>m.statusAt-c.statusAt);for(let c of d){if(c.scope!==t||!Ln(c)||!c.sessionIds.some(b=>l.has(b)))continue;let m=Mn(c);if(!m.some(b=>i.has(b))&&(m.forEach(b=>i.add(b)),a.push(c),a.length===Vs))break}return a}function Js(e,t){if(t!=="serve")return"";let n=e.length?e.map(zs).join(""):\'<p class="small muted" style="margin:0">This scope has no proposal yet. When /orangu:improve writes one, it shows here.</p>\';return`<section class="sg-inbox card pad mb16" aria-label="Saved proposals"><div class="sg-inbox-head"><div class="card-title">Saved proposals \\xB7 ${e.length}</div><span class="eyebrow">Localhost only</span></div>${n}</section>`}function Xs(e,t,n,s){let o=e.data.mode==="serve"?Ys(e.data.suggestions,t,e.a?.session.id??e.state.s??e.data.selectedId,n,s):[];return Js(o,e.data.mode)}var jn={details:Fn,inbox:Xs};function Hn(e){let t=e.data.aggregates.global;if(!t)return w(`<section>${be("global",e.data)}</section>`);let n=new Map;for(let m of t.sessions)n.set(m.source,(n.get(m.source)??0)+1);let s=[A("Sessions",String(t.sessionCount),R(n.size,"source")),A("Total tokens",y(t.totals.tokens),I(t.averages.cacheHitRatio)+" read from cache",{accent:!0}),A("Per session",y(t.averages.tokensPerSession)),A("Active time",C(t.totals.activeMs),"of "+C(t.totals.wallMs)+" wall"),A("Per human turn",y(t.averages.tokensPerHumanTurn)),A("Shipped",`${t.totals.prs} PRs`,`${t.totals.commits} commits`)].join(""),o=t.byWeek.filter(m=>m.sessions>0).length,l=t.byWeek.map(m=>m.tokens).filter(m=>m>0),i=l.length?`${y(Math.min(...l))} \\u2013 ${y(Math.max(...l))} / week`:"",a=o>=2?`<svg viewBox="0 0 600 110" style="width:100%;height:110px;display:block" preserveAspectRatio="none" role="img"><title>Weekly token trend</title><polyline points="${Ht(t.byWeek)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"></polyline><line x1="0" y1="104" x2="600" y2="104" stroke="var(--border2)" stroke-width="1"></line></svg>\n<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:4px"><span>12w ago</span><span>8w</span><span>4w</span><span>this week</span></div>`:re("not enough history for a trend"),d=(m,b)=>{if(!m.length)return re("nothing here yet");let S=Math.max(...m.map(v=>v.tokens),1e-4);return m.slice(0,6).map(v=>`<div class="rollrow"><div class="rollhead"><span class="mono">${r(v.key)}</span><span class="muted" style="font-size:11.5px">${R(v.count,"session")}</span><span class="mono" style="margin-left:auto;font-weight:700">${r(y(v.tokens))}</span></div><span class="trough" style="margin-top:5px"><i style="width:${(v.tokens/S*100).toFixed(1)}%;background:${b}"></i></span></div>`).join("")},c=[...n.entries()].sort((m,b)=>b[1]-m[1]).map(([m,b])=>`<span class="sigchip">${r(Pt(m))} \\xB7 ${b}</span>`).join("");return w(`<section>${ot("global",e.state)}\n<div class="kpis">${s}</div>\n<div class="card pad mb16">\n<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><span style="font-weight:700;font-size:13.5px">Weekly tokens \\xB7 last 12 weeks</span><span class="mono small muted">${r(i)}</span></div>\n${a}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by model</div>${d(t.byModel,"var(--accent)")}</div>\n<div class="card pad"><div class="card-title">Tokens by project</div>${d(t.byProject,"var(--cat-agent)")}</div>\n</div>\n<div class="chiprow mb16">${c}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>\n${rt(t,e)}\n</section>`)}var pt=12,Pn=e=>{let t=e.inventory;return!t.settings.length&&!t.skills.length&&!t.agents.length&&!t.plugins.length&&!t.mcpServers.length&&!t.claudeMd.length};function _n(e){let t=e.crosswalk,n=t.counts.skills.idle,s=e.inventory.totals.skills,o=s?n?`${n} of ${s} skills never fired`:`every one of ${s} skills fired`:"no skills installed",l=[...t.injectedListings].sort((a,d)=>d.approxTokensPerMainSession-a.approxTokensPerMainSession)[0],i=l?`${l.type} \\u2248${H(l.approxTokensPerMainSession)} tokens per session in the main context`:`${H(e.scope.sessionsScanned)} sessions scanned`;return{title:o,sub:i}}function gt(e){return e.length?`<div class="pill-row">${e.slice(0,pt).map(n=>`<span class="pill">${r(n)}</span>`).join("")}${e.length>pt?`<span class="small muted">+${e.length-pt} more</span>`:""}</div>`:""}function mt(e,t,n,s,o,l){let i=s?n?`<div class="aval">${n}<span class="anote"> of ${s} ${o}</span></div>${gt(t)}`:`<p class="small" style="color:var(--good);margin:0">Every one of ${s} ${l}.</p>`:\'<p class="small muted" style="margin:0">The config that orangu read declares none.</p>\';return`<div class="card pad"><div class="card-title">${e}</div>${i}</div>`}function Nn(e,t){let n=e===void 0?{title:"Comparing what your config declares with what these sessions used\\u2026",sub:"a cold cache takes a moment"}:e===null?{title:"orangu could not compute the harness report.",sub:"orangu harness prints the reason"}:Pn(e)?{title:"orangu found no harness config under the scanned roots",sub:"settings.json \\xB7 skills/ \\xB7 agents/ \\xB7 plugins/ \\xB7 .mcp.json \\xB7 CLAUDE.md"}:_n(e);return`<a class="card pad mb16 harness-card" href="${r(t)}"${e===void 0?\' aria-busy="true"\':""}><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${r(n.title)}</div><div class="small muted">${r(n.sub)} \\xB7 open the harness view \\u2192</div></a>`}function Dn(e,t){if(!t)return w(`<section>${q({title:"orangu could not compute the harness report.",hint:"Run the command directly to see the reason.",command:"orangu harness"})}</section>`);if(Pn(t))return w(`<section>${q({title:"orangu found no harness config under the scanned roots.",hint:`orangu looked for settings.json \\xB7 skills/ \\xB7 agents/ \\xB7 plugins/ \\xB7 .mcp.json \\xB7 CLAUDE.md under ${t.scope.roots.join(", ")}. It found nothing to compare.`,command:"orangu harness"})}</section>`);let n=t.crosswalk,s=t.inventory,o=_n(t),l=n.skills.filter(u=>u.status==="idle").map(u=>u.name),i=n.mcpServers.filter(u=>u.status==="idle").map(u=>u.name),a=n.agents.filter(u=>u.status==="idle").map(u=>u.name),d=[...n.skills.filter(u=>u.status==="undeclared").map(u=>"skill "+u.name),...n.mcpServers.filter(u=>u.status==="undeclared").map(u=>"mcp "+u.name),...n.agents.filter(u=>u.status==="undeclared").map(u=>"agent "+u.name),...n.hooks.filter(u=>u.status==="undeclared").map(u=>"hook "+(u.commandBasename??u.event))],c=n.counts.skills.undeclared+n.counts.mcpServers.undeclared+n.counts.agents.undeclared+n.counts.hooks.undeclared,m=n.injectedListings.length?`<div class="scroll-x"><table class="grid"><thead><tr><th>Listing</th><th class="num">\\u2248 tokens / session</th><th class="num">Sessions</th><th class="num">\\u2248 tokens / injection<br><span class="small muted">anywhere in the tree</span></th><th class="num">Subagents \\u2248 tokens</th><th class="num">Subagent sessions</th></tr></thead><tbody>${[...n.injectedListings].sort((u,x)=>x.approxTokensPerMainSession-u.approxTokensPerMainSession).map(u=>`<tr><td class="mono">${r(u.type)}</td><td class="num">${r(H(u.approxTokensPerMainSession))}</td><td class="num">${u.main.sessions}</td><td class="num">${r(H(u.approxTokensPerInjection))}</td><td class="num">${r(H(u.subagent.approxTokens))}</td><td class="num">${u.subagent.sessions}</td></tr>`).join("")}</tbody></table></div><div class="smt8">Each \\u2248 tokens figure is the recurring context weight, in bytes \\xF7 4. The per-session column counts the primary transcript of each session that carried the listing. The subagent columns show what the agent tree carried, over the sessions that had subagents.</div>`:\'<p class="small muted" style="margin:0">orangu measured no injected listings in these sessions.</p>\',b=n.claudeMd.reduce((u,x)=>u+x.approxTokensCarried,0),S=s.claudeMd.length?`<div class="aval">\\u2248${r(y(s.totals.claudeMdApproxTokens))}<span class="anote"> tokens in ${s.claudeMd.length} file${s.claudeMd.length===1?"":"s"} \\xB7 \\u2248${r(y(b))} carried across the window</span></div>${gt(s.claudeMd.map(u=>u.file))}`:\'<p class="small muted" style="margin:0">The scanned roots hold no CLAUDE.md.</p>\',v=t.notes.length?`<div class="card pad mb16" style="background:var(--bg2)"><div class="card-title">Notes</div><ul class="small muted" style="margin:0;padding-left:18px">${t.notes.map(u=>`<li>${r(u)}</li>`).join("")}</ul></div>`:"",h=t.scope.global?`global \\xB7 ${t.scope.roots.length} root${t.scope.roots.length===1?"":"s"}`:`repo ${t.scope.cwd}`;return w(`<section>\n<div class="hero">\n${pe(48)}\n<div class="grow"><div class="eyebrow">Declared vs used</div><div class="herotitle">${r(o.title)}</div><div class="sg-sub">${r(o.sub)} \\xB7 ${r(h)} \\xB7 ${H(t.scope.sessionsScanned)} sessions scanned</div></div>\n</div>\n<div class="kpis">\n${mt("Idle skills",l,n.counts.skills.idle,s.totals.skills,"skills never fired","skills fired")}\n${mt("Idle MCP servers",i,n.counts.mcpServers.idle,s.totals.mcpServers,"servers never called","servers was called")}\n${mt("Agents never dispatched",a,n.counts.agents.idle,s.totals.agents,"agents never dispatched","agents was dispatched")}\n</div>\n<div class="card pad mb16"><div class="card-title">Injected listings \\xB7 per session</div>${m}</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">CLAUDE.md</div>${S}</div>\n<div class="card pad"><div class="card-title">Undeclared \\xB7 ${c}</div>${c?`<p class="small muted" style="margin:0 0 8px">The sessions used these, but the config that orangu read does not declare them. They come from a source outside this scope, or the config drifted.</p>${gt(d)}`:\'<p class="small muted" style="margin:0">The config that orangu read declares everything that the sessions used.</p>\'}</div>\n</div>\n<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="card-title">Turn this into proposals in Claude Code.</div>${O(je(t.scope.global?"global":"repo"))}<div class="smt8">This button only copies text. Nothing runs here. <span class="mono">orangu harness --json</span> prints this report.</div></div>\n${v}\n</section>`)}var Qs=50;function Zs(e){let t=Bt(e,Qs);return t.length?`<div class="feed" style="margin-top:18px" aria-live="off"><div class="card-head">Fleet feed</div>${t.map(s=>`<div class="feedrow"><span class="ft">${r(B(s.sid))}</span><span class="ft">${r(xe(s.ts))}</span><span class="sw" style="background:${P(s.category)}"></span><span class="fn">${r(s.name)}</span><span class="fw">${r(s.summary)}</span></div>`).join("")}<div class="feedfoot">last ${t.length} events across the live sessions</div></div>`:""}var Ge=[],Bn=0;function eo(e){let t=new Map(e.map(i=>[i.id,i])),n=Ge.length===e.length&&Ge.every(i=>t.has(i)),s=typeof matchMedia=="function"&&matchMedia("(prefers-reduced-motion: reduce)").matches,o=Date.now()-Bn<5e3;if(n&&(o||s))return Ge.map(i=>t.get(i));let l=[...e].sort((i,a)=>a.mtimeMs-i.mtimeMs);return Ge=l.map(i=>i.id),Bn=Date.now(),l}function to(e,t){let n=eo(t),s=typeof window<"u"?window.__ORANGU_SERVE__?.maxLive:void 0,o=s!==void 0&&e.data.mode==="serve"?`<div class="banner info">watching ${Math.min(s,n.length)} of ${n.length} live session${n.length===1?"":"s"}${n.length>s?\' \\xB7 raise with <span class="mono">--max-live</span>\':""}</div>`:"",l=e.conn==="reconnecting"?\'<div class="banner warn">The connection is lost. The page reconnects on its own.</div>\':"",i=n.map(a=>{let d=a.contextWindow&&a.contextFinal?a.contextFinal/a.contextWindow:0,c=Math.min(a.agentsRunning??0,8),m=c?`<div class="agentstrip">${"<i></i>".repeat(c)}${(a.agentsRunning??0)>8?`<span class="more">+${(a.agentsRunning??0)-8}</span>`:""}</div>`:"",b=a.lastEvent?`last: ${a.lastEvent.name} \\xB7 ${a.lastEvent.summary}`:ue(a);return`<a class="fleetcard" href="#live?s=${r(a.id)}">\n<div class="fh"><span class="ldot" data-pulse="1" aria-hidden="true"></span><span>${r(B(a.id))}</span><span class="proj">${r(a.projectSlug)}</span><span class="muted">turn ${a.turns??"\\u2013"}</span></div>\n<div class="fk"><span>${a.startedAt!==void 0&&a.mtimeMs>a.startedAt?r(C(a.mtimeMs-a.startedAt)):"\\u2013"}</span><span style="color:var(--accent-ink)">${a.tokens!==void 0?r(y(a.tokens)):"\\u2013"}</span><span>${a.toolCalls??"\\u2013"}\\u2699</span><span>${d?r(I(d)):"\\u2013"} ctx</span></div>\n<span class="trough" style="height:6px"><i style="width:${(d*100).toFixed(1)}%"></i></span>\n<div class="fl">${r(b)}</div>\n${m}\n</a>`}).join("");return w(`<section>${l}${o}<div class="fleet">${i}</div>${Zs(n)}<p class="small muted">Each card is one running session. Click a card to watch it.</p></section>`)}typeof window<"u"&&(window.__ORANGU_FLEET__=to);function no(e,t){let n=t?r(B(t.id))+" \\xB7 "+r(t.projectSlug||t.source):"\\u2013";if(e.sessions.length<2)return`<div class="sid">${n}</div>`;let s=e.sessions.map(o=>{let l=o.badge==="live"?\'<span class="ldot" data-pulse="1" aria-hidden="true"></span>\':o.badge==="idle"?\'<span class="ldot hollow" aria-hidden="true"></span>\':\'<span class="ldot done" aria-hidden="true"></span>\';return`<div role="option" tabindex="-1" data-id="${r(o.id)}" aria-selected="${o.id===t?.id}">${l}<span class="mono">${r(B(o.id))}</span><span class="proj">${r(o.projectSlug)}</span></div>`}).join("");return`<button class="sid pick" id="btn-pick" aria-haspopup="listbox" aria-expanded="false">${n} \\u25BE</button>\n<div class="picklist" id="pick-list" role="listbox" aria-label="Sessions" hidden>${s}</div>`}function so(e,t){let n=e.querySelector("#btn-pick"),s=e.querySelector("#pick-list");if(!n||!s)return;let o=Array.prototype.slice.call(s.querySelectorAll(\'[role="option"]\')),l=()=>{s.hidden=!0,n.setAttribute("aria-expanded","false")};n.addEventListener("click",()=>{let i=s.hidden;s.hidden=!i,n.setAttribute("aria-expanded",String(i)),i&&(o.find(a=>a.getAttribute("aria-selected")==="true")??o[0])?.focus()}),s.addEventListener("keydown",i=>{let a=o.indexOf(document.activeElement);i.key==="Escape"?(l(),n.focus()):i.key==="ArrowDown"||i.key==="ArrowUp"?(i.preventDefault(),o[(a+(i.key==="ArrowDown"?1:o.length-1))%o.length]?.focus()):(i.key==="Enter"||i.key===" ")&&(i.preventDefault(),document.activeElement?.click())});for(let i of o)i.addEventListener("click",()=>{l(),t({s:i.dataset.id},{push:!0})})}var $e=new Set;function oo(e,t,n,s){let o;if(n.screen==="repo"?o="repo":n.screen==="global"?o="global":n.screen==="suggest"&&(n.scope==="repo"||n.scope==="global")&&(o=n.scope),!o||e.aggregates[o])return!1;if(!$e.has(o)){let l=o;$e.add(l);let i=e.sessions.find(a=>a.id===n.s)??e.sessions[0];t.aggregate(l,l==="repo"?i?.cwd:void 0).then(a=>{$e.delete(l),a&&(e.aggregates[l]=a,s())}).catch(()=>$e.delete(l))}return $e.has(o)}function ro(){return w(`<section><div class="card"><div class="empty-hero">${V(48)}<div class="t">Analysing sessions\\u2026</div><div class="s">A cold cache takes a moment. The numbers appear when they are ready.</div></div></div></section>`)}function io(e){return e.state.screen==="global"?Hn(e):vn(e)}var ao=3e4,le,Ve=!1,ft=!1,On=0;function lo(){ft=!0}function qn(e,t){let n=ft&&Date.now()-On>=ao;return le!==void 0&&!n?!1:(Ve||(Ve=!0,ft=!1,e.harness().then(s=>{le=s},()=>{le===void 0&&(le=null)}).finally(()=>{Ve=!1,On=Date.now(),t()})),Ve&&le===void 0)}function co(e){return Dn(e,le??null)}function uo(e,t,n){return qn(e,t),Nn(le,n)}var Wn={pickerHtml:no,wirePicker:so,ensureAggregate:oo,aggScreen:ro,aggregateView:io,megaReview:An,ensureHarness:qn,invalidateHarness:lo,harnessView:co,harnessCard:uo,proposals:jn};var po=["session","repo","global","report","app"],vt=["bug","confusing","missing","slow","delight","other"],Un="https://github.com/NissanOhana/orangu/issues/new";function Gn(e){return typeof e=="string"&&po.includes(e)}function bt(){return{summary:"",category:"bug",rant:"",expected:"",reproduction:""}}function Vn(e){return e.replace(/\\r\\n?/g,`\n`).trim()}function ht(e,t){let n=Vn(t);return`## ${e}\n\n${n||"_Not provided._"}`}function Kn(e,t){let n=Vn(e.summary).replace(/\\s+/g," "),s=`${e.category} \\xB7 ${t.context}`,o=`[beta feedback] ${[...n||s].slice(0,160).join("")}`,l=[ht("Experience",e.rant),ht("What I expected",e.expected),ht("How to reproduce",e.reproduction),`## Context\n\n- Area: ${t.context}\n- Category: ${e.category}`,`## Diagnostics (reviewed)\n\n- Orangu: ${t.version}\n- Node: ${t.nodeMajor}\n- OS: ${t.osFamily}\n- Architecture: ${t.arch}\n- Surface: ${t.surface}`].join(`\n\n`);return{title:o,body:l}}function yt(e,t=7500){let n=new URLSearchParams({title:e.title,body:e.body}).toString(),s=`${Un}?${n}`,o=s.length;return o>t?{kind:"oversized",blankUrl:Un,encodedLength:o,report:e}:{kind:"composer",url:s,encodedLength:o,report:e}}var F={context:"app",draft:bt(),reviewed:!1};function mo(){let e=/(?:[?&])context=([^&]+)/.exec(location.hash),t="app";try{e?.[1]&&(t=decodeURIComponent(e[1]))}catch{}return Gn(t)?t:"app"}function zn(e){window.open(e,"_blank","noopener,noreferrer")}function go(e,t){let n=()=>{let s=t.textContent;t.textContent="copied",setTimeout(()=>t.textContent=s,1200)};if(navigator.clipboard?.writeText)navigator.clipboard.writeText(e).then(n,n);else{let s=document.createElement("textarea");s.value=e,document.body.appendChild(s),s.select();try{document.execCommand("copy")}catch{}s.remove(),n()}}function fo(){let e=mo();F.context!==e&&(F={context:e,draft:bt(),reviewed:!1});let t=window.__ORANGU_SERVE__?.feedback,n={version:t?.version??window.__ORANGU_SERVE__?.version??"unknown",nodeMajor:t?.nodeMajor??"unknown",osFamily:t?.osFamily??"other",arch:t?.arch??"other",surface:"localhost",context:e},s=vt.map(p=>`<option value="${p}"${F.draft.category===p?" selected":""}>${p}</option>`).join(""),o=w(`<section class="feedback">\n<div class="banner info"><b>This stays private until you choose to share it.</b>&nbsp; orangu attaches nothing from a session or report. If you open the reviewed composer, it sends only the preview below to GitHub.</div>\n<div class="card pad mb16">\n<div class="card-title">Rant about the beta</div>\n<p class="narrative">Be blunt. What was unclear, broken, slow, or better than you expected?</p>\n<div class="feedback-grid">\n<label>Short summary<input id="fb-summary" maxlength="240" value="${r(F.draft.summary)}" placeholder="What should we fix first?"></label>\n<label>Category<select id="fb-category">${s}</select></label>\n</div>\n<label>Your experience<textarea id="fb-rant" rows="7" placeholder="Rant here\\u2026">${r(F.draft.rant)}</textarea></label>\n<label>What did you expect?<textarea id="fb-expected" rows="3">${r(F.draft.expected)}</textarea></label>\n<label>How can we reproduce it? <span class="muted">optional</span><textarea id="fb-reproduction" rows="3">${r(F.draft.reproduction)}</textarea></label>\n<button type="button" class="btn" id="fb-preview">Review exact report</button>\n</div>\n<div class="card pad mb16" id="fb-review">\n<div class="card-title">Exact GitHub prefill</div>\n<p class="small muted" id="fb-review-status">Review the title, body, and generic diagnostics before anything can leave localhost.</p>\n<div class="eyebrow">Title</div><pre class="feedback-preview" id="fb-title-preview"></pre>\n<div class="eyebrow">Body</div><pre class="feedback-preview" id="fb-body-preview"></pre>\n<label class="feedback-check"><input type="checkbox" id="fb-reviewed"> I reviewed this exact report and want to send its prefill to GitHub.</label>\n<button type="button" class="btn" id="fb-send">Send reviewed prefill to GitHub</button>\n<div id="fb-fallback"></div>\n</div>\n</section>`),l=o.querySelector("#fb-summary"),i=o.querySelector("#fb-category"),a=o.querySelector("#fb-rant"),d=o.querySelector("#fb-expected"),c=o.querySelector("#fb-reproduction"),m=o.querySelector("#fb-reviewed"),b=o.querySelector("#fb-send"),S=o.querySelector("#fb-title-preview"),v=o.querySelector("#fb-body-preview"),h=o.querySelector("#fb-review-status"),u=o.querySelector("#fb-fallback"),x=()=>({summary:l.value,category:vt.includes(i.value)?i.value:"other",rant:a.value,expected:d.value,reproduction:c.value}),$=()=>{F.draft=x(),F.preview=void 0,F.reviewed=!1,m.checked=!1,m.disabled=!0,b.disabled=!0,S.textContent="",v.textContent="",u.replaceChildren(),h.textContent="The draft changed. Review the exact report again."};for(let p of[l,i,a,d,c])p.addEventListener("input",$);i.addEventListener("change",$);let f=()=>{let p=F.preview;if(S.textContent=p?.title??"",v.textContent=p?.body??"",m.disabled=!p,m.checked=!!(p&&F.reviewed),b.disabled=!p||!F.reviewed,u.replaceChildren(),!p)return;let g=yt(p);if(h.textContent=g.kind==="composer"?`The encoded prefill is ${g.encodedLength.toLocaleString()} characters. If you open it, it sends this title and body to GitHub.`:`The complete prefill is ${g.encodedLength.toLocaleString()} characters. That is too large for a reliable URL. The form keeps the complete report.`,g.kind==="oversized"&&F.reviewed){b.disabled=!0;let L=`${p.title}\n\n${p.body}`,E=document.createElement("button");E.type="button",E.className="btn-sm",E.textContent="Copy complete report",E.addEventListener("click",()=>go(L,E));let _=document.createElement("button");_.type="button",_.className="btn-sm",_.textContent="Open blank GitHub issue",_.addEventListener("click",()=>zn(g.blankUrl)),u.append(E,_)}return g};return o.querySelector("#fb-preview").addEventListener("click",()=>{F.draft=x(),F.preview=Kn(F.draft,n),F.reviewed=!1,f()}),m.addEventListener("change",()=>{F.reviewed=!!(F.preview&&m.checked),f()}),b.addEventListener("click",()=>{if(!F.reviewed||!F.preview)return;let p=yt(F.preview);p.kind==="composer"&&zn(p.url)}),f(),o}function $t(){return/^#feedback(?:[?]|$)/.test(location.hash)}function Yn(){let e=document.getElementById("app");if(!e)return;e.className="app feedback-root",e.replaceChildren();let t=w(\'<main class="feedback-shell"><header class="page-head"><div><h1>Beta feedback</h1><div class="sub">rant locally \\xB7 review exactly what you share</div></div><a class="btn" href="#overview">Back to orangu</a></header></main>\');t.appendChild(fo()),e.appendChild(t),document.title="orangu \\xB7 beta feedback"}function Jn(){if(document.getElementById("feedback-launch"))return;let e=document.createElement("a");e.id="feedback-launch",e.className="feedback-launch",e.href="#feedback?context=app",e.textContent="Beta feedback",e.setAttribute("aria-label","Open beta feedback"),document.body.appendChild(e)}function Xn(){let e=$t();e?Yn():Tn(Cn(En(location.pathname)),Wn).then(Jn),window.addEventListener("hashchange",()=>{$t()!==e&&location.reload()})}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",Xn):Xn();})();\n';
+var CLIENT_JS_AGG = '"use strict";(()=>{var dn=["live","overview","timeline","tools","agents","context","coverage","repo","global","harness","suggest"];function D(e){return e.slice(0,8)}function ee(e){return e.mode==="file"&&!e.capabilities.watch?[]:e.sessions.filter(t=>t.badge==="live")}function P(e){if(!(e.mode!=="file"||e.session))return e.aggregates.repo?"repo":e.aggregates.global?"global":void 0}function Je(e){return e.mode==="serve"?ee(e).length>1?"live":"overview":P(e)??"overview"}function Xe(e,t){let n=t.audience==="plain"?"plain":"dev",s=ee(e),o=[];s.length>1&&o.push({id:"live-all",label:`All live \\xB7 ${s.length}`,screen:"live",dot:"pulse"});for(let m of s)o.push({id:"live-"+m.id,label:s.length>1?`${D(m.id)} \\xB7 ${m.projectSlug}`:`Watch \\xB7 ${D(m.id)}`,screen:"live",s:m.id,dot:"pulse"});let a=[];P(e)===void 0&&(a.push({id:"overview",label:"Overview",screen:"overview"},{id:"timeline",label:"Timeline",screen:"timeline"},{id:"tools",label:"Tools & calls",screen:"tools"}),n==="dev"&&((e.session?.agents.runs.length??0)>0&&a.push({id:"agents",label:"Agents",screen:"agents"}),a.push({id:"context",label:"Context & tokens",screen:"context"}),a.push({id:"coverage",label:"Coverage",screen:"coverage"})));let i=e.aggregates.repo?.sessionCount,l=e.mode==="file"?e.aggregates.global?.sessionCount:void 0,c=e.mode==="file"?"needs orangu serve":void 0,d=[{id:"repo",label:i!==void 0?`Repo \\xB7 ${i} sessions`:"Repo",screen:"repo",hint:i===void 0?c:void 0},{id:"global",label:l!==void 0?`Global \\xB7 ${l} sessions`:"Global \\xB7 all time",screen:"global",hint:l===void 0?c:void 0},{id:"harness",label:"Harness",screen:"harness",hint:c}];return[{id:"live",label:"Live",items:o},{id:"session",label:"Observe this session",items:a},{id:"across",label:"Recurring patterns",items:d},{id:"improve",label:"Improve the next session",items:[{id:"suggest",label:"Improvements",screen:"suggest"}]}]}function Qe(e){let t={screen:"overview"},n=e.replace(/^#/,""),[s,o]=n.split("?");if(s&&dn.includes(s)&&(t.screen=s),o)for(let a of o.split("&")){let i=a.indexOf("=");if(i<0)continue;let l=a.slice(0,i),c=decodeURIComponent(a.slice(i+1));l==="s"?t.s=c:l==="scope"&&(c==="session"||c==="repo"||c==="global")?t.scope=c:l==="tool"?t.tool=c:l==="cat"?t.cat=c:l==="agent"?t.agent=c:l==="turn"?t.turn=Number(c):l==="err"?t.errorsOnly=c==="1":l==="filter"&&(c==="all"||c==="errors"||c==="agents"||c==="human")?t.filter=c:l==="theme"?t.theme=c:l==="audience"&&(c==="dev"||c==="plain")&&(t.audience=c)}return t}function Q(e,t){return Pe({...e,scope:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0,filter:void 0,...t})}function Pe(e){let t=[];return e.s&&t.push("s="+encodeURIComponent(e.s)),e.scope&&t.push("scope="+e.scope),e.tool&&t.push("tool="+encodeURIComponent(e.tool)),e.cat&&t.push("cat="+encodeURIComponent(e.cat)),e.agent&&t.push("agent="+encodeURIComponent(e.agent)),e.turn!==void 0&&t.push("turn="+e.turn),e.errorsOnly&&t.push("err=1"),e.filter&&t.push("filter="+e.filter),e.audience&&t.push("audience="+e.audience),e.theme&&t.push("theme="+e.theme),"#"+e.screen+(t.length?"?"+t.join("&"):"")}function y(e){return e>=1e9?(e/1e9).toFixed(e>=1e10?0:1)+"B":e>=1e6?(e/1e6).toFixed(e>=1e7?0:2)+"M":e>=1e3?(e/1e3).toFixed(e>=1e5?0:1)+"k":String(Math.round(e))}function I(e){if(e===void 0||!isFinite(e))return"\\u2013";if(e<1e3)return Math.round(e)+"ms";let t=e/1e3;if(t<60)return t.toFixed(t<10?1:0)+"s";let n=Math.floor(t/60);if(n<60)return n+"m "+Math.round(t%60)+"s";let s=Math.floor(n/60);return s<24?s+"h "+n%60+"m":Math.floor(s/24)+"d "+s%24+"h"}function E(e,t=0){return(e*100).toFixed(t)+"%"}function w(e,t,n=t+"s"){return`${_(e)} ${e===1?t:n}`}function _(e){return e.toLocaleString("en-US")}function Ze(e){return e===void 0?"\\u2013":new Date(e).toISOString().slice(0,16).replace("T"," ")}function et(e){return e===void 0?"--:--:--":new Date(e).toISOString().slice(11,19)}function ve(e){return e>=1<<20?(e/(1<<20)).toFixed(1)+" MB":e>=1024?Math.round(e/1024)+" KB":e+" B"}function r(e){return String(e??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/\'/g,"&#39;")}var ie={read:"Read",search:"Search",edit:"Edit",write:"Write",exec:"Shell",agent:"Agents",skill:"Skills",web:"Web",plan:"Plan",ask:"Ask",mcp:"MCP",task:"Tasks",notebook:"Notebook",other:"Other"},cn=["read","search","edit","write","exec","agent","skill","web","other"];function N(e){return`var(--cat-${cn.includes(e)?e:"other"}, var(--cat-other))`}var un={clean:"The last check it ran passed",interrupted:"You stopped it",failing:"The last test run failed"};function nt(e,t){let n=un[e]??"The agent completed its last task";return e==="clean"&&t&&He(t)?`${n}. ${t.testRunsFailed} of ${w(t.testRuns,"test run")} failed earlier.`:n}function He(e){return e.testRunsFailed&&e.testRunsFailed<e.testRuns?"last run":""}function ye(e,t){let n=[],s=new Map;for(let o of e){if(o.signature){n.push(o);continue}let{tool:a,total:i,sessions:l=0}=t(o),c=s.get(a)??{tool:a,total:0,signatures:0,sessions:0};c.total+=i,c.signatures++,c.sessions=Math.max(c.sessions,l),s.set(a,c)}return{kept:n,hidden:[...s.values()].sort((o,a)=>a.total-o.total)}}function st(e){if(e.ending==="interrupted")return`Stopped by you after ${w(e.turns,"turn")}`;let t=Ne(e);if(t.length)return t.join(" \\xB7 ");let n=w(e.humanTurns,"request");return e.toolCalls>0?`${n}, ${e.agents?w(e.agents,"subagent")+", ":""}nothing committed`:`${n}, no tool calls recorded`}function Ne(e){let t=e.outcomes,n=[];t.prLinks.length&&n.push(w(t.prLinks.length,"PR")),t.gitCommits&&n.push(w(t.gitCommits,"commit"));let s=t.filesEdited+t.filesWritten;return s&&n.push(w(s,"file")+" changed"),t.buildRunsFailed&&n.push(`${t.buildRunsFailed} of ${w(t.buildRuns,"build run")} failed`),t.testRuns&&n.push(t.testRunsFailed?`${t.testRunsFailed} of ${w(t.testRuns,"test run")} failed`:`${w(t.testRuns,"test run")} green`),n}function ot(e){return{value:I(e.activeMs),note:e.wallMs!==void 0?`over ${I(e.wallMs)} wall \\xB7 ${I(e.humanWaitMs)} waiting for you`:"single-message session"}}function rt(e){let t=e.evidence,n=t.calls?.[0],s=n?.tool??n?.name??t.tools?.[0]?.name;if(typeof s=="string"&&s)return{tool:s};if(e.turnIndexes.length)return{turn:e.turnIndexes[0]}}function be(e,t){return e.map(n=>{let s=t.findIndex(o=>o.ts!==void 0&&n.ts!==void 0&&o.ts>=n.ts);return{x:s<0?Math.max(0,t.length-1):s,label:"compaction at turn "+n.turnIndex}})}function $e(e){if(!e)return"";let t=e.estimated?"~":"";return e.tokens?`save ${t}${y(e.tokens)} tokens`:e.ms?`save ${t}${I(e.ms)}`:""}function xe(e,t,n){if(!e||!e.tokens&&!e.ms)return;let s=`Rule ${n} ${e.estimated?"estimated":"measured"} a saving of \\u2248`;if(e.tokens&&t&&e.tokens<=t){let o=e.tokens/t;return{text:o<.005?"under 1% of this session":`~${E(o)} of this session`,title:`${s}${y(e.tokens)} of the ${y(t)} tokens in this session.`}}return{text:$e(e),title:`${s}${e.tokens?y(e.tokens)+" tokens":I(e.ms)}.`}}function it(e,t){return!t||!e.tokens&&!e.ms?"":`${e.tokens?`\\u2248${y(e.tokens)} tokens`:`\\u2248${I(e.ms)}`} recoverable across ${w(t,"finding")}`}function at(e){let t=e.summary,n=e.context,s=[];return n.contextWindow&&t.contextPeak&&s.push(`Context grew to ${E(t.contextPeak/n.contextWindow)} of the window`),t.totalTokens&&s.push(`${E(t.cacheHitRatio)} of tokens were cache reads`),t.totalTokens&&e.tokens.agents&&s.push(`${E(e.tokens.agents/t.totalTokens)} of tokens went to subagents`),s.length?s.join(". ")+".":"The transcript records no token usage for this session."}function lt(e){let t=e.find(s=>s.id==="tests");return t?.tone==="good"?"passing":t?.tone==="bad"?"failing":e.some(s=>(s.id==="commits"||s.id==="prs")&&Number(s.value)>0)?"shipped":"\\u2013"}function ae(e,t,n){return e.filter(s=>s.turnIndex===t&&(!n||s.agentId===n))}function dt(e,t,n){let s=ae(e,t,n);if(!s.length)return[];let o=new Map;for(let a of s)o.set(a.category,(o.get(a.category)??0)+1);return[...o.entries()].map(([a,i])=>({cat:a,pct:i/s.length*100}))}function ct(e,t){let n=[...t].sort((a,i)=>a.turnIndex-i.turnIndex).filter(a=>a.turnIndex>(e[0]?.index??0)&&a.turnIndex<=(e[e.length-1]?.index??0)),s=[],o=e;for(let a of n){let i=o.filter(l=>l.index<a.turnIndex);o=o.filter(l=>l.index>=a.turnIndex),s.push({turns:i,after:a})}return s.push({turns:o,after:void 0}),s}function ut(e,t=600,n=104,s=8){let o=e.length;if(!o)return"";let a=Math.max(...e.map(i=>i.tokens),1e-4);return e.map((i,l)=>{let c=o===1?t/2:l/(o-1)*t,d=n-i.tokens/a*(n-s);return`${Math.round(c*10)/10},${Math.round(d*10)/10}`}).join(" ")}var pn={"claude-code":"Claude Code",cowork:"Cowork",desktop:"Desktop"};function pt(e){return pn[e]??e}function mt(e,t){let n=[];for(let s of e.tools.calls)n.push({ts:s.startTs,name:s.name,category:s.category,summary:s.summary,durationMs:s.durationMs,isError:s.isError,agentType:s.agentId?"agent":void 0,key:s.toolUseId});for(let s of e.events)n.push({ts:s.ts,name:s.kind,category:"other",summary:s.label,key:"ev-"+s.turnIndex+"-"+s.kind});for(let s of e.agents.runs)n.push({ts:s.startTs,name:s.agentType||s.name||s.agentId,category:"agent",summary:s.taskKind??s.description??"subagent run",durationMs:s.durationMs,key:s.agentId});return n.sort((s,o)=>(s.ts??1/0)-(o.ts??1/0)||(s.key<o.key?-1:s.key>o.key?1:0)),n.slice(-t)}function tt(e){let t=Math.max(0,Math.round(e/1e3));if(t<60)return t+"s";let n=Math.floor(t/60);return n<60?n+"m":Math.floor(n/60)+"h"}function ke(e){return e.badge!=="ended"&&e.possiblyLive?"Watching \\xB7 possibly live":e.badge==="ended"?"ended \\xB7 updated "+tt(e.ageMs)+" ago":"updated "+tt(e.ageMs)+" ago"}function gt(e){if(!e.length)return 1/0;let t=e.map(s=>s.totalTokens).sort((s,o)=>o-s),n=Math.max(1,Math.floor(t.length*.2));return t[n-1]}function ft(e,t){let n=new Set(t.map(a=>a.id)),s=e.filter(a=>!n.has(a)),o=t.filter(a=>a.open).map(a=>a.id);return[...new Set([...s,...o])]}var ht="orangu-brand-icon";var mn=/^data:image\\/png;base64,[A-Za-z0-9+/]+={0,2}$/;function q(e=30){let t=`width="${e}" height="${e}" style="display:block"`,n=typeof document>"u"?void 0:document.getElementById(ht)?.getAttribute("href");return!n||!mn.test(n)?`<span class="logo" ${t} role="img" aria-label="orangu"></span>`:`<img class="logo" src="${n}" ${t} alt="orangu" draggable="false">`}function T(e){let t=document.createElement("template");return t.innerHTML=e.trim(),t.content.firstElementChild}function we(e){e.querySelectorAll("details").forEach(t=>{let n=t.querySelector("summary");n&&(n.setAttribute("role","button"),n.setAttribute("aria-expanded",String(t.open)),t.addEventListener("toggle",()=>n.setAttribute("aria-expanded",String(t.open))))})}function Se(e){e.querySelectorAll("[data-copy]").forEach(t=>{t.addEventListener("click",()=>{let n=t.getAttribute("data-copy")??"",s=()=>{let o=t.textContent;t.textContent="copied",setTimeout(()=>t.textContent=o,1200)};if(navigator.clipboard?.writeText)navigator.clipboard.writeText(n).then(s,s);else{let o=document.createElement("textarea");o.value=n,document.body.appendChild(o),o.select();try{document.execCommand("copy")}catch{}o.remove(),s()}})})}var vt={high:3,medium:2,low:1,info:0};function yt(e,t){return(vt[t.severity]??0)-(vt[e.severity]??0)||t.totalSavingsTokens-e.totalSavingsTokens||t.sessions-e.sessions||e.ruleId.localeCompare(t.ruleId)}var Rs=7*864e5;function bt(e){return new TextEncoder().encode(e)}function $t(e){let t=bt(e),n=t.length,s=(n+8>>6)+1,o=new Uint32Array(s*16);for(let f=0;f<n;f++)o[f>>2]|=t[f]<<24-(f&3)*8;o[n>>2]|=128<<24-(n&3)*8;let a=n*8;o[s*16-1]=a>>>0,o[s*16-2]=Math.floor(a/4294967296)>>>0;let i=1732584193,l=4023233417,c=2562383102,d=271733878,m=3285377520,x=new Uint32Array(80),R=(f,v)=>f<<v|f>>>32-v;for(let f=0;f<o.length;f+=16){for(let u=0;u<16;u++)x[u]=o[f+u];for(let u=16;u<80;u++)x[u]=R(x[u-3]^x[u-8]^x[u-14]^x[u-16],1);let v=i,S=l,b=c,g=d,p=m;for(let u=0;u<80;u++){let L,C;u<20?(L=S&b|~S&g,C=1518500249):u<40?(L=S^b^g,C=1859775393):u<60?(L=S&b|S&g|b&g,C=2400959708):(L=S^b^g,C=3395469782);let G=R(v,5)+L+p+C+x[u]>>>0;p=g,g=b,b=R(S,30)>>>0,S=v,v=G}i=i+v>>>0,l=l+S>>>0,c=c+b>>>0,d=d+g>>>0,m=m+p>>>0}let h=f=>f.toString(16).padStart(8,"0");return h(i)+h(l)+h(c)+h(d)+h(m)}function ne(e){return[...new Set(e.map(t=>t.trim().replace(/\\\\/g,"/")).filter(Boolean))].sort()}function xt(e){return $t(JSON.stringify(ne(e))).slice(0,16)}function kt(e,t="finding"){let n=e.cohortFingerprint;if(e.scope==="session"){if(n!==void 0)throw new Error(`${t} session scope must omit cohortFingerprint`);return}if(typeof n!="string"||!/^[0-9a-f]{16}$/.test(n))throw new Error(`${t} repo/global scope requires a 16-hex cohortFingerprint`)}function le(e,t){return kt(e),{v:2,source:t,scope:e.scope,ruleId:e.ruleId,sessionIds:ne(e.sessionIds),...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}}}function de(e){let t=JSON.stringify({v:2,source:e.source,scope:e.scope,ruleId:e.ruleId,sessionIds:ne(e.sessionIds),insightId:e.insightId??null,...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{}});return"sg_"+$t(t).slice(0,12)}function gn(e){return btoa(Array.from(e,t=>String.fromCharCode(t)).join("")).replace(/\\+/g,"-").replace(/\\//g,"_").replace(/=+$/,"")}function fn(e){return JSON.stringify(e,(t,n)=>n&&typeof n=="object"&&!Array.isArray(n)?Object.fromEntries(Object.entries(n).sort(([s],[o])=>s<o?-1:s>o?1:0)):n)}var Cs=256*1024;function hn(e,t="report"){kt(e);let n={...e,sessionIds:ne(e.sessionIds)};return gn(bt(fn({v:2,source:t,finding:n})))}function vn(e,t){if(t==="serve")return e.id;if(e.title&&e.evidence){let s={ruleId:e.ruleId,title:e.title,scope:e.scope,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:e.evidence};return`${e.id} --finding ${hn(s,e.source??"report")}`}let n=[...e.sessionIds].sort().join(",");return`${e.id} --rule ${e.ruleId} --scope ${e.scope} --session ${n}`}function ce(e,t){let n=vn(e,t);return{claude:`claude "/orangu:improve ${n}"`,codex:`$orangu-improve ${n}`}}var wt="/plugin marketplace add NissanOhana/orangu \\xB7 /plugin install orangu",Te="Each title shows the figures of one example session.";function yn(e){let t=e.trim().replace(/[-_]+/g," ")||"finding";return t[0].toUpperCase()+t.slice(1)}var bn="orangu hides these details because they quote commands and output. To see them, run the report again with --include-text.";function St(e,t,n){return{title:t.trim()||yn(e),detail:n.trim()||bn}}function _e(e){let t=e.boundedSavingsTokens??e.totalSavingsTokens,n=e.boundedSavingsMs??e.totalSavingsMs;return{...t?{tokens:t}:{},...n?{ms:n}:{},estimated:!0}}function Tt(e,t){let n=St(e.ruleId,e.title,e.detail);return{ruleId:e.ruleId,...n,improvement:e.improvement||e.recommendation,why:e.why,method:e.method,savings:e.savings,sessionIds:t?[t]:[],insightId:e.id,severity:e.severity}}function pe(e,t,n){if(e==="session")return(t?.insights??[]).map(o=>Tt(o,t?.session.id));let s=n?xt(n.sessions.map(o=>o.id)):void 0;return[...n?.crossFindings??[]].sort(yt).map(o=>{let a=St(o.ruleId,o.title,`This pattern shows in ${o.sessions} of ${w(n.sessionCount,"session")}.`);return{ruleId:o.ruleId,...a,displayTitle:o.exampleTitle,improvement:o.improvement||o.recommendation,why:o.why,method:o.method,savings:_e(o),sessionIds:o.exampleSessionIds,sessions:o.sessions,severity:o.severity,...s?{cohortFingerprint:s}:{}}})}function Be(e,t){let n=Oe(Tt(e,t),"session"),s=le(n,"report"),o=de(s);return{id:o,command:ce({id:o,...n,sessionIds:s.sessionIds,source:"report"},"file").claude}}function Rt(e){let t=0,n=0;for(let s of e)t+=s.savings?.tokens??0,n+=s.savings?.ms??0;return{tokens:t,ms:n}}function Oe(e,t){return{ruleId:e.ruleId,title:e.title,scope:t,sessionIds:e.sessionIds,...e.insightId?{insightId:e.insightId}:{},...e.cohortFingerprint?{cohortFingerprint:e.cohortFingerprint}:{},evidence:{estimated:e.savings?.estimated??!0,sessions:e.sessions??1,...e.savings?.tokens!==void 0?{savingsTokens:e.savings.tokens}:{},...e.savings?.ms!==void 0?{savingsMs:e.savings.ms}:{}}}}function It(e){return`claude "/orangu:harness --scope ${e}"`}function Ct(e){if(e?.status!=="failed")return"";let t=e.kickoff?.error?.trim();return t?`Claude could not write the proposal: ${t}`:"Claude could not write the proposal. Copy the command. Run it again to see the error."}function At(e,t,n,s){let o,a=ne(t.sessionIds).join(`\n`);for(let i of e){if(!Array.isArray(i.sessionIds)||!i.sessionIds.every(d=>typeof d=="string"))continue;let l=i.id===s||Array.isArray(i.legacyIds)&&i.legacyIds.includes(s),c=i.v===1&&i.ruleId===t.ruleId&&i.scope===n&&ne(i.sessionIds).join(`\n`)===a&&(!t.insightId||!i.insightId||t.insightId===i.insightId);!l&&!c||(!o||i.statusAt>o.statusAt)&&(o=i)}return o}function U(e,t="$",n="command"){return`<div class="cmd"><span class="p" aria-hidden="true">${r(t)}</span><span class="txt">${r(e)}</span><button class="copy" data-copy="${r(e)}" aria-label="copy ${n}">copy</button></div>`}function te(e,t){return`Paste it in a terminal${e?` in ${e}`:t?" in this repository":""}. It starts Claude Code.`}function Re(){return`<div class="small sg-install">First time only, type these 2 lines in Claude Code:</div>${wt.split(" \\xB7 ").map((e,t)=>U(e,">",t?"the install command":"the marketplace command")).join("")}`}var Et={"context window":"working memory","cache reads":"reused context","cache read":"reused context","cache writes":"saved context","cache write":"saved context","cache hits":"reused context",compactions:"memory refreshes",compaction:"memory refresh"};var $n=Object.keys(Et).sort((e,t)=>t.length-e.length);function M(e,t){if(t!=="plain")return e;let n=e;for(let s of $n)n=n.split(s).join(Et[s]);return n}function me(e,t){if(t!=="plain")return e;let n=M(e.toLowerCase(),t);return n[0].toUpperCase()+n.slice(1)}function A(e,t,n="",s={}){let o=s.estimated?\'<span class="est" title="estimated: derived from bytes, not reported by the API">~</span>\':"";return`<div class="kpi${s.big?" big":""}${s.skeleton?" skel":""}"${s.title?` title="${r(s.title)}"`:""}>\n<div class="label">${r(e)}</div>\n<div class="val${s.accent?" accent":""}">${s.skeleton?"\\xB7\\xB7\\xB7":r(t)+o}</div>\n${n?`<div class="hint${s.badHint?" bad":""}">${r(n)}</div>`:""}\n</div>`}function W(e){return`<div class="card"><div class="empty-hero">\n${q(e.mascotSize??48)}\n<div class="t">${r(e.title)}</div>\n${e.hint?`<div class="s">${r(e.hint)}</div>`:""}\n${e.command?U(e.command):""}\n</div></div>`}function se(e){return`<div class="chart-empty">${r(e)}</div>`}function K(){return T(`<section>${W({title:"No session selected."})}</section>`)}function Ie(e){return`<span class="mascot" style="display:block;width:${e}px;flex:none" aria-hidden="true">${q(e)}</span>`}function Mt(e,t={}){let n=e.reduce((i,l)=>i+l.value,0)||1,s=t.height??14,o=0,a=e.filter(i=>i.value>0).map(i=>{let l=i.value/n*100,c=`<rect x="${o}%" y="0" width="${l}%" height="${s}" fill="${i.color}"><title>${r(i.label)}</title></rect>`;return o+=l,c}).join("");return`<svg width="100%" height="${s}" viewBox="0 0 100 ${s}" preserveAspectRatio="none" role="img"${t.title?` aria-label="${r(t.title)}"`:""}>${a}</svg>`}function Lt(e,t,n={}){let s=n.width??720,o=n.height??160,a={l:4,r:4,t:8,b:16},i=e[0]?.length??0;if(i===0)return\'<div class="chart-empty">no data points yet</div>\';let l=s-a.l-a.r,c=o-a.t-a.b,d=new Array(i).fill(0),m=0;for(let g of e)for(let p=0;p<i;p++)m=Math.max(m,d[p]+(g[p]??0));let x=new Array(i).fill(0);for(let g of e)for(let p=0;p<i;p++)x[p]+=g[p]??0;m=n.yMaxOverride??Math.max(...x,1);let R=g=>a.l+(i===1?l/2:g/(i-1)*l),h=g=>a.t+c-g/m*c,f=new Array(i).fill(0),v=[];e.forEach((g,p)=>{let u=g.map((C,G)=>f[G]+(C??0)),L=`M ${R(0).toFixed(1)} ${h(f[0]).toFixed(1)}`;for(let C=0;C<i;C++)L+=` L ${R(C).toFixed(1)} ${h(u[C]).toFixed(1)}`;for(let C=i-1;C>=0;C--)L+=` L ${R(C).toFixed(1)} ${h(f[C]).toFixed(1)}`;L+=" Z",v.push(`<path d="${L}" fill="${t[p]??"var(--cat-other)"}" opacity="0.85"><title>${r(n.labels?.[p]??"")}</title></path>`);for(let C=0;C<i;C++)f[C]=u[C]});let S=(n.markers??[]).map(g=>{let p=R(g.x);return`<line x1="${p.toFixed(1)}" y1="${a.t}" x2="${p.toFixed(1)}" y2="${a.t+c}" stroke="${g.color??"var(--bad)"}" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(g.label)}</title></line>`}).join(""),b=`<line x1="${a.l}" y1="${a.t+c}" x2="${a.l+l}" y2="${a.t+c}" stroke="var(--border2)" stroke-width="1"/>`;return`<svg width="100%" viewBox="0 0 ${s} ${o}" role="img" aria-label="stacked area">${v.join("")}${S}${b}</svg>`}function ge(e,t={}){let n=t.width??720,s=t.height??150,o={l:4,r:4,t:8,b:14},a=e.length;if(!a)return\'<div class="chart-empty">no data points yet</div>\';let i=n-o.l-o.r,l=s-o.t-o.b,c=t.yMax??Math.max(...e,1),d=b=>o.l+(a===1?i/2:b/(a-1)*i),m=b=>o.t+l-b/c*l,x="";e.forEach((b,g)=>{x+=(g===0?"M":"L")+" "+d(g).toFixed(1)+" "+m(b).toFixed(1)+" "});let R=t.color??"var(--accent-ink)",h=t.threshold?`<line x1="${o.l}" y1="${m(t.threshold.y).toFixed(1)}" x2="${o.l+i}" y2="${m(t.threshold.y).toFixed(1)}" stroke="var(--warn)" stroke-width="1" stroke-dasharray="4 3"><title>${r(t.threshold.label)}</title></line>`:"",f=(t.markers??[]).map(b=>`<line x1="${d(b.x).toFixed(1)}" y1="${o.t}" x2="${d(b.x).toFixed(1)}" y2="${o.t+l}" stroke="var(--bad)" stroke-width="1.5" stroke-dasharray="3 2"><title>${r(b.label)}</title></line>`).join(""),v=t.fmtY,S=v?`<text x="${o.l+2}" y="${o.t+8}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(v(c))}</text><text x="${o.l+2}" y="${o.t+l-3}" font-size="9" fill="var(--ink3)" font-family="var(--mono)">${r(v(0))}</text>`:"";return`<svg width="100%" viewBox="0 0 ${n} ${s}" role="img" aria-label="line chart">${h}<path d="${x}" fill="none" stroke="${R}" stroke-width="2" stroke-linejoin="round"/>${f}<line x1="${o.l}" y1="${o.t+l}" x2="${o.l+i}" y2="${o.t+l}" stroke="var(--border2)"/><line x1="${o.l}" y1="${o.t}" x2="${o.l}" y2="${o.t+l}" stroke="var(--border2)"/>${S}</svg>`}function Ft(e,t,n,s,o,a){let i=s-n||1,l=(e-n)/i*100,c=Math.max(.6,(t-e)/i*100);return`<svg width="100%" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><rect x="${l.toFixed(2)}" y="3" width="${c.toFixed(2)}" height="8" rx="3" fill="${o}"><title>${r(a)}</title></rect></svg>`}function Ce(e,t){let n=Math.max(...e.map(s=>s.value),1);return e.map(s=>`<div class="proprow" style="display:grid;grid-template-columns:130px 1fr 72px;gap:10px;align-items:center;padding:3px 0">\n<div class="small" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r(s.label)}${s.sub?` <span class="muted">${r(s.sub)}</span>`:""}</div>\n<span class="trough"><i style="width:${(s.value/n*100).toFixed(1)}%;background:${s.color}"></i></span>\n<div class="right mono small">${r(t(s.value))}</div>\n</div>`).join("")}var Ae=50,jt=12;function xn(e,t,n){return t?e.conn==="reconnecting"?"reconnecting":t.badge==="ended"?"ended":n&&n.summary.toolCalls===0?"empty":e.data.mode==="file"?e.data.capabilities.watch?"file":"snapshot":t.badge==="idle"?"stalled":"live":"connecting"}function Ee(e,t){return`<span class="bdot ${e}"${e==="p"?\' data-pulse="1"\':""} aria-hidden="true"></span>${t?`<span class="vh">${t}</span>`:""}`}var oe={pulse:Ee("p","live"),hollow:Ee("h","quiet"),good:Ee("g","ended"),static:Ee("s")},Pt=[oe.pulse,"","This view refreshes as the transcript grows. Nothing leaves this machine."],kn={connecting:[oe.static,"Connecting to orangu serve\\u2026","The page waits for the first event."],live:Pt,empty:Pt,stalled:[oe.hollow,"","The transcript did not grow recently. The session may need your input."],ended:[oe.good,"Session ended \\xB7 final numbers",""],reconnecting:[oe.hollow,"Connection lost \\xB7 retrying","The page reconnects on its own."],file:[oe.static,"Watching with orangu watch","orangu watch rewrites this file on each change. Reload the page to see the latest numbers."],snapshot:[oe.static,"Static snapshot","This file does not update. To follow the session live, run orangu watch."]};function wn(e,t,n){let s=n?`turn <b style="color:var(--ink1)">${n.summary.turns}</b>${e==="ended"||e==="snapshot"?"":" in progress"}`:"",[o,a,i]=kn[e],l=a,c=i;return e==="live"||e==="empty"?l=t?.possiblyLive?"Watching \\xB7 possibly live":"Watching a running session":e==="stalled"?l=`Watching \\xB7 quiet for ${Math.max(1,Math.round((t?.ageMs??0)/6e4))}m`:e==="ended"&&(c=t?ke(t):""),`<div class="livebanner">${Ie(44)}<div class="grow"><div class="lt">${o}<span aria-live="polite">${r(l)}</span></div><div class="ls">${r(c)}</div></div><div class="lr">${s}</div></div>`}function Me(e,t,n){let s=e.startTs!==void 0&&isFinite(t)?Ft(e.startTs,e.endTs??n,t,n||t+1,N("agent"),`${e.agentType??e.name??e.agentId} \\xB7 ${I(e.durationMs)} \\xB7 ${y(e.totalTokens)} tokens`):\'<div class="small muted">no timing</div>\';return`<div class="swimrow"><div class="alabel">${"\\xB7 ".repeat(e.spawnDepth)}${r(e.agentType||e.name||e.agentId.slice(0,10))} <small>${r(e.model??"")}</small></div><div${e.status==="running"?"":\' class="dim"\'}>${s}</div></div>`}function Sn(e){let t=e.agents.runs;if(!t.length)return"";let n=t.filter(l=>l.status==="running"),s=Math.min(...t.map(l=>l.startTs??1/0).filter(isFinite)),o=Math.max(...t.map(l=>l.endTs??-1/0).filter(isFinite)),a=[...n,...t.filter(l=>l.status!=="running")].slice(0,jt),i=t.length>jt?`<div class="pagefoot"><button data-all-lanes="1">show all ${t.length} agents</button></div>`:"";return`<div class="card pad mb18"><div class="card-title">Agents \\xB7 ${n.length} running \\xB7 ${t.length-n.length} done</div><div class="agent-lanes">${a.map(l=>Me(l,s,o)).join("")}</div>${i}</div>`}function Tn(e,t,n){let s=xn(e,t,n),o=e.audience,a=n?.summary,i=!n,l=[A("Elapsed",a?.wallMs!==void 0?I(a.wallMs):"\\u2013","",{big:!0,skeleton:i}),A("Tokens so far",a?y(a.totalTokens):"\\u2013","",{big:!0,accent:!0,skeleton:i}),A("Tool calls",a?String(a.toolCalls):"\\u2013","",{big:!0,skeleton:i}),A(me("Cache hits",o),a?E(a.cacheHitRatio):"\\u2013","",{big:!0,skeleton:i})].join(""),c=n?.context,d=c?.contextWindow?c.final/c.contextWindow:void 0,m=s==="ended"?"\\u2013":M(`${w(a?.compactions??0,"compaction")} so far${d!==void 0&&d>=.75?" \\xB7 compaction likely near 90%":""}`,o),x=`<div class="card pad mb18">\n<div class="ctxhead"><span>${me("Context window",o)}</span><span class="mono">${d!==void 0?r(E(d))+" of "+r(y(c.contextWindow)):c?r(y(c.final)):"\\u2013"}</span></div>\n<div class="ctxbar"><i style="width:${d!==void 0?(d*100).toFixed(1):0}%"></i></div>\n<div class="smt8">${r(m)}</div>\n</div>`,R=n?mt(n,Ae+1):[],h=R.length>Ae,f=R.slice(-Ae).map(u=>`<div class="feedrow">${u.agentType?\'<span style="width:2px;align-self:stretch;background:var(--cat-agent);flex:none"></span>\':""}<span class="ft">${r(et(u.ts))}</span><span class="sw" style="background:${N(u.category)}"></span><span class="fn">${r(u.name)}</span><span class="fw">${r(u.summary)}</span><span class="fd">${u.durationMs!==void 0?r(I(u.durationMs)):""}${u.isError?" \\xB7 error":""}</span></div>`).join(""),v=s==="connecting"?\'<div class="feedrow muted">Waiting for the first event\\u2026</div>\':\'<div class="feedrow muted">No tool calls yet.</div>\',S=[];t&&S.push(`streaming from \\u2026/${D(t.id)}.jsonl`),s==="ended"&&S.push("transcript closed"),h&&n&&S.push(`showing last ${Ae} of ${n.tools.calls.length+n.events.length+n.agents.runs.length} \\xB7 full list in Timeline`);let b=s==="ended"?`<a class="btn-sm" href="#overview${t?"?s="+r(t.id):""}" style="display:inline-block;margin-left:10px">Open Overview \\u2192</a>`:"",g=`<div class="feed" aria-live="off"><div class="card-head">Live feed</div>${f||v}<div class="feedfoot">${r(S.join(" \\xB7 "))}${b}</div></div>`,p=T(`<section>${wn(s,t,n)}<div class="kpis k4">${l}</div>${x}${n?Sn(n):""}${g}</section>`);return p.querySelector("[data-all-lanes]")?.addEventListener("click",u=>{if(!n)return;let L=p.querySelector(".agent-lanes");L.classList.add("swimbox");let C=Math.min(...n.agents.runs.map(Z=>Z.startTs??1/0).filter(isFinite)),G=Math.max(...n.agents.runs.map(Z=>Z.endTs??-1/0).filter(isFinite));L.innerHTML=n.agents.runs.map(Z=>Me(Z,C,G)).join(""),u.currentTarget.parentElement?.remove()}),p}function Ht(e){let t=ee(e.data),n=/[?&]s=/.test(location.hash),s=typeof window<"u"?window.__ORANGU_FLEET__:void 0;if(t.length>1&&!n&&s)return s(e,t);let o=e.data.sessions.find(a=>a.id===(e.state.s??e.data.selectedId))??e.data.sessions[0];return o?Tn(e,o,e.a):T(`<section>${W({title:"orangu found no sessions.",command:"orangu serve"})}</section>`)}function Le(e,t){return`<div class="banner ${e}">${t}</div>`}function z(e,t){let n=e.parse.reconciliation;if(!(e.parse.badLines>0||!n.ok))return"";if(t==="plain")return Le("warn",`orangu could not read ${_(e.parse.badLines)} lines of the transcript. The numbers may be low.`);let o=n.matchesWithinPct.toFixed(2);return Le("warn",`Parsed ${r(_(e.parse.totalLines-e.parse.badLines))} of ${r(_(e.parse.totalLines))} records \\xB7 token totals off by ${r(o)}% \\xB7 <a href="#coverage">see Coverage</a>`)}function B(e,t={}){let n=Object.entries(t.data??{}).map(([i,l])=>` data-${i}="${r(l)}"`).join(""),s="chip"+(t.active?" active":""),o=t.disabled?\' aria-disabled="true" tabindex="-1"\':"",a=t.removable?\'<button class="x" aria-label="remove filter">\\xD7</button>\':"";return`<button type="button" class="${s}"${o}${t.title?` title="${r(t.title)}"`:""}${n}>${r(e)}${a}</button>`}function Nt(e){if(!e.length)return"";let t=e.map(n=>`<span class="sigchip">${r(n.label)} <b class="${r(n.tone)}"${n.detail?` title="${r(n.detail)}"`:""}>${r(String(n.value))}</b></span>`).join("");return`<details class="signals"><summary>${e.length} signals</summary><div class="chiprow">${t}</div></details>`}function De(e,t){return e?`<span class="rec sg-lead"><b>Improvement:</b> ${r(M(e,t))}</span>`:""}function We(e,t,n,s){return t||n?`<details class="why" id="why-${r(e)}"><summary><span class="chev" aria-hidden="true">\\u25B8</span>Why</summary>${t?`<p>${r(M(t,s))}</p>`:""}${n?`<p class="muted">${r(M(n,s))}</p>`:""}</details>`:""}function qe(e,t,n={}){let s=xe(e.savings,n.sessionTotalTokens,e.ruleId),o=t==="plain"?"":`<span class="pill">${r(e.ruleId)}</span>`,a=e.turnIndexes.length&&t!=="plain"&&!n.link?`<div style="margin-top:10px"><button class="btn-sm" data-turns="${r(e.turnIndexes.join(","))}">Show ${w(e.turnIndexes.length,"turn")} \\u2192</button></div>`:"",i=e.detail?`<p>${r(M(e.detail,t))}</p>`:"",l=n.command?`<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${U(n.command,"$","the Claude Code command")}<div class="small">${r(te(n.cwd))}${n.how?` <a href="${r(n.how)}" data-to="ai-steps">See the 3 steps \\u2192</a>`:""}</div></div>`:"",c=n.link?`<div style="margin-top:10px"><a class="btn-sm" href="${r(n.link.href)}">${r(n.link.label)}</a></div>`:"",d=e.improvement||e.recommendation;return`<details class="finding${n.open?" top":""}"${n.open?" open":""}>\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="sev ${r(e.severity)}" title="${r(e.severity)}"></span><b>${r(M(e.title,t))}</b>${s?`<span class="fsave" title="${r(s.title)}">${r(s.text)}</span>`:""}${o}${De(d,t)}</summary>\n<div class="fbody">\n${We(n.id??e.id,e.why,e.method,t)}${i}\n${c}${a}\n${l}\n</div>\n</details>`}function fe(e,t,n){return Q(e.state,{s:e.state.s??t.session.id,...n})}function Rn(e,t){return`<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${q(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${r(st(e.summary))}</div><div class="sg-sub">${r(M(e.summary.narrative,t))}</div></div></div>`}function In(e){let t=e.summary,n=Ne(t).join(" \\xB7 ")||"no commits, PRs or test runs detected",s=ot(t),o=t.totalTokens?`${E(t.cacheHitRatio)} read from cache \\xB7 ${y(e.tokens.byKind.output)} generated`:"no usage recorded",a=He(t.outcomes);return`<div class="triptych">\n<div class="axis q"><div class="aname">Quality \\u2191</div><div class="aval">${r(lt(e.quality.signals))}${a?` <span class="anote">(${a})</span>`:""}</div><div class="anote">${r(n)}</div>${Nt(e.quality.signals)}</div>\n<div class="axis t"><div class="aname">Time \\u2193</div><div class="aval">${r(s.value)}</div><div class="anote">${r(s.note)}</div></div>\n<div class="axis c"><div class="aname">Tokens \\u2193</div><div class="aval">${r(y(t.totalTokens))}</div><div class="anote">${r(o)}</div></div>\n</div>`}function _t(e,t,n){if(!n)return`<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${q(22)}<span class="muted">The rules found nothing to change in this session.</span></div>`;let s=rt(n),o=s?.tool?{href:fe(e,t,{screen:"timeline",tool:s.tool}),label:`See the ${s.tool} calls \\u2192`}:s?{href:fe(e,t,{screen:"timeline",turn:s.turn}),label:`See the ${w(n.turnIndexes.length,"turn")} \\u2192`}:void 0;return`<div class="eyebrow mb6">Top improvement</div>${qe(n,e.audience,{...Be(n,t.session.id),sessionTotalTokens:t.summary.totalTokens,open:!0,how:fe(e,t,{screen:"suggest"}),cwd:t.session.cwd,...o?{link:o}:{}})}`}function Cn(e){let t=e.context,n=t.series.filter(i=>!i.agentId),o=`${t.contextWindow?`peak ${E(e.summary.contextPeak/t.contextWindow)} of the window`:`peak ${y(e.summary.contextPeak)}`} \\xB7 ${w(e.summary.compactions,"compaction")}`;return`<div class="card pad"><div class="card-title">Context</div>${n.length?`<div class="spark">${ge(n.map(i=>i.contextSize),{width:320,height:60,markers:be(t.compactions,n),yMax:t.contextWindow})}</div>`:""}<div class="small muted">${r(o)}</div></div>`}function Bt(e,t){let n=t.summary,s=pe("session",t,void 0).length;return`<nav class="card pad where-next" aria-label="Where to look next"><div class="card-title">Where to look next</div>${[{screen:"timeline",label:n.toolErrors?`Timeline \\xB7 ${w(n.toolErrors,"error")} only`:`Timeline \\xB7 ${_(n.turns)} turns`,state:n.toolErrors?{errorsOnly:!0}:{}},{screen:"tools",label:`Tools \\xB7 ${w(n.toolCalls,"call")}, ${w(n.toolErrors,"error")}`,state:{}},{screen:"suggest",label:`Improvements \\xB7 ${s||"none"}`,state:{}}].map(a=>`<a data-screen="${a.screen}" href="${r(fe(e,t,{screen:a.screen,...a.state}))}">${r(M(a.label,e.audience))} \\u2192</a>`).join("")}</nav>`}function An(e,t){let n=t.summary.topInsightIds.map(a=>t.insights.find(i=>i.id===a)).filter(a=>!!a),s=n.slice(1).map(a=>qe(a,"dev",{...Be(a,t.session.id),sessionTotalTokens:t.summary.totalTokens,cwd:t.session.cwd})).join(""),o=it(Rt(pe("session",t,void 0)),t.insights.length);return`${In(t)}${_t(e,t,n[0])}\n<div class="two-up mb16">${Cn(t)}${Bt(e,t)}</div>\n${e.harnessCard?.()??""}\n${o?`<p class="recoverable"><a href="${r(fe(e,t,{screen:"suggest"}))}">${r(o)} \\u2192</a></p>`:""}${s?`<h3 style="margin:4px 0 10px">More findings</h3>${s}`:""}`}function En(e,t){let n=t.summary,o=t.turns.find(l=>l.kind==="human")?.promptPreview.slice(0,140)||(t.session.title?t.session.title:"(this report does not include the prompt text)"),a=`${y(n.totalTokens)} tokens \\xB7 ${I(n.wallMs)}, of which ${I(n.humanWaitMs)} needed your attention`,i=t.insights.find(l=>l.id===n.topInsightIds[0])??t.insights[0];return`<div class="card mb16" style="overflow:hidden">\n<div class="card-head">${q(22)}What happened here</div>\n<div class="plaingrid">\n<div class="k">Goal</div><div>${r(o)}</div>\n<div class="k">How it ended</div><div>${r(nt(n.ending,n.outcomes))}</div>\n<div class="k">Tokens &amp; time</div><div>${r(a)}</div>\n</div>\n</div>\n${_t(e,t,i)}\n${Bt(e,t)}`}function Mn(e){let t=e.a;if(!t)return`<section>${W({title:"No session selected.",hint:P(e.data)?"This report covers a scope, not a session.":"Pick a session from the sidebar."})}</section>`;let n=e.audience==="plain"?En(e,t):An(e,t);return`<section>${z(t,e.audience)}${Rn(t,e.audience)}${n}</section>`}function Ue(e){return T(Mn(e))}var Ot=10;function Ln(e,t,n){let s=n.state;if(s.turn!==void 0&&t.index!==s.turn)return!1;let o=ae(e.tools.calls,t.index,s.agent);return!(s.filter==="errors"&&!o.some(a=>a.isError)||s.filter==="agents"&&t.agents.length===0&&!o.some(a=>a.agentId)||s.filter==="human"&&t.kind!=="human"||s.agent&&!t.agents.includes(s.agent)&&!o.length||(s.tool||s.cat||s.errorsOnly)&&(s.tool&&!o.some(a=>a.name===s.tool)||s.cat&&!o.some(a=>a.category===s.cat)||s.errorsOnly&&!o.some(a=>a.isError)))}function Fn(e){let t=e.isCommand?"cmd":e.kind==="human"?"human":e.autoContinuations>0?"auto":e.kind;return`<span class="kind ${e.isCommand?"kcmd":e.kind==="human"?"khuman":""}">${r(t)}</span>`}function jn(e,t){let n=e.promptPreview||e.commandName;return n?{text:n,own:!1}:{text:[e.promptChars?`${y(e.promptChars)}-char prompt`:"",e.activity].filter(Boolean).join(" \\xB7 ")||(t?"(no prompt)":"(prompt text not included)"),own:!0}}function Pn(e,t,n,s,o){let i=dt(e.tools.calls,t.index,n.state.agent).map(v=>`<i style="width:${v.pct.toFixed(1)}%;background:${N(v.cat)}"></i>`).join(""),{text:l,own:c}=jn(t,n.data.capabilities.includeText),d=c?\' style="color:var(--ink3)"\':"",m=ae(e.tools.calls,t.index,n.state.agent),x=m.map(v=>{let S=v.agentId?e.agents.runs.find(g=>g.agentId===v.agentId):void 0,b=v.agentId?S?.agentType||S?.name||v.agentId.slice(0,8):"main";return`<div class="evline"><span class="sw" style="background:${N(v.category)}"></span><span class="pill">${r(b)}</span><span class="en">${r(v.name)}</span><span class="ew">${r(v.summary)}</span><span class="tag ${v.isError?"bad":"good"}">${v.isError?"error":"ok"}</span><span class="ex">${[v.durationMs!==void 0?I(v.durationMs):"",v.resultBytes?ve(v.resultBytes):"",v.errorHint??""].filter(Boolean).map(r).join(" \\xB7 ")}</span></div>`}).join(""),R=t.agents.map(v=>{let S=e.agents.runs.find(g=>g.agentId===v);if(!S)return"";let b=S.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\';return`<button class="btn-sm" data-agent-jump="${r(v)}">\\u25B8 ${r(S.agentType||S.name||v.slice(0,8))} \\xB7 ${r(y(S.totalTokens))} tokens${b}</button>`}).join(" "),h=[t.firstResponseMs!==void 0?`first response ${I(t.firstResponseMs)}`:"",t.humanGapMs?`waited ${I(t.humanGapMs)}`:"",t.autoContinuations?`${t.autoContinuations} auto-continuations`:"",t.models.length?t.models.join(", "):"","context end "+(t.contextEnd?y(t.contextEnd):"\\u2013")].filter(Boolean).join(" \\xB7 "),f=I(t.durationMs??t.reportedDurationMs);return`<details class="turn${t.interrupted?" interrupted":""}" id="turn-${t.index}"${o?" open":""}>\n<summary>\n<span class="tnum">#${t.index}</span>\n<span class="tprompt"${d}>${Fn(t)}${r(l)}</span>\n<span class="mixbar" title="tool mix">${i}</span>\n<span class="tcell">${m.length}\\u2699</span>\n<span class="tcell">${r(f)}</span>\n<span class="tcell${t.totalTokens>=s&&t.totalTokens>0?" hot":""}">${r(y(t.totalTokens))}</span>\n</summary>\n<div class="tbody">\n<div class="tmeta">${r(h)}</div>\n${x||\'<p class="small muted" style="margin:0">No tool calls in this turn.</p>\'}\n${R?`<div class="pill-row">${R}</div>`:""}\n</div>\n</details>`}function Dt(e,t,n,s){return ct(t,e.context.compactions).map(o=>{let a=o.turns.map(l=>Pn(e,l,n,s,n.state.turn===l.index)).join(""),i=o.after?`<div class="divider"><span class="mono">\\u21C5 context compacted at turn ${o.after.turnIndex}${o.after.contextBefore&&o.after.contextAfter?` \\xB7 ${y(o.after.contextBefore)} \\u2192 ${y(o.after.contextAfter)}`:""}</span></div>`:"";return a+i}).join("")}function qt(e){let t=e.a;if(!t)return K();let n=e.state,s=t.turns,o={all:s.length,errors:s.filter(g=>ae(t.tools.calls,g.index).some(p=>p.isError)).length,agents:s.filter(g=>g.agents.length>0||ae(t.tools.calls,g.index).some(p=>p.agentId)).length,human:s.filter(g=>g.kind==="human").length},a=n.filter??"all",i=[B(`All turns \\xB7 ${o.all}`,{active:a==="all",data:{filter:"all"}}),B(`Errors only \\xB7 ${o.errors}`,{active:a==="errors",data:{filter:"errors"}}),B(`With agents \\xB7 ${o.agents}`,{active:a==="agents",data:{filter:"agents"}}),B(`Human turns \\xB7 ${o.human}`,{active:a==="human",data:{filter:"human"}})].join(""),l=[];n.tool&&l.push(B("tool: "+n.tool,{active:!0,removable:!0,data:{clear:"tool"}})),n.cat&&l.push(B("category: "+n.cat,{active:!0,removable:!0,data:{clear:"cat"}})),n.agent&&l.push(B("agent: "+n.agent.slice(0,12),{active:!0,removable:!0,data:{clear:"agent"}})),n.turn!==void 0&&l.push(B("turn "+n.turn,{active:!0,removable:!0,data:{clear:"turn"}})),n.errorsOnly&&l.push(B("errors only",{active:!0,removable:!0,data:{clear:"err"}}));let c=s.filter(g=>Ln(t,g,e)),d=gt(s),m=c.length<=Ot||n.turn!==void 0||!!(n.tool||n.cat||n.agent||n.errorsOnly||n.filter&&n.filter!=="all"),x=m?c:c.slice(0,Ot),R=new Set(x.map(g=>g.index)),h=Dt(t,x,e,d),f=c.length?"":`<div class="card pad" style="background:var(--bg2);text-align:center"><p class="muted" style="margin:0 0 10px">No turns match \\xB7 ${r(a==="all"?"these filters":a)}</p><button class="btn-sm" data-clearall="1">Clear filters</button></div>`,v=m?"":`<div class="pagefoot">showing ${x.length} of ${c.length} turns \\xB7 <button data-showall="1">show all</button></div>`,S=M("Open a turn to see every parent and subagent call. The URL saves this view.",e.audience),b=T(`<section>\n${z(t,e.audience)}\n<div class="chiprow">${i}${l.join("")}<span class="small muted" style="margin-left:auto">${r(S)}</span></div>\n<div id="turnlist">${h}${f}${v}</div>\n</section>`);return b.querySelectorAll("[data-filter]").forEach(g=>g.addEventListener("click",()=>{let p=g.dataset.filter;e.go({filter:p==="all"?void 0:p,turn:void 0})})),b.querySelectorAll("[data-clear]").forEach(g=>g.addEventListener("click",()=>{let p=g.dataset.clear;p==="err"?e.go({errorsOnly:void 0}):p==="tool"?e.go({tool:void 0}):p==="cat"?e.go({cat:void 0}):p==="agent"?e.go({agent:void 0}):e.go({turn:void 0})})),b.querySelector("[data-clearall]")?.addEventListener("click",()=>e.go({filter:void 0,tool:void 0,cat:void 0,agent:void 0,turn:void 0,errorsOnly:void 0})),b.querySelector("[data-showall]")?.addEventListener("click",()=>{let g=b.querySelector("#turnlist");g.innerHTML=Dt(t,c,e,d),we(g),Wt(g,e)}),Wt(b,e),n.turn!==void 0&&R.has(n.turn)&&setTimeout(()=>b.querySelector("#turn-"+n.turn)?.scrollIntoView({block:"center"}),0),b}function Wt(e,t){e.querySelectorAll("[data-agent-jump]").forEach(n=>n.addEventListener("click",()=>t.go({screen:"agents",agent:n.dataset.agentJump},{push:!0})))}function Fe(e,t,n=""){let s=t?"No error text was recorded.":\'Redaction hides the text. Run the command again with <span class="mono">--include-text</span>.\';return`<div class="rrow"${n?` style="${n}"`:""}><span class="grow"><b>${r(e.tool)}</b> \\xB7 ${w(e.total,"error")} across ${w(e.signatures,"recurring signature")}</span>${e.sessions?`<span class="mono small muted">${e.sessions}+ sessions</span>`:""}<span class="small muted">${s}</span></div>`}var Ut=12,Hn=[[/ENOENT/,"run the build first, or check the path"],[/old_string not found|String to replace not found/i,"the file changed after the last read. Read it again before you edit it."],[/EACCES|permission/i,"permission problem: check file modes"],[/timed? out/i,"raise the timeout or split the command"]];function Nn(e){for(let[t,n]of Hn)if(t.test(e))return n;return""}function Gt(e){let t=e.a;if(!t)return K();let n=t.tools,s=t.summary.toolCalls,o=n.byCategory.map(p=>`<span style="width:${s?(p.count/s*100).toFixed(1):0}%;background:${N(p.category)}" title="${r(ie[p.category]??p.category)} \\xB7 ${p.count}"></span>`).join(""),a=n.byCategory.map(p=>`<span><i class="sw" style="background:${N(p.category)}"></i>${r(ie[p.category]??p.category)} \\xB7 ${p.count}</span>`).join(""),i=n.parallelism,l=i.groups?`${i.parallelGroups} of ${i.groups} batches ran in parallel \\xB7 max ${i.maxGroupSize} at once`:"",c=Math.max(...n.byName.map(p=>p.totalMs),1),d="One or more calls took far longer than the rest."+(e.audience==="plain"?"":" p95 is the typical worst case."),m=p=>p.avgMs>p.p95Ms?`<td class="num" title="${d}">${r(I(p.avgMs))}<span class="outlier">outlier</span></td>`:`<td class="num">${r(I(p.avgMs))}</td>`,x=p=>p.map(u=>`<tr class="tool-row" data-tool="${r(u.name)}" title="${r(`${ve(u.resultBytesTotal)} output \\xB7 ${u.mainCount} main / ${u.agentCount} agent`)}">\n<td><i class="swd" style="background:${N(u.category)}"></i><span class="mono125">${r(u.name)}</span></td>\n<td class="num">${_(u.count)}</td>\n<td class="num"${u.errors?\' style="color:var(--bad)"\':\' style="color:var(--ink3)"\'}>${u.errors}</td>\n${m(u)}\n<td class="num p95col">${r(I(u.p95Ms))}</td>\n<td><span class="trough"><i style="width:${(u.totalMs/c*100).toFixed(1)}%;background:${N(u.category)}"></i></span></td>\n</tr>`).join(""),R=`<tr><th>Tool</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Avg</th><th class="num p95col">${e.audience==="plain"?"":"p95"}</th><th>Share of tool time</th></tr>`,h=n.byName.length>Ut?`<div class="pagefoot"><button data-more-tools="1">show all ${n.byName.length} tools</button></div>`:"",{kept:f,hidden:v}=ye(n.errorGroups,p=>({tool:p.name,total:p.count})),S=n.errorGroups.length?v.map(p=>Fe(p,e.data.capabilities.includeText)).join("")+f.slice(0,8).map(p=>{let u=p.sampleHint||Nn(p.signature);return`<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${r(p.signature)}</span><span class="mono115" style="margin-left:auto">\\xD7${p.count}</span></div><div class="small muted" style="margin-top:2px">${r(p.name)}${u?" \\xB7 "+r(u):""}</div></div>`}).join(""):\'<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>\',b=T(`<section>\n${z(t,e.audience)}\n<div class="card pad mb16">\n<div class="card-title">${r(M(`Calls by category \\xB7 ${s} total`,e.audience))}</div>\n<div class="catbar">${o}</div>\n<div class="legend">${a}</div>\n${l?`<div class="smt8">${r(l)} \\xB7 ${r(E(i.parallelCallShare))} of calls in a parallel batch</div>`:""}\n</div>\n<div class="card scroll-x mb16">\n<table class="grid"><thead>${R}</thead><tbody id="toolbody">${x(n.byName.slice(0,Ut))}</tbody></table>\n${h}\n</div>\n<div class="card pad"><div class="card-title">Recurring errors in this session</div>${S}</div>\n</section>`),g=p=>{e.audience==="plain"&&p.querySelectorAll(".p95col").forEach(u=>u.remove()),p.querySelectorAll(".tool-row").forEach(u=>u.addEventListener("click",()=>e.go({screen:"timeline",tool:u.dataset.tool},{push:!0})))};return g(b),b.querySelector("[data-more-tools]")?.addEventListener("click",p=>{let u=b.querySelector("#toolbody");u.innerHTML=x(n.byName),g(u),p.currentTarget.parentElement?.remove()}),b}function re(e,t){let n=e==="repo"?"analyse this repository":e==="global"?"analyse everything on this machine":"compare your Claude Code config with what your sessions used",s=P(t)?"This report carries one scope, not a session.":"This single-file report carries one session.";return W({title:"Across-session views need orangu serve",hint:`${s} Start the local viewer to ${n}. Nothing leaves your machine.`,command:"orangu serve"})}function Ge(e,t){return`<div class="hero"><div class="grow"><div class="eyebrow">Recurring patterns</div><div class="herotitle">Choose major improvements from repeated evidence.</div><div class="sg-sub">Patterns across ${e==="repo"?"this repository":"supported sessions on this machine"} link back to example sessions. Review them before you change your harness or your scripts.</div></div><a class="btn-primary" href="${r(Q(t,{screen:"suggest",scope:e}))}">Review ${e} improvements \\u2192</a></div>`}function Vt(e){let t=e.data.aggregates.repo;return t?T(`<section>${Ge("repo",e.state)}${_n(t,e)}</section>`):T(`<section>${re("repo",e.data)}</section>`)}function _n(e,t){return`<div class="kpis">${[A("Sessions",String(e.sessionCount)),A("Total tokens",y(e.totals.tokens),"",{accent:!0}),A("Per session",y(e.averages.tokensPerSession)),A("Per human turn",y(e.averages.tokensPerHumanTurn)),A(me("Cache hits",t.audience),E(e.averages.cacheHitRatio)),A("Tool error rate",E(e.averages.toolErrorRate,1),"",{badHint:e.averages.toolErrorRate>=.03})].join("")}</div>${Ve(e,t)}`}function Ve(e,t){let n=e.crossFindings.length?`<p class="sg-cap">${Te}</p>`+e.crossFindings.slice(0,8).map(d=>`<div class="rrow"><span class="pill">${r(d.ruleId)}</span><span class="grow">${r(d.exampleTitle||d.title)}</span><span class="mono small muted">${w(d.sessions,"session")}</span><span class="saveval">${r($e(_e(d)))}</span></div>`).join(""):se(e.sessionCount<2?"Patterns appear from 2 sessions on.":`No recurring findings across ${e.sessionCount} sessions.`),s=Math.max(...e.topReReadFiles.map(d=>d.totalReads),1),o=e.topReReadFiles.length?e.topReReadFiles.slice(0,8).map(d=>`<div class="rerow"><div class="rehead"><span class="mono grow ellip">${r(d.path)}</span><span class="mono115">${d.sessions} sess</span><span class="saveval">${d.totalReads} reads</span></div><span class="trough" style="height:6px;margin-top:5px"><i style="width:${(d.totalReads/s*100).toFixed(1)}%"></i></span></div>`).join(""):se("No heavily re-read files."),{kept:a,hidden:i}=ye(e.recurringErrors,d=>({tool:d.tool,total:d.total,sessions:d.sessions})),l=e.recurringErrors.length?`<div class="card mb16" style="overflow:hidden"><div class="card-head">Recurring errors \\xB7 environment problems to fix once</div>${i.map(d=>Fe(d,t.data.capabilities.includeText,"padding:10px 18px")).join("")}${a.slice(0,8).map(d=>`<div class="rrow" style="padding:10px 18px"><span class="sigline">${r(d.signature)}</span><span class="kind">${r(d.tool)}</span><span class="mono small muted">${w(d.sessions,"session")}</span><span class="mono125">\\xD7${d.total}</span></div>`).join("")}</div>`:"",c=e.topSessions.slice(0,10).map(d=>{let m=[d.prs?`${d.prs} PR`:"",d.commits?`${d.commits} commits`:"",d.interruptions?`interrupted \\xD7${d.interruptions}`:""].filter(Boolean).join(" \\xB7 ")||"\\u2013";return`<tr>\n<td><a class="mono" style="font-size:12px" ${t.data.mode==="serve"?`href="#overview?s=${r(d.id)}"`:`href="#" title="open with: orangu report ${r(d.id.slice(0,8))}" aria-disabled="true" onclick="return false"`}>${r(d.id.slice(0,8))}</a></td>\n<td class="ellip" style="max-width:280px;color:var(--ink2)">${r(d.title??"")}</td>\n<td class="num">${d.turns}</td>\n<td class="num">${d.toolCalls}</td>\n<td class="num"${d.toolErrors?\' style="color:var(--bad)"\':""}>${d.toolErrors}</td>\n<td class="num" style="font-weight:700">${r(y(d.tokens))}</td>\n<td class="small muted">${r(m)}</td>\n</tr>`}).join("");return`<div class="two-up">\n<div class="card pad"><div class="card-title">Recurring findings \\xB7 ranked by evidence</div><div class="cardsub">patterns one session cannot establish</div>${n}</div>\n<div class="card pad"><div class="card-title">Most re-read files</div><div class="cardsub">context carried again and again \\xB7 trim or index these</div>${o}</div>\n</div>\n${l}\n<div class="card scroll-x">\n<div class="card-head"><span>Heaviest sessions</span><span style="margin-left:auto;font-weight:400;font-size:12px;color:var(--ink3)">sorted by tokens</span></div>\n<table class="grid"><thead><tr><th>Session</th><th>Title</th><th class="num">Turns</th><th class="num">Calls</th><th class="num">Errors</th><th class="num">Tokens</th><th>Outcome</th></tr></thead><tbody>${c}</tbody></table>\n</div>\n${e.sessionCount?"":`<div style="margin-top:16px">${se("Analysing sessions\\u2026")}</div>`}\n<p class="small muted" style="margin-top:12px">${w(e.sessionCount,"session")} \\xB7 every figure is a token count reported by the API.</p>`}var Kt=["Instruction files","Scripts and CLIs","Hooks","Skills to create","Skills to discover","Subagents and agents","MCP servers","Plugins","Workflow and configuration"];var Bn=e=>e?.verificationTrusted===!0;function On(e){return e==="kicked-off"?"running":e==="rejected"?"dismissed":e??"new"}function Dn(e,t="",n=!1){let s=e!=="verified"||n,o=s?e==="verified"?"verified comparison":e:"legacy unverified";return`<span class="status-chip" data-status="${s?e:"legacy"}" aria-live="polite"${t?` title="${r(t)}"`:""}>${o}${e==="verified"&&s?" \\u2713":""}</span>`}function zt(e){return`<div class="sg-handoffs"><div class="sg-hand"><span>Claude</span>${U(e.claude)}</div></div>`}function Wn(e,t){return`<div class="card pad mb16"><div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">\n<li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>\n<li><div><span>${r(e)}</span>${Re()}</div></li>\n<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository. ${t==="serve"?"The proposal shows below, in Saved proposals.":"The proposal is in ~/.orangu/proposals. Run orangu serve to see it here."}</span></div></li>\n</ol></div>`}function qn(e,t,n,s,o){let a=e.audience,i=xe(t.savings,e.state.scope===void 0||e.state.scope==="session"?e.a?.summary.totalTokens:void 0,t.ruleId),l=o?.proposal?.effort,c=On(o?.status),d=Ct(o),m=t.sessionIds.map(x=>e.data.mode==="serve"?`<a class="exch" href="${r(Q(e.state,{screen:"overview",s:x}))}">${r(x.slice(0,8))}</a>`:`<span class="exch">${r(x.slice(0,8))}</span>`).join("");return`<details class="finding" data-sid="${r(s)}" data-rule="${r(t.ruleId)}">\n<summary><span class="chev" aria-hidden="true">\\u25B8</span><span class="rank">${n}</span>${t.severity?`<span class="sev ${r(t.severity)}" title="${r(t.severity)}"></span>`:""}<b class="sg-t">${r(M(t.displayTitle||t.title,a))}</b>${i?`<span class="fsave sg-save" title="${r(i.title)}">${r(i.text)}</span>`:""}${l?`<span class="pill">effort ${r(l)}</span>`:""}${De(t.improvement,a)}</summary>\n<div class="fbody sg-body">\n${We(s,t.why,t.method,a)}<div class="sg-ev"><b>Evidence:</b> ${r(M(t.detail,a))} ${a==="plain"?"":`<span class="pill">${r(t.ruleId)}</span>`}</div>\n<div class="sg-ex"><span class="small muted">Example sessions:</span>${m}</div>\n${e.proposals?.details(o)??""}\n<div class="kickrow">\n<button type="button" class="btn-primary" data-kick-copy="${r(s)}">Copy the Claude Code command</button>\n${Dn(c,d,Bn(o))}\n</div>\n<div class="kick-cmd sg-cmd">${e.data.mode==="serve"&&o&&!o.proposal&&c!=="dismissed"?zt(ce(o,"serve")):""}</div>\n<div class="kick-msg small" aria-live="polite">${r(d)}</div>\n</div>\n</details>`}function Un(e){let t=e.a,n=e.state.scope??P(e.data)??"session",s=e.data.aggregates.repo?.sessionCount,o=e.data.aggregates.global?.sessionCount,a=[B("This session",{active:n==="session",disabled:!t,title:t?"":"no session is selected",data:{scope:"session"}}),B(s!==void 0?`Repo \\xB7 ${s}`:"Repo",{active:n==="repo",disabled:s===void 0,title:s===void 0?"run orangu serve":"",data:{scope:"repo"}}),B(o!==void 0?`Global \\xB7 ${o}`:"Global",{active:n==="global",disabled:o===void 0,title:o===void 0?"run orangu serve":"",data:{scope:"global"}})].join(""),i=n==="session"?void 0:e.data.aggregates[n],l=pe(n,t,i).map(u=>{let L=Oe(u,n);return{row:u,finding:L,sid:de(le(L,"report"))}}),c=new Map(l.map(u=>[u.sid,u])),d=l.map(u=>({...u,record:At(e.data.suggestions,u.row,n,u.sid)})),m=d.flatMap(({record:u})=>u?[u]:[]),x=i?.sessions.map(u=>u.id)??[],R=M(n==="session"?"Each improvement below comes from the evidence in this session.":n==="repo"?"These patterns recur across this repository. Review each proposal before you apply it.":"These patterns recur across this machine. Global proposals are for review only.",e.audience),h=te(t?.session.cwd,n==="repo"),f=d.length?Wn(h,e.data.mode)+(n==="session"?"":`<p class="sg-cap">${Te}</p>`)+d.map((u,L)=>qn(e,u.row,L+1,u.sid,u.record)).join(""):W({title:"No improvements found",hint:"The rules found nothing to change. Look again after your next session."}),v=Kt.map(u=>`<span class="sigchip">${r(u)}</span>`).join(""),S=d.length?`<details class="card pad mb16 sg-note"><summary><span class="chev" aria-hidden="true">\\u25B8</span>What a proposal can change</summary><div class="chiprow mt8">${v}</div></details>`:"",b=n==="session"||!i?"":e.megaReview?.(n)??"",g="orangu measures the evidence. Claude writes the proposal only when you run the command. "+(n==="session"?"Only later sessions in the same workspace can verify it.":n==="repo"?"Applied means that the reviewed files changed. Only later sessions can verify it.":"Global proposals stay proposals. Claude applies nothing from here.");return[`<section>\n<div class="hero">\n${Ie(48)}\n<div class="grow sg-hero herotitle">${r(R)}</div>\n</div>\n<div class="chiprow">${a}</div>\n${b}\n${n!=="session"&&!i?W({title:"This scope needs orangu serve",command:"orangu serve"}):f+S}\n${e.proposals?.inbox(e,n,x,m)??""}\n<p class="small muted sg-foot">${g}</p>\n</section>`,c,h]}function Yt(e){let[t,n,s]=Un(e),o=T(t);return o.querySelectorAll("[data-scope]").forEach(i=>i.addEventListener("click",()=>{if(i.getAttribute("aria-disabled")==="true")return;let l=i.dataset.scope;e.go({scope:l==="session"?void 0:l})})),(i=>{o.querySelectorAll(i).forEach(l=>l.addEventListener("click",()=>{let c=l.closest("details"),d=c.querySelector(".kick-msg"),m=l.dataset.kickCopy,x=m?n.get(m):void 0;if(!x)return;l.setAttribute("aria-busy","true");let R={mode:"copy",suggestionId:m,finding:x.finding};e.ds.kickoff(R).then(f=>f.ok?{kind:"copied",message:`The command is on your clipboard. ${s}`,response:f.response}:{kind:"error",message:f.message,...f.response?{response:f.response}:{}}).then(f=>{if(l.removeAttribute("aria-busy"),d.textContent=f.message,"response"in f&&f.response?.commands){let v=c.querySelector(".kick-cmd");v.innerHTML=zt(f.response.commands),Se(v),f.kind==="copied"&&v.querySelector("[data-copy]")?.click()}})}))})("[data-kick-copy]"),o}var Ke=24;function Jt(e){let t=e.a;if(!t)return K();let n=t.agents;if(!n.runs.length)return T(`<section>${W({title:"No subagents in this session.",hint:"This session ran entirely on the main thread."})}</section>`);let s=Math.min(...n.runs.map(d=>d.startTs??1/0).filter(isFinite)),o=Math.max(...n.runs.map(d=>d.endTs??-1/0).filter(isFinite)),a=n.runs.slice(0,Ke).map(d=>Me(d,s,o)).join(""),i=Ce(n.byType.map(d=>({label:d.agentType,value:d.tokens,color:N("agent"),sub:"\\xD7"+d.count})),d=>y(d)),l=n.runs.map(d=>`<tr data-agent="${r(d.agentId)}" class="agent-row"${e.state.agent===d.agentId?\' style="background:var(--accent-weak)"\':""}>\n<td>${"\\xB7 ".repeat(d.spawnDepth)}${r(d.agentType||d.name||d.agentId.slice(0,8))}${d.hasTranscript?"":\' <span class="tag warn" title="only the parent summary was available">summary</span>\'}</td>\n<td>${r(d.model??"\\u2013")}</td>\n<td class="num">${r(I(d.durationMs))}</td>\n<td class="num">${d.toolCallCount}${d.toolErrors?` <span class="tag bad">${d.toolErrors}</span>`:""}</td>\n<td class="num">${r(y(d.totalTokens))}</td>\n</tr>`).join(""),c=T(`<section>\n${z(t,e.audience)}\n<div class="card pad" style="margin-bottom:16px">\n<div class="card-title">${n.runs.length} subagent runs \\xB7 ${r(E(1-n.mainThreadShare.tokens))} of tokens \\xB7 max depth ${n.maxDepth} \\xB7 up to ${n.maxConcurrency} parallel</div>\n<div class="swimbox">${a}</div>\n${n.runs.length>Ke?`<div class="pagefoot muted small">showing ${Ke} of ${n.runs.length} lanes \\xB7 all runs in the table below</div>`:""}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by agent type</div>${i}</div>\n<div class="card scroll-x"><table class="grid"><thead><tr><th>Agent</th><th>Model</th><th class="num">Duration</th><th class="num">Tools</th><th class="num">Tokens</th></tr></thead><tbody>${l}</tbody></table></div>\n</div>\n</section>`);return c.querySelectorAll("[data-agent]").forEach(d=>d.addEventListener("click",()=>e.go({screen:"timeline",agent:d.dataset.agent},{push:!0}))),c}function ue(e,t,n=""){return`<div class="card pad${n?" "+n:""}"><div class="card-title">${e}</div>${t}</div>`}function Xt(e){let t=e.a;if(!t)return K();let n=t.context,s=n.series.filter(h=>!h.agentId),o=be(n.compactions,s),a=ge(s.map(h=>h.contextSize),{threshold:n.contextWindow?{y:n.contextWindow,label:"window "+y(n.contextWindow)}:void 0,markers:o,yMax:n.contextWindow,fmtY:y}),i=Lt([s.map(h=>h.cacheRead),s.map(h=>h.cacheWrite),s.map(h=>h.input),s.map(h=>h.output)],["var(--cat-read)","var(--cat-edit)","var(--cat-write)","var(--cat-agent)"],{markers:o,labels:["cache read","cache write","fresh input","output"]}),l=t.tokens,c=[{value:l.byKind.cacheRead,color:"var(--cat-read)",label:"cache read "+y(l.byKind.cacheRead)},{value:l.byKind.cacheWrite5m,color:"var(--cat-skill)",label:"cache write 5m "+y(l.byKind.cacheWrite5m)},{value:l.byKind.cacheWrite1h,color:"var(--cat-edit)",label:"cache write 1h "+y(l.byKind.cacheWrite1h)},{value:l.byKind.input,color:"var(--cat-write)",label:"fresh input "+y(l.byKind.input)},{value:l.byKind.output,color:"var(--cat-agent)",label:"output "+y(l.byKind.output)}],d=Ce(l.byModel.map(h=>({label:h.displayName,value:h.totalTokens,color:N("edit"),sub:h.estimatedMatch?"~est. match":""})),h=>y(h)),m=l.serverToolRequests.webSearch+l.serverToolRequests.webFetch,x=ge(l.byTurn.map(h=>h.cumulativeTokens),{color:"var(--accent-ink)",fmtY:y}),R=[ue("Token composition per request",`<div class="scroll-x">${i}</div><div class="legend">${["read","edit","write","agent"].map((h,f)=>`<span><i class="sw" style="background:var(--cat-${h})"></i>${["cache read","cache write","fresh input","output"][f]}</span>`).join("")}</div>`,"mb16"),ue("By model",`${d}<p class="small muted" style="margin-top:8px">Main thread ${r(y(l.mainThread))} \\xB7 agents ${r(y(l.agents))}</p>`,"mb16"),ue("Cumulative tokens over turns",`<div class="scroll-x">${x}</div>`)].join("");return T(`<section>\n${z(t,e.audience)}\n<p class="ctx-lead">${r(at(t))}</p>\n<div class="kpis">\n${A("Peak context",y(n.peak),n.contextWindow?E(n.peak/n.contextWindow)+" of "+y(n.contextWindow):"")}\n${A("Cache hit ratio",E(n.cacheHitRatio,1),"context re-read rather than re-sent")}\n${A("Context re-read",n.reReadMultiplier.toFixed(1)+"\\xD7","context carried \\xF7 peak")}\n${A("Long-lived cache writes",E(n.cacheWrite1hShare),"of cache writes (the 1h tier)")}\n${A("Fixed weight per request",y(n.baseline),"system + tools + CLAUDE.md, every request")}\n${A("Compactions",String(n.compactions.length),n.compactions.length?"context was reset":"none")}\n</div>\n${ue("Context size over the session",`<div class="scroll-x">${a}</div><div class="legend"><span>Each point is one API request. Each dashed line is a compaction.</span></div>`,"mb16")}\n${ue(`Where the tokens went \\xB7 ${r(y(l.totalTokens))} total`,`${Mt(c,{height:22})}<div class="legend">${c.filter(h=>h.value>0).map(h=>`<span><i class="sw" style="background:${h.color}"></i>${r(h.label)}</span>`).join("")}</div>${m?`<div class="smt8">${w(m,"server-tool request")} (web search/fetch), counted per request, not in tokens</div>`:""}`,"mb16")}\n<details class="more-charts"><summary><span class="chev" aria-hidden="true">\\u25B8</span>More charts \\xB7 composition per request, by model, cumulative</summary><div class="mt8">${R}</div></details>\n</section>`)}var ze="\\u2039stripped\\u203A";function Qt(e){let t=e.a;if(!t)return K();let n=t.parse,s=n.reconciliation,o=Object.entries(n.unknownRecordTypes).filter(([f])=>f!==ze),a=n.unknownRecordTypes[ze]??0,i=o.length,l=a?`<div class="small muted">orangu counted ${w(a,"unrecognized record")}. Redaction hides their type names. To see them, run orangu again with --include-text.</div>`:"",c=t.skills.byName.length?`<div class="card pad mt16"><div class="card-title">Skills &amp; commands used</div><div class="pill-row">${t.skills.byName.map(f=>`<span class="sigchip">${r(f.name)} <span class="muted">\\xD7${f.count} ${r(f.via.join("/"))}</span></span>`).join("")}</div></div>`:"",d=t.hooks.runs?`<div class="card pad mt16"><div class="card-title">Hooks</div><p class="small muted" style="margin:0">${t.hooks.runs} hook runs \\xB7 ${t.hooks.errors} errors \\xB7 ${r(I(t.hooks.totalMs))} total</p></div>`:"",m=T(`<section>\n${Le(s.ok?"info":"warn",`<strong>Parse coverage:</strong>&nbsp;${r(_(n.totalLines))} records, ${n.badLines} unreadable, ${w(i,"unrecognized record type")}${a?` (+${a} record${a===1?"":"s"} with redacted type names)`:""}. Token totals reconcile to within ${r(s.matchesWithinPct.toFixed(2))}% ${s.ok?"\\u2713":"(review)"}.`)}\n<div class="two-up">\n<div class="card pad"><div class="card-title">Session</div>\n<table class="grid"><tbody>\n<tr><td>ID</td><td class="mono small">${r(t.session.id)}</td></tr>\n<tr><td>Source</td><td>${r(t.session.source)}</td></tr>\n<tr><td>Project</td><td class="mono small">${r(t.session.cwd??t.session.projectSlug??"\\u2013")}</td></tr>\n<tr><td>Started</td><td>${r(Ze(t.session.startedAt))}</td></tr>\n<tr><td>Client</td><td>${r(t.session.clientVersions.join(", "))}</td></tr>\n<tr><td>Models</td><td>${t.session.models.map(f=>r(f.displayName)+(f.estimatedMatch?" ~":"")).join(", ")}</td></tr>\n<tr><td>Branches</td><td class="mono small">${r(t.session.gitBranches.join(", ")||"\\u2013")}</td></tr>\n<tr><td>Generated</td><td>orangu v${r(t.generator.version)} \\xB7 model catalog ${r(t.generator.modelCatalogUpdatedAt)}</td></tr>\n</tbody></table>\n</div>\n<div class="card pad"><div class="card-title">How to read the numbers</div>\n<ul class="small" style="padding-left:18px;line-height:1.7;margin:0">\n<li><strong>Tokens are the only usage metric</strong> orangu reports. They are what the transcript records.</li>\n<li>orangu <strong>deduplicates token usage by message id</strong>.</li>\n<li>Context = fresh input + cache read + cache write.</li>\n<li>~ marks a model matched by family fallback: the name is approximate, the token counts are not.</li>\n<li>No LLM and no network call produced any number here.</li>\n</ul>\n</div>\n</div>\n${i||a?`<div class="card pad mt16"><div class="card-title">Unrecognized records (counted, not dropped)</div>${i?`<div class="pill-row">${o.map(([f,v])=>`<span class="pill">${r(f)} \\xD7${v}</span>`).join("")}</div>`:""}${l}</div>`:""}\n${c}\n${d}\n<div class="card pad mt16">\n<div class="card-title">Raw explorer</div>\n<div class="raw-filter no-print">\n<input type="text" id="raw-q" placeholder="filter by text\\u2026" aria-label="filter calls by text" />\n<select id="raw-cat" aria-label="filter by category"><option value="">all categories</option>${Object.keys(ie).map(f=>`<option value="${r(f)}">${r(ie[f])}</option>`).join("")}</select>\n<label class="small"><input type="checkbox" id="raw-err" /> errors only</label>\n<span class="small muted" id="raw-count"></span>\n</div>\n<div id="raw-list" style="max-height:480px;overflow:auto;border-top:1px solid var(--border)"></div>\n</div>\n</section>`),x=m.querySelector("#raw-list"),R=m.querySelector("#raw-count"),h=()=>{let f=m.querySelector("#raw-q").value.toLowerCase(),v=m.querySelector("#raw-cat").value,S=m.querySelector("#raw-err").checked,b=t.tools.calls.filter(g=>(!v||g.category===v)&&(!S||g.isError)&&(!f||g.summary.toLowerCase().includes(f)||g.name.toLowerCase().includes(f)));R.textContent=b.length+" of "+t.tools.calls.length+" calls",x.innerHTML=b.slice(0,2e3).map(g=>`<div class="rawrow"><span class="rt">${r(g.name)}</span><span class="muted">#${g.turnIndex}${g.agentId?" agent":""}${g.isError?" \\u26A0":""}</span><span class="rp">${r(g.summary)}${g.durationMs!==void 0?" \\xB7 "+r(I(g.durationMs)):""}</span></div>`).join("")+(b.length>2e3?`<div class="rawrow muted">\\u2026${b.length-2e3} more (narrow the filter)</div>`:""),b.length||(x.innerHTML=\'<div class="rawrow muted">no calls match</div>\')};return m.querySelector("#raw-q").addEventListener("input",h),m.querySelector("#raw-cat").addEventListener("change",h),m.querySelector("#raw-err").addEventListener("change",h),h(),m}var Gn={live:Ht,overview:Ue,timeline:qt,tools:Gt,suggest:Yt,agents:Jt,context:Xt,coverage:Qt},Vn={live:"Live",overview:"Overview",timeline:"Timeline",tools:"Tools & calls",repo:"Repo",global:"Global",harness:"Harness",suggest:"Improvements",agents:"Agents",context:"Context & tokens",coverage:"Coverage"};function Kn(e){return Vn[e]??"Overview"}function zn(e,t,n){let s=t.screen,o=s==="repo"||s==="global"?s:s==="suggest"&&t.scope!=="session"?t.scope??P(e):n?void 0:P(e);return o?`--scope ${o}`:n&&/^[\\w:-]+$/.test(n.session.id)?n.session.id:""}function Yn(e,t,n){let s=zn(e,t,n);return s&&`<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${U(`claude "/orangu:show-me ${s}"`,"$","the show me command")}<p>${r(te(n?.session.cwd,s==="--scope repo"))} The files open in your browser.</p>${Re()}</div></details>`}function Jn(e){let t=e.a,n=e.audience;switch(e.state.screen){case"live":{let s=ee(e.data);if(s.length>1)return`${s.length} running sessions \\xB7 ${s.reduce((a,i)=>a+(i.agentsRunning??0),0)} agents active`;let o=e.data.sessions.find(a=>a.id===(e.state.s??e.data.selectedId));return o?`${D(o.id)} \\xB7 ${ke(o)}`:""}case"overview":return t?M(`outcome and evidence \\xB7 ${D(t.session.id)} \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolCalls} tool calls`,n):"";case"timeline":return t?M(`every step and tool call \\xB7 ${t.summary.turns} turns \\xB7 ${t.summary.toolErrors} errors`,n):"";case"tools":return t?M(`${t.summary.toolCalls} tool calls \\xB7 ${t.tools.byName.length} tools`,n):"";case"repo":return`${e.data.aggregates.repo?e.data.aggregates.repo.sessionCount+" sessions \\xB7 ":""}recurring evidence in this repository`;case"global":return`${e.data.aggregates.global?e.data.aggregates.global.sessionCount+" sessions \\xB7 ":""}recurring evidence across this machine`;case"harness":return"declared vs used, in tokens";case"suggest":{let s=e.state.scope??P(e.data);return s==="repo"||s==="global"?"recurring patterns \\xB7 one proposal per improvement \\xB7 whole-harness review":"this session \\xB7 one proposal per improvement"}case"agents":return t?`${t.agents.runs.length} runs \\xB7 up to ${t.agents.maxConcurrency} parallel`:"";case"context":return t?`peak ${_(t.context.peak)} \\xB7 ${t.context.compactions.length} compactions`:"";case"coverage":return t?`${_(t.parse.totalLines)} records \\xB7 ${t.parse.badLines} unreadable`:"";default:return""}}var Xn=600;function Qn(e,t,n){return e?0:Math.max(0,t+Xn-n)}var Zn=80;function es(e){return(e??1/0)>Zn}async function Zt(e,t,n,s){try{e.suggestions=await t.suggestions(),n&&s()}catch{}}async function ts(e,t,n,s,o){e.type==="connection"&&e.state==="connected"&&await Zt(t,n,s,o)}function Ye(e){return e==="dark"?"dark":"light"}function ns(e){return Ye(e)==="dark"?void 0:"dark"}function ss(e){return P(e)===void 0?"Session":"Scope"}function os(e,t,n){let s=P(e);return"orangu \\xB7 "+(t?.session.title||D(n??"")||s&&e.aggregates[s]?.scope||"report")}async function en(e,t){let n=document.getElementById("app");if(!n)return;let s=null;try{s=await e.load()}catch{s=null}if(!s){n.innerHTML=`<div class="page"><div class="card"><div class="empty-hero">${q(48)}<div class="t">This file has no analysis data.</div><div class="s mono">npx orangu report</div></div></div></div>`;return}let o=s,a=$=>{let k=Qe($);return $.replace(/^#/,"")||(k.screen=Je(o)),k.s||(k.s=o.selectedId),k},i=a(location.hash),l=async $=>{if(!$)return o.session;if(o.mode!=="serve")return o.session&&o.session.session.id===$?o.session:await e.session($)??o.session;let k=await e.session($);return k||(o.session&&o.session.session.id===$?o.session:void 0)},c=()=>{let $=document.documentElement;Ye(i.theme)==="dark"?$.setAttribute("data-theme","dark"):$.removeAttribute("data-theme")},d=($,k={})=>{i={...i,...$};let F=Pe(i);k.push?history.pushState(null,"",F):history.replaceState(null,"",F),v(!0)},m,x=async()=>({data:o,a:await l(i.s),ds:e,state:i,audience:i.audience==="plain"?"plain":"dev",conn:m,aggLoading:t?i.screen==="harness"?t.ensureHarness(e,v):t.ensureAggregate(o,e,i,v):!1,megaReview:t?.megaReview,proposals:t?.proposals,harnessCard:t?()=>t.harnessCard(e,v,Q(i,{screen:"harness"})):void 0,go:d}),R=!1,h,f=0;function v($){let k=Qn($===!0,f,Date.now());if($)clearTimeout(h);else if(R)return;R=!0,h=setTimeout(()=>{R=!1,Z($)},k)}function S($){let k=Xe(o,i),F=o.sessions.find(X=>X.id===i.s)??o.sessions[0],V=k.filter(X=>X.items.length).map(X=>`<div class="navgroup"><div class="navgroup-label">${r(X.label)}</div>${X.items.map(j=>{let he=Q(i,{screen:j.screen,s:j.s??i.s,scope:i.scope}),H=i.screen===j.screen&&(j.s===void 0||j.s===i.s),je=j.dot?`<span class="ldot${j.dot==="hollow"?" hollow":j.dot==="ended"?" done":""}"${j.dot==="pulse"?\' data-pulse="1"\':""} aria-hidden="true"></span><span class="vh">${j.dot==="pulse"?"live":j.dot==="hollow"?"quiet":"ended"}</span>`:"";return`<a class="navitem" href="${r(he)}"${H?\' aria-current="page"\':""}>${je}${r(j.label)}${j.hint?`<span class="hint">${r(j.hint)}</span>`:""}</a>`}).join("")}</div>`).join(""),Y=ee(o).length,J=o.mode==="serve"?"Local server: 127.0.0.1.<br/>Nothing leaves this machine."+(Y>1?"<br/>alt+\\u2191\\u2193 switch session":""):"This report is self-contained.<br/>It makes 0 network requests.",O=T(`<aside class="side">\n<div class="brand">${q(26)}<span class="name">orangu</span><span class="ver">v${r(o.version)}</span></div>\n<div class="sesscard"><div class="eyebrow">${ss(o)}</div>${t?t.pickerHtml(o,F):`<div class="sid">${F?r(D(F.id))+" \\xB7 "+r(F.projectSlug||F.source):"\\u2013"}</div>`}</div>\n<div class="navwrap"><nav aria-label="Report">${V}</nav></div>\n<div class="side-foot">\n<button class="themebtn" id="btn-theme">\\u25D0 theme \\xB7 ${Ye(i.theme)}</button>\n<div class="note">${J}</div>\n</div>\n</aside>`);return O.querySelector("#btn-theme").addEventListener("click",()=>d({theme:ns(i.theme)})),t?.wirePicker(O,d),O}function b($){let k=$.audience,F=T(`<header class="page-head">\n<div><h1>${r(Kn(i.screen))}</h1><div class="sub">${r(Jn($))}</div></div>\n<div class="page-tools">\n<div class="aud" role="group" aria-label="Detail level">\n<button id="aud-dev" aria-pressed="${k==="dev"}">Detailed</button>\n<button id="aud-plain" aria-pressed="${k==="plain"}">Plain language</button>\n</div>\n<button class="btn" id="btn-export">\\u2193 Export HTML</button>\n${Yn($.data,$.state,$.a)}\n</div>\n</header>`);return F.querySelector("#aud-dev").addEventListener("click",()=>d({audience:void 0})),F.querySelector("#aud-plain").addEventListener("click",()=>d({audience:"plain"})),F.querySelector("#btn-export").addEventListener("click",()=>{let V=e.exportHref(i.s??"");if(V){location.href=V;return}let Y=new Blob([`<!doctype html>\n`+document.documentElement.outerHTML],{type:"text/html"}),J=URL.createObjectURL(Y),O=document.createElement("a");O.href=J,O.download=`orangu-${D(i.s??"report")}.html`,document.body.appendChild(O),O.click(),O.remove(),setTimeout(()=>URL.revokeObjectURL(J),2e3)}),F}let g=[],p={},u="details[data-sid],details[id]",L=$=>$.dataset.sid??$.id,C,G;async function Z($){f=Date.now(),c(),$&&es(p[i.screen])&&(n.querySelector(".main")?.setAttribute("aria-busy","true"),await new Promise(H=>requestAnimationFrame(()=>setTimeout(H))));let k=await x();document.title=os(o,k.a,i.s);let F=Gn[i.screen]??Ue,V=i.screen==="repo"||i.screen==="global"||i.screen==="harness"?i.screen:void 0,Y=k.aggLoading&&t?t.aggScreen():V?t?V==="harness"?t.harnessView(k):t.aggregateView(k):T(`<section>${re(V,o)}</section>`):F(k);Y.classList.add("screen"),Y.id="screen-"+i.screen;let J=T(\'<div class="page"></div>\');o.illustrative&&J.appendChild(T(\'<div class="sample-note" role="note"><b>This sample is synthetic.</b> Its numbers come from made-up input, not a measured customer result.</div>\')),J.appendChild(b(k)),J.appendChild(Y);let O=T(\'<main class="main"></main>\');O.appendChild(J);let X=[];n.querySelectorAll(u).forEach(H=>X.push({id:L(H),open:H.open})),g=ft(g,X);let j=n.querySelector(".main")?.scrollTop??0;n.innerHTML="",n.appendChild(S(k)),n.appendChild(O),n.querySelectorAll(u).forEach(H=>{g.includes(L(H))&&(H.open=!0)});let he=G&&document.getElementById(G);G=void 0,he?he.scrollIntoView():i.screen===C?O.scrollTop=j:scrollTo(0,0),C=i.screen,we(n),Se(n),n.querySelectorAll("[data-to]").forEach(H=>H.addEventListener("click",()=>G=H.dataset.to)),n.querySelectorAll("[data-turns]").forEach(H=>H.addEventListener("click",je=>{je.preventDefault();let ln=Number(H.dataset.turns.split(",")[0]);d({screen:"timeline",turn:ln},{push:!0})})),p[i.screen]=Date.now()-f}window.addEventListener("hashchange",()=>{i=a(location.hash),v(!0)}),window.addEventListener("keydown",$=>{if(!$.altKey||$.key!=="ArrowUp"&&$.key!=="ArrowDown"||i.screen!=="live")return;let k=ee(o);if(k.length<2)return;let F=k.findIndex(Y=>Y.id===i.s),V=k[(F+($.key==="ArrowDown"?1:k.length-1))%k.length];$.preventDefault(),d({s:V.id},{push:!0})}),e.subscribe($=>{if($.type==="session-updated"){let k=o.sessions.findIndex(F=>F.id===$.id);k>=0&&(o.sessions[k]=$.row),t?.invalidateHarness(),(i.s===$.id||i.screen==="live")&&v()}else if($.type==="session-added")o.sessions.push($.row),t?.invalidateHarness(),v();else if($.type==="session-live"){let k=o.sessions.find(F=>F.id===$.id);k&&(k.badge=$.badge,k.ageMs=$.ageMs),i.screen==="live"&&v()}else if($.type==="suggestion-updated")Zt(o,e,i.screen==="suggest",v);else if($.type==="connection"){let k=m;m=$.state,ts($,o,e,i.screen==="suggest",v),k!==m&&v()}}),await Z()}var tn="Global scope is for review only. Claude applies nothing.";function nn(e){let t=It(e),n=e==="repo",s=n?"Improve the harness of this repository with one command.":"Review every harness on this machine with one command.",o="Claude Code reads the evidence. It ranks a plan of changes to your harness and your scripts. Then it waits until you approve the plan."+(n?"":` ${tn}`),a=n?"Review the ranked plan. Approve the items that you want. Claude applies them.":`Review the ranked plan. ${tn}`;return`<div class="card pad mb16"><div class="eyebrow">Whole-harness review</div><div class="herotitle">${s}</div><div class="sg-sub">${o}</div><ol class="steps" aria-label="Run the whole-harness review">\n<li><div><button type="button" class="btn-primary" data-copy="${r(t)}" aria-live="polite">Copy the whole-harness command</button><div class="sg-cmd">${U(t)}</div></div></li>\n<li><span>${te(void 0,n)}</span></li>\n<li><span>${a}</span></li>\n</ol><p class="small muted sg-foot">This button only copies text. Claude asks before it reads a large input.</p></div>`}function sn(e){let t=e.data.aggregates.global;if(!t)return T(`<section>${re("global",e.data)}</section>`);let n=new Map;for(let m of t.sessions)n.set(m.source,(n.get(m.source)??0)+1);let s=[A("Sessions",String(t.sessionCount),w(n.size,"source")),A("Total tokens",y(t.totals.tokens),E(t.averages.cacheHitRatio)+" read from cache",{accent:!0}),A("Per session",y(t.averages.tokensPerSession)),A("Active time",I(t.totals.activeMs),"of "+I(t.totals.wallMs)+" wall"),A("Per human turn",y(t.averages.tokensPerHumanTurn)),A("Shipped",`${t.totals.prs} PRs`,`${t.totals.commits} commits`)].join(""),o=t.byWeek.filter(m=>m.sessions>0).length,a=t.byWeek.map(m=>m.tokens).filter(m=>m>0),i=a.length?`${y(Math.min(...a))} \\u2013 ${y(Math.max(...a))} / week`:"",l=o>=2?`<svg viewBox="0 0 600 110" style="width:100%;height:110px;display:block" preserveAspectRatio="none" role="img"><title>Weekly token trend</title><polyline points="${ut(t.byWeek)}" fill="none" stroke="var(--accent)" stroke-width="2.5" stroke-linejoin="round"></polyline><line x1="0" y1="104" x2="600" y2="104" stroke="var(--border2)" stroke-width="1"></line></svg>\n<div style="display:flex;justify-content:space-between;font-family:var(--mono);font-size:10.5px;color:var(--ink3);margin-top:4px"><span>12w ago</span><span>8w</span><span>4w</span><span>this week</span></div>`:se("not enough history for a trend"),c=(m,x)=>{if(!m.length)return se("nothing here yet");let R=Math.max(...m.map(h=>h.tokens),1e-4);return m.slice(0,6).map(h=>`<div class="rollrow"><div class="rollhead"><span class="mono">${r(h.key)}</span><span class="muted" style="font-size:11.5px">${w(h.count,"session")}</span><span class="mono" style="margin-left:auto;font-weight:700">${r(y(h.tokens))}</span></div><span class="trough" style="margin-top:5px"><i style="width:${(h.tokens/R*100).toFixed(1)}%;background:${x}"></i></span></div>`).join("")},d=[...n.entries()].sort((m,x)=>x[1]-m[1]).map(([m,x])=>`<span class="sigchip">${r(pt(m))} \\xB7 ${x}</span>`).join("");return T(`<section>${Ge("global",e.state)}\n<div class="kpis">${s}</div>\n<div class="card pad mb16">\n<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px"><span style="font-weight:700;font-size:13.5px">Weekly tokens \\xB7 last 12 weeks</span><span class="mono small muted">${r(i)}</span></div>\n${l}\n</div>\n<div class="two-up">\n<div class="card pad"><div class="card-title">Tokens by model</div>${c(t.byModel,"var(--accent)")}</div>\n<div class="card pad"><div class="card-title">Tokens by project</div>${c(t.byProject,"var(--cat-agent)")}</div>\n</div>\n<div class="chiprow mb16">${d}<span class="small muted" style="align-self:center">a session is a session, wherever it ran</span></div>\n${Ve(t,e)}\n</section>`)}function rs(e,t){let n=P(e);if(!n)return`<div class="sid">${t?r(D(t.id))+" \\xB7 "+r(t.projectSlug||t.source):"\\u2013"}</div>`;let s=e.aggregates[n];return`<div class="sid">${s?r(`${s.scope} \\xB7 ${s.sessionCount} sessions`):"\\u2013"}</div>`}function is(e){return e.state.screen==="global"?sn(e):Vt(e)}function as(e){return T(`<section>${re("harness",e.data)}</section>`)}function ls(){return T("<section></section>")}var on={pickerHtml:rs,wirePicker:()=>{},ensureAggregate:()=>!1,aggScreen:ls,aggregateView:is,megaReview:nn,ensureHarness:()=>!1,invalidateHarness:()=>{},harnessView:as,harnessCard:()=>""};function rn(){let e=null,t=()=>{if(e)return e;if(window.__ORANGU__)return e=window.__ORANGU__,e;let n=document.getElementById("orangu-data");if(!n)return null;try{e=JSON.parse(n.textContent||"null")}catch{e=null}return e};return{mode:"file",async load(){let n=t();if(!n)throw new Error("no embedded data");return n},async session(n){let s=t();return s?.session&&s.session.session.id===n?s.session:null},async aggregate(){return null},async harness(){return null},async suggestions(){return t()?.suggestions??[]},async kickoff(n){let s=n.finding,o=le(s,"report"),a={id:n.suggestionId??de(o),v:2,key:o,createdAt:0,source:"report",scope:s.scope,sessionIds:o.sessionIds,ruleId:s.ruleId,title:s.title,insightId:s.insightId,cohortFingerprint:s.cohortFingerprint,evidence:s.evidence,status:"new",statusAt:0},i=ce(a,"file");return{ok:!0,response:{record:a,commands:i,command:i.claude,spawned:!1}}},async setStatus(){return null},subscribe(){return()=>{}},exportHref(){return null}}}function an(){en(rn(),on)}document.readyState==="loading"?document.addEventListener("DOMContentLoaded",an):an();})();\n';
 var CLIENT_CSS = `/* Canonical design tokens for the report, served app, and landing page.
    scripts/build.mjs inlines this file. Do not hand-duplicate these values anywhere else.
    Light is the only default: dark exists solely under :root[data-theme="dark"], never from the
@@ -2133,13 +2135,13 @@ function strippedCountMap(value, opts) {
   const source = value;
   if (!opts.stripText) {
     const out3 = /* @__PURE__ */ new Map();
-    for (const [key, count2] of Object.entries(source)) {
+    for (const [key, count3] of Object.entries(source)) {
       const publicKey = scrubOne(key, opts);
-      out3.set(publicKey, typeof count2 === "number" ? (Number(out3.get(publicKey)) || 0) + count2 : walk(count2, opts));
+      out3.set(publicKey, typeof count3 === "number" ? (Number(out3.get(publicKey)) || 0) + count3 : walk(count3, opts));
     }
     return Object.fromEntries(out3);
   }
-  const total = Object.values(source).reduce((sum2, count2) => sum2 + (typeof count2 === "number" ? count2 : 0), 0);
+  const total = Object.values(source).reduce((sum2, count3) => sum2 + (typeof count3 === "number" ? count3 : 0), 0);
   return total ? { [STRIPPED_KEY]: total } : {};
 }
 function walk(obj2, opts) {
@@ -2157,10 +2159,10 @@ function walk(obj2, opts) {
       }
       if (k === "recordCounts" && v && typeof v === "object" && !Array.isArray(v)) {
         const counts = /* @__PURE__ */ new Map();
-        for (const [recordType, count2] of Object.entries(v)) {
+        for (const [recordType, count3] of Object.entries(v)) {
           if (opts.stripText && unknownRecordKeys?.has(recordType)) continue;
           const publicKey = scrubOne(recordType, opts);
-          counts.set(publicKey, typeof count2 === "number" ? (Number(counts.get(publicKey)) || 0) + count2 : walk(count2, opts));
+          counts.set(publicKey, typeof count3 === "number" ? (Number(counts.get(publicKey)) || 0) + count3 : walk(count3, opts));
         }
         out3.set(k, Object.fromEntries(counts));
         continue;
@@ -2422,9 +2424,9 @@ function short(s, max = 80) {
 }
 function baseName(p) {
   if (typeof p !== "string") return "";
-  const parts = p.split(/[\\/]/);
-  const last = parts[parts.length - 1] ?? p;
-  const prev = parts.length > 1 ? parts[parts.length - 2] : "";
+  const parts2 = p.split(/[\\/]/);
+  const last = parts2[parts2.length - 1] ?? p;
+  const prev = parts2.length > 1 ? parts2[parts2.length - 2] : "";
   return prev ? `${prev}/${last}` : last;
 }
 function summarizeToolInput(name, input) {
@@ -2533,16 +2535,16 @@ function textOfContent2(content) {
   if (typeof content === "string") return content;
   const a = arr(content);
   if (!a) return "";
-  const parts = [];
+  const parts2 = [];
   for (const b of a) {
     const o = obj(b);
     if (!o) continue;
-    if (o["type"] === "text" && typeof o["text"] === "string") parts.push(o["text"]);
+    if (o["type"] === "text" && typeof o["text"] === "string") parts2.push(o["text"]);
   }
-  return parts.join("\n");
+  return parts2.join("\n");
 }
-function addCount(counts, key, amount = 1) {
-  counts.set(key, (counts.get(key) ?? 0) + amount);
+function addCount(counts, key, amount2 = 1) {
+  counts.set(key, (counts.get(key) ?? 0) + amount2);
 }
 function countRecord(counts) {
   return Object.fromEntries(counts);
@@ -2609,16 +2611,16 @@ function commandEnvelopeTitle(envelope, commandName) {
 var INTERRUPT_RE = /\[Request interrupted by user/i;
 var NOTIFICATION_ENQUEUE_RE = /^\s*<(?:task|system)-notification>/;
 var LEADING_REMINDERS_RE = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/;
-function classifyPrompt(r, text2, isMeta) {
+function classifyPrompt(r, text3, isMeta) {
   const origin = obj(r["origin"]);
   const originKind = str(origin?.["kind"]);
   const promptSource = str(r["promptSource"]);
-  if (INTERRUPT_RE.test(text2.slice(0, 200))) return "interrupt";
+  if (INTERRUPT_RE.test(text3.slice(0, 200))) return "interrupt";
   if (r["isVisibleInTranscriptOnly"] === true) return "meta";
-  if (originKind === "human" || promptSource === "typed") return COMMAND_RE.test(text2) ? "command" : "human";
+  if (originKind === "human" || promptSource === "typed") return COMMAND_RE.test(text3) ? "command" : "human";
   if (originKind === "task-notification") return "notification";
   if (originKind === "peer" || originKind === "teammate" || originKind === "cross-session") return "peer";
-  const t = text2.replace(LEADING_REMINDERS_RE, "").trimStart();
+  const t = text3.replace(LEADING_REMINDERS_RE, "").trimStart();
   if (t.startsWith("<command-name>") || t.startsWith("<command-message>")) return "command";
   if (t.startsWith("<local-command-stdout>") || t.startsWith("<local-command-caveat>") || t.startsWith("<local-command-stderr>")) return "local_output";
   if (t.startsWith("<task-notification>")) return "notification";
@@ -2647,7 +2649,7 @@ async function withStableSessionRead(path, options, read) {
       if (!isTransientInputChange(error)) throw error;
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
-      await new Promise((resolve13) => setTimeout(resolve13, pause));
+      await new Promise((resolve14) => setTimeout(resolve14, pause));
     }
   }
 }
@@ -2705,10 +2707,10 @@ function buildSession(files2, mainPath, keepText, t0) {
   const unknownRecordTypes = /* @__PURE__ */ new Map();
   const unknownBlockTypes = /* @__PURE__ */ new Map();
   const warnings = /* @__PURE__ */ new Map();
-  const warn = (code, message, line) => {
-    const w = warnings.get(code);
+  const warn = (code2, message, line) => {
+    const w = warnings.get(code2);
     if (w) w.count++;
-    else warnings.set(code, { code, message, count: 1, sampleLine: line });
+    else warnings.set(code2, { code: code2, message, count: 1, sampleLine: line });
   };
   const KNOWN_TYPES = /* @__PURE__ */ new Set([
     "user",
@@ -2769,8 +2771,8 @@ function buildSession(files2, mainPath, keepText, t0) {
   const cacheMissByProviderMsg = /* @__PURE__ */ new Map();
   const thinkingByProviderMsg = /* @__PURE__ */ new Map();
   const prByNumber = /* @__PURE__ */ new Map();
-  const setAdd = (list, v) => {
-    if (v && !list.includes(v)) list.push(v);
+  const setAdd = (list2, v) => {
+    if (v && !list2.includes(v)) list2.push(v);
   };
   const lastRecordForProviderMsg = /* @__PURE__ */ new Map();
   let currentTurn;
@@ -2885,8 +2887,8 @@ function buildSession(files2, mainPath, keepText, t0) {
           }
         } else if (at === "skill_listing" && !isSub) {
           const names = (arr(a?.["names"]) ?? []).filter((x) => typeof x === "string");
-          const count2 = num(a?.["skillCount"]) ?? names.length;
-          if (!meta.skillsAvailable || bool(a?.["isInitial"])) meta.skillsAvailable = { count: count2, names };
+          const count3 = num(a?.["skillCount"]) ?? names.length;
+          if (!meta.skillsAvailable || bool(a?.["isInitial"])) meta.skillsAvailable = { count: count3, names };
         } else if (at === "read_truncation_notice") {
           meta.truncatedReads++;
         } else if (at === "deferred_tools_delta") {
@@ -2929,11 +2931,11 @@ function buildSession(files2, mainPath, keepText, t0) {
       const hasToolResult = blocks.some((b) => b.kind === "tool_result");
       const isMeta = bool(r["isMeta"]);
       const isCompactSummary = bool(r["isCompactSummary"]);
-      const text2 = type === "system" ? str(r["content"]) ?? "" : textOfContent2(content);
-      const cmd = COMMAND_RE.exec(text2)?.[1];
-      const interrupted = INTERRUPT_RE.test(text2);
+      const text3 = type === "system" ? str(r["content"]) ?? "" : textOfContent2(content);
+      const cmd = COMMAND_RE.exec(text3)?.[1];
+      const interrupted = INTERRUPT_RE.test(text3);
       const isPromptLike = type === "user" && !hasToolResult && !isCompactSummary && !!message;
-      const promptKind = isPromptLike ? classifyPrompt(r, text2, isMeta) : void 0;
+      const promptKind = isPromptLike ? classifyPrompt(r, text3, isMeta) : void 0;
       const startsTurn = !!promptKind && TURN_STARTING_KINDS.has(promptKind);
       const isHumanPrompt = startsTurn && !isSidechain;
       const isAgentPrompt = startsTurn && isSidechain && !isMeta;
@@ -2944,8 +2946,8 @@ function buildSession(files2, mainPath, keepText, t0) {
           index: mainTurnIndex,
           kind: promptKind ?? "human",
           startTs: t,
-          promptPreview: preview(text2),
-          promptChars: text2.length,
+          promptPreview: preview(text3),
+          promptChars: text3.length,
           commandName: cmd,
           messageUuids: [],
           toolCallIds: [],
@@ -2959,7 +2961,7 @@ function buildSession(files2, mainPath, keepText, t0) {
         };
         turns.push(currentTurn);
         if (!firstPromptPreview && promptKind === "human") firstPromptPreview = currentTurn.promptPreview;
-        if (cmd) skills.push({ name: cmd, via: "command", turnIndex: mainTurnIndex, ts: t, args: preview(text2.replace(COMMAND_RE, ""), 80) || void 0 });
+        if (cmd) skills.push({ name: cmd, via: "command", turnIndex: mainTurnIndex, ts: t, args: preview(text3.replace(COMMAND_RE, ""), 80) || void 0 });
       } else if (promptKind && !isSidechain && (promptKind === "notification" || promptKind === "local_output") && currentTurn) {
         currentTurn.autoContinuations++;
       } else if (isAgentPrompt && agentId) {
@@ -3008,13 +3010,13 @@ function buildSession(files2, mainPath, keepText, t0) {
         stopReason: str(message?.["stop_reason"]),
         usage,
         usageCounted: false,
-        preview: preview(text2 || blocks.map((b) => b.kind === "tool_use" ? `[${b.name}]` : b.kind === "thinking" ? "[thinking]" : b.kind === "tool_result" ? "[result]" : "").join(" ")),
+        preview: preview(text3 || blocks.map((b) => b.kind === "tool_use" ? `[${b.name}]` : b.kind === "thinking" ? "[thinking]" : b.kind === "tool_result" ? "[result]" : "").join(" ")),
         line,
         fileIndex: f.index,
         systemSubtype: type === "system" ? str(r["subtype"]) : void 0,
         commandName: cmd,
         interrupted,
-        apiError: apiErr ? { status: r["apiErrorStatus"], message: preview(str(r["error"]) ?? text2, 200) } : void 0,
+        apiError: apiErr ? { status: r["apiErrorStatus"], message: preview(str(r["error"]) ?? text3, 200) } : void 0,
         attribution: type === "assistant" && (r["attributionSkill"] !== void 0 || r["attributionPlugin"] !== void 0 || r["attributionMcpServer"] !== void 0 || r["attributionAgent"] !== void 0) ? { skill: str(r["attributionSkill"]), plugin: str(r["attributionPlugin"]), mcpServer: str(r["attributionMcpServer"]), mcpTool: str(r["attributionMcpTool"]), agent: str(r["attributionAgent"]) } : void 0,
         thinkingTokens,
         cacheMissReason
@@ -3022,13 +3024,13 @@ function buildSession(files2, mainPath, keepText, t0) {
       const mi = messages.length;
       messages.push(msg);
       if (iters && iters.length > 1) {
-        const list = [];
+        const list2 = [];
         for (let k = 0; k < iters.length - 1; k++) {
           const io = obj(iters[k]);
           const iu = parseUsage(io);
-          if (iu) list.push({ model: str(io?.["model"]), usage: iu, type: str(io?.["type"]) });
+          if (iu) list2.push({ model: str(io?.["model"]), usage: iu, type: str(io?.["type"]) });
         }
-        if (list.length) hiddenIterations.push({ messageUuid: msg.uuid, iterations: list });
+        if (list2.length) hiddenIterations.push({ messageUuid: msg.uuid, iterations: list2 });
       }
       if (!agentId && currentTurn) currentTurn.messageUuids.push(msg.uuid);
       if (interrupted) {
@@ -3041,10 +3043,10 @@ function buildSession(files2, mainPath, keepText, t0) {
       if (apiErr) events.push({ kind: "api_error", ts: t, turnIndex, agentId, label: `API error${msg.apiError?.status ? " " + String(msg.apiError.status) : ""}`, detail: msg.apiError?.message });
       if (isCompactSummary) {
         if (pendingBoundary && pendingBoundary.summaryChars === void 0) {
-          pendingBoundary.summaryChars = text2.length;
+          pendingBoundary.summaryChars = text3.length;
           pendingBoundary = void 0;
         } else {
-          compactions.push({ ts: t, turnIndex, trigger: "unknown", summaryChars: text2.length });
+          compactions.push({ ts: t, turnIndex, trigger: "unknown", summaryChars: text3.length });
         }
       }
       if (type === "system") {
@@ -3075,11 +3077,11 @@ function buildSession(files2, mainPath, keepText, t0) {
             hooks.push({ hookEvent: "Stop", command: str(eo?.["command"]) ?? preview(String(e), 80), ok: false, ts: t, turnIndex });
           }
         } else if (sub === "scheduled_task_fire") {
-          events.push({ kind: "scheduled_fire", ts: t, turnIndex, label: str(r["cronKind"]) ?? "scheduled", detail: preview(text2, 120) });
+          events.push({ kind: "scheduled_fire", ts: t, turnIndex, label: str(r["cronKind"]) ?? "scheduled", detail: preview(text3, 120) });
         } else if (sub === "away_summary") {
-          events.push({ kind: "away_summary", ts: t, turnIndex, label: "away summary", detail: preview(text2, 200) });
+          events.push({ kind: "away_summary", ts: t, turnIndex, label: "away summary", detail: preview(text3, 200) });
         } else if (sub === "api_error" || sub === "api_retry") {
-          events.push({ kind: "api_error", ts: t, turnIndex, label: sub, detail: preview(text2, 200) });
+          events.push({ kind: "api_error", ts: t, turnIndex, label: sub, detail: preview(text3, 200) });
         }
         continue;
       }
@@ -3810,7 +3812,7 @@ var catalog_default = {
 // src/models/catalog.ts
 var T = catalog_default;
 function normalizeModelId(raw) {
-  const tags = [];
+  const tags2 = [];
   let id = raw.trim().toLowerCase();
   id = id.replace(/^(us|eu|apac|global|us-gov)\./, "");
   id = id.replace(/^anthropic\./, "");
@@ -3819,24 +3821,24 @@ function normalizeModelId(raw) {
   id = id.replace(/@(\d{8})$/, "-$1");
   const ctx = /\[(1m|200k|\d+k)\]$/.exec(id);
   if (ctx) {
-    tags.push(`context:${ctx[1]}`);
+    tags2.push(`context:${ctx[1]}`);
     id = id.slice(0, ctx.index);
   }
   if (id.endsWith("-fast")) {
-    tags.push("speed:fast");
+    tags2.push("speed:fast");
     id = id.slice(0, -5);
   }
-  return { id, tags };
+  return { id, tags: tags2 };
 }
 var cache = /* @__PURE__ */ new Map();
 function resolveModel(rawId) {
   const raw = rawId ?? "unknown";
   const hit = cache.get(raw);
   if (hit) return hit;
-  const { id, tags } = normalizeModelId(raw);
+  const { id, tags: tags2 } = normalizeModelId(raw);
   let out3;
   if (raw in T.nonModelSentinels || id in T.nonModelSentinels) {
-    out3 = { rawId: raw, normalizedId: id, displayName: raw, family: "none", estimatedMatch: false, synthetic: true, tags };
+    out3 = { rawId: raw, normalizedId: id, displayName: raw, family: "none", estimatedMatch: false, synthetic: true, tags: tags2 };
   } else {
     let catalogId;
     let estimatedMatch = false;
@@ -3873,7 +3875,7 @@ function resolveModel(rawId) {
       contextWindow: entry?.contextWindow,
       estimatedMatch: estimatedMatch || !entry || unverified,
       synthetic: false,
-      tags
+      tags: tags2
     };
   }
   cache.set(raw, out3);
@@ -4265,18 +4267,18 @@ function analyzeContext(s) {
   }
   const requestsPerCompaction = [];
   if (s.compactions.length) {
-    let count2 = 0;
+    let count3 = 0;
     let ci = 0;
     const comps = [...s.compactions].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
     for (const p of main2) {
       while (ci < comps.length && p.ts !== void 0 && (comps[ci].ts ?? Infinity) <= p.ts) {
-        requestsPerCompaction.push(count2);
-        count2 = 0;
+        requestsPerCompaction.push(count3);
+        count3 = 0;
         ci++;
       }
-      count2++;
+      count3++;
     }
-    requestsPerCompaction.push(count2);
+    requestsPerCompaction.push(count3);
   }
   const compactions = s.compactions.map((c) => {
     let before;
@@ -4497,7 +4499,7 @@ function analyzeHooks(s) {
       const hookEvent = busiest(e.events);
       return { command, count: e.count, totalMs: e.totalMs, errors: e.errors, ...hookEvent ? { hookEvent } : {}, events: eventsRecord(e.events), keyedBy: e.keyedBy };
     }).sort((a, b) => b.totalMs - a.totalMs),
-    events: [...byEvent.entries()].map(([hookEvent, count2]) => ({ hookEvent, count: count2 }))
+    events: [...byEvent.entries()].map(([hookEvent, count3]) => ({ hookEvent, count: count3 }))
   };
 }
 function unionMs(iv) {
@@ -4554,6 +4556,7 @@ function capSavings(ctx, tokens) {
   const cap = ctx.tokens.totalTokens * 0.6;
   return cap > 0 ? Math.min(tokens, cap) : tokens;
 }
+var NO_CHANGE = "No change needed.";
 var seq = 0;
 function mk(partial) {
   seq++;
@@ -5356,12 +5359,12 @@ var skillTokenWeight = (ctx) => {
 var timeBudget = (ctx) => {
   const active = ctx.time.activeMs;
   if (active < 6e4) return [];
-  const parts = [
+  const parts2 = [
     { key: "tool execution", ms: ctx.time.toolMs },
     { key: "subagents", ms: ctx.time.agentMs }
   ].map((p) => ({ ...p, share: Math.min(1, p.ms / active) })).filter((p) => p.share >= 0.75);
-  if (!parts.length) return [];
-  const dominant = parts.sort((a, b) => b.share - a.share)[0];
+  if (!parts2.length) return [];
+  const dominant = parts2.sort((a, b) => b.share - a.share)[0];
   const tools = dominant.key === "tool execution";
   const improvementText = tools ? "Fix the slowest tools first: add timeouts, cache their work, or narrow their scope. Run long commands in the background." : "Spawn agents in parallel or in the background, so that the parent keeps working. Tighten the brief of each agent, so that it finishes sooner.";
   const whyText = tools ? "Tool execution takes most of the active time, so the model mostly waits on commands." : "Subagent wall time takes most of the active time.";
@@ -5755,15 +5758,15 @@ var scriptCandidate = (ctx) => {
   saveIn = Math.min(saveIn, union.inTok);
   saveOut = Math.min(saveOut, union.outTok);
   const tokens = Math.round(capSavings(ctx, saveIn + saveOut));
-  const parts = [];
-  if (tpl.length) parts.push(`${tpl.length} Bash template${tpl.length > 1 ? "s" : ""} \xD7${tpl[0][1].count}`);
-  if (grams.length) parts.push(`${grams.length} tool sequence${grams.length > 1 ? "s" : ""} \xD7${grams[0].count}`);
+  const parts2 = [];
+  if (tpl.length) parts2.push(`${tpl.length} Bash template${tpl.length > 1 ? "s" : ""} \xD7${tpl[0][1].count}`);
+  if (grams.length) parts2.push(`${grams.length} tool sequence${grams.length > 1 ? "s" : ""} \xD7${grams[0].count}`);
   return [
     mk({
       ruleId: "script-candidate",
       severity: topCount >= 30 ? "medium" : "low",
       axis: "tokens",
-      title: `Scriptable repetition (${parts.join(", ")}): one script could run the batch in one turn`,
+      title: `Scriptable repetition (${parts2.join(", ")}): one script could run the batch in one turn`,
       detail: [
         ...tpl.map(([t, e]) => `"${t.slice(0, 80)}${t.length > 80 ? "\u2026" : ""}" \xD7${e.count} (${e.raws.size >= 12 ? "12+" : e.raws.size} variants)`),
         ...grams.map((g) => `${g.gram} \xD7${g.count}`)
@@ -6078,15 +6081,15 @@ function analyzeSession(s, opts = {}) {
   const hooks = analyzeHooks(s);
   const time = analyzeTime(s, turns, agents, hooks.totalMs);
   const agentTokensByTurn = /* @__PURE__ */ new Map();
-  const turnAtTime = (ts2) => {
-    if (ts2 === void 0) return void 0;
+  const turnAtTime = (ts3) => {
+    if (ts3 === void 0) return void 0;
     for (const t of s.turns) {
       const start = t.startTs;
       const end = t.endTs ?? Number.POSITIVE_INFINITY;
-      if (start !== void 0 && ts2 >= start && ts2 <= end) return t.index;
+      if (start !== void 0 && ts3 >= start && ts3 <= end) return t.index;
     }
     let best;
-    for (const t of s.turns) if (t.startTs !== void 0 && t.startTs <= ts2) best = t.index;
+    for (const t of s.turns) if (t.startTs !== void 0 && t.startTs <= ts3) best = t.index;
     return best;
   };
   for (const r of agents.runs) {
@@ -6175,19 +6178,19 @@ function sessionEnding(s, quality) {
   return lastRun.ok ? "clean" : "failing";
 }
 function narrative(s, sum2, top) {
-  const parts = [];
+  const parts2 = [];
   const what = s.meta.title ? `\u201C${s.meta.title.slice(0, 80)}\u201D` : "this session";
-  parts.push(`In ${what}, you made ${sum2.humanTurns} request${sum2.humanTurns === 1 ? "" : "s"}${sum2.turns > sum2.humanTurns ? ` (${sum2.turns} turns including commands and automation)` : ""} over ${sum2.wallMs ? fmtMs(sum2.wallMs) : "an unknown span"}. The agent was busy for ${fmtMs(sum2.activeMs)} of that.`);
-  parts.push(`It made ${sum2.toolCalls} tool call${sum2.toolCalls === 1 ? "" : "s"}${sum2.toolErrors ? ` (${sum2.toolErrors} failed)` : ""}${sum2.agents ? `, ran ${sum2.agents} subagent${sum2.agents > 1 ? "s" : ""}` : ""}${sum2.skills ? `, used ${sum2.skills} skill/command invocation${sum2.skills > 1 ? "s" : ""}` : ""}, and processed ${fmtTokens(usageTotal(sum2.tokens))} tokens.`);
+  parts2.push(`In ${what}, you made ${sum2.humanTurns} request${sum2.humanTurns === 1 ? "" : "s"}${sum2.turns > sum2.humanTurns ? ` (${sum2.turns} turns including commands and automation)` : ""} over ${sum2.wallMs ? fmtMs(sum2.wallMs) : "an unknown span"}. The agent was busy for ${fmtMs(sum2.activeMs)} of that.`);
+  parts2.push(`It made ${sum2.toolCalls} tool call${sum2.toolCalls === 1 ? "" : "s"}${sum2.toolErrors ? ` (${sum2.toolErrors} failed)` : ""}${sum2.agents ? `, ran ${sum2.agents} subagent${sum2.agents > 1 ? "s" : ""}` : ""}${sum2.skills ? `, used ${sum2.skills} skill/command invocation${sum2.skills > 1 ? "s" : ""}` : ""}, and processed ${fmtTokens(usageTotal(sum2.tokens))} tokens.`);
   const o = sum2.outcomes;
   const outs = [];
   if (o.prLinks.length) outs.push(`${o.prLinks.length} PR${o.prLinks.length > 1 ? "s" : ""}`);
   if (o.gitCommits) outs.push(`${o.gitCommits} commit${o.gitCommits > 1 ? "s" : ""}`);
   if (o.filesEdited || o.filesWritten) outs.push(`${o.filesEdited + o.filesWritten} file${o.filesEdited + o.filesWritten > 1 ? "s" : ""} changed`);
   if (o.testRuns) outs.push(`${o.testRuns} test run${o.testRuns > 1 ? "s" : ""}${o.testRunsFailed ? ` (${o.testRunsFailed} failed)` : ""}`);
-  parts.push(outs.length ? `Orangu found these outcomes: ${outs.join(", ")}.` : "Orangu found no commits, PRs or test runs.");
-  if (top.length) parts.push(`Look at these first: ${top.join(" \xB7 ")}.`);
-  return parts.join(" ");
+  parts2.push(outs.length ? `Orangu found these outcomes: ${outs.join(", ")}.` : "Orangu found no commits, PRs or test runs.");
+  if (top.length) parts2.push(`Look at these first: ${top.join(" \xB7 ")}.`);
+  return parts2.join(" ");
 }
 
 // src/util/home.ts
@@ -7016,10 +7019,10 @@ function padCell(s, width, align = "l") {
   return align === "l" ? s + " ".repeat(pad) : " ".repeat(pad) + s;
 }
 function wrapValue(v, budget, sep3 = " \xB7 ") {
-  const parts = v.split(sep3);
+  const parts2 = v.split(sep3);
   const lines = [];
   let cur = "";
-  for (const part of parts) {
+  for (const part of parts2) {
     const next = cur ? cur + sep3 + part : part;
     if (cur && displayWidth(next) > budget) {
       lines.push(cur);
@@ -7029,9 +7032,9 @@ function wrapValue(v, budget, sep3 = " \xB7 ") {
   if (cur) lines.push(cur);
   return lines;
 }
-function wrapWords(text2, width) {
+function wrapWords(text3, width) {
   const room = Math.max(1, Math.floor(width));
-  const words2 = stripAnsi(text2).split(/[ \t\n]+/).filter(Boolean);
+  const words2 = stripAnsi(text3).split(/[ \t\n]+/).filter(Boolean);
   const lines = [];
   let cur = "";
   let curWidth = 0;
@@ -7101,8 +7104,8 @@ function decodeKey(chunk) {
   if (/^[1-9]$/.test(chunk)) return { key: "digit", digit: Number(chunk) };
   return { key: "other" };
 }
-function rewriteLine(stream, caps, text2) {
-  stream.write(caps.animate ? CLEAR_LINE + text2 : text2 + "\n");
+function rewriteLine(stream, caps, text3) {
+  stream.write(caps.animate ? CLEAR_LINE + text3 : text3 + "\n");
 }
 var FRAMES_UNICODE = ["\u280B", "\u2819", "\u2839", "\u2838", "\u283C", "\u2834", "\u2826", "\u2827", "\u2807", "\u280F"];
 var FRAMES_ASCII = ["-", "\\", "|", "/"];
@@ -7134,12 +7137,12 @@ function spinner(caps, stream = process.stderr, opts = {}) {
   const frames = caps.unicode ? FRAMES_UNICODE : FRAMES_ASCII;
   const ms2 = opts.intervalMs ?? (caps.unicode ? 80 : 130);
   let i = 0;
-  let text2 = "";
+  let text3 = "";
   let timer;
   let hook;
   const draw = () => {
     const frame = paint(caps, "accent", frames[i++ % frames.length]);
-    stream.write(CLEAR_LINE + frame + " " + truncate(text2, caps.columns - 4, caps));
+    stream.write(CLEAR_LINE + frame + " " + truncate(text3, caps.columns - 4, caps));
   };
   const clear = () => {
     if (!timer) return;
@@ -7149,7 +7152,7 @@ function spinner(caps, stream = process.stderr, opts = {}) {
   };
   return {
     start(t) {
-      text2 = t;
+      text3 = t;
       if (!caps.animate || timer) return;
       hook = hook ?? onceOnExit(clear, opts.proc);
       stream.write(HIDE_CURSOR);
@@ -7158,7 +7161,7 @@ function spinner(caps, stream = process.stderr, opts = {}) {
       timer.unref();
     },
     update(t) {
-      text2 = t;
+      text3 = t;
       if (timer) draw();
     },
     pause: clear,
@@ -7320,10 +7323,10 @@ function ranked(rows2, n2, k) {
 }
 function parseMcpToolName(name) {
   if (!name.startsWith("mcp__")) return null;
-  const parts = name.split("__");
-  if (parts.length < 3) return null;
-  const server = parts[1] ?? "";
-  const tool = parts.slice(2).join("__");
+  const parts2 = name.split("__");
+  if (parts2.length < 3) return null;
+  const server = parts2[1] ?? "";
+  const tool = parts2.slice(2).join("__");
   return server && tool ? { server, tool } : null;
 }
 var norm = (p) => p.replace(/\\/g, "/");
@@ -7831,32 +7834,57 @@ function buildHarnessReport(inv, analyses, agg, o) {
 }
 
 // src/report/client/format.ts
+function tok(n2) {
+  if (n2 >= 1e9) return (n2 / 1e9).toFixed(n2 >= 1e10 ? 0 : 1) + "B";
+  if (n2 >= 1e6) return (n2 / 1e6).toFixed(n2 >= 1e7 ? 0 : 2) + "M";
+  if (n2 >= 1e3) return (n2 / 1e3).toFixed(n2 >= 1e5 ? 0 : 1) + "k";
+  return String(Math.round(n2));
+}
+function ms(v) {
+  if (v === void 0 || !isFinite(v)) return "\u2013";
+  if (v < 1e3) return Math.round(v) + "ms";
+  const s = v / 1e3;
+  if (s < 60) return s.toFixed(s < 10 ? 1 : 0) + "s";
+  const m = Math.floor(s / 60);
+  if (m < 60) return m + "m " + Math.round(s % 60) + "s";
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + "h " + m % 60 + "m";
+  return Math.floor(h / 24) + "d " + h % 24 + "h";
+}
+function pct(n2, digits = 0) {
+  return (n2 * 100).toFixed(digits) + "%";
+}
 function plural2(n2, one, many = one + "s") {
   return `${num2(n2)} ${n2 === 1 ? one : many}`;
 }
 function num2(n2) {
   return n2.toLocaleString("en-US");
 }
+function ts2(v) {
+  if (v === void 0) return "\u2013";
+  const d = new Date(v);
+  return d.toISOString().slice(0, 16).replace("T", " ");
+}
 
 // src/report/client/derive.ts
 function outcomeHeadline(s) {
   if (s.ending === "interrupted") return `Stopped by you after ${plural2(s.turns, "turn")}`;
-  const parts = outcomeBits(s);
-  if (parts.length) return parts.join(" \xB7 ");
+  const parts2 = outcomeBits(s);
+  if (parts2.length) return parts2.join(" \xB7 ");
   const requests = plural2(s.humanTurns, "request");
   if (s.toolCalls > 0) return `${requests}, ${s.agents ? plural2(s.agents, "subagent") + ", " : ""}nothing committed`;
   return `${requests}, no tool calls recorded`;
 }
 function outcomeBits(s) {
   const o = s.outcomes;
-  const parts = [];
-  if (o.prLinks.length) parts.push(plural2(o.prLinks.length, "PR"));
-  if (o.gitCommits) parts.push(plural2(o.gitCommits, "commit"));
+  const parts2 = [];
+  if (o.prLinks.length) parts2.push(plural2(o.prLinks.length, "PR"));
+  if (o.gitCommits) parts2.push(plural2(o.gitCommits, "commit"));
   const changed = o.filesEdited + o.filesWritten;
-  if (changed) parts.push(plural2(changed, "file") + " changed");
-  if (o.buildRunsFailed) parts.push(`${o.buildRunsFailed} of ${plural2(o.buildRuns, "build run")} failed`);
-  if (o.testRuns) parts.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural2(o.testRuns, "test run")} failed` : `${plural2(o.testRuns, "test run")} green`);
-  return parts;
+  if (changed) parts2.push(plural2(changed, "file") + " changed");
+  if (o.buildRunsFailed) parts2.push(`${o.buildRunsFailed} of ${plural2(o.buildRuns, "build run")} failed`);
+  if (o.testRuns) parts2.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural2(o.testRuns, "test run")} failed` : `${plural2(o.testRuns, "test run")} green`);
+  return parts2;
 }
 
 // src/suggest/id.ts
@@ -8089,16 +8117,16 @@ function layoutWidth(caps) {
 function valueBudget(caps) {
   return layoutWidth(caps) - GUTTER;
 }
-function wrapJoined(caps, text2, width) {
-  const plain = wrapWords(text2, Infinity)[0] ?? "";
+function wrapJoined(caps, text3, width) {
+  const plain = wrapWords(text3, Infinity)[0] ?? "";
   return wrapValue(plain, width, glyphs(caps).sep).flatMap((l) => displayWidth(l) > width ? wrapWords(l, width) : [l]);
 }
 function rows(caps, label, value, o = {}) {
-  const head = INDENT + padCell(label, LABEL_WIDTH) + " ";
+  const head2 = INDENT + padCell(label, LABEL_WIDTH) + " ";
   const budget = valueBudget(caps);
-  const parts = o.raw ? [value] : o.joined ? wrapJoined(caps, value, budget) : wrapWords(value, budget);
-  if (!parts.length) parts.push("");
-  return parts.map((p, i) => (i ? " ".repeat(GUTTER) : head) + (o.style ? paint(caps, o.style, p) : p));
+  const parts2 = o.raw ? [value] : o.joined ? wrapJoined(caps, value, budget) : wrapWords(value, budget);
+  if (!parts2.length) parts2.push("");
+  return parts2.map((p, i) => (i ? " ".repeat(GUTTER) : head2) + (o.style ? paint(caps, o.style, p) : p));
 }
 function row(caps, label, value, o = {}) {
   return rows(caps, label, value, o).join("\n");
@@ -8127,10 +8155,10 @@ function nextStepLines(caps, step) {
   const lines = rows(caps, "finding", step.finding, { style: "bold" });
   if (step.improvement) lines.push(...continuation(caps, `Improvement: ${step.improvement}`));
   if (step.storeNote) {
-    const head = "unavailable: ";
+    const head2 = "unavailable: ";
     const tail = " (full command below)";
-    const reason = truncate(step.storeNote, valueBudget(caps) - head.length - tail.length, caps);
-    lines.push(row(caps, "store", head + reason + tail, { style: "warn", raw: true }));
+    const reason = truncate(step.storeNote, valueBudget(caps) - head2.length - tail.length, caps);
+    lines.push(row(caps, "store", head2 + reason + tail, { style: "warn", raw: true }));
   }
   if (step.next) lines.push(row(caps, "next", step.next, { raw: true }));
   const [add, install] = PLUGIN_INSTALL.split(" \xB7 ");
@@ -8257,10 +8285,10 @@ function aggregateBlock(caps, a) {
     const budget = layoutWidth(caps) - AGG_TITLE_COLUMN;
     for (const f of a.crossFindings.slice(0, 8)) {
       const figure = paint(caps, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8));
-      const count2 = `(${plural(f.sessions, "session")})`;
+      const count3 = `(${plural(f.sessions, "session")})`;
       const title = wrapWords(f.exampleTitle || f.title, budget);
       const last = title.at(-1);
-      const body = last !== void 0 && displayWidth(last) + 2 + count2.length <= budget ? [...title.slice(0, -1), last + "  " + paint(caps, "dim", count2)] : [...title, paint(caps, "dim", count2)];
+      const body = last !== void 0 && displayWidth(last) + 2 + count3.length <= budget ? [...title.slice(0, -1), last + "  " + paint(caps, "dim", count3)] : [...title, paint(caps, "dim", count3)];
       const improvement = f.improvement ? wrapWords(`Improvement: ${f.improvement}`, budget) : [];
       [...body, ...improvement].forEach((p, i) => lines.push((i ? pad : `    ${figure}  `) + p));
     }
@@ -8390,16 +8418,16 @@ function inspectReviewedPath(file) {
   if (isAbsolute3(file) || /^[\\/]/.test(file)) return { violation: "must be relative to the target repository" };
   if (file.includes(":")) return { violation: "must not contain a colon or Windows alternate data stream" };
   const canonical = file.replace(/\\/g, "/");
-  const parts = canonical.split("/");
-  if (parts.some((part) => part === "")) return { violation: "must not contain empty path components or a trailing separator" };
-  if (parts.some((part) => part === ".")) return { violation: "must not contain dot path components" };
-  if (parts.some((part) => part === "..")) return { violation: "must not escape the target repository" };
-  for (const part of parts) {
+  const parts2 = canonical.split("/");
+  if (parts2.some((part) => part === "")) return { violation: "must not contain empty path components or a trailing separator" };
+  if (parts2.some((part) => part === ".")) return { violation: "must not contain dot path components" };
+  if (parts2.some((part) => part === "..")) return { violation: "must not escape the target repository" };
+  for (const part of parts2) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename14 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename14)) return { violation: "must not use a reserved Windows device name" };
+    const basename15 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename15)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -8760,8 +8788,8 @@ function record(value) {
 }
 function boundedText(value, max) {
   if (typeof value !== "string") return void 0;
-  const text2 = value.trim();
-  return text2 && text2.length <= max && !/[\x00-\x1f\x7f]/.test(text2) ? text2 : void 0;
+  const text3 = value.trim();
+  return text3 && text3.length <= max && !/[\x00-\x1f\x7f]/.test(text3) ? text3 : void 0;
 }
 function validDate(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -8913,10 +8941,10 @@ function rankTest(before, after) {
   let lower = 0;
   let higher = 0;
   for (let sum2 = 0; sum2 <= maxSum; sum2++) {
-    const count2 = distribution[sum2];
-    total += count2;
-    if (sum2 <= observed) lower += count2;
-    if (sum2 >= observed) higher += count2;
+    const count3 = distribution[sum2];
+    total += count3;
+    if (sum2 <= observed) lower += count3;
+    if (sum2 >= observed) higher += count3;
   }
   return { pLower: round6(lower / total), pHigher: round6(higher / total) };
 }
@@ -9017,14 +9045,14 @@ function numericMapMatches(value, expected) {
   const wanted = Object.entries(expected);
   return entries.length === wanted.length && wanted.every(([key, number]) => value[key] === number);
 }
-function applicationTime(record2) {
-  if (typeof record2.appliedAt === "number" && Number.isFinite(record2.appliedAt) && record2.appliedAt > 0) return record2.appliedAt;
-  return record2.status === "applied" && Number.isFinite(record2.statusAt) && record2.statusAt > 0 ? record2.statusAt : void 0;
+function applicationTime(record3) {
+  if (typeof record3.appliedAt === "number" && Number.isFinite(record3.appliedAt) && record3.appliedAt > 0) return record3.appliedAt;
+  return record3.status === "applied" && Number.isFinite(record3.statusAt) && record3.statusAt > 0 ? record3.statusAt : void 0;
 }
 function cohortReceiptSummary(receipt) {
-  const head = `Later sessions beat the baseline beyond chance (${receipt.baselineSessionIds.length} before, ${receipt.measuredSessionIds.length} after, p \u2264 ${COHORT_ALPHA}): ${receipt.checks.map(verificationCheckName).join("; ")}.`;
+  const head2 = `Later sessions beat the baseline beyond chance (${receipt.baselineSessionIds.length} before, ${receipt.measuredSessionIds.length} after, p \u2264 ${COHORT_ALPHA}): ${receipt.checks.map(verificationCheckName).join("; ")}.`;
   const others = receipt.confoundedBy.length;
-  return others ? `${head} Measured together with ${others} other applied change${others === 1 ? "" : "s"}; not attributable to this change alone.` : head;
+  return others ? `${head2} Measured together with ${others} other applied change${others === 1 ? "" : "s"}; not attributable to this change alone.` : head2;
 }
 var SUGGESTION_ID_RE = /^sg_[0-9a-f]{12}$/;
 var MAX_CONFOUNDERS = 64;
@@ -9075,29 +9103,29 @@ function cohortReceiptViolation(value, reviewed, appliedAt) {
   if (receipt.summary !== cohortReceiptSummary(receipt)) return "summary must be the computed summary";
   return void 0;
 }
-function effectMatchesChecks(record2, checks2, measured) {
-  const effect = record2.effect;
+function effectMatchesChecks(record3, checks2, measured) {
+  const effect = record3.effect;
   if (!effect || !Array.isArray(effect.measuredSessionIds) || JSON.stringify(effect.measuredSessionIds) !== JSON.stringify(measured)) return false;
   const before = Object.fromEntries(checks2.map((check) => [check.metric, check.before]));
   const after = Object.fromEntries(checks2.map((check) => [check.metric, check.after]));
   return numericMapMatches(effect.before, before) && numericMapMatches(effect.after, after);
 }
-function isTrustedCohortVerification(record2) {
-  if (record2.scope !== "session" && record2.scope !== "repo") return false;
-  const proposal = record2.proposal;
-  const receipt = record2.verificationReceipt;
-  if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || record2.application?.v !== 1 || receipt?.v !== 2) return false;
-  if (cohortReceiptViolation(receipt, proposal.verificationChecks, record2.appliedAt) !== void 0) return false;
-  return effectMatchesChecks(record2, receipt.checks, receipt.measuredSessionIds);
+function isTrustedCohortVerification(record3) {
+  if (record3.scope !== "session" && record3.scope !== "repo") return false;
+  const proposal = record3.proposal;
+  const receipt = record3.verificationReceipt;
+  if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || record3.application?.v !== 1 || receipt?.v !== 2) return false;
+  if (cohortReceiptViolation(receipt, proposal.verificationChecks, record3.appliedAt) !== void 0) return false;
+  return effectMatchesChecks(record3, receipt.checks, receipt.measuredSessionIds);
 }
-function isTrustedComputedVerification(record2) {
-  if (record2.status !== "verified") return false;
-  if (record2.verificationTrust === "computed-v2") return isTrustedCohortVerification(record2);
-  if (record2.verificationTrust !== "computed-v1" || record2.scope !== "session") return false;
-  const proposal = record2.proposal;
-  const application = record2.application;
-  const receipt = record2.verificationReceipt;
-  const effect = record2.effect;
+function isTrustedComputedVerification(record3) {
+  if (record3.status !== "verified") return false;
+  if (record3.verificationTrust === "computed-v2") return isTrustedCohortVerification(record3);
+  if (record3.verificationTrust !== "computed-v1" || record3.scope !== "session") return false;
+  const proposal = record3.proposal;
+  const application = record3.application;
+  const receipt = record3.verificationReceipt;
+  const effect = record3.effect;
   if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || application?.v !== 1 || receipt?.v !== 1 || !effect || !Array.isArray(receipt.checks) || receipt.checks.length !== proposal.verificationChecks.length || !Array.isArray(receipt.measuredSessionIds) || receipt.measuredSessionIds.length === 0 || JSON.stringify(receipt.measuredSessionIds) !== JSON.stringify(effect.measuredSessionIds)) return false;
   if (receipt.summary !== verificationReceiptSummary(proposal.verificationChecks)) return false;
   for (let index = 0; index < proposal.verificationChecks.length; index++) {
@@ -9365,8 +9393,8 @@ async function readPrivateSuggestionStore(path, directories) {
     await handle.close();
   }
 }
-async function appendPrivateSuggestionRecord(path, record2, directories, assertOwnership) {
-  const recordBytes = Buffer.from(`${JSON.stringify(record2)}
+async function appendPrivateSuggestionRecord(path, record3, directories, assertOwnership) {
+  const recordBytes = Buffer.from(`${JSON.stringify(record3)}
 `, "utf8");
   if (recordBytes.byteLength - 1 > MAX_SUGGESTION_RECORD_BYTES) {
     throw new Error(`suggestion record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes`);
@@ -9437,8 +9465,8 @@ var ALLOWED_PATCH_FIELDS = {
   rejected: [],
   failed: ["kickoff"]
 };
-function recordMatchesFinding(record2, finding, source) {
-  return record2.source === source && record2.scope === finding.scope && record2.ruleId === finding.ruleId && (record2.insightId ?? "") === (finding.insightId ?? "") && (record2.cohortFingerprint ?? record2.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record2.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));
+function recordMatchesFinding(record3, finding, source) {
+  return record3.source === source && record3.scope === finding.scope && record3.ruleId === finding.ruleId && (record3.insightId ?? "") === (finding.insightId ?? "") && (record3.cohortFingerprint ?? record3.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record3.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));
 }
 function sameEvidence(a, b) {
   const canonical = (v) => JSON.stringify(
@@ -9471,12 +9499,12 @@ function stringArray(value) {
 }
 function isPersistedSuggestionRecord(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const record2 = value;
-  if (typeof record2.id !== "string" || !isSuggestionId(record2.id) || record2.v !== 1 && record2.v !== 2 || typeof record2.createdAt !== "number" || !Number.isFinite(record2.createdAt) || record2.source !== "report" && record2.source !== "skill" || record2.scope !== "session" && record2.scope !== "repo" && record2.scope !== "global" || !stringArray(record2.sessionIds) || !nonEmptyString(record2.ruleId) || typeof record2.title !== "string" || !record2.evidence || typeof record2.evidence !== "object" || Array.isArray(record2.evidence) || typeof record2.status !== "string" || !Object.hasOwn(TRANSITIONS, record2.status) || typeof record2.statusAt !== "number" || !Number.isFinite(record2.statusAt) || record2.legacyIds !== void 0 && (!stringArray(record2.legacyIds) || !record2.legacyIds.every(isSuggestionId)) || record2.insightId !== void 0 && typeof record2.insightId !== "string" || record2.cohortFingerprint !== void 0 && typeof record2.cohortFingerprint !== "string" || record2.appliedAt !== void 0 && (typeof record2.appliedAt !== "number" || !Number.isFinite(record2.appliedAt))) {
+  const record3 = value;
+  if (typeof record3.id !== "string" || !isSuggestionId(record3.id) || record3.v !== 1 && record3.v !== 2 || typeof record3.createdAt !== "number" || !Number.isFinite(record3.createdAt) || record3.source !== "report" && record3.source !== "skill" || record3.scope !== "session" && record3.scope !== "repo" && record3.scope !== "global" || !stringArray(record3.sessionIds) || !nonEmptyString(record3.ruleId) || typeof record3.title !== "string" || !record3.evidence || typeof record3.evidence !== "object" || Array.isArray(record3.evidence) || typeof record3.status !== "string" || !Object.hasOwn(TRANSITIONS, record3.status) || typeof record3.statusAt !== "number" || !Number.isFinite(record3.statusAt) || record3.legacyIds !== void 0 && (!stringArray(record3.legacyIds) || !record3.legacyIds.every(isSuggestionId)) || record3.insightId !== void 0 && typeof record3.insightId !== "string" || record3.cohortFingerprint !== void 0 && typeof record3.cohortFingerprint !== "string" || record3.appliedAt !== void 0 && (typeof record3.appliedAt !== "number" || !Number.isFinite(record3.appliedAt))) {
     return false;
   }
-  if (record2.v === 2) {
-    const key = record2.key;
+  if (record3.v === 2) {
+    const key = record3.key;
     if (!key || typeof key !== "object" || key.v !== 2 || key.source !== "report" && key.source !== "skill" || key.scope !== "session" && key.scope !== "repo" && key.scope !== "global" || !nonEmptyString(key.ruleId) || !stringArray(key.sessionIds) || key.insightId !== void 0 && typeof key.insightId !== "string" || key.cohortFingerprint !== void 0 && typeof key.cohortFingerprint !== "string") {
       return false;
     }
@@ -9521,7 +9549,7 @@ function assertVerificationEffect(value, receipt, to) {
   }
   const expectedBefore = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.before]));
   const expectedAfter = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.after]));
-  const canonical = (record2) => JSON.stringify(Object.entries(record2).sort(([a], [b]) => a.localeCompare(b)));
+  const canonical = (record3) => JSON.stringify(Object.entries(record3).sort(([a], [b]) => a.localeCompare(b)));
   if (canonical(effect.before) !== canonical(expectedBefore) || canonical(effect.after) !== canonical(expectedAfter)) {
     throw lifecycleError(to, "verification effect values must exactly match the computed receipt checks");
   }
@@ -9741,14 +9769,14 @@ var SuggestionStore = class {
     const id = explicitId ?? canonicalId;
     const records = await this.replay(guard.parent);
     const existing = records.get(id);
-    const ts2 = this.now();
+    const ts3 = this.now();
     if (existing) {
       if (!recordMatchesFinding(existing, f, source)) {
         throw new Error(`suggestion id identity mismatch: ${id} belongs to a different finding`);
       }
       if (existing.status !== "new") return { record: existing, created: false };
       if (existing.title === f.title && sameEvidence(existing.evidence, f.evidence)) return { record: existing, created: false };
-      const refreshed = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts2 };
+      const refreshed = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts3 };
       await this.append(refreshed, guard);
       return { record: refreshed, created: false };
     }
@@ -9772,18 +9800,18 @@ var SuggestionStore = class {
           evidence: f.evidence,
           // Migration changes identity, not lifecycle state. Preserve the
           // applied timestamp because later verification is ordered against it.
-          statusAt: Number.isFinite(legacy.statusAt) && legacy.statusAt > 0 ? legacy.statusAt : ts2
+          statusAt: Number.isFinite(legacy.statusAt) && legacy.statusAt > 0 ? legacy.statusAt : ts3
         };
         await this.append(migrated, guard);
         return { record: migrated, created: false };
       }
     }
     const isCanonical = id === canonicalId;
-    const record2 = {
+    const record3 = {
       id,
       v: isCanonical ? 2 : 1,
       ...isCanonical ? { key } : {},
-      createdAt: ts2,
+      createdAt: ts3,
       source,
       scope: f.scope,
       sessionIds: isCanonical ? key.sessionIds : [...f.sessionIds].sort(),
@@ -9793,10 +9821,10 @@ var SuggestionStore = class {
       ...f.cohortFingerprint ? { cohortFingerprint: f.cohortFingerprint } : {},
       evidence: f.evidence,
       status: "new",
-      statusAt: ts2
+      statusAt: ts3
     };
-    await this.append(record2, guard);
-    return { record: record2, created: true };
+    await this.append(record3, guard);
+    return { record: record3, created: true };
   }
   async transition(id, to, patch) {
     return this.serialized((guard) => this.transitionLocked(id, to, guard, patch));
@@ -9834,8 +9862,8 @@ async function persistNextStep(a, redact, deps = {}) {
   const improvement = top.improvement;
   try {
     const store = deps.store ? deps.store() : new SuggestionStore();
-    const { record: record2 } = await store.upsertNew(finding, "report");
-    return { finding: title, improvement, next: kickoffCommands(record2, "serve").claude };
+    const { record: record3 } = await store.upsertNew(finding, "report");
+    return { finding: title, improvement, next: kickoffCommands(record3, "serve").claude };
   } catch (e) {
     const key = suggestionKey(finding, "report");
     const id = suggestionIdV2(key);
@@ -9865,9 +9893,9 @@ var MAX_WALK_DEPTH = 6;
 var CLAUDE_JSON_KEYS = ["mcpServers", "projects", "skillUsage", "pluginUsage"];
 var CLAUDE_JSON_PROJECT_KEYS = ["mcpServers", "enabledMcpjsonServers", "disabledMcpjsonServers"];
 function reasonOf(e) {
-  const code = e?.code;
-  if (code === "ENOENT" || code === "ENOTDIR") return "enoent";
-  if (code === "EACCES" || code === "EPERM") return "eacces";
+  const code2 = e?.code;
+  if (code2 === "ENOENT" || code2 === "ENOTDIR") return "enoent";
+  if (code2 === "EACCES" || code2 === "EPERM") return "eacces";
   return "other";
 }
 function cleanPath(ctx, p) {
@@ -9899,20 +9927,20 @@ async function readText(ctx, path) {
     return null;
   }
   try {
-    const text2 = await readFile(path, "utf8");
+    const text3 = await readFile(path, "utf8");
     ctx.filesRead++;
     ctx.bytesRead += size;
-    return text2;
+    return text3;
   } catch (e) {
     mark(ctx, path, reasonOf(e));
     return null;
   }
 }
 async function readJson(ctx, path) {
-  const text2 = await readText(ctx, path);
-  if (text2 === null) return null;
+  const text3 = await readText(ctx, path);
+  if (text3 === null) return null;
   try {
-    const v = JSON.parse(text2);
+    const v = JSON.parse(text3);
     if (!v || typeof v !== "object" || Array.isArray(v)) {
       mark(ctx, path, "bad-json");
       return null;
@@ -9952,21 +9980,21 @@ async function isDir(path) {
   }
 }
 var approxTokens2 = (bytes) => Math.ceil(bytes / 4);
-function lineCount(text2) {
-  if (text2 === "") return 0;
-  const parts = text2.split("\n");
-  if (parts[parts.length - 1] === "") parts.pop();
-  return parts.length;
+function lineCount(text3) {
+  if (text3 === "") return 0;
+  const parts2 = text3.split("\n");
+  if (parts2[parts2.length - 1] === "") parts2.pop();
+  return parts2.length;
 }
-function headingCount(text2) {
+function headingCount(text3) {
   let n2 = 0;
-  for (const l of text2.split("\n")) if (/^#{1,6}\s/.test(l)) n2++;
+  for (const l of text3.split("\n")) if (/^#{1,6}\s/.test(l)) n2++;
   return n2;
 }
 var FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/;
-function parseFrontmatter(text2) {
-  const m = FRONTMATTER.exec(text2);
-  if (!m) return { fm: {}, body: text2 };
+function parseFrontmatter(text3) {
+  const m = FRONTMATTER.exec(text3);
+  if (!m) return { fm: {}, body: text3 };
   const fm = {};
   for (const raw of (m[1] ?? "").split(/\r?\n/)) {
     if (/^\s/.test(raw)) continue;
@@ -9979,7 +10007,7 @@ function parseFrontmatter(text2) {
     if (val.length > 1 && (val.startsWith('"') && val.endsWith('"') || val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
     fm[key] = val;
   }
-  return { fm, body: text2.slice(m[0].length) };
+  return { fm, body: text3.slice(m[0].length) };
 }
 function splitList(value) {
   if (value === void 0) return null;
@@ -10078,10 +10106,10 @@ async function readSkillDir(ctx, dir, origin, plugin) {
   for (const e of await listDir(ctx, dir)) {
     if (!e.dir || e.name.startsWith(".")) continue;
     const file = join7(dir, e.name, "SKILL.md");
-    const text2 = await readText(ctx, file);
-    if (text2 === null) continue;
-    const { fm, body } = parseFrontmatter(text2);
-    const bytes = Buffer.byteLength(text2, "utf8");
+    const text3 = await readText(ctx, file);
+    if (text3 === null) continue;
+    const { fm, body } = parseFrontmatter(text3);
+    const bytes = Buffer.byteLength(text3, "utf8");
     out3.push({
       name: cleanName(fm["name"] ?? e.name),
       origin,
@@ -10100,10 +10128,10 @@ async function readSkillDir(ctx, dir, origin, plugin) {
 async function readAgentDir(ctx, dir, origin, plugin) {
   const out3 = [];
   for (const file of await walkMarkdown(ctx, dir)) {
-    const text2 = await readText(ctx, file);
-    if (text2 === null) continue;
-    const { fm } = parseFrontmatter(text2);
-    const bytes = Buffer.byteLength(text2, "utf8");
+    const text3 = await readText(ctx, file);
+    if (text3 === null) continue;
+    const { fm } = parseFrontmatter(text3);
+    const bytes = Buffer.byteLength(text3, "utf8");
     out3.push({
       name: cleanName(fm["name"] ?? basename7(file, ".md")),
       origin,
@@ -10121,10 +10149,10 @@ async function readAgentDir(ctx, dir, origin, plugin) {
   return out3;
 }
 async function readMemory(ctx, file, scope) {
-  const text2 = await readText(ctx, file);
-  if (text2 === null) return null;
-  const bytes = Buffer.byteLength(text2, "utf8");
-  return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: lineCount(text2), headings: headingCount(text2) };
+  const text3 = await readText(ctx, file);
+  if (text3 === null) return null;
+  const bytes = Buffer.byteLength(text3, "utf8");
+  return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: lineCount(text3), headings: headingCount(text3) };
 }
 function mcpFromRecord(rec, scope, enabled = true) {
   if (!rec) return [];
@@ -10289,11 +10317,11 @@ async function collectInventory(opts) {
       const ownRowsFrom = mcpServers.length;
       mcpServers.push(...mcpFromRecord(asRecord(proj["mcpServers"]), "project"));
       const ownsRepoFile = key === opts.cwd;
-      for (const [list, on] of [
+      for (const [list2, on] of [
         [asArray(proj["enabledMcpjsonServers"]), true],
         [asArray(proj["disabledMcpjsonServers"]), false]
       ]) {
-        for (const raw of list) {
+        for (const raw of list2) {
           const name = asString(raw);
           if (!name) continue;
           const clean = cleanName(name);
@@ -10678,12 +10706,12 @@ function json(res, status, body) {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
   res.end(s);
 }
-function publicSuggestion(record2) {
+function publicSuggestion(record3) {
   const view = {
-    ...record2,
+    ...record3,
     // Always overwrite any unknown JSONL property with the computed result.
     // JSON.stringify omits undefined, so untrusted records expose no claim.
-    verificationTrusted: isTrustedComputedVerification(record2) ? true : void 0
+    verificationTrusted: isTrustedComputedVerification(record3) ? true : void 0
   };
   return redactValue(view, { scrub: true });
 }
@@ -11066,12 +11094,12 @@ var kickoffRoutes = (ctx) => [
         sendJson(res, 400, { error: `suggestionId mismatch: finding hashes to ${id}` });
         return;
       }
-      const { record: record2 } = await ctx.store.upsertNew(parsed.finding, "report");
-      const commands = kickoffCommands(record2, "serve");
+      const { record: record3 } = await ctx.store.upsertNew(parsed.finding, "report");
+      const commands = kickoffCommands(record3, "serve");
       const command = commands.claude;
-      const annotated = { ...record2, kickoff: { mode: "serve", command } };
+      const annotated = { ...record3, kickoff: { mode: "serve", command } };
       const publicRecord = redactValue(annotated, { scrub: true });
-      ctx.noteSuggestion?.(record2);
+      ctx.noteSuggestion?.(record3);
       if (parsed.mode === "run") {
         sendJson(res, 403, {
           record: publicRecord,
@@ -11367,7 +11395,7 @@ async function startServe(opts, deps = {}) {
     registry,
     store,
     emit: (ev) => hub.emit(ev),
-    noteSuggestion: (record2) => suggestionWatcher.observe(record2),
+    noteSuggestion: (record3) => suggestionWatcher.observe(record3),
     now,
     renderReport
   };
@@ -11441,9 +11469,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve13, reject) => {
+  await new Promise((resolve14, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve13);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve14);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -11460,7 +11488,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve13) => server.close(() => resolve13()));
+      await new Promise((resolve14) => server.close(() => resolve14()));
     }
   };
 }
@@ -11518,8 +11546,8 @@ function mascotLines(caps) {
   const indent = " ".repeat(Math.max(INDENT2.length, Math.floor((width - widest) / 2)));
   const budget = width - indent.length;
   return rows2.map((row2) => {
-    const text2 = plainRow(row2);
-    if (displayWidth(text2) > budget) return indent + paint(caps, FACE_STYLE, truncate(text2, budget, caps));
+    const text3 = plainRow(row2);
+    if (displayWidth(text3) > budget) return indent + paint(caps, FACE_STYLE, truncate(text3, budget, caps));
     return indent + row2.map((segment) => paint(caps, segment.style, segment.text)).join("");
   });
 }
@@ -11741,7 +11769,7 @@ function validateCrossFinding(value, index) {
   const ruleId = boundedId(value["ruleId"], `Aggregate.crossFindings[${index}].ruleId`, MAX_RULE_ID_CHARS);
   const title = boundedString(value["title"], `Aggregate.crossFindings[${index}].title`, MAX_TITLE_CHARS, true);
   const recommendation = optionalString(value["recommendation"], `Aggregate.crossFindings[${index}].recommendation`, MAX_INPUT_TEXT_CHARS);
-  const parts = validateParts(value, `Aggregate.crossFindings[${index}]`, recommendation);
+  const parts2 = validateParts(value, `Aggregate.crossFindings[${index}]`, recommendation);
   const exampleTitle = optionalString(value["exampleTitle"], `Aggregate.crossFindings[${index}].exampleTitle`, MAX_TITLE_CHARS);
   const sessions = finiteNonNegative2(value["sessions"], `Aggregate.crossFindings[${index}].sessions`);
   if (!Number.isInteger(sessions) || sessions < 1 || sessions > MAX_EVIDENCE_INPUT_SESSIONS) {
@@ -11759,7 +11787,7 @@ function validateCrossFinding(value, index) {
     title,
     ...exampleTitle !== void 0 ? { exampleTitle } : {},
     ...recommendation !== void 0 ? { recommendation } : {},
-    ...parts,
+    ...parts2,
     sessions,
     totalSavingsTokens,
     totalSavingsMs,
@@ -11855,11 +11883,11 @@ function findingFromCrossFinding(finding, scope, cohortFingerprint) {
     }
   };
 }
-function outputParts(parts) {
+function outputParts(parts2) {
   return {
-    ...parts.improvement !== void 0 ? { improvement: outputText(parts.improvement, MAX_OUTPUT_DETAIL_CHARS) } : {},
-    ...parts.why !== void 0 ? { why: outputText(parts.why, MAX_OUTPUT_DETAIL_CHARS) } : {},
-    ...parts.method !== void 0 ? { method: outputText(parts.method, MAX_OUTPUT_DETAIL_CHARS) } : {}
+    ...parts2.improvement !== void 0 ? { improvement: outputText(parts2.improvement, MAX_OUTPUT_DETAIL_CHARS) } : {},
+    ...parts2.why !== void 0 ? { why: outputText(parts2.why, MAX_OUTPUT_DETAIL_CHARS) } : {},
+    ...parts2.method !== void 0 ? { method: outputText(parts2.method, MAX_OUTPUT_DETAIL_CHARS) } : {}
   };
 }
 function rowsFromAnalysis(a) {
@@ -11987,12 +12015,12 @@ function projectEvidence(value, options = {}) {
   }
   return bundle;
 }
-function parseEvidenceArtifact(text2, options = {}) {
-  const bytes = utf8Bytes(text2);
+function parseEvidenceArtifact(text3, options = {}) {
+  const bytes = utf8Bytes(text3);
   if (bytes > MAX_EVIDENCE_ARTIFACT_BYTES) throw new Error(`evidence artifact exceeds ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes`);
   let value;
   try {
-    value = JSON.parse(text2);
+    value = JSON.parse(text3);
   } catch (error) {
     throw new Error(`invalid evidence JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -12041,8 +12069,8 @@ var CLOCK_SKEW_MS = 3e4;
 function hash(value) {
   return createHash3("sha256").update(value).digest("base64url");
 }
-function sessionsHash(record2) {
-  return hash(JSON.stringify(normalizeSessionIds(record2.sessionIds)));
+function sessionsHash(record3) {
+  return hash(JSON.stringify(normalizeSessionIds(record3.sessionIds)));
 }
 function estimateHash(estimate) {
   return hash(
@@ -12061,9 +12089,9 @@ function invalid(reason) {
 function verifyConfirmationReceipt(o) {
   if (!o.publicKey) return invalid("confirmation public key unavailable");
   if (!o.token || o.token.length > MAX_RECEIPT_CHARS) return invalid("receipt is empty or too large");
-  const parts = o.token.split(".");
-  if (parts.length !== 2) return invalid("receipt format is invalid");
-  const [payload, signature] = parts;
+  const parts2 = o.token.split(".");
+  if (parts2.length !== 2) return invalid("receipt format is invalid");
+  const [payload, signature] = parts2;
   if (!/^[A-Za-z0-9_-]+$/.test(payload) || !/^[A-Za-z0-9_-]{86}$/.test(signature)) return invalid("receipt format is invalid");
   const payloadBytes = Buffer.from(payload, "base64url");
   const signatureBytes = Buffer.from(signature, "base64url");
@@ -12542,8 +12570,8 @@ async function resolveEvidenceSession(selector, flags) {
 }
 async function bundleFromJsonFile(path, options) {
   const absolute = resolve7(path);
-  const text2 = await readStableTextFile(absolute, MAX_EVIDENCE_ARTIFACT_BYTES, "evidence JSON");
-  return parseEvidenceArtifact(text2, options);
+  const text3 = await readStableTextFile(absolute, MAX_EVIDENCE_ARTIFACT_BYTES, "evidence JSON");
+  return parseEvidenceArtifact(text3, options);
 }
 async function bundleFromSession(selector, flags, options) {
   const ref = await resolveEvidenceSession(selector, flags);
@@ -12903,31 +12931,31 @@ function evidenceSessionIds(selectors) {
   return ids;
 }
 var byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
-async function measureCohortEffect(record2, others, deps) {
-  if (record2.scope === "global") throw new Error(`suggestion ${record2.id}: global suggestions are review-only and cannot be verified`);
-  if (record2.status !== "applied" && record2.status !== "verified") {
-    throw new Error(`suggestion ${record2.id} is not applied (status ${record2.status})`);
+async function measureCohortEffect(record3, others, deps) {
+  if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
+  if (record3.status !== "applied" && record3.status !== "verified") {
+    throw new Error(`suggestion ${record3.id} is not applied (status ${record3.status})`);
   }
-  const proposal = record2.proposal;
+  const proposal = record3.proposal;
   const intents = proposal?.verificationChecks;
   if (proposal?.v !== 1 || !proposal.workspace || !intents?.length) {
-    throw new Error(`suggestion ${record2.id} has no reviewed verification checks and workspace`);
+    throw new Error(`suggestion ${record3.id} has no reviewed verification checks and workspace`);
   }
-  const appliedAt = applicationTime(record2);
-  if (appliedAt === void 0) throw new Error(`suggestion ${record2.id}: its application time is unknown, so later sessions cannot be cut from it`);
+  const appliedAt = applicationTime(record3);
+  if (appliedAt === void 0) throw new Error(`suggestion ${record3.id}: its application time is unknown, so later sessions cannot be cut from it`);
   const cwd = await deps.canonicalWorkspace(proposal.workspace);
   const candidates = await deps.listCandidates(cwd);
   const skipped = Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0]));
-  const excluded = evidenceSessionIds(record2.sessionIds);
+  const excluded = evidenceSessionIds(record3.sessionIds);
   const baselineCandidates = candidates.filter((c) => c.mtimeMs < appliedAt).sort((a, b) => b.mtimeMs - a.mtimeMs || byPath(a, b));
   const laterCandidates = candidates.filter((c) => c.mtimeMs > appliedAt).sort((a, b) => a.mtimeMs - b.mtimeMs || byPath(a, b));
   skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === appliedAt).length;
   const seen = /* @__PURE__ */ new Set();
-  const take = async (list, side) => {
+  const take = async (list2, side) => {
     const accepted = [];
     let sideBytes = 0;
     let budgetSpent = false;
-    for (const candidate of list) {
+    for (const candidate of list2) {
       if (accepted.length >= COHORT_MAX) break;
       const id = candidate.sessionId.toLowerCase();
       if (seen.has(id)) continue;
@@ -12979,7 +13007,7 @@ async function measureCohortEffect(record2, others, deps) {
   const laterSide = await take(laterCandidates, "later");
   const later = laterSide.accepted;
   if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
-    throw new Error(`suggestion ${record2.id}: the reviewed workspace changed while its sessions were read`);
+    throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its sessions were read`);
   }
   const checks2 = intents.map(
     (intent) => evaluateCheck(
@@ -12993,16 +13021,16 @@ async function measureCohortEffect(record2, others, deps) {
   const windowEnd = measured.length ? Math.max(...measured.map((s) => s.endedAt)) : appliedAt;
   const confoundedBy = [
     ...new Set(
-      others.filter((other) => other.id !== record2.id && other.proposal?.workspace?.cwd === proposal.workspace.cwd).filter((other) => {
+      others.filter((other) => other.id !== record3.id && other.proposal?.workspace?.cwd === proposal.workspace.cwd).filter((other) => {
         const at = applicationTime(other);
         return at !== void 0 && at >= windowStart && at <= windowEnd;
       }).map((other) => other.id)
     )
   ].sort();
   return {
-    id: record2.id,
-    status: record2.status,
-    scope: record2.scope,
+    id: record3.id,
+    status: record3.status,
+    scope: record3.scope,
     appliedAt,
     verdict: overallVerdict(checks2, baseline.length, later.length),
     baseline,
@@ -13273,10 +13301,10 @@ function terminal(value) {
 var MIN_TITLE_COLUMNS = 20;
 function recordLines(rec, width) {
   const status = rec.status === "verified" && !isTrustedComputedVerification(rec) ? "legacy-unverified" : rec.status;
-  const head = `  ${terminal(rec.id)}  [${terminal(status)}]  `;
-  const column = displayWidth(head);
+  const head2 = `  ${terminal(rec.id)}  [${terminal(status)}]  `;
+  const column = displayWidth(head2);
   const [first = "", ...rest] = wrapWords(rec.title, Math.max(MIN_TITLE_COLUMNS, width - column));
-  const lines = [head + first, ...rest.map((t) => " ".repeat(column) + t)];
+  const lines = [head2 + first, ...rest.map((t) => " ".repeat(column) + t)];
   lines.push(`    rule ${terminal(rec.ruleId)} \xB7 scope ${terminal(rec.scope)} \xB7 sessions ${rec.sessionIds.map((s) => terminal(s.slice(0, 8))).join(", ")}`);
   if (rec.proposal) lines.push(`    proposal: ${terminal(rec.proposal.proposalPath)}`);
   return lines;
@@ -13434,11 +13462,11 @@ async function cmdCreate(store, positionals, flags) {
     };
     source = explicitId ? "report" : "skill";
   }
-  const { record: record2, created } = await store.upsertNew(finding, source, explicitId);
-  const command = kickoffCommand(record2, "serve");
-  const catalog = matchRule(record2.ruleId);
-  if (flagBool(flags, "json")) return emit(visible({ record: record2, created, command, catalog }, flags), flags);
-  printRecord(visible(record2, flags));
+  const { record: record3, created } = await store.upsertNew(finding, source, explicitId);
+  const command = kickoffCommand(record3, "serve");
+  const catalog = matchRule(record3.ruleId);
+  if (flagBool(flags, "json")) return emit(visible({ record: record3, created, command, catalog }, flags), flags);
+  printRecord(visible(record3, flags));
   printCatalog(catalog);
   process.stdout.write(`  ${created ? "created" : "already existed"}. Continue with:
     ${command}
@@ -13485,8 +13513,8 @@ async function cmdEffect(store, id, flags) {
   w(`  ${terminal(view.id)}  later sessions vs baseline \xB7 ${view.baseline.n} before, ${view.later.n} after the change`);
   for (const check of view.checks) w(`    ${terminal(check.evidence)}`);
   if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal).join(", ")} (not attributable to this change alone)`);
-  const skipped = Object.entries(view.skipped).filter(([, count2]) => count2 > 0);
-  if (skipped.length) w(`    skipped: ${skipped.map(([reason, count2]) => `${reason} ${count2}`).join(", ")}`);
+  const skipped = Object.entries(view.skipped).filter(([, count3]) => count3 > 0);
+  if (skipped.length) w(`    skipped: ${skipped.map(([reason, count3]) => `${reason} ${count3}`).join(", ")}`);
   w(`  verdict: ${view.verdict}`);
   w(`  next: ${terminal(view.next)}`);
 }
@@ -13507,10 +13535,19 @@ import { join as join9 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/cli/open-browser.ts
-import { spawn } from "node:child_process";
-function openInBrowser(target) {
-  const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
-  const args = process.platform === "win32" ? ["/c", "start", "", target] : [target];
+import { spawn as nodeSpawn } from "node:child_process";
+var CMD_SPECIAL = /[&^%!"<>|]/;
+function openInBrowser(target, deps = {}) {
+  const platform2 = deps.platform ?? process.platform;
+  const spawn = deps.spawn ?? nodeSpawn;
+  if (platform2 === "win32" && CMD_SPECIAL.test(target)) {
+    ;
+    (deps.stderr ?? process.stderr).write(`  orangu does not open this path, because cmd reads a character in it. Open it by hand: ${stripAnsi(target)}
+`);
+    return false;
+  }
+  const command = platform2 === "darwin" ? "open" : platform2 === "win32" ? "cmd" : "xdg-open";
+  const args = platform2 === "win32" ? ["/c", "start", "", target] : [target];
   try {
     const child = spawn(command, args, { detached: true, stdio: "ignore" });
     child.once("error", () => {
@@ -13518,6 +13555,7 @@ function openInBrowser(target) {
     child.unref();
   } catch {
   }
+  return true;
 }
 
 // src/feedback/model.ts
@@ -13586,12 +13624,12 @@ async function cmdFeedback(positionals, flags) {
   loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
 `);
   if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve13) => {
+  await new Promise((resolve14) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve13);
+      void server.close().finally(resolve14);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
@@ -13673,7 +13711,7 @@ var ORANGU_VERBS = new Set("report analyze list pick repo global watch serve fee
 var GIT_VERBS = new Set("add apply blame branch checkout cherry-pick clone commit config diff fetch grep init log merge mv pull push rebase reset restore revert rm show stash status switch tag worktree".split(" "));
 
 // src/ste/index.ts
-var ch = (code) => String.fromCharCode(code);
+var ch = (code2) => String.fromCharCode(code2);
 var PARAGRAPH = ch(8233);
 var EM = ch(8212);
 var LSQUO = ch(8216);
@@ -13701,8 +13739,8 @@ var TRAIL = new RegExp(`[.,;:!?)"${RDQUO}${RSQUO}']*$`);
 var WORD_EDGE = new RegExp(`^[([{"'${LDQUO}${LSQUO}]+|[)\\]}"'${RDQUO}${RSQUO}.,;:!?${ELLIPSIS}]+$`, "g");
 var WORD2 = new RegExp(`^[A-Za-z][A-Za-z'${RSQUO}-]*$`);
 var QUOTED_ARGUMENT = new RegExp(`^["${LDQUO}]`);
-function escapeRegExp(text2) {
-  return text2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function escapeRegExp(text3) {
+  return text3.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 var WORD_RULES = [
   ...Object.entries(STE_WORDS).map(([word, use]) => ({ word, use, source: "ste" })),
@@ -13712,15 +13750,15 @@ function htmlToText(html) {
   const blank = (match) => match.replace(/[^\n]/g, "");
   return html.replace(/<(script|style|svg|pre|code)\b[\s\S]*?<\/\1>/gi, blank).replace(/<!--[\s\S]*?-->/g, blank).replace(/<\/?(p|li|h[1-6]|div|section|article|td|th|tr|br|ul|ol|header|footer|figcaption|blockquote)\b[^>]*>/gi, PARAGRAPH).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"');
 }
-function proseWords(text2) {
-  return wrapCommands(text2).replace(/`[^`]*`/g, "CODE").split(/\s+/).map((token) => token.replace(WORD_EDGE, "")).filter((token) => WORD2.test(token)).length;
+function proseWords(text3) {
+  return wrapCommands(text3).replace(/`[^`]*`/g, "CODE").split(/\s+/).map((token) => token.replace(WORD_EDGE, "")).filter((token) => WORD2.test(token)).length;
 }
 function tableCells(line) {
   if (/^[\s|:-]+$/.test(line) && line.includes("-")) return [];
   const body = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
   const cells = [];
   let cell = "";
-  let code = false;
+  let code2 = false;
   for (let index = 0; index < body.length; index += 1) {
     const char = body[index];
     if (char === "\\" && body[index + 1] === "|") {
@@ -13728,8 +13766,8 @@ function tableCells(line) {
       index += 1;
       continue;
     }
-    if (char === "`") code = !code;
-    if (char === "|" && !code) {
+    if (char === "`") code2 = !code2;
+    if (char === "|" && !code2) {
       cells.push(cell);
       cell = "";
       continue;
@@ -13737,10 +13775,10 @@ function tableCells(line) {
     cell += char;
   }
   cells.push(cell);
-  return cells.map((text2) => text2.trim());
+  return cells.map((text3) => text3.trim());
 }
-function proseBlocks(text2, { lines: lineMode = false } = {}) {
-  const lines = text2.split("\n");
+function proseBlocks(text3, { lines: lineMode = false } = {}) {
+  const lines = text3.split("\n");
   const blocks = [];
   let current = null;
   let fence = null;
@@ -13794,8 +13832,8 @@ function proseBlocks(text2, { lines: lineMode = false } = {}) {
   close();
   return blocks;
 }
-function frontmatterDescription(text2) {
-  const lines = text2.split("\n");
+function frontmatterDescription(text3) {
+  const lines = text3.split("\n");
   if (lines[0]?.trim() !== "---") return null;
   const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
   for (let index = 1; index < end; index += 1) {
@@ -13855,12 +13893,12 @@ function wrapSegment(segment) {
   const tokens = tokenize(segment);
   const spans = [];
   for (let i = 0; i < tokens.length; ) {
-    const head = commandHead(tokens, i);
-    if (!head) {
+    const head2 = commandHead(tokens, i);
+    if (!head2) {
       i += 1;
       continue;
     }
-    let last = i + head - 1;
+    let last = i + head2 - 1;
     let end = tokens[last].coreEnd;
     for (let j = last + 1; j < tokens.length && !tokens[j - 1].trail; ) {
       const token = tokens[j];
@@ -13894,14 +13932,14 @@ function wrapSegment(segment) {
   }
   return out3 + segment.slice(cursor);
 }
-function wrapCommands(text2) {
-  return text2.split(/(`[^`]*`)/).map((part, index) => index % 2 ? part : wrapSegment(part)).join("");
+function wrapCommands(text3) {
+  return text3.split(/(`[^`]*`)/).map((part, index) => index % 2 ? part : wrapSegment(part)).join("");
 }
 function plainSentence(sentence) {
   return wrapCommands(sentence).replace(/`[^`]*`/g, "CODE").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/https?:\/\/\S+/g, "URL").replace(/[*_]{1,3}/g, "");
 }
-function splitSentences(text2) {
-  const guarded = text2.replace(ABBREVIATIONS, (match) => match.replace(/\./g, "\0"));
+function splitSentences(text3) {
+  const guarded = text3.replace(ABBREVIATIONS, (match) => match.replace(/\./g, "\0"));
   const sentences = [];
   let cursor = 0;
   for (const match of guarded.matchAll(SENTENCE_END)) {
@@ -13914,8 +13952,8 @@ function splitSentences(text2) {
 function wordCount(sentence) {
   return plainSentence(sentence).split(/\s+/).filter((token) => /[A-Za-z0-9]/.test(token)).length;
 }
-function excerpt(text2) {
-  const flat = text2.replace(/\s+/g, " ");
+function excerpt(text3) {
+  const flat = text3.replace(/\s+/g, " ");
   return flat.length > 90 ? `${flat.slice(0, 87)}...` : flat;
 }
 function sentenceFindings(sentence, line) {
@@ -13967,13 +14005,13 @@ function checkBlocks(blocks) {
   let clean = 0;
   for (const block of blocks) {
     const where = block.file === void 0 ? {} : { file: block.file };
-    const parts = splitSentences(block.text);
-    if (!block.label && parts.length > LIMITS.paragraphSentences) {
-      findings.push({ ...where, line: block.line, rule: "paragraph-length", text: excerpt(parts[0].text), hint: `${parts.length} sentences: keep one topic in at most ${LIMITS.paragraphSentences}` });
+    const parts2 = splitSentences(block.text);
+    if (!block.label && parts2.length > LIMITS.paragraphSentences) {
+      findings.push({ ...where, line: block.line, rule: "paragraph-length", text: excerpt(parts2[0].text), hint: `${parts2.length} sentences: keep one topic in at most ${LIMITS.paragraphSentences}` });
     }
     let newlines = 0;
     let nextNewline = block.text.indexOf("\n");
-    for (const part of parts) {
+    for (const part of parts2) {
       while (nextNewline !== -1 && nextNewline < part.offset) {
         newlines += 1;
         nextNewline = block.text.indexOf("\n", nextNewline + 1);
@@ -13992,8 +14030,8 @@ function checkBlocks(blocks) {
   const score = sentences === 0 ? 100 : Math.round(clean / sentences * 100);
   return { sentences, clean, score, findings, banned: bannedCounts(findings) };
 }
-function checkText(text2, { html = false, lines = false, frontmatter = false } = {}) {
-  const source = html ? htmlToText(text2) : text2;
+function checkText(text3, { html = false, lines = false, frontmatter = false } = {}) {
+  const source = html ? htmlToText(text3) : text3;
   const blocks = proseBlocks(source, { lines });
   const description = frontmatter ? frontmatterDescription(source) : null;
   return checkBlocks(description ? [description, ...blocks] : blocks);
@@ -14008,23 +14046,23 @@ var cannotRead = (name, reason) => new Error(`orangu ste cannot read ${oneLine2(
 var C1_OR_DEL = /[\x7f-\x9f]/g;
 var escapeC1 = (json2) => json2.replace(C1_OR_DEL, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 function readError(name, error) {
-  const code = error?.code;
-  if (typeof code !== "string") return error instanceof Error ? error : new Error(String(error));
-  if (code === "ENOENT") return cannotRead(name, "the file does not exist");
-  if (code === "EACCES" || code === "EPERM") return cannotRead(name, "permission denied");
-  if (code === "EISDIR") return cannotRead(name, "it is a folder, not a file");
-  return cannotRead(name, code);
+  const code2 = error?.code;
+  if (typeof code2 !== "string") return error instanceof Error ? error : new Error(String(error));
+  if (code2 === "ENOENT") return cannotRead(name, "the file does not exist");
+  if (code2 === "EACCES" || code2 === "EPERM") return cannotRead(name, "permission denied");
+  if (code2 === "EISDIR") return cannotRead(name, "it is a folder, not a file");
+  return cannotRead(name, code2);
 }
 async function readBounded(chunks, name) {
-  const parts = [];
+  const parts2 = [];
   let total = 0;
   for await (const chunk of chunks) {
     const part = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
     total += part.length;
     if (total > MAX_EVIDENCE_ARTIFACT_BYTES) throw overBound(name);
-    parts.push(part);
+    parts2.push(part);
   }
-  return Buffer.concat(parts).toString("utf8");
+  return Buffer.concat(parts2).toString("utf8");
 }
 async function readNamedFile(name) {
   const path = resolve10(name);
@@ -14055,12 +14093,1560 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
   const lines = flagBool(flags, "lines");
   const results = [];
   for (const file of positionals) {
-    const text2 = file === STDIN ? await readBounded(io.stdin, file) : await readNamedFile(file);
-    results.push({ file, ...checkText(text2, { html: /\.html?$/i.test(file), lines, frontmatter: /\.md$/i.test(file) }) });
+    const text3 = file === STDIN ? await readBounded(io.stdin, file) : await readNamedFile(file);
+    results.push({ file, ...checkText(text3, { html: /\.html?$/i.test(file), lines, frontmatter: /\.md$/i.test(file) }) });
   }
   const output = flagBool(flags, "json") ? [escapeC1(JSON.stringify(results, null, 2))] : results.flatMap(report);
   io.stdout.write(`${output.join("\n")}
 `);
+}
+
+// src/cli/commands/show-me.ts
+import { basename as basename11, resolve as resolve11 } from "node:path";
+
+// src/show-me/prepare.ts
+import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
+import { join as join11 } from "node:path";
+
+// src/show-me/render.ts
+import { randomBytes as randomBytes4 } from "node:crypto";
+import { lstat as lstat9, realpath as realpath11, rename as rename2, rm } from "node:fs/promises";
+import { dirname as dirname6, join as join10 } from "node:path";
+
+// src/show-me/check.ts
+import { createHash as createHash4 } from "node:crypto";
+
+// src/show-me/generated/templates.ts
+var SLIDES_HTML = `<!doctype html>
+<html lang="en" data-scope="session" data-live="true" data-caution="true" data-redacted="true">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rRgBMKwoW58rZ5PngLud1b+VTqqEUklGeUZGfC/w6q8='; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>
+<meta name="robots" content="noindex"/>
+<meta name="generator" content="orangu 0.9.0"/>
+<title data-slot="title">EXAMPLE Fix the flaky checkout tests</title>
+<style>
+/* Canonical design tokens for the report, served app, and landing page.
+   scripts/build.mjs inlines this file. Do not hand-duplicate these values anywhere else.
+   Light is the only default: dark exists solely under :root[data-theme="dark"], never from the
+   system colour scheme. \`--accent\` is decorative only on light backgrounds; text uses \`--accent-ink\`. */
+:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#8a877e;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+:root[data-theme="dark"]{--bg:#151412;--bg2:#1d1c18;--surface:#201f1b;--border:#2e2c25;--border2:#403d33;--ink1:#f5f3ec;--ink2:#c9c5ba;--ink3:#8f8c81;--accent-ink:#e79f84;--accent-weak:#38281f;--good:#9cc47f;--warn:#e6c374;--bad:#f0a08b;--cmd:#26241e;--cmd-ink:#f5f3ec;--cat-read:#7fa8d8;--cat-search:#9cc0e8;--cat-edit:#e79f84;--cat-write:#f0a08b;--cat-exec:#b39bd8;--cat-agent:#6fbdb8;--cat-skill:#e6c374;--cat-web:#9cc47f;--cat-other:#a8a498}
+*,*:before,*:after{box-sizing:border-box}html{scroll-snap-type:y mandatory;background:var(--bg2);-webkit-text-size-adjust:100%}@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+body{margin:0;background:var(--bg2);color:var(--ink1);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}h1,h2,h3,p,ol,ul,figure{margin:0}ol,ul{padding:0;list-style:none}code{font-family:var(--mono)}
+:focus-visible{outline:2px solid var(--accent-ink);outline-offset:3px}.theme{position:fixed;top:14px;right:14px;z-index:9;font:500 12.5px/1 var(--sans);color:var(--ink2);background:var(--surface);border:1px
+solid var(--border2);border-radius:999px;padding:8px 14px;cursor:pointer}.theme:hover{color:var(--ink1);border-color:var(--ink2)}html:not([data-scope=session]) [data-if=session],html[data-scope=session]
+[data-if=aggregate],html:not([data-scope=repo]) [data-if=repo],html:not([data-scope=global]) [data-if=global],html:not([data-live=true]) [data-if=live],html:not([data-caution=true]) [data-if=caution],
+html[data-caution=true] [data-if=reconciled],html:not([data-redacted=true]) [data-if=redacted],html:not(:has([data-repeat=improvement])) [data-if=improvements],html:not(:has([data-repeat=finding])) [data-if=findings],
+html:has([data-repeat=improvement]) [data-empty=improvement],html:has([data-repeat=finding]) [data-empty=finding]{display:none!important}.deck{counter-reset:slide;outline:none}.slide{height:100vh;height:100dvh;
+scroll-snap-align:start;display:grid;place-items:center;padding:28px;counter-increment:slide}.frame{position:relative;width:min(100%,calc((100vh - 56px)*16/9));width:min(100%,calc((100dvh - 56px)*16/9));
+aspect-ratio:16/9;container-type:size;overflow:hidden;background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 1px 2px color-mix(in srgb,var(--ink1) 6%,transparent),0 32px
+72px -40px color-mix(in srgb,var(--ink1) 38%,transparent)}:root[data-theme=dark] .frame{box-shadow:0 1px 2px color-mix(in srgb,var(--bg) 70%,transparent),0 32px 72px -36px color-mix(in srgb,var(--bg) 95%,transparent)}
+.sl{--d:5.4cqw;--t:3.2cqw;--vd:3.6cqw;--k:4cqw;--l:1.9cqw;--b:1.55cqw;--f:1.25cqw;--e:max(12px,1.05cqw);--c:1.3cqw;--o:max(12px,1cqw);--g:1.8cqw;--r:1.1cqw;position:absolute;inset:0;display:grid;grid-template-rows:auto
+minmax(0,1fr) auto;row-gap:1.4cqw;padding:3.2cqw 4.5cqw 2.4cqw}.hd{display:flex;align-items:center;gap:1.4cqw;min-height:2.2cqw}.ey{display:flex;align-items:center;gap:.9cqw;font:600 var(--e)/1.2 var(--sans);
+letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}.ey:before{content:"";flex:none;width:1.9cqw;height:2px;border-radius:2px;background:var(--accent)}.bd{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
+column-gap:var(--g);row-gap:1.6cqw;align-content:center;min-height:0}.st{grid-column:1/-1;font:700 var(--t)/1.12 var(--title);letter-spacing:-.022em;text-wrap:balance}.ft{display:flex;justify-content:space-between;
+align-items:center;padding-top:1.2cqw;border-top:1px solid var(--border);font:400 var(--o)/1 var(--mono);color:var(--ink2)}.ft .sc:before{content:"orangu \\b7  session report"}html[data-scope=repo] .ft
+.sc:before{content:"orangu \\b7  repository report"}html[data-scope=global] .ft .sc:before{content:"orangu \\b7  all sessions on this machine"}.pg:empty:before{content:counter(slide)}.lb{font:600 var(--e)/1.2
+var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin-bottom:.7cqw}.tx{font-size:var(--b);line-height:1.5}.pill{display:inline-block;font:400 var(--f)/1.3 var(--mono);color:var(--ink2);
+border:1px solid var(--border2);border-radius:999px;padding:.15cqw .8cqw;white-space:nowrap}.cmd{display:flex;align-items:center;gap:1cqw;background:var(--cmd);color:var(--cmd-ink);font:400 var(--c)/1.35
+var(--mono);border-radius:.8cqw;padding:.95cqw 1.3cqw;overflow:hidden}.cmd .p{color:var(--accent);flex:none}.cmd code{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dot{flex:none;display:inline-block;
+width:.8cqw;height:.8cqw;border-radius:50%;background:var(--ink3)}[data-sev=high] .dot{background:var(--bad)}[data-sev=medium] .dot{background:var(--warn)}[data-sev=low] .dot{background:var(--cat-read)}
+.caution{border:1px solid var(--border);border-radius:var(--r);padding:1cqw 1.4cqw;background:color-mix(in srgb,var(--warn) 12%,var(--surface));font-size:var(--f);line-height:1.45}.caution b{color:var(--warn)}
+.bar{display:flex;gap:2px;height:.75cqw;border-radius:99px;overflow:hidden;background:var(--border)}.bar i{flex:var(--n) 1 0;min-width:0}[data-k=read]{--c-k:var(--cat-read)}[data-k=write5m]{--c-k:var(--cat-skill)}
+[data-k=write1h]{--c-k:var(--cat-edit)}[data-k=input]{--c-k:var(--cat-write)}[data-k=output]{--c-k:var(--cat-agent)}[data-k=active]{--c-k:var(--cat-search)}[data-k=waiting]{--c-k:var(--border2)}.bar i{
+background:var(--c-k)}.lg{display:flex;flex-wrap:wrap;gap:.3cqw 1.2cqw;margin-top:.8cqw;font-size:var(--o);color:var(--ink2)}.lg span{display:inline-flex;align-items:center;gap:.5cqw}.lg span:before{content:"";
+width:.7cqw;height:.7cqw;border-radius:2px;background:var(--c-k)}.ring{flex:none;width:4.4cqw;height:4.4cqw}.ring circle{fill:none;stroke-width:4.4}.ring .trk{stroke:var(--border)}.ring .val{stroke:var(--cat-read);
+stroke-linecap:round}.strip{display:block;width:100%;height:.9cqw;margin-top:.7cqw;border-radius:99px;overflow:hidden}.strip .trk{fill:var(--border)}.cap{display:block;margin-top:.45cqw;font-size:var(--o);
+color:var(--ink2);text-align:right}.strip .hit{fill:var(--accent);stroke:var(--accent);stroke-width:3px;vector-effect:non-scaling-stroke}.s-title .frame{background:linear-gradient(125deg,var(--surface)
+38%,var(--accent-weak))}.glow{position:absolute;inset:0;pointer-events:none}.glow i{position:absolute;border-radius:50%}.glow i:nth-child(1){width:60cqh;height:60cqh;right:-9cqh;top:-23cqh;background:color-mix(in
+srgb,var(--accent) 12%,transparent)}.glow i:nth-child(2){width:92cqh;height:92cqh;right:-25cqh;top:-39cqh;border:1px solid color-mix(in srgb,var(--accent) 24%,transparent)}.glow i:nth-child(3){width:11cqh;
+height:11cqh;right:41cqh;top:47cqh;background:color-mix(in srgb,var(--accent) 20%,transparent)}.mascot{width:4.6cqw;height:4.6cqw;object-fit:contain}.wm{font:700 1.9cqw/1 var(--title);letter-spacing:-.02em}
+.s-title .bd{align-content:end}.tt{grid-column:1/9}.tt .ey{margin-bottom:1.4cqw}.dp{font:700 var(--d)/1.03 var(--title);letter-spacing:-.032em;text-wrap:balance;display:-webkit-box;-webkit-box-orient:vertical;
+-webkit-line-clamp:2;overflow:hidden}.mt{margin-top:1.6cqw;font-size:var(--l);line-height:1.3;color:var(--ink2)}.mt>span+span:before{content:"\\b7";margin:0 .8cqw}.lv{display:inline-block;margin-top:1.4cqw;
+font-size:var(--f);color:var(--ink1);background:var(--surface);border:1px solid var(--border2);border-radius:999px;padding:.5cqw 1.2cqw}.lv:before{content:"";display:inline-block;vertical-align:.08em;
+margin-right:.8cqw;width:.8cqw;height:.8cqw;border-radius:50%;background:var(--accent)}.nt{grid-column:9/13;align-self:end;display:grid;gap:1cqw;font-size:var(--f);line-height:1.45;color:var(--ink2);text-align:right;
+text-wrap:pretty}.vd{grid-column:1/11;font:700 var(--vd)/1.12 var(--title);letter-spacing:-.025em;text-wrap:balance;margin-bottom:1cqw}.cards{grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+gap:var(--g)}.ax{display:flex;flex-direction:column;gap:.5cqw;min-width:0;border:1px solid var(--border);border-left:.35cqw solid var(--border2);border-radius:var(--r);padding:1.7cqw 1.9cqw;background:var(--surface)}
+.ax.q{border-left-color:var(--good)}.ax.c{border-left-color:var(--accent)}.an{font:600 var(--e)/1.2 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}.av{font:700 var(--k)/1.05
+var(--title);letter-spacing:-.025em;display:flex;align-items:center;gap:1.2cqw}.av small{font:600 var(--f)/1 var(--sans);letter-spacing:0;color:var(--ink2)}.ax.c .av b{color:var(--accent-ink)}.av.phrase{
+font-size:2.2cqw;line-height:1.22}.ann{font-size:var(--f);line-height:1.45;color:var(--ink2)}.ax .chart{margin-top:auto;padding-top:1cqw}.end{display:inline-flex;align-items:center;gap:.6cqw}.end:before{
+content:"";width:.8cqw;height:.8cqw;border-radius:50%;background:var(--ink3)}[data-end=clean] .end:before{background:var(--good)}[data-end=failing] .end:before{background:var(--bad)}[data-end=interrupted]
+.end:before{background:var(--warn)}.ax .caution{margin-top:auto}.wide{grid-column:1/-1}.sv{margin-left:auto;display:inline-flex;align-items:center;gap:.6cqw;font:600 var(--e)/1 var(--sans);letter-spacing:.06em;
+text-transform:uppercase;color:var(--ink2)}.ev{grid-column:1/8;display:flex;flex-direction:column;gap:1.5cqw;min-width:0}.facts{display:grid;gap:.9cqw;border-top:1px solid var(--border);padding-top:1.3cqw}
+.fr{display:grid;grid-template-columns:9cqw minmax(0,1fr);gap:1.2cqw;align-items:baseline;font-size:var(--f);line-height:1.45}.fk{color:var(--ink2)}.fr:has(.share){align-items:center}.fv code{font-size:var(--f)}
+.why .tx{color:var(--ink2)}.rec{grid-column:8/13;align-self:stretch;display:flex;flex-direction:column;gap:.4cqw;background:var(--bg2);border-left:.3cqw solid var(--accent);border-radius:0 var(--r) var(--r)
+0;padding:2cqw 2.2cqw}.rec .lb{color:var(--accent-ink)}.share{display:flex;align-items:center;gap:1cqw}.share .ring{width:3cqw;height:3cqw}.imps{grid-column:1/11;counter-reset:rank;display:grid}.imps li{
+counter-increment:rank;display:grid;grid-template-columns:2.6cqw minmax(0,1fr) auto;gap:1.4cqw;align-items:center;padding:1.15cqw 0;border-top:1px solid var(--border)}.imps li:last-child{border-bottom:1px
+solid var(--border)}.rk{width:2.6cqw;height:2.6cqw;border-radius:50%;background:var(--accent-ink);color:var(--bg);display:grid;place-items:center;font:700 var(--f)/1 var(--sans)}.rk:before{content:counter(rank)}
+.it{font-size:var(--b);line-height:1.4}.im{display:flex;align-items:center;gap:1cqw;justify-self:end}.save{font:600 var(--f)/1 var(--mono);color:var(--accent-ink);white-space:nowrap}.empty{grid-column:1/11}
+.empty h3{font:700 var(--t)/1.15 var(--title);letter-spacing:-.02em;margin-bottom:1cqw}.empty p{font-size:var(--l);color:var(--ink2)}.steps{grid-column:1/11;counter-reset:step;display:grid;gap:1.5cqw}
+.steps>li{counter-increment:step;display:grid;grid-template-columns:2.6cqw minmax(0,1fr);gap:1.4cqw;align-items:start}.steps>li:before{content:counter(step);width:2.6cqw;height:2.6cqw;border-radius:50%;
+border:1px solid var(--border2);display:grid;place-items:center;font:700 var(--f)/1 var(--mono);color:var(--ink2)}.steps .tx{padding-top:.3cqw}.steps .cmd{margin-top:.9cqw}.steps .cmd+.cmd{margin-top:.6cqw}
+.small{margin-top:1.1cqw;font-size:var(--f);color:var(--ink2)}.method{grid-column:1/11;display:grid;gap:1.1cqw}.method li{display:grid;grid-template-columns:2cqw minmax(0,1fr);gap:1cqw;align-items:baseline;
+font-size:var(--b);line-height:1.45}.method li:before{content:"";width:.8cqw;height:.8cqw;border-radius:50%;background:var(--good);transform:translateY(-.15cqw)}.method li.muted:before{background:var(--border2)}
+.go{grid-column:1/11;justify-self:start;margin-top:.6cqw;display:inline-flex;align-items:center;gap:.8cqw;font:600 var(--b)/1 var(--sans);color:var(--accent-ink);text-decoration:none;border:1px solid var(--accent-ink);
+border-radius:999px;padding:1cqw 1.8cqw}.go:hover{background:var(--accent-weak)}@media(max-width:700px){html{scroll-snap-type:none}.slide{height:auto;padding:10px 16px}.slide:first-child{padding-top:56px}
+.frame{width:100%;aspect-ratio:auto;container-type:inline-size;border-radius:14px}.sl{--d:34px;--t:24px;--vd:26px;--k:28px;--l:17px;--b:15px;--f:14px;--e:12px;--c:13px;--o:12px;--g:14px;--r:10px;position:static;
+row-gap:16px;padding:20px}.bd,.cards{grid-template-columns:minmax(0,1fr);row-gap:14px}.bd>*,.cards>*{grid-column:1/-1!important}.glow{display:none}.mascot{width:44px;height:44px}.wm{font-size:20px}.nt{
+text-align:left}.ax{padding:16px}.av.phrase{font-size:20px}.ring{width:40px;height:40px}.share .ring{width:28px;height:28px}.bar{height:8px}.strip{height:10px}.fr{grid-template-columns:96px minmax(0,1fr)}
+.rec{border-left-width:3px;padding:16px}.imps li,.steps>li{grid-template-columns:28px minmax(0,1fr)}.rk,.steps>li:before{width:28px;height:28px}.im{grid-column:2;justify-self:start}.cmd{padding:10px 12px;
+border-radius:8px}.cmd code{white-space:normal;overflow-wrap:anywhere}.method li{grid-template-columns:14px minmax(0,1fr)}.method li:before{width:8px;height:8px}.go{padding:10px 16px}.ey:before{width:16px}}
+@page{size:13.333in 7.5in;margin:0}@media print{html{scroll-snap-type:none;background:none}body{background:none}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.theme,.hint{display:none}.slide{
+width:13.333in;height:7.5in;padding:0;display:block;break-after:page;page-break-after:always}.frame{width:13.333in;height:7.5in;border:0;border-radius:0;box-shadow:none}}
+</style>
+</head>
+<body>
+<button class="theme" id="theme" type="button">\u25D0 theme \xB7 light</button>
+<main class="deck" tabindex="0" aria-label="Slides">
+
+<section class="slide s-title" aria-roledescription="slide">
+ <div class="frame"><div class="glow" aria-hidden="true"><i></i><i></i><i></i></div><div class="sl">
+  <header class="hd"><img class="mascot" src="data:image/png;base64,
+iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAfZ0lEQVR4nMWbd7gV1bn/P2utmV1P
+r3QQQaQKIlgoB3vEKEY9RMWuqNdEsQWDGg8YE2vuz26MLUaNxmO5GrtX4YiCBRVQmtKRdjh99z0z
+a/3+mH0KYAyoee56ntl79p6ZVb7r7e87gv+bpgAvFApz7bUzx36xaEF1dsfmCXbQLr7hzr9Uvf76
+6/WAnD17tieEMP9Hc/zpmzFGAFJIyZ233DJq0tjhL07crzgz45CIGd8LM3nc8OeNMXKXx2R1Ner/
+Yr4/VRM1NTWyCixABoNBfjll8jXjBpWkbxgfNGsuK9XPnRR1T5hwwFJjTP+ZM2cOPWry5MGzam4f
+sbHFlNjB0H92cv/Jzqurq1Vtba0HIKXE8zx5/FFV9+hNn/7q6oMsxvaKenHHyDNfahTb7F7bekQc
+aTmpCu1lTSgYFK4Mbhfh4qW9+va9+6FnXntTCKGBn5Ql/iMA1NTUyDlz5miAvLw8zjvvvMO++vzT
+ycl485GVzsZDfj8urHsWBETK1WJL3OXPnyc4pJtkSLlFQcCiJGqxZGuKOxfEachaDB019qNn3/zw
+aCFEwhjDTykXfnIA2nfdGCMuv2R69aKP3r8iP7390FFlWQYWCw7tFdalYUsmHY2lBMZAyAJbSZNy
+NEoIHl2SMI8uyYhJx5y46ewLL71s8olTXkkm4lRXo2pr8X7K+f6kAFSBVQfu0oULR1x7/dX3ym3L
+Jp7Q16Gqb8h0y7c8g5RJx0hXG6QQtFOzNv5hSUg6hqe+TNCYMjS6Qb3dK2gNlPZ+9ddXXn/nlCmT
+lwIS0D/VnH9KABQI76F776x+6pH7Hz00tCl/+oF5XlleUMSzRjqeRkiBFALRwcadIHT8Noa8gMDT
+hkTGZUOLwzsbPJaky9ITTzjn2utuvu2e666b1cFiP7btqnJ+UKuurlZCCO++O289/+8P3/XcGZXf
+5l8/scQLB2zVnNZSY7CUQEmB6IBc+OsXXfZA+Edr1hBzQCqLfmURU1lgubFtG0NvvPD43bfOvv7w
+2bNnm+rq6p9ENf5oAGpqamRtba332AMPTPrH3x549Nye2/W0kaW6MaWVa0DJ3Ko6SN74511pr+tv
+4QNlSYFGoLURPfOkFbCVlzG2c/DYsWkhhKmurv6xU/eH+zEPG2OEEEIYY0omjh60ZErhuu4Xjy0z
+9QlXWkogDBjhDyP+zUjtl43fMeQYxRhDvi1IZD0954OY+LZw5Ftvzv3oFCFE2vgT+FEa4UdRwNSp
+QlrK0oePH3PTYNb3uHB0ideQcKUlBRgwQmAQaGPwDHg5YfddTeeue7r9Pp9apBC0Zg1SSTl7fFSX
+Ni352Tm//MU9wWBIT5069UdT8A/uwCd9vBtn/Xa4u/3rCy4aGfHSnlFdd1obCNmS0qhNWdSiLGpT
+GFIIwNMGjOnQAHlB6d+TZ1EatckP+izuGYMlBVkPbMtWVx9oOVuWL7zgT3+cM7m2ttb7sbLgx7CA
+spTlHTh84GOTC9afd9XBBW5DSlu2EngGLCnICylWbE/x8foYW+IekYBkQLHF+P4FFIVtmpIukYDE
+koJFG9tYvCVFY9pQFJIMKQ8ytm+BrxqzGiXB8QxlEeU99GmTfD01+KO5CxePEz7iP5gNfhAF5Jwa
+78233qy0UztOPqqfbRKuUEpJPANBJXA0XPfmNm5YZLO+dxXdjj6dwNiTeNUZzIWvtvLSVy30KAiw
+vinLRS9t58FvK2kdchy9jp2Gc8DxPFbfm4teqeer+gwFIQtP+3ZCPOOpyQOjyOZ1B8+aNetA4Edp
+BOuHPHTccQMDgHff3XcfsW80XbhvccjLeJ4SQmArQcKBX71azwFHH8/zl0yhqLTQF2xCgDYs/GwV
+v7/jcT795wZWpSJMm34xZ514GFY44O+lAByP2jc/5rd/epTfjdUc1idCLOOR0YZeBbY3pixtLXj/
+vSnV1dWLY1/UWvjG0V5Twg9hAQEYKxDkiAkH33ckn/7qkgML3Ma0tqSAgpDNZa9sZb9jTuLGa8/C
+a2ol63idWsBAqChKa2OMs6+5lxnnHscRxxxCdkczWhu63hgqL2LB/KVcc+2tPHxcPsVhi4yrKQpJ
+/erKVvlU24hFn3y5ZkxLc+MPWMYPA0DagYCedsKxJ29e+82hLdnU1BkDGvocNzDPtKQ8URRWzF0d
+44n6Hrzy1zlkkmkQAoHAGI0QAiEEnqcJ2BbStkBr0ukMUvrcaIy/iUIIHMcl2q2UP9zxFA3zX+Km
+o7uzI+ESDUizoj4jZi0UjSJQ8nyvnt1WPPfOBw8IIRx2Ny+/f0F7s3hlWfqUYyfcvH39Fy8ce+T+
+1wR0sk/Qd2gE+EbPG98kqT7pKLCVv6MGbEsRzI9gKYXWGqUkrqfJpjNksw5KtbOwIRgNEwwFMdpg
+WRa6LcG0E6tYlYqyPZbFVgJtEHlBiU2m9LQTR10ckS13TRgx4FljjKrZy03dIwBqamokoJ9+/PED
+6zd+PeuOmou9q++41plywpGmMZbCUhKlBG0plwYTYcyIAZDOIgUEIyGaY0nen/8lrfEkwUgYo41v
+/AmBEBJjQFkKyw6w4ONlrFy9kWBeBCHAzTr06V5KXkUP1jWmCCiJUpLmeJqRB400l//xCvehO6/O
+lufpky84ferxc0DvjVDcIyE4b94cCejH/3zfhFHD+suhB+zvPvv/nrRHdw8Sqc8nmfWwpKAt5SBC
+YUoLo3iOix0N8+niVVx14/3k5eWTSSe455YrGbJfb5xUO9kbZE7PXzrzTrZsa6AtkeL0XxzO5RdX
+k2ppI2Ar8guLaE5uwFaCpAvlEcUpgyrFo7f91TrrpInusVWj9ROvLv6ZsuxXamtr95gK9owF6kBI
+yeZN6wq7lxcZlKSpNcGX777G6B4h0p5P6koIhDY4rvYFvjbceMvDnFV9NG+8fT8nHTeBmTc9CFJh
+jMEYcFwXVZDHw0++QkNTC2+9fA/PPHg9j/39Nb766huCkRBGa1zHwVa+gZx2PAZ3z6N+0Vw2bWmA
+cIDy8hLppGNFuRnvsQzYMzVYBabOUFRYlE6n0+BqLj3vRLYWbeadDz5kWM9CPO1RGLKwMi1s3NpI
+98r+ZGNJfnbUoZx24hHoHc2cefLRaARSe4SiEZxUhnAoiLAVvXpUcu1l0zBOln59e/Cr809BAFIK
+YrEUrQ3b6D0sRMrx3eW5axPs37c71dNPhkCQlra4sULRjGDvNMIeUUBFRbUBw7BRB325eMV6kY0l
+Jdrlxa8d3l6bImqDow2RgKJP2OG9j75ChIJIKZlxSTXhoIWbylAQDXDFlWey8usNfPHlajwhWPft
+Dj5671NOPmEi4w8ZRjaWJJNIMf3M4xnUvzdIyecrNyFa6+lbHCbjaQIS6uMOd30Sx81mIeuKJcvW
+iOKyikWu51JVteeCcI8AqK2t1YB48Imn523Y2rZ27oefyba2tH7+3c+4aGwJWc+31xOO4ZThhbz3
+9rs0bmsmEAqQao37qk2ACAS49dZHePiZt3h7/ucsXrGed+Z/xlvzl3Dx1Xfw7eYdqGAAISCdSOF5
+HtgBHnn6nxzXz8JSEoEgljGcOLiQ2PbNvP3JN2b1ytVy4eI1rb+dc+uLGMO8eWaPw2Z7jFR1dbV6
+/vnnvcumn3/Gt8vqnrbzCr2hyaVyxmHloinlooTA1ZqyqM0dddv5tmI0D99+OW4qA0AwL8LCj75k
+wecrmHbq0YSUJL8oH5PN8m1TGyuWr2P1+m+57OJq0q1xAEJFeTzw2Ou8/rcnePKXPWhNuSjpe4z5
+QckHa2M8sKHUK8qPqJQsv+zVeR/ed+opp3REovek7bEdUFtb6516qlH3PvLXv/ceOm7GyiVLxc/2
+yzeJrOdbHjmvrS3tsbLR0L93BWidC/oIvEyW3j0rmHHJVO568B8cOfVqVF6Um+56muOqr+LICaP4
+xc/G48aTSOkbTDrrsv+AHiQD+SzekiA/KPG0QQpDIutxUN+oF4xtUU1e8e3vLFh036la79Xi9woA
+v1VjtCdSVtni4X0KRf8i1WG6a6AwbHH/gga6jT2cG649Byed9a8LgXY1PcqLUdrj0nNO5NLzTkK3
+tnHI6KE8eNtVWJaiR3kROne/lIJMPMURRxzI9TfM4JaFSRKOxpI+0RoEFWFhxvQKE4jmJ9LpFPV7
+wfvtba+cofr6WgGYNas+Hz0xPysW11ueEloOLrNwNWxoTPJJPJ9nf3UqXmucUDiI53poT4OUuFpj
+0h59updzwTlTcNriTD76YDCGbLvZnPMFjDGECyJkGto48oiRvPz2eF5cOp8LxlbQknZJuYYXV2Xp
+FTa0bdsyIhed2mtn6Ae5w5XF+cWbW7PcOLeJjOePGQkoFqyLM2zkAZRVFIEQ/PmpN9i4tREZsNHa
+dKi1rOuSam4DBJlEinQijZCyc/FaEwgGuffRl9nR3IbxPE446hA+qzc4nsYYCCjBo1/EWbglQ5CM
+J8RsUVVVtdcUsFcATJpUBaB6lkQ3Lmu2Sak8EZAGDShp+LbNY59+PTEYVDhEc1MLDz/9Gqq4EM/1
+MF32RykJAqTwTVvwd91xPQJF+Sxa8jXvzP2I4tJCSGXYp2cZWStCLOUAYAlD0JbilW8cyiu66VD4
+Tl1XV+fubWxgjwEwxog5c+q0EMJTed1bk67UmYwjGtM+X2oDWoCSEqQi0xZnxiVT+eKr1bz47JtE
+elUipcB1XbT2d1FrjTYGrQ2u66G1JlJWxI76Fq7941+Yedk0otEweBopJDnfCktCU0rjeUbNGB3R
+O9YunTJhzLB7jTGFtbW1XlVV1R6z9h4BkIv7G2OMmXL8MTfM+59HHrt0uMdpg5T4fGsWG42nBX0K
+LLZs2Y4AXFcTthUP3XkVf/7by9z2h0dIa0O4rJhQYT7BUIBgwCYYChKMhgiXFhIqLODNNxcybXoN
+/3X2CYwfN5JUWxxCATbVN2O5KaIBRUAJ1jQbSiOCqw4rkH+aKMODUl/8+tARAz6450+3jq2rq3PZ
+Q/n2b3mmPdFpjKmYcPAB9/XKrKmeMcpieGWYb5pc5sxv5fbDiyiOSr5pSHPT0ggvPHYztvT9/lA4
+RGsizS13P82yrzdy6Oj9OXD4fvTpUUokEiGbydLQ3Mbi5WtZ+NlKhNb8evpJjB0zjExLDG0M4bJC
+am59gtCS17jk0G4YNDcviDOsTHLigDBpLYhauE8tbbP+tjrUeuTPz7jgjvsefEFrreD7c4nfC0CX
+xfc59fjD36nc/uF+140rcG3LUm0ZLcrCkrs/jVOepzhjSBhHC657exujTz2XS84/gWR9E0pZ2LZC
+5kVYs2o978z7hKUrN5BMJvG0xvWgIBqkb69uTDxkBOMPHQEI0vEEIAiGg2zY0sh5F1/P3ZMC9C6y
+WdHg8uiSBDdNLMDTJhdqF5SGpffWN63qwW8KOHrqf11xw5zf3z1+/HgrRxF7B0BOrWCMCZ88edKn
+veo/GDLn8BIn4Qjb1QblX0MATy5Lckz/MPsUKja1Zvn1u2nu+u/fcdCBA0k2tqKU7/2FQgEIh0Br
+dDJNNutgWRZWyIaADY5LJp4CfLkQDAUwts0p02/mSPUNZ48uJZZ2eenrNGN6BtinwCLtmY5FuBrK
+o0rXrW42964pVceffeX0GVdd80hNVZU151+A8K8AEICMRiLehHEHP99zx/xTbj+yxI07wjJGI3OJ
+D60NtoKEAxkNBUFB2JIsWB/n1sWK2/94FRPGDUe3xMhk3Z1GU1IipcRojWc0piMe6CdDgkV5tDbH
+uWTWA/RuXMyswyuJpR0cz5DxoCQsyXjgTyWXcDW+U1YeUfr1lc3mntWl2St/d9ux1aefNb9rsca/
+BaDd7r/kogtnxhY9d9vNh1qOpSzb1YZc6A5jfLXVngMQAhwPDIbisMWH6xPc/kmaY08+iemnHU1l
+t2LIZPGyDp7ndTwPIKRACYEVsCEYwE1leem9z3ngoWc5PH87lx5WQSzj5XKnBinAMQJL+kkVKUQu
+nWZyAWVDacTSf1vcKF+J77/5nQVLRwkhGmtqatg1q7wbAO18/+67Hwz6w1Wnf3FGzx2ByYOKZMbV
+QrXrDCEwGkK2IGz7Fp4APxeIbxYXBBWNSYc/1TWwyarg4InjGH/wCAb27UZhYYGvy/zVg+OSTqX5
+dnsTHy5azvz3F+J+u4rzR0YZ3z+flqTrA298CjEIlPRTbwJJIuOR9TQiB4AxOdM8KNzr3muxmnof
++dzLb7z3yxOnnLgbFXwXBUhjjDhvyuHPf7yg7qQxPYPeTVUFyg9e5RZvDGFbsnxbgldWxMii6EKI
+PoVgsIUgGpR8s8Phw3UQCEHPbvlUVJZTWpxPOBwk63i0trTR0NjM5q0N1DfC4EoYt49FxoGUq7Gl
+n19sj5j7yWSBow0lAc1pI0spj9g+CDli0MYQUIK2ZMa9ckHAqpr2m5NmzZr58q6ssJuurKmpAdB5
+JRWhorBtrhgbJaQg7RqEEBhtCNqSZVsT/HFFKZPPuZnSkhLcXAFEOwIilxU2BgYrwWkBn9+zWYeM
+42K0T4naGCxLYSmFbVvYtkXW1cQzetesec6S7JyHsizWrl3NzGf/m7smQX7Qws1lXyWQcQ3dCsPi
+tH6t5qmXn7zZGPOaEEJ39Rt2AqBd8s+ePTu6YtWqHv81yhL7FFqiJWNQUnQgG7Elr66McexZv+e8
+s8+isbHRl/R0yLGdaMt0ZIX9C1J2XhQiJ1CN6ZQJ+MLtO+nUdH5pz+Pnk4/jhs0bmPv145w+pgfN
+CYf2fRAC4lmtLGVp0bxuWM2smb8AaqdOndphH+wEwNSpU6WUyjv7zDNq9nW+HjF5QJ7XktFKii5F
+LcKfrFSSgmiYpqYm4vG4L9G73NN1ot8x/52a6HiIzhRaTqrT9douzXVdLMsmPz+/IwfRFVhjIGwJ
+NsXRa+vjouTz+RfYgWBtbW1tx50dpnCu0kMvXry8/7YVCy87cz+pvVx9hz8Z01HSIqUgz9I0NTZg
+2wHff1cKmVNtQsiOcyklYpfvXQ8hpV8/JGWXfpR/3qXf9kN1+TZCEGvaQXHY90e6lt1ICSnXcOaQ
+oBhYkUe4tO/72UxaVFdXdyDaQQHLly8XUio9+8Zrrh4d3h4c0T3fbcp4VnspW8em5rAosKG+pdnn
+++9q35Og2qkapOO/7+ingxp27cAXCEIItNYkY83kB9XOgjI3gKMNJWHF5H5GvN2wZVzADhjHdXam
+AGOMqK2t9TzP7R7ftGza5H7KpLVQ7YJHdJT5+PU7CCgKQay5odPFNburlK7kb3b5vz1S1H7sdLGD
+4rqwxXc0IQSO6+HEmykK5QAwHcU1vlsuBPEssqqPbXT910f8/ZnnRwA6l+3yAZg0aZICmDZt2gn7
+WjsKB1eGdco1QgrfwDGdGpbF9Rk8LSgOK5Ktjb4NIHbe7nbB1r6wXYFpT4sZo3NGUeezhvbCIrHz
+A+2niI77pZKk02mcRDPFEYttMZeVDRls4ZfZCIRvZmgj+hTY3vCCZOiFF54+FWDevHmdANTV1elg
+MMSm1V+dOqbMNbby9ToCPCNQAmwFYSX4YpvD5phLZdQiE2vCdVx/MbvseFce6GTNDqWG1ppgIEhh
+YQG2be0sxAQ7s5Dp/LtTuhqUVCSSSXSqlbKozadbsmxPaPIC+ElUfO3j74eUI4qypnXruhONMbKu
+rs6vYW5PfK7c2NAtlGk8eFi5JZKOkQJBQAmKgoK0q9nQ4uEaKAkq3l2Xolu+jZNsIZ3J7qTW2g2l
+rnB0lfJSSrTWlJWW0L9/X3r36sG++/SjoCAPbXQnSO2Pm07eau+1/VwqSSwWJ+ilsC3Fom0O+xQH
+2Jow7EhqwrYgP+jL+bSHGFQWEl7L5n0/X7mxG2BqamqkNXT5cgFw2y01QyrtVEH3vIDOekZaCrbF
+Nf/zdYp1zS4aQ9aFhqRHyoMje4YJOHHS6TR5kQB4uiM83knPuwsxrTWhYJCK8lIw4GkPpRTdKstJ
+JpJorTvrBk3H9n2HzWqQUhKLxSizMyzdIXl3fZrmlEfKNURtQa8CxRH9Qgwrt8lqIyqiSlcEMnlP
+P/bIYGDL0OXLhXV/fb0AaG7YPqRPyCESCJm2rMHTgk1tLof1tDl9SJiwBS0pw9pWh+dXZnhgcQaP
+GPF4jIK8CjzX222xph2ELuRvjCEQDCD88vkOSa6UwrJt0ul0zrnJrdt05YsufWuDlIpEWzMNcYdH
+vlScMCDECQNDdIsqgrZgc5vL1phH1rNQAiK20OVBT7a17tgfeHdZfb2woA6A+k0b8kcFDZZon7dh
+TPcAShgyrl+uVhQSHFMaZmiZzfkvNVDvtOCmYgjZbTeNt7OK8/trl/jpdKZj0drTKEuRTmfIZrO5
+Imr/IZFzfv6VIWSExEu28O5qj6p+CX57RDm2ZdGW9jBA/2KL/Uoskq4vFC0liSqHuZ98lAaYR12n
+IfTVki9aA6pTaUnh29KJrC9IjIGwrZi3NslFb6eZftVFHDNhJFu3bkVJidbfF3nKafkcCNlslq1b
+63FdDyEFmUyGLVu3dZJ/V+TaWWAnzjJ42kMK2Lx5M5efeyQHnfRLznq5mU1tDpaSfoTZMyScdh3m
+85GFoaWlsSM40gHAkOEHFGQ0HdWdIJDCt6aMgIAl2R7PcufnLjf94TecfdGpKMvGzWYoLasgHI7k
+nBS9s17fjSoMUkiaW1tZs3Y96zdsYu26jSSTqY46odwqdwHCP9Weh1KSSCRKcWkZqUSM0rIifjP7
+Yk45/1x+924zUnRGidROUzE4SHr12Sfo/67qBKCgtHzrtoTB1Wa3gm6jDXlByeOfNXH8qVOYMH44
+8dWbaG5L8OIzT/HcU4+zavkytDaEo3m7gWCEj77osKj8iJDneiSTKYzWOy8ednYouux8NL+AVDLN
+sqVL+etDDzDvf99lW2Mb7votXHjWsVSOPIQXlzZSEFK5MLrIZZwg62nRlBEMHzEq3d6n5ef+axkw
+6MDF69fV6VjGk1JanVoIsJSgIZ5htVPIlZPHoZtjBAOKP992FW/M/ZgvFr3Igldb2NGqueDymYwY
+cxjpZAIhJTuZil0EWVeZ8K9b1/s14Ugeb/7Pc/zz2b/SpzJMZWkBsy8/niMOG4WbzaAykurjJ/HY
+7Qs5bWSX8YxfvdKSdGW9E2bikFHLACoqKjpNLmNMYPyIfRZfN7hh0MG980wsq6WS7bwvWLE1zkPb
+e/Pk/TfiZTN+eioUhLLCnK9rWDpvIdff/Qp3PPw8nvcvA7Fd9xRjcvLhe3AwxhAIBNi+dRu3//Zc
+nrp3JoW9u0PAV7/UN5FxHAK2xZbGGFdecQO3HqII2JbvZgNRW+lFm2Ly7k39tr6x4MuBufePhAWY
+qiosKWXm55N/9vir696/7bA+xgNkOw0oKUlkNJFoFGlZZNNpAqEg8z/5inUbtlFZXogdCDCv7mO6
+9ehNMBQiHmtFyn+Xpfr3ZfTt2HieR0FREXYgj6dq32XokH1JJtNs2dHK2JH7MXS/PniOQ14khAqE
+SbtpQkGB1n7wNqjQdZu1DJb1ftayrER1NUoI4UmAefOMZ4wRr7z6+uMrde9tL61oUeVRW7uezpnD
+hkhAkE6l0J7nv7Tjafr1KifrZJn/8VL+d97HYIeJN9ezedMmLMv27XytMUb7399z6C7Hrtc87WHb
+Nmu+XomtPBqTLm+9t5CFn60gaAt6VBSjXRelJIlUFjeTJmz5msDzNPlBZRZviYnPEmXuNTOvu8/z
+PIYMqemMCOXewFBCiB0P3HXn9GefuPufZeFGc8SAYt2QdGQyq+ldHCa5fDObtzfRs6wAJ+vQu3d3
+LrxiWi427auMc0+9nIb67ew7cCDxeKyDCtrNYfNdnl2OTHfjhBx5aM+jqKSMtd+sZOiASm685zfQ
+3AqWAteF7Y2k0lmsgiir1n1D1GmjMFxGc1oTDSiyWcd5aJkKDDj4mFsnTTp8bXV1tZozZ46323jV
+1dXqhRde8G67uebyN//xyN3V3es5ZUihi1QyYkt53Ztb6HbUafz2imqyzW3MXfgVHy9aRrQgSjKW
+YNHnq7CixZx3+Sw812kn8i6jdHGQOuwb/792FfldcQFjwLIUba2tPHbXTZSV5HHAsP4EAkHiiTQ/
+P+oQhg/qjZ2fx/lX/IlDE59y2shy42hjdrRl9O8XJq2Wbgf/49W3687M5Th1e0xwt9Gqcq++Pfbw
+g0c/89e/PNgztWbfn/d1GdktiAJ9dV3KzJh1NROPOQSnvlEuXr6Wteu3UN6zkjden6cXr00ycNAg
+ksm4r35yo4gcv7cTQIeZ3MXsN+2aoov53B5wMVoTDOex/ItPqJ48miGDB8im7fUMGtiPEUP3hYJ8
+/chfXmDBc09y7+QyNrdl1fsb0ryyJZ/CweOefPKZF88R7dmsLoUU3ymCurz8WHzFZb+6cNWSReeL
+lo37jSxOyaZYkoXbJWecchSHjxtF314VSGmxauNW7rn/75hID/oPGoyTzfgx/9yapOgMVwvhB9nb
+I8O77XjuozNg4msCZQdY8vF8hvSJcs6ZU+hTWYLjeKxcs4nX/vcT3n6njhMGhUmbMMta7LQs33fx
+pONO+u8bb6ypTadT4rveOv2XMrhr/NwYE3ro0SfGzntv7pht65eXFttOUMtQn0yi7aBsNllo2ZaU
+Vt63+w8btiAUkLK1pVlb6ruz07pj0ZKuto/2q2h2+g2d/wnA05qS0lLREncqli/54gCdaY06ntb5
+JWVxIQLzCqNWdlurbus79MCmiVVV713x64s/bWtt9QfbzaD22/8HICtM8eD/gygAAAAASUVORK5C
+YII=" width="64" height="64" alt=""><span class="wm">orangu</span></header>
+  <div class="bd">
+   <div class="tt">
+    <p class="ey"><span data-if="session">orangu \xB7 session report</span><span data-if="repo">orangu \xB7 repository report</span><span data-if="global">orangu \xB7 all sessions on this machine</span></p>
+    <h1 class="dp" data-slot="title">EXAMPLE Fix the flaky checkout tests</h1>
+    <p class="mt" data-if="session"><span data-slot="project">EXAMPLE demo</span><span data-slot="date" data-f="date" data-v="">EXAMPLE 2026-08-17</span><span data-slot="models">EXAMPLE Claude Opus 5</span></p>
+    <p class="mt" data-if="aggregate"><span><b data-slot="sessions" data-f="num" data-v="">EXAMPLE 7</b> <span data-slot="session-noun">EXAMPLE sessions</span></span></p>
+    <p class="lv" data-if="live">Live session: these numbers are a snapshot from <span data-slot="live-at" data-f="time" data-v="">EXAMPLE 2026-08-17 14:05</span>.</p>
+   </div>
+   <div class="nt">
+    <p>The numbers come from orangu <span data-slot="version">EXAMPLE 0.8.0</span>. Claude wrote the words.</p>
+    <p class="hint">Use the arrow keys to move. Press T to change the theme. Print the page to save a PDF.</p>
+   </div>
+  </div>
+  <footer class="ft"><span class="sc"></span><span class="pg"></span></footer>
+ </div></div>
+</section>
+
+<section class="slide" aria-roledescription="slide">
+ <div class="frame"><div class="sl">
+  <header class="hd"><span class="ey">Verdict</span></header>
+  <div class="bd">
+   <h2 class="vd" data-slot="verdict">EXAMPLE The session fixed the checkout tests and ended with a green test run.</h2>
+   <div class="cards" data-if="session">
+    <div class="ax q" data-end="clean">
+     <div class="an">Quality \u2191</div>
+     <div class="av phrase" data-slot="quality">EXAMPLE 2 commits \xB7 3 test runs green</div>
+     <p class="ann"><span class="end" data-slot="quality-note">EXAMPLE The last check it ran passed.</span></p>
+    </div>
+    <div class="ax t">
+     <div class="an">Time \u2193</div>
+     <div class="av"><b data-slot="active" data-f="ms" data-v="">EXAMPLE 4m 12s</b></div>
+     <p class="ann"><span data-slot="wall" data-f="ms" data-v="">EXAMPLE 21m 3s</span> in total \xB7 <span data-slot="waiting" data-f="ms" data-v="">EXAMPLE 9m 40s</span> waiting for you</p>
+     <div class="chart" data-chart="time" data-sample>
+      <div class="bar" role="img" aria-label="EXAMPLE Working 4m 12s, waiting for you 9m 40s"><i data-k="active" style="--n:252000"></i><i data-k="waiting" style="--n:580000"></i></div>
+      <p class="lg"><span data-k="active">working</span><span data-k="waiting">waiting for you</span></p>
+     </div>
+    </div>
+    <div class="ax c">
+     <div class="an">Tokens \u2193</div>
+     <div class="av"><svg class="ring" data-chart="cache" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 84% read from cache"><circle class="trk" cx="18" cy="18" r="15" pathLength="100"/><circle class="val" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="84 100" transform="rotate(-90 18 18)"/></svg><span><b data-slot="tokens" data-f="tok" data-v="">EXAMPLE 1.23M</b> <small>tokens</small></span></div>
+     <p class="ann"><span data-slot="cache" data-f="pct" data-v="">EXAMPLE 84%</span> read from cache \xB7 <span data-slot="output" data-f="tok" data-v="">EXAMPLE 12.3k</span> generated</p>
+     <div class="chart" data-chart="tokens" data-sample>
+      <div class="bar" role="img" aria-label="EXAMPLE Tokens by kind: cache read 1,032,000, cache write 1h 98,000, fresh input 87,600, output 12,300"><i data-k="read" style="--n:1032000"></i><i data-k="write5m" style="--n:0"></i><i data-k="write1h" style="--n:98000"></i><i data-k="input" style="--n:87600"></i><i data-k="output" style="--n:12300"></i></div>
+      <p class="lg"><span data-k="read">cache read</span><span data-k="write5m">cache write 5m</span><span data-k="write1h">cache write 1h</span><span data-k="input">fresh input</span><span data-k="output">output</span></p>
+     </div>
+    </div>
+   </div>
+   <div class="cards" data-if="aggregate">
+    <div class="ax q">
+     <div class="an">Sessions read</div>
+     <div class="av"><b data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</b></div>
+     <p class="ann">Supported sessions in this scope</p>
+    </div>
+    <div class="ax t">
+     <div class="an">Recurring findings</div>
+     <div class="av"><b data-slot="kpi-findings" data-f="num" data-v="">EXAMPLE 11</b></div>
+     <p class="ann">Rule findings in these sessions</p>
+    </div>
+    <div class="ax c" data-empty="finding">
+     <div class="an">Top pattern</div>
+     <div class="av phrase">None</div>
+     <p class="ann">The rules found no finding in these sessions.</p>
+    </div>
+    <div class="ax c" data-if="findings">
+     <div class="an">Top pattern</div>
+     <div class="av share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span><b data-slot="kpi-top-n" data-f="num" data-v="">EXAMPLE 3</b> <small>of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></small></span></div>
+     <p class="ann">Rule <span class="pill" data-slot="kpi-top-rule">EXAMPLE tool-errors</span></p>
+    </div>
+   </div>
+   <p class="caution wide" data-if="caution"><b>CAUTION:</b> The token totals do not reconcile. The numbers can be wrong by <span data-slot="caution-pct">EXAMPLE 2.4</span>%.</p>
+  </div>
+  <footer class="ft"><span class="sc"></span><span class="pg"></span></footer>
+ </div></div>
+</section>
+
+<section class="slide sf" data-repeat="finding" data-max="3" data-sev="high" aria-roledescription="slide">
+ <div class="frame"><div class="sl">
+  <header class="hd"><span class="ey"><span><span data-if="session">Finding</span><span data-if="aggregate">Recurring finding</span> <span data-slot="f-i">EXAMPLE 1</span> of <span data-slot="f-k">EXAMPLE 3</span></span></span><span class="sv"><i class="dot"></i><span data-slot="f-sev">EXAMPLE high</span></span></header>
+  <div class="bd">
+   <p class="lb wide" data-if="aggregate">In one session</p>
+   <h2 class="st" data-slot="f-title">EXAMPLE 36 tool errors in 1,172 calls, most in Bash</h2>
+   <div class="ev">
+    <div>
+     <p class="lb">Evidence</p>
+     <p class="tx" data-slot="f-evidence">EXAMPLE The same test command failed 4 times in a row. Each run stopped on the same missing module.</p>
+    </div>
+    <div class="facts" data-if="session">
+     <div class="fr" data-if="turns"><span class="fk">In turns</span><span class="fv"><span data-slot="f-turns">EXAMPLE #4, #9, #12</span><svg class="strip" data-chart="turns" data-sample viewBox="0 0 40 1" preserveAspectRatio="none" role="img" aria-label="EXAMPLE In turns #4, #9 and #12 of 40"><rect class="trk" width="40" height="1"/><rect class="hit" data-repeat="turn" data-max="50" x="4" width="1" height="1"/></svg><span class="cap"><span data-slot="turn-count" data-f="num" data-v="">EXAMPLE 40</span> <span data-slot="turn-noun">EXAMPLE turns</span> in the session</span></span></div>
+     <div class="fr" data-if="savings"><span class="fk">Savings</span><span class="fv">\u2248<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>
+     <div class="fr" data-if="savings-ms"><span class="fk">Savings</span><span class="fv">\u2248<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>
+     <div class="fr"><span class="fk">Rule</span><span class="fv"><span class="pill" data-slot="f-rule">EXAMPLE tool-errors</span></span></div>
+    </div>
+    <div class="facts" data-if="aggregate">
+     <div class="fr"><span class="fk">Sessions</span><span class="fv share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span>Shows in <span data-slot="f-shows" data-f="num" data-v="">EXAMPLE 3</span> of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></span></span></div>
+     <div class="fr"><span class="fk">Examples</span><span class="fv"><code data-slot="f-examples">EXAMPLE 63d26acb, a1b2c3d4</code></span></div>
+     <div class="fr" data-if="savings"><span class="fk">Savings</span><span class="fv">\u2248<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>
+     <div class="fr" data-if="savings-ms"><span class="fk">Savings</span><span class="fv">\u2248<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></span></div>
+     <div class="fr"><span class="fk">Rule</span><span class="fv"><span class="pill" data-slot="f-rule">EXAMPLE tool-errors</span></span></div>
+    </div>
+    <div class="why" data-if="why">
+     <p class="lb">Why it matters</p>
+     <p class="tx" data-slot="f-why">EXAMPLE Each failed run used a turn. The agent ran the same command again with no change.</p>
+    </div>
+   </div>
+   <aside class="rec">
+    <p class="lb">Improvement</p>
+    <p class="tx" data-slot="f-improvement">EXAMPLE Install the missing module once, and add it to the setup script. Tell the agent to stop after 2 failures of the same command.</p>
+   </aside>
+  </div>
+  <footer class="ft"><span class="sc"></span><span class="pg"></span></footer>
+ </div></div>
+</section>
+
+<section class="slide" aria-roledescription="slide">
+ <div class="frame"><div class="sl">
+  <header class="hd"><span class="ey">Improvements</span></header>
+  <div class="bd">
+   <h2 class="st" data-if="improvements" data-slot="improvements-title">EXAMPLE Three changes for the next session</h2>
+   <ol class="imps" data-if="improvements">
+    <li data-repeat="improvement" data-max="5"><span class="rk" aria-hidden="true"></span><span class="it" data-slot="i-text">EXAMPLE Install the missing module once, and add it to the setup script.</span><span class="im"><span class="save" data-if="savings">\u2248<b data-slot="i-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens</span><span class="save" data-if="savings-ms">\u2248<b data-slot="i-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b></span><span class="pill" data-slot="i-rule">EXAMPLE tool-errors</span></span></li>
+   </ol>
+   <div class="empty" data-empty="improvement">
+    <h3>No improvements found</h3>
+    <p data-if="session">The rules found nothing to change in this session. Look again after your next session.</p>
+    <p data-if="aggregate">The rules found nothing to change in these sessions. Look again after your next session.</p>
+   </div>
+  </div>
+  <footer class="ft"><span class="sc"></span><span class="pg"></span></footer>
+ </div></div>
+</section>
+
+<section class="slide" aria-roledescription="slide">
+ <div class="frame"><div class="sl">
+  <header class="hd"><span class="ey">Next step</span></header>
+  <div class="bd">
+   <h2 class="st" data-if="session">Get an AI proposal in Claude Code</h2>
+   <h2 class="st" data-if="aggregate">Review the whole harness in Claude Code</h2>
+   <ol class="steps" data-if="improvements">
+    <li><div>
+     <p class="tx" data-if="session">Paste this command in a terminal in <code data-slot="cwd">EXAMPLE ~/Code/demo</code>. It starts Claude Code.</p>
+     <p class="tx" data-if="repo">Paste this command in a terminal in this repository. It starts Claude Code.</p>
+     <p class="tx" data-if="global">Paste this command in a terminal. It starts Claude Code.</p>
+     <div class="cmd" data-if="session"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:improve <span data-slot="session-id">EXAMPLE 63d26acb-0000-4000-8000-000000000001</span>"</code></div>
+     <div class="cmd" data-if="repo"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:harness --scope repo"</code></div>
+     <div class="cmd" data-if="global"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:harness --scope global"</code></div>
+     <p class="small">First time only, type these 2 lines in Claude Code:</p>
+     <div class="cmd"><span class="p" aria-hidden="true">&gt;</span><code>/plugin marketplace add NissanOhana/orangu</code></div>
+     <div class="cmd"><span class="p" aria-hidden="true">&gt;</span><code>/plugin install orangu</code></div>
+    </div></li>
+    <li><p class="tx" data-if="session">Claude writes one proposal: the change, its effect, its risk and how to check it. It changes no file in your repository.</p><p class="tx" data-if="aggregate">Claude Code reads the evidence. It ranks a plan of changes to your instructions, skills, hooks, agents and scripts. Then it waits for your approval.</p></li>
+    <li><p class="tx" data-if="session">The proposal is in ~/.orangu/proposals. Run orangu serve to see it in the browser.</p><p class="tx" data-if="repo">Review the ranked plan. Approve the items that you want. Claude applies them.</p><p class="tx" data-if="global">Review the ranked plan. Global scope is for review only. Claude applies nothing.</p></li>
+   </ol>
+   <div class="steps" data-empty="improvement">
+    <p class="tx">Look again after your next session.</p>
+    <div class="cmd"><span class="p" aria-hidden="true">$</span><code>npx orangu</code></div>
+   </div>
+  </div>
+  <footer class="ft"><span class="sc"></span><span class="pg"></span></footer>
+ </div></div>
+</section>
+
+<section class="slide" aria-roledescription="slide">
+ <div class="frame"><div class="sl">
+  <header class="hd"><span class="ey">How orangu measured this</span></header>
+  <div class="bd">
+   <h2 class="st">Every number comes from orangu</h2>
+   <ul class="method">
+    <li data-if="session">orangu read the session files on this machine. No model measured these numbers.</li>
+    <li data-if="aggregate">orangu read the session files of this scope on this machine. No model measured these numbers.</li>
+    <li>Tokens are the only usage unit.</li>
+    <li>A savings figure is an estimate by the rule that names it.</li>
+    <li>Claude wrote the words on these slides. Claude did not change the numbers.</li>
+    <li data-if="reconciled">The token totals reconcile.</li>
+    <li class="muted" data-if="redacted">orangu hid the transcript text. Details that quote commands or output are blank.</li>
+   </ul>
+   <p class="caution wide" data-if="caution"><b>CAUTION:</b> The token totals do not reconcile. The numbers can be wrong by <span data-slot="caution-pct">EXAMPLE 2.4</span>%.</p>
+   <a class="go" href="report.html">Read the written report \u2192</a>
+  </div>
+  <footer class="ft"><span class="sc"></span><span class="pg"></span></footer>
+ </div></div>
+</section>
+
+</main>
+<script>(()=>{const s=document,h=s.documentElement,p=t=>t>=1e9?(t/1e9).toFixed(t>=1e10?0:1)+"B":t>=1e6?(t/1e6).toFixed(t>=1e7?0:2)+"M":t>=1e3?(t/1e3).toFixed(t>=1e5?0:1)+"k":String(Math.round(t)),S=t=>{if(t<1e3)
+return Math.round(t)+"ms";const e=t/1e3;if(e<60)return e.toFixed(e<10?1:0)+"s";const o=Math.floor(e/60);if(o<60)return o+"m "+Math.round(e%60)+"s";const a=Math.floor(o/60);return a<24?a+"h "+o%60+"m":
+Math.floor(a/24)+"d "+a%24+"h"},u=t=>new Date(t).toISOString(),w={tok:p,ms:S,pct:t=>(t*100).toFixed(0)+"%",num:t=>t.toLocaleString("en-US"),date:t=>u(t).slice(0,10),time:t=>u(t).slice(0,16).replace("T",
+" ")};for(const t of s.querySelectorAll("[data-f][data-v]")){const e=w[t.dataset.f],o=t.dataset.v.split("+").reduce((a,y)=>a+Number(y),0);e&&t.dataset.v&&isFinite(o)&&(t.textContent=e(o))}const m=new URLSearchParams(
+location.hash.slice(1)),l=s.getElementById("theme");let n=m.get("theme")==="dark",d=0;const g=()=>{const t=new URLSearchParams;d&&t.set("n",d),n&&t.set("theme","dark"),history.replaceState(null,"","#"+
+t)},k=()=>{n?h.dataset.theme="dark":delete h.dataset.theme,l&&(l.textContent="\\u25D0 theme \\xB7 "+(n?"dark":"light"));for(const t of s.links)t.setAttribute("href",t.getAttribute("href").split("#")[0]+
+(n?"#theme=dark":""))},x=()=>{n=!n,k(),g()};k(),l&&l.addEventListener("click",x);const i=[...s.querySelectorAll(".slide")],r=i.length;let c=0;const f=(t,e)=>{c=Math.max(0,Math.min(r-1,t)),i[c].scrollIntoView(
+{behavior:e})};if(i.forEach((t,e)=>{t.setAttribute("aria-label",e+1+" of "+r);const o=t.querySelector(".pg");o&&(o.textContent=e+1+" / "+r)}),r){f((+m.get("n")||1)-1,"instant");const t=new IntersectionObserver(
+e=>{for(const o of e)o.isIntersecting&&(d=(c=i.indexOf(o.target))+1,g())},{rootMargin:"-45% 0px"});for(const e of i)t.observe(e)}s.addEventListener("keydown",t=>{const e=t.key;if(!(t.metaKey||t.ctrlKey||
+t.altKey)){if(/^t$/i.test(e))x();else if(r&&/^(Arrow(Right|Down)|j)$/i.test(e))f(c+1);else if(r&&/^(Arrow(Left|Up)|k)$/i.test(e))f(c-1);else return;t.preventDefault()}})})();</script>
+</body>
+</html>
+`;
+var REPORT_HTML = `<!doctype html>
+<html lang="en" data-scope="session" data-live="true" data-caution="true" data-redacted="true">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rRgBMKwoW58rZ5PngLud1b+VTqqEUklGeUZGfC/w6q8='; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>
+<meta name="robots" content="noindex"/>
+<meta name="generator" content="orangu 0.9.0"/>
+<title data-slot="title">EXAMPLE Fix the flaky checkout tests</title>
+<style>
+/* Canonical design tokens for the report, served app, and landing page.
+   scripts/build.mjs inlines this file. Do not hand-duplicate these values anywhere else.
+   Light is the only default: dark exists solely under :root[data-theme="dark"], never from the
+   system colour scheme. \`--accent\` is decorative only on light backgrounds; text uses \`--accent-ink\`. */
+:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#8a877e;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+:root[data-theme="dark"]{--bg:#151412;--bg2:#1d1c18;--surface:#201f1b;--border:#2e2c25;--border2:#403d33;--ink1:#f5f3ec;--ink2:#c9c5ba;--ink3:#8f8c81;--accent-ink:#e79f84;--accent-weak:#38281f;--good:#9cc47f;--warn:#e6c374;--bad:#f0a08b;--cmd:#26241e;--cmd-ink:#f5f3ec;--cat-read:#7fa8d8;--cat-search:#9cc0e8;--cat-edit:#e79f84;--cat-write:#f0a08b;--cat-exec:#b39bd8;--cat-agent:#6fbdb8;--cat-skill:#e6c374;--cat-web:#9cc47f;--cat-other:#a8a498}
+*,*:before,*:after{box-sizing:border-box}html{background:var(--bg);-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--ink1);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+h1,h2,h3,p,ol,ul,dl,dd{margin:0}ol,ul{padding:0;list-style:none}code{font:400 13.5px/1.5 var(--mono)}a{color:var(--accent-ink)}:focus-visible{outline:2px solid var(--accent-ink);outline-offset:3px}html:not([data-scope=session])
+[data-if=session],html[data-scope=session] [data-if=aggregate],html:not([data-scope=repo]) [data-if=repo],html:not([data-scope=global]) [data-if=global],html:not([data-live=true]) [data-if=live],html:not([data-caution=true])
+[data-if=caution],html[data-caution=true] [data-if=reconciled],html:not([data-redacted=true]) [data-if=redacted],html:not(:has([data-repeat=improvement])) [data-if=improvements],html:not(:has([data-repeat=finding]))
+[data-if=findings],html:has([data-repeat=improvement]) [data-empty=improvement],html:has([data-repeat=finding]) [data-empty=finding]{display:none!important}.page{max-width:760px;margin:0 auto;padding:48px
+24px 72px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}.brand{display:inline-flex;align-items:center;gap:10px;font:700 18px/1 var(--title);letter-spacing:-.02em}
+.brand:before{content:"";width:11px;height:11px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 4px var(--accent-weak)}.theme{font:500 12.5px/1 var(--sans);color:var(--ink2);background:var(--surface);
+border:1px solid var(--border2);border-radius:999px;padding:8px 14px;cursor:pointer}.theme:hover{color:var(--ink1);border-color:var(--ink2)}.hero{position:relative;overflow:hidden;border:1px solid var(--border);
+border-radius:16px;padding:36px 32px 30px;background:linear-gradient(125deg,var(--surface) 40%,var(--accent-weak))}.hero:after{content:"";position:absolute;width:260px;height:260px;right:-80px;top:-130px;
+border-radius:50%;background:color-mix(in srgb,var(--accent) 12%,transparent)}.hero>*{position:relative;z-index:1}.ey{display:flex;align-items:center;gap:10px;font:600 11px/1.3 var(--sans);letter-spacing:.06em;
+text-transform:uppercase;color:var(--ink2)}.ey:before{content:"";flex:none;width:18px;height:2px;border-radius:2px;background:var(--accent)}h1{font:700 36px/1.15 var(--title);letter-spacing:-.028em;margin:14px
+0 12px;text-wrap:balance}.meta{font-size:15px;color:var(--ink2)}.meta>span+span:before{content:"\\b7";margin:0 8px}.lv{display:inline-block;margin-top:14px;font-size:14px;background:var(--surface);border:1px
+solid var(--border2);border-radius:999px;padding:5px 12px}.lv:before{content:"";display:inline-block;vertical-align:.05em;margin-right:8px;width:8px;height:8px;border-radius:50%;background:var(--accent)}
+.open{display:inline-flex;align-items:center;gap:8px;margin-top:20px;font:600 14px/1 var(--sans);color:var(--accent-ink);text-decoration:none;border:1px solid var(--accent-ink);border-radius:999px;padding:10px
+16px;background:var(--surface)}.open:hover{background:var(--accent-weak)}section{margin-top:48px}h2{display:flex;align-items:center;gap:12px;font:700 22px/1.25 var(--title);letter-spacing:-.015em;margin-bottom:16px}
+h2:before{content:"";flex:none;width:4px;height:20px;border-radius:2px;background:var(--accent)}.lead{font-size:17px;line-height:1.65}.lead+.cards,.lead+.cards+.cards{margin-top:16px}.lb{font:600 11px/1.3
+var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin-bottom:6px}.pill{display:inline-block;font:400 12.5px/1.4 var(--mono);color:var(--ink2);border:1px solid var(--border2);
+border-radius:999px;padding:1px 9px;white-space:nowrap}.caution{margin-top:14px;border:1px solid var(--border);border-radius:10px;padding:12px 16px;background:color-mix(in srgb,var(--warn) 12%,var(--surface));
+font-size:14px;line-height:1.5}.caution b{color:var(--warn)}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.ax{display:flex;flex-direction:column;gap:6px;min-width:0;
+border:1px solid var(--border);border-left:3px solid var(--border2);border-radius:12px;padding:16px 18px;background:var(--surface)}.ax.q{border-left-color:var(--good)}.ax.c{border-left-color:var(--accent)}
+.an{font:600 11px/1.3 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}.av{display:flex;align-items:center;gap:12px;font:700 28px/1.1 var(--title);letter-spacing:-.02em}.av.phrase{
+font-size:19px;line-height:1.3}.av small{font:600 13px/1 var(--sans);letter-spacing:0;color:var(--ink2)}.ax.c .av b{color:var(--accent-ink)}.ann{font-size:14px;line-height:1.45;color:var(--ink2)}.ax .chart{
+margin-top:auto;padding-top:8px}.end{display:inline-flex;align-items:center;gap:7px}.end:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--ink3)}[data-end=clean] .end:before{background:var(--good)}
+[data-end=failing] .end:before{background:var(--bad)}[data-end=interrupted] .end:before{background:var(--warn)}.bar{display:flex;gap:2px;height:8px;border-radius:99px;overflow:hidden;background:var(--border)}
+.bar i{flex:var(--n) 1 0;min-width:0;background:var(--c-k)}[data-k=read]{--c-k:var(--cat-read)}[data-k=write5m]{--c-k:var(--cat-skill)}[data-k=write1h]{--c-k:var(--cat-edit)}[data-k=input]{--c-k:var(--cat-write)}
+[data-k=output]{--c-k:var(--cat-agent)}[data-k=active]{--c-k:var(--cat-search)}[data-k=waiting]{--c-k:var(--border2)}.lg{display:flex;flex-wrap:wrap;gap:2px 12px;margin-top:8px;font-size:12px;color:var(--ink2)}
+.lg span{display:inline-flex;align-items:center;gap:5px}.lg span:before{content:"";width:8px;height:8px;border-radius:2px;background:var(--c-k)}.ring{flex:none;width:44px;height:44px}.ring circle{fill:none;
+stroke-width:4.4}.ring .trk{stroke:var(--border)}.ring .val{stroke:var(--cat-read);stroke-linecap:round}.strip{display:block;width:100%;height:10px;margin-top:8px;border-radius:99px;overflow:hidden}.strip
+.trk{fill:var(--border)}.cap{display:block;margin-top:4px;font-size:12px;color:var(--ink2);text-align:right}.strip .hit{fill:var(--accent);stroke:var(--accent);stroke-width:3px;vector-effect:non-scaling-stroke}
+.share{display:flex;align-items:center;gap:10px}.share .ring{width:28px;height:28px}.finding{border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--surface)}.finding+.finding{
+margin-top:14px}.finding h3{display:flex;align-items:baseline;gap:10px;font:700 17px/1.35 var(--title);letter-spacing:-.01em}.sev{flex:none;align-self:center;font:600 11px/1 var(--sans);letter-spacing:.06em;
+text-transform:uppercase;color:var(--ink2);display:inline-flex;align-items:center;gap:6px;margin-left:auto}.dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--ink3)}[data-sev=high] .dot{
+background:var(--bad)}[data-sev=medium] .dot{background:var(--warn)}[data-sev=low] .dot{background:var(--cat-read)}.count{font:600 11px/1 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);
+margin-bottom:8px}.finding .ev{margin-top:12px}.facts{display:grid;grid-template-columns:120px minmax(0,1fr);gap:8px 14px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border);font-size:14px;
+line-height:1.45}.facts>div{display:contents}.facts dt{color:var(--ink2)}.facts dd.share+dt,.facts div:has(.share)>dt{align-self:center}.facts code{font-size:13px}.why{margin-top:14px;color:var(--ink2)}
+.rec{margin-top:16px;border-left:3px solid var(--accent);border-radius:0 10px 10px 0;background:var(--bg2);padding:12px 16px}.rec .lb{color:var(--accent-ink)}.imps{counter-reset:rank}.imps li{counter-increment:rank;
+display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--border)}.imps li:last-child{border-bottom:1px solid var(--border)}.rk{width:28px;
+height:28px;border-radius:50%;background:var(--accent-ink);color:var(--bg);display:grid;place-items:center;font:700 13px/1 var(--sans)}.rk:before{content:counter(rank)}.im{display:flex;align-items:center;
+gap:8px;justify-self:end}.save{font:600 13px/1 var(--mono);color:var(--accent-ink);white-space:nowrap}.empty h3{font:700 17px/1.3 var(--title);margin-bottom:6px}.empty p{color:var(--ink2)}.steps{counter-reset:step;
+display:grid;gap:16px}.steps>li{counter-increment:step;display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;align-items:start}.steps>li:before{content:counter(step);width:28px;height:28px;border-radius:50%;
+border:1px solid var(--border2);display:grid;place-items:center;font:700 12px/1 var(--mono);color:var(--ink2)}.steps>li>div>p:first-child,.steps>li>p{padding-top:2px}.cmd{display:flex;align-items:center;
+gap:10px;margin-top:10px;background:var(--cmd);color:var(--cmd-ink);border-radius:8px;padding:10px 12px;overflow-x:auto}.cmd+.cmd{margin-top:6px}.cmd .p{color:var(--accent);flex:none;font-family:var(--mono)}
+.cmd code{white-space:nowrap}.small{margin-top:12px;font-size:14px;color:var(--ink2)}.method{display:grid;gap:8px}.method li{display:grid;grid-template-columns:18px minmax(0,1fr);align-items:baseline}
+.method li:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--good);transform:translateY(-1px)}.method li.muted:before{background:var(--border2)}.foot{margin-top:56px;padding-top:16px;
+border-top:1px solid var(--border);display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;font:400 12.5px/1.5 var(--mono);color:var(--ink2)}@media(max-width:560px){.page{padding:28px 16px 56px}
+.hero{padding:26px 20px 22px}h1{font-size:28px}.facts{grid-template-columns:minmax(0,1fr);gap:2px}.facts dd{margin-bottom:8px}.imps li{grid-template-columns:28px minmax(0,1fr)}.im{grid-column:2;justify-self:start}
+.cmd code{white-space:normal;overflow-wrap:anywhere}}@page{margin:18mm}@media print{*{-webkit-print-color-adjust:exact;print-color-adjust:exact}.theme{display:none}.page{max-width:none;padding:0}.finding,
+.ax,.rec,.cmd,.caution{break-inside:avoid}h2{break-after:avoid}}
+</style>
+</head>
+<body>
+<div class="page">
+ <div class="top"><span class="brand">orangu</span><button class="theme" id="theme" type="button">\u25D0 theme \xB7 light</button></div>
+
+ <header class="hero">
+  <p class="ey"><span data-if="session">orangu \xB7 session report</span><span data-if="repo">orangu \xB7 repository report</span><span data-if="global">orangu \xB7 all sessions on this machine</span></p>
+  <h1 data-slot="title">EXAMPLE Fix the flaky checkout tests</h1>
+  <p class="meta" data-if="session"><span data-slot="project">EXAMPLE demo</span><span data-slot="date" data-f="date" data-v="">EXAMPLE 2026-08-17</span><span data-slot="models">EXAMPLE Claude Opus 5</span></p>
+  <p class="meta" data-if="aggregate"><span><b data-slot="sessions" data-f="num" data-v="">EXAMPLE 7</b> <span data-slot="session-noun">EXAMPLE sessions</span></span></p>
+  <p class="lv" data-if="live">Live session: these numbers are a snapshot from <span data-slot="live-at" data-f="time" data-v="">EXAMPLE 2026-08-17 14:05</span>.</p>
+  <div><a class="open" href="slides.html">Open the slides \u2192</a></div>
+ </header>
+
+ <main>
+ <section>
+  <h2>Summary</h2>
+  <p class="lead" data-slot="summary">EXAMPLE The session fixed the checkout tests. The first test runs failed on a missing module. The agent installed the module, and the last test run passed. Most tokens came from the cache.</p>
+ </section>
+
+ <section>
+  <h2>The numbers</h2>
+  <p class="lead" data-slot="verdict">EXAMPLE The session fixed the checkout tests and ended with a green test run.</p>
+  <div class="cards" data-if="session">
+   <div class="ax q" data-end="clean">
+    <div class="an">Quality \u2191</div>
+    <div class="av phrase" data-slot="quality">EXAMPLE 2 commits \xB7 3 test runs green</div>
+    <p class="ann"><span class="end" data-slot="quality-note">EXAMPLE The last check it ran passed.</span></p>
+   </div>
+   <div class="ax t">
+    <div class="an">Time \u2193</div>
+    <div class="av"><b data-slot="active" data-f="ms" data-v="">EXAMPLE 4m 12s</b></div>
+    <p class="ann"><span data-slot="wall" data-f="ms" data-v="">EXAMPLE 21m 3s</span> in total \xB7 <span data-slot="waiting" data-f="ms" data-v="">EXAMPLE 9m 40s</span> waiting for you</p>
+    <div class="chart" data-chart="time" data-sample>
+     <div class="bar" role="img" aria-label="EXAMPLE Working 4m 12s, waiting for you 9m 40s"><i data-k="active" style="--n:252000"></i><i data-k="waiting" style="--n:580000"></i></div>
+     <p class="lg"><span data-k="active">working</span><span data-k="waiting">waiting for you</span></p>
+    </div>
+   </div>
+   <div class="ax c">
+    <div class="an">Tokens \u2193</div>
+    <div class="av"><svg class="ring" data-chart="cache" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 84% read from cache"><circle class="trk" cx="18" cy="18" r="15" pathLength="100"/><circle class="val" cx="18" cy="18" r="15" pathLength="100" stroke-dasharray="84 100" transform="rotate(-90 18 18)"/></svg><span><b data-slot="tokens" data-f="tok" data-v="">EXAMPLE 1.23M</b> <small>tokens</small></span></div>
+    <p class="ann"><span data-slot="cache" data-f="pct" data-v="">EXAMPLE 84%</span> read from cache \xB7 <span data-slot="output" data-f="tok" data-v="">EXAMPLE 12.3k</span> generated</p>
+    <div class="chart" data-chart="tokens" data-sample>
+     <div class="bar" role="img" aria-label="EXAMPLE Tokens by kind: cache read 1,032,000, cache write 1h 98,000, fresh input 87,600, output 12,300"><i data-k="read" style="--n:1032000"></i><i data-k="write5m" style="--n:0"></i><i data-k="write1h" style="--n:98000"></i><i data-k="input" style="--n:87600"></i><i data-k="output" style="--n:12300"></i></div>
+     <p class="lg"><span data-k="read">cache read</span><span data-k="write5m">cache write 5m</span><span data-k="write1h">cache write 1h</span><span data-k="input">fresh input</span><span data-k="output">output</span></p>
+    </div>
+   </div>
+  </div>
+  <div class="cards" data-if="aggregate">
+   <div class="ax q">
+    <div class="an">Sessions read</div>
+    <div class="av"><b data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</b></div>
+    <p class="ann">Supported sessions in this scope</p>
+   </div>
+   <div class="ax t">
+    <div class="an">Recurring findings</div>
+    <div class="av"><b data-slot="kpi-findings" data-f="num" data-v="">EXAMPLE 11</b></div>
+    <p class="ann">Rule findings in these sessions</p>
+   </div>
+   <div class="ax c" data-empty="finding">
+    <div class="an">Top pattern</div>
+    <div class="av phrase">None</div>
+    <p class="ann">The rules found no finding in these sessions.</p>
+   </div>
+   <div class="ax c" data-if="findings">
+    <div class="an">Top pattern</div>
+    <div class="av share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span><b data-slot="kpi-top-n" data-f="num" data-v="">EXAMPLE 3</b> <small>of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></small></span></div>
+    <p class="ann">Rule <span class="pill" data-slot="kpi-top-rule">EXAMPLE tool-errors</span></p>
+   </div>
+  </div>
+  <p class="caution" data-if="caution"><b>CAUTION:</b> The token totals do not reconcile. The numbers can be wrong by <span data-slot="caution-pct">EXAMPLE 2.4</span>%.</p>
+ </section>
+
+ <section>
+  <h2>Findings</h2>
+  <article class="finding" data-repeat="finding" data-max="3" data-sev="high">
+   <p class="count"><span data-if="session">Finding</span><span data-if="aggregate">Recurring finding</span>&nbsp;<span data-slot="f-i">EXAMPLE 1</span>&nbsp;of&nbsp;<span data-slot="f-k">EXAMPLE 3</span></p>
+   <p class="lb" data-if="aggregate">In one session</p>
+   <h3><span data-slot="f-title">EXAMPLE 36 tool errors in 1,172 calls, most in Bash</span><span class="sev"><i class="dot"></i><span data-slot="f-sev">EXAMPLE high</span></span></h3>
+   <div class="ev">
+    <p class="lb">Evidence</p>
+    <p data-slot="f-evidence">EXAMPLE The same test command failed 4 times in a row. Each run stopped on the same missing module.</p>
+   </div>
+   <dl class="facts" data-if="session">
+    <div data-if="turns"><dt>In turns</dt><dd><span data-slot="f-turns">EXAMPLE #4, #9, #12</span><svg class="strip" data-chart="turns" data-sample viewBox="0 0 40 1" preserveAspectRatio="none" role="img" aria-label="EXAMPLE In turns #4, #9 and #12 of 40"><rect class="trk" width="40" height="1"/><rect class="hit" data-repeat="turn" data-max="50" x="4" width="1" height="1"/></svg><span class="cap"><span data-slot="turn-count" data-f="num" data-v="">EXAMPLE 40</span> <span data-slot="turn-noun">EXAMPLE turns</span> in the session</span></dd></div>
+    <div data-if="savings"><dt>Savings</dt><dd>\u2248<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
+    <div data-if="savings-ms"><dt>Savings</dt><dd>\u2248<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
+    <div><dt>Rule</dt><dd><span class="pill" data-slot="f-rule">EXAMPLE tool-errors</span></dd></div>
+   </dl>
+   <dl class="facts" data-if="aggregate">
+    <div><dt>Sessions</dt><dd class="share"><svg class="ring" data-chart="share" data-sample viewBox="0 0 36 36" role="img" aria-label="EXAMPLE 3 of 7 sessions"><circle class="trk" cx="18" cy="18" r="15" pathLength="7"/><circle class="val" cx="18" cy="18" r="15" pathLength="7" stroke-dasharray="3 7" transform="rotate(-90 18 18)"/></svg><span>Shows in <span data-slot="f-shows" data-f="num" data-v="">EXAMPLE 3</span> of <span data-slot="kpi-sessions" data-f="num" data-v="">EXAMPLE 7</span> <span data-slot="session-noun">EXAMPLE sessions</span></span></dd></div>
+    <div><dt>Examples</dt><dd><code data-slot="f-examples">EXAMPLE 63d26acb, a1b2c3d4</code></dd></div>
+    <div data-if="savings"><dt>Savings</dt><dd>\u2248<b data-slot="f-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
+    <div data-if="savings-ms"><dt>Savings</dt><dd>\u2248<b data-slot="f-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b>, estimated by rule <code data-slot="f-rule">EXAMPLE tool-errors</code></dd></div>
+    <div><dt>Rule</dt><dd><span class="pill" data-slot="f-rule">EXAMPLE tool-errors</span></dd></div>
+   </dl>
+   <p class="why" data-slot="f-why">EXAMPLE Each failed run used a turn. The agent ran the same command again with no change.</p>
+   <div class="rec">
+    <p class="lb">Improvement</p>
+    <p data-slot="f-improvement">EXAMPLE Install the missing module once, and add it to the setup script. Tell the agent to stop after 2 failures of the same command.</p>
+   </div>
+  </article>
+ </section>
+
+ <section>
+  <h2>Improvements</h2>
+  <ol class="imps" data-if="improvements">
+   <li data-repeat="improvement" data-max="5"><span class="rk" aria-hidden="true"></span><span data-slot="i-text">EXAMPLE Install the missing module once, and add it to the setup script.</span><span class="im"><span class="save" data-if="savings">\u2248<b data-slot="i-savings" data-f="tok" data-v="">EXAMPLE 12.3k</b> tokens</span><span class="save" data-if="savings-ms">\u2248<b data-slot="i-savings-ms" data-f="ms" data-v="">EXAMPLE 4.2s</b></span><span class="pill" data-slot="i-rule">EXAMPLE tool-errors</span></span></li>
+  </ol>
+  <div class="empty" data-empty="improvement">
+   <h3>No improvements found</h3>
+   <p data-if="session">The rules found nothing to change in this session. Look again after your next session.</p>
+   <p data-if="aggregate">The rules found nothing to change in these sessions. Look again after your next session.</p>
+  </div>
+ </section>
+
+ <section>
+  <h2><span data-if="session">Get an AI proposal in Claude Code</span><span data-if="aggregate">Review the whole harness in Claude Code</span></h2>
+  <ol class="steps" data-if="improvements">
+   <li><div>
+    <p data-if="session">Paste this command in a terminal in <code data-slot="cwd">EXAMPLE ~/Code/demo</code>. It starts Claude Code.</p>
+    <p data-if="repo">Paste this command in a terminal in this repository. It starts Claude Code.</p>
+    <p data-if="global">Paste this command in a terminal. It starts Claude Code.</p>
+    <div class="cmd" data-if="session"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:improve <span data-slot="session-id">EXAMPLE 63d26acb-0000-4000-8000-000000000001</span>"</code></div>
+    <div class="cmd" data-if="repo"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:harness --scope repo"</code></div>
+    <div class="cmd" data-if="global"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:harness --scope global"</code></div>
+    <p class="small">First time only, type these 2 lines in Claude Code:</p>
+    <div class="cmd"><span class="p" aria-hidden="true">&gt;</span><code>/plugin marketplace add NissanOhana/orangu</code></div>
+    <div class="cmd"><span class="p" aria-hidden="true">&gt;</span><code>/plugin install orangu</code></div>
+   </div></li>
+   <li><p data-if="session">Claude writes one proposal: the change, its effect, its risk and how to check it. It changes no file in your repository.</p><p data-if="aggregate">Claude Code reads the evidence. It ranks a plan of changes to your instructions, skills, hooks, agents and scripts. Then it waits for your approval.</p></li>
+   <li><p data-if="session">The proposal is in ~/.orangu/proposals. Run orangu serve to see it in the browser.</p><p data-if="repo">Review the ranked plan. Approve the items that you want. Claude applies them.</p><p data-if="global">Review the ranked plan. Global scope is for review only. Claude applies nothing.</p></li>
+  </ol>
+  <div data-empty="improvement">
+   <p>Look again after your next session.</p>
+   <div class="cmd"><span class="p" aria-hidden="true">$</span><code>npx orangu</code></div>
+  </div>
+ </section>
+
+ <section>
+  <h2>How orangu measured this</h2>
+  <ul class="method">
+   <li data-if="session">orangu read the session files on this machine. No model measured these numbers.</li>
+   <li data-if="aggregate">orangu read the session files of this scope on this machine. No model measured these numbers.</li>
+   <li>Tokens are the only usage unit.</li>
+   <li>A savings figure is an estimate by the rule that names it.</li>
+   <li>Claude wrote the words in this report. Claude did not change the numbers.</li>
+   <li data-if="reconciled">The token totals reconcile.</li>
+   <li class="muted" data-if="redacted">orangu hid the transcript text. Details that quote commands or output are blank.</li>
+  </ul>
+  <p class="caution" data-if="caution"><b>CAUTION:</b> The token totals do not reconcile. The numbers can be wrong by <span data-slot="caution-pct">EXAMPLE 2.4</span>%.</p>
+ </section>
+
+ </main>
+
+ <footer class="foot"><span>The numbers come from orangu <span data-slot="version">EXAMPLE 0.8.0</span>. Claude wrote the words.</span><span data-if="session" data-slot="generated" data-f="date" data-v="">EXAMPLE 2026-08-17</span></footer>
+</div>
+<script>(()=>{const s=document,h=s.documentElement,p=t=>t>=1e9?(t/1e9).toFixed(t>=1e10?0:1)+"B":t>=1e6?(t/1e6).toFixed(t>=1e7?0:2)+"M":t>=1e3?(t/1e3).toFixed(t>=1e5?0:1)+"k":String(Math.round(t)),S=t=>{if(t<1e3)
+return Math.round(t)+"ms";const e=t/1e3;if(e<60)return e.toFixed(e<10?1:0)+"s";const o=Math.floor(e/60);if(o<60)return o+"m "+Math.round(e%60)+"s";const a=Math.floor(o/60);return a<24?a+"h "+o%60+"m":
+Math.floor(a/24)+"d "+a%24+"h"},u=t=>new Date(t).toISOString(),w={tok:p,ms:S,pct:t=>(t*100).toFixed(0)+"%",num:t=>t.toLocaleString("en-US"),date:t=>u(t).slice(0,10),time:t=>u(t).slice(0,16).replace("T",
+" ")};for(const t of s.querySelectorAll("[data-f][data-v]")){const e=w[t.dataset.f],o=t.dataset.v.split("+").reduce((a,y)=>a+Number(y),0);e&&t.dataset.v&&isFinite(o)&&(t.textContent=e(o))}const m=new URLSearchParams(
+location.hash.slice(1)),l=s.getElementById("theme");let n=m.get("theme")==="dark",d=0;const g=()=>{const t=new URLSearchParams;d&&t.set("n",d),n&&t.set("theme","dark"),history.replaceState(null,"","#"+
+t)},k=()=>{n?h.dataset.theme="dark":delete h.dataset.theme,l&&(l.textContent="\\u25D0 theme \\xB7 "+(n?"dark":"light"));for(const t of s.links)t.setAttribute("href",t.getAttribute("href").split("#")[0]+
+(n?"#theme=dark":""))},x=()=>{n=!n,k(),g()};k(),l&&l.addEventListener("click",x);const i=[...s.querySelectorAll(".slide")],r=i.length;let c=0;const f=(t,e)=>{c=Math.max(0,Math.min(r-1,t)),i[c].scrollIntoView(
+{behavior:e})};if(i.forEach((t,e)=>{t.setAttribute("aria-label",e+1+" of "+r);const o=t.querySelector(".pg");o&&(o.textContent=e+1+" / "+r)}),r){f((+m.get("n")||1)-1,"instant");const t=new IntersectionObserver(
+e=>{for(const o of e)o.isIntersecting&&(d=(c=i.indexOf(o.target))+1,g())},{rootMargin:"-45% 0px"});for(const e of i)t.observe(e)}s.addEventListener("keydown",t=>{const e=t.key;if(!(t.metaKey||t.ctrlKey||
+t.altKey)){if(/^t$/i.test(e))x();else if(r&&/^(Arrow(Right|Down)|j)$/i.test(e))f(c+1);else if(r&&/^(Arrow(Left|Up)|k)$/i.test(e))f(c-1);else return;t.preventDefault()}})})();</script>
+</body>
+</html>
+`;
+var SCRIPT_HASH = "rRgBMKwoW58rZ5PngLud1b+VTqqEUklGeUZGfC/w6q8=";
+
+// src/show-me/check.ts
+var SelfCheckError = class extends Error {
+  name = "SelfCheckError";
+};
+var HTML_TAG = /^<html lang="en" data-scope="(?:session|repo|global)" data-live="(?:true|false)" data-caution="(?:true|false)" data-redacted="(?:true|false)">$/;
+var CSP2 = '<meta http-equiv="Content-Security-Policy" content="';
+var SCRIPT = /<script>([\s\S]*?)<\/script>/;
+function head(html, what) {
+  const open11 = html.indexOf("<html");
+  const tagEnd = html.indexOf(">", open11) + 1;
+  const start = html.indexOf("<head>", tagEnd);
+  const csp = html.indexOf(CSP2, start);
+  const cspEnd = csp < 0 ? -1 : html.indexOf("/>", csp);
+  const end = html.indexOf("</head>", start);
+  if (open11 < 0 || tagEnd <= 0 || start < 0 || csp < 0 || cspEnd < 0 || end < 0) throw new SelfCheckError(`${what} has no <html>, <head> or CSP meta in place`);
+  const whole2 = html.slice(start, end + "</head>".length);
+  return {
+    prefix: html.slice(0, open11),
+    tag: html.slice(open11, tagEnd),
+    between: html.slice(tagEnd, start),
+    toCsp: html.slice(start, cspEnd + 2),
+    masked: whole2.replace(/(<title data-slot="title">)[^<]*(<\/title>)/, (_match, before, after) => before + after)
+  };
+}
+function tags(html) {
+  return html.replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, "").match(/<[a-zA-Z][^>]*>/g) ?? [];
+}
+var tagName = (tag) => /^<([a-zA-Z][\w-]*)/.exec(tag)[1].toLowerCase();
+var attributeNames = (tag) => [...tag.replace(/"[^"]*"|'[^']*'/g, '""').slice(1 + tagName(tag).length).matchAll(/([^\s=/>"']+)/g)].map((m) => m[1].toLowerCase());
+var hrefs = (all) => all.flatMap((tag) => [...tag.matchAll(/\shref\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi)].map((m) => m[1])).sort();
+var count = (text3, pattern) => text3.match(pattern)?.length ?? 0;
+function selfCheck(out3, template, what = "the file") {
+  const fail3 = (rule) => {
+    throw new SelfCheckError(`${what} failed the self-check: ${rule}`);
+  };
+  const mine = head(out3, what);
+  const theirs = head(template, "the template");
+  if (!HTML_TAG.test(mine.tag)) fail3("the <html> tag is not the fixed tag with its 4 enum attributes");
+  if (mine.prefix !== theirs.prefix || mine.between !== theirs.between) fail3("the bytes around the <html> tag differ from the template");
+  if (mine.toCsp !== theirs.toCsp) fail3("the head up to the CSP meta differs from the template");
+  if (mine.masked !== theirs.masked) fail3("the head differs from the template");
+  if (count(out3, /<script\b/gi) !== 1 || count(out3, /<\/script/gi) !== 1) fail3("it must hold exactly one script");
+  if (count(out3, /<style\b/gi) !== count(template, /<style\b/gi) || count(out3, /<\/style/gi) !== count(template, /<\/style/gi)) fail3("it must hold only the style of the template");
+  const body = SCRIPT.exec(out3)?.[1];
+  if (body === void 0 || createHash4("sha256").update(body, "utf8").digest("base64") !== SCRIPT_HASH) fail3("the script is not the pinned runtime");
+  const own = tags(out3);
+  const model = tags(template);
+  const equivs = own.flatMap((tag) => tag.match(/\bhttp-equiv\s*=\s*["']?[^"'\s>]*/gi) ?? []);
+  if (equivs.length !== 1 || equivs[0] !== 'http-equiv="Content-Security-Policy') fail3("the CSP must be the one http-equiv");
+  if (hrefs(own).join("\n") !== hrefs(model).join("\n")) fail3("the links differ from the template");
+  if (count(out3, /<meta\b/gi) !== count(template, /<meta\b/gi)) fail3("the meta tags differ from the template");
+  const names = new Set(model.map(tagName));
+  if (own.some((tag) => !names.has(tagName(tag)))) fail3("it holds a tag that the template does not have");
+  const attributes = new Set(model.flatMap(attributeNames));
+  if (own.some((tag) => attributeNames(tag).some((name) => !attributes.has(name)))) fail3("it holds an attribute that the template does not have");
+}
+
+// src/show-me/words.ts
+var WORD_KEYS = ["verdict", "summary", "improvementsTitle"];
+var CONTROL2 = /[\u0000-\u001f\u007f-\u009f]/;
+var ShowMeInputError = class extends Error {
+  name = "ShowMeInputError";
+};
+var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function validateWords(raw) {
+  if (!isRecord2(raw)) throw new ShowMeInputError("words.json must hold one JSON object with the keys verdict, summary and improvementsTitle.");
+  const keys = Object.keys(raw);
+  if (keys.some((key) => !WORD_KEYS.includes(key))) {
+    throw new ShowMeInputError("words.json may hold only the keys verdict, summary and improvementsTitle.");
+  }
+  const words2 = {};
+  for (const key of WORD_KEYS) {
+    const value = raw[key];
+    if (typeof value !== "string") throw new ShowMeInputError(`words.json: ${key} must be a string.`);
+    if (!value.trim()) throw new ShowMeInputError(`words.json: ${key} is empty.`);
+    if (CONTROL2.test(value)) throw new ShowMeInputError(`words.json: ${key} holds a control character. Write each word on one line, with no tab.`);
+    words2[key] = value;
+  }
+  return words2;
+}
+function wordFindings(words2) {
+  return WORD_KEYS.flatMap((slot) => checkText(words2[slot]).findings.map(({ line, rule, text: text3, hint }) => ({ slot, line, rule, text: text3, hint })));
+}
+
+// src/show-me/data.ts
+var SEVERITIES = ["info", "low", "medium", "high"];
+var ENDINGS = ["clean", "interrupted", "failing", "unknown"];
+var MAX_EPOCH_MS = 864e13;
+var fail = (label, rule) => {
+  throw new ShowMeInputError(`data.json: ${label} ${rule}.`);
+};
+var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+function record2(value, label) {
+  return isRecord3(value) ? value : fail(label, "must be an object");
+}
+function list(value, label) {
+  return Array.isArray(value) ? value : fail(label, "must be an array");
+}
+function text2(value, label) {
+  return typeof value === "string" ? value : fail(label, "must be a string");
+}
+function optionalText2(value, label) {
+  return value === void 0 ? void 0 : text2(value, label);
+}
+function finite(value, label) {
+  return typeof value === "number" && Number.isFinite(value) ? value : fail(label, "must be a finite number");
+}
+function amount(value, label) {
+  const n2 = finite(value, label);
+  return n2 >= 0 ? n2 : fail(label, "must not be negative");
+}
+function optionalAmount(value, label) {
+  return value === void 0 ? void 0 : amount(value, label);
+}
+function whole(value, label) {
+  const n2 = amount(value, label);
+  return Number.isSafeInteger(n2) ? n2 : fail(label, "must be a whole number");
+}
+function epoch(value, label) {
+  const n2 = finite(value, label);
+  return Math.abs(n2) <= MAX_EPOCH_MS ? n2 : fail(label, "must be a time in milliseconds");
+}
+function bool2(value, label) {
+  return typeof value === "boolean" ? value : fail(label, "must be true or false");
+}
+function oneOf(value, allowed, label) {
+  return typeof value === "string" && allowed.includes(value) ? value : fail(label, `must be one of ${allowed.join(", ")}`);
+}
+var maybe = (key, value) => value === void 0 ? {} : { [key]: value };
+function sessionInsight(value, index) {
+  const at = `insights[${index}]`;
+  const i = record2(value, at);
+  const savings = i["savings"] === void 0 ? void 0 : record2(i["savings"], `${at}.savings`);
+  return {
+    id: text2(i["id"], `${at}.id`),
+    ruleId: text2(i["ruleId"], `${at}.ruleId`),
+    severity: oneOf(i["severity"], SEVERITIES, `${at}.severity`),
+    title: text2(i["title"], `${at}.title`),
+    detail: text2(i["detail"], `${at}.detail`),
+    turnIndexes: list(i["turnIndexes"], `${at}.turnIndexes`).map((turn, t) => whole(turn, `${at}.turnIndexes[${t}]`)),
+    ...maybe("improvement", optionalText2(i["improvement"], `${at}.improvement`)),
+    ...maybe("why", optionalText2(i["why"], `${at}.why`)),
+    ...maybe("recommendation", optionalText2(i["recommendation"], `${at}.recommendation`)),
+    ...maybe(
+      "savings",
+      savings && {
+        ...maybe("tokens", optionalAmount(savings["tokens"], `${at}.savings.tokens`)),
+        ...maybe("ms", optionalAmount(savings["ms"], `${at}.savings.ms`))
+      }
+    )
+  };
+}
+function sessionData(raw) {
+  if (raw["schemaVersion"] !== ANALYSIS_SCHEMA_VERSION) fail("schemaVersion", `must be ${ANALYSIS_SCHEMA_VERSION}`);
+  const generator = record2(raw["generator"], "generator");
+  const session = record2(raw["session"], "session");
+  const summary = record2(raw["summary"], "summary");
+  const outcomes = record2(summary["outcomes"], "summary.outcomes");
+  const byKind = record2(record2(raw["tokens"], "tokens")["byKind"], "tokens.byKind");
+  const reconciliation = record2(record2(raw["parse"], "parse")["reconciliation"], "parse.reconciliation");
+  const startedAt = session["startedAt"] === void 0 ? void 0 : epoch(session["startedAt"], "session.startedAt");
+  const wallMs = optionalAmount(summary["wallMs"], "summary.wallMs");
+  return {
+    slim: true,
+    generator: { version: text2(generator["version"], "generator.version"), generatedAt: epoch(generator["generatedAt"], "generator.generatedAt") },
+    session: {
+      id: text2(session["id"], "session.id"),
+      ...maybe("title", optionalText2(session["title"], "session.title")),
+      ...maybe("projectSlug", optionalText2(session["projectSlug"], "session.projectSlug")),
+      ...maybe("startedAt", startedAt),
+      models: list(session["models"], "session.models").map((m, i) => ({ displayName: text2(record2(m, `session.models[${i}]`)["displayName"], `session.models[${i}].displayName`) })),
+      live: bool2(session["live"], "session.live"),
+      ...maybe("cwd", optionalText2(session["cwd"], "session.cwd"))
+    },
+    summary: {
+      topInsightIds: list(summary["topInsightIds"], "summary.topInsightIds").map((id, i) => text2(id, `summary.topInsightIds[${i}]`)),
+      turns: whole(summary["turns"], "summary.turns"),
+      outcomes: {
+        prLinks: list(outcomes["prLinks"], "summary.outcomes.prLinks"),
+        gitCommits: whole(outcomes["gitCommits"], "summary.outcomes.gitCommits"),
+        filesEdited: whole(outcomes["filesEdited"], "summary.outcomes.filesEdited"),
+        filesWritten: whole(outcomes["filesWritten"], "summary.outcomes.filesWritten"),
+        buildRuns: whole(outcomes["buildRuns"], "summary.outcomes.buildRuns"),
+        buildRunsFailed: whole(outcomes["buildRunsFailed"], "summary.outcomes.buildRunsFailed"),
+        testRuns: whole(outcomes["testRuns"], "summary.outcomes.testRuns"),
+        testRunsFailed: whole(outcomes["testRunsFailed"], "summary.outcomes.testRunsFailed")
+      },
+      ending: oneOf(summary["ending"], ENDINGS, "summary.ending"),
+      activeMs: amount(summary["activeMs"], "summary.activeMs"),
+      ...maybe("wallMs", wallMs),
+      humanWaitMs: amount(summary["humanWaitMs"], "summary.humanWaitMs"),
+      totalTokens: amount(summary["totalTokens"], "summary.totalTokens"),
+      cacheHitRatio: amount(summary["cacheHitRatio"], "summary.cacheHitRatio")
+    },
+    insights: list(raw["insights"], "insights").map(sessionInsight),
+    tokens: {
+      byKind: {
+        input: amount(byKind["input"], "tokens.byKind.input"),
+        output: amount(byKind["output"], "tokens.byKind.output"),
+        cacheRead: amount(byKind["cacheRead"], "tokens.byKind.cacheRead"),
+        cacheWrite5m: amount(byKind["cacheWrite5m"], "tokens.byKind.cacheWrite5m"),
+        cacheWrite1h: amount(byKind["cacheWrite1h"], "tokens.byKind.cacheWrite1h")
+      }
+    },
+    parse: { reconciliation: { ok: bool2(reconciliation["ok"], "parse.reconciliation.ok"), matchesWithinPct: finite(reconciliation["matchesWithinPct"], "parse.reconciliation.matchesWithinPct") } }
+  };
+}
+function aggregateFinding(value, index) {
+  const at = `findings[${index}]`;
+  const f = record2(value, at);
+  const finding = record2(f["finding"], `${at}.finding`);
+  const evidence = record2(finding["evidence"], `${at}.finding.evidence`);
+  const sessions = evidence["sessions"] === void 0 ? void 0 : whole(evidence["sessions"], `${at}.finding.evidence.sessions`);
+  return {
+    severity: oneOf(f["severity"], SEVERITIES, `${at}.severity`),
+    detail: text2(f["detail"], `${at}.detail`),
+    finding: {
+      ruleId: text2(finding["ruleId"], `${at}.finding.ruleId`),
+      title: text2(finding["title"], `${at}.finding.title`),
+      sessionIds: list(finding["sessionIds"], `${at}.finding.sessionIds`).map((id, i) => text2(id, `${at}.finding.sessionIds[${i}]`)),
+      evidence: {
+        ...maybe("sessions", sessions),
+        ...maybe("savingsTokens", optionalAmount(evidence["savingsTokens"], `${at}.finding.evidence.savingsTokens`)),
+        ...maybe("savingsMs", optionalAmount(evidence["savingsMs"], `${at}.finding.evidence.savingsMs`))
+      }
+    },
+    ...maybe("improvement", optionalText2(f["improvement"], `${at}.improvement`)),
+    ...maybe("recommendation", optionalText2(f["recommendation"], `${at}.recommendation`)),
+    ...maybe("why", optionalText2(f["why"], `${at}.why`)),
+    ...maybe("exampleTitle", optionalText2(f["exampleTitle"], `${at}.exampleTitle`))
+  };
+}
+function aggregateData(raw) {
+  if (raw["schemaVersion"] !== EVIDENCE_SCHEMA_VERSION) fail("schemaVersion", `must be ${EVIDENCE_SCHEMA_VERSION}`);
+  const source = record2(raw["source"], "source");
+  const scope = oneOf(source["scope"], ["repo", "global"], "source.scope");
+  const folder = optionalText2(raw["folder"], "folder");
+  if (scope === "repo" && !folder?.trim()) fail("folder", "must name the repository folder");
+  return {
+    kind: "aggregate",
+    scope,
+    value: {
+      source: { scope, sessions: whole(source["sessions"], "source.sessions") },
+      totalFindings: whole(raw["totalFindings"], "totalFindings"),
+      findings: list(raw["findings"], "findings").map(aggregateFinding)
+    },
+    ...maybe("folder", folder),
+    version: text2(raw["version"], "version")
+  };
+}
+function validateShowMeData(raw) {
+  const value = record2(raw, "the file");
+  if (value["slim"] === true) return { kind: "session", value: sessionData(value) };
+  if (isRecord3(value["source"]) && Array.isArray(value["findings"])) return aggregateData(value);
+  return fail("the file", "must be a slim analysis or an evidence bundle that orangu show-me wrote");
+}
+
+// src/show-me/fill.ts
+var FORMATS = {
+  tok,
+  ms,
+  pct: (v) => pct(v),
+  num: num2,
+  date: (v) => ts2(v).slice(0, 10),
+  time: (v) => ts2(v)
+};
+var ENUM_ATTRIBUTES = {
+  "data-scope": ["session", "repo", "global"],
+  "data-live": ["true", "false"],
+  "data-caution": ["true", "false"],
+  "data-redacted": ["true", "false"],
+  "data-end": ["clean", "failing", "interrupted", "unknown"],
+  "data-sev": ["info", "low", "medium", "high"]
+};
+var NUMBER_ATTRIBUTES = {
+  "data-v": Number.isFinite,
+  // a turn marker's position: a turn index
+  x: (v) => Number.isSafeInteger(v) && v >= 0
+};
+var ATTRIBUTES = [...Object.keys(ENUM_ATTRIBUTES), ...Object.keys(NUMBER_ATTRIBUTES)];
+var FillError = class extends Error {
+  name = "FillError";
+};
+var VOID = /* @__PURE__ */ new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr"]);
+var DIRECTIVE = /<([a-zA-Z][\w-]*)\b[^>]*\bdata-(?:repeat|empty|if|chart|slot|end)="[^"]*"[^>]*>/g;
+var ENTITY = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+function escapeHtml2(text3) {
+  return text3.replace(/[&<>"']/g, (char) => ENTITY[char]).replace(/(https?):/gi, (_match, scheme) => `${scheme}&#58;`);
+}
+function attributeValue(name, value) {
+  const allowed = ENUM_ATTRIBUTES[name];
+  if (allowed) {
+    if (typeof value !== "string" || !allowed.includes(value)) throw new FillError(`${name} must be one of ${allowed.join(", ")}`);
+    return value;
+  }
+  const valid = NUMBER_ATTRIBUTES[name];
+  if (valid) {
+    if (typeof value !== "number" || !valid(value)) throw new FillError(`${name} must be a finite number`);
+    return String(value);
+  }
+  throw new FillError(`the fill sets no ${name} attribute`);
+}
+function chartNumber(value, what) {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new FillError(`${what} must be a finite number, 0 or more`);
+  return String(value);
+}
+function elementEnd(html, start) {
+  const open11 = /^<([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/.exec(html.slice(start));
+  if (!open11) throw new FillError(`no tag at ${start}`);
+  const tag = open11[1].toLowerCase();
+  if (open11[2] || VOID.has(tag)) return start + open11[0].length;
+  const re = new RegExp(`<(/?)${tag}\\b[^>]*?(/?)>`, "gi");
+  re.lastIndex = start + open11[0].length;
+  let depth = 1;
+  for (let m = re.exec(html); m; m = re.exec(html)) {
+    if (m[1]) depth -= 1;
+    else if (!m[2]) depth += 1;
+    if (depth === 0) return re.lastIndex;
+  }
+  throw new FillError(`unclosed <${tag}> at ${start}`);
+}
+var openTagOf = (el) => /^<[^>]*>/.exec(el)[0];
+var attr = (tag, name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
+function setAttr(el, name, value) {
+  const checked = attributeValue(name, value);
+  const open11 = openTagOf(el);
+  const next = attr(open11, name) !== void 0 ? open11.replace(new RegExp(`(\\s${name}=)"[^"]*"`), (_match, before) => `${before}"${checked}"`) : open11.replace(/(\/?>)$/, (end) => ` ${name}="${checked}"${end}`);
+  return next + el.slice(open11.length);
+}
+function parts(el) {
+  const open11 = openTagOf(el);
+  if (open11.endsWith("/>") || el.length === open11.length) return [open11, "", ""];
+  const close = /<\/[a-zA-Z][\w-]*>$/.exec(el)[0];
+  return [open11, el.slice(open11.length, el.length - close.length), close];
+}
+function children(html, scope) {
+  let out3 = "";
+  let at = 0;
+  for (; ; ) {
+    DIRECTIVE.lastIndex = at;
+    const m = DIRECTIVE.exec(html);
+    if (!m) return out3 + html.slice(at);
+    const end = elementEnd(html, m.index);
+    out3 += html.slice(at, m.index) + element(html.slice(m.index, end), scope);
+    at = end;
+  }
+}
+function merge(scope, item) {
+  return {
+    slots: { ...scope.slots, ...item.slots },
+    conditions: [...scope.conditions, ...item.conditions ?? []],
+    lists: { ...scope.lists, ...item.lists },
+    charts: { ...scope.charts, ...item.charts },
+    ...scope.end !== void 0 ? { end: scope.end } : {}
+  };
+}
+function element(el, scope, repeated = false) {
+  const repeat = attr(openTagOf(el), "data-repeat");
+  if (repeat !== void 0 && !repeated) {
+    const max = Number(attr(openTagOf(el), "data-max") ?? Infinity);
+    return (scope.lists[repeat] ?? []).slice(0, max).map((item) => {
+      let copy = el;
+      if (item.attrs?.["data-sev"] !== void 0) copy = setAttr(copy, "data-sev", item.attrs["data-sev"]);
+      if (item.attrs?.x !== void 0) copy = setAttr(copy, "x", item.attrs.x);
+      return element(copy, merge(scope, item), true);
+    }).join("");
+  }
+  const open11 = openTagOf(el);
+  const empty = attr(open11, "data-empty");
+  if (empty !== void 0 && (scope.lists[empty] ?? []).length > 0) return "";
+  const condition = attr(open11, "data-if");
+  if (condition !== void 0 && !scope.conditions.includes(condition)) return "";
+  if (attr(open11, "data-end") !== void 0 && scope.end !== void 0) el = setAttr(el, "data-end", scope.end);
+  const chart = attr(open11, "data-chart");
+  if (chart !== void 0 && scope.charts[chart]) el = drawChart(el, scope.charts[chart]);
+  const slot = attr(open11, "data-slot");
+  if (slot !== void 0 && scope.slots[slot] !== void 0) return fillSlot(el, scope.slots[slot]);
+  const [head2, inner, tail] = parts(el);
+  return head2 + children(inner, scope) + tail;
+}
+function fillSlot(el, value) {
+  if (value === null) return "";
+  const [head2, inner, tail] = parts(el);
+  if (/</.test(inner)) throw new FillError(`a data-slot element holds only text: ${head2}`);
+  if (typeof value === "string") return head2 + escapeHtml2(value) + tail;
+  const format = FORMATS[attr(head2, "data-f") ?? ""];
+  if (!format) throw new FillError(`a number slot needs a data-f format: ${head2}`);
+  return setAttr(head2, "data-v", value.v) + escapeHtml2(format(value.v)) + tail;
+}
+var CHART_KEY = /^[a-z0-9]+$/;
+function drawChart(sample, chart) {
+  const el = sample.replace(/ data-sample(?:="[^"]*")?/, () => "");
+  const label = (html) => html.replace(/(<[^>]*\brole="img"[^>]*\baria-label=)"[^"]*"/, (_match, before) => `${before}"${escapeHtml2(chart.label)}"`);
+  if (chart.kind === "bars") {
+    let out3 = el;
+    for (const [key, value] of Object.entries(chart.values)) {
+      if (!CHART_KEY.test(key)) throw new FillError("a bars chart key is one word");
+      const n2 = chartNumber(value, `the ${key} bar`);
+      out3 = value > 0 ? out3.replace(new RegExp(`(<i data-k="${key}" style=")--n:[^"]*"`), (_match, before) => `${before}--n:${n2}"`) : out3.replace(new RegExp(`<i data-k="${key}"[^>]*></i>`), () => "").replace(new RegExp(`<span data-k="${key}">[^<]*</span>`), () => "");
+    }
+    return label(out3);
+  }
+  if (chart.kind === "ring") {
+    const of = chartNumber(chart.of, "the ring total");
+    const value = chartNumber(chart.value, "the ring value");
+    return label(el.replaceAll(/pathLength="[^"]*"/g, () => `pathLength="${of}"`).replace(/stroke-dasharray="[^"]*"/, () => `stroke-dasharray="${value} ${of}"`));
+  }
+  const turns = chartNumber(chart.turns, "the turn count");
+  return label(el.replace(/viewBox="0 0 [^ ]+ 1"/, () => `viewBox="0 0 ${turns} 1"`).replace(/(<rect class="trk" width=)"[^"]*"/, (_match, before) => `${before}"${turns}"`));
+}
+function fillTemplate(html, page) {
+  let out3 = html;
+  for (const name of ["data-scope", "data-live", "data-caution", "data-redacted"]) {
+    out3 = out3.replace(/<html\b[^>]*>/, (tag) => setAttr(tag, name, page.root[name]));
+  }
+  const at = out3.indexOf("<html");
+  const end = out3.indexOf("</html>") + "</html>".length;
+  const scope = { slots: page.slots, conditions: page.conditions, lists: page.lists, charts: page.charts, ...page.end !== void 0 ? { end: page.end } : {} };
+  return out3.slice(0, at) + children(out3.slice(at, end), scope) + out3.slice(end);
+}
+
+// src/show-me/pages.ts
+var FINDINGS_SHOWN = 3;
+var TURNS_NAMED = 5;
+var TURN_MARKERS = 50;
+var EXAMPLE_SESSIONS2 = 5;
+var ID_PREFIX = 8;
+var REDACTED_DETAIL = "orangu hides these details because they quote commands and output.";
+var NO_IMPROVEMENT_TEXT = "No improvement text in this evidence.";
+var QUALITY_NOTE = {
+  clean: "The last check it ran passed.",
+  interrupted: "You stopped it.",
+  failing: "The last test run failed.",
+  unknown: "No test or build run to judge."
+};
+var plural3 = (n2, one, many = `${one}s`) => `${n2.toLocaleString("en-US")} ${n2 === 1 ? one : many}`;
+var improvementOf = (o) => o.improvement ?? o.recommendation;
+var unmarked = (title) => title.startsWith(IN_ONE_SESSION) ? title.slice(IN_ONE_SESSION.length) : title;
+var reasonOf2 = (o) => o.why?.trim() ? o.why : void 0;
+var isChange = (text3) => text3 !== void 0 && text3.trim() !== "" && !text3.startsWith(NO_CHANGE);
+function qualityValue(o) {
+  const parts2 = [];
+  if (o.prLinks.length) parts2.push(plural3(o.prLinks.length, "PR"));
+  if (o.gitCommits) parts2.push(plural3(o.gitCommits, "commit"));
+  if (o.filesEdited) parts2.push(`${plural3(o.filesEdited, "file")} edited`);
+  if (o.filesWritten) parts2.push(`${plural3(o.filesWritten, "file")} written`);
+  if (o.buildRunsFailed) parts2.push(`${o.buildRunsFailed} of ${plural3(o.buildRuns, "build run")} failed`);
+  if (o.testRuns) parts2.push(o.testRunsFailed ? `${o.testRunsFailed} of ${plural3(o.testRuns, "test run")} failed` : `${plural3(o.testRuns, "test run")} green`);
+  return parts2.length ? parts2.join(" \xB7 ") : "No commits, PRs or test runs";
+}
+function savingsOf(tokens, time) {
+  const slots = {};
+  const conditions = [];
+  if (tokens && tokens > 0) {
+    slots["f-savings"] = slots["i-savings"] = { v: tokens };
+    conditions.push("savings");
+  }
+  if (time && time > 0) {
+    slots["f-savings-ms"] = slots["i-savings-ms"] = { v: time };
+    conditions.push("savings-ms");
+  }
+  return { slots, conditions };
+}
+var turnList = (turns) => turns.slice(0, TURNS_NAMED).map((t) => `#${t}`).join(", ");
+function sessionPage(a, words2) {
+  const s = a.summary;
+  const byId = new Map(a.insights.map((insight) => [insight.id, insight]));
+  const top = s.topInsightIds.map((id) => byId.get(id)).filter((insight) => insight !== void 0).slice(0, FINDINGS_SHOWN);
+  const rest = a.insights.filter((insight) => !top.includes(insight));
+  const findings = top.map((insight, index) => {
+    const saving = savingsOf(insight.savings?.tokens, insight.savings?.ms);
+    return {
+      attrs: { "data-sev": insight.severity },
+      slots: {
+        "f-i": String(index + 1),
+        "f-k": String(top.length),
+        "f-sev": insight.severity,
+        "f-title": insight.title,
+        "f-evidence": insight.detail || REDACTED_DETAIL,
+        "f-turns": turnList(insight.turnIndexes),
+        "f-rule": insight.ruleId,
+        "f-why": reasonOf2(insight) ?? null,
+        "f-improvement": improvementOf(insight) ?? NO_IMPROVEMENT_TEXT,
+        ...saving.slots
+      },
+      conditions: [...insight.turnIndexes.length ? ["turns"] : [], ...reasonOf2(insight) ? ["why"] : [], ...saving.conditions],
+      lists: { turn: insight.turnIndexes.slice(0, TURN_MARKERS).map((x) => ({ attrs: { x } })) },
+      charts: { turns: { kind: "turns", turns: s.turns, label: `In turns ${turnList(insight.turnIndexes)} of ${s.turns}` } }
+    };
+  });
+  const improvements = [...top, ...rest].flatMap((insight) => {
+    const text3 = improvementOf(insight);
+    if (!isChange(text3)) return [];
+    const saving = savingsOf(insight.savings?.tokens, insight.savings?.ms);
+    return [{ slots: { "i-text": text3, "i-rule": insight.ruleId, ...saving.slots }, conditions: saving.conditions }];
+  });
+  const k = a.tokens.byKind;
+  const ok = a.parse.reconciliation.ok;
+  const redacted2 = top.some((insight) => !insight.detail);
+  const live = a.session.live;
+  return {
+    root: { "data-scope": "session", "data-live": String(live), "data-caution": String(!ok), "data-redacted": String(redacted2) },
+    end: s.ending,
+    conditions: ["session", ...live ? ["live"] : [], ok ? "reconciled" : "caution", ...redacted2 ? ["redacted"] : [], ...improvements.length ? ["improvements"] : [], ...findings.length ? ["findings"] : []],
+    slots: {
+      title: a.session.title || `Session ${a.session.id.slice(0, ID_PREFIX)}`,
+      project: a.session.projectSlug ?? null,
+      date: a.session.startedAt !== void 0 ? { v: a.session.startedAt } : null,
+      models: a.session.models.map((m) => m.displayName).join(", "),
+      "live-at": { v: a.generator.generatedAt },
+      version: a.generator.version,
+      generated: { v: a.generator.generatedAt },
+      verdict: words2.verdict,
+      summary: words2.summary,
+      quality: qualityValue(s.outcomes),
+      "quality-note": QUALITY_NOTE[s.ending] ?? QUALITY_NOTE["unknown"],
+      active: { v: s.activeMs },
+      wall: s.wallMs !== void 0 ? { v: s.wallMs } : null,
+      waiting: { v: s.humanWaitMs },
+      tokens: { v: s.totalTokens },
+      cache: { v: s.cacheHitRatio },
+      output: { v: k.output },
+      "turn-count": { v: s.turns },
+      "turn-noun": s.turns === 1 ? "turn" : "turns",
+      "caution-pct": String(a.parse.reconciliation.matchesWithinPct),
+      "improvements-title": words2.improvementsTitle,
+      cwd: a.session.cwd ?? "the project directory",
+      "session-id": a.session.id
+    },
+    lists: { finding: findings, improvement: improvements },
+    charts: {
+      time: { kind: "bars", values: { active: s.activeMs, waiting: s.humanWaitMs }, label: `Working ${ms(s.activeMs)}, waiting for you ${ms(s.humanWaitMs)}` },
+      tokens: {
+        kind: "bars",
+        values: { read: k.cacheRead, write5m: k.cacheWrite5m, write1h: k.cacheWrite1h, input: k.input, output: k.output },
+        label: `Tokens by kind: cache read ${num2(k.cacheRead)}, cache write 5m ${num2(k.cacheWrite5m)}, cache write 1h ${num2(k.cacheWrite1h)}, fresh input ${num2(k.input)}, output ${num2(k.output)}`
+      },
+      cache: { kind: "ring", value: Number(pct(s.cacheHitRatio).slice(0, -1)), of: 100, label: `${pct(s.cacheHitRatio)} read from cache` }
+    }
+  };
+}
+function aggregatePage(e, scope, o) {
+  const n2 = e.source.sessions;
+  const seen = (f) => f.finding.evidence.sessions ?? 1;
+  const top = e.findings.slice(0, FINDINGS_SHOWN);
+  const findings = top.map((f, index) => {
+    const saving = savingsOf(f.finding.evidence.savingsTokens, f.finding.evidence.savingsMs);
+    return {
+      attrs: { "data-sev": f.severity },
+      slots: {
+        "f-i": String(index + 1),
+        "f-k": String(top.length),
+        "f-sev": f.severity,
+        "f-title": f.exampleTitle ?? unmarked(f.finding.title),
+        "f-evidence": f.detail || REDACTED_DETAIL,
+        "f-shows": { v: seen(f) },
+        "f-examples": f.finding.sessionIds.slice(0, EXAMPLE_SESSIONS2).map((id) => id.slice(0, ID_PREFIX)).join(", "),
+        "f-rule": f.finding.ruleId,
+        "f-why": reasonOf2(f) ?? null,
+        "f-improvement": improvementOf(f) ?? NO_IMPROVEMENT_TEXT,
+        ...saving.slots
+      },
+      conditions: [...reasonOf2(f) ? ["why"] : [], ...saving.conditions],
+      charts: { share: { kind: "ring", value: seen(f), of: n2, label: `${seen(f)} of ${n2} sessions` } }
+    };
+  });
+  const improvements = e.findings.flatMap((f) => {
+    const text3 = improvementOf(f);
+    if (!isChange(text3)) return [];
+    const saving = savingsOf(f.finding.evidence.savingsTokens, f.finding.evidence.savingsMs);
+    return [{ slots: { "i-text": text3, "i-rule": f.finding.ruleId, ...saving.slots }, conditions: saving.conditions }];
+  });
+  const first = e.findings[0];
+  const redacted2 = top.some((f) => !f.detail);
+  return {
+    root: { "data-scope": scope, "data-live": "false", "data-caution": "false", "data-redacted": String(redacted2) },
+    conditions: [scope, "aggregate", "reconciled", ...redacted2 ? ["redacted"] : [], ...improvements.length ? ["improvements"] : [], ...findings.length ? ["findings"] : []],
+    slots: {
+      title: scope === "repo" ? `Recurring patterns in ${o.folder ?? "this repository"}` : "Recurring patterns on this machine",
+      sessions: { v: n2 },
+      "kpi-sessions": { v: n2 },
+      "session-noun": n2 === 1 ? "session" : "sessions",
+      "kpi-findings": { v: e.totalFindings },
+      ...first ? { "kpi-top-n": { v: seen(first) }, "kpi-top-rule": first.finding.ruleId } : {},
+      version: o.version,
+      verdict: o.words.verdict,
+      summary: o.words.summary,
+      "improvements-title": o.words.improvementsTitle
+    },
+    lists: { finding: findings, improvement: improvements },
+    charts: first ? { share: { kind: "ring", value: seen(first), of: n2, label: `${seen(first)} of ${n2} sessions` } } : {}
+  };
+}
+
+// src/show-me/render.ts
+var TEMPLATES = Object.freeze([
+  Object.freeze({ file: "slides.html", html: SLIDES_HTML }),
+  Object.freeze({ file: "report.html", html: REPORT_HTML })
+]);
+var showMeBase = () => join10(oranguHome(), "show-me");
+var ShowMeRenderError = class extends Error {
+  name = "ShowMeRenderError";
+};
+var code = (error) => error?.code;
+async function confinedRunDir(dir, base = showMeBase()) {
+  let realBase;
+  try {
+    realBase = await realpath11(base);
+  } catch {
+    throw new ShowMeRenderError("orangu has no show-me run directory yet. Run orangu show-me first, then render its directory.");
+  }
+  let real;
+  try {
+    real = await realpath11(dir);
+  } catch {
+    throw new ShowMeRenderError("the --render directory does not exist.");
+  }
+  if (dirname6(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
+  if (!(await lstat9(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
+  try {
+    const data = await lstat9(join10(real, "data.json"));
+    if (!data.isFile()) throw new ShowMeRenderError("data.json in the run directory must be a regular file.");
+  } catch (error) {
+    if (error instanceof ShowMeRenderError) throw error;
+    throw new ShowMeRenderError("the run directory has no data.json. Run orangu show-me to make one.");
+  }
+  return real;
+}
+async function readJson2(dir, name) {
+  let text3;
+  try {
+    text3 = await readStableTextFile(join10(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("not found")) throw new ShowMeInputError(`the run directory has no ${name}.${name === "words.json" ? " Write the 3 words first." : ""}`);
+    if (message.includes("exceeds")) throw new ShowMeInputError(`${name} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu show-me reads.`);
+    if (message.includes("symbolic link") || message.includes("regular file")) throw new ShowMeInputError(`${name} must be a regular file, not a link.`);
+    throw new ShowMeInputError(`orangu show-me cannot read ${name}.`);
+  }
+  try {
+    return JSON.parse(text3);
+  } catch {
+    throw new ShowMeInputError(`${name} is not valid JSON.`);
+  }
+}
+async function writeBoth(dir, files2) {
+  const staged = [];
+  try {
+    for (const { file } of files2) {
+      const to = join10(dir, file);
+      try {
+        const existing = await lstat9(to);
+        if (!existing.isFile()) throw new ShowMeRenderError(`${file} in the run directory is not a regular file.`);
+      } catch (error) {
+        if (error instanceof ShowMeRenderError) throw error;
+        if (code(error) !== "ENOENT") throw error;
+      }
+    }
+    for (const { file, html } of files2) {
+      const from = join10(dir, `.${file}.${randomBytes4(6).toString("hex")}.tmp`);
+      staged.push({ from, to: join10(dir, file) });
+      await writePrivateOutput(from, html);
+    }
+    for (const { from, to } of staged) await rename2(from, to);
+  } catch (error) {
+    await Promise.all(staged.map(({ from }) => rm(from, { force: true })));
+    if (error instanceof ShowMeRenderError) throw error;
+    throw new ShowMeRenderError("orangu show-me could not write the 2 files.");
+  }
+}
+async function renderShowMe(dir, o = {}) {
+  const run = await confinedRunDir(dir, o.base);
+  const words2 = validateWords(await readJson2(run, "words.json"));
+  const data = validateShowMeData(await readJson2(run, "data.json"));
+  const page = data.kind === "session" ? sessionPage(data.value, words2) : aggregatePage(data.value, data.scope, { ...data.folder !== void 0 ? { folder: data.folder } : {}, version: data.version, words: words2 });
+  const files2 = TEMPLATES.map(({ file, html: template }) => {
+    const html = fillTemplate(template, page);
+    selfCheck(html, template, file);
+    return { file, html };
+  });
+  await writeBoth(run, files2);
+  return { dir: run, slides: join10(run, "slides.html"), report: join10(run, "report.html"), findings: wordFindings(words2) };
+}
+
+// src/show-me/prepare.ts
+var MAX_NAME_CHARS = 64;
+function runName(name) {
+  const safe = name.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^[.-]+|-+$/g, "").slice(0, MAX_NAME_CHARS);
+  return safe || "run";
+}
+async function prepareRun(scope, name, json2, o = {}) {
+  const base = o.base ?? showMeBase();
+  await mkdir3(base, { recursive: true, mode: 448 });
+  const dir = await realpath12(await mkdtemp(join11(base, `${scope}-${runName(name)}-`)));
+  const path = join11(dir, "data.json");
+  await writePrivateOutput(path, json2);
+  const bytes = Buffer.byteLength(json2);
+  const approxTokens3 = Math.ceil(bytes / 4);
+  return { dir, data: { path, bytes, approxTokens: approxTokens3, overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD } };
+}
+
+// src/cli/json-out.ts
+function renderAnalysisJson(a, flags) {
+  let out3 = a;
+  if (!flagBool(flags, "no-redact")) {
+    out3 = redactAnalysis(a, { scrub: true, stripText: !flagBool(flags, "include-text"), stripPaths: flagBool(flags, "strip-paths") }).analysis;
+  }
+  const body = flagBool(flags, "slim") ? slimAnalysis(out3) : out3;
+  return JSON.stringify(body, null, flagBool(flags, "quiet") ? 0 : 2) + "\n";
+}
+function emitAnalysisJson(a, flags) {
+  process.stdout.write(renderAnalysisJson(a, flags));
+}
+function prepareAggregateForOutput(a, flags) {
+  if (flagBool(flags, "no-redact")) return a;
+  return redactValue(a, {
+    scrub: true,
+    stripText: !flagBool(flags, "include-text"),
+    stripPaths: flagBool(flags, "strip-paths")
+  });
+}
+function renderPreparedAggregateJson(a, flags, options = {}) {
+  const body = JSON.stringify(a, null, options.pretty ?? !flagBool(flags, "quiet") ? 2 : 0);
+  return body + (options.trailingNewline ?? true ? "\n" : "");
+}
+
+// src/cli/commands/show-me.ts
+var USAGE2 = "usage: orangu show-me [<session>] | --scope repo [--cwd <dir>] | --scope global [--json], then orangu show-me --render <dir> [--open] [--json]";
+var PREPARE_FLAGS = /* @__PURE__ */ new Set(["scope", "cwd", "root", "r", "json", "quiet", "no-color", "include-text", "no-redact", "strip-paths", "no-cache", "limit", "jobs", "j"]);
+var SCAN_FLAGS = ["limit", "jobs", "j"];
+var RENDER_FLAGS = /* @__PURE__ */ new Set(["render", "open", "json", "quiet", "no-color"]);
+var flagName2 = (name) => `${name.length === 1 ? "-" : "--"}${name}`;
+function checkFlags(flags, allowed, step) {
+  for (const name of Object.keys(flags)) {
+    if (!allowed.has(name)) throw new Error(`${flagName2(name)} is not a flag of orangu show-me ${step}. ${USAGE2}`);
+  }
+}
+function streams(flags) {
+  const machine = flagBool(flags, "json") || flagBool(flags, "quiet") || flagBool(flags, "no-color");
+  return { out: detectCaps(process.stdout, process.env, { machine }), err: detectCaps(process.stderr, process.env, { machine }) };
+}
+async function selectSession(selector, flags, err3) {
+  const configDir = flagStr(flags, "root", "r");
+  const cwd = flagStr(flags, "cwd");
+  const options = { ...configDir ? { configDir } : {}, ...cwd ? { cwd } : {} };
+  if (selector === void 0 || selector === "latest") {
+    const latest = await findLatestSession(options);
+    if (!latest) throw new Error("orangu found no sessions. Is Claude Code installed? Try: orangu list");
+    return latest;
+  }
+  if (!selector.trim()) throw new Error("The session selector is empty.");
+  if (selector === "current") {
+    const found = await resolveCurrentSession(options, process.env);
+    if (found.note && !flagBool(flags, "quiet") && !flagBool(flags, "json")) process.stderr.write(`  ${paint(err3, "dim", found.note)}
+`);
+    return found.ref;
+  }
+  const resolved = await resolveSession(selector, options);
+  if (resolved) return resolved;
+  const candidates = await candidatesForPrefix(selector, options);
+  if (candidates.length > 1) throw new Error(`"${oneLine2(selector)}" matches ${candidates.length} sessions. Give more of the id.`);
+  throw new Error(`No session matches "${oneLine2(selector)}". Try: orangu list`);
+}
+var cacheFor = (flags) => flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1" ? null : new AnalysisCache({ version: VERSION2 });
+async function sessionData2(selector, flags, err3) {
+  const ref = await selectSession(selector, flags, err3);
+  const analysis = await analyzeRefCached(ref, { cache: cacheFor(flags), version: VERSION2, now: Date.now() });
+  const json2 = renderAnalysisJson(analysis, { slim: true, "no-redact": flagBool(flags, "no-redact"), "include-text": flagBool(flags, "include-text"), "strip-paths": flagBool(flags, "strip-paths") });
+  return { name: ref.sessionId.slice(0, 8), json: json2 };
+}
+async function aggregateData2(scope, flags, err3) {
+  const rootArg = flagStr(flags, "root", "r");
+  const cwd = resolve11(flagStr(flags, "cwd") ?? process.cwd());
+  const refs = scope === "global" ? await listSessions({ roots: await claudeRoots(rootArg) }) : await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
+  if (!refs.length) throw new Error(scope === "global" ? "orangu found no sessions on this machine." : "orangu found no sessions for this repository.");
+  const limitRaw = flagStr(flags, "limit");
+  const limit = limitRaw === void 0 ? scope === "global" ? 500 : 200 : Number(limitRaw);
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("--limit must be a whole number, 1 or more.");
+  const use = refs.slice(0, limit);
+  if (!flagBool(flags, "quiet") && !flagBool(flags, "json")) process.stderr.write(`  ${paint(err3, "dim", `analyzing ${use.length} session${use.length === 1 ? "" : "s"}`)}
+`);
+  const now = Date.now();
+  const cacheEnabled = !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1");
+  const jobsRaw = flagStr(flags, "jobs", "j");
+  const jobs = jobsRaw !== void 0 ? Math.max(1, Math.floor(Number(jobsRaw)) || 1) : defaultJobs();
+  const bundled = /\.(m?js)$/.test(new URL(import.meta.url).pathname);
+  const analyses = [];
+  let failed = 0;
+  if (jobs > 1 && use.length > 1 && bundled) {
+    const pooled = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs, version: VERSION2, now, cacheEnabled });
+    analyses.push(...pooled.analyses);
+    failed = pooled.failed;
+  } else {
+    const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION2 }) : null;
+    for (const ref of use) {
+      try {
+        analyses.push(await analyzeRefCached(ref, { cache: cache2, version: VERSION2, now }));
+      } catch {
+        failed++;
+      }
+    }
+  }
+  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename11(cwd)}`, now);
+  if (failed) agg.scope += ` (${failed} unreadable skipped)`;
+  const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, flags))), { scope });
+  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename11(cwd) : redactValue(basename11(cwd), { scrub: true }) : void 0;
+  const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION2 }, null, 2)}
+`;
+  return { name: scope === "global" ? "machine" : basename11(cwd), json: json2 };
+}
+function printPrepared(run, out3) {
+  const lines = [
+    row(out3, "dir", oneLine2(run.dir), { raw: true }),
+    row(out3, "data", `${oneLine2(run.data.path)} \xB7 ${run.data.bytes.toLocaleString("en-US")} bytes \xB7 about ${run.data.approxTokens.toLocaleString("en-US")} tokens`, { raw: true }),
+    run.data.overThreshold ? row(out3, "gate", `over the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString("en-US")}-token gate. Ask the user before you read data.json into a model.`, { style: "warn" }) : row(out3, "gate", `under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString("en-US")}-token gate`, { style: "dim" })
+  ];
+  process.stdout.write(`${lines.join("\n")}
+`);
+}
+async function prepare(positionals, flags) {
+  checkFlags(flags, PREPARE_FLAGS, "(prepare)");
+  const { out: out3, err: err3 } = streams(flags);
+  const scopeRaw = flags["scope"] ?? "session";
+  if (scopeRaw !== "session" && scopeRaw !== "repo" && scopeRaw !== "global") throw new Error(`--scope must be repo or global. ${USAGE2}`);
+  const scope = scopeRaw;
+  if (positionals.length > 1) throw new Error(`orangu show-me takes one session. ${USAGE2}`);
+  if (scope !== "session" && positionals.length) throw new Error(`A session goes with session scope only. --scope ${scope} reads every session of its scope.`);
+  if (scope === "global" && flags["cwd"] !== void 0) throw new Error("--cwd goes with a session or --scope repo. --scope global reads every session on this machine.");
+  const scan = SCAN_FLAGS.find((name2) => flags[name2] !== void 0);
+  if (scope === "session" && scan) throw new Error(`${flagName2(scan)} goes with --scope repo or --scope global. One session needs no scan limit.`);
+  const { name, json: json2 } = scope === "session" ? await sessionData2(positionals[0], flags, err3) : await aggregateData2(scope, flags, err3);
+  const run = await prepareRun(scope, name, json2);
+  if (flagBool(flags, "json")) {
+    process.stdout.write(`${JSON.stringify(run, null, 2)}
+`);
+    return;
+  }
+  printPrepared(run, out3);
+}
+function printRendered(result, opened, out3) {
+  const lines = [row(out3, "slides", oneLine2(result.slides), { raw: true }), row(out3, "report", oneLine2(result.report), { raw: true })];
+  for (const f of result.findings) lines.push(row(out3, "ste", `${f.slot}: ${f.rule} "${oneLine2(f.text)}" ${oneLine2(f.hint)}`));
+  const count3 = result.findings.length;
+  lines.push(
+    count3 ? row(out3, "words", `${count3} STE finding${count3 === 1 ? "" : "s"}. This is advice: fix each real finding in words.json, then render again.`, { style: "warn" }) : row(out3, "words", "no STE finding", { style: "dim" })
+  );
+  if (opened) lines.push(row(out3, "opened", "both files, in the browser", { style: "dim" }));
+  process.stdout.write(`${lines.join("\n")}
+`);
+}
+async function render(positionals, flags) {
+  checkFlags(flags, RENDER_FLAGS, "--render");
+  const { out: out3 } = streams(flags);
+  const dir = flags["render"];
+  if (typeof dir !== "string" || !dir.trim()) throw new Error(`--render needs the run directory that orangu show-me printed. ${USAGE2}`);
+  if (positionals.length) throw new Error(`orangu show-me --render takes only the run directory. ${USAGE2}`);
+  const result = await renderShowMe(dir);
+  const open11 = flagBool(flags, "open") && [openInBrowser(result.slides), openInBrowser(result.report)].every(Boolean);
+  if (flagBool(flags, "json")) {
+    process.stdout.write(`${JSON.stringify(result, null, 2)}
+`);
+    return;
+  }
+  printRendered(result, open11, out3);
+}
+async function cmdShowMe(positionals, flags) {
+  return flags["render"] !== void 0 ? render(positionals, flags) : prepare(positionals, flags);
 }
 
 // src/cli/commands/index.ts
@@ -14070,7 +15656,8 @@ var EXTRA_COMMANDS = {
   estimate: cmdEstimate,
   harness: cmdHarness,
   suggest: cmdSuggest,
-  ste: cmdSte
+  ste: cmdSte,
+  "show-me": cmdShowMe
 };
 var EXTRA_HELP = [
   // Each entry may span lines (main.ts joins entries with '\n'); keep every line <= 80 columns.
@@ -14120,27 +15707,37 @@ var EXTRA_HELP = [
     "  orangu ste <file...|->       score Markdown, HTML or text against the STE",
     "                               writing rules (- reads stdin, no pass mark)",
     "                                 ([--json] [--lines])"
+  ].join("\n"),
+  [
+    "  orangu show-me [<session>]   a slide deck and a written report, in 2 steps:",
+    "                               write data.json to a new run directory",
+    "                                 (--scope repo [--cwd <dir>] | --scope global)",
+    "                                 ([--json] [--include-text] [--no-redact])",
+    "  orangu show-me --render <dir>",
+    "                               fill both offline HTML files from data.json",
+    "                               and words.json (no pass mark: STE advice)",
+    "                                 ([--open] [--json])"
   ].join("\n")
 ];
 
 // src/cli/commands/pick.ts
-import { basename as basename11 } from "node:path";
+import { basename as basename12 } from "node:path";
 
 // src/cli/select.ts
 var FRAME_CHROME_LINES = 5;
-function windowFor(cursor, start, size, count2) {
-  if (count2 <= size) return 0;
+function windowFor(cursor, start, size, count3) {
+  if (count3 <= size) return 0;
   let s = start;
   if (cursor < s) s = cursor;
   if (cursor >= s + size) s = cursor - size + 1;
-  return Math.max(0, Math.min(s, count2 - size));
+  return Math.max(0, Math.min(s, count3 - size));
 }
 function select(o) {
-  const count2 = Math.max(1, o.count);
+  const count3 = Math.max(1, o.count);
   const columns = () => Math.max(40, o.output.columns ?? o.caps.columns);
-  const size = Math.max(1, Math.min(count2, o.viewRows ?? Math.max(3, (o.output.rows ?? 24) - FRAME_CHROME_LINES)));
-  let cursor = Math.max(0, Math.min(o.initial ?? 0, count2 - 1));
-  let start = windowFor(cursor, 0, size, count2);
+  const size = Math.max(1, Math.min(count3, o.viewRows ?? Math.max(3, (o.output.rows ?? 24) - FRAME_CHROME_LINES)));
+  let cursor = Math.max(0, Math.min(o.initial ?? 0, count3 - 1));
+  let start = windowFor(cursor, 0, size, count3);
   let drawn = 0;
   const frame = () => {
     const lines = o.render({ cursor, start, size, columns: columns() });
@@ -14150,7 +15747,7 @@ function select(o) {
   const draw = () => {
     o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
   };
-  return new Promise((resolve13) => {
+  return new Promise((resolve14) => {
     let done = false;
     const restore = () => {
       if (done) return;
@@ -14168,11 +15765,11 @@ function select(o) {
     const finish = (r) => {
       restore();
       hook.dispose();
-      resolve13(r);
+      resolve14(r);
     };
     const move = (to) => {
-      cursor = Math.max(0, Math.min(to, count2 - 1));
-      start = windowFor(cursor, start, size, count2);
+      cursor = Math.max(0, Math.min(to, count3 - 1));
+      start = windowFor(cursor, start, size, count3);
       draw();
     };
     const onResize = () => draw();
@@ -14193,7 +15790,7 @@ function select(o) {
         case "home":
           return move(0);
         case "end":
-          return move(count2 - 1);
+          return move(count3 - 1);
         case "pageup":
           return move(cursor - size);
         case "pagedown":
@@ -14244,9 +15841,9 @@ async function gatherPickRows(flags, deps = {}) {
   const redact = !flagBool(flags, "no-redact");
   const rows2 = await Promise.all(
     ordered.slice(0, limit).map(async ({ r, running }) => {
-      const head = await peekHead(r.path);
-      const title = head.title && redact ? redactValue(head.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head.title;
-      const project = head.cwd ? basename11(head.cwd) : basename11(r.projectSlug);
+      const head2 = await peekHead(r.path);
+      const title = head2.title && redact ? redactValue(head2.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head2.title;
+      const project = head2.cwd ? basename12(head2.cwd) : basename12(r.projectSlug);
       return {
         sessionId: r.sessionId,
         path: r.path,
@@ -14288,7 +15885,7 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename12, resolve as resolve11 } from "node:path";
+import { basename as basename13, resolve as resolve12 } from "node:path";
 var INDENT3 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
@@ -14298,7 +15895,7 @@ function dashboardPrecondition(stdin, stdout, env, flags) {
   return interactivePrecondition(stdin, stdout, env, flags);
 }
 async function gatherDashboardData(flags, deps = {}) {
-  const cwd = resolve11((deps.cwd ?? (() => process.cwd()))());
+  const cwd = resolve12((deps.cwd ?? (() => process.cwd()))());
   const configArg = flagStr(flags, "root", "config", "r");
   const pickFlags = { ...flags, global: true };
   const [picked, repoRefs, roots] = await Promise.all([
@@ -14307,7 +15904,7 @@ async function gatherDashboardData(flags, deps = {}) {
     claudeRoots(configArg)
   ]);
   return {
-    repoName: basename12(cwd) || cwd,
+    repoName: basename13(cwd) || cwd,
     repoSessions: repoRefs.length,
     globalSessions: picked.counts.total,
     roots: roots.length,
@@ -14321,7 +15918,7 @@ function dashboardChoices(data) {
   choices.push(...data.live.map((row2) => ({ kind: "session", row: row2 })));
   return choices;
 }
-function count(value, noun) {
+function count2(value, noun) {
   return `${value} ${noun}${value === 1 ? "" : "s"}`;
 }
 function oneLine3(value) {
@@ -14330,11 +15927,11 @@ function oneLine3(value) {
 function choiceText(choice, data, now, sep3) {
   switch (choice.kind) {
     case "repo":
-      return { tag: "REPO", text: `Repository report${sep3}${data.repoName}${sep3}${count(data.repoSessions, "session")}`, live: false };
+      return { tag: "REPO", text: `Repository report${sep3}${data.repoName}${sep3}${count2(data.repoSessions, "session")}`, live: false };
     case "global":
-      return { tag: "GLOBAL", text: `Global report${sep3}${count(data.globalSessions, "session")}${sep3}${count(data.roots, "root")}`, live: false };
+      return { tag: "GLOBAL", text: `Global report${sep3}${count2(data.globalSessions, "session")}${sep3}${count2(data.roots, "root")}`, live: false };
     case "browse":
-      return { tag: "SESSION", text: `Browse session reports${sep3}${count(data.globalSessions, "session")}`, live: false };
+      return { tag: "SESSION", text: `Browse session reports${sep3}${count2(data.globalSessions, "session")}`, live: false };
     case "session": {
       const title = oneLine3(choice.row.title ?? choice.row.sessionId.slice(0, 8));
       return { tag: "LIVE", text: `${title}${sep3}${choice.row.project}${sep3}${fmtAge(choice.row.mtimeMs, now)}`, live: true };
@@ -14351,7 +15948,7 @@ function dashboardFrame(caps, data, choices, view, now) {
     ...mascotLines(caps),
     "",
     paint(caps, "bold", INDENT3 + "Choose a report"),
-    paint(caps, "dim", truncate(`${INDENT3}${count(data.runningSessions, "open Claude session")}${g.sep}local only${g.sep}no network calls`, width, caps)),
+    paint(caps, "dim", truncate(`${INDENT3}${count2(data.runningSessions, "open Claude session")}${g.sep}local only${g.sep}no network calls`, width, caps)),
     ""
   ];
   const end = Math.min(choices.length, view.start + view.size);
@@ -14363,11 +15960,11 @@ function dashboardFrame(caps, data, choices, view, now) {
     const liveMark = rendered.live ? paint(caps, "good", g.mark) : " ";
     const tag = paint(caps, rendered.live ? "good" : "accent", rendered.tag.padEnd(TAG_WIDTH));
     const budget = Math.max(1, width - displayWidth(prefix) - 2 - TAG_WIDTH - 1);
-    const text2 = truncate(rendered.text, budget, caps);
-    lines.push(prefix + liveMark + " " + tag + (cursor ? paint(caps, "bold", text2) : text2));
+    const text3 = truncate(rendered.text, budget, caps);
+    lines.push(prefix + liveMark + " " + tag + (cursor ? paint(caps, "bold", text3) : text3));
   }
   const hidden = choices.length - (end - view.start);
-  lines.push(hidden > 0 ? paint(caps, "dim", truncate(`${INDENT3}    ${g.up}${g.down} ${count(hidden, "more choice")}`, width, caps)) : "");
+  lines.push(hidden > 0 ? paint(caps, "dim", truncate(`${INDENT3}    ${g.up}${g.down} ${count2(hidden, "more choice")}`, width, caps)) : "");
   const keys = caps.unicode ? "\u2191\u2193 or j k move \xB7 enter selects \xB7 q quits" : "up/down or j k move | enter selects | q quits";
   lines.push(paint(caps, "dim", truncate(INDENT3 + keys, width, caps)));
   return lines;
@@ -14412,31 +16009,6 @@ async function cmdDashboard(flags, deps) {
   return true;
 }
 
-// src/cli/json-out.ts
-function renderAnalysisJson(a, flags) {
-  let out3 = a;
-  if (!flagBool(flags, "no-redact")) {
-    out3 = redactAnalysis(a, { scrub: true, stripText: !flagBool(flags, "include-text"), stripPaths: flagBool(flags, "strip-paths") }).analysis;
-  }
-  const body = flagBool(flags, "slim") ? slimAnalysis(out3) : out3;
-  return JSON.stringify(body, null, flagBool(flags, "quiet") ? 0 : 2) + "\n";
-}
-function emitAnalysisJson(a, flags) {
-  process.stdout.write(renderAnalysisJson(a, flags));
-}
-function prepareAggregateForOutput(a, flags) {
-  if (flagBool(flags, "no-redact")) return a;
-  return redactValue(a, {
-    scrub: true,
-    stripText: !flagBool(flags, "include-text"),
-    stripPaths: flagBool(flags, "strip-paths")
-  });
-}
-function renderPreparedAggregateJson(a, flags, options = {}) {
-  const body = JSON.stringify(a, null, options.pretty ?? !flagBool(flags, "quiet") ? 2 : 0);
-  return body + (options.trailingNewline ?? true ? "\n" : "");
-}
-
 // src/cli/main.ts
 var out2 = MACHINE_CAPS;
 var err2 = MACHINE_CAPS;
@@ -14466,13 +16038,13 @@ var SELECTOR_FORMS = "an id, a unique prefix, a .jsonl path, latest, or current"
 function sessionSelector(sel, flags) {
   const raw = flags["session"] ?? flags["s"];
   if (raw === void 0) return sel;
-  if (typeof raw !== "string" || !raw.trim()) fail(`--session needs a session selector: ${SELECTOR_FORMS}`);
+  if (typeof raw !== "string" || !raw.trim()) fail2(`--session needs a session selector: ${SELECTOR_FORMS}`);
   const flag = raw.trim();
-  if (flag.includes(",")) fail("--session takes one session here. Only estimate and suggest take a comma list.");
-  if (sel !== void 0 && sel !== flag) fail(`--session ${flag} and "${sel}" name different sessions. Give only one.`);
+  if (flag.includes(",")) fail2("--session takes one session here. Only estimate and suggest take a comma list.");
+  if (sel !== void 0 && sel !== flag) fail2(`--session ${flag} and "${sel}" name different sessions. Give only one.`);
   return flag;
 }
-async function selectSession(sel, flags) {
+async function selectSession2(sel, flags) {
   sel = sessionSelector(sel, flags);
   const configArg = flagStr(flags, "root", "config", "r");
   let opts = configArg ? { configDir: configArg } : {};
@@ -14480,7 +16052,7 @@ async function selectSession(sel, flags) {
   if (flags["cwd"]) opts.cwd = String(flags["cwd"]);
   if (!sel || sel === "latest") {
     const s = await findLatestSession(opts);
-    if (!s) fail("orangu found no sessions. Is Claude Code installed? Try: orangu list");
+    if (!s) fail2("orangu found no sessions. Is Claude Code installed? Try: orangu list");
     return s;
   }
   if (sel === "current") {
@@ -14492,13 +16064,13 @@ async function selectSession(sel, flags) {
   if (r) return r;
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
-    fail(`"${sel}" matches ${cands.length} sessions:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename13(c.projectSlug)).join("\n"));
+    fail2(`"${sel}" matches ${cands.length} sessions:
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename14(c.projectSlug)).join("\n"));
   }
-  fail(`No session matches "${sel}". Try: orangu list`);
+  fail2(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
 }
-function fail(msg) {
+function fail2(msg) {
   progress?.pause();
   process.stderr.write(paint(err2, "bad", "error: ") + msg + "\n");
   process.exit(1);
@@ -14536,11 +16108,11 @@ async function analyzeWithProgress(ref, flags) {
 }
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
-  if (out3) return resolve12(out3);
-  return join10(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  if (out3) return resolve13(out3);
+  return join12(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
-  const ref = await selectSession(sel, flags);
+  const ref = await selectSession2(sel, flags);
   const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags);
   const { html, redaction } = renderReport(analysis, { redact: redactOptions(flags) });
   if (flagBool(flags, "stdout")) {
@@ -14560,7 +16132,7 @@ async function cmdReport(sel, flags) {
   thresholdExit(analysis, flags);
 }
 async function cmdAnalyze(sel, flags) {
-  const ref = await selectSession(sel, flags);
+  const ref = await selectSession2(sel, flags);
   const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags);
   if (flagBool(flags, "json")) {
     emitAnalysisJson(analysis, flags);
@@ -14577,7 +16149,7 @@ async function cmdAnalyze(sel, flags) {
   thresholdExit(analysis, flags);
 }
 async function cmdBrief(flags) {
-  const ref = await selectSession(void 0, flags);
+  const ref = await selectSession2(void 0, flags);
   const { analysis } = await analyzeWithProgress(ref, flags);
   const step = await nextStep2(analysis, flags);
   process.stdout.write(briefBlock(out2, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, "quiet") }).join("\n") + "\n");
@@ -14602,31 +16174,31 @@ var SESSION_GATE_VERBS = /* @__PURE__ */ new Set(["report", "html", "analyze", "
 var AGGREGATE_VERBS = /* @__PURE__ */ new Set(["repo", "global", "all"]);
 var AGGREGATE_SIDE_EFFECT_FLAGS = ["html", "open"];
 function rejectUnusableFlags(command, flags) {
-  for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== void 0) fail(message);
+  for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== void 0) fail2(message);
   const unknown = unknownFlags(flags);
-  if (unknown.length) fail(`unknown flag${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")}. Run: orangu --help`);
+  if (unknown.length) fail2(`unknown flag${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")}. Run: orangu --help`);
   if (command !== void 0 && !SESSION_GATE_VERBS.has(command)) {
     for (const flag of SESSION_GATE_FLAGS) {
-      if (flags[flag] !== void 0) fail(`--${flag} gates one session: use it with orangu analyze or orangu report`);
+      if (flags[flag] !== void 0) fail2(`--${flag} gates one session: use it with orangu analyze or orangu report`);
     }
   }
   if (!SESSION_SELECTOR_VERBS.has(command) && (flags["session"] !== void 0 || flags["s"] !== void 0)) {
-    fail("--session selects one session: use it with report, analyze, watch, estimate or evidence");
+    fail2("--session selects one session: use it with report, analyze, watch, estimate or evidence");
   }
   if (command !== void 0 && AGGREGATE_VERBS.has(command)) {
     if (flagBool(flags, "json")) {
       for (const flag of AGGREGATE_SIDE_EFFECT_FLAGS) {
-        if (flags[flag] !== void 0) fail(`--${flag} writes the HTML report. --json is a machine read with no side effect. Run them separately.`);
+        if (flags[flag] !== void 0) fail2(`--${flag} writes the HTML report. --json is a machine read with no side effect. Run them separately.`);
       }
     }
   } else if (command !== void 0 && flags["html"] !== void 0) {
-    fail("--html writes the scope report: use it with orangu repo or orangu global");
+    fail2("--html writes the scope report: use it with orangu repo or orangu global");
   }
 }
 function thresholdExit(analysis, flags) {
   let bad = false;
   const maxTokensStr = flagStr(flags, "max-tokens");
-  if (maxTokensStr !== void 0 && Number.isNaN(Number(maxTokensStr))) fail(`--max-tokens must be a number, got "${maxTokensStr}"`);
+  if (maxTokensStr !== void 0 && Number.isNaN(Number(maxTokensStr))) fail2(`--max-tokens must be a number, got "${maxTokensStr}"`);
   const maxTokens = Number(maxTokensStr);
   if (maxTokensStr !== void 0 && !Number.isNaN(maxTokens) && analysis.summary.totalTokens > maxTokens) {
     process.stderr.write(paint(err2, "bad", `FAIL: ${fmtTokens(analysis.summary.totalTokens)} tokens > --max-tokens ${fmtTokens(maxTokens)}`) + "\n");
@@ -14658,12 +16230,12 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${plural(roots.length, "root")})`;
   } else {
-    const cwd = selOrPath ? resolve12(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename13(cwd)}`;
+    scopeLabel = `repo ${basename14(cwd)}`;
   }
-  if (!refs.length) fail(`orangu found no sessions for ${scopeLabel}.`);
+  if (!refs.length) fail2(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
   const use = refs.slice(0, Number.isNaN(max) ? refs.length : max);
   const quiet = flagBool(flags, "quiet") || flagBool(flags, "json");
@@ -14706,8 +16278,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve12(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve12(outFile), { raw: true }) + "\n");
+    await writePrivateOutput(resolve13(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    if (!quiet) process.stderr.write(row(err2, "written", resolve13(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -14724,9 +16296,9 @@ async function writeAggregateHtml(scope, a, flags) {
   const open11 = flagBool(flags, "open") && !flagBool(flags, "no-open");
   if (flags["html"] === void 0 && !open11) return false;
   const named = flagStr(flags, "html");
-  const stamp = createHash4("sha256").update(`${a.scope}
+  const stamp = createHash5("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve12(named) : join10(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve13(named) : join12(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
@@ -14739,7 +16311,7 @@ ${a.generatedAt}`).digest("hex").slice(0, 8);
 async function cmdServe(flags) {
   const portStr = flagStr(flags, "port", "p");
   const port = portStr !== void 0 ? Number(portStr) : void 0;
-  if (portStr !== void 0 && (!Number.isInteger(port) || port < 0 || port > 65535)) fail(`--port must be an integer 0\u201365535, got "${portStr}"`);
+  if (portStr !== void 0 && (!Number.isInteger(port) || port < 0 || port > 65535)) fail2(`--port must be an integer 0\u201365535, got "${portStr}"`);
   const configArg = flagStr(flags, "root", "config", "r");
   const roots = flagBool(flags, "global") ? await claudeRoots(configArg) : void 0;
   const maxLiveStr = flagStr(flags, "max-live");
@@ -14884,7 +16456,7 @@ async function main() {
     case "all":
       return cmdAggregate("global", sel, flags);
     case "watch": {
-      const ref = await selectSession(sel, flags);
+      const ref = await selectSession2(sel, flags);
       return watchSession(ref, flags, { version: VERSION2, openInBrowser, outPath: (id) => outPath(flags, id) });
     }
     case "serve":
@@ -14892,7 +16464,7 @@ async function main() {
     default: {
       const extra = Object.prototype.hasOwnProperty.call(EXTRA_COMMANDS, command) ? EXTRA_COMMANDS[command] : void 0;
       if (extra) return extra(positionals, flags);
-      fail(`unknown command "${command}". Run: orangu --help`);
+      fail2(`unknown command "${command}". Run: orangu --help`);
     }
   }
 }
@@ -14905,5 +16477,5 @@ for (const stream of [process.stdout, process.stderr]) {
 if (isPoolWorker()) {
   runPoolWorker();
 } else {
-  main().catch((e) => fail(e instanceof Error ? process.env["ORANGU_DEBUG"] === "1" ? e.stack ?? e.message : e.message : String(e)));
+  main().catch((e) => fail2(e instanceof Error ? process.env["ORANGU_DEBUG"] === "1" ? e.stack ?? e.message : e.message : String(e)));
 }
