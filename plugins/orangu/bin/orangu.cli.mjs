@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash4 } from "node:crypto";
-import { basename as basename13, join as join10, resolve as resolve11 } from "node:path";
+import { basename as basename13, join as join10, resolve as resolve12 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -33,7 +33,8 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "for-apply",
   "verbose",
   "no-color",
-  "plain"
+  "plain",
+  "lines"
 ]);
 var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   ...BOOL_FLAGS,
@@ -104,17 +105,17 @@ function parseArgs(argv) {
         }
       }
     } else if (a.startsWith("-") && a.length > 1) {
-      const ch = a.slice(1);
-      if (ch.length === 1 && SHORT_VALUE_FLAGS.has(ch)) {
+      const ch2 = a.slice(1);
+      if (ch2.length === 1 && SHORT_VALUE_FLAGS.has(ch2)) {
         const next = argv[i + 1];
         if (next !== void 0 && !next.startsWith("-")) {
-          flags[ch] = next;
+          flags[ch2] = next;
           i++;
         } else {
-          flags[ch] = true;
+          flags[ch2] = true;
         }
       } else {
-        for (const c of ch) flags[c] = true;
+        for (const c of ch2) flags[c] = true;
       }
     } else if (!command && !a.startsWith("-")) {
       command = a;
@@ -310,14 +311,14 @@ var MAX_EVIDENCE_META_BYTES = 1 * 1024 * 1024;
 var MAX_EVIDENCE_SESSION_RECORDS = DEFAULT_MAX_JSONL_RECORDS;
 var MAX_EVIDENCE_SIDECAR_ENTRIES = 2048;
 var MAX_EVIDENCE_SIDECAR_DEPTH = 4;
-function snapshotOf(stat7) {
+function snapshotOf(stat8) {
   return {
-    dev: stat7.dev,
-    ino: stat7.ino,
-    mode: stat7.mode,
-    size: stat7.size,
-    mtimeNs: stat7.mtimeNs,
-    ctimeNs: stat7.ctimeNs
+    dev: stat8.dev,
+    ino: stat8.ino,
+    mode: stat8.mode,
+    size: stat8.size,
+    mtimeNs: stat8.mtimeNs,
+    ctimeNs: stat8.ctimeNs
   };
 }
 function sameSnapshot(a, b) {
@@ -436,9 +437,9 @@ async function discoverEvidenceSidecars(main2) {
     entries.sort((a, b) => a.name.localeCompare(b.name));
     for (const entry of entries) {
       const path = join(canonicalDir, entry.name);
-      const stat7 = await lstat(path, { bigint: true });
-      if (stat7.isSymbolicLink()) throw new Error(`session input must not include symbolic links: ${path}`);
-      if (stat7.isDirectory()) {
+      const stat8 = await lstat(path, { bigint: true });
+      if (stat8.isSymbolicLink()) throw new Error(`session input must not include symbolic links: ${path}`);
+      if (stat8.isDirectory()) {
         if (depth >= MAX_EVIDENCE_SIDECAR_DEPTH) {
           throw new Error(`session sidecar traversal exceeds ${MAX_EVIDENCE_SIDECAR_DEPTH} levels`);
         }
@@ -2644,7 +2645,7 @@ async function withStableSessionRead(path, options, read) {
       if (!isTransientInputChange(error)) throw error;
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
-      await new Promise((resolve12) => setTimeout(resolve12, pause));
+      await new Promise((resolve13) => setTimeout(resolve13, pause));
     }
   }
 }
@@ -6202,8 +6203,8 @@ function oranguHome(env = process.env) {
 import { constants as constants5 } from "node:fs";
 import { lstat as lstat3, open as open5, realpath as realpath3 } from "node:fs/promises";
 import { resolve as resolve3 } from "node:path";
-function snapshot(stat7) {
-  return { dev: stat7.dev, ino: stat7.ino, mode: stat7.mode, size: stat7.size, mtimeNs: stat7.mtimeNs, ctimeNs: stat7.ctimeNs };
+function snapshot(stat8) {
+  return { dev: stat8.dev, ino: stat8.ino, mode: stat8.mode, size: stat8.size, mtimeNs: stat8.mtimeNs, ctimeNs: stat8.ctimeNs };
 }
 function same(a, b) {
   return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
@@ -6279,8 +6280,8 @@ var MAX_STALE_CACHE_GENERATION_ENTRIES = 4096;
 function sameInode(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function modeBits(stat7) {
-  return Number(stat7.mode & 0o777n);
+function modeBits(stat8) {
+  return Number(stat8.mode & 0o777n);
 }
 async function ensurePrivateDirectory(path) {
   await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
@@ -6828,9 +6829,9 @@ var PrivateOutputError = class extends Error {
 function sameInode2(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function assertSafeOutput(stat7, path) {
-  if (!stat7.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
-  if (stat7.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
+function assertSafeOutput(stat8, path) {
+  if (!stat8.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
+  if (stat8.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
 }
 async function assertPathStillNamesHandle(path, opened) {
   const current = await lstat6(path, { bigint: true });
@@ -9015,18 +9016,18 @@ function errno(error) {
 function sameInode3(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
-function modeBits2(stat7) {
-  return Number(stat7.mode & 0o777n);
+function modeBits2(stat8) {
+  return Number(stat8.mode & 0o777n);
 }
-function fileSnapshot(stat7) {
+function fileSnapshot(stat8) {
   return {
-    dev: stat7.dev,
-    ino: stat7.ino,
-    mode: stat7.mode,
-    nlink: stat7.nlink,
-    size: stat7.size,
-    mtimeNs: stat7.mtimeNs,
-    ctimeNs: stat7.ctimeNs
+    dev: stat8.dev,
+    ino: stat8.ino,
+    mode: stat8.mode,
+    nlink: stat8.nlink,
+    size: stat8.size,
+    mtimeNs: stat8.mtimeNs,
+    ctimeNs: stat8.ctimeNs
   };
 }
 function sameFileSnapshot(a, b) {
@@ -9843,16 +9844,16 @@ function splitList(value) {
   const out3 = [];
   let depth = 0;
   let cur = "";
-  for (const ch of s) {
-    if (ch === "(" || ch === "[") depth++;
-    else if (ch === ")" || ch === "]") depth--;
-    if (ch === "," && depth <= 0) {
+  for (const ch2 of s) {
+    if (ch2 === "(" || ch2 === "[") depth++;
+    else if (ch2 === ")" || ch2 === "]") depth--;
+    if (ch2 === "," && depth <= 0) {
       const t2 = cur.trim();
       if (t2) out3.push(t2);
       cur = "";
       continue;
     }
-    cur += ch;
+    cur += ch2;
   }
   const t = cur.trim();
   if (t) out3.push(t);
@@ -10718,14 +10719,14 @@ var HarnessRunner = class {
     const roots = this.ctx.opts.roots ?? [this.ctx.opts.configDir ?? defaultConfigDir()];
     const now = this.ctx.now();
     const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: !repoCwd });
-    const report = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : "global", now), {
+    const report2 = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : "global", now), {
       version: this.ctx.opts.version,
       now,
       scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home },
       // the registry rows already carry what retention measures: path, size and mtime of each transcript
       sessions: rows.map((row2) => ({ path: row2.path, sizeBytes: row2.sizeBytes, mtimeMs: row2.mtimeMs }))
     });
-    this.result = redactValue(report, { scrub: true, home });
+    this.result = redactValue(report2, { scrub: true, home });
     this.fingerprint = fp;
     this.computedAt = Date.now();
   }
@@ -11296,9 +11297,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve12, reject) => {
+  await new Promise((resolve13, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve12);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve13);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -11315,7 +11316,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve12) => server.close(() => resolve12()));
+      await new Promise((resolve13) => server.close(() => resolve13()));
     }
   };
 }
@@ -12039,30 +12040,30 @@ async function runHarness(flags) {
   const home = homedir4();
   const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: isGlobal });
   const agg = aggregate(analyses, scopeLabel, now);
-  const report = buildHarnessReport(inventory, analyses, agg, {
+  const report2 = buildHarnessReport(inventory, analyses, agg, {
     version: VERSION,
     now,
     scope: { cwd, roots, global: isGlobal, limit, sessionsUnreadable: failed, home },
     // every discovered session, not the `--limit` slice: the cleanup sweep reaches all of them
     sessions: refs
   });
-  if (flagBool(flags, "no-redact")) return report;
-  return redactValue(report, { scrub: true, stripPaths: flagBool(flags, "strip-paths"), home });
+  if (flagBool(flags, "no-redact")) return report2;
+  return redactValue(report2, { scrub: true, stripPaths: flagBool(flags, "strip-paths"), home });
 }
 async function cmdHarness(_positionals, flags) {
-  const report = await runHarness(flags);
+  const report2 = await runHarness(flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve6(outFile), JSON.stringify(report, null, 2));
+    await writePrivateOutput(resolve6(outFile), JSON.stringify(report2, null, 2));
     process.stderr.write(paint(err, "good", glyphs(err).ok) + ` harness written to ${resolve6(outFile)}
 `);
     if (!flagBool(flags, "json")) return;
   }
   if (flagBool(flags, "json")) {
-    process.stdout.write(JSON.stringify(report, null, flagBool(flags, "quiet") ? 0 : 2) + "\n");
+    process.stdout.write(JSON.stringify(report2, null, flagBool(flags, "quiet") ? 0 : 2) + "\n");
     return;
   }
-  printHarness(report);
+  printHarness(report2);
 }
 function printRetention(r, line, w) {
   const t = r.retention;
@@ -12284,12 +12285,12 @@ async function cmdEstimate(positionals, flags) {
   const slim = flagBool(flags, "slim");
   if (positionals[0] === "harness") {
     if (slim) throw new Error(SLIM_HARNESS);
-    const report = await runHarness({ ...flags, quiet: true });
-    const bytes = Buffer.byteLength(JSON.stringify(report));
+    const report2 = await runHarness({ ...flags, quiet: true });
+    const bytes = Buffer.byteLength(JSON.stringify(report2));
     const approxTokens3 = Math.ceil(bytes / 4);
     const est2 = {
-      sessions: report.scope.sessionsScanned,
-      files: report.inventory.totals.filesRead,
+      sessions: report2.scope.sessionsScanned,
+      files: report2.inventory.totals.filesRead,
       bytes,
       approxTokens: approxTokens3,
       overThreshold: approxTokens3 > ESTIMATE_TOKEN_THRESHOLD
@@ -12486,15 +12487,15 @@ function inside(root, candidate) {
   const rel = relative3(root, candidate);
   return rel === "" || !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && rel !== ".." && !isAbsolute5(rel);
 }
-function artifactSnapshot(stat7) {
+function artifactSnapshot(stat8) {
   return {
-    dev: stat7.dev,
-    ino: stat7.ino,
-    mode: stat7.mode,
-    nlink: stat7.nlink,
-    size: stat7.size,
-    mtimeNs: stat7.mtimeNs,
-    ctimeNs: stat7.ctimeNs
+    dev: stat8.dev,
+    ino: stat8.ino,
+    mode: stat8.mode,
+    nlink: stat8.nlink,
+    size: stat8.size,
+    mtimeNs: stat8.mtimeNs,
+    ctimeNs: stat8.ctimeNs
   };
 }
 function sameArtifactSnapshot(a, b) {
@@ -12507,21 +12508,21 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
   let rootStat;
-  let stat7;
+  let stat8;
   try {
     ;
-    [rootStat, stat7] = await Promise.all([lstat8(root, { bigint: true }), lstat8(candidate, { bigint: true })]);
+    [rootStat, stat8] = await Promise.all([lstat8(root, { bigint: true }), lstat8(candidate, { bigint: true })]);
   } catch {
     throw artifactError(`${expectedName} does not exist`);
   }
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw artifactError(`proposals directory must be a regular directory`);
-  if (!stat7.isFile() || stat7.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`);
-  if (stat7.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`);
-  if (stat7.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
+  if (!stat8.isFile() || stat8.isSymbolicLink()) throw artifactError(`${expectedName} must be a regular, non-symlink file`);
+  if (stat8.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`);
+  if (stat8.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
   if (process.platform !== "win32") await chmod(root, 448);
   const [realRoot, realCandidate] = await Promise.all([realpath7(root), realpath7(candidate)]);
   if (!inside(realRoot, realCandidate)) throw artifactError(`${expectedName} resolves outside ${realRoot}`);
-  const initial = artifactSnapshot(stat7);
+  const initial = artifactSnapshot(stat8);
   let handle;
   try {
     handle = await open10(realCandidate, constants10.O_RDONLY | (constants10.O_NOFOLLOW ?? 0));
@@ -13433,17 +13434,481 @@ async function cmdFeedback(positionals, flags) {
   loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
 `);
   if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve12) => {
+  await new Promise((resolve13) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve12);
+      void server.close().finally(resolve13);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
   });
   process.stderr.write("  stopped.\n");
+}
+
+// src/cli/commands/ste.ts
+import { createReadStream as createReadStream2 } from "node:fs";
+import { stat as stat7 } from "node:fs/promises";
+import { resolve as resolve10 } from "node:path";
+
+// src/ste/words.ts
+var STE_WORDS = {
+  commence: "start",
+  commencing: "starting",
+  ensure: "make sure",
+  ensures: "makes sure",
+  "prior to": "before",
+  replenish: "fill",
+  utilize: "use",
+  utilizes: "uses",
+  utilise: "use",
+  utilized: "used",
+  utilizing: "using",
+  ensured: "made sure",
+  ensuring: "making sure",
+  approximately: "about",
+  "in order to": "to"
+};
+var PLAIN_WORDS = {
+  leverage: "use",
+  leverages: "uses",
+  leveraging: "using",
+  leveraged: "used",
+  facilitate: "help",
+  facilitates: "helps",
+  additional: "more",
+  numerous: "many",
+  sufficient: "enough",
+  assist: "help",
+  obtain: "get",
+  terminate: "stop",
+  initiate: "start",
+  initiated: "started",
+  subsequently: "then",
+  "in the event that": "if",
+  "due to the fact that": "because",
+  "is able to": "can",
+  "are able to": "can",
+  "a number of": "some, or the count",
+  "at this point in time": "now",
+  "e.g.": "for example",
+  "i.e.": "that is",
+  "etc.": "the full list",
+  "incl.": "including",
+  via: "through, or with",
+  whilst: "while",
+  seamless: "nothing, or the measured fact",
+  seamlessly: "nothing",
+  robust: "the measured fact",
+  powerful: "the measured fact",
+  "cutting-edge": "nothing",
+  simply: "nothing",
+  just: "nothing",
+  easily: "nothing",
+  basically: "nothing",
+  essentially: "nothing",
+  actually: "nothing",
+  very: "nothing, or a number",
+  really: "nothing"
+};
+var BANNED_WORDS = /* @__PURE__ */ new Set(["e.g.", "i.e.", "etc."]);
+var IMPERATIVES = new Set(
+  "add ask call check click copy create delete do don't draw enter find fix give keep list load make mark merge move name never open pick publish push put read record remove render run save select send set show start stop test type update use wait write".split(" ")
+);
+var ING_NOUNS = /* @__PURE__ */ new Set(["thing", "nothing", "something", "anything", "everything", "during", "morning", "evening", "string", "ring", "king", "bring", "spring", "wing", "ceiling", "building", "meaning", "setting", "warning", "booking", "pending", "missing", "funding", "onboarding", "bookkeeping", "billing", "pricing", "routing", "logging", "testing", "scheduling", "matching"]);
+var ORANGU_VERBS = new Set("report analyze list pick repo global watch serve feedback evidence estimate harness suggest ste show-me help".split(" "));
+var GIT_VERBS = new Set("add apply blame branch checkout cherry-pick clone commit config diff fetch grep init log merge mv pull push rebase reset restore revert rm show stash status switch tag worktree".split(" "));
+
+// src/ste/index.ts
+var ch = (code) => String.fromCharCode(code);
+var PARAGRAPH = ch(8233);
+var EM = ch(8212);
+var LSQUO = ch(8216);
+var RSQUO = ch(8217);
+var LDQUO = ch(8220);
+var RDQUO = ch(8221);
+var ELLIPSIS = ch(8230);
+var LIMITS = { procedural: 20, descriptive: 25, paragraphSentences: 6 };
+var PROGRESSIVE = /\b(am|is|are|was|were|be|been)\s+(?:not\s+|still\s+|now\s+)?([a-z]+ing)\b/gi;
+var PERFECT = /\b(has|have|had)\s+(?:not\s+|already\s+|never\s+|just\s+|now\s+)?(been|[a-z]+ed|done|gone|seen|made|written|run|taken|given|found|built|sent|shown|known|got|gotten|begun|broken|chosen|left|kept|held|put|set|read)\b/gi;
+var CONTRACTION = new RegExp(
+  `\\b[A-Za-z]+n['${RSQUO}]t\\b|\\b[A-Za-z]+['${RSQUO}](?:re|ve|ll|m|d)\\b|\\b(?:it|that|there|what|here|let|who|where|how|he|she)['${RSQUO}]s\\b`,
+  "gi"
+);
+var EM_DASH = new RegExp(`${EM}|\\s--\\s`, "g");
+var ABBREVIATIONS = /\b(e\.g|i\.e|etc|vs|approx|fig)\./gi;
+var SENTENCE_END = new RegExp(`(?<=[.!?][*_)"'${RDQUO}${RSQUO}]*)\\s+(?=[A-Z0-9"${LDQUO}(\`*[_])`, "g");
+var LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
+var FLAG = /^--?[A-Za-z][\w-]*(?:=\S*)?$/;
+var PATHISH = /^[\w./~:@=+*-]*[/.~_:=@*\d][\w./~:@=+*-]*$/;
+var OPEN_QUOTE = new RegExp(`["${LDQUO}'${LSQUO}]`);
+var CLOSE_QUOTE = new RegExp(`["${RDQUO}'${RSQUO}]`);
+var LEAD = new RegExp(`^[(${LDQUO}${LSQUO}"']*`);
+var TRAIL = new RegExp(`[.,;:!?)"${RDQUO}${RSQUO}']*$`);
+var WORD_EDGE = new RegExp(`^[([{"'${LDQUO}${LSQUO}]+|[)\\]}"'${RDQUO}${RSQUO}.,;:!?${ELLIPSIS}]+$`, "g");
+var WORD2 = new RegExp(`^[A-Za-z][A-Za-z'${RSQUO}-]*$`);
+var QUOTED_ARGUMENT = new RegExp(`^["${LDQUO}]`);
+function escapeRegExp(text2) {
+  return text2.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+var WORD_RULES = [
+  ...Object.entries(STE_WORDS).map(([word, use]) => ({ word, use, source: "ste" })),
+  ...Object.entries(PLAIN_WORDS).map(([word, use]) => ({ word, use, source: "plain" }))
+].map((entry) => ({ ...entry, pattern: new RegExp(`(?<![\\w-])${escapeRegExp(entry.word)}(?![\\w-])`, "gi") }));
+function htmlToText(html) {
+  const blank = (match) => match.replace(/[^\n]/g, "");
+  return html.replace(/<(script|style|svg|pre|code)\b[\s\S]*?<\/\1>/gi, blank).replace(/<!--[\s\S]*?-->/g, blank).replace(/<\/?(p|li|h[1-6]|div|section|article|td|th|tr|br|ul|ol|header|footer|figcaption|blockquote)\b[^>]*>/gi, PARAGRAPH).replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"');
+}
+function proseWords(text2) {
+  return wrapCommands(text2).replace(/`[^`]*`/g, "CODE").split(/\s+/).map((token) => token.replace(WORD_EDGE, "")).filter((token) => WORD2.test(token)).length;
+}
+function tableCells(line) {
+  if (/^[\s|:-]+$/.test(line) && line.includes("-")) return [];
+  const body = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
+  const cells = [];
+  let cell = "";
+  let code = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index];
+    if (char === "\\" && body[index + 1] === "|") {
+      cell += "|";
+      index += 1;
+      continue;
+    }
+    if (char === "`") code = !code;
+    if (char === "|" && !code) {
+      cells.push(cell);
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+  cells.push(cell);
+  return cells.map((text2) => text2.trim());
+}
+function proseBlocks(text2, { lines: lineMode = false } = {}) {
+  const lines = text2.split("\n");
+  const blocks = [];
+  let current = null;
+  let fence = null;
+  let start = 0;
+  if (lines[0]?.trim() === "---") {
+    const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+    if (end > 0) start = end + 1;
+  }
+  const close = () => {
+    if (current) blocks.push(current);
+    current = null;
+  };
+  for (let index = start; index < lines.length; index += 1) {
+    const line = lines[index];
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker || fence) {
+      close();
+      if (marker && !fence) fence = marker[0];
+      else if (marker && marker[0] === fence) fence = null;
+      continue;
+    }
+    if (/^\s*$/.test(line) || /^\s*>/.test(line)) {
+      close();
+      continue;
+    }
+    const heading = /^\s*#{1,6}\s+(.*)$/.exec(line);
+    if (heading) {
+      close();
+      blocks.push({ line: index + 1, text: heading[1], label: true });
+      continue;
+    }
+    if (/^\s*\|/.test(line)) {
+      close();
+      for (const cell of tableCells(line)) {
+        if (!/[A-Za-z]/.test(cell.replace(/`[^`]*`/g, ""))) continue;
+        blocks.push({ line: index + 1, text: cell, label: proseWords(cell) < 3 });
+      }
+      continue;
+    }
+    const pieces = line.split(PARAGRAPH);
+    pieces.forEach((piece, pieceIndex) => {
+      if (pieceIndex > 0) close();
+      if (LIST_ITEM.test(piece)) close();
+      const clean = piece.replace(LIST_ITEM, "");
+      if (!clean.trim()) return;
+      if (!current) current = { line: index + 1, text: clean };
+      else current.text += `${pieceIndex > 0 ? "" : "\n"}${clean}`;
+    });
+    if (lineMode) close();
+  }
+  close();
+  return blocks;
+}
+function frontmatterDescription(text2) {
+  const lines = text2.split("\n");
+  if (lines[0]?.trim() !== "---") return null;
+  const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
+  for (let index = 1; index < end; index += 1) {
+    const match = /^description:\s*(.*)$/.exec(lines[index]);
+    if (!match) continue;
+    let value = match[1].trim();
+    if (/^[>|][+-]?$/.test(value)) {
+      const body = [];
+      for (let next = index + 1; next < end && /^\s+\S/.test(lines[next]); next += 1) body.push(lines[next].trim());
+      value = body.join(value.startsWith(">") ? " " : "\n");
+    } else if (value.startsWith('"')) {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        value = value.slice(1, -1);
+      }
+    } else if (value.startsWith("'")) value = value.slice(1, -1).replace(/''/g, "'");
+    return value ? { line: index + 1, text: value } : null;
+  }
+  return null;
+}
+function tokenize(segment) {
+  return [...segment.matchAll(/\S+/g)].map((match) => {
+    const raw = match[0];
+    const lead = LEAD.exec(raw)[0];
+    const rest = raw.slice(lead.length);
+    const trail = TRAIL.exec(rest)[0];
+    const core = rest.slice(0, rest.length - trail.length);
+    const coreStart = match.index + lead.length;
+    return { lead, core, trail, coreStart, coreEnd: coreStart + core.length };
+  });
+}
+var isArg = (core) => FLAG.test(core) || /^[<[]/.test(core) || PATHISH.test(core) || core === "..." || core === ELLIPSIS;
+function commandHead(tokens, i) {
+  const at = (k) => {
+    for (let j = i; j < k; j += 1) if (tokens[j].trail) return void 0;
+    const token = tokens[k];
+    return token && !token.lead ? token.core : void 0;
+  };
+  const word = tokens[i].core;
+  if (word === "npx" && at(i + 1) && at(i + 1) !== "--") return at(i + 1) === "orangu" && ORANGU_VERBS.has(at(i + 2) ?? "") ? 3 : 2;
+  if (word === "orangu" && ORANGU_VERBS.has(at(i + 1) ?? "")) return 2;
+  if (word === "orangu" && FLAG.test(at(i + 1) ?? "")) return 1;
+  if (word === "git" && GIT_VERBS.has(at(i + 1) ?? "")) return 2;
+  if (word === "checkout" && at(i + 1) === "--") return 2;
+  const next = tokens[i + 1];
+  if (word === "claude" && !tokens[i].trail && next) {
+    if (QUOTED_ARGUMENT.test(next.lead)) return 1;
+    if (FLAG.test(at(i + 1) ?? "")) return 1;
+    if (at(i + 1) === "plugin" || at(i + 1) === "mcp") return 2;
+  }
+  if (word.startsWith("/orangu:")) return 1;
+  if (word.startsWith("--") && FLAG.test(word)) return 1;
+  return 0;
+}
+function wrapSegment(segment) {
+  const tokens = tokenize(segment);
+  const spans = [];
+  for (let i = 0; i < tokens.length; ) {
+    const head = commandHead(tokens, i);
+    if (!head) {
+      i += 1;
+      continue;
+    }
+    let last = i + head - 1;
+    let end = tokens[last].coreEnd;
+    for (let j = last + 1; j < tokens.length && !tokens[j - 1].trail; ) {
+      const token = tokens[j];
+      if (OPEN_QUOTE.test(token.lead) && !token.lead.includes("(")) {
+        let k = j;
+        while (k < tokens.length && k - j <= 12 && !CLOSE_QUOTE.test(tokens[k].trail)) k += 1;
+        if (k === tokens.length || k - j > 12) break;
+        const close = tokens[k].trail.search(CLOSE_QUOTE);
+        last = k;
+        end = tokens[k].coreEnd + close + 1;
+        if (tokens[k].trail.length > close + 1) break;
+        j = k + 1;
+        continue;
+      }
+      if (token.core === "--") {
+        const after = tokens[j + 1];
+        if (token.lead || token.trail || !after || after.lead || after.core === "--" || !isArg(after.core)) break;
+      } else if (token.lead || !isArg(token.core)) break;
+      last = j;
+      end = token.coreEnd;
+      j += 1;
+    }
+    spans.push([tokens[i].coreStart, end]);
+    i = last + 1;
+  }
+  let out3 = "";
+  let cursor = 0;
+  for (const [from, to] of spans) {
+    out3 += `${segment.slice(cursor, from)}\`${segment.slice(from, to)}\``;
+    cursor = to;
+  }
+  return out3 + segment.slice(cursor);
+}
+function wrapCommands(text2) {
+  return text2.split(/(`[^`]*`)/).map((part, index) => index % 2 ? part : wrapSegment(part)).join("");
+}
+function plainSentence(sentence) {
+  return wrapCommands(sentence).replace(/`[^`]*`/g, "CODE").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/https?:\/\/\S+/g, "URL").replace(/[*_]{1,3}/g, "");
+}
+function splitSentences(text2) {
+  const guarded = text2.replace(ABBREVIATIONS, (match) => match.replace(/\./g, "\0"));
+  const sentences = [];
+  let cursor = 0;
+  for (const match of guarded.matchAll(SENTENCE_END)) {
+    sentences.push({ offset: cursor, text: guarded.slice(cursor, match.index) });
+    cursor = match.index + match[0].length;
+  }
+  sentences.push({ offset: cursor, text: guarded.slice(cursor) });
+  return sentences.map((sentence) => ({ ...sentence, text: sentence.text.replace(/\u0000/g, ".").trim() })).filter((sentence) => /[A-Za-z]/.test(sentence.text));
+}
+function wordCount(sentence) {
+  return plainSentence(sentence).split(/\s+/).filter((token) => /[A-Za-z0-9]/.test(token)).length;
+}
+function excerpt(text2) {
+  const flat = text2.replace(/\s+/g, " ");
+  return flat.length > 90 ? `${flat.slice(0, 87)}...` : flat;
+}
+function sentenceFindings(sentence, line) {
+  const plain = plainSentence(sentence);
+  const findings = [];
+  const words2 = wordCount(sentence);
+  const first = plain.trim().split(/\s+/)[0]?.toLowerCase().replace(/[^a-z']/g, "") ?? "";
+  const limit = IMPERATIVES.has(first) ? LIMITS.procedural : LIMITS.descriptive;
+  if (words2 > limit) findings.push({ line, rule: "sentence-length", text: excerpt(sentence), hint: `${words2} words: split it (limit ${limit})` });
+  for (const rule of WORD_RULES) {
+    for (const match of plain.matchAll(rule.pattern)) {
+      findings.push({ line, rule: rule.source === "ste" ? "ste-word" : "plain-word", text: match[0], hint: `write "${rule.use}"` });
+    }
+  }
+  for (const match of plain.matchAll(PROGRESSIVE)) {
+    if (ING_NOUNS.has(match[2].toLowerCase())) continue;
+    findings.push({ line, rule: "progressive", text: match[0], hint: "use the simple present or past" });
+  }
+  for (const match of plain.matchAll(PERFECT)) {
+    findings.push({ line, rule: "perfect", text: match[0], hint: "use the simple past" });
+  }
+  if (/;\s/.test(plain)) findings.push({ line, rule: "semicolon", text: excerpt(sentence), hint: "split it into two sentences" });
+  for (const _ of plain.matchAll(EM_DASH)) {
+    findings.push({ line, rule: "em-dash", text: excerpt(sentence), hint: "use a comma, colon, period or parentheses" });
+  }
+  for (const match of plain.matchAll(CONTRACTION)) {
+    findings.push({ line, rule: "contraction", text: match[0], hint: 'write the two words ("do not", "it is")' });
+  }
+  return findings;
+}
+var isBanned = (finding) => finding.rule === "em-dash" || finding.rule === "contraction" || finding.rule === "plain-word" && BANNED_WORDS.has(finding.text.toLowerCase());
+function bannedCounts(findings) {
+  const banned = { emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0 };
+  for (const finding of findings) {
+    if (finding.rule === "em-dash") banned.emDash += 1;
+    else if (finding.rule === "contraction") banned.contractions += 1;
+    else if (finding.rule === "plain-word") {
+      const word = finding.text.toLowerCase();
+      if (word === "e.g.") banned.eg += 1;
+      else if (word === "i.e.") banned.ie += 1;
+      else if (word === "etc.") banned.etc += 1;
+    }
+  }
+  return banned;
+}
+function checkBlocks(blocks) {
+  const findings = [];
+  let sentences = 0;
+  let clean = 0;
+  for (const block of blocks) {
+    const where = block.file === void 0 ? {} : { file: block.file };
+    const parts = splitSentences(block.text);
+    if (!block.label && parts.length > LIMITS.paragraphSentences) {
+      findings.push({ ...where, line: block.line, rule: "paragraph-length", text: excerpt(parts[0].text), hint: `${parts.length} sentences: keep one topic in at most ${LIMITS.paragraphSentences}` });
+    }
+    let newlines = 0;
+    let nextNewline = block.text.indexOf("\n");
+    for (const part of parts) {
+      while (nextNewline !== -1 && nextNewline < part.offset) {
+        newlines += 1;
+        nextNewline = block.text.indexOf("\n", nextNewline + 1);
+      }
+      const line = block.line + newlines;
+      const own = sentenceFindings(part.text, line).map((finding) => ({ ...where, ...finding }));
+      if (block.label) {
+        findings.push(...own.filter(isBanned));
+        continue;
+      }
+      sentences += 1;
+      if (own.length === 0) clean += 1;
+      findings.push(...own);
+    }
+  }
+  const score = sentences === 0 ? 100 : Math.round(clean / sentences * 100);
+  return { sentences, clean, score, findings, banned: bannedCounts(findings) };
+}
+function checkText(text2, { html = false, lines = false, frontmatter = false } = {}) {
+  const source = html ? htmlToText(text2) : text2;
+  const blocks = proseBlocks(source, { lines });
+  const description = frontmatter ? frontmatterDescription(source) : null;
+  return checkBlocks(description ? [description, ...blocks] : blocks);
+}
+
+// src/cli/commands/ste.ts
+var USAGE = "usage: orangu ste <file...|-> [--json] [--lines]";
+var STDIN = "-";
+var OWN_FLAGS = /* @__PURE__ */ new Set(["json", "lines", "quiet", "no-color"]);
+var overBound = (name) => new Error(`${stripAnsi(name)} has more than ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes, the most that orangu ste reads.`);
+var cannotRead = (name, reason) => new Error(`orangu ste cannot read ${stripAnsi(name)}: ${reason}.`);
+var C1_OR_DEL = /[\x7f-\x9f]/g;
+var escapeC1 = (json2) => json2.replace(C1_OR_DEL, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
+function readError(name, error) {
+  const code = error?.code;
+  if (typeof code !== "string") return error instanceof Error ? error : new Error(String(error));
+  if (code === "ENOENT") return cannotRead(name, "the file does not exist");
+  if (code === "EACCES" || code === "EPERM") return cannotRead(name, "permission denied");
+  if (code === "EISDIR") return cannotRead(name, "it is a folder, not a file");
+  return cannotRead(name, code);
+}
+async function readBounded(chunks, name) {
+  const parts = [];
+  let total = 0;
+  for await (const chunk of chunks) {
+    const part = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
+    total += part.length;
+    if (total > MAX_EVIDENCE_ARTIFACT_BYTES) throw overBound(name);
+    parts.push(part);
+  }
+  return Buffer.concat(parts).toString("utf8");
+}
+async function readNamedFile(name) {
+  const path = resolve10(name);
+  try {
+    const info = await stat7(path);
+    if (info.isDirectory()) throw cannotRead(name, "it is a folder, not a file");
+    if (info.size > MAX_EVIDENCE_ARTIFACT_BYTES) throw overBound(name);
+    return await readBounded(createReadStream2(path, { end: MAX_EVIDENCE_ARTIFACT_BYTES }), name);
+  } catch (error) {
+    throw readError(name, error);
+  }
+}
+function flagName(name) {
+  return `${name.length === 1 ? "-" : "--"}${name}`;
+}
+function report(result) {
+  const file = stripAnsi(result.file);
+  const lines = result.findings.map((finding) => `${file}:${finding.line}  ${finding.rule}  "${stripAnsi(finding.text)}"  ${stripAnsi(finding.hint)}`);
+  lines.push(`${file}: ${result.sentences} sentences, ${result.clean} clean, STE score ${result.score}%, ${result.findings.length} findings`);
+  return lines;
+}
+async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: process.stdout }) {
+  for (const name of Object.keys(flags)) {
+    if (!OWN_FLAGS.has(name)) throw new Error(`${flagName(name)} is not an orangu ste flag. ${USAGE}`);
+  }
+  if (positionals.length === 0) throw new Error(`${USAGE}. Give one or more files, or - to read stdin.`);
+  if (positionals.filter((name) => name === STDIN).length > 1) throw new Error(`orangu ste reads stdin (-) one time. Give - once. ${USAGE}`);
+  const lines = flagBool(flags, "lines");
+  const results = [];
+  for (const file of positionals) {
+    const text2 = file === STDIN ? await readBounded(io.stdin, file) : await readNamedFile(file);
+    results.push({ file, ...checkText(text2, { html: /\.html?$/i.test(file), lines, frontmatter: /\.md$/i.test(file) }) });
+  }
+  const output = flagBool(flags, "json") ? [escapeC1(JSON.stringify(results, null, 2))] : results.flatMap(report);
+  io.stdout.write(`${output.join("\n")}
+`);
 }
 
 // src/cli/commands/index.ts
@@ -13452,7 +13917,8 @@ var EXTRA_COMMANDS = {
   evidence: cmdEvidence,
   estimate: cmdEstimate,
   harness: cmdHarness,
-  suggest: cmdSuggest
+  suggest: cmdSuggest,
+  ste: cmdSte
 };
 var EXTRA_HELP = [
   // Each entry may span lines (main.ts joins entries with '\n'); keep every line <= 80 columns.
@@ -13497,6 +13963,11 @@ var EXTRA_HELP = [
     "                                    [--application <path>]",
     "                                    [--verification <path>]",
     "                                  | --list)"
+  ].join("\n"),
+  [
+    "  orangu ste <file...|->       score Markdown, HTML or text against the STE",
+    "                               writing rules (- reads stdin, no pass mark)",
+    "                                 ([--json] [--lines])"
   ].join("\n")
 ];
 
@@ -13527,7 +13998,7 @@ function select(o) {
   const draw = () => {
     o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
   };
-  return new Promise((resolve12) => {
+  return new Promise((resolve13) => {
     let done = false;
     const restore = () => {
       if (done) return;
@@ -13545,7 +14016,7 @@ function select(o) {
     const finish = (r) => {
       restore();
       hook.dispose();
-      resolve12(r);
+      resolve13(r);
     };
     const move = (to) => {
       cursor = Math.max(0, Math.min(to, count2 - 1));
@@ -13665,7 +14136,7 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename12, resolve as resolve10 } from "node:path";
+import { basename as basename12, resolve as resolve11 } from "node:path";
 var INDENT3 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
@@ -13675,7 +14146,7 @@ function dashboardPrecondition(stdin, stdout, env, flags) {
   return interactivePrecondition(stdin, stdout, env, flags);
 }
 async function gatherDashboardData(flags, deps = {}) {
-  const cwd = resolve10((deps.cwd ?? (() => process.cwd()))());
+  const cwd = resolve11((deps.cwd ?? (() => process.cwd()))());
   const configArg = flagStr(flags, "root", "config", "r");
   const pickFlags = { ...flags, global: true };
   const [picked, repoRefs, roots] = await Promise.all([
@@ -13913,7 +14384,7 @@ async function analyzeWithProgress(ref, flags) {
 }
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
-  if (out3) return resolve11(out3);
+  if (out3) return resolve12(out3);
   return join10(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
@@ -14035,7 +14506,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${plural(roots.length, "root")})`;
   } else {
-    const cwd = selOrPath ? resolve11(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve12(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
     scopeLabel = `repo ${basename13(cwd)}`;
@@ -14083,8 +14554,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve11(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve11(outFile), { raw: true }) + "\n");
+    await writePrivateOutput(resolve12(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    if (!quiet) process.stderr.write(row(err2, "written", resolve12(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -14103,7 +14574,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash4("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve11(named) : join10(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve12(named) : join10(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
