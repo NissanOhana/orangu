@@ -4,7 +4,6 @@ import { dirname, join } from 'node:path'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
 import { CHANGE_CLASS_DEFINITIONS } from '../src/suggest/change-classes.js'
 import { allEntries } from '../src/suggest/catalog.js'
-import { showMeChecks } from './fixtures/show-me-fill.js'
 
 const root = process.cwd()
 const readJson = (p: string) => JSON.parse(readFileSync(join(root, p), 'utf8'))
@@ -727,11 +726,14 @@ describe('plugin packaging', () => {
       expect(text, `${path} reads no earlier draft`).not.toContain('If that file exists')
     }
   })
-  it('analyze, improve and harness pre-approve an edit of their drafts directory and nothing else, and no other skill pre-approves an edit', () => {
+  // show-me pre-approves the edit of one file, words.json, in a run directory. It writes no other file. Orangu writes
+  // the HTML, so a steered model cannot write a page with no prompt.
+  it('analyze, improve and harness pre-approve an edit of their drafts directory, show-me of its words.json, and no other skill pre-approves an edit', () => {
     const edits = (s: string): string[] =>
       (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim()).filter((grant) => /^Edit\b/.test(grant))
     for (const s of ['analyze', 'improve', 'harness']) expect(edits(s), `${s} edits only its drafts`).toEqual(['Edit(~/.orangu/drafts/**)'])
-    for (const s of ['apply', 'feedback', 'show-me']) expect(edits(s), `${s} has no edit grant`).toEqual([])
+    expect(edits('show-me'), 'show-me edits only its words.json').toEqual(['Edit(~/.orangu/show-me/*/words.json)'])
+    for (const s of ['apply', 'feedback']) expect(edits(s), `${s} has no edit grant`).toEqual([])
   })
   const between = (text: string, from: string, to: string): string => {
     const start = text.indexOf(from)
@@ -838,38 +840,37 @@ describe('plugin packaging', () => {
     for (const target of ['.agents/skills', 'plugins/orangu/skills']) expect(existsSync(join(root, target, 'orangu-show-me'))).toBe(false)
   })
 
-  // /orangu:show-me turns deterministic evidence into a slide deck and a written report. It may read CLI
-  // output and its own templates, write only under ~/.orangu/show-me, and never measure anything itself.
+  // /orangu:show-me turns deterministic evidence into a slide deck and a written report. Orangu prepares the data and
+  // writes both HTML files. Claude reads the data and writes only the 3 values of words.json, and never measures.
   describe('show-me', () => {
     const SHOW_ME = 'plugin/skills/show-me/SKILL.md'
     const md = (): string => readText(SHOW_ME)
     const body = (): string => md().split('\n---\n')[1] ?? ''
     const grants = (): string[] => (/^allowed-tools:\s*(.+)$/m.exec(md())?.[1] ?? '').split(',').map((grant) => grant.trim())
+    const inOrder = (text: string, steps: string[]): void => {
+      for (const step of steps) expect(text, `names ${step}`).toContain(step)
+      for (let i = 1; i < steps.length; i++) expect(text.indexOf(steps[i - 1]!), `${steps[i - 1]} comes before ${steps[i]}`).toBeLessThan(text.indexOf(steps[i]!))
+    }
 
-    // Grep is the read-only tool for the post-write check: no shell, and no reach that the Read grant lacks.
-    it('pre-approves exactly the CLI, a temp directory, reads, a read-only check, and writes under ~/.orangu/show-me', () => {
-      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *)', 'Bash(mktemp:*)', 'Read', 'Grep', 'Write(~/.orangu/show-me/**)'])
-      // opening the files is a normal permission prompt, never a pre-approval
-      expect(grants().join(' ')).not.toMatch(/\b(?:open|xdg-open|start)\b/)
-    })
-
-    it('sizes every read before it reads, and treats a failed size command as a large read', () => {
-      const text = body()
-      const before = (size: string, read: string): void => {
-        expect(text, `names ${size}`).toContain(size)
-        expect(text, `names ${read}`).toContain(read)
-        expect(text.indexOf(size), `${size} comes before ${read}`).toBeLessThan(text.indexOf(read))
+    // Claude Code checks a Write against Edit(path) rules and never consults a Write(path) rule. So the one write that
+    // runs with no prompt is words.json, by its file name, one run directory deep. A grant on ~/.orangu/show-me/**
+    // would let a steered model write its own report.html or slides.html (no CSP) with no prompt.
+    const SHOW_ME_GRANTS = 'allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Read, Edit(~/.orangu/show-me/*/words.json)'
+    it('pre-approves exactly the CLI, reads and an edit of words.json, and no grant reaches an HTML file', () => {
+      expect(md().split('\n')[3]).toBe(SHOW_ME_GRANTS)
+      expect(grants()).toEqual(['Bash(orangu:*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *)', 'Read', 'Edit(~/.orangu/show-me/*/words.json)'])
+      for (const grant of grants()) {
+        expect(grant, 'no grant on the whole show-me tree').not.toContain('~/.orangu/show-me/**')
+        expect(grant, 'no grant names an HTML file').not.toMatch(/slides\.html|report\.html|\.html\b/)
+        expect(grant, 'no Write rule: Claude Code never consults one').not.toMatch(/^Write\b/)
       }
-      before("orangu estimate '<session>' --slim --json", "orangu analyze '<session>' --json --slim")
-      before("orangu evidence '<tmp>/aggregate.json' --scope repo --estimate --quiet", "orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'")
-      expect(text).toMatch(/more than about 5,000 tokens \(about 20 KB\), so ask once before you read anything/)
-      expect(text).toMatch(/If the size command fails[^.]*treat the read as over the limit/)
-      expect(text).toContain('Never combine `--out` with `--json`.')
+      // no Grep count, no temp directory, and opening the files is the CLI's --open, never a pre-approved opener
+      expect(grants().join(' ')).not.toMatch(/\bGrep\b|\bmktemp\b|\b(?:open|xdg-open|start)\b/)
     })
 
     it('copies numbers, never computes one, and keeps money, scores and rankings out', () => {
       for (const rule of [
-        'Copy each number from the CLI output. Compute or estimate no new figure.',
+        'Copy each number from `data.json`. Compute or estimate no new figure.',
         'Use only tokens, milliseconds (ms) and S, M or L effort as units.',
         'Show a savings figure only where the rule claims one.',
         'Show no composite score and no ranking of people.',
@@ -878,18 +879,16 @@ describe('plugin packaging', () => {
 
     // The report's Show me control copies exactly these 3 forms, each as claude "…" for a terminal paste: the
     // full session id on a session, --scope repo or --scope global on a scope file. Each form must be documented
-    // and must reach its read, and a bare call must pick a session instead of failing.
+    // and must reach its prepare command, and a bare call must pick a session instead of failing.
     it('accepts the 3 forms that the report copies, and a bare call', () => {
       const text = body()
       expect(text).toContain('`claude "/orangu:show-me …"`')
       for (const form of ['/orangu:show-me <session>', '/orangu:show-me --scope repo', '/orangu:show-me --scope global'])
         expect(text, `documents ${form}`).toContain(`\`${form}\``)
       expect(text, 'a full session id is a session').toMatch(/`<session>` is a session id/)
-      expect(text, 'session form reaches its read').toContain("orangu analyze '<session>' --json --slim")
-      expect(text, 'repo form reaches its read').toContain("orangu repo '<dir>' --out '<tmp>/aggregate.json'")
-      expect(text, 'repo form projects its scope').toContain("orangu evidence '<tmp>/aggregate.json' --scope repo --quiet")
-      expect(text, 'global form reaches its read').toContain("orangu global --out '<tmp>/aggregate.json'")
-      expect(text, 'global form projects its scope').toMatch(/the same steps with `orangu global --out '<tmp>\/aggregate\.json'` and `--scope global`/)
+      expect(text, 'session form prepares its run').toContain("`orangu show-me '<session>' --json`")
+      expect(text, 'repo form prepares its run').toContain("`orangu show-me --scope repo --cwd '<cwd>' --json`")
+      expect(text, 'global form prepares its run').toContain('`orangu show-me --scope global --json`')
       expect(text, 'a bare call shows the latest session').toContain('With no argument, show `latest`, and tell the user which session id that is.')
     })
 
@@ -897,39 +896,45 @@ describe('plugin packaging', () => {
       expect(body()).toContain('Use default redaction. Add `--no-redact` or `--include-text` only when the user explicitly asks for it.')
     })
 
-    it('fills the two built templates and writes exactly two files to a new directory each run', () => {
+    // One estimate before any read: data.json from the prepare output, plus the slot rules. The model reads no
+    // template, so the estimate names none. test/show-me-templates.test.ts holds the stated size to slots.md.
+    it('prepares first, then asks once with one estimate before it reads data.json and the slot rules', () => {
       const text = body()
-      for (const file of ['references/slides.html', 'references/report.html', 'references/slots.md']) expect(text, file).toContain(file)
-      expect(text, 'the sources are build input, never read by the skill').not.toContain('.src.html')
-      expect(text).toContain('~/.orangu/show-me/<id>/slides.html')
-      expect(text).toContain('~/.orangu/show-me/<id>/report.html')
-      expect(text).toContain("so a second run never overwrites the first")
+      inOrder(text, [
+        "`orangu show-me '<session>' --json`",
+        'Give the user one estimate of the read: `data.bytes` and `data.approxTokens` from that output.',
+        'Ask once before you read anything.',
+        'When the user agrees, read `data.json` and [the slot rules](references/slots.md).',
+      ])
+      expect(text, 'reads no template').not.toMatch(/references\/(?:slides|report)\.html|\.src\.html/)
     })
 
-    // The files carry session text that Claude escapes by hand. A missed escape must not run script or send the
-    // reader anywhere: the CSP pins the one script by hash, and the skill counts what it wrote before it opens it. The
-    // patterns live once, in SKILL.md; test/show-me-templates.test.ts runs them on filled files and on hostile ones.
-    // The Grep tool parameters are named exactly: the head count needs multiline mode, and ripgrep refuses its `\n`
-    // without it, so a missed parameter fails closed.
-    it('counts each written file before it opens it: samples, script, meta, links, the exact link and the fixed head', () => {
+    // Orangu writes every byte of HTML. Claude writes one file of 3 values, and the render escapes each value. So the
+    // skill needs no escape rule, no Grep count and no check of a head or a link.
+    it('writes only words.json with exactly 3 values, and no instruction writes, edits, escapes or counts HTML', () => {
       const text = body()
-      expect(text).toContain('run these counts on each file with the Grep tool and `output_mode: "count"`. Set `-i: true` for counts 2 to 9, and `multiline: true` for count 9:')
-      expect(showMeChecks(md()).map(({ expected }) => expected)).toEqual([0, 0, 1, 5, 1, 1, 1, 1, 1])
-      expect(showMeChecks(md())[0]).toEqual({ pattern: 'EXAMPLE|data-sample', expected: 0, caseSensitive: true, multiline: false })
-      expect(showMeChecks(md()).map(({ multiline }) => multiline).lastIndexOf(true)).toBe(8)
-      expect(showMeChecks(md()).filter(({ multiline }) => multiline)).toHaveLength(1)
-      expect(text).toContain('The templates keep each counted tag on its own line, so a count of lines and a count of matches agree.')
-      expect(text).toContain('If a count is different, delete nothing, report the file and the count, and do not open it.')
-      expect(text.indexOf('run these counts with the Grep tool')).toBeLessThan(text.indexOf('Print both absolute paths.'))
+      expect(text).toContain('Write only `<dir>/words.json`. Never write or edit another file.')
+      expect(text).toContain('Write `<dir>/words.json`: one JSON object with exactly the keys `verdict`, `summary` and `improvementsTitle`. Each value is plain text on one line, and none is empty.')
+      expect(md().match(/output_mode/g), 'no Grep count').toBeNull()
+      expect(text, 'no Grep tool').not.toMatch(/\bGrep\b/)
+      expect(text, 'no meta count').not.toContain('<meta')
+      expect(text, 'no escape warning').not.toMatch(/WARNING|[Ee]scape each|&amp;|&lt;/)
+      expect(text, 'no file path for the model to write HTML to').not.toMatch(/~\/\.orangu\/show-me\/<id>|Write the 2 files|Fill a copy/)
     })
 
-    // One estimate for the whole run, before any read: the fixed template and slot-rule reads, the evidence read, and
-    // the 2 files to write. test/show-me-templates.test.ts holds the stated sizes to the built files.
-    it('states the cost of the whole run and asks once before any read', () => {
+    // The render is the STE check of the 3 values (it prints a finding for each one). Claude fixes each real finding,
+    // then renders once more with --open, so the browser opens the files once, with the final words.
+    it('renders, fixes each real finding, then renders again with --open, and prints both paths', () => {
       const text = body()
-      expect(text).toMatch(/The 2 templates and the slot rules are about \d+ KB to read \(about \d+k tokens\)\. The 2 files are about \d+ KB to write \(about \d+k tokens\)\./)
-      expect(text.indexOf('about 20 KB')).toBeLessThan(text.indexOf("orangu analyze '<session>' --json --slim"))
-      expect(text.indexOf('about 20 KB')).toBeLessThan(text.indexOf('Read [the slot rules]'))
+      inOrder(text, [
+        "Run `orangu show-me --render '<dir>' --json`.",
+        'Fix each finding that is real in `words.json`. Do not chase a score.',
+        "Then run `orangu show-me --render '<dir>' --open --json`.",
+        'Print both absolute paths.',
+      ])
+      expect(text).toContain('If it refuses `words.json`, fix the file as the error says, and run it again.')
+      // the render checks the values: no chat draft and no orangu ste run on them
+      expect(text).not.toContain('orangu ste')
     })
 
     // A user who asks what happened in a session wants /orangu:analyze; show-me answers a request for a deck.
@@ -937,11 +942,6 @@ describe('plugin packaging', () => {
       const desc = /description:\s*(.+)/.exec(md())?.[1] ?? ''
       for (const phrase of ['what happened', 'review a run', 'trace what the agent did']) expect(desc).not.toContain(phrase)
       expect(desc).toMatch(/slides/)
-    })
-
-    it('prints both paths and opens both files with the OS opener', () => {
-      expect(body()).toContain('Print both absolute paths.')
-      for (const opener of ['`open`', '`xdg-open`', '`start`']) expect(body()).toContain(opener)
     })
   })
 
@@ -1205,7 +1205,11 @@ describe('plugin packaging', () => {
     // 2 sentences for the summary in improve step 5. A chat draft goes to a new file, never through the shell. The
     // rules for the check live once, in shared/ste.md and shared/untrusted-input.md. analyze (688) and apply (607)
     // grew under their ceiling of 700, which does not move.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
+    // 2026-10-07 show-me writes data only: body 794 -> 536, measured 793 -> 535 words (-258). Orangu now prepares the
+    // run and writes both HTML files. So the template reads, the 9 Grep counts, the escape warning and the opener list
+    // went. The skill now prepares, asks once, writes the 3 values of words.json, renders, fixes, and renders with
+    // --open. The description (304 chars) and the resident total do not move.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1425, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 536 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

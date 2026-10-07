@@ -1,6 +1,6 @@
 /**
  * The two /orangu:show-me templates. Each is built from its source, offline, typeset on the canonical tokens,
- * and fillable by the slot rules the skill follows. A deck and a written report filled from synthetic
+ * and filled by the code behind `orangu show-me --render`. A deck and a written report filled from synthetic
  * fixtures pass the same offline gate as an orangu report, with every sample value replaced.
  */
 import { describe, it, expect } from 'vitest'
@@ -14,7 +14,7 @@ import type { Analysis } from '../src/model/analysis.js'
 import { slimAnalysis } from '../src/suggest/slim.js'
 import { projectEvidence } from '../src/suggest/evidence.js'
 import { REPORT_HTML, SCRIPT_HASH, SLIDES_HTML } from '../src/show-me/generated/templates.js'
-import { FORMATS, aggregatePage, checksFor, countCheck, fillTemplate, sessionPage, showMeChecks, type Words } from './fixtures/show-me-fill.js'
+import { FORMATS, aggregatePage, fillTemplate, sessionPage, type Item, type Page, type Words } from './fixtures/show-me-fill.js'
 
 const root = process.cwd()
 const DIR = 'plugin/skills/show-me/references'
@@ -180,19 +180,53 @@ describe('show-me runtime', () => {
   })
 })
 
+// slots.md holds the rules of the 3 word slots only. The code behind `orangu show-me --render` sets every other
+// value. So the code is the contract: each name in a template is one that a page of values sets, in some scope.
 describe('show-me slot contract', () => {
-  const rules = read(`${DIR}/slots.md`)
-  const named = new Set([...rules.matchAll(/`([a-z][a-z0-9-]*)`/g)].map((m) => m[1]!))
+  type Names = Record<'slot' | 'if' | 'chart' | 'list', Set<string>>
+  const collect = (scope: Partial<Page> | Item, into: Names): Names => {
+    for (const key of Object.keys(scope.slots ?? {})) into.slot.add(key)
+    for (const condition of scope.conditions ?? []) into.if.add(condition)
+    for (const key of Object.keys(scope.charts ?? {})) into.chart.add(key)
+    for (const [key, items] of Object.entries(scope.lists ?? {})) {
+      into.list.add(key)
+      for (const item of items) collect(item, into)
+    }
+    return into
+  }
+  // every shape that sets an optional value: a live session that does not reconcile, with hidden details and savings
+  const everything = (a: Analysis): Analysis => ({
+    ...a,
+    session: { ...a.session, live: true },
+    parse: { ...a.parse, reconciliation: { ...a.parse.reconciliation, ok: false } },
+    insights: a.insights.map((insight) => ({ ...insight, detail: '', savings: { tokens: 100, ms: 1_000, estimated: true } })),
+  })
+  const evidence = projectEvidence(JSON.parse(read('test/golden/aggregate.json')), { scope: 'repo' })
+  const withSavings = { ...evidence, findings: evidence.findings.map((f) => ({ ...f, finding: { ...f.finding, evidence: { ...f.finding.evidence, savingsTokens: 100, savingsMs: 1_000 } } })) }
+  const pages: Page[] = [
+    ...['errors-and-interrupts', 'single-prompt', 'live-partial'].flatMap((name) => [sessionPage(slimAnalysis(golden(name)), WORDS), sessionPage(slimAnalysis(everything(golden(name))), WORDS)]),
+    ...(['repo', 'global'] as const).flatMap((scope) => [evidence, withSavings].map((e) => aggregatePage(e, scope, { folder: 'demo', version: '0.0.0-test', words: WORDS }))),
+  ]
+  const set = pages.reduce((names, page) => collect(page, names), { slot: new Set<string>(), if: new Set<string>(), chart: new Set<string>(), list: new Set<string>() } as Names)
 
   for (const name of NAMES) {
-    it(`every slot in ${name}.html is named in the slot rules and holds an EXAMPLE sample`, () => {
+    it(`every slot, condition, chart and list in ${name}.html is one that the fill code sets, and each slot holds an EXAMPLE sample`, () => {
       const html = built(name)
-      for (const slot of slotNames(html)) expect(named.has(slot), `slots.md names ${slot}`).toBe(true)
+      for (const slot of slotNames(html)) expect(set.slot.has(slot), `the fill sets ${slot}`).toBe(true)
       for (const m of html.matchAll(/<([a-z0-9]+)\b[^>]*\bdata-slot="([^"]+)"[^>]*>([^<]*)<\/\1>/g))
         expect(m[3], `${m[2]} sample value`).toMatch(/^EXAMPLE /)
-      for (const m of html.matchAll(/\bdata-(?:if|chart)="([^"]+)"/g)) expect(named.has(m[1]!), `slots.md names ${m[1]}`).toBe(true)
+      for (const m of html.matchAll(/\bdata-(if|chart)="([^"]+)"/g)) expect(set[m[1] as 'if' | 'chart'].has(m[2]!), `the fill sets data-${m[1]} ${m[2]}`).toBe(true)
+      for (const m of html.matchAll(/\bdata-(?:repeat|empty)="([^"]+)"/g)) expect(set.list.has(m[1]!), `the fill sets the list ${m[1]}`).toBe(true)
     })
   }
+
+  // The skill reads the rules of the 3 words only: every other rule is code, and no word has a count.
+  it('slots.md names the 3 word slots and no other slot, with no word or sentence count', () => {
+    const rules = read(`${DIR}/slots.md`)
+    expect([...rules.matchAll(/^## `([^`]+)`$/gm)].map((m) => m[1])).toEqual(['verdict', 'summary', 'improvementsTitle'])
+    for (const slot of set.slot) if (!['verdict', 'summary', 'improvements-title'].includes(slot)) expect(rules, `slots.md names ${slot}`).not.toContain(`\`${slot}\``)
+    expect(rules).not.toMatch(/\b(?:words|sentences|characters) or (?:fewer|less|more)\b|\b\d+ (?:words?|sentences?|characters?)\b/i)
+  })
 
   it('one rule set fills both files: the report adds only its summary and its footer date', () => {
     const deck = new Set(slotNames(built('slides')))
@@ -262,10 +296,8 @@ describe('show-me filled from synthetic fixtures', () => {
   })
 })
 
-// ---------- the post-write check, the run estimate, and the review fixes ----------
+// ---------- the run estimate and the review fixes ----------
 
-const CHECKS = showMeChecks(read('plugin/skills/show-me/SKILL.md'))
-const BY = ['lines', 'matches'] as const
 const fillAll = (page: ReturnType<typeof sessionPage>): { slides: string; report: string } => ({
   slides: fillTemplate(built('slides'), page),
   report: fillTemplate(built('report'), page),
@@ -285,8 +317,7 @@ const oneTurn = (): Analysis => {
 function filledFiles(): Array<[string, string]> {
   const a = golden('errors-and-interrupts')
   const single = golden('single-prompt')
-  // escaped markup and the plain word "JavaScript:" pass. Text that reads like an attribute (" onerror=", "href=")
-  // fails closed instead: see "escaped session text that reads like a handler stops the open".
+  // markup in session text: the fill writes it as escaped text
   const hostile = '</title><script>alert(1)</script><b>bold</b> JavaScript: tests'
   const oneSession = evidenceOf()
   const pages: Array<[string, ReturnType<typeof sessionPage>]> = [
@@ -303,136 +334,6 @@ function filledFiles(): Array<[string, string]> {
     return [[`${name} slides`, slides], [`${name} report`, report]] as Array<[string, string]>
   })
 }
-
-describe('show-me post-write check (SKILL.md, step 4)', () => {
-  it('is 9 counts, 8 on each file: no sample, no active markup, 1 script, 5 metas, 1 http-equiv, 1 link, the exact link, the fixed head', () => {
-    expect(CHECKS.map(({ expected }) => expected)).toEqual([0, 0, 1, 5, 1, 1, 1, 1, 1])
-    expect(CHECKS.map(({ file }) => file ?? 'both')).toEqual(['both', 'both', 'both', 'both', 'both', 'both', 'slides', 'report', 'both'])
-    expect(CHECKS.map(({ multiline }) => multiline)).toEqual([false, false, false, false, false, false, false, false, true])
-    for (const name of NAMES) expect(checksFor(CHECKS, name)).toHaveLength(8)
-  })
-
-  // The last count pins the exact hash. A rebuild that changes the runtime changes the hash in both templates, and
-  // this test stays red until SKILL.md carries the new hash (with + escaped for the pattern).
-  it('the hash in the SKILL.md head count is the sha256 of the one script in each built template', () => {
-    const head = CHECKS.find((check) => check.multiline)
-    const pinned = /'sha256-((?:\\\+|[A-Za-z0-9/=])+)'/.exec(head?.pattern ?? '')?.[1]?.replaceAll('\\+', '+')
-    expect(pinned, 'the exact hash, not a class').toMatch(/^[A-Za-z0-9+/]{43}=$/)
-    for (const name of NAMES) {
-      const scripts = [...built(name).matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]!)
-      expect(scripts, `${name}.html has one script`).toHaveLength(1)
-      expect(sha256(scripts[0]!), `${name}.html runtime`).toBe(pinned)
-    }
-  })
-
-  // Security re-check R1: a steered model changes bytes that the template fixes, and the old 7 counts all passed.
-  // Each attack is applied to the current build, so the test stays valid after a rebuild. Chromium ran the script
-  // in the first 3 (scratchpad probe); a link needs one click.
-  it('a swapped script, a moved or swallowed CSP, and a retargeted or extra link each fail a count', () => {
-    const slides = built('slides')
-    const report = built('report')
-    const head = CHECKS.find((check) => check.multiline)!
-    const exact = (file: 'slides' | 'report') => CHECKS.find((check) => check.file === file)!
-    for (const [name, html] of [['slides', slides], ['report', report]] as const)
-      for (const by of BY) {
-        expect(countCheck(html, head, by), `${name}.html head by ${by}`).toBe(1)
-        expect(countCheck(html, exact(name), by), `${name}.html link by ${by}`).toBe(1)
-      }
-    const runtime = /<script>([\s\S]*?)<\/script>/.exec(slides)![1]!
-    const swap = "document.title='x'"
-    const cspLine = /^<meta http-equiv="Content-Security-Policy"[^\n]*\n/m.exec(slides)![0]
-    const attacks: Array<[string, string, typeof head]> = [
-      ['the runtime swapped, with its own hash in the CSP', slides.replace(/script-src 'sha256-[^']+'/, `script-src 'sha256-${sha256(swap)}'`).replace(runtime, swap), head],
-      ['the exact CSP line moved under <body>', slides.replace(cspLine, '').replace(/<body[^>]*>\n/, (m) => m + cspLine).replace(runtime, swap), head],
-      ["an open ' in <html> that swallows the head and the CSP", slides.replace('<html lang="en" ', `<html lang="en" data-x=' `).replace(runtime, swap), head],
-      ['markup before <html>', slides.replace('<html', '<img src="x">\n<html'), head],
-      ['the one link retargeted', report.replace('href="slides.html"', 'href="https:evil.example/?d=x"'), exact('report')],
-      ['the one link retargeted in the slides', slides.replace('href="report.html"', 'href="https:evil.example/?d=x"'), exact('slides')],
-    ]
-    for (const [name, html, check] of attacks) {
-      expect(html !== slides && html !== report, `${name} changes the file`).toBe(true)
-      for (const by of BY) expect(countCheck(html, check, by), `${name} by ${by}`).toBe(0)
-    }
-    // A second link whose attribute is split over 2 lines. ripgrep reads one line at a time, so `href\s*=` missed it.
-    const split = report.replace('<div><a class="open" href="slides.html">', '<div><a href\n="https:evil.example/?d=x">x</a><a class="open" href="slides.html">')
-    for (const by of BY) expect(countCheck(split, CHECKS[5]!, by), `split link by ${by}`).toBe(2)
-  })
-
-  // Grep in count mode may count lines, not matches. The templates put each counted tag alone on a line with no
-  // slot, so an injected tag always lands on another line and both counts move.
-  for (const name of NAMES) {
-    it(`${name}.html keeps each counted tag alone on a line with no slot, and has no active markup`, () => {
-      const html = built(name)
-      for (const check of checksFor(CHECKS, name).slice(2)) {
-        for (const by of BY) expect(countCheck(html, check, by), `${check.pattern} by ${by}`).toBe(check.expected)
-        if (check.multiline) continue
-        for (const line of html.split('\n').filter((l) => new RegExp(check.pattern, 'i').test(l))) {
-          expect(line, check.pattern).not.toContain('data-slot')
-          expect(line.match(new RegExp(check.pattern, 'gi'))?.length, `one ${check.pattern} on its line`).toBe(1)
-        }
-      }
-      for (const by of BY) expect(countCheck(html, CHECKS[1]!, by), 'active markup in the template').toBe(0)
-    })
-  }
-
-  it('every filled shape passes every count, by lines and by matches', () => {
-    for (const [name, html] of filledFiles()) {
-      const checks = checksFor(CHECKS, name.endsWith(' slides') ? 'slides' : 'report')
-      for (const check of checks) for (const by of BY) expect(countCheck(html, check, by), `${name}: ${check.pattern} by ${by}`).toBe(check.expected)
-    }
-  })
-
-  // A regex cannot tell an onerror attribute from the words " onerror=" in escaped text. The check fails closed:
-  // the skill reports the count and opens nothing, which SKILL.md says is correct.
-  it('escaped session text that reads like a handler stops the open instead of passing', () => {
-    const a = golden('errors-and-interrupts')
-    const { slides } = fillAll(sessionPage(slimAnalysis({ ...a, session: { ...a.session, title: 'img onerror="alert(2)"' } }), WORDS))
-    expect(slides).toContain('img onerror=&quot;alert(2)&quot;')
-    for (const by of BY) expect(countCheck(slides, CHECKS[1]!, by), by).toBeGreaterThan(0)
-  })
-
-  // The forms that the security review proved against the CSP-only defence, plus a dropped and a loosened CSP.
-  it('every injection, a dropped or loosened CSP, and a leftover sample fail a count, by lines and by matches', () => {
-    const base = fillAll(sessionPage(slimAnalysis(golden('errors-and-interrupts')), WORDS)).slides
-    const titleSlot = '<h1 class="dp" data-slot="title">Run the flaky suite</h1>'
-    expect(base).toContain(titleSlot)
-    const inSlot = (payload: string): string => base.replace(titleSlot, `<h1 class="dp" data-slot="title">${payload}</h1>`)
-    const svgLinks: Array<[string, string]> = [
-      ['an svg link set by <set>, with no href=', inSlot('<svg><a><set attributeName="href" to="https:evil.example/x"/><text>Open the full report</text></a></svg>')],
-      ['an svg link set by <animate>, with no href=', inSlot('<svg><a><animate attributeName="href" to="https:evil.example/x"/><text>Open the full report</text></a></svg>')],
-    ]
-    const variants: Array<[string, string]> = [
-      ['meta refresh in the title', base.replace('<title data-slot="title">Run the flaky suite</title>', '<title data-slot="title"></title><meta http-equiv="refresh" content="0;url=https:evil.example/x"></title>')],
-      ['meta refresh in the body, no slashes', inSlot('<meta http-equiv="refresh" content="0;url=http:127.0.0.1:9/noslash">')],
-      ['onerror after a slash', inSlot('<img src="data:,"/onerror="x()">')],
-      ['svg onload', inSlot('<svg/onload=x()>')],
-      ['a quoted > before the handler', inSlot('<img alt=">" onerror=x()>')],
-      ['a handler on the next line', inSlot('<img src=x\nonerror=x()>')],
-      ['an entity-encoded javascript: link', inSlot('<a href="java&#115;cript:x()">x</a>')],
-      ['an svg set to an encoded javascript:', inSlot('<svg><set attributeName="href" to="java&#115;cript:x()"/></svg>')],
-      ['a named-entity javascript: link', inSlot('<a href="java&Tab;script:x()">x</a>')],
-      ['an upper-case javascript: link', inSlot('<A HREF="JAVASCRIPT:x()">x</A>')],
-      ['a second script', inSlot('<script>x()</script>')],
-      ['an iframe', inSlot('<iframe srcdoc="&lt;script&gt;x()&lt;/script&gt;"></iframe>')],
-      ['a base', inSlot('<base href="https://evil.example/">')],
-      ['a link with no slashes', inSlot('<a href="https:evil.example">x</a>')],
-      ['a form', inSlot('<form action="https://evil.example"><button>x</button></form>')],
-      ['an object', inSlot('<object data="data:text/html,x"></object>')],
-      ['a dropped CSP', base.replace(/^<meta http-equiv="Content-Security-Policy"[^\n]*\n/m, '')],
-      ['a loosened CSP', base.replace("script-src 'sha256-", "script-src 'unsafe-inline' 'sha256-")],
-      ['a leftover sample sentence', inSlot('EXAMPLE The session ran.')],
-      ['a chart left at its sample values', base.replace('<svg class="ring" data-chart="cache"', '<svg class="ring" data-chart="cache" data-sample')],
-      ...svgLinks,
-    ]
-    for (const [name, html] of variants) {
-      expect(html, `${name} changes the file`).not.toBe(base)
-      for (const by of BY) expect(checksFor(CHECKS, 'slides').some((check) => countCheck(html, check, by) !== check.expected), `${name} passes every count by ${by}`).toBe(true)
-    }
-    // Security re-check R2: an SVG <a> gets its link from <set> or <animate>, with no literal href=, and passed all 9
-    // counts (Chromium navigates on click). Count 2 must catch the attribute that sets it.
-    for (const [name, html] of svgLinks) for (const by of BY) expect(countCheck(html, CHECKS[1]!, by), `${name}: count 2 by ${by}`).toBe(1)
-  })
-})
 
 describe('show-me review fixes', () => {
   it('turns read as positions in the report form, with a noun that agrees with the count', () => {
@@ -461,7 +362,7 @@ describe('show-me review fixes', () => {
     }
   })
 
-  it('marks every sample chart, so a chart that the skill did not set stays countable', () => {
+  it('marks every sample chart, and the fill removes each mark', () => {
     for (const name of NAMES) {
       const charts = built(name).match(/<[^>]*\bdata-chart="[^"]+"[^>]*>/g) ?? []
       expect(charts.length, name).toBeGreaterThan(0)
@@ -483,21 +384,20 @@ describe('show-me review fixes', () => {
     }
   })
 
-  // SKILL.md states one estimate of the whole run before any read; it must match what the run reads and writes.
-  it('states the read and write sizes of the run within 20% of the built templates and a filled pair', () => {
-    const stated = /about (\d+) KB to read \(about (\d+)k tokens\)\. The 2 files are about (\d+) KB to write \(about (\d+)k tokens\)/.exec(read('plugin/skills/show-me/SKILL.md'))
-    expect(stated, 'SKILL.md states the run estimate').toBeTruthy()
-    const [readKb, readTokens, writeKb, writeTokens] = stated!.slice(1).map(Number)
-    const readBytes = Buffer.byteLength(built('slides')) + Buffer.byteLength(built('report')) + Buffer.byteLength(read('plugin/skills/show-me/references/slots.md'))
-    const filled = fillAll(sessionPage(slimAnalysis(golden('errors-and-interrupts')), WORDS))
-    const writeBytes = Buffer.byteLength(filled.slides) + Buffer.byteLength(filled.report)
+  // SKILL.md states one estimate before any read: data.json from the prepare output, plus the slot rules. The model
+  // reads no template and writes no HTML, so the estimate names neither. The stated size must match slots.md.
+  it('states the slot-rule read within 20% of slots.md, and takes the data.json size from the prepare output', () => {
+    const skill = read('plugin/skills/show-me/SKILL.md')
+    expect(skill).toContain('`data.bytes` and `data.approxTokens` from that output')
+    const stated = /Add about (\d+) KB \(about (\d+) tokens\) for the slot rules\./.exec(skill)
+    expect(stated, 'SKILL.md states the slot-rule read').toBeTruthy()
+    const [kb, tokens] = stated!.slice(1).map(Number)
+    const bytes = Buffer.byteLength(read('plugin/skills/show-me/references/slots.md'))
     const near = (value: number, actual: number, label: string): void => {
       expect(value / actual, label).toBeGreaterThan(0.8)
       expect(value / actual, label).toBeLessThan(1.2)
     }
-    near(readKb!, readBytes / 1024, 'read KB')
-    near(readTokens!, readBytes / 4 / 1000, 'read tokens at 4 bytes a token')
-    near(writeKb!, writeBytes / 1024, 'write KB')
-    near(writeTokens!, writeBytes / 4 / 1000, 'write tokens at 4 bytes a token')
+    near(kb!, bytes / 1024, 'slot rules KB')
+    near(tokens!, bytes / 4, 'slot rules tokens at 4 bytes a token')
   })
 })
