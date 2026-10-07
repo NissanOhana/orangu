@@ -330,6 +330,7 @@ table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: 
 .overview-copy { position: relative; z-index: 1; min-width: 0; }
 .overview-copy .herotitle { margin-top: 2px; font-size: clamp(24px, 3vw, 34px); letter-spacing: -0.02em; }
 .overview-copy .sg-sub { max-width: 680px; font-size: 14px; line-height: 1.55; }
+.overview-copy .sg-sub + .sg-sub { margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .overview-brand::before, .overview-brand .logo { animation: none !important; transition: none !important; } }
 .rank { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-ink); color: var(--bg); display: grid; place-items: center; font-weight: 700; font-size: 13px; flex-shrink: 0; }
 .vh { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -529,7 +530,9 @@ ${We(n.id??e.id,e.why,e.method,t)}${i}
 ${c}${a}
 ${l}
 </div>
-</details>`}function fe(e,t,n){return Q(e.state,{s:e.state.s??t.session.id,...n})}function Rn(e,t){return`<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${q(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${r(st(e.summary))}</div><div class="sg-sub">${r(M(e.summary.narrative,t))}</div></div></div>`}function In(e){let t=e.summary,n=Ne(t).join(" \xB7 ")||"no commits, PRs or test runs detected",s=ot(t),o=t.totalTokens?`${E(t.cacheHitRatio)} read from cache \xB7 ${y(e.tokens.byKind.output)} generated`:"no usage recorded",a=He(t.outcomes);return`<div class="triptych">
+</details>`}function fe(e,t,n){return Q(e.state,{s:e.state.s??t.session.id,...n})}function Rn(e,t){let n=e.summary.narrative.split(`
+
+`).map(s=>`<div class="sg-sub">${r(M(s,t))}</div>`);return`<div class="hero overview-hero"><span class="overview-brand" aria-hidden="true">${q(64)}</span><div class="grow overview-copy"><div class="eyebrow">What happened</div><div class="herotitle">${r(st(e.summary))}</div>${n.join("")}</div></div>`}function In(e){let t=e.summary,n=Ne(t).join(" \xB7 ")||"no commits, PRs or test runs detected",s=ot(t),o=t.totalTokens?`${E(t.cacheHitRatio)} read from cache \xB7 ${y(e.tokens.byKind.output)} generated`:"no usage recorded",a=He(t.outcomes);return`<div class="triptych">
 <div class="axis q"><div class="aname">Quality \u2191</div><div class="aval">${r(lt(e.quality.signals))}${a?` <span class="anote">(${a})</span>`:""}</div><div class="anote">${r(n)}</div>${Nt(e.quality.signals)}</div>
 <div class="axis t"><div class="aname">Time \u2193</div><div class="aval">${r(s.value)}</div><div class="anote">${r(s.note)}</div></div>
 <div class="axis c"><div class="aname">Tokens \u2193</div><div class="aval">${r(y(t.totalTokens))}</div><div class="anote">${r(o)}</div></div>
