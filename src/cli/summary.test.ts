@@ -335,7 +335,7 @@ describe('persistNextStep', () => {
 })
 
 describe('aggregateBlock', () => {
-  const CAPTION = /In one session/
+  const CAPTION = 'Each title shows the figures of one example session.'
   const sessions = (n: number) => `${n} session${n === 1 ? '' : 's'}`
   async function sample() {
     const one = await analyzed(heavyBuilder())
@@ -351,17 +351,22 @@ describe('aggregateBlock', () => {
     return block
   }
 
-  it('says the one-session marker once, as a caption, and prints the example title, the count and the improvement per row', async () => {
+  it('says once, as a caption, that each title shows one example session, and prints the example title, the count and the improvement per row', async () => {
     const a = await sample()
     expect(a.crossFindings.length).toBeGreaterThan(0)
+    const HEAD = /^ {4} *(~\S+|–) {2}\S/
     for (const [label, caps] of VARIANTS) {
       const lines = aggregateBlock(caps, a)
       const block = findingsBlock(lines)
-      // one caption for the whole list, and no title carries the marker
-      expect(lines.map(stripAnsi).filter((l) => CAPTION.test(l)), label).toHaveLength(1)
-      expect(block[0], label).toMatch(/^ {2}In one session: \S/)
-      const rows = block.slice(1)
-      const heads = rows.map((l, i) => (/^ {4} *(~\S+|–) {2}\S/.test(l) ? i : -1)).filter((i) => i >= 0)
+      // one caption for the whole list, the same sentence as the report, wrapped at whole words
+      const caption = block.slice(0, block.findIndex((l) => HEAD.test(l)))
+      for (const l of caption) expect(l, label).toMatch(/^ {2}\S/)
+      expect(caption.map((l) => l.trim()).join(' '), label).toBe(CAPTION)
+      expect(lines.map(stripAnsi).filter((l) => l.includes('Each title')), label).toHaveLength(1)
+      // no title carries the per-title marker any more
+      expect(lines.map(stripAnsi).filter((l) => l.includes('In one session')), label).toHaveLength(0)
+      const rows = block.slice(caption.length)
+      const heads = rows.map((l, i) => (HEAD.test(l) ? i : -1)).filter((i) => i >= 0)
       expect(heads, label).toHaveLength(Math.min(8, a.crossFindings.length))
       heads.forEach((h, n) => {
         const f = a.crossFindings[n]!

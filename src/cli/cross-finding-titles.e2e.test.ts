@@ -1,9 +1,9 @@
 /**
- * `orangu global` / `orangu repo` print the aggregate's cross-findings verbatim (printAggregate in
- * src/cli/main.ts). Those titles used to be the rule's title with every number replaced by N, so a person
- * read "N tool results over N KB". Against the BUILT CLI: every recurring-finding line carries real figures
- * from an example session, marked "In one session:" so they never read as the cross-session total, and the
- * "(N sessions)" count that follows it.
+ * `orangu global` / `orangu repo` print the aggregate's cross-findings (aggregateBlock in
+ * src/cli/summary.ts). Those titles used to be the rule's title with every number replaced by N, so a person
+ * read "N tool results over N KB". Against the BUILT CLI: every recurring-finding row carries real figures
+ * from an example session, under one caption that says so, so they never read as the cross-session total,
+ * and the "(N sessions)" count follows each title.
  *
  * The HTML report of the same verbs (`--html <file>`) embeds the aggregate after the default redaction. Each
  * closed repo or global card shows its finding's `recommendation` as the improvement line, so every embedded
@@ -39,8 +39,8 @@ describe.skipIf(!existsSync(CLI))('orangu global: recurring-finding titles (buil
     for (const line of lines) {
       expect(line).not.toMatch(/\bN\b/)
       expect(line).not.toMatch(/\be\.g\./)
-      // the marker is said once, as the caption above the rows; then each row head, or a continuation under its title
-      expect(line).toMatch(line === lines[0] ? /^ {2}In one session: \S/ : /^ {4} *(~\S+|–) {2}\S|^ {14}\S/)
+      // the caption is said once, above the rows; then each row head, or a continuation under its title
+      expect(line).toMatch(line === lines[0] ? /^ {2}Each title shows the figures of one example session\.$/ : /^ {4} *(~\S+|–) {2}\S|^ {14}\S/)
     }
   })
 })

@@ -257,8 +257,11 @@ export function aggregateOffer(caps: Caps, wroteHtml: boolean): string[] {
   return ['', ...fit(caps, `${INDENT}add ${offer}`, 'dim')]
 }
 
-/** The one-session marker, said once above the recurring findings instead of before each title. */
-const ONE_SESSION_CAPTION = 'In one session: each title shows the figures of one example session.'
+/**
+ * Said once above the recurring findings instead of a marker before each title. The same sentence as the
+ * caption of the report's Repo and Global lists: one thing gets one sentence everywhere.
+ */
+const EXAMPLE_TITLE_CAPTION = 'Each title shows the figures of one example session.'
 /** Columns before a recurring finding's title: the 4-space indent, the 8-column token figure, 2 spaces. */
 const AGG_TITLE_COLUMN = 14
 /** Columns before a heaviest-session title: the indent, the 9-column token figure, the 8-character id, 2 gaps. */
@@ -266,7 +269,7 @@ const AGG_SESSION_COLUMN = 25
 
 /**
  * stdout block of `orangu repo` and `orangu global`, without the closing flag hint (that depends on what
- * the command wrote). The recurring findings say the one-session marker once, as a caption. Each row
+ * the command wrote). The recurring findings get one caption that says each title shows one example session. Each row
  * prints the bounded token figure, the example title wrapped at whole words, the session count, then the
  * improvement as continuation lines (repo and global text has no footer, so each row carries its own).
  * Every value from a transcript (a title, a path, a model id, an error signature) passes through
@@ -288,7 +291,7 @@ export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
   }
   if (a.crossFindings.length) {
     lines.push('', paint(caps, 'bold', `${INDENT}recurring findings (across sessions)`))
-    lines.push(...fit(caps, INDENT + ONE_SESSION_CAPTION, 'dim'))
+    lines.push(...fit(caps, INDENT + EXAMPLE_TITLE_CAPTION, 'dim'))
     const pad = ' '.repeat(AGG_TITLE_COLUMN)
     const budget = layoutWidth(caps) - AGG_TITLE_COLUMN
     // The bounded figure (median per session × sessions) so one outlier session cannot inflate the claim.
