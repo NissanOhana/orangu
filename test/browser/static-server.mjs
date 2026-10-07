@@ -1,9 +1,12 @@
 import { createServer } from 'node:http'
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..')
+// the /orangu:show-me files: rendered by the built CLI before the server listens (test/browser/show-me-render.ts)
+const showMe = execFileSync(process.execPath, ['--import', 'tsx', join(root, 'test', 'browser', 'show-me-render.ts')], { cwd: root, encoding: 'utf8' }).trim()
 const pages = new Map([
   ['/', join(root, 'site', 'index.html')],
   ['/index.html', join(root, 'site', 'index.html')],
@@ -14,12 +17,17 @@ const pages = new Map([
   ['/sitemap.xml', join(root, 'site', 'sitemap.xml')],
   ['/llms.txt', join(root, 'site', 'llms.txt')],
   ['/llms-full.txt', join(root, 'site', 'llms-full.txt')],
-  // the /orangu:show-me templates, served side by side so their relative links resolve
-  ['/show-me/slides.html', join(root, 'plugin', 'skills', 'show-me', 'references', 'slides.html')],
-  ['/show-me/report.html', join(root, 'plugin', 'skills', 'show-me', 'references', 'report.html')],
+  // the 2 files that `orangu show-me --render` wrote, side by side so their relative links resolve, and the
+  // words it rendered, so the spec can look for each one as text
+  ['/show-me/slides.html', join(showMe, 'slides.html')],
+  ['/show-me/report.html', join(showMe, 'report.html')],
+  ['/show-me/words.json', join(showMe, 'words.json')],
 ])
 const contentType = (file) =>
-  file.endsWith('.txt') ? 'text/plain; charset=utf-8' : file.endsWith('.xml') ? 'application/xml; charset=utf-8' : 'text/html; charset=utf-8'
+  file.endsWith('.txt') ? 'text/plain; charset=utf-8'
+  : file.endsWith('.xml') ? 'application/xml; charset=utf-8'
+  : file.endsWith('.json') ? 'application/json; charset=utf-8'
+  : 'text/html; charset=utf-8'
 
 const server = createServer((req, res) => {
   const path = new URL(req.url ?? '/', 'http://127.0.0.1').pathname

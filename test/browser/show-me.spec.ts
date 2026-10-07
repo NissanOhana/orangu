@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
-import { readFileSync } from 'node:fs'
 import { paintedTheme, projectTheme } from './theme.js'
 
-// The two /orangu:show-me templates render as a complete sample before the skill fills them. Each opens in
-// light and dark with no console error; the deck moves by keyboard, keeps the slide and the theme in the
-// hash, and T changes the theme.
+// The two /orangu:show-me files, as `orangu show-me --render` wrote them for a fixture session with hostile words
+// (test/browser/show-me-render.ts). Each opens in light and dark with no console error; the deck moves by keyboard,
+// keeps the slide and the theme in the hash, and T changes the theme. The words stay text, and only the pinned
+// runtime runs.
 const BASE = 'http://127.0.0.1:4173/show-me'
 
 function runtimeErrors(page: Page): string[] {
@@ -12,6 +12,10 @@ function runtimeErrors(page: Page): string[] {
   page.on('pageerror', (error) => errors.push(`page: ${error.message}`))
   page.on('console', (message) => {
     if (message.type() === 'error') errors.push(`console: ${message.text()}`)
+  })
+  page.on('dialog', (dialog) => {
+    errors.push(`dialog: ${dialog.message()}`)
+    void dialog.dismiss()
   })
   return errors
 }
@@ -27,15 +31,26 @@ test('the slide deck opens in its theme, moves by keyboard and keeps its place i
   expect(await paintedTheme(page)).toBe(theme)
   await expect(page.locator('#theme')).toHaveText(`◐ theme · ${theme}`)
   const slides = page.locator('section[aria-roledescription="slide"]')
-  await expect(slides).toHaveCount(6)
-  await expect(slides.first()).toHaveAttribute('aria-label', '1 of 6')
-  await expect(slides.first().locator('.pg')).toHaveText('1 / 6')
-  await expect(page).toHaveURL(/#n=1/)
+  // 5 fixed slides and one for each finding the fixture session has (1 to 3)
+  const total = await slides.count()
+  expect(total).toBeGreaterThan(5)
+  expect(total).toBeLessThanOrEqual(8)
+  await expect(slides.first()).toHaveAttribute('aria-label', `1 of ${total}`)
+  await expect(slides.first().locator('.pg')).toHaveText(`1 / ${total}`)
+  // the hash names the slide across the middle of the viewport. A wide slide fills the viewport, so that is slide
+  // 1 and then slide 2. A phone card has the height of its text: a short title card leaves slide 2 across the
+  // middle at the top of the page, so there the check is that the arrow key moves the hash forward.
+  const slideInHash = async (): Promise<number> => Number(/n=(\d+)/.exec(new URL(page.url()).hash)?.[1] ?? 0)
+  await expect.poll(slideInHash).toBeGreaterThan(0)
+  const start = await slideInHash()
+  const wide = info.project.name.startsWith('wide')
+  if (wide) expect(start).toBe(1)
 
   await page.keyboard.press('ArrowRight')
-  await expect(page).toHaveURL(/#n=2/)
-  // a wide slide fills the viewport; a phone card can be taller than it, so only the hash is checked there
-  if (info.project.name.startsWith('wide')) await expect(slides.nth(1)).toBeInViewport({ ratio: 0.6 })
+  if (wide) {
+    await expect(page).toHaveURL(/#n=2/)
+    await expect(slides.nth(1)).toBeInViewport({ ratio: 0.6 })
+  } else await expect.poll(slideInHash).toBeGreaterThan(start)
   if (theme === 'dark') await expect(page).toHaveURL(/theme=dark/)
 
   await page.keyboard.press('t')
@@ -50,22 +65,43 @@ test('a deck link with a slide number opens on that slide', async ({ page }, inf
   test.skip(!info.project.name.startsWith('wide'), 'the slide hash is the same at every width')
   const errors = runtimeErrors(page)
   await page.goto(`${BASE}/slides.html#n=4&theme=${projectTheme(info)}`)
-  await expect(page.locator('section[aria-roledescription="slide"]').nth(3)).toBeInViewport({ ratio: 0.6 })
+  const slides = page.locator('section[aria-roledescription="slide"]')
+  await expect(slides.nth(3)).toBeInViewport({ ratio: 0.6 })
   await page.keyboard.press('End')
-  await expect(page).toHaveURL(/#n=6/)
+  await expect(page).toHaveURL(new RegExp(`#n=${await slides.count()}`))
   await page.keyboard.press('Home')
   await expect(page).toHaveURL(/#n=1/)
   expect(errors).toEqual([])
 })
 
-// The skill escapes session text by hand. If one escape is missed, the page must still run nothing but its own
-// runtime: the CSP pins that script by hash, so an injected <script> or event handler stays inert.
-test('an unescaped injection in a slot runs no script, and the pinned runtime still runs', async ({ page }, info) => {
+// The words that Claude wrote are hostile here. orangu wrote them as text, so the page shows each one, runs no
+// script of theirs, and makes no CSP report: there is nothing to block.
+test('the hostile words show as text, and only the pinned runtime runs', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  const words = (await (await page.request.get(`${BASE}/words.json`)).json()) as { verdict: string; summary: string; improvementsTitle: string }
+  expect(words.verdict).toContain('<script>')
+  for (const file of ['slides', 'report']) {
+    await page.goto(`${BASE}/${file}.html${projectTheme(info) === 'dark' ? '#theme=dark' : ''}`)
+    await expect(page.locator('#theme')).toHaveText(`◐ theme · ${projectTheme(info)}`)
+    await expect(page.locator('[data-slot="verdict"]')).toHaveText(words.verdict)
+    if (file === 'report') await expect(page.locator('[data-slot="summary"]')).toHaveText(words.summary)
+    else await expect(page.locator('[data-slot="improvements-title"]')).toHaveText(words.improvementsTitle)
+    expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined()
+    expect(await page.evaluate(() => document.scripts.length)).toBe(1)
+    expect(await page.evaluate(() => document.querySelectorAll('set, animate, iframe, base, [onload], [onerror]').length)).toBe(0)
+  }
+  expect(errors).toEqual([])
+})
+
+// A defence in depth: if a missed escape ever put raw markup in a rendered file, the page must still run nothing but
+// its own runtime. The CSP pins that script by hash, so an injected <script> or event handler stays inert.
+test('an unescaped injection in a rendered slot runs no script, and the pinned runtime still runs', async ({ page }, info) => {
   test.skip(info.project.name !== 'wide-light', 'the CSP behaves the same in every project')
-  const template = readFileSync(new URL('../../plugin/skills/show-me/references/slides.html', import.meta.url), 'utf8')
-  const sample = '<h1 class="dp" data-slot="title">EXAMPLE Fix the flaky checkout tests</h1>'
-  expect(template).toContain(sample)
-  const hostile = template.replace(sample, '<h1 class="dp" data-slot="title"><img src="data:," onerror="window.__xss=1"><script>window.__xss=2</script>hostile</h1>')
+  const rendered = await (await page.request.get(`${BASE}/slides.html`)).text()
+  const title = /<h1 class="dp" data-slot="title">[^<]*<\/h1>/.exec(rendered)?.[0]
+  expect(title, 'the rendered title slot').toBeTruthy()
+  const hostile = rendered.replace(title!, '<h1 class="dp" data-slot="title"><img src="data:," onerror="window.__xss=1"><script>window.__xss=2</script>hostile</h1>')
+  const total = (rendered.match(/aria-roledescription="slide"/g) ?? []).length
   await page.route(`${BASE}/hostile.html`, (route) => route.fulfill({ contentType: 'text/html; charset=utf-8', body: hostile }))
   const blocked: string[] = []
   const pageErrors: string[] = []
@@ -73,7 +109,7 @@ test('an unescaped injection in a slot runs no script, and the pinned runtime st
   page.on('pageerror', (error) => pageErrors.push(error.message))
   await page.goto(`${BASE}/hostile.html`)
   await expect(page.locator('#theme')).toHaveText('◐ theme · light')
-  await expect(page.locator('.pg').first()).toHaveText('1 / 6')
+  await expect(page.locator('.pg').first()).toHaveText(`1 / ${total}`)
   expect(await page.evaluate(() => (window as unknown as { __xss?: number }).__xss)).toBeUndefined()
   expect(blocked.some((text) => /Content Security Policy/.test(text))).toBe(true)
   expect(pageErrors).toEqual([])
@@ -103,12 +139,13 @@ test('Space on the focused theme button presses the button and keeps the slide',
   await expect(page).toHaveURL(/#n=1&theme=dark$/)
 })
 
-test('the written report opens in its theme and links back to the slides', async ({ page }, info) => {
+test('the written report opens in its theme, holds no sample value and links back to the slides', async ({ page }, info) => {
   const theme = projectTheme(info)
   const errors = runtimeErrors(page)
   await page.goto(`${BASE}/report.html${theme === 'dark' ? '#theme=dark' : ''}`)
   expect(await paintedTheme(page)).toBe(theme)
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('EXAMPLE')
+  await expect(page.getByRole('heading', { level: 1 })).not.toBeEmpty()
+  expect(await page.content()).not.toContain('EXAMPLE')
   const back = page.getByRole('link', { name: 'Open the slides →' })
   await expect(back).toHaveAttribute('href', theme === 'dark' ? 'slides.html#theme=dark' : 'slides.html')
   await page.getByRole('button', { name: `◐ theme · ${theme}` }).click()
