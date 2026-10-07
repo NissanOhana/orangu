@@ -130,6 +130,151 @@ describe('projectEvidence', () => {
     )
   })
 
+  it('keeps the evidence schema version at 1, because the rule text parts are additive', () => {
+    expect(EVIDENCE_SCHEMA_VERSION).toBe('1')
+  })
+
+  it("carries each insight's own improvement, reason and method beside the whole recommendation", async () => {
+    const analysis = await canonical()
+    // the canonical session emits no method, so one insight carries a method to prove that it is copied too
+    const withMethod: Insight = { ...analysis.insights[0]!, id: 'with-method-1', method: 'The rule counts each failed call once.' }
+    const input = withInsights(analysis, [...analysis.insights, withMethod])
+    for (const value of [input, slimAnalysis(input)]) {
+      const bundle = projectEvidence(value, { limit: MAX_EVIDENCE_LIMIT })
+      expect(bundle.findings.length).toBe(input.insights.length)
+      for (const row of bundle.findings) {
+        const source = input.insights.find((i) => i.id === row.finding.insightId)!
+        expect(source.why, source.ruleId).toMatch(/\S/)
+        expect(row.improvement, source.ruleId).toBe(source.improvement)
+        expect(row.why, source.ruleId).toBe(source.why)
+        expect(row.method, source.ruleId).toBe(source.method)
+        expect(row.recommendation, source.ruleId).toBe(source.recommendation)
+        // the parts are not the joined text: the improvement alone is shorter than the recommendation
+        expect(row.improvement, source.ruleId).not.toBe(row.recommendation)
+        // the marker-free title is a repo and global field only
+        expect('exampleTitle' in row).toBe(false)
+      }
+      expect(bundle.findings.some((row) => row.method !== undefined)).toBe(true)
+    }
+  })
+
+  it("carries each cross finding's improvement, reason, method and example title into repo and global rows", async () => {
+    const analysis = await canonical()
+    const withMethod: Insight = { ...analysis.insights[0]!, id: 'with-method-1', ruleId: 'method-rule', method: 'The rule counts each failed call once.' }
+    const input = aggregate([withInsights(analysis, [...analysis.insights, withMethod])], 'repo demo', 0)
+    for (const scope of ['repo', 'global'] as const) {
+      const bundle = projectEvidence(input, { scope, limit: MAX_EVIDENCE_LIMIT })
+      expect(bundle.findings.length).toBe(input.crossFindings.length)
+      for (const row of bundle.findings) {
+        const source = input.crossFindings.find((f) => f.ruleId === row.finding.ruleId)!
+        expect(source.improvement, source.ruleId).toMatch(/\S/)
+        expect(source.exampleTitle, source.ruleId).toMatch(/\S/)
+        expect(row.improvement, source.ruleId).toBe(source.improvement)
+        expect(row.why, source.ruleId).toBe(source.why)
+        expect(row.method, source.ruleId).toBe(source.method)
+        expect(row.exampleTitle, source.ruleId).toBe(source.exampleTitle)
+        expect(row.recommendation, source.ruleId).toBe(source.recommendation)
+        // the marked title stays the finding identity: the suggestion id and the token still hash it
+        expect(row.finding.title, source.ruleId).toBe(source.title)
+      }
+      expect(bundle.findings.some((row) => row.method !== undefined)).toBe(true)
+    }
+  })
+
+  it('shows the rule name as the example title when the example insight has an empty title, as the finding title does', async () => {
+    const analysis = await canonical()
+    const untitled: Insight = { ...analysis.insights[0]!, id: 'untitled-1', ruleId: 'untitled-rule', title: '' }
+    const input = aggregate([withInsights(analysis, [untitled])], 'repo demo', 0)
+    expect(input.crossFindings[0]).toMatchObject({ title: '', exampleTitle: '' })
+    const row = projectEvidence(input, { scope: 'repo' }).findings[0]!
+    expect(row.finding.title).toBe('Untitled rule')
+    expect(row.exampleTitle).toBe('Untitled rule')
+  })
+
+  it('accepts an older Analysis without the parts and uses its recommendation as the improvement', async () => {
+    const analysis = await canonical()
+    const legacy = JSON.parse(JSON.stringify(analysis)) as { insights: Array<Record<string, unknown>> }
+    for (const insight of legacy.insights) {
+      delete insight['improvement']
+      delete insight['why']
+      delete insight['method']
+    }
+    const bundle = parseEvidenceArtifact(JSON.stringify(legacy), { limit: MAX_EVIDENCE_LIMIT })
+    expect(bundle.findings.length).toBe(analysis.insights.length)
+    for (const row of bundle.findings) {
+      expect(row.recommendation).toMatch(/\S/)
+      expect(row.improvement).toBe(row.recommendation)
+      expect('why' in row).toBe(false)
+      expect('method' in row).toBe(false)
+    }
+    // the parts are copy, not identity: the same findings keep the same suggestion ids with or without them
+    expect(bundle.findings.map((row) => row.suggestionId)).toEqual(projectEvidence(analysis, { limit: MAX_EVIDENCE_LIMIT }).findings.map((row) => row.suggestionId))
+  })
+
+  it('accepts an older Aggregate without the parts and uses its recommendation as the improvement', async () => {
+    const analysis = await canonical()
+    const input = aggregate([analysis], 'repo demo', 0)
+    const legacy = JSON.parse(JSON.stringify(input)) as { crossFindings: Array<Record<string, unknown>> }
+    for (const f of legacy.crossFindings) {
+      delete f['improvement']
+      delete f['why']
+      delete f['method']
+      delete f['exampleTitle']
+    }
+    const bundle = parseEvidenceArtifact(JSON.stringify(legacy), { scope: 'repo', limit: MAX_EVIDENCE_LIMIT })
+    expect(bundle.findings.length).toBe(input.crossFindings.length)
+    for (const row of bundle.findings) {
+      expect(row.recommendation).toMatch(/\S/)
+      expect(row.improvement).toBe(row.recommendation)
+      expect('why' in row).toBe(false)
+      expect('method' in row).toBe(false)
+      expect('exampleTitle' in row).toBe(false)
+    }
+    expect(bundle.findings.map((row) => row.suggestionId)).toEqual(projectEvidence(input, { scope: 'repo', limit: MAX_EVIDENCE_LIMIT }).findings.map((row) => row.suggestionId))
+
+    // an Aggregate older than the recommendation too has no rule text, so its row carries no improvement
+    for (const f of legacy.crossFindings) delete f['recommendation']
+    const older = parseEvidenceArtifact(JSON.stringify(legacy), { scope: 'repo', limit: MAX_EVIDENCE_LIMIT })
+    expect(older.findings.length).toBe(input.crossFindings.length)
+    for (const row of older.findings) expect('improvement' in row).toBe(false)
+  })
+
+  it('rejects rule text parts that are not bounded strings', async () => {
+    const analysis = await canonical()
+    const insight = analysis.insights[0]!
+    for (const key of ['improvement', 'why', 'method'] as const) {
+      expect(() => projectEvidence(withInsights(analysis, [{ ...insight, [key]: 42 } as unknown as Insight]))).toThrow(new RegExp(`insights\\[0\\]\\.${key} must be`))
+      expect(() => projectEvidence(withInsights(analysis, [{ ...insight, [key]: 'x'.repeat(16_385) }]))).toThrow(new RegExp(`insights\\[0\\]\\.${key} exceeds`))
+    }
+    const input = aggregate([analysis], 'repo demo', 0)
+    const finding = input.crossFindings[0]!
+    for (const key of ['improvement', 'why', 'method', 'exampleTitle'] as const) {
+      expect(() => projectEvidence({ ...input, crossFindings: [{ ...finding, [key]: 42 }] }, { scope: 'repo' })).toThrow(
+        new RegExp(`crossFindings\\[0\\]\\.${key} must be`),
+      )
+      expect(() => projectEvidence({ ...input, crossFindings: [{ ...finding, [key]: 'x'.repeat(16_385) }] }, { scope: 'repo' })).toThrow(
+        new RegExp(`crossFindings\\[0\\]\\.${key} exceeds`),
+      )
+    }
+  })
+
+  it('scrubs a secret planted in any rule text part', async () => {
+    const analysis = await canonical()
+    const secret = 'sk-ant-api03-abc123def456ghi789'
+    const insight: Insight = { ...analysis.insights[0]!, improvement: `Remove ${secret}`, why: `It leaks ${secret}`, method: `It counts ${secret}` }
+    const session = JSON.stringify(projectEvidence(withInsights(analysis, [insight])))
+    expect(session).not.toContain(secret)
+    expect(session.match(/‹anthropic-key›/g)?.length).toBeGreaterThanOrEqual(3)
+    const input = aggregate([analysis], 'repo demo', 0)
+    const planted = {
+      ...input,
+      crossFindings: input.crossFindings.map((f) => ({ ...f, improvement: `Remove ${secret}`, why: `It leaks ${secret}`, method: `It counts ${secret}`, exampleTitle: `Saw ${secret}` })),
+    }
+    const repo = JSON.stringify(projectEvidence(planted, { scope: 'repo' }))
+    expect(repo).not.toContain(secret)
+    expect(repo.match(/‹anthropic-key›/g)?.length).toBeGreaterThanOrEqual(4)
+  })
+
   it('states the recurrence against the cohort total, never as a bare "Recurs in" count', async () => {
     const analysis = await canonical()
     const cohort = (withFinding: number) =>

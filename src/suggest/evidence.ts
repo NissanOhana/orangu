@@ -51,7 +51,23 @@ interface EvidenceCatalogMatch {
   evidence: string
 }
 
-interface EvidenceFinding {
+/** The rule text parts of a projected finding, each scrubbed and bounded like `recommendation`. */
+interface RuleTextParts {
+  /**
+   * The change to make. Present whenever the input carries rule text: an input written before the split
+   * has no parts, so its whole `recommendation` is the improvement. Absent only for an Aggregate written
+   * before cross findings carried a `recommendation`, because that input has no rule text at all.
+   */
+  improvement?: string
+  /** what the finding costs or means */
+  why?: string
+  /** what the rule counts and skips */
+  method?: string
+  /** repo and global only: the example insight's title without the `In one session: ` marker of `finding.title` */
+  exampleTitle?: string
+}
+
+interface EvidenceFinding extends RuleTextParts {
   suggestionId: string
   findingToken: string
   finding: Finding
@@ -94,7 +110,7 @@ export interface ProjectEvidenceOptions {
   scope?: AggregateScope
 }
 
-interface ProjectedRow {
+interface ProjectedRow extends RuleTextParts {
   finding: Finding
   axis: Insight['axis']
   severity: InsightSeverity
@@ -224,6 +240,27 @@ function validateBoundedValue(
   state.seen.delete(value)
 }
 
+/** An additive text field: absent stays absent, and a present value must be a bounded string. */
+function optionalString(value: unknown, label: string, max: number): string | undefined {
+  return value === undefined ? undefined : boundedString(value, label, max, true)
+}
+
+/**
+ * The rule text parts of an Insight or a CrossFinding (additive, schema unchanged). An input written before
+ * the split has no parts: its whole `recommendation` is then the improvement, because an older text has no
+ * split. An absent `why` or `method` stays absent.
+ */
+function validateParts(value: Record<string, unknown>, label: string, recommendation: string | undefined): Pick<RuleTextParts, 'improvement' | 'why' | 'method'> {
+  const improvement = optionalString(value['improvement'], `${label}.improvement`, MAX_INPUT_TEXT_CHARS) ?? recommendation
+  const why = optionalString(value['why'], `${label}.why`, MAX_INPUT_TEXT_CHARS)
+  const method = optionalString(value['method'], `${label}.method`, MAX_INPUT_TEXT_CHARS)
+  return {
+    ...(improvement !== undefined ? { improvement } : {}),
+    ...(why !== undefined ? { why } : {}),
+    ...(method !== undefined ? { method } : {}),
+  }
+}
+
 function validateSessionIds(value: unknown, label: string): string[] {
   const raw = boundedArray(value, label, MAX_SESSION_IDS_PER_FINDING)
   if (!raw.length) throw new Error(`${label} must not be empty`)
@@ -237,6 +274,7 @@ function validateInsight(value: unknown, index: number): Insight {
   const title = boundedString(value['title'], `insights[${index}].title`, MAX_TITLE_CHARS, true)
   const detail = boundedString(value['detail'], `insights[${index}].detail`, MAX_INPUT_TEXT_CHARS, true)
   const recommendation = boundedString(value['recommendation'], `insights[${index}].recommendation`, MAX_INPUT_TEXT_CHARS, true)
+  const { improvement = recommendation, why, method } = validateParts(value, `insights[${index}]`, recommendation)
   const axis = insightAxis(value['axis'], `insights[${index}].axis`)
   const severity = insightSeverity(value['severity'], `insights[${index}].severity`)
   const evidence = value['evidence']
@@ -263,7 +301,22 @@ function validateInsight(value: unknown, index: number): Insight {
       ...(rawSavings['ms'] !== undefined ? { ms: finiteNonNegative(rawSavings['ms'], `insights[${index}].savings.ms`) } : {}),
     }
   }
-  return { id, ruleId, title, detail, recommendation, improvement: recommendation, axis, severity, evidence, turnIndexes, ...(savings ? { savings } : {}), personas }
+  return {
+    id,
+    ruleId,
+    title,
+    detail,
+    recommendation,
+    improvement,
+    ...(why !== undefined ? { why } : {}),
+    ...(method !== undefined ? { method } : {}),
+    axis,
+    severity,
+    evidence,
+    turnIndexes,
+    ...(savings ? { savings } : {}),
+    personas,
+  }
 }
 
 function matchableFiles(value: Record<string, unknown>): MatchableAnalysis['files'] {
@@ -329,10 +382,9 @@ function validateCrossFinding(value: unknown, index: number): ValidatedCrossFind
   const ruleId = boundedId(value['ruleId'], `Aggregate.crossFindings[${index}].ruleId`, MAX_RULE_ID_CHARS)
   const title = boundedString(value['title'], `Aggregate.crossFindings[${index}].title`, MAX_TITLE_CHARS, true)
   // Additive (aggregate v2): older JSON omits the recommendation; its row then carries none, as before.
-  const recommendation =
-    value['recommendation'] === undefined
-      ? undefined
-      : boundedString(value['recommendation'], `Aggregate.crossFindings[${index}].recommendation`, MAX_INPUT_TEXT_CHARS, true)
+  const recommendation = optionalString(value['recommendation'], `Aggregate.crossFindings[${index}].recommendation`, MAX_INPUT_TEXT_CHARS)
+  const parts = validateParts(value, `Aggregate.crossFindings[${index}]`, recommendation)
+  const exampleTitle = optionalString(value['exampleTitle'], `Aggregate.crossFindings[${index}].exampleTitle`, MAX_TITLE_CHARS)
   const sessions = finiteNonNegative(value['sessions'], `Aggregate.crossFindings[${index}].sessions`)
   if (!Number.isInteger(sessions) || sessions < 1 || sessions > MAX_EVIDENCE_INPUT_SESSIONS) {
     throw new Error(`Aggregate.crossFindings[${index}].sessions is out of range`)
@@ -348,7 +400,9 @@ function validateCrossFinding(value: unknown, index: number): ValidatedCrossFind
   return {
     ruleId,
     title,
+    ...(exampleTitle !== undefined ? { exampleTitle } : {}),
     ...(recommendation !== undefined ? { recommendation } : {}),
+    ...parts,
     sessions,
     totalSavingsTokens,
     totalSavingsMs,
@@ -452,6 +506,15 @@ function findingFromCrossFinding(finding: ValidatedCrossFinding, scope: Aggregat
   }
 }
 
+/** The rule text parts through the same scrub and bound as `recommendation`; an absent part stays absent. */
+function outputParts(parts: { improvement?: string; why?: string; method?: string }): Omit<RuleTextParts, 'exampleTitle'> {
+  return {
+    ...(parts.improvement !== undefined ? { improvement: outputText(parts.improvement, MAX_OUTPUT_DETAIL_CHARS) } : {}),
+    ...(parts.why !== undefined ? { why: outputText(parts.why, MAX_OUTPUT_DETAIL_CHARS) } : {}),
+    ...(parts.method !== undefined ? { method: outputText(parts.method, MAX_OUTPUT_DETAIL_CHARS) } : {}),
+  }
+}
+
 function rowsFromAnalysis(a: EvidenceAnalysisInput): ProjectedRow[] {
   return a.insights.map((insight) => ({
     finding: findingFromInsight(insight, a.session.id),
@@ -459,6 +522,7 @@ function rowsFromAnalysis(a: EvidenceAnalysisInput): ProjectedRow[] {
     severity: insight.severity,
     detail: outputText(insight.detail, MAX_OUTPUT_DETAIL_CHARS),
     recommendation: outputText(insight.recommendation, MAX_OUTPUT_DETAIL_CHARS),
+    ...outputParts(insight),
     turnIndexes: [...insight.turnIndexes],
     catalogMatches: matchRule(insight.ruleId, [a]).slice(0, MAX_CATALOG_MATCHES_PER_FINDING),
   }))
@@ -482,6 +546,9 @@ function rowsFromAggregate(a: EvidenceAggregateInput, scope: AggregateScope): Pr
     severity: finding.severity,
     detail: `This pattern shows in ${finding.sessions} of ${total} session${total === 1 ? '' : 's'}.`,
     ...(finding.recommendation !== undefined ? { recommendation: outputText(finding.recommendation, MAX_OUTPUT_DETAIL_CHARS) } : {}),
+    ...outputParts(finding),
+    // the display title: an empty one falls back to the rule name, as `finding.title` does
+    ...(finding.exampleTitle !== undefined ? { exampleTitle: safeTitle(finding.ruleId, finding.exampleTitle) } : {}),
     catalogMatches: matchRule(finding.ruleId).slice(0, MAX_CATALOG_MATCHES_PER_FINDING),
   }))
 }
@@ -566,6 +633,10 @@ export function projectEvidence(value: unknown, options: ProjectEvidenceOptions 
       severity: row.severity,
       detail: row.detail,
       ...(row.recommendation !== undefined ? { recommendation: row.recommendation } : {}),
+      ...(row.improvement !== undefined ? { improvement: row.improvement } : {}),
+      ...(row.why !== undefined ? { why: row.why } : {}),
+      ...(row.method !== undefined ? { method: row.method } : {}),
+      ...(row.exampleTitle !== undefined ? { exampleTitle: row.exampleTitle } : {}),
       ...(row.turnIndexes !== undefined ? { turnIndexes: row.turnIndexes } : {}),
       catalogMatchIds: matches.map((match) => match.id),
     }
