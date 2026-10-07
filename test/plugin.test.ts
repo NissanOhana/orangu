@@ -91,16 +91,17 @@ describe('plugin packaging', () => {
     expect(existsSync(join(root, 'plugin/hooks/hooks.json'))).toBe(false)
     expect(existsSync(join(root, 'plugin/optional-hooks'))).toBe(false)
   })
-  // The one Edit grant that improve and harness hold is the drafts directory: it is outside the repository and holds
-  // only the skill's own chat draft, which the skill writes there to check it with `orangu ste`. Claude Code checks a
-  // Write against Edit(path) rules, so this grant keeps that write silent. Every other Edit stays forbidden.
+  // The one Edit grant that improve and harness hold is their own drafts in the drafts directory: it is outside the
+  // repository and holds only the skill's own chat draft, which the skill writes there to check it with `orangu ste`.
+  // Claude Code checks a Write against Edit(path) rules, so this grant keeps that write silent. Every other Edit stays
+  // forbidden.
   it('improve and harness declare proposal-only writes with no repository edit grant', () => {
     for (const s of ['improve', 'harness']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const fm = /^---\n([\s\S]*?)\n---/.exec(md)!
       const allowed = /allowed-tools:\s*(.+)/.exec(fm[1]!)?.[1] ?? ''
       expect(allowed, `${s} has allowed-tools`).toBeTruthy()
-      expect(allowed.match(/\bEdit\b(?:\([^)]*\))?/g), `${s} edits only its drafts`).toEqual(['Edit(~/.orangu/drafts/**)'])
+      expect(allowed.match(/\bEdit\b(?:\([^)]*\))?/g), `${s} edits only its drafts`).toEqual([`Edit(~/.orangu/drafts/${s}-*.md)`])
       // the only Write grant is the orangu proposals dir
       const writes = allowed.match(/Write\([^)]*\)|Write(?!\()/g) ?? []
       for (const w of writes) expect(w, `${s} write grant is proposals-scoped: ${w}`).toMatch(/^Write\(~\/\.orangu\//)
@@ -133,7 +134,9 @@ describe('plugin packaging', () => {
     }
     // 5 -> 7 when apply lost its bare Bash grant: apply keeps the CLI fallback as 2 grants, one for each verb that it
     // runs (suggest, ste), and each names the plugin CLI and the verb before its *.
-    expect(nodeGrants, 'analyze, feedback, harness, improve and show-me keep one CLI fallback, apply keeps 2').toBe(7)
+    // 7 -> 27 when analyze, improve and harness lost their any-verb grants: one CLI fallback for each verb that a step
+    // runs (analyze 11, improve 4, harness 8), plus apply 2, feedback 1 and show-me 1.
+    expect(nodeGrants, 'analyze 11, improve 4, harness 8, apply 2, feedback 1, show-me 1').toBe(27)
   })
 
   // apply edits a repository, so it pre-approves only what it must run with no prompt: the 2 orangu verbs that it
@@ -147,6 +150,49 @@ describe('plugin packaging', () => {
     for (const s of readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))) {
       const grants = (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
       for (const bare of ['Bash', 'Edit', 'Write']) expect(grants, `${s} pre-approves no bare ${bare}`).not.toContain(bare)
+    }
+  })
+
+  // A grant for every orangu verb also pre-approved `orangu report latest --no-redact --include-text -o <any path>`.
+  // Text that Claude reads from a transcript, a file or a page can plant that line, and it ran with no prompt. So
+  // each skill pre-approves only the orangu verbs that its steps run, in the PATH form and in the plugin CLI form,
+  // and every other verb asks. A verb that writes a named file still replaces only a file that orangu wrote
+  // (src/cli/private-output.ts). The drafts grant names the skill's own draft files (the drafts pin below states its
+  // directory rule).
+  const ANALYZE_GRANTS =
+    'allowed-tools: Bash(orangu analyze:*), Bash(orangu estimate:*), Bash(orangu evidence:*), Bash(orangu repo:*), Bash(orangu global:*), Bash(orangu list:*), Bash(orangu report:*), Bash(orangu watch:*), Bash(orangu serve:*), Bash(orangu ste:*), Bash(orangu suggest:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" list *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" report *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" watch *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" serve *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Read, Edit(~/.orangu/drafts/analyze-*.md)'
+  const IMPROVE_GRANTS =
+    'allowed-tools: Bash(orangu evidence:*), Bash(orangu estimate:*), Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Read, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/improve-*.md), WebSearch, WebFetch'
+  const HARNESS_GRANTS =
+    'allowed-tools: Bash(orangu harness:*), Bash(orangu estimate:*), Bash(orangu repo:*), Bash(orangu global:*), Bash(orangu analyze:*), Bash(orangu evidence:*), Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" harness *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/harness-*.md), Skill(orangu:apply)'
+  it('analyze, improve and harness pre-approve only the orangu verbs that their steps run, and only their own drafts', () => {
+    expect(readText('plugin/skills/analyze/SKILL.md').split('\n')[3]).toBe(ANALYZE_GRANTS)
+    expect(readText('plugin/skills/improve/SKILL.md').split('\n')[3]).toBe(IMPROVE_GRANTS)
+    expect(readText('plugin/skills/harness/SKILL.md').split('\n')[3]).toBe(HARNESS_GRANTS)
+  })
+
+  const PLUGIN_CLI_VERB = /^Bash\(node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/orangu\.cli\.mjs" ([a-z][a-z-]*) ?\*\)$/
+  const PATH_VERB = /^Bash\(orangu ([a-z][a-z-]*):\*\)$/
+  const grantsOf = (s: string): string[] =>
+    (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
+  it('no skill pre-approves every orangu verb: each orangu grant names one verb', () => {
+    const skills = readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))
+    expect(skills.length, 'every skill is checked').toBe(6)
+    for (const s of skills) {
+      for (const grant of grantsOf(s).filter((g) => /^Bash\((?:orangu\b|node\b)/.test(g))) {
+        expect(PATH_VERB.test(grant) || PLUGIN_CLI_VERB.test(grant), `${s}: ${grant} names one orangu verb`).toBe(true)
+      }
+    }
+  })
+  it('each skill pre-approves exactly the orangu verbs that its text runs, in both the PATH form and the plugin CLI form', () => {
+    for (const s of ['analyze', 'improve', 'harness', 'apply', 'feedback', 'show-me']) {
+      const refs = join(root, 'plugin/skills', s, 'references')
+      const texts = [readText(`plugin/skills/${s}/SKILL.md`), ...(existsSync(refs) ? readdirSync(refs).filter((f) => f.endsWith('.md')).map((f) => readText(`plugin/skills/${s}/references/${f}`)) : [])]
+      const runs = [...new Set(texts.flatMap((text) => [...text.matchAll(/`orangu ([a-z][a-z-]*)/g)].map((m) => m[1]!)))].sort()
+      const grants = grantsOf(s)
+      const verbs = (re: RegExp): string[] => grants.map((g) => re.exec(g)?.[1]).filter((v): v is string => v !== undefined).sort()
+      expect(verbs(PATH_VERB), `${s} PATH grants`).toEqual(runs)
+      expect(verbs(PLUGIN_CLI_VERB), `${s} plugin CLI grants`).toEqual(runs)
     }
   })
 
@@ -728,11 +774,14 @@ describe('plugin packaging', () => {
   })
   // show-me pre-approves no write at all. A path rule that matches a directory also matches every file under it, so
   // Edit(~/.orangu/show-me/*/words.json) also matched a page at <run>/words.json/report.html. Its words.json write asks.
-  it('analyze, improve and harness pre-approve an edit of their drafts directory, and no other skill pre-approves an edit', () => {
+  // Each drafts grant names the skill's own draft files, `<skill>-*.md`, in the drafts directory, and not the drafts of
+  // another skill. By the same directory rule it also matches each path under a directory named `<skill>-*.md` there.
+  // So its reach stays inside ~/.orangu/drafts, which nothing reads but `orangu ste` on the path that the skill names.
+  it('analyze, improve and harness pre-approve an edit of their own drafts, and no other skill pre-approves an edit', () => {
     const allowed = (s: string): string[] =>
       (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
     const edits = (s: string): string[] => allowed(s).filter((grant) => /^Edit\b/.test(grant))
-    for (const s of ['analyze', 'improve', 'harness']) expect(edits(s), `${s} edits only its drafts`).toEqual(['Edit(~/.orangu/drafts/**)'])
+    for (const s of ['analyze', 'improve', 'harness']) expect(edits(s), `${s} edits only its drafts`).toEqual([`Edit(~/.orangu/drafts/${s}-*.md)`])
     for (const s of ['apply', 'feedback', 'show-me']) expect(edits(s), `${s} has no edit grant`).toEqual([])
     expect(allowed('show-me').filter((grant) => /^Write\b/.test(grant)), 'show-me has no write grant').toEqual([])
     expect(allowed('show-me'), 'show-me has no bare orangu grant').not.toContain('Bash(orangu:*)')

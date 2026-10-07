@@ -1,7 +1,7 @@
 ---
 name: improve
 description: Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk and a verification check. Use when the user runs /orangu:improve or pastes a suggestion id from a report. Also use when the user asks what to change so the next run or session goes better, or wants an applied change verified against later sessions. Never edits the target repository. Not for applying a proposal: /orangu:apply. Not for a repo or global harness review: /orangu:harness.
-allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Read, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/**), WebSearch, WebFetch
+allowed-tools: Bash(orangu evidence:*), Bash(orangu estimate:*), Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Read, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/improve-*.md), WebSearch, WebFetch
 ---
 
 # /orangu:improve

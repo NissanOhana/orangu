@@ -1,7 +1,7 @@
 ---
 name: analyze
 description: Explain what happened in one session, finished or still running, from local deterministic evidence. Use when the user asks to review a run or trace what the agent did and why it ended there. Use it to diagnose an error or retry, see where time or tokens went, or open a visual report. Use it to open the report for the session running right now. Use it to keep a report refreshed while a session runs. Not for a change proposal (/orangu:improve) or a repo or global harness review (/orangu:harness).
-allowed-tools: Bash(orangu:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" *), Read, Edit(~/.orangu/drafts/**)
+allowed-tools: Bash(orangu analyze:*), Bash(orangu estimate:*), Bash(orangu evidence:*), Bash(orangu repo:*), Bash(orangu global:*), Bash(orangu list:*), Bash(orangu report:*), Bash(orangu watch:*), Bash(orangu serve:*), Bash(orangu ste:*), Bash(orangu suggest:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" list *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" report *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" watch *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" serve *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Read, Edit(~/.orangu/drafts/analyze-*.md)
 ---
 
 # /orangu:analyze
