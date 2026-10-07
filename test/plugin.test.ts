@@ -220,13 +220,25 @@ describe('plugin packaging', () => {
     const shape = readFileSync(join(root, 'plugin/skills/analyze/references/json-shape.md'), 'utf8')
     expect(shape).toContain('SlimAnalysis')
   })
-  // The aggregate emits CrossFinding.recommendation (the improvement for each recurring finding); the shape
-  // reference that analyze reads lists it, so the skill knows the field exists.
-  it('the analyze JSON reference lists the cross-finding recommendation', () => {
+  // The rule text has 3 parts: `improvement` (the change), `why` (why the finding matters) and `method`
+  // (what the rule counts). `recommendation` is their join, kept for older readers, and a cross finding also has
+  // `exampleTitle` (its title without the "In one session: " marker). The 2 references that analyze reads name each
+  // field, so the skill can lead with the improvement.
+  it('the analyze references name the rule text parts of an insight and a cross finding', () => {
     const shape = readText('plugin/skills/analyze/references/json-shape.md')
-    const crossFindings = shape.split('\n').find((line) => line.includes('crossFindings:[{')) ?? ''
-    expect(crossFindings, 'json-shape.md has a crossFindings line').not.toBe('')
-    expect(crossFindings).toMatch(/\brecommendation\b/)
+    const lineWith = (marker: string): string => shape.split('\n').find((line) => line.includes(marker)) ?? ''
+    for (const [marker, fields] of [
+      ['**Insight** = `{', ['recommendation', 'improvement', 'why?', 'method?']],
+      ['crossFindings:[{', ['recommendation', 'improvement?', 'why?', 'method?', 'exampleTitle?']],
+    ] as const) {
+      const line = lineWith(marker)
+      expect(line, `json-shape.md has a ${marker} line`).not.toBe('')
+      for (const field of fields) expect(line, `${marker} names ${field}`).toMatch(new RegExp(`[{,]\\s*${field.replace('?', '\\?')}\\s*[,}]`))
+    }
+    expect(shape).toContain('`recommendation` is the 3 parts joined')
+    expect(shape).toContain('`exampleTitle` is `title` without the `In one session: ` marker.')
+    const reading = readText('plugin/skills/analyze/references/reading-the-report.md')
+    for (const field of ['`improvement`', '`why`', '`method`', '`exampleTitle`']) expect(reading, `reading-the-report.md names ${field}`).toContain(field)
   })
   // The report opens in Detailed. The plain words replace the mechanism names only when the user asks for plain
   // language, so each swap sentence carries that condition itself.
@@ -631,6 +643,85 @@ describe('plugin packaging', () => {
       expect(rules, `the STE rules say: ${literal}`).toContain(literal)
     // portable to the generated Codex mirror: no slash command, no plugin root variable
     expect(rules).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
+  })
+
+  // Short text comes from its structure, not from a word cap: the point first, then the reason, then the method
+  // and the limits under their own heading. Then the shipped checker reads the text before it goes out. The
+  // checker has no pass mark: a finding is advice, so Claude fixes the real ones, keeps a correct sentence and
+  // chases no score.
+  it('the shared STE rules lead with the point and check each text with orangu ste before it goes out', () => {
+    const rules = readText(STE_RULES)
+    const lead = rules.indexOf('## Lead with the point')
+    const check = rules.indexOf('## Check before you send')
+    expect(lead, 'the rules have a Lead with the point section').toBeGreaterThan(0)
+    expect(lead, 'the structure rules come before the check').toBeLessThan(check)
+    const structure = rules.slice(lead, check)
+    for (const rule of [
+      '1. Put the answer, or the change to make, in the first sentence.',
+      '2. Then give the reason.',
+      '3. Put the method, the evidence and the limits last, under their own heading. If the user did not ask for them and the answer does not depend on them, leave them out.',
+      '4. Say each point once. Do not end with a summary of what you said.',
+    ]) expect(structure, rule).toContain(rule)
+    const checkStep = rules.slice(check)
+    for (const step of [
+      "1. If you wrote the text to a file, run `orangu ste '<path>'`.",
+      '2. If the text goes to chat, pass the draft on stdin, as the quoted here-document in [the untrusted-input rules](untrusted-input.md). Never put a draft in an argument.',
+      '3. Fix each finding that is real. Do not rewrite a correct sentence to clear a finding. Do not chase a score.',
+    ]) expect(checkStep, step).toContain(step)
+    // the point-first rule is said once, in its own section
+    expect(rules.split('in the first sentence').length - 1, 'one point-first rule').toBe(1)
+  })
+
+  // A draft has newlines, and rule 1 of the shell-data boundary rejects a value with a newline, so a draft never
+  // goes in an argument. It goes on stdin in a here-document whose quoted end word stops every expansion ($ and
+  // backticks). A draft line that holds the end word ends the here-document early, and the shell runs the next
+  // line as a command (checked in zsh), so that line stays out.
+  it('the shell-data boundary passes a draft only as the quoted here-document on orangu ste', () => {
+    for (const path of [SHARED_RULES, '.agents/skills/shared/untrusted-input.md', 'plugins/orangu/skills/shared/untrusted-input.md']) {
+      const rules = readText(path)
+      const boundary = rules.slice(rules.indexOf('## 2. The shell-data boundary'), rules.indexOf('## 3. '))
+      expect(boundary, path).toContain('7. Pass a draft of your own text to a command only as this quoted here-document on `orangu ste -`. Never put a draft in an argument.')
+      expect(boundary, `${path} shows the exact form`).toMatch(/\n\s*orangu ste - <<'END_STE'\n\s*<the draft>\n\s*END_STE\n/)
+      expect(boundary, path).toContain('If a line of the draft contains `END_STE`, leave that line out.')
+      expect(boundary, `${path} has no unquoted end word`).not.toMatch(/<<-?\s*"?END_STE/)
+    }
+  })
+
+  // Each skill checks its own text at the step that writes it: a proposal file after the write and before the
+  // record moves to proposed, and chat text on stdin before it goes out. The chat form names the quoted end word
+  // at each call site, because an unquoted one would let the shell expand text that the draft quotes.
+  const CHAT_CHECK = "`orangu ste - <<'END_STE'`"
+  const between = (text: string, from: string, to: string): string => {
+    const start = text.indexOf(from)
+    expect(start, `the text has ${from}`).toBeGreaterThanOrEqual(0)
+    const end = text.indexOf(to, start)
+    expect(end, `the text has ${to} after ${from}`).toBeGreaterThan(start)
+    return text.slice(start, end)
+  }
+  it('each skill that writes text checks it with orangu ste at the step that writes it', () => {
+    const analyze = readText('plugin/skills/analyze/SKILL.md')
+    expect(between(analyze, '## Answer from evidence', '## Handoff')).toContain(`6. Before you send the answer, check the draft with ${CHAT_CHECK}.`)
+    const proposalCheck = "Check the proposal with `orangu ste '<proposal-path>'`."
+    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md', 'plugins/orangu/skills/orangu-improve/SKILL.md']) {
+      const save = between(readText(path), '## 4. Save one bounded proposal', '## 5. ')
+      const write = save.indexOf('Write both `~/.orangu/proposals/<id>.md`')
+      expect(save.indexOf(proposalCheck), `${path} checks the proposal after the write`).toBeGreaterThan(write)
+      expect(save.indexOf("--set '<id>' proposed"), `${path} checks the proposal before it is proposed`).toBeGreaterThan(save.indexOf(proposalCheck))
+      const report = between(readText(path), '## 5. Report in chat', '## 6. ')
+      expect(report.indexOf(`Before you send the summary, check it with ${CHAT_CHECK}.`), `${path} checks the whole summary`).toBeGreaterThan(report.indexOf('Say that you applied nothing.'))
+    }
+    const harness = readText('plugin/skills/harness/SKILL.md')
+    const synthesize = between(harness, '## 5. Synthesize bounded proposals', '## 6. ')
+    expect(synthesize.indexOf(proposalCheck), 'harness checks each proposal after the write').toBeGreaterThan(synthesize.indexOf('Write both `~/.orangu/proposals/<id>.md`'))
+    expect(synthesize.indexOf("--set '<id>' proposed"), 'harness checks each proposal before it is proposed').toBeGreaterThan(synthesize.indexOf(proposalCheck))
+    const reportCheck = `Before you send this report, check it with ${CHAT_CHECK}.`
+    expect(harness.indexOf(reportCheck), 'harness checks the ranked report').toBeGreaterThan(harness.indexOf('this review did not edit the target repository'))
+    expect(harness.indexOf(reportCheck), 'the check comes before the approval question').toBeLessThan(harness.indexOf('which items the user approves'))
+    for (const path of ['plugin/skills/apply/SKILL.md', '.agents/skills/orangu-apply/SKILL.md', 'plugins/orangu/skills/orangu-apply/SKILL.md']) {
+      const text = readText(path)
+      const record = text.slice(text.indexOf('## 4. Record application'))
+      expect(record.indexOf(`Before you send this reply, pass it to ${CHAT_CHECK}.`), `${path} checks the result`).toBeGreaterThan(record.indexOf('Return the changed files'))
+    }
   })
 
   // The STE rules shape prose only. Values that Orangu validates, text that a proposal writes into a
@@ -1060,7 +1151,14 @@ describe('plugin packaging', () => {
     // 2026-10-06 show-me security re-check R1: body 769 -> 794, measured 793 words (+25). The 7 counts become 9, 8 on
     // each file: the exact link in each file (2 items), the fixed head of the file with the exact runtime hash in place
     // of the line that took any hash anywhere, and the exact Grep parameters (`output_mode`, `-i`, `multiline`).
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1401, improve: 1021, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
+    // 2026-10-07 the orangu ste check step: harness 1401 -> 1420 and improve 1021 -> 1040, each by exactly the
+    // measured words of its 2 check sentences, +19 each (measured 1,400 -> 1,419 and 1,020 -> 1,039). The proposal
+    // check, "Check the proposal with `orangu ste '<proposal-path>'`. Then run", is +7 after the write and before
+    // `--set … proposed`. The chat check is +12: "Before you send this report, check it with
+    // `orangu ste - <<'END_STE'`." in harness stage 6, and "Before you send the summary, …" in improve step 5.
+    // The rules for the check live once, in shared/ste.md and shared/untrusted-input.md. analyze (672) and apply
+    // (599) grew under their ceiling of 700, which does not move.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1420, improve: 1040, analyze: 700, apply: 700, feedback: 350, 'show-me': 794 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

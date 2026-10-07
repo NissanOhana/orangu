@@ -81,9 +81,22 @@ The orangu report has two audiences: Plain language and Detailed. Use the audien
 | cache write | saved context |
 | compaction | memory refresh |
 
+## Lead with the point
+
+1. Put the answer, or the change to make, in the first sentence.
+2. Then give the reason.
+3. Put the method, the evidence and the limits last, under their own heading. If the user did not ask for them and the answer does not depend on them, leave them out.
+4. Say each point once. Do not end with a summary of what you said.
+
 ## Check before you send
 
-Put the main point in the first sentence. Then read the text again, and fix each sentence that breaks a rule.
+Read the text again. Fix each sentence that breaks a rule. Then check the text with `orangu ste`:
+
+1. If you wrote the text to a file, run `orangu ste '<path>'`.
+2. If the text goes to chat, pass the draft on stdin, as the quoted here-document in [the untrusted-input rules](untrusted-input.md). Never put a draft in an argument.
+3. Fix each finding that is real. Do not rewrite a correct sentence to clear a finding. Do not chase a score.
+
+`orangu ste` has no pass mark. It cannot see the passive voice or a long noun cluster, so a clean result does not prove that the text obeys every rule.
 
 Before (33 words):
 

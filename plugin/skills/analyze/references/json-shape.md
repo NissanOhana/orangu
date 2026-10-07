@@ -36,7 +36,8 @@ This is the stable machine contract that `orangu analyze --json` emits. The HTML
 - **ToolStat** = `{ name, category, count, errors, unresolved, totalMs, avgMs, p95Ms, maxMs, resultBytesTotal, resultBytesMax, inputBytesTotal, parallelShare, mainCount, agentCount }`
 - **AgentStat** = `{ agentId, name?, agentType?, description?, model?, spawnDepth, parentAgentId?, spawnedByToolUseId?, turnIndex?, startTs?, endTs?, durationMs?, messageCount, toolCallCount, toolErrors, tokens:Usage, totalTokens, reportedTotalTokens?, reportedDurationMs?, status?, hasTranscript }`
 - **ContextPoint** = `{ messageUuid, turnIndex, agentId?, ts?, model, contextSize, input, cacheRead, cacheWrite, cacheWrite1h, output }`
-- **Insight** = `{ id, ruleId, severity(info|low|medium|high), axis(quality|time|tokens|context), title, detail, recommendation, evidence{}, turnIndexes[], savings?{tokens?,ms?,estimated}, personas[] }`
+- **Insight** = `{ id, ruleId, severity(info|low|medium|high), axis(quality|time|tokens|context), title, detail, recommendation, improvement, why?, method?, evidence{}, turnIndexes[], savings?{tokens?,ms?,estimated}, personas[] }`
+  - `improvement` is the change to make. It starts with "No change needed." when the finding needs no change. `why` says why the finding matters, and `method` says what the rule counts and skips. `recommendation` is the 3 parts joined, kept for older readers. Lead with `improvement`.
   - `savings.tokens` is a **token count**. It is present only when following the recommendation would cause fewer tokens to be sent or generated. A rule whose change would only move the same tokens (a cache tier, a different model) omits `savings` entirely. Do not invent one for it.
 
 ## Aggregate (`orangu repo/global --json`)
@@ -47,9 +48,11 @@ This is the stable machine contract that `orangu analyze --json` emits. The HTML
   byModel[], byProject[], byTool[], byAgentType[], bySkill[],
   topReReadFiles:[{path,sessions,totalReads}],
   recurringErrors:[{signature,tool,sessions,total}],
-  crossFindings:[{ruleId,title,recommendation,sessions,totalSavingsTokens,totalSavingsMs,axis,severity,exampleSessionIds[]}],
+  crossFindings:[{ruleId,title,exampleTitle?,recommendation,improvement?,why?,method?,sessions,totalSavingsTokens,totalSavingsMs,axis,severity,exampleSessionIds[]}],
   sessions:[SessionRow], topSessions:[SessionRow], byWeek:[{weekStartUtc,tokens,sessions}] }
 ```
+
+A cross finding takes its title and its rule text from one example session. `exampleTitle` is `title` without the `In one session: ` marker. `improvement`, `why` and `method` are the parts of `recommendation`, as in an insight.
 
 ## `--slim` (the projection built for LLM reads)
 

@@ -28,7 +28,7 @@ Claude Code may write one JSONL line per content block, with several lines repea
 
 ## The findings (insight rules)
 
-orangu ships deterministic rules. Each finding carries an `axis`, `severity`, `recommendation`, `evidence`, `turnIndexes`, and sometimes a `savings` estimate. The estimate is in `tokens` or `ms`, with `estimated: true` when orangu derives it from bytes at ~4 bytes/token.
+orangu ships deterministic rules. Each finding carries an `axis`, `severity`, `improvement`, `why`, `recommendation`, `evidence`, `turnIndexes`, and sometimes a `method` and a `savings` estimate. `improvement` is the change to make, `why` says why the finding matters, and `method` says what the rule counts. `recommendation` is the 3 parts joined. The estimate is in `tokens` or `ms`, with `estimated: true` when orangu derives it from bytes at ~4 bytes/token.
 
 A rule attaches `savings.tokens` **only** when following its recommendation would cause fewer tokens to be sent or generated. A rule whose change would only move the same tokens between cache tiers or between models omits `savings` on purpose. Relay those findings as observations, not as savings. The main rules:
 
@@ -56,7 +56,7 @@ A rule attaches `savings.tokens` **only** when following its recommendation woul
 
 `orangu repo` and `orangu global` aggregate the same components across many sessions:
 - **tokens by model / project**, **tokens per session**, **tokens per human turn**
-- **crossFindings**: which insight rules recur, with total token savings and example session ids
+- **crossFindings**: which insight rules recur, with total token savings and example session ids. Each one shows the finding title and the rule text of one example session. `exampleTitle` is that title, and `title` adds the `In one session: ` marker.
 - **recurringErrors**: tool-error signatures that appear in **many** sessions. These are environment problems (worktree isolation, write-before-read, missing deps), not one-off bad luck. They point to the harness improvements with the largest effect.
 - **topReReadFiles**: files read across many sessions. These are candidates to summarize, cache, or restructure (a CLAUDE.md read hundreds of times is a signal to trim it).
 - **topSessions**: the heaviest sessions, by tokens

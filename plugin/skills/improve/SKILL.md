@@ -65,13 +65,13 @@ For a direct evidence finding, create or reuse its canonical record with the emi
 
 Before writing either artifact, run `orangu suggest --show '<id>' --for-proposal --json --quiet`. Stop unless this eligibility and current-workspace check succeeds. Every evidence session must be discoverable from a configured root and match the current workspace. If it fails for archived, custom, or direct evidence, return the ranked chat suggestions and explain `ORANGU_CLAUDE_ROOTS` or `CLAUDE_CONFIG_DIR`. Do not claim saved or proposed state.
 
-Write both `~/.orangu/proposals/<id>.md` and `~/.orangu/proposals/<id>.json` exactly as the artifact contract specifies. Resolve both files to trusted absolute paths, then run `orangu suggest --set '<id>' proposed --proposal '<proposal-path>' --manifest '<manifest-path>' --json --quiet`.
+Write both `~/.orangu/proposals/<id>.md` and `~/.orangu/proposals/<id>.json` exactly as the artifact contract specifies. Resolve both files to trusted absolute paths. Check the proposal with `orangu ste '<proposal-path>'`. Then run `orangu suggest --set '<id>' proposed --proposal '<proposal-path>' --manifest '<manifest-path>' --json --quiet`.
 
 Write no proposal when evidence is missing, already addressed, or too weak. Say why. Use `rejected` only when the user's workflow calls for closing the record.
 
 ## 5. Report in chat
 
-Return a short ranked summary: what happened, evidence, the change, expected outcome, risks, later verification, sources, the saved proposal id and path. Name the next action: `/orangu:apply <id>` for session/repo proposals, review only for global. Say that you applied nothing. Then offer `/orangu:feedback` once. Never launch it unless the user accepts.
+Return a short ranked summary: what happened, evidence, the change, expected outcome, risks, later verification, sources, the saved proposal id and path. Name the next action: `/orangu:apply <id>` for session/repo proposals, review only for global. Say that you applied nothing. Before you send the summary, check it with `orangu ste - <<'END_STE'`. Then offer `/orangu:feedback` once. Never launch it unless the user accepts.
 
 ## 6. Verify only with later evidence
 
