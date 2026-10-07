@@ -158,17 +158,21 @@ describe('plugin packaging', () => {
   // each skill pre-approves only the orangu verbs that its steps run, in the PATH form and in the plugin CLI form,
   // and every other verb asks. A verb that writes a named file still replaces only a file that orangu wrote
   // (src/cli/private-output.ts). The drafts grant names the skill's own draft files (the drafts pin below states its
-  // directory rule).
+  // directory rule). harness pre-approves only the exact `mktemp -d` of its stage 1: `Bash(mktemp:*)` also ran
+  // `mktemp -d <any path>` and `mktemp <any path>`, which make a directory or a file wherever a planted line says.
   const ANALYZE_GRANTS =
     'allowed-tools: Bash(orangu analyze:*), Bash(orangu estimate:*), Bash(orangu evidence:*), Bash(orangu repo:*), Bash(orangu global:*), Bash(orangu list:*), Bash(orangu report:*), Bash(orangu watch:*), Bash(orangu serve:*), Bash(orangu ste:*), Bash(orangu suggest:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" list *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" report *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" watch *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" serve *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Read, Edit(~/.orangu/drafts/analyze-*.md)'
   const IMPROVE_GRANTS =
     'allowed-tools: Bash(orangu evidence:*), Bash(orangu estimate:*), Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Read, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/improve-*.md), WebSearch, WebFetch'
   const HARNESS_GRANTS =
-    'allowed-tools: Bash(orangu harness:*), Bash(orangu estimate:*), Bash(orangu repo:*), Bash(orangu global:*), Bash(orangu analyze:*), Bash(orangu evidence:*), Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" harness *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(mktemp:*), Read, Agent, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/harness-*.md), Skill(orangu:apply)'
+    'allowed-tools: Bash(orangu harness:*), Bash(orangu estimate:*), Bash(orangu repo:*), Bash(orangu global:*), Bash(orangu analyze:*), Bash(orangu evidence:*), Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" harness *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(mktemp -d), Read, Agent, Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/harness-*.md), Skill(orangu:apply)'
   it('analyze, improve and harness pre-approve only the orangu verbs that their steps run, and only their own drafts', () => {
     expect(readText('plugin/skills/analyze/SKILL.md').split('\n')[3]).toBe(ANALYZE_GRANTS)
     expect(readText('plugin/skills/improve/SKILL.md').split('\n')[3]).toBe(IMPROVE_GRANTS)
     expect(readText('plugin/skills/harness/SKILL.md').split('\n')[3]).toBe(HARNESS_GRANTS)
+    for (const s of readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))) {
+      expect(grantsOf(s), `${s} pre-approves no mktemp with a chosen path`).not.toContain('Bash(mktemp:*)')
+    }
   })
 
   const PLUGIN_CLI_VERB = /^Bash\(node "\$\{CLAUDE_PLUGIN_ROOT\}\/bin\/orangu\.cli\.mjs" ([a-z][a-z-]*) ?\*\)$/
