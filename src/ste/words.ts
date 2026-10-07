@@ -79,6 +79,6 @@ export const IMPERATIVES: ReadonlySet<string> = new Set(
 export const ING_NOUNS: ReadonlySet<string> = new Set(['thing', 'nothing', 'something', 'anything', 'everything', 'during', 'morning', 'evening', 'string', 'ring', 'king', 'bring', 'spring', 'wing', 'ceiling', 'building', 'meaning', 'setting', 'warning', 'booking', 'pending', 'missing', 'funding', 'onboarding', 'bookkeeping', 'billing', 'pricing', 'routing', 'logging', 'testing', 'scheduling', 'matching'])
 
 /** The verbs that make `orangu <verb>` a command. "orangu reads the file" is the product noun, not a command. */
-export const ORANGU_VERBS: ReadonlySet<string> = new Set('report analyze list pick repo global watch serve feedback evidence estimate harness suggest help'.split(' '))
+export const ORANGU_VERBS: ReadonlySet<string> = new Set('report analyze list pick repo global watch serve feedback evidence estimate harness suggest ste show-me help'.split(' '))
 
 export const GIT_VERBS: ReadonlySet<string> = new Set('add apply blame branch checkout cherry-pick clone commit config diff fetch grep init log merge mv pull push rebase reset restore revert rm show stash status switch tag worktree'.split(' '))

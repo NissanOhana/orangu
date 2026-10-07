@@ -175,6 +175,12 @@ describe('ste checker: a command or a flag is one technical name', () => {
     expect(wrapCommands('Pass --json to print it.')).toBe('Pass `--json` to print it.')
   })
 
+  it('wraps the ste and show-me verbs as a command too', () => {
+    expect(wrapCommands('Run orangu ste draft.md --json first.')).toBe('Run `orangu ste draft.md --json` first.')
+    expect(wrapCommands('Then run npx orangu show-me --render <dir> once.')).toBe('Then run `npx orangu show-me --render <dir>` once.')
+    expect(wordCount('Run orangu ste - now')).toBe(3)
+  })
+
   it('leaves the product noun alone when no verb follows it', () => {
     expect(wrapCommands('orangu reads the transcript on disk.')).toBe('orangu reads the transcript on disk.')
     expect(wrapCommands('Claude Code writes the session.')).toBe('Claude Code writes the session.')
