@@ -258,3 +258,129 @@ describe('crossFindings recommendation: the improvement of the example insight w
     }
   })
 })
+
+describe('crossFindings rule text parts: the improvement, reason, method and title of the example insight', () => {
+  interface PartClaim {
+    tokens: number
+    ms?: number
+    title: string
+    improvement: string
+    why?: string
+    method?: string
+  }
+  async function parted(claims: PartClaim[]) {
+    const base = analyzeSession(await parseClaudeCodeSession({ records: buildCanonicalSession().toRecords(), noSidecar: true }), { version: 't', now: 0 })
+    const analyses = claims.map((c, i) => {
+      // the base insight's own parts are dropped, so each claim carries only the parts it names
+      const { why: _why, method: _method, ...rest } = base.insights[0]!
+      return {
+        ...base,
+        session: { ...base.session, id: `sess-${i}` },
+        insights: [
+          {
+            ...rest,
+            id: `ins-${i}`,
+            ruleId: 'one-rule',
+            title: c.title,
+            recommendation: [c.improvement, c.why, c.method].filter((part) => part !== undefined).join(' '),
+            improvement: c.improvement,
+            ...(c.why !== undefined ? { why: c.why } : {}),
+            ...(c.method !== undefined ? { method: c.method } : {}),
+            savings: { tokens: c.tokens, ms: c.ms ?? 0, estimated: true },
+          },
+        ],
+      }
+    })
+    return aggregate(analyses, 'repo test', 0).crossFindings.find((f) => f.ruleId === 'one-rule')!
+  }
+
+  it('takes every part from the first insight seen while no larger claim replaces it', async () => {
+    const f = await parted([
+      { tokens: 50, title: 'first', improvement: 'Do the first thing.', why: 'First reason.', method: 'First method.' },
+      { tokens: 5, title: 'second', improvement: 'Do the second thing.', why: 'Second reason.' },
+    ])
+    expect(f.title).toBe('In one session: first')
+    expect(f.exampleTitle).toBe('first')
+    expect(f.improvement).toBe('Do the first thing.')
+    expect(f.why).toBe('First reason.')
+    expect(f.method).toBe('First method.')
+    expect(f.recommendation).toBe('Do the first thing. First reason. First method.')
+  })
+
+  it('moves every part with the title when a larger claim replaces the example, and drops a part the new example lacks', async () => {
+    const f = await parted([
+      { tokens: 10, title: 'small', improvement: 'Do the small thing.', why: 'Small reason.', method: 'Small method.' },
+      { tokens: 1000, title: 'large', improvement: 'Do the large thing.', why: 'Large reason.' },
+      { tokens: 5, title: 'tiny', improvement: 'Do the tiny thing.', why: 'Tiny reason.', method: 'Tiny method.' },
+    ])
+    expect(f.title).toBe('In one session: large')
+    expect(f.exampleTitle).toBe('large')
+    expect(f.improvement).toBe('Do the large thing.')
+    expect(f.why).toBe('Large reason.')
+    // the method of the replaced example must not stay behind beside the new example's text
+    expect('method' in f).toBe(false)
+    expect(f.recommendation).toBe('Do the large thing. Large reason.')
+
+    const gained = await parted([
+      { tokens: 10, title: 'small', improvement: 'Do the small thing.', why: 'Small reason.' },
+      { tokens: 1000, title: 'large', improvement: 'Do the large thing.', why: 'Large reason.', method: 'Large method.' },
+    ])
+    expect(gained.method).toBe('Large method.')
+    expect(gained.exampleTitle).toBe('large')
+  })
+
+  it('follows the title through the ms tie-break and the first-seen tie', async () => {
+    const byMs = await parted([
+      { tokens: 10, ms: 100, title: 'first', improvement: 'First advice.', why: 'First reason.' },
+      { tokens: 10, ms: 900, title: 'second', improvement: 'Second advice.', why: 'Second reason.' },
+    ])
+    expect([byMs.exampleTitle, byMs.improvement, byMs.why]).toEqual(['second', 'Second advice.', 'Second reason.'])
+    const tie = await parted([
+      { tokens: 10, ms: 5, title: 'first', improvement: 'First advice.', why: 'First reason.' },
+      { tokens: 10, ms: 5, title: 'second', improvement: 'Second advice.', why: 'Second reason.' },
+    ])
+    expect([tie.exampleTitle, tie.improvement, tie.why]).toEqual(['first', 'First advice.', 'First reason.'])
+  })
+
+  it('lays out the same keys in the same order whether or not the example was replaced', async () => {
+    const kept = await parted([
+      { tokens: 50, title: 'first', improvement: 'Do it.', why: 'Reason.', method: 'Method.' },
+      { tokens: 5, title: 'second', improvement: 'Do it.', why: 'Reason.', method: 'Method.' },
+    ])
+    const replaced = await parted([
+      { tokens: 5, title: 'first', improvement: 'Do it.', why: 'Reason.' },
+      { tokens: 50, title: 'second', improvement: 'Do it.', why: 'Reason.', method: 'Method.' },
+    ])
+    expect(Object.keys(replaced)).toEqual(Object.keys(kept))
+  })
+
+  it('keeps an empty example title empty in both fields instead of a bare marker', async () => {
+    const f = await parted([{ tokens: 10, title: '', improvement: 'Do it.', why: 'Reason.' }])
+    expect(f.title).toBe('')
+    expect(f.exampleTitle).toBe('')
+    expect(f.improvement).toBe('Do it.')
+  })
+
+  it('emits the improvement and the example title on every cross finding of the golden corpus, from the insight the title names', async () => {
+    const { files, aggregateJson } = await goldenCorpus()
+    const agg = JSON.parse(aggregateJson) as ReturnType<typeof aggregate>
+    const analyses = files.map((f) => JSON.parse(f.json) as { session: { id: string }; insights: Array<{ ruleId: string; title: string; recommendation: string; improvement: string; why?: string; method?: string }> })
+    expect(agg.crossFindings.length).toBeGreaterThan(3)
+    expect(agg.crossFindings.some((f) => f.method !== undefined)).toBe(true)
+    for (const f of agg.crossFindings) {
+      expect(typeof f.improvement, f.ruleId).toBe('string')
+      expect(f.improvement!.trim(), f.ruleId).not.toBe('')
+      expect(typeof f.exampleTitle, f.ruleId).toBe('string')
+      expect(f.title, f.ruleId).toBe('In one session: ' + f.exampleTitle)
+      const source = analyses
+        .filter((a) => f.exampleSessionIds.includes(a.session.id))
+        .flatMap((a) => a.insights)
+        .find((ins) => ins.ruleId === f.ruleId && ins.title === f.exampleTitle)
+      expect(source, f.ruleId).toBeDefined()
+      expect(f.recommendation, f.ruleId).toBe(source!.recommendation)
+      expect(f.improvement, f.ruleId).toBe(source!.improvement)
+      expect(f.why, f.ruleId).toBe(source!.why)
+      expect(f.method, f.ruleId).toBe(source!.method)
+    }
+  })
+})

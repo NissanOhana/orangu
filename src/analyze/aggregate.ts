@@ -2,7 +2,7 @@
  * Aggregate analysis across many sessions (a repo, or everything globally).
  * Deterministic. Emits an object with the same "components, not a score" discipline as a single Analysis.
  */
-import type { Analysis } from '../model/analysis.js'
+import type { Analysis, Insight } from '../model/analysis.js'
 import { round } from './util.js'
 
 export const AGGREGATE_SCHEMA_VERSION = '2'
@@ -120,8 +120,26 @@ function titlePatternOf(title: string): string {
  * The marker lives here, once, so the terminal, the Repo and Global rows and the Suggest card stay honest
  * together. An empty title stays empty: a bare marker would say nothing.
  */
-function exampleTitle(title: string): string {
+function markedTitle(title: string): string {
   return title ? `In one session: ${title}` : ''
+}
+
+/** The text fields that a cross finding copies from its example insight. They always move together. */
+type ExampleText = Pick<CrossFinding, 'title' | 'exampleTitle' | 'recommendation' | 'improvement' | 'why' | 'method'>
+
+/**
+ * The rule text of one example insight. A part that the insight lacks is left out, so a part of an example
+ * that a larger claim replaced never stays behind.
+ */
+function exampleText(ins: Insight): ExampleText {
+  return {
+    title: markedTitle(ins.title),
+    exampleTitle: ins.title,
+    recommendation: ins.recommendation,
+    improvement: ins.improvement,
+    ...(ins.why !== undefined ? { why: ins.why } : {}),
+    ...(ins.method !== undefined ? { method: ins.method } : {}),
+  }
 }
 
 export interface CrossFinding {
@@ -133,18 +151,34 @@ export interface CrossFinding {
    */
   title: string
   /**
+   * Additive (v2 unchanged), user-facing: the same example insight's own title, without the
+   * `In one session: ` marker, so that a view can show the marker once as a caption. `title` equals the
+   * marker plus this text, and both are empty when the insight title is empty. Optional in the type so older
+   * aggregate JSON still validates; the aggregate always emits it.
+   */
+  exampleTitle?: string
+  /**
    * Additive (v2 unchanged): the rule's title with every number replaced by `N`, i.e. the shape shared by
    * every session the finding recurs in. Internal grouping key; not for display (it was the old `title`).
    * Optional in the type so older aggregate JSON still validates; the aggregate always emits it.
    */
   titlePattern?: string
   /**
-   * Additive (v2 unchanged), user-facing: the improvement the rule suggests, from the same example insight
-   * whose title `title` carries (same tie rule), so the advice and the figures belong to one session. Rule
-   * copy, never transcript text, so default redaction keeps it. Required here because the aggregate always
-   * emits it; `orangu evidence` still accepts older aggregate JSON without it.
+   * Additive (v2 unchanged), user-facing: the whole rule text (`improvement`, `why` and `method` joined) of
+   * the same example insight whose title `title` carries (same tie rule), so the advice and the figures
+   * belong to one session. Rule copy, never transcript text, so default redaction keeps it. Required here
+   * because the aggregate always emits it; `orangu evidence` still accepts older aggregate JSON without it.
    */
   recommendation: string
+  /**
+   * Additive (v2 unchanged), user-facing: the parts of the same example insight's rule text. `improvement`
+   * is the change to make, `why` is what the finding costs or means, and `method` is what the rule counts.
+   * Optional in the type so older aggregate JSON still validates. The aggregate always emits `improvement`,
+   * and it emits `why` and `method` when the example insight has them.
+   */
+  improvement?: string
+  why?: string
+  method?: string
   sessions: number
   totalSavingsTokens: number
   totalSavingsMs: number
@@ -222,11 +256,14 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
   const bySkill = new Map<string, RollupItem>()
   const reReadFiles = new Map<string, { sessions: Set<string>; totalReads: number }>()
   const errorSigs = new Map<string, { tool: string; sessions: Set<string>; total: number }>()
-  const findings = new Map<string, Omit<CrossFinding, 'boundedSavingsTokens' | 'boundedSavingsMs'>>()
+  const findings = new Map<string, Omit<CrossFinding, 'boundedSavingsTokens' | 'boundedSavingsMs' | keyof ExampleText>>()
   /** per-rule, per-session claims: the bounded figure is median × sessions */
   const perSessionSavings = new Map<string, { tokens: number[]; ms: number[] }>()
-  /** per-rule: the largest claim among the example sessions, whose title the cross-finding carries */
-  const exampleClaim = new Map<string, { tokens: number; ms: number }>()
+  /**
+   * per-rule: the insight with the largest claim among the example sessions, and that claim. The cross
+   * finding copies its whole rule text (exampleText) from this one insight.
+   */
+  const example = new Map<string, { insight: Insight; tokens: number; ms: number }>()
   const rows: SessionRow[] = []
   const t = { tokens: 0, toolCalls: 0, toolErrors: 0, agents: 0, turns: 0, humanTurns: 0, wallMs: 0, activeMs: 0, compactions: 0, prs: 0, commits: 0 }
   let cacheRatioSum = 0
@@ -272,7 +309,7 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
     for (const ins of a.insights) {
       const claimTokens = ins.savings?.tokens ?? 0
       const claimMs = ins.savings?.ms ?? 0
-      const f = findings.get(ins.ruleId) ?? { ruleId: ins.ruleId, title: exampleTitle(ins.title), titlePattern: titlePatternOf(ins.title), recommendation: ins.recommendation, sessions: 0, totalSavingsTokens: 0, totalSavingsMs: 0, axis: ins.axis, severity: ins.severity, exampleSessionIds: [] }
+      const f = findings.get(ins.ruleId) ?? { ruleId: ins.ruleId, titlePattern: titlePatternOf(ins.title), sessions: 0, totalSavingsTokens: 0, totalSavingsMs: 0, axis: ins.axis, severity: ins.severity, exampleSessionIds: [] }
       f.sessions++
       f.totalSavingsTokens += claimTokens
       f.totalSavingsMs += claimMs
@@ -280,13 +317,10 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
         f.exampleSessionIds.push(sid)
         // the title follows the example session with the largest claim (tokens, then ms; ties keep the
         // first seen), so the figures a person reads belong to a session they can open from the examples;
-        // the recommendation moves with it, so the advice is the one that session's insight gave
-        const best = exampleClaim.get(ins.ruleId)
-        if (!best) exampleClaim.set(ins.ruleId, { tokens: claimTokens, ms: claimMs })
-        else if (claimTokens > best.tokens || (claimTokens === best.tokens && claimMs > best.ms)) {
-          f.title = exampleTitle(ins.title)
-          f.recommendation = ins.recommendation
-          exampleClaim.set(ins.ruleId, { tokens: claimTokens, ms: claimMs })
+        // the whole rule text moves with it, so the advice is the one that session's insight gave
+        const best = example.get(ins.ruleId)
+        if (!best || claimTokens > best.tokens || (claimTokens === best.tokens && claimMs > best.ms)) {
+          example.set(ins.ruleId, { insight: ins, tokens: claimTokens, ms: claimMs })
         }
       }
       findings.set(ins.ruleId, f)
@@ -350,10 +384,18 @@ export function aggregate(analyses: Analysis[], scope: string, now: number): Agg
       .sort((a, b) => b.sessions - a.sessions || b.total - a.total)
       .slice(0, 20),
     crossFindings: [...findings.values()]
-      .map((f) => {
+      .map((f): CrossFinding => {
         const per = perSessionSavings.get(f.ruleId) ?? { tokens: [], ms: [] }
+        const { ruleId, titlePattern, ...counts } = f
+        // the first insight seen always sets the example, so every finding has one
+        const { title, exampleTitle, ...parts } = exampleText(example.get(ruleId)!.insight)
         return {
-          ...f,
+          ruleId,
+          title,
+          exampleTitle,
+          titlePattern,
+          ...parts,
+          ...counts,
           totalSavingsTokens: round(f.totalSavingsTokens, 0),
           totalSavingsMs: round(f.totalSavingsMs, 0),
           boundedSavingsTokens: round(Math.min(f.totalSavingsTokens, median(per.tokens) * f.sessions), 0),
