@@ -10,7 +10,7 @@ import { emptyHero, emptyNote } from '../components/empty.js'
 import { hiddenErrorRow } from '../components/errors.js'
 import { savingsText } from '../components/finding.js'
 import { foldHiddenErrors } from '../derive.js'
-import { boundedSavings } from '../suggest-rows.js'
+import { EXAMPLE_TITLE_CAPTION, boundedSavings } from '../suggest-rows.js'
 import { plainLabel } from '../strings.js'
 
 /**
@@ -58,14 +58,18 @@ export function aggregateBody(g: Aggregate, ctx: Ctx): string {
   return `<div class="kpis">${kpis}</div>${aggregateEvidence(g, ctx)}`
 }
 
-/** The evidence every Aggregate carries, rendered the same on Repo and Global: recurring findings, re-read files, recurring errors, heaviest sessions. */
+/**
+ * The evidence every Aggregate carries, rendered the same on Repo and Global: recurring findings, re-read
+ * files, recurring errors, heaviest sessions. A recurring row shows its example title (an older aggregate
+ * has only the marked title), and one caption under the card title says the "In one session" marker once.
+ */
 export function aggregateEvidence(g: Aggregate, ctx: Ctx): string {
   const findings = g.crossFindings.length
-    ? g.crossFindings
+    ? `<p class="sg-cap">${EXAMPLE_TITLE_CAPTION}</p>` + g.crossFindings
         .slice(0, 8)
         .map(
           (f) =>
-            `<div class="rrow"><span class="pill">${esc(f.ruleId)}</span><span class="grow">${esc(f.title)}</span><span class="mono small muted">${plural(f.sessions, 'session')}</span><span class="saveval">${esc(savingsText(boundedSavings(f)))}</span></div>`,
+            `<div class="rrow"><span class="pill">${esc(f.ruleId)}</span><span class="grow">${esc(f.exampleTitle || f.title)}</span><span class="mono small muted">${plural(f.sessions, 'session')}</span><span class="saveval">${esc(savingsText(boundedSavings(f)))}</span></div>`,
         )
         .join('')
     : emptyNote(g.sessionCount < 2 ? 'Patterns appear from 2 sessions on.' : `No recurring findings across ${g.sessionCount} sessions.`)

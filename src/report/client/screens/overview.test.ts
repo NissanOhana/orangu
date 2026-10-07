@@ -4,7 +4,7 @@ import { analyzeSession } from '../../../analyze/analyze.js'
 import type { AppData } from '../../../model/app-data.js'
 import { buildCanonicalSession } from '../../../../test/fixtures/session-builder.js'
 import type { Ctx } from '../app.js'
-import { renderOverview } from './overview.js'
+import { overviewScreenHtml, renderOverview } from './overview.js'
 import { esc, ms } from '../format.js'
 import { outcomeHeadline } from '../derive.js'
 import { leadSentence, plainSentence } from '../strings.js'
@@ -219,9 +219,34 @@ describe('renderOverview: the top improvement and the way to an AI proposal', ()
     const top = ctx.a!.insights.find((i) => i.id === ctx.a!.summary.topInsightIds[0])!
     const start = markup.indexOf('<details class="finding top" open>')
     const card = markup.slice(start, markup.indexOf('</details>', start))
-    expect(card.slice(0, card.indexOf('</summary>'))).toContain(`<span class="rec sg-lead"><b>Improvement:</b> ${esc(top.recommendation)}</span>`)
+    const summary = card.slice(0, card.indexOf('</summary>'))
+    expect(top.improvement).not.toBe(top.recommendation)
+    expect(summary).toContain(`<span class="rec sg-lead"><b>Improvement:</b> ${esc(top.improvement)}</span>`)
+    expect(summary).not.toContain(esc(top.why!))
     expect(card).not.toContain('<b>Fix.</b>')
     expect(markup).toContain('<div class="eyebrow mb6">Top improvement</div>')
+  })
+
+  // The top card renders open; its reason waits closed behind Why, keyed by the sg_ id that its improve
+  // command carries, so the Improvements card of the same finding shares its open state.
+  it('puts a closed Why first in the open top card body, keyed by the sg_ id of its improve command', async () => {
+    const ctx = await context()
+    renderOverview(ctx)
+    const top = ctx.a!.insights.find((i) => i.id === ctx.a!.summary.topInsightIds[0])!
+    const start = markup.indexOf('<details class="finding top" open>')
+    const body = markup.slice(markup.indexOf('<div class="fbody">', start) + '<div class="fbody">'.length).trimStart()
+    const sid = /\/orangu:improve (sg_[0-9a-f]{12})/.exec(body)?.[1]
+    expect(sid).toBeTruthy()
+    expect(body.startsWith(`<details class="why" id="why-${sid}"><summary><span class="chev" aria-hidden="true">▸</span>Why</summary><p>${esc(top.why!)}</p>`)).toBe(true)
+  })
+
+  it('gives each More findings card its own Why id', async () => {
+    const ctx = await context()
+    expect(ctx.a!.summary.topInsightIds.length).toBeGreaterThan(1)
+    renderOverview(ctx)
+    const ids = [...markup.matchAll(/<details class="why" id="(why-[^"]+)">/g)].map((m) => m[1])
+    expect(ids).toHaveLength(ctx.a!.summary.topInsightIds.length)
+    expect(new Set(ids).size).toBe(ids.length)
   })
 
   // /orangu:improve refuses evidence from another workspace, so the caption names the session folder
@@ -248,7 +273,7 @@ describe('renderOverview: the top improvement and the way to an AI proposal', ()
   ] as const)('words the improvement line on the top card for the %s audience', async (audience, shown, hidden) => {
     const ctx = await context({ audience })
     const top = ctx.a!.insights.find((i) => i.id === ctx.a!.summary.topInsightIds[0])!
-    top.recommendation = 'Start a new session before the context window fills and a compaction starts.'
+    top.improvement = 'Start a new session before the context window fills and a compaction starts.'
     renderOverview(ctx)
     const start = markup.indexOf('<details class="finding top" open>')
     expect(start).toBeGreaterThan(-1)
@@ -289,5 +314,29 @@ describe('renderOverview with no session to show', () => {
     ctx.data.session = undefined
     renderOverview(ctx)
     expect(markup).toContain('Pick a session from the sidebar.')
+  })
+})
+
+/** The Overview as a string: the markup renderOverview wraps in the DOM, built with no DOM, for a node gate. */
+describe('overviewScreenHtml', () => {
+  it.each(['dev', 'plain'] as const)('is the markup that renderOverview draws (%s)', async (audience) => {
+    const ctx = await context({ audience })
+    renderOverview(ctx)
+    expect(overviewScreenHtml(ctx).trim()).toBe(markup)
+  })
+
+  it('is the designed empty state when no session is selected', async () => {
+    const ctx = await context({ mode: 'serve' })
+    ctx.a = undefined
+    renderOverview(ctx)
+    expect(overviewScreenHtml(ctx).trim()).toBe(markup)
+  })
+
+  it('needs no document', async () => {
+    const ctx = await context()
+    vi.unstubAllGlobals()
+    const html = overviewScreenHtml(ctx)
+    expect(html).toContain('<details class="finding top" open>')
+    expect(html).toContain('>Why</summary>')
   })
 })

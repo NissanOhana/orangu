@@ -123,7 +123,9 @@ describe('offline report', () => {
     // The run spent 1,633 of the 3,301 B the proposals seam freed; the rest leaves the budget for good.
     // 2026-10-07 close-out (sample note in STE, copy confirmation in body ink): the cap goes DOWN 81,468 ->
     // 81,457, the measured 81,444 below plus the same 13 B of headroom.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(81_457)
+    // 2026-10-07 Why disclosure: the cap goes UP 81,457 -> 82,056, the measured 82,043 below plus the same
+    // 13 B of headroom. A named, measured growth: the pin below gives the bytes of each part and the reason.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_056)
     // 2026-10-06 proposals seam: -3,301 B (83,123 -> 79,822), and this bundle gets the exact pin the
     // session bundle has always had, so a change that moves it has to name the bytes. The stored
     // proposal block and the Saved proposals inbox (proposals-ui.ts) reach the Suggest screen only
@@ -149,7 +151,17 @@ describe('offline report', () => {
     // published samples says "This sample is synthetic." instead of the fragment "Illustrative synthetic
     // sample." (app.ts, -5 B), and the copy confirmation drops its muted class, which failed AA in light
     // (screens/suggest.ts, -6 B). Run history: 83,123 before the run, 81,444 at its close.
-    expect(CLIENT_JS_AGG.length).toBe(81444)
+    // 2026-10-07 Why disclosure: +599 B (81,444 -> 82,043), re-measured after `npm run build`. The rule
+    // text has 3 parts now, and the user asked for structure, not a word cap: each card leads with the
+    // improvement only, and the reason and the method open under one closed Why, first in the card body,
+    // keyed by the sg_ id so that a re-render keeps it open. Repo and global cards and the Recurring
+    // findings rows show the example title, and one caption per list says that its figures come from one
+    // example session. Costed from the minified segments: the Why builder, its 2 call sites and the reason
+    // and the method on each row are +343 B; the example title and the caption are +196 B (the Recurring
+    // findings rows ship only in this bundle); the pure Overview and Improvements builders are +72 B; the
+    // improvement with its recommendation fallback is +38 B net of the old row copy; keying the Overview
+    // Why by the sg_ id is -50 B, because the commandForInsight wrapper and its 2 call sites left.
+    expect(CLIENT_JS_AGG.length).toBe(82043)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -185,7 +197,9 @@ describe('offline report', () => {
     // then). The run spent 1,785 of the 3,302 B the proposals seam freed; the rest leaves the budget.
     // 2026-10-07 close-out (sample note in STE, copy confirmation in body ink): the cap goes DOWN 72,211 ->
     // 72,200, the measured 72,174 below plus the same 26 B of headroom.
-    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_200)
+    // 2026-10-07 Why disclosure: the cap goes UP 72,200 -> 72,753, the measured 72,727 below plus the same
+    // 26 B of headroom. A named, measured growth: the pin below gives the bytes of each part and the reason.
+    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_753)
     // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
     // 2026-08-27 final client pass 2 (fix/final-client2): −56 B net, cap unchanged. Eight UX fixes cost +1,233 B
     // (the Timeline row's own-facts fallback, folded hidden-error rows on Tools/Repo/Global, the Quality verdict
@@ -254,6 +268,15 @@ describe('offline report', () => {
     // published samples says "This sample is synthetic." instead of the fragment "Illustrative synthetic
     // sample." (app.ts, -5 B), and the copy confirmation drops its muted class, which failed AA in light
     // (screens/suggest.ts, -6 B). Run history: 73,702 before the run, 72,174 at its close.
-    expect(CLIENT_JS.length).toBe(72174)
+    // 2026-10-07 Why disclosure: +553 B (72,174 -> 72,727), re-measured after `npm run build`. The rule
+    // text has 3 parts now, and the user asked for structure, not a word cap: each card leads with the
+    // improvement only, and the reason and the method open under one closed Why, first in the card body,
+    // keyed by the sg_ id so that a re-render keeps it open. Repo and global cards show the example title,
+    // and one caption above them says that its figures come from one example session. Costed from the
+    // minified segments: the Why builder, its 2 call sites and the reason and the method on each row are
+    // +343 B; the example title and the caption are +150 B; the pure Overview and Improvements builders are
+    // +72 B; the improvement with its recommendation fallback is +38 B net of the old row copy; keying the
+    // Overview Why by the sg_ id is -50 B, because the commandForInsight wrapper and its 2 call sites left.
+    expect(CLIENT_JS.length).toBe(72727)
   })
 })

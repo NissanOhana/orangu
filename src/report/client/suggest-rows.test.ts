@@ -15,6 +15,7 @@ import {
   boundedSavings,
   commandForInsight,
   harnessCommand,
+  planRowForInsight,
   planRows,
   recoverableFrom,
   recordForRow,
@@ -63,8 +64,29 @@ describe('planRows', () => {
     const rows = planRows('session', analysis, undefined)
     expect(rows.map((r) => r.ruleId)).toEqual(['reread-files', 'context-bloat'])
     expect(rows[0]!.sessionIds).toEqual(['sess-1'])
-    expect(rows[0]!.recommendation).toBe('r1')
+    // an insight written before the rule text had parts: its whole recommendation is the improvement
+    expect(rows[0]!.improvement).toBe('r1')
     expect(rows[0]!.insightId).toBe('ins-1')
+  })
+
+  it('carries the 3 parts of the rule text, and shows the improvement before the whole recommendation', () => {
+    const parts = { ...analysis, insights: [{ ...analysis.insights[0]!, recommendation: 'Fix. Reason. Method.', improvement: 'Fix.', why: 'Reason.', method: 'Method.' }] } as unknown as Analysis
+    const row = planRowForInsight(parts.insights[0]!, 'sess-1')
+    expect(row).toMatchObject({ improvement: 'Fix.', why: 'Reason.', method: 'Method.' })
+    expect(row.displayTitle).toBeUndefined()
+  })
+
+  it('shows the example title on a repo/global row and keeps the marked title for the handoff', () => {
+    const marked = {
+      ...agg,
+      crossFindings: [{ ...agg.crossFindings[1]!, title: 'In one session: Big', exampleTitle: 'Big', recommendation: 'Fix. Reason.', improvement: 'Fix.', why: 'Reason.' }],
+    } as unknown as Aggregate
+    const row = planRows('repo', undefined, marked)[0]!
+    expect(row).toMatchObject({ title: 'In one session: Big', displayTitle: 'Big', improvement: 'Fix.', why: 'Reason.' })
+    expect(row.method).toBeUndefined()
+    expect(findingForRow(row, 'repo').title).toBe('In one session: Big')
+    // an older aggregate has no example title: the row shows the title it has
+    expect(planRows('repo', undefined, agg)[0]!.displayTitle).toBeUndefined()
   })
   // Severity-first, not savings-first. Omitting an unsupported savings figure must not demote a
   // high-severity finding beneath a low-severity finding that reports savings.
@@ -118,7 +140,11 @@ describe('planRows', () => {
     const rows = planRows('repo', undefined, golden)
     expect(rows.length).toBe(golden.crossFindings.length)
     expect(rows.length).toBeGreaterThan(0)
-    for (const row of rows) expect(row.recommendation?.trim(), row.ruleId).toBeTruthy()
+    for (const row of rows) {
+      expect(row.improvement?.trim(), row.ruleId).toBeTruthy()
+      expect(row.why?.trim(), row.ruleId).toBeTruthy()
+      expect(row.title, row.ruleId).toBe(`In one session: ${row.displayTitle}`)
+    }
   })
 
   it('counts the sessions that show a pattern against the sessions in the scope, never as a bare recurrence', () => {

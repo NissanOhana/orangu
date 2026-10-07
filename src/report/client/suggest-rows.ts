@@ -13,12 +13,25 @@ import { kickoffCommands, normalizeSessionIds, sessionCohortFingerprint, suggest
 /** The one-time plugin install, typed inside Claude Code (not a shell command); the report and the CLI print the same line. */
 export const PLUGIN_INSTALL = '/plugin marketplace add NissanOhana/orangu · /plugin install orangu'
 
+/**
+ * The "In one session" marker of a cross-finding title, said once above a repo or global list. Each row
+ * then shows its example title, and `title` keeps the marker for the handoff and the stored records.
+ */
+export const EXAMPLE_TITLE_CAPTION = 'Each title shows the figures of one example session.'
+
 export interface PlanRow {
   ruleId: string
+  /** marked on repo/global ("In one session: …"): findingForRow hands it on, so the --finding token and stored records keep it */
   title: string
+  /** repo/global: the example insight's own title, shown on the card in place of the marked `title`; an older aggregate has none, and an empty one shows `title` */
+  displayTitle?: string
   detail: string
-  /** the change the rule suggests; a crossFinding carries the one of its example session, an older aggregate none (the card then has no improvement line) */
-  recommendation?: string
+  /** the change the rule suggests, or the whole recommendation of a finding written before the rule text had parts; a crossFinding carries the one of its example session, an older aggregate none (the card then has no improvement line) */
+  improvement?: string
+  /** what the finding costs or means; behind the card's Why disclosure */
+  why?: string
+  /** what the rule counts and skips; behind Why, after `why` */
+  method?: string
   savings?: Insight['savings']
   /** kickoff evidence sessions: the selected session, or the finding's examples */
   sessionIds: string[]
@@ -67,7 +80,9 @@ export function planRowForInsight(i: Insight, sessionId: string | undefined): Pl
   return {
     ruleId: i.ruleId,
     ...copy,
-    recommendation: i.recommendation,
+    improvement: i.improvement || i.recommendation,
+    why: i.why,
+    method: i.method,
     savings: i.savings,
     sessionIds: sessionId ? [sessionId] : [],
     insightId: i.id,
@@ -81,12 +96,15 @@ export function planRows(scope: SuggestionScope, a: Analysis | undefined, agg: A
   return [...(agg?.crossFindings ?? [])]
     .sort(compareCrossFindings)
     .map((f) => {
-      // the count against the scope: the title already says its figures come from one example session
+      // the count against the scope: the list caption already says each title's figures come from one example session
       const copy = safeCopy(f.ruleId, f.title, `This pattern shows in ${f.sessions} of ${plural(agg!.sessionCount, 'session')}.`)
       return {
         ruleId: f.ruleId,
         ...copy,
-        recommendation: f.recommendation,
+        displayTitle: f.exampleTitle,
+        improvement: f.improvement || f.recommendation,
+        why: f.why,
+        method: f.method,
         savings: boundedSavings(f),
         sessionIds: f.exampleSessionIds,
         sessions: f.sessions,

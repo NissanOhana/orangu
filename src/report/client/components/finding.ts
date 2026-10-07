@@ -1,9 +1,9 @@
 /**
  * The shared Finding component: <details> with severity dot, title, savings pill (share of the
- * session, basis in the title), rule pill, and the improvement line in the summary; body = detail (when
- * the redactor kept it) + "Show N turns →" + the exact improve command. Plain audience hides the rule
- * pill and maps vocabulary. The app wires [data-turns] buttons to the timeline and [data-copy] to the
- * clipboard.
+ * session, basis in the title), rule pill, and the improvement line in the summary; body = the Why
+ * disclosure (the reason, then the method) + detail (when the redactor kept it) + "Show N turns →" + the
+ * exact improve command. Plain audience hides the rule pill and maps vocabulary. The app wires
+ * [data-turns] buttons to the timeline and [data-copy] to the clipboard.
  */
 import type { Insight } from '../../../model/analysis.js'
 import { esc, plural } from '../format.js'
@@ -22,8 +22,21 @@ export function improvementLead(text: string | undefined, audience: Audience): s
   return text ? `<span class="rec sg-lead"><b>Improvement:</b> ${esc(plainSentence(text, audience))}</span>` : ''
 }
 
+/**
+ * The reason and the method of a finding, one click away: the first child of a card body, closed by
+ * default. The id keys the app's re-render seam (details[id]), so an open Why stays open, and dom.ts
+ * stamps aria-expanded on its summary. '' when the finding has neither: an empty Why would open on nothing.
+ */
+export function whyHtml(key: string, why: string | undefined, method: string | undefined, audience: Audience): string {
+  return why || method
+    ? `<details class="why" id="why-${esc(key)}"><summary><span class="chev" aria-hidden="true">▸</span>Why</summary>${why ? `<p>${esc(plainSentence(why, audience))}</p>` : ''}${method ? `<p class="muted">${esc(plainSentence(method, audience))}</p>` : ''}</details>`
+    : ''
+}
+
 export interface FindingOpts {
-  /** the exact `claude "/orangu:improve …"` handoff for this finding (commandForInsight) */
+  /** the finding's sg_ id (handoffForInsight): it keys the Why disclosure, so the Improvements card of the same finding shares its open state */
+  id?: string
+  /** the exact `claude "/orangu:improve …"` handoff for this finding (handoffForInsight) */
   command?: string
   /** the session's total tokens, so the savings pill can be a share of it */
   sessionTotalTokens?: number
@@ -50,10 +63,12 @@ export function findingHtml(ins: Insight, audience: Audience, opts: FindingOpts 
     ? `<div class="fcmd"><div class="eyebrow">Get an AI proposal</div>${commandBlock(opts.command, '$', 'the Claude Code command')}<div class="small">${esc(pasteLine(opts.cwd))}${opts.how ? ` <a href="${esc(opts.how)}" data-to="ai-steps">See the 3 steps →</a>` : ''}</div></div>`
     : ''
   const link = opts.link ? `<div style="margin-top:10px"><a class="btn-sm" href="${esc(opts.link.href)}">${esc(opts.link.label)}</a></div>` : ''
+  // a payload from before the rule text had parts carries the whole text as its recommendation only
+  const lead = ins.improvement || ins.recommendation
   return `<details class="finding${opts.open ? ' top' : ''}"${opts.open ? ' open' : ''}>
-<summary><span class="chev" aria-hidden="true">▸</span><span class="sev ${esc(ins.severity)}" title="${esc(ins.severity)}"></span><b>${esc(plainSentence(ins.title, audience))}</b>${share ? `<span class="fsave" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${pill}${improvementLead(ins.recommendation, audience)}</summary>
+<summary><span class="chev" aria-hidden="true">▸</span><span class="sev ${esc(ins.severity)}" title="${esc(ins.severity)}"></span><b>${esc(plainSentence(ins.title, audience))}</b>${share ? `<span class="fsave" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${pill}${improvementLead(lead, audience)}</summary>
 <div class="fbody">
-${detail}
+${whyHtml(opts.id ?? ins.id, ins.why, ins.method, audience)}${detail}
 ${link}${turnsBtn}
 ${cmd}
 </div>

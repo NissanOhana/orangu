@@ -19,7 +19,7 @@ import { emptyHero } from '../components/empty.js'
 import { mascotSvg } from '../mascot.js'
 import { lineChart } from '../charts.js'
 import { compactionMarkers, endingWord, insightLink, outcomeBits, outcomeHeadline, qualityHeadline, qualityScope, recoverableLine, timeAxis } from '../derive.js'
-import { commandForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
+import { handoffForInsight, planRows, recoverableFrom } from '../suggest-rows.js'
 import { cleanHash, fileScope, type RouteState } from '../nav.js'
 import { plainSentence } from '../strings.js'
 
@@ -46,7 +46,7 @@ function triptych(a: Analysis): string {
 </div>`
 }
 
-/** The top finding, hoisted: title, improvement, savings as a share of the session, the evidence link, the improve command and the way to the 3 steps. */
+/** The top finding, hoisted: title, improvement, savings as a share of the session, the closed Why, the evidence link, the improve command and the way to the 3 steps. */
 function topFinding(ctx: Ctx, a: Analysis, ins: Insight | undefined): string {
   if (!ins)
     return `<div class="card pad mb16" style="background:var(--bg2);display:flex;align-items:center;gap:10px">${mascotSvg(22)}<span class="muted">The rules found nothing to change in this session.</span></div>`
@@ -56,7 +56,8 @@ function topFinding(ctx: Ctx, a: Analysis, ins: Insight | undefined): string {
     : at
       ? { href: href(ctx, a, { screen: 'timeline', turn: at.turn }), label: `See the ${plural(ins.turnIndexes.length, 'turn')} →` }
       : undefined
-  return `<div class="eyebrow mb6">Top improvement</div>${findingHtml(ins, ctx.audience, { command: commandForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, how: href(ctx, a, { screen: 'suggest' }), cwd: a.session.cwd, ...(link ? { link } : {}) })}`
+  // the handoff's sg_ id keys the card's Why, as it keys the Improvements card of the same finding
+  return `<div class="eyebrow mb6">Top improvement</div>${findingHtml(ins, ctx.audience, { ...handoffForInsight(ins, a.session.id), sessionTotalTokens: a.summary.totalTokens, open: true, how: href(ctx, a, { screen: 'suggest' }), cwd: a.session.cwd, ...(link ? { link } : {}) })}`
 }
 
 /** 60 px context sparkline (the Context screen's chart, reused); a caption alone when there is no series. */
@@ -85,7 +86,7 @@ function whereNext(ctx: Ctx, a: Analysis): string {
 
 function detailedBody(ctx: Ctx, a: Analysis): string {
   const top = a.summary.topInsightIds.map((id) => a.insights.find((i) => i.id === id)).filter((i): i is Insight => !!i)
-  const rest = top.slice(1).map((i) => findingHtml(i, 'dev', { command: commandForInsight(i, a.session.id), sessionTotalTokens: a.summary.totalTokens, cwd: a.session.cwd })).join('')
+  const rest = top.slice(1).map((i) => findingHtml(i, 'dev', { ...handoffForInsight(i, a.session.id), sessionTotalTokens: a.summary.totalTokens, cwd: a.session.cwd })).join('')
   const recoverable = recoverableLine(recoverableFrom(planRows('session', a, undefined)), a.insights.length)
   return `${triptych(a)}${topFinding(ctx, a, top[0])}
 <div class="two-up mb16">${contextSpark(a)}${whereNext(ctx, a)}</div>
@@ -111,12 +112,17 @@ ${topFinding(ctx, a, one)}
 ${whereNext(ctx, a)}`
 }
 
-export function renderOverview(ctx: Ctx): HTMLElement {
+/** The Overview as a string, with no DOM: renderOverview wraps it, and a node gate can read it. */
+export function overviewScreenHtml(ctx: Ctx): string {
   const a = ctx.a
   // A file about a scope has no session group in its sidebar, so there is no picker to point at: the
   // hint has to name what the document is instead of a control that is not on the page.
   if (!a)
-    return h(`<section>${emptyHero({ title: 'No session selected.', hint: fileScope(ctx.data) ? 'This report covers a scope, not a session.' : 'Pick a session from the sidebar.' })}</section>`)
+    return `<section>${emptyHero({ title: 'No session selected.', hint: fileScope(ctx.data) ? 'This report covers a scope, not a session.' : 'Pick a session from the sidebar.' })}</section>`
   const body = ctx.audience === 'plain' ? plainBody(ctx, a) : detailedBody(ctx, a)
-  return h(`<section>${degradedBanner(a, ctx.audience)}${outcome(a, ctx.audience)}${body}</section>`)
+  return `<section>${degradedBanner(a, ctx.audience)}${outcome(a, ctx.audience)}${body}</section>`
+}
+
+export function renderOverview(ctx: Ctx): HTMLElement {
+  return h(overviewScreenHtml(ctx))
 }

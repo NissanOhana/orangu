@@ -6,7 +6,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseClaudeCodeSession } from '../../../adapters/claude-code/parse.js'
 import { analyzeSession } from '../../../analyze/analyze.js'
-import { aggregate, type Aggregate } from '../../../analyze/aggregate.js'
+import { aggregate, type Aggregate, type CrossFinding } from '../../../analyze/aggregate.js'
 import type { AppData } from '../../../model/app-data.js'
 import { buildCanonicalSession } from '../../../../test/fixtures/session-builder.js'
 import type { Ctx } from '../app.js'
@@ -117,6 +117,55 @@ describe('Repo and Global with an aggregate and no Analysis', () => {
     renderRepo(await fileContext('repo'))
     expect(markup).toContain('title="open with: orangu report ')
     expect(markup).not.toContain('href="#overview?s=')
+  })
+
+  /** A cross finding as the aggregate writes it now: the marked title and the example title, from one session. */
+  function recurring(ruleId: string, exampleTitle: string): CrossFinding {
+    return {
+      ruleId, title: `In one session: ${exampleTitle}`, exampleTitle, recommendation: 'Do it once.', improvement: 'Do it once.',
+      sessions: 3, totalSavingsTokens: 9000, totalSavingsMs: 0, boundedSavingsTokens: 6000, boundedSavingsMs: 0,
+      axis: 'tokens', severity: 'medium', exampleSessionIds: ['session-a'],
+    }
+  }
+
+  /** [rule pill, row title] of each Recurring findings row. */
+  function recurringRows(html: string): string[][] {
+    return [...html.matchAll(/<div class="rrow"><span class="pill">([^<]*)<\/span><span class="grow">([^<]*)<\/span>/g)].map((m) => [m[1]!, m[2]!])
+  }
+
+  const CAPTION = 'Each title shows the figures of one example session.'
+
+  // The marker "In one session" said once per list, as one caption, so that each row title is one clean sentence.
+  it.each([
+    ['repo', renderRepo],
+    ['global', renderGlobal],
+  ] as const)('shows each example title in Recurring findings and says once, under the card title, that the figures come from one example session (%s)', async (scope, render) => {
+    const ctx = await fileContext(scope)
+    ctx.data.aggregates[scope]!.crossFindings = [recurring('reread-files', 'Read the same file 6 times'), recurring('tool-errors', '3 tool errors')]
+    render(ctx)
+    expect(recurringRows(markup)).toEqual([['reread-files', 'Read the same file 6 times'], ['tool-errors', '3 tool errors']])
+    expect(markup).not.toContain('In one session')
+    expect(markup.split(CAPTION).length - 1).toBe(1)
+    const caption = markup.indexOf(CAPTION)
+    expect(markup.indexOf('Recurring findings · ranked by evidence')).toBeLessThan(caption)
+    expect(caption).toBeLessThan(markup.indexOf('<div class="rrow">'))
+  })
+
+  it('shows the marked title of an older aggregate that has no example title', async () => {
+    const ctx = await fileContext('repo')
+    const old = recurring('reread-files', 'Read the same file 6 times')
+    delete old.exampleTitle
+    ctx.data.aggregates.repo!.crossFindings = [old]
+    renderRepo(ctx)
+    expect(recurringRows(markup)).toEqual([['reread-files', 'In one session: Read the same file 6 times']])
+  })
+
+  it('says no caption when no finding recurs, and keeps the empty note', async () => {
+    const ctx = await fileContext('repo')
+    ctx.data.aggregates.repo!.crossFindings = []
+    renderRepo(ctx)
+    expect(markup).not.toContain(CAPTION)
+    expect(markup).toContain('Patterns appear from 2 sessions on.')
   })
 
   // The cache KPI used to show its Detailed name to a Plain reader: the Plain map only matched lowercase keys.

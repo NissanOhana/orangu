@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Analysis } from '../../../model/analysis.js'
 import type { AppData, SuggestionViewRecord } from '../../../model/app-data.js'
-import { suggestionIdV2, suggestionKey } from '../../../suggest/id.js'
+import { decodeFinding, encodeFinding, suggestionIdV2, suggestionKey } from '../../../suggest/id.js'
 import type { Ctx } from '../app.js'
 import type { Aggregate } from '../../../analyze/aggregate.js'
 import { megaReview } from '../mega-review.js'
 import { proposalsUi } from '../proposals-ui.js'
 import { findingForRow, planRows } from '../suggest-rows.js'
-import { renderSuggest } from './suggest.js'
+import { renderSuggest, suggestScreenHtml } from './suggest.js'
 
 let markup = ''
 
@@ -337,10 +337,31 @@ describe('renderSuggest proposal UX', () => {
   })
 })
 
+/**
+ * Every card, each from its opening tag to its own closing tag. The Why disclosure is a <details> inside the
+ * card, so the end of a card is the </details> that closes its depth, not the first one after it.
+ */
+function cardsOf(html: string): string[] {
+  const cards: string[] = []
+  const tag = /<details\b[^>]*>|<\/details>/g
+  let start = -1
+  let depth = 0
+  for (let m = tag.exec(html); m; m = tag.exec(html)) {
+    if (m[0] === '</details>') {
+      depth--
+      if (!depth && start >= 0) cards.push(html.slice(start, m.index))
+      if (!depth) start = -1
+    } else {
+      if (!depth && m[0].startsWith('<details class="finding"')) start = m.index
+      depth++
+    }
+  }
+  return cards
+}
+
 /** The markup of the first card, from its opening tag to its own closing tag. */
 function firstCard(html: string): string {
-  const start = html.indexOf('<details class="finding"')
-  return html.slice(start, html.indexOf('</details>', start))
+  return cardsOf(html)[0] ?? ''
 }
 
 /** Everything inside a card's <summary>: what a reader sees while the card is closed. */
@@ -450,6 +471,85 @@ describe('renderSuggest: each card leads with its improvement, one explainer say
     expect(markup).toContain('The rules found nothing to change. Look again after your next session.')
     expect(markup).not.toContain('Get an AI proposal')
     expect(markup).not.toContain('What a proposal can change')
+  })
+})
+
+/** The card body, from its first child on. */
+function bodyOf(card: string): string {
+  const open = '<div class="fbody sg-body">'
+  return card.slice(card.indexOf(open) + open.length).trimStart()
+}
+
+/** The opening tag of a card's Why disclosure, or '' when it has none. */
+function whyTag(card: string): string {
+  return /<details class="why"[^>]*>/.exec(card)?.[0] ?? ''
+}
+
+/** The sg_ id a card carries, which keys its status, its copy button and its Why disclosure. */
+function sidOf(card: string): string {
+  return /data-sid="([^"]+)"/.exec(card)?.[1] ?? ''
+}
+
+const WHY = 'Each re-read sends the whole file to the model again.'
+const METHOD = 'The rule skips reads inside subagents.'
+const EXAMPLE_CAPTION = 'Each title shows the figures of one example session.'
+
+/** A session with 2 findings whose rule text has its 3 parts, as the analyzer writes it now. */
+const withParts = {
+  ...analysis,
+  insights: [
+    { ...analysis.insights[0]!, recommendation: `Cache it. ${WHY} ${METHOD}`, improvement: 'Cache it.', why: WHY, method: METHOD },
+    { id: 'ins-2', ruleId: 'tool-errors', severity: 'low', title: '3 tool errors', detail: 'Bash failed', recommendation: 'Fix the tool. Errors cost turns.', improvement: 'Fix the tool.', why: 'Errors cost turns.' },
+  ],
+} as unknown as Analysis
+
+/**
+ * The closed card names the change and nothing else. The reason and the method wait one click away, behind
+ * one Why disclosure that is first in the card body, closed by default, and keyed by the card's sg_ id, so
+ * the app's re-render seam (details[id]) keeps it open.
+ */
+describe('renderSuggest: the reason and the method wait behind Why', () => {
+  function sessionWithParts(): Ctx {
+    const ctx = context('file', [])
+    ctx.a = withParts
+    ctx.data.session = withParts
+    return ctx
+  }
+
+  it('leads the closed card with the improvement and keeps the reason and the method out of its summary', () => {
+    renderSuggest(sessionWithParts())
+    const summary = summaryOf(firstCard(markup))
+    expect(leadOf(summary)).toBe('<span class="rec sg-lead"><b>Improvement:</b> Cache it.</span>')
+    expect(summary).not.toContain(WHY)
+    expect(summary).not.toContain(METHOD)
+  })
+
+  it('puts one Why disclosure first in each card body, closed, with the reason and then the method in the muted style', () => {
+    renderSuggest(sessionWithParts())
+    const card = firstCard(markup)
+    const body = bodyOf(card)
+    expect(body.startsWith(`<details class="why" id="why-${sidOf(card)}">`)).toBe(true)
+    expect(whyTag(card)).not.toMatch(/\bopen\b/)
+    expect(body).toContain('<summary><span class="chev" aria-hidden="true">▸</span>Why</summary>')
+    expect(body.indexOf(`<p>${WHY}</p>`)).toBeGreaterThan(-1)
+    expect(body.indexOf(`<p>${WHY}</p>`)).toBeLessThan(body.indexOf(`<p class="muted">${METHOD}</p>`))
+    expect(body.indexOf('</details>')).toBeLessThan(body.indexOf('<div class="sg-ev">'))
+  })
+
+  it('gives two cards on one screen two different disclosure ids', () => {
+    renderSuggest(sessionWithParts())
+    const cards = cardsOf(markup)
+    expect(cards).toHaveLength(2)
+    const ids = cards.map(whyTag)
+    expect(ids[0]).toMatch(/^<details class="why" id="why-sg_[0-9a-f]{12}">$/)
+    expect(ids[1]).toMatch(/^<details class="why" id="why-sg_[0-9a-f]{12}">$/)
+    expect(ids[0]).not.toBe(ids[1])
+  })
+
+  it('shows no example-session caption on the session scope, where each title comes from that session', () => {
+    renderSuggest(sessionWithParts())
+    expect(markup).not.toContain(EXAMPLE_CAPTION)
+    expect(markup).not.toContain('class="sg-cap"')
   })
 })
 
@@ -637,5 +737,102 @@ describe('renderSuggest on a repo/global scope', () => {
     renderSuggest(ctx)
     expect(markup).toContain('<a class="exch" href="#overview?s=session-a&amp;audience=plain&amp;theme=dark">session-</a>')
     expect(markup).not.toContain('href="#overview?s=session-a"')
+  })
+
+  /** Two cross findings as the aggregate writes them now: the marked title, its example title and the rule text parts. */
+  const marked = [
+    {
+      ...crossFinding,
+      exampleTitle: 'Read the same file 6 times',
+      recommendation: `Read each file once. ${WHY} ${METHOD}`,
+      improvement: 'Read each file once.',
+      why: WHY,
+      method: METHOD,
+    },
+    {
+      ...crossFinding,
+      ruleId: 'tool-errors',
+      severity: 'low',
+      title: 'In one session: 3 tool errors (16.7% of 18 calls)',
+      exampleTitle: '3 tool errors (16.7% of 18 calls)',
+      recommendation: 'Fix the tool. Errors cost turns.',
+      improvement: 'Fix the tool.',
+      why: 'Errors cost turns.',
+      exampleSessionIds: ['session-c'],
+    },
+  ]
+
+  /** The title text in a card summary. */
+  function titleOf(card: string): string {
+    return /<b class="sg-t">([^<]*)<\/b>/.exec(card)?.[1] ?? ''
+  }
+
+  it.each(['repo', 'global'] as const)('titles each %s card with its example title and says once, above the cards, that the figures come from one example session', (scope) => {
+    renderSuggest(scopeContext(scope, marked as Array<typeof crossFinding>))
+    const cards = cardsOf(markup)
+    expect(cards.map(titleOf)).toEqual(['Read the same file 6 times', '3 tool errors (16.7% of 18 calls)'])
+    expect(markup).not.toContain('In one session')
+    expect(markup.split(EXAMPLE_CAPTION).length - 1).toBe(1)
+    expect(markup.split('class="sg-cap"').length - 1).toBe(1)
+    const caption = markup.indexOf(EXAMPLE_CAPTION)
+    expect(markup.indexOf('Get an AI proposal')).toBeLessThan(caption)
+    expect(caption).toBeLessThan(markup.indexOf('<details class="finding"'))
+  })
+
+  it.each(['repo', 'global'] as const)('still hands the marked title to the improve command on %s, so the finding title, the --finding token and the sg_ id do not move', (scope) => {
+    const ctx = scopeContext(scope, marked as Array<typeof crossFinding>)
+    renderSuggest(ctx)
+    const rows = planRows(scope, undefined, ctx.data.aggregates[scope])
+    const finding = findingForRow(rows.find((row) => row.ruleId === 'reread-files')!, scope)
+    expect(finding.title).toBe('In one session: Read the same file 6 times')
+    expect(decodeFinding(encodeFinding(finding, 'report')).finding.title).toBe('In one session: Read the same file 6 times')
+    const card = cardsOf(markup).find((c) => c.includes('data-rule="reread-files"'))!
+    expect(sidOf(card)).toBe(suggestionIdV2(suggestionKey(finding, 'report')))
+  })
+
+  it.each(['repo', 'global'] as const)('puts the Why disclosure first in each %s card body, keyed by the sg_ id of the card', (scope) => {
+    renderSuggest(scopeContext(scope, marked as Array<typeof crossFinding>))
+    const cards = cardsOf(markup)
+    for (const card of cards) expect(bodyOf(card).startsWith(`<details class="why" id="why-${sidOf(card)}">`)).toBe(true)
+    expect(whyTag(cards[0]!)).not.toBe(whyTag(cards[1]!))
+    const summary = summaryOf(cards[0]!)
+    expect(leadOf(summary)).toBe('<span class="rec sg-lead"><b>Improvement:</b> Read each file once.</span>')
+    expect(summary).not.toContain(WHY)
+    expect(bodyOf(cards[0]!).indexOf(WHY)).toBeLessThan(bodyOf(cards[0]!).indexOf(`<p class="muted">${METHOD}</p>`))
+  })
+
+  it('titles the card with the marked title on an older aggregate that has no example title', () => {
+    renderSuggest(scopeContext('repo'))
+    expect(titleOf(firstCard(markup))).toBe('In one session: Read the same file 6 times')
+    expect(firstCard(markup)).not.toContain('class="why"')
+  })
+
+  it('says no caption when the scope has no findings', () => {
+    renderSuggest(scopeContext('repo', []))
+    expect(markup).not.toContain(EXAMPLE_CAPTION)
+  })
+})
+
+/**
+ * The Improvements screen as a string: the markup renderSuggest wraps in the DOM and wires, built with no
+ * DOM, so a node gate can read the screen that a reader sees.
+ */
+describe('suggestScreenHtml', () => {
+  it.each(['file', 'serve'] as const)('is the markup that renderSuggest draws (%s)', (mode) => {
+    const ctx = mode === 'serve' ? serveContext([]) : context('file', [])
+    ctx.a = withParts
+    ctx.data.session = withParts
+    renderSuggest(ctx)
+    expect(suggestScreenHtml(ctx).trim()).toBe(markup)
+  })
+
+  it('needs no document', () => {
+    vi.unstubAllGlobals()
+    const ctx = context('file', [])
+    ctx.a = withParts
+    ctx.data.session = withParts
+    const html = suggestScreenHtml(ctx)
+    expect(cardsOf(html)).toHaveLength(2)
+    expect(html).toContain('>Why</summary>')
   })
 })

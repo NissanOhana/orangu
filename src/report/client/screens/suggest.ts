@@ -1,8 +1,10 @@
 /**
  * Improvements (§5): hero + scope chips + one explainer + plan items. Each card is one finding with its
  * severity dot, its savings as a share of the session and its improvement in the summary, so a reader
- * sees the change while the card is closed; the body holds the evidence, the examples and the copy
- * button. The explainer above the cards says once how to get an AI proposal: copy the command, paste it
+ * sees the change while the card is closed; the body opens with a closed Why (the reason, then the
+ * method), then holds the evidence, the examples and the copy button. Repo and global cards show the
+ * example title, and one caption above them says that its figures come from one example session.
+ * The explainer above the cards says once how to get an AI proposal: copy the command, paste it
  * in a terminal (it is a shell command that starts Claude Code), read the proposal where it lands. The
  * report never launches a model process; copying a string queues nothing.
  * Rows per scope come from suggest-rows.ts (pure): session = this session's insights; repo/global =
@@ -19,10 +21,11 @@ import { chip } from '../components/chips.js'
 import { cleanHash, fileScope } from '../nav.js'
 import { commandBlock, installLines, pasteLine } from '../components/command.js'
 import { emptyHero } from '../components/empty.js'
-import { improvementLead } from '../components/finding.js'
+import { improvementLead, whyHtml } from '../components/finding.js'
 import { mascotBox } from '../components/mascot-box.js'
 import { savingsShare } from '../derive.js'
 import {
+  EXAMPLE_TITLE_CAPTION,
   findingForRow,
   kickoffFailureMessage,
   planRows,
@@ -71,9 +74,9 @@ function planItem(ctx: Ctx, row: PlanRow, rank: number, sid: string, rec: Sugges
     .map((id) => (ctx.data.mode === 'serve' ? `<a class="exch" href="${esc(cleanHash(ctx.state, { screen: 'overview', s: id }))}">${esc(id.slice(0, 8))}</a>` : `<span class="exch">${esc(id.slice(0, 8))}</span>`))
     .join('')
   return `<details class="finding" data-sid="${esc(sid)}" data-rule="${esc(row.ruleId)}">
-<summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span>${row.severity ? `<span class="sev ${esc(row.severity)}" title="${esc(row.severity)}"></span>` : ''}<b class="sg-t">${esc(plainSentence(row.title, aud))}</b>${share ? `<span class="fsave sg-save" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${effort ? `<span class="pill">effort ${esc(effort)}</span>` : ''}${improvementLead(row.recommendation, aud)}</summary>
+<summary><span class="chev" aria-hidden="true">▸</span><span class="rank">${rank}</span>${row.severity ? `<span class="sev ${esc(row.severity)}" title="${esc(row.severity)}"></span>` : ''}<b class="sg-t">${esc(plainSentence(row.displayTitle || row.title, aud))}</b>${share ? `<span class="fsave sg-save" title="${esc(share.title)}">${esc(share.text)}</span>` : ''}${effort ? `<span class="pill">effort ${esc(effort)}</span>` : ''}${improvementLead(row.improvement, aud)}</summary>
 <div class="fbody sg-body">
-<div class="sg-ev"><b>Evidence:</b> ${esc(plainSentence(row.detail, aud))} ${aud === 'plain' ? '' : `<span class="pill">${esc(row.ruleId)}</span>`}</div>
+${whyHtml(sid, row.why, row.method, aud)}<div class="sg-ev"><b>Evidence:</b> ${esc(plainSentence(row.detail, aud))} ${aud === 'plain' ? '' : `<span class="pill">${esc(row.ruleId)}</span>`}</div>
 <div class="sg-ex"><span class="small muted">Example sessions:</span>${examples}</div>
 ${ctx.proposals?.details(rec) ?? ''}
 <div class="kickrow">
@@ -86,7 +89,8 @@ ${statusChip(state, failure, trustedVerification(rec))}
 </details>`
 }
 
-export function renderSuggest(ctx: Ctx): HTMLElement {
+/** The Improvements screen as [markup, the row behind each sg_ id, the paste line]: the last 2 are what its listeners need. */
+function suggestView(ctx: Ctx) {
   const a = ctx.a
   // No scope= in the hash: a file about a scope answers about that scope, not about a session it has
   // no record of. The session chip is then a dead end, so it says so rather than ignoring the click.
@@ -119,8 +123,9 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
   // the command is a shell command that starts Claude Code; the explainer and the copy message share the line
   const paste = pasteLine(a?.session.cwd, scope === 'repo')
 
+  // repo/global: each card shows its example title, and the "In one session" marker becomes this one caption
   const items = boundRows.length
-    ? explainer(paste, ctx.data.mode) + boundRows.map((r, i) => planItem(ctx, r.row, i + 1, r.sid, r.record)).join('')
+    ? explainer(paste, ctx.data.mode) + (scope === 'session' ? '' : `<p class="sg-cap">${EXAMPLE_TITLE_CAPTION}</p>`) + boundRows.map((r, i) => planItem(ctx, r.row, i + 1, r.sid, r.record)).join('')
     : emptyHero({ title: 'No improvements found', hint: 'The rules found nothing to change. Look again after your next session.' })
 
   // The taxonomy is explanatory copy under a collapsed note, never a status chip and never a header
@@ -140,7 +145,7 @@ export function renderSuggest(ctx: Ctx): HTMLElement {
       ? 'Applied means that the reviewed files changed. Only later sessions can verify it.'
       : 'Global proposals stay proposals. Claude applies nothing from here.')
 
-  const el = h(`<section>
+  const html = `<section>
 <div class="hero">
 ${mascotBox(48)}
 <div class="grow sg-hero herotitle">${esc(heroSub)}</div>
@@ -150,7 +155,18 @@ ${mega}
 ${scope !== 'session' && !agg ? emptyHero({ title: 'This scope needs orangu serve', command: 'orangu serve' }) : items + install}
 ${ctx.proposals?.inbox(ctx, scope, activeSessionIds, mapped) ?? ''}
 <p class="small muted sg-foot">${foot}</p>
-</section>`)
+</section>`
+  return [html, bySid, paste] as const
+}
+
+/** The Improvements screen as a string, with no DOM and no listeners: renderSuggest wraps and wires it, and a node gate can read it. */
+export function suggestScreenHtml(ctx: Ctx): string {
+  return suggestView(ctx)[0]
+}
+
+export function renderSuggest(ctx: Ctx): HTMLElement {
+  const [html, bySid, paste] = suggestView(ctx)
+  const el = h(html)
 
   el.querySelectorAll<HTMLElement>('[data-scope]').forEach((c) =>
     c.addEventListener('click', () => {
