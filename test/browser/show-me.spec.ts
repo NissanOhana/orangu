@@ -81,7 +81,7 @@ test('the deck shows each improvement, title and improvement text whole, with no
   const cut = await page.evaluate(() =>
     Object.fromEntries(
       ['.it', '.st', '.rec .tx'].map((selector) => {
-        const all = [...document.querySelectorAll<HTMLElement>(selector)]
+        const all = Array.from(document.querySelectorAll<HTMLElement>(selector))
         return [selector, `${all.filter((el) => el.scrollHeight > el.clientHeight + 4).length} of ${all.length}`]
       }),
     ),
