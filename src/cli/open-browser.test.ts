@@ -39,7 +39,7 @@ describe('openInBrowser', () => {
 
   it('on macOS and Linux, passes the target as one argument with no shell, so & is only a character', () => {
     for (const [platform, command] of [['darwin', 'open'], ['linux', 'xdg-open']] as const) {
-      const target = '/home/a/.orangu/show-me/session-a&calc&-x/slides.html'
+      const target = '/tmp/orangu/show-me/session-a&calc&-x/slides.html'
       const { deps, calls } = stub(platform)
       expect(openInBrowser(target, deps)).toBe(true)
       expect(calls).toEqual([{ command, args: [target] }])
