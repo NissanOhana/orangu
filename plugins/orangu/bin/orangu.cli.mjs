@@ -6535,13 +6535,16 @@ function runPoolWorker() {
 function defaultJobs() {
   return Math.max(1, cpus().length - 1);
 }
+function maxJobs() {
+  return Math.max(1, cpus().length);
+}
 async function analyzeAllPooled(refs, o) {
   const results = new Array(refs.length);
   let failed = 0;
   let hits = 0;
   let next = 0;
   let done = 0;
-  const n2 = Math.max(1, Math.min(o.jobs, refs.length));
+  const n2 = Math.max(1, Math.min(o.jobs, refs.length, maxJobs()));
   await new Promise((resolveAll, rejectAll) => {
     let alive = 0;
     const finishIfDone = () => {
@@ -6591,7 +6594,7 @@ async function analyzeAllPooled(refs, o) {
     finishIfDone();
   });
   const analyses = results.filter((a) => a !== void 0);
-  return { analyses, failed, hits, misses: refs.length - failed - hits };
+  return { analyses, failed, hits, misses: refs.length - failed - hits, workers: n2 };
 }
 
 // src/cli/watch.ts
@@ -6827,67 +6830,6 @@ function sessionFromTail(st) {
 import { constants as constants8 } from "node:fs";
 import { lstat as lstat6, open as open8 } from "node:fs/promises";
 import { resolve as resolve5 } from "node:path";
-var PRIVATE_FILE_MODE2 = 384;
-var PrivateOutputError = class extends Error {
-  name = "PrivateOutputError";
-};
-function sameInode2(a, b) {
-  return a.dev === b.dev && a.ino === b.ino;
-}
-function assertSafeOutput(stat8, path) {
-  if (!stat8.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${path}`);
-  if (stat8.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${path}`);
-}
-async function assertPathStillNamesHandle(path, opened) {
-  const current = await lstat6(path, { bigint: true });
-  if (current.isSymbolicLink() || !current.isFile() || !sameInode2(current, opened)) {
-    throw new PrivateOutputError(`private output target changed during access: ${path}`);
-  }
-}
-async function openOutput(path) {
-  const baseFlags = constants8.O_WRONLY | (constants8.O_NOFOLLOW ?? 0) | (constants8.O_NONBLOCK ?? 0);
-  try {
-    return await open8(path, baseFlags | constants8.O_CREAT | constants8.O_EXCL, PRIVATE_FILE_MODE2);
-  } catch (error) {
-    if (error.code !== "EEXIST") throw error;
-  }
-  try {
-    return await open8(path, baseFlags);
-  } catch (error) {
-    if (error.code === "ELOOP") {
-      throw new PrivateOutputError(`private output target must not be a symbolic link: ${path}`);
-    }
-    throw error;
-  }
-}
-async function writePrivateOutput(path, data) {
-  const outputPath = resolve5(path);
-  try {
-    const handle = await openOutput(outputPath);
-    try {
-      const opened = await handle.stat({ bigint: true });
-      assertSafeOutput(opened, outputPath);
-      await assertPathStillNamesHandle(outputPath, opened);
-      if (process.platform !== "win32") await handle.chmod(PRIVATE_FILE_MODE2);
-      const secured = await handle.stat({ bigint: true });
-      assertSafeOutput(secured, outputPath);
-      if (process.platform !== "win32" && Number(secured.mode & 0o777n) !== PRIVATE_FILE_MODE2) {
-        throw new PrivateOutputError(`private output permissions could not be secured: ${outputPath}`);
-      }
-      await assertPathStillNamesHandle(outputPath, secured);
-      await handle.truncate(0);
-      await handle.writeFile(data);
-      const written = await handle.stat({ bigint: true });
-      assertSafeOutput(written, outputPath);
-      await assertPathStillNamesHandle(outputPath, written);
-    } finally {
-      await handle.close();
-    }
-  } catch (error) {
-    if (error instanceof PrivateOutputError) throw error;
-    throw new PrivateOutputError(`private output could not be written safely: ${outputPath}`);
-  }
-}
 
 // src/cli/tty.ts
 import { hostname } from "node:os";
@@ -7172,6 +7114,86 @@ function spinner(caps, stream = process.stderr, opts = {}) {
       if (final !== void 0) stream.write(final + "\n");
     }
   };
+}
+
+// src/cli/private-output.ts
+var PRIVATE_FILE_MODE2 = 384;
+var OUTPUT_HEAD_BYTES = 4096;
+var HTML_MARKER = /^<!doctype html>\s*<html\b[^>]*>\s*<head>(?:\s*<meta\b[^>]*>)*?\s*<meta name="generator" content="orangu [^"<>]*"\/?>/;
+var JSON_MARKER = new RegExp(
+  '^\\{\\s*"schemaVersion"\\s*:\\s*"[^"\\\\]*"\\s*,\\s*(?:' + ['"generatedAt"\\s*:\\s*\\d+\\s*,\\s*"scope"\\s*:\\s*"', '"generator"\\s*:\\s*\\{\\s*"name"\\s*:\\s*"orangu"\\s*[,}]', '"source"\\s*:\\s*\\{\\s*"kind"\\s*:\\s*"(?:analysis|slim-analysis|aggregate)"\\s*,\\s*"schemaVersion"\\s*:'].join("|") + ")"
+);
+function isOranguOutput(head2) {
+  return HTML_MARKER.test(head2) || JSON_MARKER.test(head2);
+}
+var PrivateOutputError = class extends Error {
+  name = "PrivateOutputError";
+};
+function sameInode2(a, b) {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+function assertSafeOutput(stat8, path) {
+  if (!stat8.isFile()) throw new PrivateOutputError(`private output target must be a regular file: ${oneLine2(path)}`);
+  if (stat8.nlink !== 1n) throw new PrivateOutputError(`private output target must not have multiple hard links: ${oneLine2(path)}`);
+}
+async function assertPathStillNamesHandle(path, opened) {
+  const current = await lstat6(path, { bigint: true });
+  if (current.isSymbolicLink() || !current.isFile() || !sameInode2(current, opened)) {
+    throw new PrivateOutputError(`private output target changed during access: ${oneLine2(path)}`);
+  }
+}
+async function assertOranguOutput(handle, path) {
+  const buffer = Buffer.alloc(OUTPUT_HEAD_BYTES);
+  const { bytesRead } = await handle.read(buffer, 0, OUTPUT_HEAD_BYTES, 0);
+  if (isOranguOutput(buffer.subarray(0, bytesRead).toString("utf8"))) return;
+  throw new PrivateOutputError(
+    `${oneLine2(path)} is not an orangu output, so orangu did not change it. Choose a new path, or delete the file by hand and run the command again.`
+  );
+}
+async function openOutput(path) {
+  const baseFlags = (constants8.O_NOFOLLOW ?? 0) | (constants8.O_NONBLOCK ?? 0);
+  try {
+    return { handle: await open8(path, baseFlags | constants8.O_WRONLY | constants8.O_CREAT | constants8.O_EXCL, PRIVATE_FILE_MODE2), created: true };
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+  }
+  try {
+    return { handle: await open8(path, baseFlags | constants8.O_RDWR), created: false };
+  } catch (error) {
+    if (error.code === "ELOOP") {
+      throw new PrivateOutputError(`private output target must not be a symbolic link: ${oneLine2(path)}`);
+    }
+    throw error;
+  }
+}
+async function writePrivateOutput(path, data) {
+  const outputPath = resolve5(path);
+  try {
+    const { handle, created } = await openOutput(outputPath);
+    try {
+      const opened = await handle.stat({ bigint: true });
+      assertSafeOutput(opened, outputPath);
+      await assertPathStillNamesHandle(outputPath, opened);
+      if (!created) await assertOranguOutput(handle, outputPath);
+      if (process.platform !== "win32") await handle.chmod(PRIVATE_FILE_MODE2);
+      const secured = await handle.stat({ bigint: true });
+      assertSafeOutput(secured, outputPath);
+      if (process.platform !== "win32" && Number(secured.mode & 0o777n) !== PRIVATE_FILE_MODE2) {
+        throw new PrivateOutputError(`private output permissions could not be secured: ${oneLine2(outputPath)}`);
+      }
+      await assertPathStillNamesHandle(outputPath, secured);
+      await handle.truncate(0);
+      await handle.writeFile(data);
+      const written = await handle.stat({ bigint: true });
+      assertSafeOutput(written, outputPath);
+      await assertPathStillNamesHandle(outputPath, written);
+    } finally {
+      await handle.close();
+    }
+  } catch (error) {
+    if (error instanceof PrivateOutputError) throw error;
+    throw new PrivateOutputError(`private output could not be written safely: ${oneLine2(outputPath)}`);
+  }
 }
 
 // src/cli/watch.ts
@@ -13557,6 +13579,15 @@ function openInBrowser(target, deps = {}) {
   }
   return true;
 }
+function openHtmlFile(path, deps = {}) {
+  if (!path.endsWith(".html")) {
+    ;
+    (deps.stderr ?? process.stderr).write(`  orangu opens only a .html file. Open it by hand: ${oneLine2(path)}
+`);
+    return false;
+  }
+  return openInBrowser(path, deps);
+}
 
 // src/feedback/model.ts
 var FEEDBACK_CONTEXTS = ["session", "repo", "global", "report", "app"];
@@ -16017,6 +16048,18 @@ async function cmdDashboard(flags, deps) {
   return true;
 }
 
+// src/cli/raw-output.ts
+var PATH_FLAGS = ["o", "out", "html"];
+var RAW_FLAGS = ["no-redact", "include-text"];
+function rawOutputRefusal(flags, env) {
+  if (!env["CLAUDECODE"] || env["ORANGU_ALLOW_RAW"] === "1") return void 0;
+  const raw = RAW_FLAGS.filter((flag) => flagBool(flags, flag));
+  const path = PATH_FLAGS.find((flag) => typeof flags[flag] === "string");
+  if (!raw.length || path === void 0) return void 0;
+  const named = `${raw.map((flag) => `--${flag}`).join(" and ")} with ${path.length === 1 ? "-" : "--"}${path}`;
+  return `${named}: inside Claude Code, orangu does not write unredacted session text to a path that the command names. Text in a session can steer Claude to run such a command with no prompt. To allow it, start the command with ORANGU_ALLOW_RAW=1, so that Claude Code asks you first.`;
+}
+
 // src/cli/main.ts
 var out2 = MACHINE_CAPS;
 var err2 = MACHINE_CAPS;
@@ -16129,8 +16172,7 @@ async function cmdReport(sel, flags) {
   }
   const path = outPath(flags, ref.sessionId);
   await writePrivateOutput(path, html);
-  const opened = !flagBool(flags, "no-open") && (flagBool(flags, "open") || out2.tty);
-  if (opened) openInBrowser(path);
+  const opened = !flagBool(flags, "no-open") && (flagBool(flags, "open") || out2.tty) && openHtmlFile(path);
   process.stdout.write(path + "\n");
   if (!flagBool(flags, "quiet") && !flagBool(flags, "json")) {
     process.stderr.write(doneLine(err2, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + "\n");
@@ -16202,6 +16244,8 @@ function rejectUnusableFlags(command, flags) {
   } else if (command !== void 0 && flags["html"] !== void 0) {
     fail2("--html writes the scope report: use it with orangu repo or orangu global");
   }
+  const raw = rawOutputRefusal(flags, process.env);
+  if (raw) fail2(raw);
 }
 function thresholdExit(analysis, flags) {
   let bad = false;
@@ -16264,7 +16308,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
     progress = void 0;
     if (!flagBool(flags, "quiet") && flagBool(flags, "verbose")) {
-      process.stderr.write(row(err2, "jobs", String(jobsN), { style: "dim" }) + "\n");
+      process.stderr.write(row(err2, "jobs", String(r.workers), { style: "dim" }) + "\n");
       if (cacheEnabled) process.stderr.write(row(err2, "cache", `${r.hits} hits, ${r.misses} misses`, { style: "dim" }) + "\n");
     }
   } else {
@@ -16310,9 +16354,9 @@ ${a.generatedAt}`).digest("hex").slice(0, 8);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
-  if (open11) openInBrowser(path);
+  const opened = open11 && openHtmlFile(path);
   if (!flagBool(flags, "quiet")) {
-    process.stderr.write(row(err2, "report", path, { raw: true }) + (open11 ? paint(err2, "dim", "  (opened)") : "") + "\n");
+    process.stderr.write(row(err2, "report", path, { raw: true }) + (opened ? paint(err2, "dim", "  (opened)") : "") + "\n");
   }
   return true;
 }
@@ -16465,7 +16509,7 @@ async function main() {
       return cmdAggregate("global", sel, flags);
     case "watch": {
       const ref = await selectSession2(sel, flags);
-      return watchSession(ref, flags, { version: VERSION2, openInBrowser, outPath: (id) => outPath(flags, id) });
+      return watchSession(ref, flags, { version: VERSION2, openInBrowser: openHtmlFile, outPath: (id) => outPath(flags, id) });
     }
     case "serve":
       return cmdServe(flags);
