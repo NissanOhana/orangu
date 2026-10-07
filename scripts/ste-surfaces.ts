@@ -497,7 +497,7 @@ function docSurfaces(files: readonly string[], where: 'root' | 'docs'): Surface[
 
 /** K owns the CLI and engine folders; a new src/ folder has no owner until its chunk names one. */
 const SRC_OWNERS: Readonly<Record<string, string>> = Object.fromEntries(
-  ['adapters', 'cache', 'cli', 'discover', 'feedback', 'harness', 'model', 'models', 'redact', 'serve', 'ste', 'suggest', 'util'].map((dir) => [dir, 'K']),
+  ['adapters', 'cache', 'cli', 'discover', 'feedback', 'harness', 'model', 'models', 'redact', 'serve', 'show-me', 'ste', 'suggest', 'util'].map((dir) => [dir, 'K']),
 )
 /** split into their own rows below: report (client and renderer) and analyze (rule copy and the rest) */
 const SRC_SPLIT = new Set(['report', 'analyze'])

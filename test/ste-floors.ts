@@ -123,6 +123,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // measured 97 (28 of 29). tail.ts:127 keeps "changed while it was being read": one phrase for every
   // read-race error. The adapter retry regex (parse.ts:261) parses only the evidence-input.ts messages
   'src/serve': { floor: 95, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 1 },
+  // new surface, the show-me fill, validation, self-check and render (the strings of orangu show-me):
+  // measured 100 (70 of 70), 0 findings. Its built templates (src/show-me/generated) are exempt in SRC_EXEMPT.
+  'src/show-me': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // new surface, the STE checker moved from scripts/: measured 100 (7 of 7) once its 2 hints use a colon,
   // not a semicolon. Its word tables (src/ste/words.ts) are data, exempt in SRC_EXEMPT.
   'src/ste': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },

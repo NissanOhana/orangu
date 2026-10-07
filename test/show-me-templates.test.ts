@@ -48,7 +48,6 @@ const slotNames = (html: string): string[] => [...new Set([...html.matchAll(/\bd
 const WORDS: Words = {
   verdict: 'The session changed 1 file, and both test runs failed before it ended.',
   summary: 'The session ran the flaky test suite and changed 1 file. Both test runs failed, and the session ended on the failure. Two tool errors came from Bash.',
-  whys: ['Each failed tool call used a turn and gave the agent no new evidence.', 'The session ended on a failing test run.', 'The model sent its request again.'],
   improvementsTitle: 'Three changes for the next session',
 }
 const golden = (name: string): Analysis => JSON.parse(read(`test/golden/${name}.analysis.json`)) as Analysis
