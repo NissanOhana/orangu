@@ -39,8 +39,9 @@ import { fileURLToPath } from 'node:url'
 import { PARAGRAPH, checkBlocks, htmlToText, proseBlocks, proseWords, frontmatterDescription, type SteBlock, type SteResult } from '../src/ste/index.js'
 import type { Aggregate } from '../src/analyze/aggregate.js'
 import type { Analysis } from '../src/model/analysis.js'
-import { APP_DATA_VERSION, type AppData } from '../src/model/app-data.js'
-import { redactAnalysis, type RedactOptions } from '../src/redact/redact.js'
+import type { AppData } from '../src/model/app-data.js'
+import type { RedactOptions } from '../src/redact/redact.js'
+import { renderAggregateReport, renderReport } from '../src/report/render.js'
 import type { Ctx } from '../src/report/client/app.js'
 import { overviewScreenHtml } from '../src/report/client/screens/overview.js'
 import { suggestScreenHtml } from '../src/report/client/screens/suggest.js'
@@ -55,7 +56,7 @@ import type { Words } from '../src/show-me/words.js'
 import { projectEvidence } from '../src/suggest/evidence.js'
 import { VERSION } from '../src/version.js'
 import { persistNextStep } from '../src/cli/next-step.js'
-import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines } from '../src/cli/summary.js'
+import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines, valueBudget } from '../src/cli/summary.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi } from '../src/cli/tty.js'
 import { suggestionIdV2, suggestionKey } from '../src/suggest/id.js'
 import { HIDDEN_ITERATIONS_FIXTURE, hiddenIterationsAggregate, hiddenIterationsAnalysis } from '../test/fixtures/hidden-iterations.js'
@@ -611,8 +612,13 @@ const blankOf = (match: string): string => match.replace(/[^\n]/g, '')
  * aria-label, alt and placeholder values are blocks of their own.
  */
 export function renderedHtmlBlocks(html: string, file: string): SteBlock[] {
+  const lifted = [...html.matchAll(HTML_LIFTED)].flatMap((match) => lineBlocks(htmlToText(match[1] ?? match[2] ?? ''), lineAtIndex(html, match.index ?? 0), file))
+  return [...lifted, ...renderedTextBlocks(html, file)]
+}
+
+/** The page text of rendered markup in reading order, without the attribute values: see renderedHtmlBlocks. */
+export function renderedTextBlocks(html: string, file: string): SteBlock[] {
   const blocks: SteBlock[] = []
-  for (const match of html.matchAll(HTML_LIFTED)) blocks.push(...lineBlocks(htmlToText(match[1] ?? match[2] ?? ''), lineAtIndex(html, match.index ?? 0), file))
   const text = htmlToText(
     html
       .replace(/<(script|style|svg|pre)\b[\s\S]*?<\/\1>/gi, blankOf)
@@ -638,6 +644,8 @@ const IMPROVEMENT_LABEL = 'Improvement: '
 
 /** A leading mark in a cell (the severity glyph and its space): the cell's text starts after it. */
 const CELL_MARK = /^[^\p{L}\p{N}\s]+ /u
+/** The column where the value of a labelled row starts (src/cli/summary.ts rows(): the indent, the 8-column label, a space). */
+const VALUE_COLUMN = layoutWidth(MACHINE_CAPS) - valueBudget(MACHINE_CAPS)
 
 /**
  * The blocks of terminal lines, as a reader reads them. A run of 2 or more spaces separates cells: a row
@@ -684,27 +692,26 @@ export function terminalBlocks(lines: readonly string[], file: string, width = l
       blocks.push(block)
       open.set(cell.start, block)
       open.set(cell.at, block)
+      // A label of the full 8 columns leaves 1 space before its value, so label and value are one cell. A word
+      // at the value column of a row at the 2-space indent still takes the wraps of that value.
+      const end = cell.start + cell.text.length
+      if (!wrap && /^ {2}\S/.test(row) && cell.start < VALUE_COLUMN && end > VALUE_COLUMN && row[VALUE_COLUMN - 1] === ' ') open.set(VALUE_COLUMN, block)
     })
   })
   return blocks
 }
 
-/** A session report's AppData, as renderReport builds it under the default redaction (src/report/render.ts). */
-function sessionData(a: Analysis): AppData {
-  return {
-    v: APP_DATA_VERSION, mode: 'file', version: 'golden', generatedAt: 0,
-    capabilities: { live: false, aggregates: false, kickoffRun: false, exportHtml: true, includeText: false },
-    selectedId: a.session.id, session: a, sessions: [], aggregates: {}, suggestions: [],
-  }
-}
+/** `orangu repo --html` with no flag: what survived the output boundary decides it (src/cli/main.ts writeAggregateHtml). */
+const AGGREGATE_INCLUDE_TEXT = false
 
-/** A repo or global report's AppData, as renderAggregateReport builds it (src/report/render.ts). */
-function aggregateData(g: Aggregate, scope: 'repo' | 'global'): AppData {
-  return {
-    v: APP_DATA_VERSION, mode: 'file', version: 'golden', generatedAt: 0,
-    capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false },
-    selectedId: undefined, session: undefined, sessions: [], aggregates: { [scope]: g }, suggestions: [],
-  }
+/**
+ * The AppData that a shipped report file carries: the JSON that renderReport and renderAggregateReport embed,
+ * parsed as the client parses it. So the rows draw the data the file holds, not a copy of how it is built.
+ */
+function embeddedAppData(html: string): AppData {
+  const json = /<script type="application\/json" id="orangu-data">([\s\S]*?)<\/script>/.exec(html)?.[1]
+  if (json === undefined) throw new Error('the rendered report embeds no orangu-data JSON')
+  return JSON.parse(json) as AppData
 }
 
 const ctxOf = (data: AppData, audience: Audience, state: Ctx['state'], a?: Analysis): Ctx => ({
@@ -733,25 +740,57 @@ function drawnMarkup(render: () => unknown): string {
   return markup
 }
 
-/** The Overview and the Improvements screen of one session, in both audiences, under the default redaction. */
-export function sessionReportBlocks(source: string, analysis: Analysis): SteBlock[] {
-  const a = redactAnalysis(analysis, CLI_REDACTION).analysis
+/** One rendered screen, filled file or block of terminal lines: what a rendered row scores and the split guard reads. */
+export interface RenderedView {
+  file: string
+  html?: string
+  lines?: readonly string[]
+}
+
+/** The scored blocks of a view: its page text and its attribute values, or its terminal blocks. */
+export const viewBlocks = (view: RenderedView): SteBlock[] => (view.html !== undefined ? renderedHtmlBlocks(view.html, view.file) : terminalBlocks(view.lines ?? [], view.file))
+
+/**
+ * The pieces of a view in reading order, without attribute values, by paragraph: what the split guard compares.
+ * A page is one paragraph (its block rules are what the guard checks). Terminal lines are one paragraph per run of
+ * lines between blank lines, because a blank line ends every sentence before it.
+ */
+export function viewPieces(view: RenderedView): SteBlock[][] {
+  if (view.html !== undefined) return [renderedTextBlocks(view.html, view.file)]
+  const rows = (view.lines ?? []).flatMap((text) => stripAnsi(text).split('\n'))
+  const paragraph: number[] = []
+  rows.forEach((row, index) => paragraph.push((paragraph[index - 1] ?? 0) + (row.trim() ? 0 : 1)))
+  const groups = new Map<number, SteBlock[]>()
+  for (const block of terminalBlocks(rows, view.file)) {
+    const key = paragraph[block.line - 1]!
+    groups.set(key, [...(groups.get(key) ?? []), block])
+  }
+  return [...groups.values()]
+}
+
+/** The Overview and the Improvements screen of `orangu report` for one session, in both audiences. */
+export function sessionReportViews(source: string, analysis: Analysis): RenderedView[] {
+  const data = embeddedAppData(renderReport(analysis, { redact: CLI_REDACTION }).html)
+  const a = data.session!
   return AUDIENCES.flatMap(([audience, name]) => [
-    ...renderedHtmlBlocks(overviewScreenHtml(ctxOf(sessionData(a), audience, { screen: 'overview', s: a.session.id }, a)), `${source}#overview.${name}`),
-    ...renderedHtmlBlocks(suggestScreenHtml(ctxOf(sessionData(a), audience, { screen: 'suggest', s: a.session.id }, a)), `${source}#improvements.${name}`),
+    { file: `${source}#overview.${name}`, html: overviewScreenHtml(ctxOf(data, audience, { screen: 'overview', s: a.session.id }, a)) },
+    { file: `${source}#improvements.${name}`, html: suggestScreenHtml(ctxOf(data, audience, { screen: 'suggest', s: a.session.id }, a)) },
   ])
 }
 
-/** The Repo and Global screens and their Improvements screens of one aggregate, in both audiences, past the output boundary. */
-export function aggregateReportBlocks(source: string, aggregate: Aggregate): SteBlock[] {
-  const g = prepareAggregateForOutput(aggregate, {})
-  return (['repo', 'global'] as const).flatMap((scope) =>
-    AUDIENCES.flatMap(([audience, name]) => {
-      const ctx = (screen: string): Ctx => ctxOf(aggregateData(g, scope), audience, { screen, scope })
-      const screen = drawnMarkup(() => (scope === 'repo' ? renderRepo(ctx('repo')) : renderGlobal(ctx('global'))))
-      return [...renderedHtmlBlocks(screen, `${source}#${scope}.${name}`), ...renderedHtmlBlocks(suggestScreenHtml(ctx('suggest')), `${source}#${scope}-improvements.${name}`)]
-    }),
-  )
+/** The Repo or Global screen and its Improvements screen of `orangu repo --html` and `orangu global --html`, in both audiences. */
+export function aggregateReportViews(source: string, aggregate: Aggregate): RenderedView[] {
+  const prepared = prepareAggregateForOutput(aggregate, {})
+  return (['repo', 'global'] as const).flatMap((scope) => {
+    const data = embeddedAppData(renderAggregateReport(prepared, { scope, scopeLabel: prepared.scope, includeText: AGGREGATE_INCLUDE_TEXT }).html)
+    return AUDIENCES.flatMap(([audience, name]) => {
+      const ctx = (screen: string): Ctx => ctxOf(data, audience, { screen, scope })
+      return [
+        { file: `${source}#${scope}.${name}`, html: drawnMarkup(() => (scope === 'repo' ? renderRepo(ctx('repo')) : renderGlobal(ctx('global')))) },
+        { file: `${source}#${scope}-improvements.${name}`, html: suggestScreenHtml(ctx('suggest')) },
+      ]
+    })
+  })
 }
 
 /** A store in memory: the next step gets its short command, and the gate writes nothing to ~/.orangu. */
@@ -767,20 +806,18 @@ const memoryStore = {
  * is the session title, which the transcript wrote, not orangu: it is read as the id fallback that the CLI
  * prints for a session with no title (src/cli/main.ts displayTitle).
  */
-export async function sessionTerminalBlocks(source: string, a: Analysis): Promise<SteBlock[]> {
+export async function sessionTerminalViews(source: string, a: Analysis): Promise<RenderedView[]> {
   const step = await persistNextStep(a, CLI_REDACTION, { store: () => memoryStore as never })
   const title = a.session.id.slice(0, 12)
   return [
-    ...terminalBlocks(briefBlock(MACHINE_CAPS, a, title, step, { hint: true }), `${source}#brief`),
-    ...terminalBlocks(analysisBlock(MACHINE_CAPS, a, title), `${source}#analyze`),
-    ...terminalBlocks(nextStepLines(MACHINE_CAPS, step), `${source}#next-step`),
+    { file: `${source}#brief`, lines: briefBlock(MACHINE_CAPS, a, title, step, { hint: true }) },
+    { file: `${source}#analyze`, lines: analysisBlock(MACHINE_CAPS, a, title) },
+    { file: `${source}#next-step`, lines: nextStepLines(MACHINE_CAPS, step) },
   ]
 }
 
 /** `orangu repo` and `orangu global` text at MACHINE_CAPS, past the output boundary. */
-export function aggregateTerminalBlocks(source: string, aggregate: Aggregate): SteBlock[] {
-  return terminalBlocks(aggregateBlock(MACHINE_CAPS, prepareAggregateForOutput(aggregate, {})), `${source}#aggregate`)
-}
+export const aggregateTerminalView = (source: string, aggregate: Aggregate): RenderedView => ({ file: `${source}#aggregate`, lines: aggregateBlock(MACHINE_CAPS, prepareAggregateForOutput(aggregate, {})) })
 
 /**
  * The 3 words that Claude writes for a show-me run, fixed, so the row measures what orangu writes around them.
@@ -805,50 +842,82 @@ export function showMeAggregateData(aggregate: Aggregate, scope: 'repo' | 'globa
 }
 
 /** Both show-me files of one run, filled from its data and the fixed words, as `orangu show-me --render` fills them. */
-export function showMeBlocks(source: string, data: ShowMeData): SteBlock[] {
+export function showMeViews(source: string, data: ShowMeData): RenderedView[] {
   const page = data.kind === 'session'
     ? sessionPage(data.value, SHOW_ME_WORDS)
     : aggregatePage(data.value, data.scope, { ...(data.folder !== undefined ? { folder: data.folder } : {}), version: data.version, words: SHOW_ME_WORDS })
   const scope = data.kind === 'session' ? 'session' : data.scope
-  return TEMPLATES.flatMap(({ file, html }) => renderedHtmlBlocks(fillTemplate(html, page), `${source}#${scope}.${file}`))
+  return TEMPLATES.map(({ file, html }) => ({ file: `${source}#${scope}.${file}`, html: fillTemplate(html, page) }))
 }
 
-const renderedSessionSurface: Surface = {
-  id: 'rendered#report.session',
-  owner: 'C10',
-  source: 'Overview and Improvements of each golden session and the hidden-iterations session, both audiences',
-  measure: async (read) => fragmentResult((await read.fixtures()).sessions.flatMap(({ source, analysis }) => sessionReportBlocks(source, analysis))),
-}
-
-const renderedAggregateSurface: Surface = {
-  id: 'rendered#report.aggregate',
-  owner: 'C10',
-  source: 'Repo, Global and their Improvements of the golden and hidden-iterations aggregates, both audiences',
-  measure: async (read) => fragmentResult((await read.fixtures()).aggregates.flatMap(({ source, aggregate }) => aggregateReportBlocks(source, aggregate))),
-}
-
-const renderedTerminalSurface: Surface = {
-  id: 'rendered#terminal',
-  owner: 'C10',
-  source: 'briefBlock, analysisBlock, nextStepLines and aggregateBlock at MACHINE_CAPS, wraps joined',
-  measure: async (read) => {
-    const { sessions, aggregates } = await read.fixtures()
-    const perSession = await Promise.all(sessions.map(({ source, analysis }) => sessionTerminalBlocks(source, analysis)))
-    return fragmentResult([...perSession.flat(), ...aggregates.flatMap(({ source, aggregate }) => aggregateTerminalBlocks(source, aggregate))])
+/** The rendered rows: each one draws its views from the fixtures. */
+const RENDERED_ROWS: ReadonlyArray<{ id: string; source: string; views(fixtures: RenderFixtures): Promise<RenderedView[]> }> = [
+  {
+    id: 'rendered#report.session',
+    source: 'Overview and Improvements of each golden session and the hidden-iterations session, both audiences',
+    views: async ({ sessions }) => sessions.flatMap(({ source, analysis }) => sessionReportViews(source, analysis)),
   },
+  {
+    id: 'rendered#report.aggregate',
+    source: 'Repo, Global and their Improvements of the golden and hidden-iterations aggregates, both audiences',
+    views: async ({ aggregates }) => aggregates.flatMap(({ source, aggregate }) => aggregateReportViews(source, aggregate)),
+  },
+  {
+    id: 'rendered#terminal',
+    source: 'briefBlock, analysisBlock, nextStepLines and aggregateBlock at MACHINE_CAPS, wraps joined',
+    views: async ({ sessions, aggregates }) => [
+      ...(await Promise.all(sessions.map(({ source, analysis }) => sessionTerminalViews(source, analysis)))).flat(),
+      ...aggregates.map(({ source, aggregate }) => aggregateTerminalView(source, aggregate)),
+    ],
+  },
+  {
+    id: 'rendered#show-me',
+    source: 'slides.html and report.html of each session, repo and global run of the same fixtures, with fixed words',
+    views: async ({ sessions, aggregates }) => [
+      ...sessions.flatMap(({ source, analysis }) => showMeViews(source, showMeSessionData(analysis))),
+      ...aggregates.flatMap(({ source, aggregate }) => (['repo', 'global'] as const).flatMap((scope) => showMeViews(source, showMeAggregateData(aggregate, scope)))),
+    ],
+  },
+]
+
+const renderedSurfaces: Surface[] = RENDERED_ROWS.map((row) => ({
+  id: row.id,
+  owner: 'C10',
+  source: row.source,
+  measure: async (read) => fragmentResult((await row.views(await read.fixtures())).flatMap(viewBlocks)),
+}))
+
+/** Every view of every rendered row, by row id: the split guard in test/ste.test.ts reads them all. */
+export async function renderedRowViews(root = ROOT): Promise<Record<string, RenderedView[]>> {
+  const fixtures = await reader(root).fixtures()
+  return Object.fromEntries(await Promise.all(RENDERED_ROWS.map(async (row) => [row.id, await row.views(fixtures)] as const)))
 }
 
-const renderedShowMeSurface: Surface = {
-  id: 'rendered#show-me',
-  owner: 'C10',
-  source: 'slides.html and report.html of each session, repo and global run of the same fixtures, with fixed words',
-  measure: async (read) => {
-    const { sessions, aggregates } = await read.fixtures()
-    return fragmentResult([
-      ...sessions.flatMap(({ source, analysis }) => showMeBlocks(source, showMeSessionData(analysis))),
-      ...aggregates.flatMap(({ source, aggregate }) => (['repo', 'global'] as const).flatMap((scope) => showMeBlocks(source, showMeAggregateData(aggregate, scope)))),
-    ])
-  },
+/** A piece that ends a sentence or opens a list: its next piece starts a new sentence. */
+const END_MARK = /[.!?:][\p{Pf}"')\]]*$/u
+
+/**
+ * The places where a block rule cuts a sentence and so hides it from the length check. Pieces chain while one
+ * has no end mark and the next starts in lower case. A chain is reported when its pieces, joined, hold more
+ * sentence-length findings than the pieces alone. A cell edge (a title, then its rule pill) joins into no
+ * long sentence, so it is not reported.
+ */
+export function hiddenSplits(pieces: readonly SteBlock[]): string[] {
+  const long = (texts: readonly string[]): number => checkBlocks(texts.map((text) => ({ line: 1, text }))).findings.filter((f) => f.rule === 'sentence-length').length
+  const out: string[] = []
+  let chain: SteBlock[] = []
+  const close = (): void => {
+    const texts = chain.map((piece) => piece.text)
+    if (chain.length > 1 && long([texts.join(' ')]) > long(texts)) out.push(`${chain[0]!.file}:${chain[0]!.line} "${texts.join(' | ')}"`)
+    chain = []
+  }
+  for (const piece of pieces) {
+    const last = chain.at(-1)
+    if (!last || last.file !== piece.file || END_MARK.test(last.text) || !/^\p{Ll}/u.test(piece.text)) close()
+    chain.push(piece)
+  }
+  close()
+  return out
 }
 
 const SAMPLE_PAGE: TsOptions ={ within: ['publish', 'main'], skipCalls: ['process.stdout.write', 'process.stderr.write', 'Error'] }
@@ -915,10 +984,7 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     // Z: the emitted session narrative
     goldenNarrativeSurface,
     // C10: rendered output, with real values through the real builders
-    renderedSessionSurface,
-    renderedAggregateSurface,
-    renderedTerminalSurface,
-    renderedShowMeSurface,
+    ...renderedSurfaces,
   ]
 }
 

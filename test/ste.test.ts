@@ -9,12 +9,13 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
-  DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, aggregateReportBlocks, fragmentResult, helpText, listFiles, measureAll, renderedHtmlBlocks, rowFailures, surfaces,
-  terminalBlocks, tsBlocks, tsFiles, type SurfaceMeasure,
+  DOC_EXEMPT, HELP_BIN, ROOT, SRC_EXEMPT, STORED_COPY_EXEMPT, aggregateReportViews, fragmentResult, helpText, hiddenSplits, listFiles, measureAll, renderedHtmlBlocks, renderedRowViews,
+  renderedTextBlocks, rowFailures, surfaces, terminalBlocks, tsBlocks, tsFiles, viewBlocks, viewPieces, type SurfaceMeasure,
 } from '../scripts/ste-surfaces.js'
 import type { Aggregate } from '../src/analyze/aggregate.js'
 import type { Analysis } from '../src/model/analysis.js'
-import { aggregateBlock, analysisBlock, nextStepLines } from '../src/cli/summary.js'
+import { aggregateBlock, analysisBlock, nextStepLines, rows } from '../src/cli/summary.js'
+import { checkBlocks, wordCount } from '../src/ste/index.js'
 import { MACHINE_CAPS, glyphs, wrapWords } from '../src/cli/tty.js'
 import { HIDDEN_ITERATIONS_FIXTURE, hiddenIterationsAggregate, hiddenIterationsAnalysis } from './fixtures/hidden-iterations.js'
 import { BANNED, BELOW_TARGET, STE_FLOORS, STE_TARGET } from './ste-floors.js'
@@ -82,10 +83,10 @@ describe('STE gate', () => {
     const finding = agg.crossFindings.find((f) => f.ruleId === 'hidden-iterations')!
     expect(finding.title).toBe(`In one session: ${finding.exampleTitle}`)
     // the shipped composition: each view shows the example title, and one caption says the marker once
-    expect(fragmentResult(aggregateReportBlocks(HIDDEN_ITERATIONS_FIXTURE, agg)).findings).toEqual([])
+    expect(fragmentResult(aggregateReportViews(HIDDEN_ITERATIONS_FIXTURE, agg).flatMap(viewBlocks)).findings).toEqual([])
     // the 0.9.0 composition: a cross finding had no example title, so every row and card showed the marked title
     const before: Aggregate = { ...agg, crossFindings: agg.crossFindings.map(({ exampleTitle: _, ...rest }) => rest) }
-    const findings = fragmentResult(aggregateReportBlocks(HIDDEN_ITERATIONS_FIXTURE, before)).findings
+    const findings = fragmentResult(aggregateReportViews(HIDDEN_ITERATIONS_FIXTURE, before).flatMap(viewBlocks)).findings
     expect(findings.map((f) => f.rule)).toEqual(['sentence-length'])
     expect(findings[0]!.text).toMatch(/^In one session: 2 hidden iterations used 41\.2k tokens/)
     expect(findings[0]!.hint).toMatch(/^26 words/)
@@ -148,6 +149,46 @@ describe('STE gate', () => {
     expect(wrapped.length, 'the sentence wraps at 42 columns').toBe(3)
     const free = ['orangu  title', '', '  A short heading', ...wrapped, '  Another short line.']
     expect(terminalBlocks(free, 'free', 42).map((b) => b.text)).toEqual(['orangu', 'title', 'A short heading', sentence, 'Another short line.'])
+  })
+
+  it('joins the wrap of a value under a label of the full 8 columns, where 1 space is the only gap between them', () => {
+    const sentence = 'The value of this row has thirty words, so the row wraps it under its label, and the checker must still see the whole sentence of thirty words at once.'
+    expect(wordCount(sentence)).toBe(30)
+    const lines = rows(MACHINE_CAPS, 'abcdefgh', sentence)
+    expect(lines[0], 'one space between an 8-column label and its value').toMatch(/^ {2}abcdefgh \S/)
+    expect(lines.length, 'the value wraps').toBeGreaterThan(1)
+    const blocks = terminalBlocks(lines, 'row')
+    expect(blocks.map((b) => b.text)).toEqual([`abcdefgh ${sentence}`])
+    expect(checkBlocks(blocks).findings.map((f) => f.rule)).toEqual(['sentence-length'])
+  })
+
+  it('no block rule cuts a sentence that the checker would flag whole, in any view of any rendered row', async () => {
+    const views = await renderedRowViews()
+    expect(Object.keys(views).sort()).toEqual(Object.keys(STE_FLOORS).filter((id) => id.startsWith('rendered#')).sort())
+    for (const [id, list] of Object.entries(views)) expect(list.length, `${id} has views`).toBeGreaterThan(0)
+    const all = Object.values(views).flat()
+    expect(all.flatMap((view) => viewPieces(view).flatMap(hiddenSplits))).toEqual([])
+  })
+
+  it('the split guard reports each shape that cuts a long sentence: touching tags, a line break, a button, a word break and an unjoined terminal wrap', () => {
+    const left = 'this sentence has thirty words and the first part of it runs on to the'
+    const right = 'middle of the long line where a rule could cut it in two short parts.'
+    expect(wordCount(`${left} ${right}`)).toBe(30)
+    const shapes = [
+      `<p>${left} <b>bold</b><span>span</span> ${right}</p>`,
+      `<p>${left}<br>${right}</p>`,
+      `<p>${left} <button>button</button> ${right}</p>`,
+      `<p>${left} over<wbr>${right}</p>`,
+    ]
+    for (const html of shapes) {
+      const pieces = renderedTextBlocks(html, 'shape')
+      expect(pieces.length, html).toBeGreaterThan(1)
+      expect(hiddenSplits(pieces), html).toHaveLength(1)
+    }
+    // a wrap at a column that no cell of its row starts at is not joined
+    expect(hiddenSplits(terminalBlocks(['  label    ' + left, ' '.repeat(12) + right], 'terminal'))).toHaveLength(1)
+    // a cell edge is not a cut: a title with no end mark, then its rule pill
+    expect(hiddenSplits(renderedTextBlocks(`<summary><b>${left}</b><span class="pill">hidden-iterations</span></summary>`, 'cell'))).toEqual([])
   })
 
   it('reads the help from the tracked plugin bin, so the gate needs no dist/', () => {
