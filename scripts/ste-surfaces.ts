@@ -43,7 +43,7 @@ export const HELP_BIN = 'plugin/bin/orangu.cli.mjs'
 /** Paths under src/ that are not gated, with the reason. Everything else under src/ is a surface. */
 export const SRC_EXEMPT: Readonly<Record<string, string>> = {
   'src/report/generated': 'built output of src/report/client (scripts/build.mjs); its sources are measured',
-  'src/ste/words.ts': 'the word tables of the STE checker: data that holds the words it flags, not copy. The rest of src/ste is measured',
+  'src/ste/words.ts': 'the word tables of the STE checker: the words it flags and the word lists it reads. Data, not copy.',
 }
 
 /** Markdown at the root and in docs/ that is not gated, with the reason. Every other doc is a surface. */
