@@ -76,8 +76,11 @@ export const STORED_COPY_EXEMPT: Readonly<Record<string, { functions: readonly s
 /** The rule copy fields a rule site passes: the title, the detail and the 3 parts of the rule text. */
 export type RuleField = 'title' | 'detail' | 'improvement' | 'why' | 'method'
 const RULE_FIELDS: readonly RuleField[] = ['title', 'detail', 'improvement', 'why', 'method']
-/** An emitted insight also carries `recommendation`, the parts joined, which older readers read. */
-type GoldenField = RuleField | 'recommendation'
+/**
+ * An emitted insight also carries `recommendation`, the parts joined, which older readers read. An emitted
+ * cross finding also carries `exampleTitle`, the title of its example insight without the marker.
+ */
+type GoldenField = RuleField | 'recommendation' | 'exampleTitle'
 
 export interface TsOptions {
   /** measure only the strings inside these top-level function declarations (and `consts`, when given) */
@@ -584,7 +587,11 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     goldenSurface('insight', 'why'),
     goldenSurface('insight', 'method'),
     goldenSurface('crossFinding', 'title'),
+    goldenSurface('crossFinding', 'exampleTitle'),
     goldenSurface('crossFinding', 'recommendation'),
+    goldenSurface('crossFinding', 'improvement'),
+    goldenSurface('crossFinding', 'why'),
+    goldenSurface('crossFinding', 'method'),
     // Z: the emitted session narrative
     goldenNarrativeSurface,
   ]

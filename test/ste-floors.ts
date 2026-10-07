@@ -197,6 +197,17 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // B2: floor 66 -> 98. Measured 40 sentences, 40 clean, score 100: the rewritten rule copy of the 11
   // example insights.
   'test/golden#crossFinding.recommendation': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // The cross-finding parts of the rule text and the example title without the marker, born 2026-10-07 at
+  // measured - 2, as the golden aggregate emits them from the 11 example insights.
+  // Measured 10 sentences of 11 titles, 10 clean, score 100. Without the marker, "1 hook error" is too short
+  // to count as a sentence.
+  'test/golden#crossFinding.exampleTitle': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Measured 23 sentences, 23 clean, score 100.
+  'test/golden#crossFinding.improvement': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Measured 16 sentences, 16 clean, score 100.
+  'test/golden#crossFinding.why': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // Measured 1 sentence, 1 clean, score 100 (only cache-ttl-churn emits a method in the corpus).
+  'test/golden#crossFinding.method': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Z: the emitted session narrative, the first prose on every session report
   // Born 2026-10-07 after the narrative rewrite: measured 97 (32 of 33), floor 95. The one finding is the
   // "Look at these first: <title> · <title>." list in agents-heavy (31 words): two rule titles, each measured
