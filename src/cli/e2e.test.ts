@@ -1088,11 +1088,21 @@ syncBuiltinESMExports()
       writeFileSync(join(run.dir, 'words.json'), JSON.stringify({ verdict, summary: 'The session changed 1 file.', improvementsTitle: 'Two changes for the next session' }))
       const r = showMe(['--render', run.dir])
       expect(r.status, r.stderr).toBe(0)
-      const findings = r.stdout.split('\n').filter((line) => /^ {2}ste {6}/.test(line))
-      expect(findings).toHaveLength(1)
-      expect(findings[0]).toMatch(/^ {2}ste {6}verdict: sentence-length "The session read one more file .*" 35 words: split it \(limit 25\)$/)
-      expect(r.stdout).toContain('1 STE finding. This is advice')
+      // a prose row wraps under itself at whole words: its label line, then continuation lines at the value column
+      const lines = r.stdout.trimEnd().split('\n')
+      const rowOf = (label: string): string[] => {
+        const at = lines.findIndex((line) => line.startsWith(`  ${label.padEnd(8)} `))
+        if (at < 0) return []
+        const end = lines.findIndex((line, i) => i > at && !line.startsWith(' '.repeat(11)))
+        return lines.slice(at, end < 0 ? lines.length : end)
+      }
+      expect(lines.filter((line) => /^ {2}ste {6}/.test(line))).toHaveLength(1)
+      const ste = rowOf('ste').join(' ').replace(/\s+/g, ' ').trim()
+      expect(ste).toMatch(/^ste verdict: sentence-length "The session read one more file .*" 35 words: split it \(limit 25\)$/)
+      expect(rowOf('words').join(' ').replace(/\s+/g, ' ').trim()).toBe('words 1 STE finding. This is advice: fix each real finding in words.json, then render again.')
       expect(r.stdout).toMatch(/^ {2}slides {3}.*\/slides\.html$/m)
+      // the path rows stay whole on one line; every other line fits 80 columns
+      for (const line of lines.filter((l) => !/^ {2}(slides|report) {3}/.test(l))) expect(displayWidth(line), line).toBeLessThanOrEqual(80)
       expect(r.stdout).not.toMatch(ESCAPES)
     })
 

@@ -12,7 +12,7 @@
  *
  * Exit 0 when the step is done: STE findings are advice, as in `orangu ste`, and no length or score is a pass mark.
  * Exit 1 (a thrown Error, through main.ts) on a usage, path, validation, self-check or write failure, and then the
- * render writes nothing. Each printed value that comes from an input passes through stripAnsi.
+ * render writes nothing. Each printed value that comes from an input passes through oneLine (src/cli/tty.ts).
  */
 import { basename, resolve } from 'node:path'
 import { aggregate } from '../../analyze/aggregate.js'
@@ -31,7 +31,7 @@ import { flagBool, flagStr } from '../args.js'
 import { prepareAggregateForOutput, renderAnalysisJson } from '../json-out.js'
 import { openInBrowser } from '../open-browser.js'
 import { row } from '../summary.js'
-import { detectCaps, paint, stripAnsi, type Caps } from '../tty.js'
+import { detectCaps, oneLine, paint, type Caps } from '../tty.js'
 
 const USAGE = 'usage: orangu show-me [<session>] | --scope repo [--cwd <dir>] | --scope global [--json], then orangu show-me --render <dir> [--open] [--json]'
 /** the flags of each step, plus the output switches that every verb accepts */
@@ -40,8 +40,6 @@ const PREPARE_FLAGS = new Set(['scope', 'cwd', 'root', 'r', 'json', 'quiet', 'no
 const SCAN_FLAGS = ['limit', 'jobs', 'j']
 const RENDER_FLAGS = new Set(['render', 'open', 'json', 'quiet', 'no-color'])
 
-/** One line of terminal text from an input: no escape sequence, no control character, no line break. */
-const inert = (value: string): string => stripAnsi(value).replace(/[\r\n\t]+/g, ' ')
 const flagName = (name: string): string => `${name.length === 1 ? '-' : '--'}${name}`
 
 function checkFlags(flags: Record<string, string | boolean>, allowed: ReadonlySet<string>, step: string): void {
@@ -76,8 +74,8 @@ async function selectSession(selector: string | undefined, flags: Record<string,
   const resolved = await resolveSession(selector, options)
   if (resolved) return resolved
   const candidates = await candidatesForPrefix(selector, options)
-  if (candidates.length > 1) throw new Error(`"${inert(selector)}" matches ${candidates.length} sessions. Give more of the id.`)
-  throw new Error(`No session matches "${inert(selector)}". Try: orangu list`)
+  if (candidates.length > 1) throw new Error(`"${oneLine(selector)}" matches ${candidates.length} sessions. Give more of the id.`)
+  throw new Error(`No session matches "${oneLine(selector)}". Try: orangu list`)
 }
 
 const cacheFor = (flags: Record<string, string | boolean>): AnalysisCache | null =>
@@ -139,11 +137,11 @@ async function aggregateData(scope: 'repo' | 'global', flags: Record<string, str
 
 function printPrepared(run: PreparedRun, out: Caps): void {
   const lines = [
-    row(out, 'dir', inert(run.dir), { raw: true }),
-    row(out, 'data', `${inert(run.data.path)} · ${run.data.bytes.toLocaleString('en-US')} bytes · about ${run.data.approxTokens.toLocaleString('en-US')} tokens`, { raw: true }),
+    row(out, 'dir', oneLine(run.dir), { raw: true }),
+    row(out, 'data', `${oneLine(run.data.path)} · ${run.data.bytes.toLocaleString('en-US')} bytes · about ${run.data.approxTokens.toLocaleString('en-US')} tokens`, { raw: true }),
     run.data.overThreshold
-      ? row(out, 'gate', `over the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate. Ask the user before you read data.json into a model.`, { raw: true, style: 'warn' })
-      : row(out, 'gate', `under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate`, { raw: true, style: 'dim' }),
+      ? row(out, 'gate', `over the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate. Ask the user before you read data.json into a model.`, { style: 'warn' })
+      : row(out, 'gate', `under the ~${ESTIMATE_TOKEN_THRESHOLD.toLocaleString('en-US')}-token gate`, { style: 'dim' }),
   ]
   process.stdout.write(`${lines.join('\n')}\n`)
 }
@@ -171,15 +169,15 @@ async function prepare(positionals: string[], flags: Record<string, string | boo
 // ---------- render ----------
 
 function printRendered(result: RenderResult, opened: boolean, out: Caps): void {
-  const lines = [row(out, 'slides', inert(result.slides), { raw: true }), row(out, 'report', inert(result.report), { raw: true })]
-  for (const f of result.findings) lines.push(row(out, 'ste', `${f.slot}: ${f.rule} "${inert(f.text)}" ${inert(f.hint)}`, { raw: true }))
+  const lines = [row(out, 'slides', oneLine(result.slides), { raw: true }), row(out, 'report', oneLine(result.report), { raw: true })]
+  for (const f of result.findings) lines.push(row(out, 'ste', `${f.slot}: ${f.rule} "${oneLine(f.text)}" ${oneLine(f.hint)}`))
   const count = result.findings.length
   lines.push(
     count
-      ? row(out, 'words', `${count} STE finding${count === 1 ? '' : 's'}. This is advice: fix each real finding in words.json, then render again.`, { raw: true, style: 'warn' })
-      : row(out, 'words', 'no STE finding', { raw: true, style: 'dim' }),
+      ? row(out, 'words', `${count} STE finding${count === 1 ? '' : 's'}. This is advice: fix each real finding in words.json, then render again.`, { style: 'warn' })
+      : row(out, 'words', 'no STE finding', { style: 'dim' }),
   )
-  if (opened) lines.push(row(out, 'opened', 'both files, in the browser', { raw: true, style: 'dim' }))
+  if (opened) lines.push(row(out, 'opened', 'both files, in the browser', { style: 'dim' }))
   process.stdout.write(`${lines.join('\n')}\n`)
 }
 
