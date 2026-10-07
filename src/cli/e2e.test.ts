@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -1010,6 +1010,160 @@ syncBuiltinESMExports()
       expect(other.status).toBe(1)
       expect(other.stdout).toBe('')
       expect(other.stderr).toMatch(/--open is not an orangu ste flag/)
+    })
+  })
+
+  describe('orangu show-me', () => {
+    // the hostile words of the security review, and a sentence of more than 10,000 characters: all render as text
+    const HOSTILE = ['<script>alert(1)</script>', '" onload="x', 'javascript:', '</title><script>', '<!--', '&#106;avascript:', '<svg><set attributeName="href" to="https://x"/>']
+    const LONG = `${'The agent read the same file again '.repeat(290)}and stopped.`
+    const escaped = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/(https?):/gi, '$1&#58;')
+    const htmlFiles = (dir: string) => readdirSync(dir).filter((f) => f.endsWith('.html')).sort()
+
+    /** a fixture Claude home, an XDG data home in a temp dir (no ORANGU_HOME), and a stub browser opener on PATH */
+    async function showMeHome() {
+      // the real path: orangu show-me prints real paths, and the macOS temp dir is a link
+      const temp = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-show-me-')))
+      const repo = join(temp, 'repo')
+      await mkdir(repo, { recursive: true })
+      const home = await makeFixtureHome(join(temp, 'claude'), { cwd: repo })
+      const bin = join(temp, 'bin')
+      await mkdir(bin)
+      const openLog = join(temp, 'opened.log')
+      for (const name of ['open', 'xdg-open']) {
+        await writeFile(join(bin, name), `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(openLog)}\n`, { mode: 0o755 })
+      }
+      const env: NodeJS.ProcessEnv = { ...process.env, HOME: join(temp, 'home'), XDG_DATA_HOME: join(temp, 'data'), ORANGU_CLAUDE_ROOTS: home.configDir, CLAUDE_CONFIG_DIR: home.configDir, ORANGU_NO_CACHE: '1', PATH: `${bin}:${process.env['PATH'] ?? ''}` }
+      delete env['ORANGU_HOME']
+      const base = join(temp, 'data', 'orangu', 'show-me')
+      const showMe = (args: string[]) => spawnSync('node', [CLI, 'show-me', ...args], { encoding: 'utf8', env })
+      return { temp, repo, home, base, env, openLog, showMe }
+    }
+
+    it('prepares a run directory under the show-me base, then renders hostile words as text in 2 offline 0600 files', async () => {
+      const { home, base, showMe, env } = await showMeHome()
+      const prepared = showMe([home.endedId, '--json'])
+      expect(prepared.status, prepared.stderr).toBe(0)
+      const run = JSON.parse(prepared.stdout) as { dir: string; data: { path: string; bytes: number; approxTokens: number; overThreshold: boolean } }
+      expect(run.dir.startsWith(base + '/'), run.dir).toBe(true)
+      expect(run.dir).toMatch(/\/session-aaaaaaaa-[A-Za-z0-9]{6}$/)
+      expect(existsSync(run.data.path)).toBe(true)
+      if (process.platform !== 'win32') expect(statSync(run.dir).mode & 0o777).toBe(0o700)
+      expect(run.data.bytes).toBe(statSync(run.data.path).size)
+      expect(run.data.approxTokens).toBe(Math.ceil(run.data.bytes / 4))
+      // data.json is the slim analysis that `orangu analyze --json --slim` prints, redacted the same way
+      const analyzed = spawnSync('node', [CLI, 'analyze', home.endedId, '--json', '--slim'], { encoding: 'utf8', env })
+      const slim = (text: string) => {
+        const value = JSON.parse(text) as { generator: { generatedAt?: number } }
+        delete value.generator.generatedAt
+        return value
+      }
+      expect(slim(readFileSync(run.data.path, 'utf8'))).toEqual(slim(analyzed.stdout))
+      expect(readFileSync(run.data.path, 'utf8')).not.toContain('sk-ant-api03')
+
+      const words = { verdict: HOSTILE.join(' '), summary: `${HOSTILE.join(' ')} ${LONG}`, improvementsTitle: HOSTILE.join(' ') }
+      writeFileSync(join(run.dir, 'words.json'), JSON.stringify(words))
+      const rendered = showMe(['--render', run.dir, '--json'])
+      expect(rendered.status, rendered.stderr).toBe(0)
+      const result = JSON.parse(rendered.stdout) as { slides: string; report: string; findings: Array<{ slot: string; rule: string }> }
+      expect([result.slides, result.report]).toEqual([join(run.dir, 'slides.html'), join(run.dir, 'report.html')])
+      for (const file of [result.slides, result.report]) {
+        if (process.platform !== 'win32') expect(statSync(file).mode & 0o777, file).toBe(0o600)
+        const html = readFileSync(file, 'utf8')
+        expect(html.match(/<script\b/gi), file).toHaveLength(1)
+        expect(html, file).toContain(`data-slot="verdict">${escaped(words.verdict)}<`)
+        for (const hostile of HOSTILE) if (/[<>"]/.test(hostile)) expect(html, `${file}: ${hostile}`).not.toContain(hostile)
+        const gate = spawnSync('node', [join(process.cwd(), 'scripts', 'assert-offline.mjs'), '--file', file], { encoding: 'utf8' })
+        expect(gate.stdout + gate.stderr, file).toContain('offline OK')
+        expect(gate.status, file).toBe(0)
+      }
+      // no length cap: the long sentence renders whole
+      expect(readFileSync(result.report, 'utf8')).toContain(LONG)
+    })
+
+    it('prints one sentence-length finding for a verdict over 25 words, as advice, and exits 0', async () => {
+      const { home, showMe } = await showMeHome()
+      const run = JSON.parse(showMe([home.endedId, '--json']).stdout) as { dir: string }
+      const verdict = `The session read ${'one more file and '.repeat(6)}then it stopped on a failing test run.`
+      writeFileSync(join(run.dir, 'words.json'), JSON.stringify({ verdict, summary: 'The session changed 1 file.', improvementsTitle: 'Two changes for the next session' }))
+      const r = showMe(['--render', run.dir])
+      expect(r.status, r.stderr).toBe(0)
+      const findings = r.stdout.split('\n').filter((line) => /^ {2}ste {6}/.test(line))
+      expect(findings).toHaveLength(1)
+      expect(findings[0]).toMatch(/^ {2}ste {6}verdict: sentence-length "The session read one more file .*" 35 words: split it \(limit 25\)$/)
+      expect(r.stdout).toContain('1 STE finding. This is advice')
+      expect(r.stdout).toMatch(/^ {2}slides {3}.*\/slides\.html$/m)
+      expect(r.stdout).not.toMatch(ESCAPES)
+    })
+
+    it('exits 1 and writes nothing for a directory outside the base or a words.json with another key', async () => {
+      const { home, temp, showMe } = await showMeHome()
+      const run = JSON.parse(showMe([home.endedId, '--json']).stdout) as { dir: string; data: { path: string } }
+      const outside = join(temp, 'outside')
+      await mkdir(outside)
+      writeFileSync(join(outside, 'data.json'), readFileSync(run.data.path))
+      writeFileSync(join(outside, 'words.json'), JSON.stringify({ verdict: 'a', summary: 'b', improvementsTitle: 'c' }))
+      const away = showMe(['--render', outside])
+      expect(away.status).toBe(1)
+      expect(away.stdout).toBe('')
+      expect(away.stderr).toMatch(/must be a run directory that orangu show-me made/)
+      expect(htmlFiles(outside)).toEqual([])
+
+      writeFileSync(join(run.dir, 'words.json'), JSON.stringify({ verdict: 'a', summary: 'b', improvementsTitle: 'c', template: 'x.html' }))
+      const extra = showMe(['--render', run.dir])
+      expect(extra.status).toBe(1)
+      expect(extra.stderr).toMatch(/words\.json may hold only the keys verdict, summary and improvementsTitle/)
+      expect(htmlFiles(run.dir)).toEqual([])
+    })
+
+    it('--open hands both rendered files to the browser opener', async () => {
+      const { home, showMe, openLog } = await showMeHome()
+      const run = JSON.parse(showMe([home.endedId, '--json']).stdout) as { dir: string }
+      writeFileSync(join(run.dir, 'words.json'), JSON.stringify({ verdict: 'The session ended.', summary: 'The session changed 1 file.', improvementsTitle: 'Two changes' }))
+      const r = showMe(['--render', run.dir, '--open'])
+      expect(r.status, r.stderr).toBe(0)
+      expect(r.stdout).toContain('both files, in the browser')
+      await until(() => existsSync(openLog) && readFileSync(openLog, 'utf8').trim().split('\n').length === 2, 10_000, 'the stub opener')
+      expect(readFileSync(openLog, 'utf8').trim().split('\n').sort()).toEqual([join(run.dir, 'report.html'), join(run.dir, 'slides.html')])
+    })
+
+    it('prepares and renders a repository: the evidence bundle with its folder, and the "In one session" label', async () => {
+      const { repo, home, base, showMe } = await showMeHome()
+      const prepared = showMe(['--scope', 'repo', '--cwd', repo, '--root', home.configDir])
+      expect(prepared.status, prepared.stderr).toBe(0)
+      const dir = /^ {2}dir {6}(.+)$/m.exec(prepared.stdout)![1]!
+      expect(dir.startsWith(join(base, 'repo-repo-'))).toBe(true)
+      expect(prepared.stdout).toMatch(/^ {2}data {5}.*\/data\.json · [\d,]+ bytes · about [\d,]+ tokens$/m)
+      const data = JSON.parse(readFileSync(join(dir, 'data.json'), 'utf8')) as { source: { scope: string; sessions: number }; folder: string; version: string; findings: Array<{ exampleTitle?: string }> }
+      expect(data.source.scope).toBe('repo')
+      expect(data.source.sessions).toBeGreaterThan(0)
+      expect(data.folder).toBe('repo')
+      expect(data.version).toBe(run(['--version']).trim())
+      writeFileSync(join(dir, 'words.json'), JSON.stringify({ verdict: 'Tool errors recur in these sessions.', summary: 'The sessions repeat one pattern.', improvementsTitle: 'One change for the next session' }))
+      const r = showMe(['--render', dir])
+      expect(r.status, r.stderr).toBe(0)
+      for (const file of ['slides.html', 'report.html']) {
+        const html = readFileSync(join(dir, file), 'utf8')
+        expect(html).toContain('<html lang="en" data-scope="repo"')
+        expect(html).toContain('Recurring patterns in repo')
+        if (data.findings.length) expect(html).toContain('data-if="aggregate">In one session</p>')
+      }
+    })
+
+    it('refuses a usage error with exit 1: a flag of the other step, a session with --scope repo, --render with no directory', async () => {
+      const { home, showMe } = await showMeHome()
+      for (const [args, message] of [
+        [[home.endedId, '--open'], /--open is not a flag of orangu show-me \(prepare\)/],
+        [['--render', '/tmp/x', '--scope', 'repo'], /--scope is not a flag of orangu show-me --render/],
+        [[home.endedId, '--scope', 'repo'], /A session goes with session scope only/],
+        [['--render'], /--render needs the run directory/],
+        [['--scope', 'everything'], /--scope must be repo or global/],
+        [[home.endedId, '--limit', '5'], /--limit goes with --scope repo or --scope global/],
+      ] as Array<[string[], RegExp]>) {
+        const r = showMe(args)
+        expect(r.status, args.join(' ')).toBe(1)
+        expect(r.stderr, args.join(' ')).toMatch(message)
+      }
     })
   })
 })

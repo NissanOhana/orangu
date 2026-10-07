@@ -8,6 +8,7 @@ import { cmdHarness } from './harness.js'
 import { cmdSuggest } from './suggest.js'
 import { cmdFeedback } from './feedback.js'
 import { cmdSte } from './ste.js'
+import { cmdShowMe } from './show-me.js'
 
 export type CommandFn = (positionals: string[], flags: Record<string, string | boolean>) => Promise<void>
 
@@ -18,6 +19,7 @@ export const EXTRA_COMMANDS: Record<string, CommandFn> = {
   harness: cmdHarness,
   suggest: cmdSuggest,
   ste: cmdSte,
+  'show-me': cmdShowMe,
 }
 
 export const EXTRA_HELP: string[] = [
@@ -68,5 +70,15 @@ export const EXTRA_HELP: string[] = [
     '  orangu ste <file...|->       score Markdown, HTML or text against the STE',
     '                               writing rules (- reads stdin, no pass mark)',
     '                                 ([--json] [--lines])',
+  ].join('\n'),
+  [
+    '  orangu show-me [<session>]   a slide deck and a written report, in 2 steps:',
+    '                               write data.json to a new run directory',
+    '                                 (--scope repo [--cwd <dir>] | --scope global)',
+    '                                 ([--json] [--include-text] [--no-redact])',
+    '  orangu show-me --render <dir>',
+    '                               fill both offline HTML files from data.json',
+    '                               and words.json (no pass mark: STE advice)',
+    '                                 ([--open] [--json])',
   ].join('\n'),
 ]

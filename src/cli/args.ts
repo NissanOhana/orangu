@@ -81,6 +81,7 @@ export const KNOWN_FLAGS = new Set([
   'application',
   'verification',
   'cohort',
+  'render',
 ])
 
 /** Flags the parser saw that no verb reads, formatted the way the user typed them. */

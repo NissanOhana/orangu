@@ -1087,25 +1087,25 @@ describe('docs/USAGE.md entry point', () => {
   })
 
   it('says which flags hide a guessed current session, verb by verb, as the code does', () => {
-    // The guess line has one gate per resolver. main.ts (report, analyze, watch) and estimate.ts hide it on
-    // --quiet or --json. evidence.ts hides it on --quiet only, so `evidence current --json` still prints it.
+    // The guess line has one gate per resolver. main.ts (report, analyze, watch), estimate.ts and show-me.ts hide
+    // it on --quiet or --json. evidence.ts hides it on --quiet only, so `evidence current --json` still prints it.
     // If a gate changes, this sentence changes with it.
     const gate = (file: string): string[] => readFileSync(join(root, file), 'utf8').split('\n').filter((line) => line.includes('found.note &&'))
-    for (const file of ['src/cli/main.ts', 'src/cli/commands/estimate.ts']) {
+    for (const file of ['src/cli/main.ts', 'src/cli/commands/estimate.ts', 'src/cli/commands/show-me.ts']) {
       expect(gate(file), file).toHaveLength(1)
       expect(gate(file)[0], file).toContain("!flagBool(flags, 'quiet') && !flagBool(flags, 'json')")
     }
     expect(gate('src/cli/commands/evidence.ts')).toHaveLength(1)
     expect(gate('src/cli/commands/evidence.ts')[0]).toContain("!flagBool(flags, 'quiet')")
     expect(gate('src/cli/commands/evidence.ts')[0]).not.toContain("'json'")
-    // exactly these 3 files resolve `current`: a 4th caller fails here until this sentence covers it
+    // exactly these 4 files resolve `current`: a 5th caller fails here until this sentence covers it
     const sources = (readdirSync(join(root, 'src'), { recursive: true }) as string[])
       .map((file) => `src/${file.split('\\').join('/')}`)
       .filter((file) => file.endsWith('.ts') && !/\.(test|spec|d)\.ts$/.test(file) && file !== 'src/discover/current.ts')
     const callers = sources.filter((file) => readFileSync(join(root, file), 'utf8').includes('resolveCurrentSession(')).sort()
-    expect(callers).toEqual(['src/cli/commands/estimate.ts', 'src/cli/commands/evidence.ts', 'src/cli/main.ts'])
+    expect(callers).toEqual(['src/cli/commands/estimate.ts', 'src/cli/commands/evidence.ts', 'src/cli/commands/show-me.ts', 'src/cli/main.ts'])
     expect(usage).not.toContain('never guessed silently')
-    expect(usage).toContain('If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch` and `estimate`.')
+    expect(usage).toContain('If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch`, `estimate` and `show-me`.')
   })
 
   it('names the Improvements screen with the label the report sidebar uses', () => {

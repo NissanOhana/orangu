@@ -60,6 +60,14 @@ describe('suggest/estimate flags ', () => {
 })
 
 describe('orangu ste flags', () => {
+  it('--render is a known flag that takes the run directory after it', () => {
+    const p = parseArgs(['show-me', '--render', '/tmp/show-me/session-a-b', '--open'])
+    expect(p.flags['render']).toBe('/tmp/show-me/session-a-b')
+    expect(p.flags['open']).toBe(true)
+    expect(p.positionals).toEqual([])
+    expect(unknownFlags(p.flags)).toEqual([])
+  })
+
   it('--lines is a known boolean flag and never takes the file after it', () => {
     const p = parseArgs(['ste', '--lines', 'help.txt', '--json'])
     expect(p.flags['lines']).toBe(true)
