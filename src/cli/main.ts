@@ -45,6 +45,7 @@ import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson, type PreparedAggregate } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
 import { openInBrowser } from './open-browser.js'
+import { rawOutputRefusal } from './raw-output.js'
 import { VERSION } from '../version.js'
 
 /**
@@ -304,6 +305,9 @@ function rejectUnusableFlags(command: string | undefined, flags: Record<string, 
     // and an ignored output flag is a report the caller never gets and never hears about.
     fail('--html writes the scope report: use it with orangu repo or orangu global')
   }
+  // inside Claude Code, unredacted text to a named path needs ORANGU_ALLOW_RAW=1 (src/cli/raw-output.ts)
+  const raw = rawOutputRefusal(flags, process.env)
+  if (raw) fail(raw)
 }
 
 function thresholdExit(analysis: ReturnType<typeof analyzeSession>, flags: Record<string, string | boolean>): void {

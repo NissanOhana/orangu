@@ -23,6 +23,10 @@ const CLI = join(process.cwd(), 'dist', 'orangu.js')
 // report / analyze / bare orangu persist the top finding as a suggestion record: every spawn below
 // inherits this hermetic ORANGU_HOME so the suite never writes into the developer's real ~/.orangu
 process.env['ORANGU_HOME'] = mkdtempSync(join(tmpdir(), 'orangu-cli-home-'))
+// The suite runs as a terminal and CI run it: a test that runs inside Claude Code sets CLAUDECODE itself, so a suite
+// started from a Claude Code session behaves as one started from a terminal.
+delete process.env['CLAUDECODE']
+delete process.env['ORANGU_ALLOW_RAW']
 const run = (args: string[]) => execFileSync('node', [CLI, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 /** any CSI/OSC escape, carriage return (spinner frame) or BEL */
 const ESCAPES = /[\x1b\r\x07]/
@@ -246,6 +250,41 @@ syncBuiltinESMExports()
     const html2 = repo(['--html', rc])
     expect(html2.status, html2.stderr).toBe(1)
     expect(readFileSync(rc, 'utf8')).toBe(rcText)
+  })
+
+  // A planted line can make Claude run a pre-approved `orangu report latest --no-redact --include-text -o <repo>/x`.
+  // Inside Claude Code that write needs ORANGU_ALLOW_RAW=1, an env prefix that no allow rule matches, so Claude Code
+  // asks the user first. A terminal run and the default temporary path do not change.
+  it('inside Claude Code, --no-redact or --include-text with a named path needs ORANGU_ALLOW_RAW=1', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'orangu-cli-raw-'))
+    const cwd = join(dir, 'project')
+    await mkdir(cwd, { recursive: true })
+    const home = await makeFixtureHome(dir, { cwd })
+    const runIn = (args: string[], env: Record<string, string>) => spawnSync('node', [CLI, ...args, '--root', home.configDir, '--no-cache', '--quiet'], { encoding: 'utf8', env: { ...process.env, ...env } })
+    const report = (out: string, env: Record<string, string>) => runIn(['report', home.endedId, '-o', out, '--no-open', '--no-redact', '--include-text'], env)
+
+    const notes = join(cwd, 'notes.md')
+    const refused = report(notes, { CLAUDECODE: '1' })
+    expect(refused.status, refused.stderr).toBe(1)
+    expect(refused.stderr).toContain('error: --no-redact and --include-text with -o: ')
+    expect(refused.stderr).toContain('ORANGU_ALLOW_RAW=1')
+    expect(existsSync(notes), 'nothing is written').toBe(false)
+    for (const extra of [['--out', join(cwd, 'agg.json'), '--include-text'], ['--html', join(cwd, 'repo.html'), '--no-redact']]) {
+      const scope = runIn(['repo', cwd, '--jobs', '1', ...extra], { CLAUDECODE: '1' })
+      expect(scope.status, `${extra.join(' ')}\n${scope.stderr}`).toBe(1)
+      expect(existsSync(extra[1]!), `${extra[0]} writes nothing`).toBe(false)
+    }
+
+    const allowed = report(join(dir, 'allowed.html'), { CLAUDECODE: '1', ORANGU_ALLOW_RAW: '1' })
+    expect(allowed.status, allowed.stderr).toBe(0)
+    expect(existsSync(join(dir, 'allowed.html'))).toBe(true)
+    const terminal = report(join(dir, 'terminal.html'), {})
+    expect(terminal.status, terminal.stderr).toBe(0)
+    expect(existsSync(join(dir, 'terminal.html'))).toBe(true)
+    // the default path is a private temporary file that orangu chooses
+    const temp = runIn(['report', home.endedId, '--no-open', '--no-redact', '--include-text'], { CLAUDECODE: '1' })
+    expect(temp.status, temp.stderr).toBe(0)
+    expect(temp.stdout.trim().startsWith(tmpdir()), temp.stdout).toBe(true)
   })
 
   it('repo honours --root: only the named config dir is scanned', async () => {

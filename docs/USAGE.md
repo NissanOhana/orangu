@@ -98,6 +98,8 @@ Orangu shortens home paths to `~`, but other absolute paths may remain as useful
 
 `orangu evidence` is always redacted and does not accept `--no-redact`.
 
+Inside Claude Code, `--no-redact` or `--include-text` with `-o`, `--out` or `--html <file>` needs `ORANGU_ALLOW_RAW=1` before the command, so that Claude Code asks you first.
+
 ## Supported inputs and limits
 
 Orangu currently parses supported Claude Code, Cowork, and Desktop session formats. It is not a generic JSONL reader and does not ingest Codex transcripts. Claude Code and Codex are both supported as hosts for the optional improvement skills.
