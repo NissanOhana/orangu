@@ -504,6 +504,8 @@ describe('aggregateBlock', () => {
   const MID_PATH = 'docs/runs/2026-10-06-ste-showme-suggest/IMPL-NOTES.md'
   // wider than the room beside the figure at every width
   const LONG_PATH = 'docs/runs/2026-10-07-minimal-content/a-folder-with-a-long-name-for-this-test/IMPL-NOTES.md'
+  // 59 columns with its colon: wider than the room beside the error figure at 60 columns (49), not at 80 (69)
+  const LONG_TOOL = 'mcp__plugin_playwright_playwright__browser_take_screenshot'
   const ERROR_HEAD = /^ {4} *\d+× {2}\S/
   const READ_HEAD = /^ {4} *\d+ reads {2}\S/
 
@@ -518,6 +520,7 @@ describe('aggregateBlock', () => {
       // blank signatures (the default strip) collapse into one row per tool
       { tool: 'mcp__playwright__browser_navigate', signature: '', sessions: 3, total: 9 },
       { tool: 'WebSearch', signature: '', sessions: 2, total: 2 },
+      { tool: LONG_TOOL, signature: '', sessions: 5, total: 7 },
     ]
     const topReReadFiles = [
       { path: '.claude/PROJECT.md', sessions: 1, totalReads: 70 },
@@ -526,12 +529,13 @@ describe('aggregateBlock', () => {
     ]
     const lines = aggregateBlock(caps, { ...a, recurringErrors, topReReadFiles }).map(stripAnsi)
 
-    // no line passes the layout width, except a re-read row whose value is its path alone, wider than the room there
+    // no line passes the layout width, except a row whose value is one whole name wider than the room there: a
+    // re-read path, or a tool name with its colon
     for (const l of lines) {
       if (displayWidth(l) <= width) continue
-      const row = /^( {4} *\d+ reads {2})(\S+)$/.exec(l)
+      const row = /^( {4} *\d+ reads {2}| {4} *\d+× {2})(\S+)$/.exec(l)
       expect(row, `${columns} columns: ${JSON.stringify(l)} passes ${width}`).not.toBeNull()
-      expect(displayWidth(row![2]!), l).toBeGreaterThan(width - row![1]!.length)
+      expect(displayWidth(row![2]!), l).toBeGreaterThan(width - displayWidth(row![1]!))
     }
 
     // each error row: its text wraps at whole words under the value column, then the count, and nothing is dropped
@@ -541,8 +545,16 @@ describe('aggregateBlock', () => {
       `Bash: ${SIGNATURE} (12 sessions)`,
       'mcp__playwright__browser_navigate: 1 recurring signature, text hidden (add --include-text) (3 sessions)',
       'WebSearch: 1 recurring signature, text hidden (add --include-text) (2 sessions)',
+      `${LONG_TOOL}: 1 recurring signature, text hidden (add --include-text) (5 sessions)`,
     ]
-    expect(errors.map((g) => g[0]!.replace(/^ *(\d+)×.*$/, '$1'))).toEqual(['11', '12345', '9', '2'])
+    expect(errors.map((g) => g[0]!.replace(/^ *(\d+)×.*$/, '$1'))).toEqual(['11', '12345', '9', '2', '7'])
+    // a tool name is an identifier: it is never broken, so it stands whole on one line of its row
+    for (const group of errors) {
+      const tool = expected[errors.indexOf(group)]!.split(':')[0]!
+      expect(group.some((l) => l.includes(tool + ':')), `${columns}: ${tool} whole\n${group.join('\n')}`).toBe(true)
+    }
+    // at 60 columns the long name is wider than its room, so it takes the row's first line alone
+    if (columns === 60) expect(errors[4]![0], 'the long tool name alone beside its figure').toBe(`       7×  ${LONG_TOOL}:`)
     errors.forEach((group, n) => {
       const column = group[0]!.indexOf('×') + 3
       for (const l of group.slice(1)) expect(l, `${columns}: ${l}`).toMatch(new RegExp(`^ {${column}}\\S`))

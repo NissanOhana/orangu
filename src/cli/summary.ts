@@ -290,7 +290,8 @@ function hang(head: string, lines: string[]): string[] {
  * the command wrote). The recurring findings get one caption that says each title shows one example session. Each row
  * prints the bounded token figure, the example title wrapped at whole words, the session count, then the
  * improvement as continuation lines (repo and global text has no footer, so each row carries its own).
- * A recurring tool-error row wraps its text at whole words under its value column. A re-read row prints its
+ * A recurring tool-error row wraps its text at whole words under its value column, and keeps the tool name
+ * whole: a name wider than the room takes the row's first line alone. A re-read row prints its
  * path whole beside the read count, because a path is a paste target: only the session count moves to the
  * next line, and a path wider than the room there passes the width (the terminal wraps it).
  * Every value from a transcript (a title, a path, a model id, an error signature) passes through
@@ -336,14 +337,17 @@ export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
       h.sessions = Math.max(h.sessions, e.sessions)
       hidden.set(e.tool, h)
     }
-    // prose (a tool and its signature, or the hidden-text note): it wraps at whole words under the value column
-    const errorRow = (total: number, text: string, sessions: number): string[] => {
+    // the tool name, then prose (the signature, or the hidden-text note) that wraps at whole words under the value
+    // column. The name is an identifier, kept whole like a path: wider than the room, it takes the first line alone
+    const errorRow = (total: number, tool: string, text: string, sessions: number): string[] => {
       const head = `    ${paint(caps, 'bad', String(total).padStart(4))}×  `
       const room = layoutWidth(caps) - displayWidth(head)
-      return hang(head, withCount(caps, wrapWords(text, room), `(${plural(sessions, 'session')})`, room))
+      const name = `${oneLine(tool)}:`
+      const body = displayWidth(name) > room ? [name, ...wrapWords(text, room)] : wrapWords(`${name} ${text}`, room)
+      return hang(head, withCount(caps, body, `(${plural(sessions, 'session')})`, room))
     }
-    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) lines.push(...errorRow(e.total, `${oneLine(e.tool)}: ${oneLine(e.signature)}`, e.sessions))
-    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(...errorRow(h.total, `${oneLine(tool)}: ${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)`, h.sessions))
+    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) lines.push(...errorRow(e.total, e.tool, oneLine(e.signature), e.sessions))
+    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(...errorRow(h.total, tool, `${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)`, h.sessions))
   }
   if (a.topReReadFiles.length) {
     lines.push('', paint(caps, 'bold', `${INDENT}most re-read files (context weight)`))
