@@ -402,37 +402,51 @@ test('generated sample fits a 390px resized desktop viewport', async ({ browser 
 })
 
 /**
- * The label cells that CSS cuts with an ellipsis, by the rule that cuts them: the agent lane label, the label of
- * a proportion row (Agents and Context), the tool name of a raw call (Coverage), and .ellip (the re-read paths
- * and the session titles on Repo). The page proves that each selector names such a rule: the computed
- * text-overflow of each cell is ellipsis. The cells come from the rule, not from a count of the cells cut today.
+ * Every element that an ellipsis cuts, on every screen of both samples. The check knows no selector: it opens each
+ * screen that the sidebar links to (and the repo and global scopes of Improvements), opens every disclosure, and
+ * takes each element whose computed text-overflow is ellipsis and whose text overflows its box. Each one must
+ * carry a title equal to its whole text: its words, with a space where one element ends and the next begins
+ * (the kind tag and the prompt of a Timeline row, the agent and its model). A new ellipsis rule with no title
+ * fails here as soon as a sample has a cell that it cuts.
  */
-const ELLIPSIS_LABELS = [
-  { file: 'sample.html', screen: 'agents', heading: 'Agents', selectors: ['.swimrow .alabel', '.proprow > div:first-child'] },
-  { file: 'sample.html', screen: 'context', heading: 'Context & tokens', selectors: ['.proprow > div:first-child'] },
-  { file: 'sample.html', screen: 'coverage', heading: 'Coverage', selectors: ['.rawrow .rt'] },
-  { file: 'sample-repo.html', screen: 'repo', heading: 'Repo', selectors: ['.rerow .ellip', 'td.ellip'] },
-]
-
-// An ellipsis hides the end of a label, and no disclosure shows it: the title carries the whole text.
-test('each label cell that an ellipsis can cut carries its whole text in a title', async ({ page }, info) => {
-  test.skip(info.project.name !== 'wide-light', 'the title is markup: the same at each width and in each theme')
+test('each element that an ellipsis cuts carries its whole text in a title, on every screen of both samples', async ({ page }, info) => {
+  test.skip(info.project.name.endsWith('dark'), 'a cut depends on the width, not on the theme: wide-light and narrow-light check it')
   const errors = runtimeErrors(page)
-  for (const { file, screen, heading, selectors } of ELLIPSIS_LABELS) {
-    await page.goto('about:blank')
-    await page.goto(`${SITE}/${file}#${screen}`, { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
-    for (const selector of selectors) {
-      const where = `${file}#${screen} ${selector}`
-      const cells = page.locator(`main.main ${selector}`)
-      await expect(cells.first(), where).toBeAttached()
-      const found = await cells.evaluateAll((all) =>
-        all.map((el) => ({ overflow: getComputedStyle(el).textOverflow, title: el.getAttribute('title'), text: (el.textContent ?? '').replace(/\s+/g, ' ').trim() })),
-      )
-      expect(found.map((cell) => cell.overflow), `${where}: the rule cuts with an ellipsis`).toEqual(found.map(() => 'ellipsis'))
-      expect(found.map((cell) => cell.title), `${where}: each title is the whole text`).toEqual(found.map((cell) => cell.text))
+  let checked = 0
+  const wrong: string[] = []
+  for (const file of ['sample.html', 'sample-repo.html']) {
+    await page.goto(`${SITE}/${file}`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    const links = await page.locator('nav[aria-label="Report"] a[href^="#"]').evaluateAll((all) => all.map((a) => a.getAttribute('href')!))
+    const screens = [...new Set([...links, '#suggest?scope=repo', '#suggest?scope=global'])]
+    expect(screens.length, `${file}: screens`).toBeGreaterThan(3)
+    for (const screen of screens) {
+      const where = `${file}${screen}`
+      await page.goto('about:blank')
+      await page.goto(`${SITE}/${file}${screen}`, { waitUntil: 'domcontentloaded' })
+      await expect(page.getByRole('heading', { level: 1 }), where).toBeVisible()
+      await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
+      const cut = await page.evaluate(() => {
+        const words = (el: Element): string => {
+          const parts: string[] = []
+          const walk = (node: Node): void => node.childNodes.forEach((child) => {
+            if (child.nodeType === Node.TEXT_NODE) parts.push((child as Text).data)
+            else if (child.nodeType === Node.ELEMENT_NODE) { parts.push(' '); walk(child); parts.push(' ') }
+          })
+          walk(el)
+          return parts.join('').replace(/\s+/g, ' ').trim()
+        }
+        return Array.from(document.body.querySelectorAll<HTMLElement>('*'))
+          .filter((el) => getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth)
+          .map((el) => ({ cell: `${el.tagName.toLowerCase()}.${String(el.className).trim().replace(/\s+/g, '.')}`, title: el.getAttribute('title'), text: words(el) }))
+      })
+      checked += cut.length
+      for (const c of cut.filter((c) => c.title !== c.text))
+        wrong.push(`${where} ${c.cell} "${c.text.slice(0, 50)}": title ${c.title === null ? 'missing' : JSON.stringify(c.title.slice(0, 50))}`)
     }
   }
+  expect(checked, 'the samples have cells that an ellipsis cuts').toBeGreaterThan(0)
+  expect(wrong, `cut cells whose title is not the whole text (${wrong.length} of ${checked})`).toEqual([])
   expect(errors).toEqual([])
 })
 
