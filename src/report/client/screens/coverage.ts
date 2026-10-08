@@ -77,7 +77,7 @@ ${hooks}
         .slice(0, 2000)
         .map(
           (c) =>
-            `<div class="rawrow"><span class="rt">${esc(c.name)}</span><span class="muted">#${c.turnIndex}${c.agentId ? ' agent' : ''}${c.isError ? ' ⚠' : ''}</span><span class="rp">${esc(c.summary)}${c.durationMs !== undefined ? ' · ' + esc(ms(c.durationMs)) : ''}</span></div>`,
+            `<div class="rawrow"><span class="rt" title="${esc(c.name)}">${esc(c.name)}</span><span class="muted">#${c.turnIndex}${c.agentId ? ' agent' : ''}${c.isError ? ' ⚠' : ''}</span><span class="rp">${esc(c.summary)}${c.durationMs !== undefined ? ' · ' + esc(ms(c.durationMs)) : ''}</span></div>`,
         )
         .join('') + (rows.length > 2000 ? `<div class="rawrow muted">…${rows.length - 2000} more (narrow the filter)</div>` : '')
     if (!rows.length) listEl.innerHTML = '<div class="rawrow muted">no calls match</div>'

@@ -127,7 +127,9 @@ describe('offline report', () => {
     // 13 B of headroom. A named, measured growth: the pin below gives the bytes of each part and the reason.
     // 2026-10-07 narrative paragraphs: the cap goes UP 82,056 -> 82,100, the measured 82,087 below plus the same
     // 13 B of headroom. A named, measured growth: the narrative shows its 2 paragraphs, each 6 sentences or fewer.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_100)
+    // 2026-10-08 ellipsis titles: the cap goes UP 82,100 -> 82,248, the measured 82,235 below plus the same 13 B of
+    // headroom. A named, measured growth: each label cell that an ellipsis can cut carries its whole text in a title.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_248)
     // 2026-10-06 proposals seam: -3,301 B (83,123 -> 79,822), and this bundle gets the exact pin the
     // session bundle has always had, so a change that moves it has to name the bytes. The stored
     // proposal block and the Saved proposals inbox (proposals-ui.ts) reach the Suggest screen only
@@ -167,7 +169,15 @@ describe('offline report', () => {
     // shows its 2 paragraphs, each 6 sentences or fewer: the analyzer puts the top finding titles in a second
     // paragraph after one blank line, and the Overview hero (screens/overview.ts, shared with the session
     // bundle) splits the narrative there and shows each paragraph in its own .sg-sub block.
-    expect(CLIENT_JS_AGG.length).toBe(82087)
+    // 2026-10-08 ellipsis titles: +148 B (82,087 -> 82,235), re-measured after `npm run build`. The user rejects
+    // hidden text with no way to read it: a label cell that a CSS ellipsis cuts had no title, and nothing else showed
+    // the rest. Each rule that cuts a label now writes the whole text into a title, through esc. Costed from
+    // the minified segments: the agent lane label (Agents and Live) is +42 B (one label variable, which the text and
+    // the title share), the label of a proportion row (Agents and Context) is +46 B, the tool name of a raw call
+    // (Coverage) is +21 B, the re-read path (Repo and Global) is +21 B, and the session title (Repo and Global) is
+    // +18 B (its `?? ""` left, because esc reads undefined as ''). The closed-card line clamp left the CSS (-221 B
+    // of CLIENT_CSS), which no JS bundle carries.
+    expect(CLIENT_JS_AGG.length).toBe(82235)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -207,7 +217,9 @@ describe('offline report', () => {
     // 26 B of headroom. A named, measured growth: the pin below gives the bytes of each part and the reason.
     // 2026-10-07 narrative paragraphs: the cap goes UP 72,753 -> 72,797, the measured 72,771 below plus the same
     // 26 B of headroom. A named, measured growth: the narrative shows its 2 paragraphs, each 6 sentences or fewer.
-    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_797)
+    // 2026-10-08 ellipsis titles: the cap goes UP 72,797 -> 72,906, the measured 72,880 below plus the same 26 B of
+    // headroom. A named, measured growth: each label cell that an ellipsis can cut carries its whole text in a title.
+    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_906)
     // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
     // 2026-08-27 final client pass 2 (fix/final-client2): −56 B net, cap unchanged. Eight UX fixes cost +1,233 B
     // (the Timeline row's own-facts fallback, folded hidden-error rows on Tools/Repo/Global, the Quality verdict
@@ -289,6 +301,13 @@ describe('offline report', () => {
     // shows its 2 paragraphs, each 6 sentences or fewer: the analyzer puts the top finding titles in a second
     // paragraph after one blank line, and the Overview hero splits the narrative there and shows each paragraph
     // in its own .sg-sub block (the split, the map and the join are the whole cost).
-    expect(CLIENT_JS.length).toBe(72771)
+    // 2026-10-08 ellipsis titles: +109 B (72,771 -> 72,880), re-measured after `npm run build`. The user rejects
+    // hidden text with no way to read it: a label cell that a CSS ellipsis cuts had no title, and nothing else showed
+    // the rest. Each rule that cuts a label now writes the whole text into a title, through esc. Costed from
+    // the minified segments: the agent lane label (Agents and Live) is +42 B (one label variable, which the text and the title
+    // share), the label of a proportion row (Agents and Context) is +46 B, and the tool name of a raw call (Coverage)
+    // is +21 B. The Repo titles ship only in the aggregate bundle. The closed-card line clamp left the CSS (-221 B of
+    // CLIENT_CSS), which no JS bundle carries.
+    expect(CLIENT_JS.length).toBe(72880)
   })
 })

@@ -79,7 +79,7 @@ export function aggregateEvidence(g: Aggregate, ctx: Ctx): string {
         .slice(0, 8)
         .map(
           (r) =>
-            `<div class="rerow"><div class="rehead"><span class="mono grow ellip">${esc(r.path)}</span><span class="mono115">${r.sessions} sess</span><span class="saveval">${r.totalReads} reads</span></div><span class="trough" style="height:6px;margin-top:5px"><i style="width:${((r.totalReads / maxReads) * 100).toFixed(1)}%"></i></span></div>`,
+            `<div class="rerow"><div class="rehead"><span class="mono grow ellip" title="${esc(r.path)}">${esc(r.path)}</span><span class="mono115">${r.sessions} sess</span><span class="saveval">${r.totalReads} reads</span></div><span class="trough" style="height:6px;margin-top:5px"><i style="width:${((r.totalReads / maxReads) * 100).toFixed(1)}%"></i></span></div>`,
         )
         .join('')
     : emptyNote('No heavily re-read files.')
@@ -101,7 +101,7 @@ export function aggregateEvidence(g: Aggregate, ctx: Ctx): string {
       const open = ctx.data.mode === 'serve' ? `href="#overview?s=${esc(s.id)}"` : `href="#" title="open with: orangu report ${esc(s.id.slice(0, 8))}" aria-disabled="true" onclick="return false"`
       return `<tr>
 <td><a class="mono" style="font-size:12px" ${open}>${esc(s.id.slice(0, 8))}</a></td>
-<td class="ellip" style="max-width:280px;color:var(--ink2)">${esc(s.title ?? '')}</td>
+<td class="ellip" title="${esc(s.title)}" style="max-width:280px;color:var(--ink2)">${esc(s.title)}</td>
 <td class="num">${s.turns}</td>
 <td class="num">${s.toolCalls}</td>
 <td class="num"${s.toolErrors ? ' style="color:var(--bad)"' : ''}>${s.toolErrors}</td>

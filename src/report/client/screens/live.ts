@@ -84,7 +84,9 @@ export function laneHtml(r: AgentStat, min: number, max: number): string {
     r.startTs !== undefined && isFinite(min)
       ? ganttRow(r.startTs, r.endTs ?? max, min, max || min + 1, catColor('agent'), `${r.agentType ?? r.name ?? r.agentId} · ${ms(r.durationMs)} · ${tok(r.totalTokens)} tokens`)
       : '<div class="small muted">no timing</div>'
-  return `<div class="swimrow"><div class="alabel">${'· '.repeat(r.spawnDepth)}${esc(r.agentType || r.name || r.agentId.slice(0, 10))} <small>${esc(r.model ?? '')}</small></div><div${r.status === 'running' ? '' : ' class="dim"'}>${bar}</div></div>`
+  // an ellipsis can cut the label: the title carries its whole text
+  const label = '· '.repeat(r.spawnDepth) + (r.agentType || r.name || r.agentId.slice(0, 10))
+  return `<div class="swimrow"><div class="alabel" title="${esc(r.model ? label + ' ' + r.model : label)}">${esc(label)} <small>${esc(r.model ?? '')}</small></div><div${r.status === 'running' ? '' : ' class="dim"'}>${bar}</div></div>`
 }
 
 function agentsCard(a: Analysis): string {

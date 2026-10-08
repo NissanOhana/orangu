@@ -386,6 +386,41 @@ test('generated sample fits a 390px resized desktop viewport', async ({ browser 
   await context.close()
 })
 
+/**
+ * The label cells that CSS cuts with an ellipsis, by the rule that cuts them: the agent lane label, the label of
+ * a proportion row (Agents and Context), the tool name of a raw call (Coverage), and .ellip (the re-read paths
+ * and the session titles on Repo). The page proves that each selector names such a rule: the computed
+ * text-overflow of each cell is ellipsis. The cells come from the rule, not from a count of the cells cut today.
+ */
+const ELLIPSIS_LABELS = [
+  { file: 'sample.html', screen: 'agents', heading: 'Agents', selectors: ['.swimrow .alabel', '.proprow > div:first-child'] },
+  { file: 'sample.html', screen: 'context', heading: 'Context & tokens', selectors: ['.proprow > div:first-child'] },
+  { file: 'sample.html', screen: 'coverage', heading: 'Coverage', selectors: ['.rawrow .rt'] },
+  { file: 'sample-repo.html', screen: 'repo', heading: 'Repo', selectors: ['.rerow .ellip', 'td.ellip'] },
+]
+
+// An ellipsis hides the end of a label, and no disclosure shows it: the title carries the whole text.
+test('each label cell that an ellipsis can cut carries its whole text in a title', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'the title is markup: the same at each width and in each theme')
+  const errors = runtimeErrors(page)
+  for (const { file, screen, heading, selectors } of ELLIPSIS_LABELS) {
+    await page.goto('about:blank')
+    await page.goto(`${SITE}/${file}#${screen}`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
+    for (const selector of selectors) {
+      const where = `${file}#${screen} ${selector}`
+      const cells = page.locator(`main.main ${selector}`)
+      await expect(cells.first(), where).toBeAttached()
+      const found = await cells.evaluateAll((all) =>
+        all.map((el) => ({ overflow: getComputedStyle(el).textOverflow, title: el.getAttribute('title'), text: (el.textContent ?? '').replace(/\s+/g, ' ').trim() })),
+      )
+      expect(found.map((cell) => cell.overflow), `${where}: the rule cuts with an ellipsis`).toEqual(found.map(() => 'ellipsis'))
+      expect(found.map((cell) => cell.title), `${where}: each title is the whole text`).toEqual(found.map((cell) => cell.text))
+    }
+  }
+  expect(errors).toEqual([])
+})
+
 test('generated repository sample renders the repo scope and the two samples link each other with the theme kept', async ({ page }, info) => {
   const errors = runtimeErrors(page)
   const external: string[] = []
