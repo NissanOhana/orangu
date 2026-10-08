@@ -368,13 +368,26 @@ describe('aggregateBlock', () => {
     const two = await analyzed(new SessionBuilder({ sessionId: 'dddddddd-0000-4000-8000-000000000004', startAt: '2026-08-15T09:00:00.000Z' }).userPrompt('a second session').tick(10).assistant([{ type: 'text', text: 'ok' }], { usage: { input_tokens: 4, output_tokens: 4 } }))
     return aggregate([one, two], 'repo demo', 0)
   }
-  /** the lines between the recurring findings heading and the next blank line */
-  function findingsBlock(lines: string[]): string[] {
-    const at = lines.findIndex((l) => stripAnsi(l) === '  recurring findings (across sessions)')
-    expect(at).toBeGreaterThan(0)
+  /** the lines between a section heading and the next blank line, without escapes */
+  function sectionBlock(lines: string[], heading: string): string[] {
+    const at = lines.findIndex((l) => stripAnsi(l) === '  ' + heading)
+    expect(at, heading).toBeGreaterThan(0)
     const block: string[] = []
     for (let i = at + 1; lines[i]; i++) block.push(stripAnsi(lines[i]!))
     return block
+  }
+  /** the lines between the recurring findings heading and the next blank line */
+  function findingsBlock(lines: string[]): string[] {
+    return sectionBlock(lines, 'recurring findings (across sessions)')
+  }
+  /** each row of a section as its lines: a line that matches `head` starts a row, the lines under it continue it */
+  function rowGroups(block: string[], head: RegExp): string[][] {
+    const groups: string[][] = []
+    for (const l of block) {
+      if (head.test(l)) groups.push([l])
+      else groups.at(-1)?.push(l)
+    }
+    return groups
   }
 
   it('says once, as a caption, that each title shows one example session, and prints the example title, the count and the improvement per row', async () => {
@@ -482,6 +495,74 @@ describe('aggregateBlock', () => {
       expect(displayWidth(heavy[0]!), label).toBeLessThanOrEqual(Math.min(caps.columns, 80))
       expect(heavy[1], label).toMatch(/ {2}Fix the title$/)
     }
+  })
+
+  // An error signature is lowercased, holds <path> and <n> in place of paths and numbers, and is cut at 80
+  // characters upstream (src/analyze/tools.ts errorSignature): this one is 80 characters, as on a real machine.
+  const SIGNATURE = 'error: command failed with exit code <n>: npm err! missing script "verify" in <p'
+  // 53 columns: it fits the room beside the figure at 80 columns (64), but not with its count; at 60 columns (44) it does not fit
+  const MID_PATH = 'docs/runs/2026-10-06-ste-showme-suggest/IMPL-NOTES.md'
+  // wider than the room beside the figure at every width
+  const LONG_PATH = 'docs/runs/2026-10-07-minimal-content/a-folder-with-a-long-name-for-this-test/IMPL-NOTES.md'
+  const ERROR_HEAD = /^ {4} *\d+× {2}\S/
+  const READ_HEAD = /^ {4} *\d+ reads {2}\S/
+
+  it.each([60, 80, 120])('fits the recurring tool-error and re-read rows to the layout at %i columns: the text wraps under its value column, and a path stays whole', async (columns) => {
+    const a = await sample()
+    const caps = capsAt(columns)
+    const width = Math.min(columns, 80)
+    const recurringErrors = [
+      { tool: 'mcp__playwright__browser_take_screenshot', signature: SIGNATURE, sessions: 4, total: 11 },
+      // a 5-digit total widens the row head, so the value column moves with it
+      { tool: 'Bash', signature: SIGNATURE, sessions: 12, total: 12345 },
+      // blank signatures (the default strip) collapse into one row per tool
+      { tool: 'mcp__playwright__browser_navigate', signature: '', sessions: 3, total: 9 },
+      { tool: 'WebSearch', signature: '', sessions: 2, total: 2 },
+    ]
+    const topReReadFiles = [
+      { path: '.claude/PROJECT.md', sessions: 1, totalReads: 70 },
+      { path: MID_PATH, sessions: 1, totalReads: 66 },
+      { path: LONG_PATH, sessions: 3, totalReads: 9 },
+    ]
+    const lines = aggregateBlock(caps, { ...a, recurringErrors, topReReadFiles }).map(stripAnsi)
+
+    // no line passes the layout width, except a re-read row whose value is its path alone, wider than the room there
+    for (const l of lines) {
+      if (displayWidth(l) <= width) continue
+      const row = /^( {4} *\d+ reads {2})(\S+)$/.exec(l)
+      expect(row, `${columns} columns: ${JSON.stringify(l)} passes ${width}`).not.toBeNull()
+      expect(displayWidth(row![2]!), l).toBeGreaterThan(width - row![1]!.length)
+    }
+
+    // each error row: its text wraps at whole words under the value column, then the count, and nothing is dropped
+    const errors = rowGroups(sectionBlock(lines, 'recurring tool errors (environment problems)'), ERROR_HEAD)
+    const expected = [
+      `mcp__playwright__browser_take_screenshot: ${SIGNATURE} (4 sessions)`,
+      `Bash: ${SIGNATURE} (12 sessions)`,
+      'mcp__playwright__browser_navigate: 1 recurring signature, text hidden (add --include-text) (3 sessions)',
+      'WebSearch: 1 recurring signature, text hidden (add --include-text) (2 sessions)',
+    ]
+    expect(errors.map((g) => g[0]!.replace(/^ *(\d+)×.*$/, '$1'))).toEqual(['11', '12345', '9', '2'])
+    errors.forEach((group, n) => {
+      const column = group[0]!.indexOf('×') + 3
+      for (const l of group.slice(1)) expect(l, `${columns}: ${l}`).toMatch(new RegExp(`^ {${column}}\\S`))
+      expect(group.map((l) => l.slice(column)).join(' ').replace(/ {2}\(/, ' ('), `${columns} columns`).toBe(expected[n])
+    })
+    // an 80-character signature never fits one line beside its head, so these rows prove the wrap
+    expect(errors[0]!.length, `${columns} columns`).toBeGreaterThan(1)
+    expect(errors[1]!.length, `${columns} columns`).toBeGreaterThan(1)
+
+    // each re-read row: the path whole on the row's first line, the count beside it when it fits there, else under it
+    const reads = rowGroups(sectionBlock(lines, 'most re-read files (context weight)'), READ_HEAD)
+    expect(reads).toHaveLength(topReReadFiles.length)
+    reads.forEach((group, n) => {
+      const f = topReReadFiles[n]!
+      const count = `(${sessions(f.sessions)})`
+      const head = `    ${String(f.totalReads).padStart(4)} reads  `
+      const room = width - head.length
+      if (f.path.length + 2 + count.length <= room) expect(group, `${columns}: ${f.path}`).toEqual([head + f.path + '  ' + count])
+      else expect(group, `${columns}: ${f.path}`).toEqual([head + f.path, ' '.repeat(head.length) + count])
+    })
   })
 })
 

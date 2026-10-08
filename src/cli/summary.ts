@@ -9,13 +9,13 @@
  * whole words (wrapWords) and is never cut: a finding title, an improvement, a row value, a hint. Only
  * label cells cut, at their last whole word (truncate): the header title and sub line, the store
  * reason, the list and pick cells and the heaviest-session title. A path or a command a paste must
- * carry whole (the report path, the next and plugin rows, the store fallback) is never cut or wrapped
- * here: below 80 columns the terminal wraps it. Text from a transcript reaches the terminal only through
- * wrapWords, truncate or oneLine, which strip escapes and control bytes first; truncate and oneLine also turn
- * a newline or a tab into a space, so that a one-line value stays one line. ASCII in every aligned cell; the
- * audited glyphs (mark, check, middle dot) appear only in a leading position or inside a trailing
- * value, and swap to ASCII when `caps.unicode` is off. Colour is painted after padding, wrapping and
- * truncation, never before.
+ * carry whole (the report path, a re-read path, the next and plugin rows, the store fallback) is never cut
+ * or wrapped here: when it is wider than its room, the terminal wraps it. Text from a transcript reaches the
+ * terminal only through wrapWords, truncate or oneLine, which strip escapes and control bytes first;
+ * truncate and oneLine also turn a newline or a tab into a space, so that a one-line value stays one line.
+ * ASCII in every aligned cell; the audited glyphs (mark, check, middle dot) appear only in a leading
+ * position or inside a trailing value, and swap to ASCII when `caps.unicode` is off. Colour is painted
+ * after padding, wrapping and truncation, never before.
  */
 import { basename } from 'node:path'
 import type { Analysis } from '../model/analysis.js'
@@ -272,11 +272,27 @@ const AGG_TITLE_COLUMN = 14
 /** Columns before a heaviest-session title: the indent, the 9-column token figure, the 8-character id, 2 gaps. */
 const AGG_SESSION_COLUMN = 25
 
+/** `lines`, then the dim session count: on the last line when it fits `room` there, else on a line of its own. */
+function withCount(caps: Caps, lines: string[], count: string, room: number): string[] {
+  const last = lines.at(-1)
+  if (last !== undefined && displayWidth(last) + 2 + displayWidth(count) <= room) return [...lines.slice(0, -1), last + '  ' + paint(caps, 'dim', count)]
+  return [...lines, paint(caps, 'dim', count)]
+}
+
+/** `head` before the first line, and a hanging indent as wide as `head` before each line after it. */
+function hang(head: string, lines: string[]): string[] {
+  const pad = ' '.repeat(displayWidth(head))
+  return lines.map((l, i) => (i ? pad : head) + l)
+}
+
 /**
  * stdout block of `orangu repo` and `orangu global`, without the closing flag hint (that depends on what
  * the command wrote). The recurring findings get one caption that says each title shows one example session. Each row
  * prints the bounded token figure, the example title wrapped at whole words, the session count, then the
  * improvement as continuation lines (repo and global text has no footer, so each row carries its own).
+ * A recurring tool-error row wraps its text at whole words under its value column. A re-read row prints its
+ * path whole beside the read count, because a path is a paste target: only the session count moves to the
+ * next line, and a path wider than the room there passes the width (the terminal wraps it).
  * Every value from a transcript (a title, a path, a model id, an error signature) passes through
  * oneLine (stripAnsi, and a newline or a tab becomes a space), inside wrapWords and truncate or directly.
  */
@@ -303,10 +319,7 @@ export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
     for (const f of a.crossFindings.slice(0, 8)) {
       const figure = paint(caps, 'accent', (f.boundedSavingsTokens ? '~' + fmtTokens(f.boundedSavingsTokens) : '–').padStart(8))
       const count = `(${plural(f.sessions, 'session')})`
-      const title = wrapWords(f.exampleTitle || f.title, budget)
-      const last = title.at(-1)
-      // the count joins the last title line when it fits there, else it takes a line of its own
-      const body = last !== undefined && displayWidth(last) + 2 + count.length <= budget ? [...title.slice(0, -1), last + '  ' + paint(caps, 'dim', count)] : [...title, paint(caps, 'dim', count)]
+      const body = withCount(caps, wrapWords(f.exampleTitle || f.title, budget), count, budget)
       const improvement = f.improvement ? wrapWords(`Improvement: ${f.improvement}`, budget) : []
       ;[...body, ...improvement].forEach((p, i) => lines.push((i ? pad : `    ${figure}  `) + p))
     }
@@ -323,12 +336,22 @@ export function aggregateBlock(caps: Caps, a: Aggregate): string[] {
       h.sessions = Math.max(h.sessions, e.sessions)
       hidden.set(e.tool, h)
     }
-    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) lines.push(`    ${paint(caps, 'bad', String(e.total).padStart(4))}×  ${oneLine(e.tool)}: ${oneLine(e.signature)}  ${paint(caps, 'dim', '(' + plural(e.sessions, 'session') + ')')}`)
-    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(`    ${paint(caps, 'bad', String(h.total).padStart(4))}×  ${oneLine(tool)}: ${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)  ${paint(caps, 'dim', '(' + plural(h.sessions, 'session') + ')')}`)
+    // prose (a tool and its signature, or the hidden-text note): it wraps at whole words under the value column
+    const errorRow = (total: number, text: string, sessions: number): string[] => {
+      const head = `    ${paint(caps, 'bad', String(total).padStart(4))}×  `
+      const room = layoutWidth(caps) - displayWidth(head)
+      return hang(head, withCount(caps, wrapWords(text, room), `(${plural(sessions, 'session')})`, room))
+    }
+    for (const e of a.recurringErrors.filter((e) => e.signature).slice(0, 6)) lines.push(...errorRow(e.total, `${oneLine(e.tool)}: ${oneLine(e.signature)}`, e.sessions))
+    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(...errorRow(h.total, `${oneLine(tool)}: ${plural(h.groups, 'recurring signature')}, text hidden (add --include-text)`, h.sessions))
   }
   if (a.topReReadFiles.length) {
     lines.push('', paint(caps, 'bold', `${INDENT}most re-read files (context weight)`))
-    for (const f of a.topReReadFiles.slice(0, 6)) lines.push(`    ${String(f.totalReads).padStart(4)} reads  ${oneLine(f.path)}  ${paint(caps, 'dim', '(' + plural(f.sessions, 'session') + ')')}`)
+    for (const f of a.topReReadFiles.slice(0, 6)) {
+      const head = `    ${String(f.totalReads).padStart(4)} reads  `
+      // a path is a paste target: never wrapped or cut, so only the count moves to the next line
+      lines.push(...hang(head, withCount(caps, [oneLine(f.path)], `(${plural(f.sessions, 'session')})`, layoutWidth(caps) - displayWidth(head))))
+    }
   }
   lines.push('', paint(caps, 'bold', `${INDENT}heaviest sessions (by tokens)`))
   // the title is a label column (transcript text): cut at its last whole word; the report shows it whole
