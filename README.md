@@ -38,10 +38,10 @@ npx orangu serve           # live loopback viewer over every local session
 npx orangu repo            # recurring patterns across this repository's sessions
 npx orangu global          # ... across every session on the machine
 npx orangu harness         # what your config declares vs what your sessions used, in tokens
+npx orangu ste <file>      # check a text file against the STE writing rules
 ```
 
-Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare
-`orangu` keeps the compact latest-session summary instead of waiting for input.
+Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare `orangu` keeps the compact latest-session summary instead of waiting for input.
 
 The repo and global choices open the same self-contained HTML report for a whole scope. From the
 command line, `orangu repo --html <file>` writes it where you say. `--open` writes it to the temp
@@ -75,7 +75,7 @@ Whole-harness (global) changes stay review-only. A proposal is not an applicatio
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, skills, agents, hooks, MCP, in tokens |
-| `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML |
+| `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML. Claude writes only 3 text values, and `orangu show-me` writes both files from the data |
 | `/orangu:feedback` | Send reviewed beta feedback from a localhost form |
 
 Skills read `orangu ... --json` and `orangu evidence`, never the raw `.jsonl`. Each skill shows a token estimate before a large read. The shipped instructions live in [`plugin/skills/`](plugin/skills/). Codex can also host the improvement skills: `codex plugin marketplace add NissanOhana/orangu` then `codex plugin add orangu@orangu` installs `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback`. orangu does not ingest Codex transcripts.

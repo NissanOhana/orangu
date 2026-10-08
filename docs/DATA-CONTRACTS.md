@@ -12,6 +12,36 @@ The complete current `Analysis` and `SlimAnalysis` reference lives at [`plugin/s
 
 Reports embed an `Analysis`. Skills should use the canonical `orangu evidence` projection described below instead of reading a full analysis or raw transcript directly.
 
+### Rule text and the narrative
+
+Each `Insight` in `Analysis.insights` holds its rule text in 3 parts. Each `CrossFinding` in `Aggregate.crossFindings` holds the parts of its example insight, the one whose figures its `title` shows.
+
+```ts
+Insight = {
+  // ...
+  title: string,
+  detail: string,
+  recommendation: string, // improvement, why and method, joined with one space (an absent part is skipped)
+  improvement: string,    // the change to make, or "No change needed." and any conditional advice after it
+  why?: string,           // what the finding means, and why it matters
+  method?: string         // what the rule counts and skips, and how to read the finding
+}
+
+CrossFinding = {
+  // ...
+  title: string,          // "In one session: " + exampleTitle
+  exampleTitle?: string,  // the title of the example insight, without the marker
+  recommendation: string, // the join of the parts below
+  improvement?: string,
+  why?: string,
+  method?: string
+}
+```
+
+`recommendation` is the join of the parts, so a reader of the whole rule text keeps working. A view that shows the change first reads `improvement`. Every rule sets `why`. The types keep `why`, `method` and every `CrossFinding` part optional, so that older JSON still reads. The aggregate always writes `exampleTitle` and `improvement`, and it writes `why` and `method` when the example insight has them.
+
+`Analysis.summary.narrative` has 2 paragraphs, split by one blank line (`"\n\n"`). The first paragraph holds the facts. The second paragraph is present only when the rules found something. It holds "Look at these first." and then each top finding title as its own sentence. The text holds no other line break.
+
 ## EvidenceBundle v1
 
 `orangu evidence <input> --quiet` emits the exact bounded, redacted handoff consumed by `orangu-improve`.
@@ -64,6 +94,10 @@ EvidenceBundle = {
     severity: "info" | "low" | "medium" | "high",
     detail: string,
     recommendation?: string,
+    improvement?: string,  // the change to make
+    why?: string,          // what the finding means, and why it matters
+    method?: string,       // what the rule counts and skips
+    exampleTitle?: string, // repo/global: the example insight title, without "In one session: "
     turnIndexes?: number[],
     catalogMatchIds: string[]
   }>
@@ -89,6 +123,8 @@ Finding = {
 ```
 
 `catalogMatches` deliberately precedes `findings`. Each finding carries the canonical report-source `suggestionId` and a validated opaque `findingToken`, so the skill can create or reuse the exact record without reconstructing identity. `source.cohortFingerprint` and `Finding.cohortFingerprint` are present only for repo/global Aggregate evidence; both bind the handoff and manual suggestion creation to the complete normalized session cohort and are exactly 16 lowercase hexadecimal characters.
+
+Orangu scrubs and bounds each rule text part as it does `recommendation`. A finding has `improvement` whenever its input carries rule text. An input from before the split into parts has none, so its whole `recommendation` becomes the `improvement`. Only an `Aggregate` from before cross findings carried a `recommendation` has no rule text at all.
 
 `orangu evidence <input> --estimate --quiet` emits:
 

@@ -507,7 +507,8 @@ ${paint(out, 'bold', 'session')}   a session id, a unique id prefix, a .jsonl pa
 
 ${paint(out, 'bold', 'flags')}
   -s, --session <sel>    the session, as a flag (same forms as the positional)
-  -o, --out <file>       write the report/JSON here (default: temp dir)
+  -o, --out <file>       write the report/JSON here (default: temp dir).
+                         It replaces only a file that orangu wrote
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
   --html <file>          repo/global: write the aggregate HTML report here
@@ -528,7 +529,8 @@ ${paint(out, 'bold', 'flags')}
   --no-color             plain output (orangu obeys NO_COLOR, FORCE_COLOR,
                          TERM=dumb and CI. NO_COLOR, FORCE_COLOR=0 and
                          ORANGU_NO_ANIMATION=1 also stop the spinner)
-  --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
+  --jobs <n>             worker threads for repo/global scans (default: CPUs-1,
+                         at most the CPU count)
   --max-tokens <n>       exit 2 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero on any hook error (CI: analyze/report)
   --version, --help

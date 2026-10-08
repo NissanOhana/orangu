@@ -40,6 +40,8 @@ node dist/orangu.js report
 | `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
 | `orangu harness` | Compare declared harness configuration with observed use |
 | `orangu suggest` | Inspect and transition validated suggestion records |
+| `orangu ste <file...\|->` | Check Markdown, HTML or text against the STE writing rules and print each finding. It has no pass mark |
+| `orangu show-me [selector]` | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
 
 A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment. If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch`, `estimate` and `show-me`. Outside Claude Code, `current` is an error.
 
@@ -53,7 +55,7 @@ On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a ke
 
 `orangu repo` and `orangu global` print their answer to stdout. `--html <file>` also writes that scope as one self-contained HTML report. `--open` writes it into the temp directory as `orangu-<scope>-<hash>.html` and hands it to your browser. So a re-run of `--open` never overwrites a file that a browser still has open. The dashboard's repository and global choices ask for `--open`, and `--no-open` suppresses it.
 
-Orangu refuses `--html` and `--open` with `--json`, which is a machine read with no side effect. `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report.
+Orangu refuses `--html` and `--open` with `--json`, which is a machine read with no side effect. `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report. `--jobs <n>` sets the worker threads of a scan over many sessions: by default the CPU count minus 1, and never more than the CPU count.
 
 `orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
 
@@ -64,6 +66,10 @@ Use `orangu --help` for flags and output controls.
 `orangu report` writes only the report path to stdout, so `orangu report | xargs open` works. Its summary goes to stderr: the check line, the path, the top finding, and the next command. `orangu analyze` prints the measurement block on stdout and the same footer on stderr. The bare interactive dashboard and the non-interactive latest-session brief both use stdout.
 
 The next command is the short `claude "/orangu:improve sg_…"`. For it to work, `report`, `analyze`, and the non-interactive bare-session brief record the top finding's suggestion under `~/.orangu`. Only when orangu cannot write that store does the long `--finding` form appear, with a line that says so. `--quiet` silences the trailing hint but still records the suggestion, and a re-run adds nothing. `--json` records nothing.
+
+The title of the top finding wraps under itself. An `Improvement:` line under it names the change, above `next`. `orangu repo` and `orangu global` print the same line under each recurring finding. One caption says that each title shows the figures of one example session.
+
+Prose wraps at whole words and is never cut: at the terminal width below 80 columns, and at 80 columns above it. Only a word longer than the line breaks inside it. Only one-line cells cut: at their last whole word, or inside a word with no space, such as a project name. They are the header, the store note, the `list` and `pick` cells, the heaviest-session titles, the dashboard and the spinner.
 
 Colour appears only on an interactive terminal. It is off under `--json`, `--quiet`, `--no-color`, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or a pipe (`FORCE_COLOR=1|2|3` paints a pipe). The spinner needs the same terminal. It is also off under `CI`, `NO_COLOR`, `FORCE_COLOR=0`, and `ORANGU_NO_ANIMATION=1` (the last one stops the spinner, not the colour).
 
@@ -82,8 +88,6 @@ The file report and localhost app render the same session evidence:
 - Repo and Global: recurring patterns across supported sessions.
 - Improvements: matching known improvements, proposals, receipts, host commands, and scope-aware verification state.
 
-The browser never starts an agent or marks a proposal applied. It only copies a command for explicit use in Claude Code or Codex.
-
 ## Beta feedback
 
 Run `orangu feedback --context session|repo|global|report|app` or use the **Beta feedback** launcher in the localhost app. The standalone command does not discover a session or attach report data. Feedback stays in the browser until you review the exact title, body, and generic diagnostics and explicitly open GitHub's issue composer.
@@ -98,21 +102,15 @@ Orangu shortens home paths to `~`, but other absolute paths may remain as useful
 
 `orangu evidence` is always redacted and does not accept `--no-redact`.
 
-Inside Claude Code, `--no-redact` or `--include-text` with `-o`, `--out` or `--html <file>` needs `ORANGU_ALLOW_RAW=1` before the command, so that Claude Code asks you first.
+Inside Claude Code, `--no-redact` or `--include-text` with `-o`, `--out` or `--html <file>` needs `ORANGU_ALLOW_RAW=1` before the command, so that Claude Code asks you first. Orangu reads the `CLAUDECODE` variable. The terminal of an IDE with Claude Code can also set it, so a command that you type there needs the same prefix.
+
+If `-o`, `--out` or `--html` names an existing file, orangu replaces it only when the file starts with the orangu output marker. For any other file, a symlink, a hard link or an empty file, orangu changes nothing and exits with code 1.
 
 ## Supported inputs and limits
 
 Orangu currently parses supported Claude Code, Cowork, and Desktop session formats. It is not a generic JSONL reader and does not ingest Codex transcripts. Claude Code and Codex are both supported as hosts for the optional improvement skills.
 
-Disk-backed parsing is fail-closed:
-
-- Normal parse, cache, and live snapshots share a 256 MiB and 100,000-record session budget.
-- Evidence and later verification use a stricter 64 MiB whole-session budget.
-- One JSONL record may be at most 8 MiB.
-- Sidecar discovery has limits on entry count, nesting depth, and metadata file size.
-- Orangu rejects symlinks, replacement races, partial verification inputs, and over-limit inputs.
-
-Current Analysis, SlimAnalysis, and Aggregate JSON inputs to `orangu evidence` are capped at 8 MiB. The projection validates at most 500 findings and 1,000 aggregate sessions, selects at most 50 findings, and emits at most 256 KiB.
+Disk-backed parsing is fail-closed. Orangu rejects symlinks, replacement races, partial verification inputs, and over-limit inputs. [Resource and filesystem bounds](DETERMINISM.md#resource-and-filesystem-bounds) gives each limit.
 
 Unknown records appear in Coverage. Orangu never treats them silently as supported.
 
@@ -124,10 +122,7 @@ The optional skills use `orangu evidence` as their only transcript boundary:
 observe -> propose -> explicit apply -> later sessions vs baseline, beyond chance
 ```
 
-- Session and repo scope support proposal, explicit application, and later same-workspace verification.
-- `orangu suggest --effect <id>` shows the comparison read-only. Orangu picks up to 10 settled sessions before the change, without the ones that surfaced the finding, and up to 10 after it. Orangu grades each reviewed check with an exact rank test.
-- A record becomes `verified` only when every directional check beats chance at p ≤ 0.05 and no guard moves the wrong way beyond chance. It also needs at least 3 sessions on each side. Otherwise it stays `applied` with a verdict such as `within-noise` or `not-enough-sessions`.
-- Orangu names changes applied in the same workspace at overlapping times as confounders. To measure each effect, apply one change at a time.
+- Session and repo scope support proposal, explicit application, and later same-workspace verification. `orangu suggest --effect <id>` shows the comparison read-only.
 - Global scope is proposal-only.
 
 See [determinism and AI skills](DETERMINISM.md) and [data contracts](DATA-CONTRACTS.md) for the complete rules.
