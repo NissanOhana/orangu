@@ -817,6 +817,24 @@ syncBuiltinESMExports()
     expect(human.stdout).toContain('My key is ‹anthropic-key›')
     expect(bare.stdout).toMatch(/^  finding {2}/m)
     expect(bare.stdout).toMatch(/^  next {5}claude "\/orangu:improve sg_[0-9a-f]{12}"$|ran clean/m)
+    // the latest fixture session runs clean, so the footers are read on the ended one, which has findings: bare on
+    // stdout, analyze on stderr. Each prints the rest of the wrapped title, then the Improvement: lines, between
+    // finding and next
+    const ended = ['--root', home.configDir, '--no-cache']
+    const bareEnded = spawnSync('node', [CLI, '--session', home.endedId, ...ended], { encoding: 'utf8' })
+    const analyzeEnded = spawnSync('node', [CLI, 'analyze', home.endedId, ...ended], { encoding: 'utf8' })
+    expect(bareEnded.status, bareEnded.stderr).toBe(0)
+    expect(analyzeEnded.status, analyzeEnded.stderr).toBe(0)
+    for (const [name, text] of [['bare', bareEnded.stdout], ['analyze', analyzeEnded.stderr]] as const) {
+      const lines = text.split('\n')
+      const finding = lines.findIndex((l) => l.startsWith('  finding  '))
+      const next = lines.findIndex((l) => l.startsWith('  next     '))
+      expect(finding, `${name}: a finding row\n${text}`).toBeGreaterThanOrEqual(0)
+      expect(next, `${name}: next follows the finding\n${text}`).toBeGreaterThan(finding)
+      const between = lines.slice(finding + 1, next)
+      for (const l of between) expect(l, name).toMatch(/^ {11}\S/)
+      expect(between.filter((l) => l.startsWith('           Improvement: ')), `${name}\n${text}`).toHaveLength(1)
+    }
     expect(bare.stdout).not.toContain(' --finding ')
     expect(bare.stdout + bare.stderr).not.toMatch(ESCAPES)
     for (const l of bare.stdout.split('\n')) expect(l.length, l).toBeLessThanOrEqual(80)
