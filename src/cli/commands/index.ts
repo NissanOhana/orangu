@@ -67,8 +67,9 @@ export const EXTRA_HELP: string[] = [
     '                                  | --list)',
   ].join('\n'),
   [
-    '  orangu ste <file...|->       score Markdown, HTML or text against the STE',
-    '                               writing rules (- reads stdin, no pass mark)',
+    '  orangu ste <file...|->       score prose (Markdown, a draft or an HTML page',
+    '                               of prose) against the STE writing rules',
+    '                               (- reads stdin, no pass mark, not for tables)',
     '                                 ([--json] [--lines])',
   ].join('\n'),
   [

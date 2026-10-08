@@ -38,7 +38,7 @@ npx orangu serve           # live loopback viewer over every local session
 npx orangu repo            # recurring patterns across this repository's sessions
 npx orangu global          # ... across every session on the machine
 npx orangu harness         # what your config declares vs what your sessions used, in tokens
-npx orangu ste <file>      # check a text file against the STE writing rules
+npx orangu ste <file>      # check a prose file against the STE writing rules
 ```
 
 Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare `orangu` keeps the compact latest-session summary instead of waiting for input.

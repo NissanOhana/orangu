@@ -40,7 +40,7 @@ node dist/orangu.js report
 | `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
 | `orangu harness` | Compare declared harness configuration with observed use |
 | `orangu suggest` | Inspect and transition validated suggestion records |
-| `orangu ste <file...\|->` | Check Markdown, HTML or text against the STE writing rules and print each finding. It has no pass mark |
+| `orangu ste <file...\|->` | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. It joins table cells into sentences, so an orangu report or terminal output gives false findings |
 | `orangu show-me [selector]` | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
 
 A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment. If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch`, `estimate` and `show-me`. Outside Claude Code, `current` is an error.
