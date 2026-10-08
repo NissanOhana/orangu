@@ -6,8 +6,9 @@
  * and the "(N sessions)" count follows each title.
  *
  * The HTML report of the same verbs (`--html <file>`) embeds the aggregate after the default redaction. Each
- * closed repo or global card shows its finding's `recommendation` as the improvement line, so every embedded
- * cross finding must carry that copy, and it must be the copy of the example session the title names.
+ * closed repo or global card shows its finding's `improvement` as the improvement line. The `recommendation`
+ * that this test reads starts with that improvement, so every embedded cross finding must carry it, and it
+ * must be the copy of the example session the title names.
  */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
