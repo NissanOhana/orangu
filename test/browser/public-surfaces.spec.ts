@@ -96,6 +96,21 @@ async function expectImprovementOnEveryClosedCard(page: Page, scope: 'repo' | 'g
   await expect(page.getByText('Each title shows the figures of one example session.'), `${where}: one caption`).toHaveCount(1)
 }
 
+/**
+ * The Recurring findings card on Repo and Global: each row shows the title of one example session, so one caption
+ * under the card title says it, once, above the first row, and no row repeats the "In one session" marker.
+ */
+async function expectOneRecurringCaption(page: Page, where: string): Promise<void> {
+  const recurring = page.locator('.card', { has: page.locator('.card-title', { hasText: 'Recurring findings' }) })
+  await expect(recurring, where).toHaveCount(1)
+  await expect(page.getByText('Each title shows the figures of one example session.'), `${where}: one caption on the screen`).toHaveCount(1)
+  const caption = recurring.locator('.sg-cap')
+  await expect(caption, `${where}: the caption in the Recurring findings card`).toHaveText('Each title shows the figures of one example session.')
+  await expect(caption, where).toBeVisible()
+  expect(await recurring.evaluate((card) => card.querySelector('.sg-cap + .rrow') !== null), `${where}: the caption sits above the first row`).toBe(true)
+  await expect(recurring.locator('.rrow', { hasText: 'In one session' }), `${where}: a row repeats the marker`).toHaveCount(0)
+}
+
 async function rasterBrandSource(page: Page): Promise<string> {
   const brand = page.locator('.brand img.logo').first()
   await expect(brand).toBeVisible()
@@ -432,6 +447,7 @@ test('generated repository sample renders the repo scope and the two samples lin
   await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
   await expect(page.getByText('Recurring findings', { exact: false }).first()).toBeVisible()
   await expect(page.locator('.rrow')).not.toHaveCount(0)
+  await expectOneRecurringCaption(page, 'sample-repo.html Repo')
   await expectNoHorizontalOverflow(page)
   expect(await paintedTheme(page)).toBe(projectTheme(info))
 
@@ -461,6 +477,7 @@ test('generated repository sample renders the repo scope and the two samples lin
   await expect(page.getByRole('heading', { level: 1, name: /^Global/ })).toBeVisible()
   await expect(page.getByText('Tokens by project')).toBeVisible()
   await expect(page.locator('.rrow')).not.toHaveCount(0)
+  await expectOneRecurringCaption(page, 'sample.html Global')
   await expectNoHorizontalOverflow(page)
   await page.goto(withTheme(`${SITE}/sample.html#suggest?scope=repo`, info), { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()

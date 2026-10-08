@@ -36,20 +36,22 @@ async function openFirstSuggestion(page: Page, info: TestInfo): Promise<ReturnTy
  * the reason. Open, its body starts with a closed Why. Why opens to the reason, and to the method in the
  * muted style when the rule has one. A re-render of the same screen (the audience switch rebuilds every
  * node) keeps the card and Why open, because both carry an id. Enter on the focused Why closes it.
+ * `top` is the Overview top card: it opens with the page, so the reader clicks only Why.
  */
-async function expectWhyOpensAndSurvivesARerender(page: Page, where: string, method: boolean): Promise<void> {
-  const card = page.locator('details.finding').first()
+async function expectWhyOpensAndSurvivesARerender(page: Page, where: string, method: boolean, top = false): Promise<void> {
+  const card = page.locator(top ? 'details.finding.top' : 'details.finding').first()
   const why = card.locator('details.why')
   const toggle = why.getByRole('button', { name: 'Why', exact: true })
   const reason = why.locator(':scope > p:not(.muted)')
   await expect(why, where).toHaveCount(1)
   const reasonText = ((await reason.textContent()) ?? '').trim()
   expect(reasonText.length, `${where}: the reason`).toBeGreaterThan(0)
-  await expect(card, where).not.toHaveAttribute('open')
+  if (top) await expect(card, `${where}: the top card opens with the page`).toHaveAttribute('open', '')
+  else await expect(card, where).not.toHaveAttribute('open')
   await expect(card.locator(':scope > summary .sg-lead'), where).toContainText('Improvement:')
   await expect(card.locator(':scope > summary'), where).not.toContainText(reasonText)
 
-  await card.locator(':scope > summary').click()
+  if (!top) await card.locator(':scope > summary').click()
   await expect(toggle, where).toBeVisible()
   await expect(toggle, where).toHaveAttribute('aria-expanded', 'false')
   await expect(reason, where).toBeHidden()
@@ -329,6 +331,39 @@ test('each Improvements card names its improvement while closed, opens its reaso
   await page.goto(withTheme(`${SITE}/sample.html#suggest`, info), { waitUntil: 'domcontentloaded' })
   await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
   await expectWhyOpensAndSurvivesARerender(page, 'sample.html session', true)
+  await noHorizontalOverflow(page)
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(errors).toEqual([])
+})
+
+/**
+ * Why on the cards that only the published samples carry: a repo card (the repository file, reached from its
+ * sidebar), a global card (a scope chip on the session file) and the Overview top card, which opens with the
+ * page. A click opens Why, aria-expanded says so, the reason shows, a re-render keeps it open and Enter closes it.
+ */
+test('Why opens on a repo card, a global card and the Overview top card, and a re-render keeps it open', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${SITE}/sample-repo.html#repo`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
+  await page.getByRole('link', { name: 'Improvements', exact: true }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  await expect(page.getByRole('button', { name: /^Repo · \d+$/ })).toHaveClass(/\bactive\b/)
+  await expectWhyOpensAndSurvivesARerender(page, 'sample-repo.html repo', false)
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+
+  await page.goto(withTheme(`${SITE}/sample.html#suggest`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  const chip = page.getByRole('button', { name: /^Global · \d+$/ })
+  await chip.click()
+  await expect(chip).toHaveClass(/\bactive\b/)
+  await expectWhyOpensAndSurvivesARerender(page, 'sample.html global', false)
+  await noHorizontalOverflow(page)
+
+  // a fresh document: the Overview opens with no open state left from the Improvements screen
+  await page.goto('about:blank')
+  await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
+  await expectWhyOpensAndSurvivesARerender(page, 'sample.html Overview top card', true, true)
   await noHorizontalOverflow(page)
   expect(await paintedTheme(page)).toBe(projectTheme(info))
   expect(errors).toEqual([])
