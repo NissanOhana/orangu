@@ -8289,6 +8289,15 @@ function aggregateOffer(caps, wroteHtml) {
 }
 var AGG_TITLE_COLUMN = 14;
 var AGG_SESSION_COLUMN = 25;
+function withCount(caps, lines, count3, room) {
+  const last = lines.at(-1);
+  if (last !== void 0 && displayWidth(last) + 2 + displayWidth(count3) <= room) return [...lines.slice(0, -1), last + "  " + paint(caps, "dim", count3)];
+  return [...lines, paint(caps, "dim", count3)];
+}
+function hang(head2, lines) {
+  const pad = " ".repeat(displayWidth(head2));
+  return lines.map((l, i) => (i ? pad : head2) + l);
+}
 function aggregateBlock(caps, a) {
   const lines = ["", paint(caps, ["bold", "accent"], "orangu") + "  " + paint(caps, "bold", oneLine2(a.scope)), paint(caps, "dim", `${INDENT}${plural(a.sessionCount, "session")}`), ""];
   const line = (l, v) => lines.push(INDENT + l.padEnd(20) + v);
@@ -8311,9 +8320,7 @@ function aggregateBlock(caps, a) {
     for (const f of a.crossFindings.slice(0, 8)) {
       const figure = paint(caps, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8));
       const count3 = `(${plural(f.sessions, "session")})`;
-      const title = wrapWords(f.exampleTitle || f.title, budget);
-      const last = title.at(-1);
-      const body = last !== void 0 && displayWidth(last) + 2 + count3.length <= budget ? [...title.slice(0, -1), last + "  " + paint(caps, "dim", count3)] : [...title, paint(caps, "dim", count3)];
+      const body = withCount(caps, wrapWords(f.exampleTitle || f.title, budget), count3, budget);
       const improvement = f.improvement ? wrapWords(`Improvement: ${f.improvement}`, budget) : [];
       [...body, ...improvement].forEach((p, i) => lines.push((i ? pad : `    ${figure}  `) + p));
     }
@@ -8329,12 +8336,22 @@ function aggregateBlock(caps, a) {
       h.sessions = Math.max(h.sessions, e.sessions);
       hidden.set(e.tool, h);
     }
-    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) lines.push(`    ${paint(caps, "bad", String(e.total).padStart(4))}\xD7  ${oneLine2(e.tool)}: ${oneLine2(e.signature)}  ${paint(caps, "dim", "(" + plural(e.sessions, "session") + ")")}`);
-    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(`    ${paint(caps, "bad", String(h.total).padStart(4))}\xD7  ${oneLine2(tool)}: ${plural(h.groups, "recurring signature")}, text hidden (add --include-text)  ${paint(caps, "dim", "(" + plural(h.sessions, "session") + ")")}`);
+    const errorRow = (total, tool, text3, sessions) => {
+      const head2 = `    ${paint(caps, "bad", String(total).padStart(4))}\xD7  `;
+      const room = layoutWidth(caps) - displayWidth(head2);
+      const name = `${oneLine2(tool)}:`;
+      const body = displayWidth(name) > room ? [name, ...wrapWords(text3, room)] : wrapWords(`${name} ${text3}`, room);
+      return hang(head2, withCount(caps, body, `(${plural(sessions, "session")})`, room));
+    };
+    for (const e of a.recurringErrors.filter((e2) => e2.signature).slice(0, 6)) lines.push(...errorRow(e.total, e.tool, oneLine2(e.signature), e.sessions));
+    for (const [tool, h] of [...hidden].slice(0, 6)) lines.push(...errorRow(h.total, tool, `${plural(h.groups, "recurring signature")}, text hidden (add --include-text)`, h.sessions));
   }
   if (a.topReReadFiles.length) {
     lines.push("", paint(caps, "bold", `${INDENT}most re-read files (context weight)`));
-    for (const f of a.topReReadFiles.slice(0, 6)) lines.push(`    ${String(f.totalReads).padStart(4)} reads  ${oneLine2(f.path)}  ${paint(caps, "dim", "(" + plural(f.sessions, "session") + ")")}`);
+    for (const f of a.topReReadFiles.slice(0, 6)) {
+      const head2 = `    ${String(f.totalReads).padStart(4)} reads  `;
+      lines.push(...hang(head2, withCount(caps, [oneLine2(f.path)], `(${plural(f.sessions, "session")})`, layoutWidth(caps) - displayWidth(head2))));
+    }
   }
   lines.push("", paint(caps, "bold", `${INDENT}heaviest sessions (by tokens)`));
   const titleBudget = layoutWidth(caps) - AGG_SESSION_COLUMN;
@@ -15746,8 +15763,9 @@ var EXTRA_HELP = [
     "                                  | --list)"
   ].join("\n"),
   [
-    "  orangu ste <file...|->       score Markdown, HTML or text against the STE",
-    "                               writing rules (- reads stdin, no pass mark)",
+    "  orangu ste <file...|->       score prose (Markdown, a draft or an HTML page",
+    "                               of prose) against the STE writing rules",
+    "                               (- reads stdin, no pass mark)",
     "                                 ([--json] [--lines])"
   ].join("\n"),
   [
