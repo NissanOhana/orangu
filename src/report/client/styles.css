@@ -168,12 +168,12 @@ details.finding > summary b { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .fcmd { margin-top: 12px; }
 details.finding.top { border-color: var(--border2); margin-bottom: 16px; }
 details.finding.top > summary b { font-size: 15px; }
-/* the improvement line: the last row of a card summary, clamped to 2 lines while the card is closed */
+/* the improvement line: the last row of a card summary, whole at every width (no line clamp: a closed card shows the whole fix) */
 details.finding > summary { flex-wrap: wrap; }
 details.finding > summary > .sg-lead { flex: 1 1 100%; margin: 2px 0 0 40px; font-size: 13.5px; line-height: 1.45; }
 details.finding > summary .sg-lead b { flex: none; font-size: inherit; }
-/* a clamp clips at the padding box, so the closed line keeps its spacing in transparent borders (the fill paints under them) and no 3rd line shows */
-details.finding:not([open]) > summary > .sg-lead { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; padding-block: 0; border-block: 6px solid transparent; }
+/* the closed line keeps its spacing in transparent borders (the fill paints under them) */
+details.finding:not([open]) > summary > .sg-lead { padding-block: 0; border-block: 6px solid transparent; }
 .sg-install { margin: 6px 0 4px; }
 /* "See the 3 steps" opens the Improvements screen at this heading: keep the card's top padding (.pad) in view */
 #ai-steps { scroll-margin-top: 16px; }
@@ -454,7 +454,6 @@ svg { display: block; max-width: 100%; }
   .app { display: block; height: auto; overflow: visible; }
   .main { overflow: visible; }
   details.turn > .tbody, details.finding > .fbody { display: block !important; }
-  details.finding:not([open]) > summary > .sg-lead { display: block; -webkit-line-clamp: none; }
   .card, .kpi, details { break-inside: avoid; }
   body { font-size: 11px; }
 }

@@ -334,6 +334,32 @@ test('each Improvements card names its improvement while closed, opens its reaso
   expect(errors).toEqual([])
 })
 
+// No length cap on content: a closed card shows its whole improvement line at every width, and the reader opens
+// the card only for the reason. A test that reads textContent cannot see what CSS hides, so the box of each
+// closed lead must hold all of its text (2 px for rounding). A 2-line clamp cut 17 of the 18 session leads and
+// 19 of the 20 repo leads of the published samples at 390 px, and none at 1440 px: the narrow projects check it.
+test('each closed card shows its whole improvement line in a narrow window, with no line clamp', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('narrow'), 'a clamp cuts a lead where the window is narrow')
+  const errors = runtimeErrors(page)
+  for (const [url, heading] of [
+    [`${SITE}/sample.html#suggest`, 'Improvements'],
+    [`${SITE}/sample-repo.html#suggest`, 'Improvements'],
+    [`${SITE}/sample.html#overview`, 'Overview'],
+  ] as const) {
+    // a fresh document each time, so the leads are the ones this screen drew
+    await page.goto('about:blank')
+    await page.goto(withTheme(url, info), { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { level: 1, name: heading }), url).toBeVisible()
+    const leads = page.locator('main.main details.finding:not([open]) > summary > .sg-lead')
+    await expect(leads.first(), `${url}: a closed card`).toBeVisible()
+    const cut = await leads.evaluateAll((all) =>
+      all.filter((el) => el.scrollHeight > el.clientHeight + 2).map((el) => `${(el.textContent ?? '').slice(0, 48)}: ${el.scrollHeight} px of text in ${el.clientHeight} px`),
+    )
+    expect(cut, `${url}: closed leads that CSS cuts`).toEqual([])
+  }
+  expect(errors).toEqual([])
+})
+
 // The page head of every screen offers the show-me command for what the page shows. Copy only.
 test('Show me in the page head copies the session show-me command, opens and closes from the keyboard, and keeps the theme', async ({ page, context }, info) => {
   const errors = runtimeErrors(page)
