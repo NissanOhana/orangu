@@ -403,17 +403,34 @@ test('generated sample fits a 390px resized desktop viewport', async ({ browser 
 
 /**
  * Every element that an ellipsis cuts, on every screen of both samples. The check knows no selector: it opens each
- * screen that the sidebar links to (and the repo and global scopes of Improvements), opens every disclosure, and
- * takes each element whose computed text-overflow is ellipsis and whose text overflows its box. Each one must
- * carry a title equal to its whole text: its words, with a space where one element ends and the next begins
- * (the kind tag and the prompt of a Timeline row, the agent and its model). A new ellipsis rule with no title
- * fails here as soon as a sample has a cell that it cuts.
+ * screen that the sidebar links to (and the repo and global scopes of Improvements) and takes each element whose
+ * computed text-overflow is ellipsis and whose text overflows its box. It measures each screen twice: as it loads,
+ * with each card closed (a rule can cut only a closed card, as the old 2-line clamp did), and again with every
+ * disclosure open (the Timeline calls, More charts). Each cut element must carry a title equal to its whole text:
+ * its words, with a space where one element ends and the next begins (the kind tag and the prompt of a Timeline
+ * row, the agent and its model). A new ellipsis rule with no title fails here as soon as a sample has a cell that
+ * it cuts.
  */
 test('each element that an ellipsis cuts carries its whole text in a title, on every screen of both samples', async ({ page }, info) => {
   test.skip(info.project.name.endsWith('dark'), 'a cut depends on the width, not on the theme: wide-light and narrow-light check it')
   const errors = runtimeErrors(page)
   let checked = 0
   const wrong: string[] = []
+  const measure = (): Promise<Array<{ cell: string; title: string | null; text: string }>> =>
+    page.evaluate(() => {
+      const words = (el: Element): string => {
+        const parts: string[] = []
+        const walk = (node: Node): void => node.childNodes.forEach((child) => {
+          if (child.nodeType === Node.TEXT_NODE) parts.push((child as Text).data)
+          else if (child.nodeType === Node.ELEMENT_NODE) { parts.push(' '); walk(child); parts.push(' ') }
+        })
+        walk(el)
+        return parts.join('').replace(/\s+/g, ' ').trim()
+      }
+      return Array.from(document.body.querySelectorAll<HTMLElement>('*'))
+        .filter((el) => getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth)
+        .map((el) => ({ cell: `${el.tagName.toLowerCase()}.${String(el.className).trim().replace(/\s+/g, '.')}`, title: el.getAttribute('title'), text: words(el) }))
+    })
   for (const file of ['sample.html', 'sample-repo.html']) {
     await page.goto(`${SITE}/${file}`, { waitUntil: 'domcontentloaded' })
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
@@ -421,28 +438,16 @@ test('each element that an ellipsis cuts carries its whole text in a title, on e
     const screens = [...new Set([...links, '#suggest?scope=repo', '#suggest?scope=global'])]
     expect(screens.length, `${file}: screens`).toBeGreaterThan(3)
     for (const screen of screens) {
-      const where = `${file}${screen}`
       await page.goto('about:blank')
       await page.goto(`${SITE}/${file}${screen}`, { waitUntil: 'domcontentloaded' })
-      await expect(page.getByRole('heading', { level: 1 }), where).toBeVisible()
-      await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
-      const cut = await page.evaluate(() => {
-        const words = (el: Element): string => {
-          const parts: string[] = []
-          const walk = (node: Node): void => node.childNodes.forEach((child) => {
-            if (child.nodeType === Node.TEXT_NODE) parts.push((child as Text).data)
-            else if (child.nodeType === Node.ELEMENT_NODE) { parts.push(' '); walk(child); parts.push(' ') }
-          })
-          walk(el)
-          return parts.join('').replace(/\s+/g, ' ').trim()
-        }
-        return Array.from(document.body.querySelectorAll<HTMLElement>('*'))
-          .filter((el) => getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth)
-          .map((el) => ({ cell: `${el.tagName.toLowerCase()}.${String(el.className).trim().replace(/\s+/g, '.')}`, title: el.getAttribute('title'), text: words(el) }))
-      })
-      checked += cut.length
-      for (const c of cut.filter((c) => c.title !== c.text))
-        wrong.push(`${where} ${c.cell} "${c.text.slice(0, 50)}": title ${c.title === null ? 'missing' : JSON.stringify(c.title.slice(0, 50))}`)
+      await expect(page.getByRole('heading', { level: 1 }), `${file}${screen}`).toBeVisible()
+      for (const state of ['closed', 'open'] as const) {
+        if (state === 'open') await page.evaluate(() => document.querySelectorAll('details').forEach((d) => { d.open = true }))
+        const cut = await measure()
+        checked += cut.length
+        for (const c of cut.filter((c) => c.title !== c.text))
+          wrong.push(`${file}${screen} (${state}) ${c.cell} "${c.text.slice(0, 50)}": title ${c.title === null ? 'missing' : JSON.stringify(c.title.slice(0, 50))}`)
+      }
     }
   }
   expect(checked, 'the samples have cells that an ellipsis cuts').toBeGreaterThan(0)
