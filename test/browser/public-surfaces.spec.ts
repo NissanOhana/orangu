@@ -418,6 +418,8 @@ test('each element that an ellipsis cuts carries its whole text in a title, on e
   const wrong: string[] = []
   const measure = (): Promise<Array<{ cell: string; title: string | null; text: string }>> =>
     page.evaluate(() => {
+      // the text and the title fold their whitespace the same way, so a title with 2 spaces or a line break still matches
+      const fold = (s: string): string => s.replace(/\s+/g, ' ').trim()
       const words = (el: Element): string => {
         const parts: string[] = []
         const walk = (node: Node): void => node.childNodes.forEach((child) => {
@@ -425,11 +427,14 @@ test('each element that an ellipsis cuts carries its whole text in a title, on e
           else if (child.nodeType === Node.ELEMENT_NODE) { parts.push(' '); walk(child); parts.push(' ') }
         })
         walk(el)
-        return parts.join('').replace(/\s+/g, ' ').trim()
+        return fold(parts.join(''))
       }
       return Array.from(document.body.querySelectorAll<HTMLElement>('*'))
         .filter((el) => getComputedStyle(el).textOverflow === 'ellipsis' && el.scrollWidth > el.clientWidth)
-        .map((el) => ({ cell: `${el.tagName.toLowerCase()}.${String(el.className).trim().replace(/\s+/g, '.')}`, title: el.getAttribute('title'), text: words(el) }))
+        .map((el) => {
+          const title = el.getAttribute('title')
+          return { cell: `${el.tagName.toLowerCase()}.${String(el.className).trim().replace(/\s+/g, '.')}`, title: title === null ? null : fold(title), text: words(el) }
+        })
     })
   for (const file of ['sample.html', 'sample-repo.html']) {
     await page.goto(`${SITE}/${file}`, { waitUntil: 'domcontentloaded' })
