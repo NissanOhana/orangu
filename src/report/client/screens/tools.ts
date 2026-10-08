@@ -68,7 +68,7 @@ ${avgCell(s)}
         .slice(0, 8)
         .map((g) => {
           const hint = g.sampleHint || errHint(g.signature)
-          return `<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline">${esc(g.signature)}</span><span class="mono115" style="margin-left:auto">×${g.count}</span></div><div class="small muted" style="margin-top:2px">${esc(g.name)}${hint ? ' · ' + esc(hint) : ''}</div></div>`
+          return `<div class="rerow" style="font-size:13px"><div style="display:flex;gap:8px;align-items:center"><span class="sigline" title="${esc(g.signature)}">${esc(g.signature)}</span><span class="mono115" style="margin-left:auto">×${g.count}</span></div><div class="small muted" style="margin-top:2px">${esc(g.name)}${hint ? ' · ' + esc(hint) : ''}</div></div>`
         })
         .join('')
     : `<p class="small" style="color:var(--good);margin:0">No tool errors in this session.</p>`

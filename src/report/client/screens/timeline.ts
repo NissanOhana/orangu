@@ -27,8 +27,12 @@ function matches(a: Analysis, t: TurnAnalysis, ctx: Ctx): boolean {
   return true
 }
 
-function kindTag(t: TurnAnalysis): string {
-  const label = t.isCommand ? 'cmd' : t.kind === 'human' ? 'human' : t.autoContinuations > 0 ? 'auto' : t.kind
+/** The kind of a turn: the word in its tag, and the first word of the row's title. */
+function kindLabel(t: TurnAnalysis): string {
+  return t.isCommand ? 'cmd' : t.kind === 'human' ? 'human' : t.autoContinuations > 0 ? 'auto' : t.kind
+}
+
+function kindTag(t: TurnAnalysis, label: string): string {
   const cls = t.isCommand ? 'kcmd' : t.kind === 'human' ? 'khuman' : ''
   return `<span class="kind ${cls}">${esc(label)}</span>`
 }
@@ -49,6 +53,8 @@ function turnRow(a: Analysis, t: TurnAnalysis, ctx: Ctx, hotTokens: number, open
   const segs = catMixForTurn(a.tools.calls, t.index, ctx.state.agent)
   const mix = segs.map((s) => `<i style="width:${s.pct.toFixed(1)}%;background:${catColor(s.cat)}"></i>`).join('')
   const { text: prompt, own } = promptText(t, ctx.data.capabilities.includeText)
+  // an ellipsis can cut the row's text: the title carries the kind and the whole prompt
+  const kind = kindLabel(t)
   const promptCls = own ? ' style="color:var(--ink3)"' : ''
   const calls = callsForTurn(a.tools.calls, t.index, ctx.state.agent)
   const evs = calls
@@ -56,7 +62,7 @@ function turnRow(a: Analysis, t: TurnAnalysis, ctx: Ctx, hotTokens: number, open
       (c) => {
         const run = c.agentId ? a.agents.runs.find((r) => r.agentId === c.agentId) : undefined
         const actor = c.agentId ? run?.agentType || run?.name || c.agentId.slice(0, 8) : 'main'
-        return `<div class="evline"><span class="sw" style="background:${catColor(c.category)}"></span><span class="pill">${esc(actor)}</span><span class="en">${esc(c.name)}</span><span class="ew">${esc(c.summary)}</span><span class="tag ${c.isError ? 'bad' : 'good'}">${c.isError ? 'error' : 'ok'}</span><span class="ex">${[c.durationMs !== undefined ? ms(c.durationMs) : '', c.resultBytes ? bytes(c.resultBytes) : '', c.errorHint ?? ''].filter(Boolean).map(esc).join(' · ')}</span></div>`
+        return `<div class="evline"><span class="sw" style="background:${catColor(c.category)}"></span><span class="pill">${esc(actor)}</span><span class="en">${esc(c.name)}</span><span class="ew" title="${esc(c.summary)}">${esc(c.summary)}</span><span class="tag ${c.isError ? 'bad' : 'good'}">${c.isError ? 'error' : 'ok'}</span><span class="ex">${[c.durationMs !== undefined ? ms(c.durationMs) : '', c.resultBytes ? bytes(c.resultBytes) : '', c.errorHint ?? ''].filter(Boolean).map(esc).join(' · ')}</span></div>`
       },
     )
     .join('')
@@ -81,7 +87,7 @@ function turnRow(a: Analysis, t: TurnAnalysis, ctx: Ctx, hotTokens: number, open
   return `<details class="turn${t.interrupted ? ' interrupted' : ''}" id="turn-${t.index}"${open ? ' open' : ''}>
 <summary>
 <span class="tnum">#${t.index}</span>
-<span class="tprompt"${promptCls}>${kindTag(t)}${esc(prompt)}</span>
+<span class="tprompt" title="${esc(kind + ' ' + prompt)}"${promptCls}>${kindTag(t, kind)}${esc(prompt)}</span>
 <span class="mixbar" title="tool mix">${mix}</span>
 <span class="tcell">${calls.length}⚙</span>
 <span class="tcell">${esc(dur)}</span>

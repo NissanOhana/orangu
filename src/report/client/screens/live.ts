@@ -126,7 +126,7 @@ function sessionView(ctx: Ctx, row: SessionSummaryRow | undefined, a: Analysis |
     .slice(-FEED_MAX)
     .map(
       (f) =>
-        `<div class="feedrow">${f.agentType ? '<span style="width:2px;align-self:stretch;background:var(--cat-agent);flex:none"></span>' : ''}<span class="ft">${esc(timeOnly(f.ts))}</span><span class="sw" style="background:${catColor(f.category)}"></span><span class="fn">${esc(f.name)}</span><span class="fw">${esc(f.summary)}</span><span class="fd">${f.durationMs !== undefined ? esc(ms(f.durationMs)) : ''}${f.isError ? ' · error' : ''}</span></div>`,
+        `<div class="feedrow">${f.agentType ? '<span style="width:2px;align-self:stretch;background:var(--cat-agent);flex:none"></span>' : ''}<span class="ft">${esc(timeOnly(f.ts))}</span><span class="sw" style="background:${catColor(f.category)}"></span><span class="fn">${esc(f.name)}</span><span class="fw" title="${esc(f.summary)}">${esc(f.summary)}</span><span class="fd">${f.durationMs !== undefined ? esc(ms(f.durationMs)) : ''}${f.isError ? ' · error' : ''}</span></div>`,
     )
     .join('')
   const emptyFeed =

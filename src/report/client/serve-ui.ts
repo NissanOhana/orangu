@@ -31,7 +31,7 @@ function fleetFeedHtml(live: SessionSummaryRow[]): string {
   const body = rows
     .map(
       (r) =>
-        `<div class="feedrow"><span class="ft">${esc(shortId(r.sid))}</span><span class="ft">${esc(timeOnly(r.ts))}</span><span class="sw" style="background:${catColor(r.category)}"></span><span class="fn">${esc(r.name)}</span><span class="fw">${esc(r.summary)}</span></div>`,
+        `<div class="feedrow"><span class="ft">${esc(shortId(r.sid))}</span><span class="ft">${esc(timeOnly(r.ts))}</span><span class="sw" style="background:${catColor(r.category)}"></span><span class="fn">${esc(r.name)}</span><span class="fw" title="${esc(r.summary)}">${esc(r.summary)}</span></div>`,
     )
     .join('')
   return `<div class="feed" style="margin-top:18px" aria-live="off"><div class="card-head">Fleet feed</div>${body}<div class="feedfoot">last ${rows.length} events across the live sessions</div></div>`
@@ -64,10 +64,10 @@ function fleetView(ctx: Ctx, liveIn: SessionSummaryRow[]): HTMLElement {
       const strip = agents ? `<div class="agentstrip">${'<i></i>'.repeat(agents)}${(r.agentsRunning ?? 0) > 8 ? `<span class="more">+${(r.agentsRunning ?? 0) - 8}</span>` : ''}</div>` : ''
       const last = r.lastEvent ? `last: ${r.lastEvent.name} · ${r.lastEvent.summary}` : badgeCopy(r)
       return `<a class="fleetcard" href="#live?s=${esc(r.id)}">
-<div class="fh"><span class="ldot" data-pulse="1" aria-hidden="true"></span><span>${esc(shortId(r.id))}</span><span class="proj">${esc(r.projectSlug)}</span><span class="muted">turn ${r.turns ?? '–'}</span></div>
+<div class="fh"><span class="ldot" data-pulse="1" aria-hidden="true"></span><span>${esc(shortId(r.id))}</span><span class="proj" title="${esc(r.projectSlug)}">${esc(r.projectSlug)}</span><span class="muted">turn ${r.turns ?? '–'}</span></div>
 <div class="fk"><span>${r.startedAt !== undefined && r.mtimeMs > r.startedAt ? esc(ms(r.mtimeMs - r.startedAt)) : '–'}</span><span style="color:var(--accent-ink)">${r.tokens !== undefined ? esc(tok(r.tokens)) : '–'}</span><span>${r.toolCalls ?? '–'}⚙</span><span>${ctxPct ? esc(pct(ctxPct)) : '–'} ctx</span></div>
 <span class="trough" style="height:6px"><i style="width:${(ctxPct * 100).toFixed(1)}%"></i></span>
-<div class="fl">${esc(last)}</div>
+<div class="fl" title="${esc(last)}">${esc(last)}</div>
 ${strip}
 </a>`
     })
@@ -88,7 +88,7 @@ function pickerHtml(d: AppData, row: SessionSummaryRow | undefined): string {
           : r.badge === 'idle'
             ? '<span class="ldot hollow" aria-hidden="true"></span>'
             : '<span class="ldot done" aria-hidden="true"></span>'
-      return `<div role="option" tabindex="-1" data-id="${esc(r.id)}" aria-selected="${r.id === row?.id}">${dot}<span class="mono">${esc(shortId(r.id))}</span><span class="proj">${esc(r.projectSlug)}</span></div>`
+      return `<div role="option" tabindex="-1" data-id="${esc(r.id)}" aria-selected="${r.id === row?.id}">${dot}<span class="mono">${esc(shortId(r.id))}</span><span class="proj" title="${esc(r.projectSlug)}">${esc(r.projectSlug)}</span></div>`
     })
     .join('')
   return `<button class="sid pick" id="btn-pick" aria-haspopup="listbox" aria-expanded="false">${label} ▾</button>

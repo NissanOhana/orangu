@@ -129,7 +129,9 @@ describe('offline report', () => {
     // 13 B of headroom. A named, measured growth: the narrative shows its 2 paragraphs, each 6 sentences or fewer.
     // 2026-10-08 ellipsis titles: the cap goes UP 82,100 -> 82,248, the measured 82,235 below plus the same 13 B of
     // headroom. A named, measured growth: each label cell that an ellipsis can cut carries its whole text in a title.
-    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_248)
+    // 2026-10-08 ellipsis titles on every rule: the cap goes UP 82,248 -> 82,427, the measured 82,414 below plus the
+    // same 13 B of headroom. A named, measured growth: each element that any ellipsis rule cuts carries a title.
+    expect(CLIENT_JS_AGG.length).toBeLessThanOrEqual(82_427)
     // 2026-10-06 proposals seam: -3,301 B (83,123 -> 79,822), and this bundle gets the exact pin the
     // session bundle has always had, so a change that moves it has to name the bytes. The stored
     // proposal block and the Saved proposals inbox (proposals-ui.ts) reach the Suggest screen only
@@ -177,7 +179,13 @@ describe('offline report', () => {
     // (Coverage) is +21 B, the re-read path (Repo and Global) is +21 B, and the session title (Repo and Global) is
     // +18 B (its `?? ""` left, because esc reads undefined as ''). The closed-card line clamp left the CSS (-221 B
     // of CLIENT_CSS), which no JS bundle carries.
-    expect(CLIENT_JS_AGG.length).toBe(82235)
+    // 2026-10-08 ellipsis titles on every rule: +179 B (82,235 -> 82,414), re-measured after `npm run build`. The rest
+    // of the rules that cut text with an ellipsis get the same title, so no cut element hides its text: the Timeline
+    // row (its kind and the whole prompt) and call summary are +75 B (19 B of it the kindLabel split, so the tag and
+    // the title share one word), the summary of a raw call (Coverage) is +28 B, the error signature on Tools and on
+    // Repo and Global are +26 B each, and the Live feed event is +24 B. The fleet card, the fleet feed and the session
+    // picker get their titles too, but they are serve-only (serve-ui.ts) and ship in no file bundle.
+    expect(CLIENT_JS_AGG.length).toBe(82414)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -219,7 +227,9 @@ describe('offline report', () => {
     // 26 B of headroom. A named, measured growth: the narrative shows its 2 paragraphs, each 6 sentences or fewer.
     // 2026-10-08 ellipsis titles: the cap goes UP 72,797 -> 72,906, the measured 72,880 below plus the same 26 B of
     // headroom. A named, measured growth: each label cell that an ellipsis can cut carries its whole text in a title.
-    expect(CLIENT_JS.length).toBeLessThanOrEqual(72_906)
+    // 2026-10-08 ellipsis titles on every rule: the cap goes UP 72,906 -> 73,059, the measured 73,033 below plus the
+    // same 26 B of headroom. A named, measured growth: each element that any ellipsis rule cuts carries a title.
+    expect(CLIENT_JS.length).toBeLessThanOrEqual(73_059)
     // 2026-08-27 rebase onto main's redaction fix (+50 B fallback label): exact pin re-measured after `npm run build`.
     // 2026-08-27 final client pass 2 (fix/final-client2): −56 B net, cap unchanged. Eight UX fixes cost +1,233 B
     // (the Timeline row's own-facts fallback, folded hidden-error rows on Tools/Repo/Global, the Quality verdict
@@ -308,6 +318,12 @@ describe('offline report', () => {
     // share), the label of a proportion row (Agents and Context) is +46 B, and the tool name of a raw call (Coverage)
     // is +21 B. The Repo titles ship only in the aggregate bundle. The closed-card line clamp left the CSS (-221 B of
     // CLIENT_CSS), which no JS bundle carries.
-    expect(CLIENT_JS.length).toBe(72880)
+    // 2026-10-08 ellipsis titles on every rule: +153 B (72,880 -> 73,033), re-measured after `npm run build`. The rest
+    // of the rules that cut text with an ellipsis get the same title, so no cut element hides its text: the Timeline
+    // row (its kind and the whole prompt) and call summary are +75 B (19 B of it the kindLabel split, so the tag and
+    // the title share one word), the summary of a raw call (Coverage) is +28 B, the error signature on Tools is +26 B,
+    // and the Live feed event is +24 B. The fleet card, the fleet feed and the session picker get their titles too,
+    // but they are serve-only (serve-ui.ts) and ship in no file bundle.
+    expect(CLIENT_JS.length).toBe(73033)
   })
 })

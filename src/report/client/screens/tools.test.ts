@@ -96,7 +96,7 @@ describe('renderTools: recurring errors under the default redaction', () => {
     const ctx = await context('dev', [stat()])
     ctx.a!.tools.errorGroups = [{ name: 'Read', signature: 'ENOENT: no such file', count: 3, sampleTurnIndex: 2 }, stripped('Bash', 5)]
     renderTools(ctx)
-    expect(markup).toContain('<span class="sigline">ENOENT: no such file</span>')
+    expect(markup).toContain('<span class="sigline" title="ENOENT: no such file">ENOENT: no such file</span>')
     expect(markup).toContain('run the build first, or check the path')
     expect(markup).toContain('<b>Bash</b> · 5 errors across 1 recurring signature</span>')
     expect(markup).toContain('No error text was recorded.')

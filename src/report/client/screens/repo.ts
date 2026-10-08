@@ -90,7 +90,7 @@ export function aggregateEvidence(g: Aggregate, ctx: Ctx): string {
         .slice(0, 8)
         .map(
           (e) =>
-            `<div class="rrow" style="padding:10px 18px"><span class="sigline">${esc(e.signature)}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${plural(e.sessions, 'session')}</span><span class="mono125">×${e.total}</span></div>`,
+            `<div class="rrow" style="padding:10px 18px"><span class="sigline" title="${esc(e.signature)}">${esc(e.signature)}</span><span class="kind">${esc(e.tool)}</span><span class="mono small muted">${plural(e.sessions, 'session')}</span><span class="mono125">×${e.total}</span></div>`,
         )
         .join('')}</div>`
     : ''

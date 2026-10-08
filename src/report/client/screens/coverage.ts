@@ -75,10 +75,11 @@ ${hooks}
     listEl.innerHTML =
       rows
         .slice(0, 2000)
-        .map(
-          (c) =>
-            `<div class="rawrow"><span class="rt" title="${esc(c.name)}">${esc(c.name)}</span><span class="muted">#${c.turnIndex}${c.agentId ? ' agent' : ''}${c.isError ? ' ⚠' : ''}</span><span class="rp">${esc(c.summary)}${c.durationMs !== undefined ? ' · ' + esc(ms(c.durationMs)) : ''}</span></div>`,
-        )
+        .map((c) => {
+          // an ellipsis can cut the name and the summary: each title carries the whole text
+          const summary = c.summary + (c.durationMs !== undefined ? ' · ' + ms(c.durationMs) : '')
+          return `<div class="rawrow"><span class="rt" title="${esc(c.name)}">${esc(c.name)}</span><span class="muted">#${c.turnIndex}${c.agentId ? ' agent' : ''}${c.isError ? ' ⚠' : ''}</span><span class="rp" title="${esc(summary)}">${esc(summary)}</span></div>`
+        })
         .join('') + (rows.length > 2000 ? `<div class="rawrow muted">…${rows.length - 2000} more (narrow the filter)</div>` : '')
     if (!rows.length) listEl.innerHTML = '<div class="rawrow muted">no calls match</div>'
   }
