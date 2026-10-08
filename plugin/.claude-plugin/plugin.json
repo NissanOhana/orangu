@@ -1,7 +1,7 @@
 {
   "name": "orangu",
   "description": "Observe supported Claude Code, Cowork, and Desktop sessions with deterministic local evidence. Then draft changes, apply session/repo proposals explicitly, and verify session-scope changes against later evidence.",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "author": {
     "name": "Nissan Ohana"
   },

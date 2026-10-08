@@ -1952,7 +1952,7 @@ svg { display: block; max-width: 100%; }
 .feedback-launch { position: fixed; z-index: 80; right: 18px; bottom: 18px; border: 1px solid var(--border2); border-radius: 999px; padding: 8px 13px; background: var(--surface); color: var(--accent-ink); box-shadow: 0 5px 20px color-mix(in srgb, var(--ink1) 14%, transparent); font-size: 12.5px; font-weight: 700; }
 .feedback-launch:hover { text-decoration: none; background: var(--accent-weak); }
 `;
-var BUILD_VERSION = "0.9.0";
+var BUILD_VERSION = "0.10.0";
 
 // src/report/brand.ts
 var BRAND_ICON_ID = "orangu-brand-icon";
@@ -12177,7 +12177,7 @@ function slimAnalysis(a) {
 // src/cli/commands/harness.ts
 import { homedir as homedir4 } from "node:os";
 import { basename as basename8, resolve as resolve6 } from "node:path";
-var VERSION = true ? "0.9.0" : "0.0.0-dev";
+var VERSION = true ? "0.10.0" : "0.0.0-dev";
 var out = MACHINE_CAPS;
 var err = MACHINE_CAPS;
 function detectStreams(flags) {
@@ -13252,7 +13252,7 @@ function createCohortDeps(options = {}) {
 }
 
 // src/version.ts
-var VERSION2 = true ? "0.9.0" : "0.0.0-dev";
+var VERSION2 = true ? "0.10.0" : "0.0.0-dev";
 
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
@@ -14158,7 +14158,7 @@ var SLIDES_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rRgBMKwoW58rZ5PngLud1b+VTqqEUklGeUZGfC/w6q8='; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>
 <meta name="robots" content="noindex"/>
-<meta name="generator" content="orangu 0.9.0"/>
+<meta name="generator" content="orangu 0.10.0"/>
 <title data-slot="title">EXAMPLE Fix the flaky checkout tests</title>
 <style>
 /* Canonical design tokens for the report, served app, and landing page.
@@ -14584,7 +14584,7 @@ var REPORT_HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-rRgBMKwoW58rZ5PngLud1b+VTqqEUklGeUZGfC/w6q8='; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'"/>
 <meta name="robots" content="noindex"/>
-<meta name="generator" content="orangu 0.9.0"/>
+<meta name="generator" content="orangu 0.10.0"/>
 <title data-slot="title">EXAMPLE Fix the flaky checkout tests</title>
 <style>
 /* Canonical design tokens for the report, served app, and landing page.
@@ -16428,7 +16428,8 @@ ${paint(out2, "bold", "session")}   a session id, a unique id prefix, a .jsonl p
 
 ${paint(out2, "bold", "flags")}
   -s, --session <sel>    the session, as a flag (same forms as the positional)
-  -o, --out <file>       write the report/JSON here (default: temp dir)
+  -o, --out <file>       write the report/JSON here (default: temp dir).
+                         It replaces only a file that orangu wrote
   --json                 machine-readable output (the stable API)
   --stdout               write the HTML report to stdout
   --html <file>          repo/global: write the aggregate HTML report here
@@ -16449,7 +16450,8 @@ ${paint(out2, "bold", "flags")}
   --no-color             plain output (orangu obeys NO_COLOR, FORCE_COLOR,
                          TERM=dumb and CI. NO_COLOR, FORCE_COLOR=0 and
                          ORANGU_NO_ANIMATION=1 also stop the spinner)
-  --jobs <n>             worker threads for repo/global scans (default: CPUs-1)
+  --jobs <n>             worker threads for repo/global scans (default: CPUs-1,
+                         at most the CPU count)
   --max-tokens <n>       exit 2 above this token total (CI: analyze/report)
   --fail-on-hook-errors  exit non-zero on any hook error (CI: analyze/report)
   --version, --help
