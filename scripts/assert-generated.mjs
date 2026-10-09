@@ -18,6 +18,8 @@ const generated = [
   'plugin/skills/show-me/references/slides.html',
   'plugin/skills/show-me/references/report.html',
   'src/show-me/generated/templates.ts',
+  'src/god/generated/tokens.ts',
+  'god/hooks/god.mjs',
 ]
 // Generated directories: the Codex skill mirror. Every path under them is compared, so an added or
 // removed mirror file is caught, not only a changed one.

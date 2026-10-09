@@ -1,0 +1,16 @@
+{
+  "name": "orangu-god",
+  "description": "Show each live Claude Code session of this machine in one pane. The pane tells you which session needs you now.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Nissan Ohana"
+  },
+  "homepage": "https://github.com/NissanOhana/orangu",
+  "license": "MIT",
+  "keywords": [
+    "sessions",
+    "claude-code",
+    "cmux",
+    "mod"
+  ]
+}

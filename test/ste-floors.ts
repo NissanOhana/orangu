@@ -242,4 +242,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // and a global run per aggregate fixture, with 3 fixed sample words. The deck shows the "In one session" label
   // once and the 23-word example title under it.
   'rendered#show-me': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // G0: orangu god. The copy of the god mod in src/god (the .ts files: the purity lint keeps copy out of the .tsx
+  // engine shell) and the description of its manifest. New surfaces, born at max(80, measured - 2) with 0 banned
+  // tokens and findings at the measured count.
+  'src/god': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2): the /god command line and its answer
+  'god/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2)
 }

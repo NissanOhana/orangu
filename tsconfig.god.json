@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    "typeRoots": ["god/.claude-plugin/types"],
+    "types": ["claude-code", "claude-code-tools", "claude-code-mcp"]
+  },
+  "include": ["src/god/**/*.ts", "src/god/**/*.tsx", "god/tests/**/*.ts"],
+  "exclude": ["src/god/**/*.test.ts"]
+}

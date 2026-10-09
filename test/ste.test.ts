@@ -214,6 +214,7 @@ describe('STE gate', () => {
       'src/report/generated': expect.stringMatching(/built/),
       'src/ste/words.ts': expect.stringMatching(/word tables/),
       'src/show-me/generated': expect.stringMatching(/built/),
+      'src/god/generated': expect.stringMatching(/built/),
     })
   })
 

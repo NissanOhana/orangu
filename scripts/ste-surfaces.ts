@@ -71,6 +71,7 @@ export const SRC_EXEMPT: Readonly<Record<string, string>> = {
   'src/report/generated': 'built output of src/report/client (scripts/build.mjs); its sources are measured',
   'src/ste/words.ts': 'the word tables of the STE checker: the words it flags and the word lists it reads. Data, not copy.',
   'src/show-me/generated': 'built output of the show-me templates (scripts/build.mjs); their .src.html sources are measured',
+  'src/god/generated': 'built output of src/report/client/tokens.css for the god pane (scripts/build.mjs): colors, not copy',
 }
 
 /** Markdown at the root and in docs/ that is not gated, with the reason. Every other doc is a surface. */
@@ -526,10 +527,13 @@ function docSurfaces(files: readonly string[], where: 'root' | 'docs'): Surface[
     .map((file) => fileSurface(file, file === 'README.md' ? 'S1' : where === 'docs' ? 'S2' : 'new', 'markdown'))
 }
 
-/** K owns the CLI and engine folders; a new src/ folder has no owner until its chunk names one. */
-const SRC_OWNERS: Readonly<Record<string, string>> = Object.fromEntries(
-  ['adapters', 'cache', 'cli', 'discover', 'feedback', 'harness', 'model', 'models', 'redact', 'serve', 'show-me', 'ste', 'suggest', 'util'].map((dir) => [dir, 'K']),
-)
+/** K owns the CLI and engine folders and G0 the god mod; a new src/ folder has no owner until its chunk names one. */
+const SRC_OWNERS: Readonly<Record<string, string>> = {
+  ...Object.fromEntries(
+    ['adapters', 'cache', 'cli', 'discover', 'feedback', 'harness', 'model', 'models', 'redact', 'serve', 'show-me', 'ste', 'suggest', 'util'].map((dir) => [dir, 'K']),
+  ),
+  god: 'G0',
+}
 /** split into their own rows below: report (client and renderer) and analyze (rule copy and the rest) */
 const SRC_SPLIT = new Set(['report', 'analyze'])
 
@@ -986,6 +990,11 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     goldenNarrativeSurface,
     // C10: rendered output, with real values through the real builders
     ...renderedSurfaces,
+    // G0: the orangu god manifest (its src/god row comes from srcSurfaces above): the description, and the title
+    // and description of each userConfig field, which the /config menu shows
+    jsonSurface('god/.claude-plugin/plugin.json#description', 'G0', one('god/.claude-plugin/plugin.json'), (json) =>
+      strings([json['description'], ...Object.values((json['userConfig'] ?? {}) as Record<string, Json>).flatMap((field) => [field['title'], field['description']])]),
+    ),
   ]
 }
 

@@ -30,6 +30,11 @@ function shippedSources(): string[] {
       out.push(f)
     }
   }
+  // the god mod: its .tsx engine shell is shipped code too
+  for (const f of [...walk('src/god', '.ts'), ...walk('src/god', '.tsx')]) {
+    if (f.endsWith('.test.ts') || f.includes('/generated/')) continue
+    out.push(f)
+  }
   return out
 }
 
@@ -79,6 +84,20 @@ describe('money guard: the curated catalog', () => {
       expect(currencyHits(text)).toEqual([])
     })
   }
+})
+
+describe('money guard: the orangu god manifest', () => {
+  // the description and every userConfig title and description show in the plugin list and the /config menu
+  const f = 'god/.claude-plugin/plugin.json'
+  it(`${f} quotes no money`, () => {
+    const text = read(f)
+    expect(moneyHits(text), `${f}: ${moneyHits(text).join(' || ')}`).toEqual([])
+    expect(currencyHits(text)).toEqual([])
+  })
+
+  it('the shipped sources include the god mod, .tsx too', () => {
+    expect(shippedSources()).toEqual(expect.arrayContaining(['src/god/types.ts', 'src/god/host.ts', 'src/god/register.tsx']))
+  })
 })
 
 describe('money guard: the documentation we publish', () => {

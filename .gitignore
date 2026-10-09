@@ -41,3 +41,6 @@ test-results/
 
 # plugin eval runs (claude plugin eval writes a timestamped report per run)
 /plugin/evals/results/
+
+# the engine types that an interactive claude --plugin-dir god lays for the god mod (regenerated, never edited)
+/god/.claude-plugin/types/
