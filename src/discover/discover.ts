@@ -14,6 +14,9 @@ import { constants, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { MAX_EVIDENCE_SIDECAR_ENTRIES } from '../adapters/claude-code/evidence-input.js'
+import { projectSlug } from './slug.js'
+
+export { projectSlug } from './slug.js'
 
 export interface DiscoverOptions {
   /** override of the Claude config dir (default: $CLAUDE_CONFIG_DIR or ~/.claude) */
@@ -147,11 +150,6 @@ export async function claudeRoots(
     out.push(r)
   }
   return out
-}
-
-/** Claude Code encodes the cwd as a directory name: every '/' '\\' '.' ':' (and other non [A-Za-z0-9-]) becomes '-'. */
-export function projectSlug(cwd: string): string {
-  return cwd.replace(/[^A-Za-z0-9-]/g, '-')
 }
 
 export const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

@@ -698,6 +698,11 @@ async function readEvidenceSessionManifest(manifest, maxBytes = manifest.maxByte
   };
 }
 
+// src/discover/slug.ts
+function projectSlug(cwd) {
+  return cwd.replace(/[^A-Za-z0-9-]/g, "-");
+}
+
 // src/discover/discover.ts
 var DESKTOP_SESSIONS_DIR = "local-agent-mode-sessions";
 function isDesktopSessionPath(p) {
@@ -770,9 +775,6 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
     out3.push(r);
   }
   return out3;
-}
-function projectSlug(cwd) {
-  return cwd.replace(/[^A-Za-z0-9-]/g, "-");
 }
 var SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var MAX_DISCOVERY_DIRECTORY_ENTRIES = 25e3;
