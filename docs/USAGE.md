@@ -67,10 +67,10 @@ A line in CLAUDE.md or in memory can be missed. A hook cannot. `orangu harness` 
 
 - **Broken rules:** a "do not" line that names a command, a tool or an MCP server, and the calls after a session loaded it. A call that a hook or a deny rule stopped is blocked.
 - **Feedback notes:** a note saved after a complaint, and the later complaints with its rare words.
-- **Memory index:** Claude Code loads only the first 200 lines or 25,000 bytes of `MEMORY.md`. The row shows the lines past that limit and the sessions that lost them.
+- **Memory index:** Claude Code loads the first 200 lines or 25,000 characters of `MEMORY.md`. The row shows the lines past it and the sessions that lost them.
 - **Recurring complaints:** words that come back in complaints across sessions.
 
-A complaint example is a session id and a turn. `--include-text` adds its text. `/orangu:harness` turns each row into a hook or a deny rule, never into another line.
+Without `--include-text`, a row has no text: no rule line, no shared word, no complaint. `/orangu:harness` turns each row into a hook or a deny rule, never another line.
 
 ### Terminal output
 

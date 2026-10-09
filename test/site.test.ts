@@ -895,9 +895,9 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // for. The workflow diagram gets back its edge from the bounded findings into the AI skill (+24 B). USAGE
     // says that the stripped text is examples and that --include-text keeps all of it, scrubbed (+69 B). Three
     // scope fixes and the STE rewrite net -4 B. The 40,000 B cap does not move.
-    // Named growth, measured 2026-10-09 (rules that hold): 39,856 B on 0f0fb4a -> 40,798 B (+942). Cause: the new
+    // Named growth, measured 2026-10-09 (rules that hold): 39,856 B on 0f0fb4a -> 40,794 B (+938). Cause: the new
     // "Rules that did not hold" section of docs/USAGE.md (4 row kinds, the --include-text gate, the skill's hook
-    // rule) and 2 README rows that name it, first cut from 1,109 B to 942 B. The cap moves 40,000 -> 40,800.
+    // rule) and 2 README rows that name it, first cut from 1,109 B to 938 B. The cap moves 40,000 -> 40,800.
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(40_800)
   })
 
