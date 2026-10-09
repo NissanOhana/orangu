@@ -60,10 +60,7 @@ import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines, 
 import { MACHINE_CAPS, displayWidth, stripAnsi } from '../src/cli/tty.js'
 import { suggestionIdV2, suggestionKey } from '../src/suggest/id.js'
 import { HIDDEN_ITERATIONS_FIXTURE, hiddenIterationsAggregate, hiddenIterationsAnalysis } from '../test/fixtures/hidden-iterations.js'
-import { NOW as GOD_NOW, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot } from '../test/fixtures/god/snapshots.js'
-import type { BoardSnapshot } from '../src/god/types.js'
-import { cannotDrawView, paneLines, paneView } from '../src/god/view/pane.js'
-import type { Line } from '../src/god/view/types.js'
+import { godViews } from './ste-god.js'
 import type { SteRow } from '../test/ste-floors.js'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -859,35 +856,6 @@ export function showMeViews(source: string, data: ShowMeData): RenderedView[] {
   return TEMPLATES.map(({ file, html }) => ({ file: `${source}#${scope}.${file}`, html: fillTemplate(html, page) }))
 }
 
-const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
-
-/**
- * The god pane of each fixture snapshot through the real view builders (src/god/view/pane.ts), as the terminal
- * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
- * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then each
- * line of a pane that cannot draw. The fixture session texts are short and clean, so the row scores the pane.
- */
-export function godViews(): RenderedView[] {
-  const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
-  const snapshots: ReadonlyArray<[string, BoardSnapshot, readonly string[]]> = [
-    ['board', boardSnapshot(), []],
-    ['board-stale-open', boardSnapshot(), ['stale']],
-    ['by-repo', byRepoSnapshot(), []],
-    ['reading', readingSnapshot(), []],
-    ['no-sessions', emptySnapshot(), []],
-    ['no-repo-match', noRepoMatchSnapshot(), []],
-    ['sources-off-no-cmux', degradedSnapshot({ agents: { status: 'off' }, registry: { status: 'off' }, cmux: { status: 'missing' }, git: { status: 'off' } }, 12_000), []],
-  ]
-  const panes = snapshots.flatMap(([name, snapshot, openGroups]) =>
-    [60, 110].map((bodyColumns) => {
-      const view = paneView({ snapshot, bodyColumns, bodyRows: 40, now: GOD_NOW, selectedKey: 's-wait', openGroups, promptHoldsKeys: true })
-      return { file: `${GOD_FIXTURE}#${name}.${bodyColumns}`, lines: paneLines(view).map(text) }
-    }),
-  )
-  const cannotDraw = (['too-narrow', 'too-short', 'failed'] as const).map((reason) => ({ file: `${GOD_FIXTURE}#cannot-draw.${reason}`, lines: paneLines(cannotDrawView(reason, 60)).map(text) }))
-  return [...panes, ...cannotDraw]
-}
-
 /** The rendered rows: each one draws its views from the fixtures. A row with no owner belongs to C10. */
 const RENDERED_ROWS: ReadonlyArray<{ id: string; owner?: string; source: string; views(fixtures: RenderFixtures): Promise<RenderedView[]> }> = [
   {
@@ -919,7 +887,7 @@ const RENDERED_ROWS: ReadonlyArray<{ id: string; owner?: string; source: string;
   {
     id: 'rendered#god',
     owner: 'G5a',
-    source: 'the god pane of each fixture snapshot at 60 and 110 columns, and each cannot-draw line',
+    source: 'the god pane of each fixture snapshot at 60 and 110 columns, each cannot-draw line, the detail of each fixture session in each tab, the confirm bar, the outcome lines and the 2 tool texts',
     views: async () => godViews(),
   },
 ]

@@ -246,10 +246,13 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // engine shell) and the description of its manifest. New surfaces, born at max(80, measured - 2) with 0 banned
   // tokens and findings at the measured count.
   // G5a: measured 100 (22 of 22) on main c044843 with the copy of the board view (src/god/view): the states, the key row and the cut lines.
+  // G5b: measured 100 (80 of 80) with the copy of the detail, the confirm bar and the 2 tool texts (src/god/view).
   'src/god': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2): the /god command line and its answer
   'god/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2)
   // G5a: what the god pane draws. The fixture snapshots of test/fixtures/god/snapshots.ts drawn through the real
   // view builders (src/god/view/pane.ts) at 60 and 110 columns: the header, the board, the key row and each state.
   // Born at max(80, measured - 2) with 0 banned tokens and 0 findings. Measured 19 sentences, 19 clean, score 100.
+  // G5b: the row adds the detail of each fixture session in each tab (test/fixtures/god/detail.ts), the confirm bar,
+  // the outcome and refusal lines and the 2 tool texts. Measured 197 sentences, 197 clean, score 100, 0 findings.
   'rendered#god': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
 }

@@ -1,0 +1,86 @@
+/**
+ * The views of the rendered#god STE row (scripts/ste-surfaces.ts): what the god pane and the 2 god tools draw from
+ * the synthetic fixtures of test/fixtures/god, through the real view builders under src/god/view, as the terminal
+ * and the god Claude read them. Dev-only, like scripts/ste-surfaces.ts.
+ */
+import type { RenderedView } from './ste-surfaces.js'
+import { NOW as GOD_NOW, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot } from '../test/fixtures/god/snapshots.js'
+import { INTENTS as GOD_INTENTS, OUTCOMES as GOD_OUTCOMES, RECAPS as GOD_RECAPS, SCREEN as GOD_SCREEN, detailSnapshot } from '../test/fixtures/god/detail.js'
+import type { BoardSnapshot, DeliverRefusal } from '../src/god/types.js'
+import { confirmView, outcomeLines, REFUSAL_TEXT } from '../src/god/view/confirm.js'
+import { DETAIL_TABS, detailLines, detailView } from '../src/god/view/detail.js'
+import { cannotDrawView, layoutOf, paneLines, paneView } from '../src/god/view/pane.js'
+import { boardToolText, sessionToolText } from '../src/god/view/tool-text.js'
+import type { Line } from '../src/god/view/types.js'
+
+const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
+
+/**
+ * The god pane of each fixture snapshot through the real view builders (src/god/view/pane.ts), as the terminal
+ * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
+ * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then each
+ * line of a pane that cannot draw. The fixture session texts are short and clean, so the row scores the pane.
+ */
+export function godViews(): RenderedView[] {
+  const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
+  const snapshots: ReadonlyArray<[string, BoardSnapshot, readonly string[]]> = [
+    ['board', boardSnapshot(), []],
+    ['board-stale-open', boardSnapshot(), ['stale']],
+    ['by-repo', byRepoSnapshot(), []],
+    ['reading', readingSnapshot(), []],
+    ['no-sessions', emptySnapshot(), []],
+    ['no-repo-match', noRepoMatchSnapshot(), []],
+    ['sources-off-no-cmux', degradedSnapshot({ agents: { status: 'off' }, registry: { status: 'off' }, cmux: { status: 'missing' }, git: { status: 'off' } }, 12_000), []],
+  ]
+  const panes = snapshots.flatMap(([name, snapshot, openGroups]) =>
+    [60, 110].map((bodyColumns) => {
+      const view = paneView({ snapshot, bodyColumns, bodyRows: 40, now: GOD_NOW, selectedKey: 's-wait', openGroups, promptHoldsKeys: true })
+      return { file: `${GOD_FIXTURE}#${name}.${bodyColumns}`, lines: paneLines(view).map(text) }
+    }),
+  )
+  const cannotDraw = (['too-narrow', 'too-short', 'failed'] as const).map((reason) => ({ file: `${GOD_FIXTURE}#cannot-draw.${reason}`, lines: paneLines(cannotDrawView(reason, 60)).map(text) }))
+  return [...panes, ...cannotDraw, ...godDetailViews()]
+}
+
+const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'
+
+/**
+ * The detail of each fixture session in each tab at the detail width of a 60-column pane (the detail alone) and a
+ * 110-column pane (beside the board), with the screen read and the answered Recap; the Recap while it runs and
+ * when it failed; each tab with no cmux; the confirm bar of each intent and each outcome and refusal line; and the
+ * 2 tool texts at 110 columns. The fixture session texts are short and clean, so the row scores what orangu writes.
+ */
+export function godDetailViews(): RenderedView[] {
+  const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
+  const snapshot = detailSnapshot()
+  const detailWidth = (columns: number): number => {
+    const layout = layoutOf(columns)
+    return layout.kind === 'wide' ? layout.detailColumns : layout.boardColumns
+  }
+  const detail = (file: string, input: Omit<Parameters<typeof detailView>[0], 'rows' | 'now' | 'scroll'>): RenderedView => ({
+    file: `${GOD_DETAIL_FIXTURE}#${file}`,
+    lines: detailLines(detailView({ ...input, rows: 60, now: GOD_NOW, scroll: 0 })).map(text),
+  })
+  const tabs = snapshot.sessions.flatMap((session) =>
+    [60, 110].flatMap((columns) =>
+      DETAIL_TABS.map((tab) => detail(`${session.sessionId}.${tab}.${columns}`, { session, width: detailWidth(columns), tab, isCmuxMissing: false, screen: GOD_SCREEN, recap: GOD_RECAPS.answered })),
+    ),
+  )
+  const wait = snapshot.sessions.find((session) => session.sessionId === GOD_SCREEN.sessionId)!
+  const states = [
+    detail('recap.running', { session: wait, width: 79, tab: 'recap', isCmuxMissing: false, recap: GOD_RECAPS.running }),
+    detail('recap.failed', { session: wait, width: 79, tab: 'recap', isCmuxMissing: false, recap: GOD_RECAPS.failed }),
+    detail('screen.refused', { session: wait, width: 79, tab: 'screen', isCmuxMissing: false, outcome: GOD_OUTCOMES.refused }),
+    ...snapshot.sessions.flatMap((session) => DETAIL_TABS.map((tab) => detail(`${session.sessionId}.${tab}.no-cmux`, { session, width: 79, tab, isCmuxMissing: true }))),
+  ]
+  const confirm = [60, 110].flatMap((columns) => Object.values(GOD_INTENTS).map((intent) => ({ file: `${GOD_DETAIL_FIXTURE}#confirm.${intent.kind}.${columns}`, lines: confirmView(intent, columns).lines.map(text) })))
+  const outcomes = [
+    ...Object.values(GOD_OUTCOMES).map((outcome) => ({ file: `${GOD_DETAIL_FIXTURE}#outcome.${outcome.status}`, lines: outcomeLines(outcome, 110).map(text) })),
+    ...(Object.keys(REFUSAL_TEXT) as DeliverRefusal[]).map((refusal) => ({ file: `${GOD_DETAIL_FIXTURE}#refusal.${refusal}`, lines: outcomeLines({ ...GOD_OUTCOMES.refused, refusal } as Parameters<typeof outcomeLines>[0], 110).map(text) })),
+  ]
+  const tools = [
+    { file: `${GOD_DETAIL_FIXTURE}#tool.board.110`, lines: boardToolText(snapshot, 110, GOD_NOW).split('\n') },
+    ...snapshot.sessions.map((session) => ({ file: `${GOD_DETAIL_FIXTURE}#tool.session.${session.sessionId}`, lines: sessionToolText(snapshot, session.name, 110, GOD_NOW).split('\n') })),
+  ]
+  return [...tabs, ...states, ...confirm, ...outcomes, ...tools]
+}
