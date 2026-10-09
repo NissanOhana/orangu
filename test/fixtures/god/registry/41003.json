@@ -1,0 +1,20 @@
+{
+  "pid": 41003,
+  "sessionId": "00000000-0000-4000-8000-00000000000c",
+  "cwd": "/Users/test/code/beta",
+  "startedAt": 1791536400000,
+  "procStart": "Fri Oct  9 09:00:00 2026",
+  "version": "2.1.295",
+  "peerProtocol": 1,
+  "peerFeatures": [],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "test",
+  "messagingSocketPath": "/tmp/claude-test/41003.sock",
+  "name": "beta docs",
+  "nameSource": "test",
+  "nameSince": 1791536400000,
+  "status": "idle",
+  "updatedAt": 1791536400000,
+  "statusUpdatedAt": 1791536400000
+}

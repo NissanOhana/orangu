@@ -1,0 +1,20 @@
+{
+  "pid": 41004,
+  "sessionId": "00000000-0000-4000-8000-00000000000d",
+  "cwd": "/Users/test/code/gamma",
+  "startedAt": 1791539970000,
+  "procStart": "Fri Oct  9 09:59:30 2026",
+  "version": "2.1.295",
+  "peerProtocol": 1,
+  "peerFeatures": [],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "test",
+  "messagingSocketPath": "/tmp/claude-test/41004.sock",
+  "name": "gamma",
+  "nameSource": "test",
+  "nameSince": 1791539970000,
+  "status": "idle",
+  "updatedAt": 1791539985000,
+  "statusUpdatedAt": 1791539985000
+}

@@ -1,0 +1,32 @@
+[
+  {
+    "pid": 41001,
+    "cwd": "/Users/test/code/alpha",
+    "kind": "interactive",
+    "startedAt": 1791532800000,
+    "sessionId": "00000000-0000-4000-8000-00000000000a",
+    "name": "alpha main",
+    "status": "busy",
+    "waitingFor": null
+  },
+  {
+    "pid": 41002,
+    "cwd": "/Users/test/code/alpha-wt/feature",
+    "kind": "interactive",
+    "startedAt": 1791534600000,
+    "sessionId": "00000000-0000-4000-8000-00000000000b",
+    "name": "alpha feature",
+    "status": "busy",
+    "waitingFor": null
+  },
+  {
+    "pid": 41003,
+    "cwd": "/Users/test/code/beta",
+    "kind": "interactive",
+    "startedAt": 1791536400000,
+    "sessionId": "00000000-0000-4000-8000-00000000000c",
+    "name": "beta docs",
+    "status": "idle",
+    "waitingFor": null
+  }
+]

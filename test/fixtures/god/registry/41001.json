@@ -1,0 +1,20 @@
+{
+  "pid": 41001,
+  "sessionId": "00000000-0000-4000-8000-00000000000a",
+  "cwd": "/Users/test/code/alpha",
+  "startedAt": 1791532800000,
+  "procStart": "Fri Oct  9 08:00:00 2026",
+  "version": "2.1.295",
+  "peerProtocol": 1,
+  "peerFeatures": [],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "test",
+  "messagingSocketPath": "/tmp/claude-test/41001.sock",
+  "name": "alpha main",
+  "nameSource": "test",
+  "nameSince": 1791532800000,
+  "status": "busy",
+  "updatedAt": 1791539880000,
+  "statusUpdatedAt": 1791539880000
+}

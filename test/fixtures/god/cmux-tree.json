@@ -1,0 +1,187 @@
+{
+  "active": {
+    "is_browser_surface": false,
+    "pane_ref": "pane:1",
+    "surface_ref": "surface:1",
+    "surface_type": "terminal",
+    "tab_ref": "tab:1",
+    "window_ref": "window:1",
+    "workspace_ref": "workspace:1"
+  },
+  "caller": {
+    "is_browser_surface": false,
+    "pane_ref": "pane:1",
+    "surface_ref": "surface:1",
+    "surface_type": "terminal",
+    "tab_ref": "tab:1",
+    "window_ref": "window:1",
+    "workspace_ref": "workspace:1"
+  },
+  "windows": [
+    {
+      "active": true,
+      "current": true,
+      "index": 0,
+      "key": true,
+      "ref": "window:1",
+      "selected_workspace_ref": "workspace:1",
+      "visible": true,
+      "workspace_count": 2,
+      "workspaces": [
+        {
+          "active": true,
+          "description": null,
+          "index": 0,
+          "panes": [
+            {
+              "active": true,
+              "focused": true,
+              "index": 0,
+              "ref": "pane:1",
+              "selected_surface_ref": "surface:1",
+              "surface_count": 2,
+              "surface_refs": ["surface:1", "surface:2"],
+              "surfaces": [
+                {
+                  "active": true,
+                  "focused": true,
+                  "here": true,
+                  "index": 0,
+                  "index_in_pane": 0,
+                  "pane_ref": "pane:1",
+                  "ref": "surface:1",
+                  "selected": true,
+                  "selected_in_pane": true,
+                  "title": "alpha main",
+                  "tty": "ttys001",
+                  "type": "terminal",
+                  "url": null
+                },
+                {
+                  "active": false,
+                  "focused": false,
+                  "here": false,
+                  "index": 1,
+                  "index_in_pane": 1,
+                  "pane_ref": "pane:1",
+                  "ref": "surface:2",
+                  "selected": false,
+                  "selected_in_pane": false,
+                  "title": "Example Domain",
+                  "tty": null,
+                  "type": "browser",
+                  "url": "https://example.com/"
+                }
+              ]
+            }
+          ],
+          "pinned": false,
+          "ref": "workspace:1",
+          "selected": true,
+          "title": "alpha"
+        },
+        {
+          "active": false,
+          "description": null,
+          "index": 1,
+          "panes": [
+            {
+              "active": false,
+              "focused": false,
+              "index": 0,
+              "ref": "pane:2",
+              "selected_surface_ref": "surface:3",
+              "surface_count": 1,
+              "surface_refs": ["surface:3"],
+              "surfaces": [
+                {
+                  "active": false,
+                  "focused": false,
+                  "here": false,
+                  "index": 0,
+                  "index_in_pane": 0,
+                  "pane_ref": "pane:2",
+                  "ref": "surface:3",
+                  "selected": true,
+                  "selected_in_pane": true,
+                  "title": "beta docs",
+                  "tty": "ttys007",
+                  "type": "terminal",
+                  "url": null
+                }
+              ]
+            }
+          ],
+          "pinned": false,
+          "ref": "workspace:2",
+          "selected": false,
+          "title": "beta"
+        }
+      ]
+    },
+    {
+      "active": false,
+      "current": false,
+      "index": 1,
+      "key": false,
+      "ref": "window:2",
+      "selected_workspace_ref": "workspace:3",
+      "visible": true,
+      "workspace_count": 1,
+      "workspaces": [
+        {
+          "active": false,
+          "description": null,
+          "index": 0,
+          "panes": [
+            {
+              "active": false,
+              "focused": false,
+              "index": 0,
+              "ref": "pane:3",
+              "selected_surface_ref": "surface:4",
+              "surface_count": 2,
+              "surface_refs": ["surface:4", "surface:5"],
+              "surfaces": [
+                {
+                  "active": false,
+                  "focused": false,
+                  "here": false,
+                  "index": 0,
+                  "index_in_pane": 0,
+                  "pane_ref": "pane:3",
+                  "ref": "surface:4",
+                  "selected": true,
+                  "selected_in_pane": true,
+                  "title": "Claude Code",
+                  "tty": "ttys004",
+                  "type": "terminal",
+                  "url": null
+                },
+                {
+                  "active": false,
+                  "focused": false,
+                  "here": false,
+                  "index": 1,
+                  "index_in_pane": 1,
+                  "pane_ref": "pane:3",
+                  "ref": "surface:5",
+                  "selected": false,
+                  "selected_in_pane": false,
+                  "title": "zsh",
+                  "tty": "ttys005",
+                  "type": "terminal",
+                  "url": null
+                }
+              ]
+            }
+          ],
+          "pinned": false,
+          "ref": "workspace:3",
+          "selected": true,
+          "title": "alpha feature"
+        }
+      ]
+    }
+  ]
+}

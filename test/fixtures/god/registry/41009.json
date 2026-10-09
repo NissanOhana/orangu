@@ -1,0 +1,20 @@
+{
+  "pid": 41009,
+  "sessionId": "00000000-0000-4000-8000-00000000000e",
+  "cwd": "/Users/test/code/delta",
+  "startedAt": 1791494762000,
+  "procStart": "Thu Oct  8 21:26:02 2026",
+  "version": "2.1.295",
+  "peerProtocol": 1,
+  "peerFeatures": [],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "test",
+  "messagingSocketPath": "/tmp/claude-test/41009.sock",
+  "name": "delta",
+  "nameSource": "test",
+  "nameSince": 1791494762000,
+  "status": "busy",
+  "updatedAt": 1791495000000,
+  "statusUpdatedAt": 1791495000000
+}

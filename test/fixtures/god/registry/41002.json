@@ -1,0 +1,21 @@
+{
+  "pid": 41002,
+  "sessionId": "00000000-0000-4000-8000-00000000000b",
+  "cwd": "/Users/test/code/alpha-wt/feature",
+  "startedAt": 1791534600000,
+  "procStart": "Fri Oct  9 08:30:00 2026",
+  "version": "2.1.295",
+  "peerProtocol": 1,
+  "peerFeatures": [],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "test",
+  "messagingSocketPath": "/tmp/claude-test/41002.sock",
+  "name": "alpha feature",
+  "nameSource": "test",
+  "nameSince": 1791534600000,
+  "status": "waiting",
+  "updatedAt": 1791539990000,
+  "statusUpdatedAt": 1791539990000,
+  "waitingFor": "permission prompt"
+}
