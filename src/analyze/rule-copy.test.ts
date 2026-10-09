@@ -119,15 +119,12 @@ const INSTRUCTION_WORDS = 20
  * own sentence, and keeps the session title on one line (NARRATIVE_0_9_0). Re-recorded at 4, because generation 4
  * is not released: 0.9.0 ships generation 3, and the 0.10.0 release moves the engine segment of the cache
  * directory, so no shipped cache holds a generation 4 entry.
+ * 2026-10-09, generation 5: the user-corrections text asks for a check (a hook, a test or a lint rule) before a
+ * CLAUDE.md line, its title and the corrections signal name "broken / not working", and the detector finds a complaint
+ * anywhere in the prompt. Words changed, so the 0.9.0 fingerprint check that proved "no word changed" is deleted, as
+ * its own comment asked. Qualifier audit of the new text: no "may", "might", "can" or "should" in the improvement.
  */
-const COPY_FINGERPRINT = { generation: 4, sha256: '5fd967f5e2d749c4472f840d6a699c69d5efc13c09ae37dd61a1e3a6c21e3534' }
-/**
- * The generation 3 fingerprint, as `git show v0.9.0:src/analyze/rule-copy.test.ts` records it. The split of each
- * rule text into its 3 parts, and the narrative with its NARRATIVE_0_9_0 literals put back, must rebuild this
- * value exactly. So no word, title or detail changed in the split, and no narrative word changed.
- * A later copy rewrite deletes this constant and its test, and runs its own qualifier audit.
- */
-const COPY_FINGERPRINT_0_9_0 = 'd0cc1f29c96a54443516e6b7b34569ba46fd06e4225584163a9dc8d3165c31c0'
+const COPY_FINGERPRINT = { generation: 5, sha256: '6aba92002b9d868143a0771a1e918c8e21b8f6330cb48c6b99af952619b6a7fb' }
 /**
  * The texts whose parts do not join in their 0.9.0 sentence order: a conditional instruction came after the
  * reason, and it now moves into the improvement. Each entry gives the opening words of each sentence, in the
@@ -320,17 +317,6 @@ function runsOf(parts: readonly string[], run: readonly string[]): number[] {
   return out
 }
 
-/** The 0.9.0 static text of narrative(): its literal parts, with each NARRATIVE_0_9_0 entry put back in its 0.9.0 form. */
-function legacyNarrativeCopy(): string {
-  let parts = narrativeParts()
-  for (const { was, now } of NARRATIVE_0_9_0) {
-    const at = runsOf(parts, now)
-    if (at.length !== 1) throw new Error(`NARRATIVE_0_9_0: ${JSON.stringify(now)} is in narrative() ${at.length} times`)
-    parts = [...parts.slice(0, at[0]), ...was, ...parts.slice(at[0]! + now.length)]
-  }
-  return parts.join(' ')
-}
-
 /** The copy of quality.signals[] in quality.ts: per signal its id and the static text of its label, value and detail. */
 function qualityCopy(): string[] {
   const out: string[] = []
@@ -397,27 +383,6 @@ function copyFingerprint(): string {
   return fingerprintOf(sites.map((site) => JSON.stringify([site.ruleId, ...FIELDS.map((field) => copyOf(site, field)), ...evidenceNotes(site)])))
 }
 
-/**
- * The 0.9.0 recommendation of a site, rebuilt from its parts: per text the parts join as improvement, why,
- * method, or in the sentence order of ORDER_0_9_0, and the texts of a rule that picks join with one space
- * (as the 0.9.0 fingerprint read a conditional). Each part has one text per pick, or one text for every pick.
- */
-function legacyRecommendation(site: Site): string {
-  const parts = PARTS.map((part) => partTexts(site, part))
-  const picks = Math.max(...parts.map((texts) => texts.length))
-  const texts: string[] = []
-  for (let pick = 0; pick < picks; pick++) {
-    const joined = parts.flatMap((texts) => {
-      if (texts.length !== 0 && texts.length !== 1 && texts.length !== picks) throw new Error(`${site.ruleId} (insights.ts:${site.line}): a part picks ${texts.length} ways, the others ${picks}`)
-      const text = texts.length === 1 ? texts[0]! : texts[pick]
-      return text ? [text] : []
-    })
-    const order = ORDER_0_9_0[picks > 1 ? `${site.ruleId}#${pick + 1}` : site.ruleId]
-    texts.push(order ? inOrder(joined.flatMap(sentencesOf), order, site.ruleId) : joined.join(' '))
-  }
-  return texts.join(' ')
-}
-
 /** The sentences in the order of their openings. Each opening names exactly one sentence, and each sentence is named once. */
 function inOrder(sentences: string[], openings: readonly string[], ruleId: string): string {
   const ordered = openings.map((opening) => {
@@ -427,17 +392,6 @@ function inOrder(sentences: string[], openings: readonly string[], ruleId: strin
   })
   if (new Set(ordered).size !== sentences.length) throw new Error(`${ruleId}: the 0.9.0 order names ${new Set(ordered).size} of ${sentences.length} sentences`)
   return ordered.join(' ')
-}
-
-/**
- * The generation 3 fingerprint function of v0.9.0: per rule site its id, title, detail, the recommendation and its
- * evidence notes, and the narrative with its 0.9.0 literals.
- */
-function legacyCopyFingerprint(): string {
-  return fingerprintOf(
-    sites.map((site) => JSON.stringify([site.ruleId, copyOf(site, 'title'), copyOf(site, 'detail'), legacyRecommendation(site), ...evidenceNotes(site)])),
-    legacyNarrativeCopy(),
-  )
 }
 
 function fingerprintOf(ruleCopy: string[], narrative: string = narrativeCopy()): string {
@@ -530,13 +484,7 @@ describe('rule copy: each improvement starts with the change', () => {
   })
 })
 
-describe('rule copy: since 0.9.0, sentences moved and no word changed', () => {
-  it('the split keeps every 0.9.0 word', () => {
-    // the parts, joined in their 0.9.0 sentence order, and the narrative with its NARRATIVE_0_9_0 literals in
-    // their 0.9.0 form, give back the 0.9.0 copy fingerprint exactly
-    expect(legacyCopyFingerprint()).toBe(COPY_FINGERPRINT_0_9_0)
-  })
-
+describe('rule copy: the 0.9.0 order and narrative maps', () => {
   it('names in NARRATIVE_0_9_0 only narrative literals that changed, each once', () => {
     const parts = narrativeParts()
     for (const { was, now } of NARRATIVE_0_9_0) {

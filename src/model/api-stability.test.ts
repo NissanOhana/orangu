@@ -10,8 +10,9 @@ import { currencyHits, moneyHits } from '../../test/money-vocabulary.js'
 describe('Analysis API stability (schemaVersion ' + ANALYSIS_SCHEMA_VERSION + ')', () => {
   it('top-level keys are exactly the documented set', async () => {
     const a = analyzeSession(await parseClaudeCodeSession({ records: buildCanonicalSession().toRecords(), noSidecar: true }), { version: 't', now: 0 })
+    // `instructions` is additive (2026-10-09, payload generation 5): a reader that does not know it is unchanged
     expect(Object.keys(a).sort()).toEqual(
-      ['agents', 'context', 'events', 'files', 'generator', 'hooks', 'insights', 'parse', 'quality', 'schemaVersion', 'session', 'skills', 'summary', 'time', 'tokens', 'tools', 'turns'].sort(),
+      ['agents', 'context', 'events', 'files', 'generator', 'hooks', 'insights', 'instructions', 'parse', 'quality', 'schemaVersion', 'session', 'skills', 'summary', 'time', 'tokens', 'tools', 'turns'].sort(),
     )
     expect(a.schemaVersion).toBe(ANALYSIS_SCHEMA_VERSION)
   })

@@ -84,7 +84,20 @@ function hasPrCreate(cmd: string): boolean {
     return base === 'gh' && w[1] === 'pr' && w[2] === 'create'
   })
 }
-const CORRECTION_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorrect|revert|undo|again[,.!]|still (broken|failing|wrong|not)|didn'?t work|doesn'?t work|you broke|why did you|stop[,.!]|don'?t do that|i said|as i said|i asked)/i
+/** a prompt that STARTS as a correction ("no, ...", "wrong", "revert") */
+const CORRECTION_START_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorrect|revert|undo|again[,.!]|still (broken|failing|wrong|not)|didn'?t work|doesn'?t work|you broke|why did you|stop[,.!]|don'?t do that|i said|as i said|i asked)/i
+/**
+ * A complaint that can sit anywhere in the prompt: "broken on desktop", "the menu is not working yet!!",
+ * "i think u check the wrong artifact". The start-only pattern above matched 6 of 7,729 real prompts and none of
+ * these. Each phrase names a failure, so a status question ("what is still open?") or a plan ("blocks we did not
+ * work on yet") does not match: "did not work on" is a plan, "does not work on mobile" is a complaint.
+ */
+const CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not|dont|don'?t) work(?:s|ing)?\b|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i
+
+/** true when a human prompt reads as a correction of the agent's last result */
+export function isCorrection(text: string): boolean {
+  return CORRECTION_START_RE.test(text) || CORRECTION_ANY_RE.test(text)
+}
 
 function cmdOf(c: ToolCall): string {
   const i = c.input as Record<string, unknown> | undefined
@@ -162,7 +175,7 @@ export function analyzeQuality(s: Session, files: FilesAnalysis): { quality: Qua
       gitCommits.push({ turnIndex: c.turnIndex, ok: !c.isError, message: m?.[1] })
     }
   }
-  const userCorrections = s.turns.filter((t) => t.kind === 'human' && CORRECTION_RE.test(t.promptPreview)).map((t) => ({ turnIndex: t.index, preview: t.promptPreview.slice(0, 100) }))
+  const userCorrections = s.turns.filter((t) => t.kind === 'human' && isCorrection(t.promptPreview)).map((t) => ({ turnIndex: t.index, preview: t.promptPreview.slice(0, 100) }))
   const interruptions = s.events.filter((e) => e.kind === 'interrupt').length
   const apiErrors = s.events.filter((e) => e.kind === 'api_error').length
   const toolErrors = s.toolCalls.filter((c) => c.isError).length
@@ -192,7 +205,7 @@ export function analyzeQuality(s: Session, files: FilesAnalysis): { quality: Qua
     { id: 'commits', label: 'Git commits', value: outcomes.gitCommits, tone: outcomes.gitCommits ? 'good' : 'neutral', evidenceTurnIndexes: gitCommits.map((g) => g.turnIndex) },
     { id: 'prs', label: 'Pull requests', value: prLinks.length, tone: prLinks.length ? 'good' : 'neutral', evidenceTurnIndexes: prLinks.map((p) => p.turnIndex) },
     { id: 'tool-error-rate', label: 'Tool error rate', value: `${round(toolErrorRate * 100, 1)}%`, tone: toolErrorRate > 0.15 ? 'bad' : toolErrorRate > 0.05 ? 'neutral' : 'good', detail: `${toolErrors} of ${s.toolCalls.length} tool calls errored` },
-    { id: 'corrections', label: 'User corrections', value: userCorrections.length, tone: userCorrections.length >= 3 ? 'bad' : userCorrections.length ? 'neutral' : 'good', detail: 'prompts that read as "no / wrong / again / revert"', evidenceTurnIndexes: userCorrections.map((u) => u.turnIndex) },
+    { id: 'corrections', label: 'User corrections', value: userCorrections.length, tone: userCorrections.length >= 3 ? 'bad' : userCorrections.length ? 'neutral' : 'good', detail: 'prompts that read as "no / wrong / revert / broken / not working"', evidenceTurnIndexes: userCorrections.map((u) => u.turnIndex) },
     { id: 'interruptions', label: 'Interruptions', value: interruptions, tone: interruptions >= 3 ? 'bad' : interruptions ? 'neutral' : 'good' },
     { id: 'api-errors', label: 'API errors', value: apiErrors, tone: apiErrors ? 'bad' : 'good' },
     { id: 'rework', label: 'Files edited 4+ times', value: reworkFiles, tone: reworkFiles >= 3 ? 'bad' : reworkFiles ? 'neutral' : 'good' },

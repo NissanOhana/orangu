@@ -17,6 +17,7 @@ import type {
   ParseWarning,
   Session,
   SessionEvent,
+  InstructionFile,
   SessionMeta,
   SkillInvocation,
   ToolCall,
@@ -373,6 +374,8 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
   let enqueueHuman = 0
   let enqueueNotification = 0
   const deferredToolNames = new Set<string>()
+  const instructionFiles: InstructionFile[] = []
+  const instructionSeen = new Set<string>()
   // per provider message id: diagnostics/thinking are carried on some chunks only, so first non-null / max wins
   const cacheMissByProviderMsg = new Map<string, CacheMissReason>()
   const thinkingByProviderMsg = new Map<string, number>()
@@ -517,6 +520,18 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
           if (!meta.skillsAvailable || bool(a?.['isInitial'])) meta.skillsAvailable = { count, names }
         } else if (at === 'read_truncation_notice') {
           meta.truncatedReads++
+        } else if (at === 'instructions' && !isSub && !bool(r['isSidechain'])) {
+          // what the MAIN context was given at start (and again after a compaction or a memory change)
+          for (const f of arr(a?.['files']) ?? []) {
+            const file = obj(f)
+            const path = str(file?.['path'])
+            const content = str(file?.['content'])
+            if (!path || content === undefined) continue
+            const key = path + '\u0000' + content
+            if (instructionSeen.has(key)) continue
+            instructionSeen.add(key)
+            instructionFiles.push({ path, type: str(file?.['type']) ?? 'unknown', content, ts: t })
+          }
         } else if (at === 'deferred_tools_delta') {
           for (const key of ['addedNames', 'readdedNames']) for (const n of arr(a?.[key]) ?? []) if (typeof n === 'string') deferredToolNames.add(n)
         } else if (at === 'queued_command') {
@@ -1001,6 +1016,7 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
   if (queueOperations.size) meta.queueOperations = countRecord(queueOperations)
   if (enqueueHuman || enqueueNotification) meta.enqueueKinds = { human: enqueueHuman, notification: enqueueNotification }
   if (deferredToolNames.size) meta.deferredToolNames = [...deferredToolNames].sort()
+  if (instructionFiles.length) meta.instructionFiles = instructionFiles
   meta.projectSlug = mainPath !== '(memory)' ? basename(dirname(mainPath)) : undefined
   if (meta.projectSlug && !meta.projectSlug.startsWith('-') && !/^[A-Za-z]-/.test(meta.projectSlug)) meta.projectSlug = undefined
 
