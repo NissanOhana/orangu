@@ -36,8 +36,11 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *     list sentence joined by " · ". The quoted session title is on one line. No word changed. 4 is not
  *     released yet: the 0.10.0 release moves the engine segment of the cache directory, so no shipped cache
  *     holds a generation 4 entry
+ *   5 (2026-10-09): Analysis.instructions (the rules in context and the calls that broke them, note writes,
+ *     memory index cuts); the correction detector also finds a complaint that does not start the prompt
+ *     ("broken on desktop"), and the user-corrections text now asks for a check before a CLAUDE.md line
  */
-export const ANALYSIS_PAYLOAD_GENERATION = 4
+export const ANALYSIS_PAYLOAD_GENERATION = 5
 
 export interface AnalysisSessionInfo {
   id: string
@@ -384,6 +387,66 @@ export interface QualityAnalysis {
   reworkFiles: number
 }
 
+/** an instruction or memory file that a Write or Edit call changed */
+export type NoteKind = 'memory' | 'memory-index' | 'claude-md' | 'agents-md' | 'rules'
+/** what a "do not" rule names: a shell command, a long flag, a built-in tool, or an MCP server */
+export type RuleTargetKind = 'command' | 'flag' | 'tool' | 'mcp-server'
+
+/**
+ * A "do not" rule that was in the main context of this session, with the calls that broke it.
+ * In context means: in a file Claude Code loaded (the `instructions` attachment), counted from the time the
+ * session first saw it, or in a note the session itself wrote, counted from the write.
+ */
+export interface InstructionRule {
+  /** the instruction file, as the session loaded or wrote it */
+  path: string
+  source: 'loaded' | 'written'
+  /** 1-based line in that text */
+  line: number
+  /** the whole line, trimmed */
+  text: string
+  target: { kind: RuleTargetKind; name: string }
+  /** calls after the rule entered the context (main thread and agents) that match the target */
+  calls: number
+  /** the part of `calls` that subagents made */
+  agentCalls: number
+  /** up to 3 distinct matching commands (the target and at most 2 words after it) or tool names */
+  examples: string[]
+  /** when the rule entered the context, when known */
+  since?: number
+  firstCallTurnIndex?: number
+}
+
+export interface NoteWrite {
+  path: string
+  kind: NoteKind
+  turnIndex: number
+  ts?: number
+  agentId?: string
+  /** distinct content words (4+ letters, no stop words) of the text written, in order, at most 40 */
+  words: string[]
+}
+
+/** Claude Code said at load that it did not load all of an auto-memory index */
+export interface MemoryCut {
+  path: string
+  ts?: number
+  /** which limit the file went over */
+  over: 'bytes' | 'lines' | 'both'
+  totalLines?: number
+  linesCut?: number
+  firstCutLine: number
+}
+
+/** what the instruction files said, crossed with what this session did (additive, payload generation 5) */
+export interface InstructionsAnalysis {
+  /** each instruction file the main context loaded, at its first sighting */
+  loaded: Array<{ path: string; type: string; bytes: number; lines: number }>
+  rules: InstructionRule[]
+  noteWrites: NoteWrite[]
+  memoryCuts: MemoryCut[]
+}
+
 export type InsightSeverity = 'info' | 'low' | 'medium' | 'high'
 export type Persona = 'developer' | 'lead' | 'pm' | 'qa' | 'anyone'
 
@@ -432,6 +495,8 @@ export interface Analysis {
   time: TimeAnalysis
   files: FilesAnalysis
   quality: QualityAnalysis
+  /** absent on a payload from an engine before generation 5 */
+  instructions?: InstructionsAnalysis
   insights: Insight[]
   events: Array<{ kind: string; ts?: number; turnIndex: number; agentId?: string; label: string; detail?: string }>
   parse: ParseReport & { reconciliation: Reconciliation }

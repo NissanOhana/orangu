@@ -598,7 +598,7 @@
         "label": "User corrections",
         "value": 0,
         "tone": "good",
-        "detail": "prompts that read as \"no / wrong / again / revert\"",
+        "detail": "prompts that read as \"no / wrong / revert / broken / not working\"",
         "evidenceTurnIndexes": []
       },
       {
@@ -634,6 +634,12 @@
     "apiErrors": 0,
     "toolErrorRate": 0,
     "reworkFiles": 0
+  },
+  "instructions": {
+    "loaded": [],
+    "rules": [],
+    "noteWrites": [],
+    "memoryCuts": []
   },
   "insights": [
     {

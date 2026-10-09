@@ -57,6 +57,22 @@ export interface SessionMeta {
   enqueueKinds?: { human: number; notification: number }
   /** deferred tool names announced by deferred_tools_delta attachments (sorted, unique) */
   deferredToolNames?: string[]
+  /**
+   * The instruction files Claude Code loaded into the main context (the `instructions` attachment): the user and
+   * project CLAUDE.md, the auto-memory MEMORY.md, and their kin. One entry per distinct path + content, in the
+   * order seen, so a rule can be tied to the sessions that had it in context. Never cached: the analyzer keeps
+   * only the rule lines it extracts (`src/analyze/instructions.ts`).
+   */
+  instructionFiles?: InstructionFile[]
+}
+
+/** one file of an `instructions` attachment */
+export interface InstructionFile {
+  path: string
+  /** Claude Code's own label: `User`, `Project`, `Local`, `AutoMem`, ... */
+  type: string
+  content: string
+  ts?: number
 }
 
 /** why an API call missed the prompt cache (message.diagnostics.cache_miss_reason) */

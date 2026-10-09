@@ -2397,7 +2397,7 @@ import { join as join5, resolve as resolve4 } from "node:path";
 
 // src/model/analysis.ts
 var ANALYSIS_SCHEMA_VERSION = "2";
-var ANALYSIS_PAYLOAD_GENERATION = 4;
+var ANALYSIS_PAYLOAD_GENERATION = 5;
 
 // src/adapters/claude-code/parse.ts
 import { basename as basename4, dirname as dirname3 } from "node:path";
@@ -2778,6 +2778,8 @@ function buildSession(files2, mainPath, keepText, t0) {
   let enqueueHuman = 0;
   let enqueueNotification = 0;
   const deferredToolNames = /* @__PURE__ */ new Set();
+  const instructionFiles = [];
+  const instructionSeen = /* @__PURE__ */ new Set();
   const cacheMissByProviderMsg = /* @__PURE__ */ new Map();
   const thinkingByProviderMsg = /* @__PURE__ */ new Map();
   const prByNumber = /* @__PURE__ */ new Map();
@@ -2901,6 +2903,17 @@ function buildSession(files2, mainPath, keepText, t0) {
           if (!meta.skillsAvailable || bool(a?.["isInitial"])) meta.skillsAvailable = { count: count3, names };
         } else if (at === "read_truncation_notice") {
           meta.truncatedReads++;
+        } else if (at === "instructions" && !isSub && !bool(r["isSidechain"])) {
+          for (const f2 of arr(a?.["files"]) ?? []) {
+            const file = obj(f2);
+            const path = str(file?.["path"]);
+            const content2 = str(file?.["content"]);
+            if (!path || content2 === void 0) continue;
+            const key = path + "\0" + content2;
+            if (instructionSeen.has(key)) continue;
+            instructionSeen.add(key);
+            instructionFiles.push({ path, type: str(file?.["type"]) ?? "unknown", content: content2, ts: t });
+          }
         } else if (at === "deferred_tools_delta") {
           for (const key of ["addedNames", "readdedNames"]) for (const n2 of arr(a?.[key]) ?? []) if (typeof n2 === "string") deferredToolNames.add(n2);
         } else if (at === "queued_command") {
@@ -3348,6 +3361,7 @@ function buildSession(files2, mainPath, keepText, t0) {
   if (queueOperations.size) meta.queueOperations = countRecord(queueOperations);
   if (enqueueHuman || enqueueNotification) meta.enqueueKinds = { human: enqueueHuman, notification: enqueueNotification };
   if (deferredToolNames.size) meta.deferredToolNames = [...deferredToolNames].sort();
+  if (instructionFiles.length) meta.instructionFiles = instructionFiles;
   meta.projectSlug = mainPath !== "(memory)" ? basename4(dirname3(mainPath)) : void 0;
   if (meta.projectSlug && !meta.projectSlug.startsWith("-") && !/^[A-Za-z]-/.test(meta.projectSlug)) meta.projectSlug = void 0;
   const parseReport = {
@@ -4105,7 +4119,11 @@ function hasPrCreate(cmd) {
     return base === "gh" && w[1] === "pr" && w[2] === "create";
   });
 }
-var CORRECTION_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorrect|revert|undo|again[,.!]|still (broken|failing|wrong|not)|didn'?t work|doesn'?t work|you broke|why did you|stop[,.!]|don'?t do that|i said|as i said|i asked)/i;
+var CORRECTION_START_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorrect|revert|undo|again[,.!]|still (broken|failing|wrong|not)|didn'?t work|doesn'?t work|you broke|why did you|stop[,.!]|don'?t do that|i said|as i said|i asked)/i;
+var CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not|dont|don'?t) work(?:s|ing)?\b|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i;
+function isCorrection(text3) {
+  return CORRECTION_START_RE.test(text3) || CORRECTION_ANY_RE.test(text3);
+}
 function cmdOf(c) {
   const i = c.input;
   return typeof i?.["command"] === "string" ? i["command"] : "";
@@ -4180,7 +4198,7 @@ function analyzeQuality(s, files2) {
       gitCommits.push({ turnIndex: c.turnIndex, ok: !c.isError, message: m?.[1] });
     }
   }
-  const userCorrections = s.turns.filter((t) => t.kind === "human" && CORRECTION_RE.test(t.promptPreview)).map((t) => ({ turnIndex: t.index, preview: t.promptPreview.slice(0, 100) }));
+  const userCorrections = s.turns.filter((t) => t.kind === "human" && isCorrection(t.promptPreview)).map((t) => ({ turnIndex: t.index, preview: t.promptPreview.slice(0, 100) }));
   const interruptions = s.events.filter((e) => e.kind === "interrupt").length;
   const apiErrors = s.events.filter((e) => e.kind === "api_error").length;
   const toolErrors2 = s.toolCalls.filter((c) => c.isError).length;
@@ -4208,7 +4226,7 @@ function analyzeQuality(s, files2) {
     { id: "commits", label: "Git commits", value: outcomes.gitCommits, tone: outcomes.gitCommits ? "good" : "neutral", evidenceTurnIndexes: gitCommits.map((g) => g.turnIndex) },
     { id: "prs", label: "Pull requests", value: prLinks.length, tone: prLinks.length ? "good" : "neutral", evidenceTurnIndexes: prLinks.map((p) => p.turnIndex) },
     { id: "tool-error-rate", label: "Tool error rate", value: `${round(toolErrorRate * 100, 1)}%`, tone: toolErrorRate > 0.15 ? "bad" : toolErrorRate > 0.05 ? "neutral" : "good", detail: `${toolErrors2} of ${s.toolCalls.length} tool calls errored` },
-    { id: "corrections", label: "User corrections", value: userCorrections.length, tone: userCorrections.length >= 3 ? "bad" : userCorrections.length ? "neutral" : "good", detail: 'prompts that read as "no / wrong / again / revert"', evidenceTurnIndexes: userCorrections.map((u) => u.turnIndex) },
+    { id: "corrections", label: "User corrections", value: userCorrections.length, tone: userCorrections.length >= 3 ? "bad" : userCorrections.length ? "neutral" : "good", detail: 'prompts that read as "no / wrong / revert / broken / not working"', evidenceTurnIndexes: userCorrections.map((u) => u.turnIndex) },
     { id: "interruptions", label: "Interruptions", value: interruptions, tone: interruptions >= 3 ? "bad" : interruptions ? "neutral" : "good" },
     { id: "api-errors", label: "API errors", value: apiErrors, tone: apiErrors ? "bad" : "good" },
     { id: "rework", label: "Files edited 4+ times", value: reworkFiles, tone: reworkFiles >= 3 ? "bad" : reworkFiles ? "neutral" : "good" },
@@ -4218,6 +4236,268 @@ function analyzeQuality(s, files2) {
     quality: { signals, testRuns, buildRuns, gitCommits, userCorrections, interruptions, apiErrors, toolErrorRate, reworkFiles },
     outcomes
   };
+}
+
+// src/analyze/instructions.ts
+var TOOL_TARGETS = /* @__PURE__ */ new Set([
+  "WebFetch",
+  "WebSearch",
+  "Agent",
+  "Task",
+  "TodoWrite",
+  "Skill",
+  "Workflow",
+  "AskUserQuestion",
+  "SendMessage",
+  "Monitor",
+  "CronCreate",
+  "ScheduleWakeup",
+  "ToolSearch",
+  "EnterPlanMode",
+  "NotebookEdit",
+  "Artifact"
+]);
+var BARE_TOOL_TARGETS = /* @__PURE__ */ new Set(["WebFetch", "WebSearch", "TodoWrite", "AskUserQuestion", "SendMessage", "CronCreate", "ScheduleWakeup", "ToolSearch", "EnterPlanMode", "NotebookEdit"]);
+var RUNNERS = ["npx ", "npm run ", "npm exec ", "pnpm run ", "pnpm exec ", "pnpm dlx ", "pnpm ", "yarn run ", "yarn dlx ", "yarn ", "bunx ", "bun run ", "bun x "];
+var NEGATIVE_RE = /\b(?:never|do not|don't|dont|must not|mustn't|should not|shouldn't|stop)\s+(?:ever\s+)?(?:use|using|run|running|call|calling|invoke|invoking|execute|executing)\b|\bavoid(?:ing)?\b/gi;
+var CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[—–-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except)\b/i;
+var INSTEAD_RE = /\b(?:instead of|rather than)\s+/gi;
+var NOT_RE = /(?:,\s*|\s)not\s+/gi;
+var OVER_RE = /\bprefer\b[^.;]*?\bover\s+/gi;
+var SPAN = "\0";
+var COMMAND_RE2 = /^[a-z][a-z0-9.+-]*(?::[a-z0-9:._-]+)?(?:\s+\S+)*$/;
+var FLAG_RE = /^--[a-z][a-z0-9-]*$/;
+function spanTarget(raw, mcpServers) {
+  const span = raw.trim().replace(/\s+/g, " ").replace(/\s*(?:\*|\.\.\.|…)$/, "").trim();
+  if (!span) return null;
+  const mcp = /^mcp__([a-z0-9_-]+?)(?:__.*)?$/i.exec(span);
+  if (mcp) return { kind: "mcp-server", name: mcp[1].toLowerCase() };
+  if (mcpServers.has(span.toLowerCase())) return { kind: "mcp-server", name: span.toLowerCase() };
+  if (TOOL_TARGETS.has(span)) return { kind: "tool", name: span };
+  if (FLAG_RE.test(span)) return { kind: "flag", name: span };
+  if (COMMAND_RE2.test(span) && !span.includes("/")) return { kind: "command", name: span };
+  return null;
+}
+function wordTarget(word, mcpServers) {
+  const w = word.replace(/[^A-Za-z0-9_-]/g, "");
+  if (!w) return null;
+  if (mcpServers.has(w.toLowerCase())) return { kind: "mcp-server", name: w.toLowerCase() };
+  if (BARE_TOOL_TARGETS.has(w)) return { kind: "tool", name: w };
+  return null;
+}
+function targetsIn(window, spans, mcpServers) {
+  const out3 = [];
+  for (const tok2 of window.split(/\s+/)) {
+    const m = new RegExp(`${SPAN}(\\d+)${SPAN}`).exec(tok2);
+    const t = m ? spanTarget(spans[Number(m[1])], mcpServers) : wordTarget(tok2, mcpServers);
+    if (t) out3.push(t);
+  }
+  return out3;
+}
+function firstTargetAfter(rest, spans, mcpServers) {
+  const head2 = rest.split(/\s+/).slice(0, 4);
+  for (const tok2 of head2) {
+    const t = targetsIn(tok2, spans, mcpServers);
+    if (t.length) return [t[0]];
+    if (CLAUSE_END_RE.test(` ${tok2} `)) break;
+  }
+  return [];
+}
+function sameTarget(a, b) {
+  return a.kind === b.kind && a.name === b.name;
+}
+function extractRules(text3, mcpServers = /* @__PURE__ */ new Set()) {
+  const out3 = [];
+  const lines = text3.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i].replace(/[’‘]/g, "'");
+    if (!raw.includes("`") && !/never|not|avoid|stop|instead|rather|prefer/i.test(raw)) continue;
+    const spans = [];
+    const masked = raw.replace(/`([^`]+)`/g, (_m, inner) => ` ${SPAN}${spans.push(inner) - 1}${SPAN} `);
+    const targets = [];
+    const add = (ts3) => {
+      for (const t of ts3) if (!targets.some((x) => sameTarget(x, t))) targets.push(t);
+    };
+    for (const m of masked.matchAll(NEGATIVE_RE)) {
+      const after = masked.slice(m.index + m[0].length);
+      const end = CLAUSE_END_RE.exec(after);
+      add(targetsIn(end ? after.slice(0, end.index) : after, spans, mcpServers));
+    }
+    for (const re of [INSTEAD_RE, OVER_RE]) {
+      for (const m of masked.matchAll(re)) add(firstTargetAfter(masked.slice(m.index + m[0].length), spans, mcpServers));
+    }
+    for (const m of masked.matchAll(NOT_RE)) {
+      const before = masked.slice(0, m.index);
+      const sentence = before.slice(Math.max(before.lastIndexOf(". "), before.lastIndexOf("; ")) + 1);
+      if (!/\b(?:use|prefer|run|call)\b/i.test(sentence)) continue;
+      if (/\b(?:do|does|did|must|should|could|would|can|will)\s*$/i.test(before)) continue;
+      add(firstTargetAfter(masked.slice(m.index + m[0].length), spans, mcpServers));
+    }
+    if (targets.length) out3.push({ line: i + 1, text: raw.trim(), targets });
+  }
+  return out3;
+}
+function commandSegments(cmd) {
+  return cmd.split(/&&|\|\||[;|\n]/).map((s) => s.trim().replace(/^[({]\s*/, "").replace(/\s+/g, " ")).filter(Boolean);
+}
+function boundaryAt(seg, at) {
+  const c = seg[at];
+  return c === void 0 || /[\s)}'"]/.test(c);
+}
+function matchCommand(seg, target) {
+  const starts = [0];
+  for (const r of RUNNERS) if (seg.startsWith(r)) starts.push(r.length);
+  for (const at of starts) {
+    if (seg.startsWith(target, at) && boundaryAt(seg, at + target.length)) {
+      const tail = seg.slice(at + target.length).trim().split(" ").filter(Boolean).slice(0, 2);
+      return [seg.slice(0, at + target.length), ...tail].join(" ");
+    }
+  }
+  return null;
+}
+function bashCommand(c) {
+  const i = c.input;
+  return typeof i?.["command"] === "string" ? i["command"] : "";
+}
+function callMatches(c, t, segs = c.name === "Bash" ? commandSegments(bashCommand(c)) : []) {
+  if (t.kind === "tool") return c.name === t.name ? c.name : null;
+  if (t.kind === "mcp-server") return c.name.toLowerCase().startsWith(`mcp__${t.name}__`) ? c.name : null;
+  if (c.name !== "Bash") return null;
+  for (const seg of segs) {
+    if (t.kind === "command") {
+      const hit = matchCommand(seg, t.name);
+      if (hit) return hit;
+    } else if (seg.split(" ").some((w) => w === t.name || w.startsWith(t.name + "="))) {
+      return seg.split(" ").slice(0, 3).join(" ");
+    }
+  }
+  return null;
+}
+var NOTE_WORD_CAP = 40;
+var STOP_WORDS = new Set(
+  "about above after again against also always another anything because been before being below between both cannot could does doing done down during each either else even every first from further have having here hers itself just last later like many might more most much must need needs never next none often once only other ought ours over own same should since some such than that their theirs them then there these they this those through under until upon very want were what when where whether which while whom whose will with within without would your yours yourself make makes made sure true false into onto when then thing things everything something nothing anyone every name description metadata type node_type originsessionid modified project feedback reference user apply rule rules note notes memory index file files line lines code task tasks work session sessions agent agents claude please stop still again broken working fixed wrong".split(/\s+/)
+);
+function contentWords(text3, cap = NOTE_WORD_CAP) {
+  const out3 = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const m of text3.toLowerCase().matchAll(/[a-z][a-z'-]{3,}/g)) {
+    const w = m[0].replace(/['-]+$/, "");
+    if (w.length < 4 || STOP_WORDS.has(w) || seen.has(w)) continue;
+    seen.add(w);
+    out3.push(w);
+    if (out3.length >= cap) break;
+  }
+  return out3;
+}
+function noteKindOf(path) {
+  const p = path.replace(/\\/g, "/");
+  const base = p.slice(p.lastIndexOf("/") + 1);
+  if (/\/projects\/[^/]+\/memory\/[^/]+\.md$/.test(p)) return base === "MEMORY.md" ? "memory-index" : "memory";
+  if (base === "CLAUDE.md" || base === "CLAUDE.local.md") return "claude-md";
+  if (base === "AGENTS.md") return "agents-md";
+  if (/\/\.claude\/rules\/.+\.md$/.test(p)) return "rules";
+  return void 0;
+}
+function writtenText(c) {
+  const i = c.input && typeof c.input === "object" ? c.input : {};
+  const path = typeof i["file_path"] === "string" ? i["file_path"] : void 0;
+  if (typeof i["content"] === "string") return { path, text: i["content"] };
+  if (typeof i["new_string"] === "string") return { path, text: i["new_string"] };
+  if (Array.isArray(i["edits"])) {
+    return { path, text: i["edits"].map((e) => e && typeof e === "object" && typeof e["new_string"] === "string" ? e["new_string"] : "").join("\n") };
+  }
+  return { path, text: "" };
+}
+var MEMORY_WARNING_RE = /MEMORY\.md is (.+?)\. Only part of it was loaded: (.+?)\. Keep index entries/;
+function parseMemoryWarning(content) {
+  const m = MEMORY_WARNING_RE.exec(content);
+  if (!m) return null;
+  const size = m[1];
+  const over = /lines and/.test(size) ? "both" : /\blines \(limit/.test(size) ? "lines" : "bytes";
+  const lines = /(\d+) of (\d+) lines were cut off, starting at line (\d+)/.exec(m[2]);
+  if (lines) return { over, totalLines: Number(lines[2]), linesCut: Number(lines[1]), firstCutLine: Number(lines[3]) };
+  if (/everything after the first \d+ characters of line 1 was cut off/.test(m[2])) return { over, firstCutLine: 1 };
+  return null;
+}
+function mcpServersOf(s) {
+  const out3 = /* @__PURE__ */ new Set();
+  const add = (name) => {
+    const m = /^mcp__([^_]+(?:_[^_]+)*?)__/.exec(name);
+    if (m) out3.add(m[1].toLowerCase());
+  };
+  for (const c of s.toolCalls) add(c.name);
+  for (const n2 of s.meta.deferredToolNames ?? []) add(n2);
+  return out3;
+}
+function utf8Bytes(text3) {
+  return new TextEncoder().encode(text3).length;
+}
+function analyzeInstructions(s) {
+  const files2 = s.meta.instructionFiles ?? [];
+  const loaded = [];
+  const memoryCuts = [];
+  const cutSeen = /* @__PURE__ */ new Set();
+  for (const f of files2) {
+    if (!loaded.some((l) => l.path === f.path)) loaded.push({ path: f.path, type: f.type, bytes: utf8Bytes(f.content), lines: f.content.split("\n").length });
+    const cut = parseMemoryWarning(f.content);
+    if (cut) {
+      const key = `${f.path}|${cut.over}|${cut.totalLines}|${cut.linesCut}|${cut.firstCutLine}`;
+      if (!cutSeen.has(key)) {
+        cutSeen.add(key);
+        memoryCuts.push({ path: f.path, ...f.ts !== void 0 ? { ts: f.ts } : {}, ...cut });
+      }
+    }
+  }
+  const noteWrites = [];
+  const sources = files2.map((f) => ({ path: f.path, source: "loaded", text: f.content, ...f.ts !== void 0 ? { since: f.ts } : {} }));
+  for (const c of s.toolCalls) {
+    if (c.category !== "edit" && c.category !== "write" && c.name !== "Write" && c.name !== "Edit" && c.name !== "MultiEdit") continue;
+    const { path, text: text3 } = writtenText(c);
+    const kind = path ? noteKindOf(path) : void 0;
+    if (!path || !kind) continue;
+    noteWrites.push({ path, kind, turnIndex: c.turnIndex, ...c.startTs !== void 0 ? { ts: c.startTs } : {}, ...c.agentId ? { agentId: c.agentId } : {}, words: contentWords(text3) });
+    if (!c.agentId) sources.push({ path, source: "written", text: text3, ...c.startTs !== void 0 ? { since: c.startTs } : {} });
+  }
+  const servers = mcpServersOf(s);
+  const segsByCall = s.toolCalls.map((c) => c.name === "Bash" ? commandSegments(bashCommand(c)) : []);
+  const rules = [];
+  for (const src of sources) {
+    for (const r of extractRules(src.text, servers)) {
+      for (const target of r.targets) {
+        const prior = rules.find((x) => x.path === src.path && x.text === r.text && sameTarget(x.target, target));
+        if (prior && (prior.since === void 0 || src.since === void 0 || prior.since <= src.since)) continue;
+        let calls = 0;
+        let agentCalls = 0;
+        let firstCallTurnIndex;
+        const examples = [];
+        for (let k = 0; k < s.toolCalls.length; k++) {
+          const c = s.toolCalls[k];
+          if (src.since !== void 0 && (c.startTs === void 0 || c.startTs < src.since)) continue;
+          const hit = callMatches(c, target, segsByCall[k]);
+          if (!hit) continue;
+          calls++;
+          if (c.agentId) agentCalls++;
+          if (firstCallTurnIndex === void 0) firstCallTurnIndex = c.turnIndex;
+          if (examples.length < 3 && !examples.includes(hit)) examples.push(hit);
+        }
+        const row2 = {
+          path: src.path,
+          source: src.source,
+          line: r.line,
+          text: r.text,
+          target,
+          calls,
+          agentCalls,
+          examples,
+          ...src.since !== void 0 ? { since: src.since } : {},
+          ...firstCallTurnIndex !== void 0 ? { firstCallTurnIndex } : {}
+        };
+        if (prior) rules[rules.indexOf(prior)] = row2;
+        else rules.push(row2);
+      }
+    }
+  }
+  return { loaded, rules, noteWrites, memoryCuts };
 }
 
 // src/analyze/context.ts
@@ -4955,10 +5235,11 @@ var interruptionsAndErrors = (ctx) => {
         ruleId: "user-corrections",
         severity: q.userCorrections.length >= 4 ? "high" : "medium",
         axis: "quality",
-        title: `${q.userCorrections.length} correction prompts ("no / wrong / again / revert")`,
+        title: `${q.userCorrections.length} correction prompts ("no / wrong / broken / not working")`,
         detail: q.userCorrections.slice(0, 4).map((c) => `turn ${c.turnIndex}: ${c.preview.slice(0, 60)}`).join(" \xB7 "),
-        improvement: "Add the rule that the agent missed to CLAUDE.md. Tell the agent to run the check before it says that the work is done, or use a reviewer subagent.",
-        why: "Each correction is a lost round trip. It can also mean that the instructions or the agent's own checks are weak.",
+        improvement: "Add a check that stops a mechanical mistake: a hook, a test or a lint rule. Add a line to CLAUDE.md only for a judgment call. Run orangu harness to see the rules that did not hold.",
+        why: "Each correction is a lost round trip. A rule in CLAUDE.md or in memory is one line among many, so the agent can miss it. A hook runs every time.",
+        method: 'Orangu counts each prompt that starts as a correction or names a failure, such as "broken" or "not working".',
         evidence: { corrections: q.userCorrections },
         turnIndexes: q.userCorrections.map((c) => c.turnIndex),
         personas: ["anyone", "lead"]
@@ -6173,6 +6454,7 @@ function analyzeSession(s, opts = {}) {
     time,
     files: files2,
     quality,
+    instructions: analyzeInstructions(s),
     insights,
     events: s.events.map((e) => ({ kind: e.kind, ts: e.ts, turnIndex: e.turnIndex, agentId: e.agentId, label: e.label, detail: e.detail })),
     parse: { ...s.parseReport, reconciliation: { usageEventsTotal, turnsPlusAgentsTotal: turnsPlusAgents, matchesWithinPct: round(diffPct, 3), ok: diffPct <= 1 } }
@@ -11985,7 +12267,7 @@ function catalogOutput(suggestionId2, match) {
     evidence: outputText(match.evidence, MAX_OUTPUT_CATALOG_TEXT_CHARS)
   };
 }
-function utf8Bytes(value) {
+function utf8Bytes2(value) {
   return new TextEncoder().encode(value).byteLength;
 }
 function evidenceLimit(limit) {
@@ -12055,7 +12337,7 @@ function projectEvidence(value, options = {}) {
     bundle.findings.push(finding);
     bundle.selectedFindings = bundle.findings.length;
     bundle.truncated = bundle.selectedFindings < rows2.length;
-    if (utf8Bytes(JSON.stringify(bundle)) > MAX_EVIDENCE_OUTPUT_BYTES) {
+    if (utf8Bytes2(JSON.stringify(bundle)) > MAX_EVIDENCE_OUTPUT_BYTES) {
       bundle.catalogMatches.splice(catalogStart);
       bundle.findings.pop();
       bundle.selectedFindings = bundle.findings.length;
@@ -12066,7 +12348,7 @@ function projectEvidence(value, options = {}) {
   return bundle;
 }
 function parseEvidenceArtifact(text3, options = {}) {
-  const bytes = utf8Bytes(text3);
+  const bytes = utf8Bytes2(text3);
   if (bytes > MAX_EVIDENCE_ARTIFACT_BYTES) throw new Error(`evidence artifact exceeds ${MAX_EVIDENCE_ARTIFACT_BYTES} bytes`);
   let value;
   try {
@@ -12077,7 +12359,7 @@ function parseEvidenceArtifact(text3, options = {}) {
   return projectEvidence(value, options);
 }
 function estimateEvidence(bundle) {
-  const bytes = utf8Bytes(JSON.stringify(bundle));
+  const bytes = utf8Bytes2(JSON.stringify(bundle));
   const approxTokens3 = Math.ceil(bytes / 4);
   return {
     bytes,

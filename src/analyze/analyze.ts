@@ -4,6 +4,7 @@ import { ANALYSIS_SCHEMA_VERSION, type Analysis, type QualityAnalysis, type Sess
 import { catalogInfo } from '../models/catalog.js'
 import { analyzeTools } from './tools.js'
 import { analyzeFiles, analyzeQuality } from './quality.js'
+import { analyzeInstructions } from './instructions.js'
 import { analyzeContext, analyzeTokens, modelInfos } from './context.js'
 import { analyzeAgents, analyzeHooks, analyzeSkills, analyzeTime } from './agents.js'
 import { runRules, type Rule } from './insights.js'
@@ -180,6 +181,7 @@ export function analyzeSession(s: Session, opts: AnalyzeOptions = {}): Analysis 
     time,
     files,
     quality,
+    instructions: analyzeInstructions(s),
     insights,
     events: s.events.map((e) => ({ kind: e.kind, ts: e.ts, turnIndex: e.turnIndex, agentId: e.agentId, label: e.label, detail: e.detail })),
     parse: { ...s.parseReport, reconciliation: { usageEventsTotal, turnsPlusAgentsTotal: turnsPlusAgents, matchesWithinPct: round(diffPct, 3), ok: diffPct <= 1 } },
