@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from './analyze.js'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
-import { contentWords, extractRules, matchCommand, noteKindOf, parseMemoryWarning, type RuleTarget } from './instructions.js'
+import { commandSegments, contentWords, extractRules, matchCommand, noteKindOf, parseMemoryWarning, type RuleTarget } from './instructions.js'
 import type { Analysis } from '../model/analysis.js'
 
 const targets = (text: string, servers: string[] = []): RuleTarget[] => extractRules(text, new Set(servers)).flatMap((r) => r.targets)
@@ -63,6 +63,22 @@ describe('extractRules: the rule grammar', () => {
     expect(targets('Never use `the driver returns those as strings at runtime regardless of it`.')).toEqual([])
   })
 
+  it('reads every negative verb form and every connector', () => {
+    expect(targets("Don't use `yarn` here.")).toEqual([{ kind: 'command', name: 'yarn' }])
+    expect(targets('You must not run `make deploy` from a branch.')).toEqual([{ kind: 'command', name: 'make deploy' }])
+    expect(targets('Stop using `npm install` in this repo.')).toEqual([{ kind: 'command', name: 'npm install' }])
+    expect(targets('Never execute `terraform apply` by hand.')).toEqual([{ kind: 'command', name: 'terraform apply' }])
+    expect(targets('Use `rg` rather than `grep -r`.')).toEqual([{ kind: 'command', name: 'grep -r' }])
+    // "invoke" and "call" are about code: only a tool or a server is a target
+    expect(targets('Never invoke `WebFetch` or `fetchAll` for GitHub.')).toEqual([{ kind: 'tool', name: 'WebFetch' }])
+  })
+
+  it('ends the clause at a condition, so the command the rule asks for is not a target', () => {
+    expect(targets('Never run `git commit` without `npm run verify` first.')).toEqual([{ kind: 'command', name: 'git commit' }])
+    expect(targets('Do not run `git push` before `npm test` passes.')).toEqual([{ kind: 'command', name: 'git push' }])
+    expect(targets('Never run `vitest` when `--run` is missing.')).toEqual([{ kind: 'command', name: 'vitest' }])
+  })
+
   it('gives the 1-based line and the whole trimmed line', () => {
     const r = extractRules('# Rules\n\n  - Never run `make clean` here.  \n')
     expect(r).toEqual([{ line: 3, text: '- Never run `make clean` here.', targets: [{ kind: 'command', name: 'make clean' }] }])
@@ -77,6 +93,21 @@ describe('matchCommand', () => {
     expect(matchCommand('npx tsc --noEmit -p tsconfig.json', 'npx tsc --noEmit')).toBe('npx tsc --noEmit')
   })
 
+  it('matches after each runner', () => {
+    for (const [seg, hit] of [
+      ['pnpm db:push', 'pnpm db:push'],
+      ['pnpm run db:push', 'pnpm run db:push'],
+      ['pnpm exec db:push', 'pnpm exec db:push'],
+      ['yarn db:push', 'yarn db:push'],
+      ['yarn run db:push', 'yarn run db:push'],
+      ['bunx db:push', 'bunx db:push'],
+      ['bun run db:push', 'bun run db:push'],
+      ['npm exec db:push', 'npm exec db:push'],
+    ]) {
+      expect(matchCommand(seg!, 'db:push'), seg).toBe(hit)
+    }
+  })
+
   it('holds a "bare" rule: an env assignment in front is not a match', () => {
     expect(matchCommand('NODE_OPTIONS=--max-old-space-size=8192 next build', 'next build')).toBeNull()
   })
@@ -85,6 +116,14 @@ describe('matchCommand', () => {
     expect(matchCommand('npm cit', 'npm ci')).toBeNull()
     expect(matchCommand('next buildx', 'next build')).toBeNull()
     expect(matchCommand('echo next build', 'next build')).toBeNull()
+  })
+})
+
+describe('commandSegments', () => {
+  it('leaves heredoc bodies and quoted text out of the commands', () => {
+    const commit = "git commit -m \"$(cat <<'EOF'\nfix: build\n\nnpx tsc --noEmit with NODE_OPTIONS passes\nEOF\n)\" && git push"
+    expect(commandSegments(commit)).toEqual(["git commit -m ''", 'git push'])
+    expect(commandSegments("echo 'next build; npm ci' && next build")).toEqual(["echo ''", 'next build'])
   })
 })
 
@@ -175,6 +214,15 @@ describe('analyzeInstructions on a parsed session', () => {
     const ins = (await analyzeOf(b)).instructions!
     expect(ins.noteWrites).toEqual([expect.objectContaining({ kind: 'memory', words: ['deploy', 'viewport', 'check'] })])
     expect(ins.rules).toEqual([expect.objectContaining({ source: 'written', target: { kind: 'command', name: 'npm run deploy' }, calls: 1, agentCalls: 0 })])
+  })
+
+  it('gives a rule that an Edit wrote line 0, because a snippet carries no file line', async () => {
+    const b = new SessionBuilder()
+    b.userPrompt('save the rule')
+    b.toolCall('Edit', { file_path: '/Users/test/Code/x/CLAUDE.md', old_string: 'a', new_string: 'x\nNever run `make clean` here.' }, 'ok')
+    b.tick(1000)
+    b.toolCall('Bash', { command: 'make clean' }, 'ok')
+    expect((await analyzeOf(b)).instructions!.rules).toEqual([expect.objectContaining({ source: 'written', line: 0, calls: 1 })])
   })
 
   it('gives empty arrays to a session with no instructions record', async () => {

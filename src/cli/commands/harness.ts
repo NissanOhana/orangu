@@ -206,7 +206,21 @@ function printEnforcement(r: HarnessReport, w: (s?: string) => void, wrapped: (s
   const e = r.enforcement
   const c = e.counts
   const dim = (s: string) => w(paint(out, 'dim', s))
+  // every line of this block wraps to the layout width, so a long target or word never passes column 80
+  const say = (s: string, indent: string) => {
+    for (const l of wrapped(s, indent)) w(l)
+  }
+  const sayDim = (s: string, indent: string) => {
+    for (const l of wrapped(s, indent)) dim(l)
+  }
+  /** a row head: the label in a 26-column field and the value beside it, or the value on its own line after a long label */
+  const head = (label: string, value: string) => {
+    if (label.length <= 24) return say(`${label.padEnd(26)} ${value}`, '    ')
+    say(label, '    ')
+    say(value, '      ')
+  }
   const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p
+  const withText = e.broken.some((b) => b.text) || e.complaints.length > 0 || e.notes.some((n) => n.sharedWords.length > 0)
   w()
   w(paint(out, 'bold', '  rules that did not hold'))
   if (r.scope.sessionsScanned === 0) {
@@ -214,47 +228,48 @@ function printEnforcement(r: HarnessReport, w: (s?: string) => void, wrapped: (s
     return
   }
   if (c.sessionsWithRecord === 0) {
-    dim('    no scanned session recorded the instruction files that it loaded,')
-    dim('    so orangu cannot tie a rule to a session. Claude Code writes that record')
-    dim('    in newer transcripts.')
+    sayDim('no scanned session recorded the instruction files that it loaded, so orangu cannot tie a rule to a session. Claude Code writes that record in newer transcripts.', '    ')
   } else if (!e.broken.length) {
-    dim(`    ${plural(c.rulesInContext, 'rule')} named a command or a tool, and no call broke ${c.rulesInContext === 1 ? 'it' : 'them'}`)
+    sayDim(`${plural(c.rulesInContext, 'rule')} named a command or a tool, and no call broke ${c.rulesInContext === 1 ? 'it' : 'them'}`, '    ')
   }
   for (const b of e.broken.slice(0, 5)) {
-    w(`    ${b.target.name.padEnd(26)} ${plural(b.calls, 'call')} in ${b.sessionsBroken} of ${plural(b.sessionsInContext, 'session')} that had the rule`)
+    head(b.target.name, `${plural(b.calls, 'call')} in ${b.sessionsBroken} of ${plural(b.sessionsInContext, 'session')} that had the rule`)
+    const where = b.line > 0 ? `${fileName(b.file)}:${b.line}` : fileName(b.file)
     const agents = b.agentCalls ? ` · ${b.agentCalls} by subagents` : ''
     const copies = b.files > 1 ? ` · ${b.files} copies of the file` : ''
-    dim(`      ${fileName(b.file)}:${b.line}${agents}${copies}`)
-    if (b.blocked) dim(b.blocked === b.calls ? '      a hook or a deny rule stopped every call: a check holds this rule' : `      a hook or a deny rule stopped ${b.blocked}, and ${b.calls - b.blocked} ran`)
-    for (const l of wrapped(b.text, '      ')) dim(l)
+    sayDim(`${where}${agents}${copies}`, '      ')
+    if (b.blocked) sayDim(b.blocked === b.calls ? 'a hook or a deny rule stopped every call: a check holds this rule' : `a hook or a deny rule stopped ${b.blocked}, and ${b.calls - b.blocked} ran`, '      ')
+    if (b.text) sayDim(b.text, '      ')
   }
-  if (e.broken.length > 5) dim(`    ${e.broken.length - 5} more broken rules in --json`)
+  if (e.broken.length > 5) sayDim(`${e.broken.length - 5} more broken rules in --json`, '    ')
 
   for (const m of e.memory.filter((x) => x.sessionsCut > 0 || (x.linesPastLimit ?? 0) > 0).slice(0, 3)) {
-    const now = m.linesPastLimit ? `${plural(m.linesPastLimit, 'line')} past the limit now` : m.bytes !== undefined ? `fits now: ${sizeLabel(m.bytes)} of 24.4 KB` : 'gone now'
-    w(`    ${'memory index'.padEnd(26)} cut in ${m.sessionsCut} of ${plural(m.sessionsLoaded, 'session')} that loaded it`)
-    dim(`      ${m.file}`)
-    dim(`      up to ${plural(m.maxLinesCut, 'line')} not loaded, the newest first · ${now}`)
+    head('memory index', m.sessionsCut ? `cut in ${m.sessionsCut} of ${plural(m.sessionsLoaded, 'session')} that loaded it` : `${plural(m.linesPastLimit ?? 0, 'line')} past the limit`)
+    sayDim(m.file, '      ')
+    if (m.sessionsCut) sayDim(`up to ${plural(m.maxLinesCut, 'line')} not loaded, the newest first`, '      ')
+    const now = m.linesPastLimit ? `${plural(m.linesPastLimit, 'line')} past the limit now, from line ${m.firstLinePastLimit}` : m.chars !== undefined ? `fits now: ${n(m.lines ?? 0)} lines, ${n(m.chars)} of 25,000 characters` : 'the file is gone now'
+    sayDim(now, '      ')
   }
 
   if (c.feedbackNotes) {
-    w(`    ${'feedback notes'.padEnd(26)} ${c.notesFollowedByComplaint} of ${c.feedbackNotes} came back as a complaint`)
+    head('feedback notes', `${c.notesFollowedByComplaint} of ${c.feedbackNotes} came back as a complaint`)
     for (const note of e.notes.filter((x) => x.matchingComplaints > 0).slice(0, 3)) {
       const first = note.firstMatchAfterMs !== undefined ? `, the first ${gapLabel(note.firstMatchAfterMs)} after the note` : ''
-      dim(`      ${fileName(note.file)} · ${plural(note.matchingComplaints, 'complaint')}${first}`)
-      if (note.sharedWords.length) dim(`        shared words: ${note.sharedWords.slice(0, 6).join(', ')}`)
+      sayDim(`${fileName(note.file)} · ${plural(note.matchingComplaints, 'complaint')}${first}`, '      ')
+      if (note.sharedWords.length) sayDim(`shared words: ${note.sharedWords.slice(0, 6).join(', ')}`, '        ')
+      for (const ex of note.examples) if (ex.preview !== undefined) sayDim(`"${ex.preview}"`, '        ')
     }
   }
 
-  const themes = e.complaints.slice(0, 6)
-  if (themes.length) {
-    w(`    ${'recurring complaints'.padEnd(26)} ${plural(c.complaints, 'complaint prompt')} in scope`)
-    for (const t of themes) dim(`      "${t.word}" in ${plural(t.prompts, 'prompt')}, ${plural(t.sessions, 'session')}${t.inInstructions ? ' · a note already uses this word' : ''}`)
+  if (c.complaints) {
+    head('recurring complaints', `${plural(c.recurringComplaintWords, 'word')} in complaints of 2 or more sessions`)
+    for (const t of e.complaints.slice(0, 6)) {
+      sayDim(`"${t.word}" in ${plural(t.prompts, 'prompt')}, ${plural(t.sessions, 'session')}${t.inInstructions ? ' · a note already uses this word' : ''}`, '      ')
+      const last = t.examples[0]
+      if (last?.preview !== undefined) sayDim(`last: "${last.preview}"`, '        ')
+    }
   }
-  if (e.notes.some((x) => x.examples.length) || themes.length) {
-    const shown = e.notes.some((x) => x.examples.some((ex) => ex.preview !== undefined)) || themes.some((t) => t.examples.some((ex) => ex.preview !== undefined))
-    if (!shown) dim('    add --include-text to see the text of each complaint')
-  }
+  if (!withText && (e.broken.length || c.feedbackNotes || c.complaints)) sayDim('add --include-text to see the rule lines, the shared words and the complaints', '    ')
 }
 
 function printHarness(r: HarnessReport): void {

@@ -65,7 +65,9 @@ Cover instruction files and memory, hooks, skills and agents, MCP servers, and s
 
 Choose the smallest fitting class (definitions: [the artifact contract](../improve/references/artifact-contract.md)). Create one record per item the interview kept.
 
-A rule that did not hold is a mechanical miss: give it a check, not a note. This applies to each `enforcement.broken` row, each `enforcement.notes` row with matching complaints, and each cut `enforcement.memory` row. Choose `hook` (a PreToolUse hook that blocks the call and quotes the rule) or `workflow-config` (a `permissions.deny` rule). Do not propose another `instruction` line for the same rule. For a cut memory index, propose a shorter index. Pass each value as one validated argv item or one correctly shell-quoted word:
+A rule that did not hold is a mechanical miss: give it a check, not a note. This applies to each `enforcement.broken` row, each `enforcement.notes` row with matching complaints, and each cut `enforcement.memory` row. Choose `hook` (a PreToolUse hook that blocks the call and quotes the rule) or `workflow-config` (a `permissions.deny` rule). Do not propose another `instruction` line for the same rule.
+
+Skip a row where `blocked` equals `calls`: a check already holds it. For a cut memory index, propose a shorter index. The report leaves out the rule text: read it at `file:line`. Pass each value as one validated argv item or one correctly shell-quoted word:
 
 - A fired rule: `orangu suggest --rule '<ruleId>' --scope repo|global --session '<evidence ids>' --title '<change>' --json`.
 - A declared-vs-used or free item with no rule: `--rule harness:<changeClass>`. Keep the named row in the title and evidence.

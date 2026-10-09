@@ -1335,11 +1335,13 @@ describe('plugin packaging', () => {
     // 2026-10-07 show-me skipped sessions: body 558 -> 570, measured 557 -> 569 words (+12). Step 3 says "If prepare
     // reports skipped sessions, say how many and why." (+10), and the prepare output shape names `skipped,
     // skippedReason` (+2).
-    // 2026-10-09 rules that hold: harness 1425 -> 1496, measured 1,424 -> 1,495 words (+71). Stage 4 gains one
+    // 2026-10-09 rules that hold: harness 1425 -> 1519, measured 1,424 -> 1,518 words (+94). Stage 4 gains one
     // paragraph: a rule that did not hold (an `enforcement.broken` row, a feedback note that a matching complaint
     // followed, a cut memory index) is a mechanical miss and gets a `hook` or a `workflow-config` deny rule, never
-    // another `instruction` line, and a cut memory index gets a shorter index. No other ceiling moves.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1496, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 570 }
+    // another `instruction` line, and a cut memory index gets a shorter index (+71). The review fixes add 2
+    // sentences (+23): skip a row whose `blocked` equals `calls` (a check already holds it), and read the rule
+    // text at `file:line`, because the report leaves it out without --include-text. No other ceiling moves.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1519, improve: 1045, analyze: 700, apply: 700, feedback: 350, 'show-me': 570 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
