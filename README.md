@@ -37,7 +37,7 @@ npx orangu report current  # the session Claude Code is running you in; or -s <i
 npx orangu serve           # live loopback viewer over every local session
 npx orangu repo            # recurring patterns across this repository's sessions
 npx orangu global          # ... across every session on the machine
-npx orangu harness         # what your config declares vs what your sessions used, in tokens
+npx orangu harness         # what your config declares vs what your sessions did, and the rules they broke
 npx orangu ste <file>      # check a prose file against the STE writing rules
 ```
 
@@ -74,7 +74,7 @@ Whole-harness (global) changes stay review-only. A proposal is not an applicatio
 | `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence. Open the report of the current session |
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
-| `/orangu:harness` | Review the whole harness: CLAUDE.md, skills, agents, hooks, MCP, in tokens |
+| `/orangu:harness` | Review the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. A rule that did not hold gets a hook, not another note |
 | `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML. Claude writes only 3 text values, and `orangu show-me` writes both files from the data |
 | `/orangu:feedback` | Send reviewed beta feedback from a localhost form |
 

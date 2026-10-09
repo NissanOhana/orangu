@@ -38,7 +38,7 @@ node dist/orangu.js report
 | `orangu global` | Aggregate supported sessions across configured roots (`--html`/`--open` for the report) |
 | `orangu evidence <input>` | Emit the bounded, always-redacted evidence a skill reads |
 | `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
-| `orangu harness` | Compare declared harness configuration with observed use |
+| `orangu harness` | Compare declared harness configuration with observed use, and show the rules that did not hold |
 | `orangu suggest` | Inspect and transition validated suggestion records |
 | `orangu ste <file...\|->` | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. Terminal output and the layout of a report can give false findings. For terminal output, add `--lines` |
 | `orangu show-me [selector]` | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
@@ -60,6 +60,17 @@ Orangu refuses `--html` and `--open` with `--json`, which is a machine read with
 `orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
 
 Use `orangu --help` for flags and output controls.
+
+### Rules that did not hold
+
+A line in CLAUDE.md or in memory can be missed. A hook cannot. `orangu harness` shows where a line did not hold:
+
+- **Broken rules:** a "do not" line that names a command, a tool or an MCP server, and the calls after a session loaded it. A call that a hook or a deny rule stopped is blocked.
+- **Feedback notes:** a note saved after a complaint, and the later complaints with its rare words.
+- **Memory index:** Claude Code loads only the first 200 lines or 25,000 bytes of `MEMORY.md`. The row shows the lines past that limit and the sessions that lost them.
+- **Recurring complaints:** words that come back in complaints across sessions.
+
+A complaint example is a session id and a turn. `--include-text` adds its text. `/orangu:harness` turns each row into a hook or a deny rule, never into another line.
 
 ### Terminal output
 

@@ -1,7 +1,7 @@
 # orangu
 
 > orangu is local, offline, deterministic observability for coding-agent sessions (Claude Code, Cowork
-> and Desktop). The orangu 0.10.0 CLI reads the `.jsonl` transcripts that are already on your disk.
+> and Desktop). The orangu 0.11.0 CLI reads the `.jsonl` transcripts that are already on your disk.
 > It turns them into a self-contained HTML report, a stable JSON API, cross-session aggregates, and a
 > harness report. The harness report compares what your config declares with what your sessions used.
 > Optional Claude Code skills turn that evidence into reviewable proposals and receipts. The loop is
