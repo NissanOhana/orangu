@@ -21,7 +21,7 @@ export type SourceFailure = { ok: false; status: Extract<SourceState['status'], 
 export type SourceResult<T> = { ok: true; value: T } | SourceFailure
 
 /**
- * Cleans 1 outside text (a session name, a waiting reason, a cmux title) before it enters a fact: the collector
+ * Cleans 1 outside text (a session name, kind, version or waiting reason, a cmux title) before it enters a fact: the collector
  * passes the sanitizer and then the redaction. A path that a later command takes (a cwd) is not cleaned.
  */
 export type CleanText = (text: string) => string
@@ -50,6 +50,12 @@ const REGISTRY_UNREAD = 'The mod cannot read the registry folder.'
 const AGENTS_UNREAD = 'The mod cannot read the claude agents list.'
 
 const STATUSES: readonly SessionStatus[] = ['busy', 'idle', 'waiting']
+/**
+ * The other status words that the parse reads as 1 of STATUSES. Claude Code 2.1.295 writes `shell` in the registry
+ * file of a session that `claude agents --json` shows as `busy` at the same time. So the parse reads `shell` as
+ * `busy`: the session keeps its row when the agents list fails, and the file is no parse error.
+ */
+const STATUS_ALIASES: Readonly<Record<string, SessionStatus>> = { shell: 'busy' }
 /** A session id is 1 path segment: it names the transcript file, so it can hold no slash and no dot. */
 const SESSION_ID = /^[0-9A-Za-z][0-9A-Za-z_-]*$/
 /** A registry file name: the PID and `.json`, nothing more. */
@@ -60,7 +66,7 @@ export type JsonObject = { readonly [key: string]: unknown }
 export const isObject = (value: unknown): value is JsonObject => typeof value === 'object' && value !== null && !Array.isArray(value)
 export const isPid = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 export const textOf = (value: unknown): string | undefined => (typeof value === 'string' ? value : undefined)
-const isStatus = (value: unknown): value is SessionStatus => STATUSES.includes(value as SessionStatus)
+const isAbsent = (value: unknown): boolean => value === undefined || value === null
 const timeOf = (value: unknown): number | undefined => (typeof value === 'number' && Number.isFinite(value) ? value : undefined)
 
 /** The value of a JSON text, or nothing when it does not parse. */
@@ -93,13 +99,22 @@ function sessionName(name: unknown, sessionId: string, clean: CleanText): string
   return cleaned.trim() === '' ? sessionId.slice(0, SHORT_ID_LENGTH) : cleaned
 }
 
+/** The status of a row: 1 of STATUSES, or a word of STATUS_ALIASES as the status it stands for. */
+function statusOf(value: unknown): SessionStatus | undefined {
+  if (typeof value !== 'string') return undefined
+  if ((STATUSES as readonly string[]).includes(value)) return value as SessionStatus
+  return Object.hasOwn(STATUS_ALIASES, value) ? STATUS_ALIASES[value] : undefined
+}
+
 /** 1 agents row from 1 parsed value, or nothing when the PID, the session id, the cwd or the status is wrong. */
 function agentRow(value: unknown, clean: CleanText): AgentRow | undefined {
   if (!isObject(value)) return undefined
-  const { pid, sessionId, cwd, status } = value
+  const { pid, sessionId, cwd } = value
+  const status = statusOf(value.status)
   if (!isPid(pid) || typeof sessionId !== 'string' || !SESSION_ID.test(sessionId)) return undefined
-  if (typeof cwd !== 'string' || cwd === '' || !isStatus(status)) return undefined
-  const row: AgentRow = { pid, sessionId, cwd, name: sessionName(value.name, sessionId, clean), kind: textOf(value.kind) ?? '', status }
+  if (typeof cwd !== 'string' || cwd === '' || status === undefined) return undefined
+  const kind = textOf(value.kind)
+  const row: AgentRow = { pid, sessionId, cwd, name: sessionName(value.name, sessionId, clean), kind: kind === undefined ? '' : clean(kind), status }
   const waitingFor = textOf(value.waitingFor)
   if (status === 'waiting' && waitingFor !== undefined) row.waitingFor = clean(waitingFor)
   const startedAt = timeOf(value.startedAt)
@@ -107,13 +122,20 @@ function agentRow(value: unknown, clean: CleanText): AgentRow | undefined {
   return row
 }
 
-/** The rows of `claude agents --json`, or nothing when the output is not a JSON list. A bad row counts and gives no row. */
+/** A background session: the agents list shows it with no PID and no status. A board row needs a PID, so it has none. */
+const isBackgroundRow = (value: unknown): boolean => isObject(value) && isAbsent(value.pid) && isAbsent(value.status)
+
+/**
+ * The rows of `claude agents --json`, or nothing when the output is not a JSON list. A background session gives no
+ * row and no parse error. Any other bad row counts as a parse error and gives no row.
+ */
 export function parseAgents(stdout: string, clean: CleanText): { rows: AgentRow[]; parseErrors: number } | undefined {
   const list = parseJson(stdout)
   if (!Array.isArray(list)) return undefined
   const rows: AgentRow[] = []
   let parseErrors = 0
   for (const value of list) {
+    if (isBackgroundRow(value)) continue
     const row = agentRow(value, clean)
     if (row) rows.push(row)
     else parseErrors += 1
@@ -173,7 +195,7 @@ function registryRow(fileName: string, body: string, fileMtimeMs: number, clean:
   const procStart = textOf(value.procStart)
   if (procStart !== undefined) out.procStart = procStart
   const version = textOf(value.version)
-  if (version !== undefined) out.version = version
+  if (version !== undefined) out.version = clean(version)
   return out
 }
 

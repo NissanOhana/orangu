@@ -33,9 +33,9 @@ const MTIMES: Readonly<Record<string, number>> = {
   '41009.json': 1791495000000, // the day before: a crash left it
 }
 
-async function registryRows(): Promise<readonly RegistryRow[]> {
-  const files = Object.fromEntries(Object.keys(MTIMES).map((name) => [name, fixture(`registry/${name}`)]))
-  const listing: DirEntry[] = Object.entries(MTIMES).map(([name, mtimeMs]) => ({ name, kind: 'file', size: files[name]?.length ?? 0, mtimeMs, isLink: false }))
+async function registryRows(mtimes: Readonly<Record<string, number>> = MTIMES): Promise<readonly RegistryRow[]> {
+  const files = Object.fromEntries(Object.keys(mtimes).map((name) => [name, fixture(`registry/${name}`)]))
+  const listing: DirEntry[] = Object.entries(mtimes).map(([name, mtimeMs]) => ({ name, kind: 'file', size: files[name]?.length ?? 0, mtimeMs, isLink: false }))
   const host: Host = {
     run: refuse,
     list: async () => listing,
@@ -124,6 +124,24 @@ describe('liveSessions: the liveness rule', () => {
     expect(liveSessions({ registry, procStarts: [{ pid: 41001, lstart: 'Fri Oct  9 11:00:00 2026' }] })).toEqual([])
     expect(liveSessions({ registry: noProcStart, procStarts: [{ pid: 41003, lstart: 'Fri Oct  9 09:00:00 2026' }] })).toEqual([])
     expect(liveSessions({ registry, procStarts: [{ pid: 41001, lstart: 'Fri Oct  9 08:00:00 2026' }] }).map((row) => row.pid)).toEqual([41001])
+  })
+
+  it('keeps a session whose registry status is shell on the board as busy when the agents list fails', async () => {
+    const registry = await registryRows({ '41005.json': 1791537660000 })
+    const live = liveSessions({ registry, procStarts: [{ pid: 41005, lstart: 'Fri Oct  9 09:20:00 2026' }] })
+    expect(live).toEqual([
+      {
+        pid: 41005,
+        sessionId: '00000000-0000-4000-8000-000000000010',
+        cwd: '/Users/test/code/epsilon',
+        name: 'epsilon shell',
+        kind: 'interactive',
+        status: 'busy',
+        startedAt: 1791537600000,
+        statusSince: 1791537660000,
+        version: '2.1.295',
+      },
+    ])
   })
 
   it('with no agents list and no ps read, no PID counts', async () => {

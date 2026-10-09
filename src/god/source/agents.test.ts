@@ -136,10 +136,21 @@ describe('parseAgents: claude agents --json', () => {
     expect(read.ok && read.value.rows.find((row) => row.pid === 41003)?.name).toBe('00000000')
   })
 
-  it('cleans the name and the waiting reason with the cleaner it gets, and keeps the cwd as on disk', () => {
+  it('cleans the name, the kind and the waiting reason with the cleaner it gets, and keeps the cwd as on disk', () => {
     const row = { pid: 7, sessionId: ID('1'), cwd: '/Users/test/w', name: 'n', kind: 'interactive', status: 'waiting', waitingFor: 'dialog open' }
     const parsed = parseAgents(JSON.stringify([row]), (text) => `[${text}]`)
-    expect(parsed?.rows[0]).toMatchObject({ name: '[n]', waitingFor: '[dialog open]', cwd: '/Users/test/w', kind: 'interactive' })
+    expect(parsed?.rows[0]).toMatchObject({ name: '[n]', waitingFor: '[dialog open]', cwd: '/Users/test/w', kind: '[interactive]' })
+  })
+
+  it('skips a row with no PID and no status, a background session, with no parse error', () => {
+    const rows = [
+      { pid: 7, sessionId: ID('1'), cwd: '/w', name: 'n', kind: 'interactive', status: 'idle' },
+      { sessionId: ID('2'), cwd: '/w', name: 'nightly check', kind: 'background' },
+      { sessionId: ID('3'), cwd: '/w', name: 'no PID', kind: 'interactive', status: 'busy' },
+    ]
+    const parsed = parseAgents(JSON.stringify(rows), keep)
+    expect(parsed?.rows.map((row) => row.pid)).toEqual([7])
+    expect(parsed?.parseErrors).toBe(1)
   })
 
   it('gives no list when the output is not a JSON list', () => {
@@ -279,6 +290,24 @@ describe('readRegistry: the files <home>/.claude/sessions/<pid>.json', () => {
       fileMtimeMs: 1791539990000,
     })
     expect(rows.find((row) => row.pid === 41001)).not.toHaveProperty('waitingFor')
+  })
+
+  it('reads a registry status of shell as busy, the status that claude agents shows for the same PID', async () => {
+    const files = { ...FILES, '41005.json': fixture('registry/41005.json') }
+    const listing = [...LISTING, fileEntry('41005.json', 1791537660000, files['41005.json'])]
+    const read = await readRegistry(registryHost(listing, files).host, HOME, {}, keep)
+    expect(read.ok && read.value.parseErrors).toBe(0)
+    expect(read.ok && read.value.rows.find((row) => row.pid === 41005)).toMatchObject({ status: 'busy', statusUpdatedAt: 1791537660000, name: 'epsilon shell' })
+  })
+
+  it('cleans the kind and the version of a registry file, and keeps procStart as the file writes it', async () => {
+    const read = await readRegistry(registryHost(LISTING).host, HOME, {}, (text) => `[${text}]`)
+    expect(read.ok && read.value.rows.find((row) => row.pid === 41001)).toMatchObject({
+      kind: '[interactive]',
+      version: '[2.1.295]',
+      procStart: 'Fri Oct  9 08:00:00 2026',
+      cwd: '/Users/test/code/alpha',
+    })
   })
 
   it('turns a registry folder that cannot be listed into a source failure', async () => {

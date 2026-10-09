@@ -46,12 +46,28 @@ export function parseRevParse(stdout: string): RepoRef | undefined {
   return { commonDir, topLevel, name: repoName(commonDir, topLevel, isWorktree), isWorktree }
 }
 
-/** Asks git once for each absolute cwd that the cache does not hold. */
+/** True when the path is a folder. A path that is gone (a removed worktree) or that is not a folder is false. */
+async function isFolder(host: Host, path: string): Promise<boolean> {
+  try {
+    return (await host.stat(path)).kind === 'dir'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Asks git once for each absolute cwd that the cache does not hold. A cwd that is not a folder (a removed worktree)
+ * is no repo, not a failure, and git does not run there.
+ */
 export async function readRepos(host: Host, cwds: readonly string[], cache: RepoCache): Promise<RepoRead> {
   const next: Record<string, RepoRef | null> = { ...cache }
   let failure: SourceFailure | undefined
   for (const cwd of cwds) {
     if (!cwd.startsWith('/') || Object.hasOwn(next, cwd)) continue
+    if (!(await isFolder(host, cwd))) {
+      next[cwd] = null
+      continue
+    }
     const result = await tryRun(host, GIT_IDENTITY_ARGV, { cwd })
     if (!result) {
       failure = off(notRunReason('git'))

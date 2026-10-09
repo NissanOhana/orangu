@@ -1,0 +1,20 @@
+{
+  "pid": 41005,
+  "sessionId": "00000000-0000-4000-8000-000000000010",
+  "cwd": "/Users/test/code/epsilon",
+  "startedAt": 1791537600000,
+  "procStart": "Fri Oct  9 09:20:00 2026",
+  "version": "2.1.295",
+  "peerProtocol": 1,
+  "peerFeatures": [],
+  "kind": "interactive",
+  "entrypoint": "cli",
+  "pidDomain": "test",
+  "messagingSocketPath": "/tmp/claude-test/41005.sock",
+  "name": "epsilon shell",
+  "nameSource": "test",
+  "nameSince": 1791537600000,
+  "status": "shell",
+  "updatedAt": 1791537660000,
+  "statusUpdatedAt": 1791537660000
+}

@@ -4,7 +4,7 @@
  * git in a temp folder, because the main worktree prints a relative common dir unless the paths are absolute.
  */
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { basename, join } from 'node:path'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -29,6 +29,10 @@ const ANSWERS: Readonly<Record<string, RunResult>> = {
   [PLAIN]: { ...result('', 128), stderr: 'fatal: not a git repository (or any of the parent directories): .git\n' },
 }
 
+/** The folders that are gone, and a path that is a file: stat rejects on the first and gives a file for the second. */
+const DELETED = '/Users/test/code/removed-wt'
+const FILE_CWD = '/Users/test/code/alpha/README.md'
+
 function gitHost(answers: Readonly<Record<string, RunResult | Error>> = ANSWERS): { host: Host; calls: { argv: readonly string[]; options?: RunOptions }[] } {
   const calls: { argv: readonly string[]; options?: RunOptions }[] = []
   const host: Host = {
@@ -40,7 +44,10 @@ function gitHost(answers: Readonly<Record<string, RunResult | Error>> = ANSWERS)
     },
     list: refuse,
     read: refuse,
-    stat: refuse,
+    stat: async (path) => {
+      if (path === DELETED) throw new Error('ENOENT: no such file or directory')
+      return { kind: path === FILE_CWD ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false }
+    },
     now: refuse,
   }
   return { host, calls }
@@ -85,6 +92,16 @@ describe('readRepos: git rev-parse in each cwd, cached by cwd', () => {
     const again = await readRepos(second.host, [MAIN, WORKTREE, PLAIN], read.cache)
     expect(second.calls.map((call) => call.options?.cwd)).toEqual([PLAIN])
     expect(Object.keys(again.cache).sort()).toEqual([PLAIN, WORKTREE, MAIN].sort())
+  })
+
+  it('a deleted cwd, or a cwd that is a file, is no repo and not a failure: git does not run there', async () => {
+    const { host, calls } = gitHost()
+    const read = await readRepos(host, [MAIN, DELETED, FILE_CWD], {})
+    expect(read.failure).toBeUndefined()
+    expect(calls.map((call) => call.options?.cwd)).toEqual([MAIN])
+    expect(read.cache[DELETED]).toBeNull()
+    expect(read.cache[FILE_CWD]).toBeNull()
+    expect(repoOf(read.cache, DELETED)).toBeUndefined()
   })
 
   it('a git that does not run is a failure: the other cwds keep their answer, and that cwd is asked again on the next read', async () => {
@@ -163,26 +180,31 @@ describe('readRepos against the real git', () => {
     },
     list: refuse,
     read: refuse,
-    stat: refuse,
+    stat: async (path) => {
+      const stat = statSync(path)
+      return { kind: stat.isDirectory() ? 'dir' : stat.isFile() ? 'file' : 'other', size: stat.size, mtimeMs: stat.mtimeMs, isLink: false }
+    },
     now: refuse,
   }
 
-  it('a worktree and its repo share 1 absolute common dir; a plain folder is no repo', async () => {
+  it('a worktree and its repo share 1 absolute common dir; a plain folder and a removed worktree are no repo', async () => {
     const main = join(root, 'alpha')
     const worktree = join(root, 'alpha-wt')
     const plain = join(root, 'plain')
+    const removed = join(root, 'removed-wt')
     mkdirSync(join(main, 'src'), { recursive: true })
     mkdirSync(plain)
     git(main, 'init', '-q')
     git(main, 'commit', '-q', '--allow-empty', '-m', 'init')
     git(main, 'worktree', 'add', '-q', worktree)
 
-    const read = await readRepos(nodeHost, [main, join(main, 'src'), worktree, plain], {})
+    const read = await readRepos(nodeHost, [main, join(main, 'src'), worktree, plain, removed], {})
     expect(read.failure).toBeUndefined()
     const expected = { commonDir: join(main, '.git'), topLevel: main, name: basename(main), isWorktree: false }
     expect(repoOf(read.cache, main)).toEqual(expected)
     expect(repoOf(read.cache, join(main, 'src'))).toEqual(expected)
     expect(repoOf(read.cache, worktree)).toEqual({ commonDir: join(main, '.git'), topLevel: worktree, name: 'alpha', isWorktree: true })
     expect(read.cache[plain]).toBeNull()
+    expect(read.cache[removed]).toBeNull()
   })
 })
