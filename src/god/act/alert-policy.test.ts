@@ -30,9 +30,13 @@ function snapshot(at: number, levels: Readonly<Record<string, Level>>, over: Par
   return { at, selfId: 'god-self', firstRefreshDone: true, sessions, groups: [], mode: 'all', repos: [], groupBy: 'level', sources: base.sources, stats: base.stats, ...over }
 }
 
-/** 1 decision with sound on, nothing muted, the pane open, and the time of the new snapshot */
+/**
+ * 1 decision with sound on, nothing muted, the pane open, the time of the new snapshot, and a refresh 2 s before it
+ * (the collector refreshes every 2 s, and it stores a snapshot only when the snapshot changed)
+ */
 function decide(last: BoardSnapshot | undefined, next: BoardSnapshot, over: Partial<AlertInput> = {}): AlertDecision {
-  return decideAlerts({ ...(last === undefined ? {} : { last }), next, state: NO_ALERTS, store: { sound: true, muted: [] }, isPaneOpen: true, now: next.at, ...over })
+  const base = last === undefined ? {} : { last, lastRefreshAt: next.at - TICK }
+  return decideAlerts({ ...base, next, state: NO_ALERTS, store: { sound: true, muted: [] }, isPaneOpen: true, now: next.at, ...over })
 }
 
 /**
@@ -74,19 +78,33 @@ describe('an alert starts on a change into needs-you or stuck, and a done tone o
     expect(decide(last, next).alerts).toEqual([])
   })
 
-  it('gives none for the first snapshot, after a snapshot made before the first refresh, and for a session that shows for the first time', () => {
+  it('gives none for the first snapshot, after a snapshot made before the first refresh, and with no time of the last refresh', () => {
     const next = snapshot(T0 + TICK, { a: 'needs-you', b: 'stuck' })
+    const last = snapshot(T0, { a: 'working', b: 'working' })
     expect(decide(undefined, next).alerts).toEqual([])
     expect(decide(snapshot(T0, { a: 'working', b: 'working' }, { firstRefreshDone: false }), next).alerts).toEqual([])
-    expect(decide(snapshot(T0, {}), next).alerts).toEqual([])
-    // the control: the same new snapshot after a last snapshot that holds both sessions alerts for both
-    expect(decide(snapshot(T0, { a: 'working', b: 'working' }), next).alerts.map((alert) => alert.kind)).toEqual(['needs-you', 'stuck'])
+    expect(decideAlerts({ last, next, state: NO_ALERTS, store: { sound: true, muted: [] }, isPaneOpen: true, now: next.at }).alerts).toEqual([])
+    // the control: the same snapshots with a refresh 2 s before alert for both
+    expect(decide(last, next).alerts.map((alert) => alert.kind)).toEqual(['needs-you', 'stuck'])
   })
 
-  it('gives none when the last snapshot is more than 5 min old, so a pane that opens again does not ring for each change it missed', () => {
-    const next = snapshot(T0 + ALERT_WINDOW_MS + SECOND, { a: 'needs-you' })
-    expect(decide(snapshot(T0, { a: 'working' }), next).alerts).toEqual([])
-    expect(decide(snapshot(T0 + SECOND, { a: 'working' }), next).alerts).toEqual([needsYou('a')])
+  it('gives an alert to a session that shows for the first time in needs-you or stuck, and no done tone to one in your-turn', () => {
+    const next = snapshot(T0 + TICK, { wait: 'needs-you', stuck: 'stuck', turn: 'your-turn', work: 'working', rest: 'idle' })
+    expect(decide(snapshot(T0, { other: 'working' }), next).alerts).toEqual([needsYou('wait'), { sessionId: 'stuck', kind: 'stuck', playsTone: false, notifies: true }])
+    expect(decide(snapshot(T0, {}), snapshot(T0 + TICK, { turn: 'your-turn' })).alerts).toEqual([])
+  })
+
+  it('gives none when the last refresh is more than 5 min ago (a wake after sleep), so a pane that opens again does not ring for each change it missed', () => {
+    const next = snapshot(T0 + ALERT_WINDOW_MS + SECOND, { a: 'needs-you', fresh: 'stuck' })
+    const last = snapshot(T0, { a: 'working' })
+    expect(decide(last, next, { lastRefreshAt: T0 }).alerts).toEqual([])
+    expect(decide(last, next, { lastRefreshAt: T0 + SECOND }).alerts.map((alert) => alert.sessionId)).toEqual(['a', 'fresh'])
+  })
+
+  it('alerts on a quiet board: the last snapshot is 20 min old because nothing changed, and the last refresh was 2 s ago', () => {
+    const quiet = snapshot(T0 - 20 * MINUTE, { a: 'working', b: 'idle' })
+    const next = snapshot(T0, { a: 'stuck', b: 'idle' })
+    expect(decide(quiet, next, { lastRefreshAt: T0 - TICK }).alerts).toEqual([{ sessionId: 'a', kind: 'stuck', playsTone: true, notifies: true }])
   })
 })
 

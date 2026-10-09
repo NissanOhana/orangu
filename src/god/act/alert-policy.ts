@@ -6,9 +6,13 @@
  *   cmux tab of the session.
  * - A done tone starts when a session goes into your-turn: its turn ended after the person last saw it. It is a
  *   tone only, with no notification and no ring, because only needs-you and stuck start an alert.
- * - A change is a new level of a session that both snapshots hold. So the first snapshot, a session that shows for
- *   the first time and a last snapshot more than 5 min old give no alert: the pane does not ring for each session
- *   when it starts or opens again.
+ * - The last stored snapshot gives the levels before. The collector stores a snapshot only when it changed, so on
+ *   a quiet board that snapshot can be old. The gap rule reads the time of the last refresh instead: with no last
+ *   snapshot, a last snapshot from before the first refresh, no time of the last refresh, or a last refresh more
+ *   than 5 min ago (a wake after sleep), nothing goes out. So the pane does not ring for each session when it starts
+ *   or opens again.
+ * - A session that shows for the first time after such a base counts as a change when it shows in needs-you or
+ *   stuck: it can need the person from its first refresh (a trust dialog does). It gets no done tone.
  * - Each session gets 1 alert in 5 min or less: a second alert needs more than 5 min since the first. A done tone
  *   needs more than 5 min since the last alert and the last done tone of that session. So a done tone never holds
  *   back an alert, and it never adds a sound next to one.
@@ -47,8 +51,10 @@ export type Alert = {
 
 /** What 1 decision reads. */
 export type AlertInput = {
-  /** the snapshot before this one, absent before the first */
+  /** the last stored snapshot before this one, absent before the first: it gives the levels before */
   last?: BoardSnapshot
+  /** the time of the refresh before this one, whatever it changed: a gap of more than 5 min since it gives no alert */
+  lastRefreshAt?: number
   next: BoardSnapshot
   state: AlertState
   /** sound false turns every tone off; a muted session gets nothing */
@@ -85,17 +91,24 @@ function recentTimes(times: Readonly<Record<string, number>>, now: number, added
   return Object.fromEntries([...kept, ...added.map((sessionId): [string, number] => [sessionId, now])])
 }
 
-/** True when the last snapshot is a base to compare with: made after the first refresh, at most 5 min before now. */
-const isBase = (last: BoardSnapshot | undefined, now: number): last is BoardSnapshot =>
-  last !== undefined && last.firstRefreshDone && now - last.at <= ALERT_WINDOW_MS
+/**
+ * True when the last snapshot is a base to compare with: made after the first refresh, with a refresh before this
+ * one at most 5 min ago. The age of the snapshot itself does not count, because a quiet board stores none.
+ */
+const isBase = (last: BoardSnapshot | undefined, lastRefreshAt: number | undefined, now: number): last is BoardSnapshot =>
+  last !== undefined && last.firstRefreshDone && lastRefreshAt !== undefined && now - lastRefreshAt <= ALERT_WINDOW_MS
 
-/** The sessions that changed into a level with an alert kind, in board order, with that kind. */
+/**
+ * The sessions that changed into a level with an alert kind, in board order, with that kind. A session that the
+ * last snapshot does not hold changes only into needs-you or stuck.
+ */
 function changes(last: BoardSnapshot, next: BoardSnapshot): { sessionId: string; kind: AlertKind }[] {
   const before = new Map(last.sessions.map((session) => [session.sessionId, session.level]))
   return next.sessions.flatMap(({ sessionId, level }) => {
     const levelBefore = before.get(sessionId)
     const kind = KIND_OF_LEVEL[level]
-    return levelBefore === undefined || levelBefore === level || kind === undefined ? [] : [{ sessionId, kind }]
+    if (kind === undefined || levelBefore === level || (levelBefore === undefined && kind === 'done')) return []
+    return [{ sessionId, kind }]
   })
 }
 
@@ -104,7 +117,7 @@ export function decideAlerts(input: AlertInput): AlertDecision {
   const { last, next, store, now } = input
   const alertAt = recentTimes(input.state.alertAt, now)
   const doneAt = recentTimes(input.state.doneAt, now)
-  if (!isBase(last, now)) return { alerts: [], state: { alertAt, doneAt } }
+  if (!isBase(last, input.lastRefreshAt, now)) return { alerts: [], state: { alertAt, doneAt } }
 
   const muted = new Set(store.muted)
   const isHeldBack = (sessionId: string, kind: AlertKind): boolean =>
