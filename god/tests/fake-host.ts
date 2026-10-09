@@ -34,6 +34,12 @@ export type Machine = {
   repos: Record<string, readonly [string, string, string]>
   /** the first opens of the pane that the engine does not place, as in a terminal under 144 columns */
   unplacedOpens?: number
+  /** the session id of the god session; a /clear gives it a new one with no session.start */
+  selfId?: string
+  /** what the first `$.session.id()` answers, when the id changed after it (a /clear after the first read) */
+  selfIdAtStart?: string
+  /** the value of the `theme` row of the /config menu; absent, the menu has no theme row */
+  theme?: string
 }
 
 /** What the plugin asked the machine and the engine for. */
@@ -70,7 +76,7 @@ export function installMachine(on: On, machine: Machine): Calls {
     calls.runs.push({ argv: [...e.argv], ...(e.init === undefined ? {} : { init: { ...e.init } }) })
     const [command, ...rest] = e.argv
     if (command === 'claude') {
-      const self = { pid: 9000, cwd: HOME, kind: 'interactive', startedAt: 0, sessionId: SELF_ID, name: 'god', status: 'busy', waitingFor: null }
+      const self = { pid: 9000, cwd: HOME, kind: 'interactive', startedAt: 0, sessionId: machine.selfId ?? SELF_ID, name: 'god', status: 'busy', waitingFor: null }
       const rows = machine.sessions.map(({ pid, cwd, sessionId, name, status, waitingFor, statusUpdatedAt }) => ({ pid, cwd, kind: 'interactive', startedAt: statusUpdatedAt, sessionId, name, status, waitingFor: waitingFor ?? null }))
       return ran(JSON.stringify([self, ...rows]))
     }
@@ -110,9 +116,14 @@ export function installMachine(on: On, machine: Machine): Calls {
     return { value: { kind: 'file' as const, size: content(session).length, mtimeMs: session.transcriptMtimeMs ?? 0, isLink: false } }
   })
 
-  on('session.id', () => ({ value: SELF_ID }))
+  let idReads = 0
+  on('session.id', () => ({ value: idReads++ === 0 && machine.selfIdAtStart !== undefined ? machine.selfIdAtStart : (machine.selfId ?? SELF_ID) }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
-  on('config.list', () => ({ value: [] }))
+  on('config.list', () => {
+    if (machine.theme === undefined) return { value: [] }
+    const row = { key: 'theme', label: 'Theme', kind: 'choice' as const, value: machine.theme, provider: { plugin: 'core', tier: 'core' as const }, isLocked: false }
+    return { value: [row] }
+  })
   on('ui.open', (_$, e) => {
     calls.opens.push({ id: e.id, ...(e.title === undefined ? {} : { title: e.title }), ...(e.columns === undefined ? {} : { columns: e.columns }) })
     const isPlaced = calls.opens.length > (machine.unplacedOpens ?? 0)

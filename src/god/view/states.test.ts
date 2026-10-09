@@ -6,7 +6,8 @@
  */
 import { describe, expect, it } from 'vitest'
 import { SECOND } from '../../../test/fixtures/god/sessions.js'
-import { NOW, boardSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot } from '../../../test/fixtures/god/snapshots.js'
+import { NOW, boardSessions, boardSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
+import { NO_REPO_SET } from '../copy.js'
 import type { BoardSnapshot } from '../types.js'
 import { cellWidth } from './cells.js'
 import { cannotDrawView, paneLines, paneView, type PaneInput } from './pane.js'
@@ -48,6 +49,14 @@ describe('the states of the board pane', () => {
       if (other.kind !== 'message') throw new Error(other.kind)
       expect(other.keys).toBeUndefined()
     }
+  })
+
+  it('the repos mode with no repo set: the line says to type /god repos and a name, and the key row stays', () => {
+    const view = pane(snapshotOf(boardSessions(), {}, { mode: 'repos', repos: [] }))
+    if (view.kind !== 'message') throw new Error(view.kind)
+    expect(view.body.map(text)).toEqual([` ${NO_REPO_SET}`])
+    expect(NO_REPO_SET).toBe('No repo is selected. Type /god repos and a repo name.')
+    expect((view.keys ?? []).flatMap((line) => line.segments).some((segment) => segment.press?.hotkey === 'f')).toBe(true)
   })
 
   it('the repos mode keeps no session in a short pane: it says the pane is too short', () => {

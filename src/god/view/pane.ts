@@ -3,8 +3,8 @@
  * - At WIDE_FROM_COLUMNS or more, the body is the board column (BOARD_COLUMNS cells) left of the detail, and each
  *   rule meets the column rule at the board width. Below, the board takes the whole body.
  * - A board state (reading, no session, no session in the selected repos) shows its message under the header in
- *   place of the board. Only the state with no session in the selected repos keeps a rule and the key row under its
- *   message, because the message names the f key, and a key works only while its Button is drawn.
+ *   place of the board. The 2 states of the repos mode (no repo selected, no session of the selected repos) keep a
+ *   rule and the key row under their message, because f leaves them, and a key works only while its Button is drawn.
  * - The pane takes no more rows than `bodyRows`: the board shows only the lines that fit, around the selected row.
  * - When the pane cannot draw (a body under BOARD_COLUMNS, or too few rows for a window over the board), it shows
  *   1 message with the reason and nothing else.
@@ -79,7 +79,7 @@ export function paneView(input: PaneInput): PaneView {
     })
   if (state !== undefined || snapshot === undefined) {
     const body = messageLines(STATE_TEXT[state ?? 'reading'], bodyColumns)
-    const keys = state === 'no-repo-match' && snapshot !== undefined ? keysOf(snapshot).lines : []
+    const keys = (state === 'no-repo-match' || state === 'no-repo-set') && snapshot !== undefined ? keysOf(snapshot).lines : []
     if (header.length + 1 + body.length + (keys.length > 0 ? 1 + keys.length : 0) > bodyRows) return cannotDrawView('too-short', bodyColumns)
     const message = { kind: 'message' as const, header, topRule: ruleLine(bodyColumns), body }
     return keys.length > 0 ? { ...message, bottomRule: ruleLine(bodyColumns), keys } : message

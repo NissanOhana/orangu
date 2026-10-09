@@ -8,6 +8,8 @@
 //   engine state and store, and 1 timer of TICK_MS. The rules of each form are in src/god/control.ts.
 // - The pane draws the last snapshot from the engine state through the view (src/god/view/pane.ts). The selected
 //   row comes from the moves of the focus ring (ui.focus). The keys n, f and g are hotkey Buttons of the key row.
+// - The pane is on the screen from its first draw (the engine can place an unasked pane later) until ui.close. The
+//   status line shows only while it is not.
 // - Each hook that can fail has a .catch: the pane then draws the line that says it cannot draw.
 import { read, update } from 'claude-code'
 import type { EngineInterface, On, PluginOptions } from 'claude-code'
@@ -42,13 +44,13 @@ async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
 
 async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLoop> {
   const home = (await $.env.get('HOME')) ?? ''
-  const selfId = await $.session.id()
   const stored = await Promise.all(STORE_KEYS.map(async (key) => [key, await $.store.get(key)] as const))
   const collector = createCollector({ host: engineHost($), home, clock: engineClock })
   const loop = createBoardLoop({
     ports: {
       refresh: () => collector.refresh(),
       clock: engineClock,
+      selfId: () => $.session.id(),
       writeSnapshot: async (snapshot) => {
         await update($, BOARD, () => snapshot)
       },
@@ -58,7 +60,6 @@ async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLo
     },
     store: storeOf(Object.fromEntries(stored)),
     settings: runtime.settings,
-    selfId,
     paneStartedAt: engineClock(),
     isPaneOpen: runtime.isPaneOpen,
   })
@@ -88,6 +89,13 @@ async function openPane($: EngineInterface, runtime: Runtime): Promise<{ loop: B
   const loop = await start($, runtime)
   loop.setPaneOpen(opened.isPlaced)
   return { loop, isPlaced: opened.isPlaced }
+}
+
+/** The pane draws, so the engine placed it: the status line goes. */
+function markPaneShown(runtime: Runtime): void {
+  if (runtime.isPaneOpen) return
+  runtime.isPaneOpen = true
+  runtime.board?.setPaneOpen(true)
 }
 
 async function choose($: EngineInterface, runtime: Runtime, choice: (store: StoreState) => BoardChoice): Promise<void> {
@@ -144,6 +152,7 @@ export function register(on: On, options: PluginOptions): void {
   }).catch(() => ({ text: GOD_FAILED }))
 
   on('ui.render', { component: 'Pane', requestId: 'god' }, async ($, e) => {
+    markPaneShown(runtime)
     const [snapshot, selected, openGroups, colors] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME)])
     const view = paneView({
       ...(snapshot === null ? {} : { snapshot }),

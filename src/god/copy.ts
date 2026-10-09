@@ -29,6 +29,9 @@ export const godShowsRepos = (names: readonly string[]): string => `The god pane
 export const reposSetText = (names: readonly string[]): string =>
   names.length === 0 ? 'No repo is selected. Run /god repos <name> to select one.' : `The repos mode shows these repos: ${names.join(', ')}.`
 
+/** What the pane shows in the repos mode when no repo is selected. */
+export const NO_REPO_SET = 'No repo is selected. Type /god repos and a repo name.'
+
 /** What /god answers to a form that it does not know. */
 export const GOD_USAGE = 'Run /god to open the pane. Run /god all to show every session. Run /god repos <name> to show the sessions of a repo.'
 

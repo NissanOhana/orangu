@@ -2,6 +2,7 @@
  * The states of the board pane that show a message in place of the board, and the reasons that the pane cannot
  * draw. Each message is 1 sentence or 2, wrapped at whole words to the pane width, never cut.
  */
+import { NO_REPO_SET } from '../copy.js'
 import type { BoardSnapshot } from '../types.js'
 import { BOARD_COLUMNS } from './board.js'
 import { wrapWords } from './cells.js'
@@ -11,14 +12,16 @@ import type { Line } from './types.js'
  * A board state with a message in place of the board:
  * - reading: the first refresh did not end yet;
  * - no-sessions: no live session but the god session;
+ * - no-repo-set: the repos mode has no repo to keep (f with no repo selected);
  * - no-repo-match: the repos mode keeps none of the live sessions.
  */
-export type BoardState = 'reading' | 'no-sessions' | 'no-repo-match'
+export type BoardState = 'reading' | 'no-sessions' | 'no-repo-set' | 'no-repo-match'
 
 /** The message of each board state. */
 export const STATE_TEXT: Readonly<Record<BoardState, string>> = {
   reading: 'Reading sessions.',
   'no-sessions': 'No other Claude Code session runs now.',
+  'no-repo-set': NO_REPO_SET,
   'no-repo-match': 'No session of the selected repos runs now. Press f to show every session.',
 }
 
@@ -41,6 +44,7 @@ export const CANNOT_DRAW: Readonly<Record<CannotDraw, string>> = {
 export function boardStateOf(snapshot: BoardSnapshot | undefined): BoardState | undefined {
   if (snapshot === undefined || !snapshot.firstRefreshDone) return 'reading'
   if (snapshot.sessions.length === 0) return 'no-sessions'
+  if (snapshot.mode === 'repos' && snapshot.repos.length === 0) return 'no-repo-set'
   if (snapshot.groups.length === 0) return 'no-repo-match'
   return undefined
 }

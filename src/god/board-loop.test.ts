@@ -14,7 +14,7 @@ type Recorded = { snapshots: BoardSnapshot[]; store: Array<[string, unknown]>; s
 
 /** A loop over fake ports: the clock reads `time.now`, and each refresh answers the next queued facts. */
 function loopOf(queue: Array<Facts | Promise<Facts>>, over: { store?: StoreState; isPaneOpen?: boolean; ports?: Partial<BoardPorts> } = {}) {
-  const time = { now: NOW }
+  const time = { now: NOW, selfId: SELF }
   const recorded: Recorded = { snapshots: [], store: [], statuses: [], redraws: 0 }
   let last: Facts | Promise<Facts> | undefined
   const ports: BoardPorts = {
@@ -23,6 +23,7 @@ function loopOf(queue: Array<Facts | Promise<Facts>>, over: { store?: StoreState
       return Promise.resolve(last!)
     },
     clock: () => time.now,
+    selfId: async () => time.selfId,
     writeSnapshot: async (snapshot) => {
       recorded.snapshots.push(snapshot)
     },
@@ -37,7 +38,7 @@ function loopOf(queue: Array<Facts | Promise<Facts>>, over: { store?: StoreState
     },
     ...over.ports,
   }
-  const loop = createBoardLoop({ ports, store: over.store ?? STORE, settings: SETTINGS, selfId: SELF, paneStartedAt: PANE_START, isPaneOpen: over.isPaneOpen ?? true })
+  const loop = createBoardLoop({ ports, store: over.store ?? STORE, settings: SETTINGS, paneStartedAt: PANE_START, isPaneOpen: over.isPaneOpen ?? true })
   return { loop, time, recorded }
 }
 
@@ -52,6 +53,28 @@ describe('the board loop', () => {
     expect(recorded.snapshots[0]!.sessions.map((session) => session.sessionId)).toEqual(['s-a', 's-b'])
     expect(recorded.store).toEqual([['seenAt', { 's-a': PANE_START, 's-b': PANE_START }]])
     expect(loop.store().seenAt).toEqual({ 's-a': PANE_START, 's-b': PANE_START })
+  })
+
+  it('reads the id of the god session on each tick: after /clear the new id gets no row, and the old one does', async () => {
+    const sessions = [idle('god-a', { name: 'god' }), idle('god-b', { name: 'god' }), idle('s-b', { name: 'b' })]
+    const { loop, time } = loopOf([facts(sessions), facts(sessions)])
+    time.selfId = 'god-a'
+    await loop.tick()
+    expect(loop.snapshot()!.sessions.map((session) => session.sessionId).sort()).toEqual(['god-b', 's-b'])
+    time.selfId = 'god-b'
+    await loop.tick()
+    expect(loop.snapshot()!.selfId).toBe('god-b')
+    expect(loop.snapshot()!.sessions.map((session) => session.sessionId).sort()).toEqual(['god-a', 's-b'])
+  })
+
+  it('keeps in the stored seenAt only the sessions of the board, so the store does not grow past its limit', async () => {
+    const { loop, recorded } = loopOf([facts([idle('s-b', { name: 'b' })])], { store: { ...STORE, seenAt: { 's-gone': 5, 's-b': 7 } } })
+    await loop.tick()
+    expect(recorded.store).toEqual([])
+    const second = loopOf([facts([idle('s-b', { name: 'b' }), idle('s-new', { name: 'n' })])], { store: { ...STORE, seenAt: { 's-gone': 5, 's-b': 7 } } })
+    await second.loop.tick()
+    expect(second.recorded.store).toEqual([['seenAt', { 's-b': 7, 's-new': PANE_START }]])
+    expect(second.loop.store().seenAt).toEqual({ 's-b': 7, 's-new': PANE_START })
   })
 
   it('writes nothing again when the facts and the clock give the same board', async () => {

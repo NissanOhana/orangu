@@ -12,6 +12,7 @@ var GOD_NOT_PLACED = "The god pane waits for more room. Make the terminal wider.
 var GOD_SHOWS_ALL = "The god pane shows every live session.";
 var godShowsRepos = (names) => `The god pane shows the sessions of these repos: ${names.join(", ")}.`;
 var reposSetText = (names) => names.length === 0 ? "No repo is selected. Run /god repos <name> to select one." : `The repos mode shows these repos: ${names.join(", ")}.`;
+var NO_REPO_SET = "No repo is selected. Type /god repos and a repo name.";
 var GOD_USAGE = "Run /god to open the pane. Run /god all to show every session. Run /god repos <name> to show the sessions of a repo.";
 var GOD_FAILED = "The god command failed. Run /god again.";
 var needYouStatus = (count2) => `god: ${count2} ${count2 === 1 ? "needs" : "need"} you`;
@@ -711,9 +712,10 @@ function shownTimes(snapshot) {
   return `${rows}|${oldAge}`;
 }
 function createBoardLoop(options) {
-  const { ports, settings, selfId, paneStartedAt } = options;
+  const { ports, settings, paneStartedAt } = options;
   let store = options.store;
   let isPaneOpen = options.isPaneOpen;
+  let selfId = "";
   let latest2;
   let written;
   let drawnTimes;
@@ -730,9 +732,10 @@ function createBoardLoop(options) {
     shownStatus = text;
     ports.showStatus(text);
   }
-  async function keepFirstSight(firstSight) {
+  async function keepFirstSight(snapshot, firstSight) {
     if (Object.keys(firstSight).length === 0) return;
-    const seenAt = { ...store.seenAt, ...firstSight };
+    const kept = snapshot.sessions.flatMap(({ sessionId }) => Object.hasOwn(store.seenAt, sessionId) ? [[sessionId, store.seenAt[sessionId]]] : []);
+    const seenAt = { ...Object.fromEntries(kept), ...firstSight };
     try {
       await ports.writeStore("seenAt", seenAt);
       store = { ...store, seenAt };
@@ -750,7 +753,7 @@ function createBoardLoop(options) {
       now,
       ...written === void 0 ? {} : { previous: written }
     });
-    await keepFirstSight(firstSight);
+    await keepFirstSight(snapshot, firstSight);
     const times = shownTimes(snapshot);
     if (isSnapshotChanged(written, snapshot)) {
       await ports.writeSnapshot(snapshot);
@@ -765,6 +768,7 @@ function createBoardLoop(options) {
   return {
     tick: async () => {
       try {
+        selfId = await ports.selfId();
         const facts = await ports.refresh();
         if (latest2 === void 0 || facts.stats.at >= latest2.stats.at) latest2 = facts;
         await serial(publish);
@@ -2698,6 +2702,7 @@ var THEME = atom({ plugin: "orangu-god", key: "theme" }, "dark");
 var STATE_TEXT = {
   reading: "Reading sessions.",
   "no-sessions": "No other Claude Code session runs now.",
+  "no-repo-set": NO_REPO_SET,
   "no-repo-match": "No session of the selected repos runs now. Press f to show every session."
 };
 var CANNOT_DRAW = {
@@ -2708,6 +2713,7 @@ var CANNOT_DRAW = {
 function boardStateOf(snapshot) {
   if (snapshot === void 0 || !snapshot.firstRefreshDone) return "reading";
   if (snapshot.sessions.length === 0) return "no-sessions";
+  if (snapshot.mode === "repos" && snapshot.repos.length === 0) return "no-repo-set";
   if (snapshot.groups.length === 0) return "no-repo-match";
   return void 0;
 }
@@ -2874,7 +2880,7 @@ function paneView(input) {
   });
   if (state !== void 0 || snapshot === void 0) {
     const body = messageLines(STATE_TEXT[state ?? "reading"], bodyColumns);
-    const keys2 = state === "no-repo-match" && snapshot !== void 0 ? keysOf(snapshot).lines : [];
+    const keys2 = (state === "no-repo-match" || state === "no-repo-set") && snapshot !== void 0 ? keysOf(snapshot).lines : [];
     if (header.length + 1 + body.length + (keys2.length > 0 ? 1 + keys2.length : 0) > bodyRows) return cannotDrawView("too-short", bodyColumns);
     const message = { kind: "message", header, topRule: ruleLine(bodyColumns), body };
     return keys2.length > 0 ? { ...message, bottomRule: ruleLine(bodyColumns), keys: keys2 } : message;
@@ -2907,13 +2913,13 @@ async function readTheme($, runtime) {
 }
 async function startBoard($, runtime) {
   const home = await $.env.get("HOME") ?? "";
-  const selfId = await $.session.id();
   const stored = await Promise.all(STORE_KEYS.map(async (key) => [key, await $.store.get(key)]));
   const collector = createCollector({ host: engineHost($), home, clock: engineClock });
   const loop = createBoardLoop({
     ports: {
       refresh: () => collector.refresh(),
       clock: engineClock,
+      selfId: () => $.session.id(),
       writeSnapshot: async (snapshot) => {
         await update($, BOARD, () => snapshot);
       },
@@ -2923,7 +2929,6 @@ async function startBoard($, runtime) {
     },
     store: storeOf(Object.fromEntries(stored)),
     settings: runtime.settings,
-    selfId,
     paneStartedAt: engineClock(),
     isPaneOpen: runtime.isPaneOpen
   });
@@ -2949,6 +2954,11 @@ async function openPane($, runtime) {
   const loop = await start($, runtime);
   loop.setPaneOpen(opened.isPlaced);
   return { loop, isPlaced: opened.isPlaced };
+}
+function markPaneShown(runtime) {
+  if (runtime.isPaneOpen) return;
+  runtime.isPaneOpen = true;
+  runtime.board?.setPaneOpen(true);
 }
 async function choose($, runtime, choice) {
   const loop = await start($, runtime);
@@ -2996,6 +3006,7 @@ function register(on, options) {
     return { text: commandAnswer(command, { isPlaced, repos: loop.store().repos }) };
   }).catch(() => ({ text: GOD_FAILED }));
   on("ui.render", { component: "Pane", requestId: "god" }, async ($, e) => {
+    markPaneShown(runtime);
     const [snapshot, selected, openGroups, colors] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME)]);
     const view = paneView({
       ...snapshot === null ? {} : { snapshot },

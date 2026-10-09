@@ -32,12 +32,12 @@ function machineAt(t0: number): Machine {
 type Setup = { machine: Machine; t0: number; clock: ReturnType<typeof mock.clock> }
 
 /** The fake machine, the clock, the store and the environment beneath the plugin, then the session start. */
-async function begin($: Engine, on: On, surface: (typeof SURFACES)[number]) {
+async function begin($: Engine, on: On, surface: (typeof SURFACES)[number], over: Partial<Machine> = {}, env: Record<string, string> = {}) {
   const t0 = Date.now()
-  const machine = machineAt(t0)
+  const machine: Machine = { ...machineAt(t0), ...over }
   const calls = installMachine(on, machine)
   const clock = mock.clock(on, { now: t0 })
-  mock.env(on, { HOME })
+  mock.env(on, { HOME, ...env })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: PLAIN, surface, isInteractive: true })
   const setup: Setup = { machine, t0, clock }
@@ -45,6 +45,21 @@ async function begin($: Engine, on: On, surface: (typeof SURFACES)[number]) {
 }
 
 const god = (args = '') => ({ command: 'god', args, origin: { kind: 'composer' as const }, presentation: { isFullscreen: true, columns: 200 } })
+
+/** An inline plugin with 1 command that closes the god pane, as the close mark of the person does. */
+const CLOSER = {
+  name: 'closer',
+  register(on: On) {
+    on('session.start', async ($, e, next) => {
+      await $.command.register({ name: 'close-god', description: 'Closes the god pane.' })
+      return next(e)
+    })
+    on('command.run', { command: 'close-god' }, async ($) => {
+      await $.ui.close({ id: 'god' })
+      return { text: 'closed' }
+    })
+  },
+}
 
 for (const surface of SURFACES) {
   test(`${surface}: /god draws 1 row per live session in level order, and leaves out the god session`, async ($, on) => {
@@ -106,6 +121,13 @@ for (const surface of SURFACES) {
     expect((await $.command.run(god('all'))).text).toBe('The god pane shows every live session.')
     expect(await shown()).toEqual(['ask-a', 'work-wt', 'stuck-b', 'idle-p'])
     expect((await $.command.run(god('repos'))).text).toBe('No repo is selected. Run /god repos <name> to select one.')
+    await ui.press({ key: 'key:f' })
+    await ui.redraw()
+    const empty = screenOf(await ui.drawn())
+    expect(empty).toContain(' No repo is selected. Type /god repos and a repo name.')
+    expect(await shown()).toEqual([])
+    await ui.press({ key: 'key:f' })
+    expect(await shown()).toEqual(['ask-a', 'work-wt', 'stuck-b', 'idle-p'])
   })
 
   test(`${surface}: below 90 columns only the board draws, and from 90 the detail column sits right of a rule`, async ($, on) => {
@@ -176,17 +198,49 @@ for (const surface of SURFACES) {
   })
 
   test(`${surface}: while the pane is not on the screen the status line counts the sessions that need you`, async ($, on) => {
-    const t0 = Date.now()
-    const machine = { ...machineAt(t0), unplacedOpens: 1 }
-    const calls = installMachine(on, machine)
-    const clock = mock.clock(on, { now: t0 })
-    mock.env(on, { HOME, ORANGU_GOD: '1' })
-    on('session.start', (_$, e) => ({ cwd: e.cwd }))
-    await $.session.start({ cwd: PLAIN, surface, isInteractive: true })
+    const { clock, calls } = await begin($, on, surface, { unplacedOpens: 1 }, { ORANGU_GOD: '1' })
     await clock.settle()
     expect(calls.statuses).toEqual(['god: 1 needs you'])
     await $.command.run(god())
     expect(calls.statuses).toEqual(['god: 1 needs you', undefined])
+  })
+
+  test(`${surface}: the status line goes when the engine places the pane later, and comes back when the pane closes`, { plugins: [CLOSER] }, async ($, on) => {
+    const { clock, calls } = await begin($, on, surface, { unplacedOpens: 1 }, { ORANGU_GOD: '1' })
+    await clock.settle()
+    expect(calls.statuses).toEqual(['god: 1 needs you'])
+    await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(110, 30) })
+    expect(calls.statuses).toEqual(['god: 1 needs you', undefined])
+    await $.command.run({ ...god(), command: 'close-god' })
+    expect(calls.statuses).toEqual(['god: 1 needs you', undefined, 'god: 1 needs you'])
+  })
+
+  test(`${surface}: when the id of the god session changes with no session.start (a /clear), the new id gets no row`, async ($, on) => {
+    const { clock } = await begin($, on, surface, { selfIdAtStart: 'god-self-before', selfId: 'god-self-after' })
+    await $.command.run(god())
+    await clock.settle()
+    // the first tick read the id before the /clear; the next tick reads the new one
+    await clock.advance(2000)
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(80, 30) })
+    const keys = (await ui.findAll({ type: 'Button' })).map((button) => button.key)
+    expect(keys.filter((key) => key?.startsWith('god-self'))).toEqual([])
+    expect(keys.filter((key) => key?.startsWith('ses-'))).toHaveLength(4)
+  })
+
+  test(`${surface}: the pane draws with the colors of the session theme, and follows a change of it`, async ($, on) => {
+    const { clock, machine } = await begin($, on, surface)
+    await $.command.run(god())
+    await clock.settle()
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(80, 30) })
+    const headingColor = async (): Promise<unknown> => {
+      await ui.redraw()
+      return (await ui.findAll({ type: 'Text', text: 'NEEDS YOU' })).find((text) => text.props['color'] !== undefined)?.props['color']
+    }
+    // the --bad token of src/report/client/tokens.css: the dark set with no theme row, the light set for `light`
+    expect(await headingColor()).toBe('#f0a08b')
+    machine.theme = 'light'
+    await clock.advance(2000)
+    expect(await headingColor()).toBe('#a03016')
   })
 }
 

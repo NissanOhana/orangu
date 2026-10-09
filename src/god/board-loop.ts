@@ -2,12 +2,15 @@
  * The board loop of the god pane: what the engine does on each tick, as pure code over ports, so the engine shell
  * (src/god/register.tsx) only connects the ports to `$`.
  *
- * - A tick refreshes the facts through the collector, then publishes. A tick that comes while a refresh runs gets
- *   the last facts again, and still publishes, so facts that stop moving show as old after 10 s.
+ * - A tick reads the session id of the god session and refreshes the facts through the collector, then publishes. The
+ *   id can change with no session start (a /clear), so the board reads it on each tick and leaves out the new one.
+ *   A tick that comes while a refresh runs gets the last facts again, and still publishes, so facts that stop moving
+ *   show as old after 10 s.
  * - A publish makes a snapshot from the newest facts that any refresh gave (a slow refresh that ends after a faster
  *   one never takes the board back), the stored choices and the settings, with the last written snapshot as
  *   `previous`. It adds the first-sight times to the store, and writes the snapshot only when isSnapshotChanged
- *   says so. Publishes run 1 at a time.
+ *   says so. Publishes run 1 at a time. The stored seenAt keeps only the sessions of the board, so the store (4 MiB
+ *   at most) does not grow with each session that ever ran.
  * - When the snapshot did not change, but a time that the open pane shows moved (the time in a level, the age of
  *   old facts), the loop asks the pane to draw again: the pane reads the clock while it draws.
  * - The status line counts the sessions that need you while the pane is not on the screen, and changes only when
@@ -27,6 +30,8 @@ export type BoardPorts = {
   refresh: () => Promise<Facts>
   /** the time now, with no wait */
   clock: () => number
+  /** the session id of the god session now */
+  selfId: () => Promise<string>
   writeSnapshot: (snapshot: BoardSnapshot) => Promise<void>
   writeStore: (key: StoreKey, value: unknown) => Promise<void>
   /** sets the status line; undefined clears it */
@@ -40,8 +45,6 @@ export type BoardLoopOptions = {
   /** the stored choices when the loop starts */
   store: StoreState
   settings: Settings
-  /** the session id of the god session */
-  selfId: string
   /** when the pane started: the first-sight time of a session that the store does not hold */
   paneStartedAt: number
   /** true when the pane is on the screen */
@@ -70,9 +73,10 @@ function shownTimes(snapshot: BoardSnapshot): string {
 }
 
 export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
-  const { ports, settings, selfId, paneStartedAt } = options
+  const { ports, settings, paneStartedAt } = options
   let store = options.store
   let isPaneOpen = options.isPaneOpen
+  let selfId = ''
   let latest: Facts | undefined
   let written: BoardSnapshot | undefined
   let drawnTimes: string | undefined
@@ -93,9 +97,11 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
     ports.showStatus(text)
   }
 
-  async function keepFirstSight(firstSight: Record<string, number>): Promise<void> {
+  /** Writes the first-sight times with the stored times of the sessions that the board still has. */
+  async function keepFirstSight(snapshot: BoardSnapshot, firstSight: Record<string, number>): Promise<void> {
     if (Object.keys(firstSight).length === 0) return
-    const seenAt = { ...store.seenAt, ...firstSight }
+    const kept = snapshot.sessions.flatMap(({ sessionId }) => (Object.hasOwn(store.seenAt, sessionId) ? [[sessionId, store.seenAt[sessionId]!] as const] : []))
+    const seenAt = { ...Object.fromEntries(kept), ...firstSight }
     try {
       await ports.writeStore('seenAt', seenAt)
       store = { ...store, seenAt }
@@ -115,7 +121,7 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
       now,
       ...(written === undefined ? {} : { previous: written }),
     })
-    await keepFirstSight(firstSight)
+    await keepFirstSight(snapshot, firstSight)
     const times = shownTimes(snapshot)
     if (isSnapshotChanged(written, snapshot)) {
       await ports.writeSnapshot(snapshot)
@@ -131,6 +137,7 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
   return {
     tick: async () => {
       try {
+        selfId = await ports.selfId()
         const facts = await ports.refresh()
         if (latest === undefined || facts.stats.at >= latest.stats.at) latest = facts
         await serial(publish)
