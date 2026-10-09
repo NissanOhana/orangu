@@ -410,7 +410,7 @@ export interface InstructionRule {
   calls: number
   /** the part of `calls` that subagents made */
   agentCalls: number
-  /** up to 3 distinct matching commands (the target and at most 2 words after it) or tool names */
+  /** up to 3 distinct matches: a runner and the target (`npx next build`), a program and a flag, or a tool name */
   examples: string[]
   /** when the rule entered the context, when known */
   since?: number

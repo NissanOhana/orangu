@@ -107,7 +107,10 @@ export function extractRules(text: string, mcpServers: ReadonlySet<string> = new
     const raw = lines[i]!.replace(/[’‘]/g, "'")
     if (!raw.includes('`') && !/never|not|avoid|stop|instead|rather|prefer/i.test(raw)) continue
     const spans: string[] = []
-    const masked = raw.replace(/`([^`]+)`/g, (_m, inner: string) => ` ${SPAN}${spans.push(inner) - 1}${SPAN} `)
+    // a code span becomes a placeholder, then markdown emphasis goes, so "bare.** Both" ends its sentence
+    const masked = raw
+      .replace(/`([^`]+)`/g, (_m, inner: string) => ` ${SPAN}${spans.push(inner) - 1}${SPAN} `)
+      .replace(/\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])/g, '')
     const targets: RuleTarget[] = []
     const add = (ts: RuleTarget[]) => {
       for (const t of ts) if (!targets.some((x) => sameTarget(x, t))) targets.push(t)
@@ -147,19 +150,15 @@ function boundaryAt(seg: string, at: number): boolean {
 }
 
 /**
- * The part of a segment that a command target matches, or null. The segment must START with the target, or with
+ * The runner and the target when a segment breaks a command rule, or null. The segment must START with the target, or with
  * one runner and then the target. An env assignment in front (`NODE_OPTIONS=... next build`) is not a match, so a
  * rule that says "never run `next build` bare" holds when the command carries what the rule asks for.
  */
 export function matchCommand(seg: string, target: string): string | null {
   const starts = [0]
   for (const r of RUNNERS) if (seg.startsWith(r)) starts.push(r.length)
-  for (const at of starts) {
-    if (seg.startsWith(target, at) && boundaryAt(seg, at + target.length)) {
-      const tail = seg.slice(at + target.length).trim().split(' ').filter(Boolean).slice(0, 2)
-      return [seg.slice(0, at + target.length), ...tail].join(' ')
-    }
-  }
+  // the match is the runner (a fixed word) and the target (the rule's own text): nothing the transcript wrote
+  for (const at of starts) if (seg.startsWith(target, at) && boundaryAt(seg, at + target.length)) return seg.slice(0, at + target.length)
   return null
 }
 
@@ -182,7 +181,9 @@ export function callMatches(c: ToolCall, t: RuleTarget, segs: readonly string[] 
       const hit = matchCommand(seg, t.name)
       if (hit) return hit
     } else if (seg.split(' ').some((w) => w === t.name || w.startsWith(t.name + '='))) {
-      return seg.split(' ').slice(0, 3).join(' ')
+      // the program's own name and the flag, so a path or an argument never leaves the session
+      const program = seg.split(' ')[0]!.replace(/^.*\//, '')
+      return /^[a-z][a-z0-9.+-]*$/.test(program) ? `${program} ${t.name}` : t.name
     }
   }
   return null
