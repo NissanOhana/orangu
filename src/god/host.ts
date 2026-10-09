@@ -47,6 +47,11 @@ export type RunResult = {
 export type RunOptions = {
   /** the working directory of the command, absolute; absent, the session's own */
   cwd?: string
+  /**
+   * Variables set over the environment of the host for this command only. The registry writes procStart in UTC,
+   * so the reused-PID check runs `ps -o pid=,tty=,lstart= -p <pids>` with `{ TZ: 'UTC' }`.
+   */
+  env?: Readonly<Record<string, string>>
 }
 
 /** 1 entry of a folder listing. A link is not followed. */

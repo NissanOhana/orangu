@@ -86,7 +86,12 @@ export type AgentRow = {
 export type RegistryRow = AgentRow & {
   /** when the status last changed (the file writes no heartbeat, so this is also its last write) */
   statusUpdatedAt?: number
-  /** the process start time as `ps -o lstart=` writes it, for the check against a reused PID */
+  /**
+   * The process start time in UTC, in the format of `ps -o lstart=` (for example `Thu Oct  8 21:26:02 2026`).
+   * Plain `ps -o lstart=` writes local time, so the check against a reused PID runs
+   * `ps -o pid=,tty=,lstart= -p <pids>` with the env `{ TZ: 'UTC' }`. It compares the lstart field of `ps`, with
+   * its padding trimmed, to this string as it is, with no change to epoch.
+   */
   procStart?: string
   /** the Claude Code version of the session */
   version?: string
@@ -97,7 +102,7 @@ export type RegistryRow = AgentRow & {
 /**
  * 1 live session after the collector merged the agents list and the registry: 1 per session id. A session is
  * live when its PID is in the last agents list, or when its registry file is newer than that list. When the
- * agents list fails, a PID counts only when `ps` shows the start time of its procStart.
+ * agents list fails, a PID counts only when `ps` in UTC shows the start time of its procStart (RegistryRow).
  */
 export type LiveSession = AgentRow & {
   /** when the status last changed: the registry statusUpdatedAt; absent when no registry file has the session */
