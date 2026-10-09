@@ -45,6 +45,7 @@ describe('isCorrection', () => {
       'a stopwatch for the build',
       'tell me what we did and what is still missing',
       'you are not allowed to push to main',
+      "don't work on the backend yet",
     ]) {
       expect(isCorrection(p), p).toBe(false)
     }

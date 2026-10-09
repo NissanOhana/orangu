@@ -32,6 +32,7 @@ import { basename, join } from 'node:path'
 import { redactValue, scrubStr } from '../redact/redact.js'
 import { contentWords } from '../analyze/instructions.js'
 import { projectSlug } from '../discover/discover.js'
+import { MEMORY_INDEX_PATH_RE } from './enforcement.js'
 import { argv0Basename } from './names.js'
 import type {
   HarnessAgentEntry,
@@ -73,24 +74,28 @@ export interface CollectOptions {
   instructionWords?: Set<string>
 }
 
-/** Claude Code loads the first 200 lines or the first 25,000 bytes of MEMORY.md, whichever comes first (docs: memory) */
+/**
+ * Claude Code loads the first 200 lines or about the first 25KB of MEMORY.md, whichever comes first (docs: memory).
+ * It counts the 25,000 in CHARACTERS (JavaScript string length), not bytes: a real transcript kept 113 lines of
+ * 24,945 characters, which are 25,169 bytes. Its warning prints that count as "24.4KB".
+ */
 export const MEMORY_INDEX_LINE_LIMIT = 200
-export const MEMORY_INDEX_BYTE_LIMIT = 25_000
+export const MEMORY_INDEX_CHAR_LIMIT = 25_000
 
 /**
  * Where Claude Code cuts an auto-memory index at load: the whole lines that fit in both limits stay, the rest
  * goes. Its own warning counts the same way ("3 of 117 lines were cut off, starting at line 115").
  */
-export function memoryIndexCut(text: string): { lines: number; linesPastLimit: number; firstLinePastLimit?: number } {
+export function memoryIndexCut(text: string): { lines: number; chars: number; linesPastLimit: number; firstLinePastLimit?: number } {
   const lines = text === '' ? [] : text.split('\n')
   if (lines.length && lines[lines.length - 1] === '') lines.pop()
-  let bytes = 0
+  let chars = 0
   for (let i = 0; i < lines.length; i++) {
-    const next = bytes + Buffer.byteLength(lines[i]!, 'utf8')
-    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_BYTE_LIMIT) return { lines: lines.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 }
-    bytes = next + 1
+    const next = chars + lines[i]!.length
+    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_CHAR_LIMIT) return { lines: lines.length, chars: text.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 }
+    chars = next + 1
   }
-  return { lines: lines.length, linesPastLimit: 0 }
+  return { lines: lines.length, chars: text.length, linesPastLimit: 0 }
 }
 
 const DEFAULT_MAX_FILE_BYTES = 1_000_000
@@ -673,7 +678,9 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
 
   // ---- auto-memory indexes: the cwd's project (or every project under a global scan), plus each one a session loaded ----
   const memoryIndexes: HarnessMemoryIndexFile[] = []
-  const indexPaths = new Set<string>(opts.memoryIndexPaths ?? [])
+  // a path a transcript names is read only when it IS a memory index under a scanned root: never another file
+  const underRoot = (p: string) => liveRoots.some((root) => p.startsWith(join(root, 'projects') + '/'))
+  const indexPaths = new Set<string>((opts.memoryIndexPaths ?? []).filter((p) => MEMORY_INDEX_PATH_RE.test(p) && underRoot(p) && !p.split(/[\\/]/).includes('..')))
   for (const root of liveRoots) {
     const projects = join(root, 'projects')
     if (opts.allProjects) {
@@ -691,7 +698,7 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
     if (text === null) continue
     const bytes = Buffer.byteLength(text, 'utf8')
     const cut = memoryIndexCut(text)
-    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, approxTokens: approxTokens(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...(cut.firstLinePastLimit !== undefined ? { firstLinePastLimit: cut.firstLinePastLimit } : {}) })
+    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, chars: cut.chars, approxTokens: approxTokens(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...(cut.firstLinePastLimit !== undefined ? { firstLinePastLimit: cut.firstLinePastLimit } : {}) })
     // the topic notes beside the index load on demand; their words still count as "a note exists"
     if (ctx.words) {
       for (const w of contentWords(text, { cap: Infinity })) ctx.words.add(w)

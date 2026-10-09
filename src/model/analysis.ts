@@ -401,7 +401,7 @@ export interface InstructionRule {
   /** the instruction file, as the session loaded or wrote it */
   path: string
   source: 'loaded' | 'written'
-  /** 1-based line in that text */
+  /** 1-based line in that text; 0 when an Edit wrote it, because an Edit snippet does not carry the file's lines */
   line: number
   /** the whole line, trimmed */
   text: string

@@ -56,7 +56,7 @@ function report(over: Partial<HarnessReport> = {}): HarnessReport {
     },
     retention: { effectiveDays: 30, isDefault: true, sweepable: { sessions: 12, bytes: 90_000 }, exempt: { sessions: 0, bytes: 0 }, oldestSweepableDays: 9, expiringSoon: { sessions: 0, bytes: 0, windowDays: 7 }, pastCutoff: { sessions: 0, bytes: 0 } },
     enforcement: {
-      counts: { sessionsWithRecord: 0, rulesInContext: 0, rulesBroken: 0, rulesEnforced: 0, notesWritten: 0, feedbackNotes: 0, notesFollowedByComplaint: 0, complaints: 0, memoryIndexesCut: 0 },
+      counts: { sessionsWithRecord: 0, rulesInContext: 0, rulesBroken: 0, rulesEnforced: 0, notesWritten: 0, feedbackNotes: 0, notesFollowedByComplaint: 0, complaints: 0, recurringComplaintWords: 0, memoryIndexesCut: 0 },
       broken: [],
       notes: [],
       memory: [],

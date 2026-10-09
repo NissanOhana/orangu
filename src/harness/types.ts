@@ -60,11 +60,13 @@ export interface HarnessMemoryFile {
 
 /**
  * An auto-memory index (`<config>/projects/<slug>/memory/MEMORY.md`). Claude Code loads the first 200 lines or the
- * first 25,000 bytes at session start, whichever comes first, and drops the rest: the newest entries, at the end.
+ * first 25,000 characters at session start, whichever comes first, and drops the rest: the newest entries, at the end.
  */
 export interface HarnessMemoryIndexFile {
   file: string
   bytes: number
+  /** the length that the 25,000 load limit counts */
+  chars: number
   approxTokens: number
   lines: number
   /** lines that the next session will not load; 0 when the file fits */
@@ -425,12 +427,13 @@ export interface HarnessPromptRef {
  * text and target, so the same line in a worktree copy of CLAUDE.md is one rule.
  */
 export interface HarnessRuleRow {
-  /** the shortest path the rule was seen in (the main checkout, not a worktree copy) */
+  /** a file the rule was seen in: one with a known line first, then the shortest path (the main checkout) */
   file: string
   /** how many distinct files carried the same line */
   files: number
+  /** 1-based; 0 when only a session's Edit wrote the rule, so no file line is known */
   line: number
-  /** the whole instruction line, trimmed and scrubbed */
+  /** the whole instruction line, trimmed and scrubbed; empty without --include-text (read it at `file:line`) */
   text: string
   target: { kind: 'command' | 'flag' | 'tool' | 'mcp-server'; name: string }
   /** sessions that had the rule in context */
@@ -474,7 +477,7 @@ export interface HarnessNoteRow {
   matchingComplaints: number
   /** ms from the first write to the first matching complaint */
   firstMatchAfterMs?: number
-  /** the shared words, most frequent first */
+  /** the shared words, most frequent first; empty without --include-text */
   sharedWords: string[]
   /** up to 3 matching complaints */
   examples: HarnessPromptRef[]
@@ -486,6 +489,7 @@ export interface HarnessMemoryLoadRow {
   /** the file now; absent when it is gone */
   lines?: number
   bytes?: number
+  chars?: number
   linesPastLimit?: number
   firstLinePastLimit?: number
   /** sessions whose transcript says they loaded this index */
@@ -525,6 +529,8 @@ export interface HarnessEnforcementCounts {
   notesFollowedByComplaint: number
   /** complaint prompts in the scanned sessions */
   complaints: number
+  /** words in complaint prompts of 2 or more sessions; their rows are in `complaints` only with --include-text */
+  recurringComplaintWords: number
   /** memory indexes cut in a session or past the limit now */
   memoryIndexesCut: number
 }
@@ -541,7 +547,7 @@ export interface HarnessEnforcement {
   /** the feedback notes written in the window, the most matching complaints first */
   notes: HarnessNoteRow[]
   memory: HarnessMemoryLoadRow[]
-  /** words in complaint prompts of 2 or more sessions, the most sessions first */
+  /** words in complaint prompts of 2 or more sessions, the most sessions first; only with --include-text */
   complaints: HarnessComplaintRow[]
 }
 

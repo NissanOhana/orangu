@@ -4125,7 +4125,7 @@ function hasPrCreate(cmd) {
   });
 }
 var CORRECTION_START_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorrect|revert|undo|again[,.!]|still (broken|failing|wrong|not)|didn'?t work|doesn'?t work|you broke|why did you|stop[,.!]|don'?t do that|i said|as i said|i asked)/i;
-var CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not|dont|don'?t) work(?:s|ing)?\b|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|you(?:'re| are) not [a-z]+ing\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i;
+var CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not) work(?:s|ing)?\b|(?:dont|don'?t) work(?:s|ing)?\b(?!\s+on\b)|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|you(?:'re| are) not [a-z]+ing\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i;
 function isCorrection(text3) {
   return CORRECTION_START_RE.test(text3) || CORRECTION_ANY_RE.test(text3);
 }
@@ -4266,7 +4266,7 @@ var BARE_TOOL_TARGETS = /* @__PURE__ */ new Set(["WebFetch", "WebSearch", "TodoW
 var RUNNERS = ["npx ", "npm run ", "npm exec ", "pnpm run ", "pnpm exec ", "pnpm dlx ", "pnpm ", "yarn run ", "yarn dlx ", "yarn ", "bunx ", "bun run ", "bun x "];
 var NEGATIVE_RE = /\b(?:never|do not|don't|dont|must not|mustn't|should not|shouldn't|stop)\s+(?:ever\s+)?(?:use|using|run|running|call|calling|invoke|invoking|execute|executing)\b|\bavoid(?:ing)?\b/gi;
 var CODE_VERB_RE = /\b(?:call|calling|invoke|invoking)$/i;
-var CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[\u2014\u2013-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except)\b/i;
+var CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[\u2014\u2013-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except|without|before|after|while|until|when|whenever|if|then|first|so|because|always)\b/i;
 var INSTEAD_RE = /\b(?:instead of|rather than)\s+/gi;
 var NOT_RE = /(?:,\s*|\s)not\s+/gi;
 var OVER_RE = /\bprefer\b[^.;]*?\bover\s+/gi;
@@ -4378,7 +4378,7 @@ function extractRules(text3, mcpServers = /* @__PURE__ */ new Set()) {
   return out3;
 }
 function commandSegments(cmd) {
-  return cmd.split(/&&|\|\||[;|\n]/).map((s) => s.trim().replace(/^[({]\s*/, "").replace(/\s+/g, " ")).filter(Boolean);
+  return cmd.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, " ").replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''").split(/&&|\|\||[;|\n]/).map((s) => s.trim().replace(/^[({]\s*/, "").replace(/\s+/g, " ")).filter(Boolean);
 }
 function boundaryAt(seg, at) {
   const c = seg[at];
@@ -4505,7 +4505,7 @@ function analyzeInstructions(s) {
     if (!path || !kind) continue;
     const noteType = noteTypeOf(text3);
     noteWrites.push({ path, kind, turnIndex: c.turnIndex, ...c.startTs !== void 0 ? { ts: c.startTs } : {}, ...c.agentId ? { agentId: c.agentId } : {}, ...noteType ? { noteType } : {}, words: contentWords(text3) });
-    if (!c.agentId) sources.push({ path, source: "written", text: text3, ...c.startTs !== void 0 ? { since: c.startTs } : {} });
+    if (!c.agentId) sources.push({ path, source: "written", text: text3, wholeFile: c.name === "Write", ...c.startTs !== void 0 ? { since: c.startTs } : {} });
   }
   if (!sources.length) return { loaded, rules: [], noteWrites, memoryCuts };
   const servers = mcpServersOf(s);
@@ -4536,7 +4536,7 @@ function analyzeInstructions(s) {
         const row2 = {
           path: src.path,
           source: src.source,
-          line: r.line,
+          line: src.wholeFile === false ? 0 : r.line,
           text: r.text,
           target,
           calls,
@@ -8160,39 +8160,44 @@ function complaintsOf(a) {
 function ref(c, includeText) {
   return { sessionId: c.sessionId, turnIndex: c.turnIndex, ...c.at !== void 0 ? { at: c.at } : {}, ...includeText ? { preview: c.preview } : {} };
 }
+function ruleHome(path) {
+  const p = path.replace(/\\/g, "/");
+  const dir = p.slice(0, Math.max(0, p.lastIndexOf("/")));
+  return dir.replace(/\/\.claude\/worktrees\/[^/]+(?=\/|$)/, "").replace(/^(.*\/[^/]+)-worktrees\/[^/]+(?=\/|$)/, (_m, repo) => repo).replace(/\/\.worktrees\/[^/]+(?=\/|$)/, "");
+}
 function ruleRows(analyses) {
   const acc = /* @__PURE__ */ new Map();
   for (const a of analyses) {
-    const seen = /* @__PURE__ */ new Set();
+    const mine = /* @__PURE__ */ new Map();
     for (const r of a.instructions?.rules ?? []) {
-      const key = `${r.target.kind}\0${r.target.name}\0${r.text}`;
+      const key = `${ruleHome(r.path)}\0${r.target.kind}\0${r.target.name}\0${r.text}`;
       let row2 = acc.get(key);
       if (!row2) {
         row2 = { files: /* @__PURE__ */ new Map(), text: r.text, target: { kind: r.target.kind, name: r.target.name }, sessions: 0, broken: 0, calls: 0, agentCalls: 0, blocked: 0, examples: [], perSession: [] };
         acc.set(key, row2);
       }
-      if (!row2.files.has(r.path)) row2.files.set(r.path, r.line);
-      const first = !seen.has(key);
-      seen.add(key);
-      if (first) row2.sessions++;
-      if (!r.calls) continue;
-      const prior = row2.perSession.find((p) => p.id === a.session.id);
-      if (prior) prior.calls += r.calls;
-      else {
-        row2.perSession.push({ id: a.session.id, calls: r.calls });
-        row2.broken++;
-        if (a.session.startedAt !== void 0 && (row2.lastBrokenAt === void 0 || a.session.startedAt > row2.lastBrokenAt)) row2.lastBrokenAt = a.session.startedAt;
-      }
-      row2.calls += r.calls;
-      row2.agentCalls += r.agentCalls;
-      row2.blocked += r.blocked ?? 0;
-      for (const e of r.examples) if (row2.examples.length < EXAMPLES && !row2.examples.includes(e)) row2.examples.push(e);
+      if ((row2.files.get(r.path) ?? 0) < r.line || !row2.files.has(r.path)) row2.files.set(r.path, r.line);
+      const prior = mine.get(key);
+      if (!prior) mine.set(key, { calls: r.calls, agentCalls: r.agentCalls, blocked: r.blocked ?? 0, examples: [...r.examples] });
+      else if (r.calls > prior.calls) Object.assign(prior, { calls: r.calls, agentCalls: r.agentCalls, blocked: r.blocked ?? 0, examples: [...r.examples] });
+    }
+    for (const [key, m] of mine) {
+      const row2 = acc.get(key);
+      row2.sessions++;
+      if (!m.calls) continue;
+      row2.broken++;
+      row2.perSession.push({ id: a.session.id, calls: m.calls });
+      if (a.session.startedAt !== void 0 && (row2.lastBrokenAt === void 0 || a.session.startedAt > row2.lastBrokenAt)) row2.lastBrokenAt = a.session.startedAt;
+      row2.calls += m.calls;
+      row2.agentCalls += m.agentCalls;
+      row2.blocked += m.blocked;
+      for (const e of m.examples) if (row2.examples.length < EXAMPLES && !row2.examples.includes(e)) row2.examples.push(e);
     }
   }
   const rows2 = [];
   for (const r of acc.values()) {
     if (!r.calls) continue;
-    const [file, line] = [...r.files].sort((a, b) => a[0].length - b[0].length || cmp(a[0], b[0]))[0];
+    const [file, line] = [...r.files].sort((a, b) => Number(b[1] > 0) - Number(a[1] > 0) || a[0].length - b[0].length || cmp(a[0], b[0]))[0];
     rows2.push({
       file,
       files: r.files.size,
@@ -8320,7 +8325,7 @@ function memoryRows(analyses, indexes) {
     }
     return r;
   };
-  for (const m of indexes) Object.assign(row2(m.file), { lines: m.lines, bytes: m.bytes, linesPastLimit: m.linesPastLimit, ...m.firstLinePastLimit !== void 0 ? { firstLinePastLimit: m.firstLinePastLimit } : {} });
+  for (const m of indexes) Object.assign(row2(m.file), { lines: m.lines, bytes: m.bytes, chars: m.chars, linesPastLimit: m.linesPastLimit, ...m.firstLinePastLimit !== void 0 ? { firstLinePastLimit: m.firstLinePastLimit } : {} });
   for (const a of analyses) {
     const ins = a.instructions;
     if (!ins) continue;
@@ -8366,10 +8371,19 @@ function complaintRows(all, instructionWords, includeText) {
   }
   return rows2.sort((a, b) => b.sessions - a.sessions || b.prompts - a.prompts || cmp(a.word, b.word));
 }
+var MEMORY_INDEX_PATH_RE = /[/\\]projects[/\\][^/\\]+[/\\]memory[/\\]MEMORY\.md$/;
 function loadedMemoryIndexPaths(analyses) {
   const out3 = /* @__PURE__ */ new Set();
-  for (const a of analyses) for (const l of a.instructions?.loaded ?? []) if (l.type === "AutoMem" || /[/\\]memory[/\\]MEMORY\.md$/.test(l.path)) out3.add(l.path);
+  for (const a of analyses) for (const l of a.instructions?.loaded ?? []) if (MEMORY_INDEX_PATH_RE.test(l.path)) out3.add(l.path);
   return [...out3].sort();
+}
+function withoutText(e) {
+  return {
+    ...e,
+    broken: e.broken.map((b) => ({ ...b, text: "" })),
+    notes: e.notes.map((n2) => ({ ...n2, sharedWords: [] })),
+    complaints: []
+  };
 }
 function buildEnforcement(input, opts = {}) {
   const analyses = opts.norm ? normed(input, opts.norm) : input;
@@ -8384,7 +8398,7 @@ function buildEnforcement(input, opts = {}) {
   const { rows: notes, written } = noteRows(analyses, complaints, opts.includeText);
   const memory = memoryRows(analyses, opts.memoryIndexes ?? []);
   const themes = complaintRows(all, opts.instructionWords, opts.includeText);
-  return {
+  const section = {
     counts: {
       sessionsWithRecord: analyses.filter((a) => (a.instructions?.loaded.length ?? 0) > 0).length,
       rulesInContext: inContext,
@@ -8394,6 +8408,7 @@ function buildEnforcement(input, opts = {}) {
       feedbackNotes: notes.length,
       notesFollowedByComplaint: notes.filter((n2) => n2.matchingComplaints > 0).length,
       complaints: all.length,
+      recurringComplaintWords: themes.length,
       memoryIndexesCut: memory.filter((m) => m.sessionsCut > 0 || (m.linesPastLimit ?? 0) > 0).length
     },
     broken: broken.slice(0, HARNESS_ROW_CAP),
@@ -8401,6 +8416,7 @@ function buildEnforcement(input, opts = {}) {
     memory: memory.slice(0, HARNESS_ROW_CAP),
     complaints: themes.slice(0, HARNESS_ROW_CAP)
   };
+  return opts.includeText ? section : withoutText(section);
 }
 
 // src/harness/report.ts
@@ -10559,17 +10575,17 @@ import { homedir as homedir3 } from "node:os";
 import { readdir as readdir2, readFile, stat as stat5 } from "node:fs/promises";
 import { basename as basename7, join as join7 } from "node:path";
 var MEMORY_INDEX_LINE_LIMIT = 200;
-var MEMORY_INDEX_BYTE_LIMIT = 25e3;
+var MEMORY_INDEX_CHAR_LIMIT = 25e3;
 function memoryIndexCut(text3) {
   const lines = text3 === "" ? [] : text3.split("\n");
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
-  let bytes = 0;
+  let chars = 0;
   for (let i = 0; i < lines.length; i++) {
-    const next = bytes + Buffer.byteLength(lines[i], "utf8");
-    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_BYTE_LIMIT) return { lines: lines.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 };
-    bytes = next + 1;
+    const next = chars + lines[i].length;
+    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_CHAR_LIMIT) return { lines: lines.length, chars: text3.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 };
+    chars = next + 1;
   }
-  return { lines: lines.length, linesPastLimit: 0 };
+  return { lines: lines.length, chars: text3.length, linesPastLimit: 0 };
 }
 var DEFAULT_MAX_FILE_BYTES = 1e6;
 var MAX_WALK_DEPTH = 6;
@@ -11024,7 +11040,8 @@ async function collectInventory(opts) {
     };
   }
   const memoryIndexes = [];
-  const indexPaths = new Set(opts.memoryIndexPaths ?? []);
+  const underRoot = (p) => liveRoots.some((root) => p.startsWith(join7(root, "projects") + "/"));
+  const indexPaths = new Set((opts.memoryIndexPaths ?? []).filter((p) => MEMORY_INDEX_PATH_RE.test(p) && underRoot(p) && !p.split(/[\\/]/).includes("..")));
   for (const root of liveRoots) {
     const projects = join7(root, "projects");
     if (opts.allProjects) {
@@ -11041,7 +11058,7 @@ async function collectInventory(opts) {
     if (text3 === null) continue;
     const bytes = Buffer.byteLength(text3, "utf8");
     const cut = memoryIndexCut(text3);
-    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...cut.firstLinePastLimit !== void 0 ? { firstLinePastLimit: cut.firstLinePastLimit } : {} });
+    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, chars: cut.chars, approxTokens: approxTokens2(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...cut.firstLinePastLimit !== void 0 ? { firstLinePastLimit: cut.firstLinePastLimit } : {} });
     if (ctx.words) {
       for (const w of contentWords(text3, { cap: Infinity })) ctx.words.add(w);
       const dir = join7(file, "..");
@@ -12999,7 +13016,19 @@ function printEnforcement(r, w, wrapped) {
   const e = r.enforcement;
   const c = e.counts;
   const dim = (s) => w(paint(out, "dim", s));
+  const say = (s, indent) => {
+    for (const l of wrapped(s, indent)) w(l);
+  };
+  const sayDim = (s, indent) => {
+    for (const l of wrapped(s, indent)) dim(l);
+  };
+  const head2 = (label, value) => {
+    if (label.length <= 24) return say(`${label.padEnd(26)} ${value}`, "    ");
+    say(label, "    ");
+    say(value, "      ");
+  };
   const fileName = (p) => p.split(/[\\/]/).pop() ?? p;
+  const withText = e.broken.some((b) => b.text) || e.complaints.length > 0 || e.notes.some((n2) => n2.sharedWords.length > 0);
   w();
   w(paint(out, "bold", "  rules that did not hold"));
   if (r.scope.sessionsScanned === 0) {
@@ -13007,44 +13036,45 @@ function printEnforcement(r, w, wrapped) {
     return;
   }
   if (c.sessionsWithRecord === 0) {
-    dim("    no scanned session recorded the instruction files that it loaded,");
-    dim("    so orangu cannot tie a rule to a session. Claude Code writes that record");
-    dim("    in newer transcripts.");
+    sayDim("no scanned session recorded the instruction files that it loaded, so orangu cannot tie a rule to a session. Claude Code writes that record in newer transcripts.", "    ");
   } else if (!e.broken.length) {
-    dim(`    ${plural(c.rulesInContext, "rule")} named a command or a tool, and no call broke ${c.rulesInContext === 1 ? "it" : "them"}`);
+    sayDim(`${plural(c.rulesInContext, "rule")} named a command or a tool, and no call broke ${c.rulesInContext === 1 ? "it" : "them"}`, "    ");
   }
   for (const b of e.broken.slice(0, 5)) {
-    w(`    ${b.target.name.padEnd(26)} ${plural(b.calls, "call")} in ${b.sessionsBroken} of ${plural(b.sessionsInContext, "session")} that had the rule`);
+    head2(b.target.name, `${plural(b.calls, "call")} in ${b.sessionsBroken} of ${plural(b.sessionsInContext, "session")} that had the rule`);
+    const where = b.line > 0 ? `${fileName(b.file)}:${b.line}` : fileName(b.file);
     const agents = b.agentCalls ? ` \xB7 ${b.agentCalls} by subagents` : "";
     const copies = b.files > 1 ? ` \xB7 ${b.files} copies of the file` : "";
-    dim(`      ${fileName(b.file)}:${b.line}${agents}${copies}`);
-    if (b.blocked) dim(b.blocked === b.calls ? "      a hook or a deny rule stopped every call: a check holds this rule" : `      a hook or a deny rule stopped ${b.blocked}, and ${b.calls - b.blocked} ran`);
-    for (const l of wrapped(b.text, "      ")) dim(l);
+    sayDim(`${where}${agents}${copies}`, "      ");
+    if (b.blocked) sayDim(b.blocked === b.calls ? "a hook or a deny rule stopped every call: a check holds this rule" : `a hook or a deny rule stopped ${b.blocked}, and ${b.calls - b.blocked} ran`, "      ");
+    if (b.text) sayDim(b.text, "      ");
   }
-  if (e.broken.length > 5) dim(`    ${e.broken.length - 5} more broken rules in --json`);
+  if (e.broken.length > 5) sayDim(`${e.broken.length - 5} more broken rules in --json`, "    ");
   for (const m of e.memory.filter((x) => x.sessionsCut > 0 || (x.linesPastLimit ?? 0) > 0).slice(0, 3)) {
-    const now = m.linesPastLimit ? `${plural(m.linesPastLimit, "line")} past the limit now` : m.bytes !== void 0 ? `fits now: ${sizeLabel(m.bytes)} of 24.4 KB` : "gone now";
-    w(`    ${"memory index".padEnd(26)} cut in ${m.sessionsCut} of ${plural(m.sessionsLoaded, "session")} that loaded it`);
-    dim(`      ${m.file}`);
-    dim(`      up to ${plural(m.maxLinesCut, "line")} not loaded, the newest first \xB7 ${now}`);
+    head2("memory index", m.sessionsCut ? `cut in ${m.sessionsCut} of ${plural(m.sessionsLoaded, "session")} that loaded it` : `${plural(m.linesPastLimit ?? 0, "line")} past the limit`);
+    sayDim(m.file, "      ");
+    if (m.sessionsCut) sayDim(`up to ${plural(m.maxLinesCut, "line")} not loaded, the newest first`, "      ");
+    const now = m.linesPastLimit ? `${plural(m.linesPastLimit, "line")} past the limit now, from line ${m.firstLinePastLimit}` : m.chars !== void 0 ? `fits now: ${n(m.lines ?? 0)} lines, ${n(m.chars)} of 25,000 characters` : "the file is gone now";
+    sayDim(now, "      ");
   }
   if (c.feedbackNotes) {
-    w(`    ${"feedback notes".padEnd(26)} ${c.notesFollowedByComplaint} of ${c.feedbackNotes} came back as a complaint`);
+    head2("feedback notes", `${c.notesFollowedByComplaint} of ${c.feedbackNotes} came back as a complaint`);
     for (const note of e.notes.filter((x) => x.matchingComplaints > 0).slice(0, 3)) {
       const first = note.firstMatchAfterMs !== void 0 ? `, the first ${gapLabel(note.firstMatchAfterMs)} after the note` : "";
-      dim(`      ${fileName(note.file)} \xB7 ${plural(note.matchingComplaints, "complaint")}${first}`);
-      if (note.sharedWords.length) dim(`        shared words: ${note.sharedWords.slice(0, 6).join(", ")}`);
+      sayDim(`${fileName(note.file)} \xB7 ${plural(note.matchingComplaints, "complaint")}${first}`, "      ");
+      if (note.sharedWords.length) sayDim(`shared words: ${note.sharedWords.slice(0, 6).join(", ")}`, "        ");
+      for (const ex of note.examples) if (ex.preview !== void 0) sayDim(`"${ex.preview}"`, "        ");
     }
   }
-  const themes = e.complaints.slice(0, 6);
-  if (themes.length) {
-    w(`    ${"recurring complaints".padEnd(26)} ${plural(c.complaints, "complaint prompt")} in scope`);
-    for (const t of themes) dim(`      "${t.word}" in ${plural(t.prompts, "prompt")}, ${plural(t.sessions, "session")}${t.inInstructions ? " \xB7 a note already uses this word" : ""}`);
+  if (c.complaints) {
+    head2("recurring complaints", `${plural(c.recurringComplaintWords, "word")} in complaints of 2 or more sessions`);
+    for (const t of e.complaints.slice(0, 6)) {
+      sayDim(`"${t.word}" in ${plural(t.prompts, "prompt")}, ${plural(t.sessions, "session")}${t.inInstructions ? " \xB7 a note already uses this word" : ""}`, "      ");
+      const last = t.examples[0];
+      if (last?.preview !== void 0) sayDim(`last: "${last.preview}"`, "        ");
+    }
   }
-  if (e.notes.some((x) => x.examples.length) || themes.length) {
-    const shown = e.notes.some((x) => x.examples.some((ex) => ex.preview !== void 0)) || themes.some((t) => t.examples.some((ex) => ex.preview !== void 0));
-    if (!shown) dim("    add --include-text to see the text of each complaint");
-  }
+  if (!withText && (e.broken.length || c.feedbackNotes || c.complaints)) sayDim("add --include-text to see the rule lines, the shared words and the complaints", "    ");
 }
 function printHarness(r) {
   const w = (s = "") => process.stdout.write(s + "\n");

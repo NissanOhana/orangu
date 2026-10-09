@@ -40,7 +40,12 @@ const NEGATIVE_RE = /\b(?:never|do not|don't|dont|must not|mustn't|should not|sh
 /** "never call `x`" is about code (a function, a method), so it names a tool or a server, never a shell command */
 const CODE_VERB_RE = /\b(?:call|calling|invoke|invoking)$/i
 /** where a "do not" clause ends: a sentence end, a dash, a semicolon, or a turn to what to do instead */
-const CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[\u2014\u2013-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except)\b/i
+/**
+ * Where a "do not" clause ends: a sentence end, a dash, a semicolon, a turn to what to do instead, or a condition.
+ * "Never run `git commit` without `npm run verify` first": after "without" comes what the rule ASKS for, so it is
+ * never a target. "for" does not end a clause ("Do not use for: `drizzle-kit push`").
+ */
+const CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[\u2014\u2013-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except|without|before|after|while|until|when|whenever|if|then|first|so|because|always)\b/i
 /** "use X instead of Y", "use X rather than Y", "use X, not Y", "prefer X over Y": Y follows the connector */
 const INSTEAD_RE = /\b(?:instead of|rather than)\s+/gi
 const NOT_RE = /(?:,\s*|\s)not\s+/gi
@@ -176,9 +181,14 @@ export function extractRules(text: string, mcpServers: ReadonlySet<string> = new
   return out
 }
 
-/** split a shell command into the segments a rule can start: on &&, ||, ;, | and new lines */
+/**
+ * Split a shell command into the segments a rule can start: on &&, ||, ;, | and new lines. A heredoc body and a
+ * quoted string are data, not commands ("git commit -m \"... npx tsc --noEmit passes\""), so they go first.
+ */
 export function commandSegments(cmd: string): string[] {
   return cmd
+    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, ' ')
+    .replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
     .split(/&&|\|\||[;|\n]/)
     .map((s) => s.trim().replace(/^[({]\s*/, '').replace(/\s+/g, ' '))
     .filter(Boolean)
@@ -338,6 +348,8 @@ interface RuleSource {
   path: string
   source: 'loaded' | 'written'
   text: string
+  /** false for an Edit snippet, whose line numbers are not the file's */
+  wholeFile?: boolean
   since?: number
 }
 
@@ -371,8 +383,9 @@ export function analyzeInstructions(s: Session): InstructionsAnalysis {
     if (!path || !kind) continue
     const noteType = noteTypeOf(text)
     noteWrites.push({ path, kind, turnIndex: c.turnIndex, ...(c.startTs !== undefined ? { ts: c.startTs } : {}), ...(c.agentId ? { agentId: c.agentId } : {}), ...(noteType ? { noteType } : {}), words: contentWords(text) })
-    // a note the session wrote is in its context from the write on, whether or not Claude Code loads the file
-    if (!c.agentId) sources.push({ path, source: 'written', text, ...(c.startTs !== undefined ? { since: c.startTs } : {}) })
+    // a note the session wrote is in its context from the write on, whether or not Claude Code loads the file;
+    // an Edit gives a snippet, so its line numbers are not the file's (line 0 = unknown)
+    if (!c.agentId) sources.push({ path, source: 'written', text, wholeFile: c.name === 'Write', ...(c.startTs !== undefined ? { since: c.startTs } : {}) })
   }
 
   // nothing to check in a session that loaded no instruction file and wrote no note: the common case stays O(calls)
@@ -407,7 +420,7 @@ export function analyzeInstructions(s: Session): InstructionsAnalysis {
         const row: InstructionRule = {
           path: src.path,
           source: src.source,
-          line: r.line,
+          line: src.wholeFile === false ? 0 : r.line,
           text: r.text,
           target,
           calls,

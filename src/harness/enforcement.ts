@@ -87,7 +87,18 @@ function ref(c: Complaint, includeText: boolean | undefined): HarnessPromptRef {
   return { sessionId: c.sessionId, turnIndex: c.turnIndex, ...(c.at !== undefined ? { at: c.at } : {}), ...(includeText ? { preview: c.preview } : {}) }
 }
 
-/** the rules rows: one per rule text and target, summed over every session that had it in context */
+/**
+ * The project a rule file belongs to: a worktree copy of CLAUDE.md (`<repo>/.claude/worktrees/<w>/CLAUDE.md`, or a
+ * sibling `<repo>-worktrees/<w>/CLAUDE.md`) is the repository's own file, so its rule is the same rule. The same
+ * line in another project's file is another rule.
+ */
+export function ruleHome(path: string): string {
+  const p = path.replace(/\\/g, '/')
+  const dir = p.slice(0, Math.max(0, p.lastIndexOf('/')))
+  return dir.replace(/\/\.claude\/worktrees\/[^/]+(?=\/|$)/, '').replace(/^(.*\/[^/]+)-worktrees\/[^/]+(?=\/|$)/, (_m, repo: string) => repo).replace(/\/\.worktrees\/[^/]+(?=\/|$)/, '')
+}
+
+/** the rules rows: one per project, rule text and target, summed over every session that had it in context */
 function ruleRows(analyses: Analysis[]): { rows: HarnessRuleRow[]; inContext: number } {
   interface Acc {
     files: Map<string, number>
@@ -104,38 +115,40 @@ function ruleRows(analyses: Analysis[]): { rows: HarnessRuleRow[]; inContext: nu
   }
   const acc = new Map<string, Acc>()
   for (const a of analyses) {
-    const seen = new Set<string>()
+    // Two copies of one rule in one session (a loaded CLAUDE.md and the note the session wrote, or the repo file
+    // and a worktree copy) see the SAME calls: the session counts each call once, the largest count of its copies.
+    const mine = new Map<string, { calls: number; agentCalls: number; blocked: number; examples: string[] }>()
     for (const r of a.instructions?.rules ?? []) {
-      const key = `${r.target.kind}\u0000${r.target.name}\u0000${r.text}`
+      const key = `${ruleHome(r.path)}\u0000${r.target.kind}\u0000${r.target.name}\u0000${r.text}`
       let row = acc.get(key)
       if (!row) {
         row = { files: new Map(), text: r.text, target: { kind: r.target.kind, name: r.target.name }, sessions: 0, broken: 0, calls: 0, agentCalls: 0, blocked: 0, examples: [], perSession: [] }
         acc.set(key, row)
       }
-      if (!row.files.has(r.path)) row.files.set(r.path, r.line)
-      // one session counts once per rule, even when it loaded two copies of the same line
-      const first = !seen.has(key)
-      seen.add(key)
-      if (first) row.sessions++
-      if (!r.calls) continue
-      const prior = row.perSession.find((p) => p.id === a.session.id)
-      if (prior) prior.calls += r.calls
-      else {
-        row.perSession.push({ id: a.session.id, calls: r.calls })
-        row.broken++
-        if (a.session.startedAt !== undefined && (row.lastBrokenAt === undefined || a.session.startedAt > row.lastBrokenAt)) row.lastBrokenAt = a.session.startedAt
-      }
-      row.calls += r.calls
-      row.agentCalls += r.agentCalls
-      row.blocked += r.blocked ?? 0
-      for (const e of r.examples) if (row.examples.length < EXAMPLES && !row.examples.includes(e)) row.examples.push(e)
+      // a line number from a loaded file beats 0 (an Edit snippet carries no file line)
+      if ((row.files.get(r.path) ?? 0) < r.line || !row.files.has(r.path)) row.files.set(r.path, r.line)
+      const prior = mine.get(key)
+      if (!prior) mine.set(key, { calls: r.calls, agentCalls: r.agentCalls, blocked: r.blocked ?? 0, examples: [...r.examples] })
+      else if (r.calls > prior.calls) Object.assign(prior, { calls: r.calls, agentCalls: r.agentCalls, blocked: r.blocked ?? 0, examples: [...r.examples] })
+    }
+    for (const [key, m] of mine) {
+      const row = acc.get(key)!
+      row.sessions++
+      if (!m.calls) continue
+      row.broken++
+      row.perSession.push({ id: a.session.id, calls: m.calls })
+      if (a.session.startedAt !== undefined && (row.lastBrokenAt === undefined || a.session.startedAt > row.lastBrokenAt)) row.lastBrokenAt = a.session.startedAt
+      row.calls += m.calls
+      row.agentCalls += m.agentCalls
+      row.blocked += m.blocked
+      for (const e of m.examples) if (row.examples.length < EXAMPLES && !row.examples.includes(e)) row.examples.push(e)
     }
   }
   const rows: HarnessRuleRow[] = []
   for (const r of acc.values()) {
     if (!r.calls) continue
-    // the shortest path is the main checkout; a worktree copy of the same CLAUDE.md is longer
-    const [file, line] = [...r.files].sort((a, b) => a[0].length - b[0].length || cmp(a[0], b[0]))[0]!
+    // a file with a known line first, then the shortest path: the main checkout, not a worktree copy
+    const [file, line] = [...r.files].sort((a, b) => Number(b[1] > 0) - Number(a[1] > 0) || a[0].length - b[0].length || cmp(a[0], b[0]))[0]!
     rows.push({
       file,
       files: r.files.size,
@@ -288,7 +301,7 @@ function memoryRows(analyses: Analysis[], indexes: HarnessMemoryIndexFile[]): Ha
     }
     return r
   }
-  for (const m of indexes) Object.assign(row(m.file), { lines: m.lines, bytes: m.bytes, linesPastLimit: m.linesPastLimit, ...(m.firstLinePastLimit !== undefined ? { firstLinePastLimit: m.firstLinePastLimit } : {}) })
+  for (const m of indexes) Object.assign(row(m.file), { lines: m.lines, bytes: m.bytes, chars: m.chars, linesPastLimit: m.linesPastLimit, ...(m.firstLinePastLimit !== undefined ? { firstLinePastLimit: m.firstLinePastLimit } : {}) })
   for (const a of analyses) {
     const ins = a.instructions
     if (!ins) continue
@@ -336,11 +349,28 @@ function complaintRows(all: Complaint[], instructionWords: ReadonlySet<string> |
   return rows.sort((a, b) => b.sessions - a.sessions || b.prompts - a.prompts || cmp(a.word, b.word))
 }
 
+/** the only shape of an auto-memory index path: `<config>/projects/<slug>/memory/MEMORY.md` */
+export const MEMORY_INDEX_PATH_RE = /[/\\]projects[/\\][^/\\]+[/\\]memory[/\\]MEMORY\.md$/
+
 /** the auto-memory indexes the sessions loaded, as raw paths, so the collector measures each one on disk */
 export function loadedMemoryIndexPaths(analyses: Analysis[]): string[] {
   const out = new Set<string>()
-  for (const a of analyses) for (const l of a.instructions?.loaded ?? []) if (l.type === 'AutoMem' || /[/\\]memory[/\\]MEMORY\.md$/.test(l.path)) out.add(l.path)
+  for (const a of analyses) for (const l of a.instructions?.loaded ?? []) if (MEMORY_INDEX_PATH_RE.test(l.path)) out.add(l.path)
   return [...out].sort()
+}
+
+/**
+ * Without `--include-text` the section carries no text that a person or a model wrote: the rule line goes (the
+ * skill reads it from the file at `file:line`), and so do the shared note words and the complaint words. The
+ * counts, targets, paths, session ids and turns stay.
+ */
+function withoutText(e: HarnessEnforcement): HarnessEnforcement {
+  return {
+    ...e,
+    broken: e.broken.map((b) => ({ ...b, text: '' })),
+    notes: e.notes.map((n) => ({ ...n, sharedWords: [] })),
+    complaints: [],
+  }
 }
 
 export function buildEnforcement(input: Analysis[], opts: EnforcementOptions = {}): HarnessEnforcement {
@@ -356,7 +386,7 @@ export function buildEnforcement(input: Analysis[], opts: EnforcementOptions = {
   const { rows: notes, written } = noteRows(analyses, complaints, opts.includeText)
   const memory = memoryRows(analyses, opts.memoryIndexes ?? [])
   const themes = complaintRows(all, opts.instructionWords, opts.includeText)
-  return {
+  const section: HarnessEnforcement = {
     counts: {
       sessionsWithRecord: analyses.filter((a) => (a.instructions?.loaded.length ?? 0) > 0).length,
       rulesInContext: inContext,
@@ -366,6 +396,7 @@ export function buildEnforcement(input: Analysis[], opts: EnforcementOptions = {
       feedbackNotes: notes.length,
       notesFollowedByComplaint: notes.filter((n) => n.matchingComplaints > 0).length,
       complaints: all.length,
+      recurringComplaintWords: themes.length,
       memoryIndexesCut: memory.filter((m) => m.sessionsCut > 0 || (m.linesPastLimit ?? 0) > 0).length,
     },
     broken: broken.slice(0, HARNESS_ROW_CAP),
@@ -373,4 +404,5 @@ export function buildEnforcement(input: Analysis[], opts: EnforcementOptions = {
     memory: memory.slice(0, HARNESS_ROW_CAP),
     complaints: themes.slice(0, HARNESS_ROW_CAP),
   }
+  return opts.includeText ? section : withoutText(section)
 }
