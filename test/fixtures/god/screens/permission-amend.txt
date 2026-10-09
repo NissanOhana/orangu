@@ -5,8 +5,9 @@
 ────────────────────────────────────────────────────────────────────────
  Bash command
 
+ Make an empty probe file
+
    touch probe-yes.txt
-   Make an empty probe file
 
  Do you want to proceed?
  ❯ 1. Yes, and tell Claude what to do next
