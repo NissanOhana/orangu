@@ -79,8 +79,14 @@ describe('summary: the session works', () => {
 })
 
 describe('summary: the turn ended', () => {
-  it('is the first sentence of the last reply on each other level', () => {
-    for (const level of ['your-turn', 'idle', 'stale'] as const) expect(summaryOf(idle('i1'), level), level).toBe('Setup is done.')
+  it('is the first sentence of the last reply on the your-turn and idle levels', () => {
+    for (const level of ['your-turn', 'idle'] as const) expect(summaryOf(idle('i1'), level), level).toBe('Setup is done.')
+  })
+
+  it('is empty on the stale level, with or without a transcript', () => {
+    const { transcript: _none, ...bare } = idle('i5')
+    expect(summaryOf(idle('i1'), 'stale')).toBe('')
+    expect(summaryOf(bare, 'stale')).toBe('')
   })
 
   it('is the title when the transcript part holds no reply, else the no-reply line', () => {

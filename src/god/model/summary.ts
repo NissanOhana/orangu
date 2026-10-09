@@ -4,10 +4,11 @@
  *   of the wait;
  * - while it works: the API error at the end of a stuck session, else the current activity, or the count of the
  *   running subagents when the open call started 1 of them;
+ * - on the stale level: no summary (''), because the stale group starts closed;
  * - else, and when a busy session has no tool call: the first sentence of the last reply, else of the title.
- * A session with no transcript gets NO_TRANSCRIPT on each level. The wait time is not in the summary: the row
- * shows the time since levelSince. The summary is whole, so a view that cuts it says how much it cut. The texts of
- * TranscriptFacts are sanitized and redacted before they come here, so the summary is too.
+ * A session with no transcript gets NO_TRANSCRIPT on each level but stale. The wait time is not in the summary:
+ * the row shows the time since levelSince. The summary is whole, so a view that cuts it says how much it cut. The
+ * texts of TranscriptFacts are sanitized and redacted before they come here, so the summary is too.
  */
 import type { Level, SessionFacts, TranscriptFacts } from '../types.js'
 
@@ -94,6 +95,7 @@ function workLine(transcript: TranscriptFacts): string {
 
 /** The 1-line summary of 1 session at its level. */
 export function summaryOf(session: SessionFacts, level: Level): string {
+  if (level === 'stale') return ''
   const transcript = session.transcript
   if (transcript === undefined) return NO_TRANSCRIPT
   if (level === 'needs-you') return waitLine(session, transcript)

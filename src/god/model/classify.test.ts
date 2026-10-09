@@ -70,10 +70,33 @@ describe('YOUR TURN: idle, and the last turn ended after seenAt', () => {
 })
 
 describe('STUCK: busy, and no transcript write for 10 min, or an API error or retry at the end', () => {
-  it('is working at 9 min 59 s with no write, and stuck at 10 min', () => {
+  it('is working at 9 min 59 s with no write, and stuck at 10 min, since the silence reached the limit', () => {
     const silent = (ms: number) => busy('b1', { lastWriteAt: NOW - ms })
     expect(at(silent(10 * MINUTE - SECOND))).toEqual({ level: 'working', levelSince: NOW - 20 * MINUTE })
-    expect(at(silent(10 * MINUTE))).toEqual({ level: 'stuck', levelSince: NOW - 10 * MINUTE })
+    expect(at(silent(10 * MINUTE))).toEqual({ level: 'stuck', levelSince: NOW })
+    expect(at(silent(15 * MINUTE))).toEqual({ level: 'stuck', levelSince: NOW - 5 * MINUTE })
+  })
+
+  it('measures the silence from the busy start when the last write is older, so a session busy for 1 min is not stuck', () => {
+    const oldWrite = (busyFor: number) => busy('b6', { statusSince: NOW - busyFor, lastWriteAt: NOW - 2 * HOUR })
+    expect(at(oldWrite(MINUTE))).toEqual({ level: 'working', levelSince: NOW - MINUTE })
+    expect(at(oldWrite(10 * MINUTE - SECOND))).toEqual({ level: 'working', levelSince: NOW - (10 * MINUTE - SECOND) })
+    expect(at(oldWrite(10 * MINUTE))).toEqual({ level: 'stuck', levelSince: NOW })
+  })
+
+  it('measures the silence from the busy start when the session has no transcript', () => {
+    const noTranscript = (busyFor: number) => {
+      const { lastWriteAt: _dropped, transcript: _none, ...rest } = busy('b4', { statusSince: NOW - busyFor })
+      return rest
+    }
+    expect(at(noTranscript(10 * MINUTE - SECOND))).toEqual({ level: 'working', levelSince: NOW - (10 * MINUTE - SECOND) })
+    expect(at(noTranscript(10 * MINUTE))).toEqual({ level: 'stuck', levelSince: NOW })
+    expect(at(noTranscript(3 * HOUR))).toEqual({ level: 'stuck', levelSince: NOW - 3 * HOUR + 10 * MINUTE })
+  })
+
+  it('is working when no fact gives the busy start or a write', () => {
+    const { lastWriteAt: _write, transcript: _none, statusSince: _status, ...rest } = busy('b7')
+    expect(at(rest).level).toBe('working')
   })
 
   it('reads the limit from the settings', () => {
@@ -89,10 +112,6 @@ describe('STUCK: busy, and no transcript write for 10 min, or an API error or re
     }
   })
 
-  it('is working when the session has no transcript, because a missing file proves no silence', () => {
-    const { lastWriteAt: _dropped, transcript: _none, ...rest } = busy('b4', { statusSince: NOW - 3 * HOUR })
-    expect(at(rest)).toEqual({ level: 'working', levelSince: NOW - 3 * HOUR })
-  })
 })
 
 describe('WORKING: busy', () => {
@@ -102,10 +121,11 @@ describe('WORKING: busy', () => {
 })
 
 describe('IDLE and STALE: idle, the person saw the last turn, and less than 24 h, else stale', () => {
-  it('is idle at 23 h 59 min, and stale at 24 h, both since the status changed', () => {
+  it('is idle at 23 h 59 min since the status changed, and stale at 24 h since the idle time reached the limit', () => {
     const quiet = (ms: number) => idle('i7', { statusSince: NOW - ms, transcript: transcript({ lastTurnEndedAt: NOW - ms }) })
     expect(at(quiet(23 * HOUR + 59 * MINUTE))).toEqual({ level: 'idle', levelSince: NOW - (23 * HOUR + 59 * MINUTE) })
-    expect(at(quiet(24 * HOUR))).toEqual({ level: 'stale', levelSince: NOW - 24 * HOUR })
+    expect(at(quiet(24 * HOUR))).toEqual({ level: 'stale', levelSince: NOW })
+    expect(at(quiet(30 * HOUR))).toEqual({ level: 'stale', levelSince: NOW - 6 * HOUR })
   })
 
   it('reads the limit from the settings', () => {
@@ -116,7 +136,7 @@ describe('IDLE and STALE: idle, the person saw the last turn, and less than 24 h
 
   it('measures the idle time from the turn end when no registry file gives the status time', () => {
     const { statusSince: _dropped, ...rest } = idle('i9', { transcript: transcript({ lastTurnEndedAt: NOW - 25 * HOUR }) })
-    expect(at(rest)).toEqual({ level: 'stale', levelSince: NOW - 25 * HOUR })
+    expect(at(rest)).toEqual({ level: 'stale', levelSince: NOW - HOUR })
   })
 })
 

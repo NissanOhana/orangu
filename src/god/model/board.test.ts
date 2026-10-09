@@ -37,6 +37,16 @@ describe('board order', () => {
     expect(turn).toMatchObject({ level: 'your-turn', levelSince: NOW - 3 * MINUTE, summary: 'Done.', flags: [], seenAt: PANE_START, muted: false })
   })
 
+  it('sorts 2 stuck rows by the time each entered the level, not by the time of its fact', () => {
+    const failed = busy('stuck-error', { transcript: transcript({ errorTail: { kind: 'api-error', text: 'Overloaded.', at: NOW - 5 * MINUTE } }) })
+    const silent = busy('stuck-silent', { lastWriteAt: NOW - 12 * MINUTE })
+    const snapshot = board([silent, failed])
+    expect(snapshot.sessions.map((session) => [session.sessionId, session.level, session.levelSince])).toEqual([
+      ['stuck-error', 'stuck', NOW - 5 * MINUTE],
+      ['stuck-silent', 'stuck', NOW - 2 * MINUTE],
+    ])
+  })
+
   it('orders 2 rows with the same level and time by name, then by id', () => {
     const twin = (id: string, name: string) => busy(id, { name, statusSince: NOW - 5 * MINUTE })
     expect(ids(board([twin('s2', 'beta'), twin('s3', 'alpha'), twin('s1', 'alpha')]))).toEqual(['s1', 's3', 's2'])

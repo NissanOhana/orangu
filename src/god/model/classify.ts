@@ -2,17 +2,19 @@
  * The attention level of 1 session, from rules only. The first rule that holds gives the level:
  * - needs-you: the status is waiting;
  * - your-turn: the status is idle, and the last turn ended after seenAt;
- * - stuck: the status is busy, and the transcript ends with an API error or retry, or has no write for the stuck
- *   limit (a session with no transcript file proves no silence, so it stays working);
+ * - stuck: the status is busy, and the transcript ends with an API error or retry, or the session is silent for the
+ *   stuck limit. The silence starts at the later of the last transcript write and the busy start, so a session
+ *   that went busy 1 min ago is not stuck. With no transcript write, the silence starts at the busy start;
  * - working: the status is busy;
  * - stale: the status is idle for the stale limit or more;
  * - idle: the status is idle.
  * So a turn that the person did not see stays your-turn after the stale limit.
  *
  * seenAt is the stored time of the person's last look, else the start time of the pane: on the first start, only a
- * turn that ends after the start is your-turn. levelSince is the start of the fact that puts the session at its
- * level (the wait, the turn end, the error or the last write, the busy status, the idle status), so it holds from 1
- * refresh to the next. When the facts give no such time, the level keeps its time from the last snapshot, else the
+ * turn that ends after the start is your-turn. levelSince is the time the session entered its level: the wait
+ * start, the turn end, the error, the silence start plus the stuck limit, the busy start, the idle start, and the
+ * idle start plus the stale limit. So the board sorts each level by the time in that level, and the time holds from
+ * 1 refresh to the next. When the facts give no such time, the level keeps its time from the last snapshot, else the
  * time starts now. The clock comes in as `now`, and the limits come from Settings.
  */
 import type { Level, SessionFacts, Settings } from '../types.js'
@@ -60,6 +62,12 @@ export function firstSightEntries(sessionIds: readonly string[], seenAt: Readonl
 
 // ---------- level ----------
 
+/** The later of 2 times, or the 1 that is there, or undefined. */
+function latest(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined) return b
+  return b === undefined ? a : Math.max(a, b)
+}
+
 /** The attention level of 1 session and the time since it is at that level. */
 export function classify({ session, seenAt, settings, now, previous }: ClassifyInput): Classified {
   const transcript = session.transcript
@@ -75,14 +83,16 @@ export function classify({ session, seenAt, settings, now, previous }: ClassifyI
 
   if (session.status === 'busy') {
     if (transcript?.errorTail !== undefined) return at('stuck', transcript.errorTail.at, session.lastWriteAt)
-    const lastWrite = session.lastWriteAt
-    if (lastWrite !== undefined && now - lastWrite >= settings.stuckAfterMin * MINUTE_MS) return at('stuck', lastWrite)
+    const silenceStart = latest(session.lastWriteAt, session.statusSince)
+    const stuckAt = silenceStart === undefined ? undefined : silenceStart + settings.stuckAfterMin * MINUTE_MS
+    if (stuckAt !== undefined && now >= stuckAt) return at('stuck', stuckAt)
     return at('working', session.statusSince)
   }
 
   const turnEnded = transcript?.lastTurnEndedAt
   if (turnEnded !== undefined && turnEnded > seenAt) return at('your-turn', turnEnded)
   const idleSince = session.statusSince ?? turnEnded ?? session.lastWriteAt
-  if (idleSince !== undefined && now - idleSince >= settings.staleAfterH * HOUR_MS) return at('stale', idleSince)
+  const staleAt = idleSince === undefined ? undefined : idleSince + settings.staleAfterH * HOUR_MS
+  if (staleAt !== undefined && now >= staleAt) return at('stale', staleAt)
   return at('idle', idleSince)
 }
