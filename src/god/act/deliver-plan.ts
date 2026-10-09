@@ -9,7 +9,8 @@
  *   question and label at the digit). A permission answer needs a session that waits on a permission prompt. A
  *   prompt needs an idle session with no open question. So a busy session that prints a dialog or an input box
  *   gets no key;
- * - the screen must be of the target session, from a tab whose refs are plain tokens, read 1 s or less before the
+ * - the screen must be of the target session, from a tab whose refs are `workspace:N` and `surface:N` or UUIDs
+ *   (never a bare index, which cmux resolves in the current window), read 1 s or less before the
  *   plan, and the state must be read 1 s or less before the screen read, never after it. Late state gives
  *   stale-screen: the plan inputs are not of 1 moment, and the executor reads both again;
  * - an answer is the option digit alone, with no Enter, and only when the screen still shows the confirmed header,
@@ -20,7 +21,9 @@
  * - a prompt is 1 `cmux send` for each line, `shift+enter` between the lines and `enter` at the end, only on an
  *   empty prompt row with no dialog on the screen. Its text must hold a visible character, no control character
  *   but the newline, no line or paragraph separator, and no backslash right before n, r or t in either case: cmux types the lowercase pairs as
- *   Enter or Tab and has no escape for them, and the uppercase pairs are not tested.
+ *   Enter or Tab and has no escape for them, and the uppercase pairs are not tested. No line may end with a
+ *   backslash (spaces after it count as its end): Claude Code reads a backslash and Enter as a new line, so the
+ *   prompt would stay in the input box and block each later prompt.
  * Each argv names the workspace and the surface, and puts `--` right before the text or the key, so a text that
  * looks like a flag stays text. A peer message has no keys: the engine sends it, and this plan refuses it.
  */
@@ -52,14 +55,18 @@ const BLANK = /^[\p{White_Space}\p{Cf}\p{Default_Ignorable_Code_Point}]*$/u
 const CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/
 /** a backslash right before n, r or t, in either case: cmux send types the lowercase pairs as Enter or Tab */
 const BACKSLASH_ESCAPE = /\\[nrtNRT]/
-/** a cmux workspace or surface ref (`workspace:2`, `surface:3`): a plain token that cannot read as a flag */
-const REF = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/
+/** a backslash at the end of a line, with only spaces after it: Claude Code reads it and Enter as a new line */
+const LINE_END_BACKSLASH = /\\[^\S\n]*$/m
+/** a cmux workspace ref: `workspace:N` or a UUID, never a bare index that cmux resolves in the current window */
+const WORKSPACE_REF = /^(?:workspace:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
+/** a cmux surface ref: `surface:N` or a UUID */
+const SURFACE_REF = /^(?:surface:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
 
 /** Why a prompt text cannot go out as typed keys, or undefined when it can. */
 export function textRefusal(text: string): DeliverRefusal | undefined {
   if (BLANK.test(text)) return 'empty'
   if (CONTROL_CHAR.test(text)) return 'control-char'
-  if (BACKSLASH_ESCAPE.test(text)) return 'backslash-escape'
+  if (BACKSLASH_ESCAPE.test(text) || LINE_END_BACKSLASH.test(text)) return 'backslash-escape'
   return undefined
 }
 
@@ -104,7 +111,7 @@ export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: Targe
     const refusal = textRefusal(intent.text)
     if (refusal) return refuse(refusal)
   }
-  if (!REF.test(screen.workspaceRef) || !REF.test(screen.surfaceRef)) return refuse('no-tab')
+  if (!WORKSPACE_REF.test(screen.workspaceRef) || !SURFACE_REF.test(screen.surfaceRef)) return refuse('no-tab')
   if (screen.sessionId !== intent.target.sessionId) return refuse('screen-changed')
   const age = now - screen.readAt
   const lag = screen.readAt - facts.factsAt

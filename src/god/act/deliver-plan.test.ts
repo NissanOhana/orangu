@@ -130,7 +130,7 @@ describe('planDelivery: the keys it sends', () => {
 describe('planDelivery: each refusal from 1 screen fixture', () => {
   const cases: [DeliverRefusal, KeyIntent, ScreenRead][] = [
     ['stale-screen', ANSWER, screen('question', { readAt: NOW - SCREEN_MAX_AGE_MS - 1 })],
-    ['screen-changed', { ...ANSWER, option: 2 }, screen('question-changed')],
+    ['screen-changed', ANSWER, screen('question-changed')],
     ['label-not-found', permission('yes'), screen('permission-amend')],
     ['multi-question', ANSWER, screen('question-two')],
     ['empty', prompt(''), screen('prompt-empty')],
@@ -268,6 +268,23 @@ describe('planDelivery: the screen read', () => {
     }
   })
 
+  it('refuses a bare index, which cmux resolves in the current window, and a ref of another kind', () => {
+    for (const ref of ['2', 'surface:3', 'pane:1', 'workspace:2x', 'workspace:', 'workspace:-2', `workspace:${'9'.repeat(10)}`]) {
+      expect(plan(ANSWER, screen('question', { workspaceRef: ref })), ref).toEqual(refused('no-tab'))
+    }
+    for (const ref of ['3', 'workspace:2', 'window:1', 'surface:3x', 'surface:']) {
+      expect(plan(ANSWER, screen('question', { surfaceRef: ref })), ref).toEqual(refused('no-tab'))
+    }
+  })
+
+  it('takes a UUID ref for the workspace and the surface', () => {
+    const workspaceRef = 'A019816D-6F57-4D6F-A83C-CD7AF2FAD8E4'
+    const surfaceRef = '0f8c2b1e-4a7d-4c3e-9b6a-1d2e3f405162'
+    const steps = [['cmux', 'send-key', '--workspace', workspaceRef, '--surface', surfaceRef, '--', '1']]
+    expect(plan(ANSWER, screen('question', { workspaceRef, surfaceRef }))).toEqual({ kind: 'send', steps })
+    expect(plan(ANSWER, screen('question', { workspaceRef: `${workspaceRef}0` }))).toEqual(refused('no-tab'))
+  })
+
   it('sends no key into a dialog for a prompt, and no digit into a prompt or the wrong dialog', () => {
     expect(plan(prompt('1'), screen('question'))).toEqual(CHANGED)
     expect(plan(prompt('yes'), screen('permission'))).toEqual(CHANGED)
@@ -303,6 +320,12 @@ describe('textRefusal', () => {
     for (const text of ['a\\nb', 'a\\rb', 'a\\tb', 'C:\\new', 'a\\\\nb', '\\t', 'a\\Nb', 'a\\Rb', 'a\\Tb', 'C:\\Temp']) expect(textRefusal(text), text).toBe('backslash-escape')
   })
 
+  it('refuses a line that ends with a backslash, which Claude Code reads as a new line in place of Enter', () => {
+    for (const text of ['ends with \\', 'ends with \\  ', `ends with \\${ch(0xa0)}`, 'first\\\nsecond', 'first\\  \nsecond', '\\']) {
+      expect(textRefusal(text), JSON.stringify(text)).toBe('backslash-escape')
+    }
+  })
+
   it('refuses a line or paragraph separator in a text with a visible character, which cmux can type as a line break', () => {
     for (const code of [0x2028, 0x2029]) {
       expect(textRefusal(`a${ch(code)}b`), `U+${code.toString(16)}`).toBe('control-char')
@@ -311,6 +334,6 @@ describe('textRefusal', () => {
   })
 
   it('passes a newline, a visible text with an invisible character in it, and a backslash before any other character', () => {
-    for (const text of ['line one\nline two', 'a\\b', 'a\\x41', 'a\\u0041', 'ends with \\', `a${ch(0x200b)}b`]) expect(textRefusal(text), text).toBeUndefined()
+    for (const text of ['line one\nline two', 'a\\b', 'a\\x41', 'a\\u0041', 'a\\ b', `a${ch(0x200b)}b`]) expect(textRefusal(text), text).toBeUndefined()
   })
 })
