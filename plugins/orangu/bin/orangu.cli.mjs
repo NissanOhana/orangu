@@ -4125,7 +4125,7 @@ function hasPrCreate(cmd) {
   });
 }
 var CORRECTION_START_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorrect|revert|undo|again[,.!]|still (broken|failing|wrong|not)|didn'?t work|doesn'?t work|you broke|why did you|stop[,.!]|don'?t do that|i said|as i said|i asked)/i;
-var CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not) work(?:s|ing)?\b|(?:dont|don'?t) work(?:s|ing)?\b(?!\s+on\b)|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|you(?:'re| are) not [a-z]+ing\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i;
+var CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not) work(?:s|ing)?\b|(?:dont|don'?t) work(?:s|ing)?\b(?!\s+on\b)|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b(?!\s+(?:understand|know|get|see|follow)\b))|you (?:forgot|missed|broke|ignored|skipped)\b|you(?:'re| are) not [a-z]+ing\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i;
 function isCorrection(text3) {
   return CORRECTION_START_RE.test(text3) || CORRECTION_ANY_RE.test(text3);
 }
@@ -4377,8 +4377,37 @@ function extractRules(text3, mcpServers = /* @__PURE__ */ new Set()) {
   }
   return out3;
 }
+var HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1([^\n]*)\n(?:[\s\S]*?\n)?[ \t]*\2[ \t]*(?=\n|$)/g;
+function dropComments(s) {
+  let out3 = "";
+  let quote = null;
+  let comment = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch2 = s[i];
+    if (comment) {
+      if (ch2 === "\n") {
+        comment = false;
+        out3 += ch2;
+      }
+      continue;
+    }
+    if (quote) {
+      out3 += ch2;
+      if (ch2 === "\\" && quote === '"' && i + 1 < s.length) out3 += s[++i];
+      else if (ch2 === quote) quote = null;
+      continue;
+    }
+    if (ch2 === "'" || ch2 === '"') quote = ch2;
+    else if (ch2 === "#" && (i === 0 || /\s/.test(s[i - 1]))) {
+      comment = true;
+      continue;
+    }
+    out3 += ch2;
+  }
+  return out3;
+}
 function commandSegments(cmd) {
-  return cmd.replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, " ").replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''").split(/&&|\|\||[;|\n]/).map((s) => s.trim().replace(/^[({]\s*/, "").replace(/\s+/g, " ")).filter(Boolean);
+  return dropComments(cmd.replace(HEREDOC_RE, (_m, _quote, _tag, rest) => " " + rest)).replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''").split(/&&|\|\||[;|\n]/).map((s) => s.trim().replace(/^[({]\s*/, "").replace(/\s+/g, " ")).filter(Boolean);
 }
 function boundaryAt(seg, at) {
   const c = seg[at];
@@ -4390,10 +4419,11 @@ function matchCommand(seg, target) {
   for (const at of starts) if (seg.startsWith(target, at) && boundaryAt(seg, at + target.length)) return seg.slice(0, at + target.length);
   return null;
 }
-var BLOCKED_RE = /^PreToolUse(?::\S+)? hook error\b|\bblocked by (?:a |the )?(?:PreToolUse )?hook\b|^Permission to use \S+[\s\S]*has been denied/i;
+var BLOCKED_RE = /^(?:PreToolUse(?::\S+)? hook error\b|Hook PreToolUse(?::\S+)? denied this tool|(?:Permission to use \S+|Agent type '[^']*')[\s\S]*?has been denied)/i;
 function wasBlocked(c) {
   return c.isError && BLOCKED_RE.test(c.resultPreview ?? c.errorHint ?? "");
 }
+var ENV_ONLY_RE = /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=\S*(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S*)*$/;
 function bashCommand(c) {
   const i = c.input;
   return typeof i?.["command"] === "string" ? i["command"] : "";
@@ -4402,8 +4432,14 @@ function callMatches(c, t, segs = c.name === "Bash" ? commandSegments(bashComman
   if (t.kind === "tool") return c.name === t.name ? c.name : null;
   if (t.kind === "mcp-server") return c.name.toLowerCase().startsWith(`mcp__${t.name}__`) ? c.name : null;
   if (c.name !== "Bash") return null;
+  let envSet = false;
   for (const seg of segs) {
+    if (ENV_ONLY_RE.test(seg)) {
+      envSet = true;
+      continue;
+    }
     if (t.kind === "command") {
+      if (envSet) continue;
       const hit = matchCommand(seg, t.name);
       if (hit) return hit;
     } else if (seg.split(" ").some((w) => w === t.name || w.startsWith(t.name + "="))) {
@@ -4461,7 +4497,7 @@ function parseMemoryWarning(content) {
   const m = MEMORY_WARNING_RE.exec(content);
   if (!m) return null;
   const size = m[1];
-  const over = /lines and/.test(size) ? "both" : /\blines \(limit/.test(size) ? "lines" : "bytes";
+  const over = /lines and/.test(size) ? "both" : /\blines \(limit/.test(size) ? "lines" : "chars";
   const lines = /(\d+) of (\d+) lines were cut off, starting at line (\d+)/.exec(m[2]);
   if (lines) return { over, totalLines: Number(lines[2]), linesCut: Number(lines[1]), firstCutLine: Number(lines[3]) };
   if (/everything after the first \d+ characters of line 1 was cut off/.test(m[2])) return { over, firstCutLine: 1 };
@@ -4486,7 +4522,8 @@ function analyzeInstructions(s) {
   const memoryCuts = [];
   const cutSeen = /* @__PURE__ */ new Set();
   for (const f of files2) {
-    if (!loaded.some((l) => l.path === f.path)) loaded.push({ path: f.path, type: f.type, bytes: utf8Bytes(f.content), lines: f.content.split("\n").length });
+    const text3 = f.content.replace(/\n*> WARNING: MEMORY\.md is [\s\S]*$/, "");
+    if (!loaded.some((l) => l.path === f.path)) loaded.push({ path: f.path, type: f.type, bytes: utf8Bytes(text3), lines: text3.split("\n").length });
     const cut = parseMemoryWarning(f.content);
     if (cut) {
       const key = `${f.path}|${cut.over}|${cut.totalLines}|${cut.linesCut}|${cut.firstCutLine}`;
@@ -10576,7 +10613,8 @@ import { readdir as readdir2, readFile, stat as stat5 } from "node:fs/promises";
 import { basename as basename7, join as join7 } from "node:path";
 var MEMORY_INDEX_LINE_LIMIT = 200;
 var MEMORY_INDEX_CHAR_LIMIT = 25e3;
-function memoryIndexCut(text3) {
+function memoryIndexCut(raw) {
+  const text3 = raw.trim();
   const lines = text3 === "" ? [] : text3.split("\n");
   if (lines.length && lines[lines.length - 1] === "") lines.pop();
   let chars = 0;

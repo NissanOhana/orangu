@@ -182,12 +182,47 @@ export function extractRules(text: string, mcpServers: ReadonlySet<string> = new
 }
 
 /**
+ * A heredoc: the opener keeps the rest of its line (`cat <<EOF > f && next build` still runs `next build`), and the
+ * body, empty or not, goes up to the terminator line.
+ */
+const HEREDOC_RE = /<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1([^\n]*)\n(?:[\s\S]*?\n)?[ \t]*\2[ \t]*(?=\n|$)/g
+
+/** a `#` comment runs to the end of its line, unless it sits in quotes; an apostrophe in a comment opens no quote */
+function dropComments(s: string): string {
+  let out = ''
+  let quote: string | null = null
+  let comment = false
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!
+    if (comment) {
+      if (ch === '\n') {
+        comment = false
+        out += ch
+      }
+      continue
+    }
+    if (quote) {
+      out += ch
+      if (ch === '\\' && quote === '"' && i + 1 < s.length) out += s[++i]
+      else if (ch === quote) quote = null
+      continue
+    }
+    if (ch === "'" || ch === '"') quote = ch
+    else if (ch === '#' && (i === 0 || /\s/.test(s[i - 1]!))) {
+      comment = true
+      continue
+    }
+    out += ch
+  }
+  return out
+}
+
+/**
  * Split a shell command into the segments a rule can start: on &&, ||, ;, | and new lines. A heredoc body and a
  * quoted string are data, not commands ("git commit -m \"... npx tsc --noEmit passes\""), so they go first.
  */
 export function commandSegments(cmd: string): string[] {
-  return cmd
-    .replace(/<<-?\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\1[^\n]*\n[\s\S]*?\n[ \t]*\2[ \t]*(?=\n|$)/g, ' ')
+  return dropComments(cmd.replace(HEREDOC_RE, (_m, _quote: string, _tag: string, rest: string) => ' ' + rest))
     .replace(/'[^']*'|"(?:[^"\\]|\\.)*"/g, "''")
     .split(/&&|\|\||[;|\n]/)
     .map((s) => s.trim().replace(/^[({]\s*/, '').replace(/\s+/g, ' '))
@@ -214,13 +249,18 @@ export function matchCommand(seg: string, target: string): string | null {
 
 /**
  * A PreToolUse hook or a permission rule stopped the call: the check held where the line in the file did not.
- * Claude Code writes "PreToolUse:Bash hook error: <the hook's message>" for a hook that exits 2, and "Permission to
- * use <tool> ... has been denied" for a deny rule.
+ * Claude Code writes "PreToolUse:Bash hook error: <the hook's message>" for a hook that exits 2, "Hook
+ * PreToolUse:Bash denied this tool" for a hook's JSON deny, and "Permission to use <tool> ... has been denied" or
+ * "Agent type '<x>' has been denied by permission rule" for a deny rule. Each is anchored at the start of the
+ * result, so a command whose own output says "blocked by the hook" is not a block.
  */
-const BLOCKED_RE = /^PreToolUse(?::\S+)? hook error\b|\bblocked by (?:a |the )?(?:PreToolUse )?hook\b|^Permission to use \S+[\s\S]*has been denied/i
+const BLOCKED_RE = /^(?:PreToolUse(?::\S+)? hook error\b|Hook PreToolUse(?::\S+)? denied this tool|(?:Permission to use \S+|Agent type '[^']*')[\s\S]*?has been denied)/i
 export function wasBlocked(c: ToolCall): boolean {
   return c.isError && BLOCKED_RE.test(c.resultPreview ?? c.errorHint ?? '')
 }
+
+/** a segment that only sets variables: `export A=1`, `export A=1 B=2`, `A=1` */
+const ENV_ONLY_RE = /^(?:export\s+)?[A-Za-z_][A-Za-z0-9_]*=\S*(?:\s+[A-Za-z_][A-Za-z0-9_]*=\S*)*$/
 
 function bashCommand(c: ToolCall): string {
   const i = c.input as Record<string, unknown> | undefined
@@ -236,8 +276,15 @@ export function callMatches(c: ToolCall, t: RuleTarget, segs: readonly string[] 
   // server names keep their case in a tool name (`mcp__claude_ai_Claude_Docs__…`), and a rule may not
   if (t.kind === 'mcp-server') return c.name.toLowerCase().startsWith(`mcp__${t.name}__`) ? c.name : null
   if (c.name !== 'Bash') return null
+  let envSet = false
   for (const seg of segs) {
+    // `export X=1; next build` sets the environment like `X=1 next build`, and neither is a bare run
+    if (ENV_ONLY_RE.test(seg)) {
+      envSet = true
+      continue
+    }
     if (t.kind === 'command') {
+      if (envSet) continue
       const hit = matchCommand(seg, t.name)
       if (hit) return hit
     } else if (seg.split(' ').some((w) => w === t.name || w.startsWith(t.name + '='))) {
@@ -326,7 +373,7 @@ export function parseMemoryWarning(content: string): Omit<MemoryCut, 'path' | 't
   const m = MEMORY_WARNING_RE.exec(content)
   if (!m) return null
   const size = m[1]!
-  const over: MemoryCut['over'] = /lines and/.test(size) ? 'both' : /\blines \(limit/.test(size) ? 'lines' : 'bytes'
+  const over: MemoryCut['over'] = /lines and/.test(size) ? 'both' : /\blines \(limit/.test(size) ? 'lines' : 'chars'
   const lines = /(\d+) of (\d+) lines were cut off, starting at line (\d+)/.exec(m[2]!)
   if (lines) return { over, totalLines: Number(lines[2]), linesCut: Number(lines[1]), firstCutLine: Number(lines[3]) }
   if (/everything after the first \d+ characters of line 1 was cut off/.test(m[2]!)) return { over, firstCutLine: 1 }
@@ -363,7 +410,9 @@ export function analyzeInstructions(s: Session): InstructionsAnalysis {
   const memoryCuts: MemoryCut[] = []
   const cutSeen = new Set<string>()
   for (const f of files) {
-    if (!loaded.some((l) => l.path === f.path)) loaded.push({ path: f.path, type: f.type, bytes: utf8Bytes(f.content), lines: f.content.split('\n').length })
+    // the loaded text, without the warning Claude Code appends to a cut index
+    const text = f.content.replace(/\n*> WARNING: MEMORY\.md is [\s\S]*$/, '')
+    if (!loaded.some((l) => l.path === f.path)) loaded.push({ path: f.path, type: f.type, bytes: utf8Bytes(text), lines: text.split('\n').length })
     const cut = parseMemoryWarning(f.content)
     if (cut) {
       const key = `${f.path}|${cut.over}|${cut.totalLines}|${cut.linesCut}|${cut.firstCutLine}`

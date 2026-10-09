@@ -86,7 +86,9 @@ export const MEMORY_INDEX_CHAR_LIMIT = 25_000
  * Where Claude Code cuts an auto-memory index at load: the whole lines that fit in both limits stay, the rest
  * goes. Its own warning counts the same way ("3 of 117 lines were cut off, starting at line 115").
  */
-export function memoryIndexCut(text: string): { lines: number; chars: number; linesPastLimit: number; firstLinePastLimit?: number } {
+export function memoryIndexCut(raw: string): { lines: number; chars: number; linesPastLimit: number; firstLinePastLimit?: number } {
+  // Claude Code trims the file first, so its line numbers count from the first non-blank line
+  const text = raw.trim()
   const lines = text === '' ? [] : text.split('\n')
   if (lines.length && lines[lines.length - 1] === '') lines.pop()
   let chars = 0

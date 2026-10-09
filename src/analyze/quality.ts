@@ -92,7 +92,7 @@ const CORRECTION_START_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorre
  * these. Each phrase names a failure, so a status question ("what is still open?") or a plan ("blocks we did not
  * work on yet") does not match: "did not work on" is a plan, "does not work on mobile" is a complaint.
  */
-const CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not) work(?:s|ing)?\b|(?:dont|don'?t) work(?:s|ing)?\b(?!\s+on\b)|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|you(?:'re| are) not [a-z]+ing\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i
+const CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not) work(?:s|ing)?\b|(?:dont|don'?t) work(?:s|ing)?\b(?!\s+on\b)|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b(?!\s+(?:understand|know|get|see|follow)\b))|you (?:forgot|missed|broke|ignored|skipped)\b|you(?:'re| are) not [a-z]+ing\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i
 
 /** true when a human prompt reads as a correction of the agent's last result */
 export function isCorrection(text: string): boolean {
