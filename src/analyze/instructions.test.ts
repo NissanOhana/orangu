@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from './analyze.js'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
-import { commandSegments, contentWords, extractRules, matchCommand, noteKindOf, parseMemoryWarning, type RuleTarget } from './instructions.js'
+import { callMatches, commandSegments, contentWords, extractRules, matchCommand, noteKindOf, parseMemoryWarning, wasBlocked, type RuleTarget } from './instructions.js'
 import type { Analysis } from '../model/analysis.js'
 
 const targets = (text: string, servers: string[] = []): RuleTarget[] => extractRules(text, new Set(servers)).flatMap((r) => r.targets)
@@ -125,18 +125,47 @@ describe('commandSegments', () => {
     expect(commandSegments(commit)).toEqual(["git commit -m ''", 'git push'])
     expect(commandSegments("echo 'next build; npm ci' && next build")).toEqual(["echo ''", 'next build'])
   })
+
+  it('keeps a command after an empty heredoc and on the heredoc opener line', () => {
+    expect(commandSegments('cat <<EOF\nEOF\nnext build')).toEqual(['cat', 'next build'])
+    expect(commandSegments("cat <<'EOF' > notes.md && next build\nbody line\nEOF")).toEqual(['cat > notes.md', 'next build'])
+  })
+
+  it('reads an apostrophe in a comment as comment text, not as a quote', () => {
+    expect(commandSegments("# don't skip the heap flag\nnpx tsc --noEmit\necho 'done'")).toEqual(['npx tsc --noEmit', "echo ''"])
+    expect(commandSegments('echo "a # b" && next build')).toEqual(["echo ''", 'next build'])
+  })
+})
+
+describe('callMatches', () => {
+  const bash = (command: string, result = 'ok', isError = false) =>
+    ({ toolUseId: 't', name: 'Bash', category: 'shell', input: { command }, inputSummary: '', inputBytes: 0, messageUuid: 'm', turnIndex: 0, isError, unresolved: false, parallelGroupSize: 1, resultPreview: result }) as unknown as Parameters<typeof callMatches>[0]
+  it('holds a bare rule when an export sets the environment first', () => {
+    const t = { kind: 'command', name: 'npx tsc --noEmit' } as const
+    expect(callMatches(bash('export NODE_OPTIONS=--max_old_space_size=12288; npx tsc --noEmit'), t)).toBeNull()
+    expect(callMatches(bash('cd web && npx tsc --noEmit'), t)).toBe('npx tsc --noEmit')
+  })
+
+  it('reads each block text that Claude Code writes, and no command output', () => {
+    expect(wasBlocked(bash('next build', 'PreToolUse:Bash hook error: needs NODE_OPTIONS', true))).toBe(true)
+    expect(wasBlocked(bash('next build', 'Hook PreToolUse:Bash denied this tool', true))).toBe(true)
+    expect(wasBlocked(bash('next build', 'Permission to use Bash with command next build has been denied.', true))).toBe(true)
+    expect(wasBlocked(bash('x', "Agent type 'reviewer' has been denied by permission rule Agent(reviewer)", true))).toBe(true)
+    expect(wasBlocked(bash('make', 'error: the deploy was blocked by the hook in CI', true))).toBe(false)
+    expect(wasBlocked(bash('next build', 'PreToolUse:Bash hook error: x', false))).toBe(false)
+  })
 })
 
 describe('parseMemoryWarning', () => {
   it('reads the byte form that Claude Code writes', () => {
     const w = '> WARNING: MEMORY.md is 25.1KB (limit: 24.4KB) — index entries are too long. Only part of it was loaded: 5 of 115 lines were cut off, starting at line 111 ("- [x](y.md) —…"). Keep index entries to one line under ~200 chars; move detail into topic files.'
-    expect(parseMemoryWarning(w)).toEqual({ over: 'bytes', totalLines: 115, linesCut: 5, firstCutLine: 111 })
+    expect(parseMemoryWarning(w)).toEqual({ over: 'chars', totalLines: 115, linesCut: 5, firstCutLine: 111 })
   })
 
   it('reads the line form, both limits, and the one-long-line form', () => {
     expect(parseMemoryWarning('MEMORY.md is 230 lines (limit: 200). Only part of it was loaded: 30 of 230 lines were cut off, starting at line 201. Keep index entries short')).toEqual({ over: 'lines', totalLines: 230, linesCut: 30, firstCutLine: 201 })
     expect(parseMemoryWarning('MEMORY.md is 230 lines and 30.2KB. Only part of it was loaded: 40 of 230 lines were cut off, starting at line 191. Keep index entries short')).toEqual({ over: 'both', totalLines: 230, linesCut: 40, firstCutLine: 191 })
-    expect(parseMemoryWarning('MEMORY.md is 40.0KB (limit: 24.4KB) — index entries are too long. Only part of it was loaded: everything after the first 25000 characters of line 1 was cut off. Keep index entries short')).toEqual({ over: 'bytes', firstCutLine: 1 })
+    expect(parseMemoryWarning('MEMORY.md is 40.0KB (limit: 24.4KB) — index entries are too long. Only part of it was loaded: everything after the first 25000 characters of line 1 was cut off. Keep index entries short')).toEqual({ over: 'chars', firstCutLine: 1 })
     expect(parseMemoryWarning('# a normal memory index')).toBeNull()
   })
 })
@@ -189,7 +218,7 @@ describe('analyzeInstructions on a parsed session', () => {
     ])
     expect(ins.rules).toHaveLength(1)
     expect(ins.rules[0]).toMatchObject({ source: 'loaded', line: 2, target: { kind: 'command', name: 'next build' }, calls: 2, agentCalls: 1, examples: ['next build', 'npx next build'] })
-    expect(ins.memoryCuts).toEqual([expect.objectContaining({ over: 'bytes', totalLines: 115, linesCut: 5, firstCutLine: 111 })])
+    expect(ins.memoryCuts).toEqual([expect.objectContaining({ over: 'chars', totalLines: 115, linesCut: 5, firstCutLine: 111 })])
   })
 
   it('counts a call that a PreToolUse hook or a deny rule stopped as blocked', async () => {

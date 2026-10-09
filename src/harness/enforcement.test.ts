@@ -197,6 +197,9 @@ describe('memoryIndexCut', () => {
     // 120 lines of 220 characters: 113 lines fit (113 x 221 = 24,973), the 114th goes over
     expect(memoryIndexCut(Array.from({ length: 120 }, () => 'x'.repeat(220)).join('\n'))).toMatchObject({ lines: 120, linesPastLimit: 7, firstLinePastLimit: 114 })
     expect(memoryIndexCut('')).toEqual({ lines: 0, chars: 0, linesPastLimit: 0 })
+    // Claude Code trims first: a blank first line does not move the line numbers, and trailing blank lines do not count
+    const lines = Array.from({ length: 230 }, (_, i) => `- line ${i}`).join('\n')
+    expect(memoryIndexCut('\n' + lines + '\n\n\n')).toMatchObject({ lines: 230, linesPastLimit: 30, firstLinePastLimit: 201 })
     // the limit counts characters: 120 lines of 220 two-byte letters hold 26,400 chars and 52,800 bytes
     expect(memoryIndexCut(Array.from({ length: 120 }, () => 'é'.repeat(220)).join('\n'))).toMatchObject({ linesPastLimit: 7, firstLinePastLimit: 114 })
     // 24,752 chars that are 25,024 bytes: Claude Code loads all of it

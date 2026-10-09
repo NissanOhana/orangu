@@ -435,8 +435,8 @@ export interface NoteWrite {
 export interface MemoryCut {
   path: string
   ts?: number
-  /** which limit the file went over */
-  over: 'bytes' | 'lines' | 'both'
+  /** which limit the file went over: 25,000 characters, 200 lines, or both */
+  over: 'chars' | 'lines' | 'both'
   totalLines?: number
   linesCut?: number
   firstCutLine: number
