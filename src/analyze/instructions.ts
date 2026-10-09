@@ -37,6 +37,8 @@ const BARE_TOOL_TARGETS = new Set(['WebFetch', 'WebSearch', 'TodoWrite', 'AskUse
 const RUNNERS = ['npx ', 'npm run ', 'npm exec ', 'pnpm run ', 'pnpm exec ', 'pnpm dlx ', 'pnpm ', 'yarn run ', 'yarn dlx ', 'yarn ', 'bunx ', 'bun run ', 'bun x ']
 
 const NEGATIVE_RE = /\b(?:never|do not|don't|dont|must not|mustn't|should not|shouldn't|stop)\s+(?:ever\s+)?(?:use|using|run|running|call|calling|invoke|invoking|execute|executing)\b|\bavoid(?:ing)?\b/gi
+/** "never call `x`" is about code (a function, a method), so it names a tool or a server, never a shell command */
+const CODE_VERB_RE = /\b(?:call|calling|invoke|invoking)$/i
 /** where a "do not" clause ends: a sentence end, a dash, a semicolon, or a turn to what to do instead */
 const CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[\u2014\u2013-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except)\b/i
 /** "use X instead of Y", "use X rather than Y", "use X, not Y", "prefer X over Y": Y follows the connector */
@@ -45,7 +47,8 @@ const NOT_RE = /(?:,\s*|\s)not\s+/gi
 const OVER_RE = /\bprefer\b[^.;]*?\bover\s+/gi
 
 const SPAN = '\u0000'
-const COMMAND_RE = /^[a-z][a-z0-9.+-]*(?::[a-z0-9:._-]+)?(?:\s+\S+)*$/
+/** a program word, an optional script name after a colon, and at most 5 more plain words */
+const COMMAND_RE = /^[a-z][a-z0-9.+-]*(?::[a-z0-9:._-]+)?(?:\s+[^\s*`]+){0,5}$/
 const FLAG_RE = /^--[a-z][a-z0-9-]*$/
 
 /** a code span's text as a target, or null when it names nothing a call can match */
@@ -97,6 +100,46 @@ function sameTarget(a: RuleTarget, b: RuleTarget): boolean {
 }
 
 /**
+ * Each markdown code span becomes a placeholder, and then markdown emphasis goes, so "bare.** Both" ends its
+ * sentence. A span opens with a run of N backticks and closes at the next run of exactly N (CommonMark), so
+ * `` sql`x` `` is one span. An unclosed run stays as text.
+ */
+export function maskCodeSpans(line: string): { masked: string; spans: string[] } {
+  const spans: string[] = []
+  let masked = ''
+  let i = 0
+  while (i < line.length) {
+    if (line[i] !== '`') {
+      masked += line[i]
+      i++
+      continue
+    }
+    let n = 0
+    while (line[i + n] === '`') n++
+    let close = -1
+    for (let j = i + n; j < line.length; j++) {
+      if (line[j] !== '`') continue
+      let m = 0
+      while (line[j + m] === '`') m++
+      if (m === n) {
+        close = j
+        break
+      }
+      j += m - 1
+    }
+    if (close < 0) {
+      masked += line.slice(i, i + n)
+      i += n
+      continue
+    }
+    const inner = line.slice(i + n, close)
+    masked += ` ${SPAN}${spans.push(inner.length > 2 && inner.startsWith(' ') && inner.endsWith(' ') ? inner.slice(1, -1) : inner) - 1}${SPAN} `
+    i = close + n
+  }
+  return { masked: masked.replace(/\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])/g, ''), spans }
+}
+
+/**
  * Every line of an instruction text that reads as a "do not" rule naming something a call can match.
  * `mcpServers` holds the lower-case server names the session knows, so "not playwright" can name a server.
  */
@@ -106,11 +149,7 @@ export function extractRules(text: string, mcpServers: ReadonlySet<string> = new
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i]!.replace(/[’‘]/g, "'")
     if (!raw.includes('`') && !/never|not|avoid|stop|instead|rather|prefer/i.test(raw)) continue
-    const spans: string[] = []
-    // a code span becomes a placeholder, then markdown emphasis goes, so "bare.** Both" ends its sentence
-    const masked = raw
-      .replace(/`([^`]+)`/g, (_m, inner: string) => ` ${SPAN}${spans.push(inner) - 1}${SPAN} `)
-      .replace(/\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])/g, '')
+    const { masked, spans } = maskCodeSpans(raw)
     const targets: RuleTarget[] = []
     const add = (ts: RuleTarget[]) => {
       for (const t of ts) if (!targets.some((x) => sameTarget(x, t))) targets.push(t)
@@ -118,7 +157,8 @@ export function extractRules(text: string, mcpServers: ReadonlySet<string> = new
     for (const m of masked.matchAll(NEGATIVE_RE)) {
       const after = masked.slice(m.index! + m[0].length)
       const end = CLAUSE_END_RE.exec(after)
-      add(targetsIn(end ? after.slice(0, end.index) : after, spans, mcpServers))
+      const found = targetsIn(end ? after.slice(0, end.index) : after, spans, mcpServers)
+      add(CODE_VERB_RE.test(m[0]) ? found.filter((t) => t.kind === 'tool' || t.kind === 'mcp-server') : found)
     }
     for (const re of [INSTEAD_RE, OVER_RE]) {
       for (const m of masked.matchAll(re)) add(firstTargetAfter(masked.slice(m.index! + m[0].length), spans, mcpServers))
@@ -162,6 +202,16 @@ export function matchCommand(seg: string, target: string): string | null {
   return null
 }
 
+/**
+ * A PreToolUse hook or a permission rule stopped the call: the check held where the line in the file did not.
+ * Claude Code writes "PreToolUse:Bash hook error: <the hook's message>" for a hook that exits 2, and "Permission to
+ * use <tool> ... has been denied" for a deny rule.
+ */
+const BLOCKED_RE = /^PreToolUse(?::\S+)? hook error\b|\bblocked by (?:a |the )?(?:PreToolUse )?hook\b|^Permission to use \S+[\s\S]*has been denied/i
+export function wasBlocked(c: ToolCall): boolean {
+  return c.isError && BLOCKED_RE.test(c.resultPreview ?? c.errorHint ?? '')
+}
+
 function bashCommand(c: ToolCall): string {
   const i = c.input as Record<string, unknown> | undefined
   return typeof i?.['command'] === 'string' ? (i['command'] as string) : ''
@@ -200,18 +250,30 @@ const STOP_WORDS = new Set(
     'make makes made sure true false into onto when then thing things everything something nothing anyone every ' +
     // markdown and memory frontmatter keys, and the words every note uses
     'name description metadata type node_type originsessionid modified project feedback reference user apply rule rules ' +
-    'note notes memory index file files line lines code task tasks work session sessions agent agents claude ' +
-    'please stop still again broken working fixed wrong'
+    'note notes memory index file files line lines code task tasks work session sessions agent agents claude please ' +
+    // words of any request, not of a topic
+    'full text open opened close closed start started want need needs show give tell look looks good well part time ' +
+    'today problem issue item items current status left real simple plain sure okay done keep kept take took'
   ).split(/\s+/),
 )
+/** the words of a complaint itself: a note and a complaint that share only these share nothing */
+const COMPLAINT_WORDS = new Set(['stop', 'still', 'again', 'broken', 'working', 'fixed', 'wrong', 'dont', 'told', 'already', 'forgot', 'missed', 'ignored', 'skipped'])
 
-/** distinct content words of a text (4+ letters, lower case, no stop words), in order of first use */
-export function contentWords(text: string, cap = NOTE_WORD_CAP): string[] {
+/**
+ * Distinct content words of a text (4+ letters, lower case, no stop words), in order of first use. The words of a
+ * complaint ("broken", "still") are left out unless `keepComplaintWords`: a theme count wants them, a match between a
+ * note and a complaint does not.
+ */
+export function contentWords(text: string, opts: { cap?: number; keepComplaintWords?: boolean } = {}): string[] {
+  const cap = opts.cap ?? NOTE_WORD_CAP
   const out: string[] = []
   const seen = new Set<string>()
-  for (const m of text.toLowerCase().matchAll(/[a-z][a-z'-]{3,}/g)) {
+  // a URL or a path is an address, not a topic ("https", "users")
+  const prose = text.toLowerCase().replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/g, ' ').replace(/(?:~|\.{1,2})?(?:\/[\w.@~-]+){2,}\/?/g, ' ')
+  for (const m of prose.matchAll(/[a-z][a-z'-]{3,}/g)) {
     const w = m[0].replace(/['-]+$/, '')
-    if (w.length < 4 || STOP_WORDS.has(w) || seen.has(w)) continue
+    // a contraction ("doesn't", "you're") is a function word, never a topic
+    if (w.length < 4 || w.includes("'") || STOP_WORDS.has(w) || seen.has(w) || (!opts.keepComplaintWords && COMPLAINT_WORDS.has(w))) continue
     seen.add(w)
     out.push(w)
     if (out.length >= cap) break
@@ -228,6 +290,13 @@ export function noteKindOf(path: string): NoteKind | undefined {
   if (base === 'AGENTS.md') return 'agents-md'
   if (/\/\.claude\/rules\/.+\.md$/.test(p)) return 'rules'
   return undefined
+}
+
+/** the `type:` of a memory note's frontmatter (`feedback`, `user`, `project`, `reference`), or undefined */
+export function noteTypeOf(text: string): string | undefined {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text)
+  const m = fm ? /^\s*type:\s*["']?([a-z][a-z-]*)/m.exec(fm[1]!) : null
+  return m ? m[1] : undefined
 }
 
 function writtenText(c: ToolCall): { path?: string; text: string } {
@@ -300,13 +369,18 @@ export function analyzeInstructions(s: Session): InstructionsAnalysis {
     const { path, text } = writtenText(c)
     const kind = path ? noteKindOf(path) : undefined
     if (!path || !kind) continue
-    noteWrites.push({ path, kind, turnIndex: c.turnIndex, ...(c.startTs !== undefined ? { ts: c.startTs } : {}), ...(c.agentId ? { agentId: c.agentId } : {}), words: contentWords(text) })
+    const noteType = noteTypeOf(text)
+    noteWrites.push({ path, kind, turnIndex: c.turnIndex, ...(c.startTs !== undefined ? { ts: c.startTs } : {}), ...(c.agentId ? { agentId: c.agentId } : {}), ...(noteType ? { noteType } : {}), words: contentWords(text) })
     // a note the session wrote is in its context from the write on, whether or not Claude Code loads the file
     if (!c.agentId) sources.push({ path, source: 'written', text, ...(c.startTs !== undefined ? { since: c.startTs } : {}) })
   }
 
+  // nothing to check in a session that loaded no instruction file and wrote no note: the common case stays O(calls)
+  if (!sources.length) return { loaded, rules: [], noteWrites, memoryCuts }
   const servers = mcpServersOf(s)
-  const segsByCall = s.toolCalls.map((c) => (c.name === 'Bash' ? commandSegments(bashCommand(c)) : []))
+  // each command is split once, and only when a rule asks for it
+  const segsCache: Array<string[] | undefined> = new Array(s.toolCalls.length)
+  const segsOf = (k: number): string[] => (segsCache[k] ??= s.toolCalls[k]!.name === 'Bash' ? commandSegments(bashCommand(s.toolCalls[k]!)) : [])
   const rules: InstructionRule[] = []
   for (const src of sources) {
     for (const r of extractRules(src.text, servers)) {
@@ -316,15 +390,17 @@ export function analyzeInstructions(s: Session): InstructionsAnalysis {
         if (prior && (prior.since === undefined || src.since === undefined || prior.since <= src.since)) continue
         let calls = 0
         let agentCalls = 0
+        let blocked = 0
         let firstCallTurnIndex: number | undefined
         const examples: string[] = []
         for (let k = 0; k < s.toolCalls.length; k++) {
           const c = s.toolCalls[k]!
           if (src.since !== undefined && (c.startTs === undefined || c.startTs < src.since)) continue
-          const hit = callMatches(c, target, segsByCall[k])
+          const hit = callMatches(c, target, target.kind === 'command' || target.kind === 'flag' ? segsOf(k) : [])
           if (!hit) continue
           calls++
           if (c.agentId) agentCalls++
+          if (wasBlocked(c)) blocked++
           if (firstCallTurnIndex === undefined) firstCallTurnIndex = c.turnIndex
           if (examples.length < 3 && !examples.includes(hit)) examples.push(hit)
         }
@@ -336,6 +412,7 @@ export function analyzeInstructions(s: Session): InstructionsAnalysis {
           target,
           calls,
           agentCalls,
+          blocked,
           examples,
           ...(src.since !== undefined ? { since: src.since } : {}),
           ...(firstCallTurnIndex !== undefined ? { firstCallTurnIndex } : {}),

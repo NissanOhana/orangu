@@ -24,6 +24,8 @@ describe('isCorrection', () => {
       'I told you to check every screen size',
       'i already said use pnpm',
       'the card is still cut on the small screen',
+      'you are not validating changes on all screen sizes!',
+      "you're not running the tests",
     ]) {
       expect(isCorrection(p), p).toBe(true)
     }
@@ -42,6 +44,7 @@ describe('isCorrection', () => {
       'notes on the broken-link checker design',
       'a stopwatch for the build',
       'tell me what we did and what is still missing',
+      'you are not allowed to push to main',
     ]) {
       expect(isCorrection(p), p).toBe(false)
     }

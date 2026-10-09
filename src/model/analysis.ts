@@ -410,6 +410,8 @@ export interface InstructionRule {
   calls: number
   /** the part of `calls` that subagents made */
   agentCalls: number
+  /** the part of `calls` that a PreToolUse hook or a permission rule stopped, so the call did not run */
+  blocked: number
   /** up to 3 distinct matches: a runner and the target (`npx next build`), a program and a flag, or a tool name */
   examples: string[]
   /** when the rule entered the context, when known */
@@ -423,6 +425,8 @@ export interface NoteWrite {
   turnIndex: number
   ts?: number
   agentId?: string
+  /** the frontmatter `type:` of a memory note (`feedback`, `user`, `project`, `reference`) */
+  noteType?: string
   /** distinct content words (4+ letters, no stop words) of the text written, in order, at most 40 */
   words: string[]
 }
