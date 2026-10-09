@@ -15,6 +15,6 @@
     "typeRoots": ["god/.claude-plugin/types"],
     "types": ["claude-code", "claude-code-tools", "claude-code-mcp"]
   },
-  "include": ["src/god/**/*.ts", "src/god/**/*.tsx", "god/tests/**/*.ts"],
+  "include": ["src/god/**/*.ts", "src/god/**/*.tsx", "god/tests/**/*.ts", "src/discover/slug.ts", "src/adapters/claude-code/prompt-kind.ts"],
   "exclude": ["src/god/**/*.test.ts"]
 }
