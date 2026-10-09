@@ -36,9 +36,11 @@ import {
   type ReadEvidenceSessionResult,
 } from './evidence-input.js'
 import type { ParseInput } from './parse-input.js'
+import { classifyPrompt, COMMAND_RE, INTERRUPT_RE, sessionTitle } from './prompt-kind.js'
 import { categorizeTool, skillNameFromInput, summarizeToolInput } from './tools.js'
 
 export type { ParseInput } from './parse-input.js'
+export { classifyPrompt } from './prompt-kind.js'
 
 // ---------- typed access helpers ----------
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
@@ -201,15 +203,6 @@ function parseBlocks(content: unknown, keepText: boolean, unknownBlockTypes: Cou
   return out
 }
 
-const COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/
-const COMMAND_ARGS_RE = /<command-args>\s*([^<]*?)\s*<\/command-args>/
-/** `<command-message>x</command-message> <command-name>/x</command-name> <command-args>a</command-args>` → `/x a` */
-function commandEnvelopeTitle(envelope: string, commandName?: string): string {
-  const name = commandName || COMMAND_RE.exec(envelope)?.[1] || envelope
-  const args = COMMAND_ARGS_RE.exec(envelope)?.[1]
-  return args ? `${name} ${args}` : name
-}
-const INTERRUPT_RE = /\[Request interrupted by user/i
 /**
  * A machine-generated queue enqueue: the harness pastes a task/system notification envelope into the
  * queue when a background task finishes. Task and system notification wrappers are machine events.
@@ -217,31 +210,6 @@ const INTERRUPT_RE = /\[Request interrupted by user/i
  * by the human.
  */
 const NOTIFICATION_ENQUEUE_RE = /^\s*<(?:task|system)-notification>/
-const LEADING_REMINDERS_RE = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/
-
-/** Classify a non-tool-result user message. Uses Claude Code's origin/promptSource when present, else content heuristics. */
-export function classifyPrompt(r: JsonObject, text: string, isMeta: boolean): PromptKind {
-  const origin = obj(r['origin'])
-  const originKind = str(origin?.['kind'])
-  const promptSource = str(r['promptSource'])
-  if (INTERRUPT_RE.test(text.slice(0, 200))) return 'interrupt'
-  if (r['isVisibleInTranscriptOnly'] === true) return 'meta'
-  if (originKind === 'human' || promptSource === 'typed') return COMMAND_RE.test(text) ? 'command' : 'human'
-  if (originKind === 'task-notification') return 'notification'
-  if (originKind === 'peer' || originKind === 'teammate' || originKind === 'cross-session') return 'peer'
-  const t = text.replace(LEADING_REMINDERS_RE, '').trimStart()
-  if (t.startsWith('<command-name>') || t.startsWith('<command-message>')) return 'command'
-  if (t.startsWith('<local-command-stdout>') || t.startsWith('<local-command-caveat>') || t.startsWith('<local-command-stderr>')) return 'local_output'
-  if (t.startsWith('<task-notification>')) return 'notification'
-  if (t.startsWith('<teammate-message') || t.startsWith('<cross-session-message') || t.startsWith('Another Claude session sent a message')) return 'peer'
-  if (isMeta && promptSource === 'system') return 'scheduled'
-  if (isMeta) return 'meta'
-  // known Claude Code injected wrappers → meta. Arbitrary pasted markup (<div>, <Component>, <xml>) is NOT
-  // meta: a real human prompt can start with pasted code, and we must not lose that turn.
-  const META_TAGS = ['<user-prompt-submit-hook>', '<system-reminder>', '<budget:', '<total_tokens>', '<user-memory-input>', '<important_context>', '<function_results>', '<returned-by-']
-  if (META_TAGS.some((tag) => t.startsWith(tag))) return 'meta'
-  return 'human'
-}
 
 // ---------- sidecar discovery ----------
 export async function discoverSubagentFiles(mainPath: string): Promise<Array<{ path: string; metaPath?: string; agentIdHint: string }>> {
@@ -1026,9 +994,7 @@ function buildSession(files: FileInput[], mainPath: string, keepText: boolean, t
   meta.startedAt = firstTs
   meta.endedAt = lastTs
   meta.wallMs = firstTs !== undefined && lastTs !== undefined ? lastTs - firstTs : undefined
-  const rawTitle = meta.customTitle ?? meta.aiTitle ?? firstPromptPreview ?? turns[0]?.promptPreview
-  // a first prompt that is a slash-command envelope titles the session by its command, not its markup
-  meta.title = rawTitle !== undefined && /^\s*<command-(?:message|name)>/.test(rawTitle) ? commandEnvelopeTitle(rawTitle, turns[0]?.commandName) : rawTitle
+  meta.title = sessionTitle(meta.customTitle, meta.aiTitle, firstPromptPreview ?? turns[0]?.promptPreview, turns[0]?.commandName)
   if (!meta.sessionId) meta.sessionId = basename(mainPath, '.jsonl')
   if (files[0]?.trailingPartial) meta.possiblyLive = true
   if (seenSessionIds.size > 1) warn('multiple_session_ids', `records reference ${seenSessionIds.size} distinct sessionIds (resumed/forked session)`)

@@ -1127,11 +1127,11 @@ async function readSessionRecord(path) {
     const pid = r["pid"];
     const sessionId = r["sessionId"];
     if (!Number.isSafeInteger(pid) || pid <= 0 || typeof sessionId !== "string" || !SESSION_ID_RE.test(sessionId)) return void 0;
-    const str2 = (k) => typeof r[k] === "string" ? r[k] : void 0;
+    const str3 = (k) => typeof r[k] === "string" ? r[k] : void 0;
     const out3 = { pid, sessionId };
-    const cwd = str2("cwd");
-    const name = str2("name");
-    const status = str2("status");
+    const cwd = str3("cwd");
+    const name = str3("name");
+    const status = str3("status");
     if (cwd) out3.cwd = cwd;
     if (name) out3.name = name;
     if (status) out3.status = status;
@@ -2104,19 +2104,19 @@ function scrubOne(s, opts) {
   }
   return out3;
 }
-function isAgentRecord(obj2) {
-  if ("toolUseId" in obj2 || "category" in obj2) return false;
-  return "spawnDepth" in obj2 && ("agentId" in obj2 || "hasTranscript" in obj2) || "agentId" in obj2 && ("agentType" in obj2 || "status" in obj2) && ("toolErrors" in obj2 || "tokens" in obj2);
+function isAgentRecord(obj3) {
+  if ("toolUseId" in obj3 || "category" in obj3) return false;
+  return "spawnDepth" in obj3 && ("agentId" in obj3 || "hasTranscript" in obj3) || "agentId" in obj3 && ("agentType" in obj3 || "status" in obj3) && ("toolErrors" in obj3 || "tokens" in obj3);
 }
-function isRuleRecord(obj2) {
-  return "ruleId" in obj2 && "severity" in obj2 && "axis" in obj2;
+function isRuleRecord(obj3) {
+  return "ruleId" in obj3 && "severity" in obj3 && "axis" in obj3;
 }
-function isQualitySignal(obj2) {
-  return "tone" in obj2 && "value" in obj2 && !("ruleId" in obj2);
+function isQualitySignal(obj3) {
+  return "tone" in obj3 && "value" in obj3 && !("ruleId" in obj3);
 }
 var SAFE_EVENT_KINDS = /* @__PURE__ */ new Set(["interrupt", "pr_link", "plan_mode", "model_fallback", "permission_prompt", "away_summary"]);
-function isSafeEventRecord(obj2) {
-  return "kind" in obj2 && "turnIndex" in obj2 && "label" in obj2 && SAFE_EVENT_KINDS.has(String(obj2["kind"]));
+function isSafeEventRecord(obj3) {
+  return "kind" in obj3 && "turnIndex" in obj3 && "label" in obj3 && SAFE_EVENT_KINDS.has(String(obj3["kind"]));
 }
 function stripsText(key, source) {
   switch (key) {
@@ -2146,12 +2146,12 @@ function strippedCountMap(value, opts) {
   const total = Object.values(source).reduce((sum2, count3) => sum2 + (typeof count3 === "number" ? count3 : 0), 0);
   return total ? { [STRIPPED_KEY]: total } : {};
 }
-function walk(obj2, opts) {
-  if (typeof obj2 === "string") return scrubOne(obj2, opts);
-  if (Array.isArray(obj2)) return obj2.map((x) => walk(x, opts));
-  if (obj2 && typeof obj2 === "object") {
+function walk(obj3, opts) {
+  if (typeof obj3 === "string") return scrubOne(obj3, opts);
+  if (Array.isArray(obj3)) return obj3.map((x) => walk(x, opts));
+  if (obj3 && typeof obj3 === "object") {
     const out3 = /* @__PURE__ */ new Map();
-    const source = obj2;
+    const source = obj3;
     const unknownRecordTypes = source["unknownRecordTypes"];
     const unknownRecordKeys = unknownRecordTypes && typeof unknownRecordTypes === "object" && !Array.isArray(unknownRecordTypes) ? new Set(Object.keys(unknownRecordTypes)) : void 0;
     for (const [k, v] of Object.entries(source)) {
@@ -2211,7 +2211,7 @@ function walk(obj2, opts) {
     }
     return Object.fromEntries(out3);
   }
-  return obj2;
+  return obj3;
 }
 function redactAnalysis(a, options = {}) {
   const scrub = options.scrub ?? true;
@@ -2402,6 +2402,43 @@ var ANALYSIS_PAYLOAD_GENERATION = 4;
 // src/adapters/claude-code/parse.ts
 import { basename as basename4, dirname as dirname3 } from "node:path";
 
+// src/adapters/claude-code/prompt-kind.ts
+var str = (v) => typeof v === "string" ? v : void 0;
+var obj = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : void 0;
+var COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/;
+var COMMAND_ARGS_RE2 = /<command-args>\s*([^<]*?)\s*<\/command-args>/;
+function commandEnvelopeTitle(envelope, commandName) {
+  const name = commandName || COMMAND_RE.exec(envelope)?.[1] || envelope;
+  const args = COMMAND_ARGS_RE2.exec(envelope)?.[1];
+  return args ? `${name} ${args}` : name;
+}
+var INTERRUPT_RE = /\[Request interrupted by user/i;
+var LEADING_REMINDERS_RE = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/;
+function classifyPrompt(r, text3, isMeta) {
+  const origin = obj(r["origin"]);
+  const originKind = str(origin?.["kind"]);
+  const promptSource = str(r["promptSource"]);
+  if (INTERRUPT_RE.test(text3.slice(0, 200))) return "interrupt";
+  if (r["isVisibleInTranscriptOnly"] === true) return "meta";
+  if (originKind === "human" || promptSource === "typed") return COMMAND_RE.test(text3) ? "command" : "human";
+  if (originKind === "task-notification") return "notification";
+  if (originKind === "peer" || originKind === "teammate" || originKind === "cross-session") return "peer";
+  const t = text3.replace(LEADING_REMINDERS_RE, "").trimStart();
+  if (t.startsWith("<command-name>") || t.startsWith("<command-message>")) return "command";
+  if (t.startsWith("<local-command-stdout>") || t.startsWith("<local-command-caveat>") || t.startsWith("<local-command-stderr>")) return "local_output";
+  if (t.startsWith("<task-notification>")) return "notification";
+  if (t.startsWith("<teammate-message") || t.startsWith("<cross-session-message") || t.startsWith("Another Claude session sent a message")) return "peer";
+  if (isMeta && promptSource === "system") return "scheduled";
+  if (isMeta) return "meta";
+  const META_TAGS = ["<user-prompt-submit-hook>", "<system-reminder>", "<budget:", "<total_tokens>", "<user-memory-input>", "<important_context>", "<function_results>", "<returned-by-"];
+  if (META_TAGS.some((tag) => t.startsWith(tag))) return "meta";
+  return "human";
+}
+function sessionTitle(customTitle, aiTitle, firstPromptPreview, firstCommandName) {
+  const rawTitle = customTitle ?? aiTitle ?? firstPromptPreview;
+  return rawTitle !== void 0 && /^\s*<command-(?:message|name)>/.test(rawTitle) ? commandEnvelopeTitle(rawTitle, firstCommandName) : rawTitle;
+}
+
 // src/adapters/claude-code/tools.ts
 function categorizeTool(name) {
   const n2 = name;
@@ -2478,12 +2515,12 @@ function skillNameFromInput(input) {
 }
 
 // src/adapters/claude-code/parse.ts
-var str = (v) => typeof v === "string" ? v : void 0;
+var str2 = (v) => typeof v === "string" ? v : void 0;
 var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : void 0;
 var HOOK_RUN_ATTACHMENTS = /* @__PURE__ */ new Set(["hook_success", "hook_error", "hook_failure", "hook_cancelled", "hook_non_blocking_error", "async_hook_response"]);
 var HOOK_RUN_NOT_OK = /* @__PURE__ */ new Set(["hook_error", "hook_failure", "hook_cancelled", "hook_non_blocking_error"]);
 var bool = (v) => v === true;
-var obj = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : void 0;
+var obj2 = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : void 0;
 var arr = (v) => Array.isArray(v) ? v : void 0;
 var ts = (v) => {
   if (typeof v === "number") return v > 1e12 ? v : v * 1e3;
@@ -2508,10 +2545,10 @@ var preview = (s, max = 160) => {
   return (space > 0 ? hard.slice(0, space) : hard) + "\u2026";
 };
 function parseUsage(u) {
-  const o = obj(u);
+  const o = obj2(u);
   if (!o) return void 0;
-  const cc = obj(o["cache_creation"]);
-  const st = obj(o["server_tool_use"]);
+  const cc = obj2(o["cache_creation"]);
+  const st = obj2(o["server_tool_use"]);
   const cacheWrite = num(o["cache_creation_input_tokens"]) ?? 0;
   let w5 = num(cc?.["ephemeral_5m_input_tokens"]);
   let w1 = num(cc?.["ephemeral_1h_input_tokens"]);
@@ -2528,9 +2565,9 @@ function parseUsage(u) {
     cacheWrite1h: w1 ?? 0,
     webSearchRequests: num(st?.["web_search_requests"]) ?? 0,
     webFetchRequests: num(st?.["web_fetch_requests"]) ?? 0,
-    serviceTier: str(o["service_tier"]),
-    speed: str(o["speed"]),
-    inferenceGeo: str(o["inference_geo"])
+    serviceTier: str2(o["service_tier"]),
+    speed: str2(o["speed"]),
+    inferenceGeo: str2(o["inference_geo"])
   };
 }
 function textOfContent2(content) {
@@ -2539,7 +2576,7 @@ function textOfContent2(content) {
   if (!a) return "";
   const parts2 = [];
   for (const b of a) {
-    const o = obj(b);
+    const o = obj2(b);
     if (!o) continue;
     if (o["type"] === "text" && typeof o["text"] === "string") parts2.push(o["text"]);
   }
@@ -2557,15 +2594,15 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
   if (!a) return [];
   const out3 = [];
   for (const raw of a) {
-    const b = obj(raw);
+    const b = obj2(raw);
     if (!b) continue;
-    const t = str(b["type"]) ?? "other";
+    const t = str2(b["type"]) ?? "other";
     switch (t) {
       case "text":
-        out3.push({ kind: "text", text: keepText ? str(b["text"]) ?? "" : "" });
+        out3.push({ kind: "text", text: keepText ? str2(b["text"]) ?? "" : "" });
         break;
       case "thinking": {
-        const th = str(b["thinking"]) ?? "";
+        const th = str2(b["thinking"]) ?? "";
         out3.push({ kind: "thinking", chars: th.length, text: keepText ? th : void 0 });
         break;
       }
@@ -2573,13 +2610,13 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
         out3.push({ kind: "redacted_thinking", rawType: t, bytes: bytesOf(b["data"]) });
         break;
       case "tool_use":
-        out3.push({ kind: "tool_use", toolUseId: str(b["id"]) ?? "", name: str(b["name"]) ?? "unknown", input: b["input"] });
+        out3.push({ kind: "tool_use", toolUseId: str2(b["id"]) ?? "", name: str2(b["name"]) ?? "unknown", input: b["input"] });
         break;
       case "tool_result": {
         const c = b["content"];
         out3.push({
           kind: "tool_result",
-          toolUseId: str(b["tool_use_id"]) ?? "",
+          toolUseId: str2(b["tool_use_id"]) ?? "",
           text: textOfContent2(c),
           isError: bool(b["is_error"]),
           bytes: bytesOf(c)
@@ -2591,9 +2628,9 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
         out3.push({ kind: t, rawType: t, bytes: bytesOf(b["source"]) });
         break;
       case "fallback": {
-        const from = obj(b["from"]);
-        const to = obj(b["to"]);
-        out3.push({ kind: "other", rawType: "fallback", bytes: 0, note: `model fallback ${str(from?.["model"]) ?? "?"} \u2192 ${str(to?.["model"]) ?? "?"}` });
+        const from = obj2(b["from"]);
+        const to = obj2(b["to"]);
+        out3.push({ kind: "other", rawType: "fallback", bytes: 0, note: `model fallback ${str2(from?.["model"]) ?? "?"} \u2192 ${str2(to?.["model"]) ?? "?"}` });
         break;
       }
       default:
@@ -2603,36 +2640,7 @@ function parseBlocks(content, keepText, unknownBlockTypes) {
   }
   return out3;
 }
-var COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/;
-var COMMAND_ARGS_RE2 = /<command-args>\s*([^<]*?)\s*<\/command-args>/;
-function commandEnvelopeTitle(envelope, commandName) {
-  const name = commandName || COMMAND_RE.exec(envelope)?.[1] || envelope;
-  const args = COMMAND_ARGS_RE2.exec(envelope)?.[1];
-  return args ? `${name} ${args}` : name;
-}
-var INTERRUPT_RE = /\[Request interrupted by user/i;
 var NOTIFICATION_ENQUEUE_RE = /^\s*<(?:task|system)-notification>/;
-var LEADING_REMINDERS_RE = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>\s*)+/;
-function classifyPrompt(r, text3, isMeta) {
-  const origin = obj(r["origin"]);
-  const originKind = str(origin?.["kind"]);
-  const promptSource = str(r["promptSource"]);
-  if (INTERRUPT_RE.test(text3.slice(0, 200))) return "interrupt";
-  if (r["isVisibleInTranscriptOnly"] === true) return "meta";
-  if (originKind === "human" || promptSource === "typed") return COMMAND_RE.test(text3) ? "command" : "human";
-  if (originKind === "task-notification") return "notification";
-  if (originKind === "peer" || originKind === "teammate" || originKind === "cross-session") return "peer";
-  const t = text3.replace(LEADING_REMINDERS_RE, "").trimStart();
-  if (t.startsWith("<command-name>") || t.startsWith("<command-message>")) return "command";
-  if (t.startsWith("<local-command-stdout>") || t.startsWith("<local-command-caveat>") || t.startsWith("<local-command-stderr>")) return "local_output";
-  if (t.startsWith("<task-notification>")) return "notification";
-  if (t.startsWith("<teammate-message") || t.startsWith("<cross-session-message") || t.startsWith("Another Claude session sent a message")) return "peer";
-  if (isMeta && promptSource === "system") return "scheduled";
-  if (isMeta) return "meta";
-  const META_TAGS = ["<user-prompt-submit-hook>", "<system-reminder>", "<budget:", "<total_tokens>", "<user-memory-input>", "<important_context>", "<function_results>", "<returned-by-"];
-  if (META_TAGS.some((tag) => t.startsWith(tag))) return "meta";
-  return "human";
-}
 async function discoverSubagentFiles(mainPath) {
   return evidenceManifestSidecarFiles(await prevalidateEvidenceSession(mainPath, { maxBytes: MAX_LOCAL_SESSION_BYTES }));
 }
@@ -2796,47 +2804,47 @@ function buildSession(files2, mainPath, keepText, t0) {
     if (isSub && f.meta) {
       const id = subAgentId ?? `agent-${f.index}`;
       const run = ensureAgent(agents, id);
-      run.agentType = str(f.meta["agentType"]) ?? run.agentType;
-      run.description = str(f.meta["description"]) ?? run.description;
-      run.name = str(f.meta["name"]) ?? run.name;
-      run.model = str(f.meta["model"]) ?? run.model;
+      run.agentType = str2(f.meta["agentType"]) ?? run.agentType;
+      run.description = str2(f.meta["description"]) ?? run.description;
+      run.name = str2(f.meta["name"]) ?? run.name;
+      run.model = str2(f.meta["model"]) ?? run.model;
       run.spawnDepth = num(f.meta["spawnDepth"]) ?? run.spawnDepth;
-      run.taskKind = str(f.meta["taskKind"]) ?? run.taskKind;
-      run.teamName = str(f.meta["teamName"]) ?? run.teamName;
+      run.taskKind = str2(f.meta["taskKind"]) ?? run.taskKind;
+      run.teamName = str2(f.meta["teamName"]) ?? run.teamName;
       run.transcriptPath = f.path;
     }
     for (let ri = 0; ri < f.records.length; ri++) {
       const r = f.records[ri];
       const line = f.lineNumbers?.[ri] ?? ri + 1;
-      const type = str(r["type"]) ?? "unknown";
+      const type = str2(r["type"]) ?? "unknown";
       addCount(recordCounts, type);
       if (!KNOWN_TYPES.has(type)) addCount(unknownRecordTypes, type);
-      const sid = str(r["sessionId"]);
+      const sid = str2(r["sessionId"]);
       if (sid) seenSessionIds.add(sid);
       if (!meta.sessionId && sid && !isSub) meta.sessionId = sid;
-      setAdd(meta.gitBranches, str(r["gitBranch"]));
-      setAdd(meta.clientVersions, str(r["version"]));
-      setAdd(meta.entrypoints, str(r["entrypoint"]));
-      if (!meta.cwd) meta.cwd = str(r["cwd"]);
+      setAdd(meta.gitBranches, str2(r["gitBranch"]));
+      setAdd(meta.clientVersions, str2(r["version"]));
+      setAdd(meta.entrypoints, str2(r["entrypoint"]));
+      if (!meta.cwd) meta.cwd = str2(r["cwd"]);
       const t = ts(r["timestamp"]);
       if (t !== void 0) {
         if (firstTs === void 0 || t < firstTs) firstTs = t;
         if (lastTs === void 0 || t > lastTs) lastTs = t;
       }
       if (type === "custom-title") {
-        meta.customTitle = str(r["customTitle"]) ?? meta.customTitle;
+        meta.customTitle = str2(r["customTitle"]) ?? meta.customTitle;
         continue;
       }
       if (type === "agent-name") {
-        meta.agentName = str(r["agentName"]) ?? meta.agentName;
+        meta.agentName = str2(r["agentName"]) ?? meta.agentName;
         continue;
       }
       if (type === "ai-title") {
-        meta.aiTitle = str(r["aiTitle"]) ?? meta.aiTitle;
+        meta.aiTitle = str2(r["aiTitle"]) ?? meta.aiTitle;
         continue;
       }
       if (type === "relocated") {
-        meta.relocatedCwd = str(r["relocatedCwd"]) ?? meta.relocatedCwd;
+        meta.relocatedCwd = str2(r["relocatedCwd"]) ?? meta.relocatedCwd;
         continue;
       }
       if (type === "worktree-state") {
@@ -2844,17 +2852,17 @@ function buildSession(files2, mainPath, keepText, t0) {
         continue;
       }
       if (type === "frame-link") {
-        events.push({ kind: "other", ts: t, turnIndex: mainTurnIndex, label: "frame link", detail: str(r["path"]) });
+        events.push({ kind: "other", ts: t, turnIndex: mainTurnIndex, label: "frame link", detail: str2(r["path"]) });
         continue;
       }
       if (type === "permission-mode") {
-        setAdd(meta.permissionModes, str(r["permissionMode"]));
+        setAdd(meta.permissionModes, str2(r["permissionMode"]));
         continue;
       }
       if (type === "pr-link") {
         const key = String(r["prNumber"] ?? r["prUrl"] ?? "?");
         if (!prByNumber.has(key)) {
-          const ev = { kind: "pr_link", ts: t, turnIndex: mainTurnIndex, label: `PR #${key}`, detail: str(r["prUrl"]) };
+          const ev = { kind: "pr_link", ts: t, turnIndex: mainTurnIndex, label: `PR #${key}`, detail: str2(r["prUrl"]) };
           prByNumber.set(key, ev);
           events.push(ev);
         }
@@ -2864,8 +2872,8 @@ function buildSession(files2, mainPath, keepText, t0) {
         continue;
       }
       if (type === "attachment") {
-        const a = obj(r["attachment"]);
-        const at = str(a?.["type"]) ?? "unknown";
+        const a = obj2(r["attachment"]);
+        const at = str2(a?.["type"]) ?? "unknown";
         const attachmentBytesHere = bytesOf(a);
         addCount(attachmentTypes, at);
         addCount(attachmentBytes, at, attachmentBytesHere);
@@ -2874,13 +2882,13 @@ function buildSession(files2, mainPath, keepText, t0) {
           addCount(primaryAttachmentBytes, at, attachmentBytesHere);
         }
         if (at.startsWith("hook") || at === "async_hook_response") {
-          const he = str(a?.["hookEvent"]);
+          const he = str2(a?.["hookEvent"]);
           if (he && he !== "Stop" && HOOK_RUN_ATTACHMENTS.has(at)) {
             const exitCode = num(a?.["exitCode"]);
             hooks.push({
               hookEvent: he,
-              hookName: str(a?.["hookName"]),
-              command: str(a?.["command"]),
+              hookName: str2(a?.["hookName"]),
+              command: str2(a?.["command"]),
               durationMs: num(a?.["durationMs"]),
               ok: !HOOK_RUN_NOT_OK.has(at) && (exitCode === void 0 || exitCode === 0),
               ts: t,
@@ -2896,17 +2904,17 @@ function buildSession(files2, mainPath, keepText, t0) {
         } else if (at === "deferred_tools_delta") {
           for (const key of ["addedNames", "readdedNames"]) for (const n2 of arr(a?.[key]) ?? []) if (typeof n2 === "string") deferredToolNames.add(n2);
         } else if (at === "queued_command") {
-          events.push({ kind: "other", ts: t, turnIndex: mainTurnIndex, label: "queued command", detail: str(a?.["commandMode"]) });
+          events.push({ kind: "other", ts: t, turnIndex: mainTurnIndex, label: "queued command", detail: str2(a?.["commandMode"]) });
         } else if (at === "ultra_effort_enter" || at === "ultra_effort_exit" || at === "plan_mode_exit") {
           events.push({ kind: at === "plan_mode_exit" ? "plan_mode" : "other", ts: t, turnIndex: mainTurnIndex, label: at });
         }
         continue;
       }
       if (type === "queue-operation") {
-        const op = str(r["operation"]) ?? "unknown";
+        const op = str2(r["operation"]) ?? "unknown";
         addCount(queueOperations, op);
         if (op === "enqueue") {
-          const content2 = str(r["content"]) ?? "";
+          const content2 = str2(r["content"]) ?? "";
           const isNotification = NOTIFICATION_ENQUEUE_RE.test(content2);
           if (isNotification) enqueueNotification++;
           else enqueueHuman++;
@@ -2915,7 +2923,7 @@ function buildSession(files2, mainPath, keepText, t0) {
         continue;
       }
       if (type !== "user" && type !== "assistant" && type !== "system") continue;
-      const recUuid = str(r["uuid"]);
+      const recUuid = str2(r["uuid"]);
       if (recUuid) {
         if (seenUuids.has(recUuid)) {
           warn("duplicate_uuid", "record uuid written more than once (superseded rewrite); first occurrence kept", line);
@@ -2924,16 +2932,16 @@ function buildSession(files2, mainPath, keepText, t0) {
         seenUuids.add(recUuid);
       }
       const isSidechain = bool(r["isSidechain"]) || isSub;
-      const agentId = str(r["agentId"]) ?? (isSub ? subAgentId : void 0);
+      const agentId = str2(r["agentId"]) ?? (isSub ? subAgentId : void 0);
       if (isSub && !subAgentId && agentId) subAgentId = agentId;
-      const message = obj(r["message"]);
-      const role = type === "system" ? "system" : str(message?.["role"]) ?? type;
+      const message = obj2(r["message"]);
+      const role = type === "system" ? "system" : str2(message?.["role"]) ?? type;
       const content = message?.["content"];
       const blocks = type === "system" ? [] : parseBlocks(content, keepText, unknownBlockTypes);
       const hasToolResult = blocks.some((b) => b.kind === "tool_result");
       const isMeta = bool(r["isMeta"]);
       const isCompactSummary = bool(r["isCompactSummary"]);
-      const text3 = type === "system" ? str(r["content"]) ?? "" : textOfContent2(content);
+      const text3 = type === "system" ? str2(r["content"]) ?? "" : textOfContent2(content);
       const cmd = COMMAND_RE.exec(text3)?.[1];
       const interrupted = INTERRUPT_RE.test(text3);
       const isPromptLike = type === "user" && !hasToolResult && !isCompactSummary && !!message;
@@ -2973,15 +2981,15 @@ function buildSession(files2, mainPath, keepText, t0) {
       }
       const turnIndex = agentId ? agentTurnIndex.get(agentId) ?? 0 : mainTurnIndex;
       const usage = type === "assistant" ? parseUsage(message?.["usage"]) : void 0;
-      const model = str(message?.["model"]);
-      const iters = type === "assistant" ? arr(obj(message?.["usage"])?.["iterations"]) : void 0;
-      const providerMessageId = str(message?.["id"]);
+      const model = str2(message?.["model"]);
+      const iters = type === "assistant" ? arr(obj2(message?.["usage"])?.["iterations"]) : void 0;
+      const providerMessageId = str2(message?.["id"]);
       let cacheMissReason;
       let thinkingTokens;
       if (type === "assistant") {
-        const cmr = obj(obj(message?.["diagnostics"])?.["cache_miss_reason"]);
-        if (cmr) cacheMissReason = { type: str(cmr["type"]) ?? "unknown", missedInputTokens: num(cmr["cache_missed_input_tokens"]) };
-        thinkingTokens = num(obj(obj(message?.["usage"])?.["output_tokens_details"])?.["thinking_tokens"]);
+        const cmr = obj2(obj2(message?.["diagnostics"])?.["cache_miss_reason"]);
+        if (cmr) cacheMissReason = { type: str2(cmr["type"]) ?? "unknown", missedInputTokens: num(cmr["cache_missed_input_tokens"]) };
+        thinkingTokens = num(obj2(obj2(message?.["usage"])?.["output_tokens_details"])?.["thinking_tokens"]);
         if (providerMessageId) {
           if (cacheMissReason && !cacheMissByProviderMsg.has(providerMessageId)) cacheMissByProviderMsg.set(providerMessageId, cacheMissReason);
           if (thinkingTokens !== void 0) {
@@ -2992,8 +3000,8 @@ function buildSession(files2, mainPath, keepText, t0) {
       }
       const apiErr = bool(r["isApiErrorMessage"]) || r["error"] !== void 0;
       const msg = {
-        uuid: str(r["uuid"]) ?? `${f.index}:${line}`,
-        parentUuid: str(r["parentUuid"]),
+        uuid: str2(r["uuid"]) ?? `${f.index}:${line}`,
+        parentUuid: str2(r["parentUuid"]),
         role,
         ts: t,
         turnIndex,
@@ -3006,20 +3014,20 @@ function buildSession(files2, mainPath, keepText, t0) {
         promptKind,
         blocks,
         model,
-        effort: str(r["effort"]),
-        requestId: str(r["requestId"]),
+        effort: str2(r["effort"]),
+        requestId: str2(r["requestId"]),
         providerMessageId,
-        stopReason: str(message?.["stop_reason"]),
+        stopReason: str2(message?.["stop_reason"]),
         usage,
         usageCounted: false,
         preview: preview(text3 || blocks.map((b) => b.kind === "tool_use" ? `[${b.name}]` : b.kind === "thinking" ? "[thinking]" : b.kind === "tool_result" ? "[result]" : "").join(" ")),
         line,
         fileIndex: f.index,
-        systemSubtype: type === "system" ? str(r["subtype"]) : void 0,
+        systemSubtype: type === "system" ? str2(r["subtype"]) : void 0,
         commandName: cmd,
         interrupted,
-        apiError: apiErr ? { status: r["apiErrorStatus"], message: preview(str(r["error"]) ?? text3, 200) } : void 0,
-        attribution: type === "assistant" && (r["attributionSkill"] !== void 0 || r["attributionPlugin"] !== void 0 || r["attributionMcpServer"] !== void 0 || r["attributionAgent"] !== void 0) ? { skill: str(r["attributionSkill"]), plugin: str(r["attributionPlugin"]), mcpServer: str(r["attributionMcpServer"]), mcpTool: str(r["attributionMcpTool"]), agent: str(r["attributionAgent"]) } : void 0,
+        apiError: apiErr ? { status: r["apiErrorStatus"], message: preview(str2(r["error"]) ?? text3, 200) } : void 0,
+        attribution: type === "assistant" && (r["attributionSkill"] !== void 0 || r["attributionPlugin"] !== void 0 || r["attributionMcpServer"] !== void 0 || r["attributionAgent"] !== void 0) ? { skill: str2(r["attributionSkill"]), plugin: str2(r["attributionPlugin"]), mcpServer: str2(r["attributionMcpServer"]), mcpTool: str2(r["attributionMcpTool"]), agent: str2(r["attributionAgent"]) } : void 0,
         thinkingTokens,
         cacheMissReason
       };
@@ -3028,9 +3036,9 @@ function buildSession(files2, mainPath, keepText, t0) {
       if (iters && iters.length > 1) {
         const list2 = [];
         for (let k = 0; k < iters.length - 1; k++) {
-          const io = obj(iters[k]);
+          const io = obj2(iters[k]);
           const iu = parseUsage(io);
-          if (iu) list2.push({ model: str(io?.["model"]), usage: iu, type: str(io?.["type"]) });
+          if (iu) list2.push({ model: str2(io?.["model"]), usage: iu, type: str2(io?.["type"]) });
         }
         if (list2.length) hiddenIterations.push({ messageUuid: msg.uuid, iterations: list2 });
       }
@@ -3055,11 +3063,11 @@ function buildSession(files2, mainPath, keepText, t0) {
         const sub = msg.systemSubtype;
         addCount(systemSubtypes, sub ?? "unknown");
         if (sub === "compact_boundary") {
-          const cm = obj(r["compactMetadata"]);
+          const cm = obj2(r["compactMetadata"]);
           const ev = {
             ts: t,
             turnIndex,
-            trigger: str(cm?.["trigger"]) ?? "unknown",
+            trigger: str2(cm?.["trigger"]) ?? "unknown",
             contextBefore: num(cm?.["preTokens"]),
             contextAfter: num(cm?.["postTokens"]),
             durationMs: num(cm?.["durationMs"]),
@@ -3071,15 +3079,15 @@ function buildSession(files2, mainPath, keepText, t0) {
           if (currentTurn && !agentId) currentTurn.reportedDurationMs = num(r["durationMs"]);
         } else if (sub === "stop_hook_summary") {
           for (const h of arr(r["hookInfos"]) ?? []) {
-            const ho = obj(h);
-            hooks.push({ hookEvent: "Stop", command: str(ho?.["command"]), durationMs: num(ho?.["durationMs"]), ok: true, ts: t, turnIndex });
+            const ho = obj2(h);
+            hooks.push({ hookEvent: "Stop", command: str2(ho?.["command"]), durationMs: num(ho?.["durationMs"]), ok: true, ts: t, turnIndex });
           }
           for (const e of arr(r["hookErrors"]) ?? []) {
-            const eo = obj(e);
-            hooks.push({ hookEvent: "Stop", command: str(eo?.["command"]) ?? preview(String(e), 80), ok: false, ts: t, turnIndex });
+            const eo = obj2(e);
+            hooks.push({ hookEvent: "Stop", command: str2(eo?.["command"]) ?? preview(String(e), 80), ok: false, ts: t, turnIndex });
           }
         } else if (sub === "scheduled_task_fire") {
-          events.push({ kind: "scheduled_fire", ts: t, turnIndex, label: str(r["cronKind"]) ?? "scheduled", detail: preview(text3, 120) });
+          events.push({ kind: "scheduled_fire", ts: t, turnIndex, label: str2(r["cronKind"]) ?? "scheduled", detail: preview(text3, 120) });
         } else if (sub === "away_summary") {
           events.push({ kind: "away_summary", ts: t, turnIndex, label: "away summary", detail: preview(text3, 200) });
         } else if (sub === "api_error" || sub === "api_retry") {
@@ -3123,7 +3131,7 @@ function buildSession(files2, mainPath, keepText, t0) {
           toolCalls.push(call);
           if (b.toolUseId) toolByUseId.set(b.toolUseId, { call, msg });
           if (currentTurn && !agentId) currentTurn.toolCallIds.push(b.toolUseId);
-          if (name === "Skill" && call.skillName) skills.push({ name: call.skillName, via: "tool", turnIndex, ts: t, agentId, args: str(obj(b.input)?.["args"]) });
+          if (name === "Skill" && call.skillName) skills.push({ name: call.skillName, via: "tool", turnIndex, ts: t, agentId, args: str2(obj2(b.input)?.["args"]) });
           if (name === "AskUserQuestion") pendingAskCount++;
           if (name === "EnterPlanMode" || name === "ExitPlanMode") events.push({ kind: "plan_mode", ts: t, turnIndex, agentId, label: name });
           if (agentId) {
@@ -3159,11 +3167,11 @@ function buildSession(files2, mainPath, keepText, t0) {
           c.resultPreview = preview(b.text, 200);
           const tur = r["toolUseResult"];
           c.resultMeta = tur;
-          const turo = obj(tur);
+          const turo = obj2(tur);
           if (typeof tur === "string" && /^error/i.test(tur)) c.isError = true;
           if (turo) {
             if (bool(turo["interrupted"])) c.errorHint = "interrupted";
-            if (bool(obj(turo["file"])?.["truncatedByTokenCap"])) c.truncated = true;
+            if (bool(obj2(turo["file"])?.["truncatedByTokenCap"])) c.truncated = true;
             const exit = num(turo["exitCode"]) ?? num(turo["exit_code"]);
             if (exit !== void 0 && exit !== 0) {
               c.isError = true;
@@ -3171,27 +3179,27 @@ function buildSession(files2, mainPath, keepText, t0) {
             }
             if (typeof turo["stderr"] === "string" && turo["stderr"] && c.isError && !c.errorHint) c.errorHint = preview(turo["stderr"], 120);
             if (c.name === "Agent" || c.name === "Task") {
-              const aid = str(turo["agentId"]);
+              const aid = str2(turo["agentId"]);
               if (aid) {
                 c.spawnedAgentId = aid;
                 const run = ensureAgent(agents, aid);
                 run.spawnedByToolUseId = c.toolUseId;
                 run.parentAgentId = agentId;
-                const inp = obj(c.input);
-                run.description = run.description ?? str(inp?.["description"]);
-                run.agentType = run.agentType ?? str(inp?.["subagent_type"]);
-                run.name = run.name ?? str(inp?.["name"]);
+                const inp = obj2(c.input);
+                run.description = run.description ?? str2(inp?.["description"]);
+                run.agentType = run.agentType ?? str2(inp?.["subagent_type"]);
+                run.name = run.name ?? str2(inp?.["name"]);
                 run.reportedTotalTokens = num(turo["totalTokens"]);
                 run.reportedDurationMs = num(turo["totalDurationMs"]);
-                run.status = str(turo["status"]);
+                run.status = str2(turo["status"]);
                 if (run.endTs === void 0) run.endTs = t;
                 if (run.startTs === void 0) run.startTs = c.startTs;
                 const u = parseUsage(turo["usage"]);
                 if (u && run.messageCount === 0) run.usage = u;
                 if (currentTurn && !agentId && !currentTurn.agentIds.includes(aid)) currentTurn.agentIds.push(aid);
               } else {
-                const name = str(turo["name"]);
-                const teamName = str(turo["team_name"]) ?? str(turo["teamName"]);
+                const name = str2(turo["name"]);
+                const teamName = str2(turo["team_name"]) ?? str2(turo["teamName"]);
                 if (name) {
                   pendingTeammateLinks.push({
                     toolUseId: c.toolUseId,
@@ -3201,10 +3209,10 @@ function buildSession(files2, mainPath, keepText, t0) {
                     turnIndex: !agentId && currentTurn ? currentTurn.index : void 0,
                     reportedTotalTokens: num(turo["totalTokens"]),
                     reportedDurationMs: num(turo["totalDurationMs"]),
-                    status: str(turo["status"]),
+                    status: str2(turo["status"]),
                     endTs: t,
                     startTs: c.startTs,
-                    description: str(obj(c.input)?.["description"])
+                    description: str2(obj2(c.input)?.["description"])
                   });
                 }
               }
@@ -3333,8 +3341,7 @@ function buildSession(files2, mainPath, keepText, t0) {
   meta.startedAt = firstTs;
   meta.endedAt = lastTs;
   meta.wallMs = firstTs !== void 0 && lastTs !== void 0 ? lastTs - firstTs : void 0;
-  const rawTitle = meta.customTitle ?? meta.aiTitle ?? firstPromptPreview ?? turns[0]?.promptPreview;
-  meta.title = rawTitle !== void 0 && /^\s*<command-(?:message|name)>/.test(rawTitle) ? commandEnvelopeTitle(rawTitle, turns[0]?.commandName) : rawTitle;
+  meta.title = sessionTitle(meta.customTitle, meta.aiTitle, firstPromptPreview ?? turns[0]?.promptPreview, turns[0]?.commandName);
   if (!meta.sessionId) meta.sessionId = basename4(mainPath, ".jsonl");
   if (files2[0]?.trailingPartial) meta.possiblyLive = true;
   if (seenSessionIds.size > 1) warn("multiple_session_ids", `records reference ${seenSessionIds.size} distinct sessionIds (resumed/forked session)`);
