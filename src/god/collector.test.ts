@@ -121,6 +121,9 @@ class FakeMachine {
   register(row: Record<string, unknown>): void {
     this.write(`${REGISTRY}/${String(row['pid'])}.json`, JSON.stringify(row))
   }
+  remove(path: string): void {
+    this.files.delete(path)
+  }
   /** The commands that ran to their answer. */
   commands(): string[] {
     return this.runs.map((run) => run.argv)
@@ -413,6 +416,79 @@ describe('the liveness inputs', () => {
     expect(facts.sources.agents).toMatchObject({ status: 'off', reason: 'The claude agents command stopped with exit code 1.' })
     expect(facts.sessions.map((row) => row.sessionId)).toEqual([A.sessionId])
     expect(m.runs.filter((run) => run.argv.startsWith('ps '))).toEqual([{ argv: 'ps -o pid=,tty=,lstart= -p 41001,41002', options: { env: { TZ: 'UTC' } } }])
+  })
+
+  it('keeps the last agents list until the ps read returns, so a tick during that read keeps each session and its record state', async () => {
+    const m = alpha()
+    m.fail('run cmux capabilities')
+    const c = collectorOf(m)
+    expect(only(await c.refresh()).transcript?.lastPrompt).toBe('Fix the parser.')
+    m.agents = 'fails'
+    m.advance(LOOP_MS)
+    const release = m.hold('run ps')
+    await settles(c.refresh())
+    m.advance(TICK_MS)
+    const during = await settles(c.refresh())
+    expect(during.sessions.map((row) => [row.sessionId, row.transcript?.lastPrompt])).toEqual([[A.sessionId, 'Fix the parser.']])
+    release()
+    await flush()
+    m.advance(TICK_MS)
+    const after = await c.refresh()
+    expect(after.sources.agents.status).toBe('off')
+    expect(after.sessions.map((row) => row.sessionId)).toEqual([A.sessionId])
+    expect(m.calls.filter((call) => call === `run tail -c +1 ${PATH_A}`)).toHaveLength(1)
+  })
+})
+
+describe('the repo cache', () => {
+  it('keeps only the repos of the live cwds, so a cwd that comes back is asked again', async () => {
+    const m = alpha()
+    m.advance(-MINUTE)
+    m.register(registryRow(B))
+    m.advance(MINUTE)
+    m.agents = [agentRow(A), agentRow(B)]
+    m.mkdir(B.cwd)
+    m.git = { ...m.git, [B.cwd]: [`${B.cwd}/.git`, `${B.cwd}/.git`, B.cwd] }
+    const gitRuns = (): number => m.calls.filter((call) => call.startsWith('run git ')).length
+    const c = collectorOf(m)
+    await c.refresh()
+    expect(gitRuns()).toBe(2)
+    m.remove(`${REGISTRY}/${B.pid}.json`)
+    m.agents = [agentRow(A)]
+    expect((await afterLoop(m, c)).sessions.map((row) => row.repo?.name)).toEqual(['alpha'])
+    expect(gitRuns()).toBe(2)
+    m.register(registryRow(B, { statusUpdatedAt: m.clock }))
+    m.agents = [agentRow(A), agentRow(B)]
+    expect((await afterLoop(m, c)).sessions.map((row) => row.repo?.name)).toEqual(['alpha', 'beta'])
+    expect(gitRuns()).toBe(3)
+  })
+})
+
+describe('a clock that moves back', () => {
+  it('makes the 15 s loop and the subagent list due, and gives no negative time', async () => {
+    const m = alpha()
+    const c = collectorOf(m)
+    await c.refresh()
+    const lists = (): number => m.calls.filter((call) => call === `list ${SUBAGENTS_A}`).length
+    expect([m.count('claude agents --json'), lists()]).toEqual([1, 1])
+    m.advance(-60 * MINUTE)
+    const facts = await c.refresh()
+    await flush()
+    expect([m.count('claude agents --json'), lists()]).toEqual([2, 2])
+    expect(facts.stats.computeMs).toBeGreaterThanOrEqual(0)
+    expect(facts.stats.waitMs).toBeGreaterThanOrEqual(0)
+  })
+
+  it('stopwatch: a clock that moves back while a call is in flight gives a wait of 0, not less', async () => {
+    let now = 100
+    let resolve = (): void => undefined
+    const pending = <T>(): Promise<T> => new Promise<T>((done) => (resolve = () => done(undefined as T)))
+    const watch = stopwatch({ run: pending, list: pending, read: pending, stat: pending, now: pending }, () => now)
+    const call = watch.host.list('/a')
+    now = 40
+    resolve()
+    await call
+    expect(watch.time(100, 40)).toEqual({ computeMs: 0, waitMs: 0 })
   })
 })
 

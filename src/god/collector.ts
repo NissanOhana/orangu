@@ -6,7 +6,7 @@
  *   runs in the tick, and the 2 s registry read shows a new wait first.
  * - The 15 s loop reads `claude agents --json`, the cmux tab map (`cmux tree --all --json`, and `ps` in UTC for the
  *   TTY of each PID) and git for each new cwd. A refresh starts it when LOOP_MS passed since the last one started,
- *   and does not wait for it, so a slow command never holds the tick. Only the first refresh waits for it, so the
+ *   or when the clock moved back, and does not wait for it, so a slow command never holds the tick. Only the first refresh waits for it, so the
  *   first board is whole. While cmux is missing (a timeout reads missing too), each loop asks `cmux capabilities`
  *   again: cmux can start after the pane.
  * - A tick that comes while a refresh runs does not start: it reads nothing, and it gets the facts of the last
@@ -65,6 +65,9 @@ const TOOL_USE_ID = /^[A-Za-z0-9_-]{1,128}$/
 
 const addTimes = (a: RefreshTime, b: RefreshTime): RefreshTime => ({ computeMs: a.computeMs + b.computeMs, waitMs: a.waitMs + b.waitMs })
 
+/** True when a read that ran at `since` is due again: never ran, LOOP_MS passed, or the clock moved back. */
+const isDue = (since: number | undefined, now: number): boolean => since === undefined || now - since >= LOOP_MS || now < since
+
 /**
  * A host whose calls are timed, and the 2 times of a span: waitMs is the time with at least 1 call in flight (calls
  * that overlap count once), and computeMs is the rest of the span. The engine bounds the own work of a hook the same
@@ -77,7 +80,7 @@ export function stopwatch(host: Host, clock: Clock): { host: Host; time: (starte
   const timed = <T>(call: () => Promise<T>): Promise<T> => {
     if (inFlight++ === 0) since = clock()
     return new Promise<T>((resolve) => resolve(call())).finally(() => {
-      if (--inFlight === 0) waitMs += clock() - since
+      if (--inFlight === 0) waitMs += Math.max(0, clock() - since)
     })
   }
   return {
@@ -158,19 +161,25 @@ export function createCollector({ host, home, clock }: CollectorOptions): Collec
     return readCmuxTree(h, clean)
   }
 
-  /** The 15 s loop: the agents list, the cmux tab map, then git for each new cwd of the live sessions. */
+  /**
+   * The 15 s loop: the agents list, the cmux tab map, then git for each new cwd of the live sessions. The agents
+   * result and the ps rows change the liveness rule together, after ps returns: a tick during the ps read still
+   * reads the last list, so no session leaves the board and comes back with a fresh transcript read. The repo cache
+   * keeps only the cwds of the live sessions.
+   */
   async function runLoop(h: Host): Promise<void> {
     const [listed, tree] = await Promise.all([readAgents(h, clean), readCmux(h)])
+    if (tree.ok) surfaces = tree.value.surfaces
+    const pids = [...(listed.ok ? listed.value.rows : []), ...registryRows].map((row) => row.pid)
+    const ps = isCmuxFound || !listed.ok ? await readPs(h, pids) : undefined
     agents = listed.ok ? listed.value : undefined
     sources.agents = listed.ok ? good() : failed('agents', listed)
-    if (tree.ok) surfaces = tree.value.surfaces
-    const pids = [...(agents?.rows ?? []), ...registryRows].map((row) => row.pid)
-    const ps = isCmuxFound || !listed.ok ? await readPs(h, pids) : undefined
     if (ps?.ok) psRows = ps.value.rows
     const cmuxFailure = !tree.ok ? tree : ps && !ps.ok ? ps : undefined
     sources.cmux = cmuxFailure ? failed('cmux', cmuxFailure) : good()
     tabs = isCmuxFound ? mapTabs(psRows, surfaces) : []
-    const read = await readRepos(h, live().map((session) => session.cwd), repos)
+    const cwds = [...new Set(live().map((session) => session.cwd))]
+    const read = await readRepos(h, cwds, Object.fromEntries(cwds.flatMap((cwd) => (Object.hasOwn(repos, cwd) ? [[cwd, repos[cwd] ?? null]] : []))))
     repos = read.cache
     sources.git = read.failure ? failed('git', read.failure) : good()
   }
@@ -216,7 +225,7 @@ export function createCollector({ host, home, clock }: CollectorOptions): Collec
       delete memory.listedAt
       return
     }
-    if (read.status !== 'read' && memory.listedAt !== undefined && clock() - memory.listedAt < LOOP_MS) return
+    if (read.status !== 'read' && !isDue(memory.listedAt, clock())) return
     memory.entries = await listSubagents(h, path, memory.entries)
     memory.subagents = memory.entries.map((entry) => subagentFile(entry, clean))
     memory.listedAt = clock()
@@ -260,7 +269,7 @@ export function createCollector({ host, home, clock }: CollectorOptions): Collec
     const read = await readRegistry(watch.host, home, registryCache, clean)
     if (read.ok) ({ rows: registryRows, cache: registryCache } = read.value)
     sources.registry = read.ok ? good() : failed('registry', read)
-    if (!isLoopRunning && (loopStartedAt === undefined || startedAt - loopStartedAt >= LOOP_MS)) {
+    if (!isLoopRunning && isDue(loopStartedAt, startedAt)) {
       loopStartedAt = startedAt
       if (last === undefined) await runLoop(watch.host)
       else startLoop()
