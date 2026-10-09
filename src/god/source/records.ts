@@ -14,7 +14,8 @@
  * - agents: an Agent call runs until its result. An Agent call that the result says was launched, and a Bash
  *   call that runs in the background, run until a task notification with their tool use id and a status.
  * - context: the input, cache read and cache write tokens of the last reply, with the window of its model.
- * - errorTail: an API error or retry system record, until the next reply or the next turn.
+ * - errorTail: an API error or retry system record, or an API error message, until the next reply or the next turn.
+ * - A call whose tool use id is not 1 to 128 letters, digits, `_` or `-` counts as a parse error and gives no fact.
  * - history: the last HISTORY_TURNS turns. A turn starts at a human, command, peer or scheduled prompt, and only a
  *   human or a command prompt is the prompt of the person.
  *
@@ -86,6 +87,8 @@ const FILE_TOOLS: ReadonlySet<string> = new Set(['Edit', 'Write', 'MultiEdit', '
 const NOTIFICATION_RE = /<task-notification>([\s\S]*?)<\/task-notification>/g
 const NOTIFIED_ID_RE = /<tool-use-id>\s*([^<\s]+)\s*<\/tool-use-id>/
 const NOTIFIED_STATUS_RE = /<status>\s*[^<\s][^<]*<\/status>/
+/** A tool use id that may enter the facts: 1 to 128 letters, digits, `_` or `-`. A call with another id is skipped. */
+const TOOL_USE_ID_RE = /^[A-Za-z0-9_-]{1,128}$/
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : undefined)
 const obj = (v: unknown): JsonObject | undefined => (v && typeof v === 'object' && !Array.isArray(v) ? (v as JsonObject) : undefined)
@@ -224,7 +227,10 @@ function taskOf(s: RecordState, call: Call): Task | undefined {
 function readCall(s: RecordState, block: JsonObject, at: number | undefined): void {
   const id = str(block['id'])
   const name = str(block['name'])
-  if (id === undefined || name === undefined) return
+  if (id === undefined || !TOOL_USE_ID_RE.test(id) || name === undefined) {
+    s.parseErrors++
+    return
+  }
   const call: Call = defined({ id, name, input: block['input'], at })
   s.open.push(call)
   s.lastCall = call
@@ -242,9 +248,11 @@ function readAssistant(s: RecordState, r: JsonObject, at: number | undefined): v
   const message = obj(r['message'])
   if (!message) return
   const model = str(message['model'])
-  const isReply = !resolveModel(model).synthetic
+  const isApiError = r['isApiErrorMessage'] === true
+  const isReply = !isApiError && !resolveModel(model).synthetic
   const usage = obj(message['usage'])
   if (isReply) delete s.errorTail
+  if (isApiError) s.errorTail = defined<ErrorTail>({ kind: 'api-error', text: textOf(message['content']), at })
   if (isReply && usage) s.context = defined({ tokens: count(usage['input_tokens']) + count(usage['cache_read_input_tokens']) + count(usage['cache_creation_input_tokens']), model })
   for (const value of list(message['content'])) {
     const block = obj(value)

@@ -26,6 +26,13 @@ describe('removeControls', () => {
     expect(removeControls('line 1\r\nline 2')).toBe('line 1\nline 2')
   })
 
+  it('removes the bidirectional controls that reorder the text, and keeps the characters beside them', () => {
+    const bidi = [0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]
+    expect(removeControls(`a${bidi.map((code) => String.fromCharCode(code)).join('')}b`)).toBe('ab')
+    const beside = [0x061b, 0x200d, 0x2010, 0x2029, 0x202f, 0x2065, 0x206a].map((code) => String.fromCharCode(code)).join('')
+    expect(removeControls(beside)).toBe(beside)
+  })
+
   it('keeps printable text, the no-break space after the C1 range included', () => {
     const text = `café 中 ✓ … ‹key›${String.fromCharCode(0xa0)}end`
     expect(removeControls(text)).toBe(text)
@@ -78,6 +85,25 @@ describe('cleanValue', () => {
     })
   })
 
+  it('reads the key once, with its space, tab or last colon trimmed', () => {
+    const value = { 'password ': 'hunter22', 'token:': 'Zq9xW2pL7mN4vB8k', 'password\t': 'x', ' API_KEY : ': 'Zq9xW2pL7mN4vB8k', 'path:': '/Users/test/a' }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({ 'password ': '‹redacted›', 'token:': '‹redacted›', 'password\t': '‹redacted›', ' API_KEY : ': '‹redacted›', 'path:': '~/a' })
+  })
+
+  it('masks every value under a secret key: a number, a short string, true, null, and each value in an object or an array under it', () => {
+    const value = { config: { password: 1234, token: 'ab', secret: true, auth: null, api_key: { inner: 'Zq9xW2pL7mN4vB8k', list: [1, 'x'] }, port: 8080 } }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({
+      config: { password: '‹redacted›', token: '‹redacted›', secret: '‹redacted›', auth: '‹redacted›', api_key: { inner: '‹redacted›', list: ['‹redacted›', '‹redacted›'] }, port: 8080 },
+    })
+  })
+
+  it('masks the value of a pair whose name or key names a secret, as an env list writes it', () => {
+    const value = { env: [{ name: 'API_KEY', value: 'Zq9xW2pL7mN4vB8k' }, { key: 'password ', value: 1234 }, { name: 'REGION', value: 'eu-west-1' }, { key: 'token', value: { id: 'x' } }] }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({
+      env: [{ name: 'API_KEY', value: '‹redacted›' }, { key: 'password ', value: '‹redacted›' }, { name: 'REGION', value: 'eu-west-1' }, { key: 'token', value: { id: '‹redacted›' } }],
+    })
+  })
+
   it('cleans each key, and each string with no key alone', () => {
     expect(cleanValue({ [`na${CSI}me`]: `a${ESC}b` }, textCleaner(HOME))).toStrictEqual({ name: 'ab' })
     expect(cleanValue([`Use ${KEY}`, 'API_KEY=Zq9xW2pL7mN4vB8k'], textCleaner(HOME))).toStrictEqual(['Use ‹anthropic-key›', 'API_KEY=‹redacted›'])
@@ -85,8 +111,13 @@ describe('cleanValue', () => {
 })
 
 describe('the source of sanitize.ts', () => {
+  const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sanitize.ts'), 'utf8')
+
   it('spells no escape sequence', () => {
-    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'sanitize.ts'), 'utf8')
     expect(source).not.toMatch(new RegExp(['\\\\x1b', '\\\\u001b', '\\\\033'].join('|')))
+  })
+
+  it('holds no raw control or bidirectional character: the class names each one as a code point', () => {
+    expect(removeControls(source)).toBe(source)
   })
 })

@@ -119,6 +119,22 @@ describe('reduceRecords: each fact from a session', () => {
     expect(reduce(b).lastPrompt).toBe('Look at this.\nThen fix it.')
   })
 
+  it('skips a call whose tool use id is not 1 to 128 letters, digits, _ or -, and counts it as a parse error', () => {
+    const b = builder()
+    const ask = { questions: [{ question: 'Which?', header: 'Pick', multiSelect: false, options: [{ label: 'A' }] }] }
+    for (const id of [`toolu_1${ESC}[2J`, 'toolu 2', 'x'.repeat(129), '']) {
+      b.assistant([{ type: 'tool_use', id, name: 'AskUserQuestion', input: ask }])
+      b.assistant([{ type: 'tool_use', id, name: 'Agent', input: { description: 'Review', prompt: 'x' } }])
+    }
+    b.push({ type: 'assistant', uuid: 'no-id', parentUuid: null, isSidechain: false, sessionId: b.sessionId, timestamp: b.now(), message: { model: 'claude-opus-5', role: 'assistant', content: [{ type: 'tool_use', name: 'Read', input: {} }] } })
+    const skipped = reduce(b)
+    expect(skipped.parseErrors).toBe(9)
+    expect(['openQuestion' in skipped, 'activity' in skipped, skipped.agents]).toEqual([false, false, []])
+    const longest = 'a'.repeat(128)
+    b.assistant([{ type: 'tool_use', id: longest, name: 'AskUserQuestion', input: ask }])
+    expect([reduce(b).openQuestion?.toolUseId, reduce(b).activity?.toolUseId]).toEqual([longest, longest])
+  })
+
   it('counts each record that is not an object, beside the lines that the reader could not parse', () => {
     const records = [42, null, 'x', [], ...builder().userPrompt('Go.').toRecords()]
     expect(reduceRecords(records, { home: HOME, parseErrors: 2 }).parseErrors).toBe(6)
@@ -349,6 +365,19 @@ describe('reduceRecords: the facts that a later record changes', () => {
     expect('errorTail' in reduce(b)).toBe(false)
     b.system('api_error', { error: { message: 'Overloaded' } })
     b.userPrompt('Try again.')
+    expect('errorTail' in reduce(b)).toBe(false)
+  })
+
+  it('sets the error tail on an API error message that Claude Code writes as a reply, and clears it on the next reply', () => {
+    const b = builder()
+    b.userPrompt('Go.')
+    b.assistant([text('Working.')])
+    b.tick(1000)
+    b.push({ type: 'assistant', uuid: 'api-error-1', parentUuid: null, isSidechain: false, sessionId: b.sessionId, timestamp: b.now(), isApiErrorMessage: true, message: { model: '<synthetic>', role: 'assistant', content: [text(`API Error: Overloaded ${KEY}`)] } })
+    const facts = reduce(b)
+    expect(facts.errorTail).toStrictEqual({ kind: 'api-error', text: `API Error: Overloaded ${MASKED_KEY}`, at: T('10:00:01.000') })
+    expect(facts.lastReply).toBe('Working.')
+    b.assistant([text('Back.')])
     expect('errorTail' in reduce(b)).toBe(false)
   })
 
