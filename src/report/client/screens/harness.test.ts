@@ -30,11 +30,12 @@ const skill = (name: string, status: 'used' | 'idle' | 'undeclared') => ({ name,
 
 function report(over: Partial<HarnessReport> = {}): HarnessReport {
   return {
-    schemaVersion: '2',
+    schemaVersion: '3',
     generator: { name: 'orangu', version: 'test', generatedAt: 0 },
     scope: { cwd: '~/Code/demo', roots: ['~/.claude'], global: false, limit: 200, sessionsScanned: 12, sessionsUnreadable: 0 },
     inventory: {
       claudeMd: [{ scope: 'repo', file: '~/Code/demo/CLAUDE.md', bytes: 4000, approxTokens: 1000, lines: 40, headings: 4 }],
+      memoryIndexes: [],
       settings: [], skills: [], agents: [], plugins: [], mcpServers: [],
       totals: { filesRead: 3, bytesRead: 9000, claudeMdBytes: 4000, claudeMdApproxTokens: 1000, skills: 85, agents: 2, plugins: 1, mcpServers: 3, hookCommands: 0 },
       unreadable: [],
@@ -54,6 +55,13 @@ function report(over: Partial<HarnessReport> = {}): HarnessReport {
       injectedListings: [{ type: 'skill_listing', main: { sessions: 12, injections: 12, bytes: 500_000, approxTokens: 125_000 }, subagent: { sessions: 3, injections: 40, bytes: 1_600_000, approxTokens: 400_000 }, approxTokensPerInjection: 10_096, approxTokensPerMainSession: 10_417 }],
     },
     retention: { effectiveDays: 30, isDefault: true, sweepable: { sessions: 12, bytes: 90_000 }, exempt: { sessions: 0, bytes: 0 }, oldestSweepableDays: 9, expiringSoon: { sessions: 0, bytes: 0, windowDays: 7 }, pastCutoff: { sessions: 0, bytes: 0 } },
+    enforcement: {
+      counts: { sessionsWithRecord: 0, rulesInContext: 0, rulesBroken: 0, rulesEnforced: 0, notesWritten: 0, feedbackNotes: 0, notesFollowedByComplaint: 0, complaints: 0, memoryIndexesCut: 0 },
+      broken: [],
+      notes: [],
+      memory: [],
+      complaints: [],
+    },
     notes: ['~/.claude.json was not read, so client-side usage counters are omitted; the crosswalk uses session evidence only'],
     ...over,
   }

@@ -9,7 +9,7 @@
  * Everything here is in tokens and effort. There is no money on this surface, by rule.
  *
  *   orangu harness [--json] [--cwd <dir>] [--root <dir>] [--global] [--limit <n>]
- *                  [-o|--out <file>] [--no-redact] [--strip-paths] [--jobs <n>] [--no-cache] [--quiet]
+ *                  [-o|--out <file>] [--no-redact] [--strip-paths] [--include-text] [--jobs <n>] [--no-cache] [--quiet]
  */
 import { homedir } from 'node:os'
 import { basename, resolve } from 'node:path'
@@ -19,6 +19,7 @@ import { analyzeAllPooled, defaultJobs } from '../../cache/pool.js'
 import { aggregate } from '../../analyze/aggregate.js'
 import { collectInventory } from '../../harness/collect.js'
 import { buildHarnessReport, plural, sizeLabel } from '../../harness/report.js'
+import { loadedMemoryIndexPaths } from '../../harness/enforcement.js'
 import { RETENTION_DEFAULT_DAYS } from '../../harness/retention.js'
 import type { HarnessConfigScope, HarnessListingRow, HarnessReport } from '../../harness/types.js'
 import { redactValue } from '../../redact/redact.js'
@@ -111,9 +112,13 @@ export async function runHarness(flags: Record<string, string | boolean>): Promi
   const home = homedir()
   // the declared side follows the observed one: a global scan reads every project entry, and managed policy
   // is read wherever the platform keeps it (ORANGU_CLAUDE_MANAGED_DIRS overrides; empty reads none)
-  const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: isGlobal })
+  const instructionWords = new Set<string>()
+  const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: isGlobal, memoryIndexPaths: loadedMemoryIndexPaths(analyses), instructionWords })
   const agg = aggregate(analyses, scopeLabel, now)
   const report = buildHarnessReport(inventory, analyses, agg, {
+    instructionWords,
+    // a complaint example carries its prompt text only on request, the same gate as `analyze --include-text`
+    ...(flagBool(flags, 'include-text') ? { includeText: true } : {}),
     version: VERSION,
     now,
     scope: { cwd, roots, global: isGlobal, limit, sessionsUnreadable: failed, home },
@@ -184,6 +189,74 @@ function printRetention(r: HarnessReport, line: (l: string, v: string) => void, 
   dim('cleanupPeriodDays sets the window, minimum 1. A larger value keeps more history to measure, and leaves plaintext transcripts on disk for longer')
 }
 
+/** "44 min", "3 h", "2 days": the gap from a note to the complaint that came back */
+function gapLabel(ms: number): string {
+  const min = Math.round(ms / 60_000)
+  if (min < 120) return plural(min, 'min').replace(/mins$/, 'min')
+  const h = Math.round(min / 60)
+  return h < 48 ? `${h} h` : plural(Math.round(h / 24), 'day')
+}
+
+/**
+ * The rules and notes that did not hold. A rule in CLAUDE.md or in memory is one line among many, so the agent
+ * can miss it, and a hook or a permission rule cannot be missed. This block shows the evidence and recommends
+ * nothing: the harness skill turns each row into a check.
+ */
+function printEnforcement(r: HarnessReport, w: (s?: string) => void, wrapped: (s: string, indent: string) => string[]): void {
+  const e = r.enforcement
+  const c = e.counts
+  const dim = (s: string) => w(paint(out, 'dim', s))
+  const fileName = (p: string) => p.split(/[\\/]/).pop() ?? p
+  w()
+  w(paint(out, 'bold', '  rules that did not hold'))
+  if (r.scope.sessionsScanned === 0) {
+    dim('    no sessions in scope: nothing can be checked')
+    return
+  }
+  if (c.sessionsWithRecord === 0) {
+    dim('    no scanned session recorded the instruction files that it loaded,')
+    dim('    so orangu cannot tie a rule to a session. Claude Code writes that record')
+    dim('    in newer transcripts.')
+  } else if (!e.broken.length) {
+    dim(`    ${plural(c.rulesInContext, 'rule')} named a command or a tool, and no call broke ${c.rulesInContext === 1 ? 'it' : 'them'}`)
+  }
+  for (const b of e.broken.slice(0, 5)) {
+    w(`    ${b.target.name.padEnd(26)} ${plural(b.calls, 'call')} in ${b.sessionsBroken} of ${plural(b.sessionsInContext, 'session')} that had the rule`)
+    const agents = b.agentCalls ? ` · ${b.agentCalls} by subagents` : ''
+    const copies = b.files > 1 ? ` · ${b.files} copies of the file` : ''
+    dim(`      ${fileName(b.file)}:${b.line}${agents}${copies}`)
+    if (b.blocked) dim(b.blocked === b.calls ? '      a hook or a deny rule stopped every call: a check holds this rule' : `      a hook or a deny rule stopped ${b.blocked}, and ${b.calls - b.blocked} ran`)
+    for (const l of wrapped(b.text, '      ')) dim(l)
+  }
+  if (e.broken.length > 5) dim(`    ${e.broken.length - 5} more broken rules in --json`)
+
+  for (const m of e.memory.filter((x) => x.sessionsCut > 0 || (x.linesPastLimit ?? 0) > 0).slice(0, 3)) {
+    const now = m.linesPastLimit ? `${plural(m.linesPastLimit, 'line')} past the limit now` : m.bytes !== undefined ? `fits now: ${sizeLabel(m.bytes)} of 24.4 KB` : 'gone now'
+    w(`    ${'memory index'.padEnd(26)} cut in ${m.sessionsCut} of ${plural(m.sessionsLoaded, 'session')} that loaded it`)
+    dim(`      ${m.file}`)
+    dim(`      up to ${plural(m.maxLinesCut, 'line')} not loaded, the newest first · ${now}`)
+  }
+
+  if (c.feedbackNotes) {
+    w(`    ${'feedback notes'.padEnd(26)} ${c.notesFollowedByComplaint} of ${c.feedbackNotes} came back as a complaint`)
+    for (const note of e.notes.filter((x) => x.matchingComplaints > 0).slice(0, 3)) {
+      const first = note.firstMatchAfterMs !== undefined ? `, the first ${gapLabel(note.firstMatchAfterMs)} after the note` : ''
+      dim(`      ${fileName(note.file)} · ${plural(note.matchingComplaints, 'complaint')}${first}`)
+      if (note.sharedWords.length) dim(`        shared words: ${note.sharedWords.slice(0, 6).join(', ')}`)
+    }
+  }
+
+  const themes = e.complaints.slice(0, 6)
+  if (themes.length) {
+    w(`    ${'recurring complaints'.padEnd(26)} ${plural(c.complaints, 'complaint prompt')} in scope`)
+    for (const t of themes) dim(`      "${t.word}" in ${plural(t.prompts, 'prompt')}, ${plural(t.sessions, 'session')}${t.inInstructions ? ' · a note already uses this word' : ''}`)
+  }
+  if (e.notes.some((x) => x.examples.length) || themes.length) {
+    const shown = e.notes.some((x) => x.examples.some((ex) => ex.preview !== undefined)) || themes.some((t) => t.examples.some((ex) => ex.preview !== undefined))
+    if (!shown) dim('    add --include-text to see the text of each complaint')
+  }
+}
+
 function printHarness(r: HarnessReport): void {
   const w = (s = '') => process.stdout.write(s + '\n')
   const inv = r.inventory
@@ -201,19 +274,9 @@ function printHarness(r: HarnessReport): void {
   }
   w()
 
-  // designed empty state: never a blank report
-  const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0
-  if (nothing) {
-    w(`  orangu found no harness config under ${r.scope.roots.join(', ')}. It found nothing to compare.`)
-    w(paint(out, 'dim', `\n  looked for: settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md\n`))
-    return
-  }
-
-  const line = (l: string, v: string) => w('  ' + l.padEnd(22) + v)
   // the 80-column contract every other verb keeps (src/cli/summary.ts): a name list wraps onto continuation
   // lines rather than being cut, so no name is lost; a path is never touched
   const width = Math.min(out.columns || 80, 80)
-  const dim = (s: string) => w(paint(out, 'dim', '    ' + s))
   /** word-wrap a sentence into lines that fit the layout width under a given indent */
   const wrapped = (s: string, indent: string): string[] => {
     const max = Math.max(20, width - indent.length)
@@ -229,6 +292,20 @@ function printHarness(r: HarnessReport): void {
     if (cur) lines.push(cur)
     return lines.map((l, i) => (i === 0 ? indent + l : ' '.repeat(indent.length) + l))
   }
+
+  // designed empty state: never a blank report
+  const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0
+  if (nothing) {
+    w(`  orangu found no harness config under ${r.scope.roots.join(', ')}. It found nothing to compare.`)
+    w(paint(out, 'dim', `\n  looked for: settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md`))
+    // the transcripts still record what the sessions loaded, wrote and were told: that needs no config
+    printEnforcement(r, w, wrapped)
+    w()
+    return
+  }
+
+  const line = (l: string, v: string) => w('  ' + l.padEnd(22) + v)
+  const dim = (s: string) => w(paint(out, 'dim', '    ' + s))
   const dimList = (items: string[]) => {
     let cur = ''
     for (const item of items) {
@@ -318,6 +395,8 @@ function printHarness(r: HarnessReport): void {
       if (l.subagent.injections) w(paint(out, 'dim', `      subagents ≈${n(l.subagent.approxTokens)} tokens over ${plural(l.subagent.injections, 'injection')} in ${plural(l.subagent.sessions, 'session')}`))
     }
   }
+
+  printEnforcement(r, w, wrapped)
 
   if (r.notes.length) {
     w()

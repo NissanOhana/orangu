@@ -74,14 +74,15 @@ function allKeys(v: unknown, out: string[] = []): string[] {
 }
 
 describe('buildHarnessReport: shape', () => {
-  it('emits exactly the seven top-level keys, with the schema version and the injected clock', async () => {
+  it('emits exactly the eight top-level keys, with the schema version and the injected clock', async () => {
     const { inv, analyses, agg } = await fixture()
     const r = buildHarnessReport(inv, analyses, agg, opts())
-    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
+    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'enforcement', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     expect(r.schemaVersion).toBe(HARNESS_SCHEMA_VERSION)
-    expect(r.schemaVersion).toBe('2')
+    expect(r.schemaVersion).toBe('3')
     expect(r.generator).toEqual({ name: 'orangu', version: '0.2.0', generatedAt: 1_700_000_000_000 })
-    expect(Object.keys(r.inventory).sort()).toEqual(['agents', 'claudeMd', 'mcpServers', 'plugins', 'settings', 'skills', 'totals', 'unreadable'])
+    expect(Object.keys(r.inventory).sort()).toEqual(['agents', 'claudeMd', 'mcpServers', 'memoryIndexes', 'plugins', 'settings', 'skills', 'totals', 'unreadable'])
+    expect(Object.keys(r.enforcement).sort()).toEqual(['broken', 'complaints', 'counts', 'memory', 'notes'])
     expect(Object.keys(r.crosswalk).sort()).toEqual([
       'agents',
       'claudeMd',

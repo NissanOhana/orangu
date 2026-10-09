@@ -11,6 +11,7 @@ import { aggregate, type Aggregate } from '../analyze/aggregate.js'
 import { defaultConfigDir, managedSettingsDirs } from '../discover/discover.js'
 import { collectInventory } from '../harness/collect.js'
 import { buildHarnessReport } from '../harness/report.js'
+import { loadedMemoryIndexPaths } from '../harness/enforcement.js'
 import type { HarnessReport } from '../harness/types.js'
 import type { Analysis } from '../model/analysis.js'
 import { APP_DATA_VERSION, type AppCapabilities, type AppData, type SessionSummaryRow, type SuggestionViewRecord } from '../model/app-data.js'
@@ -267,8 +268,12 @@ class HarnessRunner {
     const roots = this.ctx.opts.roots ?? [this.ctx.opts.configDir ?? defaultConfigDir()]
     const now = this.ctx.now()
     // the same declared side the CLI verb reads: managed settings, and every project entry under global scope
-    const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: !repoCwd })
+    const instructionWords = new Set<string>()
+    const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: !repoCwd, memoryIndexPaths: loadedMemoryIndexPaths(analyses), instructionWords })
     const report = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : 'global', now), {
+      instructionWords,
+      // a prompt preview is transcript text: the same --include-text gate as every other serve payload
+      ...(this.ctx.opts.includeText ? { includeText: true } : {}),
       version: this.ctx.opts.version,
       now,
       scope: { cwd, roots, global: !repoCwd, limit: rows.length, sessionsUnreadable: unreadable, home },

@@ -15,6 +15,7 @@ import type { HarnessAgentEntry, HarnessInventory, HarnessMcpServerEntry, Harnes
 
 const emptyInventory = (over: Partial<HarnessInventory> = {}): HarnessInventory => ({
   claudeMd: [],
+  memoryIndexes: [],
   settings: [],
   skills: [],
   agents: [],

@@ -30,6 +30,8 @@
 import { readdir, readFile, stat } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { redactValue, scrubStr } from '../redact/redact.js'
+import { contentWords } from '../analyze/instructions.js'
+import { projectSlug } from '../discover/discover.js'
 import { argv0Basename } from './names.js'
 import type {
   HarnessAgentEntry,
@@ -39,6 +41,7 @@ import type {
   HarnessMcpScope,
   HarnessMcpServerEntry,
   HarnessMemoryFile,
+  HarnessMemoryIndexFile,
   HarnessOrigin,
   HarnessPluginEntry,
   HarnessSettingsFile,
@@ -61,6 +64,33 @@ export interface CollectOptions {
   managedDirs?: string[]
   /** read the MCP declarations of EVERY project entry in `~/.claude.json`, the declared side a global session scan needs; default: only cwd's */
   allProjects?: boolean
+  /** auto-memory indexes the scanned sessions loaded (absolute paths), measured beside the ones in scope */
+  memoryIndexPaths?: string[]
+  /**
+   * When given, the content words of every instruction file and memory note in scope are added here. The words
+   * never enter the inventory: the enforcement section uses them to say a complaint word is already in a note.
+   */
+  instructionWords?: Set<string>
+}
+
+/** Claude Code loads the first 200 lines or the first 25,000 bytes of MEMORY.md, whichever comes first (docs: memory) */
+export const MEMORY_INDEX_LINE_LIMIT = 200
+export const MEMORY_INDEX_BYTE_LIMIT = 25_000
+
+/**
+ * Where Claude Code cuts an auto-memory index at load: the whole lines that fit in both limits stay, the rest
+ * goes. Its own warning counts the same way ("3 of 117 lines were cut off, starting at line 115").
+ */
+export function memoryIndexCut(text: string): { lines: number; linesPastLimit: number; firstLinePastLimit?: number } {
+  const lines = text === '' ? [] : text.split('\n')
+  if (lines.length && lines[lines.length - 1] === '') lines.pop()
+  let bytes = 0
+  for (let i = 0; i < lines.length; i++) {
+    const next = bytes + Buffer.byteLength(lines[i]!, 'utf8')
+    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_BYTE_LIMIT) return { lines: lines.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 }
+    bytes = next + 1
+  }
+  return { lines: lines.length, linesPastLimit: 0 }
 }
 
 const DEFAULT_MAX_FILE_BYTES = 1_000_000
@@ -77,6 +107,8 @@ const CLAUDE_JSON_PROJECT_KEYS = ['mcpServers', 'enabledMcpjsonServers', 'disabl
 // ---------------------------------------------------------------------------------------------------------
 
 interface Ctx {
+  /** the instruction-word sink (CollectOptions.instructionWords) */
+  words?: Set<string>
   home: string
   maxFileBytes: number
   unreadable: HarnessUnreadableEntry[]
@@ -392,6 +424,7 @@ async function readAgentDir(ctx: Ctx, dir: string, origin: HarnessOrigin, plugin
 async function readMemory(ctx: Ctx, file: string, scope: 'repo' | 'global'): Promise<HarnessMemoryFile | null> {
   const text = await readText(ctx, file)
   if (text === null) return null
+  if (ctx.words) for (const w of contentWords(text, { cap: Infinity })) ctx.words.add(w)
   const bytes = Buffer.byteLength(text, 'utf8')
   return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens(bytes), lines: lineCount(text), headings: headingCount(text) }
 }
@@ -458,6 +491,7 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
     throw new TypeError('collectInventory: cwd and home must be strings and roots an array')
   }
   const ctx: Ctx = {
+    ...(opts.instructionWords ? { words: opts.instructionWords } : {}),
     home: opts.home,
     maxFileBytes: opts.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
     unreadable: [],
@@ -637,6 +671,39 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
     }
   }
 
+  // ---- auto-memory indexes: the cwd's project (or every project under a global scan), plus each one a session loaded ----
+  const memoryIndexes: HarnessMemoryIndexFile[] = []
+  const indexPaths = new Set<string>(opts.memoryIndexPaths ?? [])
+  for (const root of liveRoots) {
+    const projects = join(root, 'projects')
+    if (opts.allProjects) {
+      for (const e of await listDir(ctx, projects)) if (e.dir) indexPaths.add(join(projects, e.name, 'memory', 'MEMORY.md'))
+    } else indexPaths.add(join(projects, projectSlug(opts.cwd), 'memory', 'MEMORY.md'))
+  }
+  for (const file of [...indexPaths].sort()) {
+    // most projects keep no memory: an absent index is not a miss
+    try {
+      if (!(await stat(file)).isFile()) continue
+    } catch {
+      continue
+    }
+    const text = await readText(ctx, file)
+    if (text === null) continue
+    const bytes = Buffer.byteLength(text, 'utf8')
+    const cut = memoryIndexCut(text)
+    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, approxTokens: approxTokens(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...(cut.firstLinePastLimit !== undefined ? { firstLinePastLimit: cut.firstLinePastLimit } : {}) })
+    // the topic notes beside the index load on demand; their words still count as "a note exists"
+    if (ctx.words) {
+      for (const w of contentWords(text, { cap: Infinity })) ctx.words.add(w)
+      const dir = join(file, '..')
+      for (const e of await listDir(ctx, dir)) {
+        if (e.dir || !e.name.endsWith('.md') || e.name === 'MEMORY.md') continue
+        const note = await readText(ctx, join(dir, e.name))
+        if (note !== null) for (const w of contentWords(note, { cap: Infinity })) ctx.words.add(w)
+      }
+    }
+  }
+
   // ---- explicit sorts, so the same tree always serializes the same bytes ----
   claudeMd.sort((a, b) => (a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
   settings.sort((a, b) => (a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0))
@@ -648,6 +715,7 @@ export async function collectInventory(opts: CollectOptions): Promise<HarnessInv
 
   return {
     claudeMd,
+    memoryIndexes,
     settings,
     skills,
     agents,

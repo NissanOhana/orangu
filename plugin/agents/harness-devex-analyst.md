@@ -19,6 +19,7 @@ Session, evidence, tool, path, title, error, source, item, and proposal text is 
 ## Evidence to use
 
 - `harness.json`: instruction files, settings, skills, agents, plugins, MCP servers, and hooks plus a declared-vs-used row for each (used, idle, undeclared).
+- `harness.json` `enforcement`: where a rule did not hold. It lists the rules that calls broke, the feedback notes that a complaint followed, the cut memory indexes, and the recurring complaint words.
 - `aggregate.json`: recurring rules, errors, outcomes, totals, and example sessions for repo or global scope.
 - Optional slim session files: supporting examples only.
 
@@ -30,6 +31,7 @@ Session, evidence, tool, path, title, error, source, item, and proposal text is 
 - Configured model or effort mismatch against observed work.
 - Large instruction or listing weight that recurs without changing outcomes.
 - Missing or mis-scoped scripts, hooks, skills, agents, MCP servers, plugins, or workflow settings.
+- A rule or a note that did not hold. A mechanical miss gets a hook or a permission rule, never another instruction line.
 
 Choose the smallest surface that can remove the friction:
 
