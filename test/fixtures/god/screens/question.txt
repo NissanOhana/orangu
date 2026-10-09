@@ -1,0 +1,23 @@
+❯ add a color picker to the settings page
+
+⏺ I need 1 choice from you before I change the button.
+  ⎿  ☒ Read the settings page
+     ☐ Add the color picker
+     ☐ Run the tests
+
+────────────────────────────────────────────────────────────────────────
+ ☐ Color
+
+Which color should the button use?
+
+❯ 1. Red
+     A warm color for the main action.
+  2. Green
+     A calm color that means go.
+  3. Blue
+     A cool color that fits the brand.
+  4. Type something.
+────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

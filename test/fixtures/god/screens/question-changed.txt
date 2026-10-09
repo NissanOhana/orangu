@@ -1,0 +1,18 @@
+❯ add a color picker to the settings page
+
+⏺ The button is done. I need 1 more choice.
+
+────────────────────────────────────────────────────────────────────────
+ ☐ Color
+
+Which color should the error banner use?
+
+❯ 1. Orange
+     A strong color that people see at once.
+  2. Red
+     The color of the other errors.
+  3. Type something.
+────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

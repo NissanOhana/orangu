@@ -1,0 +1,18 @@
+❯ show me the dialog
+
+⏺ The dialog looks like this:
+
+   ☐ Color
+
+  Which color should the button use?
+
+  ❯ 1. Red
+       A warm color for the main action.
+    2. Green
+       A calm color that means go.
+    3. Type something.
+
+────────────────────────────────────────────────────────────────────────
+❯ 
+────────────────────────────────────────────────────────────────────────
+  ? for shortcuts

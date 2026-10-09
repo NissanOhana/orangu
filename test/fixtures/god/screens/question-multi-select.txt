@@ -1,0 +1,14 @@
+❯ plan the pizza order
+
+────────────────────────────────────────────────────────────────────────
+←  ☐ Toppings   ✔ Submit  →
+
+Which toppings do you want?
+
+❯ 1. Cheese
+     The base of each pizza.
+  2. Olives
+     Black olives, cut in rings.
+  3. Type something
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

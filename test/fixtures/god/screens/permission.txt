@@ -1,0 +1,18 @@
+❯ make an empty probe file
+
+⏺ Bash(touch probe-yes.txt)
+
+────────────────────────────────────────────────────────────────────────
+ Bash command
+
+ Make an empty probe file
+
+   touch probe-yes.txt
+
+ Do you want to proceed?
+ ❯ 1. Yes
+   2. Yes, and always allow access to probe/ from this project
+   3. Yes, and switch to auto mode
+   4. No
+
+ Esc to cancel · Tab to amend

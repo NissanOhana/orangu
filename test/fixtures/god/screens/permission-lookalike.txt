@@ -1,0 +1,18 @@
+❯ make an empty probe file
+
+⏺ Bash(touch probe-yes.txt)
+
+────────────────────────────────────────────────────────────────────────
+ Bash command
+
+   touch probe-yes.txt
+   Make an empty probe file
+
+ Do you want to proceed?
+ ❯ 1. Yеs
+   2. Ｙｅｓ
+   3. Yes.
+   4. Nо
+   5. Ｎｏ
+
+ Esc to cancel
