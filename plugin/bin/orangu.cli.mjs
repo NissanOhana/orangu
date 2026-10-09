@@ -2075,13 +2075,15 @@ var TEXT_KEYS = /* @__PURE__ */ new Set([
   "taskKind",
   "url",
   "template",
-  "sample"
+  "sample",
+  // InstructionRule.text: a line of an instruction file, as the transcript's `instructions` record carried it
+  "text"
 ]);
 var PATH_KEYS = /* @__PURE__ */ new Set(["path", "cwd", "transcriptPath", "file"]);
 var PATH_ARRAY_KEYS = /* @__PURE__ */ new Set(["subagentPaths"]);
 var PROJECT_KEYS = /* @__PURE__ */ new Set(["projectSlug", "project"]);
 var NARRATIVE_TITLE_RE = /^In “[\s\S]*”, (?=(?:you|the human) made \d[\d,]* requests?\b)/;
-var PRIVATE_STRING_ARRAY_KEYS = /* @__PURE__ */ new Set(["gitBranches"]);
+var PRIVATE_STRING_ARRAY_KEYS = /* @__PURE__ */ new Set(["gitBranches", "examples", "words"]);
 var UNKNOWN_COUNT_MAP_KEYS = /* @__PURE__ */ new Set([
   "unknownRecordTypes",
   "unknownBlockTypes",
@@ -2118,10 +2120,13 @@ var SAFE_EVENT_KINDS = /* @__PURE__ */ new Set(["interrupt", "pr_link", "plan_mo
 function isSafeEventRecord(obj3) {
   return "kind" in obj3 && "turnIndex" in obj3 && "label" in obj3 && SAFE_EVENT_KINDS.has(String(obj3["kind"]));
 }
+function isTextRuleTarget(obj2) {
+  return Object.keys(obj2).length === 2 && "name" in obj2 && (obj2["kind"] === "command" || obj2["kind"] === "flag");
+}
 function stripsText(key, source) {
   switch (key) {
     case "name":
-      return isAgentRecord(source);
+      return isAgentRecord(source) || isTextRuleTarget(source);
     case "title":
       return !isRuleRecord(source);
     case "label":
@@ -4260,7 +4265,7 @@ var TOOL_TARGETS = /* @__PURE__ */ new Set([
 var BARE_TOOL_TARGETS = /* @__PURE__ */ new Set(["WebFetch", "WebSearch", "TodoWrite", "AskUserQuestion", "SendMessage", "CronCreate", "ScheduleWakeup", "ToolSearch", "EnterPlanMode", "NotebookEdit"]);
 var RUNNERS = ["npx ", "npm run ", "npm exec ", "pnpm run ", "pnpm exec ", "pnpm dlx ", "pnpm ", "yarn run ", "yarn dlx ", "yarn ", "bunx ", "bun run ", "bun x "];
 var NEGATIVE_RE = /\b(?:never|do not|don't|dont|must not|mustn't|should not|shouldn't|stop)\s+(?:ever\s+)?(?:use|using|run|running|call|calling|invoke|invoking|execute|executing)\b|\bavoid(?:ing)?\b/gi;
-var CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[—–-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except)\b/i;
+var CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[\u2014\u2013-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except)\b/i;
 var INSTEAD_RE = /\b(?:instead of|rather than)\s+/gi;
 var NOT_RE = /(?:,\s*|\s)not\s+/gi;
 var OVER_RE = /\bprefer\b[^.;]*?\bover\s+/gi;
@@ -4313,7 +4318,7 @@ function extractRules(text3, mcpServers = /* @__PURE__ */ new Set()) {
     const raw = lines[i].replace(/[’‘]/g, "'");
     if (!raw.includes("`") && !/never|not|avoid|stop|instead|rather|prefer/i.test(raw)) continue;
     const spans = [];
-    const masked = raw.replace(/`([^`]+)`/g, (_m, inner) => ` ${SPAN}${spans.push(inner) - 1}${SPAN} `);
+    const masked = raw.replace(/`([^`]+)`/g, (_m, inner) => ` ${SPAN}${spans.push(inner) - 1}${SPAN} `).replace(/\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])/g, "");
     const targets = [];
     const add = (ts3) => {
       for (const t of ts3) if (!targets.some((x) => sameTarget(x, t))) targets.push(t);
@@ -4347,12 +4352,7 @@ function boundaryAt(seg, at) {
 function matchCommand(seg, target) {
   const starts = [0];
   for (const r of RUNNERS) if (seg.startsWith(r)) starts.push(r.length);
-  for (const at of starts) {
-    if (seg.startsWith(target, at) && boundaryAt(seg, at + target.length)) {
-      const tail = seg.slice(at + target.length).trim().split(" ").filter(Boolean).slice(0, 2);
-      return [seg.slice(0, at + target.length), ...tail].join(" ");
-    }
-  }
+  for (const at of starts) if (seg.startsWith(target, at) && boundaryAt(seg, at + target.length)) return seg.slice(0, at + target.length);
   return null;
 }
 function bashCommand(c) {
@@ -4368,14 +4368,15 @@ function callMatches(c, t, segs = c.name === "Bash" ? commandSegments(bashComman
       const hit = matchCommand(seg, t.name);
       if (hit) return hit;
     } else if (seg.split(" ").some((w) => w === t.name || w.startsWith(t.name + "="))) {
-      return seg.split(" ").slice(0, 3).join(" ");
+      const program = seg.split(" ")[0].replace(/^.*\//, "");
+      return /^[a-z][a-z0-9.+-]*$/.test(program) ? `${program} ${t.name}` : t.name;
     }
   }
   return null;
 }
 var NOTE_WORD_CAP = 40;
 var STOP_WORDS = new Set(
-  "about above after again against also always another anything because been before being below between both cannot could does doing done down during each either else even every first from further have having here hers itself just last later like many might more most much must need needs never next none often once only other ought ours over own same should since some such than that their theirs them then there these they this those through under until upon very want were what when where whether which while whom whose will with within without would your yours yourself make makes made sure true false into onto when then thing things everything something nothing anyone every name description metadata type node_type originsessionid modified project feedback reference user apply rule rules note notes memory index file files line lines code task tasks work session sessions agent agents claude please stop still again broken working fixed wrong".split(/\s+/)
+  "about above after again against also always another anything because been before being below between both cannot could does doing done down during each either else even every first from further have having here hers itself last later like many might more most much must need needs never next none often once only other ought ours over own same should since some such than that their theirs them then there these they this those through under until upon want were what when where whether which while whom whose will with within without would your yours yourself make makes made sure true false into onto when then thing things everything something nothing anyone every name description metadata type node_type originsessionid modified project feedback reference user apply rule rules note notes memory index file files line lines code task tasks work session sessions agent agents claude please stop still again broken working fixed wrong".split(/\s+/)
 );
 function contentWords(text3, cap = NOTE_WORD_CAP) {
   const out3 = [];

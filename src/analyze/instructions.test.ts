@@ -15,6 +15,13 @@ describe('extractRules: the rule grammar', () => {
     ])
   })
 
+  it('ends the sentence inside bold markers, so the advice in the next sentence is not a target', () => {
+    expect(targets('- **Never run `npx tsc --noEmit` or `next build` bare.** Both abort on this tree: `npm run check:tsc-baseline` sets the heap.')).toEqual([
+      { kind: 'command', name: 'npx tsc --noEmit' },
+      { kind: 'command', name: 'next build' },
+    ])
+  })
+
   it('stops the clause at a dash, so the advice after it is not a target', () => {
     expect(targets('never use `db:push` for verification in this repo — use `npm run db:migrate:local` plus a check')).toEqual([{ kind: 'command', name: 'db:push' }])
   })
@@ -59,9 +66,9 @@ describe('extractRules: the rule grammar', () => {
 describe('matchCommand', () => {
   it('matches a segment that starts with the target, or with a runner and then the target', () => {
     expect(matchCommand('next build', 'next build')).toBe('next build')
-    expect(matchCommand('npx next build --debug', 'next build')).toBe('npx next build --debug')
-    expect(matchCommand('npm run db:push -- --force', 'db:push')).toBe('npm run db:push -- --force')
-    expect(matchCommand('npx tsc --noEmit -p tsconfig.json', 'npx tsc --noEmit')).toBe('npx tsc --noEmit -p tsconfig.json')
+    expect(matchCommand('npx next build --debug', 'next build')).toBe('npx next build')
+    expect(matchCommand('npm run db:push -- --force', 'db:push')).toBe('npm run db:push')
+    expect(matchCommand('npx tsc --noEmit -p tsconfig.json', 'npx tsc --noEmit')).toBe('npx tsc --noEmit')
   })
 
   it('holds a "bare" rule: an env assignment in front is not a match', () => {
@@ -136,7 +143,7 @@ describe('analyzeInstructions on a parsed session', () => {
       ['MEMORY.md', 'AutoMem'],
     ])
     expect(ins.rules).toHaveLength(1)
-    expect(ins.rules[0]).toMatchObject({ source: 'loaded', line: 2, target: { kind: 'command', name: 'next build' }, calls: 2, agentCalls: 1, examples: ['next build', 'npx next build --debug'] })
+    expect(ins.rules[0]).toMatchObject({ source: 'loaded', line: 2, target: { kind: 'command', name: 'next build' }, calls: 2, agentCalls: 1, examples: ['next build', 'npx next build'] })
     expect(ins.memoryCuts).toEqual([expect.objectContaining({ over: 'bytes', totalLines: 115, linesCut: 5, firstCutLine: 111 })])
   })
 

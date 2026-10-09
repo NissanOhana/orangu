@@ -520,3 +520,22 @@ describe('scrubStr masks the hosted-service tokens the repo hygiene check alread
     expect(scrubStr('the author: someone wrote this')).toBe('the author: someone wrote this')
   })
 })
+
+describe('redaction: the instructions analysis', () => {
+  const rule = (kind: 'command' | 'mcp-server', name: string) => ({ path: '/x/CLAUDE.md', source: 'loaded', line: 3, text: 'Never run `next build` bare.', target: { kind, name }, calls: 2, agentCalls: 0, examples: ['npx next build'] })
+  const value = { instructions: { loaded: [], rules: [rule('command', 'next build'), rule('mcp-server', 'playwright')], noteWrites: [{ path: '/x/CLAUDE.md', kind: 'claude-md', turnIndex: 1, words: ['desktop', 'viewport'] }], memoryCuts: [] } }
+
+  it('strips the rule line, the command target, the examples and the note words when text is stripped', () => {
+    const out = redactValue(value, { stripText: true, home: '/nohome' }).instructions
+    expect(out.rules[0]).toMatchObject({ text: '', target: { kind: 'command', name: '' }, examples: [], calls: 2 })
+    // a server or tool name is structural, as in tools.byName
+    expect(out.rules[1]!.target).toEqual({ kind: 'mcp-server', name: 'playwright' })
+    expect(out.noteWrites[0]!.words).toEqual([])
+  })
+
+  it('keeps them, scrubbed, when text is kept', () => {
+    const out = redactValue(value, { stripText: false, home: '/nohome' }).instructions
+    expect(out.rules[0]).toMatchObject({ text: 'Never run `next build` bare.', target: { kind: 'command', name: 'next build' }, examples: ['npx next build'] })
+    expect(out.noteWrites[0]!.words).toEqual(['desktop', 'viewport'])
+  })
+})

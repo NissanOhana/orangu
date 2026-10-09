@@ -181,6 +181,8 @@ const TEXT_KEYS = new Set([
   'url',
   'template',
   'sample',
+  // InstructionRule.text: a line of an instruction file, as the transcript's `instructions` record carried it
+  'text',
 ])
 const PATH_KEYS = new Set(['path', 'cwd', 'transcriptPath', 'file'])
 /** string[] of paths (Session.subagentPaths): each element is a path under stripPaths */
@@ -200,7 +202,11 @@ const PROJECT_KEYS = new Set(['projectSlug', 'project'])
  * dropped with the whole narrative (fail-closed, below).
  */
 const NARRATIVE_TITLE_RE = /^In “[\s\S]*”, (?=(?:you|the human) made \d[\d,]* requests?\b)/
-const PRIVATE_STRING_ARRAY_KEYS = new Set(['gitBranches'])
+/**
+ * gitBranches; InstructionRule.examples (the command that broke a rule, runner + target); NoteWrite.words (the
+ * content words of a note the session wrote)
+ */
+const PRIVATE_STRING_ARRAY_KEYS = new Set(['gitBranches', 'examples', 'words'])
 const UNKNOWN_COUNT_MAP_KEYS = new Set([
   'unknownRecordTypes',
   'unknownBlockTypes',
@@ -270,11 +276,16 @@ function isSafeEventRecord(obj: Record<string, unknown>): boolean {
   return 'kind' in obj && 'turnIndex' in obj && 'label' in obj && SAFE_EVENT_KINDS.has(String(obj['kind']))
 }
 
+/** InstructionRule.target: a command or a flag is the text of an instruction line; a tool or server name is structural */
+function isTextRuleTarget(obj: Record<string, unknown>): boolean {
+  return Object.keys(obj).length === 2 && 'name' in obj && (obj['kind'] === 'command' || obj['kind'] === 'flag')
+}
+
 /** Does `stripText` blank this string field, given the record it sits in? */
 function stripsText(key: string, source: Record<string, unknown>): boolean {
   switch (key) {
     case 'name':
-      return isAgentRecord(source)
+      return isAgentRecord(source) || isTextRuleTarget(source)
     case 'title':
       return !isRuleRecord(source)
     case 'label':
