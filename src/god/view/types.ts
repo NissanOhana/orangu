@@ -17,6 +17,19 @@ export type Segment = {
   bold?: boolean
   /** drawn dim, as the `dimColor` of `Text` */
   dim?: boolean
+  /**
+   * Set on a key that 1 Button presses: the shell draws the segment as a plain Button with this hotkey and label.
+   * The engine paints such a Button as the key, a colon, a space and the label (`j: jump`), so `text` holds that
+   * painted form and every width that the view counts is the width on the screen.
+   */
+  press?: KeyPress
+}
+
+/** The hotkey and the label of a key Button. */
+export type KeyPress = {
+  /** 1 lowercase letter or 1 digit, as a Button hotkey takes it */
+  hotkey: string
+  label: string
 }
 
 /** 1 row of the pane. */
@@ -54,7 +67,8 @@ export type PaneLayout =
  * The whole pane, top to bottom:
  * - board: the header, a rule, the body, a rule, the key row. In the wide layout the body is the board column
  *   only, and the rules join the column rule (`┬`, `┴`) at the board width;
- * - message: the header, a rule and 1 message across the body, in place of the board (no session yet, or none);
+ * - message: the header, a rule and 1 message across the body, in place of the board (no session yet, or none).
+ *   When the message names a key (no session of the selected repos), a rule and the key row follow it;
  * - cannot-draw: 1 message with the reason, and nothing else.
  */
 export type PaneView =
@@ -68,5 +82,5 @@ export type PaneView =
       keys: readonly Line[]
       hints: readonly KeyHint[]
     }
-  | { kind: 'message'; header: readonly Line[]; topRule: Line; body: readonly Line[] }
+  | { kind: 'message'; header: readonly Line[]; topRule: Line; body: readonly Line[]; bottomRule?: Line; keys?: readonly Line[] }
   | { kind: 'cannot-draw'; lines: readonly Line[] }

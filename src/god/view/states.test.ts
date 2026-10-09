@@ -9,7 +9,7 @@ import { SECOND } from '../../../test/fixtures/god/sessions.js'
 import { NOW, boardSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot } from '../../../test/fixtures/god/snapshots.js'
 import type { BoardSnapshot } from '../types.js'
 import { cellWidth } from './cells.js'
-import { cannotDrawView, paneView, type PaneInput } from './pane.js'
+import { cannotDrawView, paneLines, paneView, type PaneInput } from './pane.js'
 import { CANNOT_DRAW, STATE_TEXT } from './states.js'
 import type { Line, PaneView } from './types.js'
 
@@ -35,6 +35,23 @@ describe('the states of the board pane', () => {
   it('the repos mode keeps no session: the line says so and names the key that shows every session', () => {
     expect(bodyOf(pane(noRepoMatchSnapshot()))).toEqual([` ${STATE_TEXT['no-repo-match']}`])
     expect(STATE_TEXT['no-repo-match']).toBe('No session of the selected repos runs now. Press f to show every session.')
+  })
+
+  it('the repos mode keeps no session: the key row stays under a rule, so the f that the line names works', () => {
+    const view = pane(noRepoMatchSnapshot())
+    if (view.kind !== 'message') throw new Error(view.kind)
+    expect(view.bottomRule && text(view.bottomRule)).toBe('─'.repeat(110))
+    const keys = (view.keys ?? []).flatMap((line) => line.segments)
+    expect(keys.find((segment) => segment.press?.hotkey === 'f')?.press).toEqual({ hotkey: 'f', label: 'all' })
+    expect(paneLines(view).map(text).slice(-2)).toEqual(['─'.repeat(110), ...(view.keys ?? []).map(text)])
+    for (const other of [pane(readingSnapshot()), pane(emptySnapshot())]) {
+      if (other.kind !== 'message') throw new Error(other.kind)
+      expect(other.keys).toBeUndefined()
+    }
+  })
+
+  it('the repos mode keeps no session in a short pane: it says the pane is too short', () => {
+    expect(pane(noRepoMatchSnapshot(), { bodyRows: 4 }).kind).toBe('cannot-draw')
   })
 
   it('a source failed: a dim chip in the header for each one, and the board keeps its rows', () => {

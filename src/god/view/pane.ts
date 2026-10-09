@@ -3,7 +3,8 @@
  * - At WIDE_FROM_COLUMNS or more, the body is the board column (BOARD_COLUMNS cells) left of the detail, and each
  *   rule meets the column rule at the board width. Below, the board takes the whole body.
  * - A board state (reading, no session, no session in the selected repos) shows its message under the header in
- *   place of the board and the key row.
+ *   place of the board. Only the state with no session in the selected repos keeps a rule and the key row under its
+ *   message, because the message names the f key, and a key works only while its Button is drawn.
  * - The pane takes no more rows than `bodyRows`: the board shows only the lines that fit, around the selected row.
  * - When the pane cannot draw (a body under BOARD_COLUMNS, or too few rows for a window over the board), it shows
  *   1 message with the reason and nothing else.
@@ -68,18 +69,23 @@ export function paneView(input: PaneInput): PaneView {
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView('too-narrow', bodyColumns)
   const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now })
   const state = boardStateOf(snapshot)
+  const keysOf = (board: BoardSnapshot) =>
+    keyRow({
+      width: bodyColumns,
+      isCmuxMissing: board.sources.cmux.status === 'missing',
+      promptHoldsKeys: input.promptHoldsKeys,
+      answerCount: answerCountOf(board, input.selectedKey),
+      mode: board.mode,
+    })
   if (state !== undefined || snapshot === undefined) {
     const body = messageLines(STATE_TEXT[state ?? 'reading'], bodyColumns)
-    if (header.length + 1 + body.length > bodyRows) return cannotDrawView('too-short', bodyColumns)
-    return { kind: 'message', header, topRule: ruleLine(bodyColumns), body }
+    const keys = state === 'no-repo-match' && snapshot !== undefined ? keysOf(snapshot).lines : []
+    if (header.length + 1 + body.length + (keys.length > 0 ? 1 + keys.length : 0) > bodyRows) return cannotDrawView('too-short', bodyColumns)
+    const message = { kind: 'message' as const, header, topRule: ruleLine(bodyColumns), body }
+    return keys.length > 0 ? { ...message, bottomRule: ruleLine(bodyColumns), keys } : message
   }
   const layout = layoutOf(bodyColumns)
-  const keys = keyRow({
-    width: bodyColumns,
-    isCmuxMissing: snapshot.sources.cmux.status === 'missing',
-    promptHoldsKeys: input.promptHoldsKeys,
-    answerCount: answerCountOf(snapshot, input.selectedKey),
-  })
+  const keys = keysOf(snapshot)
   const room = bodyRows - header.length - 2 - keys.lines.length
   const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey }
   if (room < MIN_WINDOW_ROWS && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length > Math.max(0, room)) return cannotDrawView('too-short', bodyColumns)
@@ -98,6 +104,6 @@ export function paneView(input: PaneInput): PaneView {
 /** Every line of a pane view, top to bottom. */
 export function paneLines(view: PaneView): Line[] {
   if (view.kind === 'cannot-draw') return [...view.lines]
-  if (view.kind === 'message') return [...view.header, view.topRule, ...view.body]
+  if (view.kind === 'message') return [...view.header, view.topRule, ...view.body, ...(view.bottomRule === undefined ? [] : [view.bottomRule]), ...(view.keys ?? [])]
   return [...view.header, view.topRule, ...view.body, view.bottomRule, ...view.keys]
 }

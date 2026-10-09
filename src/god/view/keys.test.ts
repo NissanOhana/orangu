@@ -8,13 +8,14 @@ import { KEY_ROW_NO_CMUX, keyRow } from './keys.js'
 import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
-const BASE = { width: 110, isCmuxMissing: false, promptHoldsKeys: false }
+const BASE = { width: 110, isCmuxMissing: false, promptHoldsKeys: false, mode: 'all' } as const
+const ROW = ' ↑↓ select  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  f: repos  g: group'
 
 describe('the key row', () => {
   it('shows the keys of the board in 1 row', () => {
     const row = keyRow(BASE)
-    expect(row.lines.map(text)).toEqual([' ↑↓ select  j jump  n next  1-9 answer  r reply  m message  t tab  s sound'])
-    expect(row.hints.filter((hint) => hint.hotkey !== undefined).map((hint) => hint.hotkey)).toEqual(['j', 'n', 'r', 'm', 't', 's'])
+    expect(row.lines.map(text)).toEqual([ROW])
+    expect(row.hints.filter((hint) => hint.hotkey !== undefined).map((hint) => hint.hotkey)).toEqual(['j', 'n', 'r', 'm', 't', 's', 'f', 'g'])
     expect(row.hints.every((hint) => !hint.isOff)).toBe(true)
   })
 
@@ -24,17 +25,44 @@ describe('the key row', () => {
   })
 
   it('ends with the ctrl+x tab line while the prompt holds the keys', () => {
-    expect(keyRow({ ...BASE, promptHoldsKeys: true }).lines.map(text).join('')).toMatch(/ {2}ctrl\+x tab: keys to the pane$/)
+    const lines = keyRow({ ...BASE, promptHoldsKeys: true }).lines.map(text)
+    expect(lines.at(-1)).toMatch(/ ctrl\+x tab: keys to the pane$/)
   })
 
   it('draws j, the digits and r dim with no cmux, and says why in a line of its own', () => {
     const row = keyRow({ ...BASE, isCmuxMissing: true })
     expect(row.hints.filter((hint) => hint.isOff).map((hint) => hint.keys)).toEqual(['j', '1-9', 'r'])
-    expect(row.lines.map(text)).toEqual([' ↑↓ select  j jump  n next  1-9 answer  r reply  m message  t tab  s sound', ` ${KEY_ROW_NO_CMUX}`])
+    expect(row.lines.map(text)).toEqual([ROW, ` ${KEY_ROW_NO_CMUX}`])
     const jump = row.lines[0]!.segments.filter((segment) => segment.text.includes('j'))
     expect(jump.length).toBeGreaterThan(0)
     for (const segment of jump) expect(segment.dim, segment.text).toBe(true)
     expect(KEY_ROW_NO_CMUX).toBe('Jump, answer and reply are off: cmux is not on this machine.')
+  })
+
+  it('gives each key with a hotkey 1 segment that a Button presses, in the form the engine paints: the key, a colon, the label', () => {
+    const segments = keyRow(BASE).lines.flatMap((line) => line.segments)
+    const pressed = segments.filter((segment) => segment.press !== undefined)
+    expect(pressed.map((segment) => segment.press)).toEqual([
+      { hotkey: 'j', label: 'jump' },
+      { hotkey: 'n', label: 'next' },
+      { hotkey: 'r', label: 'reply' },
+      { hotkey: 'm', label: 'message' },
+      { hotkey: 't', label: 'tab' },
+      { hotkey: 's', label: 'sound' },
+      { hotkey: 'f', label: 'repos' },
+      { hotkey: 'g', label: 'group' },
+    ])
+    for (const segment of pressed) expect(segment.text).toBe(`${segment.press!.hotkey}: ${segment.press!.label}`)
+    expect(segments.filter((segment) => segment.text.includes('select') || segment.text.includes('answer')).every((segment) => segment.press === undefined)).toBe(true)
+  })
+
+  it('names the mode that f shows next: the repos from all, all from the repos', () => {
+    const label = (mode: 'all' | 'repos'): string | undefined =>
+      keyRow({ ...BASE, mode })
+        .lines.flatMap((line) => line.segments)
+        .find((segment) => segment.press?.hotkey === 'f')?.press?.label
+    expect(label('all')).toBe('repos')
+    expect(label('repos')).toBe('all')
   })
 
   it('moves whole keys to the next line when they do not fit', () => {

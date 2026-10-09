@@ -1,8 +1,10 @@
 // The god plugin loads in the engine, registers /god, and does no host work before the person asks for it:
-// no host command, no file read and no timer until /god runs, when ORANGU_GOD is not set.
+// no host command, no file read, no timer and no pane until /god runs, when ORANGU_GOD is not set. A session that
+// starts with ORANGU_GOD=1 opens the pane and starts the board at once.
 import { expect, mock, test } from 'claude-code/testing'
+import { HOME, PANE, installMachine } from './fake-host'
 
-test('the plugin registers /god, reads nothing before it, and /god answers its line', async ($, on) => {
+test('the plugin registers /god, and reads nothing and draws nothing before it', async ($, on) => {
   const hostCalls: string[] = []
   const commands: string[] = []
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -18,20 +20,27 @@ test('the plugin registers /god, reads nothing before it, and /god answers its l
     hostCalls.push(next.event)
     return { deny: 'no file read before /god' }
   })
-  on('clock.every', () => {
-    hostCalls.push('clock.every')
-    return { deny: 'no timer before /god' }
-  })
-  on('clock.after', () => {
-    hostCalls.push('clock.after')
-    return { deny: 'no timer before /god' }
-  })
+  for (const event of ['clock.every', 'clock.after', 'ui.open', 'session.id', 'store.get', 'config.list'] as const) {
+    on(event, () => {
+      hostCalls.push(event)
+      return { deny: 'nothing before /god' }
+    })
+  }
   mock.env(on, { HOME: '/tmp/god-home' })
 
   await $.session.start({ cwd: '/tmp/god-home', surface: 'terminal', isInteractive: true })
   expect(commands).toEqual(['god'])
   expect(hostCalls).toEqual([])
+})
 
-  const out = await $.command.run({ command: 'god', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
-  expect(out.text).toBe('The god pane is not ready in this build.')
+test('a session with ORANGU_GOD=1 opens the pane and reads the sessions at start', async ($, on) => {
+  const calls = installMachine(on, { sessions: [], repos: {} })
+  const clock = mock.clock(on, { now: Date.now() })
+  mock.env(on, { HOME, ORANGU_GOD: '1' })
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: HOME, surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 110 }])
+  expect(calls.runs.map((run) => run.argv.slice(0, 2).join(' '))).toContain('claude agents')
+  expect(calls.boardWrites).toBeGreaterThan(0)
 })

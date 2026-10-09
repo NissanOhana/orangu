@@ -7,10 +7,35 @@
   },
   "homepage": "https://github.com/NissanOhana/orangu",
   "license": "MIT",
+  "types": "./types/index.d.ts",
   "keywords": [
     "sessions",
     "claude-code",
     "cmux",
     "mod"
-  ]
+  ],
+  "userConfig": {
+    "stuckAfterMin": {
+      "type": "number",
+      "title": "Stuck after (minutes)",
+      "description": "A busy session with no transcript write for this many minutes shows as stuck.",
+      "default": 10
+    },
+    "staleAfterH": {
+      "type": "number",
+      "title": "Stale after (hours)",
+      "description": "An idle session shows as stale after this many hours.",
+      "default": 24
+    },
+    "motion": {
+      "type": "string",
+      "title": "Motion",
+      "description": "Set off to stop every spinner, pulse and sparkline of the pane.",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    }
+  }
 }

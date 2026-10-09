@@ -44,3 +44,5 @@ test-results/
 
 # the engine types that an interactive claude --plugin-dir god lays for the god mod (regenerated, never edited)
 /god/.claude-plugin/types/
+# the tsconfig that the same load writes into god/ when the mod has none
+/god/tsconfig.json
