@@ -121,11 +121,11 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     fx = await makeHarnessFixture()
   })
 
-  it('emits the seven top-level keys with the harness schema version', () => {
+  it('emits the eight top-level keys with the harness schema version', () => {
     const r = JSON.parse(run(['harness', '--json', '--global', '--cwd', fx.repo, '--quiet'], fx.home))
-    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
+    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'enforcement', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     // 2: listing rows name their population (main vs subagent) and hook rows may be event-only
-    expect(r.schemaVersion).toBe('2')
+    expect(r.schemaVersion).toBe('3')
     expect(r.scope.sessionsScanned).toBeGreaterThan(0)
   })
 
@@ -390,8 +390,8 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     expect(existsSync(dest)).toBe(true)
     const raw = readFileSync(dest, 'utf8')
     const r = JSON.parse(raw)
-    expect(r.schemaVersion).toBe('2')
-    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
+    expect(r.schemaVersion).toBe('3')
+    expect(Object.keys(r).sort()).toEqual(['crosswalk', 'enforcement', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     expect(raw).toContain('\n  ') // pretty-printed with 2 spaces, like cmdAggregate
     expect(raw).not.toContain('$')
     if (process.platform !== 'win32') expect(statSync(dest).mode & 0o777).toBe(0o600)
@@ -401,12 +401,12 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const dir = await mkdtemp(join(tmpdir(), 'orangu-harness-out2-'))
     const short = join(dir, 'short.json')
     expect(run(['harness', '--global', '--cwd', fx.repo, '-o', short, '--quiet'], fx.home)).toBe('')
-    expect(JSON.parse(readFileSync(short, 'utf8')).schemaVersion).toBe('2')
+    expect(JSON.parse(readFileSync(short, 'utf8')).schemaVersion).toBe('3')
 
     const both = join(dir, 'both.json')
     const printed = run(['harness', '--global', '--cwd', fx.repo, '--out', both, '--json', '--quiet'], fx.home)
-    expect(JSON.parse(printed).schemaVersion).toBe('2')
-    expect(JSON.parse(readFileSync(both, 'utf8')).schemaVersion).toBe('2')
+    expect(JSON.parse(printed).schemaVersion).toBe('3')
+    expect(JSON.parse(readFileSync(both, 'utf8')).schemaVersion).toBe('3')
   })
 
   // A steered model can run a pre-approved `orangu harness --out <path>`. The writer replaces only a file that orangu
@@ -416,7 +416,7 @@ describe.skipIf(!existsSync(CLI))('orangu harness (built CLI)', () => {
     const args = (out: string) => ['harness', '--global', '--cwd', fx.repo, '--out', out, '--quiet']
     expect(run(args(dest), fx.home), 'a new path').toBe('')
     expect(run(args(dest), fx.home), 'a run again on its own output').toBe('')
-    expect(JSON.parse(readFileSync(dest, 'utf8')).schemaVersion).toBe('2')
+    expect(JSON.parse(readFileSync(dest, 'utf8')).schemaVersion).toBe('3')
 
     const claudeMd = join(fx.repo, 'CLAUDE.md')
     const before = readFileSync(claudeMd, 'utf8')

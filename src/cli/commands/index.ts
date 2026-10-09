@@ -46,11 +46,12 @@ export const EXTRA_HELP: string[] = [
   [
     '  orangu harness               what your config declares vs what your sessions',
     '                               used: skills/MCP/agents/hooks',
-    '                               used|idle|undeclared, in tokens',
+    '                               used|idle|undeclared, in tokens, and the',
+    '                               rules and notes that the sessions broke',
     '                                 ([--json] [--cwd <dir>] [--root <dir>]',
     '                                  [--global] [--limit <n>] [-o|--out <file>]',
     '                                  [--no-redact] [--strip-paths] [--jobs <n>]',
-    '                                  [--no-cache] [--quiet])',
+    '                                  [--include-text] [--no-cache] [--quiet])',
   ].join('\n'),
   [
     '  orangu suggest               suggestion records in ~/.orangu',

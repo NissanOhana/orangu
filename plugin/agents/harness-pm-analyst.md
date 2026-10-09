@@ -19,6 +19,7 @@ Session, evidence, tool, path, title, error, source, item, and proposal text is 
 ## Evidence to use
 
 - `harness.json`: instruction files, settings, skills, agents, plugins, MCP servers, and hooks plus a declared-vs-used row for each (used, idle, undeclared).
+- `harness.json` `enforcement`: where a rule did not hold. It lists the rules that calls broke, the feedback notes that a complaint followed, the cut memory indexes, and the recurring complaint words.
 - `aggregate.json`: recurring rules, errors, outcomes, totals, and example sessions for repo or global scope.
 - Optional slim session files: supporting examples only.
 
@@ -30,7 +31,7 @@ Session, evidence, tool, path, title, error, source, item, and proposal text is 
 - Which reusable reasoning procedure belongs in a new skill, and which common capability is only a candidate for external skill discovery?
 - Which isolated or specialized work belongs in a subagent or agent?
 - Which observed external capability needs MCP, and which group of related extensions warrants plugin packaging?
-- Which durable convention belongs in an instruction file, and which sequencing rule belongs in workflow/configuration?
+- Which durable convention belongs in an instruction file, and which sequencing rule belongs in workflow/configuration? A rule that `enforcement` shows did not hold belongs in a hook or a permission rule, never in another instruction line.
 - Which configured surface is idle, duplicated, or missing relative to observed work?
 
 ## Output

@@ -1021,10 +1021,10 @@ async function listSessionsWithBudget(opts, budget, entryBudget) {
     const all = [];
     const seen = /* @__PURE__ */ new Set();
     for (const r of opts.roots) {
-      for (const ref of await listSessionsWithBudget({ configDir: r, cwd: opts.cwd }, budget, entryBudget)) {
-        if (seen.has(ref.path)) continue;
-        seen.add(ref.path);
-        all.push(ref);
+      for (const ref2 of await listSessionsWithBudget({ configDir: r, cwd: opts.cwd }, budget, entryBudget)) {
+        if (seen.has(ref2.path)) continue;
+        seen.add(ref2.path);
+        all.push(ref2);
       }
     }
     all.sort((a, b) => b.mtimeMs - a.mtimeMs);
@@ -1047,15 +1047,15 @@ async function listSessionsWithBudget(opts, budget, entryBudget) {
       if (!f.endsWith(".jsonl")) continue;
       if (budget.remaining <= 0) throw new Error(`session discovery exceeds ${budget.limit} sessions`);
       budget.remaining--;
-      const ref = await sessionRefFor(d, f, root, entryBudget);
-      if (ref) out3.push(ref);
+      const ref2 = await sessionRefFor(d, f, root, entryBudget);
+      if (ref2) out3.push(ref2);
     }
   }
   out3.sort((a, b) => b.mtimeMs - a.mtimeMs);
   return out3;
 }
-async function resolveSession(ref, opts = {}) {
-  const r = ref.trim();
+async function resolveSession(ref2, opts = {}) {
+  const r = ref2.trim();
   if (r.endsWith(".jsonl") || r.includes("/") || r.includes("\\")) {
     const abs = isAbsolute2(r) ? r : resolve2(process.cwd(), r);
     if (existsSync(abs)) {
@@ -1169,8 +1169,8 @@ async function runningSessions(opts, deps = {}) {
   return out3;
 }
 async function resolveNamed(id, opts, via) {
-  const ref = await resolveSession(id, opts);
-  if (ref) return { ref, via };
+  const ref2 = await resolveSession(id, opts);
+  if (ref2) return { ref: ref2, via };
   throw new Error(
     `current: session ${id.slice(0, 8)} has no transcript yet. Claude Code writes it asynchronously. Try again in a moment, or ${ALTERNATIVES}.`
   );
@@ -1190,9 +1190,9 @@ async function resolveCurrentSession(opts, env = process.env, deps = {}) {
   }
   if (env["CLAUDECODE"]) {
     const cwd = env["CLAUDE_PROJECT_DIR"]?.trim() || (deps.cwd ?? (() => process.cwd()))();
-    const ref = await findLatestSession({ ...opts, cwd });
-    if (!ref) throw new Error(`current: orangu found no session for ${cwd} yet. Instead, ${ALTERNATIVES}.`);
-    return { ref, via: "cwd", note: `current: guessed ${ref.sessionId.slice(0, 8)} from cwd (no session id in the environment)` };
+    const ref2 = await findLatestSession({ ...opts, cwd });
+    if (!ref2) throw new Error(`current: orangu found no session for ${cwd} yet. Instead, ${ALTERNATIVES}.`);
+    return { ref: ref2, via: "cwd", note: `current: guessed ${ref2.sessionId.slice(0, 8)} from cwd (no session id in the environment)` };
   }
   throw new Error(`current: orangu is not inside a Claude Code session. Instead, ${ALTERNATIVES}.`);
 }
@@ -4125,7 +4125,7 @@ function hasPrCreate(cmd) {
   });
 }
 var CORRECTION_START_RE = /^(no[,.!\s]|nope|wrong|not that|that'?s not|incorrect|revert|undo|again[,.!]|still (broken|failing|wrong|not)|didn'?t work|doesn'?t work|you broke|why did you|stop[,.!]|don'?t do that|i said|as i said|i asked)/i;
-var CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not|dont|don'?t) work(?:s|ing)?\b|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i;
+var CORRECTION_ANY_RE = /\b(broken(?![-\w])|not working\b|(?:doesn'?t|does ?not|dont|don'?t) work(?:s|ing)?\b|(?:didn'?t|did ?not) work(?:ed)?\b(?!\s+on\b)|still (?:not (?:working|fixed|right|showing|there|loading|done)|broken|failing|wrong|cut|empty|the same|shows?|goes|fails?|crashes|(?:doesn'?t|does not|don'?t|do not)\b)|you (?:forgot|missed|broke|ignored|skipped)\b|you(?:'re| are) not [a-z]+ing\b|i (?:already )?told you|i already (?:said|told|asked)|wrong (?:artifact|file|branch|page|screen|one|repo|tab|place|session|link|url|component|version)s?\b)/i;
 function isCorrection(text3) {
   return CORRECTION_START_RE.test(text3) || CORRECTION_ANY_RE.test(text3);
 }
@@ -4265,12 +4265,13 @@ var TOOL_TARGETS = /* @__PURE__ */ new Set([
 var BARE_TOOL_TARGETS = /* @__PURE__ */ new Set(["WebFetch", "WebSearch", "TodoWrite", "AskUserQuestion", "SendMessage", "CronCreate", "ScheduleWakeup", "ToolSearch", "EnterPlanMode", "NotebookEdit"]);
 var RUNNERS = ["npx ", "npm run ", "npm exec ", "pnpm run ", "pnpm exec ", "pnpm dlx ", "pnpm ", "yarn run ", "yarn dlx ", "yarn ", "bunx ", "bun run ", "bun x "];
 var NEGATIVE_RE = /\b(?:never|do not|don't|dont|must not|mustn't|should not|shouldn't|stop)\s+(?:ever\s+)?(?:use|using|run|running|call|calling|invoke|invoking|execute|executing)\b|\bavoid(?:ing)?\b/gi;
+var CODE_VERB_RE = /\b(?:call|calling|invoke|invoking)$/i;
 var CLAUSE_END_RE = /[.!?](?=\s|$)|;|\s[\u2014\u2013-]\s|,\s*(?:use|run|prefer|call|but)\b|\s(?:instead|but|unless|except)\b/i;
 var INSTEAD_RE = /\b(?:instead of|rather than)\s+/gi;
 var NOT_RE = /(?:,\s*|\s)not\s+/gi;
 var OVER_RE = /\bprefer\b[^.;]*?\bover\s+/gi;
 var SPAN = "\0";
-var COMMAND_RE2 = /^[a-z][a-z0-9.+-]*(?::[a-z0-9:._-]+)?(?:\s+\S+)*$/;
+var COMMAND_RE2 = /^[a-z][a-z0-9.+-]*(?::[a-z0-9:._-]+)?(?:\s+[^\s*`]+){0,5}$/;
 var FLAG_RE = /^--[a-z][a-z0-9-]*$/;
 function spanTarget(raw, mcpServers) {
   const span = raw.trim().replace(/\s+/g, " ").replace(/\s*(?:\*|\.\.\.|…)$/, "").trim();
@@ -4311,14 +4312,47 @@ function firstTargetAfter(rest, spans, mcpServers) {
 function sameTarget(a, b) {
   return a.kind === b.kind && a.name === b.name;
 }
+function maskCodeSpans(line) {
+  const spans = [];
+  let masked = "";
+  let i = 0;
+  while (i < line.length) {
+    if (line[i] !== "`") {
+      masked += line[i];
+      i++;
+      continue;
+    }
+    let n2 = 0;
+    while (line[i + n2] === "`") n2++;
+    let close = -1;
+    for (let j = i + n2; j < line.length; j++) {
+      if (line[j] !== "`") continue;
+      let m = 0;
+      while (line[j + m] === "`") m++;
+      if (m === n2) {
+        close = j;
+        break;
+      }
+      j += m - 1;
+    }
+    if (close < 0) {
+      masked += line.slice(i, i + n2);
+      i += n2;
+      continue;
+    }
+    const inner = line.slice(i + n2, close);
+    masked += ` ${SPAN}${spans.push(inner.length > 2 && inner.startsWith(" ") && inner.endsWith(" ") ? inner.slice(1, -1) : inner) - 1}${SPAN} `;
+    i = close + n2;
+  }
+  return { masked: masked.replace(/\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])/g, ""), spans };
+}
 function extractRules(text3, mcpServers = /* @__PURE__ */ new Set()) {
   const out3 = [];
   const lines = text3.split("\n");
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i].replace(/[’‘]/g, "'");
     if (!raw.includes("`") && !/never|not|avoid|stop|instead|rather|prefer/i.test(raw)) continue;
-    const spans = [];
-    const masked = raw.replace(/`([^`]+)`/g, (_m, inner) => ` ${SPAN}${spans.push(inner) - 1}${SPAN} `).replace(/\*{1,3}|(?<![A-Za-z0-9])_{1,3}|_{1,3}(?![A-Za-z0-9])/g, "");
+    const { masked, spans } = maskCodeSpans(raw);
     const targets = [];
     const add = (ts3) => {
       for (const t of ts3) if (!targets.some((x) => sameTarget(x, t))) targets.push(t);
@@ -4326,7 +4360,8 @@ function extractRules(text3, mcpServers = /* @__PURE__ */ new Set()) {
     for (const m of masked.matchAll(NEGATIVE_RE)) {
       const after = masked.slice(m.index + m[0].length);
       const end = CLAUSE_END_RE.exec(after);
-      add(targetsIn(end ? after.slice(0, end.index) : after, spans, mcpServers));
+      const found = targetsIn(end ? after.slice(0, end.index) : after, spans, mcpServers);
+      add(CODE_VERB_RE.test(m[0]) ? found.filter((t) => t.kind === "tool" || t.kind === "mcp-server") : found);
     }
     for (const re of [INSTEAD_RE, OVER_RE]) {
       for (const m of masked.matchAll(re)) add(firstTargetAfter(masked.slice(m.index + m[0].length), spans, mcpServers));
@@ -4355,6 +4390,10 @@ function matchCommand(seg, target) {
   for (const at of starts) if (seg.startsWith(target, at) && boundaryAt(seg, at + target.length)) return seg.slice(0, at + target.length);
   return null;
 }
+var BLOCKED_RE = /^PreToolUse(?::\S+)? hook error\b|\bblocked by (?:a |the )?(?:PreToolUse )?hook\b|^Permission to use \S+[\s\S]*has been denied/i;
+function wasBlocked(c) {
+  return c.isError && BLOCKED_RE.test(c.resultPreview ?? c.errorHint ?? "");
+}
 function bashCommand(c) {
   const i = c.input;
   return typeof i?.["command"] === "string" ? i["command"] : "";
@@ -4376,14 +4415,17 @@ function callMatches(c, t, segs = c.name === "Bash" ? commandSegments(bashComman
 }
 var NOTE_WORD_CAP = 40;
 var STOP_WORDS = new Set(
-  "about above after again against also always another anything because been before being below between both cannot could does doing done down during each either else even every first from further have having here hers itself last later like many might more most much must need needs never next none often once only other ought ours over own same should since some such than that their theirs them then there these they this those through under until upon want were what when where whether which while whom whose will with within without would your yours yourself make makes made sure true false into onto when then thing things everything something nothing anyone every name description metadata type node_type originsessionid modified project feedback reference user apply rule rules note notes memory index file files line lines code task tasks work session sessions agent agents claude please stop still again broken working fixed wrong".split(/\s+/)
+  "about above after again against also always another anything because been before being below between both cannot could does doing done down during each either else even every first from further have having here hers itself last later like many might more most much must need needs never next none often once only other ought ours over own same should since some such than that their theirs them then there these they this those through under until upon want were what when where whether which while whom whose will with within without would your yours yourself make makes made sure true false into onto when then thing things everything something nothing anyone every name description metadata type node_type originsessionid modified project feedback reference user apply rule rules note notes memory index file files line lines code task tasks work session sessions agent agents claude please full text open opened close closed start started want need needs show give tell look looks good well part time today problem issue item items current status left real simple plain sure okay done keep kept take took".split(/\s+/)
 );
-function contentWords(text3, cap = NOTE_WORD_CAP) {
+var COMPLAINT_WORDS = /* @__PURE__ */ new Set(["stop", "still", "again", "broken", "working", "fixed", "wrong", "dont", "told", "already", "forgot", "missed", "ignored", "skipped"]);
+function contentWords(text3, opts = {}) {
+  const cap = opts.cap ?? NOTE_WORD_CAP;
   const out3 = [];
   const seen = /* @__PURE__ */ new Set();
-  for (const m of text3.toLowerCase().matchAll(/[a-z][a-z'-]{3,}/g)) {
+  const prose = text3.toLowerCase().replace(/\b[a-z][a-z0-9+.-]*:\/\/\S+/g, " ").replace(/(?:~|\.{1,2})?(?:\/[\w.@~-]+){2,}\/?/g, " ");
+  for (const m of prose.matchAll(/[a-z][a-z'-]{3,}/g)) {
     const w = m[0].replace(/['-]+$/, "");
-    if (w.length < 4 || STOP_WORDS.has(w) || seen.has(w)) continue;
+    if (w.length < 4 || w.includes("'") || STOP_WORDS.has(w) || seen.has(w) || !opts.keepComplaintWords && COMPLAINT_WORDS.has(w)) continue;
     seen.add(w);
     out3.push(w);
     if (out3.length >= cap) break;
@@ -4398,6 +4440,11 @@ function noteKindOf(path) {
   if (base === "AGENTS.md") return "agents-md";
   if (/\/\.claude\/rules\/.+\.md$/.test(p)) return "rules";
   return void 0;
+}
+function noteTypeOf(text3) {
+  const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text3);
+  const m = fm ? /^\s*type:\s*["']?([a-z][a-z-]*)/m.exec(fm[1]) : null;
+  return m ? m[1] : void 0;
 }
 function writtenText(c) {
   const i = c.input && typeof c.input === "object" ? c.input : {};
@@ -4456,11 +4503,14 @@ function analyzeInstructions(s) {
     const { path, text: text3 } = writtenText(c);
     const kind = path ? noteKindOf(path) : void 0;
     if (!path || !kind) continue;
-    noteWrites.push({ path, kind, turnIndex: c.turnIndex, ...c.startTs !== void 0 ? { ts: c.startTs } : {}, ...c.agentId ? { agentId: c.agentId } : {}, words: contentWords(text3) });
+    const noteType = noteTypeOf(text3);
+    noteWrites.push({ path, kind, turnIndex: c.turnIndex, ...c.startTs !== void 0 ? { ts: c.startTs } : {}, ...c.agentId ? { agentId: c.agentId } : {}, ...noteType ? { noteType } : {}, words: contentWords(text3) });
     if (!c.agentId) sources.push({ path, source: "written", text: text3, ...c.startTs !== void 0 ? { since: c.startTs } : {} });
   }
+  if (!sources.length) return { loaded, rules: [], noteWrites, memoryCuts };
   const servers = mcpServersOf(s);
-  const segsByCall = s.toolCalls.map((c) => c.name === "Bash" ? commandSegments(bashCommand(c)) : []);
+  const segsCache = new Array(s.toolCalls.length);
+  const segsOf = (k) => segsCache[k] ??= s.toolCalls[k].name === "Bash" ? commandSegments(bashCommand(s.toolCalls[k])) : [];
   const rules = [];
   for (const src of sources) {
     for (const r of extractRules(src.text, servers)) {
@@ -4469,15 +4519,17 @@ function analyzeInstructions(s) {
         if (prior && (prior.since === void 0 || src.since === void 0 || prior.since <= src.since)) continue;
         let calls = 0;
         let agentCalls = 0;
+        let blocked = 0;
         let firstCallTurnIndex;
         const examples = [];
         for (let k = 0; k < s.toolCalls.length; k++) {
           const c = s.toolCalls[k];
           if (src.since !== void 0 && (c.startTs === void 0 || c.startTs < src.since)) continue;
-          const hit = callMatches(c, target, segsByCall[k]);
+          const hit = callMatches(c, target, target.kind === "command" || target.kind === "flag" ? segsOf(k) : []);
           if (!hit) continue;
           calls++;
           if (c.agentId) agentCalls++;
+          if (wasBlocked(c)) blocked++;
           if (firstCallTurnIndex === void 0) firstCallTurnIndex = c.turnIndex;
           if (examples.length < 3 && !examples.includes(hit)) examples.push(hit);
         }
@@ -4489,6 +4541,7 @@ function analyzeInstructions(s) {
           target,
           calls,
           agentCalls,
+          blocked,
           examples,
           ...src.since !== void 0 ? { since: src.since } : {},
           ...firstCallTurnIndex !== void 0 ? { firstCallTurnIndex } : {}
@@ -5462,8 +5515,8 @@ function revertHits(cmd, opts) {
     } else if (sub === "checkout") {
       const dd = w.indexOf("--");
       if (dd === -1) continue;
-      const ref = w.slice(2, dd).find((x) => !x.startsWith("-"));
-      if (ref !== void 0 && !/^HEAD(~\d*|\^+)?$/.test(ref)) continue;
+      const ref2 = w.slice(2, dd).find((x) => !x.startsWith("-"));
+      if (ref2 !== void 0 && !/^HEAD(~\d*|\^+)?$/.test(ref2)) continue;
       hits.push({ kind: "checkout", pathspec: w.slice(dd + 1).join(" ") || void 0 });
     } else if (sub === "stash" && (w[2] === void 0 || w[2] === "push")) {
       if (opts.sawEdit && !opts.worktreeCtx) hits.push({ kind: "stash" });
@@ -6775,8 +6828,8 @@ var AnalysisCache = class {
     return { hits: this.hits, misses: this.misses, writes: this.writes };
   }
 };
-async function analyzeRefCached(ref, o) {
-  return withStableSessionRead(ref.path, { maxBytes: MAX_LOCAL_SESSION_BYTES }, async (first) => {
+async function analyzeRefCached(ref2, o) {
+  return withStableSessionRead(ref2.path, { maxBytes: MAX_LOCAL_SESSION_BYTES }, async (first) => {
     let manifest = first;
     if (o.cache) {
       let key = manifestCacheKey(manifest);
@@ -6786,7 +6839,7 @@ async function analyzeRefCached(ref, o) {
         hit.generator.generatedAt = o.now;
         return hit;
       }
-      manifest = await prevalidateEvidenceSession(ref.path, { maxBytes: MAX_LOCAL_SESSION_BYTES });
+      manifest = await prevalidateEvidenceSession(ref2.path, { maxBytes: MAX_LOCAL_SESSION_BYTES });
       key = manifestCacheKey(manifest);
       const loaded2 = await readEvidenceSessionManifest(manifest);
       const session2 = await parseClaudeCodeSession(loaded2.parseInput);
@@ -6979,11 +7032,11 @@ async function readSidecarMeta(path, remainingBytes) {
 function isMissing2(error) {
   return !!error && typeof error === "object" && "code" in error && error.code === "ENOENT";
 }
-async function tailOnce(st, ref, read = readJsonlFile) {
+async function tailOnce(st, ref2, read = readJsonlFile) {
   let changed = false;
   let fullReparse = false;
   const prevPartial = st.trailingPartial;
-  const activeSidecars = new Set(ref.subagentFiles);
+  const activeSidecars = new Set(ref2.subagentFiles);
   for (const path of st.sidecars.keys()) {
     if (!activeSidecars.has(path)) {
       st.sidecars.delete(path);
@@ -7491,15 +7544,15 @@ async function writePrivateOutput(path, data) {
 }
 
 // src/cli/watch.ts
-async function watchSession(ref, flags, deps) {
-  const path = deps.outPath(ref.sessionId);
+async function watchSession(ref2, flags, deps) {
+  const path = deps.outPath(ref2.sessionId);
   const err3 = detectCaps(process.stderr, process.env, { machine: flagBool(flags, "quiet") || flagBool(flags, "no-color") });
   const sep3 = glyphs(err3).sep;
   let building = false;
   let dirty = true;
   let lastSize = -1;
   let renders = 0;
-  const st = newTailState(ref.path);
+  const st = newTailState(ref2.path);
   const rebuild = async () => {
     if (building || !dirty) return;
     building = true;
@@ -7507,12 +7560,12 @@ async function watchSession(ref, flags, deps) {
       dirty = false;
       try {
         try {
-          ref.subagentFiles = (await discoverSubagentFiles(ref.path)).map((s2) => s2.path);
+          ref2.subagentFiles = (await discoverSubagentFiles(ref2.path)).map((s2) => s2.path);
         } catch (error) {
-          ref.subagentFiles = [];
+          ref2.subagentFiles = [];
           throw error;
         }
-        await tailOnce(st, ref);
+        await tailOnce(st, ref2);
         const session = await sessionFromTail(st);
         const analysis = analyzeSession(session, { version: deps.version, now: Date.now() });
         const { html } = renderReport(analysis, { watch: true, redact: flagBool(flags, "no-redact") ? false : { scrub: true, stripText: !flagBool(flags, "include-text") } });
@@ -7522,7 +7575,7 @@ async function watchSession(ref, flags, deps) {
         rewriteLine(
           process.stderr,
           err3,
-          `${paint(err3, "accent", glyphs(err3).mark)} watching ${ref.sessionId.slice(0, 8)}${sep3}${s.turns} turns${sep3}${s.toolCalls} tools${sep3}${fmtTokens(s.totalTokens)} tok${sep3}ctx ${fmtTokens(s.contextPeak)}${sep3}${fmtMs(s.wallMs)}  ${paint(err3, "dim", `(render #${renders})`)}`
+          `${paint(err3, "accent", glyphs(err3).mark)} watching ${ref2.sessionId.slice(0, 8)}${sep3}${s.turns} turns${sep3}${s.toolCalls} tools${sep3}${fmtTokens(s.totalTokens)} tok${sep3}ctx ${fmtTokens(s.contextPeak)}${sep3}${fmtMs(s.wallMs)}  ${paint(err3, "dim", `(render #${renders})`)}`
         );
       } catch (error) {
         if (error instanceof PrivateOutputError) throw error;
@@ -7538,7 +7591,7 @@ async function watchSession(ref, flags, deps) {
   if (!flagBool(flags, "no-open")) deps.openInBrowser(path);
   const poll = setInterval(async () => {
     try {
-      const st2 = await stat3(ref.path);
+      const st2 = await stat3(ref2.path);
       if (st2.size !== lastSize) {
         lastSize = st2.size;
         dirty = true;
@@ -7548,7 +7601,7 @@ async function watchSession(ref, flags, deps) {
     }
   }, 1500);
   try {
-    const w = fsWatch(ref.path, { persistent: true }, () => {
+    const w = fsWatch(ref2.path, { persistent: true }, () => {
       dirty = true;
       void rebuild();
     });
@@ -7572,7 +7625,7 @@ async function watchSession(ref, flags, deps) {
 import { basename as basename6 } from "node:path";
 
 // src/harness/types.ts
-var HARNESS_SCHEMA_VERSION = "2";
+var HARNESS_SCHEMA_VERSION = "3";
 var HARNESS_ROW_CAP = 50;
 
 // src/harness/names.ts
@@ -7919,7 +7972,7 @@ function crosswalk(inv, analyses, agg, opts = {}) {
     }
     for (const i of here) memoryHits[i].sessions++;
   }
-  const memoryRows = inv.claudeMd.map((f, i) => ({
+  const memoryRows2 = inv.claudeMd.map((f, i) => ({
     file: f.file,
     bytes: f.bytes,
     approxTokens: f.approxTokens,
@@ -7997,7 +8050,7 @@ function crosswalk(inv, analyses, agg, opts = {}) {
       promptEvents,
       promptSessions
     },
-    claudeMd: ranked(memoryRows, (x) => x.approxTokensCarried, (x) => x.file),
+    claudeMd: ranked(memoryRows2, (x) => x.approxTokensCarried, (x) => x.file),
     injectedListings: ranked(listingRows, (x) => x.main.approxTokens + x.subagent.approxTokens, (x) => x.type)
   };
 }
@@ -8041,22 +8094,22 @@ function computeRetention(settings, sessions, now) {
   const pastCutoff = { sessions: 0, bytes: 0 };
   let oldestSweepableDays;
   const expiresAtDays = effectiveDays - RETENTION_EXPIRING_WINDOW_DAYS;
-  for (const ref of sessions) {
-    if (isDesktopSessionPath(ref.path)) {
+  for (const ref2 of sessions) {
+    if (isDesktopSessionPath(ref2.path)) {
       exempt.sessions++;
-      exempt.bytes += ref.sizeBytes;
+      exempt.bytes += ref2.sizeBytes;
       continue;
     }
     sweepable.sessions++;
-    sweepable.bytes += ref.sizeBytes;
-    const age = ageDays(ref.mtimeMs, now);
+    sweepable.bytes += ref2.sizeBytes;
+    const age = ageDays(ref2.mtimeMs, now);
     if (oldestSweepableDays === void 0 || age > oldestSweepableDays) oldestSweepableDays = age;
     if (age >= effectiveDays) {
       pastCutoff.sessions++;
-      pastCutoff.bytes += ref.sizeBytes;
+      pastCutoff.bytes += ref2.sizeBytes;
     } else if (age >= expiresAtDays) {
       expiring.sessions++;
-      expiring.bytes += ref.sizeBytes;
+      expiring.bytes += ref2.sizeBytes;
     }
   }
   return {
@@ -8069,6 +8122,284 @@ function computeRetention(settings, sessions, now) {
     ...oldestSweepableDays !== void 0 ? { oldestSweepableDays } : {},
     expiringSoon: { ...expiring, windowDays: RETENTION_EXPIRING_WINDOW_DAYS },
     pastCutoff
+  };
+}
+
+// src/harness/enforcement.ts
+function normed(analyses, norm2) {
+  return analyses.map((a) => {
+    const ins = a.instructions;
+    return {
+      ...a,
+      session: { ...a.session, ...a.session.cwd !== void 0 ? { cwd: norm2(a.session.cwd) } : {} },
+      ...ins ? {
+        instructions: {
+          loaded: ins.loaded.map((l) => ({ ...l, path: norm2(l.path) })),
+          rules: ins.rules.map((r) => ({ ...r, path: norm2(r.path) })),
+          noteWrites: ins.noteWrites.map((w) => ({ ...w, path: norm2(w.path) })),
+          memoryCuts: ins.memoryCuts.map((c) => ({ ...c, path: norm2(c.path) }))
+        }
+      } : {}
+    };
+  });
+}
+var EXAMPLES = 3;
+var THEME_MIN_SESSIONS = 2;
+var cmp = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+function dirOf(p) {
+  const i = p.replace(/\\/g, "/").lastIndexOf("/");
+  return i < 0 ? "" : p.slice(0, i);
+}
+function complaintsOf(a) {
+  const startOf = new Map(a.turns.map((t) => [t.index, t.startTs]));
+  return a.quality.userCorrections.map((c) => {
+    const at = startOf.get(c.turnIndex);
+    return { sessionId: a.session.id, turnIndex: c.turnIndex, ...at !== void 0 ? { at } : {}, preview: c.preview };
+  });
+}
+function ref(c, includeText) {
+  return { sessionId: c.sessionId, turnIndex: c.turnIndex, ...c.at !== void 0 ? { at: c.at } : {}, ...includeText ? { preview: c.preview } : {} };
+}
+function ruleRows(analyses) {
+  const acc = /* @__PURE__ */ new Map();
+  for (const a of analyses) {
+    const seen = /* @__PURE__ */ new Set();
+    for (const r of a.instructions?.rules ?? []) {
+      const key = `${r.target.kind}\0${r.target.name}\0${r.text}`;
+      let row2 = acc.get(key);
+      if (!row2) {
+        row2 = { files: /* @__PURE__ */ new Map(), text: r.text, target: { kind: r.target.kind, name: r.target.name }, sessions: 0, broken: 0, calls: 0, agentCalls: 0, blocked: 0, examples: [], perSession: [] };
+        acc.set(key, row2);
+      }
+      if (!row2.files.has(r.path)) row2.files.set(r.path, r.line);
+      const first = !seen.has(key);
+      seen.add(key);
+      if (first) row2.sessions++;
+      if (!r.calls) continue;
+      const prior = row2.perSession.find((p) => p.id === a.session.id);
+      if (prior) prior.calls += r.calls;
+      else {
+        row2.perSession.push({ id: a.session.id, calls: r.calls });
+        row2.broken++;
+        if (a.session.startedAt !== void 0 && (row2.lastBrokenAt === void 0 || a.session.startedAt > row2.lastBrokenAt)) row2.lastBrokenAt = a.session.startedAt;
+      }
+      row2.calls += r.calls;
+      row2.agentCalls += r.agentCalls;
+      row2.blocked += r.blocked ?? 0;
+      for (const e of r.examples) if (row2.examples.length < EXAMPLES && !row2.examples.includes(e)) row2.examples.push(e);
+    }
+  }
+  const rows2 = [];
+  for (const r of acc.values()) {
+    if (!r.calls) continue;
+    const [file, line] = [...r.files].sort((a, b) => a[0].length - b[0].length || cmp(a[0], b[0]))[0];
+    rows2.push({
+      file,
+      files: r.files.size,
+      line,
+      text: r.text,
+      target: r.target,
+      sessionsInContext: r.sessions,
+      sessionsBroken: r.broken,
+      calls: r.calls,
+      agentCalls: r.agentCalls,
+      blocked: r.blocked,
+      examples: r.examples,
+      exampleSessionIds: [...r.perSession].sort((x, y) => y.calls - x.calls || cmp(x.id, y.id)).slice(0, EXAMPLES).map((p) => p.id),
+      ...r.lastBrokenAt !== void 0 ? { lastBrokenAt: r.lastBrokenAt } : {}
+    });
+  }
+  rows2.sort((a, b) => b.calls - b.blocked - (a.calls - a.blocked) || b.calls - a.calls || b.sessionsBroken - a.sessionsBroken || cmp(a.file, b.file) || a.line - b.line || cmp(a.target.name, b.target.name));
+  return { rows: rows2, inContext: acc.size };
+}
+function sameProject(a, path, kind, writerCwd) {
+  const loaded = a.instructions?.loaded ?? [];
+  if (kind === "memory" || kind === "memory-index") {
+    const dir = dirOf(path);
+    if (loaded.some((l) => dirOf(l.path) === dir)) return true;
+  } else if (loaded.some((l) => l.path === path)) return true;
+  if (writerCwd !== void 0 && a.session.cwd === writerCwd) return true;
+  const root = dirOf(path);
+  return kind !== "memory" && kind !== "memory-index" && a.session.cwd !== void 0 && root !== "" && (a.session.cwd === root || a.session.cwd.startsWith(root + "/"));
+}
+var TRIGGER_TURNS = 3;
+var RARE_SHARE = 0.05;
+function promptWordCounts(analyses) {
+  const df = /* @__PURE__ */ new Map();
+  let prompts = 0;
+  for (const a of analyses) {
+    for (const t of a.turns) {
+      if (t.kind !== "human") continue;
+      prompts++;
+      for (const w of contentWords(t.promptPreview, { cap: Infinity })) df.set(w, (df.get(w) ?? 0) + 1);
+    }
+  }
+  return { df, prompts };
+}
+function isFeedbackNote(path, noteType) {
+  const base = path.replace(/\\/g, "/").split("/").pop() ?? "";
+  return noteType === "feedback" || /^feedback[_-]/i.test(base);
+}
+function noteRows(analyses, complaints, includeText) {
+  const notes = /* @__PURE__ */ new Map();
+  for (const a of analyses) {
+    const own = complaints.get(a.session.id) ?? [];
+    for (const w of a.instructions?.noteWrites ?? []) {
+      const n2 = notes.get(w.path);
+      const earlier = !n2 || w.ts !== void 0 && (n2.writtenAt === void 0 || w.ts < n2.writtenAt);
+      if (!n2) notes.set(w.path, { kind: w.kind, writtenBy: a.session.id, firstTurn: w.turnIndex, writes: 0, words: /* @__PURE__ */ new Set() });
+      const row2 = notes.get(w.path);
+      if (earlier) {
+        const trigger = [...own].reverse().find((c) => c.turnIndex <= w.turnIndex && c.turnIndex >= w.turnIndex - TRIGGER_TURNS);
+        row2.writtenBy = a.session.id;
+        row2.firstTurn = w.turnIndex;
+        if (w.ts !== void 0) row2.writtenAt = w.ts;
+        else delete row2.writtenAt;
+        if (a.session.cwd !== void 0) row2.writerCwd = a.session.cwd;
+        else delete row2.writerCwd;
+        if (trigger) row2.trigger = trigger;
+        else delete row2.trigger;
+      }
+      if (w.noteType && !row2.noteType) row2.noteType = w.noteType;
+      row2.writes++;
+      for (const word of w.words) row2.words.add(word);
+    }
+  }
+  const { df, prompts } = promptWordCounts(analyses);
+  const rareCap = Math.max(3, Math.ceil(prompts * RARE_SHARE));
+  const rows2 = [];
+  for (const [file, n2] of notes) {
+    if (!isFeedbackNote(file, n2.noteType) && !n2.trigger) continue;
+    const topic = new Set([...n2.words, ...n2.trigger ? contentWords(n2.trigger.preview) : []].filter((w) => (df.get(w) ?? 0) <= rareCap));
+    let sessionsAfter = 0;
+    let after = 0;
+    const matches = [];
+    for (const a of analyses) {
+      const own = a.session.id === n2.writtenBy;
+      if (!own && !sameProject(a, file, n2.kind, n2.writerCwd)) continue;
+      const later = own || n2.writtenAt !== void 0 && a.session.startedAt !== void 0 && a.session.startedAt > n2.writtenAt;
+      if (!later) continue;
+      sessionsAfter++;
+      for (const c of complaints.get(a.session.id) ?? []) {
+        if (own && c.turnIndex <= n2.firstTurn) continue;
+        after++;
+        const shared = contentWords(c.preview).filter((w) => topic.has(w));
+        if (shared.length >= (n2.trigger ? 1 : 2)) matches.push({ c, shared });
+      }
+    }
+    matches.sort((x, y) => (x.c.at ?? 0) - (y.c.at ?? 0) || cmp(x.c.sessionId, y.c.sessionId) || x.c.turnIndex - y.c.turnIndex);
+    const wordCount2 = /* @__PURE__ */ new Map();
+    for (const m of matches) for (const w of m.shared) wordCount2.set(w, (wordCount2.get(w) ?? 0) + 1);
+    const firstAt = matches[0]?.c.at;
+    rows2.push({
+      file,
+      kind: n2.kind,
+      ...n2.noteType ? { noteType: n2.noteType } : {},
+      ...n2.trigger ? { trigger: ref(n2.trigger, includeText) } : {},
+      ...n2.writtenAt !== void 0 ? { writtenAt: n2.writtenAt } : {},
+      writtenBy: n2.writtenBy,
+      writes: n2.writes,
+      sessionsAfter,
+      complaintsAfter: after,
+      matchingComplaints: matches.length,
+      ...firstAt !== void 0 && n2.writtenAt !== void 0 ? { firstMatchAfterMs: Math.max(0, firstAt - n2.writtenAt) } : {},
+      sharedWords: [...wordCount2].sort((x, y) => y[1] - x[1] || cmp(x[0], y[0])).map(([w]) => w),
+      examples: matches.slice(0, EXAMPLES).map((m) => ref(m.c, includeText))
+    });
+  }
+  rows2.sort((a, b) => b.matchingComplaints - a.matchingComplaints || b.complaintsAfter - a.complaintsAfter || (b.writtenAt ?? 0) - (a.writtenAt ?? 0) || cmp(a.file, b.file));
+  return { rows: rows2, written: notes.size };
+}
+function memoryRows(analyses, indexes) {
+  const rows2 = /* @__PURE__ */ new Map();
+  const row2 = (file) => {
+    let r = rows2.get(file);
+    if (!r) {
+      r = { file, sessionsLoaded: 0, sessionsCut: 0, maxLinesCut: 0 };
+      rows2.set(file, r);
+    }
+    return r;
+  };
+  for (const m of indexes) Object.assign(row2(m.file), { lines: m.lines, bytes: m.bytes, linesPastLimit: m.linesPastLimit, ...m.firstLinePastLimit !== void 0 ? { firstLinePastLimit: m.firstLinePastLimit } : {} });
+  for (const a of analyses) {
+    const ins = a.instructions;
+    if (!ins) continue;
+    for (const l of ins.loaded) if (l.type === "AutoMem" || /[/\\]memory[/\\]MEMORY\.md$/.test(l.path)) row2(l.path).sessionsLoaded++;
+    const cutHere = /* @__PURE__ */ new Set();
+    for (const c of ins.memoryCuts) {
+      const r = row2(c.path);
+      if (!cutHere.has(c.path)) {
+        cutHere.add(c.path);
+        r.sessionsCut++;
+      }
+      r.maxLinesCut = Math.max(r.maxLinesCut, c.linesCut ?? 0);
+      if (c.ts !== void 0 && (r.lastCutAt === void 0 || c.ts > r.lastCutAt)) r.lastCutAt = c.ts;
+    }
+  }
+  return [...rows2.values()].sort((a, b) => b.sessionsCut - a.sessionsCut || (b.linesPastLimit ?? 0) - (a.linesPastLimit ?? 0) || b.sessionsLoaded - a.sessionsLoaded || cmp(a.file, b.file));
+}
+function complaintRows(all, instructionWords, includeText) {
+  const acc = /* @__PURE__ */ new Map();
+  for (const c of all) {
+    for (const w of contentWords(c.preview, { keepComplaintWords: true })) {
+      const a = acc.get(w) ?? { prompts: [], sessions: /* @__PURE__ */ new Set() };
+      a.prompts.push(c);
+      a.sessions.add(c.sessionId);
+      acc.set(w, a);
+    }
+  }
+  const rows2 = [];
+  for (const [word, a] of acc) {
+    if (a.sessions.size < THEME_MIN_SESSIONS) continue;
+    const sorted = [...a.prompts].sort((x, y) => (x.at ?? 0) - (y.at ?? 0) || cmp(x.sessionId, y.sessionId) || x.turnIndex - y.turnIndex);
+    const firstAt = sorted.find((c) => c.at !== void 0)?.at;
+    const lastAt = [...sorted].reverse().find((c) => c.at !== void 0)?.at;
+    rows2.push({
+      word,
+      prompts: a.prompts.length,
+      sessions: a.sessions.size,
+      ...firstAt !== void 0 ? { firstAt } : {},
+      ...lastAt !== void 0 ? { lastAt } : {},
+      inInstructions: instructionWords?.has(word) ?? false,
+      examples: sorted.slice(-EXAMPLES).reverse().map((c) => ref(c, includeText))
+    });
+  }
+  return rows2.sort((a, b) => b.sessions - a.sessions || b.prompts - a.prompts || cmp(a.word, b.word));
+}
+function loadedMemoryIndexPaths(analyses) {
+  const out3 = /* @__PURE__ */ new Set();
+  for (const a of analyses) for (const l of a.instructions?.loaded ?? []) if (l.type === "AutoMem" || /[/\\]memory[/\\]MEMORY\.md$/.test(l.path)) out3.add(l.path);
+  return [...out3].sort();
+}
+function buildEnforcement(input, opts = {}) {
+  const analyses = opts.norm ? normed(input, opts.norm) : input;
+  const complaints = /* @__PURE__ */ new Map();
+  const all = [];
+  for (const a of analyses) {
+    const cs = complaintsOf(a);
+    complaints.set(a.session.id, cs);
+    all.push(...cs);
+  }
+  const { rows: broken, inContext } = ruleRows(analyses);
+  const { rows: notes, written } = noteRows(analyses, complaints, opts.includeText);
+  const memory = memoryRows(analyses, opts.memoryIndexes ?? []);
+  const themes = complaintRows(all, opts.instructionWords, opts.includeText);
+  return {
+    counts: {
+      sessionsWithRecord: analyses.filter((a) => (a.instructions?.loaded.length ?? 0) > 0).length,
+      rulesInContext: inContext,
+      rulesBroken: broken.length,
+      rulesEnforced: broken.filter((b) => b.blocked === b.calls).length,
+      notesWritten: written,
+      feedbackNotes: notes.length,
+      notesFollowedByComplaint: notes.filter((n2) => n2.matchingComplaints > 0).length,
+      complaints: all.length,
+      memoryIndexesCut: memory.filter((m) => m.sessionsCut > 0 || (m.linesPastLimit ?? 0) > 0).length
+    },
+    broken: broken.slice(0, HARNESS_ROW_CAP),
+    notes: notes.slice(0, HARNESS_ROW_CAP),
+    memory: memory.slice(0, HARNESS_ROW_CAP),
+    complaints: themes.slice(0, HARNESS_ROW_CAP)
   };
 }
 
@@ -8145,6 +8476,12 @@ function buildHarnessReport(inv, analyses, agg, o) {
     inventory: inv,
     crosswalk: x,
     retention,
+    enforcement: buildEnforcement(analyses, {
+      memoryIndexes: inv.memoryIndexes,
+      ...o.instructionWords ? { instructionWords: o.instructionWords } : {},
+      ...o.includeText ? { includeText: true } : {},
+      norm: rel
+    }),
     notes: buildNotes(inv, x, retention, analyses.length, sessionsUnreadable, unsplitAnalyses)
   };
 }
@@ -10221,6 +10558,19 @@ import { homedir as homedir3 } from "node:os";
 // src/harness/collect.ts
 import { readdir as readdir2, readFile, stat as stat5 } from "node:fs/promises";
 import { basename as basename7, join as join7 } from "node:path";
+var MEMORY_INDEX_LINE_LIMIT = 200;
+var MEMORY_INDEX_BYTE_LIMIT = 25e3;
+function memoryIndexCut(text3) {
+  const lines = text3 === "" ? [] : text3.split("\n");
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+  let bytes = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const next = bytes + Buffer.byteLength(lines[i], "utf8");
+    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_BYTE_LIMIT) return { lines: lines.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 };
+    bytes = next + 1;
+  }
+  return { lines: lines.length, linesPastLimit: 0 };
+}
 var DEFAULT_MAX_FILE_BYTES = 1e6;
 var MAX_WALK_DEPTH = 6;
 var CLAUDE_JSON_KEYS = ["mcpServers", "projects", "skillUsage", "pluginUsage"];
@@ -10484,6 +10834,7 @@ async function readAgentDir(ctx, dir, origin, plugin) {
 async function readMemory(ctx, file, scope) {
   const text3 = await readText(ctx, file);
   if (text3 === null) return null;
+  if (ctx.words) for (const w of contentWords(text3, { cap: Infinity })) ctx.words.add(w);
   const bytes = Buffer.byteLength(text3, "utf8");
   return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: lineCount(text3), headings: headingCount(text3) };
 }
@@ -10520,6 +10871,7 @@ async function collectInventory(opts) {
     throw new TypeError("collectInventory: cwd and home must be strings and roots an array");
   }
   const ctx = {
+    ...opts.instructionWords ? { words: opts.instructionWords } : {},
     home: opts.home,
     maxFileBytes: opts.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
     unreadable: [],
@@ -10671,6 +11023,35 @@ async function collectInventory(opts) {
       plugins: Object.keys(pluginUsage ?? {}).sort().map((key) => ({ key: cleanName(key), usageCount: asNumber(asRecord(pluginUsage[key])?.["usageCount"]), lastUsedAt: asNumber(asRecord(pluginUsage[key])?.["lastUsedAt"]) }))
     };
   }
+  const memoryIndexes = [];
+  const indexPaths = new Set(opts.memoryIndexPaths ?? []);
+  for (const root of liveRoots) {
+    const projects = join7(root, "projects");
+    if (opts.allProjects) {
+      for (const e of await listDir(ctx, projects)) if (e.dir) indexPaths.add(join7(projects, e.name, "memory", "MEMORY.md"));
+    } else indexPaths.add(join7(projects, projectSlug(opts.cwd), "memory", "MEMORY.md"));
+  }
+  for (const file of [...indexPaths].sort()) {
+    try {
+      if (!(await stat5(file)).isFile()) continue;
+    } catch {
+      continue;
+    }
+    const text3 = await readText(ctx, file);
+    if (text3 === null) continue;
+    const bytes = Buffer.byteLength(text3, "utf8");
+    const cut = memoryIndexCut(text3);
+    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...cut.firstLinePastLimit !== void 0 ? { firstLinePastLimit: cut.firstLinePastLimit } : {} });
+    if (ctx.words) {
+      for (const w of contentWords(text3, { cap: Infinity })) ctx.words.add(w);
+      const dir = join7(file, "..");
+      for (const e of await listDir(ctx, dir)) {
+        if (e.dir || !e.name.endsWith(".md") || e.name === "MEMORY.md") continue;
+        const note = await readText(ctx, join7(dir, e.name));
+        if (note !== null) for (const w of contentWords(note, { cap: Infinity })) ctx.words.add(w);
+      }
+    }
+  }
   claudeMd.sort((a, b) => a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
   settings.sort((a, b) => a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
   skills.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
@@ -10680,6 +11061,7 @@ async function collectInventory(opts) {
   ctx.unreadable.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0);
   return {
     claudeMd,
+    memoryIndexes,
     settings,
     skills,
     agents,
@@ -10827,17 +11209,17 @@ var Registry = class {
   /** Full discovery pass: newcomers, refreshed refs, badge changes, tailing set. */
   async rescanOnce() {
     const refs = await listSessions(this.discoverOpts());
-    for (const ref of refs) {
-      const existing = this.watched.get(ref.sessionId);
+    for (const ref2 of refs) {
+      const existing = this.watched.get(ref2.sessionId);
       if (!existing) {
-        const { badge } = badgeFor(ref.mtimeMs, this.nowFn());
-        const w = { ref, badge, dirty: false, queued: false, inFlight: false, lastTickMs: 0, pinned: false, force: false, seq: 0 };
-        this.watched.set(ref.sessionId, w);
+        const { badge } = badgeFor(ref2.mtimeMs, this.nowFn());
+        const w = { ref: ref2, badge, dirty: false, queued: false, inFlight: false, lastTickMs: 0, pinned: false, force: false, seq: 0 };
+        this.watched.set(ref2.sessionId, w);
         this.emitFn({ type: "session-added", row: this.rowFor(w) });
       } else {
-        const grown = ref.mtimeMs !== existing.ref.mtimeMs || ref.sizeBytes !== existing.ref.sizeBytes || ref.subagentFiles.length !== existing.ref.subagentFiles.length;
-        existing.ref = ref;
-        if (grown && existing.tail) this.markDirty(ref.sessionId);
+        const grown = ref2.mtimeMs !== existing.ref.mtimeMs || ref2.sizeBytes !== existing.ref.sizeBytes || ref2.subagentFiles.length !== existing.ref.subagentFiles.length;
+        existing.ref = ref2;
+        if (grown && existing.tail) this.markDirty(ref2.sessionId);
       }
     }
     this.checkBadges();
@@ -11223,8 +11605,12 @@ var HarnessRunner = class {
     const cwd = repoCwd ?? process.cwd();
     const roots = this.ctx.opts.roots ?? [this.ctx.opts.configDir ?? defaultConfigDir()];
     const now = this.ctx.now();
-    const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: !repoCwd });
+    const instructionWords = /* @__PURE__ */ new Set();
+    const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: !repoCwd, memoryIndexPaths: loadedMemoryIndexPaths(analyses), instructionWords });
     const report2 = buildHarnessReport(inventory, analyses, aggregate(analyses, repoCwd ? `repo ${repoCwd}` : "global", now), {
+      instructionWords,
+      // a prompt preview is transcript text: the same --include-text gate as every other serve payload
+      ...this.ctx.opts.includeText ? { includeText: true } : {},
       version: this.ctx.opts.version,
       now,
       scope: { cwd, roots, global: !repoCwd, limit: rows2.length, sessionsUnreadable: unreadable, home },
@@ -12533,9 +12919,9 @@ async function runHarness(flags) {
     failed = r.failed;
   } else {
     const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION }) : null;
-    for (const ref of use) {
+    for (const ref2 of use) {
       try {
-        analyses.push(await analyzeRefCached(ref, { cache: cache2, version: VERSION, now }));
+        analyses.push(await analyzeRefCached(ref2, { cache: cache2, version: VERSION, now }));
       } catch {
         failed++;
       }
@@ -12543,9 +12929,13 @@ async function runHarness(flags) {
   }
   if (!flagBool(flags, "quiet")) process.stderr.write(paint(err, "dim", `analyzed ${plural(analyses.length, "session")}: declared vs used`) + "\n");
   const home = homedir4();
-  const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: isGlobal });
+  const instructionWords = /* @__PURE__ */ new Set();
+  const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: isGlobal, memoryIndexPaths: loadedMemoryIndexPaths(analyses), instructionWords });
   const agg = aggregate(analyses, scopeLabel, now);
   const report2 = buildHarnessReport(inventory, analyses, agg, {
+    instructionWords,
+    // a complaint example carries its prompt text only on request, the same gate as `analyze --include-text`
+    ...flagBool(flags, "include-text") ? { includeText: true } : {},
     version: VERSION,
     now,
     scope: { cwd, roots, global: isGlobal, limit, sessionsUnreadable: failed, home },
@@ -12599,6 +12989,63 @@ function printRetention(r, line, w) {
   }
   dim("cleanupPeriodDays sets the window, minimum 1. A larger value keeps more history to measure, and leaves plaintext transcripts on disk for longer");
 }
+function gapLabel(ms2) {
+  const min = Math.round(ms2 / 6e4);
+  if (min < 120) return plural(min, "min").replace(/mins$/, "min");
+  const h = Math.round(min / 60);
+  return h < 48 ? `${h} h` : plural(Math.round(h / 24), "day");
+}
+function printEnforcement(r, w, wrapped) {
+  const e = r.enforcement;
+  const c = e.counts;
+  const dim = (s) => w(paint(out, "dim", s));
+  const fileName = (p) => p.split(/[\\/]/).pop() ?? p;
+  w();
+  w(paint(out, "bold", "  rules that did not hold"));
+  if (r.scope.sessionsScanned === 0) {
+    dim("    no sessions in scope: nothing can be checked");
+    return;
+  }
+  if (c.sessionsWithRecord === 0) {
+    dim("    no scanned session recorded the instruction files that it loaded,");
+    dim("    so orangu cannot tie a rule to a session. Claude Code writes that record");
+    dim("    in newer transcripts.");
+  } else if (!e.broken.length) {
+    dim(`    ${plural(c.rulesInContext, "rule")} named a command or a tool, and no call broke ${c.rulesInContext === 1 ? "it" : "them"}`);
+  }
+  for (const b of e.broken.slice(0, 5)) {
+    w(`    ${b.target.name.padEnd(26)} ${plural(b.calls, "call")} in ${b.sessionsBroken} of ${plural(b.sessionsInContext, "session")} that had the rule`);
+    const agents = b.agentCalls ? ` \xB7 ${b.agentCalls} by subagents` : "";
+    const copies = b.files > 1 ? ` \xB7 ${b.files} copies of the file` : "";
+    dim(`      ${fileName(b.file)}:${b.line}${agents}${copies}`);
+    if (b.blocked) dim(b.blocked === b.calls ? "      a hook or a deny rule stopped every call: a check holds this rule" : `      a hook or a deny rule stopped ${b.blocked}, and ${b.calls - b.blocked} ran`);
+    for (const l of wrapped(b.text, "      ")) dim(l);
+  }
+  if (e.broken.length > 5) dim(`    ${e.broken.length - 5} more broken rules in --json`);
+  for (const m of e.memory.filter((x) => x.sessionsCut > 0 || (x.linesPastLimit ?? 0) > 0).slice(0, 3)) {
+    const now = m.linesPastLimit ? `${plural(m.linesPastLimit, "line")} past the limit now` : m.bytes !== void 0 ? `fits now: ${sizeLabel(m.bytes)} of 24.4 KB` : "gone now";
+    w(`    ${"memory index".padEnd(26)} cut in ${m.sessionsCut} of ${plural(m.sessionsLoaded, "session")} that loaded it`);
+    dim(`      ${m.file}`);
+    dim(`      up to ${plural(m.maxLinesCut, "line")} not loaded, the newest first \xB7 ${now}`);
+  }
+  if (c.feedbackNotes) {
+    w(`    ${"feedback notes".padEnd(26)} ${c.notesFollowedByComplaint} of ${c.feedbackNotes} came back as a complaint`);
+    for (const note of e.notes.filter((x) => x.matchingComplaints > 0).slice(0, 3)) {
+      const first = note.firstMatchAfterMs !== void 0 ? `, the first ${gapLabel(note.firstMatchAfterMs)} after the note` : "";
+      dim(`      ${fileName(note.file)} \xB7 ${plural(note.matchingComplaints, "complaint")}${first}`);
+      if (note.sharedWords.length) dim(`        shared words: ${note.sharedWords.slice(0, 6).join(", ")}`);
+    }
+  }
+  const themes = e.complaints.slice(0, 6);
+  if (themes.length) {
+    w(`    ${"recurring complaints".padEnd(26)} ${plural(c.complaints, "complaint prompt")} in scope`);
+    for (const t of themes) dim(`      "${t.word}" in ${plural(t.prompts, "prompt")}, ${plural(t.sessions, "session")}${t.inInstructions ? " \xB7 a note already uses this word" : ""}`);
+  }
+  if (e.notes.some((x) => x.examples.length) || themes.length) {
+    const shown = e.notes.some((x) => x.examples.some((ex) => ex.preview !== void 0)) || themes.some((t) => t.examples.some((ex) => ex.preview !== void 0));
+    if (!shown) dim("    add --include-text to see the text of each complaint");
+  }
+}
 function printHarness(r) {
   const w = (s = "") => process.stdout.write(s + "\n");
   const inv = r.inventory;
@@ -12613,17 +13060,7 @@ function printHarness(r) {
     w(paint(out, "dim", `                 repo files from ${r.scope.cwd}`));
   }
   w();
-  const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
-  if (nothing) {
-    w(`  orangu found no harness config under ${r.scope.roots.join(", ")}. It found nothing to compare.`);
-    w(paint(out, "dim", `
-  looked for: settings.json \xB7 skills/ \xB7 agents/ \xB7 plugins/ \xB7 .mcp.json \xB7 CLAUDE.md
-`));
-    return;
-  }
-  const line = (l, v) => w("  " + l.padEnd(22) + v);
   const width = Math.min(out.columns || 80, 80);
-  const dim = (s) => w(paint(out, "dim", "    " + s));
   const wrapped = (s, indent) => {
     const max = Math.max(20, width - indent.length);
     const lines = [];
@@ -12638,6 +13075,17 @@ function printHarness(r) {
     if (cur) lines.push(cur);
     return lines.map((l, i) => i === 0 ? indent + l : " ".repeat(indent.length) + l);
   };
+  const nothing = inv.settings.length === 0 && inv.skills.length === 0 && inv.agents.length === 0 && inv.plugins.length === 0 && inv.mcpServers.length === 0 && inv.claudeMd.length === 0;
+  if (nothing) {
+    w(`  orangu found no harness config under ${r.scope.roots.join(", ")}. It found nothing to compare.`);
+    w(paint(out, "dim", `
+  looked for: settings.json \xB7 skills/ \xB7 agents/ \xB7 plugins/ \xB7 .mcp.json \xB7 CLAUDE.md`));
+    printEnforcement(r, w, wrapped);
+    w();
+    return;
+  }
+  const line = (l, v) => w("  " + l.padEnd(22) + v);
+  const dim = (s) => w(paint(out, "dim", "    " + s));
   const dimList = (items) => {
     let cur = "";
     for (const item of items) {
@@ -12707,6 +13155,7 @@ function printHarness(r) {
       if (l.subagent.injections) w(paint(out, "dim", `      subagents \u2248${n(l.subagent.approxTokens)} tokens over ${plural(l.subagent.injections, "injection")} in ${plural(l.subagent.sessions, "session")}`));
     }
   }
+  printEnforcement(r, w, wrapped);
   if (r.notes.length) {
     w();
     w(paint(out, "bold", "  notes"));
@@ -12722,15 +13171,15 @@ var slimBytes = (a) => Buffer.byteLength(JSON.stringify(slimAnalysis(a)));
 async function loadAnalysisResult(sel, analyzeOptions = { version: "evidence", now: 0 }) {
   const value = sel.trim();
   const pathSelector = value.endsWith(".jsonl") || value.includes("/") || value.includes("\\");
-  let ref;
+  let ref2;
   try {
-    ref = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() });
+    ref2 = await resolveSession(value, pathSelector ? {} : { roots: await claudeRoots() });
   } catch (err3) {
     return { ok: false, reason: `session lookup failed: ${err3.message}` };
   }
-  if (!ref) return { ok: false, reason: "no such session" };
+  if (!ref2) return { ok: false, reason: "no such session" };
   try {
-    const loaded = await readStableEvidenceSession(ref.path);
+    const loaded = await readStableEvidenceSession(ref2.path);
     const session = await parseClaudeCodeSession(loaded.parseInput);
     return { ok: true, analysis: analyzeSession(session, analyzeOptions) };
   } catch (err3) {
@@ -12907,8 +13356,8 @@ async function bundleFromJsonFile(path, options) {
   return parseEvidenceArtifact(text3, options);
 }
 async function bundleFromSession(selector, flags, options) {
-  const ref = await resolveEvidenceSession(selector, flags);
-  const loaded = await readStableEvidenceSession(ref.path);
+  const ref2 = await resolveEvidenceSession(selector, flags);
+  const loaded = await readStableEvidenceSession(ref2.path);
   const session = await parseClaudeCodeSession(loaded.parseInput);
   const analysis = analyzeSession(session, { version: "evidence", now: 0 });
   const { analysis: redacted2 } = redactAnalysis(analysis, { scrub: true, stripText: !flagBool(flags, "include-text") });
@@ -13437,17 +13886,17 @@ import { isAbsolute as isAbsolute6, resolve as resolve9 } from "node:path";
 var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
 var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
 async function discoveredInventory() {
-  const refs = (await listSessions({ roots: await claudeRoots(), maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS })).filter((ref) => SESSION_ID_RE.test(ref.sessionId));
+  const refs = (await listSessions({ roots: await claudeRoots(), maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS })).filter((ref2) => SESSION_ID_RE.test(ref2.sessionId));
   if (refs.length > MAX_VERIFICATION_DISCOVERED_SESSIONS) {
     throw new Error(`verification discovery exceeds ${MAX_VERIFICATION_DISCOVERED_SESSIONS} sessions`);
   }
   const byCanonicalPath = /* @__PURE__ */ new Map();
-  for (const ref of refs) {
+  for (const ref2 of refs) {
     try {
-      const canonical = await realpath8(ref.path);
+      const canonical = await realpath8(ref2.path);
       const prior = byCanonicalPath.get(canonical);
-      if (prior === void 0) byCanonicalPath.set(canonical, ref);
-      else if (prior !== null && resolve9(prior.path) !== resolve9(ref.path)) byCanonicalPath.set(canonical, null);
+      if (prior === void 0) byCanonicalPath.set(canonical, ref2);
+      else if (prior !== null && resolve9(prior.path) !== resolve9(ref2.path)) byCanonicalPath.set(canonical, null);
     } catch {
     }
   }
@@ -13458,7 +13907,7 @@ async function exactDiscoveredRef(selector, inventory) {
   if (!value) return void 0;
   let matches;
   if (SESSION_ID_RE.test(value)) {
-    matches = inventory.refs.filter((ref) => ref.sessionId.toLowerCase() === value.toLowerCase());
+    matches = inventory.refs.filter((ref2) => ref2.sessionId.toLowerCase() === value.toLowerCase());
   } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
     let canonical;
     try {
@@ -13471,14 +13920,14 @@ async function exactDiscoveredRef(selector, inventory) {
   } else {
     return void 0;
   }
-  const unique = new Map(matches.map((ref) => [resolve9(ref.path), ref]));
+  const unique = new Map(matches.map((ref2) => [resolve9(ref2.path), ref2]));
   return unique.size === 1 ? [...unique.values()][0] : void 0;
 }
 var OVER_BUDGET_RE = /exceeds (?:\d+ bytes|the remaining \d+-byte read budget)/;
-async function loadSettledAnalysis(ref, maxBytes, options = {}) {
+async function loadSettledAnalysis(ref2, maxBytes, options = {}) {
   let settling = false;
   try {
-    const loaded = await withStableSessionRead(ref.path, void 0, async (manifest) => {
+    const loaded = await withStableSessionRead(ref2.path, void 0, async (manifest) => {
       if (options.requireQuiet) {
         const changedAt = evidenceManifestLatestChangeMs(manifest);
         const observedAt = (options.now ?? Date.now)();
@@ -13494,7 +13943,7 @@ async function loadSettledAnalysis(ref, maxBytes, options = {}) {
     if (options.requireQuiet && (loaded.parseInput.trailingPartial || loaded.parseInput.subagents?.some((sidecar) => sidecar.trailingPartial))) return { skip: "still-settling", bytesRead };
     const session = await parseClaudeCodeSession(loaded.parseInput);
     const analysis = analyzeSession(session, { version: "verification", now: 0 });
-    if (analysis.session.source !== "claude-code" || analysis.session.id.toLowerCase() !== ref.sessionId.toLowerCase()) {
+    if (analysis.session.source !== "claude-code" || analysis.session.id.toLowerCase() !== ref2.sessionId.toLowerCase()) {
       return { skip: "unreadable", bytesRead };
     }
     return { analysis, session, bytesRead };
@@ -13511,9 +13960,9 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
   return async (selector) => {
     try {
       if (remainingBytes < 1) return void 0;
-      const ref = await exactDiscoveredRef(selector, await inventory);
-      if (!ref) return void 0;
-      const loaded = await loadSettledAnalysis(ref, remainingBytes, options);
+      const ref2 = await exactDiscoveredRef(selector, await inventory);
+      if (!ref2) return void 0;
+      const loaded = await loadSettledAnalysis(ref2, remainingBytes, options);
       remainingBytes -= loaded.bytesRead;
       return "analysis" in loaded ? loaded.analysis : void 0;
     } catch {
@@ -13527,7 +13976,7 @@ function createCohortDeps(options = {}) {
   return {
     async listCandidates(cwd) {
       const refs = await listSessions({ roots: await claudeRoots(), cwd, maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS });
-      return refs.filter((ref) => SESSION_ID_RE.test(ref.sessionId)).map((ref) => ({ sessionId: ref.sessionId.toLowerCase(), path: ref.path, mtimeMs: ref.mtimeMs }));
+      return refs.filter((ref2) => SESSION_ID_RE.test(ref2.sessionId)).map((ref2) => ({ sessionId: ref2.sessionId.toLowerCase(), path: ref2.path, mtimeMs: ref2.mtimeMs }));
     },
     async loadCandidate(candidate, maxBytes) {
       const loaded = await loadSettledAnalysis({ path: candidate.path, sessionId: candidate.sessionId }, maxBytes, {
@@ -15892,10 +16341,10 @@ async function selectSession(selector, flags, err3) {
 }
 var cacheFor = (flags) => flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1" ? null : new AnalysisCache({ version: VERSION2 });
 async function sessionData2(selector, flags, err3) {
-  const ref = await selectSession(selector, flags, err3);
-  const analysis = await analyzeRefCached(ref, { cache: cacheFor(flags), version: VERSION2, now: Date.now() });
+  const ref2 = await selectSession(selector, flags, err3);
+  const analysis = await analyzeRefCached(ref2, { cache: cacheFor(flags), version: VERSION2, now: Date.now() });
   const json2 = renderAnalysisJson(analysis, { slim: true, "no-redact": flagBool(flags, "no-redact"), "include-text": flagBool(flags, "include-text"), "strip-paths": flagBool(flags, "strip-paths") });
-  return { name: ref.sessionId.slice(0, 8), json: json2, skipped: 0 };
+  return { name: ref2.sessionId.slice(0, 8), json: json2, skipped: 0 };
 }
 async function aggregateData2(scope, flags, err3) {
   const rootArg = flagStr(flags, "root", "r");
@@ -15921,9 +16370,9 @@ async function aggregateData2(scope, flags, err3) {
     failed = pooled.failed;
   } else {
     const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION2 }) : null;
-    for (const ref of use) {
+    for (const ref2 of use) {
       try {
-        analyses.push(await analyzeRefCached(ref, { cache: cache2, version: VERSION2, now }));
+        analyses.push(await analyzeRefCached(ref2, { cache: cache2, version: VERSION2, now }));
       } catch {
         failed++;
       }
@@ -16033,11 +16482,12 @@ var EXTRA_HELP = [
   [
     "  orangu harness               what your config declares vs what your sessions",
     "                               used: skills/MCP/agents/hooks",
-    "                               used|idle|undeclared, in tokens",
+    "                               used|idle|undeclared, in tokens, and the",
+    "                               rules and notes that the sessions broke",
     "                                 ([--json] [--cwd <dir>] [--root <dir>]",
     "                                  [--global] [--limit <n>] [-o|--out <file>]",
     "                                  [--no-redact] [--strip-paths] [--jobs <n>]",
-    "                                  [--no-cache] [--quiet])"
+    "                                  [--include-text] [--no-cache] [--quiet])"
   ].join("\n"),
   [
     "  orangu suggest               suggestion records in ~/.orangu",
@@ -16449,20 +16899,20 @@ function printCacheStats(cache2, flags) {
   const s = cache2.stats();
   process.stderr.write(row(err2, "cache", `${s.hits} hits, ${s.misses} misses`, { style: "dim" }) + "\n");
 }
-async function analyzeRef(ref, flags, cache2) {
+async function analyzeRef(ref2, flags, cache2) {
   const c = cache2 !== void 0 ? cache2 : makeCache(flags);
-  const analysis = await analyzeRefCached(ref, { cache: c, version: VERSION2, now: Date.now() });
+  const analysis = await analyzeRefCached(ref2, { cache: c, version: VERSION2, now: Date.now() });
   if (cache2 === void 0) printCacheStats(c, flags);
   return analysis;
 }
-async function analyzeWithProgress(ref, flags) {
+async function analyzeWithProgress(ref2, flags) {
   const quiet = flagBool(flags, "quiet") || flagBool(flags, "json");
   const t0 = performance.now();
   const sp = spinner(err2);
   progress = sp;
-  if (!quiet) sp.start(`analyzing ${ref.sessionId.slice(0, 8)} ${fmtBytes(ref.sizeBytes)}`);
+  if (!quiet) sp.start(`analyzing ${ref2.sessionId.slice(0, 8)} ${fmtBytes(ref2.sizeBytes)}`);
   try {
-    const analysis = await analyzeRef(ref, flags);
+    const analysis = await analyzeRef(ref2, flags);
     return { analysis, elapsedMs: performance.now() - t0 };
   } finally {
     sp.stop();
@@ -16475,27 +16925,27 @@ function outPath(flags, id, ext = "html") {
   return join12(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
-  const ref = await selectSession2(sel, flags);
-  const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags);
+  const ref2 = await selectSession2(sel, flags);
+  const { analysis, elapsedMs } = await analyzeWithProgress(ref2, flags);
   const { html, redaction } = renderReport(analysis, { redact: redactOptions(flags) });
   if (flagBool(flags, "stdout")) {
     process.stdout.write(html);
     return;
   }
-  const path = outPath(flags, ref.sessionId);
+  const path = outPath(flags, ref2.sessionId);
   await writePrivateOutput(path, html);
   const opened = !flagBool(flags, "no-open") && (flagBool(flags, "open") || out2.tty) && openHtmlFile(path);
   process.stdout.write(path + "\n");
   if (!flagBool(flags, "quiet") && !flagBool(flags, "json")) {
-    process.stderr.write(doneLine(err2, { sizeBytes: ref.sizeBytes, elapsedMs, redactions: redaction?.applied }) + "\n");
+    process.stderr.write(doneLine(err2, { sizeBytes: ref2.sizeBytes, elapsedMs, redactions: redaction?.applied }) + "\n");
     const step = await nextStep2(analysis, flags);
     process.stderr.write(reportFooter(err2, { path, opened, step }).join("\n") + "\n");
   }
   thresholdExit(analysis, flags);
 }
 async function cmdAnalyze(sel, flags) {
-  const ref = await selectSession2(sel, flags);
-  const { analysis, elapsedMs } = await analyzeWithProgress(ref, flags);
+  const ref2 = await selectSession2(sel, flags);
+  const { analysis, elapsedMs } = await analyzeWithProgress(ref2, flags);
   if (flagBool(flags, "json")) {
     emitAnalysisJson(analysis, flags);
     thresholdExit(analysis, flags);
@@ -16503,7 +16953,7 @@ async function cmdAnalyze(sel, flags) {
   }
   process.stdout.write(analysisBlock(out2, analysis, displayTitle(analysis, flags)).join("\n") + "\n");
   if (!flagBool(flags, "quiet")) {
-    process.stderr.write(doneLine(err2, { sizeBytes: ref.sizeBytes, elapsedMs }) + "\n");
+    process.stderr.write(doneLine(err2, { sizeBytes: ref2.sizeBytes, elapsedMs }) + "\n");
     const step = await nextStep2(analysis, flags);
     process.stderr.write(nextStepLines(err2, step).join("\n") + "\n");
     offerBetaFeedback("session");
@@ -16511,8 +16961,8 @@ async function cmdAnalyze(sel, flags) {
   thresholdExit(analysis, flags);
 }
 async function cmdBrief(flags) {
-  const ref = await selectSession2(void 0, flags);
-  const { analysis } = await analyzeWithProgress(ref, flags);
+  const ref2 = await selectSession2(void 0, flags);
+  const { analysis } = await analyzeWithProgress(ref2, flags);
   const step = await nextStep2(analysis, flags);
   process.stdout.write(briefBlock(out2, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, "quiet") }).join("\n") + "\n");
   thresholdExit(analysis, flags);
@@ -16617,7 +17067,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION2, now: Date.now(), cacheEnabled });
     analyses = r.analyses;
     failed = r.failed;
-    sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
+    sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref2) => n2 + ref2.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
     progress = void 0;
     if (!flagBool(flags, "quiet") && flagBool(flags, "verbose")) {
       process.stderr.write(row(err2, "jobs", String(r.workers), { style: "dim" }) + "\n");
@@ -16625,14 +17075,14 @@ async function cmdAggregate(scope, selOrPath, flags) {
     }
   } else {
     const cache2 = makeCache(flags);
-    for (const ref of use) {
+    for (const ref2 of use) {
       try {
-        analyses.push(await analyzeRef(ref, flags, cache2));
+        analyses.push(await analyzeRef(ref2, flags, cache2));
       } catch {
         failed++;
       }
     }
-    sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref) => n2 + ref.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
+    sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref2) => n2 + ref2.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
     progress = void 0;
     printCacheStats(cache2, flags);
   }
@@ -16822,8 +17272,8 @@ async function main() {
     case "all":
       return cmdAggregate("global", sel, flags);
     case "watch": {
-      const ref = await selectSession2(sel, flags);
-      return watchSession(ref, flags, { version: VERSION2, openInBrowser: openHtmlFile, outPath: (id) => outPath(flags, id) });
+      const ref2 = await selectSession2(sel, flags);
+      return watchSession(ref2, flags, { version: VERSION2, openInBrowser: openHtmlFile, outPath: (id) => outPath(flags, id) });
     }
     case "serve":
       return cmdServe(flags);

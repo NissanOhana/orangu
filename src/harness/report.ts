@@ -14,6 +14,7 @@ import type { Analysis } from '../model/analysis.js'
 import type { Aggregate } from '../analyze/aggregate.js'
 import { crosswalk, hasPrimaryView } from './crosswalk.js'
 import { computeRetention, type RetentionSessionRef } from './retention.js'
+import { buildEnforcement } from './enforcement.js'
 import { HARNESS_SCHEMA_VERSION } from './types.js'
 import type { HarnessCrosswalk, HarnessInventory, HarnessReport, HarnessRetention } from './types.js'
 
@@ -42,6 +43,10 @@ export interface BuildHarnessReportOptions {
    * is a fact about the disk, not about how many sessions this run chose to analyze.
    */
   sessions: RetentionSessionRef[]
+  /** the content words of the instruction files and memory notes in scope (CollectOptions.instructionWords) */
+  instructionWords?: ReadonlySet<string>
+  /** keep the prompt text of each enforcement example (`--include-text`) */
+  includeText?: boolean
 }
 
 /** `1 session` / `2 sessions`: the one plural helper the harness surfaces share (src/cli/commands/harness.ts too) */
@@ -136,6 +141,12 @@ export function buildHarnessReport(inv: HarnessInventory, analyses: Analysis[], 
     inventory: inv,
     crosswalk: x,
     retention,
+    enforcement: buildEnforcement(analyses, {
+      memoryIndexes: inv.memoryIndexes,
+      ...(o.instructionWords ? { instructionWords: o.instructionWords } : {}),
+      ...(o.includeText ? { includeText: true } : {}),
+      norm: rel,
+    }),
     notes: buildNotes(inv, x, retention, analyses.length, sessionsUnreadable, unsplitAnalyses),
   }
 }

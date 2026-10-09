@@ -15,8 +15,13 @@
  * Versioned independently of `ANALYSIS_SCHEMA_VERSION`: this is its own contract, and `Analysis` is untouched.
  */
 
-/** 2 (2026-09-14): listing rows split main vs subagent and name their population; hook rows may be event-only */
-export const HARNESS_SCHEMA_VERSION = '2'
+/**
+ * 2 (2026-09-14): listing rows split main vs subagent and name their population; hook rows may be event-only
+ * 3 (2026-10-09): the `enforcement` section (rules in context against the calls that broke them, notes against the
+ *   complaints after them, memory indexes against their load limit, recurring complaint words) and
+ *   `inventory.memoryIndexes`
+ */
+export const HARNESS_SCHEMA_VERSION = '3'
 
 /** every `crosswalk` array is bounded to this many rows, after an explicit sort */
 export const HARNESS_ROW_CAP = 50
@@ -51,6 +56,21 @@ export interface HarnessMemoryFile {
   approxTokens: number
   lines: number
   headings: number
+}
+
+/**
+ * An auto-memory index (`<config>/projects/<slug>/memory/MEMORY.md`). Claude Code loads the first 200 lines or the
+ * first 25,000 bytes at session start, whichever comes first, and drops the rest: the newest entries, at the end.
+ */
+export interface HarnessMemoryIndexFile {
+  file: string
+  bytes: number
+  approxTokens: number
+  lines: number
+  /** lines that the next session will not load; 0 when the file fits */
+  linesPastLimit: number
+  /** 1-based line where the cut starts; absent when the file fits */
+  firstLinePastLimit?: number
 }
 
 export interface HarnessHookConfig {
@@ -167,6 +187,8 @@ export interface HarnessUnreadableEntry {
 /** Stable inventory contract. Add fields deliberately because consumers serialize this shape. */
 export interface HarnessInventory {
   claudeMd: HarnessMemoryFile[]
+  /** the memory indexes in scope: the cwd's project (repo) or every project (global), plus each one a scanned session loaded */
+  memoryIndexes: HarnessMemoryIndexFile[]
   settings: HarnessSettingsFile[]
   skills: HarnessSkillEntry[]
   agents: HarnessAgentEntry[]
@@ -384,7 +406,146 @@ export interface HarnessRetention {
   pastCutoff: { sessions: number; bytes: number }
 }
 
-/** Seven top-level keys. `generator.generatedAt` is the injected `now`, never a clock read. */
+// ---------------------------------------------------------------------------------------------------------
+// enforcement: what the instruction files and notes said, against what the sessions did
+// ---------------------------------------------------------------------------------------------------------
+
+/** an example the skill can open with `orangu analyze <sessionId>`; `preview` only under --include-text */
+export interface HarnessPromptRef {
+  sessionId: string
+  turnIndex: number
+  at?: number
+  preview?: string
+}
+
+/**
+ * A "do not" rule that was in the main context of a session, summed over the sessions that had it there.
+ * In context means: in a file Claude Code loaded at start (the transcript records the list), counted from the
+ * moment the session saw it, or in a note the session wrote, counted from the write. The rule identity is its
+ * text and target, so the same line in a worktree copy of CLAUDE.md is one rule.
+ */
+export interface HarnessRuleRow {
+  /** the shortest path the rule was seen in (the main checkout, not a worktree copy) */
+  file: string
+  /** how many distinct files carried the same line */
+  files: number
+  line: number
+  /** the whole instruction line, trimmed and scrubbed */
+  text: string
+  target: { kind: 'command' | 'flag' | 'tool' | 'mcp-server'; name: string }
+  /** sessions that had the rule in context */
+  sessionsInContext: number
+  /** of those, sessions with at least one matching call */
+  sessionsBroken: number
+  /** calls that matched the target after the rule entered the context: each one is a try to break the rule */
+  calls: number
+  /** the part of `calls` that subagents made */
+  agentCalls: number
+  /** the part of `calls` that a hook or a permission rule stopped: there a check held where the line did not */
+  blocked: number
+  /** up to 3 matches: a runner and the target, a program and a flag, or a tool name */
+  examples: string[]
+  /** up to 3 sessions, the most calls first */
+  exampleSessionIds: string[]
+  /** the start of the latest session that broke the rule */
+  lastBrokenAt?: number
+}
+
+/**
+ * A feedback note that a session wrote, and the complaints after it. A feedback note is a memory note of type
+ * `feedback` (or a `feedback_*.md` file), or any note (memory, CLAUDE.md, AGENTS.md, .claude/rules) written within
+ * 3 turns after a complaint: "the agent agreed and saved a note".
+ */
+export interface HarnessNoteRow {
+  file: string
+  kind: 'memory' | 'memory-index' | 'claude-md' | 'agents-md' | 'rules'
+  noteType?: string
+  /** the complaint just before the first write, when there was one */
+  trigger?: HarnessPromptRef
+  /** the first write in the window */
+  writtenAt?: number
+  writtenBy: string
+  writes: number
+  /** sessions of the same project that started after the first write, plus the writer's own remaining turns */
+  sessionsAfter: number
+  /** complaint prompts after the first write, in those sessions */
+  complaintsAfter: number
+  /** of those, the complaints that share rare content words with the note or its trigger: 1 after a trigger, else 2 */
+  matchingComplaints: number
+  /** ms from the first write to the first matching complaint */
+  firstMatchAfterMs?: number
+  /** the shared words, most frequent first */
+  sharedWords: string[]
+  /** up to 3 matching complaints */
+  examples: HarnessPromptRef[]
+}
+
+/** an auto-memory index against its load limit, now and in the sessions */
+export interface HarnessMemoryLoadRow {
+  file: string
+  /** the file now; absent when it is gone */
+  lines?: number
+  bytes?: number
+  linesPastLimit?: number
+  firstLinePastLimit?: number
+  /** sessions whose transcript says they loaded this index */
+  sessionsLoaded: number
+  /** sessions where Claude Code said it did not load all of it */
+  sessionsCut: number
+  maxLinesCut: number
+  lastCutAt?: number
+}
+
+/** a content word that recurs in complaint prompts */
+export interface HarnessComplaintRow {
+  word: string
+  prompts: number
+  sessions: number
+  firstAt?: number
+  lastAt?: number
+  /** an instruction file or memory note in scope already uses this word: a note exists and the complaint came back */
+  inInstructions: boolean
+  examples: HarnessPromptRef[]
+}
+
+export interface HarnessEnforcementCounts {
+  /** sessions whose transcript lists the instruction files they loaded; older transcripts do not */
+  sessionsWithRecord: number
+  /** distinct rules with a target that at least one session had in context */
+  rulesInContext: number
+  /** of those, rules with at least one matching call */
+  rulesBroken: number
+  /** of the broken rules, the ones where a hook or a permission rule stopped every matching call */
+  rulesEnforced: number
+  /** distinct note files that the sessions wrote */
+  notesWritten: number
+  /** of those, the feedback notes (see HarnessNoteRow) */
+  feedbackNotes: number
+  /** feedback notes with at least one matching complaint after them */
+  notesFollowedByComplaint: number
+  /** complaint prompts in the scanned sessions */
+  complaints: number
+  /** memory indexes cut in a session or past the limit now */
+  memoryIndexesCut: number
+}
+
+/**
+ * Where a rule did not hold. This layer measures and recommends nothing: the harness skill turns a broken rule, a
+ * note followed by the same complaint, or a cut memory index into a check (a hook or a permission rule).
+ * Arrays are sorted, then capped at `HARNESS_ROW_CAP`; `counts` are taken before the cap.
+ */
+export interface HarnessEnforcement {
+  counts: HarnessEnforcementCounts
+  /** rules with at least one matching call, the most calls first */
+  broken: HarnessRuleRow[]
+  /** the feedback notes written in the window, the most matching complaints first */
+  notes: HarnessNoteRow[]
+  memory: HarnessMemoryLoadRow[]
+  /** words in complaint prompts of 2 or more sessions, the most sessions first */
+  complaints: HarnessComplaintRow[]
+}
+
+/** Eight top-level keys. `generator.generatedAt` is the injected `now`, never a clock read. */
 export interface HarnessReport {
   schemaVersion: string
   generator: { name: string; version: string; generatedAt: number }
@@ -393,6 +554,8 @@ export interface HarnessReport {
   crosswalk: HarnessCrosswalk
   /** what the configured cleanup window will delete out from under the crosswalk above */
   retention: HarnessRetention
+  /** where an instruction or a note did not hold */
+  enforcement: HarnessEnforcement
   /** drift and skip notes, human-readable. A note is how this layer reports a miss instead of throwing. */
   notes: string[]
 }

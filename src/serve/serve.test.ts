@@ -327,7 +327,7 @@ describe('orangu serve (in-process e2e)', () => {
       const r = await fetch(url + '/api/harness')
       return r.status === 200 ? ((await r.json()) as { schemaVersion: string; scope: { sessionsScanned: number; roots: string[]; global: boolean }; crosswalk: { injectedListings: unknown[] }; notes: string[] }) : undefined
     })
-    expect(report.schemaVersion).toBe('2')
+    expect(report.schemaVersion).toBe('3')
     expect(report.scope.sessionsScanned).toBe(3)
     // no --cwd: the registry holds every session under the scanned root, so the scope says global
     expect(report.scope.global).toBe(true)
