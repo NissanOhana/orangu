@@ -1,9 +1,14 @@
 /**
- * The deliver plan: turns what the person confirmed and a fresh screen of the target tab into the cmux argv lists
- * to run in order, or into exactly 1 refusal. It runs no command and reads no clock: the plan time and the screen
- * time come in as values, and the executor runs the lists.
+ * The deliver plan: turns what the person confirmed, a fresh screen of the target tab and the state of the target
+ * session into the cmux argv lists to run in order, or into exactly 1 refusal. It runs no command and reads no
+ * clock: the plan time and the screen time come in as values, and the executor runs the lists.
  *
  * Every rule fails closed:
+ * - the state comes from the registry and the transcript, which a session cannot draw on its screen. An answer
+ *   needs a session that waits for input on the same open question (1 question, 1 selection, the same header,
+ *   question and label at the digit). A permission answer needs a session that waits on a permission prompt. A
+ *   prompt needs an idle session with no open question. So a busy session that prints a dialog or an input box
+ *   gets no key;
  * - the screen must be of the target session, from a tab whose refs are plain tokens, read 1 s or less before the
  *   plan;
  * - an answer is the option digit alone, with no Enter, and only when the screen still shows the confirmed header,
@@ -11,13 +16,14 @@
  * - a permission answer is the digit of the option labeled exactly Yes or exactly No, on a dialog that shows the
  *   confirmed shell command;
  * - a prompt is 1 `cmux send` for each line, `shift+enter` between the lines and `enter` at the end, only on an
- *   empty prompt row with no dialog on the screen. Its text may hold no control character but the newline, and no
- *   backslash right before n, r or t: cmux types those 2 characters as Enter or Tab, and has no escape for them.
+ *   empty prompt row with no dialog on the screen. Its text must hold a visible character, no control character
+ *   but the newline, and no backslash right before n, r or t in either case: cmux types the lowercase pairs as
+ *   Enter or Tab and has no escape for them, and the uppercase pairs are not tested.
  * Each argv names the workspace and the surface, and puts `--` right before the text or the key, so a text that
  * looks like a flag stays text. A peer message has no keys: the engine sends it, and this plan refuses it.
  */
 import { matchAnswer, matchPermission, matchPrompt, readScreen, type ScreenMatch } from '../model/screen-match.js'
-import type { DeliverIntent, DeliverPlan, DeliverRefusal, ScreenRead } from '../types.js'
+import type { DeliverIntent, DeliverPlan, DeliverRefusal, ScreenRead, SessionFacts, TranscriptFacts } from '../types.js'
 
 /** A screen read older than this, at the plan time, is stale. */
 export const SCREEN_MAX_AGE_MS = 1000
@@ -25,19 +31,41 @@ export const SCREEN_MAX_AGE_MS = 1000
 /** The intents that go out as keys: every intent but the peer message. */
 export type KeyIntent = Exclude<DeliverIntent, { kind: 'peer' }>
 
+/**
+ * The state of the target session at the plan time: its registry status and wait, and the open question of its
+ * transcript. A SessionFacts or a GodSession of the target fits it.
+ */
+export type TargetFacts = Pick<SessionFacts, 'sessionId' | 'status' | 'waitingFor'> & { transcript?: Pick<TranscriptFacts, 'openQuestion'> }
+
+/** a text with no visible character: white space, format characters and the other characters that draw nothing */
+const BLANK = /^[\p{White_Space}\p{Cf}\p{Default_Ignorable_Code_Point}]*$/u
 /** C0 but the newline, DEL and C1: a control character that a terminal reads as a key or a sequence */
 const CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/
-/** a backslash right before n, r or t: cmux send types it as Enter or Tab */
-const BACKSLASH_ESCAPE = /\\[nrt]/
+/** a backslash right before n, r or t, in either case: cmux send types the lowercase pairs as Enter or Tab */
+const BACKSLASH_ESCAPE = /\\[nrtNRT]/
 /** a cmux workspace or surface ref (`workspace:2`, `surface:3`): a plain token that cannot read as a flag */
 const REF = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,127}$/
 
 /** Why a prompt text cannot go out as typed keys, or undefined when it can. */
 export function textRefusal(text: string): DeliverRefusal | undefined {
-  if (/^[\s]*$/.test(text)) return 'empty'
+  if (BLANK.test(text)) return 'empty'
   if (CONTROL_CHAR.test(text)) return 'control-char'
   if (BACKSLASH_ESCAPE.test(text)) return 'backslash-escape'
   return undefined
+}
+
+/** Why the state of the target session does not take the intent, or undefined when it does. */
+function stateRefusal(intent: KeyIntent, facts: TargetFacts): DeliverRefusal | undefined {
+  if (facts.sessionId !== intent.target.sessionId) return 'screen-changed'
+  const open = facts.transcript?.openQuestion
+  if (intent.kind === 'prompt') return facts.status === 'idle' && facts.waitingFor === undefined && open === undefined ? undefined : 'screen-changed'
+  if (intent.kind === 'permission') return facts.status === 'waiting' && facts.waitingFor === 'permission prompt' ? undefined : 'screen-changed'
+  if (facts.status !== 'waiting' || facts.waitingFor !== 'input needed' || !open || open.toolUseId !== intent.toolUseId) return 'screen-changed'
+  const [question, ...more] = open.questions
+  if (!question) return 'screen-changed'
+  if (more.length > 0 || question.multiSelect) return 'multi-question'
+  const sameOption = question.options[intent.option - 1]?.label === intent.label
+  return question.header === intent.header && question.text === intent.question && sameOption ? undefined : 'screen-changed'
 }
 
 const refuse = (refusal: DeliverRefusal): DeliverPlan => ({ kind: 'refuse', refusal })
@@ -58,16 +86,19 @@ function promptSteps(text: string, screen: ScreenRead): (readonly string[])[] {
 }
 
 /**
- * The plan of 1 confirmed intent on 1 fresh screen read, made at `now` (engine time, in ms). The text checks of a
- * prompt come first, then the tab refs, the session and the age of the read, then the match of the screen.
+ * The plan of 1 confirmed intent on 1 fresh screen read and the state of the target, made at `now` (engine time, in
+ * ms). The text checks of a prompt come first, then the tab refs, the session of the read, the state of the
+ * session, the age of the read, then the match of the screen.
  */
-export function planDelivery(intent: KeyIntent, screen: ScreenRead, now: number): DeliverPlan {
+export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, now: number): DeliverPlan {
   if (intent.kind === 'prompt') {
     const refusal = textRefusal(intent.text)
     if (refusal) return refuse(refusal)
   }
   if (!REF.test(screen.workspaceRef) || !REF.test(screen.surfaceRef)) return refuse('no-tab')
   if (screen.sessionId !== intent.target.sessionId) return refuse('screen-changed')
+  const stateRefused = stateRefusal(intent, facts)
+  if (stateRefused) return refuse(stateRefused)
   const age = now - screen.readAt
   if (!(age >= 0 && age <= SCREEN_MAX_AGE_MS)) return refuse('stale-screen')
   const view = readScreen(screen.text)
