@@ -2120,8 +2120,8 @@ var SAFE_EVENT_KINDS = /* @__PURE__ */ new Set(["interrupt", "pr_link", "plan_mo
 function isSafeEventRecord(obj3) {
   return "kind" in obj3 && "turnIndex" in obj3 && "label" in obj3 && SAFE_EVENT_KINDS.has(String(obj3["kind"]));
 }
-function isTextRuleTarget(obj2) {
-  return Object.keys(obj2).length === 2 && "name" in obj2 && (obj2["kind"] === "command" || obj2["kind"] === "flag");
+function isTextRuleTarget(obj3) {
+  return Object.keys(obj3).length === 2 && "name" in obj3 && (obj3["kind"] === "command" || obj3["kind"] === "flag");
 }
 function stripsText(key, source) {
   switch (key) {
@@ -2910,14 +2910,14 @@ function buildSession(files2, mainPath, keepText, t0) {
           meta.truncatedReads++;
         } else if (at === "instructions" && !isSub && !bool(r["isSidechain"])) {
           for (const f2 of arr(a?.["files"]) ?? []) {
-            const file = obj(f2);
-            const path = str(file?.["path"]);
-            const content2 = str(file?.["content"]);
+            const file = obj2(f2);
+            const path = str2(file?.["path"]);
+            const content2 = str2(file?.["content"]);
             if (!path || content2 === void 0) continue;
             const key = path + "\0" + content2;
             if (instructionSeen.has(key)) continue;
             instructionSeen.add(key);
-            instructionFiles.push({ path, type: str(file?.["type"]) ?? "unknown", content: content2, ts: t });
+            instructionFiles.push({ path, type: str2(file?.["type"]) ?? "unknown", content: content2, ts: t });
           }
         } else if (at === "deferred_tools_delta") {
           for (const key of ["addedNames", "readdedNames"]) for (const n2 of arr(a?.[key]) ?? []) if (typeof n2 === "string") deferredToolNames.add(n2);
