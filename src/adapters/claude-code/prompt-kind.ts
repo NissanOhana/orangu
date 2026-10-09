@@ -48,8 +48,14 @@ export function classifyPrompt(r: JsonObject, text: string, isMeta: boolean): Pr
 }
 
 /**
- * The session title: the custom title, else the AI title, else the first prompt preview. `firstCommandName` is
- * the command name of the first turn. Only a missing value falls through, so an empty title stays empty.
+ * The session title: the custom title, else the AI title, else the first prompt preview. Only a missing value
+ * falls through, so an empty title stays empty.
+ *
+ * Every caller gives the same 2 last values, so the report and the god pane show the same title:
+ * - `firstPromptPreview` is `firstHumanPromptPreview ?? firstTurnPreview`: the preview of the first prompt that
+ *   classifyPrompt calls `human`, else the preview of the first turn (a command, a peer message or a scheduled
+ *   prompt). parse.ts gives `firstPromptPreview ?? turns[0]?.promptPreview`;
+ * - `firstCommandName` is the command name of the first turn.
  */
 export function sessionTitle(customTitle: string | undefined, aiTitle: string | undefined, firstPromptPreview: string | undefined, firstCommandName: string | undefined): string | undefined {
   const rawTitle = customTitle ?? aiTitle ?? firstPromptPreview
