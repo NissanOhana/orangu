@@ -8,15 +8,28 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import type { QuestionOption } from '../types.js'
 import { matchAnswer, matchPermission, matchPrompt, readScreen, type QuestionDialog } from './screen-match.js'
 
 const SCREENS = join(dirname(fileURLToPath(import.meta.url)), '../../../test/fixtures/god/screens')
 const fixture = (name: string): string => readFileSync(join(SCREENS, `${name}.txt`), 'utf8')
 const view = (name: string) => readScreen(fixture(name))
 
-/** the answer that the person confirmed on the base question fixture */
-const RED = { header: 'Color', question: 'Which color should the button use?', option: 1, label: 'Red' }
+/** the options of the open question of the base question fixture, as the transcript gives them */
+const OPTIONS: readonly QuestionOption[] = [
+  { label: 'Red', description: 'A warm color for the main action.' },
+  { label: 'Green', description: 'A calm color that means go.' },
+  { label: 'Blue', description: 'A cool color that fits the brand.' },
+]
+/** the answer that the person confirmed on the base question fixture, with the options of the open question */
+const RED = { header: 'Color', question: 'Which color should the button use?', option: 1, label: 'Red', options: OPTIONS }
 const GREEN = { ...RED, option: 2, label: 'Green' }
+/** The confirmed answer at digit 1 with another first option: its label, and its description (null for none). */
+const firstOption = (label: string, description: string | null = OPTIONS[0]?.description ?? null): typeof RED => ({
+  ...RED,
+  label,
+  options: [{ label, ...(description === null ? {} : { description }) }, ...OPTIONS.slice(1)],
+})
 /** the permission that the person confirmed on the permission fixtures */
 const bash = (command: string, description = 'Make an empty probe file') => ({ tool: 'Bash', input: JSON.stringify({ command, description }) })
 const TOUCH = bash('touch probe-yes.txt')
@@ -160,8 +173,9 @@ describe('matchAnswer', () => {
 
   it('refuses a label row whose next row can be the rest of the label, on a narrow screen', () => {
     const wrapped = narrow(edit('question', '     A warm color for the main action.', '     wine'), 14)
-    expect(matchAnswer(readScreen(wrapped), RED)).toEqual(CHANGED)
-    expect(matchAnswer(readScreen(narrow(fixture('question'), 40)), RED)).toEqual({ isMatch: true, digit: 1 })
+    expect(matchAnswer(readScreen(wrapped), firstOption('Red', 'wine'))).toEqual(CHANGED)
+    expect(matchAnswer(readScreen(narrow(fixture('question'), 14)), RED)).toEqual(CHANGED)
+    expect(matchAnswer(readScreen(narrow(fixture('question'), 46)), RED)).toEqual({ isMatch: true, digit: 1 })
   })
 
   it('refuses a label row with a row under it when the screen has no rule to give its width', () => {
@@ -170,10 +184,10 @@ describe('matchAnswer', () => {
 
   it('refuses a label of unknown width with a row under it, and measures a wide label as 2 columns', () => {
     const emoji = readScreen(edit('question', '❯ 1. Red', '❯ 1. Red 🔴'))
-    expect(matchAnswer(emoji, { ...RED, label: 'Red 🔴' })).toEqual(CHANGED)
+    expect(matchAnswer(emoji, firstOption('Red 🔴'))).toEqual(CHANGED)
     const wide = readScreen(edit('question', '❯ 1. Red', '❯ 1. 赤'))
-    expect(matchAnswer(wide, { ...RED, label: '赤' })).toEqual({ isMatch: true, digit: 1 })
-    expect(matchAnswer(readScreen(narrow(edit('question', '❯ 1. Red', '❯ 1. 赤赤'), 15)), { ...RED, label: '赤赤' })).toEqual(CHANGED)
+    expect(matchAnswer(wide, firstOption('赤'))).toEqual({ isMatch: true, digit: 1 })
+    expect(matchAnswer(readScreen(narrow(edit('question', '❯ 1. Red', '❯ 1. 赤赤'), 15)), firstOption('赤赤'))).toEqual(CHANGED)
   })
 
   it('gives multi-question for 2 questions and for a multi select, by the tabs or by the missing period alone', () => {
@@ -186,8 +200,9 @@ describe('matchAnswer', () => {
   })
 
   it('refuses a screen with 2 dialogs, a quoted dialog above the prompt, and a permission dialog', () => {
-    expect(matchAnswer(view('two-dialogs'), RED)).toEqual(CHANGED)
-    expect(matchAnswer(view('dialog-above-prompt'), RED)).toEqual(CHANGED)
+    const twoOptions = { ...RED, options: OPTIONS.slice(0, 2) }
+    expect(matchAnswer(view('two-dialogs'), twoOptions)).toEqual(CHANGED)
+    expect(matchAnswer(view('dialog-above-prompt'), twoOptions)).toEqual(CHANGED)
     expect(matchAnswer(view('permission'), RED)).toEqual(CHANGED)
     expect(matchAnswer(view('prompt-empty'), RED)).toEqual(CHANGED)
   })
@@ -197,6 +212,41 @@ describe('matchAnswer', () => {
     expect(matchAnswer(readScreen(`${fixture('question')}  6. Red\n`), RED)).toEqual(CHANGED)
     expect(matchPermission(readScreen(`${fixture('permission')}❯ 1. Yes\n  2. No\n`), { ...TOUCH, choice: 'yes' })).toEqual(CHANGED)
     expect(matchPermission(readScreen(`${fixture('permission')}  5. Yes\n`), { ...TOUCH, choice: 'yes' })).toEqual(CHANGED)
+  })
+})
+
+describe('matchAnswer: each option against the open question', () => {
+  it('refuses a description that changed under the same header, question and label', () => {
+    expect(matchAnswer(readScreen(edit('question', '     A warm color for the main action.', '     A warm color for production.')), RED)).toEqual(CHANGED)
+    expect(matchAnswer(readScreen(edit('question', '     A cool color that fits the brand.', '     A cool color for the old brand.')), RED)).toEqual(CHANGED)
+  })
+
+  it('refuses another option count and another label at another digit', () => {
+    expect(matchAnswer(view('question'), { ...RED, options: OPTIONS.slice(0, 2) })).toEqual(CHANGED)
+    expect(matchAnswer(view('question'), { ...RED, options: [...OPTIONS, { label: 'Black', description: 'A dark color.' }] })).toEqual(CHANGED)
+    expect(matchAnswer(view('question'), { ...RED, options: [...OPTIONS.slice(0, 2), { label: 'Navy', description: 'A cool color that fits the brand.' }] })).toEqual(CHANGED)
+  })
+
+  it('refuses when another option than the confirmed one can wrap its label', () => {
+    const calming = edit('question', '     A calm color that means go.', '     Calming color that means go.')
+    const options = [OPTIONS[0], { label: 'Green', description: 'Calming color that means go.' }, OPTIONS[2]].filter((option): option is QuestionOption => option !== undefined)
+    expect(matchAnswer(readScreen(narrow(calming, 20)), { ...RED, options })).toEqual(CHANGED)
+    expect(matchAnswer(readScreen(narrow(calming, 40)), { ...RED, options })).toEqual({ isMatch: true, digit: 1 })
+  })
+
+  it('refuses a description that wraps to 2 rows, even when its rows join to the same text', () => {
+    const wrapped = edit('question', '     A warm color for the main action.', '     A warm color for\n     the main action.')
+    expect(matchAnswer(readScreen(wrapped), RED)).toEqual(CHANGED)
+  })
+
+  it('refuses a description on the screen that the open question does not have, and the reverse', () => {
+    expect(matchAnswer(view('question'), firstOption('Red', null))).toEqual(CHANGED)
+    expect(matchAnswer(readScreen(fixture('question').replace('     A warm color for the main action.\n', '')), RED)).toEqual(CHANGED)
+  })
+
+  it('compares each description as it is: no trim of the confirmed text, and a no-break space at the end stays', () => {
+    expect(matchAnswer(view('question'), firstOption('Red', 'A warm color for the main action. '))).toEqual(CHANGED)
+    expect(matchAnswer(readScreen(edit('question', '     A warm color for the main action.', `     A warm color for the main action.${String.fromCodePoint(0xa0)}`)), RED)).toEqual(CHANGED)
   })
 })
 

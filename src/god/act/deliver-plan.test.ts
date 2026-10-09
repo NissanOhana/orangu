@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { DeliverIntent, DeliverPlan, DeliverRefusal, OpenQuestion, ScreenRead } from '../types.js'
-import { SCREEN_MAX_AGE_MS, planDelivery, textRefusal, type KeyIntent, type TargetFacts } from './deliver-plan.js'
+import { FACTS_MAX_LAG_MS, SCREEN_MAX_AGE_MS, planDelivery, textRefusal, type KeyIntent, type TargetFacts } from './deliver-plan.js'
 
 const SCREENS = join(dirname(fileURLToPath(import.meta.url)), '../../../test/fixtures/god/screens')
 const fixture = (name: string): string => readFileSync(join(SCREENS, `${name}.txt`), 'utf8')
@@ -40,13 +40,19 @@ const QUESTION: OpenQuestion = {
       text: 'Which color should the button use?',
       header: 'Color',
       multiSelect: false,
-      options: [{ label: 'Red' }, { label: 'Green' }, { label: 'Blue' }],
+      options: [
+        { label: 'Red', description: 'A warm color for the main action.' },
+        { label: 'Green', description: 'A calm color that means go.' },
+        { label: 'Blue', description: 'A cool color that fits the brand.' },
+      ],
     },
   ],
 }
 
+/** The state of a test: TargetFacts whose read time defaults to 100 ms before the screen read. */
+type State = Omit<TargetFacts, 'factsAt'> & { factsAt?: number }
 /** The state of the target: idle with no open question, with the given fields over it. */
-const facts = (over: Partial<TargetFacts> = {}): TargetFacts => ({ sessionId: TARGET.sessionId, status: 'idle', ...over })
+const facts = (over: Partial<State> = {}): State => ({ sessionId: TARGET.sessionId, status: 'idle', ...over })
 const ASKS = facts({ status: 'waiting', waitingFor: 'input needed', transcript: { openQuestion: QUESTION } })
 const ASKS_PERMISSION = facts({ status: 'waiting', waitingFor: 'permission prompt' })
 const IDLE = facts()
@@ -57,8 +63,9 @@ const permission = (choice: 'yes' | 'no'): KeyIntent => ({ kind: 'permission', t
 const prompt = (text: string): KeyIntent => ({ kind: 'prompt', target: TARGET, text })
 
 /** The plan with the state that the intent needs, unless a test gives another one. */
-const stateFor = (intent: KeyIntent): TargetFacts => (intent.kind === 'answer' ? ASKS : intent.kind === 'permission' ? ASKS_PERMISSION : IDLE)
-const plan = (intent: KeyIntent, read: ScreenRead, state: TargetFacts = stateFor(intent)): DeliverPlan => planDelivery(intent, read, state, NOW)
+const stateFor = (intent: KeyIntent): State => (intent.kind === 'answer' ? ASKS : intent.kind === 'permission' ? ASKS_PERMISSION : IDLE)
+const plan = (intent: KeyIntent, read: ScreenRead, state: State = stateFor(intent)): DeliverPlan =>
+  planDelivery(intent, read, { ...state, factsAt: state.factsAt ?? read.readAt - 100 }, NOW)
 
 const sendText = (text: string): string[] => ['cmux', 'send', '--workspace', WS, '--surface', SURFACE, '--', text]
 const sendKey = (key: string): string[] => ['cmux', 'send-key', '--workspace', WS, '--surface', SURFACE, '--', key]
@@ -169,7 +176,7 @@ describe('planDelivery: the state of the target session, which its screen cannot
   it('refuses an answer whose header, question or label at the digit is not the open question', () => {
     const [first] = QUESTION.questions
     if (!first) throw new Error('QUESTION has a question')
-    const asks = (over: Partial<typeof first>): TargetFacts => facts({ status: 'waiting', waitingFor: 'input needed', transcript: { openQuestion: { ...QUESTION, questions: [{ ...first, ...over }] } } })
+    const asks = (over: Partial<typeof first>): State => facts({ status: 'waiting', waitingFor: 'input needed', transcript: { openQuestion: { ...QUESTION, questions: [{ ...first, ...over }] } } })
     expect(plan(ANSWER, screen('question'), asks({ header: 'Colour' }))).toEqual(CHANGED)
     expect(plan(ANSWER, screen('question'), asks({ text: 'Which color should the banner use?' }))).toEqual(CHANGED)
     expect(plan(ANSWER, screen('question'), asks({ options: [{ label: 'Green' }, { label: 'Red' }] }))).toEqual(CHANGED)
@@ -179,7 +186,7 @@ describe('planDelivery: the state of the target session, which its screen cannot
   it('gives multi-question when the open question has 2 questions or takes more than 1 selection, and refuses 0 questions', () => {
     const [first] = QUESTION.questions
     if (!first) throw new Error('QUESTION has a question')
-    const asks = (questions: OpenQuestion['questions']): TargetFacts => facts({ status: 'waiting', waitingFor: 'input needed', transcript: { openQuestion: { ...QUESTION, questions } } })
+    const asks = (questions: OpenQuestion['questions']): State => facts({ status: 'waiting', waitingFor: 'input needed', transcript: { openQuestion: { ...QUESTION, questions } } })
     expect(plan(ANSWER, screen('question'), asks([first, { ...first, header: 'Size' }]))).toEqual(refused('multi-question'))
     expect(plan(ANSWER, screen('question'), asks([{ ...first, multiSelect: true }]))).toEqual(refused('multi-question'))
     expect(plan(ANSWER, screen('question'), asks([]))).toEqual(CHANGED)
@@ -194,6 +201,52 @@ describe('planDelivery: the state of the target session, which its screen cannot
   it('refuses the state of another session', () => {
     expect(plan(ANSWER, screen('question'), { ...ASKS, sessionId: 'session-other' })).toEqual(CHANGED)
     expect(plan(prompt('hi'), screen('prompt-empty'), { ...IDLE, sessionId: 'session-other' })).toEqual(CHANGED)
+  })
+})
+
+describe('planDelivery: the age of the state against the screen read', () => {
+  it('takes facts read up to 1 s before the screen read, and refuses older facts, facts read after it and no time', () => {
+    const read = screen('question')
+    expect(plan(ANSWER, read, { ...ASKS, factsAt: read.readAt - FACTS_MAX_LAG_MS }).kind).toBe('send')
+    expect(plan(ANSWER, read, { ...ASKS, factsAt: read.readAt - FACTS_MAX_LAG_MS - 1 })).toEqual(refused('stale-screen'))
+    expect(plan(ANSWER, read, { ...ASKS, factsAt: read.readAt + 1 })).toEqual(refused('stale-screen'))
+    expect(plan(ANSWER, read, { ...ASKS, factsAt: Number.NaN })).toEqual(refused('stale-screen'))
+    expect(plan(prompt('hi'), screen('prompt-empty'), { ...IDLE, factsAt: NOW - 200 - FACTS_MAX_LAG_MS - 1 })).toEqual(refused('stale-screen'))
+  })
+})
+
+describe('planDelivery: a question that the model asks again', () => {
+  /** the Deploy question that the person confirmed, and the one that the model asks again within 2 s */
+  const deploy = (toolUseId: string, description: string): OpenQuestion => ({
+    toolUseId,
+    questions: [
+      {
+        text: 'Deploy the build now?',
+        header: 'Deploy',
+        multiSelect: false,
+        options: [
+          { label: 'Yes', description },
+          { label: 'No', description: 'Keep the build where it is.' },
+        ],
+      },
+    ],
+  })
+  const YES: KeyIntent = { kind: 'answer', target: TARGET, toolUseId: 'toolu_deploy_1', header: 'Deploy', question: 'Deploy the build now?', option: 1, label: 'Yes' }
+  const asks = (question: OpenQuestion, factsAt?: number): State =>
+    facts({ status: 'waiting', waitingFor: 'input needed', transcript: { openQuestion: question }, ...(factsAt === undefined ? {} : { factsAt }) })
+  const read = screen('question-deploy')
+
+  it('refuses the late facts of the first question on the screen of the second', () => {
+    expect(plan(YES, read, asks(deploy('toolu_deploy_1', 'Deploy to staging.'), read.readAt - 2000))).toEqual(refused('stale-screen'))
+  })
+
+  it('refuses fresh facts of the second question: its tool use id is not the confirmed one', () => {
+    expect(plan(YES, read, asks(deploy('toolu_deploy_2', 'Deploy to production.')))).toEqual(CHANGED)
+  })
+
+  it('refuses a changed description even with fresh facts that keep the confirmed id', () => {
+    expect(plan(YES, read, asks(deploy('toolu_deploy_1', 'Deploy to staging.')))).toEqual(CHANGED)
+    expect(plan(YES, read, asks(deploy('toolu_deploy_1', 'Deploy to production.')))).toEqual({ kind: 'send', steps: [sendKey('1')] })
   })
 })
 
@@ -248,6 +301,13 @@ describe('textRefusal', () => {
 
   it('refuses a backslash right before n, r or t in either case, which cmux can type as Enter or Tab', () => {
     for (const text of ['a\\nb', 'a\\rb', 'a\\tb', 'C:\\new', 'a\\\\nb', '\\t', 'a\\Nb', 'a\\Rb', 'a\\Tb', 'C:\\Temp']) expect(textRefusal(text), text).toBe('backslash-escape')
+  })
+
+  it('refuses a line or paragraph separator in a text with a visible character, which cmux can type as a line break', () => {
+    for (const code of [0x2028, 0x2029]) {
+      expect(textRefusal(`a${ch(code)}b`), `U+${code.toString(16)}`).toBe('control-char')
+      expect(textRefusal(`line one${ch(code)}`), `U+${code.toString(16)}`).toBe('control-char')
+    }
   })
 
   it('passes a newline, a visible text with an invisible character in it, and a backslash before any other character', () => {

@@ -14,11 +14,13 @@
  * - the prompt: the input box, a rule row, `❯` and a space (a no-break space in this build) and the typed text,
  *   then a rule row. The transcript shows the earlier prompts in the same form, so only the last prompt row counts.
  * The transcript can quote a dialog. So a match needs exactly 1 dialog, with no prompt row and no numbered row
- * below it. Each text compares as it is: only the padding spaces at the end of a row go, with no Unicode
+ * below it. An answer also needs every option row to show the open question of the transcript: the same count,
+ * and for each option the same label and the same description on exactly 1 row, so a question that the model asks
+ * again with a new description under the same label never matches. Each text compares as it is: only the padding spaces at the end of a row go, with no Unicode
  * normalization and no collapse of spaces, so a lookalike letter, a residue of an escape sequence or another
  * space never matches. A label that can go on in the row under it (a wrap) never matches.
  */
-import type { DeliverIntent, DeliverRefusal } from '../types.js'
+import type { DeliverIntent, DeliverRefusal, QuestionOption } from '../types.js'
 
 /** 1 numbered row of a dialog. */
 export type ScreenOption = {
@@ -28,6 +30,8 @@ export type ScreenOption = {
   label: string
   /** the rows under the row that are indented past its digit, each trimmed, joined with 1 space */
   description?: string
+  /** how many rows the description takes: more than 1 means it wraps, so it cannot be read whole */
+  descriptionRows: number
   /** true when the row holds the cursor ❯ */
   hasCursor: boolean
   /**
@@ -136,7 +140,7 @@ function columns(text: string): number | undefined {
 function optionRow(rows: readonly string[], i: number): (ScreenOption & { column: number }) | undefined {
   const match = OPTION_ROW.exec(rows[i] ?? '')
   if (!match) return undefined
-  return { digit: Number(match[3]), label: match[4] ?? '', hasCursor: match[2] === '❯', isWhole: false, line: i, column: (match[1] ?? '').length + 2 }
+  return { digit: Number(match[3]), label: match[4] ?? '', descriptionRows: 0, hasCursor: match[2] === '❯', isWhole: false, line: i, column: (match[1] ?? '').length + 2 }
 }
 
 /** True when the row under the label row on line i cannot be the rest of its label, on a screen `width` columns wide. */
@@ -164,6 +168,7 @@ function readOptions(rows: readonly string[], start: number, width: number): { o
       end = i
     } else if (!row && last && !isBlank(rows[i]) && indent(rows[i] ?? '') > column && !RULE_ROW.test(rows[i] ?? '')) {
       last.description = [last.description, trim(rows[i] ?? '')].filter(Boolean).join(' ')
+      last.descriptionRows += 1
       end = i
     } else if (isBlank(rows[i]) && last && optionRow(rows, i + 1)?.digit === options.length + 1) {
       continue
@@ -278,19 +283,27 @@ function soleDialog(view: ScreenView): ScreenDialog | undefined {
 
 const refuse = (refusal: DeliverRefusal): ScreenMatch => ({ isMatch: false, refusal })
 
+/** True when the option row shows exactly this option: the same label, whole, and the same description on 1 row, or none. */
+function showsOption(row: ScreenOption, expected: QuestionOption | undefined): boolean {
+  if (!expected || row.label !== expected.label || !row.isWhole) return false
+  return expected.description ? row.descriptionRows === 1 && row.description === expected.description : row.descriptionRows === 0
+}
+
 /**
  * Checks a question answer: the screen shows 1 question dialog with 1 question and 1 selection, the same header,
- * the same question, the cursor on an option row, and the confirmed label, whole, at the confirmed digit.
+ * the same question, the cursor on an option row, the options of the open question (count, labels and
+ * descriptions), and the confirmed label, whole, at the confirmed digit.
  */
-export function matchAnswer(view: ScreenView, want: Pick<AnswerIntent, 'header' | 'question' | 'option' | 'label'>): ScreenMatch {
+export function matchAnswer(view: ScreenView, want: Pick<AnswerIntent, 'header' | 'question' | 'option' | 'label'> & { options: readonly QuestionOption[] }): ScreenMatch {
   const dialog = soleDialog(view)
   if (dialog?.kind !== 'question') return refuse('screen-changed')
   if (dialog.chips !== 1 || dialog.hasTabs || dialog.isMultiSelect) return refuse('multi-question')
   if (dialog.header !== want.header || dialog.question !== want.question || !dialog.other) return refuse('screen-changed')
   const cursors = [...dialog.options, dialog.other, ...(dialog.chat ? [dialog.chat] : [])].filter((row) => row.hasCursor)
   if (cursors.length !== 1 || !dialog.options.includes(cursors[0] as ScreenOption)) return refuse('screen-changed')
+  if (dialog.options.length !== want.options.length || !dialog.options.every((row, k) => showsOption(row, want.options[k]))) return refuse('screen-changed')
   const option = dialog.options.find((row) => row.digit === want.option)
-  if (!option || option.label !== want.label || !option.isWhole) return refuse('screen-changed')
+  if (!option || option.label !== want.label) return refuse('screen-changed')
   return { isMatch: true, digit: option.digit }
 }
 

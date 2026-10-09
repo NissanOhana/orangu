@@ -10,14 +10,16 @@
  *   prompt needs an idle session with no open question. So a busy session that prints a dialog or an input box
  *   gets no key;
  * - the screen must be of the target session, from a tab whose refs are plain tokens, read 1 s or less before the
- *   plan;
+ *   plan, and the state must be read 1 s or less before the screen read, never after it. Late state gives
+ *   stale-screen: the plan inputs are not of 1 moment, and the executor reads both again;
  * - an answer is the option digit alone, with no Enter, and only when the screen still shows the confirmed header,
- *   question and label at that digit (src/god/model/screen-match.ts);
+ *   question and label at that digit, and each option of the open question with its description
+ *   (src/god/model/screen-match.ts);
  * - a permission answer is the digit of the option labeled exactly Yes or exactly No, on a dialog that shows the
  *   confirmed shell command;
  * - a prompt is 1 `cmux send` for each line, `shift+enter` between the lines and `enter` at the end, only on an
  *   empty prompt row with no dialog on the screen. Its text must hold a visible character, no control character
- *   but the newline, and no backslash right before n, r or t in either case: cmux types the lowercase pairs as
+ *   but the newline, no line or paragraph separator, and no backslash right before n, r or t in either case: cmux types the lowercase pairs as
  *   Enter or Tab and has no escape for them, and the uppercase pairs are not tested.
  * Each argv names the workspace and the surface, and puts `--` right before the text or the key, so a text that
  * looks like a flag stays text. A peer message has no keys: the engine sends it, and this plan refuses it.
@@ -28,19 +30,26 @@ import type { DeliverIntent, DeliverPlan, DeliverRefusal, ScreenRead, SessionFac
 /** A screen read older than this, at the plan time, is stale. */
 export const SCREEN_MAX_AGE_MS = 1000
 
+/** State read more than this before the screen read is stale: the model can ask a new question in that time. */
+export const FACTS_MAX_LAG_MS = 1000
+
 /** The intents that go out as keys: every intent but the peer message. */
 export type KeyIntent = Exclude<DeliverIntent, { kind: 'peer' }>
 
 /**
  * The state of the target session at the plan time: its registry status and wait, and the open question of its
- * transcript. A SessionFacts or a GodSession of the target fits it.
+ * transcript, with the time of that read. A SessionFacts or a GodSession of the target, with factsAt, fits it.
  */
-export type TargetFacts = Pick<SessionFacts, 'sessionId' | 'status' | 'waitingFor'> & { transcript?: Pick<TranscriptFacts, 'openQuestion'> }
+export type TargetFacts = Pick<SessionFacts, 'sessionId' | 'status' | 'waitingFor'> & {
+  transcript?: Pick<TranscriptFacts, 'openQuestion'>
+  /** when the executor read the registry file and the transcript tail (engine time, in ms): just before the screen read */
+  factsAt: number
+}
 
 /** a text with no visible character: white space, format characters and the other characters that draw nothing */
 const BLANK = /^[\p{White_Space}\p{Cf}\p{Default_Ignorable_Code_Point}]*$/u
-/** C0 but the newline, DEL and C1: a control character that a terminal reads as a key or a sequence */
-const CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/
+/** C0 but the newline, DEL, C1, and the line and paragraph separators: a character that cmux can type as a key or a break */
+const CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/
 /** a backslash right before n, r or t, in either case: cmux send types the lowercase pairs as Enter or Tab */
 const BACKSLASH_ESCAPE = /\\[nrtNRT]/
 /** a cmux workspace or surface ref (`workspace:2`, `surface:3`): a plain token that cannot read as a flag */
@@ -87,8 +96,8 @@ function promptSteps(text: string, screen: ScreenRead): (readonly string[])[] {
 
 /**
  * The plan of 1 confirmed intent on 1 fresh screen read and the state of the target, made at `now` (engine time, in
- * ms). The text checks of a prompt come first, then the tab refs, the session of the read, the state of the
- * session, the age of the read, then the match of the screen.
+ * ms). The text checks of a prompt come first, then the tab refs, the session of the read, the age of the read and
+ * of the state, the state of the session, then the match of the screen.
  */
 export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, now: number): DeliverPlan {
   if (intent.kind === 'prompt') {
@@ -97,14 +106,15 @@ export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: Targe
   }
   if (!REF.test(screen.workspaceRef) || !REF.test(screen.surfaceRef)) return refuse('no-tab')
   if (screen.sessionId !== intent.target.sessionId) return refuse('screen-changed')
+  const age = now - screen.readAt
+  const lag = screen.readAt - facts.factsAt
+  if (!(age >= 0 && age <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS)) return refuse('stale-screen')
   const stateRefused = stateRefusal(intent, facts)
   if (stateRefused) return refuse(stateRefused)
-  const age = now - screen.readAt
-  if (!(age >= 0 && age <= SCREEN_MAX_AGE_MS)) return refuse('stale-screen')
   const view = readScreen(screen.text)
   switch (intent.kind) {
     case 'answer':
-      return digitPlan(matchAnswer(view, intent), screen)
+      return digitPlan(matchAnswer(view, { ...intent, options: facts.transcript?.openQuestion?.questions[0]?.options ?? [] }), screen)
     case 'permission':
       return digitPlan(matchPermission(view, intent), screen)
     case 'prompt': {

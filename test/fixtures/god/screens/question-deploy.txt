@@ -1,0 +1,18 @@
+❯ ship the release
+
+⏺ I ask before I deploy.
+
+────────────────────────────────────────────────────────────────────────
+ ☐ Deploy
+
+Deploy the build now?
+
+❯ 1. Yes
+     Deploy to production.
+  2. No
+     Keep the build where it is.
+  3. Type something.
+────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel
