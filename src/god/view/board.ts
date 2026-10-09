@@ -4,8 +4,8 @@
  *   its count and a `▸`, and opens when the person opens it (`openGroups`). Its heading is a row that the person
  *   can select, with the key groupKey(<group key>);
  * - 1 row for each session of an open group: the selection mark, the glyph of the level, the name, 1 chip for
- *   each kind of overlap flag, the summary, and the time in the level at the right edge. The row key is the
- *   session id;
+ *   the same tree and 1 for the same files, the summary, and the time in the level at the right edge. The same
+ *   repo gets no chip on the row: the detail shows it. The row key is the session id;
  * - every row is exactly `width` cells. The names share 1 column. A text that does not fit is cut with its count
  *   (src/god/view/cut.ts): the detail of the session shows it whole;
  * - only `rows` lines: the window keeps the selected row in view, and a line above and below counts the sessions
@@ -35,13 +35,16 @@ export const LEVEL_HEADING: Readonly<Record<Level, string>> = {
   stale: 'STALE',
 }
 
-/** The chip of each overlap flag. */
-export const FLAG_CHIP: Readonly<Record<FlagKind, string>> = { 'same-tree': 'TREE', 'same-files': 'FILES', 'same-repo': 'REPO' }
+/** The overlap flags that a board row shows as a chip. */
+export type ChipKind = Exclude<FlagKind, 'same-repo'>
+
+/** The chip of each overlap flag that a board row shows. */
+export const FLAG_CHIP: Readonly<Record<ChipKind, string>> = { 'same-tree': 'TREE', 'same-files': 'FILES' }
 
 /** The heading of the repo group of the sessions that have no repo. */
 export const NO_REPO = 'No repo'
 
-const FLAG_KINDS: readonly FlagKind[] = ['same-tree', 'same-files', 'same-repo']
+const CHIP_KINDS: readonly ChipKind[] = ['same-tree', 'same-files']
 const SESSION_UNIT = ['session', 'sessions'] as const
 /** the name column: at least this many cells when a name needs it, and never more than NAME_MAX */
 const NAME_MIN = 6
@@ -69,13 +72,13 @@ export type BoardViewInput = {
   openGroups: readonly string[]
 }
 
-/** The time since `since`: `now` under 1 min, then `12m`, `3h`, `9d` (99d at most), in 4 cells or less. */
+/** The time since `since`: `now` under 1 min, then `12m`, `3h`, `9d` (999d at most), in 4 cells or less. */
 export function levelTime(since: number, now: number): string {
   const minutes = Math.floor(Math.max(0, now - since) / 60_000)
   if (minutes < 1) return 'now'
   if (minutes < 60) return `${minutes}m`
   if (minutes < 24 * 60) return `${Math.floor(minutes / 60)}h`
-  return `${Math.min(99, Math.floor(minutes / (24 * 60)))}d`
+  return `${Math.min(999, Math.floor(minutes / (24 * 60)))}d`
 }
 
 /** Outside text on 1 line. */
@@ -101,8 +104,8 @@ function headingItem(group: BoardGroup, input: BoardViewInput): Item {
   }
 }
 
-/** The kinds of the flags of 1 session, each once, in the kind order. */
-const chipKinds = (session: GodSession): FlagKind[] => FLAG_KINDS.filter((kind) => session.flags.some((flag) => flag.kind === kind))
+/** The chips of the flags of 1 session, each kind once, in the chip order. */
+const chipKinds = (session: GodSession): ChipKind[] => CHIP_KINDS.filter((kind) => session.flags.some((flag) => flag.kind === kind))
 
 function sessionLine(session: GodSession, input: BoardViewInput, nameColumn: number): Line {
   const time = levelTime(session.levelSince, input.now)

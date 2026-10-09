@@ -17,7 +17,7 @@ const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'))
 // module with any JSON inlined. platform 'neutral' stops the build on a node: import anywhere in the graph, and
 // minify stays off so the engine validator reads `function register`, `$` and `on` as they are written.
 // `--god-only` builds only this step, and `--god-only --watch` bundles again on each save in src/god.
-const GOD_TOKEN_NAMES = ['--accent', '--accent-ink', '--bad', '--good', '--warn', '--cat-read', '--cat-edit', '--ink1', '--ink2', '--ink3']
+const GOD_TOKEN_NAMES = ['--accent', '--accent-ink', '--bad', '--good', '--warn', '--cat-read', '--cat-search', '--cat-edit', '--ink1', '--ink2', '--ink3']
 const GOD_BUNDLE = {
   absWorkingDir: root,
   entryPoints: [join(root, 'src/god/register.tsx')],

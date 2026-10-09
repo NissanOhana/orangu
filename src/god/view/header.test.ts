@@ -21,8 +21,26 @@ describe('the header', () => {
     expect(segmentOf(lines, '⠋')).toEqual({ text: '⠋', token: '--cat-read' })
   })
 
-  it('shows the repos of the repos mode', () => {
-    expect(headerLines({ snapshot: noRepoMatchSnapshot(), width: 110, now: NOW }).map(text).join('')).toMatch(/ {2}repos: shop$/)
+  it('shows the repos of the repos mode, each name as its own item', () => {
+    expect(headerLines({ snapshot: noRepoMatchSnapshot(), width: 110, now: NOW }).map(text).join('')).toMatch(/ {2}repos: {2}shop$/)
+  })
+
+  it('shows each repo name whole or not at all, and counts the names it leaves out with the command that lists them', () => {
+    const names = Array.from({ length: 12 }, (_, index) => `repo-${String(index).padStart(2, '0')}`)
+    const long = 'a-repo-name-that-is-wider-than-any-line-of-the-pane-at-sixty-columns'
+    const cases: Array<[readonly string[], number]> = [[names, 60], [names, 110], [[long, 'api'], 60]]
+    for (const [repos, width] of cases) {
+      const snapshot = { ...boardSnapshot(), mode: 'repos' as const, repos }
+      const lines = headerLines({ snapshot, width, now: NOW }).map(text)
+      for (const line of lines) expect(cellWidth(line), `${width}: ${line}`).toBeLessThanOrEqual(width)
+      const words = lines.join('  ').split(/ {2,}/).map((word) => word.trim()).filter(Boolean)
+      const shown = words.filter((word) => repos.includes(word))
+      const count = /^\+(\d+) repos? \(\/god repos\)$/.exec(words.find((word) => word.startsWith('+')) ?? '')
+      expect(count, `${width}: ${lines.join(' | ')}`).not.toBeNull()
+      expect(shown.length + Number(count![1]), `${width}: each name shows whole or counts`).toBe(repos.length)
+      expect(shown.length, `${width}: some names show`).toBeGreaterThan(0)
+    }
+    expect(headerLines({ snapshot: { ...boardSnapshot(), mode: 'repos', repos: ['api', 'web'] }, width: 110, now: NOW }).map(text).join('')).toMatch(/ {2}repos: {2}api {2}web$/)
   })
 
   it('shows a dim chip for each source that failed, and none for cmux that is not on the machine', () => {

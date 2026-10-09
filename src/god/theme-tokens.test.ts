@@ -30,8 +30,8 @@ const LIGHT = variables(':root')
 const DARK = { ...LIGHT, ...variables(':root[data-theme="dark"]') }
 
 describe('the god pane colors come from tokens.css', () => {
-  it('names the 10 tokens that the pane draws with', () => {
-    expect(GOD_TOKEN_NAMES).toEqual(['--accent', '--accent-ink', '--bad', '--good', '--warn', '--cat-read', '--cat-edit', '--ink1', '--ink2', '--ink3'])
+  it('names the 11 tokens that the pane draws with', () => {
+    expect(GOD_TOKEN_NAMES).toEqual(['--accent', '--accent-ink', '--bad', '--good', '--warn', '--cat-read', '--cat-search', '--cat-edit', '--ink1', '--ink2', '--ink3'])
     expect(Object.keys(GOD_TOKENS.light)).toEqual([...GOD_TOKEN_NAMES])
     expect(Object.keys(GOD_TOKENS.dark)).toEqual([...GOD_TOKEN_NAMES])
   })

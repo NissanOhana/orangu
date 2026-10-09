@@ -250,6 +250,6 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'god/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2)
   // G5a: what the god pane draws. The fixture snapshots of test/fixtures/god/snapshots.ts drawn through the real
   // view builders (src/god/view/pane.ts) at 60 and 110 columns: the header, the board, the key row and each state.
-  // Born at max(80, measured - 2) with 0 banned tokens and 0 findings. Measured 20 sentences, 20 clean, score 100.
+  // Born at max(80, measured - 2) with 0 banned tokens and 0 findings. Measured 19 sentences, 19 clean, score 100.
   'rendered#god': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
 }
