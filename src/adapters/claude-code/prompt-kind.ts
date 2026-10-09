@@ -15,7 +15,7 @@ const obj = (v: unknown): JsonObject | undefined => (v && typeof v === 'object' 
 export const COMMAND_RE = /<command-name>\s*([^<\s]+)\s*<\/command-name>/
 const COMMAND_ARGS_RE = /<command-args>\s*([^<]*?)\s*<\/command-args>/
 /** `<command-message>x</command-message> <command-name>/x</command-name> <command-args>a</command-args>` → `/x a` */
-function commandEnvelopeTitle(envelope: string, commandName?: string): string {
+export function commandEnvelopeTitle(envelope: string, commandName?: string): string {
   const name = commandName || COMMAND_RE.exec(envelope)?.[1] || envelope
   const args = COMMAND_ARGS_RE.exec(envelope)?.[1]
   return args ? `${name} ${args}` : name
