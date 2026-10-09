@@ -245,6 +245,11 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // G0: orangu god. The copy of the god mod in src/god (the .ts files: the purity lint keeps copy out of the .tsx
   // engine shell) and the description of its manifest. New surfaces, born at max(80, measured - 2) with 0 banned
   // tokens and findings at the measured count.
+  // G5a: measured 100 (22 of 22) on main c044843 with the copy of the board view (src/god/view): the states, the key row and the cut lines.
   'src/god': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2): the /god command line and its answer
   'god/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2)
+  // G5a: what the god pane draws. The fixture snapshots of test/fixtures/god/snapshots.ts drawn through the real
+  // view builders (src/god/view/pane.ts) at 60 and 110 columns: the header, the board, the key row and each state.
+  // Born at max(80, measured - 2) with 0 banned tokens and 0 findings. Measured 20 sentences, 20 clean, score 100.
+  'rendered#god': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
 }

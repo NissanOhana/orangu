@@ -60,6 +60,10 @@ import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines, 
 import { MACHINE_CAPS, displayWidth, stripAnsi } from '../src/cli/tty.js'
 import { suggestionIdV2, suggestionKey } from '../src/suggest/id.js'
 import { HIDDEN_ITERATIONS_FIXTURE, hiddenIterationsAggregate, hiddenIterationsAnalysis } from '../test/fixtures/hidden-iterations.js'
+import { NOW as GOD_NOW, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot } from '../test/fixtures/god/snapshots.js'
+import type { BoardSnapshot } from '../src/god/types.js'
+import { cannotDrawView, paneLines, paneView } from '../src/god/view/pane.js'
+import type { Line } from '../src/god/view/types.js'
 import type { SteRow } from '../test/ste-floors.js'
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -855,8 +859,37 @@ export function showMeViews(source: string, data: ShowMeData): RenderedView[] {
   return TEMPLATES.map(({ file, html }) => ({ file: `${source}#${scope}.${file}`, html: fillTemplate(html, page) }))
 }
 
-/** The rendered rows: each one draws its views from the fixtures. */
-const RENDERED_ROWS: ReadonlyArray<{ id: string; source: string; views(fixtures: RenderFixtures): Promise<RenderedView[]> }> = [
+const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
+
+/**
+ * The god pane of each fixture snapshot through the real view builders (src/god/view/pane.ts), as the terminal
+ * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
+ * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then each
+ * line of a pane that cannot draw. The fixture session texts are short and clean, so the row scores the pane.
+ */
+export function godViews(): RenderedView[] {
+  const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
+  const snapshots: ReadonlyArray<[string, BoardSnapshot, readonly string[]]> = [
+    ['board', boardSnapshot(), []],
+    ['board-stale-open', boardSnapshot(), ['stale']],
+    ['by-repo', byRepoSnapshot(), []],
+    ['reading', readingSnapshot(), []],
+    ['no-sessions', emptySnapshot(), []],
+    ['no-repo-match', noRepoMatchSnapshot(), []],
+    ['sources-off-no-cmux', degradedSnapshot({ agents: { status: 'off' }, registry: { status: 'off' }, cmux: { status: 'missing' }, git: { status: 'off' } }, 12_000), []],
+  ]
+  const panes = snapshots.flatMap(([name, snapshot, openGroups]) =>
+    [60, 110].map((bodyColumns) => {
+      const view = paneView({ snapshot, bodyColumns, bodyRows: 40, now: GOD_NOW, selectedKey: 's-wait', openGroups, promptHoldsKeys: true })
+      return { file: `${GOD_FIXTURE}#${name}.${bodyColumns}`, lines: paneLines(view).map(text) }
+    }),
+  )
+  const cannotDraw = (['too-narrow', 'too-short', 'failed'] as const).map((reason) => ({ file: `${GOD_FIXTURE}#cannot-draw.${reason}`, lines: paneLines(cannotDrawView(reason, 60)).map(text) }))
+  return [...panes, ...cannotDraw]
+}
+
+/** The rendered rows: each one draws its views from the fixtures. A row with no owner belongs to C10. */
+const RENDERED_ROWS: ReadonlyArray<{ id: string; owner?: string; source: string; views(fixtures: RenderFixtures): Promise<RenderedView[]> }> = [
   {
     id: 'rendered#report.session',
     source: 'Overview and Improvements of each golden session and the hidden-iterations session, both audiences',
@@ -883,11 +916,17 @@ const RENDERED_ROWS: ReadonlyArray<{ id: string; source: string; views(fixtures:
       ...aggregates.flatMap(({ source, aggregate }) => (['repo', 'global'] as const).flatMap((scope) => showMeViews(source, showMeAggregateData(aggregate, scope)))),
     ],
   },
+  {
+    id: 'rendered#god',
+    owner: 'G5a',
+    source: 'the god pane of each fixture snapshot at 60 and 110 columns, and each cannot-draw line',
+    views: async () => godViews(),
+  },
 ]
 
 const renderedSurfaces: Surface[] = RENDERED_ROWS.map((row) => ({
   id: row.id,
-  owner: 'C10',
+  owner: row.owner ?? 'C10',
   source: row.source,
   measure: async (read) => fragmentResult((await row.views(await read.fixtures())).flatMap(viewBlocks)),
 }))
@@ -989,12 +1028,14 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     // Z: the emitted session narrative
     goldenNarrativeSurface,
     // C10: rendered output, with real values through the real builders
-    ...renderedSurfaces,
+    ...renderedSurfaces.filter((surface) => surface.owner === 'C10'),
     // G0: the orangu god manifest (its src/god row comes from srcSurfaces above): the description, and the title
     // and description of each userConfig field, which the /config menu shows
     jsonSurface('god/.claude-plugin/plugin.json#description', 'G0', one('god/.claude-plugin/plugin.json'), (json) =>
       strings([json['description'], ...Object.values((json['userConfig'] ?? {}) as Record<string, Json>).flatMap((field) => [field['title'], field['description']])]),
     ),
+    // G5a: what the god pane draws, through the real view builders
+    ...renderedSurfaces.filter((surface) => surface.owner === 'G5a'),
   ]
 }
 
