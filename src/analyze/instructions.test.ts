@@ -57,6 +57,12 @@ describe('extractRules: the rule grammar', () => {
     expect(targets('Do not use `Bash` to read a file.')).toEqual([])
   })
 
+  it('reads a double-backtick span as one span, and no prose or tagged template as a command', () => {
+    expect(targets('- **Never call a `Date` method on an aggregate from a raw `` sql`x` `` template** - the driver returns those as **strings** at runtime.')).toEqual([])
+    expect(targets('Never run `` npm run x`` here.')).toEqual([{ kind: 'command', name: 'npm run x' }])
+    expect(targets('Never use `the driver returns those as strings at runtime regardless of it`.')).toEqual([])
+  })
+
   it('gives the 1-based line and the whole trimmed line', () => {
     const r = extractRules('# Rules\n\n  - Never run `make clean` here.  \n')
     expect(r).toEqual([{ line: 3, text: '- Never run `make clean` here.', targets: [{ kind: 'command', name: 'make clean' }] }])
@@ -145,6 +151,17 @@ describe('analyzeInstructions on a parsed session', () => {
     expect(ins.rules).toHaveLength(1)
     expect(ins.rules[0]).toMatchObject({ source: 'loaded', line: 2, target: { kind: 'command', name: 'next build' }, calls: 2, agentCalls: 1, examples: ['next build', 'npx next build'] })
     expect(ins.memoryCuts).toEqual([expect.objectContaining({ over: 'bytes', totalLines: 115, linesCut: 5, firstCutLine: 111 })])
+  })
+
+  it('counts a call that a PreToolUse hook or a deny rule stopped as blocked', async () => {
+    const b = new SessionBuilder()
+    b.attachment('instructions', { files: [{ path: '/Users/test/Code/x/CLAUDE.md', type: 'Project', content: CLAUDE_MD }] })
+    b.userPrompt('build').tick(1000)
+    b.toolCall('Bash', { command: 'next build' }, 'PreToolUse:Bash hook error: next build on this tree needs an 8 GB heap', { isError: true })
+    b.toolCall('Bash', { command: 'next build' }, 'Permission to use Bash with command next build has been denied.', { isError: true })
+    b.toolCall('Bash', { command: 'next build' }, 'Error: build failed', { isError: true })
+    const r = (await analyzeOf(b)).instructions!.rules[0]!
+    expect(r).toMatchObject({ calls: 3, blocked: 2 })
   })
 
   it('treats a note the session wrote as in context from the write, and records the write', async () => {
