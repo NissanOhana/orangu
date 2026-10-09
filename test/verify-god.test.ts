@@ -70,6 +70,11 @@ describe('verify:god reads the validate report', () => {
     }
   })
 
+  it('reads a call that the 2.1.296 validator writes with the helper that makes it, as `$.noun.method (via helper)`', () => {
+    expect(findings(report({ calls: '$.command.register, $.process.run (via engineHost), $.ui.open (via openPane)' }))).toEqual([])
+    expect(findings(report({ calls: '$.command.register, $.fs.write (via saveBoard)' }))).toEqual(['call outside the allowlist: $.fs.write (via saveBoard)'])
+  })
+
   it('fails an environment read outside HOME and ORANGU_GOD, and any environment write', () => {
     expect(findings(report({ reads: 'HOME, PATH' }))).toEqual(['environment read outside HOME and ORANGU_GOD: PATH'])
     expect(findings(report({ writes: 'ORANGU_GOD' }))).toEqual(['environment write: ORANGU_GOD'])
