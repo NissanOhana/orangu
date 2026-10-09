@@ -8,6 +8,8 @@
  *    start. With ESC gone, the rest of a sequence (`[31m`) stays as inert text.
  * 2. Then the orangu redaction runs with the home folder that the engine gives. The god mod has no process, so the
  *    redaction cannot find the home folder alone, and an empty home rewrites no path.
+ * 3. cleanValue cleans a JSON value (a tool input) key by key. It cleans a string under a key as `<key>=<value>`,
+ *    because the key=value rule of the redaction needs the key, and JSON puts a quote between a key and its value.
  *
  * The control strip runs first, so a control character inside a secret cannot hide the secret from the redaction.
  * The character class is written as ranges of code points and never spells the escape byte, which only
@@ -31,4 +33,29 @@ export function cleanText(text: string, home: string): string {
 /** The text cleaner that a source takes: cleanText with the home folder of the engine. */
 export function textCleaner(home: string): (text: string) => string {
   return (text) => cleanText(text, home)
+}
+
+/**
+ * A string under a key, cleaned as `<key>=<value>` and given back without the key: the key=value rule of the
+ * redaction masks a value whose key names a secret (`API_KEY`, `password`), and the value alone shows nothing.
+ */
+function cleanKeyed(key: string, value: string, clean: (text: string) => string): string {
+  const prefix = `${clean(key)}=`
+  const joined = clean(`${key}=${value}`)
+  return joined.startsWith(prefix) ? joined.slice(prefix.length) : clean(value)
+}
+
+function cleanUnder(value: unknown, clean: (text: string) => string, key: string | undefined): unknown {
+  if (typeof value === 'string') return key === undefined ? clean(value) : cleanKeyed(key, value, clean)
+  if (Array.isArray(value)) return value.map((item) => cleanUnder(item, clean, key))
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.entries(value).map(([name, item]) => [clean(name), cleanUnder(item, clean, name)]))
+}
+
+/**
+ * A JSON value (a tool input) with each key and each string cleaned, in any depth. A string under a key is cleaned
+ * with its key, and an array item has the key of its array, so `{ "API_KEY": "..." }` shows no secret.
+ */
+export function cleanValue(value: unknown, clean: (text: string) => string): unknown {
+  return cleanUnder(value, clean, undefined)
 }

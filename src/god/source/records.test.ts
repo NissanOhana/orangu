@@ -10,6 +10,7 @@ import { parseClaudeCodeSession } from '../../adapters/claude-code/parse.js'
 import { redactValue } from '../../redact/redact.js'
 import type { TranscriptFacts } from '../types.js'
 import { emptyRecordState, readRecords, reduceRecords, transcriptFacts } from './records.js'
+import type { TranscriptRecord } from './transcript.js'
 
 const HOME = '/Users/test'
 const KEY = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
@@ -434,7 +435,7 @@ describe('reduceRecords: the history', () => {
 
 describe('readRecords: reads in parts', () => {
   it('gives the same facts for 1 read and for 2 reads, adds up the parse errors, and never changes the state it reads from', () => {
-    const records = buildCanonicalSession().toRecords()
+    const records: readonly TranscriptRecord[] = buildCanonicalSession().toRecords()
     const once = reduceRecords(records, { home: HOME, parseErrors: 2 })
     for (const cut of [1, 5, 13, records.length - 1]) {
       const first = readRecords(emptyRecordState(HOME), records.slice(0, cut), { parseErrors: 1 })
@@ -464,6 +465,29 @@ describe('reduceRecords: every text field is sanitized and redacted', () => {
     const facts = reduce(b)
     expect(facts.lastReply).toBe('Red[31m text\nnextline\tend')
     expect(facts.lastPrompt).toBe('Open ~/Code/demo/a.ts')
+  })
+
+  it('masks a string that only its key names as a secret, in a nested input object, in an array of objects and in the input JSON', () => {
+    const secret = 'Zq9xW2pL7mN4vB8k'
+    const b = builder()
+    const input = {
+      path: '/Users/test/Code/demo/app',
+      env: { API_KEY: secret, password: secret, client_secret: secret, authToken: secret, region: 'eu-west-1' },
+      services: [{ name: 'db', password: secret }, { name: 'cache', token: secret }],
+      access: { API_KEY: [secret] },
+    }
+    b.assistant([{ type: 'tool_use', id: fakeToolUseId(), name: 'mcp__deploy__run', input }])
+    const activity = reduce(b).activity
+    expect(activity?.input).not.toContain(secret)
+    expect(JSON.parse(activity?.input ?? '{}')).toStrictEqual({
+      path: '~/Code/demo/app',
+      env: { API_KEY: '‹redacted›', password: '‹redacted›', client_secret: '‹redacted›', authToken: '‹redacted›', region: 'eu-west-1' },
+      services: [{ name: 'db', password: '‹redacted›' }, { name: 'cache', token: '‹redacted›' }],
+      access: { API_KEY: ['‹redacted›'] },
+    })
+    const keyed = builder()
+    keyed.assistant([{ type: 'tool_use', id: fakeToolUseId(), name: 'mcp__vault__put', input: { API_KEY: secret } }])
+    expect(reduce(keyed).activity?.text).toBe('mcp__vault__put ‹redacted›')
   })
 
   it('cleans each text field of the facts, from every record kind', () => {

@@ -18,14 +18,15 @@
  * - history: the last HISTORY_TURNS turns. A turn starts at a human, command, peer or scheduled prompt, and only a
  *   human or a command prompt is the prompt of the person.
  *
- * Every text field leaves transcriptFacts through cleanText (src/god/sanitize.ts). The state keeps most text as
+ * Every text field leaves transcriptFacts through cleanText, and each tool input through cleanValue
+ * (src/god/sanitize.ts), so a secret that only its key names is masked too. The state keeps most text as
  * the transcript wrote it, so a read cleans only the text that the facts show. Keep the state inside the collector.
  */
 import { classifyPrompt, COMMAND_RE, commandEnvelopeTitle, sessionTitle } from '../../adapters/claude-code/prompt-kind.js'
 import { summarizeToolInput } from '../../adapters/claude-code/tools.js'
 import { TURN_STARTING_KINDS, type PromptKind } from '../../model/session.js'
 import { resolveModel } from '../../models/catalog.js'
-import { cleanText } from '../sanitize.js'
+import { cleanText, cleanValue } from '../sanitize.js'
 import type { AgentTask, ContextFacts, ErrorTail, FileTouch, HistoryTurn, OpenQuestion, PrLink, Question, ToolActivity, TranscriptFacts } from '../types.js'
 
 /** The History tab shows this many turns, the last ones. */
@@ -120,17 +121,9 @@ function textOf(content: unknown): string {
     .join('\n')
 }
 
-/** A value with each string in it cleaned, the keys too, in any depth. */
-function cleanDeep(value: unknown, clean: Clean): unknown {
-  if (typeof value === 'string') return clean(value)
-  if (Array.isArray(value)) return value.map((item) => cleanDeep(item, clean))
-  const o = obj(value)
-  return o ? Object.fromEntries(Object.entries(o).map(([key, item]) => [clean(key), cleanDeep(item, clean)])) : value
-}
-
 /** The 1-line summary of a call, from its cleaned input, so a cut never leaves half a secret. */
 function callText(name: string, input: unknown, clean: Clean): string {
-  return clean(summarizeToolInput(clean(name), cleanDeep(input, clean)))
+  return clean(summarizeToolInput(clean(name), cleanValue(input, clean)))
 }
 
 /** The kind and the text of a user record that is a prompt, not a tool result and not a compact summary. */
@@ -340,7 +333,7 @@ function activityOf(s: RecordState, clean: Clean): ToolActivity | undefined {
   const open = s.open[s.open.length - 1]
   const call = open ?? s.lastCall
   if (!call) return undefined
-  const input = open ? JSON.stringify(cleanDeep(open.input, clean)) : undefined
+  const input = open ? JSON.stringify(cleanValue(open.input, clean)) : undefined
   return defined({ toolUseId: call.id, tool: clean(call.name), text: callText(call.name, call.input, clean), input, isOpen: open !== undefined, at: call.at })
 }
 

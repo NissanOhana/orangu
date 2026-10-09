@@ -7,7 +7,8 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { cleanText, removeControls, textCleaner } from './sanitize.js'
+import { cleanText, cleanValue, removeControls, textCleaner } from './sanitize.js'
+import type { CleanText } from './source/agents.js'
 
 const HOME = '/Users/test'
 const ESC = String.fromCharCode(0x1b)
@@ -50,10 +51,36 @@ describe('cleanText', () => {
 
 describe('textCleaner', () => {
   it('gives the text cleaner that a source takes: the same result as cleanText with that home', () => {
-    const clean = textCleaner(HOME)
+    const clean: CleanText = textCleaner(HOME)
     const dirty = `name ${ESC}[2J${BEL}${CSI} ${KEY} /Users/test/Code/demo`
     expect(clean(dirty)).toBe(cleanText(dirty, HOME))
     expect(clean(dirty)).toBe('name [2J ‹anthropic-key› ~/Code/demo')
+  })
+})
+
+describe('cleanValue', () => {
+  const secret = 'Zq9xW2pL7mN4vB8k'
+
+  it('masks a string that only its key names as a secret, at any depth and in an array, and keeps a plain key as it is', () => {
+    const value = {
+      path: '/Users/test/Code/demo',
+      env: { API_KEY: secret, password: secret, client_secret: secret, authToken: secret, region: 'eu-west-1' },
+      services: [{ name: 'db', password: secret }],
+      access: { API_KEY: [secret] },
+      count: 3,
+    }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({
+      path: '~/Code/demo',
+      env: { API_KEY: '‹redacted›', password: '‹redacted›', client_secret: '‹redacted›', authToken: '‹redacted›', region: 'eu-west-1' },
+      services: [{ name: 'db', password: '‹redacted›' }],
+      access: { API_KEY: ['‹redacted›'] },
+      count: 3,
+    })
+  })
+
+  it('cleans each key, and each string with no key alone', () => {
+    expect(cleanValue({ [`na${CSI}me`]: `a${ESC}b` }, textCleaner(HOME))).toStrictEqual({ name: 'ab' })
+    expect(cleanValue([`Use ${KEY}`, 'API_KEY=Zq9xW2pL7mN4vB8k'], textCleaner(HOME))).toStrictEqual(['Use ‹anthropic-key›', 'API_KEY=‹redacted›'])
   })
 })
 
