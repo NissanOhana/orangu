@@ -57,9 +57,9 @@ export function godDetailViews(): RenderedView[] {
     const layout = layoutOf(columns)
     return layout.kind === 'wide' ? layout.detailColumns : layout.boardColumns
   }
-  const detail = (file: string, input: Omit<Parameters<typeof detailView>[0], 'rows' | 'now' | 'scroll'>): RenderedView => ({
+  const detail = (file: string, input: Omit<Parameters<typeof detailView>[0], 'rows' | 'now' | 'scroll'>, rows = 60): RenderedView => ({
     file: `${GOD_DETAIL_FIXTURE}#${file}`,
-    lines: detailLines(detailView({ ...input, rows: 60, now: GOD_NOW, scroll: 0 })).map(text),
+    lines: detailLines(detailView({ ...input, rows, now: GOD_NOW, scroll: 0 })).map(text),
   })
   const tabs = snapshot.sessions.flatMap((session) =>
     [60, 110].flatMap((columns) =>
@@ -73,7 +73,14 @@ export function godDetailViews(): RenderedView[] {
     detail('screen.refused', { session: wait, width: 79, tab: 'screen', isCmuxMissing: false, outcome: GOD_OUTCOMES.refused }),
     ...snapshot.sessions.flatMap((session) => DETAIL_TABS.map((tab) => detail(`${session.sessionId}.${tab}.no-cmux`, { session, width: 79, tab, isCmuxMissing: true }))),
   ]
-  const confirm = [60, 110].flatMap((columns) => Object.values(GOD_INTENTS).map((intent) => ({ file: `${GOD_DETAIL_FIXTURE}#confirm.${intent.kind}.${columns}`, lines: confirmView(intent, columns).lines.map(text) })))
+  const confirm = [60, 110].flatMap((columns) =>
+    Object.values(GOD_INTENTS).map((intent) => ({ file: `${GOD_DETAIL_FIXTURE}#confirm.${intent.kind}.${columns}`, lines: confirmView({ intent, width: columns, rows: 12, scroll: 0 }).lines.map(text) })),
+  )
+  // a window of each kind: the Now tab and a prompt that do not fit their rows, so the row scores the count lines
+  const windows = [
+    detail('window.now', { session: wait, width: 79, tab: 'now', isCmuxMissing: false }, 11),
+    { file: `${GOD_DETAIL_FIXTURE}#window.confirm`, lines: confirmView({ intent: GOD_INTENTS.prompt, width: 60, rows: 3, scroll: 1 }).lines.map(text) },
+  ]
   const outcomes = [
     ...Object.values(GOD_OUTCOMES).map((outcome) => ({ file: `${GOD_DETAIL_FIXTURE}#outcome.${outcome.status}`, lines: outcomeLines(outcome, 110).map(text) })),
     ...(Object.keys(REFUSAL_TEXT) as DeliverRefusal[]).map((refusal) => ({ file: `${GOD_DETAIL_FIXTURE}#refusal.${refusal}`, lines: outcomeLines({ ...GOD_OUTCOMES.refused, refusal } as Parameters<typeof outcomeLines>[0], 110).map(text) })),
@@ -82,5 +89,5 @@ export function godDetailViews(): RenderedView[] {
     { file: `${GOD_DETAIL_FIXTURE}#tool.board.110`, lines: boardToolText(snapshot, 110, GOD_NOW).split('\n') },
     ...snapshot.sessions.map((session) => ({ file: `${GOD_DETAIL_FIXTURE}#tool.session.${session.sessionId}`, lines: sessionToolText(snapshot, session.name, 110, GOD_NOW).split('\n') })),
   ]
-  return [...tabs, ...states, ...confirm, ...outcomes, ...tools]
+  return [...tabs, ...states, ...confirm, ...windows, ...outcomes, ...tools]
 }

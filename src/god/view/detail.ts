@@ -18,11 +18,13 @@ import type { DeliverOutcome, DetailTab, GodSession, PrLink, RecapState, ScreenR
 import { ACCENT, DIM, FLAG_PAINT } from '../ui/theme.js'
 import { NO_REPO } from './board.js'
 import { cellWidth } from './cells.js'
-import { moreText } from './cut.js'
 import { tabContent, type OptionKey } from './detail-tabs.js'
 import { CANNOT_DRAW, messageLines } from './states.js'
 import type { Line, Segment } from './types.js'
+import { MIN_WINDOW, windowOf, type ScrollWindow } from './window.js'
 import { flat, wrapSegments } from './wrap.js'
+
+export { SCROLL_KEYS, scrollBy } from './window.js'
 
 /** The tabs in the order that `t` walks them. */
 export const DETAIL_TABS: readonly DetailTab[] = ['now', 'history', 'agents', 'screen', 'recap']
@@ -30,21 +32,14 @@ export const DETAIL_TABS: readonly DetailTab[] = ['now', 'history', 'agents', 's
 /** The label of each tab. */
 export const TAB_LABEL: Readonly<Record<DetailTab, string>> = { now: 'Now', history: 'History', agents: 'Agents', screen: 'Screen', recap: 'Recap' }
 
-/** The key that shows the lines above the window, and the key that shows the lines below it. */
-export const SCROLL_KEYS = { up: 'w', down: 'z' } as const
-
 /** The label of each overlap flag line. */
 export const FLAG_LABEL = { 'same-tree': 'SAME TREE', 'same-files': 'SAME FILES', 'same-repo': 'SAME REPO' } as const
-
-/** The fewest rows of a window over content that does not fit: the count above, 1 line, the count below. */
-const MIN_WINDOW = 3
-const LINE_UNIT = ['line', 'lines'] as const
 
 /** 1 tab of the tab row: 1 Button. */
 export type TabCell = { tab: DetailTab; key: string; segments: Segment[] }
 
-/** The window over the tab content: its first line, the lines it shows, all lines, and the lines of 1 page. */
-export type DetailWindow = { first: number; shown: number; total: number; page: number }
+/** The window over the tab content (src/god/view/window.ts). */
+export type DetailWindow = ScrollWindow
 
 /** What the detail reads. The engine shell passes the selection, the pane props, the clock and the last reads. */
 export type DetailInput = {
@@ -76,13 +71,6 @@ export type DetailView =
 
 /** The tab after `tab`, and Now after Recap. */
 export const nextTab = (tab: DetailTab): DetailTab => DETAIL_TABS[(DETAIL_TABS.indexOf(tab) + 1) % DETAIL_TABS.length]!
-
-/** The scroll after 1 press of the up or the down key: the next page down, or the page above (the top near it). */
-export function scrollBy(window: DetailWindow, direction: 'up' | 'down'): number {
-  if (direction === 'down') return window.first + window.shown
-  const first = window.first - window.page
-  return first <= 1 ? 0 : first
-}
 
 /** The context as a percent of the window, `~` first when the window is an estimate; undefined with no window. */
 export function contextPercent(context: ContextFacts | undefined): string | undefined {
@@ -146,22 +134,6 @@ function footLines(session: GodSession, width: number): Line[] {
     wrapSegments([{ text: `${FLAG_LABEL[flag.kind]}:`, ...FLAG_PAINT[flag.kind], bold: true }, { text: ` ${flat(flag.otherName)}${flag.file === undefined ? '' : ` (${flat(flag.file)})`}` }], width, 1, 3),
   )
   return [...context, ...flags]
-}
-
-/** The lines that fit `room`, from `scroll`, with a count line for each side that the window leaves out. */
-function windowOf(lines: readonly Line[], room: number, scroll: number): { lines: Line[]; window: DetailWindow } {
-  const total = lines.length
-  const page = Math.max(1, room - 2)
-  if (total <= room) return { lines: [...lines], window: { first: 0, shown: total, total, page } }
-  const first = Math.min(Math.max(0, Number.isFinite(scroll) ? Math.floor(scroll) : 0), total - (room - 1))
-  const top = first > 0 ? 1 : 0
-  const hasBottom = first + room - top < total
-  const shown = room - top - (hasBottom ? 1 : 0)
-  const count = (hidden: number, key: string): Line => ({ segments: [{ text: ' ' }, { text: moreText(hidden, LINE_UNIT, key), ...DIM }] })
-  return {
-    lines: [...(top > 0 ? [count(first, SCROLL_KEYS.up)] : []), ...lines.slice(first, first + shown), ...(hasBottom ? [count(total - first - shown, SCROLL_KEYS.down)] : [])],
-    window: { first, shown, total, page },
-  }
 }
 
 /** The detail of 1 session. */

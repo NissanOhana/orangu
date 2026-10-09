@@ -2,7 +2,7 @@
  * The content of each tab of the detail, as lines of the detail width. Each text shows whole: it wraps, and
  * src/god/view/detail.ts cuts only by rows, with a count line that names its key.
  * - Now: the open question (the header chip, the question, each option as `<n> <label>`), or the open permission
- *   request and its whole input, or the current tool call and the API error at the end; then the last reply.
+ *   request and its whole input with its spaces as written, or the current tool call and the API error at the end; then the last reply.
  * - History: the last turns, the newest first, each as your prompt and then the reply.
  * - Agents: the running subagents and background tasks first, then the ended ones, then the subagent files that
  *   no task of the read part names.
@@ -15,14 +15,10 @@ import { NO_REPLY, NO_TRANSCRIPT, WAITS } from '../model/summary.js'
 import type { AgentTask, DeliverOutcome, DetailTab, GodSession, Question, RecapFailure, RecapState, ScreenRead } from '../types.js'
 import { DIM } from '../ui/theme.js'
 import { levelTime } from './board.js'
-import { outcomeLines } from './confirm.js'
+import { MULTI_DIALOG, MULTI_DIALOG_NO_CMUX, outcomeLines } from './confirm.js'
 import type { Line, Segment } from './types.js'
-import { flat, screenLines, textLines, wrapSegments } from './wrap.js'
+import { flat, keptLines, screenLines, textLines, wrapSegments } from './wrap.js'
 
-export const MULTI_QUESTION = 'This dialog has more than 1 question. Press j to answer it in its tab.'
-export const MULTI_QUESTION_NO_CMUX = 'This dialog has more than 1 question. Answer it in its tab.'
-export const MULTI_SELECT = 'This dialog takes more than 1 choice. Press j to answer it in its tab.'
-export const MULTI_SELECT_NO_CMUX = 'This dialog takes more than 1 choice. Answer it in its tab.'
 export const NO_HISTORY = 'The part of the transcript that the pane read has no turn.'
 export const NO_AGENTS = 'This session has no subagent and no background task.'
 export const SCREEN_NO_CMUX = 'cmux is not on this machine, so the pane cannot show the screen.'
@@ -122,8 +118,7 @@ function openQuestionLines(input: TabInput): TabContent {
   const isMultiSelect = questions.some((question) => question.multiSelect)
   const parts = questions.map((question, index) => questionLines(input, question, index, !isMulti && !isMultiSelect))
   const lines = parts.flatMap((part) => part.lines)
-  if (isMulti) lines.push(...message(input.isCmuxMissing ? MULTI_QUESTION_NO_CMUX : MULTI_QUESTION, input.width))
-  else if (isMultiSelect) lines.push(...message(input.isCmuxMissing ? MULTI_SELECT_NO_CMUX : MULTI_SELECT, input.width))
+  if (isMulti || isMultiSelect) lines.push(...message(input.isCmuxMissing ? MULTI_DIALOG_NO_CMUX : MULTI_DIALOG, input.width))
   return { lines, options: parts.flatMap((part) => part.options) }
 }
 
@@ -137,7 +132,7 @@ function nowContent(input: TabInput): TabContent {
   if (transcript.openQuestion !== undefined && transcript.openQuestion.questions.length > 0) top = openQuestionLines(input)
   else if (session.level === 'needs-you' && session.waitingFor === 'permission prompt' && activity?.isOpen === true) {
     const request = [...wrapSegments([{ text: '☐ Permission', bold: true }, ...waitChip(input)], width), ...wrapSegments([{ text: flat(activity.text) }], width)]
-    const toolInput = activity.input === undefined ? labelLine(width, { text: 'Input' }, 'none') : [...labelLine(width, { text: 'Input' }), ...textLines(activity.input, width, TEXT_INDENT)]
+    const toolInput = activity.input === undefined ? labelLine(width, { text: 'Input' }, 'none') : [...labelLine(width, { text: 'Input' }), ...keptLines(activity.input, width, TEXT_INDENT)]
     top = { lines: [...request, ...toolInput], options: [] }
   } else {
     if (activity !== undefined) top.lines.push(...labelLine(width, { text: activity.isOpen ? 'Runs' : 'Last tool' }, flat(activity.text), ago(activity.at, now)))

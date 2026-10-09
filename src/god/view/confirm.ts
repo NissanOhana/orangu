@@ -2,17 +2,19 @@
  * The confirm bar and the outcome lines of the key path. Nothing goes out until the person presses y in the bar,
  * so the bar names the session and what goes to it, in the accent color, then the y and c keys:
  * - an answer: the option digit and label, then the header chip and the question;
- * - a permission: Yes or No, the tool, then its whole input (never cut: the person approves what it shows);
- * - a prompt or a peer message: the first line, then the count of the other lines and the key that opens the text
- *   again (r for a prompt, m for a peer message).
- * Each text wraps whole. Each refusal code has 1 line in the bad color, and the not-delivered line is in the warn
- * color. The engine shell puts the bar 1 row above the key row. No line is wider than `width`.
+ * - a permission: Yes or No and the tool, then its whole input, with the spaces of the input as written;
+ * - a prompt or a peer message: the whole text.
+ * The target and the question stay fixed. A long prompt or tool input scrolls with w and z in the row limit of the
+ * bar (src/god/view/window.ts), with a count line for each side that the window leaves out, so the person can read
+ * all of it before y. When the limit leaves fewer than 3 rows, the bar takes its fixed lines and 3 more: a text
+ * that the person approves never hides. Each refusal code has 1 line: an old read in the warn color, every other
+ * refusal in the bad color, and the not-delivered line in the warn color. No line is wider than `width`.
  */
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal } from '../types.js'
-import { ACCENT, DIM } from '../ui/theme.js'
-import { moreText } from './cut.js'
+import { ACCENT } from '../ui/theme.js'
 import type { KeyHint, Line, Segment } from './types.js'
-import { LINE_BREAK, appendItem, flat, textLines, wrapSegments } from './wrap.js'
+import { MIN_WINDOW, windowOf, type ScrollWindow } from './window.js'
+import { appendItem, flat, keptLines, textLines, wrapSegments } from './wrap.js'
 
 /** The keys of the bar: y sends, c cancels. */
 export const CONFIRM_HINTS: readonly KeyHint[] = [
@@ -20,17 +22,27 @@ export const CONFIRM_HINTS: readonly KeyHint[] = [
   { keys: 'c', label: 'cancel', hotkey: 'c', isOff: false },
 ]
 
-/** Why the key path sent nothing: 1 line for each refusal code. */
+/** The line of a dialog that the digits cannot answer: the detail shows it, and so does the multi-question refusal. */
+export const MULTI_DIALOG = 'This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.'
+
+/** The same line when cmux is not on the machine, so j is off. */
+export const MULTI_DIALOG_NO_CMUX = 'This dialog has more than 1 question or more than 1 choice. Answer it in its tab.'
+
+/**
+ * Why the key path sent nothing: 1 line for each refusal code. 2 codes have 2 meanings each in the key guard
+ * (src/god/act/deliver-plan.ts), and their lines name both: screen-changed is a changed screen or a session state
+ * that does not take the key, and stale-screen is an old screen read or session facts that lag the read.
+ */
 export const REFUSAL_TEXT: Readonly<Record<DeliverRefusal, string>> = {
-  'no-cmux': 'cmux is not on this machine, so nothing was sent.',
-  'no-tab': 'The session has no cmux tab, so nothing was sent.',
-  'stale-screen': 'The screen read is older than 1 s, so nothing was sent.',
-  'screen-changed': 'The screen changed, so nothing was sent.',
-  'label-not-found': 'The screen shows no option with the exact label Yes or No, so nothing was sent.',
-  'multi-question': 'The dialog has more than 1 question, so nothing was sent. Press j to answer it in its tab.',
-  empty: 'The text is empty, so nothing was sent.',
-  'control-char': 'The text has a control character, so nothing was sent.',
-  'backslash-escape': 'The text has a backslash escape that cmux types as a key, so nothing was sent.',
+  'no-cmux': 'cmux is not on this machine, so the pane sent nothing.',
+  'no-tab': 'The session has no cmux tab, so the pane sent nothing.',
+  'stale-screen': 'The screen or the session facts are too old, so the pane sent nothing. Press y again.',
+  'screen-changed': 'The screen or the session changed, so the pane sent nothing.',
+  'label-not-found': 'The screen shows no option with the exact label Yes or No, so the pane sent nothing.',
+  'multi-question': MULTI_DIALOG,
+  empty: 'The text is empty, so the pane sent nothing.',
+  'control-char': 'The text has a control character, so the pane sent nothing.',
+  'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t, so the pane sent nothing.',
 }
 
 /** The keys went out, but the next refresh did not see the answer or the prompt. */
@@ -42,13 +54,19 @@ export const PEER_NOT_DELIVERED = 'The peer message did not arrive.'
 /** A cmux command of the plan failed, so the steps after it did not run. */
 export const SEND_FAILED = 'A cmux command failed, so the keys after it did not go out. Check the Screen tab.'
 
-/** The key that opens the text of a prompt or a peer message again: it shows the lines that the bar counts. */
-const TEXT_KEY = { prompt: 'r', peer: 'm' } as const
+/** What the bar reads. */
+export type ConfirmInput = {
+  intent: DeliverIntent
+  /** the pane width in cells */
+  width: number
+  /** the most rows of the bar */
+  rows: number
+  /** the first line of the scrolled text to show: 0, or what scrollBy gave. The shell sets 0 for a new intent */
+  scroll: number
+}
 
-const LINE_UNIT = ['line', 'lines'] as const
-
-/** The bar and its keys. */
-export type ConfirmView = { lines: Line[]; hints: readonly KeyHint[] }
+/** The bar, its keys, and the window over its scrolled text. */
+export type ConfirmView = { lines: Line[]; hints: readonly KeyHint[]; window: ScrollWindow }
 
 /** The question of the bar: what goes to which session. */
 function askText(intent: DeliverIntent): string {
@@ -58,31 +76,23 @@ function askText(intent: DeliverIntent): string {
   return intent.kind === 'prompt' ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`
 }
 
-/** The first line of a text that is not blank, and the count of the other lines. */
-function firstLine(text: string): { first: string; more: number } {
-  const lines = text.split(LINE_BREAK)
-  while (lines.length > 0 && lines.at(-1)!.trim() === '') lines.pop()
-  const first = lines.find((line) => line.trim() !== '') ?? ''
-  return { first: flat(first), more: Math.max(0, lines.length - 1) }
-}
-
-/** What the bar shows under its question. */
-function bodyOf(intent: DeliverIntent, width: number): Line[] {
-  if (intent.kind === 'answer') return wrapSegments([{ text: `☐ ${flat(intent.header)}`, bold: true }, { text: `  ${flat(intent.question)}` }], width, 1, 3)
+/** The lines that stay fixed (the target and the question), and the text that scrolls under them. */
+function partsOf(intent: DeliverIntent, width: number): { fixed: Line[]; text: Line[] } {
+  const keys: Segment[] = CONFIRM_HINTS.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), { text: hint.keys, bold: true }, { text: ` ${hint.label}` }])
+  const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width)
+  if (intent.kind === 'answer') return { fixed: [...ask, ...wrapSegments([{ text: `☐ ${flat(intent.header)}`, bold: true }, { text: `  ${flat(intent.question)}` }], width, 1, 3)], text: [] }
   if (intent.kind === 'permission') {
-    if (intent.input === undefined) return wrapSegments([{ text: 'Input', bold: true }, { text: '  none' }], width)
-    return [...wrapSegments([{ text: 'Input', bold: true }], width), ...textLines(intent.input, width, 3)]
+    if (intent.input === undefined) return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }, { text: '  none' }], width)], text: [] }
+    return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }], width)], text: keptLines(intent.input, width, 3) }
   }
-  const { first, more } = firstLine(intent.text)
-  const lines = wrapSegments([{ text: first }], width)
-  return more === 0 ? lines : appendItem(lines, [{ text: moreText(more, LINE_UNIT, TEXT_KEY[intent.kind]), ...DIM }], width)
+  return { fixed: ask, text: textLines(intent.text, width, 3) }
 }
 
 /** The confirm bar of 1 intent. */
-export function confirmView(intent: DeliverIntent, width: number): ConfirmView {
-  const keys: Segment[] = CONFIRM_HINTS.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), { text: hint.keys, bold: true }, { text: ` ${hint.label}` }])
-  const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width)
-  return { lines: [...ask, ...bodyOf(intent, width)], hints: CONFIRM_HINTS }
+export function confirmView(input: ConfirmInput): ConfirmView {
+  const { fixed, text } = partsOf(input.intent, input.width)
+  const { lines, window } = windowOf(text, Math.max(MIN_WINDOW, input.rows - fixed.length), input.scroll)
+  return { lines: [...fixed, ...lines], hints: CONFIRM_HINTS, window }
 }
 
 /** What became of an intent after y, as the lines that the pane shows. */
@@ -90,7 +100,7 @@ export function outcomeLines(outcome: DeliverOutcome, width: number): Line[] {
   const name = flat(outcome.intent.target.name)
   switch (outcome.status) {
     case 'refused':
-      return wrapSegments([{ text: REFUSAL_TEXT[outcome.refusal], token: '--bad' }], width)
+      return wrapSegments([{ text: REFUSAL_TEXT[outcome.refusal], token: outcome.refusal === 'stale-screen' ? '--warn' : '--bad' }], width)
     case 'not-delivered':
       return wrapSegments([{ text: outcome.intent.kind === 'peer' ? PEER_NOT_DELIVERED : NOT_DELIVERED, token: '--warn' }], width)
     case 'failed':

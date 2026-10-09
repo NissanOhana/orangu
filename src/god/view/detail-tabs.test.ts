@@ -9,13 +9,10 @@ import { HOUR, MINUTE, busy, transcript, waiting } from '../../../test/fixtures/
 import { snapshotOf } from '../../../test/fixtures/god/snapshots.js'
 import { NOW, OUTCOMES, QUESTION, RECAPS, SCREEN, detailSession } from '../../../test/fixtures/god/detail.js'
 import type { GodSession } from '../types.js'
-import { REFUSAL_TEXT } from './confirm.js'
+import { MULTI_DIALOG, MULTI_DIALOG_NO_CMUX, REFUSAL_TEXT } from './confirm.js'
 import { detailView, type DetailInput, type DetailView } from './detail.js'
 import {
   MODEL_TEXT,
-  MULTI_QUESTION,
-  MULTI_QUESTION_NO_CMUX,
-  MULTI_SELECT,
   NO_AGENTS,
   NO_HISTORY,
   RECAP_FAILURE,
@@ -61,22 +58,39 @@ describe('the Now tab', () => {
     expect(off.body.find((line) => line.key === 'option:1')!.segments[1]).toEqual({ text: '1', dim: true })
   })
 
+  /** the lines of the dialog line under the options, joined: it wraps at 79 columns */
+  const dialogLine = (lines: readonly string[], from: number): string => lines.slice(from, lines.indexOf(' Last reply')).join(' ').replace(/\s+/g, ' ').trim()
+
   it('shows every question of a dialog with 2 questions, with no digit key, and the line that says to answer it in its tab', () => {
-    expect(MULTI_QUESTION).toBe('This dialog has more than 1 question. Press j to answer it in its tab.')
+    expect(MULTI_DIALOG).toBe('This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.')
     const view = detail('s-multi')
     expect(view.options).toEqual([])
-    expect(view.body.map(text)).toEqual([' ☐ Port · waits 4m', ' Which port do you want?', ' • 3000', ' • 8080', ' ☐ Host', ' Which host do you want?', ' • Local', ' • Shared', ` ${MULTI_QUESTION}`, ' Last reply', '   No reply yet.'])
-    expect(body('s-multi', { isCmuxMissing: true })).toContain(` ${MULTI_QUESTION_NO_CMUX}`)
+    const lines = view.body.map(text)
+    expect(lines.slice(0, 8)).toEqual([' ☐ Port · waits 4m', ' Which port do you want?', ' • 3000', ' • 8080', ' ☐ Host', ' Which host do you want?', ' • Local', ' • Shared'])
+    expect(dialogLine(lines, 8)).toBe(MULTI_DIALOG)
+    expect(lines.slice(-2)).toEqual([' Last reply', '   No reply yet.'])
+    expect(dialogLine(body('s-multi', { isCmuxMissing: true }), 8)).toBe(MULTI_DIALOG_NO_CMUX)
   })
 
-  it('shows a dialog with more than 1 choice with no digit key, and its own line', () => {
+  it('shows a dialog with more than 1 choice with no digit key, and the same line', () => {
     const view = detail('s-pick')
     expect(view.options).toEqual([])
-    expect(view.body.map(text).slice(0, 6)).toEqual([' ☐ Checks · waits 2m', ' Which checks do you want?', ' • Lint', ' • Types', ' • Tests', ` ${MULTI_SELECT}`])
+    const lines = view.body.map(text)
+    expect(lines.slice(0, 5)).toEqual([' ☐ Checks · waits 2m', ' Which checks do you want?', ' • Lint', ' • Types', ' • Tests'])
+    expect(dialogLine(lines, 5)).toBe(MULTI_DIALOG)
   })
 
   it('shows the permission request and its whole input', () => {
     expect(body('s-perm')).toEqual([' ☐ Permission · waits 3m', ' Bash npm test', ' Input', '   {"command":"npm test","description":"Run the tests"}', ' Last reply', '   No reply yet.'])
+  })
+
+  it('keeps the runs of spaces of the tool input as written', () => {
+    const spacedInput = '{"command":"echo  a   b"}'
+    const perm = detailSession('s-perm')
+    const spaced = { ...perm, transcript: { ...perm.transcript!, activity: { ...perm.transcript!.activity!, input: spacedInput } } }
+    const view = detailView(input(spaced))
+    if (view.kind !== 'detail') throw new Error(view.kind)
+    expect(view.body.map(text)).toContain(`   ${spacedInput}`)
   })
 
   it('shows the current tool call, or the API error of a stuck session, then the last reply', () => {

@@ -241,7 +241,7 @@ describe('light-set contrast', () => {
           }),
         ),
       ),
-      ...Object.values(INTENTS).flatMap((intent) => confirmView(intent, 110).lines.flatMap((line) => line.segments)),
+      ...Object.values(INTENTS).flatMap((intent) => confirmView({ intent, width: 110, rows: 20, scroll: 0 }).lines.flatMap((line) => line.segments)),
       ...outcomes.flatMap((outcome) => outcomeLines(outcome, 110).flatMap((line) => line.segments)),
     ]
     const tokens = [...new Set(segments.flatMap((segment): GodTokenName[] => (segment.token === undefined ? [] : [segment.token])))]

@@ -5,7 +5,8 @@
  *   becomes 1 space), and a word wider than a line breaks between graphemes;
  * - textLines: a text of 1 or more lines (a reply, a prompt, a tool input), each line wrapped, with 1 blank line
  *   kept between paragraphs;
- * - screenLines: a terminal screen, each row with its spaces kept, broken between graphemes at the width.
+ * - keptLines and screenLines: a tool input or a terminal screen, each row with its spaces as written, broken
+ *   between graphemes at the width.
  * A tab becomes 2 spaces and each line break ends a line, so no line that a view gives holds a character that
  * the terminal draws wider than cellWidth says.
  */
@@ -100,22 +101,30 @@ export function textLines(text: string, width: number, indent: number, style: St
   return out
 }
 
-/** A terminal screen: each row after 1 space, its spaces kept, broken between graphemes at the width. */
-export function screenLines(text: string, width: number): Line[] {
-  const rows = text.replace(/\t/g, '  ').split(LINE_BREAK).map((row) => row.trimEnd())
-  while (rows.length > 0 && rows.at(-1) === '') rows.pop()
+/**
+ * A text with its spaces as written (a tool input, a terminal screen): each row after `indent` spaces, broken
+ * between graphemes at the width, with no blank row at the end. A screen also drops the spaces at the end of each
+ * row (`isTrimmed`), which only pad it.
+ */
+export function keptLines(text: string, width: number, indent: number, isTrimmed = false): Line[] {
+  const rows = text.replace(/\t/g, '  ').split(LINE_BREAK).map((row) => (isTrimmed ? row.trimEnd() : row))
+  while (rows.length > 0 && rows.at(-1)!.trim() === '') rows.pop()
+  const pad = ' '.repeat(indent)
   return rows.flatMap((row): Line[] => {
     if (row === '') return [{ segments: [] }]
     const pieces: string[] = []
     let rest = row
     while (rest !== '') {
-      const [head, tail] = splitAt(rest, width - 1)
+      const [head, tail] = splitAt(rest, width - indent)
       pieces.push(head)
       rest = tail
     }
-    return pieces.map((piece) => ({ segments: [{ text: ` ${piece}` }] }))
+    return pieces.map((piece) => ({ segments: [{ text: pad + piece }] }))
   })
 }
+
+/** A terminal screen: each row after 1 space, its spaces kept, broken between graphemes at the width. */
+export const screenLines = (text: string, width: number): Line[] => keptLines(text, width, 1, true)
 
 /** 1 more item after the last line, 2 spaces after it, or on a line of its own when it does not fit. */
 export function appendItem(lines: readonly Line[], item: readonly Segment[], width: number): Line[] {
