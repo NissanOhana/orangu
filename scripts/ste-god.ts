@@ -7,6 +7,8 @@ import type { RenderedView } from './ste-surfaces.js'
 import { NOW as GOD_NOW, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot } from '../test/fixtures/god/snapshots.js'
 import { INTENTS as GOD_INTENTS, OUTCOMES as GOD_OUTCOMES, RECAPS as GOD_RECAPS, SCREEN as GOD_SCREEN, detailSnapshot } from '../test/fixtures/god/detail.js'
 import type { BoardSnapshot, DeliverRefusal } from '../src/god/types.js'
+import { statsAnswer } from '../src/god/control.js'
+import { JUMP_NOTE } from '../src/god/view/keys.js'
 import { confirmView, outcomeLines, REFUSAL_TEXT } from '../src/god/view/confirm.js'
 import { DETAIL_TABS, detailLines, detailView } from '../src/god/view/detail.js'
 import { cannotDrawView, layoutOf, paneLines, paneView } from '../src/god/view/pane.js'
@@ -20,8 +22,8 @@ const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
  * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
  * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then the
  * pane with the detail open in each tab at 60 columns (the detail in place of the board) and 110, the wide pane
- * with no session selected, and each line of a pane that cannot draw. The fixture session texts are short and
- * clean, so the row scores the pane.
+ * with no session selected, the pane with each jump note, and each line of a pane that cannot draw. Then each
+ * answer of /god stats. The fixture session texts are short and clean, so the row scores the pane.
  */
 export function godViews(): RenderedView[] {
   const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -48,7 +50,15 @@ export function godViews(): RenderedView[] {
   )
   const noSelection = { file: `${GOD_FIXTURE}#no-selection.110`, lines: paneLines(paneView({ snapshot: boardSnapshot(), bodyColumns: 110, bodyRows: 40, now: GOD_NOW, openGroups: [], promptHoldsKeys: true })).map(text) }
   const cannotDraw = (['too-narrow', 'too-short', 'failed'] as const).map((reason) => ({ file: `${GOD_FIXTURE}#cannot-draw.${reason}`, lines: paneLines(cannotDrawView(reason, 60)).map(text) }))
-  return [...panes, ...opened, noSelection, ...cannotDraw, ...godDetailViews()]
+  const noted = (Object.keys(JUMP_NOTE) as Array<keyof typeof JUMP_NOTE>).flatMap((reason) =>
+    [60, 110].map((bodyColumns) => {
+      const view = paneView({ snapshot: detailSnapshot(), bodyColumns, bodyRows: 40, now: GOD_NOW, selectedKey: 's-wait', openGroups: [], promptHoldsKeys: true, jumpNote: { sessionId: 's-wait', reason } })
+      return { file: `${GOD_DETAIL_FIXTURE}#jump-note.${reason}.${bodyColumns}`, lines: paneLines(view).map(text) }
+    }),
+  )
+  const stats = { at: GOD_NOW, computeMs: 23, waitMs: 410, sessions: 15 }
+  const statsViews = [undefined, [], [stats], [stats, { ...stats, sessions: 1 }]].map((recent, index) => ({ file: `${GOD_FIXTURE}#stats.${index}`, lines: [statsAnswer(recent)] }))
+  return [...panes, ...opened, noSelection, ...noted, ...cannotDraw, ...statsViews, ...godDetailViews()]
 }
 
 const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'
@@ -80,6 +90,7 @@ export function godDetailViews(): RenderedView[] {
     detail('recap.running', { session: wait, width: 79, tab: 'recap', isCmuxMissing: false, recap: GOD_RECAPS.running }),
     detail('recap.failed', { session: wait, width: 79, tab: 'recap', isCmuxMissing: false, recap: GOD_RECAPS.failed }),
     detail('screen.refused', { session: wait, width: 79, tab: 'screen', isCmuxMissing: false, outcome: GOD_OUTCOMES.refused }),
+    detail('screen.failed', { session: wait, width: 79, tab: 'screen', isCmuxMissing: false, screen: GOD_SCREEN, isScreenFailed: true }),
     ...snapshot.sessions.flatMap((session) => DETAIL_TABS.map((tab) => detail(`${session.sessionId}.${tab}.no-cmux`, { session, width: 79, tab, isCmuxMissing: true }))),
   ]
   const confirm = [60, 110].flatMap((columns) =>
