@@ -21,6 +21,8 @@
  *   bar and the key row, so y and c stay.
  * - When the pane cannot draw (a body under BOARD_COLUMNS, or too few rows for a window over the board), it shows
  *   1 message with the reason and nothing else.
+ * - The motion of the draw (src/god/view/motion.ts) gives the board its spinner and pulse frame, and the header its
+ *   sparkline. No motion: the static frame and no sparkline.
  * No line is wider than `bodyColumns`, and no line of the board column is wider than the board.
  */
 import type { JumpNote } from '../act/jump.js'
@@ -33,6 +35,7 @@ import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState, type Pan
 import { ANSWERED_TOOL, PERMISSION_ANSWERS } from './detail-tabs.js'
 import { headerLines } from './header.js'
 import { JUMP_NOTE, keyRow } from './keys.js'
+import type { PaneMotion } from './motion.js'
 import { CANNOT_DRAW, STATE_TEXT, boardStateOf, messageLines, type CannotDraw } from './states.js'
 import type { Line, PaneLayout, PaneView } from './types.js'
 
@@ -66,6 +69,8 @@ export type PaneInput = {
   recap?: RecapState | null
   /** true while s keeps every tone off: the header says so */
   isSoundOff?: boolean
+  /** the spinner and pulse frame, and the sparkline; absent, the static frame and no sparkline */
+  motion?: PaneMotion
 }
 
 /** Where the board goes at a body width. */
@@ -111,7 +116,8 @@ function withoutScroll(detail: PaneDetail, bar: BarView | undefined): PaneDetail
 export function paneView(input: PaneInput): PaneView {
   const { snapshot, bodyColumns, bodyRows, now } = input
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView('too-narrow', bodyColumns)
-  const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now, ...(input.isSoundOff === true ? { isSoundOff: true } : {}) })
+  const { frame, spark } = input.motion ?? {}
+  const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now, ...(input.isSoundOff === true ? { isSoundOff: true } : {}), ...(spark === undefined ? {} : { spark }) })
   const state = boardStateOf(snapshot)
   const note = input.jumpNote ?? undefined
   const notice = note !== undefined && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {}
@@ -145,7 +151,7 @@ export function paneView(input: PaneInput): PaneView {
   const under = bodyRows - header.length - 2 - keys.lines.length
   const barOf = (rows: number): BarView | undefined =>
     input.deliver === undefined ? undefined : barView({ deliver: input.deliver, width: bodyColumns, rows, ...selection, isScreenOpen: detailState.tab === 'screen' })
-  const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey }
+  const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey, ...(frame === undefined ? {} : { frame }) }
   const fits = (room: number): boolean => room >= MIN_WINDOW_ROWS || (!isDetail && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length <= Math.max(0, room))
   const shared = barOf(Math.floor(under / 2))
   const bar = shared !== undefined && isNote(shared) && !fits(under - barHeight(shared)) ? undefined : shared

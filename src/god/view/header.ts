@@ -7,6 +7,8 @@
  * - the mode: `all`, or `repos:` and each stored repo name as its own item. The names show whole or not at all.
  *   When they do not all fit 1 line, the names that fit come first, then `+N repos (/god repos)`: the count of
  *   the names left out and the command that prints them all;
+ * - the sparkline of the last 30 min and its label `30m`, as 1 item, when the draw has one (src/god/view/motion.ts)
+ *   and the header holds it with no more lines than it has without it;
  * - a dim chip for each source whose last read failed (`agents off`). A source that is not on the machine (no cmux)
  *   gets no chip: the key row says what it turns off;
  * - a dim `sound off` chip while s keeps every tone off;
@@ -18,6 +20,7 @@ import type { BoardSnapshot, Level, SourceName } from '../types.js'
 import { LEVEL_GLYPH } from './board.js'
 import { cellWidth, flowItems } from './cells.js'
 import { moreText } from './cut.js'
+import { SPARK_LABEL, sparkGlyphs } from './motion.js'
 import type { Line, Segment } from './types.js'
 
 /** The levels whose count the header shows. */
@@ -43,6 +46,8 @@ export type HeaderInput = {
   now: number
   /** true while s keeps every tone off */
   isSoundOff?: boolean
+  /** the count of working sessions in each minute of the sparkline; absent, no sparkline */
+  spark?: readonly number[]
 }
 
 /** An age as `12s`, `3m`, `2h` or `1d`. */
@@ -84,8 +89,13 @@ export function headerLines(input: HeaderInput): Line[] {
     if (count > 0) items.push([{ text: LEVEL_GLYPH[level], ...LEVEL_PAINT[level] }, { text: ` ${count}` }])
   }
   items.push(...modeItems(snapshot, width))
-  for (const source of SOURCES) if (snapshot.sources[source].status === 'off') items.push([{ text: `${source} off`, ...DIM }])
-  if (input.isSoundOff === true) items.push([{ text: 'sound off', ...DIM }])
-  if (snapshot.factsAt !== undefined && now - snapshot.factsAt > OLD_AFTER_MS) items.push([{ text: `old ${age(now - snapshot.factsAt)}`, ...OLD_FACTS }])
-  return flowItems(items, width)
+  const chips: Segment[][] = []
+  for (const source of SOURCES) if (snapshot.sources[source].status === 'off') chips.push([{ text: `${source} off`, ...DIM }])
+  if (input.isSoundOff === true) chips.push([{ text: 'sound off', ...DIM }])
+  if (snapshot.factsAt !== undefined && now - snapshot.factsAt > OLD_AFTER_MS) chips.push([{ text: `old ${age(now - snapshot.factsAt)}`, ...OLD_FACTS }])
+  const plain = flowItems([...items, ...chips], width)
+  if (input.spark === undefined) return plain
+  const spark: Segment[] = [{ text: sparkGlyphs(input.spark), ...LEVEL_PAINT.working, raster: true }, { text: ` ${SPARK_LABEL}`, ...DIM }]
+  const withSpark = flowItems([...items, spark, ...chips], width)
+  return withSpark.length > plain.length ? plain : withSpark
 }

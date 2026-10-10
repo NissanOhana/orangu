@@ -42,6 +42,8 @@ declare module 'claude-code' {
       alerts: { alertAt: { readonly [sessionId: string]: number }; doneAt: { readonly [sessionId: string]: number } }
       /** the last Recap, of any session, null before the first x */
       recap: OranguGodRecap | null
+      /** the working sessions of each minute of the last 30 min, oldest first, for the sparkline */
+      spark: { minutes: readonly { minute: number; ids: readonly string[] }[] }
     }
   }
 }

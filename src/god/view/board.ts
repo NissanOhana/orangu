@@ -15,11 +15,14 @@
  *   every row, also in a pane too short for the ring to reach a row out of view.
  * The glyph tells the level with no color, for a reader who cannot tell the colors apart. Outside text (a name, a
  * summary, a repo name) shows on 1 line: each run of white space becomes 1 space. The clock comes in as `now`.
+ * The motion frame (src/god/view/motion.ts) comes in as `frame`: a WORKING row shows its spinner frame, and while
+ * the pulse is on, the glyph and the name of a NEEDS YOU row draw bold in the level color. No frame: the static frame.
  */
 import { ACCENT, DIM, FLAG_PAINT, LEVEL_PAINT } from '../ui/theme.js'
 import type { BoardGroup, BoardSnapshot, FlagKind, GodSession, Level } from '../types.js'
 import { cellWidth } from './cells.js'
 import { cutInline, fitSegments, moreText, type Part } from './cut.js'
+import { spinnerGlyph, type MotionFrame } from './motion.js'
 import type { Line, Segment } from './types.js'
 
 /** The board width in the wide layout, and the narrowest board that the row layout fits. */
@@ -82,6 +85,8 @@ export type BoardViewInput = {
   selectedKey?: string
   /** the keys of the groups that the person opened */
   openGroups: readonly string[]
+  /** the motion frame of the draw; absent, the static frame */
+  frame?: MotionFrame
 }
 
 /** The time since `since`: `now` under 1 min, then `12m`, `3h`, `9d` (999d at most), in 4 cells or less. */
@@ -125,7 +130,9 @@ function sessionLine(session: GodSession, input: BoardViewInput, nameColumn: num
   const name = flat(session.name)
   const shownName = cutInline(name, nameColumn) ?? name
   const summary = flat(session.summary)
-  const parts: Part[] = [{ segment: { text: shownName } }]
+  const pulse = session.level === 'needs-you' && input.frame?.isPulseOn === true ? { ...LEVEL_PAINT[session.level], bold: true } : {}
+  const glyph = session.level === 'working' && input.frame !== undefined ? spinnerGlyph(input.frame) : LEVEL_GLYPH[session.level]
+  const parts: Part[] = [{ segment: { text: shownName, ...pulse } }]
   if (cellWidth(shownName) < nameColumn) parts.push({ segment: { text: ' '.repeat(nameColumn - cellWidth(shownName)) } })
   for (const kind of chipKinds(session)) parts.push({ segment: { text: ' ' } }, { segment: { text: FLAG_CHIP[kind], ...FLAG_PAINT[kind] }, isWhole: true })
   if (summary !== '') parts.push({ segment: { text: '  ' } }, { segment: { text: summary } })
@@ -135,7 +142,7 @@ function sessionLine(session: GodSession, input: BoardViewInput, nameColumn: num
     key: session.sessionId,
     segments: [
       mark(input.selectedKey === session.sessionId),
-      { text: LEVEL_GLYPH[session.level], ...LEVEL_PAINT[session.level] },
+      { text: glyph, ...LEVEL_PAINT[session.level], ...pulse },
       { text: ' ' },
       ...middle,
       { text: ' '.repeat(fill + 1) },

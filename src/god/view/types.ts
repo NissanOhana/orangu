@@ -31,6 +31,11 @@ export type Segment = {
    * widths, and the shell draws it only as that paint.
    */
   isPainted?: true
+  /**
+   * Set on the glyphs of the sparkline (src/god/view/motion.ts): the shell draws them as 1 Raster of 1 row, 1 cell
+   * for each glyph, in the color of the token. Only a surface with a Raster gets such a segment.
+   */
+  raster?: true
 }
 
 /** The hotkey and the label of a key Button. */

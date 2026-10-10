@@ -28,6 +28,7 @@
 //   session. /god stats adds the counts of the alert loop.
 // - The Recap (src/god/recap-keys.tsx): only x on the Recap tab of a session makes a model call, 1 at a time.
 // - The selection keys are in src/god/select-keys.tsx.
+// - The motion (src/god/motion-keys.tsx): each draw tells the motion loop its period, and ui.close stops the loop.
 // - The pane asks for its rows inline above the prompt and for its columns in the dock.
 // - The pane is on the screen from its first draw (the engine can place an unasked pane later) until ui.close. The
 //   status line shows only while it is not.
@@ -43,6 +44,7 @@ import { STORE_KEYS, commandAnswer, commandChoice, parseGodArgs, selectionOf, se
 import { GOD_ARGUMENT_HINT, GOD_COMMAND_DESCRIPTION, GOD_FAILED, PANE_TITLE, TOOL_FAILED } from './copy.js'
 import { detailAfterNextTab, detailAfterScroll, detailAfterTab } from './detail-control.js'
 import { engineClock, engineHost } from './engine.js'
+import { drawnMotion, motionLoopOf, recordSpark, type MotionLoop } from './motion-keys.js'
 import { makeRecap, type RecapRuntime } from './recap-keys.js'
 import { textCleaner } from './sanitize.js'
 import { PANE, addDraftLine, cancelBar, checkSent, openAnswer, openDraft, openPermission, scrollBar, sendConfirmed, type DeliverRuntime } from './deliver-keys.js'
@@ -52,8 +54,9 @@ import { readScreenOf } from './source/screen.js'
 import { BOARD, DELIVER, DETAIL, JUMP, OPEN_GROUPS, RECAP, SCREEN, SELECTED, THEME } from './state.js'
 import { BOARD_TOOL, SESSION_TOOL, boardToolAnswer, sessionToolAnswer, type ToolBoard } from './tools.js'
 import type { Settings, StoreState } from './types.js'
-import { drawPane, type PaneActions } from './ui/board.js'
+import { NO_ACTIONS, drawPane, type PaneActions } from './ui/board.js'
 import { themeOf } from './ui/theme.js'
+import { motionPeriod } from './view/motion.js'
 import { cannotDrawView, layoutOf, paneView } from './view/pane.js'
 import type { PaneLayout } from './view/types.js'
 
@@ -63,8 +66,8 @@ const PANE_ROWS = 20
 
 /**
  * The state of 1 load of the module: the settings, whether the pane is on the screen, the board, the screen loop and
- * the alert loop once they run, the last theme that it read, whether the 2 tools are registered, the key path and
- * the Recap.
+ * the alert loop once they run, the last theme that it read, whether the 2 tools are registered, the key path, the
+ * Recap and the motion loop.
  */
 type Runtime = {
   settings: Settings
@@ -77,6 +80,7 @@ type Runtime = {
   hasTools?: boolean
   deliver: DeliverRuntime
   recap: RecapRuntime
+  motion?: MotionLoop
 }
 
 async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
@@ -99,6 +103,7 @@ async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLo
     },
     every: (ms, fn) => $.clock.every(ms, fn),
   })
+  runtime.motion = motionLoopOf($)
   const alerts = alertLoopOf($, host, clean)
   runtime.alerts = alerts
   const loop = createBoardLoop({
@@ -112,7 +117,7 @@ async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLo
       writeStore: (key, value) => $.store.set(key, value),
       showStatus: (text) => $.ui.status(text),
       redraw: () => $.ui.invalidate('ui.render'),
-      onRefresh: (turn) => alerts.onRefresh(turn),
+      onRefresh: async (turn) => void (await Promise.all([alerts.onRefresh(turn), recordSpark($, turn)])),
     },
     store: storeOf(Object.fromEntries(stored)),
     settings: runtime.settings,
@@ -221,17 +226,6 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
   }
 }
 
-const NONE = (): void => undefined
-
-/** The presses of the line that says the pane cannot draw: it has no Button. */
-const NO_ACTIONS: PaneActions = {
-  onRow: NONE,
-  onMore: NONE,
-  keys: {},
-  detail: { onTab: NONE, onScroll: NONE, onOption: NONE, onPermission: NONE, onRecap: NONE },
-  bar: { onSend: NONE, onCancel: NONE, onScroll: NONE, onDraft: NONE },
-}
-
 export function register(on: On, options: PluginOptions): void {
   const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false, isCancelled: false }, recap: { isRunning: false } }
 
@@ -261,7 +255,7 @@ export function register(on: On, options: PluginOptions): void {
 
   on('ui.render', { component: 'Pane', requestId: 'god' }, async ($, e) => {
     markPaneShown(runtime)
-    const [snapshot, selected, openGroups, colors, detail, screen, jumpNote, deliverState, recap] = await Promise.all([
+    const [snapshot, selected, openGroups, colors, detail, screen, jumpNote, deliverState, recap, motion] = await Promise.all([
       read($, BOARD),
       read($, SELECTED),
       read($, OPEN_GROUPS),
@@ -271,6 +265,7 @@ export function register(on: On, options: PluginOptions): void {
       read($, JUMP),
       read($, DELIVER),
       read($, RECAP),
+      drawnMotion($, runtime.motion?.elapsed() ?? 0, runtime.settings.motion, e.surface === 'terminal'),
     ])
     const view = paneView({
       ...(snapshot === null ? {} : { snapshot }),
@@ -286,9 +281,11 @@ export function register(on: On, options: PluginOptions): void {
       deliver: deliverState,
       recap,
       isSoundOff: runtime.board?.store().sound === false,
+      motion,
     })
     const wanted = screenWanted(snapshot ?? undefined, selected || undefined, detail.tab)
     runtime.screen?.want(wanted, isScreenShown(view, wanted))
+    runtime.motion?.want(motionPeriod(view, snapshot ?? undefined, runtime.settings.motion))
     return drawPane($.ui.resolve(e), view, colors, actionsOf($, runtime, layoutOf(e.props.bodyColumns)))
   }).catch(($, e) => drawPane($.ui.resolve(e), cannotDrawView('failed', e.props.bodyColumns), 'dark', NO_ACTIONS))
 
@@ -304,6 +301,7 @@ export function register(on: On, options: PluginOptions): void {
     runtime.isPaneOpen = false
     runtime.board?.setPaneOpen(false)
     runtime.screen?.stop()
+    runtime.motion?.stop()
     return closed
   }).catch(($, e, next) => next(e))
 

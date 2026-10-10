@@ -4,7 +4,8 @@
  * - a theme that starts with `light` uses the light tokens, and each one that the pane draws as text holds 4.5:1
  *   or more against the light ground;
  * - any other theme (`auto`, a custom theme) uses the Claude Code theme keys by meaning, which follow the
- *   person's terminal.
+ *   person's terminal;
+ * - a Raster cell takes the token color as a number, and the terminal's own color for a theme key.
  * Every token value comes from tokens.css through the generated module.
  */
 import { existsSync, readFileSync } from 'node:fs'
@@ -14,8 +15,9 @@ import { describe, expect, it } from 'vitest'
 import { NOW, boardSnapshot, byRepoSnapshot, degradedSnapshot } from '../../../test/fixtures/god/snapshots.js'
 import { GOD_TOKENS, GOD_TOKEN_NAMES, type GodTokenName } from '../generated/tokens.js'
 import { LEVEL_ORDER } from '../types.js'
+import { TERMINAL_COLOR } from '../view/motion.js'
 import { paneLines, paneView } from '../view/pane.js'
-import { ACCENT, FLAG_PAINT, LEVEL_PAINT, OLD_FACTS, colorOf, themeOf } from './theme.js'
+import { ACCENT, FLAG_PAINT, LEVEL_PAINT, OLD_FACTS, colorOf, rasterColorOf, themeOf } from './theme.js'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../..')
 const ENGINE_TYPES = join(ROOT, 'god/.claude-plugin/types/claude-code/index.d.ts')
@@ -115,6 +117,12 @@ describe('colorOf: a token as a color of the theme', () => {
     expect(colorOf('--cat-read', 'theme-keys')).toBe('suggestion')
     expect(colorOf('--accent', 'theme-keys')).toBe('claude')
     expect(colorOf('--cat-edit', 'theme-keys')).toBe('claude')
+  })
+
+  it('gives a Raster cell the color of the token in the dark and light sets, and the terminal color for a theme key', () => {
+    expect(rasterColorOf('--cat-read', 'dark')).toBe(Number.parseInt(GOD_TOKENS.dark['--cat-read'].slice(1), 16))
+    expect(rasterColorOf('--cat-read', 'light')).toBe(Number.parseInt(GOD_TOKENS.light['--cat-search'].slice(1), 16))
+    expect(rasterColorOf('--cat-read', 'theme-keys')).toBe(TERMINAL_COLOR)
   })
 
   it.skipIf(!existsSync(ENGINE_TYPES))('names only keys of the ThemeKey union of the engine types', () => {

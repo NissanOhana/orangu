@@ -10,9 +10,12 @@
  *   accent and the edit color with the accent ink, the read color with the search color.
  * - Any other theme (`auto`, a custom theme) uses the Claude Code theme keys by meaning, so the colors follow the
  *   terminal of the person. src/god/ui/theme.test.ts holds each key to the ThemeKey list of the engine types.
+ * - A Raster cell (the sparkline) takes its color as a number. A theme key has no number, so the cell takes the
+ *   terminal's own color.
  */
 import { GOD_TOKENS, type GodTokenName } from '../generated/tokens.js'
 import type { FlagKind, Level } from '../types.js'
+import { TERMINAL_COLOR } from '../view/motion.js'
 import type { Segment } from '../view/types.js'
 
 /** The 3 ways the pane colors a token: the dark tokens, the light tokens, or the Claude Code theme keys. */
@@ -79,4 +82,10 @@ const THEME_KEY: Readonly<Record<GodTokenName, string>> = {
 export function colorOf(token: GodTokenName, theme: ThemeSet): string {
   if (theme === 'theme-keys') return THEME_KEY[token]
   return GOD_TOKENS[theme][theme === 'light' ? (LIGHT_TEXT[token] ?? token) : token]
+}
+
+/** The color of a token as a Raster cell color (0x00RRGGBB), or the terminal's own color for the theme keys. */
+export function rasterColorOf(token: GodTokenName, theme: ThemeSet): number {
+  const color = colorOf(token, theme)
+  return /^#[0-9a-f]{6}$/i.test(color) ? Number.parseInt(color.slice(1), 16) : TERMINAL_COLOR
 }

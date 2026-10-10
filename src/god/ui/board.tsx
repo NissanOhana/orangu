@@ -34,6 +34,17 @@ export type PaneActions = {
   bar: BarActions
 }
 
+const NONE = (): void => undefined
+
+/** The presses of the line that says the pane cannot draw: it has no Button. */
+export const NO_ACTIONS: PaneActions = {
+  onRow: NONE,
+  onMore: NONE,
+  keys: {},
+  detail: { onTab: NONE, onScroll: NONE, onOption: NONE, onPermission: NONE, onRecap: NONE },
+  bar: { onSend: NONE, onCancel: NONE, onScroll: NONE, onDraft: NONE },
+}
+
 /** The pane of 1 view. */
 export function drawPane(ui: PaneElements, view: PaneView, theme: ThemeSet, actions: PaneActions): RenderElement {
   const { Box } = ui

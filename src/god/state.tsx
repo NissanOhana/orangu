@@ -13,7 +13,9 @@
 //   check of the refreshes after a send, and the mark while the keys go out (src/god/view/bar.ts);
 // - alerts: the times of the last alert and the last done tone of each session in the last 5 min, so a reload of the
 //   code keeps the limit of 1 alert in 5 min (src/god/act/alert-policy.ts). No pane draws it;
-// - recap: the last Recap, of any session, null before the first x (src/god/act/recap.ts).
+// - recap: the last Recap, of any session, null before the first x (src/god/act/recap.ts);
+// - spark: the working sessions of each minute of the last 30 min, for the sparkline of the header
+//   (src/god/view/motion.ts). Each tick of the board adds to it, whether the pane shows or not.
 import { atom } from 'claude-code'
 
 import { NO_ALERTS, type AlertState } from './act/alert-policy.js'
@@ -23,6 +25,7 @@ import type { BoardSnapshot, RecapState } from './types.js'
 import type { ThemeSet } from './ui/theme.js'
 import { NO_DELIVERY, type DeliverState } from './view/bar.js'
 import { DEFAULT_DETAIL, type DetailState } from './view/detail-pane.js'
+import { NO_SPARK, type SparkState } from './view/motion.js'
 
 declare module 'claude-code' {
   interface PluginState {
@@ -37,6 +40,7 @@ declare module 'claude-code' {
       deliver: DeliverState
       alerts: AlertState
       recap: RecapState | null
+      spark: SparkState
     }
   }
 }
@@ -51,3 +55,4 @@ export const JUMP = atom({ plugin: 'orangu-god', key: 'jump' } as const, null)
 export const DELIVER = atom({ plugin: 'orangu-god', key: 'deliver' } as const, NO_DELIVERY)
 export const ALERTS = atom({ plugin: 'orangu-god', key: 'alerts' } as const, NO_ALERTS)
 export const RECAP = atom({ plugin: 'orangu-god', key: 'recap' } as const, null)
+export const SPARK = atom({ plugin: 'orangu-god', key: 'spark' } as const, NO_SPARK)
