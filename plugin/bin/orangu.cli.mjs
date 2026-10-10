@@ -1972,11 +1972,310 @@ function badgeFor(mtimeMs, now) {
   return { badge, ageMs };
 }
 
-// src/redact/redact.ts
+// src/redact/secret-name.ts
+var secretWords = (sep3) => `password|passwd|passphrase|secret[${sep3}]?keys?|secret|token|api[${sep3}]?keys?|access[${sep3}]?keys?|private[${sep3}]?keys?|authorization|auth`;
+var NAME_SEPARATORS = "_./-";
+var NAME_END_SEPARATORS = "_-";
+var KEY_SEPARATORS = " _.:/-";
+var wordAtEnd = (sep3) => new RegExp(`(?:${secretWords(sep3)})$`, "i");
+var [NAME_WORD, KEY_WORD] = [wordAtEnd(NAME_SEPARATORS), wordAtEnd(KEY_SEPARATORS)];
+var ALPHANUMERIC = /[A-Za-z0-9]/;
+function endsWithSecretName(name, sep3, word) {
+  let end = name.length;
+  while (end > 0) {
+    if (word.test(name.slice(Math.max(0, end - 16), end))) return true;
+    let start = end;
+    while (start > 0 && ALPHANUMERIC.test(name[start - 1])) start--;
+    if (start === end || start === 0 || !sep3.includes(name[start - 1])) return false;
+    end = start - 1;
+  }
+  return false;
+}
+var isSecretName = (run) => endsWithSecretName(run, NAME_END_SEPARATORS, NAME_WORD);
+var endsWithSecretWord = (text3) => KEY_WORD.test(text3.slice(-16));
+var answers = /* @__PURE__ */ new Map();
+function maskedSecret(value, mark2) {
+  if (value && typeof value === "object") {
+    return Array.isArray(value) ? value.map((item) => maskedSecret(item, mark2)) : Object.fromEntries(Object.entries(value).map(([k, v]) => [k, maskedSecret(v, mark2)]));
+  }
+  if (!["string", "number", "boolean"].includes(typeof value) || value === "") return value;
+  mark2();
+  return "\u2039redacted\u203A";
+}
+function isSecretKey(key) {
+  const known = answers.get(key);
+  if (known !== void 0) return known;
+  const answer = endsWithSecretName(key.trim().replace(/:$/, "").trim(), KEY_SEPARATORS, KEY_WORD);
+  if (key.length <= 256) {
+    if (answers.size >= 4096) answers.clear();
+    answers.set(key, answer);
+  }
+  return answer;
+}
+
+// src/redact/scan.ts
+var MASK = "\u2039redacted\u203A";
+var NAME_CHAR = /[A-Za-z0-9_.\/-]/;
+var SPACE = /\s/;
+var LINE_END = /[\n\r]/;
+var VALUE_CHAR = /[^\s'"‹]/;
+function quotedTail(text3, end) {
+  const quote = text3[end];
+  if (quote !== '"' && quote !== "'" || text3[end - 1] !== "=" && text3[end - 1] !== ":") return end;
+  let at = end + 1;
+  while (at < text3.length && !LINE_END.test(text3[at]) && text3[at] !== quote) at++;
+  return text3[at] === quote ? at + 1 : at;
+}
+function lineEnd(text3, at, quote) {
+  let end = at;
+  while (end < text3.length && !LINE_END.test(text3[end]) && text3[end] !== quote) end++;
+  return end;
+}
+function twoWordName(text3, start, end, done) {
+  if (text3[start - 1] !== " " || start - 1 <= done) return false;
+  let word = start - 1;
+  while (word > done && /[A-Za-z]/.test(text3[word - 1])) word--;
+  return word < start - 1 && endsWithSecretWord(text3.slice(word, end));
+}
+function skipSpaces(text3, at) {
+  while (at < text3.length && SPACE.test(text3[at])) at++;
+  return at;
+}
+function crossesLine(text3, from, to) {
+  for (let at = from; at < to; at++) if (LINE_END.test(text3[at])) return true;
+  return false;
+}
+var URL_PASSWORD = "\u2039redacted\u203A@";
+function valueCharsEnd(text3, at) {
+  let end = at;
+  for (; ; ) {
+    while (end < text3.length && VALUE_CHAR.test(text3[end])) end++;
+    if (!text3.startsWith(URL_PASSWORD, end)) return end;
+    end += URL_PASSWORD.length;
+  }
+}
+var valueRunEnd = (text3, at) => quotedTail(text3, valueCharsEnd(text3, at));
+var opensValue = (c) => c !== void 0 && (VALUE_CHAR.test(c) || c === '"' || c === "'");
+var isSeparator = (c) => c === "=" || c === ":";
+var BLANK = /[ \t]/;
+function namesSecretAt(text3, end) {
+  let start = end;
+  while (start > 0 && NAME_CHAR.test(text3[start - 1])) start--;
+  return start < end && isSecretName(text3.slice(start, end));
+}
+function endOfName(text3, end) {
+  while (end > 0 && BLANK.test(text3[end - 1])) end--;
+  return end;
+}
+function endsWithInnerName(text3, end) {
+  const at = endOfName(text3, text3[end - 1] === '"' || text3[end - 1] === "'" ? end - 1 : end);
+  return isSeparator(text3[at - 1]) && namesSecretAt(text3, endOfName(text3, at - 1));
+}
+function longValueAt(text3, at) {
+  const from = text3[at] === '"' || text3[at] === "'" ? at + 1 : at;
+  let end = from;
+  while (end < from + 6 && VALUE_CHAR.test(text3[end] ?? " ")) end++;
+  return end === from + 6;
+}
+function withInnerPairs(text3, end) {
+  const later = [];
+  let first = -1;
+  let start = 0;
+  for (; ; ) {
+    let blank = end;
+    while (BLANK.test(text3[blank] ?? "")) blank++;
+    const next = skipSpaces(text3, end);
+    let inner = -1;
+    const after = isSeparator(text3[next]) ? skipSpaces(text3, next + 1) : -1;
+    if (after >= 0 && (!crossesLine(text3, end, after) || namesSecretAt(text3, endOfName(text3, end)) && longValueAt(text3, after))) inner = after;
+    else if (opensValue(text3[next]) && endsWithInnerName(text3, end) && (next === blank || longValueAt(text3, next))) inner = next;
+    else if (isSeparator(text3[end - 1]) && blank > end && opensValue(text3[blank])) inner = blank;
+    if (inner < 0) break;
+    const from = text3[inner] === '"' || text3[inner] === "'" ? inner + 1 : inner;
+    if (crossesLine(text3, end, inner)) {
+      if (first < 0) first = end;
+      else later.push([start, end]);
+      start = from;
+      end = valueCharsEnd(text3, from);
+    } else end = valueRunEnd(text3, from);
+  }
+  if (first < 0) return { end, later };
+  later.push([start, end]);
+  return { end: first, later };
+}
+function maskLater(text3, at, pairs, mark2) {
+  let out3 = "";
+  for (const [from, to] of pairs.later) {
+    out3 += text3.slice(at, from) + MASK;
+    mark2(from, to, MASK);
+    at = to;
+  }
+  return out3;
+}
+var lastEnd = (pairs) => pairs.later.at(-1)?.[1] ?? pairs.end;
+function holdsInnerName(text3, at, end) {
+  for (let sep3 = at; sep3 < end; sep3++) if (isSeparator(text3[sep3]) && namesSecretAt(text3, sep3)) return true;
+  return false;
+}
+function maskAssignments(text3, mark2) {
+  let out3 = "";
+  let done = 0;
+  for (let at = 0; at < text3.length; at++) {
+    if (text3[at] !== "=" && text3[at] !== ":") continue;
+    let nameEnd = at;
+    while (nameEnd > done && SPACE.test(text3[nameEnd - 1])) nameEnd--;
+    let nameStart = nameEnd;
+    while (nameStart > done && NAME_CHAR.test(text3[nameStart - 1])) nameStart--;
+    if (nameStart === nameEnd || !(isSecretName(text3.slice(nameStart, nameEnd)) || twoWordName(text3, nameStart, nameEnd, done))) continue;
+    const value = skipSpaces(text3, at + 1);
+    const opened = text3[value] === '"' || text3[value] === "'";
+    const later = crossesLine(text3, at + 1, value);
+    const quote = opened && !later ? text3[value] : "";
+    const from = opened && later ? value + 1 : value;
+    const close = quote ? lineEnd(text3, value + 1, quote) : -1;
+    const end = quote ? text3[close] === quote ? close + 1 : close : later ? valueCharsEnd(text3, from) : valueRunEnd(text3, from);
+    if ((quote ? close - value - 1 : end - from) < 6) continue;
+    const pairs = withInnerPairs(text3, end);
+    const keep = later ? from : crossesLine(text3, nameEnd, at) ? at : nameEnd;
+    const by = later ? MASK : "=" + MASK;
+    out3 += text3.slice(done, keep) + by;
+    mark2(keep, pairs.end, by);
+    out3 += maskLater(text3, pairs.end, pairs, mark2);
+    done = lastEnd(pairs);
+    at = done - 1;
+  }
+  return out3 + text3.slice(done);
+}
+var QUOTED_KEY = /(\\{0,7}["'])([^"'\\\n]+)\1([ \t]*[:=][ \t]*)/g;
+var OPEN_QUOTE = /\\{0,7}["']/y;
+var UNQUOTED_VALUES = [/[^\s'"\\,;}\]‹]{6,}/y, /[^\s'"‹]{6,}/y];
+function quotedValue(text3, at) {
+  OPEN_QUOTE.lastIndex = at;
+  const quote = OPEN_QUOTE.exec(text3)?.[0];
+  if (!quote || text3[at + quote.length] === "\u2039") return void 0;
+  let items = 0;
+  let k = at + quote.length;
+  while (k < text3.length && !LINE_END.test(text3[k])) {
+    if (text3.startsWith(quote, k)) return items >= 6 ? { end: k + quote.length, mask: quote + MASK + quote } : void 0;
+    k += text3[k] === "\\" && text3[k + 1] !== void 0 && !LINE_END.test(text3[k + 1]) ? 2 : 1;
+    items++;
+  }
+  return items >= 6 ? { end: k, mask: quote + MASK } : void 0;
+}
+function unquotedValue(text3, at) {
+  for (const value of UNQUOTED_VALUES) {
+    value.lastIndex = at;
+    if (value.exec(text3)) return { end: holdsInnerName(text3, at, value.lastIndex) ? valueRunEnd(text3, at) : value.lastIndex, mask: MASK };
+  }
+  return void 0;
+}
+function maskQuotedPairs(text3, mark2) {
+  let out3 = "";
+  let done = 0;
+  QUOTED_KEY.lastIndex = 0;
+  for (let m = QUOTED_KEY.exec(text3); m; m = QUOTED_KEY.exec(text3)) {
+    if (!isSecretKey(m[2])) continue;
+    const at = m.index + m[0].length;
+    const value = quotedValue(text3, at) ?? unquotedValue(text3, at);
+    if (!value) continue;
+    const pairs = withInnerPairs(text3, quotedTail(text3, value.end));
+    out3 += text3.slice(done, at) + value.mask;
+    mark2(at, pairs.end, value.mask);
+    out3 += maskLater(text3, pairs.end, pairs, mark2);
+    done = QUOTED_KEY.lastIndex = lastEnd(pairs);
+  }
+  return out3 + text3.slice(done);
+}
+var AUTHORIZATION = /\b((?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?[a-z][a-z0-9_-]*)[ \t]+([A-Za-z0-9+/._~@-]{4,})(?![A-Za-z0-9+/._~-]|@[A-Za-z0-9]|[ \t]*:|[ \t]+=|=+[ \t]*["']?[A-Za-z0-9+/._~-])={0,2}/dgi;
+var TRAILING_NAME = /[A-Za-z0-9_.\/-]*$/;
+function maskAuthorizations(text3, mark2) {
+  let out3 = "";
+  let done = 0;
+  AUTHORIZATION.lastIndex = 0;
+  for (let m = AUTHORIZATION.exec(text3); m; m = AUTHORIZATION.exec(text3)) {
+    const credential = m.indices[2][1];
+    const name = TRAILING_NAME.exec(m[2])[0];
+    const pairs = isSecretName(name) ? withInnerPairs(text3, credential) : { end: 0, later: [] };
+    const end = Math.max(m.index + m[0].length, pairs.end);
+    const by = `${m[1]} \u2039token\u203A`;
+    out3 += text3.slice(done, m.index) + by;
+    mark2(m.index, end, by);
+    out3 += maskLater(text3, end, pairs, mark2);
+    done = AUTHORIZATION.lastIndex = Math.max(end, lastEnd(pairs));
+  }
+  return out3 + text3.slice(done);
+}
+var LOCAL_CHAR = /[A-Za-z0-9._%+-]/;
+var DOMAIN_CHAR = /[A-Za-z0-9.-]/;
+var LETTER = /[A-Za-z]/;
+function addressEnd(text3, from) {
+  let end = from;
+  while (end < text3.length && DOMAIN_CHAR.test(text3[end])) end++;
+  for (let dot = end - 1; dot > from; dot--) {
+    if (text3[dot] !== ".") continue;
+    let last = dot + 1;
+    while (last < end && LETTER.test(text3[last])) last++;
+    if (last - dot > 2 && (last === text3.length || !WORD_CHAR.test(text3[last]))) return last;
+  }
+  return -1;
+}
+function maskEmails(text3, mark2) {
+  let out3 = "";
+  let done = 0;
+  for (let at = 0; at < text3.length; ) {
+    const boundary = WORD_CHAR.test(text3[at]) !== (at > 0 && WORD_CHAR.test(text3[at - 1]));
+    if (!boundary || !LOCAL_CHAR.test(text3[at])) {
+      at++;
+      continue;
+    }
+    let local = at;
+    while (local < text3.length && LOCAL_CHAR.test(text3[local])) local++;
+    const end = text3[local] === "@" ? addressEnd(text3, local + 1) : -1;
+    if (end < 0) {
+      at = text3[local] === "@" ? local + 1 : Math.max(local, at + 1);
+      continue;
+    }
+    out3 += text3.slice(done, at) + "\u2039email\u203A";
+    mark2(at, end, "\u2039email\u203A");
+    done = at = end;
+  }
+  return out3 + text3.slice(done);
+}
+var TOKEN_CHAR = /[A-Za-z0-9_-]/;
+var WORD_CHAR = /\w/;
+var runEnd = (text3, from) => {
+  let at = from;
+  while (at < text3.length && TOKEN_CHAR.test(text3[at])) at++;
+  return at;
+};
+function maskJwts(text3, mark2) {
+  let out3 = "";
+  let done = 0;
+  let skipTo = 0;
+  for (let at = text3.indexOf("eyJ"); at >= 0; at = text3.indexOf("eyJ", at + 1)) {
+    if (at < skipTo || at > 0 && WORD_CHAR.test(text3[at - 1])) continue;
+    const first = runEnd(text3, at + 3);
+    const second = text3[first] === "." ? runEnd(text3, first + 1) : first;
+    const third = text3[second] === "." && second !== first ? runEnd(text3, second + 1) : second;
+    if (first - at < 13 || second - first - 1 < 10 || text3[second] !== "." || third - second - 1 < 5) {
+      skipTo = first;
+      continue;
+    }
+    out3 += text3.slice(done, at) + "\u2039jwt\u203A";
+    mark2(at, third, "\u2039jwt\u203A");
+    done = skipTo = third;
+    at = third - 1;
+  }
+  return out3 + text3.slice(done);
+}
+
+// src/redact/rules.ts
 var PATTERNS = [
   // key material first: its body would otherwise be cut into the blobs and hashes below
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, "\u2039private-key\u203A"],
-  // API keys / tokens (do these before generic ones)
+  // API keys / tokens (do these before generic ones). Each key rule, the JWT rule, Bearer and Authorization start at a
+  // word start: a rule that starts inside a word splits a JWT, an address, a value or a blob (`helpdesk-…@…`,
+  // `password=Xy9sk-…`), and the rule that would mask it whole then sees only a part of it.
   [/\bsk-ant-[A-Za-z0-9_-]{10,}/g, "\u2039anthropic-key\u203A"],
   [/\bsk-proj-[A-Za-z0-9_-]{20,}/g, "\u2039openai-project-key\u203A"],
   [/\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/g, "\u2039stripe-key\u203A"],
@@ -1991,31 +2290,55 @@ var PATTERNS = [
   [/\bxox[baprs]-[A-Za-z0-9-]{10,}/g, "\u2039slack-token\u203A"],
   [/\bAKIA[0-9A-Z]{16}\b/g, "\u2039aws-key\u203A"],
   [/\bAIza[0-9A-Za-z_-]{30,}/g, "\u2039google-key\u203A"],
-  [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g, "\u2039jwt\u203A"],
+  maskJwts,
   [/\b[A-Fa-f0-9]{40}\b/g, "\u2039hash40\u203A"],
   // connection strings
   [/\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s'"]+/gi, "\u2039db-url\u203A"],
+  // the password of any other URL (scheme://user:<password>@host): the scheme, the user, the host and the path stay.
+  // The password runs to the last @ before the host, so a password that holds an @ goes whole.
+  [/\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/?#@'"]*):(?!‹)[^\s/?#'"]+@/gi, "$1:\u2039redacted\u203A@"],
   // bearer/authorization
   [/\bBearer\s+[A-Za-z0-9._-]{12,}/g, "Bearer \u2039token\u203A"],
-  // key=value assignments, including env-style names around the secret word (AWS_SECRET_ACCESS_KEY=,
-  // DB_PASSWORD=, _authToken=). A bare plural such as `tokens:` never matches, and a value a rule above
-  // already masked (‹…›) keeps that marker.
-  [/\b([A-Za-z0-9_-]*?(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|auth)(?:[_-][A-Za-z0-9]+)*)\s*[:=]\s*['"]?[^\s'"‹]{6,}/gi, "$1=\u2039redacted\u203A"],
-  // email
-  [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "\u2039email\u203A"],
+  // the credential after any other scheme word of an Authorization header (Basic, Token, Negotiate, …), as a scanner
+  // so that a credential that names a secret takes its inner pair with it
+  maskAuthorizations,
+  // a quoted key and its value, then key=value assignments with env-style names around the secret word
+  // (AWS_SECRET_ACCESS_KEY=, DB_PASSWORD=, _authToken=). A value a rule above already masked (‹…›) keeps its marker,
+  // but a URL password that the URL rule masked inside a longer value goes with that value.
+  maskQuotedPairs,
+  maskAssignments,
+  // email, as a scanner that reads each run once
+  maskEmails,
   // long hex/base64 blobs
   [/\b[A-Za-z0-9+/]{60,}={0,2}\b/g, "\u2039blob\u203A"]
 ];
+function replaceRule(text3, [re, rep], mark2) {
+  return text3.replace(re, (...m) => {
+    const by = rep.replace(/\$(\d)/g, (_, i) => String(m[Number(i)] ?? ""));
+    const at = m[m.length - 2];
+    mark2(at, at + m[0].length, by);
+    return by;
+  });
+}
+var applyRule = (text3, rule, mark2) => typeof rule === "function" ? rule(text3, mark2) : replaceRule(text3, rule, mark2);
+function homeRegExp(home) {
+  if (home.length < 2) return null;
+  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(escaped + "(?![A-Za-z0-9_.-])", "g");
+}
+function homeSlugRegExp(home) {
+  if (home.length < 2) return null;
+  const slug = home.replace(/[^A-Za-z0-9-]/g, "-");
+  if (slug.length < 2 || !/[A-Za-z0-9]/.test(slug)) return null;
+  const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(escaped + "(?![A-Za-z0-9_.])", "g");
+}
+
+// src/redact/redact.ts
+var count = () => void counter++;
 var counter = 0;
 function scrubStr(s) {
-  let out3 = s;
-  for (const [re, rep] of PATTERNS) {
-    out3 = out3.replace(re, (...m) => {
-      counter++;
-      return rep.replace(/\$(\d)/g, (_, i) => String(m[Number(i)] ?? ""));
-    });
-  }
-  return out3;
+  return PATTERNS.reduce((out3, rule) => applyRule(out3, rule, count), s);
 }
 function basename3(p) {
   return p.split(/[\\/]/).filter(Boolean).at(-1) ?? p;
@@ -2042,18 +2365,6 @@ function projectIdentity(value, opts) {
 function detectHome() {
   const proc = globalThis.process;
   return proc?.env?.["HOME"] ?? proc?.env?.["USERPROFILE"] ?? "";
-}
-function homeRegExp(home) {
-  if (home.length < 2) return null;
-  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(escaped + "(?![A-Za-z0-9_.-])", "g");
-}
-function homeSlugRegExp(home) {
-  if (home.length < 2) return null;
-  const slug = home.replace(/[^A-Za-z0-9-]/g, "-");
-  if (slug.length < 2 || !/[A-Za-z0-9]/.test(slug)) return null;
-  const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(escaped + "(?![A-Za-z0-9_.])", "g");
 }
 var TEXT_KEYS = /* @__PURE__ */ new Set([
   "promptPreview",
@@ -2142,13 +2453,13 @@ function strippedCountMap(value, opts) {
   const source = value;
   if (!opts.stripText) {
     const out3 = /* @__PURE__ */ new Map();
-    for (const [key, count3] of Object.entries(source)) {
+    for (const [key, count4] of Object.entries(source)) {
       const publicKey = scrubOne(key, opts);
-      out3.set(publicKey, typeof count3 === "number" ? (Number(out3.get(publicKey)) || 0) + count3 : walk(count3, opts));
+      out3.set(publicKey, typeof count4 === "number" ? (Number(out3.get(publicKey)) || 0) + count4 : walk(count4, opts));
     }
     return Object.fromEntries(out3);
   }
-  const total = Object.values(source).reduce((sum2, count3) => sum2 + (typeof count3 === "number" ? count3 : 0), 0);
+  const total = Object.values(source).reduce((sum2, count4) => sum2 + (typeof count4 === "number" ? count4 : 0), 0);
   return total ? { [STRIPPED_KEY]: total } : {};
 }
 function walk(obj3, opts) {
@@ -2166,10 +2477,10 @@ function walk(obj3, opts) {
       }
       if (k === "recordCounts" && v && typeof v === "object" && !Array.isArray(v)) {
         const counts = /* @__PURE__ */ new Map();
-        for (const [recordType, count3] of Object.entries(v)) {
+        for (const [recordType, count4] of Object.entries(v)) {
           if (opts.stripText && unknownRecordKeys?.has(recordType)) continue;
           const publicKey = scrubOne(recordType, opts);
-          counts.set(publicKey, typeof count3 === "number" ? (Number(counts.get(publicKey)) || 0) + count3 : walk(count3, opts));
+          counts.set(publicKey, typeof count4 === "number" ? (Number(counts.get(publicKey)) || 0) + count4 : walk(count4, opts));
         }
         out3.set(k, Object.fromEntries(counts));
         continue;
@@ -2212,7 +2523,8 @@ function walk(obj3, opts) {
         );
         continue;
       }
-      out3.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
+      if (opts.scrub && isSecretKey(k)) out3.set(k, maskedSecret(v && typeof v === "object" ? walk(v, opts) : v, count));
+      else out3.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
     }
     return Object.fromEntries(out3);
   }
@@ -2402,7 +2714,7 @@ import { join as join5, resolve as resolve4 } from "node:path";
 
 // src/model/analysis.ts
 var ANALYSIS_SCHEMA_VERSION = "2";
-var ANALYSIS_PAYLOAD_GENERATION = 5;
+var ANALYSIS_PAYLOAD_GENERATION = 6;
 
 // src/adapters/claude-code/parse.ts
 import { basename as basename4, dirname as dirname3 } from "node:path";
@@ -2904,8 +3216,8 @@ function buildSession(files2, mainPath, keepText, t0) {
           }
         } else if (at === "skill_listing" && !isSub) {
           const names = (arr(a?.["names"]) ?? []).filter((x) => typeof x === "string");
-          const count3 = num(a?.["skillCount"]) ?? names.length;
-          if (!meta.skillsAvailable || bool(a?.["isInitial"])) meta.skillsAvailable = { count: count3, names };
+          const count4 = num(a?.["skillCount"]) ?? names.length;
+          if (!meta.skillsAvailable || bool(a?.["isInitial"])) meta.skillsAvailable = { count: count4, names };
         } else if (at === "read_truncation_notice") {
           meta.truncatedReads++;
         } else if (at === "instructions" && !isSub && !bool(r["isSidechain"])) {
@@ -4647,18 +4959,18 @@ function analyzeContext(s) {
   }
   const requestsPerCompaction = [];
   if (s.compactions.length) {
-    let count3 = 0;
+    let count4 = 0;
     let ci = 0;
     const comps = [...s.compactions].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
     for (const p of main2) {
       while (ci < comps.length && p.ts !== void 0 && (comps[ci].ts ?? Infinity) <= p.ts) {
-        requestsPerCompaction.push(count3);
-        count3 = 0;
+        requestsPerCompaction.push(count4);
+        count4 = 0;
         ci++;
       }
-      count3++;
+      count4++;
     }
-    requestsPerCompaction.push(count3);
+    requestsPerCompaction.push(count4);
   }
   const compactions = s.compactions.map((c) => {
     let before;
@@ -4879,7 +5191,7 @@ function analyzeHooks(s) {
       const hookEvent = busiest(e.events);
       return { command, count: e.count, totalMs: e.totalMs, errors: e.errors, ...hookEvent ? { hookEvent } : {}, events: eventsRecord(e.events), keyedBy: e.keyedBy };
     }).sort((a, b) => b.totalMs - a.totalMs),
-    events: [...byEvent.entries()].map(([hookEvent, count3]) => ({ hookEvent, count: count3 }))
+    events: [...byEvent.entries()].map(([hookEvent, count4]) => ({ hookEvent, count: count4 }))
   };
 }
 function unionMs(iv) {
@@ -8970,10 +9282,10 @@ function aggregateOffer(caps, wroteHtml) {
 }
 var AGG_TITLE_COLUMN = 14;
 var AGG_SESSION_COLUMN = 25;
-function withCount(caps, lines, count3, room) {
+function withCount(caps, lines, count4, room) {
   const last = lines.at(-1);
-  if (last !== void 0 && displayWidth(last) + 2 + displayWidth(count3) <= room) return [...lines.slice(0, -1), last + "  " + paint(caps, "dim", count3)];
-  return [...lines, paint(caps, "dim", count3)];
+  if (last !== void 0 && displayWidth(last) + 2 + displayWidth(count4) <= room) return [...lines.slice(0, -1), last + "  " + paint(caps, "dim", count4)];
+  return [...lines, paint(caps, "dim", count4)];
 }
 function hang(head2, lines) {
   const pad = " ".repeat(displayWidth(head2));
@@ -9000,8 +9312,8 @@ function aggregateBlock(caps, a) {
     const budget = layoutWidth(caps) - AGG_TITLE_COLUMN;
     for (const f of a.crossFindings.slice(0, 8)) {
       const figure = paint(caps, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8));
-      const count3 = `(${plural(f.sessions, "session")})`;
-      const body = withCount(caps, wrapWords(f.exampleTitle || f.title, budget), count3, budget);
+      const count4 = `(${plural(f.sessions, "session")})`;
+      const body = withCount(caps, wrapWords(f.exampleTitle || f.title, budget), count4, budget);
       const improvement = f.improvement ? wrapWords(`Improvement: ${f.improvement}`, budget) : [];
       [...body, ...improvement].forEach((p, i) => lines.push((i ? pad : `    ${figure}  `) + p));
     }
@@ -9664,10 +9976,10 @@ function rankTest(before, after) {
   let lower = 0;
   let higher = 0;
   for (let sum2 = 0; sum2 <= maxSum; sum2++) {
-    const count3 = distribution[sum2];
-    total += count3;
-    if (sum2 <= observed) lower += count3;
-    if (sum2 >= observed) higher += count3;
+    const count4 = distribution[sum2];
+    total += count4;
+    if (sum2 <= observed) lower += count4;
+    if (sum2 >= observed) higher += count4;
   }
   return { pLower: round6(lower / total), pHigher: round6(higher / total) };
 }
@@ -14363,8 +14675,8 @@ async function cmdEffect(store, id, flags) {
   w(`  ${terminal(view.id)}  later sessions vs baseline \xB7 ${view.baseline.n} before, ${view.later.n} after the change`);
   for (const check of view.checks) w(`    ${terminal(check.evidence)}`);
   if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal).join(", ")} (not attributable to this change alone)`);
-  const skipped = Object.entries(view.skipped).filter(([, count3]) => count3 > 0);
-  if (skipped.length) w(`    skipped: ${skipped.map(([reason, count3]) => `${reason} ${count3}`).join(", ")}`);
+  const skipped = Object.entries(view.skipped).filter(([, count4]) => count4 > 0);
+  if (skipped.length) w(`    skipped: ${skipped.map(([reason, count4]) => `${reason} ${count4}`).join(", ")}`);
   w(`  verdict: ${view.verdict}`);
   w(`  next: ${terminal(view.next)}`);
 }
@@ -14591,7 +14903,7 @@ var SENTENCE_END = new RegExp(`(?<=[.!?][*_)"'${RDQUO}${RSQUO}]*)\\s+(?=[A-Z0-9"
 var LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s+/;
 var FLAG = /^--?[A-Za-z][\w-]*(?:=\S*)?$/;
 var PATHISH = /^[\w./~:@=+*-]*[/.~_:=@*\d][\w./~:@=+*-]*$/;
-var OPEN_QUOTE = new RegExp(`["${LDQUO}'${LSQUO}]`);
+var OPEN_QUOTE2 = new RegExp(`["${LDQUO}'${LSQUO}]`);
 var CLOSE_QUOTE = new RegExp(`["${RDQUO}'${RSQUO}]`);
 var LEAD = new RegExp(`^[(${LDQUO}${LSQUO}"']*`);
 var TRAIL = new RegExp(`[.,;:!?)"${RDQUO}${RSQUO}']*$`);
@@ -14761,7 +15073,7 @@ function wrapSegment(segment) {
     let end = tokens[last].coreEnd;
     for (let j = last + 1; j < tokens.length && !tokens[j - 1].trail; ) {
       const token = tokens[j];
-      if (OPEN_QUOTE.test(token.lead) && !token.lead.includes("(")) {
+      if (OPEN_QUOTE2.test(token.lead) && !token.lead.includes("(")) {
         let k = j;
         while (k < tokens.length && k - j <= 12 && !CLOSE_QUOTE.test(tokens[k].trail)) k += 1;
         if (k === tokens.length || k - j > 12) break;
@@ -15669,7 +15981,7 @@ function tags(html) {
 var tagName = (tag) => /^<([a-zA-Z][\w-]*)/.exec(tag)[1].toLowerCase();
 var attributeNames = (tag) => [...tag.replace(/"[^"]*"|'[^']*'/g, '""').slice(1 + tagName(tag).length).matchAll(/([^\s=/>"']+)/g)].map((m) => m[1].toLowerCase());
 var hrefs = (all) => all.flatMap((tag) => [...tag.matchAll(/\shref\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi)].map((m) => m[1])).sort();
-var count = (text3, pattern) => text3.match(pattern)?.length ?? 0;
+var count2 = (text3, pattern) => text3.match(pattern)?.length ?? 0;
 function selfCheck(out3, template, what = "the file") {
   const fail3 = (rule) => {
     throw new SelfCheckError(`${what} failed the self-check: ${rule}`);
@@ -15680,8 +15992,8 @@ function selfCheck(out3, template, what = "the file") {
   if (mine.prefix !== theirs.prefix || mine.between !== theirs.between) fail3("the bytes around the <html> tag differ from the template");
   if (mine.toCsp !== theirs.toCsp) fail3("the head up to the CSP meta differs from the template");
   if (mine.masked !== theirs.masked) fail3("the head differs from the template");
-  if (count(out3, /<script\b/gi) !== 1 || count(out3, /<\/script/gi) !== 1) fail3("it must hold exactly one script");
-  if (count(out3, /<style\b/gi) !== count(template, /<style\b/gi) || count(out3, /<\/style/gi) !== count(template, /<\/style/gi)) fail3("it must hold only the style of the template");
+  if (count2(out3, /<script\b/gi) !== 1 || count2(out3, /<\/script/gi) !== 1) fail3("it must hold exactly one script");
+  if (count2(out3, /<style\b/gi) !== count2(template, /<style\b/gi) || count2(out3, /<\/style/gi) !== count2(template, /<\/style/gi)) fail3("it must hold only the style of the template");
   const body = SCRIPT.exec(out3)?.[1];
   if (body === void 0 || createHash4("sha256").update(body, "utf8").digest("base64") !== SCRIPT_HASH) fail3("the script is not the pinned runtime");
   const own = tags(out3);
@@ -15689,7 +16001,7 @@ function selfCheck(out3, template, what = "the file") {
   const equivs = own.flatMap((tag) => tag.match(/\bhttp-equiv\s*=\s*["']?[^"'\s>]*/gi) ?? []);
   if (equivs.length !== 1 || equivs[0] !== 'http-equiv="Content-Security-Policy') fail3("the CSP must be the one http-equiv");
   if (hrefs(own).join("\n") !== hrefs(model).join("\n")) fail3("the links differ from the template");
-  if (count(out3, /<meta\b/gi) !== count(template, /<meta\b/gi)) fail3("the meta tags differ from the template");
+  if (count2(out3, /<meta\b/gi) !== count2(template, /<meta\b/gi)) fail3("the meta tags differ from the template");
   const names = new Set(model.map(tagName));
   if (own.some((tag) => !names.has(tagName(tag)))) fail3("it holds a tag that the template does not have");
   const attributes = new Set(model.flatMap(attributeNames));
@@ -16489,9 +16801,9 @@ async function prepare(positionals, flags) {
 function printRendered(result, opened, out3) {
   const lines = [row(out3, "slides", oneLine2(result.slides), { raw: true }), row(out3, "report", oneLine2(result.report), { raw: true })];
   for (const f of result.findings) lines.push(row(out3, "ste", `${f.slot}: ${f.rule} "${oneLine2(f.text)}" ${oneLine2(f.hint)}`));
-  const count3 = result.findings.length;
+  const count4 = result.findings.length;
   lines.push(
-    count3 ? row(out3, "words", `${count3} STE finding${count3 === 1 ? "" : "s"}. This is advice: fix each real finding in words.json, then render again.`, { style: "warn" }) : row(out3, "words", "no STE finding", { style: "dim" })
+    count4 ? row(out3, "words", `${count4} STE finding${count4 === 1 ? "" : "s"}. This is advice: fix each real finding in words.json, then render again.`, { style: "warn" }) : row(out3, "words", "no STE finding", { style: "dim" })
   );
   if (opened) lines.push(row(out3, "opened", "both files, in the browser", { style: "dim" }));
   process.stdout.write(`${lines.join("\n")}
@@ -16594,19 +16906,19 @@ import { basename as basename12 } from "node:path";
 
 // src/cli/select.ts
 var FRAME_CHROME_LINES = 5;
-function windowFor(cursor, start, size, count3) {
-  if (count3 <= size) return 0;
+function windowFor(cursor, start, size, count4) {
+  if (count4 <= size) return 0;
   let s = start;
   if (cursor < s) s = cursor;
   if (cursor >= s + size) s = cursor - size + 1;
-  return Math.max(0, Math.min(s, count3 - size));
+  return Math.max(0, Math.min(s, count4 - size));
 }
 function select(o) {
-  const count3 = Math.max(1, o.count);
+  const count4 = Math.max(1, o.count);
   const columns = () => Math.max(40, o.output.columns ?? o.caps.columns);
-  const size = Math.max(1, Math.min(count3, o.viewRows ?? Math.max(3, (o.output.rows ?? 24) - FRAME_CHROME_LINES)));
-  let cursor = Math.max(0, Math.min(o.initial ?? 0, count3 - 1));
-  let start = windowFor(cursor, 0, size, count3);
+  const size = Math.max(1, Math.min(count4, o.viewRows ?? Math.max(3, (o.output.rows ?? 24) - FRAME_CHROME_LINES)));
+  let cursor = Math.max(0, Math.min(o.initial ?? 0, count4 - 1));
+  let start = windowFor(cursor, 0, size, count4);
   let drawn = 0;
   const frame = () => {
     const lines = o.render({ cursor, start, size, columns: columns() });
@@ -16637,8 +16949,8 @@ function select(o) {
       resolve14(r);
     };
     const move = (to) => {
-      cursor = Math.max(0, Math.min(to, count3 - 1));
-      start = windowFor(cursor, start, size, count3);
+      cursor = Math.max(0, Math.min(to, count4 - 1));
+      start = windowFor(cursor, start, size, count4);
       draw();
     };
     const onResize = () => draw();
@@ -16659,7 +16971,7 @@ function select(o) {
         case "home":
           return move(0);
         case "end":
-          return move(count3 - 1);
+          return move(count4 - 1);
         case "pageup":
           return move(cursor - size);
         case "pagedown":
@@ -16787,7 +17099,7 @@ function dashboardChoices(data) {
   choices.push(...data.live.map((row2) => ({ kind: "session", row: row2 })));
   return choices;
 }
-function count2(value, noun) {
+function count3(value, noun) {
   return `${value} ${noun}${value === 1 ? "" : "s"}`;
 }
 function oneLine3(value) {
@@ -16796,11 +17108,11 @@ function oneLine3(value) {
 function choiceText(choice, data, now, sep3) {
   switch (choice.kind) {
     case "repo":
-      return { tag: "REPO", text: `Repository report${sep3}${data.repoName}${sep3}${count2(data.repoSessions, "session")}`, live: false };
+      return { tag: "REPO", text: `Repository report${sep3}${data.repoName}${sep3}${count3(data.repoSessions, "session")}`, live: false };
     case "global":
-      return { tag: "GLOBAL", text: `Global report${sep3}${count2(data.globalSessions, "session")}${sep3}${count2(data.roots, "root")}`, live: false };
+      return { tag: "GLOBAL", text: `Global report${sep3}${count3(data.globalSessions, "session")}${sep3}${count3(data.roots, "root")}`, live: false };
     case "browse":
-      return { tag: "SESSION", text: `Browse session reports${sep3}${count2(data.globalSessions, "session")}`, live: false };
+      return { tag: "SESSION", text: `Browse session reports${sep3}${count3(data.globalSessions, "session")}`, live: false };
     case "session": {
       const title = oneLine3(choice.row.title ?? choice.row.sessionId.slice(0, 8));
       return { tag: "LIVE", text: `${title}${sep3}${choice.row.project}${sep3}${fmtAge(choice.row.mtimeMs, now)}`, live: true };
@@ -16817,7 +17129,7 @@ function dashboardFrame(caps, data, choices, view, now) {
     ...mascotLines(caps),
     "",
     paint(caps, "bold", INDENT3 + "Choose a report"),
-    paint(caps, "dim", truncate(`${INDENT3}${count2(data.runningSessions, "open Claude session")}${g.sep}local only${g.sep}no network calls`, width, caps)),
+    paint(caps, "dim", truncate(`${INDENT3}${count3(data.runningSessions, "open Claude session")}${g.sep}local only${g.sep}no network calls`, width, caps)),
     ""
   ];
   const end = Math.min(choices.length, view.start + view.size);
@@ -16833,7 +17145,7 @@ function dashboardFrame(caps, data, choices, view, now) {
     lines.push(prefix + liveMark + " " + tag + (cursor ? paint(caps, "bold", text3) : text3));
   }
   const hidden = choices.length - (end - view.start);
-  lines.push(hidden > 0 ? paint(caps, "dim", truncate(`${INDENT3}    ${g.up}${g.down} ${count2(hidden, "more choice")}`, width, caps)) : "");
+  lines.push(hidden > 0 ? paint(caps, "dim", truncate(`${INDENT3}    ${g.up}${g.down} ${count3(hidden, "more choice")}`, width, caps)) : "");
   const keys = caps.unicode ? "\u2191\u2193 or j k move \xB7 enter selects \xB7 q quits" : "up/down or j k move | enter selects | q quits";
   lines.push(paint(caps, "dim", truncate(INDENT3 + keys, width, caps)));
   return lines;

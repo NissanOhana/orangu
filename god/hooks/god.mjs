@@ -329,13 +329,13 @@ function boardLines(input) {
 function boardWindow(input) {
   const { snapshot, width } = input;
   const byId = new Map(snapshot.sessions.map((session) => [session.sessionId, session]));
-  const shown = snapshot.groups.map((group) => ({
+  const shown2 = snapshot.groups.map((group) => ({
     group,
     sessions: isOpen(group, input.openGroups) ? group.sessionIds.flatMap((id) => byId.get(id) ?? []) : []
   }));
-  const longest = Math.max(0, ...shown.flatMap(({ sessions }) => sessions.map((session) => cellWidth(flat(session.name)))));
+  const longest = Math.max(0, ...shown2.flatMap(({ sessions }) => sessions.map((session) => cellWidth(flat(session.name)))));
   const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, Math.floor((width - 3) * 0.4)));
-  const items = shown.flatMap(({ group, sessions }) => [headingItem(group, input), ...sessions.map((session) => ({ line: sessionLine(session, input, nameColumn), sessions: 1 }))]);
+  const items = shown2.flatMap(({ group, sessions }) => [headingItem(group, input), ...sessions.map((session) => ({ line: sessionLine(session, input, nameColumn), sessions: 1 }))]);
   const selected = items.findIndex((item) => item.line.key !== void 0 && item.line.key === input.selectedKey);
   return windowOf(items, input.rows, Math.max(0, selected));
 }
@@ -804,14 +804,331 @@ function createBoardLoop(options) {
   };
 }
 
-// src/model/app-data.ts
-var STRIPPED_KEY = "\u2039stripped\u203A";
+// src/redact/origins.ts
+function originsAfter(text, origins, edits, length) {
+  const next = new Int32Array(length);
+  const origin = (i) => origins ? origins[i] : i;
+  let at = 0;
+  let j = 0;
+  for (const [from, to, by] of edits) {
+    while (at < from) next[j++] = origin(at++);
+    let head = 0;
+    while (head < by.length && head < to - from && by[head] === text[from + head]) head++;
+    let tail = 0;
+    while (tail < by.length - head && tail < to - from - head && by[by.length - 1 - tail] === text[to - 1 - tail]) tail++;
+    for (let k = 0; k < by.length; k++) next[j++] = k < head ? origin(from + k) : k >= by.length - tail ? origin(to - by.length + k) : -1;
+    at = to;
+  }
+  while (at < text.length) next[j++] = origin(at++);
+  if (j !== length) throw new Error(`the edits give ${j} characters, not ${length}`);
+  return next;
+}
+function applyEdits(text, edits) {
+  let out = "";
+  let at = 0;
+  for (const [from, to, by] of edits) {
+    out += text.slice(at, from) + by;
+    at = to;
+  }
+  return out + text.slice(at);
+}
 
-// src/redact/redact.ts
+// src/redact/secret-name.ts
+var secretWords = (sep) => `password|passwd|passphrase|secret[${sep}]?keys?|secret|token|api[${sep}]?keys?|access[${sep}]?keys?|private[${sep}]?keys?|authorization|auth`;
+var NAME_SEPARATORS = "_./-";
+var NAME_END_SEPARATORS = "_-";
+var KEY_SEPARATORS = " _.:/-";
+var wordAtEnd = (sep) => new RegExp(`(?:${secretWords(sep)})$`, "i");
+var [NAME_WORD, KEY_WORD] = [wordAtEnd(NAME_SEPARATORS), wordAtEnd(KEY_SEPARATORS)];
+var ALPHANUMERIC = /[A-Za-z0-9]/;
+function endsWithSecretName(name, sep, word) {
+  let end = name.length;
+  while (end > 0) {
+    if (word.test(name.slice(Math.max(0, end - 16), end))) return true;
+    let start2 = end;
+    while (start2 > 0 && ALPHANUMERIC.test(name[start2 - 1])) start2--;
+    if (start2 === end || start2 === 0 || !sep.includes(name[start2 - 1])) return false;
+    end = start2 - 1;
+  }
+  return false;
+}
+var isSecretName = (run) => endsWithSecretName(run, NAME_END_SEPARATORS, NAME_WORD);
+var endsWithSecretWord = (text) => KEY_WORD.test(text.slice(-16));
+var answers = /* @__PURE__ */ new Map();
+function isSecretKey(key) {
+  const known = answers.get(key);
+  if (known !== void 0) return known;
+  const answer = endsWithSecretName(key.trim().replace(/:$/, "").trim(), KEY_SEPARATORS, KEY_WORD);
+  if (key.length <= 256) {
+    if (answers.size >= 4096) answers.clear();
+    answers.set(key, answer);
+  }
+  return answer;
+}
+
+// src/redact/scan.ts
+var MASK = "\u2039redacted\u203A";
+var NAME_CHAR = /[A-Za-z0-9_.\/-]/;
+var SPACE = /\s/;
+var LINE_END = /[\n\r]/;
+var VALUE_CHAR = /[^\s'"‹]/;
+function quotedTail(text, end) {
+  const quote = text[end];
+  if (quote !== '"' && quote !== "'" || text[end - 1] !== "=" && text[end - 1] !== ":") return end;
+  let at = end + 1;
+  while (at < text.length && !LINE_END.test(text[at]) && text[at] !== quote) at++;
+  return text[at] === quote ? at + 1 : at;
+}
+function lineEnd(text, at, quote) {
+  let end = at;
+  while (end < text.length && !LINE_END.test(text[end]) && text[end] !== quote) end++;
+  return end;
+}
+function twoWordName(text, start2, end, done) {
+  if (text[start2 - 1] !== " " || start2 - 1 <= done) return false;
+  let word = start2 - 1;
+  while (word > done && /[A-Za-z]/.test(text[word - 1])) word--;
+  return word < start2 - 1 && endsWithSecretWord(text.slice(word, end));
+}
+function skipSpaces(text, at) {
+  while (at < text.length && SPACE.test(text[at])) at++;
+  return at;
+}
+function crossesLine(text, from, to) {
+  for (let at = from; at < to; at++) if (LINE_END.test(text[at])) return true;
+  return false;
+}
+var URL_PASSWORD = "\u2039redacted\u203A@";
+function valueCharsEnd(text, at) {
+  let end = at;
+  for (; ; ) {
+    while (end < text.length && VALUE_CHAR.test(text[end])) end++;
+    if (!text.startsWith(URL_PASSWORD, end)) return end;
+    end += URL_PASSWORD.length;
+  }
+}
+var valueRunEnd = (text, at) => quotedTail(text, valueCharsEnd(text, at));
+var opensValue = (c) => c !== void 0 && (VALUE_CHAR.test(c) || c === '"' || c === "'");
+var isSeparator = (c) => c === "=" || c === ":";
+var BLANK = /[ \t]/;
+function namesSecretAt(text, end) {
+  let start2 = end;
+  while (start2 > 0 && NAME_CHAR.test(text[start2 - 1])) start2--;
+  return start2 < end && isSecretName(text.slice(start2, end));
+}
+function endOfName(text, end) {
+  while (end > 0 && BLANK.test(text[end - 1])) end--;
+  return end;
+}
+function endsWithInnerName(text, end) {
+  const at = endOfName(text, text[end - 1] === '"' || text[end - 1] === "'" ? end - 1 : end);
+  return isSeparator(text[at - 1]) && namesSecretAt(text, endOfName(text, at - 1));
+}
+function longValueAt(text, at) {
+  const from = text[at] === '"' || text[at] === "'" ? at + 1 : at;
+  let end = from;
+  while (end < from + 6 && VALUE_CHAR.test(text[end] ?? " ")) end++;
+  return end === from + 6;
+}
+function withInnerPairs(text, end) {
+  const later = [];
+  let first = -1;
+  let start2 = 0;
+  for (; ; ) {
+    let blank = end;
+    while (BLANK.test(text[blank] ?? "")) blank++;
+    const next = skipSpaces(text, end);
+    let inner = -1;
+    const after = isSeparator(text[next]) ? skipSpaces(text, next + 1) : -1;
+    if (after >= 0 && (!crossesLine(text, end, after) || namesSecretAt(text, endOfName(text, end)) && longValueAt(text, after))) inner = after;
+    else if (opensValue(text[next]) && endsWithInnerName(text, end) && (next === blank || longValueAt(text, next))) inner = next;
+    else if (isSeparator(text[end - 1]) && blank > end && opensValue(text[blank])) inner = blank;
+    if (inner < 0) break;
+    const from = text[inner] === '"' || text[inner] === "'" ? inner + 1 : inner;
+    if (crossesLine(text, end, inner)) {
+      if (first < 0) first = end;
+      else later.push([start2, end]);
+      start2 = from;
+      end = valueCharsEnd(text, from);
+    } else end = valueRunEnd(text, from);
+  }
+  if (first < 0) return { end, later };
+  later.push([start2, end]);
+  return { end: first, later };
+}
+function maskLater(text, at, pairs, mark2) {
+  let out = "";
+  for (const [from, to] of pairs.later) {
+    out += text.slice(at, from) + MASK;
+    mark2(from, to, MASK);
+    at = to;
+  }
+  return out;
+}
+var lastEnd = (pairs) => pairs.later.at(-1)?.[1] ?? pairs.end;
+function holdsInnerName(text, at, end) {
+  for (let sep = at; sep < end; sep++) if (isSeparator(text[sep]) && namesSecretAt(text, sep)) return true;
+  return false;
+}
+function maskAssignments(text, mark2) {
+  let out = "";
+  let done = 0;
+  for (let at = 0; at < text.length; at++) {
+    if (text[at] !== "=" && text[at] !== ":") continue;
+    let nameEnd = at;
+    while (nameEnd > done && SPACE.test(text[nameEnd - 1])) nameEnd--;
+    let nameStart = nameEnd;
+    while (nameStart > done && NAME_CHAR.test(text[nameStart - 1])) nameStart--;
+    if (nameStart === nameEnd || !(isSecretName(text.slice(nameStart, nameEnd)) || twoWordName(text, nameStart, nameEnd, done))) continue;
+    const value = skipSpaces(text, at + 1);
+    const opened = text[value] === '"' || text[value] === "'";
+    const later = crossesLine(text, at + 1, value);
+    const quote = opened && !later ? text[value] : "";
+    const from = opened && later ? value + 1 : value;
+    const close = quote ? lineEnd(text, value + 1, quote) : -1;
+    const end = quote ? text[close] === quote ? close + 1 : close : later ? valueCharsEnd(text, from) : valueRunEnd(text, from);
+    if ((quote ? close - value - 1 : end - from) < 6) continue;
+    const pairs = withInnerPairs(text, end);
+    const keep = later ? from : crossesLine(text, nameEnd, at) ? at : nameEnd;
+    const by = later ? MASK : "=" + MASK;
+    out += text.slice(done, keep) + by;
+    mark2(keep, pairs.end, by);
+    out += maskLater(text, pairs.end, pairs, mark2);
+    done = lastEnd(pairs);
+    at = done - 1;
+  }
+  return out + text.slice(done);
+}
+var QUOTED_KEY = /(\\{0,7}["'])([^"'\\\n]+)\1([ \t]*[:=][ \t]*)/g;
+var OPEN_QUOTE = /\\{0,7}["']/y;
+var UNQUOTED_VALUES = [/[^\s'"\\,;}\]‹]{6,}/y, /[^\s'"‹]{6,}/y];
+function quotedValue(text, at) {
+  OPEN_QUOTE.lastIndex = at;
+  const quote = OPEN_QUOTE.exec(text)?.[0];
+  if (!quote || text[at + quote.length] === "\u2039") return void 0;
+  let items = 0;
+  let k = at + quote.length;
+  while (k < text.length && !LINE_END.test(text[k])) {
+    if (text.startsWith(quote, k)) return items >= 6 ? { end: k + quote.length, mask: quote + MASK + quote } : void 0;
+    k += text[k] === "\\" && text[k + 1] !== void 0 && !LINE_END.test(text[k + 1]) ? 2 : 1;
+    items++;
+  }
+  return items >= 6 ? { end: k, mask: quote + MASK } : void 0;
+}
+function unquotedValue(text, at) {
+  for (const value of UNQUOTED_VALUES) {
+    value.lastIndex = at;
+    if (value.exec(text)) return { end: holdsInnerName(text, at, value.lastIndex) ? valueRunEnd(text, at) : value.lastIndex, mask: MASK };
+  }
+  return void 0;
+}
+function maskQuotedPairs(text, mark2) {
+  let out = "";
+  let done = 0;
+  QUOTED_KEY.lastIndex = 0;
+  for (let m = QUOTED_KEY.exec(text); m; m = QUOTED_KEY.exec(text)) {
+    if (!isSecretKey(m[2])) continue;
+    const at = m.index + m[0].length;
+    const value = quotedValue(text, at) ?? unquotedValue(text, at);
+    if (!value) continue;
+    const pairs = withInnerPairs(text, quotedTail(text, value.end));
+    out += text.slice(done, at) + value.mask;
+    mark2(at, pairs.end, value.mask);
+    out += maskLater(text, pairs.end, pairs, mark2);
+    done = QUOTED_KEY.lastIndex = lastEnd(pairs);
+  }
+  return out + text.slice(done);
+}
+var AUTHORIZATION = /\b((?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?[a-z][a-z0-9_-]*)[ \t]+([A-Za-z0-9+/._~@-]{4,})(?![A-Za-z0-9+/._~-]|@[A-Za-z0-9]|[ \t]*:|[ \t]+=|=+[ \t]*["']?[A-Za-z0-9+/._~-])={0,2}/dgi;
+var TRAILING_NAME = /[A-Za-z0-9_.\/-]*$/;
+function maskAuthorizations(text, mark2) {
+  let out = "";
+  let done = 0;
+  AUTHORIZATION.lastIndex = 0;
+  for (let m = AUTHORIZATION.exec(text); m; m = AUTHORIZATION.exec(text)) {
+    const credential = m.indices[2][1];
+    const name = TRAILING_NAME.exec(m[2])[0];
+    const pairs = isSecretName(name) ? withInnerPairs(text, credential) : { end: 0, later: [] };
+    const end = Math.max(m.index + m[0].length, pairs.end);
+    const by = `${m[1]} \u2039token\u203A`;
+    out += text.slice(done, m.index) + by;
+    mark2(m.index, end, by);
+    out += maskLater(text, end, pairs, mark2);
+    done = AUTHORIZATION.lastIndex = Math.max(end, lastEnd(pairs));
+  }
+  return out + text.slice(done);
+}
+var LOCAL_CHAR = /[A-Za-z0-9._%+-]/;
+var DOMAIN_CHAR = /[A-Za-z0-9.-]/;
+var LETTER = /[A-Za-z]/;
+function addressEnd(text, from) {
+  let end = from;
+  while (end < text.length && DOMAIN_CHAR.test(text[end])) end++;
+  for (let dot = end - 1; dot > from; dot--) {
+    if (text[dot] !== ".") continue;
+    let last = dot + 1;
+    while (last < end && LETTER.test(text[last])) last++;
+    if (last - dot > 2 && (last === text.length || !WORD_CHAR.test(text[last]))) return last;
+  }
+  return -1;
+}
+function maskEmails(text, mark2) {
+  let out = "";
+  let done = 0;
+  for (let at = 0; at < text.length; ) {
+    const boundary = WORD_CHAR.test(text[at]) !== (at > 0 && WORD_CHAR.test(text[at - 1]));
+    if (!boundary || !LOCAL_CHAR.test(text[at])) {
+      at++;
+      continue;
+    }
+    let local = at;
+    while (local < text.length && LOCAL_CHAR.test(text[local])) local++;
+    const end = text[local] === "@" ? addressEnd(text, local + 1) : -1;
+    if (end < 0) {
+      at = text[local] === "@" ? local + 1 : Math.max(local, at + 1);
+      continue;
+    }
+    out += text.slice(done, at) + "\u2039email\u203A";
+    mark2(at, end, "\u2039email\u203A");
+    done = at = end;
+  }
+  return out + text.slice(done);
+}
+var TOKEN_CHAR = /[A-Za-z0-9_-]/;
+var WORD_CHAR = /\w/;
+var runEnd = (text, from) => {
+  let at = from;
+  while (at < text.length && TOKEN_CHAR.test(text[at])) at++;
+  return at;
+};
+function maskJwts(text, mark2) {
+  let out = "";
+  let done = 0;
+  let skipTo = 0;
+  for (let at = text.indexOf("eyJ"); at >= 0; at = text.indexOf("eyJ", at + 1)) {
+    if (at < skipTo || at > 0 && WORD_CHAR.test(text[at - 1])) continue;
+    const first = runEnd(text, at + 3);
+    const second = text[first] === "." ? runEnd(text, first + 1) : first;
+    const third = text[second] === "." && second !== first ? runEnd(text, second + 1) : second;
+    if (first - at < 13 || second - first - 1 < 10 || text[second] !== "." || third - second - 1 < 5) {
+      skipTo = first;
+      continue;
+    }
+    out += text.slice(done, at) + "\u2039jwt\u203A";
+    mark2(at, third, "\u2039jwt\u203A");
+    done = skipTo = third;
+    at = third - 1;
+  }
+  return out + text.slice(done);
+}
+
+// src/redact/rules.ts
 var PATTERNS = [
   // key material first: its body would otherwise be cut into the blobs and hashes below
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, "\u2039private-key\u203A"],
-  // API keys / tokens (do these before generic ones)
+  // API keys / tokens (do these before generic ones). Each key rule, the JWT rule, Bearer and Authorization start at a
+  // word start: a rule that starts inside a word splits a JWT, an address, a value or a blob (`helpdesk-…@…`,
+  // `password=Xy9sk-…`), and the rule that would mask it whole then sees only a part of it.
   [/\bsk-ant-[A-Za-z0-9_-]{10,}/g, "\u2039anthropic-key\u203A"],
   [/\bsk-proj-[A-Za-z0-9_-]{20,}/g, "\u2039openai-project-key\u203A"],
   [/\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/g, "\u2039stripe-key\u203A"],
@@ -826,57 +1143,49 @@ var PATTERNS = [
   [/\bxox[baprs]-[A-Za-z0-9-]{10,}/g, "\u2039slack-token\u203A"],
   [/\bAKIA[0-9A-Z]{16}\b/g, "\u2039aws-key\u203A"],
   [/\bAIza[0-9A-Za-z_-]{30,}/g, "\u2039google-key\u203A"],
-  [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g, "\u2039jwt\u203A"],
+  maskJwts,
   [/\b[A-Fa-f0-9]{40}\b/g, "\u2039hash40\u203A"],
   // connection strings
   [/\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s'"]+/gi, "\u2039db-url\u203A"],
+  // the password of any other URL (scheme://user:<password>@host): the scheme, the user, the host and the path stay.
+  // The password runs to the last @ before the host, so a password that holds an @ goes whole.
+  [/\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/?#@'"]*):(?!‹)[^\s/?#'"]+@/gi, "$1:\u2039redacted\u203A@"],
   // bearer/authorization
   [/\bBearer\s+[A-Za-z0-9._-]{12,}/g, "Bearer \u2039token\u203A"],
-  // key=value assignments, including env-style names around the secret word (AWS_SECRET_ACCESS_KEY=,
-  // DB_PASSWORD=, _authToken=). A bare plural such as `tokens:` never matches, and a value a rule above
-  // already masked (‹…›) keeps that marker.
-  [/\b([A-Za-z0-9_-]*?(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|auth)(?:[_-][A-Za-z0-9]+)*)\s*[:=]\s*['"]?[^\s'"‹]{6,}/gi, "$1=\u2039redacted\u203A"],
-  // email
-  [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "\u2039email\u203A"],
+  // the credential after any other scheme word of an Authorization header (Basic, Token, Negotiate, …), as a scanner
+  // so that a credential that names a secret takes its inner pair with it
+  maskAuthorizations,
+  // a quoted key and its value, then key=value assignments with env-style names around the secret word
+  // (AWS_SECRET_ACCESS_KEY=, DB_PASSWORD=, _authToken=). A value a rule above already masked (‹…›) keeps its marker,
+  // but a URL password that the URL rule masked inside a longer value goes with that value.
+  maskQuotedPairs,
+  maskAssignments,
+  // email, as a scanner that reads each run once
+  maskEmails,
   // long hex/base64 blobs
   [/\b[A-Za-z0-9+/]{60,}={0,2}\b/g, "\u2039blob\u203A"]
 ];
-var counter = 0;
-function scrubStr(s) {
-  let out = s;
-  for (const [re, rep] of PATTERNS) {
-    out = out.replace(re, (...m) => {
-      counter++;
-      return rep.replace(/\$(\d)/g, (_, i) => String(m[Number(i)] ?? ""));
-    });
+function replaceRule(text, [re, rep], mark2) {
+  return text.replace(re, (...m) => {
+    const by = rep.replace(/\$(\d)/g, (_, i) => String(m[Number(i)] ?? ""));
+    const at = m[m.length - 2];
+    mark2(at, at + m[0].length, by);
+    return by;
+  });
+}
+var applyRule = (text, rule, mark2) => typeof rule === "function" ? rule(text, mark2) : replaceRule(text, rule, mark2);
+function scrubWithOrigins(s, home) {
+  let text = s;
+  let origins;
+  const homeRules = [homeRegExp(home), homeSlugRegExp(home)].flatMap((re) => re ? [[re, "~"]] : []);
+  for (const rule of [...PATTERNS, ...homeRules]) {
+    const edits = [];
+    const next = applyRule(text, rule, (from, to, by) => void edits.push([from, to, by]));
+    if (!edits.length) continue;
+    origins = originsAfter(text, origins, edits, next.length);
+    text = next;
   }
-  return out;
-}
-function basename(p) {
-  return p.split(/[\\/]/).filter(Boolean).at(-1) ?? p;
-}
-function encodedProjectLeaf(value) {
-  let inMarker = false;
-  for (let i = value.length - 1; i >= 0; i--) {
-    if (value[i] === "\u203A") inMarker = true;
-    else if (value[i] === "\u2039") inMarker = false;
-    else if (value[i] === "-" && !inMarker) return value.slice(i + 1) || "project";
-  }
-  return value;
-}
-function isEncodedProjectSlug(value) {
-  return value.startsWith("-") || /^[A-Za-z]--/.test(value);
-}
-function projectIdentity(value, opts) {
-  if (!opts.scrub) return value;
-  const scrubbed = scrubOne(value, opts);
-  if (isEncodedProjectSlug(value) || isEncodedProjectSlug(scrubbed)) return encodedProjectLeaf(scrubbed);
-  if (opts.stripPaths && (scrubbed.includes("/") || scrubbed.includes("\\"))) return scrubOne(basename(scrubbed), opts);
-  return scrubbed;
-}
-function detectHome() {
-  const proc = globalThis.process;
-  return proc?.env?.["HOME"] ?? proc?.env?.["USERPROFILE"] ?? "";
+  return { text, origins };
 }
 function homeRegExp(home) {
   if (home.length < 2) return null;
@@ -890,198 +1199,158 @@ function homeSlugRegExp(home) {
   const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return new RegExp(escaped + "(?![A-Za-z0-9_.])", "g");
 }
-var TEXT_KEYS = /* @__PURE__ */ new Set([
-  "promptPreview",
-  "summary",
-  "inputSummary",
-  "resultPreview",
-  "preview",
-  "detail",
-  "sampleHint",
-  "signature",
-  "title",
-  "label",
-  "description",
-  "args",
-  "command",
-  "message",
-  "errorHint",
-  "teamName",
-  "taskKind",
-  "url",
-  "template",
-  "sample",
-  // InstructionRule.text: a line of an instruction file, as the transcript's `instructions` record carried it
-  "text"
-]);
-var PATH_KEYS = /* @__PURE__ */ new Set(["path", "cwd", "transcriptPath", "file"]);
-var PATH_ARRAY_KEYS = /* @__PURE__ */ new Set(["subagentPaths"]);
-var PROJECT_KEYS = /* @__PURE__ */ new Set(["projectSlug", "project"]);
-var NARRATIVE_TITLE_RE = /^In “[\s\S]*”, (?=(?:you|the human) made \d[\d,]* requests?\b)/;
-var PRIVATE_STRING_ARRAY_KEYS = /* @__PURE__ */ new Set(["gitBranches", "examples", "words"]);
-var UNKNOWN_COUNT_MAP_KEYS = /* @__PURE__ */ new Set([
-  "unknownRecordTypes",
-  "unknownBlockTypes",
-  "attachmentTypes",
-  "attachmentBytes",
-  "primaryAttachmentTypes",
-  "primaryAttachmentBytes",
-  "systemSubtypes",
-  "queueOperations"
-]);
-function scrubOne(s, opts) {
-  if (!opts.scrub) return s;
-  let out = scrubStr(s);
-  for (const re of [opts.homeRe, opts.homeSlugRe]) {
-    if (!re) continue;
-    out = out.replace(re, () => {
-      counter++;
-      return "~";
-    });
+
+// src/god/sanitize.ts
+var ESC = String.fromCharCode(27);
+var CONTROL = "[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u00ad\\u034f\\u061c\\u115f\\u1160\\u17b4\\u17b5\\u180b-\\u180f\\u200b-\\u200f\\u202a-\\u202e\\u2060-\\u2064\\u2066-\\u206f\\u3164\\ufe00-\\ufe0f\\ufeff\\uffa0\\ufff9-\\ufffb]|\\udb40[\\udc00-\\udc7f\\udd00-\\uddef]";
+var CSI = `(?:${ESC}\\[|\\u009b)(?:[\\u0030-\\u003f]+[\\u0020-\\u002f]*|[\\u0021-\\u002f]*)[\\u0040-\\u007e]`;
+var STRING_TEXT = "[^\\u0000-\\u001f\\u007f-\\u009f]*";
+var STRING_END = `(?:\\u0007|${ESC}\\\\|\\u009c)`;
+var STRING = `${ESC}[\\]PX^_]${STRING_TEXT}${STRING_END}?|[\\u0090\\u0098\\u009d-\\u009f]${STRING_TEXT}${STRING_END}`;
+var ESCAPE = `${ESC}[\\u0021-\\u002f]*[\\u0030-\\u007e]`;
+var SEQUENCES = new RegExp(`(?:${CSI}|${STRING}|${ESCAPE}|${CONTROL})+`, "g");
+var CONTROLS = new RegExp(`(?:${CONTROL})+`, "g");
+var C0_INSIDE = "[\\u0000-\\u0017\\u0019\\u001c-\\u001f]";
+var LOOSE_STRING = `(?:${ESC}[\\]PX^_]|[\\u0090\\u0098\\u009d-\\u009f])${STRING_TEXT}${STRING_END}?`;
+function looseSequences(c0Inside, final) {
+  const inside = c0Inside ? `|${C0_INSIDE}` : "";
+  const csi = `(?:${ESC}\\[|\\u009b)(?:[\\u0030-\\u003f]${inside})*(?:[\\u0020-\\u002f]${inside})*${final ? "[\\u0040-\\u007e]?" : ""}`;
+  const escape = `${ESC}(?:[\\u0020-\\u002f]${inside})*${final ? "[\\u0030-\\u007e]?" : ""}`;
+  return new RegExp(`(?:${csi}|${LOOSE_STRING}|${escape}|${CONTROL})+`, "g");
+}
+var LOOSE = [true, false].flatMap((c0Inside) => [true, false].map((final) => looseSequences(c0Inside, final)));
+var SEQUENCE_START = new RegExp(`[${ESC}\\u0090\\u0098\\u009b\\u009d-\\u009f]`);
+var NARROW_CONTROLS = new RegExp("[\\u0000-\\u0008\\u000b-\\u001f\\u007f-\\u009f\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]+", "g");
+var REDACTED = "\u2039redacted\u203A";
+function spaceBetween(text, at, run) {
+  return at > 0 && at + run.length < text.length && !/\s/.test(text[at - 1]) && !/\s/.test(text[at + run.length]) ? " " : "";
+}
+function removeControls(text) {
+  return text.replace(SEQUENCES, (run, at) => spaceBetween(text, at, run));
+}
+function cutsOf(text, pattern, put) {
+  return Array.from(text.matchAll(pattern), (m) => [m.index, m.index + m[0].length, put(m.index, m[0])]);
+}
+function readingOf(text, cuts) {
+  const read2 = applyEdits(text, cuts);
+  return { text: read2, origins: originsAfter(text, void 0, cuts, read2.length) };
+}
+var sameCuts = (a, b) => a.length === b.length && a.every(([from, to, by], i) => from === b[i][0] && to === b[i][1] && by === b[i][2]);
+function readings(text) {
+  const patterns = [CONTROLS, ...SEQUENCE_START.test(text) ? LOOSE : []];
+  const all = [...patterns.flatMap((pattern) => [cutsOf(text, pattern, () => ""), cutsOf(text, pattern, () => " ")]), cutsOf(text, NARROW_CONTROLS, () => "")];
+  return all.filter((cuts, i) => !all.slice(0, i).some((seen) => sameCuts(seen, cuts))).map((cuts) => readingOf(text, cuts));
+}
+function markHidden(reading, home, hidden) {
+  const { origins } = scrubWithOrigins(reading.text, home);
+  if (!origins) return;
+  const kept = new Uint8Array(reading.text.length);
+  for (const at of origins) if (at >= 0) kept[at] = 1;
+  for (let i = 0; i < kept.length; i++) if (!kept[i] && reading.origins[i] >= 0) hidden[reading.origins[i]] = 1;
+}
+var MARKER_OR_RUN = /‹[^›]*›|[A-Za-z0-9]+/g;
+function hideIn(text, isHidden) {
+  const hide = new Uint8Array(text.length);
+  for (let at = 0; at < text.length; at++) if (isHidden(at) && !/\s/.test(text[at])) hide[at] = 1;
+  if (!hide.includes(1)) return text;
+  for (const m of text.matchAll(MARKER_OR_RUN)) if (hide.subarray(m.index, m.index + m[0].length).includes(1)) hide.fill(1, m.index, m.index + m[0].length);
+  let out = "";
+  for (let at = 0; at < text.length; ) {
+    let end = at;
+    while (end < text.length && hide[end] === hide[at]) end++;
+    out += hide[at] ? REDACTED : text.slice(at, end);
+    at = end;
   }
   return out;
 }
-function isAgentRecord(obj3) {
-  if ("toolUseId" in obj3 || "category" in obj3) return false;
-  return "spawnDepth" in obj3 && ("agentId" in obj3 || "hasTranscript" in obj3) || "agentId" in obj3 && ("agentType" in obj3 || "status" in obj3) && ("toolErrors" in obj3 || "tokens" in obj3);
+function cleanControls(text, home) {
+  const pane = readingOf(text, cutsOf(text, SEQUENCES, (at, run) => spaceBetween(text, at, run)));
+  const { text: out, origins } = scrubWithOrigins(pane.text, home);
+  if (pane.text === text) return out;
+  const hidden = new Uint8Array(text.length);
+  for (const reading of readings(text)) markHidden(reading, home, hidden);
+  return hideIn(out, (at) => {
+    const from = origins ? origins[at] : at;
+    return from >= 0 && pane.origins[from] >= 0 && hidden[pane.origins[from]] === 1;
+  });
 }
-function isRuleRecord(obj3) {
-  return "ruleId" in obj3 && "severity" in obj3 && "axis" in obj3;
+var MAX_READ_CHARS = 262144;
+var MAX_SHOW_CHARS = 65536;
+var CUT_CHAR = /[\s"'`,;(){}[\]<>]/;
+function cutBefore(text, limit) {
+  let at = limit;
+  while (at > 0 && !CUT_CHAR.test(text[at])) at--;
+  return at;
 }
-function isQualitySignal(obj3) {
-  return "tone" in obj3 && "value" in obj3 && !("ruleId" in obj3);
-}
-var SAFE_EVENT_KINDS = /* @__PURE__ */ new Set(["interrupt", "pr_link", "plan_mode", "model_fallback", "permission_prompt", "away_summary"]);
-function isSafeEventRecord(obj3) {
-  return "kind" in obj3 && "turnIndex" in obj3 && "label" in obj3 && SAFE_EVENT_KINDS.has(String(obj3["kind"]));
-}
-function isTextRuleTarget(obj3) {
-  return Object.keys(obj3).length === 2 && "name" in obj3 && (obj3["kind"] === "command" || obj3["kind"] === "flag");
-}
-function stripsText(key, source) {
-  switch (key) {
-    case "name":
-      return isAgentRecord(source) || isTextRuleTarget(source);
-    case "title":
-      return !isRuleRecord(source);
-    case "label":
-      return !isQualitySignal(source) && !isSafeEventRecord(source);
-    case "detail":
-      return !isQualitySignal(source);
-    default:
-      return TEXT_KEYS.has(key);
+var CHECK_CHARS = 4096;
+var MOVE_CHARS = 2 * MAX_READ_CHARS;
+function readCut(text, clean) {
+  let at = cutBefore(text, MAX_READ_CHARS);
+  const wide = clean(text.slice(0, at + CHECK_CHARS));
+  let kept = clean(text.slice(0, at));
+  for (let moved = 0; at > 0 && !wide.startsWith(kept); moved += at) {
+    let same = 0;
+    while (kept[same] === wide[same]) same++;
+    const from = at - (kept.length - same);
+    const asItCameIn = from >= 0 && text.slice(from, at) === kept.slice(same);
+    at = cutBefore(text, asItCameIn ? from : Math.floor(at / 2));
+    if (moved + at > MOVE_CHARS) at = 0;
+    kept = clean(text.slice(0, at));
   }
+  return { at, kept };
 }
-function strippedCountMap(value, opts) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return walk(value, opts);
-  const source = value;
-  if (!opts.stripText) {
-    const out = /* @__PURE__ */ new Map();
-    for (const [key, count2] of Object.entries(source)) {
-      const publicKey = scrubOne(key, opts);
-      out.set(publicKey, typeof count2 === "number" ? (Number(out.get(publicKey)) || 0) + count2 : walk(count2, opts));
-    }
-    return Object.fromEntries(out);
+function shown(cleaned, lost) {
+  if (cleaned.length <= MAX_SHOW_CHARS && lost === 0) return cleaned;
+  let at = Math.min(cleaned.length, MAX_SHOW_CHARS);
+  const open = cleaned.lastIndexOf("\u2039", at - 1);
+  if (open >= 0 && cleaned.indexOf("\u203A", open) >= at) at = open;
+  if (at > 0 && /[\ud800-\udbff]/.test(cleaned[at - 1])) at--;
+  return `${cleaned.slice(0, at)}\u2026+${cleaned.length - at + lost} chars`;
+}
+var CACHE_ENTRIES = 4096;
+var CACHE_CHARS = 8388608;
+var cache = /* @__PURE__ */ new Map();
+var cacheHome = "";
+var cacheChars = 0;
+function remembered(text, home, clean) {
+  if (home !== cacheHome) {
+    cache.clear();
+    cacheChars = 0;
+    cacheHome = home;
   }
-  const total = Object.values(source).reduce((sum, count2) => sum + (typeof count2 === "number" ? count2 : 0), 0);
-  return total ? { [STRIPPED_KEY]: total } : {};
-}
-function walk(obj3, opts) {
-  if (typeof obj3 === "string") return scrubOne(obj3, opts);
-  if (Array.isArray(obj3)) return obj3.map((x) => walk(x, opts));
-  if (obj3 && typeof obj3 === "object") {
-    const out = /* @__PURE__ */ new Map();
-    const source = obj3;
-    const unknownRecordTypes = source["unknownRecordTypes"];
-    const unknownRecordKeys = unknownRecordTypes && typeof unknownRecordTypes === "object" && !Array.isArray(unknownRecordTypes) ? new Set(Object.keys(unknownRecordTypes)) : void 0;
-    for (const [k, v] of Object.entries(source)) {
-      if (UNKNOWN_COUNT_MAP_KEYS.has(k)) {
-        out.set(k, strippedCountMap(v, opts));
-        continue;
-      }
-      if (k === "recordCounts" && v && typeof v === "object" && !Array.isArray(v)) {
-        const counts = /* @__PURE__ */ new Map();
-        for (const [recordType, count2] of Object.entries(v)) {
-          if (opts.stripText && unknownRecordKeys?.has(recordType)) continue;
-          const publicKey = scrubOne(recordType, opts);
-          counts.set(publicKey, typeof count2 === "number" ? (Number(counts.get(publicKey)) || 0) + count2 : walk(count2, opts));
-        }
-        out.set(k, Object.fromEntries(counts));
-        continue;
-      }
-      if (opts.stripText && PRIVATE_STRING_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out.set(k, []);
-        continue;
-      }
-      if (opts.stripText && typeof v === "string" && stripsText(k, source)) {
-        out.set(k, "");
-        continue;
-      }
-      if (opts.stripText && k === "narrative" && typeof v === "string") {
-        const stripped = v.replace(NARRATIVE_TITLE_RE, "In this session, ");
-        out.set(k, stripped === v && v.startsWith("In \u201C") ? "" : scrubOne(stripped, opts));
-        continue;
-      }
-      if (opts.stripPaths && PATH_KEYS.has(k) && typeof v === "string" && (v.includes("/") || v.includes("\\"))) {
-        out.set(k, scrubOne(basename(v), opts));
-        continue;
-      }
-      if (opts.stripPaths && PATH_ARRAY_KEYS.has(k) && Array.isArray(v)) {
-        out.set(k, v.map((x) => typeof x === "string" ? scrubOne(basename(x), opts) : walk(x, opts)));
-        continue;
-      }
-      if (PROJECT_KEYS.has(k) && typeof v === "string") {
-        out.set(k, projectIdentity(v, opts));
-        continue;
-      }
-      if (k === "byProject" && Array.isArray(v)) {
-        out.set(
-          k,
-          v.map((item) => {
-            const row = walk(item, opts);
-            if (row && typeof row === "object" && !Array.isArray(row) && typeof row.key === "string") {
-              return { ...row, key: projectIdentity(item.key, opts) };
-            }
-            return row;
-          })
-        );
-        continue;
-      }
-      out.set(k, typeof v === "string" ? scrubOne(v, opts) : walk(v, opts));
-    }
-    return Object.fromEntries(out);
+  const known = cache.get(text);
+  if (known !== void 0) {
+    cache.delete(text);
+    cache.set(text, known);
+    return known;
   }
-  return obj3;
-}
-function redactValue(value, options = {}) {
-  const scrub = options.scrub ?? true;
-  const home = options.home ?? detectHome();
-  const opts = {
-    scrub,
-    stripText: options.stripText ?? false,
-    stripPaths: options.stripPaths ?? false,
-    homeRe: scrub ? homeRegExp(home) : null,
-    homeSlugRe: scrub ? homeSlugRegExp(home) : null
-  };
-  return walk(value, opts);
-}
-
-// src/god/sanitize.ts
-var CONTROLS = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/g;
-var REDACTED = "\u2039redacted\u203A";
-function removeControls(text) {
-  return text.replace(CONTROLS, "");
+  const cleaned = clean();
+  if (text.length + cleaned.length > CACHE_CHARS) return cleaned;
+  cache.set(text, cleaned);
+  cacheChars += text.length + cleaned.length;
+  for (const [raw, value] of cache) {
+    if (cache.size <= CACHE_ENTRIES && cacheChars <= CACHE_CHARS) break;
+    cache.delete(raw);
+    cacheChars -= raw.length + value.length;
+  }
+  return cleaned;
 }
 function cleanText(text, home) {
-  return redactValue(removeControls(text), { home });
+  return remembered(text, home, () => {
+    const clean = (part) => cleanControls(part, home);
+    if (text.length <= MAX_READ_CHARS) return shown(clean(text), 0);
+    const { at, kept } = readCut(text, clean);
+    return shown(kept, text.length - at);
+  });
 }
 function textCleaner(home) {
   return (text) => cleanText(text, home);
 }
-function isSecretKey(key) {
-  const name = key.trim().replace(/:$/, "").trim();
-  return name !== "" && cleanText(`${name}=xxxxxxxxxx`, "").includes(REDACTED);
+function isSecretKey2(key) {
+  return [removeControls(key), key.replace(SEQUENCES, ""), key.replace(CONTROLS, "")].some(isSecretKey);
 }
+var PAIR_NAMES = /* @__PURE__ */ new Set(["name", "key", "parameterkey"]);
+var PAIR_VALUES = /* @__PURE__ */ new Set(["value", "parametervalue"]);
 function masked(value, clean) {
   if (Array.isArray(value)) return value.map((item) => masked(item, clean));
   if (!value || typeof value !== "object") return REDACTED;
@@ -1092,8 +1361,8 @@ function cleanValue(value, clean) {
   if (Array.isArray(value)) return value.map((item) => cleanValue(item, clean));
   if (!value || typeof value !== "object") return value;
   const entries = Object.entries(value);
-  const isSecretPair = entries.some(([name, item]) => (name === "name" || name === "key") && typeof item === "string" && isSecretKey(item));
-  return Object.fromEntries(entries.map(([name, item]) => [clean(name), isSecretKey(name) || isSecretPair && name === "value" ? masked(item, clean) : cleanValue(item, clean)]));
+  const isSecretPair = entries.some(([name, item]) => PAIR_NAMES.has(name.toLowerCase()) && typeof item === "string" && isSecretKey2(item));
+  return Object.fromEntries(entries.map(([name, item]) => [clean(name), isSecretKey2(name) || isSecretPair && PAIR_VALUES.has(name.toLowerCase()) ? masked(item, clean) : cleanValue(item, clean)]));
 }
 
 // src/god/source/agents.ts
@@ -1201,7 +1470,7 @@ function registryRow(fileName, body, fileMtimeMs, clean) {
   if (version !== void 0) out.version = clean(version);
   return out;
 }
-async function readRegistry(host, home, cache2, clean) {
+async function readRegistry(host, home, cache3, clean) {
   const folder = registryFolder(home);
   try {
     const entries = await host.list(folder);
@@ -1210,7 +1479,7 @@ async function readRegistry(host, home, cache2, clean) {
     let filesRead = 0;
     for (const entry of entries) {
       if (entry.kind !== "file" || entry.isLink || !REGISTRY_FILE.test(entry.name)) continue;
-      const known = cache2[entry.name];
+      const known = cache3[entry.name];
       if (known && known.size === entry.size && known.mtimeMs === entry.mtimeMs) {
         next[entry.name] = known;
         continue;
@@ -1326,9 +1595,9 @@ function parseCmuxTree(stdout, clean) {
   const tree = parseJson(stdout);
   const windows = isObject(tree) ? listOf(tree.windows) : void 0;
   if (!windows) return void 0;
-  const walk2 = new TreeWalk(clean);
-  for (const window of windows) walk2.window(window);
-  return { surfaces: walk2.surfaces, parseErrors: walk2.parseErrors };
+  const walk = new TreeWalk(clean);
+  for (const window of windows) walk.window(window);
+  return { surfaces: walk.surfaces, parseErrors: walk.parseErrors };
 }
 async function readCmuxTree(host, clean) {
   try {
@@ -1932,10 +2201,10 @@ function normalizeModelId(raw) {
   }
   return { id, tags };
 }
-var cache = /* @__PURE__ */ new Map();
+var cache2 = /* @__PURE__ */ new Map();
 function resolveModel(rawId) {
   const raw = rawId ?? "unknown";
-  const hit = cache.get(raw);
+  const hit = cache2.get(raw);
   if (hit) return hit;
   const { id, tags } = normalizeModelId(raw);
   let out;
@@ -1980,7 +2249,7 @@ function resolveModel(rawId) {
       tags
     };
   }
-  cache.set(raw, out);
+  cache2.set(raw, out);
   return out;
 }
 function guessFamily(id) {
@@ -2267,8 +2536,8 @@ async function isFolder(host, path) {
     return false;
   }
 }
-async function readRepos(host, cwds, cache2) {
-  const next = { ...cache2 };
+async function readRepos(host, cwds, cache3) {
+  const next = { ...cache3 };
   let failure;
   for (const cwd of cwds) {
     if (!cwd.startsWith("/") || Object.hasOwn(next, cwd)) continue;
@@ -2291,8 +2560,8 @@ async function readRepos(host, cwds, cache2) {
   }
   return failure ? { cache: next, failure } : { cache: next };
 }
-function repoOf(cache2, cwd) {
-  return Object.hasOwn(cache2, cwd) ? cache2[cwd] ?? void 0 : void 0;
+function repoOf(cache3, cwd) {
+  return Object.hasOwn(cache3, cwd) ? cache3[cwd] ?? void 0 : void 0;
 }
 
 // src/discover/slug.ts
@@ -2712,11 +2981,11 @@ function windowOf2(lines, room, scroll) {
   const first = Math.min(Math.max(0, Number.isFinite(scroll) ? Math.floor(scroll) : 0), total - (room - 1));
   const top = first > 0 ? 1 : 0;
   const hasBottom = first + room - top < total;
-  const shown = room - top - (hasBottom ? 1 : 0);
+  const shown2 = room - top - (hasBottom ? 1 : 0);
   const count2 = (hidden, key) => ({ segments: [{ text: " " }, { ...pressSegment(key, countText(hidden, LINE_UNIT)), ...DIM }] });
   return {
-    lines: [...top > 0 ? [count2(first, SCROLL_KEYS.up)] : [], ...lines.slice(first, first + shown), ...hasBottom ? [count2(total - first - shown, SCROLL_KEYS.down)] : []],
-    window: { first, shown, total, page }
+    lines: [...top > 0 ? [count2(first, SCROLL_KEYS.up)] : [], ...lines.slice(first, first + shown2), ...hasBottom ? [count2(total - first - shown2, SCROLL_KEYS.down)] : []],
+    window: { first, shown: shown2, total, page }
   };
 }
 
@@ -3074,8 +3343,8 @@ function detailView(input) {
   const room = rows - head.length - tabRows.length - foot.length;
   if (content.lines.length > room && room < MIN_WINDOW) return { kind: "too-short", lines: messageLines(CANNOT_DRAW["too-short"], width) };
   const { lines: body, window } = windowOf2(content.lines, room, input.scroll);
-  const shown = new Set(body.flatMap((line) => line.key === void 0 ? [] : [line.key]));
-  return { kind: "detail", head, tabRows, body, foot, options: content.options.filter((option) => shown.has(option.key)), window };
+  const shown2 = new Set(body.flatMap((line) => line.key === void 0 ? [] : [line.key]));
+  return { kind: "detail", head, tabRows, body, foot, options: content.options.filter((option) => shown2.has(option.key)), window };
 }
 function detailLines(view) {
   if (view.kind === "too-short") return [...view.lines];
@@ -3188,8 +3457,8 @@ var THEME = atom({ plugin: "orangu-god", key: "theme" }, "dark");
 var DETAIL = atom({ plugin: "orangu-god", key: "detail" }, DEFAULT_DETAIL);
 
 // src/god/view/frame.ts
-var BLANK = { segments: [{ text: " " }] };
-var blanks = (count2) => Array.from({ length: Math.max(0, count2) }, () => BLANK);
+var BLANK2 = { segments: [{ text: " " }] };
+var blanks = (count2) => Array.from({ length: Math.max(0, count2) }, () => BLANK2);
 function wideColumns(board, detailHeight) {
   const height = Math.max(board.length, detailHeight);
   return {
