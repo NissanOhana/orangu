@@ -8,16 +8,20 @@
  *   place of the board. The 2 states of the repos mode (no repo selected, no session of the selected repos) keep a
  *   rule and the key row under their message, because f leaves them, and a key works only while its Button is drawn.
  * - The pane takes no more rows than `bodyRows`: the board shows only the lines that fit, around the selected row.
+ * - The jump note of the selected session (why its last j did not jump) shows under the key row. The note of another
+ *   session shows nothing.
  * - When the pane cannot draw (a body under BOARD_COLUMNS, or too few rows for a window over the board), it shows
  *   1 message with the reason and nothing else.
  * No line is wider than `bodyColumns`, and no line of the board column is wider than the board.
  */
+import type { JumpNote } from '../act/jump.js'
+import type { ScreenState } from '../source/screen.js'
 import { DIM } from '../ui/theme.js'
 import type { BoardSnapshot } from '../types.js'
 import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow } from './board.js'
 import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState } from './detail-pane.js'
 import { headerLines } from './header.js'
-import { keyRow } from './keys.js'
+import { JUMP_NOTE, keyRow } from './keys.js'
 import { CANNOT_DRAW, STATE_TEXT, boardStateOf, messageLines, type CannotDraw } from './states.js'
 import type { Line, PaneLayout, PaneView } from './types.js'
 
@@ -41,6 +45,10 @@ export type PaneInput = {
   promptHoldsKeys: boolean
   /** the open tab of the detail, its scroll, and whether the narrow pane shows the detail; absent, the defaults */
   detail?: DetailState
+  /** the note of the last j that did not jump */
+  jumpNote?: JumpNote | null
+  /** the screen state of the Screen tab */
+  screen?: ScreenState | null
 }
 
 /** Where the board goes at a body width. */
@@ -74,6 +82,8 @@ export function paneView(input: PaneInput): PaneView {
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView('too-narrow', bodyColumns)
   const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now })
   const state = boardStateOf(snapshot)
+  const note = input.jumpNote ?? undefined
+  const notice = note !== undefined && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {}
   const keysOf = (board: BoardSnapshot, isDetail = false) =>
     keyRow({
       width: bodyColumns,
@@ -82,6 +92,7 @@ export function paneView(input: PaneInput): PaneView {
       answerCount: answerCountOf(board, input.selectedKey),
       mode: board.mode,
       isDetail,
+      ...notice,
     })
   if (state !== undefined || snapshot === undefined) {
     const body = messageLines(STATE_TEXT[state ?? 'reading'], bodyColumns)
@@ -96,7 +107,8 @@ export function paneView(input: PaneInput): PaneView {
   const keys = keysOf(snapshot, isDetail)
   const room = bodyRows - header.length - 2 - keys.lines.length
   const selection = input.selectedKey === undefined ? {} : { selectedKey: input.selectedKey }
-  const detailOf = (width: number) => paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState })
+  const screen = input.screen === undefined || input.screen === null ? {} : { screen: input.screen }
+  const detailOf = (width: number) => paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen })
   if (isDetail) {
     if (room < MIN_WINDOW_ROWS) return cannotDrawView('too-short', bodyColumns)
     return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), keys: keys.lines, hints: keys.hints }

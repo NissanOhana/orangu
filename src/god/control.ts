@@ -1,7 +1,9 @@
 /**
  * The pure rules of the pane controls, so the engine shell (src/god/register.tsx) holds none:
  * - the forms of /god: `/god` opens the pane, `/god all` shows every session and clears the repo set,
- *   `/god repos <name>...` sets the repo set, `/god repos` with no name prints the set. Any other form is unknown;
+ *   `/god repos <name>...` sets the repo set, `/god repos` with no name prints the set, `/god stats` prints the times
+ *   of the last refresh from the last facts (not from the snapshot, which ignores a change of the stats alone) and
+ *   opens nothing. Any other form is unknown;
  * - the settings from the userConfig values, and the stored choices from the store, each value checked, else its
  *   default. A seenAt entry needs a finite number under a key of its own;
  * - the answer of /god: what the form did, or that the engine keeps the pane off the screen for now;
@@ -10,10 +12,12 @@
  * - the selection: a move of the focus ring onto a session row or onto a heading that opens and closes selects
  *   that row. A move onto a key Button keeps the selection. n selects the next session that needs you after the
  *   selected row, in the order of the groups that the mode keeps, and goes round to the first;
- * - the status line: `god: N need you` while the pane is not on the screen and N sessions of the board need you.
+ * - the status line: `god: N need you` while the pane is not on the screen and N sessions of the board need you;
+ * - the session that a press opens: a press on a session row (Enter, or a click) opens that session, in both
+ *   layouts, so it marks the session seen. A move of the ring only selects a row: the person walks the board with it.
  */
-import { GOD_NOT_PLACED, GOD_OPENED, GOD_SHOWS_ALL, GOD_USAGE, godShowsRepos, needYouStatus, reposSetText } from './copy.js'
-import type { BoardMode, BoardSnapshot, GroupBy, Settings, StoreState } from './types.js'
+import { GOD_NOT_PLACED, GOD_OPENED, GOD_SHOWS_ALL, GOD_STATS_OFF, GOD_STATS_READING, GOD_USAGE, godShowsRepos, godStats, needYouStatus, reposSetText } from './copy.js'
+import type { BoardMode, BoardSnapshot, GroupBy, RefreshStats, Settings, StoreState } from './types.js'
 import { groupKey } from './view/board.js'
 
 /** What /god does with its arguments. */
@@ -22,6 +26,7 @@ export type GodCommand =
   | { kind: 'all' }
   | { kind: 'repos'; names: readonly string[] }
   | { kind: 'show-repos' }
+  | { kind: 'stats' }
   | { kind: 'unknown' }
 
 /** The settings when the userConfig values are not set. */
@@ -42,6 +47,7 @@ export function parseGodArgs(args: string): GodCommand {
   const [verb, ...rest] = args.trim().split(/\s+/).filter((word) => word !== '')
   if (verb === undefined) return { kind: 'open' }
   if (verb === 'all' && rest.length === 0) return { kind: 'all' }
+  if (verb === 'stats' && rest.length === 0) return { kind: 'stats' }
   if (verb === 'repos') return rest.length === 0 ? { kind: 'show-repos' } : { kind: 'repos', names: [...new Set(rest)] }
   return { kind: 'unknown' }
 }
@@ -92,7 +98,7 @@ export function commandChoice(command: GodCommand): BoardChoice | undefined {
 }
 
 /** What /god answers to a form, from whether the engine placed the pane and the repo set after the form. */
-export function commandAnswer(command: GodCommand, after: { isPlaced: boolean; repos: readonly string[] }): string {
+export function commandAnswer(command: Exclude<GodCommand, { kind: 'stats' }>, after: { isPlaced: boolean; repos: readonly string[] }): string {
   if (command.kind === 'unknown') return GOD_USAGE
   if (command.kind === 'show-repos') return reposSetText(after.repos)
   if (command.kind === 'all') return GOD_SHOWS_ALL
@@ -139,3 +145,21 @@ export function statusText(snapshot: BoardSnapshot | undefined, isPaneOpen: bool
   const count = snapshot.sessions.filter((session) => session.level === 'needs-you').length
   return count > 0 ? needYouStatus(count) : undefined
 }
+
+/**
+ * What /god stats answers from the stats of the last refreshes, oldest first: the 2 times of the newest one and its
+ * session count, then the most engine work of all of them. Undefined: the board does not run.
+ */
+export function statsAnswer(recent: readonly RefreshStats[] | undefined): string {
+  if (recent === undefined) return GOD_STATS_OFF
+  const last = recent.at(-1)
+  if (last === undefined) return GOD_STATS_READING
+  const most = Math.max(...recent.map((stats) => stats.computeMs))
+  return godStats({ computeMs: Math.round(last.computeMs), waitMs: Math.round(last.waitMs), sessions: last.sessions }, Math.round(most), recent.length)
+}
+
+/** The session that a press on the row `key` opens: the session of a session row, else none. */
+export function openedSessionOf(key: string, snapshot: BoardSnapshot | undefined): string | undefined {
+  return snapshot?.sessions.some((session) => session.sessionId === key) === true ? key : undefined
+}
+

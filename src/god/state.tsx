@@ -6,9 +6,13 @@
 // - openGroups: the keys of the groups that the person opened (the stale group starts closed);
 // - theme: the color set of the session theme (src/god/ui/theme.ts);
 // - detail: the open tab of the detail, the first line of its content, and whether the narrow pane shows the detail
-//   in place of the board (src/god/view/detail-pane.ts).
+//   in place of the board (src/god/view/detail-pane.ts);
+// - screen: the screen state of the Screen tab, null before its first read (src/god/screen-loop.ts);
+// - jump: the note of the last j that did not jump, null for none (src/god/act/jump.ts).
 import { atom } from 'claude-code'
 
+import type { JumpNote } from './act/jump.js'
+import type { ScreenState } from './source/screen.js'
 import type { BoardSnapshot } from './types.js'
 import type { ThemeSet } from './ui/theme.js'
 import { DEFAULT_DETAIL, type DetailState } from './view/detail-pane.js'
@@ -21,6 +25,8 @@ declare module 'claude-code' {
       openGroups: readonly string[]
       theme: ThemeSet
       detail: DetailState
+      screen: ScreenState | null
+      jump: JumpNote | null
     }
   }
 }
@@ -30,3 +36,5 @@ export const SELECTED = atom({ plugin: 'orangu-god', key: 'selected' } as const,
 export const OPEN_GROUPS = atom({ plugin: 'orangu-god', key: 'openGroups' } as const, [])
 export const THEME = atom({ plugin: 'orangu-god', key: 'theme' } as const, 'dark')
 export const DETAIL = atom({ plugin: 'orangu-god', key: 'detail' } as const, DEFAULT_DETAIL)
+export const SCREEN = atom({ plugin: 'orangu-god', key: 'screen' } as const, null)
+export const JUMP = atom({ plugin: 'orangu-god', key: 'jump' } as const, null)

@@ -6,7 +6,8 @@
  * - History: the last turns, the newest first, each as your prompt and then the reply.
  * - Agents: the running subagents and background tasks first, then the ended ones, then the subagent files that
  *   no task of the read part names.
- * - Screen: the last read of the cmux tab, with its spaces, under the line of a refusal.
+ * - Screen: the last read of the cmux tab, with its spaces, under the line of a refusal, and under the line that says
+ *   that the newest read failed.
  * - Recap: the hint, or the model text under its label and its token count.
  * The session texts are sanitized and redacted before they come here. Outside text that the detail shows on 1 line
  * is flattened, so no line break gets into a line. The clock comes in as `now`.
@@ -24,6 +25,7 @@ export const NO_AGENTS = 'This session has no subagent and no background task.'
 export const SCREEN_NO_CMUX = 'cmux is not on this machine, so the pane cannot show the screen.'
 export const SCREEN_NO_TAB = 'This session has no cmux tab, so the pane cannot show its screen.'
 export const SCREEN_READING = 'Reading the screen.'
+export const SCREEN_FAILED = 'cmux did not read the screen. The pane tries again in 1 s.'
 export const RECAP_HINT = 'Press x to make a Recap. The Recap is model text, and it uses tokens.'
 export const RECAP_RUNNING = 'The model writes the Recap.'
 /** The label above a Recap: the only model text of the pane. */
@@ -49,6 +51,8 @@ export type TabInput = {
   isCmuxMissing: boolean
   /** the last read of a screen: the Screen tab shows it when it is a read of this session */
   screen?: ScreenRead
+  /** true when the newest screen read of this session failed: the Screen tab says so over the last read */
+  isScreenFailed?: boolean
   /** the last Recap: the Recap tab shows it when it is a Recap of this session */
   recap?: RecapState
   /** the last outcome of the key path: the Screen tab shows a refusal of this session above its screen */
@@ -191,7 +195,7 @@ function agentLines({ session, width, now }: TabInput): Line[] {
 }
 
 /** The Screen tab: why it has no screen, or the newest read of this session under the line of a refusal. */
-function screenTabLines({ session, width, isCmuxMissing, screen, outcome }: TabInput): Line[] {
+function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed, outcome }: TabInput): Line[] {
   if (isCmuxMissing) return message(SCREEN_NO_CMUX, width)
   if (session.tab === undefined) return message(SCREEN_NO_TAB, width)
   const own = outcome !== undefined && outcome.intent.target.sessionId === session.sessionId ? outcome : undefined
@@ -199,7 +203,9 @@ function screenTabLines({ session, width, isCmuxMissing, screen, outcome }: TabI
   const fresh = own !== undefined && 'screen' in own ? own.screen : undefined
   const reads = [screen, fresh].filter((read): read is ScreenRead => read !== undefined && read.sessionId === session.sessionId)
   const newest = reads.sort((a, b) => b.readAt - a.readAt)[0]
-  return [...notice, ...(newest === undefined ? message(SCREEN_READING, width) : screenLines(newest.text, width))]
+  const failed = isScreenFailed === true ? message(SCREEN_FAILED, width, { token: '--warn' }) : []
+  const shown = newest === undefined ? (isScreenFailed === true ? [] : message(SCREEN_READING, width)) : screenLines(newest.text, width)
+  return [...notice, ...failed, ...shown]
 }
 
 /** A token count with a comma between each group of 3 digits. */

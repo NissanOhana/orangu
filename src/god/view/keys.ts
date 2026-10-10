@@ -7,9 +7,11 @@
  * - The digits name the options of the open question of the selected session (`1-3`), else `1-9`.
  * - While the prompt holds the keys, the row ends with the key that gives them to the pane.
  * - With no cmux on the machine, jump, the digits and reply show dim, and 1 more line says why.
+ * - A notice of the last key (why the last j did not jump) shows under the row in the warn color, wrapped, never cut.
  * - While the narrow pane shows the detail in place of the board, the row starts with b, which goes back to the
  *   board, in place of the arrows: the arrows select a session only on the board.
  */
+import type { JumpNote } from '../act/jump.js'
 import type { BoardMode } from '../types.js'
 import { DIM } from '../ui/theme.js'
 import { flowItems, wrapWords } from './cells.js'
@@ -20,6 +22,12 @@ export const KEY_ROW_PROMPT = 'ctrl+x tab: keys to the pane'
 
 /** The line under the key row when cmux is not on the machine. */
 export const KEY_ROW_NO_CMUX = 'Jump, answer and reply are off: cmux is not on this machine.'
+
+/** The line of the key row for each jump note: why the last j of the selected session did not jump. */
+export const JUMP_NOTE: Readonly<Record<JumpNote['reason'], string>> = {
+  'no-tab': 'This session has no cmux tab, so j cannot jump to it.',
+  failed: 'The jump failed: cmux did not show the tab of this session. Press j to try again.',
+}
 
 /** What the key row reads. */
 export type KeyRowInput = {
@@ -34,6 +42,8 @@ export type KeyRowInput = {
   mode: BoardMode
   /** true while the narrow pane shows the detail in place of the board */
   isDetail?: boolean
+  /** a line about the last key, under the row */
+  notice?: string
 }
 
 /** What f does in each mode: it shows the other mode. */
@@ -81,5 +91,6 @@ export function keyRow(input: KeyRowInput): KeyRow {
   if (input.promptHoldsKeys) items.push([{ text: KEY_ROW_PROMPT, ...DIM }])
   const lines = flowItems(items, input.width)
   if (off) lines.push(...wrapWords(KEY_ROW_NO_CMUX, input.width - 1).map((text): Line => ({ segments: [{ text: ` ${text}` }] })))
+  if (input.notice !== undefined) lines.push(...wrapWords(input.notice, input.width - 1).map((text): Line => ({ segments: [{ text: ' ' }, { text, token: '--warn' }] })))
   return { hints, lines }
 }

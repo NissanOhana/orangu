@@ -1,6 +1,7 @@
 // A fake machine for the plugin tests of orangu god: the host commands, the files and the engine calls that the
 // pane makes, answered by hooks beneath the plugin (the store in memory too), and each call recorded. Every value is synthetic: the home
-// folder is /tmp/god-home and the repos live under /tmp/god-test. The fake has no cmux, so ps does not run.
+// folder is /tmp/god-home and the repos live under /tmp/god-test. A machine with no cmux answers no cmux call, so ps
+// does not run; a machine with a cmux answers its tree, ps in UTC, the jump calls and the screen of each tab.
 // screenOf draws a pane tree as text lines, the way the terminal paints it: a plain Button with a hotkey shows
 // `<key>: <label>`, the columns of a row Box sit side by side, each padded to its width.
 import type { On } from 'claude-code'
@@ -28,8 +29,21 @@ export type FakeSession = {
   fileMtimeMs: number
 }
 
+/** The cmux of the fake machine: the tab of each session PID, the screen of each surface, and the calls that exit 1. */
+export type FakeCmux = {
+  tabs: Record<number, { tty: string; workspaceRef: string; surfaceRef: string; title: string }>
+  /** the text that `read-screen` gives for each surface ref */
+  screens?: Record<string, string>
+  /** the cmux subcommands that exit 1 */
+  failing?: string[]
+}
+
 export type Machine = {
   sessions: FakeSession[]
+  /** absent: cmux is not on the machine */
+  cmux?: FakeCmux
+  /** the values that the engine store holds before the session starts */
+  store?: Record<string, unknown>
   /** the git answer of each cwd: the git dir, the common dir and the top level */
   repos: Record<string, readonly [string, string, string]>
   /** the first opens of the pane that the engine does not place, as in a terminal under 144 columns */
@@ -50,6 +64,8 @@ export type Calls = {
   storeSets: Array<[string, unknown]>
   statuses: Array<string | undefined>
   opens: Array<{ id: string; title?: string; columns?: number; rows?: number }>
+  /** the tools that the plugin registered, as it gave them */
+  tools: Array<{ name: string; description: string; inputSchema?: Record<string, unknown>; isDeferred?: boolean }>
 }
 
 /** The folder name of a cwd under the projects folder, as Claude Code writes it. */
@@ -69,7 +85,7 @@ const fileOf = (machine: Machine, path: string): FakeSession | undefined =>
 
 /** Installs the machine beneath the plugin. The god session itself is in the agents list, so the board must leave it out. */
 export function installMachine(on: On, machine: Machine): Calls {
-  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [] }
+  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [], tools: [] }
   const content = (session: FakeSession): string => `${(session.transcript ?? []).join('\n')}\n`
 
   on('process.run', (_$, e) => {
@@ -79,6 +95,12 @@ export function installMachine(on: On, machine: Machine): Calls {
       const self = { pid: 9000, cwd: HOME, kind: 'interactive', startedAt: 0, sessionId: machine.selfId ?? SELF_ID, name: 'god', status: 'busy', waitingFor: null }
       const rows = machine.sessions.map(({ pid, cwd, sessionId, name, status, waitingFor, statusUpdatedAt }) => ({ pid, cwd, kind: 'interactive', startedAt: statusUpdatedAt, sessionId, name, status, waitingFor: waitingFor ?? null }))
       return ran(JSON.stringify([self, ...rows]))
+    }
+    if (command === 'cmux' && machine.cmux) return cmuxRun(machine.cmux, rest)
+    if (command === 'ps' && machine.cmux) {
+      const pids = (rest[3] ?? '').split(',').map(Number)
+      const rows = pids.flatMap((pid) => (machine.cmux!.tabs[pid] ? [`${pid} ${machine.cmux!.tabs[pid]!.tty}  Fri Oct  9 08:00:00 2026`] : [`${pid} ??       Fri Oct  9 08:00:00 2026`]))
+      return ran(`${rows.join('\n')}\n`)
     }
     if (command === 'git') {
       const lines = machine.repos[e.init?.cwd ?? '']
@@ -130,6 +152,10 @@ export function installMachine(on: On, machine: Machine): Calls {
     return { value: isPlaced ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'the terminal is too narrow' } }
   })
   on('ui.close', () => ({ value: undefined }))
+  on('tool.register', (_$, e) => {
+    calls.tools.push({ ...e })
+    return { value: { tool: `mcp__${PLUGIN}__${e.name}` } }
+  })
   on('ui.focus', () => ({}))
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.status', (_$, e) => {
@@ -141,7 +167,7 @@ export function installMachine(on: On, machine: Machine): Calls {
     return next(e)
   })
   // the store in memory, as the engine keeps the store of a plugin, with each write recorded
-  const store = new Map<string, unknown>()
+  const store = new Map<string, unknown>(Object.entries(machine.store ?? {}))
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
   on('store.set', (_$, e) => {
     calls.storeSets.push([e.key, e.value])
@@ -149,6 +175,26 @@ export function installMachine(on: On, machine: Machine): Calls {
     return { value: undefined }
   })
   return calls
+}
+
+/** The value after a flag of an argv. */
+const flagValue = (argv: readonly string[], flag: string): string | undefined => argv[argv.indexOf(flag) + 1]
+
+/** What the fake cmux gives: its methods, its tree of the session tabs, the screen of a surface, and 0 for a jump. */
+function cmuxRun(cmux: FakeCmux, argv: readonly string[]) {
+  const [verb = ''] = argv
+  if (cmux.failing?.includes(verb)) return ran('', 1)
+  if (verb === 'capabilities') return ran(JSON.stringify({ methods: ['system.tree', 'surface.read_text'] }))
+  if (verb === 'tree') {
+    const workspaces = [...new Set(Object.values(cmux.tabs).map((tab) => tab.workspaceRef))].map((ref) => ({
+      ref,
+      title: `space ${ref.slice(ref.indexOf(':') + 1)}`,
+      panes: [{ ref: 'pane:1', surfaces: Object.values(cmux.tabs).filter((tab) => tab.workspaceRef === ref).map((tab) => ({ ref: tab.surfaceRef, tty: tab.tty, title: tab.title })) }],
+    }))
+    return ran(JSON.stringify({ windows: [{ ref: 'window:1', workspaces }] }))
+  }
+  if (verb === 'read-screen') return ran(cmux.screens?.[flagValue(argv, '--surface') ?? ''] ?? '')
+  return ran('')
 }
 
 /** The Pane props of a pane of `columns` by `rows` body cells that holds the keys. */

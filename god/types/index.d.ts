@@ -19,6 +19,10 @@ declare module 'claude-code' {
       theme: 'dark' | 'light' | 'theme-keys'
       /** the open tab of the detail, the first line of its content, and whether the narrow pane shows the detail */
       detail: { tab: 'now' | 'history' | 'agents' | 'screen' | 'recap'; scroll: number; isOpen: boolean }
+      /** the screen state of the Screen tab: the session, the last good read of its screen, and whether the newest read failed */
+      screen: { sessionId: string; read?: { sessionId: string; workspaceRef: string; surfaceRef: string; text: string; readAt: number }; isFailed: boolean } | null
+      /** the note of the last j that did not jump: the session and the reason */
+      jump: { sessionId: string; reason: 'no-tab' | 'failed' } | null
     }
   }
 }

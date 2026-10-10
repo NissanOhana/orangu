@@ -190,4 +190,34 @@ describe('the board loop', () => {
     await loop.tick()
     expect(loop.facts()).toBe(one)
   })
+
+  it('keeps the stats of the last 10 refreshes for /god stats, oldest first, each refresh once', async () => {
+    const queue = Array.from({ length: 12 }, (_, index) => atFacts([idle('s-b', { name: 'b' })], NOW + index * SECOND))
+    const { loop } = loopOf(queue)
+    expect(loop.recentStats()).toEqual([])
+    for (let tick = 0; tick < 12; tick += 1) await loop.tick()
+    // a tick that the collector dropped gives the last facts again: they count once
+    await loop.tick()
+    expect(loop.recentStats().map((stats) => stats.at)).toEqual(Array.from({ length: 10 }, (_, index) => NOW + (index + 2) * SECOND))
+  })
+
+  it('marks a session seen at a time: the store keeps it, and the next snapshot takes it at once', async () => {
+    const turn = idle('s-turn', { name: 't', statusSince: NOW - MINUTE, transcript: { ...idle('x').transcript!, lastTurnEndedAt: NOW - MINUTE } })
+    const { loop, recorded } = loopOf([facts([turn, idle('s-b', { name: 'b' })])])
+    await loop.tick()
+    expect(recorded.snapshots.at(-1)!.sessions.find((session) => session.sessionId === 's-turn')!.level).toBe('your-turn')
+    await loop.seen('s-turn', NOW)
+    expect(loop.store().seenAt['s-turn']).toBe(NOW)
+    expect(recorded.store.at(-1)).toEqual(['seenAt', { 's-turn': NOW, 's-b': PANE_START }])
+    expect(recorded.snapshots.at(-1)!.sessions.find((session) => session.sessionId === 's-turn')!.level).toBe('idle')
+  })
+
+  it('marks nothing for a session that is not on the board', async () => {
+    const { loop, recorded } = loopOf([facts([idle('s-b', { name: 'b' })])])
+    await loop.tick()
+    const writes = recorded.store.length
+    await loop.seen('s-gone', NOW)
+    expect(recorded.store).toHaveLength(writes)
+    expect(loop.store().seenAt).not.toHaveProperty('s-gone')
+  })
 })

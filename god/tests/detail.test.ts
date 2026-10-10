@@ -77,14 +77,14 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'key:t' }))?.props['hotkey']).toBe('t')
   })
 
-  test(`${surface}: a press on a tab opens it, and the Screen and Recap tabs say that they are not in this build`, async ($, on) => {
+  test(`${surface}: a press on a tab opens it, the Screen tab says why it has no screen with no cmux, and the Recap tab is not in this build`, async ($, on) => {
     const { ui } = await openAt($, on, surface, 110)
     await select($, 'ses-wait')
     expect((await keysOf(ui)).filter((key) => key.startsWith('tab:'))).toEqual(['tab:now', 'tab:history', 'tab:agents', 'tab:screen', 'tab:recap'])
     await ui.press({ key: 'tab:screen' })
     const screen = await lines(ui)
     expect(openTab(screen)).toBe('Screen')
-    expect(screen.some((line) => line.endsWith('│ The Screen tab is not in this build.'))).toBe(true)
+    expect(screen.some((line) => line.endsWith('│ cmux is not on this machine, so the pane cannot show the screen.')), screen.join('\n')).toBe(true)
     await ui.press({ key: 'tab:recap' })
     expect((await lines(ui)).some((line) => line.endsWith('│ The Recap tab is not in this build.'))).toBe(true)
   })

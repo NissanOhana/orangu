@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { cellWidth } from './cells.js'
-import { KEY_ROW_NO_CMUX, keyRow } from './keys.js'
+import { JUMP_NOTE, KEY_ROW_NO_CMUX, keyRow } from './keys.js'
 import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -27,6 +27,21 @@ describe('the key row', () => {
   it('ends with the ctrl+x tab line while the prompt holds the keys', () => {
     const lines = keyRow({ ...BASE, promptHoldsKeys: true }).lines.map(text)
     expect(lines.at(-1)).toMatch(/ ctrl\+x tab: keys to the pane$/)
+  })
+
+  it('says in a line of its own, in the warn color, why the last j did not jump', () => {
+    expect(JUMP_NOTE).toEqual({
+      'no-tab': 'This session has no cmux tab, so j cannot jump to it.',
+      failed: 'The jump failed: cmux did not show the tab of this session. Press j to try again.',
+    })
+    for (const notice of Object.values(JUMP_NOTE)) {
+      const row = keyRow({ ...BASE, notice })
+      expect(row.lines.map(text)).toEqual([ROW, ` ${notice}`])
+      expect(row.lines[1]!.segments.find((segment) => segment.text.trim() !== '')?.token).toBe('--warn')
+    }
+    const narrow = keyRow({ ...BASE, width: 40, notice: JUMP_NOTE.failed })
+    for (const line of narrow.lines) expect(cellWidth(text(line)), text(line)).toBeLessThanOrEqual(40)
+    expect(narrow.lines.map(text).join(' ').replace(/\s+/g, ' ')).toContain(JUMP_NOTE.failed)
   })
 
   it('draws j, the digits and r dim with no cmux, and says why in a line of its own', () => {

@@ -16,12 +16,17 @@
  * - The status line counts the sessions that need you while the pane is not on the screen, and changes only when
  *   its text changes.
  * - A choice (a /god form, the f or g key) goes to the store, field by field, and publishes at once.
+ * - A jump to a session and an open of its row mark it seen: its seenAt takes that time, goes to the store with the
+ *   seenAt of the other sessions of the board, and the loop publishes at once, so YOUR TURN turns to IDLE. A session
+ *   that is not on the board is not marked.
+ * - The loop keeps the stats of the last RECENT_STATS refreshes for /god stats, each refresh once: a tick that the
+ *   collector dropped gives the last facts again, with the same time.
  * - A failed port does not stop the loop: a store write that fails leaves the choice in memory, and a snapshot that
  *   the engine did not take is written on the next tick.
  */
 import { statusText, type BoardChoice, type StoreKey } from './control.js'
 import { hasOldFacts, isSnapshotChanged, makeSnapshot } from './snapshot.js'
-import type { BoardSnapshot, Facts, Settings, StoreState } from './types.js'
+import type { BoardSnapshot, Facts, RefreshStats, Settings, StoreState } from './types.js'
 import { levelTime } from './view/board.js'
 
 /** What the loop asks of the engine. */
@@ -63,7 +68,14 @@ export type BoardLoop = {
   snapshot: () => BoardSnapshot | undefined
   /** the newest facts, for /god stats */
   facts: () => Facts | undefined
+  /** the stats of the last refreshes, oldest first, for /god stats */
+  recentStats: () => readonly RefreshStats[]
+  /** marks a session of the board seen at `at` (a jump, or an open of its row), and publishes at once */
+  seen: (sessionId: string, at: number) => Promise<void>
 }
+
+/** /god stats reads the stats of this many refreshes. */
+export const RECENT_STATS = 10
 
 /** The times that the pane shows of a snapshot: the time in the level of each row, and the age of old facts. */
 function shownTimes(snapshot: BoardSnapshot): string {
@@ -82,6 +94,7 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
   let drawnTimes: string | undefined
   let shownStatus: string | undefined
   let queue: Promise<void> = Promise.resolve()
+  let recent: RefreshStats[] = []
 
   /** Runs 1 publish after the ones before it. */
   const serial = (work: () => Promise<void>): Promise<void> => {
@@ -140,6 +153,7 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
         selfId = await ports.selfId()
         const facts = await ports.refresh()
         if (latest === undefined || facts.stats.at >= latest.stats.at) latest = facts
+        if (recent.length === 0 || facts.stats.at > recent.at(-1)!.at) recent = [...recent, facts.stats].slice(-RECENT_STATS)
         await serial(publish)
       } catch {
         // a refresh never rejects, and a failed write tries again on the next tick
@@ -157,5 +171,14 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
     store: () => store,
     snapshot: () => written,
     facts: () => latest,
+    recentStats: () => recent,
+    seen: async (sessionId, at) => {
+      const sessions = written?.sessions ?? []
+      if (!sessions.some((session) => session.sessionId === sessionId)) return
+      const kept = sessions.flatMap(({ sessionId: id }) => (Object.hasOwn(store.seenAt, id) ? [[id, store.seenAt[id]!] as const] : []))
+      store = { ...store, seenAt: { ...Object.fromEntries(kept), [sessionId]: at } }
+      await ports.writeStore('seenAt', store.seenAt).catch(() => undefined)
+      await serial(publish).catch(() => undefined)
+    },
   }
 }

@@ -9,8 +9,17 @@
 // - The pane draws the last snapshot from the engine state through the view (src/god/view/pane.ts). The selected
 //   row comes from the moves of the focus ring (ui.focus), n, a press on a row, and a press on a count line of the
 //   board, which also moves the ring onto the row that it selects. Each new selection starts the detail at its
-//   top. The keys n, f, g, t and b are hotkey Buttons of the key row, and w and z the count lines of the detail.
+//   top. The keys j, n, f, g, t and b are hotkey Buttons of the key row, and w and z the count lines of the detail.
 //   The rules of the detail controls are in src/god/detail-control.ts.
+// - j jumps to the cmux tab of the selected session (src/god/act/jump.ts). A jump and a press on a session row (an
+//   open) mark the session seen. The note of a j that did not jump goes to the engine state for the key row.
+// - The Screen tab: each draw tells the screen loop (src/god/screen-loop.ts) which tab the shared state asks for and
+//   whether this draw shows it. The loop reads that tab every 1 s through the host port and writes each read to the
+//   engine state. The pane that closes stops it.
+// - The 2 tools (src/god/tools.ts) register once, the first time the pane opens (before the first prompt when
+//   ORANGU_GOD is 1), with their schema in the prompt. Each tool.call hook answers from the last snapshot that the
+//   board took. The tools only read.
+// - /god stats answers from the stats of the last refreshes of the board, and opens nothing.
 // - The pane asks for its rows inline above the prompt and for its columns in the dock.
 // - The pane is on the screen from its first draw (the engine can place an unasked pane later) until ui.close. The
 //   status line shows only while it is not.
@@ -18,13 +27,18 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, On, PluginOptions } from 'claude-code'
 
+import { jumpNoteOf, jumpPlan, jumpedSessionOf, runJump } from './act/jump.js'
 import { createBoardLoop, type BoardLoop } from './board-loop.js'
 import { TICK_MS, createCollector } from './collector.js'
-import { STORE_KEYS, commandAnswer, commandChoice, nextNeedsYou, openGroupsAfterPress, parseGodArgs, selectionOf, settingsOf, storeOf, toggledGroup, toggledMode, type BoardChoice } from './control.js'
-import { GOD_ARGUMENT_HINT, GOD_COMMAND_DESCRIPTION, GOD_FAILED, PANE_TITLE } from './copy.js'
+import { STORE_KEYS, commandAnswer, commandChoice, nextNeedsYou, openGroupsAfterPress, openedSessionOf, parseGodArgs, selectionOf, settingsOf, statsAnswer, storeOf, toggledGroup, toggledMode, type BoardChoice } from './control.js'
+import { GOD_ARGUMENT_HINT, GOD_COMMAND_DESCRIPTION, GOD_FAILED, PANE_TITLE, TOOL_FAILED } from './copy.js'
 import { detailAfterBack, detailAfterNextTab, detailAfterRowPress, detailAfterScroll, detailAfterSelect, detailAfterTab } from './detail-control.js'
 import { engineClock, engineHost } from './engine.js'
-import { BOARD, DETAIL, OPEN_GROUPS, SELECTED, THEME } from './state.js'
+import { textCleaner } from './sanitize.js'
+import { createScreenLoop, isScreenShown, screenWanted, type ScreenLoop } from './screen-loop.js'
+import { readScreenOf } from './source/screen.js'
+import { BOARD, DETAIL, JUMP, OPEN_GROUPS, SCREEN, SELECTED, THEME } from './state.js'
+import { BOARD_TOOL, SESSION_TOOL, boardToolAnswer, sessionToolAnswer, type ToolBoard } from './tools.js'
 import type { Settings, StoreState } from './types.js'
 import { drawPane, type PaneActions } from './ui/board.js'
 import { themeOf } from './ui/theme.js'
@@ -38,10 +52,10 @@ const PANE_COLUMNS = 110
 const PANE_ROWS = 20
 
 /**
- * The state of 1 load of the module: the settings, whether the pane is on the screen, the board once it runs, and the
- * last theme that it read.
+ * The state of 1 load of the module: the settings, whether the pane is on the screen, the board and the screen loop
+ * once they run, the last theme that it read, and whether the 2 tools are registered.
  */
-type Runtime = { settings: Settings; isPaneOpen: boolean; starting?: Promise<BoardLoop>; board?: BoardLoop; theme?: string }
+type Runtime = { settings: Settings; isPaneOpen: boolean; starting?: Promise<BoardLoop>; board?: BoardLoop; screen?: ScreenLoop; theme?: string; hasTools?: boolean }
 
 async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
   const next = themeOf((await $.config.list()).find((row) => row.key === 'theme')?.value)
@@ -53,7 +67,16 @@ async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
 async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLoop> {
   const home = (await $.env.get('HOME')) ?? ''
   const stored = await Promise.all(STORE_KEYS.map(async (key) => [key, await $.store.get(key)] as const))
-  const collector = createCollector({ host: engineHost($), home, clock: engineClock })
+  const host = engineHost($)
+  const collector = createCollector({ host, home, clock: engineClock })
+  const clean = textCleaner(home)
+  runtime.screen = createScreenLoop({
+    read: (target) => readScreenOf(host, target, clean, engineClock),
+    write: async (state) => {
+      await update($, SCREEN, () => state)
+    },
+    every: (ms, fn) => $.clock.every(ms, fn),
+  })
   const loop = createBoardLoop({
     ports: {
       refresh: () => collector.refresh(),
@@ -90,8 +113,23 @@ function start($: EngineInterface, runtime: Runtime): Promise<BoardLoop> {
   return runtime.starting
 }
 
+/** Registers the 2 tools once. A registration that fails leaves the pane as it is, and the next open tries again. */
+async function registerTools($: EngineInterface, runtime: Runtime): Promise<void> {
+  if (runtime.hasTools === true) return
+  await $.tool.register(BOARD_TOOL)
+  await $.tool.register(SESSION_TOOL)
+  runtime.hasTools = true
+}
+
+/** The board that the tools read: whether it runs in this load, and the last snapshot that it took. */
+function toolBoard(runtime: Runtime): ToolBoard {
+  const snapshot = runtime.board?.snapshot()
+  return { isRunning: runtime.board !== undefined || runtime.starting !== undefined, ...(snapshot === undefined ? {} : { snapshot }) }
+}
+
 /** Opens the pane, starts the board, and tells the board whether the pane is on the screen. */
 async function openPane($: EngineInterface, runtime: Runtime): Promise<{ loop: BoardLoop; isPlaced: boolean }> {
+  await registerTools($, runtime).catch(() => undefined)
   const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS, rows: PANE_ROWS })
   runtime.isPaneOpen = opened.isPlaced
   const loop = await start($, runtime)
@@ -117,6 +155,7 @@ async function select($: EngineInterface, key: string): Promise<void> {
   if (before === key) return
   await update($, SELECTED, () => key)
   await update($, DETAIL, (state) => detailAfterSelect(state, before, key))
+  await update($, JUMP, () => null)
 }
 
 /** Selects the row `key` and moves the focus ring onto it, so the arrows and Tab go on from there. */
@@ -130,11 +169,21 @@ async function selectNext($: EngineInterface): Promise<void> {
   if (next !== undefined) await selectAndFocus($, next)
 }
 
-async function pressRow($: EngineInterface, key: string, layout: PaneLayout): Promise<void> {
+async function pressRow($: EngineInterface, runtime: Runtime, key: string, layout: PaneLayout): Promise<void> {
   const snapshot = (await read($, BOARD)) ?? undefined
   await update($, OPEN_GROUPS, (groups) => openGroupsAfterPress(groups, key, snapshot))
   await select($, key)
   await update($, DETAIL, (state) => detailAfterRowPress(state, key, snapshot, layout))
+  const opened = openedSessionOf(key, snapshot)
+  if (opened !== undefined) await runtime.board?.seen(opened, engineClock())
+}
+
+/** j: the jump to the tab of the selected session, the note of a j that did not jump, and the seen mark of a jump. */
+async function jumpSelected($: EngineInterface, runtime: Runtime): Promise<void> {
+  const outcome = await runJump(engineHost($), jumpPlan((await read($, BOARD)) ?? undefined, (await read($, SELECTED)) || undefined))
+  await update($, JUMP, () => jumpNoteOf(outcome))
+  const jumped = jumpedSessionOf(outcome)
+  if (jumped !== undefined) await runtime.board?.seen(jumped, engineClock())
 }
 
 async function changeDetail($: EngineInterface, change: (state: DetailState) => DetailState): Promise<void> {
@@ -152,9 +201,10 @@ async function backToBoard($: EngineInterface): Promise<void> {
 function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): PaneActions {
   const quiet = (work: Promise<void>): void => void work.catch(() => undefined)
   return {
-    onRow: (key) => quiet(pressRow($, key, layout)),
+    onRow: (key) => quiet(pressRow($, runtime, key, layout)),
     onMore: (key) => quiet(selectAndFocus($, key)),
     keys: {
+      j: () => quiet(jumpSelected($, runtime)),
       n: () => quiet(selectNext($)),
       f: () => quiet(choose($, runtime, toggledMode)),
       g: () => quiet(choose($, runtime, toggledGroup)),
@@ -178,13 +228,18 @@ export function register(on: On, options: PluginOptions): void {
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'god', description: GOD_COMMAND_DESCRIPTION, argumentHint: GOD_ARGUMENT_HINT })
-    if ((await $.env.get('ORANGU_GOD')) === '1') void openPane($, runtime).catch(() => undefined)
+    if ((await $.env.get('ORANGU_GOD')) === '1') {
+      // awaited here, so the first prompt of the session lists the tools
+      await registerTools($, runtime).catch(() => undefined)
+      void openPane($, runtime).catch(() => undefined)
+    }
     return next(e)
   }).catch(($, e, next) => next(e))
 
   on('command.run', { command: 'god' }, async ($, e) => {
     const command = parseGodArgs(e.args)
     if (command.kind === 'unknown') return { text: commandAnswer(command, { isPlaced: false, repos: [] }) }
+    if (command.kind === 'stats') return { text: statsAnswer(runtime.board?.recentStats()) }
     if (command.kind === 'show-repos') {
       const repos = runtime.board?.store().repos ?? storeOf({ repos: await $.store.get('repos') }).repos
       return { text: commandAnswer(command, { isPlaced: false, repos }) }
@@ -197,7 +252,7 @@ export function register(on: On, options: PluginOptions): void {
 
   on('ui.render', { component: 'Pane', requestId: 'god' }, async ($, e) => {
     markPaneShown(runtime)
-    const [snapshot, selected, openGroups, colors, detail] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME), read($, DETAIL)])
+    const [snapshot, selected, openGroups, colors, detail, screen, jumpNote] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME), read($, DETAIL), read($, SCREEN), read($, JUMP)])
     const view = paneView({
       ...(snapshot === null ? {} : { snapshot }),
       bodyColumns: e.props.bodyColumns,
@@ -207,7 +262,11 @@ export function register(on: On, options: PluginOptions): void {
       openGroups,
       promptHoldsKeys: !e.props.isFocused,
       detail,
+      screen,
+      jumpNote,
     })
+    const wanted = screenWanted(snapshot ?? undefined, selected || undefined, detail.tab)
+    runtime.screen?.want(wanted, isScreenShown(view, wanted))
     return drawPane($.ui.resolve(e), view, colors, actionsOf($, runtime, layoutOf(e.props.bodyColumns)))
   }).catch(($, e) => drawPane($.ui.resolve(e), cannotDrawView('failed', e.props.bodyColumns), 'dark', NO_ACTIONS))
 
@@ -222,6 +281,11 @@ export function register(on: On, options: PluginOptions): void {
     const closed = await next(e)
     runtime.isPaneOpen = false
     runtime.board?.setPaneOpen(false)
+    runtime.screen?.stop()
     return closed
   }).catch(($, e, next) => next(e))
+
+  on('tool.call', { tool: 'mcp__orangu-god__board' }, async () => ({ result: boardToolAnswer(toolBoard(runtime), engineClock()) })).catch(() => ({ deny: TOOL_FAILED }))
+
+  on('tool.call', { tool: 'mcp__orangu-god__session' }, async ($, e) => ({ result: sessionToolAnswer(toolBoard(runtime), e.name, engineClock()) })).catch(() => ({ deny: TOOL_FAILED }))
 }

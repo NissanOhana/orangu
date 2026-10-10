@@ -11,6 +11,7 @@ import type { BoardSnapshot } from '../types.js'
 import { cellWidth } from './cells.js'
 import { BOARD_COLUMNS, MORE_KEYS } from './board.js'
 import { DEFAULT_DETAIL, NO_DETAIL, paneDetailLines } from './detail-pane.js'
+import { JUMP_NOTE } from './keys.js'
 import { layoutOf, paneLines, paneView, type PaneInput } from './pane.js'
 import type { Line, PaneView } from './types.js'
 
@@ -178,3 +179,28 @@ describe('the detail', () => {
     expect(view.body.some((line) => line.key === view.more[MORE_KEYS.down])).toBe(false)
   })
 })
+
+describe('the jump note and the screen read', () => {
+  it('shows the jump note of the selected session under the key row, and no note for another session', () => {
+    for (const bodyColumns of [60, 110]) {
+      const noted = paneLines(pane(detailSnapshot(), { bodyColumns, selectedKey: 's-wait', jumpNote: { sessionId: 's-wait', reason: 'no-tab' } })).map(text)
+      expect(noted.at(-1), noted.join('\n')).toBe(` ${JUMP_NOTE['no-tab']}`)
+      const other = paneLines(pane(detailSnapshot(), { bodyColumns, selectedKey: 's-work', jumpNote: { sessionId: 's-wait', reason: 'no-tab' } })).map(text)
+      expect(other.join('\n')).not.toContain(JUMP_NOTE['no-tab'])
+    }
+  })
+
+  it('takes the room of the note from the board, so the pane still fits its rows', () => {
+    for (const bodyRows of [12, 20, 40]) {
+      const view = pane(detailSnapshot(), { bodyColumns: 110, bodyRows, selectedKey: 's-wait', jumpNote: { sessionId: 's-wait', reason: 'failed' } })
+      expect(rowsOf(view)).toBeLessThanOrEqual(bodyRows)
+    }
+  })
+
+  it('shows the screen read of the selected session in its Screen tab', () => {
+    const screen = { sessionId: 's-wait', read: { sessionId: 's-wait', workspaceRef: 'workspace:7', surfaceRef: 'surface:12', text: 'The screen of the session.', readAt: NOW }, isFailed: false }
+    const lines = paneLines(pane(detailSnapshot(), { selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, tab: 'screen' }, screen })).map(text)
+    expect(lines.some((line) => line.endsWith('The screen of the session.')), lines.join('\n')).toBe(true)
+  })
+})
+

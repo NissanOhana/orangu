@@ -17,6 +17,8 @@ import {
   commandAnswer,
   commandChoice,
   openGroupsAfterPress,
+  openedSessionOf,
+  statsAnswer,
   storeOf,
   toggledGroup,
   toggledMode,
@@ -25,13 +27,15 @@ import type { StoreState } from './types.js'
 import { STALE_GROUP_KEY } from './view/board.js'
 
 describe('the /god arguments', () => {
-  it('reads the 4 forms, the repo names in order with no repeat, and anything else as unknown', () => {
+  it('reads the 5 forms, the repo names in order with no repeat, and anything else as unknown', () => {
     expect(parseGodArgs('')).toEqual({ kind: 'open' })
     expect(parseGodArgs('   ')).toEqual({ kind: 'open' })
     expect(parseGodArgs('all')).toEqual({ kind: 'all' })
     expect(parseGodArgs(' repos  repo-a repo-b repo-a ')).toEqual({ kind: 'repos', names: ['repo-a', 'repo-b'] })
     expect(parseGodArgs('repos')).toEqual({ kind: 'show-repos' })
-    expect(parseGodArgs('stats')).toEqual({ kind: 'unknown' })
+    expect(parseGodArgs('stats')).toEqual({ kind: 'stats' })
+    expect(parseGodArgs(' stats ')).toEqual({ kind: 'stats' })
+    expect(parseGodArgs('stats all')).toEqual({ kind: 'unknown' })
     expect(parseGodArgs('all repo-a')).toEqual({ kind: 'unknown' })
     expect(parseGodArgs('ALL')).toEqual({ kind: 'unknown' })
   })
@@ -86,6 +90,34 @@ describe('what /god answers', () => {
     expect(commandAnswer({ kind: 'show-repos' }, { isPlaced: true, repos: ['repo-a'] })).toBe('The repos mode shows these repos: repo-a.')
     expect(commandAnswer({ kind: 'show-repos' }, { isPlaced: true, repos: [] })).toBe('No repo is selected. Run /god repos <name> to select one.')
     expect(commandAnswer({ kind: 'unknown' }, { isPlaced: true, repos: [] })).toMatch(/^Run \/god to open the pane\. Run \/god all /)
+    expect(commandAnswer({ kind: 'unknown' }, { isPlaced: true, repos: [] })).toMatch(/ Run \/god stats to show the time of the last refresh\.$/)
+  })
+})
+
+describe('what /god stats answers', () => {
+  const stats = (at: number, computeMs: number, waitMs: number, sessions: number) => ({ at, computeMs, waitMs, sessions })
+
+  it('gives the 2 times and the session count of the last refresh, and the most engine work of the refreshes that it keeps', () => {
+    expect(statsAnswer([stats(1, 18, 400, 14), stats(2, 31, 650, 15), stats(3, 23.4, 410.6, 15)])).toBe(
+      'The last refresh took 23 ms of engine work and 411 ms of wait for host commands, for 15 sessions. The most engine work in the last 3 refreshes was 31 ms.',
+    )
+    expect(statsAnswer([stats(1, 7, 90, 1)])).toBe('The last refresh took 7 ms of engine work and 90 ms of wait for host commands, for 1 session. The most engine work in the last 1 refresh was 7 ms.')
+  })
+
+  it('says that no refresh ended yet, and that the board does not run before /god', () => {
+    expect(statsAnswer([])).toBe('The god pane reads the sessions now. Run /god stats again in 2 s.')
+    expect(statsAnswer(undefined)).toBe('The god pane does not run now. Run /god to start it.')
+  })
+})
+
+describe('the session that a press opens', () => {
+  it('is the session of a session row, and none for a heading, a count line or a row that is gone', () => {
+    const snapshot = boardSnapshot()
+    expect(openedSessionOf('s-wait', snapshot)).toBe('s-wait')
+    expect(openedSessionOf(STALE_GROUP_KEY, snapshot)).toBeUndefined()
+    expect(openedSessionOf('more-down', snapshot)).toBeUndefined()
+    expect(openedSessionOf('s-gone', snapshot)).toBeUndefined()
+    expect(openedSessionOf('s-wait', undefined)).toBeUndefined()
   })
 })
 

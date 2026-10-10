@@ -1,7 +1,8 @@
 /**
  * The detail that the pane shows: the detail of the selected session (src/god/view/detail.ts), or 1 line that asks
- * for a selection. The Screen and the Recap tab show 1 line that says that they are not in this build. The view
- * gives the scroll that w and z go to, only for a side that the window cuts.
+ * for a selection. The Recap tab shows 1 line that says that it is not in this build. The Screen tab shows the last
+ * screen read of the selected session. The view gives the scroll that w and z go to, only for a side that the
+ * window cuts.
  */
 import { describe, expect, it } from 'vitest'
 import { busy, transcript } from '../../../test/fixtures/god/sessions.js'
@@ -11,7 +12,9 @@ import type { BoardSnapshot, DetailTab } from '../types.js'
 import { STALE_GROUP_KEY } from './board.js'
 import { cellWidth } from './cells.js'
 import { DETAIL_TABS, scrollBy } from './detail.js'
+import type { ScreenState } from '../source/screen.js'
 import { DEFAULT_DETAIL, NO_DETAIL, TAB_NOT_IN_BUILD, paneDetail, paneDetailLines, type PaneDetail, type PaneDetailInput } from './detail-pane.js'
+import { SCREEN_FAILED, SCREEN_READING } from './detail-tabs.js'
 import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -40,16 +43,30 @@ describe('the detail of the selected session', () => {
     expect(NO_DETAIL).toBe('Select a session on the board to show its detail.')
   })
 
-  it('shows 1 line in the Screen and the Recap tab, which are not in this build, and the other tabs as they are', () => {
-    expect(TAB_NOT_IN_BUILD).toEqual({ screen: 'The Screen tab is not in this build.', recap: 'The Recap tab is not in this build.' })
-    for (const tab of ['screen', 'recap'] as const) {
-      const detail = sessionDetail(detailOf(detailSnapshot(), { state: { ...DEFAULT_DETAIL, tab } }))
-      if (detail.view.kind !== 'detail') throw new Error(detail.view.kind)
-      expect(detail.view.body.map(text)).toEqual([` ${TAB_NOT_IN_BUILD[tab]}`])
-    }
+  it('shows 1 line in the Recap tab, which is not in this build, and the other tabs as they are', () => {
+    expect(TAB_NOT_IN_BUILD).toEqual({ recap: 'The Recap tab is not in this build.' })
+    const recap = sessionDetail(detailOf(detailSnapshot(), { state: { ...DEFAULT_DETAIL, tab: 'recap' } }))
+    if (recap.view.kind !== 'detail') throw new Error(recap.view.kind)
+    expect(recap.view.body.map(text)).toEqual([` ${TAB_NOT_IN_BUILD.recap}`])
     const history = sessionDetail(detailOf(detailSnapshot(), { state: { ...DEFAULT_DETAIL, tab: 'history' } }))
     if (history.view.kind !== 'detail') throw new Error(history.view.kind)
     expect(history.view.body.map(text).join('\n')).toContain('Read the parser.')
+  })
+
+  it('shows in the Screen tab the last read of the selected session, the reading line before the first, and the failure line over it', () => {
+    const read = { sessionId: 's-wait', workspaceRef: 'workspace:7', surfaceRef: 'surface:12', text: 'line one\n  line two  ', readAt: NOW }
+    const body = (screen?: ScreenState): string[] => {
+      const detail = sessionDetail(detailOf(detailSnapshot(), { state: { ...DEFAULT_DETAIL, tab: 'screen' }, ...(screen === undefined ? {} : { screen }) }))
+      if (detail.view.kind !== 'detail') throw new Error(detail.view.kind)
+      return detail.view.body.map(text)
+    }
+    expect(body()).toEqual([` ${SCREEN_READING}`])
+    expect(body({ sessionId: 's-wait', read, isFailed: false })).toEqual([' line one', '   line two'])
+    expect(body({ sessionId: 's-wait', read, isFailed: true })).toEqual([` ${SCREEN_FAILED}`, ' line one', '   line two'])
+    expect(body({ sessionId: 's-wait', isFailed: true })).toEqual([` ${SCREEN_FAILED}`])
+    // a read of another session is not this screen
+    expect(body({ sessionId: 's-work', read: { ...read, sessionId: 's-work' }, isFailed: true })).toEqual([` ${SCREEN_READING}`])
+    expect(SCREEN_FAILED).toBe('cmux did not read the screen. The pane tries again in 1 s.')
   })
 
   it('holds every line to the width and the rows, in every tab of every session', () => {

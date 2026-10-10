@@ -56,6 +56,8 @@ export type DetailInput = {
   /** true when cmux is not on the machine: the digits draw dim, and the Screen tab says why it is empty */
   isCmuxMissing: boolean
   screen?: ScreenRead
+  /** true when the newest screen read of this session failed */
+  isScreenFailed?: boolean
   recap?: RecapState
   outcome?: DeliverOutcome
   /** a line that the open tab shows in place of its content, when the source of the tab is not in this build */

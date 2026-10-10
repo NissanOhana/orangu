@@ -58,9 +58,9 @@ const BACKSLASH_ESCAPE = /\\[nrtNRT]/
 /** a backslash at the end of a line, with only spaces after it: Claude Code reads it and Enter as a new line */
 const LINE_END_BACKSLASH = /\\[^\S\n]*$/m
 /** a cmux workspace ref: `workspace:N` or a UUID, never a bare index that cmux resolves in the current window */
-const WORKSPACE_REF = /^(?:workspace:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
+export const WORKSPACE_REF = /^(?:workspace:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
 /** a cmux surface ref: `surface:N` or a UUID */
-const SURFACE_REF = /^(?:surface:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
+export const SURFACE_REF = /^(?:surface:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
 
 /** Why a prompt text cannot go out as typed keys, or undefined when it can. */
 export function textRefusal(text: string): DeliverRefusal | undefined {

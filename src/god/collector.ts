@@ -19,7 +19,8 @@
  *   from the end starts it again. The head records give the title only. The record state holds raw transcript text,
  *   so it stays in this closure, and only transcriptFacts output leaves.
  * - Every outside text goes through the text cleaner of the home folder: the sources clean their own, and the
- *   subagent meta fields are cleaned here. A subagent tool use id that is not safe is left out.
+ *   subagent meta fields and the repo name (a folder name, which the detail and the tools show) are cleaned here. The
+ *   repo paths stay as they are on disk, because git takes them. A subagent tool use id that is not safe is left out.
  * - The stats time a refresh as the engine times the own work of a hook. waitMs is the time with at least 1 host
  *   call in flight, and computeMs is the rest of the wall time. A loop that ran in the background adds its own 2
  *   times to the refresh that ends after it.
@@ -251,7 +252,8 @@ export function createCollector({ host, home, clock }: CollectorOptions): Collec
 
   function factsOf(session: LiveSession, tabOf: ReadonlyMap<number, TabRef>): SessionFacts {
     const memory = transcripts.get(session.sessionId)
-    const repo = repoOf(repos, session.cwd)
+    const found = repoOf(repos, session.cwd)
+    const repo = found === undefined ? undefined : { ...found, name: clean(found.name) }
     const tab = tabOf.get(session.pid)
     return {
       ...session,

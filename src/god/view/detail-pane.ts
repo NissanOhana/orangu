@@ -4,11 +4,14 @@
  * selection when no session of the board is selected.
  * - The selected session is the selected row of the board when it is a session of the snapshot. A heading, no
  *   selection, or a session that left the board selects none.
- * - The Screen and the Recap tab show 1 line that says that they are not in this build: the screen read and the
- *   Recap call come with their own chunks of work, and a tab never says that it reads what nothing reads.
+ * - The Screen tab shows the screen state of the selected session (src/god/screen-loop.ts): its last good read, and
+ *   whether the newest read failed. A state of another session shows nothing of it.
+ * - The Recap tab shows 1 line that says that it is not in this build: the Recap call comes with its own chunk of
+ *   work, and a tab never says that it reads what nothing reads.
  * - For each side that the window over the tab content cuts, the view gives the scroll that its key goes to: w the
  *   page above, z the page below (scrollBy in src/god/view/window.ts). The engine shell keeps only the number.
  */
+import type { ScreenState } from '../source/screen.js'
 import type { BoardSnapshot, DetailTab } from '../types.js'
 import { detailLines, detailView, scrollBy, SCROLL_KEYS, type DetailView } from './detail.js'
 import { messageLines } from './states.js'
@@ -31,7 +34,6 @@ export const NO_DETAIL = 'Select a session on the board to show its detail.'
 
 /** The line of each tab whose source is not in this build, in place of its content. */
 export const TAB_NOT_IN_BUILD: Readonly<Partial<Record<DetailTab, string>>> = {
-  screen: 'The Screen tab is not in this build.',
   recap: 'The Recap tab is not in this build.',
 }
 
@@ -55,6 +57,8 @@ export type PaneDetailInput = {
   rows: number
   now: number
   state: DetailState
+  /** the screen state of the Screen tab: the session that it read, its last good read, and whether the newest failed */
+  screen?: ScreenState
 }
 
 /** The scroll that each key goes to: w while lines hide above the window, z while lines hide below it. */
@@ -73,6 +77,7 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
   const session = snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey)
   if (session === undefined) return { kind: 'none', lines: messageLines(NO_DETAIL, width) }
   const placeholder = TAB_NOT_IN_BUILD[input.state.tab]
+  const screen = input.screen?.sessionId === session.sessionId ? input.screen : undefined
   const view = detailView({
     session,
     width,
@@ -81,6 +86,8 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
     tab: input.state.tab,
     scroll: input.state.scroll,
     isCmuxMissing: snapshot.sources.cmux.status === 'missing',
+    ...(screen?.read === undefined ? {} : { screen: screen.read }),
+    ...(screen?.isFailed === true ? { isScreenFailed: true } : {}),
     ...(placeholder === undefined ? {} : { placeholder }),
   })
   return { kind: 'session', sessionId: session.sessionId, view, scrollTo: scrollTargets(view) }

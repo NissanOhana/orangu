@@ -569,6 +569,19 @@ describe('the transcripts', () => {
     expect(strings(facts).filter((value) => value.includes(KEY))).toEqual([])
   })
 
+  it('cleans the repo name that the views and the tools show, and keeps the paths that git takes as they are on disk', async () => {
+    const m = alpha()
+    const top = `/Users/test/code/alpha${ESC}[31m ${KEY}`
+    m.agents = [agentRow(A, { cwd: top })]
+    m.register(registryRow(A, { cwd: top }))
+    m.mkdir(top)
+    m.git = { [top]: [`${top}/.git`, `${top}/.git`, top] }
+    const row = only(await collectorOf(m).refresh())
+    expect(row.repo?.name).toBe('alpha[31m ‹anthropic-key›')
+    expect(row.repo?.topLevel).toBe(top)
+    expect(row.repo?.commonDir).toBe(`${top}/.git`)
+  })
+
   it('keeps the record state inside: the collector gives only refresh, and the facts hold no raw transcript text', async () => {
     const m = alpha()
     const jsonl = transcriptOf(A, (b) =>
