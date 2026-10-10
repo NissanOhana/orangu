@@ -579,7 +579,7 @@ describe('the transcripts', () => {
     m.mkdir(top)
     m.git = { [top]: [`${top}/.git`, `${top}/.git`, top] }
     const row = only(await collectorOf(m).refresh())
-    expect(row.repo?.name).toBe('alpha[31m ‹anthropic-key›')
+    expect(row.repo?.name).toBe('alpha ‹anthropic-key›')
     expect(row.repo?.topLevel).toBe(top)
     expect(row.repo?.commonDir).toBe(`${top}/.git`)
   })

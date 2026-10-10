@@ -45,7 +45,8 @@ describe('readScreenOf', () => {
     expect(read).toEqual({ sessionId: 's-wait', workspaceRef: 'workspace:7', surfaceRef: 'surface:12', readAt: 1234, text: expect.any(String) })
     expect(read!.text).not.toContain(ESC)
     expect(read!.text).not.toContain(KEY)
-    expect(read!.text).toContain('[31mred[0m text')
+    expect(read!.text).toContain('red text')
+    expect(read!.text).not.toContain('[31m')
     expect(read!.text).toContain('~/Code/demo')
   })
 
