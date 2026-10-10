@@ -952,15 +952,15 @@ var SPACE = /\s/;
 var LINE_END = /[\n\r]/;
 var VALUE_CHAR = /[^\s'"‹]/;
 function quotedTail(text, end) {
-  const quote = text[end];
-  if (quote !== '"' && quote !== "'" || text[end - 1] !== "=" && text[end - 1] !== ":") return end;
+  const quote2 = text[end];
+  if (quote2 !== '"' && quote2 !== "'" || text[end - 1] !== "=" && text[end - 1] !== ":") return end;
   let at = end + 1;
-  while (at < text.length && !LINE_END.test(text[at]) && text[at] !== quote) at++;
-  return text[at] === quote ? at + 1 : at;
+  while (at < text.length && !LINE_END.test(text[at]) && text[at] !== quote2) at++;
+  return text[at] === quote2 ? at + 1 : at;
 }
-function lineEnd(text, at, quote) {
+function lineEnd(text, at, quote2) {
   let end = at;
-  while (end < text.length && !LINE_END.test(text[end]) && text[end] !== quote) end++;
+  while (end < text.length && !LINE_END.test(text[end]) && text[end] !== quote2) end++;
   return end;
 }
 function twoWordName(text, start2, end, done) {
@@ -1062,11 +1062,11 @@ function maskAssignments(text, mark2) {
     const value = skipSpaces(text, at + 1);
     const opened = text[value] === '"' || text[value] === "'";
     const later = crossesLine(text, at + 1, value);
-    const quote = opened && !later ? text[value] : "";
+    const quote2 = opened && !later ? text[value] : "";
     const from = opened && later ? value + 1 : value;
-    const close = quote ? lineEnd(text, value + 1, quote) : -1;
-    const end = quote ? text[close] === quote ? close + 1 : close : later ? valueCharsEnd(text, from) : valueRunEnd(text, from);
-    if ((quote ? close - value - 1 : end - from) < 6) continue;
+    const close = quote2 ? lineEnd(text, value + 1, quote2) : -1;
+    const end = quote2 ? text[close] === quote2 ? close + 1 : close : later ? valueCharsEnd(text, from) : valueRunEnd(text, from);
+    if ((quote2 ? close - value - 1 : end - from) < 6) continue;
     const pairs = withInnerPairs(text, end);
     const keep = later ? from : crossesLine(text, nameEnd, at) ? at : nameEnd;
     const by = later ? MASK : "=" + MASK;
@@ -1083,16 +1083,16 @@ var OPEN_QUOTE = /\\{0,7}["']/y;
 var UNQUOTED_VALUES = [/[^\s'"\\,;}\]‹]{6,}/y, /[^\s'"‹]{6,}/y];
 function quotedValue(text, at) {
   OPEN_QUOTE.lastIndex = at;
-  const quote = OPEN_QUOTE.exec(text)?.[0];
-  if (!quote || text[at + quote.length] === "\u2039") return void 0;
+  const quote2 = OPEN_QUOTE.exec(text)?.[0];
+  if (!quote2 || text[at + quote2.length] === "\u2039") return void 0;
   let items = 0;
-  let k = at + quote.length;
+  let k = at + quote2.length;
   while (k < text.length && !LINE_END.test(text[k])) {
-    if (text.startsWith(quote, k)) return items >= 6 ? { end: k + quote.length, mask: quote + MASK + quote } : void 0;
+    if (text.startsWith(quote2, k)) return items >= 6 ? { end: k + quote2.length, mask: quote2 + MASK + quote2 } : void 0;
     k += text[k] === "\\" && text[k + 1] !== void 0 && !LINE_END.test(text[k + 1]) ? 2 : 1;
     items++;
   }
-  return items >= 6 ? { end: k, mask: quote + MASK } : void 0;
+  return items >= 6 ? { end: k, mask: quote2 + MASK } : void 0;
 }
 function unquotedValue(text, at) {
   for (const value of UNQUOTED_VALUES) {
@@ -3330,8 +3330,8 @@ function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed,
   const reads = [screen, fresh].filter((read2) => read2 !== void 0 && read2.sessionId === session.sessionId);
   const newest = reads.sort((a, b) => b.readAt - a.readAt)[0];
   const failed = isScreenFailed === true ? message(SCREEN_FAILED, width, { token: "--warn" }) : [];
-  const shown = newest === void 0 ? isScreenFailed === true ? [] : message(SCREEN_READING, width) : screenLines(newest.text, width);
-  return [...notice, ...failed, ...shown];
+  const shown2 = newest === void 0 ? isScreenFailed === true ? [] : message(SCREEN_READING, width) : screenLines(newest.text, width);
+  return [...notice, ...failed, ...shown2];
 }
 var tokenCount = (tokens) => `${String(Math.max(0, Math.round(tokens))).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} tokens`;
 function recapLines({ session, width, recap }) {
@@ -3670,8 +3670,8 @@ function quoted(label, text, isCut) {
   if (text === void 0 || flat2(text) === "") return plain(`${label} none`);
   const value = flat2(text);
   const render = (room, least) => {
-    const shown = quoteCut(value, room - cellWidth(label) - 1, least);
-    return shown === void 0 ? void 0 : `${label} ${shown}`;
+    const shown2 = quoteCut(value, room - cellWidth(label) - 1, least);
+    return shown2 === void 0 ? void 0 : `${label} ${shown2}`;
   };
   const chars = graphemes(value);
   return { render, isCut, least: () => cellWidth(`${label} ${chars.length <= MIN_KEPT ? quote(value) : cutQuote(chars, MIN_KEPT)}`) };
@@ -3684,14 +3684,14 @@ function pack(fields, width) {
   fields.forEach((field2, index) => {
     const reserve = fields.slice(index + 1).filter((next) => next.isCut).reduce((sum, next) => sum + SEPARATOR.length + next.least(), 0);
     const least = field2.isCut ? MIN_KEPT : Number.POSITIVE_INFINITY;
-    let shown = field2.render(room() - (field2.isCut ? reserve : 0), least);
-    if (shown === void 0 && !isFresh()) {
+    let shown2 = field2.render(room() - (field2.isCut ? reserve : 0), least);
+    if (shown2 === void 0 && !isFresh()) {
       lines.push(line);
       line = NEXT_LINE;
-      shown = field2.render(room() - (field2.isCut ? reserve : 0), least);
+      shown2 = field2.render(room() - (field2.isCut ? reserve : 0), least);
     }
-    shown ??= field2.render(room(), 1) ?? field2.render(Number.POSITIVE_INFINITY, 1) ?? "";
-    line = isFresh() ? line + shown : line + SEPARATOR + shown;
+    shown2 ??= field2.render(room(), 1) ?? field2.render(Number.POSITIVE_INFINITY, 1) ?? "";
+    line = isFresh() ? line + shown2 : line + SEPARATOR + shown2;
   });
   return [...lines, line];
 }
