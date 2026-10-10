@@ -8,6 +8,7 @@ Everything committed here is public product or contributor documentation. The re
 - [Privacy](PRIVACY.md): what stays local, what redaction removes, and what to check before sharing.
 - [Beta feedback](feedback.md): private localhost drafting, exact-review consent, and the GitHub handoff.
 - [Determinism and AI skills](DETERMINISM.md): which layer owns evidence, proposals, application, and verification.
+- [orangu god](GOD.md): the Claude Code mod that shows each live session in 1 pane, its keys, and the safety steps of its key path.
 
 ## Integrate and extend
 

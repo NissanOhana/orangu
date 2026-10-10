@@ -66,6 +66,8 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'scripts/build-sample.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   // S2: every user doc in docs/
   'docs/DETERMINISM.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (205 sentences) after the STE rewrite, was 74 with 2 em dashes
+  // G12: the user doc of orangu god, born at max(80, measured - 2) with 0 banned tokens and findings at the measured count.
+  'docs/GOD.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (176 sentences), 0 findings
   'docs/README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (18 sentences) after the STE rewrite, was 94
   'docs/USAGE.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (109 sentences) after the STE rewrite, was 82
   'docs/feedback.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (23 sentences) after the STE rewrite, was 95
