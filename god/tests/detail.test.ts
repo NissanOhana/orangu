@@ -6,9 +6,10 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, Mounted } from 'claude-code/testing'
 import type { On } from 'claude-code'
-import { HOME, PANE, PLUGIN, SURFACES, installMachine, paneProps, prompt, question, reply, screenOf, turns, type FakeSession, type Machine } from './fake-host'
+import { HOME, PANE, PLUGIN, SURFACES, edit, installMachine, paneProps, prompt, question, reply, screenOf, turns, type FakeSession, type Machine } from './fake-host'
 
 const A = '/tmp/god-test/repo-a'
+const A_WT = '/tmp/god-test/repo-a-wt'
 const PLAIN = '/tmp/god-test/plain'
 const TABS = ['Now', 'History', 'Agents', 'Screen', 'Recap']
 
@@ -142,6 +143,27 @@ for (const surface of SURFACES) {
   })
 }
 
+/** A waiting session whose last reply used 100,000 input tokens, and a busy session in a worktree of its repo. */
+function footAt(t0: number): Machine {
+  const sessions: FakeSession[] = [
+    { pid: 44001, sessionId: 'ses-wait', cwd: A, name: 'ask-a', status: 'waiting', waitingFor: 'input needed', statusUpdatedAt: t0 - 60_000, transcript: [prompt('Pick a color.', t0 - 90_000), ...reply('I need 1 choice.', t0 - 80_000, 100_000), question('toolu_q1', 'Which color?', ['Red', 'Green'], t0 - 60_000)], transcriptMtimeMs: t0 - 60_000, fileMtimeMs: t0 - 60_000 },
+    { pid: 44002, sessionId: 'ses-wt', cwd: A_WT, name: 'work-wt', status: 'busy', statusUpdatedAt: t0 - 60_000, transcript: [prompt('Fix the parser.', t0 - 60_000), edit('toolu_e1', `${A_WT}/parse.ts`, t0 - 5_000)], transcriptMtimeMs: t0 - 5_000, fileMtimeMs: t0 - 60_000 },
+  ]
+  return { sessions, repos: { [A]: [`${A}/.git`, `${A}/.git`, A], [A_WT]: [`${A}/.git/worktrees/repo-a-wt`, `${A}/.git`, A_WT] } }
+}
+
+for (const surface of SURFACES) {
+  test(`${surface}: the detail draws the context bar and a flag line under the tab content`, async ($, on) => {
+    const { ui } = await openAt($, on, surface, 110, 30, footAt)
+    await select($, 'ses-wait')
+    const shown = await lines(ui)
+    const bar = shown.findIndex((line) => /│ ctx [▰▱]{10} ~?\d+%$/.test(line))
+    const flag = shown.findIndex((line) => line.endsWith('│ SAME REPO: work-wt'))
+    expect(bar, shown.join('\n')).toBeGreaterThan(shown.findIndex((line) => line.includes('Which color?')))
+    expect(flag, shown.join('\n')).toBe(bar + 1)
+  })
+}
+
 /** 12 busy sessions, so a short pane shows only some of them. */
 function manyAt(t0: number): Machine {
   const sessions: FakeSession[] = Array.from({ length: 12 }, (_, index) => {
@@ -163,7 +185,8 @@ for (const surface of SURFACES) {
     expect(order).toHaveLength(12)
     await ui.redraw(paneProps(80, 10))
     const first = await lines(ui)
-    expect(first.some((line) => /^ \+\d+ sessions \(↓\)$/.test(line)), first.join('\n')).toBe(true)
+    expect(first.some((line) => /^ \+\d+ sessions \(Enter\)$/.test(line)), first.join('\n')).toBe(true)
+    expect(first.join('\n')).not.toMatch(/[↑↓]\)/)
     expect(await keysOf(ui)).toContain('more-down')
     const names = (await ui.findAll({ type: 'Button' })).flatMap((button) => (button.key?.startsWith('ses-') ? [button.key] : []))
     expect(names.length).toBeLessThan(12)

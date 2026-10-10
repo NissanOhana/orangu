@@ -9,9 +9,10 @@
  * - every row is exactly `width` cells. The names share 1 column. A text that does not fit is cut with its count
  *   (src/god/view/cut.ts): the detail of the session shows it whole;
  * - only `rows` lines: the window keeps the selected row in view, and a line above and below counts the sessions
- *   that it leaves out and names the arrow key that shows them. Each count line is a row that the person can
- *   press (key MORE_KEYS.up or MORE_KEYS.down): the press selects the first hidden row on its side, so the window
- *   moves and the person reaches every row, also in a pane too short for the ring to reach a row out of view.
+ *   that it leaves out. Each count line is a row that the person presses (key MORE_KEYS.up or MORE_KEYS.down), and
+ *   it names the key that presses it: `+3 sessions (Enter)`. The arrows only walk the drawn Buttons, so a press is
+ *   what shows the rest: it selects the first hidden row on its side, and the window moves, so the person reaches
+ *   every row, also in a pane too short for the ring to reach a row out of view.
  * The glyph tells the level with no color, for a reader who cannot tell the colors apart. Outside text (a name, a
  * summary, a repo name) shows on 1 line: each run of white space becomes 1 space. The clock comes in as `now`.
  */
@@ -56,6 +57,9 @@ export const MIN_WINDOW_ROWS = 3
 
 /** The keys of the count lines above and below the window: each is a row that a press moves past the window. */
 export const MORE_KEYS = { up: 'more-up', down: 'more-down' } as const
+
+/** The key that presses a count line, as its line names it. */
+const PRESS_KEY = 'Enter'
 
 /** The board column and, for each count line, the key of the row that a press on it selects. */
 export type BoardWindow = { lines: Line[]; more: Readonly<Record<string, string>> }
@@ -149,10 +153,10 @@ function windowOf(items: readonly Item[], rows: number, selected: number): Board
   const room = Math.max(MIN_WINDOW_ROWS, rows)
   const sessions = (from: number, to: number): number => items.slice(from, to).reduce((sum, item) => sum + item.sessions, 0)
   const more: Record<string, string> = {}
-  const countLine = (count: number, arrow: string, key: string, hidden: readonly Item[]): Line => {
+  const countLine = (count: number, key: string, hidden: readonly Item[]): Line => {
     const target = hidden.find((item) => item.line.key !== undefined)?.line.key
     if (target !== undefined) more[key] = target
-    return { ...(target === undefined ? {} : { key }), segments: [{ text: ' ' }, { text: moreText(count, SESSION_UNIT, arrow), ...DIM }] }
+    return { ...(target === undefined ? {} : { key }), segments: [{ text: ' ' }, { text: moreText(count, SESSION_UNIT, PRESS_KEY), ...DIM }] }
   }
   let start = 0
   let end = room - 1
@@ -163,9 +167,9 @@ function windowOf(items: readonly Item[], rows: number, selected: number): Board
     if (start === 1 && items[0]!.sessions === 0) start = 0
   }
   const lines = [
-    ...(start > 0 ? [countLine(sessions(0, start), '↑', MORE_KEYS.up, items.slice(0, start).reverse())] : []),
+    ...(start > 0 ? [countLine(sessions(0, start), MORE_KEYS.up, items.slice(0, start).reverse())] : []),
     ...items.slice(start, end).map((item) => item.line),
-    ...(end < items.length ? [countLine(sessions(end, items.length), '↓', MORE_KEYS.down, items.slice(end))] : []),
+    ...(end < items.length ? [countLine(sessions(end, items.length), MORE_KEYS.down, items.slice(end))] : []),
   ]
   return { lines, more }
 }

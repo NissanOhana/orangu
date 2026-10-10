@@ -152,7 +152,7 @@ describe('only the lines that fit, with the selected row in view', () => {
         expect(selected, `${rows} rows: ${selectedKey} shows`).toBeDefined()
         expect(selected!.segments[0], `${rows} rows: ${selectedKey} is marked`).toEqual({ text: '▌', token: '--accent' })
         const counted = lines.map(text).flatMap((line) => {
-          const match = /^ \+(\d+) sessions? \((↑|↓)\)$/.exec(line)
+          const match = /^ \+(\d+) sessions? \(Enter\)$/.exec(line)
           return match === null ? [] : [Number(match[1])]
         })
         const shown = lines.filter((line) => line.key !== undefined && line.key !== STALE_GROUP_KEY && line.key !== MORE_KEYS.up && line.key !== MORE_KEYS.down).length
@@ -177,8 +177,8 @@ describe('only the lines that fit, with the selected row in view', () => {
         const up = lines.find((line) => line.key === MORE_KEYS.up)
         expect(down === undefined, `${rows} rows, ${selectedKey}: a Button below while a row hides below`).toBe(below.length === 0)
         expect(up === undefined, `${rows} rows, ${selectedKey}: a Button above while a row hides above`).toBe(above.length === 0)
-        if (down !== undefined) expect(text(down)).toMatch(/^ \+\d+ sessions? \(↓\)$/)
-        if (up !== undefined) expect(text(up)).toMatch(/^ \+\d+ sessions? \(↑\)$/)
+        if (down !== undefined) expect(text(down)).toMatch(/^ \+\d+ sessions? \(Enter\)$/)
+        if (up !== undefined) expect(text(up)).toMatch(/^ \+\d+ sessions? \(Enter\)$/)
         expect(more).toEqual({ ...(below.length === 0 ? {} : { [MORE_KEYS.down]: below[0] }), ...(above.length === 0 ? {} : { [MORE_KEYS.up]: above.at(-1) }) })
       }
     }

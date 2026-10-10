@@ -80,6 +80,11 @@ describe('verify:god reads the validate report', () => {
     expect(findings(report({ calls: '$.command.register, $.fs.write (via saveBoard, saveStore), $.env.get' }))).toEqual(['call outside the allowlist: $.fs.write (via saveBoard, saveStore)'])
   })
 
+  it('takes only helper names in the parentheses, so a call hidden there still fails', () => {
+    expect(findings(report({ calls: '$.command.register, $.ui.focus (via a, $.fs.write)' }))).toEqual(['call outside the allowlist: $.ui.focus (via a, $.fs.write)'])
+    expect(findings(report({ calls: '$.ui.focus (via one), $.ui.focus (via $.http.fetch)' }))).toEqual(['call outside the allowlist: $.ui.focus (via $.http.fetch)'])
+  })
+
   it('fails an environment read outside HOME and ORANGU_GOD, and any environment write', () => {
     expect(findings(report({ reads: 'HOME, PATH' }))).toEqual(['environment read outside HOME and ORANGU_GOD: PATH'])
     expect(findings(report({ writes: 'ORANGU_GOD' }))).toEqual(['environment write: ORANGU_GOD'])

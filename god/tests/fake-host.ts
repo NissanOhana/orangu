@@ -179,9 +179,9 @@ export const question = (id: string, text: string, labels: readonly string[], ms
 export const edit = (id: string, path: string, ms: number): string =>
   JSON.stringify({ type: 'assistant', timestamp: at(ms), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id, name: 'Edit', input: { file_path: path, old_string: 'a', new_string: 'b' } }] } })
 
-/** A reply and the end of the turn. */
-export const reply = (text: string, ms: number): string[] => [
-  JSON.stringify({ type: 'assistant', timestamp: at(ms), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text }] } }),
+/** A reply and the end of the turn; with `inputTokens`, the reply carries that usage. */
+export const reply = (text: string, ms: number, inputTokens?: number): string[] => [
+  JSON.stringify({ type: 'assistant', timestamp: at(ms), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text }], ...(inputTokens === undefined ? {} : { usage: { input_tokens: inputTokens } }) } }),
   JSON.stringify({ type: 'system', subtype: 'turn_duration', durationMs: 1000, timestamp: at(ms) }),
 ]
 

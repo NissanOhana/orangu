@@ -68,8 +68,9 @@ export function reportFindings(report) {
       if (match[1] === 'hooks') hooksNote = true
       if (match[1] === 'calls') {
         callsNote = true
-        // the 2.1.296 validator names the helper that makes a call: `$.process.run (via engineHost)`
-        for (const call of values) if (!ALLOWED_CALLS.includes(call.replace(/ \(via [^)]*\)$/, ''))) findings.push(`call outside the allowlist: ${call}`)
+        // the 2.1.296 validator names the helpers that make a call: `$.process.run (via engineHost)`. Only helper
+        // names may stand in the parentheses, so a call written there still fails
+        for (const call of values) if (!ALLOWED_CALLS.includes(call.replace(/ \(via [A-Za-z_$][\w$]*(?:, [A-Za-z_$][\w$]*)*\)$/, ''))) findings.push(`call outside the allowlist: ${call}`)
       }
       if (match[1] === 'env reads') for (const name of values) if (!ENV_READS.includes(name)) findings.push(`environment read outside HOME and ORANGU_GOD: ${name}`)
       if (match[1] === 'env writes') for (const name of values) findings.push(`environment write: ${name}`)

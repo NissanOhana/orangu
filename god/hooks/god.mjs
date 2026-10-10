@@ -250,6 +250,7 @@ var NAME_MIN = 6;
 var NAME_MAX = 24;
 var MIN_WINDOW_ROWS = 3;
 var MORE_KEYS = { up: "more-up", down: "more-down" };
+var PRESS_KEY = "Enter";
 var groupKey = (key) => `group:${key}`;
 var STALE_GROUP_KEY = groupKey("stale");
 function levelTime(since, now) {
@@ -303,10 +304,10 @@ function windowOf(items, rows, selected) {
   const room = Math.max(MIN_WINDOW_ROWS, rows);
   const sessions = (from, to) => items.slice(from, to).reduce((sum, item) => sum + item.sessions, 0);
   const more = {};
-  const countLine = (count2, arrow, key, hidden) => {
+  const countLine = (count2, key, hidden) => {
     const target = hidden.find((item) => item.line.key !== void 0)?.line.key;
     if (target !== void 0) more[key] = target;
-    return { ...target === void 0 ? {} : { key }, segments: [{ text: " " }, { text: moreText(count2, SESSION_UNIT, arrow), ...DIM }] };
+    return { ...target === void 0 ? {} : { key }, segments: [{ text: " " }, { text: moreText(count2, SESSION_UNIT, PRESS_KEY), ...DIM }] };
   };
   let start2 = 0;
   let end = room - 1;
@@ -316,9 +317,9 @@ function windowOf(items, rows, selected) {
     if (start2 === 1 && items[0].sessions === 0) start2 = 0;
   }
   const lines = [
-    ...start2 > 0 ? [countLine(sessions(0, start2), "\u2191", MORE_KEYS.up, items.slice(0, start2).reverse())] : [],
+    ...start2 > 0 ? [countLine(sessions(0, start2), MORE_KEYS.up, items.slice(0, start2).reverse())] : [],
     ...items.slice(start2, end).map((item) => item.line),
-    ...end < items.length ? [countLine(sessions(end, items.length), "\u2193", MORE_KEYS.down, items.slice(end))] : []
+    ...end < items.length ? [countLine(sessions(end, items.length), MORE_KEYS.down, items.slice(end))] : []
   ];
   return { lines, more };
 }
