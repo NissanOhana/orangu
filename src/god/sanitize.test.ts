@@ -7,6 +7,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { INNER_PAIR_FORMS, INNER_PAIR_RELATIVES, INNER_SECRET_PART, LINE_END_SHAPES, NEXT_LINES } from '../../test/fixtures/inner-pair-shapes.js'
 import { cleanText, cleanValue, removeControls, textCleaner } from './sanitize.js'
 import type { CleanText } from './source/agents.js'
 
@@ -18,19 +19,43 @@ const CSI = String.fromCharCode(0x9b)
 const KEY = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
 
 describe('removeControls', () => {
-  it('removes ESC, BEL, every other C0 control, DEL and every C1 control, and keeps newline and tab', () => {
+  it('takes out each run of C0 controls but tab and newline, DEL and C1 controls, with 1 space only where 2 words meet', () => {
     const c0 = Array.from({ length: 0x20 }, (_, code) => String.fromCharCode(code)).join('')
     const c1 = Array.from({ length: 0x20 }, (_, code) => String.fromCharCode(0x80 + code)).join('')
-    expect(removeControls(`a${c0}b${DEL}c${c1}d`)).toBe('a\t\nbcd')
-    expect(removeControls(`red${ESC}[31m text${BEL} and${CSI}2J${DEL}`)).toBe('red[31m text and2J')
+    expect(removeControls(`a${c0}b${DEL}c${c1}d`)).toBe('a\t\nb c d')
     expect(removeControls('line 1\r\nline 2')).toBe('line 1\nline 2')
+  })
+
+  it('takes out each whole CSI and OSC sequence, 7-bit and 8-bit, so 2 words never join', () => {
+    expect(removeControls(`red${ESC}[31m text${BEL} and${CSI}2J${DEL}`)).toBe('red text and')
+    expect(removeControls(`alpha${ESC}[01;31m${ESC}[Kbeta${ESC}[m${ESC}[Kgamma`)).toBe('alpha beta gamma')
+    expect(removeControls(`a${ESC}]0;window title${BEL}b${ESC}]2;other${ESC}\\c${String.fromCharCode(0x9d)}x${String.fromCharCode(0x9c)}d`)).toBe('a b c d')
+    // an OSC with no end runs to the end of its line, as a terminal reads it
+    expect(removeControls(`a${ESC}]0;title\nnext`)).toBe('a\nnext')
+  })
+
+  it('takes out an ESC 2-byte sequence, a CSI with intermediate bytes, and a DCS, SOS, PM or APC string, 7-bit and 8-bit', () => {
+    const C = (code: number): string => String.fromCharCode(code)
+    expect(removeControls(`a${ESC}(Bb${ESC}7c${ESC}[0 qd`)).toBe('a b c d')
+    expect(removeControls(`a${ESC}Pq#0;2${ESC}\\b${ESC}Xsos${ESC}\\c${ESC}^pm${ESC}\\d${ESC}_apc${ESC}\\e`)).toBe('a b c d e')
+    expect(removeControls(`a${C(0x90)}dcs${C(0x9c)}b${C(0x98)}sos${C(0x9c)}c${C(0x9e)}pm${C(0x9c)}d${C(0x9f)}apc${C(0x9c)}e`)).toBe('a b c d e')
   })
 
   it('removes the bidirectional controls that reorder the text, and keeps the characters beside them', () => {
     const bidi = [0x061c, 0x200e, 0x200f, 0x202a, 0x202b, 0x202c, 0x202d, 0x202e, 0x2066, 0x2067, 0x2068, 0x2069]
-    expect(removeControls(`a${bidi.map((code) => String.fromCharCode(code)).join('')}b`)).toBe('ab')
-    const beside = [0x061b, 0x200d, 0x2010, 0x2029, 0x202f, 0x2065, 0x206a].map((code) => String.fromCharCode(code)).join('')
+    expect(removeControls(`a${bidi.map((code) => String.fromCharCode(code)).join('')}b`)).toBe('a b')
+    const beside = [0x061b, 0x200a, 0x2010, 0x2029, 0x202f, 0x2065, 0x2070].map((code) => String.fromCharCode(code)).join('')
     expect(removeControls(beside)).toBe(beside)
+  })
+
+  it('removes the tag characters and the zero-width characters, which a model reads and the pane does not show', () => {
+    const tags = String.fromCodePoint(0xe0000, 0xe0041, 0xe0069, 0xe007f)
+    const zero = [0x200b, 0x200c, 0x200d, 0x2060, 0xfeff].map((code) => String.fromCharCode(code)).join('')
+    expect(removeControls(`a${tags}b${zero}c`)).toBe('a b c')
+    expect(removeControls(`a${String.fromCodePoint(0xe0080)}b`)).toBe(`a${String.fromCodePoint(0xe0080)}b`)
+    const hidden = [0x00ad, 0x034f, 0x115f, 0x1160, 0x17b4, 0x180b, 0x180e, 0x180f, 0x2061, 0x2064, 0x206a, 0x206f, 0x3164, 0xfe00, 0xfe0f, 0xffa0, 0xfff9, 0xfffb]
+    expect(removeControls(hidden.map((code) => String.fromCharCode(code)).join('x'))).toBe(Array(hidden.length - 1).fill('x').join(' '))
+    expect(removeControls(`a${String.fromCodePoint(0xe0100, 0xe01ef)}b`)).toBe('a b')
   })
 
   it('keeps printable text, the no-break space after the C1 range included', () => {
@@ -41,8 +66,10 @@ describe('removeControls', () => {
 
 describe('cleanText', () => {
   it('masks a planted key, and finds a key that a control character split', () => {
-    expect(cleanText(`Use ${KEY}${ESC} now.`, HOME)).toBe('Use ‹anthropic-key› now.')
-    expect(cleanText(`sk-ant-api03-FAKE${BEL}FAKEFAKEFAKE`, HOME)).toBe('‹anthropic-key›')
+    expect(cleanText(`Use ${KEY}${BEL} now.`, HOME)).toBe('Use ‹anthropic-key› now.')
+    // ESC SP is 1 sequence to a reader that stops before its final byte: it glues `now` to the key, so `now` is hidden too
+    expect(cleanText(`Use ${KEY}${ESC} now.`, HOME)).toBe('Use ‹anthropic-key› ‹redacted›.')
+    expect(cleanText(`sk-ant-api03-FAKE${BEL}FAKEFAKEFAKE`, HOME)).toBe('‹anthropic-key› ‹redacted›')
   })
 
   it('writes the home folder as ~, as a path and as a project slug, and only on a segment boundary', () => {
@@ -54,6 +81,24 @@ describe('cleanText', () => {
   it('rewrites no home when the engine gives none', () => {
     expect(cleanText('/Users/test/a.ts', '')).toBe('/Users/test/a.ts')
   })
+
+  it('masks each inner pair and each whole run that main masks: after a quoted key, a newline or a credential, and around a URL password', () => {
+    expect(INNER_PAIR_FORMS).toHaveLength(1_920)
+    for (const text of [...INNER_PAIR_FORMS, ...INNER_PAIR_RELATIVES]) expect(cleanText(text, HOME), text).not.toMatch(INNER_SECRET_PART)
+  })
+
+  it('never takes the next line of a command with a masked value, so the confirm bar shows the whole command', () => {
+    for (const shape of LINE_END_SHAPES) {
+      for (const [line, stays] of NEXT_LINES) {
+        for (const end of ['\n', '\r\n']) {
+          const out = cleanText(`${shape}${end}${line}`, HOME)
+          expect(out.endsWith(stays === line ? `\n${line}` : stays), JSON.stringify(out)).toBe(true)
+          expect(out.split('\n'), JSON.stringify(out)).toHaveLength(2)
+          expect(out, shape).not.toMatch(INNER_SECRET_PART)
+        }
+      }
+    }
+  })
 })
 
 describe('textCleaner', () => {
@@ -61,7 +106,7 @@ describe('textCleaner', () => {
     const clean: CleanText = textCleaner(HOME)
     const dirty = `name ${ESC}[2J${BEL}${CSI} ${KEY} /Users/test/Code/demo`
     expect(clean(dirty)).toBe(cleanText(dirty, HOME))
-    expect(clean(dirty)).toBe('name [2J ‹anthropic-key› ~/Code/demo')
+    expect(clean(dirty)).toBe('name  ‹anthropic-key› ~/Code/demo')
   })
 })
 
@@ -104,8 +149,57 @@ describe('cleanValue', () => {
     })
   })
 
+  it('masks the value of a pair in any case of name, key and value, and of a ParameterKey and ParameterValue pair', () => {
+    const value = {
+      ecs: [{ Name: 'API_KEY', Value: secret }, { NAME: 'REGION', VALUE: 'eu-west-1' }],
+      tags: [{ Key: 'password', Value: secret }, { KEY: 'db_token', VALUE: secret }],
+      stack: [{ ParameterKey: 'DbPassword', ParameterValue: secret }, { ParameterKey: 'InstanceType', ParameterValue: 't3.micro' }],
+    }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({
+      ecs: [{ Name: 'API_KEY', Value: '‹redacted›' }, { NAME: 'REGION', VALUE: 'eu-west-1' }],
+      tags: [{ Key: 'password', Value: '‹redacted›' }, { KEY: 'db_token', VALUE: '‹redacted›' }],
+      stack: [{ ParameterKey: 'DbPassword', ParameterValue: '‹redacted›' }, { ParameterKey: 'InstanceType', ParameterValue: 't3.micro' }],
+    })
+  })
+
+  it('masks a JSON pair in a text, URL credentials, a Basic credential and the camelCase key names', () => {
+    expect(cleanText(`reply: {"api_key": "${secret}"}`, HOME)).toBe('reply: {"api_key": "‹redacted›"}')
+    expect(cleanValue({ body: `{"API_KEY":"${secret}"}` }, textCleaner(HOME))).toStrictEqual({ body: '{"API_KEY":"‹redacted›"}' })
+    expect(cleanText(`https://user:${secret}@host/x`, HOME)).toBe('https://user:‹redacted›@host/x')
+    expect(cleanText(`Authorization: Basic ${secret}`, HOME)).toBe('Authorization: Basic ‹token›')
+    const value = { secretKey: secret, privateKey: secret, passphrase: secret, apiKeys: [secret], port: 8080 }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({ secretKey: '‹redacted›', privateKey: '‹redacted›', passphrase: '‹redacted›', apiKeys: ['‹redacted›'], port: 8080 })
+  })
+
+  it('masks a number after a quoted secret key, and a key with a space inside', () => {
+    expect(cleanText('{"api_key": 123456789012}', HOME)).toBe('{"api_key": ‹redacted›}')
+    expect(cleanText(`{"api key": "${secret}"}`, HOME)).toBe('{"api key": "‹redacted›"}')
+    const value = { 'api key': secret, 'client secret': 1234, env: [{ Name: 'client secret', Value: secret }], 'the author': 'x' }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({ 'api key': '‹redacted›', 'client secret': '‹redacted›', env: [{ Name: 'client secret', Value: '‹redacted›' }], 'the author': 'x' })
+  })
+
+  it('masks an authorization key with any value', () => {
+    const value = { headers: { Authorization: `Token ${secret}`, 'Proxy-Authorization': secret }, env: [{ name: 'AUTHORIZATION', value: secret }] }
+    expect(cleanValue(value, textCleaner(HOME))).toStrictEqual({ headers: { Authorization: '‹redacted›', 'Proxy-Authorization': '‹redacted›' }, env: [{ name: 'AUTHORIZATION', value: '‹redacted›' }] })
+    expect(cleanText(`authorization=${secret}`, HOME)).toBe('authorization=‹redacted›')
+  })
+
+  it('masks a name=value parameter of an Authorization header in a text and in a Bash command', () => {
+    for (const header of [`Token token="${secret}"`, `OAuth oauth_token="${secret}"`, `Bearer token=${secret}`, `Basic auth_token=${secret}`]) {
+      const command = `curl -H 'Authorization: ${header}' https://example.com`
+      expect(cleanText(command, HOME), header).not.toContain(secret.slice(0, 6))
+      expect(JSON.stringify(cleanValue({ command }, textCleaner(HOME))), header).not.toContain(secret.slice(0, 6))
+    }
+  })
+
+  it('reads a key with its control characters removed, so a control character cannot hide a secret key', () => {
+    expect(cleanValue({ [`api${CSI}_key`]: secret, [`pass${BEL}word`]: 1234 }, textCleaner(HOME))).toStrictEqual({ 'api key': '‹redacted›', 'pass word': '‹redacted›' })
+    expect(cleanValue({ [`to${String.fromCharCode(0x200b)}ken`]: secret }, textCleaner(HOME))).toStrictEqual({ 'to ken': '‹redacted›' })
+  })
+
   it('cleans each key, and each string with no key alone', () => {
-    expect(cleanValue({ [`na${CSI}me`]: `a${ESC}b` }, textCleaner(HOME))).toStrictEqual({ name: 'ab' })
+    // U+009B m and ESC b are whole sequences: each takes out its final byte
+    expect(cleanValue({ [`na${CSI}me`]: `a${ESC}b c` }, textCleaner(HOME))).toStrictEqual({ 'na e': 'a c' })
     expect(cleanValue([`Use ${KEY}`, 'API_KEY=Zq9xW2pL7mN4vB8k'], textCleaner(HOME))).toStrictEqual(['Use ‹anthropic-key›', 'API_KEY=‹redacted›'])
   })
 })

@@ -492,7 +492,7 @@ describe('reduceRecords: every text field is sanitized and redacted', () => {
     b.userPrompt('Open /Users/test/Code/demo/a.ts')
     b.assistant([text(`Red${ESC}[31m text${BEL}\nnext${CSI}line\tend`)])
     const facts = reduce(b)
-    expect(facts.lastReply).toBe('Red[31m text\nnextline\tend')
+    expect(facts.lastReply).toBe('Red text\nnext ine\tend')
     expect(facts.lastPrompt).toBe('Open ~/Code/demo/a.ts')
   })
 
@@ -541,15 +541,18 @@ describe('reduceRecords: every text field is sanitized and redacted', () => {
       expect(value).not.toContain('sk-ant-')
       expect(value).not.toContain('/Users/test')
     }
-    const clean = (word: string): string => `${word} [2J ${MASKED_KEY} ~/Code/demo`
+    const clean = (word: string): string => `${word}  ${MASKED_KEY} ~/Code/demo`
     expect(facts.title).toBe(clean('title'))
     expect(facts.lastReply).toBe(clean('reply'))
     expect(facts.branch).toBe(clean('branch'))
     expect(facts.permissionMode).toBe(clean('mode'))
     expect(facts.errorTail?.text).toBe(clean('error'))
     expect(facts.openQuestion?.questions[0]).toStrictEqual({ text: clean('question'), header: clean('header'), multiSelect: false, options: [{ label: clean('label'), description: clean('about') }] })
-    expect(facts.agents[0]).toMatchObject({ text: `Agent ${clean('agent')} (${clean('type')})`, agentType: clean('type') })
-    expect(facts.activity?.tool).toBe('mcp__demo__run')
-    expect(facts.activity?.input).toBe(JSON.stringify({ command: clean('command') }))
+    // the agent text is a preview, which puts 1 space for each run of white space
+    expect(facts.agents[0]).toMatchObject({ text: `Agent ${clean('agent').replace(/\s+/g, ' ')} (${clean('type')})`, agentType: clean('type') })
+    // a sequence between 2 words is 1 space: ESC r is a whole 2-byte sequence and takes the `r`, and the 8-bit CSI
+    // takes the `m` of com<CSI>mand as its final byte
+    expect(facts.activity?.tool).toBe('mcp__demo__ un')
+    expect(facts.activity?.input).toBe(JSON.stringify({ 'com and': clean('command') }))
   })
 })
