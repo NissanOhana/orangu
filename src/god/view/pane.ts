@@ -14,7 +14,8 @@
  *   in the narrow detail, and its rows come from the board: it takes at most half of the rows under the header. While
  *   the bar shows a count line, w and z scroll the bar, so the detail draws its own count lines with no key.
  * - The digits of the key row name the options of the open question of the selected session, or the Yes and No of
- *   its Bash request, while the Now tab of the detail draws their Buttons. While a draft is open they draw dim.
+ *   its Bash request, while the Now tab of the detail draws their Buttons. Where no digit Button shows (the narrow
+ *   board, another tab, a draft, nothing to answer) the row shows `1-9` dim.
  * - When the bar leaves too few rows for a window over the board or the detail, a note of the last outcome gives way
  *   (it has no key), and a bar that holds an intent or a draft takes the place of the board: the header, a rule, the
  *   bar and the key row, so y and c stay.
@@ -111,17 +112,19 @@ export function paneView(input: PaneInput): PaneView {
   const note = input.jumpNote ?? undefined
   const notice = note !== undefined && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {}
   const isDraftOpen = input.deliver?.draft !== undefined
-  const keysOf = (board: BoardSnapshot, isDetail = false, showsDigits = false) =>
-    keyRow({
+  const keysOf = (board: BoardSnapshot, isDetail = false, showsDigits = false) => {
+    const answerCount = showsDigits ? answerCountOf(board, input.selectedKey) : undefined
+    return keyRow({
       width: bodyColumns,
       isCmuxMissing: board.sources.cmux.status === 'missing',
       promptHoldsKeys: input.promptHoldsKeys,
-      ...(showsDigits ? { answerCount: answerCountOf(board, input.selectedKey) } : {}),
-      isAnswerOff: isDraftOpen,
+      ...(answerCount === undefined ? {} : { answerCount }),
+      isAnswerOff: answerCount === undefined,
       mode: board.mode,
       isDetail,
       ...notice,
     })
+  }
   if (state !== undefined || snapshot === undefined) {
     const body = messageLines(STATE_TEXT[state ?? 'reading'], bodyColumns)
     const keys = (state === 'no-repo-match' || state === 'no-repo-set') && snapshot !== undefined ? keysOf(snapshot).lines : []

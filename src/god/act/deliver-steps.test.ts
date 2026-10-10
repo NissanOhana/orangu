@@ -2,8 +2,9 @@
  * The executor of the key path between the steps of a prompt, and the checks that hold each key, over a fake machine:
  * - before each next step of a prompt it reads the registry file and the screen again, and it stops at the first
  *   change: a session that waits or runs, a dialog on the screen, a box that does not hold the text typed so far
- *   (as the text cleaner shows it), or a read that took too long. A stop sends no later key, and the outcome keeps
- *   the newest screen;
+ *   (as the text cleaner shows it), a new status time or another transcript size since the plan read, or a read that
+ *   took too long. A stop sends no later key, and the outcome keeps the newest screen;
+ * - a shell command, the help or an exit word gets no host call, so a box in the shell mode never holds its text;
  * - a prompt to an idle session whose background task or subagent runs gets no key;
  * - the cancel mark of c stops the steps that did not go out;
  * - ps shows the PID of the target with the start time of its registry file and the TTY of its tab, or no key goes out.
@@ -15,12 +16,14 @@ import {
   HOME,
   PID,
   PS_START,
+  T0,
   asks,
   backgroundLines,
   idle,
   keyRuns,
   machine,
   prompt,
+  promptLine,
   request,
   screenFixture,
   sendKey,
@@ -122,6 +125,46 @@ describe('deliver: the text cleaner and the clock between the steps', () => {
     const fake = machine(idle(), { onKey: () => void (keys += 1), nowFails: () => keys >= 1 })
     const { outcome } = await deliver(fake.ports, request(prompt('Run the tests.\nThen fix the lint.')))
     expect(outcome).toMatchObject({ status: 'failed', reason: 'stopped' })
+    expect(keyRuns(fake.runs)).toEqual([sendText('Run the tests.')])
+  })
+})
+
+describe('deliver: a text that is no prompt, and the shell mode on the screen', () => {
+  it('refuses a shell command, the help and an exit before any host call', async () => {
+    for (const text of ['!ls', '  ?', 'exit', '\n:wq!']) {
+      const fake = machine(idle())
+      expect((await deliver(fake.ports, request(prompt(text)))).outcome, JSON.stringify(text)).toMatchObject({ status: 'refused', refusal: 'not-a-prompt' })
+      expect(fake.log).toEqual([])
+    }
+  })
+
+  it('sends no key when the box of the target shows the shell mode, before the first step or after it', async () => {
+    const shell = (typed: string): string => typedScreen(typed).replace('❯\u00a0', '!\u00a0')
+    const before = machine(idle({ screen: shell }))
+    expect((await deliver(before.ports, request(prompt('Run the tests.')))).outcome).toMatchObject({ status: 'refused', refusal: 'screen-changed' })
+    expect(keyRuns(before.runs)).toEqual([])
+    const after = machine(idle(), { onKey: (keys, target) => void (keys === 1 ? (target.screen = shell) : undefined) })
+    expect((await deliver(after.ports, request(prompt('Run the tests.\nThen fix the lint.')))).outcome).toMatchObject({ status: 'failed', reason: 'stopped' })
+    expect(keyRuns(after.runs)).toEqual([sendText('Run the tests.')])
+    // a ! prompt turns the box to the shell mode after its first key, so it stopped there and left its text in the box
+    for (const text of ['!ls\nThen stop.', ' !ls']) {
+      const bang = machine(idle(), { onKey: (keys, target) => void (keys === 1 ? (target.screen = shell) : undefined) })
+      expect((await deliver(bang.ports, request(prompt(text)))).outcome, JSON.stringify(text)).toMatchObject({ status: 'refused', refusal: 'not-a-prompt' })
+      expect(keyRuns(bang.runs)).toEqual([])
+    }
+  })
+})
+
+describe('deliver: a write of the session between 2 steps', () => {
+  it('stops when the transcript grows after the plan read', async () => {
+    const fake = machine(idle(), { onKey: (keys, target) => void (keys === 1 ? (target.lines = [...(target.lines ?? []), promptLine('A task note.', T0)]) : undefined) })
+    expect((await deliver(fake.ports, request(prompt('Run the tests.\nThen fix the lint.')))).outcome).toMatchObject({ status: 'failed', reason: 'stopped' })
+    expect(keyRuns(fake.runs)).toEqual([sendText('Run the tests.')])
+  })
+
+  it('stops when the registry file writes a new status time after the plan read, with the same status', async () => {
+    const fake = machine(idle(), { onKey: (keys, target) => void (keys === 1 ? (target.statusUpdatedAt = T0 - 1000) : undefined) })
+    expect((await deliver(fake.ports, request(prompt('Run the tests.\nThen fix the lint.')))).outcome).toMatchObject({ status: 'failed', reason: 'stopped' })
     expect(keyRuns(fake.runs)).toEqual([sendText('Run the tests.')])
   })
 })

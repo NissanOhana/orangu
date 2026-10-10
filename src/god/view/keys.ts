@@ -5,7 +5,7 @@
  * by themselves, and the digits belong to the option Buttons of the detail, so neither has a hotkey here.
  * - f shows the mode that it switches to: `f: repos` in the all mode, `f: all` in the repos mode. g groups the rows.
  * - The digits name the options of the open question of the selected session (`1-3`) while the detail draws their
- *   Buttons, else `1-9`. While a draft of r or m is open they draw dim: a digit types into the draft.
+ *   Buttons, else `1-9`, dim where no digit Button shows (a draft of r or m, the narrow board, another tab).
  * - While the prompt holds the keys, the row ends with the key that gives them to the pane.
  * - With no cmux on the machine, jump, the digits and reply show dim, and 1 more line says why.
  * - A notice of the last key (why the last j did not jump) shows under the row in the warn color, wrapped, never cut.
@@ -39,7 +39,7 @@ export type KeyRowInput = {
   promptHoldsKeys: boolean
   /** the option count of the open question of the selected session, when it has 1 question with 1 choice and the detail draws its Buttons */
   answerCount?: number
-  /** true while a draft of r or m is open: the digits have no hotkey */
+  /** true where no digit Button shows: the digits do nothing there */
   isAnswerOff?: boolean
   /** the mode of the board: f switches to the other one */
   mode: BoardMode

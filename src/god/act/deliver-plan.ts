@@ -59,6 +59,12 @@ export type TargetFacts = Pick<SessionFacts, 'sessionId' | 'status' | 'waitingFo
 const BLANK = /^[\p{White_Space}\p{Cf}\p{Default_Ignorable_Code_Point}]*$/u
 /** C0 but the newline, DEL, C1, and the line and paragraph separators: a character that cmux can type as a key or a break */
 const CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/
+/** a format character or a default ignorable character: it draws nothing, so the person cannot see it in the bar */
+const HIDDEN_CHAR = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u
+/** the first character that opens a mode in place of a prompt: `!` runs a shell command, `?` shows the help */
+const MODE_MARKS = new Set(['!', '?'])
+/** a first line that ends the session in place of a prompt */
+const EXIT_WORDS = new Set(['exit', 'quit', ':q', ':q!', ':wq', ':wq!'])
 /** a backslash right before n, r or t, in either case: cmux send types the lowercase pairs as Enter or Tab */
 const BACKSLASH_ESCAPE = /\\[nrtNRT]/
 /** a backslash at the end of a line, with only spaces after it: Claude Code reads it and Enter as a new line */
@@ -68,11 +74,18 @@ export const WORKSPACE_REF = /^(?:workspace:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f
 /** a cmux surface ref: `surface:N` or a UUID */
 export const SURFACE_REF = /^(?:surface:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
 
+/** True when the text is no prompt for the model: a shell command, the help, or an exit word on its first line. */
+function isNotPrompt(text: string): boolean {
+  const start = text.trimStart()
+  return MODE_MARKS.has(start.charAt(0)) || EXIT_WORDS.has((start.split('\n', 1)[0] ?? '').trim().toLowerCase())
+}
+
 /** Why a prompt text cannot go out as typed keys, or undefined when it can. */
 export function textRefusal(text: string): DeliverRefusal | undefined {
   if (BLANK.test(text)) return 'empty'
-  if (CONTROL_CHAR.test(text)) return 'control-char'
+  if (CONTROL_CHAR.test(text) || HIDDEN_CHAR.test(text)) return 'control-char'
   if (BACKSLASH_ESCAPE.test(text) || LINE_END_BACKSLASH.test(text)) return 'backslash-escape'
+  if (isNotPrompt(text)) return 'not-a-prompt'
   return undefined
 }
 

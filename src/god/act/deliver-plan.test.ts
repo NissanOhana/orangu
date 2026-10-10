@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { DeliverIntent, DeliverPlan, DeliverRefusal, OpenQuestion, ScreenRead } from '../types.js'
-import { FACTS_MAX_LAG_MS, SCREEN_MAX_AGE_MS, planDelivery, textRefusal, type KeyIntent, type TargetFacts } from './deliver-plan.js'
+import { FACTS_MAX_LAG_MS, SCREEN_MAX_AGE_MS, planDelivery, type KeyIntent, type TargetFacts } from './deliver-plan.js'
 
 const SCREENS = join(dirname(fileURLToPath(import.meta.url)), '../../../test/fixtures/god/screens')
 const fixture = (name: string): string => readFileSync(join(SCREENS, `${name}.txt`), 'utf8')
@@ -296,45 +296,6 @@ describe('planDelivery: the screen read', () => {
   it('refuses a peer message: it has no keys and goes through the engine', () => {
     const peer = { kind: 'peer', target: TARGET, text: 'hello' } as DeliverIntent
     expect(plan(peer as KeyIntent, screen('prompt-empty'), IDLE)).toEqual(CHANGED)
-  })
-})
-
-describe('textRefusal', () => {
-  it('refuses an empty text and a text of white space only', () => {
-    for (const text of ['', ' ', '\n', ` \n ${ch(0xa0)}`]) expect(textRefusal(text)).toBe('empty')
-  })
-
-  it('refuses a text of only blank or invisible characters as empty', () => {
-    const invisible = [0x200b, 0x200c, 0x200d, 0x200e, 0x200f, 0x00ad, 0x2028, 0x2029, 0xfeff, 0x2060, 0x202e, 0x3000, 0xfe0f]
-    for (const code of invisible) expect(textRefusal(ch(code)), `U+${code.toString(16)}`).toBe('empty')
-    expect(textRefusal(ch(0x200b, 0x20, 0xad, 0xfeff, 0x0a, 0x2028))).toBe('empty')
-  })
-
-  it('refuses every control character but the newline: C0, DEL and C1', () => {
-    for (const code of [0x00, 0x03, 0x07, 0x08, 0x09, 0x0b, 0x0c, 0x0d, 0x1b, 0x1f, 0x7f, 0x80, 0x85, 0x9b, 0x9f]) {
-      expect(textRefusal(`a${ch(code)}b`), `U+${code.toString(16)}`).toBe('control-char')
-    }
-  })
-
-  it('refuses a backslash right before n, r or t in either case, which cmux can type as Enter or Tab', () => {
-    for (const text of ['a\\nb', 'a\\rb', 'a\\tb', 'C:\\new', 'a\\\\nb', '\\t', 'a\\Nb', 'a\\Rb', 'a\\Tb', 'C:\\Temp']) expect(textRefusal(text), text).toBe('backslash-escape')
-  })
-
-  it('refuses a line that ends with a backslash, which Claude Code reads as a new line in place of Enter', () => {
-    for (const text of ['ends with \\', 'ends with \\  ', `ends with \\${ch(0xa0)}`, 'first\\\nsecond', 'first\\  \nsecond', '\\']) {
-      expect(textRefusal(text), JSON.stringify(text)).toBe('backslash-escape')
-    }
-  })
-
-  it('refuses a line or paragraph separator in a text with a visible character, which cmux can type as a line break', () => {
-    for (const code of [0x2028, 0x2029]) {
-      expect(textRefusal(`a${ch(code)}b`), `U+${code.toString(16)}`).toBe('control-char')
-      expect(textRefusal(`line one${ch(code)}`), `U+${code.toString(16)}`).toBe('control-char')
-    }
-  })
-
-  it('passes a newline, a visible text with an invisible character in it, and a backslash before any other character', () => {
-    for (const text of ['line one\nline two', 'a\\b', 'a\\x41', 'a\\u0041', 'a\\ b', `a${ch(0x200b)}b`]) expect(textRefusal(text), text).toBeUndefined()
   })
 })
 

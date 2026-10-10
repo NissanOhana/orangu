@@ -227,7 +227,7 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
     },
     bar: {
       onSend: (shown) => quiet(sendConfirmed($, runtime.deliver, shown)),
-      onCancel: () => quiet(cancelBar($, runtime.deliver)),
+      onCancel: (shown) => quiet(cancelBar($, runtime.deliver, shown)),
       onScroll: (scroll) => quiet(scrollBar($, scroll)),
       onDraft: (value) => quiet(addDraftLine($, value)),
     },

@@ -7,8 +7,9 @@
  * - It runs only the plan steps, in order, and stops at the first one that fails. Its host runs only cmux send,
  *   send-key and read-screen, ps of 1 PID in UTC, and the reads of the transcript.
  * - A peer message goes through the engine with no screen check.
- * The checks between the steps of a prompt, the cancel mark and the process check are in deliver-steps.test.ts. The
- * fake machine is test/fixtures/god/deliver-machine.ts.
+ * The checks between the steps of a prompt, the cancel mark and the process check are in deliver-steps.test.ts, and
+ * the argv forms that the host of the executor takes in deliver-argv.test.ts. The fake machine is
+ * test/fixtures/god/deliver-machine.ts.
  */
 import { describe, expect, it } from 'vitest'
 import {
@@ -39,7 +40,7 @@ import {
 } from '../../../test/fixtures/god/deliver-machine.js'
 import type { PeerOutcome } from '../host.js'
 import type { DeliverIntent, SourceState } from '../types.js'
-import { REFUSED_DELIVER_ARGV, deliver, deliverHost, deliverPeer, isDeliverArgv, type DeliverRequest, type DeliverRow } from './deliver.js'
+import { deliver, deliverPeer, type DeliverRequest, type DeliverRow } from './deliver.js'
 
 describe('deliver: the checks before any read', () => {
   it('refuses with no cmux, with no cmux read that worked, and with no usable tab, and runs no host call', async () => {
@@ -169,54 +170,6 @@ describe('deliver: the fresh reads, then the plan', () => {
     expect(typed.check?.expect).toEqual({ kind: 'prompt', text: 'Run the tests.\nThen fix the lint.', after: T0 + 4000 })
     const refused = await deliver(machine(asks({ screen: screenFixture('prompt-empty') })).ports, request(ANSWER))
     expect(refused.check).toBeUndefined()
-  })
-})
-
-describe('isDeliverArgv: the only commands of the executor', () => {
-  it('takes cmux send and send-key with both refs and -- right before 1 value, the screen read, and the transcript reads', () => {
-    for (const argv of [sendKey('1'), sendText('--surface x'), ['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40'], ['stat', '-f', '%i %N', TRANSCRIPT], ['tail', '-c', '+1', TRANSCRIPT], ['head', '-c', '100', TRANSCRIPT], ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242']]) {
-      expect(isDeliverArgv(argv), argv.join(' ')).toBe(true)
-    }
-  })
-
-  it('refuses every other cmux subcommand, a key with no --, a bad ref, more values, and every other command', () => {
-    for (const argv of [
-      ['cmux', 'notify', '--title', 't', '--body', 'b'],
-      ['cmux', 'select-workspace', '--workspace', WS],
-      ['cmux', 'focus-panel', '--panel', SF, '--workspace', WS],
-      ['cmux', 'send', '--workspace', WS, '--surface', SF, 'text'],
-      ['cmux', 'send', '--workspace', '3', '--surface', SF, '--', 'text'],
-      ['cmux', 'send-key', '--workspace', WS, '--surface', SF, '--', '1', 'enter'],
-      ['cmux', 'send-key', '--surface', SF, '--workspace', WS, '--', '1'],
-      ['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40', '--scrollback'],
-      ['claude', '-p', 'hi'],
-      ['git', 'push'],
-      ['ps', '-o', 'pid='],
-      ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242,4243'],
-      ['ps', '-o', 'pid=,tty=,lstart=', '-p', '-1'],
-      ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242', '-e'],
-      [],
-    ]) {
-      expect(isDeliverArgv(argv), argv.join(' ')).toBe(false)
-    }
-  })
-})
-
-describe('deliverHost: the host of the executor', () => {
-  it('runs an argv that isDeliverArgv takes, and refuses any other one before the host port sees it', async () => {
-    const fake = machine(asks())
-    const host = deliverHost(fake.ports.host)
-    await host.run(sendKey('1'))
-    for (const argv of [['cmux', 'notify', '--title', 't', '--body', 'b'], ['cmux', 'select-workspace', '--workspace', WS], ['git', 'push'], ['claude', '-p', 'hi']]) {
-      await expect(host.run(argv)).rejects.toThrow(REFUSED_DELIVER_ARGV)
-    }
-    // ps runs only in UTC, and no other command sets the environment
-    const ps = ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242']
-    await expect(host.run(ps)).rejects.toThrow(REFUSED_DELIVER_ARGV)
-    await expect(host.run(ps, { env: { TZ: 'Asia/Jerusalem' } })).rejects.toThrow(REFUSED_DELIVER_ARGV)
-    await expect(host.run(sendKey('1'), { env: { TZ: 'UTC' } })).rejects.toThrow(REFUSED_DELIVER_ARGV)
-    await host.run(ps, { env: { TZ: 'UTC' } })
-    expect(fake.runs).toEqual([sendKey('1'), ps])
   })
 })
 

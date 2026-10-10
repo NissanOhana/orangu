@@ -12,6 +12,7 @@ import {
   afterDraftLine,
   afterRefresh,
   answerIntent,
+  cancelPressed,
   cancelled,
   draftFor,
   isSendable,
@@ -23,6 +24,7 @@ import {
   scrolled,
   sendPressed,
   sending,
+  stopsDelivery,
   withDraft,
   withIntent,
   withPicked,
@@ -195,5 +197,25 @@ describe('y while the keys go out', () => {
     expect(sendPressed(marked, INTENTS.answer)).toBe(marked)
     expect(isSendingOf(state, INTENTS.answer)).toBe(false)
     expect(notSending(marked)).toEqual(state)
+  })
+})
+
+describe('c of a bar', () => {
+  it('closes only the bar that its drawing shows: a confirm bar of the same intent, or a draft with no bar', () => {
+    const state: DeliverState = { scroll: 2, intent: INTENTS.answer, outcome: OUTCOMES.refused }
+    expect(cancelPressed(state, INTENTS.answer)).toEqual(cancelled(state))
+    expect(cancelPressed(state, INTENTS.prompt)).toBe(state)
+    expect(cancelPressed(state, undefined)).toBe(state)
+    const drafted = withDraft(NO_DELIVERY, draftFor(SNAPSHOT, 's-idle', 'prompt')!)
+    expect(cancelPressed(drafted, undefined)).toEqual(cancelled(drafted))
+    expect(cancelPressed(drafted, INTENTS.answer)).toBe(drafted)
+  })
+
+  it('stops the keys of a delivery only from the bar of that same intent', () => {
+    expect(stopsDelivery(INTENTS.answer, INTENTS.answer)).toBe(true)
+    // a digit pressed while the keys go out opens a new bar: its c closes that bar and stops nothing
+    expect(stopsDelivery(INTENTS.answer, { ...INTENTS.answer, option: 3, label: 'None' } as typeof INTENTS.answer)).toBe(false)
+    expect(stopsDelivery(INTENTS.answer, undefined)).toBe(false)
+    expect(stopsDelivery(undefined, INTENTS.answer)).toBe(false)
   })
 })

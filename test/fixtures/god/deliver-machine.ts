@@ -60,6 +60,8 @@ export type Target = {
   screen: string | ((typed: string) => string)
   procStart?: string
   ps?: { lstart: string; tty: string } | 'none' | 'fails'
+  /** the status time that the registry file writes; absent, 60 s before T0 */
+  statusUpdatedAt?: number
 }
 
 /** The empty prompt screen with the input box holding `typed`: the first line after the prompt mark, the next ones after 2 spaces. */
@@ -108,7 +110,7 @@ export function machine(target: Target, options: MachineOptions = {}) {
   const cancel = { isCancelled: false }
   const content = (): string => `${(target.lines ?? []).join('\n')}\n`
   const registry = (): string =>
-    JSON.stringify({ pid: PID, sessionId: target.sessionId ?? ID, cwd: CWD, name: 'color-picker', kind: 'interactive', status: target.status, ...(target.waitingFor === undefined ? {} : { waitingFor: target.waitingFor }), statusUpdatedAt: T0 - 60_000, procStart: target.procStart ?? PS_START })
+    JSON.stringify({ pid: PID, sessionId: target.sessionId ?? ID, cwd: CWD, name: 'color-picker', kind: 'interactive', status: target.status, ...(target.waitingFor === undefined ? {} : { waitingFor: target.waitingFor }), statusUpdatedAt: target.statusUpdatedAt ?? T0 - 60_000, procStart: target.procStart ?? PS_START })
   const host: Host = {
     run: async (argv, runOptions) => {
       log.push(`run ${argv.join(' ')}`)

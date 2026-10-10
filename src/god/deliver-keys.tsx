@@ -9,8 +9,9 @@
 //   the row of its target and the state of cmux from the last board snapshot. 1 y runs at a time: a y while one runs
 //   does nothing, so a key never goes out twice. While it runs, the state is marked as sending, so the bar draws no
 //   y and no c.
-// - c while the keys go out (from a drawing made before y) sets the cancel mark, which the executor reads before each
-//   step, so the steps that did not go out never go out.
+// - c closes the bar of its own drawing. A c of the bar whose intent goes out now (from a drawing made before y) sets
+//   the cancel mark, which the executor reads before each step, so the steps that did not go out never go out. The c
+//   of a bar that a digit opened while the keys go out closes that bar and stops nothing.
 // - A refusal or a failure with a fresh screen selects its session and opens its Screen tab.
 // - The text field of a draft takes the focus ring when it opens and after each line, so the person types on.
 // - After each tick of the board, the check of the last send reads the newest facts.
@@ -23,7 +24,7 @@ import {
   afterDraftLine,
   afterRefresh,
   answerIntent,
-  cancelled,
+  cancelPressed,
   draftFor,
   isSendingOf,
   notSending,
@@ -32,6 +33,7 @@ import {
   screenDetail,
   scrolled,
   sendPressed,
+  stopsDelivery,
   withDraft,
   withPicked,
 } from './deliver-control.js'
@@ -44,8 +46,8 @@ import { draftKey, type Draft } from './view/bar.js'
 /** The id of the pane. */
 export const PANE = 'god'
 
-/** The key path of 1 load of the module: true while a y runs, and the cancel mark of a c while it runs. */
-export type DeliverRuntime = { isDelivering: boolean; isCancelled: boolean }
+/** The key path of 1 load of the module: true while a y runs, the intent that goes out, and the cancel mark of its c. */
+export type DeliverRuntime = { isDelivering: boolean; isCancelled: boolean; delivering?: DeliverIntent }
 
 async function selection($: EngineInterface): Promise<{ snapshot: BoardSnapshot | undefined; selectedKey: string | undefined }> {
   return { snapshot: (await read($, BOARD)) ?? undefined, selectedKey: (await read($, SELECTED)) || undefined }
@@ -87,10 +89,10 @@ export async function addDraftLine($: EngineInterface, value: string): Promise<v
   if (next.draft !== undefined) await focusDraft($, next.draft)
 }
 
-/** c: the bar and the draft close. While a y runs, the steps that did not go out stop. */
-export async function cancelBar($: EngineInterface, runtime: DeliverRuntime): Promise<void> {
-  if (runtime.isDelivering) runtime.isCancelled = true
-  await update($, DELIVER, cancelled)
+/** c of a drawing that shows `shown`: its bar closes, and the steps of the delivery of that intent that did not go out stop. */
+export async function cancelBar($: EngineInterface, runtime: DeliverRuntime, shown: DeliverIntent | undefined): Promise<void> {
+  if (stopsDelivery(runtime.delivering, shown)) runtime.isCancelled = true
+  await update($, DELIVER, (state) => cancelPressed(state, shown))
 }
 
 /** w or z of the bar: the scroll that the view gave for the key. */
@@ -120,6 +122,8 @@ export async function sendConfirmed($: EngineInterface, runtime: DeliverRuntime,
   if (runtime.isDelivering || shown === undefined) return
   runtime.isDelivering = true
   runtime.isCancelled = false
+  // set before the first wait, so a c of this bar in the same moment as y stops the keys
+  runtime.delivering = shown
   try {
     const marked = await update($, DELIVER, (state) => sendPressed(state, shown))
     if (!isSendingOf(marked, shown)) return
@@ -131,6 +135,7 @@ export async function sendConfirmed($: EngineInterface, runtime: DeliverRuntime,
     if (opensScreen(result.outcome)) await showScreen($, shown.target.sessionId)
   } finally {
     runtime.isDelivering = false
+    delete runtime.delivering
   }
 }
 

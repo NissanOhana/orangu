@@ -302,4 +302,16 @@ describe('the answer hint of the key row', () => {
     expect(hint(drafted)).toBe('1-9')
     if (drafted.kind === 'board') expect(drafted.hints.find((one) => one.label === 'answer')?.isOff).toBe(true)
   })
+
+  it('dims the answer hint wherever no digit Button shows', () => {
+    const isOff = (view: PaneView): boolean | undefined => (view.kind === 'board' || view.kind === 'detail' ? view.hints.find((one) => one.label === 'answer')?.isOff : undefined)
+    expect(isOff(pane(detailSnapshot(), { selectedKey: 's-wait' }))).toBe(false)
+    expect(isOff(pane(detailSnapshot(), { selectedKey: 's-perm' }))).toBe(false)
+    expect(isOff(pane(detailSnapshot(), { selectedKey: 's-wait', bodyColumns: 80, detail: { ...DEFAULT_DETAIL, isOpen: true } }))).toBe(false)
+    // the narrow board, another tab, and a session with nothing to answer draw no digit Button
+    expect(isOff(pane(detailSnapshot(), { selectedKey: 's-wait', bodyColumns: 80 }))).toBe(true)
+    expect(isOff(pane(detailSnapshot(), { selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, tab: 'history' } }))).toBe(true)
+    expect(isOff(pane(detailSnapshot(), { selectedKey: 's-idle' }))).toBe(true)
+    expect(isOff(pane(detailSnapshot()))).toBe(true)
+  })
 })

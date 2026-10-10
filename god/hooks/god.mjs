@@ -230,14 +230,22 @@ var SCREEN_MAX_AGE_MS = 1e3;
 var FACTS_MAX_LAG_MS = 1e3;
 var BLANK = /^[\p{White_Space}\p{Cf}\p{Default_Ignorable_Code_Point}]*$/u;
 var CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/;
+var HIDDEN_CHAR = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
+var MODE_MARKS = /* @__PURE__ */ new Set(["!", "?"]);
+var EXIT_WORDS = /* @__PURE__ */ new Set(["exit", "quit", ":q", ":q!", ":wq", ":wq!"]);
 var BACKSLASH_ESCAPE = /\\[nrtNRT]/;
 var LINE_END_BACKSLASH = /\\[^\S\n]*$/m;
 var WORKSPACE_REF = /^(?:workspace:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/;
 var SURFACE_REF = /^(?:surface:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/;
+function isNotPrompt(text) {
+  const start2 = text.trimStart();
+  return MODE_MARKS.has(start2.charAt(0)) || EXIT_WORDS.has((start2.split("\n", 1)[0] ?? "").trim().toLowerCase());
+}
 function textRefusal(text) {
   if (BLANK.test(text)) return "empty";
-  if (CONTROL_CHAR.test(text)) return "control-char";
+  if (CONTROL_CHAR.test(text) || HIDDEN_CHAR.test(text)) return "control-char";
   if (BACKSLASH_ESCAPE.test(text) || LINE_END_BACKSLASH.test(text)) return "backslash-escape";
+  if (isNotPrompt(text)) return "not-a-prompt";
   return void 0;
 }
 function stateRefusal(intent, facts) {
@@ -368,6 +376,8 @@ var SESSION_TOOL_DESCRIPTION = "This tool shows the detail of the live session w
 var SESSION_TOOL_NAME_HINT = "The name of the session, as the board tool shows it.";
 var TOOL_NOT_RUNNING = "The god pane does not run in this session now. Ask the person to run /god.";
 var TOOL_FAILED = "The orangu god tool failed. Call it again.";
+var TASK_RUNNING = "The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.";
+var NOT_A_PROMPT = "The pane does not type a shell command, the help or an exit. Press j and type it in its tab.";
 
 // src/god/generated/tokens.ts
 var GOD_TOKENS = {
@@ -3503,14 +3513,13 @@ var REFUSAL_TEXT = {
   "label-not-found": "The screen shows no option with the exact label Yes or No, so the pane sent nothing.",
   "multi-question": MULTI_DIALOG,
   empty: "The text is empty, so the pane sent nothing.",
-  "control-char": "The text has a control character, so the pane sent nothing.",
+  "control-char": "The text has a control character or a character that does not show, so the pane sent nothing.",
   "backslash-escape": "A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.",
-  "task-running": "The session runs a background task or a subagent that can open a dialog, so the pane sent nothing."
+  "task-running": TASK_RUNNING,
+  "not-a-prompt": NOT_A_PROMPT
 };
 var PROMPT_MODE_TEXT = {
-  "!": "The first line starts with !, so the session runs it as a shell command.",
-  "/": "The first line starts with /, so the session runs it as a command.",
-  "?": "The first line starts with ?, so the session shows its help."
+  "/": "The first line starts with /, so the session runs it as a command."
 };
 var NOT_DELIVERED = "Not delivered. Check the Screen tab.";
 var PEER_NOT_DELIVERED = "The peer message did not arrive.";
@@ -3537,7 +3546,7 @@ function partsOf(intent, width, isSending) {
     if (intent.input === void 0) return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }, { text: "  none" }], width)], text: [] };
     return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }], width)], text: keptLines(intent.input, width, 3) };
   }
-  const mode = intent.kind === "prompt" ? PROMPT_MODE_TEXT[intent.text.split("\n").find((line) => line !== "")?.charAt(0) ?? ""] : void 0;
+  const mode = intent.kind !== "prompt" ? void 0 : textRefusal(intent.text) === "not-a-prompt" ? NOT_A_PROMPT : PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)];
   return { fixed: [...ask, ...mode === void 0 ? [] : wrapSegments([{ text: mode, token: "--warn" }], width)], text: textLines(intent.text, width, 3) };
 }
 function confirmView(input) {
@@ -3974,25 +3983,39 @@ function checkDelivery(check, facts) {
 }
 
 // src/god/act/deliver.ts
-var READ_COMMANDS = ["stat", "tail", "head"];
 var REFUSED_DELIVER_ARGV = "The key path runs only cmux send, send-key and read-screen, ps of 1 process, and the reads of the transcript.";
 var PS_HEAD = ["ps", "-o", "pid=,tty=,lstart=", "-p"];
+var PLAN_KEYS = /* @__PURE__ */ new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "enter", "shift+enter"]);
 var isRefs = (workspaceRef, surfaceRef) => WORKSPACE_REF.test(workspaceRef ?? "") && SURFACE_REF.test(surfaceRef ?? "");
-function isDeliverArgv(argv) {
+function isTranscriptPath(path, home) {
+  const root = `${projectsDir(home)}/`;
+  if (path === void 0 || !path.startsWith(root) || !path.endsWith(".jsonl") || /[\n\r\0]/.test(path)) return false;
+  const parts = path.slice(root.length).split("/");
+  return parts.length === 2 && parts.every((part) => part !== "" && part !== "." && part !== "..");
+}
+function isTranscriptRead(argv, home) {
+  const [command, flag, value, path, ...more] = argv;
+  if (more.length > 0 || !isTranscriptPath(path, home)) return false;
+  if (command === "stat") return flag === "-f" && value === "%i %N";
+  if (command === "tail") return flag === "-c" && /^\+[1-9][0-9]{0,15}$/.test(value ?? "");
+  return command === "head" && flag === "-c" && /^[1-9][0-9]{0,4}$/.test(value ?? "") && Number(value) <= HEAD_BYTES;
+}
+function isDeliverArgv(argv, home) {
   const [command, verb, workspaceFlag, workspaceRef, surfaceFlag, surfaceRef, ...rest] = argv;
   if (command === "ps") return argv.length === PS_HEAD.length + 1 && PS_HEAD.every((arg, index) => argv[index] === arg) && /^[1-9][0-9]{0,9}$/.test(argv.at(-1) ?? "");
-  if (command !== "cmux") return command !== void 0 && READ_COMMANDS.includes(command);
+  if (command !== "cmux") return isTranscriptRead(argv, home);
   if (workspaceFlag !== "--workspace" || surfaceFlag !== "--surface" || !isRefs(workspaceRef, surfaceRef)) return false;
   if (verb === "read-screen") return rest.length === 2 && rest[0] === "--lines" && /^[1-9][0-9]{0,3}$/.test(rest[1] ?? "");
-  return (verb === "send" || verb === "send-key") && rest.length === 2 && rest[0] === "--";
+  if (rest.length !== 2 || rest[0] !== "--") return false;
+  return verb === "send" || verb === "send-key" && PLAN_KEYS.has(rest[1] ?? "");
 }
 function isDeliverEnv(argv, options) {
   const env = options?.env ?? {};
   const keys = Object.keys(env);
   return argv[0] === "ps" ? keys.length === 1 && env["TZ"] === "UTC" : keys.length === 0;
 }
-function deliverHost(host) {
-  return { ...host, run: (argv, options) => isDeliverArgv(argv) && isDeliverEnv(argv, options) ? host.run(argv, options) : Promise.reject(new Error(REFUSED_DELIVER_ARGV)) };
+function deliverHost(host, home) {
+  return { ...host, run: (argv, options) => isDeliverArgv(argv, home) && isDeliverEnv(argv, options) ? host.run(argv, options) : Promise.reject(new Error(REFUSED_DELIVER_ARGV)) };
 }
 async function readFresh(host, ports, row) {
   const factsAt = await host.now();
@@ -4003,24 +4026,30 @@ async function readFresh(host, ports, row) {
   const transcript = read3.status === "read" ? reduceRecords(read3.records, { home: ports.home, headRecords: read3.headRecords, parseErrors: read3.parseErrors }) : void 0;
   const state = { sessionId: registry.sessionId, status: registry.status, ...registry.waitingFor === void 0 ? {} : { waitingFor: registry.waitingFor } };
   const procStart = registry.procStart === void 0 ? {} : { procStart: registry.procStart };
-  return { kind: "read", facts: { ...state, ...transcript === void 0 ? {} : { transcript }, factsAt }, ...transcript === void 0 ? {} : { transcript }, ...procStart };
+  const path = read3.cursor.path;
+  const size = read3.status === "read" ? read3.cursor.position?.size : void 0;
+  const marks = { ...registry.statusUpdatedAt === void 0 ? {} : { statusUpdatedAt: registry.statusUpdatedAt }, ...path === void 0 || size === void 0 ? {} : { transcript: { path, size } } };
+  return { kind: "read", facts: { ...state, ...transcript === void 0 ? {} : { transcript }, factsAt }, ...transcript === void 0 ? {} : { transcript }, ...procStart, marks };
 }
 function isSameProcess(rows, pid, procStart, tty) {
   const row = rows.find((candidate) => candidate.pid === pid);
   return row !== void 0 && procStart !== void 0 && procStart !== "" && row.lstart === procStart && tty !== void 0 && row.tty === tty;
 }
-async function nextStep(host, ports, row, refs, intent, typed) {
+async function nextStep(host, ports, row, refs, step) {
+  const { intent, typed, marks } = step;
   const factsAt = await host.now();
   const registry = await readRegistryFile(host, ports.home, row.pid, ports.clean);
+  const size = marks.transcript === void 0 ? void 0 : (await host.stat(marks.transcript.path).catch(() => void 0))?.size;
   const screen = await readScreenOf(host, { sessionId: row.sessionId, ...refs }, ports.clean, () => host.now());
   if (registry === void 0 || screen === void 0) return { refusal: "screen-changed", ...screen === void 0 ? {} : { screen } };
+  if (registry.statusUpdatedAt !== marks.statusUpdatedAt || size !== marks.transcript?.size) return { refusal: "screen-changed", screen };
   const facts = { sessionId: registry.sessionId, status: registry.status, ...registry.waitingFor === void 0 ? {} : { waitingFor: registry.waitingFor }, factsAt };
   const refusal = nextStepRefusal(intent, screen, facts, ports.clean(typed), await host.now());
   return { ...refusal === void 0 ? {} : { refusal }, screen };
 }
 async function deliver(ports, request) {
   const { intent, session } = request;
-  const host = deliverHost(ports.host);
+  const host = deliverHost(ports.host, ports.home);
   const at = () => host.now().catch(() => ports.clock());
   const refused = async (refusal, screen2) => ({ outcome: { status: "refused", intent, at: await at(), refusal, ...screen2 === void 0 ? {} : { screen: screen2 } } });
   const failed = async (reason, screen2) => ({ outcome: { status: "failed", intent, at: await at(), reason, ...screen2 === void 0 ? {} : { screen: screen2 } } });
@@ -4045,7 +4074,8 @@ async function deliver(ports, request) {
   let newest = screen;
   for (const [index, step] of plan.steps.entries()) {
     if (index > 0) {
-      const between = await nextStep(host, ports, session, refs, intent, typedBy(plan.steps.slice(0, index))).catch(() => ({ refusal: "screen-changed" }));
+      const next = { intent, typed: typedBy(plan.steps.slice(0, index)), marks: fresh.marks };
+      const between = await nextStep(host, ports, session, refs, next).catch(() => ({ refusal: "screen-changed" }));
       if (between.screen !== void 0) newest = between.screen;
       if (between.refusal !== void 0) return failed("stopped", newest);
     }
@@ -4091,6 +4121,7 @@ function draftFor(snapshot, selectedKey, kind) {
   const session = selectedSession(snapshot, selectedKey, kind === "prompt");
   return session === void 0 ? void 0 : { kind, target: targetOf(session), lines: [] };
 }
+var sameIntent = (a, b) => a !== void 0 && JSON.stringify(a) === JSON.stringify(b);
 var checkOf = (state) => state.check === void 0 ? {} : { check: state.check };
 var withIntent = (state, intent) => ({ scroll: 0, intent, ...checkOf(state) });
 var withPicked = (state, intent) => state.draft === void 0 ? withIntent(state, intent) : state;
@@ -4107,8 +4138,12 @@ function cancelled(state) {
   const { intent: _intent, draft: _draft, ...rest } = state;
   return { ...rest, scroll: 0 };
 }
+function cancelPressed(state, shown) {
+  const isShown = shown === void 0 ? state.intent === void 0 : sameIntent(state.intent, shown);
+  return isShown ? cancelled(state) : state;
+}
+var stopsDelivery = (delivering, shown) => delivering !== void 0 && shown !== void 0 && sameIntent(delivering, shown);
 var scrolled = (state, scroll) => ({ ...state, scroll });
-var sameIntent = (a, b) => a !== void 0 && JSON.stringify(a) === JSON.stringify(b);
 var isSendable = (state, shown) => shown !== void 0 && state.isSending !== true && sameIntent(state.intent, shown);
 var sending = (state) => ({ ...state, isSending: true });
 function notSending(state) {
@@ -4263,9 +4298,9 @@ async function addDraftLine($, value) {
   const next = await update($, DELIVER, (state) => afterDraftLine(state, value));
   if (next.draft !== void 0) await focusDraft($, next.draft);
 }
-async function cancelBar($, runtime) {
-  if (runtime.isDelivering) runtime.isCancelled = true;
-  await update($, DELIVER, cancelled);
+async function cancelBar($, runtime, shown) {
+  if (stopsDelivery(runtime.delivering, shown)) runtime.isCancelled = true;
+  await update($, DELIVER, (state) => cancelPressed(state, shown));
 }
 async function scrollBar($, scroll) {
   await update($, DELIVER, (state) => scrolled(state, scroll));
@@ -4287,6 +4322,7 @@ async function sendConfirmed($, runtime, shown) {
   if (runtime.isDelivering || shown === void 0) return;
   runtime.isDelivering = true;
   runtime.isCancelled = false;
+  runtime.delivering = shown;
   try {
     const marked = await update($, DELIVER, (state) => sendPressed(state, shown));
     if (!isSendingOf(marked, shown)) return;
@@ -4298,6 +4334,7 @@ async function sendConfirmed($, runtime, shown) {
     if (opensScreen(result.outcome)) await showScreen($, shown.target.sessionId);
   } finally {
     runtime.isDelivering = false;
+    delete runtime.delivering;
   }
 }
 async function checkSent($, facts) {
@@ -4600,7 +4637,7 @@ function drawLine(ui, line, theme, onKeyed, keys) {
 function barRows(ui, bar, theme, actions) {
   if (bar === void 0) return [];
   const scrollKeys = Object.entries(bar.scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]]);
-  const keys = { ...bar.isOpen ? { y: () => actions.onSend(bar.intent), c: actions.onCancel } : {}, ...Object.fromEntries(scrollKeys) };
+  const keys = { ...bar.isOpen ? { y: () => actions.onSend(bar.intent), c: () => actions.onCancel(bar.intent) } : {}, ...Object.fromEntries(scrollKeys) };
   const rows = bar.lines.map((line) => drawLine(ui, line, theme, () => void 0, keys));
   const { Input } = ui;
   const field2 = bar.field;
@@ -4738,16 +4775,19 @@ function paneView(input) {
   const note = input.jumpNote ?? void 0;
   const notice = note !== void 0 && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {};
   const isDraftOpen = input.deliver?.draft !== void 0;
-  const keysOf = (board2, isDetail2 = false, showsDigits2 = false) => keyRow({
-    width: bodyColumns,
-    isCmuxMissing: board2.sources.cmux.status === "missing",
-    promptHoldsKeys: input.promptHoldsKeys,
-    ...showsDigits2 ? { answerCount: answerCountOf(board2, input.selectedKey) } : {},
-    isAnswerOff: isDraftOpen,
-    mode: board2.mode,
-    isDetail: isDetail2,
-    ...notice
-  });
+  const keysOf = (board2, isDetail2 = false, showsDigits2 = false) => {
+    const answerCount = showsDigits2 ? answerCountOf(board2, input.selectedKey) : void 0;
+    return keyRow({
+      width: bodyColumns,
+      isCmuxMissing: board2.sources.cmux.status === "missing",
+      promptHoldsKeys: input.promptHoldsKeys,
+      ...answerCount === void 0 ? {} : { answerCount },
+      isAnswerOff: answerCount === void 0,
+      mode: board2.mode,
+      isDetail: isDetail2,
+      ...notice
+    });
+  };
   if (state !== void 0 || snapshot === void 0) {
     const body2 = messageLines(STATE_TEXT[state ?? "reading"], bodyColumns);
     const keys2 = (state === "no-repo-match" || state === "no-repo-set") && snapshot !== void 0 ? keysOf(snapshot).lines : [];
@@ -4937,7 +4977,7 @@ function actionsOf($, runtime, layout) {
     },
     bar: {
       onSend: (shown) => quiet(sendConfirmed($, runtime.deliver, shown)),
-      onCancel: () => quiet(cancelBar($, runtime.deliver)),
+      onCancel: (shown) => quiet(cancelBar($, runtime.deliver, shown)),
       onScroll: (scroll) => quiet(scrollBar($, scroll)),
       onDraft: (value) => quiet(addDraftLine($, value))
     }

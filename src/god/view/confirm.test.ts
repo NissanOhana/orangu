@@ -14,6 +14,7 @@ import { planDelivery, type KeyIntent, type TargetFacts } from '../act/deliver-p
 import type { DeliverIntent, DeliverRefusal, OpenQuestion, ScreenRead } from '../types.js'
 import { cellWidth } from './cells.js'
 import { CONFIRM_HINTS, FAILURE_TEXT, NOT_DELIVERED, PEER_NOT_DELIVERED, REFUSAL_TEXT, SEND_FAILED, SENDING, confirmView, outcomeLines, type ConfirmInput, type ConfirmView } from './confirm.js'
+import { NOT_A_PROMPT } from '../copy.js'
 import { MULTI_DIALOG } from './confirm.js'
 import { scrollBy } from './detail.js'
 import type { Line } from './types.js'
@@ -25,7 +26,7 @@ const squeeze = (value: string): string => value.replace(/\s+/g, '')
 const COUNT = /^ ([wz]): \+(\d+) lines?$/
 
 /** every refusal code of the contract: a code that the record misses fails the type check of REFUSAL_TEXT */
-const CODES: readonly DeliverRefusal[] = ['no-cmux', 'no-tab', 'stale-screen', 'screen-changed', 'label-not-found', 'multi-question', 'empty', 'control-char', 'backslash-escape', 'task-running']
+const CODES: readonly DeliverRefusal[] = ['no-cmux', 'no-tab', 'stale-screen', 'screen-changed', 'label-not-found', 'multi-question', 'empty', 'control-char', 'backslash-escape', 'task-running', 'not-a-prompt']
 
 /** the line of each code, word for word as the pane shows it */
 const LINES: Readonly<Record<DeliverRefusal, string>> = {
@@ -36,9 +37,10 @@ const LINES: Readonly<Record<DeliverRefusal, string>> = {
   'label-not-found': 'The screen shows no option with the exact label Yes or No, so the pane sent nothing.',
   'multi-question': 'This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.',
   empty: 'The text is empty, so the pane sent nothing.',
-  'control-char': 'The text has a control character, so the pane sent nothing.',
+  'control-char': 'The text has a control character or a character that does not show, so the pane sent nothing.',
   'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
   'task-running': 'The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.',
+  'not-a-prompt': 'The pane does not type a shell command, the help or an exit. Press j and type it in its tab.',
 }
 
 /** A Bash input of 2,483 characters with runs of spaces in it, as a tool call can write it. */
@@ -91,17 +93,17 @@ describe('the confirm bar', () => {
     expect(bar(INTENTS.peer)).toEqual([' Send this peer message to api-7?  y: send  c: cancel', '   Stop the deploy now.', '   I check the logs first.'])
   })
 
-  it('names the mode that a prompt opens when its first line starts with !, / or ?', () => {
-    const MODE = { '!': 'The first line starts with !, so the session runs it as a shell command.', '/': 'The first line starts with /, so the session runs it as a command.', '?': 'The first line starts with ?, so the session shows its help.' }
-    for (const [mark, line] of Object.entries(MODE)) {
-      const lines = view({ ...INTENTS.prompt, text: `${mark}status\nThen stop.` } as DeliverIntent).lines
-      expect(lines.map(text)).toEqual([' Send this prompt to api-7?  y: send  c: cancel', ` ${line}`, `   ${mark}status`, '   Then stop.'])
-      expect(lines[1]!.segments[1]).toEqual({ text: line, token: '--warn' })
-    }
-    for (const prompt of [' !status', 'status !', 'Then /stop']) expect(bar({ ...INTENTS.prompt, text: prompt } as DeliverIntent)).toHaveLength(2)
-    // the box takes the first line that is not empty as its first text, so the mode comes from it
-    expect(bar({ ...INTENTS.prompt, text: '\n\n!status' } as DeliverIntent)[1]).toBe(` ${MODE['!']}`)
+  it('names the command mode of a / prompt, and says before y that the pane does not type a shell command, the help or an exit', () => {
+    const COMMAND = 'The first line starts with /, so the session runs it as a command.'
+    const lines = view({ ...INTENTS.prompt, text: '/status\nThen stop.' } as DeliverIntent).lines
+    expect(lines.map(text)).toEqual([' Send this prompt to api-7?  y: send  c: cancel', ` ${COMMAND}`, '   /status', '   Then stop.'])
+    expect(lines[1]!.segments[1]).toEqual({ text: COMMAND, token: '--warn' })
+    for (const prompt of ['!status', '?', ' !status', '\n\n?help', 'exit', '  :wq!']) expect(bar({ ...INTENTS.prompt, text: prompt } as DeliverIntent)[1], JSON.stringify(prompt)).toBe(` ${NOT_A_PROMPT}`)
+    for (const prompt of ['status !', 'Then /stop', 'exit the loop']) expect(bar({ ...INTENTS.prompt, text: prompt } as DeliverIntent)).toHaveLength(2)
+    // the mode comes from the first character that is not white space, on any line
+    expect(bar({ ...INTENTS.prompt, text: '   \n/clear' } as DeliverIntent)[1]).toBe(` ${COMMAND}`)
     expect(bar({ ...INTENTS.peer, text: '/stop now' } as DeliverIntent)).toHaveLength(2)
+    expect(bar({ ...INTENTS.peer, text: '!stop now' } as DeliverIntent)).toHaveLength(2)
   })
 
   it('shows no y and no c while the keys go out, and says so in their place', () => {
@@ -171,10 +173,12 @@ describe('the row limit of the confirm bar', () => {
 })
 
 describe('the outcome lines', () => {
-  it('has 1 line for each refusal code, in the active voice but for the 2 lines that say what to do', () => {
+  it('has 1 line for each refusal code, in the active voice but for the 3 lines that say what to do', () => {
     expect(Object.keys(REFUSAL_TEXT).sort()).toEqual([...CODES].sort())
     expect(REFUSAL_TEXT).toEqual(LINES)
-    for (const code of CODES.filter((code) => code !== 'multi-question' && code !== 'stale-screen')) expect(REFUSAL_TEXT[code], code).toMatch(/, so the pane sent nothing\.$/)
+    const says = ['multi-question', 'stale-screen', 'not-a-prompt']
+    for (const code of CODES.filter((code) => !says.includes(code))) expect(REFUSAL_TEXT[code], code).toMatch(/, so the pane sent nothing\.$/)
+    expect(REFUSAL_TEXT['not-a-prompt']).toBe(NOT_A_PROMPT)
     expect(Object.values(REFUSAL_TEXT).join(' ')).not.toMatch(/was sent/)
     expect(REFUSAL_TEXT['multi-question']).toBe(MULTI_DIALOG)
   })

@@ -219,6 +219,23 @@ for (const surface of SURFACES) {
     expect(has(shown, '[Screen]')).toBe(true)
   })
 
+  test(`${surface}: a digit while the keys go out opens a new bar, and its c closes only that bar`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    await press(ui, 'option:1')
+    machine.cmux!.delay = (verb) => (verb === 'read-screen' ? clock.sleep(500) : undefined)
+    const atY = calls.runs.length
+    const sending = press(ui, 'key:y')
+    await clock.settle()
+    await press(ui, 'option:2')
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    await press(ui, 'key:c')
+    await clock.advance(500)
+    await sending
+    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(has(await lines(ui), 'Send "2 Green"')).toBe(false)
+  })
+
   test(`${surface}: y sends the intent of the drawing that it belongs to, and a bar that opened since then stays for its own y`, async ($, on) => {
     const { calls, clock, ui } = await begin($, on, surface)
     await select($, 'ses-wait')

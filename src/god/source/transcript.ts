@@ -101,7 +101,8 @@ const TITLE_TYPES: ReadonlySet<unknown> = new Set(['custom-title', 'ai-title'])
 const REPLACEMENT = '�'
 const encoder = new TextEncoder()
 
-const projectsDir = (home: string): string => `${home}/.claude/projects`
+/** The folder of the project folders of the transcripts. */
+export const projectsDir = (home: string): string => `${home}/.claude/projects`
 
 /** The path of a transcript: the project folder of the cwd, then the session id. */
 export function transcriptPath(home: string, cwd: string, sessionId: string): string {

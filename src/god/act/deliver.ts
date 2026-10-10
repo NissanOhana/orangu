@@ -15,13 +15,15 @@
  * 3. planDelivery (src/god/act/deliver-plan.ts) makes the plan of the intent from that screen and those facts, with
  *    the host clock right after the screen read. A refusal keeps the fresh screen for the Screen tab.
  * 4. It runs the plan steps in order and stops at the first one that fails: an exit code that is not 0, or a reject.
- *    Before each next step of a prompt it reads the registry file and the screen again, and nextStepRefusal checks
- *    them, because a dialog can open between 2 steps. The box shows through the text cleaner, so the typed text goes
- *    through it too. A check that refuses or fails stops. Before each step it reads the cancel mark of c. A stop
- *    keeps the newest screen, and no later step goes out.
- * 5. Its host runs only cmux send and send-key in the exact form of the plan, cmux read-screen of 1 tab, ps of 1 PID in
- *    UTC, and the reads of the transcript (stat, tail, head). Any other command, another cmux subcommand among them,
- *    is refused before the engine sees it: the host port checks only the command name.
+ *    Before each next step of a prompt it reads the registry file, the size of the transcript and the screen again,
+ *    because a dialog can open between 2 steps: a new status time or another transcript size stops it, and
+ *    nextStepRefusal checks the rest. The box shows through the text cleaner, so the typed text goes through it too.
+ *    A check that refuses or fails stops. Before each step it reads the cancel mark of c. A stop keeps the newest
+ *    screen, and no later step goes out.
+ * 5. Its host runs only cmux send and send-key in the exact form of the plan (send-key only with a key that the plan
+ *    sends), cmux read-screen of 1 tab, ps of 1 PID in UTC, and the 3 reads of 1 transcript under the projects folder
+ *    in their exact forms (stat, tail, head). Any other command, another cmux subcommand among them, is refused before
+ *    the engine sees it: the host port checks only the command name.
  * 6. After the last step it gives the check of the next refreshes (src/god/act/deliver-check.ts), timed on the clock
  *    of the collector, which the refresh stats use.
  * A peer message has no keys: deliverPeer sends it through the engine with no screen check, and the confirm bar is its
@@ -32,14 +34,11 @@ import { readRegistryFile } from '../source/agents.js'
 import { readPs, type PsRow } from '../source/cmux.js'
 import { reduceRecords } from '../source/records.js'
 import { readScreenOf } from '../source/screen.js'
-import { readTranscripts } from '../source/transcript.js'
+import { HEAD_BYTES, projectsDir, readTranscripts } from '../source/transcript.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal, ScreenRead, SessionFacts, SourceState, TranscriptFacts } from '../types.js'
 import { expectOf, type DeliverCheck } from './deliver-check.js'
 import { SURFACE_REF, WORKSPACE_REF, nextStepRefusal, planDelivery, textRefusal, typedBy, type KeyIntent, type TargetFacts } from './deliver-plan.js'
 import { tabRefs } from './jump.js'
-
-/** The commands of the transcript read: the inode, the tail and the head of the file. */
-const READ_COMMANDS: readonly string[] = ['stat', 'tail', 'head']
 
 /** The reason when the host of the executor refuses a command. */
 export const REFUSED_DELIVER_ARGV = 'The key path runs only cmux send, send-key and read-screen, ps of 1 process, and the reads of the transcript.'
@@ -53,20 +52,42 @@ export type FailureReason = 'facts-unread' | 'screen-unread' | 'step-failed' | '
 /** The ps argv of the process check: the PID, the TTY and the start time of 1 PID. */
 const PS_HEAD: readonly string[] = ['ps', '-o', 'pid=,tty=,lstart=', '-p']
 
+/** The keys that the plan sends (src/god/act/deliver-plan.ts): the digit of an option, and the 2 keys of a prompt. */
+const PLAN_KEYS: ReadonlySet<string> = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'enter', 'shift+enter'])
+
 /** True when the 2 refs are in the forms that the key guard takes. */
 const isRefs = (workspaceRef: string | undefined, surfaceRef: string | undefined): boolean => WORKSPACE_REF.test(workspaceRef ?? '') && SURFACE_REF.test(surfaceRef ?? '')
 
+/** True when the path is a transcript that the read takes: `<projects folder>/<folder>/<name>.jsonl`, with no `.` or `..` part. */
+function isTranscriptPath(path: string | undefined, home: string): boolean {
+  const root = `${projectsDir(home)}/`
+  if (path === undefined || !path.startsWith(root) || !path.endsWith('.jsonl') || /[\n\r\0]/.test(path)) return false
+  const parts = path.slice(root.length).split('/')
+  return parts.length === 2 && parts.every((part) => part !== '' && part !== '.' && part !== '..')
+}
+
+/** True when the argv is 1 of the 3 transcript reads (src/god/source/transcript.ts): the inode, the tail from a byte, the head of at most 64 KiB. */
+function isTranscriptRead(argv: readonly string[], home: string): boolean {
+  const [command, flag, value, path, ...more] = argv
+  if (more.length > 0 || !isTranscriptPath(path, home)) return false
+  if (command === 'stat') return flag === '-f' && value === '%i %N'
+  if (command === 'tail') return flag === '-c' && /^\+[1-9][0-9]{0,15}$/.test(value ?? '')
+  return command === 'head' && flag === '-c' && /^[1-9][0-9]{0,4}$/.test(value ?? '') && Number(value) <= HEAD_BYTES
+}
+
 /**
- * True when the executor may run the argv: `cmux send` or `cmux send-key` with both refs and `--` right before 1
- * value, `cmux read-screen` of 1 tab, ps of 1 PID, or a read of the transcript.
+ * True when the executor may run the argv: `cmux send` of 1 text or `cmux send-key` of 1 key that the plan sends, each
+ * with both refs and `--` right before the value, `cmux read-screen` of 1 tab, ps of 1 PID, or a transcript read
+ * under the projects folder of `home`.
  */
-export function isDeliverArgv(argv: readonly string[]): boolean {
+export function isDeliverArgv(argv: readonly string[], home: string): boolean {
   const [command, verb, workspaceFlag, workspaceRef, surfaceFlag, surfaceRef, ...rest] = argv
   if (command === 'ps') return argv.length === PS_HEAD.length + 1 && PS_HEAD.every((arg, index) => argv[index] === arg) && /^[1-9][0-9]{0,9}$/.test(argv.at(-1) ?? '')
-  if (command !== 'cmux') return command !== undefined && READ_COMMANDS.includes(command)
+  if (command !== 'cmux') return isTranscriptRead(argv, home)
   if (workspaceFlag !== '--workspace' || surfaceFlag !== '--surface' || !isRefs(workspaceRef, surfaceRef)) return false
   if (verb === 'read-screen') return rest.length === 2 && rest[0] === '--lines' && /^[1-9][0-9]{0,3}$/.test(rest[1] ?? '')
-  return (verb === 'send' || verb === 'send-key') && rest.length === 2 && rest[0] === '--'
+  if (rest.length !== 2 || rest[0] !== '--') return false
+  return verb === 'send' || (verb === 'send-key' && PLAN_KEYS.has(rest[1] ?? ''))
 }
 
 /** True when the run may set its environment so: ps only in UTC, every other command with no variable. */
@@ -77,11 +98,11 @@ function isDeliverEnv(argv: readonly string[], options: RunOptions | undefined):
 }
 
 /**
- * The host of the executor: the host port, with every command that isDeliverArgv refuses, or that sets another
- * environment, rejected before it runs.
+ * The host of the executor: the host port, with every command that isDeliverArgv refuses for `home`, or that sets
+ * another environment, rejected before it runs.
  */
-export function deliverHost(host: Host): Host {
-  return { ...host, run: (argv, options) => (isDeliverArgv(argv) && isDeliverEnv(argv, options) ? host.run(argv, options) : Promise.reject(new Error(REFUSED_DELIVER_ARGV))) }
+export function deliverHost(host: Host, home: string): Host {
+  return { ...host, run: (argv, options) => (isDeliverArgv(argv, home) && isDeliverEnv(argv, options) ? host.run(argv, options) : Promise.reject(new Error(REFUSED_DELIVER_ARGV))) }
 }
 
 /** What the executor reads and runs through. */
@@ -110,7 +131,13 @@ export type DeliverResult = { outcome: DeliverOutcome; check?: DeliverCheck }
  * The facts of the target read again, with the transcript facts for the check and the process start that the
  * registry file writes, or why they are not there.
  */
-type FreshFacts = { kind: 'read'; facts: TargetFacts; transcript?: TranscriptFacts; procStart?: string } | { kind: 'gone' } | { kind: 'unread' }
+type FreshFacts = { kind: 'read'; facts: TargetFacts; transcript?: TranscriptFacts; procStart?: string; marks: WriteMarks } | { kind: 'gone' } | { kind: 'unread' }
+
+/**
+ * What the plan read saw of the writes of the session: the status time of its registry file, and the path and the
+ * size of its transcript. A session that moves writes 1 of them, so the check before each next step compares them.
+ */
+type WriteMarks = { statusUpdatedAt?: number; transcript?: { path: string; size: number } }
 
 /** The registry file and the transcript tail of the target, read again at once, timed just before the reads. */
 async function readFresh(host: Host, ports: DeliverPorts, row: DeliverRow): Promise<FreshFacts> {
@@ -122,7 +149,10 @@ async function readFresh(host: Host, ports: DeliverPorts, row: DeliverRow): Prom
   const transcript = read.status === 'read' ? reduceRecords(read.records, { home: ports.home, headRecords: read.headRecords, parseErrors: read.parseErrors }) : undefined
   const state = { sessionId: registry.sessionId, status: registry.status, ...(registry.waitingFor === undefined ? {} : { waitingFor: registry.waitingFor }) }
   const procStart = registry.procStart === undefined ? {} : { procStart: registry.procStart }
-  return { kind: 'read', facts: { ...state, ...(transcript === undefined ? {} : { transcript }), factsAt }, ...(transcript === undefined ? {} : { transcript }), ...procStart }
+  const path = read.cursor.path
+  const size = read.status === 'read' ? read.cursor.position?.size : undefined
+  const marks: WriteMarks = { ...(registry.statusUpdatedAt === undefined ? {} : { statusUpdatedAt: registry.statusUpdatedAt }), ...(path === undefined || size === undefined ? {} : { transcript: { path, size } }) }
+  return { kind: 'read', facts: { ...state, ...(transcript === undefined ? {} : { transcript }), factsAt }, ...(transcript === undefined ? {} : { transcript }), ...procStart, marks }
 }
 
 /** True when ps shows the PID with the start time of the registry file and the TTY of the mapped tab. */
@@ -134,16 +164,23 @@ function isSameProcess(rows: readonly PsRow[], pid: number, procStart: string | 
 /** What the check before a next step gave: why the step cannot go out, and the newest screen. */
 type StepCheck = { refusal?: DeliverRefusal; screen?: ScreenRead }
 
+/** The step of a prompt that the check reads before: the intent, the text typed so far, and the write marks of the plan read. */
+type NextStep = { intent: KeyIntent; typed: string; marks: WriteMarks }
+
 /**
- * The check before the next step of a prompt: the registry file of the target, then the screen of its tab, read
- * again, each timed on the host clock. The screen shows the box through the text cleaner, so the typed text goes
- * through it too (a home folder shows as ~). The screen is the newest read, for the Screen tab.
+ * The check before the next step of a prompt: the registry file of the target, the size of its transcript, then the
+ * screen of its tab, read again, each timed on the host clock. A new status time or a transcript of another size
+ * stops it: the session wrote since the plan read. The screen shows the box through the text cleaner, so the typed
+ * text goes through it too (a home folder shows as ~). The screen is the newest read, for the Screen tab.
  */
-async function nextStep(host: Host, ports: DeliverPorts, row: DeliverRow, refs: { workspaceRef: string; surfaceRef: string }, intent: KeyIntent, typed: string): Promise<StepCheck> {
+async function nextStep(host: Host, ports: DeliverPorts, row: DeliverRow, refs: { workspaceRef: string; surfaceRef: string }, step: NextStep): Promise<StepCheck> {
+  const { intent, typed, marks } = step
   const factsAt = await host.now()
   const registry = await readRegistryFile(host, ports.home, row.pid, ports.clean)
+  const size = marks.transcript === undefined ? undefined : (await host.stat(marks.transcript.path).catch(() => undefined))?.size
   const screen = await readScreenOf(host, { sessionId: row.sessionId, ...refs }, ports.clean, () => host.now())
   if (registry === undefined || screen === undefined) return { refusal: 'screen-changed', ...(screen === undefined ? {} : { screen }) }
+  if (registry.statusUpdatedAt !== marks.statusUpdatedAt || size !== marks.transcript?.size) return { refusal: 'screen-changed', screen }
   const facts: TargetFacts = { sessionId: registry.sessionId, status: registry.status, ...(registry.waitingFor === undefined ? {} : { waitingFor: registry.waitingFor }), factsAt }
   const refusal = nextStepRefusal(intent, screen, facts, ports.clean(typed), await host.now())
   return { ...(refusal === undefined ? {} : { refusal }), screen }
@@ -152,7 +189,7 @@ async function nextStep(host: Host, ports: DeliverPorts, row: DeliverRow, refs: 
 /** Delivers 1 confirmed intent that goes out as keys. It never rejects: a host call that fails gives an outcome. */
 export async function deliver(ports: DeliverPorts, request: DeliverRequest): Promise<DeliverResult> {
   const { intent, session } = request
-  const host = deliverHost(ports.host)
+  const host = deliverHost(ports.host, ports.home)
   const at = (): Promise<number> => host.now().catch(() => ports.clock())
   const refused = async (refusal: DeliverRefusal, screen?: ScreenRead): Promise<DeliverResult> => ({ outcome: { status: 'refused', intent, at: await at(), refusal, ...(screen === undefined ? {} : { screen }) } })
   const failed = async (reason: FailureReason, screen?: ScreenRead): Promise<DeliverResult> => ({ outcome: { status: 'failed', intent, at: await at(), reason, ...(screen === undefined ? {} : { screen }) } })
@@ -180,7 +217,8 @@ export async function deliver(ports: DeliverPorts, request: DeliverRequest): Pro
   let newest = screen
   for (const [index, step] of plan.steps.entries()) {
     if (index > 0) {
-      const between = await nextStep(host, ports, session, refs, intent, typedBy(plan.steps.slice(0, index))).catch((): StepCheck => ({ refusal: 'screen-changed' }))
+      const next: NextStep = { intent, typed: typedBy(plan.steps.slice(0, index)), marks: fresh.marks }
+      const between = await nextStep(host, ports, session, refs, next).catch((): StepCheck => ({ refusal: 'screen-changed' }))
       if (between.screen !== undefined) newest = between.screen
       if (between.refusal !== undefined) return failed('stopped', newest)
     }

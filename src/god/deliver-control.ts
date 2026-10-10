@@ -14,6 +14,8 @@
  *   While the keys go out the state is marked as sending, so the bar draws no y and no c; the outcome ends the mark.
  * - Each line of a draft adds its text, split at its line breaks (a paste can hold them). An empty line ends the
  *   draft: with 1 or more lines it opens the bar with the whole text, else it closes the draft.
+ * - c closes the bar of its own drawing (as y sends the intent of its own drawing), and stops the keys only of a
+ *   delivery of that same intent, so the c of a bar that a digit opened while the keys go out stops nothing.
  * - c closes the bar and the draft. A delivery closes the bar of its intent, but after stale-screen, when the bar
  *   still asks about that intent, the bar stays with its scroll, so y reads the facts and the screen again. A bar or a
  *   draft that the person opened while the keys went out stays.
@@ -63,6 +65,8 @@ export function draftFor(snapshot: BoardSnapshot | undefined, selectedKey: strin
   return session === undefined ? undefined : { kind, target: targetOf(session), lines: [] }
 }
 
+const sameIntent = (a: DeliverIntent | undefined, b: DeliverIntent): boolean => a !== undefined && JSON.stringify(a) === JSON.stringify(b)
+
 /** The check of the state, when it has one: a new bar or draft keeps it. */
 const checkOf = (state: DeliverState): Pick<DeliverState, 'check'> => (state.check === undefined ? {} : { check: state.check })
 
@@ -91,10 +95,20 @@ export function cancelled(state: DeliverState): DeliverState {
   return { ...rest, scroll: 0 }
 }
 
+/**
+ * c of a drawing that shows `shown` (the intent of its confirm bar, or undefined for a draft): no bar and no draft
+ * while the state still shows that bar, else the same state, so a c never closes a bar that opened after its drawing.
+ */
+export function cancelPressed(state: DeliverState, shown: DeliverIntent | undefined): DeliverState {
+  const isShown = shown === undefined ? state.intent === undefined : sameIntent(state.intent, shown)
+  return isShown ? cancelled(state) : state
+}
+
+/** True when c of a bar that shows `shown` stops the keys of the delivery of `delivering`: only the bar of that intent does. */
+export const stopsDelivery = (delivering: DeliverIntent | undefined, shown: DeliverIntent | undefined): boolean => delivering !== undefined && shown !== undefined && sameIntent(delivering, shown)
+
 /** w or z of the bar: the scroll that the view gave for the key. */
 export const scrolled = (state: DeliverState, scroll: number): DeliverState => ({ ...state, scroll })
-
-const sameIntent = (a: DeliverIntent | undefined, b: DeliverIntent): boolean => a !== undefined && JSON.stringify(a) === JSON.stringify(b)
 
 /** True when y of a drawing that shows `shown` may send it: the state still holds that intent, and no y runs. */
 export const isSendable = (state: DeliverState, shown: DeliverIntent | undefined): shown is DeliverIntent => shown !== undefined && state.isSending !== true && sameIntent(state.intent, shown)

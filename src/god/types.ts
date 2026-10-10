@@ -492,9 +492,11 @@ export type DeliverIntent =
  * - label-not-found: no option on the screen has the exact label Yes or No;
  * - multi-question: the dialog has more than 1 question or takes more than 1 selection;
  * - empty: the text is empty;
- * - control-char: the text holds a control character other than a newline;
+ * - control-char: the text holds a control character other than a newline, or a character that does not show;
  * - backslash-escape: the text holds the 2 characters of a backslash escape that cmux types as a key;
- * - task-running: the idle session runs a background task or a subagent, which can open a dialog while the pane types.
+ * - task-running: the idle session runs a background task or a subagent, which can open a dialog while the pane types;
+ * - not-a-prompt: the text is no prompt for the model: its first character that is not white space is `!` (a shell
+ *   command) or `?` (the help), or its first line is an exit word that ends the session.
  */
 export type DeliverRefusal =
   | 'no-cmux'
@@ -507,6 +509,7 @@ export type DeliverRefusal =
   | 'control-char'
   | 'backslash-escape'
   | 'task-running'
+  | 'not-a-prompt'
 
 /** The plan of 1 delivery from an intent and a fresh screen: the argv lists to run in order, or 1 refusal. */
 export type DeliverPlan =
