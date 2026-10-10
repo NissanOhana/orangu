@@ -1,6 +1,6 @@
 // The detail of the god pane on the terminal and the desktop surfaces, over the fake machine: below 90 columns Enter
 // on a row opens the detail in place of the board and b goes back; t walks the 5 tabs; Now shows the open question
-// with each option as a Button that has no hotkey yet; w and z page a long History, and the scroll starts at the
+// with each option as a Button, with no digit hotkey while cmux is not on the machine; w and z page a long History, and the scroll starts at the
 // top again on a new session and on a new tab; the board and the detail split at 90 columns. In a short pane, the
 // count lines of the board are Buttons, so presses alone reach every session (the ring reaches only drawn rows).
 import { expect, mock, test } from 'claude-code/testing'
@@ -89,11 +89,12 @@ for (const surface of SURFACES) {
     expect((await lines(ui)).some((line) => line.endsWith('│ The Recap tab is not in this build.'))).toBe(true)
   })
 
-  test(`${surface}: Now shows the open question of the selected session, each option a Button with no hotkey yet`, async ($, on) => {
+  test(`${surface}: Now shows the open question of the selected session, each option a Button with no digit hotkey while cmux is not on the machine`, async ($, on) => {
     const { ui } = await openAt($, on, surface, 110)
     await select($, 'ses-wait')
     const shown = await lines(ui)
     expect(openTab(shown)).toBe('Now')
+    // this machine has no cmux, so the digits draw dim and answer nothing (god/tests/act.test.ts has the digits)
     for (const part of ['☐ Pick', 'Which color?', '1 Red', '2 Green']) expect(shown.some((line) => line.includes(part)), `${part}\n${shown.join('\n')}`).toBe(true)
     const options = (await ui.findAll({ type: 'Button' })).filter((button) => button.key?.startsWith('option:'))
     expect(options.map((button) => button.key)).toEqual(['option:1', 'option:2'])

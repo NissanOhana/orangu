@@ -2,8 +2,9 @@
 // - The title and facts lines, the context bar and the flag lines are Texts.
 // - Each tab of the tab row is 1 plain Button keyed tab:<tab>, after the space that the view gives: a press on it
 //   opens that tab.
-// - Each option line of the open question is 1 plain Button keyed option:<n>, with no hotkey: the digits come with
-//   the answer path, and until then a press on an option does nothing.
+// - Each option line of the open question is 1 plain Button keyed option:<n> whose hotkey is its digit, and the Yes and
+//   No of a Bash request are 2 such Buttons keyed permission:yes and permission:no. A press on one, or its digit,
+//   opens the confirm bar for it: nothing goes out until y. With no cmux they have no hotkey, and a press does nothing.
 // - Each count line of the window over the tab content is the hotkey Button of its key (w above, z below): a press
 //   goes to the scroll that the view gave for the key.
 // - With no selected session, or a detail that the rows cannot hold, the lines of the view are Texts.
@@ -24,6 +25,8 @@ export type DetailActions = {
   onScroll: (scroll: number) => void
   /** a press on the option line with this digit */
   onOption: (digit: number) => void
+  /** a press on the Yes or the No of a Bash request */
+  onPermission: (choice: 'yes' | 'no') => void
 }
 
 /** The rows of the detail, top to bottom: 1 element for each line of the view. */
@@ -37,10 +40,12 @@ export function detailRows(ui: PaneElements, detail: PaneDetail, theme: ThemeSet
   const scrollKeys: KeyActions = Object.fromEntries(
     Object.entries(detail.scrollTo).flatMap(([hotkey, scroll]) => (scroll === undefined ? [] : [[hotkey, () => actions.onScroll(scroll)]])),
   )
-  const digits = new Map(view.options.map((option) => [option.key, option.digit]))
+  const picks = new Map(view.options.map((option) => [option.key, option]))
   const onOption = (key: string): void => {
-    const digit = digits.get(key)
-    if (digit !== undefined) actions.onOption(digit)
+    const pick = picks.get(key)
+    if (pick === undefined) return
+    if (pick.choice === undefined) actions.onOption(pick.digit)
+    else actions.onPermission(pick.choice)
   }
   const tabRow = (row: readonly TabCell[]): RenderElement => (
     <Box flexDirection="row">

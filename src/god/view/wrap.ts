@@ -2,7 +2,7 @@
  * Text in lines of a width, for the detail and the confirm bar of the god pane. The detail shows each text whole,
  * so nothing here cuts:
  * - wrapSegments: styled text that fits keeps its spaces; else it breaks at whole words (each run of white space
- *   becomes 1 space), and a word wider than a line breaks between graphemes;
+ *   becomes 1 space), and a word wider than a line breaks between graphemes. A key segment (`y: send`) is 1 word;
  * - textLines: a text of 1 or more lines (a reply, a prompt, a tool input), each line wrapped, with 1 blank line
  *   kept between paragraphs;
  * - keptLines and screenLines: a tool input or a terminal screen, each row with its spaces as written, broken
@@ -23,7 +23,9 @@ export const flat = (text: string): string => text.replace(/\s+/g, ' ').trim()
 type Style = Omit<Segment, 'text'>
 
 const styleOf = ({ text: _text, ...style }: Segment): Style => style
-const sameStyle = (a: Style, b: Style): boolean => a.token === b.token && a.bold === b.bold && a.dim === b.dim
+/** A key that 1 Button presses, or the text that the engine paints: it stays 1 segment, never joined and never split. */
+const isWhole = (style: Style): boolean => style.press !== undefined || style.isPainted === true
+const sameStyle = (a: Style, b: Style): boolean => !isWhole(a) && !isWhole(b) && a.token === b.token && a.bold === b.bold && a.dim === b.dim
 
 /** The segments with no empty text, each run of 1 style joined into 1 segment. */
 function merged(segments: readonly Segment[]): Segment[] {
@@ -53,7 +55,7 @@ function splitAt(text: string, room: number): [string, string] {
 export function wrapSegments(segments: readonly Segment[], width: number, indent = 1, hang = indent): Line[] {
   const clean = segments.map((segment) => ({ ...segment, text: segment.text.replace(/\t/g, '  ').replace(new RegExp(LINE_BREAK.source, 'g'), ' ') }))
   if (indent + clean.reduce((sum, segment) => sum + cellWidth(segment.text), 0) <= width) return [{ segments: merged([{ text: ' '.repeat(indent) }, ...clean]) }]
-  const words = clean.flatMap((segment) => segment.text.split(/\s+/).filter((word) => word !== '').map((word) => ({ ...segment, text: word })))
+  const words = clean.flatMap((segment) => (isWhole(segment) ? [segment] : segment.text.split(/\s+/).filter((word) => word !== '').map((word) => ({ ...segment, text: word }))))
   const lines: Segment[][] = []
   let line: Segment[] = []
   let used = 0

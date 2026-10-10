@@ -15,6 +15,8 @@ import {
   MODEL_TEXT,
   NO_AGENTS,
   NO_HISTORY,
+  PERMISSION_JUMP,
+  PERMISSION_JUMP_NO_CMUX,
   RECAP_FAILURE,
   RECAP_HINT,
   RECAP_RUNNING,
@@ -34,13 +36,13 @@ const detail = (sessionId: string, over: Partial<DetailInput> = {}): Extract<Det
 const body = (sessionId: string, over: Partial<DetailInput> = {}): string[] => detail(sessionId, over).body.map(text)
 
 describe('the Now tab', () => {
-  it('shows the open question: the header chip and the wait, the question whole, then each option as <n> <label>', () => {
+  it('shows the open question: the header chip and the wait, the question whole, then each option as <n>: <label>', () => {
     expect(body('s-wait')).toEqual([
       ' ☐ Eval set · waits 6h',
       ` ${QUESTION}`,
-      ' 1 Small  Only the fast tests.',
-      ' 2 All',
-      ' 3 None  Skip the eval.',
+      ' 1: Small  Only the fast tests.',
+      ' 2: All',
+      ' 3: None  Skip the eval.',
       ' Last reply',
       '   The eval tests pass. I need 1 choice from you.',
       '',
@@ -48,14 +50,31 @@ describe('the Now tab', () => {
     ])
   })
 
-  it('keys each option line by its digit, and draws the digit dim when cmux is not on the machine', () => {
+  it('keys each option line by its digit, with the digit as its hotkey, and draws the digit dim with no hotkey when cmux is not on the machine', () => {
     const view = detail('s-wait')
     expect(view.options).toEqual([1, 2, 3].map((digit) => ({ key: `option:${digit}`, digit, isOff: false })))
-    expect(view.body.filter((line) => line.key !== undefined).map((line) => line.key)).toEqual(['option:1', 'option:2', 'option:3'])
-    expect(view.body.find((line) => line.key === 'option:1')!.segments[1]).toEqual({ text: '1', bold: true })
+    expect(view.body.filter((line) => line.key !== undefined).map((line) => [line.key, line.hotkey])).toEqual([
+      ['option:1', '1'],
+      ['option:2', '2'],
+      ['option:3', '3'],
+    ])
+    // the engine paints the hotkey, a colon and a space at the start of the Button, so the view counts those cells
+    expect(view.body.find((line) => line.key === 'option:1')!.segments.slice(0, 3)).toEqual([{ text: ' ' }, { text: '1: ', isPainted: true }, { text: 'Small' }])
     const off = detail('s-wait', { isCmuxMissing: true })
     expect(off.options.every((option) => option.isOff)).toBe(true)
+    expect(off.body.find((line) => line.key === 'option:1')!.hotkey).toBeUndefined()
     expect(off.body.find((line) => line.key === 'option:1')!.segments[1]).toEqual({ text: '1', dim: true })
+    expect(off.body.map(text).slice(2, 5)).toEqual([' 1 Small  Only the fast tests.', ' 2 All', ' 3 None  Skip the eval.'])
+  })
+
+  it('wraps a long option label under its painted hotkey, with the rest of the label after the hang', () => {
+    const wait = detailSession('s-wait')
+    const open = wait.transcript!.openQuestion!
+    const long = { ...wait, transcript: { ...wait.transcript!, openQuestion: { ...open, questions: [{ ...open.questions[0]!, options: [{ label: 'A very long label that goes past the edge of the pane' }] }] } } }
+    const view = detailView(input(long, { width: 30 }))
+    if (view.kind !== 'detail') throw new Error(view.kind)
+    const at = view.body.findIndex((line) => line.key === 'option:1')
+    expect(view.body.slice(at, at + 3).map(text)).toEqual([' 1: A very long label that', '   goes past the edge of the', '   pane'])
   })
 
   /** the lines of the dialog line under the options, joined: it wraps at 79 columns */
@@ -80,8 +99,35 @@ describe('the Now tab', () => {
     expect(dialogLine(lines, 5)).toBe(MULTI_DIALOG)
   })
 
-  it('shows the permission request and its whole input', () => {
-    expect(body('s-perm')).toEqual([' ☐ Permission · waits 3m', ' Bash npm test', ' Input', '   {"command":"npm test","description":"Run the tests"}', ' Last reply', '   No reply yet.'])
+  it('shows the permission request, its whole input, then Yes and No of a Bash request as digit Buttons', () => {
+    expect(body('s-perm')).toEqual([' ☐ Permission · waits 3m', ' Bash npm test', ' Input', '   {"command":"npm test","description":"Run the tests"}', ' 1: Yes', ' 2: No', ' Last reply', '   No reply yet.'])
+    const view = detail('s-perm')
+    expect(view.options).toEqual([
+      { key: 'permission:yes', digit: 1, isOff: false, choice: 'yes' },
+      { key: 'permission:no', digit: 2, isOff: false, choice: 'no' },
+    ])
+    expect(view.body.filter((line) => line.key !== undefined).map((line) => [line.key, line.hotkey])).toEqual([
+      ['permission:yes', '1'],
+      ['permission:no', '2'],
+    ])
+    const off = detail('s-perm', { isCmuxMissing: true })
+    expect(off.body.map(text)).toContain(' 1 Yes')
+    expect(off.body.every((line) => line.hotkey === undefined)).toBe(true)
+  })
+
+  it('gives a request of any other tool no Yes and No, and the line that says to answer it in its tab', () => {
+    const perm = detailSession('s-perm')
+    const edit = { ...perm, transcript: { ...perm.transcript!, activity: { ...perm.transcript!.activity!, tool: 'Edit', text: 'Edit parse.ts', input: '{"file_path":"parse.ts"}' } } }
+    const view = detailView(input(edit))
+    if (view.kind !== 'detail') throw new Error(view.kind)
+    expect(view.options).toEqual([])
+    expect(view.body.some((line) => line.key !== undefined)).toBe(false)
+    const lines = view.body.map(text)
+    expect(dialogLine(lines, 4)).toBe(PERMISSION_JUMP)
+    expect(PERMISSION_JUMP).toBe('The pane answers only a Bash request with Yes or No. Press j to answer this request in its tab.')
+    const off = detailView(input(edit, { isCmuxMissing: true }))
+    if (off.kind !== 'detail') throw new Error(off.kind)
+    expect(dialogLine(off.body.map(text), 4)).toBe(PERMISSION_JUMP_NO_CMUX)
   })
 
   it('keeps the runs of spaces of the tool input as written', () => {
@@ -186,6 +232,14 @@ describe('the Screen tab', () => {
     expect(body('s-stuck', { tab: 'screen' })).toEqual([` ${SCREEN_NO_TAB}`])
     expect(body('s-wait', { tab: 'screen' })).toEqual([` ${SCREEN_READING}`])
     expect(body('s-work', { tab: 'screen', screen: SCREEN })).toEqual([` ${SCREEN_READING}`])
+  })
+
+  it('shows the refusal line of the session above the reason that it shows no screen', () => {
+    const stuck = { sessionId: 's-stuck', name: 'api-3' }
+    const noTab = { status: 'refused' as const, intent: { kind: 'prompt' as const, target: stuck, text: 'Run the tests.' }, at: NOW, refusal: 'no-tab' as const }
+    expect(body('s-stuck', { tab: 'screen', outcome: noTab })).toEqual([` ${REFUSAL_TEXT['no-tab']}`, ` ${SCREEN_NO_TAB}`])
+    const noCmux = { ...noTab, intent: { ...noTab.intent, target: { sessionId: 's-wait', name: 'api-7' } }, refusal: 'no-cmux' as const }
+    expect(body('s-wait', { tab: 'screen', isCmuxMissing: true, outcome: noCmux })).toEqual([` ${REFUSAL_TEXT['no-cmux']}`, ` ${SCREEN_NO_CMUX}`])
   })
 })
 

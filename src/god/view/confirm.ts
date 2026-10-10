@@ -4,6 +4,9 @@
  * - an answer: the option digit and label, then the header chip and the question;
  * - a permission: Yes or No and the tool, then its whole input, with the spaces of the input as written;
  * - a prompt or a peer message: the whole text.
+ * The keys show in the form that the engine paints a hotkey Button (`y: send  c: cancel`), each 1 segment that the
+ * shell draws as its Button. The bar of a prompt also names the mode that the target opens when the first line starts
+ * with `!` (shell), `/` (a command) or `?` (help), because the session reads that first character as a key.
  * The target and the question stay fixed. A long prompt or tool input scrolls with w and z in the row limit of the
  * bar (src/god/view/window.ts), with a count line for each side that the window leaves out, so the person can read
  * all of it before y. When the limit leaves fewer than 3 rows, the bar takes its fixed lines and 3 more: a text
@@ -12,6 +15,7 @@
  */
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal } from '../types.js'
 import { ACCENT } from '../ui/theme.js'
+import { pressSegment } from './keys.js'
 import type { KeyHint, Line, Segment } from './types.js'
 import { MIN_WINDOW, windowOf, type ScrollWindow } from './window.js'
 import { appendItem, flat, keptLines, textLines, wrapSegments } from './wrap.js'
@@ -42,7 +46,14 @@ export const REFUSAL_TEXT: Readonly<Record<DeliverRefusal, string>> = {
   'multi-question': MULTI_DIALOG,
   empty: 'The text is empty, so the pane sent nothing.',
   'control-char': 'The text has a control character, so the pane sent nothing.',
-  'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t, so the pane sent nothing.',
+  'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
+}
+
+/** The line of the mode that the target opens for a prompt whose first character is 1 of these. */
+export const PROMPT_MODE_TEXT: Readonly<Record<string, string>> = {
+  '!': 'The first line starts with !, so the session runs it as a shell command.',
+  '/': 'The first line starts with /, so the session runs it as a command.',
+  '?': 'The first line starts with ?, so the session shows its help.',
 }
 
 /** The keys went out, but the next refresh did not see the answer or the prompt. */
@@ -78,14 +89,15 @@ function askText(intent: DeliverIntent): string {
 
 /** The lines that stay fixed (the target and the question), and the text that scrolls under them. */
 function partsOf(intent: DeliverIntent, width: number): { fixed: Line[]; text: Line[] } {
-  const keys: Segment[] = CONFIRM_HINTS.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), { text: hint.keys, bold: true }, { text: ` ${hint.label}` }])
+  const keys: Segment[] = CONFIRM_HINTS.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), pressSegment(hint.hotkey ?? hint.keys, hint.label)])
   const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width)
   if (intent.kind === 'answer') return { fixed: [...ask, ...wrapSegments([{ text: `☐ ${flat(intent.header)}`, bold: true }, { text: `  ${flat(intent.question)}` }], width, 1, 3)], text: [] }
   if (intent.kind === 'permission') {
     if (intent.input === undefined) return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }, { text: '  none' }], width)], text: [] }
     return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }], width)], text: keptLines(intent.input, width, 3) }
   }
-  return { fixed: ask, text: textLines(intent.text, width, 3) }
+  const mode = intent.kind === 'prompt' ? PROMPT_MODE_TEXT[intent.text.charAt(0)] : undefined
+  return { fixed: [...ask, ...(mode === undefined ? [] : wrapSegments([{ text: mode, token: '--warn' }], width))], text: textLines(intent.text, width, 3) }
 }
 
 /** The confirm bar of 1 intent. */

@@ -2,6 +2,7 @@
 // pane makes, answered by hooks beneath the plugin (the store in memory too), and each call recorded. Every value is synthetic: the home
 // folder is /tmp/god-home and the repos live under /tmp/god-test. A machine with no cmux answers no cmux call, so ps
 // does not run; a machine with a cmux answers its tree, ps in UTC, the jump calls and the screen of each tab.
+// A peer message goes to a session.send hook that records it and says it was delivered.
 // screenOf draws a pane tree as text lines, the way the terminal paints it: a plain Button with a hotkey shows
 // `<key>: <label>`, the columns of a row Box sit side by side, each padded to its width.
 import type { On } from 'claude-code'
@@ -39,6 +40,8 @@ export type FakeCmux = {
   screens?: Record<string, string>
   /** the cmux subcommands that exit 1 */
   failing?: string[]
+  /** a wait before a cmux subcommand answers, as a slow cmux: a test passes the sleep of its mock clock */
+  delay?: (verb: string) => Promise<void> | undefined
 }
 
 export type Machine = {
@@ -69,6 +72,8 @@ export type Calls = {
   opens: Array<{ id: string; title?: string; columns?: number; rows?: number }>
   /** the tools that the plugin registered, as it gave them */
   tools: Array<{ name: string; description: string; inputSchema?: Record<string, unknown>; isDeferred?: boolean }>
+  /** the peer messages that the plugin sent, each as its address and its text */
+  peers: Array<{ to: string; text: string }>
 }
 
 /** The folder name of a cwd under the projects folder, as Claude Code writes it. */
@@ -88,10 +93,10 @@ const fileOf = (machine: Machine, path: string): FakeSession | undefined =>
 
 /** Installs the machine beneath the plugin. The god session itself is in the agents list, so the board must leave it out. */
 export function installMachine(on: On, machine: Machine): Calls {
-  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [], tools: [] }
+  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [], tools: [], peers: [] }
   const content = (session: FakeSession): string => `${(session.transcript ?? []).join('\n')}\n`
 
-  on('process.run', (_$, e) => {
+  on('process.run', async (_$, e) => {
     calls.runs.push({ argv: [...e.argv], ...(e.init === undefined ? {} : { init: { ...e.init } }) })
     const [command, ...rest] = e.argv
     if (command === 'claude') {
@@ -99,7 +104,10 @@ export function installMachine(on: On, machine: Machine): Calls {
       const rows = machine.sessions.map(({ pid, cwd, sessionId, name, status, waitingFor, statusUpdatedAt }) => ({ pid, cwd, kind: 'interactive', startedAt: statusUpdatedAt, sessionId, name, status, waitingFor: waitingFor ?? null }))
       return ran(JSON.stringify([self, ...rows]))
     }
-    if (command === 'cmux' && machine.cmux) return cmuxRun(machine.cmux, rest)
+    if (command === 'cmux' && machine.cmux) {
+      await machine.cmux.delay?.(rest[0] ?? '')
+      return cmuxRun(machine.cmux, rest)
+    }
     if (command === 'ps' && machine.cmux) {
       const pids = (rest[3] ?? '').split(',').map(Number)
       const rows = pids.flatMap((pid) => (machine.cmux!.tabs[pid] ? [`${pid} ${machine.cmux!.tabs[pid]!.tty}  Fri Oct  9 08:00:00 2026`] : [`${pid} ??       Fri Oct  9 08:00:00 2026`]))
@@ -160,6 +168,10 @@ export function installMachine(on: On, machine: Machine): Calls {
     return { value: { tool: `mcp__${PLUGIN}__${e.name}` } }
   })
   on('ui.focus', () => ({}))
+  on('session.send', (_$, e) => {
+    calls.peers.push({ to: String(e.to), text: e.text })
+    return { isDelivered: true as const }
+  })
   on('ui.invalidate', () => ({ value: undefined }))
   on('ui.status', (_$, e) => {
     calls.statuses.push(e.text)
@@ -225,6 +237,14 @@ export const question = (id: string, text: string, labels: readonly string[], ms
       content: [{ type: 'tool_use', id, name: 'AskUserQuestion', input: { questions: [{ question: text, header: 'Pick', multiSelect: false, options: labels.map((label) => ({ label, description: label })) }] } }],
     },
   })
+
+/** An open Bash call, with the description that its permission dialog shows. */
+export const bash = (id: string, command: string, description: string, ms: number): string =>
+  JSON.stringify({ type: 'assistant', timestamp: at(ms), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id, name: 'Bash', input: { command, description } }] } })
+
+/** The result of a call: the answer of a question or the outcome of a tool. */
+export const toolResult = (id: string, text: string, ms: number): string =>
+  JSON.stringify({ type: 'user', timestamp: at(ms), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text }] } })
 
 /** An open Edit call. */
 export const edit = (id: string, path: string, ms: number): string =>

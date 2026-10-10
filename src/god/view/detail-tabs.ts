@@ -1,13 +1,18 @@
 /**
  * The content of each tab of the detail, as lines of the detail width. Each text shows whole: it wraps, and
  * src/god/view/detail.ts cuts only by rows, with a count line that names its key.
- * - Now: the open question (the header chip, the question, each option as `<n> <label>`), or the open permission
+ * - Now: the open question (the header chip, the question, each option as `<n>: <label>`), or the open permission
  *   request and its whole input with its spaces as written, or the current tool call and the API error at the end; then the last reply.
+ *   Each option that a digit answers is 1 Button whose hotkey is its digit, and the engine paints that digit as
+ *   `1: ` before the label. A Bash request also gets `1: Yes` and `2: No`, the 2 answers that the pane can send to
+ *   it; a request of any other tool gets 1 line that says to answer it in its tab. With no cmux, the digits draw dim
+ *   and no Button has a hotkey.
  * - History: the last turns, the newest first, each as your prompt and then the reply.
  * - Agents: the running subagents and background tasks first, then the ended ones, then the subagent files that
  *   no task of the read part names.
  * - Screen: the last read of the cmux tab, with its spaces, under the line of a refusal, and under the line that says
- *   that the newest read failed. While the tab map can be old (the last cmux read failed), the no-tab line only.
+ *   that the newest read failed. While the tab map can be old (the last cmux read failed), the no-tab line only, and
+ *   with no cmux the no-cmux line only, each under the line of a refusal.
  * - Recap: the hint, or the model text under its label and its token count.
  * The session texts are sanitized and redacted before they come here. Outside text that the detail shows on 1 line
  * is flattened, so no line break gets into a line. The clock comes in as `now`.
@@ -16,6 +21,7 @@ import { NO_REPLY, NO_TRANSCRIPT, WAITS } from '../model/summary.js'
 import type { AgentTask, DeliverOutcome, DetailTab, GodSession, Question, RecapFailure, RecapState, ScreenRead } from '../types.js'
 import { DIM } from '../ui/theme.js'
 import { levelTime } from './board.js'
+import { cellWidth } from './cells.js'
 import { MULTI_DIALOG, MULTI_DIALOG_NO_CMUX, outcomeLines } from './confirm.js'
 import type { Line, Segment } from './types.js'
 import { flat, keptLines, screenLines, textLines, wrapSegments } from './wrap.js'
@@ -37,8 +43,24 @@ export const RECAP_FAILURE: Readonly<Record<RecapFailure, string>> = {
   refused: 'Claude Code refused the model call. Press x to try again.',
 }
 
-/** An option line that a digit answers: its line key, its digit, and true when the digits are off (no cmux). */
-export type OptionKey = { key: string; digit: number; isOff: boolean }
+/** The line of a request of a tool that the pane does not answer. */
+export const PERMISSION_JUMP = 'The pane answers only a Bash request with Yes or No. Press j to answer this request in its tab.'
+export const PERMISSION_JUMP_NO_CMUX = 'The pane answers only a Bash request with Yes or No. Answer this request in its tab.'
+
+/** The 2 answers of a Bash request in the pane: the choice, its label and the digit that the pane gives it. */
+export const PERMISSION_ANSWERS = [
+  { choice: 'yes', label: 'Yes', digit: 1 },
+  { choice: 'no', label: 'No', digit: 2 },
+] as const
+
+/** The only tool whose request the pane answers: its dialog shows the exact command that the screen check reads. */
+export const ANSWERED_TOOL = 'Bash'
+
+/**
+ * A line that a digit answers: its line key, its digit, true when the digits are off (no cmux), and for the Yes or
+ * No of a Bash request, the choice.
+ */
+export type OptionKey = { key: string; digit: number; isOff: boolean; choice?: 'yes' | 'no' }
 
 /** The lines of 1 tab, and the option keys among them. */
 export type TabContent = { lines: Line[]; options: OptionKey[] }
@@ -66,6 +88,9 @@ const TEXT_INDENT = 3
 
 /** The key of the line of option n. */
 export const optionKey = (digit: number): string => `option:${digit}`
+
+/** The key of the line of the Yes or the No of a Bash request. */
+export const permissionKey = (choice: 'yes' | 'no'): string => `permission:${choice}`
 
 /** `now`, or the time since `at` as `12m ago`; '' with no time. */
 export function ago(at: number | undefined, now: number): string {
@@ -97,6 +122,25 @@ function labelLine(width: number, label: Segment, text = '', time = ''): Line[] 
   return wrapSegments([{ bold: true, ...label }, ...(text === '' ? [] : [{ text: `  ${text}` }]), ...(time === '' ? [] : [{ text: `  ${time}`, ...DIM }])], width, 1, TEXT_INDENT)
 }
 
+/** The segments with their first `count` cells gone: the cells of an indent that the painted hotkey takes. */
+function dropLead(segments: readonly Segment[], count: number): Segment[] {
+  const [head, ...tail] = segments
+  if (head === undefined || count <= 0) return [...segments]
+  if (head.text.length > count) return [{ ...head, text: head.text.slice(count) }, ...tail]
+  return dropLead(tail, count - head.text.length)
+}
+
+/**
+ * The lines of a choice that a digit presses: 1 space, then the hotkey as the engine paints it (`1: `), then the
+ * text, which wraps after the hang. Only the first line is the Button.
+ */
+function keyedLines(key: string, digit: number, segments: readonly Segment[], width: number): Line[] {
+  const painted = `${digit}: `
+  const lead = 1 + cellWidth(painted)
+  const [first, ...rest] = wrapSegments(segments, width, lead, TEXT_INDENT)
+  return [{ key, hotkey: String(digit), segments: [{ text: ' ' }, { text: painted, isPainted: true }, ...dropLead(first?.segments ?? [], lead)] }, ...rest]
+}
+
 function questionLines(input: TabInput, question: Question, index: number, hasDigits: boolean): TabContent {
   const { width } = input
   const lines = [...wrapSegments([{ text: `☐ ${flat(question.header)}`, bold: true }, ...(index === 0 ? waitChip(input) : [])], width), ...textLines(question.text, width, 1)]
@@ -104,16 +148,36 @@ function questionLines(input: TabInput, question: Question, index: number, hasDi
   question.options.forEach((option, at) => {
     const digit = at + 1
     const keyed = hasDigits && digit <= 9
-    const mark: Segment = keyed ? { text: String(digit), ...(input.isCmuxMissing ? DIM : { bold: true }) } : { text: hasDigits ? String(digit) : '•', ...DIM }
     const about = option.description === undefined || flat(option.description) === '' ? [] : [{ text: `  ${flat(option.description)}`, ...DIM }]
+    if (keyed && !input.isCmuxMissing) {
+      lines.push(...keyedLines(optionKey(digit), digit, [{ text: flat(option.label) }, ...about], width))
+      options.push({ key: optionKey(digit), digit, isOff: false })
+      return
+    }
+    const mark: Segment = { text: hasDigits ? String(digit) : '•', ...DIM }
     const [first, ...rest] = wrapSegments([mark, { text: ` ${flat(option.label)}` }, ...about], width, 1, TEXT_INDENT)
     if (!keyed) {
       lines.push(first!, ...rest)
       return
     }
     lines.push({ ...first!, key: optionKey(digit) }, ...rest)
-    options.push({ key: optionKey(digit), digit, isOff: input.isCmuxMissing })
+    options.push({ key: optionKey(digit), digit, isOff: true })
   })
+  return { lines, options }
+}
+
+/** The answers of an open request: Yes and No of a Bash request, else the line that says to answer it in its tab. */
+function permissionAnswers(input: TabInput, tool: string): TabContent {
+  const { width } = input
+  if (tool !== ANSWERED_TOOL) return { lines: message(input.isCmuxMissing ? PERMISSION_JUMP_NO_CMUX : PERMISSION_JUMP, width), options: [] }
+  const lines: Line[] = []
+  const options: OptionKey[] = []
+  for (const { choice, label, digit } of PERMISSION_ANSWERS) {
+    const key = permissionKey(choice)
+    if (input.isCmuxMissing) lines.push({ key, segments: [{ text: ' ' }, { text: String(digit), ...DIM }, { text: ` ${label}` }] })
+    else lines.push(...keyedLines(key, digit, [{ text: label }], width))
+    options.push({ key, digit, isOff: input.isCmuxMissing, choice })
+  }
   return { lines, options }
 }
 
@@ -139,7 +203,8 @@ function nowContent(input: TabInput): TabContent {
   else if (session.level === 'needs-you' && session.waitingFor === 'permission prompt' && activity?.isOpen === true) {
     const request = [...wrapSegments([{ text: '☐ Permission', bold: true }, ...waitChip(input)], width), ...wrapSegments([{ text: flat(activity.text) }], width)]
     const toolInput = activity.input === undefined ? labelLine(width, { text: 'Input' }, 'none') : [...labelLine(width, { text: 'Input' }), ...keptLines(activity.input, width, TEXT_INDENT)]
-    top = { lines: [...request, ...toolInput], options: [] }
+    const answers = permissionAnswers(input, activity.tool)
+    top = { lines: [...request, ...toolInput, ...answers.lines], options: answers.options }
   } else {
     if (activity !== undefined) top.lines.push(...labelLine(width, { text: activity.isOpen ? 'Runs' : 'Last tool' }, flat(activity.text), ago(activity.at, now)))
     const error = transcript.errorTail
@@ -198,10 +263,10 @@ function agentLines({ session, width, now }: TabInput): Line[] {
 
 /** The Screen tab: why it has no screen, or the newest read of this session under the line of a refusal. */
 function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed, isTabMapOld, outcome }: TabInput): Line[] {
-  if (isCmuxMissing) return message(SCREEN_NO_CMUX, width)
-  if (session.tab === undefined || isTabMapOld === true) return message(SCREEN_NO_TAB, width)
   const own = outcome !== undefined && outcome.intent.target.sessionId === session.sessionId ? outcome : undefined
   const notice = own !== undefined && (own.status === 'refused' || own.status === 'not-delivered' || own.status === 'failed') ? outcomeLines(own, width) : []
+  if (isCmuxMissing) return [...notice, ...message(SCREEN_NO_CMUX, width)]
+  if (session.tab === undefined || isTabMapOld === true) return [...notice, ...message(SCREEN_NO_TAB, width)]
   const fresh = own !== undefined && 'screen' in own ? own.screen : undefined
   const reads = [screen, fresh].filter((read): read is ScreenRead => read !== undefined && read.sessionId === session.sessionId)
   const newest = reads.sort((a, b) => b.readAt - a.readAt)[0]

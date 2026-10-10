@@ -8,6 +8,7 @@
  * got. A text that does not fit is cut with the count of what it cut (src/god/view/cut.ts), never in silence.
  */
 import type { GodTokenName } from '../generated/tokens.js'
+import type { BarView } from './bar.js'
 import type { PaneDetail } from './detail-pane.js'
 
 /** 1 run of text with 1 style. The shell resolves the token to a color of the session theme (src/god/ui/theme.ts). */
@@ -24,6 +25,12 @@ export type Segment = {
    * painted form and every width that the view counts is the width on the screen.
    */
   press?: KeyPress
+  /**
+   * Set on the first segment of a keyed line that a digit also presses (Line hotkey): the engine paints the hotkey,
+   * a colon and a space at the start of the Button itself (`1: Red`), so the segment holds that painted text for the
+   * widths, and the shell draws it only as that paint.
+   */
+  isPainted?: true
 }
 
 /** The hotkey and the label of a key Button. */
@@ -42,6 +49,11 @@ export type Line = {
    * opens and closes has groupKey(<group key>) (src/god/view/board.ts).
    */
   key?: string
+  /**
+   * Set on a keyed line that 1 digit also presses (an option of the open question, the Yes or No of a Bash request):
+   * the shell draws its Button with this hotkey, and the segment with isPainted holds the text that the engine paints.
+   */
+  hotkey?: string
 }
 
 /** 1 key of the key row: what to press, what it does, and the Button hotkey that presses it. */
@@ -66,11 +78,12 @@ export type PaneLayout =
 
 /**
  * The whole pane, top to bottom:
- * - board: the header, a rule, the body, a rule, the key row. The body is the board column. In the wide layout
- *   the detail column sits right of it (`detail`), and the rules join the column rule (`┬`, `┴`) at the board
- *   width. `more` gives the row that a press on each count line of the board selects;
+ * - board: the header, a rule, the body, a rule, the bar of the key path when it has lines, the key row. The body
+ *   is the board column. In the wide layout the detail column sits right of it (`detail`), and the rules join the
+ *   column rule (`┬`, `┴`) at the board width. `more` gives the row that a press on each count line of the board
+ *   selects;
  * - detail: the narrow pane once the person opened the detail: the header, a rule, the detail in place of the
- *   board, a rule, the key row;
+ *   board, a rule, the bar of the key path when it has lines, the key row;
  * - message: the header, a rule and 1 message across the body, in place of the board (no session yet, or none).
  *   When the message names a key (no session of the selected repos), a rule and the key row follow it;
  * - cannot-draw: 1 message with the reason, and nothing else.
@@ -85,9 +98,11 @@ export type PaneView =
       more: Readonly<Record<string, string>>
       detail?: PaneDetail
       bottomRule: Line
+      /** the bar of the key path under the bottom rule: the confirm bar, the draft of r or m, or the last outcome */
+      bar?: BarView
       keys: readonly Line[]
       hints: readonly KeyHint[]
     }
-  | { kind: 'detail'; header: readonly Line[]; topRule: Line; detail: PaneDetail; bottomRule: Line; keys: readonly Line[]; hints: readonly KeyHint[] }
+  | { kind: 'detail'; header: readonly Line[]; topRule: Line; detail: PaneDetail; bottomRule: Line; bar?: BarView; keys: readonly Line[]; hints: readonly KeyHint[] }
   | { kind: 'message'; header: readonly Line[]; topRule: Line; body: readonly Line[]; bottomRule?: Line; keys?: readonly Line[] }
   | { kind: 'cannot-draw'; lines: readonly Line[] }

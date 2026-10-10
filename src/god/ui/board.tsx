@@ -6,11 +6,13 @@
 //   same painted text: the engine paints the Button as `j: jump`, and the view counts that width.
 // - In the wide layout, the body is 3 columns side by side: the board, the column rule and the detail column
 //   (src/god/ui/detail.tsx). In the narrow layout, the detail that the person opened takes the place of the board.
+// - The bar of the key path (src/god/ui/bar.tsx) sits under the bottom rule and above the key row.
 import type { RenderElement } from 'claude-code'
 
 import { paneDetailLines } from '../view/detail-pane.js'
 import { wideColumns } from '../view/frame.js'
 import type { Line, PaneView } from '../view/types.js'
+import { barRows, type BarActions } from './bar.js'
 import { detailRows, type DetailActions } from './detail.js'
 import { drawLine, type KeyActions, type PaneElements } from './line.js'
 import type { ThemeSet } from './theme.js'
@@ -27,6 +29,8 @@ export type PaneActions = {
   keys: KeyActions
   /** the presses of the detail */
   detail: DetailActions
+  /** the presses of the bar of the key path */
+  bar: BarActions
 }
 
 /** The pane of 1 view. */
@@ -52,6 +56,7 @@ export function drawPane(ui: PaneElements, view: PaneView, theme: ThemeSet, acti
         {row(view.topRule)}
         {detailRows(ui, view.detail, theme, actions.detail)}
         {row(view.bottomRule)}
+        {barRows(ui, view.bar, theme, actions.bar)}
         {view.keys.map(row)}
       </Box>
     )
@@ -81,6 +86,7 @@ export function drawPane(ui: PaneElements, view: PaneView, theme: ThemeSet, acti
       {row(view.topRule)}
       {body}
       {row(view.bottomRule)}
+      {barRows(ui, view.bar, theme, actions.bar)}
       {view.keys.map(row)}
     </Box>
   )

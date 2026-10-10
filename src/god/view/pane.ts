@@ -10,6 +10,11 @@
  * - The pane takes no more rows than `bodyRows`: the board shows only the lines that fit, around the selected row.
  * - The jump note of the selected session (why its last j did not jump) shows under the key row. The note of another
  *   session shows nothing.
+ * - The bar of the key path (src/god/view/bar.ts) sits under the bottom rule and above the key row, in the board and
+ *   in the narrow detail, and its rows come from the board: it takes at most half of the rows under the header. While
+ *   the bar shows a count line, w and z scroll the bar, so the detail draws its own count lines with no key.
+ * - The digits of the key row name the options of the open question of the selected session, or the Yes and No of
+ *   its Bash request.
  * - When the pane cannot draw (a body under BOARD_COLUMNS, or too few rows for a window over the board), it shows
  *   1 message with the reason and nothing else.
  * No line is wider than `bodyColumns`, and no line of the board column is wider than the board.
@@ -19,7 +24,9 @@ import type { ScreenState } from '../source/screen.js'
 import { DIM } from '../ui/theme.js'
 import type { BoardSnapshot } from '../types.js'
 import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow } from './board.js'
-import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState } from './detail-pane.js'
+import { barView, type BarView, type DeliverState } from './bar.js'
+import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState, type PaneDetail } from './detail-pane.js'
+import { ANSWERED_TOOL, PERMISSION_ANSWERS } from './detail-tabs.js'
 import { headerLines } from './header.js'
 import { JUMP_NOTE, keyRow } from './keys.js'
 import { CANNOT_DRAW, STATE_TEXT, boardStateOf, messageLines, type CannotDraw } from './states.js'
@@ -49,6 +56,8 @@ export type PaneInput = {
   jumpNote?: JumpNote | null
   /** the screen state of the Screen tab */
   screen?: ScreenState | null
+  /** the state of the key path: the confirm bar, the draft of r or m, the last outcome */
+  deliver?: DeliverState
 }
 
 /** Where the board goes at a body width. */
@@ -69,11 +78,22 @@ export function cannotDrawView(reason: CannotDraw, bodyColumns: number): PaneVie
   return { kind: 'cannot-draw', lines: messageLines(CANNOT_DRAW[reason], bodyColumns) }
 }
 
-/** The option count of the open question of the selected session, when the digits can answer it. */
+/** The count of the choices that the digits answer for the selected session: its open question, or its Bash request. */
 function answerCountOf(snapshot: BoardSnapshot, selectedKey: string | undefined): number | undefined {
-  const questions = snapshot.sessions.find((session) => session.sessionId === selectedKey)?.transcript?.openQuestion?.questions
+  const session = snapshot.sessions.find((candidate) => candidate.sessionId === selectedKey)
+  const questions = session?.transcript?.openQuestion?.questions
+  const activity = session?.transcript?.activity
+  if ((questions === undefined || questions.length === 0) && session?.waitingFor === 'permission prompt' && activity?.isOpen === true && activity.tool === ANSWERED_TOOL) return PERMISSION_ANSWERS.length
   const only = questions?.length === 1 ? questions[0] : undefined
   return only === undefined || only.multiSelect ? undefined : only.options.length
+}
+
+/** The rows of the bar, its text field included. */
+const barHeight = (bar: BarView | undefined): number => (bar === undefined ? 0 : bar.lines.length + (bar.field === undefined ? 0 : 1))
+
+/** The detail with no scroll keys: the bar shows a count line, so w and z scroll the bar. */
+function withoutScroll(detail: PaneDetail, bar: BarView | undefined): PaneDetail {
+  return detail.kind === 'session' && bar !== undefined && Object.keys(bar.scrollTo).length > 0 ? { ...detail, scrollTo: {} } : detail
 }
 
 /** The pane of 1 snapshot. */
@@ -105,13 +125,17 @@ export function paneView(input: PaneInput): PaneView {
   const detailState = input.detail ?? DEFAULT_DETAIL
   const isDetail = layout.kind === 'narrow' && detailState.isOpen
   const keys = keysOf(snapshot, isDetail)
-  const room = bodyRows - header.length - 2 - keys.lines.length
   const selection = input.selectedKey === undefined ? {} : { selectedKey: input.selectedKey }
+  const under = bodyRows - header.length - 2 - keys.lines.length
+  const bar = input.deliver === undefined ? undefined : barView({ deliver: input.deliver, width: bodyColumns, rows: Math.floor(under / 2), ...selection, isScreenOpen: detailState.tab === 'screen' })
+  const withBar = bar === undefined ? {} : { bar }
+  const room = under - barHeight(bar)
   const screen = input.screen === undefined || input.screen === null ? {} : { screen: input.screen }
-  const detailOf = (width: number) => paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen })
+  const outcome = input.deliver?.outcome === undefined ? {} : { outcome: input.deliver.outcome }
+  const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome }), bar)
   if (isDetail) {
     if (room < MIN_WINDOW_ROWS) return cannotDrawView('too-short', bodyColumns)
-    return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), keys: keys.lines, hints: keys.hints }
+    return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints }
   }
   const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey }
   if (room < MIN_WINDOW_ROWS && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length > Math.max(0, room)) return cannotDrawView('too-short', bodyColumns)
@@ -125,15 +149,20 @@ export function paneView(input: PaneInput): PaneView {
     more,
     ...(layout.kind === 'wide' ? { detail: detailOf(layout.detailColumns) } : {}),
     bottomRule: ruleLine(bodyColumns, layout, '┴'),
+    ...withBar,
     keys: keys.lines,
     hints: keys.hints,
   }
 }
 
-/** Every line of a pane view, top to bottom. In the wide body, the lines of the board column come before the detail. */
+/**
+ * Every line of a pane view, top to bottom. In the wide body, the lines of the board column come before the detail.
+ * The text field of a draft is an element, not a line.
+ */
 export function paneLines(view: PaneView): Line[] {
   if (view.kind === 'cannot-draw') return [...view.lines]
   if (view.kind === 'message') return [...view.header, view.topRule, ...view.body, ...(view.bottomRule === undefined ? [] : [view.bottomRule]), ...(view.keys ?? [])]
-  if (view.kind === 'detail') return [...view.header, view.topRule, ...paneDetailLines(view.detail), view.bottomRule, ...view.keys]
-  return [...view.header, view.topRule, ...view.body, ...(view.detail === undefined ? [] : paneDetailLines(view.detail)), view.bottomRule, ...view.keys]
+  const bar = view.bar?.lines ?? []
+  if (view.kind === 'detail') return [...view.header, view.topRule, ...paneDetailLines(view.detail), view.bottomRule, ...bar, ...view.keys]
+  return [...view.header, view.topRule, ...view.body, ...(view.detail === undefined ? [] : paneDetailLines(view.detail)), view.bottomRule, ...bar, ...view.keys]
 }

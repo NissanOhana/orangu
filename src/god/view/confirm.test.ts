@@ -37,7 +37,7 @@ const LINES: Readonly<Record<DeliverRefusal, string>> = {
   'multi-question': 'This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.',
   empty: 'The text is empty, so the pane sent nothing.',
   'control-char': 'The text has a control character, so the pane sent nothing.',
-  'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t, so the pane sent nothing.',
+  'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
 }
 
 /** A Bash input of 2,483 characters with runs of spaces in it, as a tool call can write it. */
@@ -49,10 +49,20 @@ function longInput(): string {
 
 describe('the confirm bar', () => {
   it('names the option with its digit, the session, the keys, and then the question of an answer', () => {
-    expect(bar(INTENTS.answer)).toEqual([' Send "2 All" to api-7?  y send  c cancel', ` ☐ Eval set  ${QUESTION}`])
+    expect(bar(INTENTS.answer)).toEqual([' Send "2 All" to api-7?  y: send  c: cancel', ` ☐ Eval set  ${QUESTION}`])
     const first = view(INTENTS.answer).lines[0]!
     expect(first.segments[1]).toEqual({ text: 'Send "2 All" to api-7?', token: '--accent', bold: true })
-    expect(first.segments.filter((segment) => segment.bold === true && segment.token === undefined).map((segment) => segment.text)).toEqual(['y', 'c'])
+    // the engine paints a plain hotkey Button as `y: send`, so each key is 1 press segment in that painted form
+    expect(first.segments.filter((segment) => segment.press !== undefined)).toEqual([
+      { text: 'y: send', press: { hotkey: 'y', label: 'send' } },
+      { text: 'c: cancel', press: { hotkey: 'c', label: 'cancel' } },
+    ])
+  })
+
+  it('keeps each key whole on its own line when the question fills the row', () => {
+    const lines = view({ ...INTENTS.answer, label: 'A label that fills the row' } as DeliverIntent, { width: 36 }).lines
+    const keys = lines.flatMap((line) => line.segments.filter((segment) => segment.press !== undefined))
+    expect(keys.map((segment) => segment.text)).toEqual(['y: send', 'c: cancel'])
   })
 
   it('gives the y and c keys as hotkeys', () => {
@@ -64,10 +74,10 @@ describe('the confirm bar', () => {
   })
 
   it('names the permission choice and the tool, and shows the whole tool input', () => {
-    expect(bar(INTENTS.permission)).toEqual([' Send "Yes" to the Bash request of ops-4?  y send  c cancel', ' Input', '   {"command":"npm test","description":"Run the tests"}'])
-    expect(bar({ ...INTENTS.permission, choice: 'no' } as DeliverIntent)[0]).toBe(' Send "No" to the Bash request of ops-4?  y send  c cancel')
+    expect(bar(INTENTS.permission)).toEqual([' Send "Yes" to the Bash request of ops-4?  y: send  c: cancel', ' Input', '   {"command":"npm test","description":"Run the tests"}'])
+    expect(bar({ ...INTENTS.permission, choice: 'no' } as DeliverIntent)[0]).toBe(' Send "No" to the Bash request of ops-4?  y: send  c: cancel')
     const { input: _input, ...noInput } = INTENTS.permission as Extract<DeliverIntent, { kind: 'permission' }>
-    expect(bar(noInput)).toEqual([' Send "Yes" to the Bash request of ops-4?  y send  c cancel', ' Input  none'])
+    expect(bar(noInput)).toEqual([' Send "Yes" to the Bash request of ops-4?  y: send  c: cancel', ' Input  none'])
   })
 
   it('keeps the runs of spaces of a tool input as written', () => {
@@ -76,8 +86,19 @@ describe('the confirm bar', () => {
   })
 
   it('shows the whole prompt and the whole peer message under the question', () => {
-    expect(bar(INTENTS.prompt)).toEqual([' Send this prompt to api-7?  y send  c cancel', '   Run the eval tests again.', '   Then write the result in the notes.', '   Keep the notes short.'])
-    expect(bar(INTENTS.peer)).toEqual([' Send this peer message to api-7?  y send  c cancel', '   Stop the deploy now.', '   I check the logs first.'])
+    expect(bar(INTENTS.prompt)).toEqual([' Send this prompt to api-7?  y: send  c: cancel', '   Run the eval tests again.', '   Then write the result in the notes.', '   Keep the notes short.'])
+    expect(bar(INTENTS.peer)).toEqual([' Send this peer message to api-7?  y: send  c: cancel', '   Stop the deploy now.', '   I check the logs first.'])
+  })
+
+  it('names the mode that a prompt opens when its first line starts with !, / or ?', () => {
+    const MODE = { '!': 'The first line starts with !, so the session runs it as a shell command.', '/': 'The first line starts with /, so the session runs it as a command.', '?': 'The first line starts with ?, so the session shows its help.' }
+    for (const [mark, line] of Object.entries(MODE)) {
+      const lines = view({ ...INTENTS.prompt, text: `${mark}status\nThen stop.` } as DeliverIntent).lines
+      expect(lines.map(text)).toEqual([' Send this prompt to api-7?  y: send  c: cancel', ` ${line}`, `   ${mark}status`, '   Then stop.'])
+      expect(lines[1]!.segments[1]).toEqual({ text: line, token: '--warn' })
+    }
+    for (const prompt of [' !status', 'status !', 'Then /stop']) expect(bar({ ...INTENTS.prompt, text: prompt } as DeliverIntent)).toHaveLength(2)
+    expect(bar({ ...INTENTS.peer, text: '/stop now' } as DeliverIntent)).toHaveLength(2)
   })
 
   it('wraps a long label whole, and puts the keys after it', () => {
@@ -85,7 +106,7 @@ describe('the confirm bar', () => {
     const lines = bar({ ...INTENTS.answer, label } as DeliverIntent, { width: 30 })
     for (const line of lines) expect(cellWidth(line)).toBeLessThanOrEqual(30)
     expect(squeeze(lines.join(''))).toContain(squeeze(`Send "2 ${label}" to api-7?`))
-    expect(lines.join('\n')).toMatch(/y send {2}c cancel/)
+    expect(lines.join('\n')).toMatch(/y: send {2}c: cancel/)
   })
 })
 
@@ -104,8 +125,9 @@ describe('the row limit of the confirm bar', () => {
       const lines = page.lines.map(text)
       expect(lines.length).toBeLessThanOrEqual(12)
       for (const line of lines) expect(cellWidth(line), line).toBeLessThanOrEqual(60)
-      expect(lines.slice(0, 2)).toEqual([' Send "Yes" to the Bash request of ops-4?  y send  c cancel', ' Input'])
-      const body = lines.slice(2)
+      // at 60 columns the 2 painted keys do not fit after the question, so they take their own line
+      expect(lines.slice(0, 3)).toEqual([' Send "Yes" to the Bash request of ops-4?', ' y: send  c: cancel', ' Input'])
+      const body = lines.slice(3)
       if (scroll > 0) expect(body[0]).toMatch(/^ w: \+\d+ lines$/)
       body.filter((line) => !COUNT.test(line)).forEach((line, index) => pieces.set(page.window.first + index, line.slice(3)))
       if (page.window.first + page.window.shown >= page.window.total) break
@@ -122,7 +144,7 @@ describe('the row limit of the confirm bar', () => {
     const page = view({ ...INTENTS.prompt, text: textOf } as DeliverIntent, { width: 60, rows: 10 })
     const lines = page.lines.map(text)
     expect(lines).toHaveLength(10)
-    expect(lines[0]).toBe(' Send this prompt to api-7?  y send  c cancel')
+    expect(lines[0]).toBe(' Send this prompt to api-7?  y: send  c: cancel')
     const hidden = Number(COUNT.exec(lines.at(-1)!)![2])
     expect(hidden + lines.length - 2).toBe(30)
   })
@@ -134,7 +156,7 @@ describe('the row limit of the confirm bar', () => {
 
   it('takes its fixed lines and 3 more when the row limit is smaller, so the text never hides', () => {
     const lines = bar({ ...INTENTS.permission, input: longInput() } as DeliverIntent, { width: 60, rows: 2 })
-    expect(lines).toHaveLength(2 + 3)
+    expect(lines).toHaveLength(3 + 3)
     expect(lines.at(-1)).toMatch(/^ z: \+\d+ lines$/)
   })
 })

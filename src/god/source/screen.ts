@@ -5,7 +5,8 @@
  *   (src/god/act/jump.ts, the forms that the key guard takes), so no value is session text and none can start with
  *   `-`. A target that the guard refuses runs no command.
  * - The text goes through the text cleaner (src/god/sanitize.ts: no control character, the secrets masked, the home
- *   folder as `~`) before it enters a ScreenRead. The read time is the clock after the command ends.
+ *   folder as `~`) before it enters a ScreenRead. The read time is the clock after the command ends: the clock of
+ *   the board for the Screen tab, and the host clock for the key path, which times its facts with the same clock.
  * - A read that exits with a code that is not 0, or that the host port rejects (a timeout), gives nothing: the
  *   Screen tab then says that the read failed and keeps the last good read of the session (src/god/screen-loop.ts).
  * The Screen tab only shows the read. The key path reads the screen again for itself, just before it types.
@@ -32,13 +33,13 @@ export function screenArgv(target: ScreenTarget): readonly string[] {
 }
 
 /** 1 read of the tab, cleaned, or undefined when the refs are refused or the read failed. */
-export async function readScreenOf(host: Host, target: ScreenTarget, clean: (text: string) => string, clock: () => number): Promise<ScreenRead | undefined> {
+export async function readScreenOf(host: Host, target: ScreenTarget, clean: (text: string) => string, clock: () => number | Promise<number>): Promise<ScreenRead | undefined> {
   const refs = guardedRefs(target.workspaceRef, target.surfaceRef)
   if (refs === undefined) return undefined
   try {
     const result = await host.run(screenArgv(target))
     if (result.exitCode !== 0) return undefined
-    return { sessionId: target.sessionId, ...refs, text: clean(result.stdout), readAt: clock() }
+    return { sessionId: target.sessionId, ...refs, text: clean(result.stdout), readAt: await clock() }
   } catch {
     return undefined
   }

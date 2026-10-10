@@ -234,6 +234,22 @@ export async function readRegistry(host: Host, home: string, cache: RegistryCach
   }
 }
 
+/**
+ * The row of 1 registry file `<pid>.json`, read again now for the key path: the folder list says that it is a file
+ * and no link, as the registry read takes it. Nothing when the file is gone, does not parse, or names another PID.
+ */
+export async function readRegistryFile(host: Host, home: string, pid: number, clean: CleanText): Promise<RegistryRow | undefined> {
+  const folder = registryFolder(home)
+  const name = `${pid}.json`
+  try {
+    const entry = (await host.list(folder)).find((item) => item.name === name)
+    if (entry === undefined || entry.kind !== 'file' || entry.isLink) return undefined
+    return registryRow(name, await host.read(`${folder}/${name}`), entry.mtimeMs, clean)
+  } catch {
+    return undefined
+  }
+}
+
 /** The start time of 1 process as `ps -o lstart=` writes it in UTC, trimmed. */
 export type ProcStart = { pid: number; lstart: string }
 

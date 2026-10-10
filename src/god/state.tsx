@@ -8,13 +8,16 @@
 // - detail: the open tab of the detail, the first line of its content, and whether the narrow pane shows the detail
 //   in place of the board (src/god/view/detail-pane.ts);
 // - screen: the screen state of the Screen tab, null before its first read (src/god/screen-loop.ts);
-// - jump: the note of the last j that did not jump, null for none (src/god/act/jump.ts).
+// - jump: the note of the last j that did not jump, null for none (src/god/act/jump.ts);
+// - deliver: the key path: the intent of the confirm bar, its scroll, the draft of r or m, the last outcome and the
+//   check of the refreshes after a send (src/god/view/bar.ts).
 import { atom } from 'claude-code'
 
 import type { JumpNote } from './act/jump.js'
 import type { ScreenState } from './source/screen.js'
 import type { BoardSnapshot } from './types.js'
 import type { ThemeSet } from './ui/theme.js'
+import { NO_DELIVERY, type DeliverState } from './view/bar.js'
 import { DEFAULT_DETAIL, type DetailState } from './view/detail-pane.js'
 
 declare module 'claude-code' {
@@ -27,6 +30,7 @@ declare module 'claude-code' {
       detail: DetailState
       screen: ScreenState | null
       jump: JumpNote | null
+      deliver: DeliverState
     }
   }
 }
@@ -38,3 +42,4 @@ export const THEME = atom({ plugin: 'orangu-god', key: 'theme' } as const, 'dark
 export const DETAIL = atom({ plugin: 'orangu-god', key: 'detail' } as const, DEFAULT_DETAIL)
 export const SCREEN = atom({ plugin: 'orangu-god', key: 'screen' } as const, null)
 export const JUMP = atom({ plugin: 'orangu-god', key: 'jump' } as const, null)
+export const DELIVER = atom({ plugin: 'orangu-god', key: 'deliver' } as const, NO_DELIVERY)

@@ -20,6 +20,9 @@
 //   ORANGU_GOD is 1), with their schema in the prompt. Each tool.call hook answers from the last snapshot that the
 //   board took. The tools only read.
 // - /god stats answers from the stats of the last refreshes of the board, and opens nothing.
+// - The key path (src/god/deliver-keys.tsx): a digit on an option, the Yes or No of a Bash request, r and m open the
+//   confirm bar or the draft, and only y in the bar sends. After each tick the check of the last send reads the
+//   newest facts.
 // - The pane asks for its rows inline above the prompt and for its columns in the dock.
 // - The pane is on the screen from its first draw (the engine can place an unasked pane later) until ui.close. The
 //   status line shows only while it is not.
@@ -35,9 +38,10 @@ import { GOD_ARGUMENT_HINT, GOD_COMMAND_DESCRIPTION, GOD_FAILED, PANE_TITLE, TOO
 import { detailAfterBack, detailAfterNextTab, detailAfterRowPress, detailAfterScroll, detailAfterSelect, detailAfterTab } from './detail-control.js'
 import { engineClock, engineHost } from './engine.js'
 import { textCleaner } from './sanitize.js'
+import { PANE, addDraftLine, cancelBar, checkSent, openAnswer, openDraft, openPermission, scrollBar, sendConfirmed, type DeliverRuntime } from './deliver-keys.js'
 import { createScreenLoop, isScreenShown, screenWanted, type ScreenLoop } from './screen-loop.js'
 import { readScreenOf } from './source/screen.js'
-import { BOARD, DETAIL, JUMP, OPEN_GROUPS, SCREEN, SELECTED, THEME } from './state.js'
+import { BOARD, DELIVER, DETAIL, JUMP, OPEN_GROUPS, SCREEN, SELECTED, THEME } from './state.js'
 import { BOARD_TOOL, SESSION_TOOL, boardToolAnswer, sessionToolAnswer, type ToolBoard } from './tools.js'
 import type { Settings, StoreState } from './types.js'
 import { drawPane, type PaneActions } from './ui/board.js'
@@ -46,16 +50,15 @@ import type { DetailState } from './view/detail-pane.js'
 import { cannotDrawView, layoutOf, paneView } from './view/pane.js'
 import type { PaneLayout } from './view/types.js'
 
-/** The id of the pane, the width that it asks for beside a fullscreen transcript, and the rows above the prompt. */
-const PANE = 'god'
+/** The width that the pane asks for beside a fullscreen transcript, and the rows above the prompt. */
 const PANE_COLUMNS = 110
 const PANE_ROWS = 20
 
 /**
  * The state of 1 load of the module: the settings, whether the pane is on the screen, the board and the screen loop
- * once they run, the last theme that it read, and whether the 2 tools are registered.
+ * once they run, the last theme that it read, whether the 2 tools are registered, and the key path.
  */
-type Runtime = { settings: Settings; isPaneOpen: boolean; starting?: Promise<BoardLoop>; board?: BoardLoop; screen?: ScreenLoop; theme?: string; hasTools?: boolean }
+type Runtime = { settings: Settings; isPaneOpen: boolean; starting?: Promise<BoardLoop>; board?: BoardLoop; screen?: ScreenLoop; theme?: string; hasTools?: boolean; deliver: DeliverRuntime }
 
 async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
   const next = themeOf((await $.config.list()).find((row) => row.key === 'theme')?.value)
@@ -95,7 +98,10 @@ async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLo
     isPaneOpen: runtime.isPaneOpen,
   })
   const tick = (): void => {
-    void loop.tick()
+    void loop
+      .tick()
+      .then(() => checkSent($, loop.facts()))
+      .catch(() => undefined)
     void readTheme($, runtime).catch(() => undefined)
   }
   $.clock.every(TICK_MS, tick)
@@ -206,6 +212,8 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
     keys: {
       j: () => quiet(jumpSelected($, runtime)),
       n: () => quiet(selectNext($)),
+      r: () => quiet(openDraft($, 'prompt')),
+      m: () => quiet(openDraft($, 'peer')),
       f: () => quiet(choose($, runtime, toggledMode)),
       g: () => quiet(choose($, runtime, toggledGroup)),
       t: () => quiet(changeDetail($, detailAfterNextTab)),
@@ -214,17 +222,31 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
     detail: {
       onTab: (tab) => quiet(changeDetail($, (state) => detailAfterTab(state, tab))),
       onScroll: (scroll) => quiet(changeDetail($, (state) => detailAfterScroll(state, scroll))),
-      // the digits and the answer come with the answer path: until then a press on an option does nothing
-      onOption: () => undefined,
+      onOption: (digit) => quiet(openAnswer($, digit)),
+      onPermission: (choice) => quiet(openPermission($, choice)),
+    },
+    bar: {
+      onSend: () => quiet(sendConfirmed($, runtime.deliver)),
+      onCancel: () => quiet(cancelBar($)),
+      onScroll: (scroll) => quiet(scrollBar($, scroll)),
+      onDraft: (value) => quiet(addDraftLine($, value)),
     },
   }
 }
 
+const NONE = (): void => undefined
+
 /** The presses of the line that says the pane cannot draw: it has no Button. */
-const NO_ACTIONS: PaneActions = { onRow: () => undefined, onMore: () => undefined, keys: {}, detail: { onTab: () => undefined, onScroll: () => undefined, onOption: () => undefined } }
+const NO_ACTIONS: PaneActions = {
+  onRow: NONE,
+  onMore: NONE,
+  keys: {},
+  detail: { onTab: NONE, onScroll: NONE, onOption: NONE, onPermission: NONE },
+  bar: { onSend: NONE, onCancel: NONE, onScroll: NONE, onDraft: NONE },
+}
 
 export function register(on: On, options: PluginOptions): void {
-  const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false }
+  const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false } }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'god', description: GOD_COMMAND_DESCRIPTION, argumentHint: GOD_ARGUMENT_HINT })
@@ -252,7 +274,7 @@ export function register(on: On, options: PluginOptions): void {
 
   on('ui.render', { component: 'Pane', requestId: 'god' }, async ($, e) => {
     markPaneShown(runtime)
-    const [snapshot, selected, openGroups, colors, detail, screen, jumpNote] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME), read($, DETAIL), read($, SCREEN), read($, JUMP)])
+    const [snapshot, selected, openGroups, colors, detail, screen, jumpNote, deliverState] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME), read($, DETAIL), read($, SCREEN), read($, JUMP), read($, DELIVER)])
     const view = paneView({
       ...(snapshot === null ? {} : { snapshot }),
       bodyColumns: e.props.bodyColumns,
@@ -264,6 +286,7 @@ export function register(on: On, options: PluginOptions): void {
       detail,
       screen,
       jumpNote,
+      deliver: deliverState,
     })
     const wanted = screenWanted(snapshot ?? undefined, selected || undefined, detail.tab)
     runtime.screen?.want(wanted, isScreenShown(view, wanted))

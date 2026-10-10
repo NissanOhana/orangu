@@ -6,10 +6,11 @@
 import type { RenderedView } from './ste-surfaces.js'
 import { NOW as GOD_NOW, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot } from '../test/fixtures/god/snapshots.js'
 import { INTENTS as GOD_INTENTS, OUTCOMES as GOD_OUTCOMES, RECAPS as GOD_RECAPS, SCREEN as GOD_SCREEN, detailSnapshot } from '../test/fixtures/god/detail.js'
-import type { BoardSnapshot, DeliverRefusal } from '../src/god/types.js'
+import type { BoardSnapshot, DeliverIntent, DeliverOutcome, DeliverRefusal } from '../src/god/types.js'
+import { barView } from '../src/god/view/bar.js'
 import { statsAnswer } from '../src/god/control.js'
 import { JUMP_NOTE } from '../src/god/view/keys.js'
-import { confirmView, outcomeLines, REFUSAL_TEXT } from '../src/god/view/confirm.js'
+import { confirmView, outcomeLines, PROMPT_MODE_TEXT, REFUSAL_TEXT } from '../src/god/view/confirm.js'
 import { DETAIL_TABS, detailLines, detailView } from '../src/god/view/detail.js'
 import { cannotDrawView, layoutOf, paneLines, paneView } from '../src/god/view/pane.js'
 import { boardToolText, sessionToolText } from '../src/god/view/tool-text.js'
@@ -66,8 +67,10 @@ const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'
 /**
  * The detail of each fixture session in each tab at the detail width of a 60-column pane (the detail alone) and a
  * 110-column pane (beside the board), with the screen read and the answered Recap; the Recap while it runs and
- * when it failed; each tab with no cmux; the confirm bar of each intent and each outcome and refusal line; and the
- * 2 tool texts at 110 columns. The fixture session texts are short and clean, so the row scores what orangu writes.
+ * when it failed; each tab with no cmux; the confirm bar of each intent and each outcome and refusal line; the
+ * request of a tool that the pane does not answer; the mode line of a prompt; the bar of each draft with its text
+ * field, and the bar after an old read; and the 2 tool texts at 110 columns. The fixture session texts are short and
+ * clean, so the row scores what orangu writes.
  */
 export function godDetailViews(): RenderedView[] {
   const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -105,9 +108,30 @@ export function godDetailViews(): RenderedView[] {
     ...Object.values(GOD_OUTCOMES).map((outcome) => ({ file: `${GOD_DETAIL_FIXTURE}#outcome.${outcome.status}`, lines: outcomeLines(outcome, 110).map(text) })),
     ...(Object.keys(REFUSAL_TEXT) as DeliverRefusal[]).map((refusal) => ({ file: `${GOD_DETAIL_FIXTURE}#refusal.${refusal}`, lines: outcomeLines({ ...GOD_OUTCOMES.refused, refusal } as Parameters<typeof outcomeLines>[0], 110).map(text) })),
   ]
+  const perm = snapshot.sessions.find((session) => session.sessionId === 's-perm')!
+  const editRequest = { ...perm, transcript: { ...perm.transcript!, activity: { ...perm.transcript!.activity!, tool: 'Edit', text: 'Edit parse.ts', input: '{"file_path":"parse.ts"}' } } }
+  const requests = [false, true].map((isCmuxMissing) => detail(`now.edit-request.${isCmuxMissing ? 'no-cmux' : 'cmux'}`, { session: editRequest, width: 79, tab: 'now', isCmuxMissing }))
+  const modes = Object.keys(PROMPT_MODE_TEXT).map((mark) => ({
+    file: `${GOD_DETAIL_FIXTURE}#confirm.mode.${mark}`,
+    lines: confirmView({ intent: { ...GOD_INTENTS.prompt, text: `${mark}status` } as DeliverIntent, width: 110, rows: 12, scroll: 0 }).lines.map(text),
+  }))
+  const target = GOD_INTENTS.prompt.target
+  const bar = (deliver: Parameters<typeof barView>[0]['deliver'], columns: number) => barView({ deliver, width: columns, rows: 12, selectedKey: target.sessionId, isScreenOpen: false })
+  const drafts = (['prompt', 'peer'] as const).flatMap((kind) =>
+    [0, 1, 2].map((count) => {
+      const view = bar({ scroll: 0, draft: { kind, target, lines: Array.from({ length: count }, (_, index) => `Line ${index + 1}.`) } }, 110)!
+      return { file: `${GOD_DETAIL_FIXTURE}#bar.draft.${kind}.${count}`, lines: [...view.lines.map(text), view.field!.placeholder] }
+    }),
+  )
+  const stale = { ...GOD_OUTCOMES.refused, refusal: 'stale-screen' } as DeliverOutcome
+  const bars = [
+    ...drafts,
+    { file: `${GOD_DETAIL_FIXTURE}#bar.stale`, lines: bar({ scroll: 0, intent: GOD_INTENTS.answer, outcome: stale }, 60)!.lines.map(text) },
+    ...Object.values(GOD_OUTCOMES).map((outcome) => ({ file: `${GOD_DETAIL_FIXTURE}#bar.note.${outcome.status}`, lines: bar({ scroll: 0, outcome }, 60)!.lines.map(text) })),
+  ]
   const tools = [
     { file: `${GOD_DETAIL_FIXTURE}#tool.board.110`, lines: boardToolText(snapshot, 110, GOD_NOW).split('\n') },
     ...snapshot.sessions.map((session) => ({ file: `${GOD_DETAIL_FIXTURE}#tool.session.${session.sessionId}`, lines: sessionToolText(snapshot, session.name, 110, GOD_NOW).split('\n') })),
   ]
-  return [...tabs, ...states, ...confirm, ...windows, ...outcomes, ...tools]
+  return [...tabs, ...states, ...confirm, ...windows, ...outcomes, ...requests, ...modes, ...bars, ...tools]
 }

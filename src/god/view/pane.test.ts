@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { HOUR, MINUTE, busy, transcript, waiting } from '../../../test/fixtures/god/sessions.js'
 import { NOW, boardSessions, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
-import { detailSnapshot } from '../../../test/fixtures/god/detail.js'
+import { INTENTS, OUTCOMES, detailSnapshot } from '../../../test/fixtures/god/detail.js'
 import type { BoardSnapshot } from '../types.js'
 import { cellWidth } from './cells.js'
 import { BOARD_COLUMNS, MORE_KEYS } from './board.js'
@@ -20,8 +20,9 @@ const pane = (snapshot: BoardSnapshot, over: Partial<PaneInput> = {}): PaneView 
   paneView({ snapshot, bodyColumns: 110, bodyRows: 40, now: NOW, openGroups: [], promptHoldsKeys: false, ...over })
 /** the rows that a view takes on the screen: in the wide body the board and the detail sit side by side */
 const rowsOf = (view: PaneView): number => {
-  if (view.kind === 'board') return view.header.length + 2 + Math.max(view.body.length, view.detail === undefined ? 0 : paneDetailLines(view.detail).length) + view.keys.length
-  return paneLines(view).length
+  const bar = view.kind === 'board' || view.kind === 'detail' ? (view.bar === undefined ? 0 : view.bar.lines.length + (view.bar.field === undefined ? 0 : 1)) : 0
+  if (view.kind === 'board') return view.header.length + 2 + Math.max(view.body.length, view.detail === undefined ? 0 : paneDetailLines(view.detail).length) + bar + view.keys.length
+  return paneLines(view).length + (view.kind === 'detail' && view.bar?.field !== undefined ? 1 : 0)
 }
 
 /** every snapshot of the fixtures, and 1 with wide characters, a long name and a long summary */
@@ -204,3 +205,54 @@ describe('the jump note and the screen read', () => {
   })
 })
 
+
+describe('the bar of the key path', () => {
+  it('sits under the bottom rule and above the key row, and the board gives it its rows', () => {
+    for (const bodyColumns of [80, 110]) {
+      for (const bodyRows of [16, 20, 40]) {
+        const view = pane(detailSnapshot(), { bodyColumns, bodyRows, selectedKey: 's-wait', deliver: { scroll: 0, intent: INTENTS.prompt } })
+        if (view.kind !== 'board') throw new Error(view.kind)
+        const lines = paneLines(view).map(text)
+        const at = lines.indexOf(' Send this prompt to api-7?  y: send  c: cancel')
+        expect(at, lines.join('\n')).toBeGreaterThan(0)
+        expect(lines[at - 1]).toBe(text(view.bottomRule))
+        expect(lines[at + view.bar!.lines.length]).toBe(text(view.keys[0]!))
+        expect(rowsOf(view), `${bodyRows} rows at ${bodyColumns}`).toBeLessThanOrEqual(bodyRows)
+      }
+    }
+  })
+
+  it('draws the bar in the narrow detail too, and a draft with its text field', () => {
+    const draft = { kind: 'prompt' as const, target: { sessionId: 's-wait', name: 'api-7' }, lines: ['Run the tests.'] }
+    const view = pane(detailSnapshot(), { bodyColumns: 80, bodyRows: 30, selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, isOpen: true }, deliver: { scroll: 0, draft } })
+    if (view.kind !== 'detail') throw new Error(view.kind)
+    expect(view.bar?.field?.key).toBe('draft:1')
+    expect(paneLines(view).map(text)).toContain(' Write the prompt for api-7. It has 1 line.  c: cancel')
+    expect(rowsOf(view)).toBeLessThanOrEqual(30)
+  })
+
+  it('gives w and z to the bar while its text is cut, so the detail draws its count lines as text', () => {
+    const long = { ...INTENTS.prompt, text: Array.from({ length: 40 }, (_, index) => `Line ${index + 1}.`).join('\n') } as typeof INTENTS.prompt
+    const cut = pane(detailSnapshot(), { bodyRows: 30, selectedKey: 's-wait', deliver: { scroll: 0, intent: long } })
+    if (cut.kind !== 'board' || cut.detail?.kind !== 'session' || cut.detail.view.kind !== 'detail') throw new Error(cut.kind)
+    expect(Object.keys(cut.bar!.scrollTo)).toEqual(['z'])
+    expect(cut.detail.view.window.shown).toBeLessThan(cut.detail.view.window.total)
+    expect(cut.detail.scrollTo).toEqual({})
+    const short = pane(detailSnapshot(), { bodyRows: 20, selectedKey: 's-wait', deliver: { scroll: 0, intent: INTENTS.answer } })
+    if (short.kind !== 'board') throw new Error(short.kind)
+    expect(short.bar!.scrollTo).toEqual({})
+  })
+
+  it('shows the note of the last outcome of the selected session, and not in its open Screen tab', () => {
+    const noted = paneLines(pane(detailSnapshot(), { selectedKey: 's-wait', deliver: { scroll: 0, outcome: OUTCOMES.refused } })).map(text)
+    expect(noted.filter((line) => line.endsWith('The screen or the session changed, so the pane sent nothing.'))).toHaveLength(1)
+    const screen = paneLines(pane(detailSnapshot(), { selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, tab: 'screen' }, deliver: { scroll: 0, outcome: OUTCOMES.refused } })).map(text)
+    expect(screen.filter((line) => line.includes('The screen or the session changed, so the pane sent nothing.'))).toHaveLength(1)
+  })
+
+  it('counts 1-2 in the key row for the Yes and No of a Bash request', () => {
+    const view = pane(detailSnapshot(), { selectedKey: 's-perm' })
+    if (view.kind !== 'board') throw new Error(view.kind)
+    expect(view.hints.find((hint) => hint.label === 'answer')?.keys).toBe('1-2')
+  })
+})

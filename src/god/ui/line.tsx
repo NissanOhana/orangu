@@ -1,17 +1,19 @@
 // The drawing of 1 line of a view (src/god/view/types.ts) as engine elements, with no rule of its own. The board
 // and the detail of the god pane both draw their lines with it.
 // - A line with a key is 1 plain Button with that key, and its segments are Texts inside it. A press on it runs
-//   onKeyed with its key.
+//   onKeyed with its key. A keyed line with a hotkey (an option that a digit answers) is a row: the segments before
+//   the painted one as Texts, then the Button with that hotkey and the segments after it. The engine paints the
+//   hotkey at the start of the Button (`1: Red`), so the painted segment itself is not drawn.
 // - A segment with a press is 1 plain hotkey Button keyed key:<hotkey> when the pane has an action for its key,
 //   else a Text of the same painted text: the engine paints the Button as `j: jump`, and the view counts that width.
 // - Any other line is 1 Text of its segments. A token resolves to a color of the session theme (src/god/ui/theme.ts).
-import type { ElementTable, RenderElement } from 'claude-code'
+import type { ElementConstructor, ElementTable, InputProps, RenderElement } from 'claude-code'
 
 import type { Line, Segment } from '../view/types.js'
 import { colorOf, type ThemeSet } from './theme.js'
 
-/** The elements that the pane draws with, from `$.ui.resolve(e)`. */
-export type PaneElements = Pick<ElementTable, 'Box' | 'Text' | 'Button'>
+/** The elements that the pane draws with, from `$.ui.resolve(e)`. A surface with no text field (mobile) has no Input. */
+export type PaneElements = Pick<ElementTable, 'Box' | 'Text' | 'Button'> & { Input?: ElementConstructor<InputProps> }
 
 /** The action of each hotkey that the pane has now; a key with none draws as text. */
 export type KeyActions = Readonly<Partial<Record<string, () => void>>>
@@ -39,11 +41,15 @@ export function drawLine(ui: PaneElements, line: Line, theme: ThemeSet, onKeyed:
   const { Box, Text, Button } = ui
   const key = line.key
   if (key !== undefined) {
-    return (
-      <Button key={key} plain onPress={() => onKeyed(key)}>
-        {line.segments.map((segment) => segmentText(ui, segment, theme))}
+    const hotkey = line.hotkey
+    const painted = hotkey === undefined ? -1 : line.segments.findIndex((segment) => segment.isPainted === true)
+    const button = (segments: readonly Segment[]): RenderElement => (
+      <Button key={key} plain {...(hotkey === undefined || painted < 0 ? {} : { hotkey })} onPress={() => onKeyed(key)}>
+        {segments.map((segment) => segmentText(ui, segment, theme))}
       </Button>
     )
+    if (painted < 0) return button(line.segments)
+    return <Box flexDirection="row">{[...line.segments.slice(0, painted).map((segment) => segmentText(ui, segment, theme)), button(line.segments.slice(painted + 1))]}</Box>
   }
   if (line.segments.some((segment) => segment.press !== undefined)) return <Box flexDirection="row">{line.segments.map((segment) => keySegment(ui, segment, theme, keys))}</Box>
   return <Text>{line.segments.map((segment) => segmentText(ui, segment, theme))}</Text>

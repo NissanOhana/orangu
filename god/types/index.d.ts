@@ -5,6 +5,9 @@
 /** The board snapshot of the god pane, as plain JSON. */
 export type OranguGodBoard = { readonly [field: string]: unknown }
 
+/** 1 value of the key path (an intent, an outcome, the check after a send), as plain JSON. */
+export type OranguGodDeliverValue = { readonly [field: string]: unknown }
+
 declare module 'claude-code' {
   interface PluginState {
     /** the values of the god pane in the engine state */
@@ -23,6 +26,14 @@ declare module 'claude-code' {
       screen: { sessionId: string; read?: { sessionId: string; workspaceRef: string; surfaceRef: string; text: string; readAt: number }; isFailed: boolean } | null
       /** the note of the last j that did not jump: the session and the reason */
       jump: { sessionId: string; reason: 'no-tab' | 'failed' } | null
+      /** the key path: the intent of the confirm bar and its scroll, the draft of r or m, the last outcome, and the check of the refreshes after a send */
+      deliver: {
+        intent?: OranguGodDeliverValue
+        scroll: number
+        draft?: { kind: 'prompt' | 'peer'; target: { sessionId: string; name: string }; lines: readonly string[] }
+        outcome?: OranguGodDeliverValue
+        check?: OranguGodDeliverValue
+      }
     }
   }
 }

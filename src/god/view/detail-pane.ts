@@ -9,11 +9,13 @@
  *   the tab says that the session has no tab, because the tab map can be old.
  * - The Recap tab shows 1 line that says that it is not in this build: the Recap call comes with its own chunk of
  *   work, and a tab never says that it reads what nothing reads.
+ * - The last outcome of the key path goes to the detail, so the Screen tab of its session shows the line of a refusal,
+ *   a failure or a miss above the screen, and the fresh screen of a refusal.
  * - For each side that the window over the tab content cuts, the view gives the scroll that its key goes to: w the
  *   page above, z the page below (scrollBy in src/god/view/window.ts). The engine shell keeps only the number.
  */
 import type { ScreenState } from '../source/screen.js'
-import type { BoardSnapshot, DetailTab } from '../types.js'
+import type { BoardSnapshot, DeliverOutcome, DetailTab } from '../types.js'
 import { detailLines, detailView, scrollBy, SCROLL_KEYS, type DetailView } from './detail.js'
 import { messageLines } from './states.js'
 import type { Line } from './types.js'
@@ -60,6 +62,8 @@ export type PaneDetailInput = {
   state: DetailState
   /** the screen state of the Screen tab: the session that it read, its last good read, and whether the newest failed */
   screen?: ScreenState
+  /** the last outcome of the key path */
+  outcome?: DeliverOutcome
 }
 
 /** The scroll that each key goes to: w while lines hide above the window, z while lines hide below it. */
@@ -91,6 +95,7 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
     ...(screen?.read === undefined ? {} : { screen: screen.read }),
     ...(screen?.isFailed === true ? { isScreenFailed: true } : {}),
     ...(placeholder === undefined ? {} : { placeholder }),
+    ...(input.outcome === undefined ? {} : { outcome: input.outcome }),
   })
   return { kind: 'session', sessionId: session.sessionId, view, scrollTo: scrollTargets(view) }
 }
