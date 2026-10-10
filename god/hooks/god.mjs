@@ -1297,14 +1297,14 @@ function valueCharsEnd(text, at) {
 var valueRunEnd = (text, at) => quotedTail(text, valueCharsEnd(text, at));
 var opensValue = (c) => c !== void 0 && (VALUE_CHAR.test(c) || c === '"' || c === "'");
 var isSeparator = (c) => c === "=" || c === ":";
-var BLANK = /[^\S\n\r]/;
+var BLANK2 = /[^\S\n\r]/;
 function namesSecretAt(text, end) {
   let start2 = end;
   while (start2 > 0 && NAME_CHAR.test(text[start2 - 1])) start2--;
   return start2 < end && isSecretName(text.slice(start2, end));
 }
 function endOfName(text, end) {
-  while (end > 0 && BLANK.test(text[end - 1])) end--;
+  while (end > 0 && BLANK2.test(text[end - 1])) end--;
   return end;
 }
 function endsWithInnerName(text, end) {
@@ -1323,7 +1323,7 @@ function withInnerPairs(text, end) {
   let start2 = 0;
   for (; ; ) {
     let blank = end;
-    while (BLANK.test(text[blank] ?? "")) blank++;
+    while (BLANK2.test(text[blank] ?? "")) blank++;
     const next = skipSpaces(text, end);
     let inner = -1;
     const after = isSeparator(text[next]) ? skipSpaces(text, next + 1) : -1;
@@ -1619,8 +1619,8 @@ function cutsOf(text, pattern, put) {
   return Array.from(text.matchAll(pattern), (m) => [m.index, m.index + m[0].length, put(m.index, m[0])]);
 }
 function readingOf(text, cuts) {
-  const read2 = applyEdits(text, cuts);
-  return { text: read2, origins: originsAfter(text, void 0, cuts, read2.length) };
+  const read3 = applyEdits(text, cuts);
+  return { text: read3, origins: originsAfter(text, void 0, cuts, read3.length) };
 }
 var sameCuts = (a, b) => a.length === b.length && a.every(([from, to, by], i) => from === b[i][0] && to === b[i][1] && by === b[i][2]);
 function readings(text) {
@@ -3686,8 +3686,8 @@ function nowContent(input) {
   else if (session.level === "needs-you" && session.waitingFor === "permission prompt" && activity?.isOpen === true) {
     const request = [...wrapSegments([{ text: "\u2610 Permission", bold: true }, ...waitChip(input)], width), ...wrapSegments([{ text: flat2(activity.text) }], width)];
     const toolInput = activity.input === void 0 ? labelLine(width, { text: "Input" }, "none") : [...labelLine(width, { text: "Input" }), ...keptLines(activity.input, width, TEXT_INDENT)];
-    const answers = permissionAnswers(input, activity.tool);
-    top = { lines: [...request, ...toolInput, ...answers.lines], options: answers.options };
+    const answers2 = permissionAnswers(input, activity.tool);
+    top = { lines: [...request, ...toolInput, ...answers2.lines], options: answers2.options };
   } else {
     if (activity !== void 0) top.lines.push(...labelLine(width, { text: activity.isOpen ? "Runs" : "Last tool" }, flat2(activity.text), ago(activity.at, now)));
     const error = transcript.errorTail;
@@ -4138,19 +4138,19 @@ function cancelled(state) {
   const { intent: _intent, draft: _draft, ...rest } = state;
   return { ...rest, scroll: 0 };
 }
-function cancelPressed(state, shown) {
-  const isShown = shown === void 0 ? state.intent === void 0 : sameIntent(state.intent, shown);
+function cancelPressed(state, shown2) {
+  const isShown = shown2 === void 0 ? state.intent === void 0 : sameIntent(state.intent, shown2);
   return isShown ? cancelled(state) : state;
 }
-var stopsDelivery = (delivering, shown) => delivering !== void 0 && shown !== void 0 && sameIntent(delivering, shown);
+var stopsDelivery = (delivering, shown2) => delivering !== void 0 && shown2 !== void 0 && sameIntent(delivering, shown2);
 var scrolled = (state, scroll) => ({ ...state, scroll });
-var isSendable = (state, shown) => shown !== void 0 && state.isSending !== true && sameIntent(state.intent, shown);
+var isSendable = (state, shown2) => shown2 !== void 0 && state.isSending !== true && sameIntent(state.intent, shown2);
 var sending = (state) => ({ ...state, isSending: true });
 function notSending(state) {
   const { isSending: _isSending, ...rest } = state;
   return rest;
 }
-var sendPressed = (state, shown) => isSendable(state, shown) ? sending(state) : state;
+var sendPressed = (state, shown2) => isSendable(state, shown2) ? sending(state) : state;
 var isSendingOf = (state, intent) => state.isSending === true && sameIntent(state.intent, intent);
 function afterDelivery(state, intent, result) {
   const { outcome, check } = result;
@@ -4298,9 +4298,9 @@ async function addDraftLine($, value) {
   const next = await update($, DELIVER, (state) => afterDraftLine(state, value));
   if (next.draft !== void 0) await focusDraft($, next.draft);
 }
-async function cancelBar($, runtime, shown) {
-  if (stopsDelivery(runtime.delivering, shown)) runtime.isCancelled = true;
-  await update($, DELIVER, (state) => cancelPressed(state, shown));
+async function cancelBar($, runtime, shown2) {
+  if (stopsDelivery(runtime.delivering, shown2)) runtime.isCancelled = true;
+  await update($, DELIVER, (state) => cancelPressed(state, shown2));
 }
 async function scrollBar($, scroll) {
   await update($, DELIVER, (state) => scrolled(state, scroll));
@@ -4318,20 +4318,20 @@ async function showScreen($, sessionId) {
   await update($, DETAIL, screenDetail);
   await update($, JUMP, () => null);
 }
-async function sendConfirmed($, runtime, shown) {
-  if (runtime.isDelivering || shown === void 0) return;
+async function sendConfirmed($, runtime, shown2) {
+  if (runtime.isDelivering || shown2 === void 0) return;
   runtime.isDelivering = true;
   runtime.isCancelled = false;
-  runtime.delivering = shown;
+  runtime.delivering = shown2;
   try {
-    const marked = await update($, DELIVER, (state) => sendPressed(state, shown));
-    if (!isSendingOf(marked, shown)) return;
-    const result = await deliverIntent($, shown, runtime).catch(async (error) => {
+    const marked = await update($, DELIVER, (state) => sendPressed(state, shown2));
+    if (!isSendingOf(marked, shown2)) return;
+    const result = await deliverIntent($, shown2, runtime).catch(async (error) => {
       await update($, DELIVER, notSending);
       throw error;
     });
-    await update($, DELIVER, (state) => afterDelivery(state, shown, result));
-    if (opensScreen(result.outcome)) await showScreen($, shown.target.sessionId);
+    await update($, DELIVER, (state) => afterDelivery(state, shown2, result));
+    if (opensScreen(result.outcome)) await showScreen($, shown2.target.sessionId);
   } finally {
     runtime.isDelivering = false;
     delete runtime.delivering;
@@ -4597,8 +4597,8 @@ function sessionToolAnswer(board, name, now) {
 }
 
 // src/god/view/frame.ts
-var BLANK2 = { segments: [{ text: " " }] };
-var blanks = (count2) => Array.from({ length: Math.max(0, count2) }, () => BLANK2);
+var BLANK3 = { segments: [{ text: " " }] };
+var blanks = (count2) => Array.from({ length: Math.max(0, count2) }, () => BLANK3);
 function wideColumns(board, detailHeight) {
   const height = Math.max(board.length, detailHeight);
   return {
@@ -4976,8 +4976,8 @@ function actionsOf($, runtime, layout) {
       onPermission: (choice) => quiet(openPermission($, choice))
     },
     bar: {
-      onSend: (shown) => quiet(sendConfirmed($, runtime.deliver, shown)),
-      onCancel: (shown) => quiet(cancelBar($, runtime.deliver, shown)),
+      onSend: (shown2) => quiet(sendConfirmed($, runtime.deliver, shown2)),
+      onCancel: (shown2) => quiet(cancelBar($, runtime.deliver, shown2)),
       onScroll: (scroll) => quiet(scrollBar($, scroll)),
       onDraft: (value) => quiet(addDraftLine($, value))
     }
