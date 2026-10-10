@@ -18,8 +18,10 @@ const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
 /**
  * The god pane of each fixture snapshot through the real view builders (src/god/view/pane.ts), as the terminal
  * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
- * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then each
- * line of a pane that cannot draw. The fixture session texts are short and clean, so the row scores the pane.
+ * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then the
+ * pane with the detail open in each tab at 60 columns (the detail in place of the board) and 110, the wide pane
+ * with no session selected, and each line of a pane that cannot draw. The fixture session texts are short and
+ * clean, so the row scores the pane.
  */
 export function godViews(): RenderedView[] {
   const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -38,8 +40,15 @@ export function godViews(): RenderedView[] {
       return { file: `${GOD_FIXTURE}#${name}.${bodyColumns}`, lines: paneLines(view).map(text) }
     }),
   )
+  const opened = DETAIL_TABS.flatMap((tab) =>
+    [60, 110].map((bodyColumns) => {
+      const view = paneView({ snapshot: detailSnapshot(), bodyColumns, bodyRows: 40, now: GOD_NOW, selectedKey: 's-wait', openGroups: [], promptHoldsKeys: true, detail: { tab, scroll: 0, isOpen: true } })
+      return { file: `${GOD_DETAIL_FIXTURE}#pane.${tab}.${bodyColumns}`, lines: paneLines(view).map(text) }
+    }),
+  )
+  const noSelection = { file: `${GOD_FIXTURE}#no-selection.110`, lines: paneLines(paneView({ snapshot: boardSnapshot(), bodyColumns: 110, bodyRows: 40, now: GOD_NOW, openGroups: [], promptHoldsKeys: true })).map(text) }
   const cannotDraw = (['too-narrow', 'too-short', 'failed'] as const).map((reason) => ({ file: `${GOD_FIXTURE}#cannot-draw.${reason}`, lines: paneLines(cannotDrawView(reason, 60)).map(text) }))
-  return [...panes, ...cannotDraw, ...godDetailViews()]
+  return [...panes, ...opened, noSelection, ...cannotDraw, ...godDetailViews()]
 }
 
 const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'

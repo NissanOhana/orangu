@@ -8,6 +8,7 @@
  * got. A text that does not fit is cut with the count of what it cut (src/god/view/cut.ts), never in silence.
  */
 import type { GodTokenName } from '../generated/tokens.js'
+import type { PaneDetail } from './detail-pane.js'
 
 /** 1 run of text with 1 style. The shell resolves the token to a color of the session theme (src/god/ui/theme.ts). */
 export type Segment = {
@@ -57,7 +58,7 @@ export type KeyHint = {
 /**
  * Where the board goes in the pane body:
  * - wide: the board on the left, then a rule, then the detail;
- * - narrow: the board alone. Enter on a row opens the detail in its place.
+ * - narrow: the board alone. Enter on a session row opens the detail in its place, and b goes back.
  */
 export type PaneLayout =
   | { kind: 'wide'; boardColumns: number; detailColumns: number }
@@ -65,8 +66,11 @@ export type PaneLayout =
 
 /**
  * The whole pane, top to bottom:
- * - board: the header, a rule, the body, a rule, the key row. In the wide layout the body is the board column
- *   only, and the rules join the column rule (`┬`, `┴`) at the board width;
+ * - board: the header, a rule, the body, a rule, the key row. The body is the board column. In the wide layout
+ *   the detail column sits right of it (`detail`), and the rules join the column rule (`┬`, `┴`) at the board
+ *   width. `more` gives the row that a press on each count line of the board selects;
+ * - detail: the narrow pane once the person opened the detail: the header, a rule, the detail in place of the
+ *   board, a rule, the key row;
  * - message: the header, a rule and 1 message across the body, in place of the board (no session yet, or none).
  *   When the message names a key (no session of the selected repos), a rule and the key row follow it;
  * - cannot-draw: 1 message with the reason, and nothing else.
@@ -78,9 +82,12 @@ export type PaneView =
       header: readonly Line[]
       topRule: Line
       body: readonly Line[]
+      more: Readonly<Record<string, string>>
+      detail?: PaneDetail
       bottomRule: Line
       keys: readonly Line[]
       hints: readonly KeyHint[]
     }
+  | { kind: 'detail'; header: readonly Line[]; topRule: Line; detail: PaneDetail; bottomRule: Line; keys: readonly Line[]; hints: readonly KeyHint[] }
   | { kind: 'message'; header: readonly Line[]; topRule: Line; body: readonly Line[]; bottomRule?: Line; keys?: readonly Line[] }
   | { kind: 'cannot-draw'; lines: readonly Line[] }

@@ -7,7 +7,11 @@
 // - /god opens the pane and starts the board once: the collector over the host port, the board loop over the
 //   engine state and store, and 1 timer of TICK_MS. The rules of each form are in src/god/control.ts.
 // - The pane draws the last snapshot from the engine state through the view (src/god/view/pane.ts). The selected
-//   row comes from the moves of the focus ring (ui.focus). The keys n, f and g are hotkey Buttons of the key row.
+//   row comes from the moves of the focus ring (ui.focus), n, a press on a row, and a press on a count line of the
+//   board, which also moves the ring onto the row that it selects. Each new selection starts the detail at its
+//   top. The keys n, f, g, t and b are hotkey Buttons of the key row, and w and z the count lines of the detail.
+//   The rules of the detail controls are in src/god/detail-control.ts.
+// - The pane asks for its rows inline above the prompt and for its columns in the dock.
 // - The pane is on the screen from its first draw (the engine can place an unasked pane later) until ui.close. The
 //   status line shows only while it is not.
 // - Each hook that can fail has a .catch: the pane then draws the line that says it cannot draw.
@@ -18,16 +22,20 @@ import { createBoardLoop, type BoardLoop } from './board-loop.js'
 import { TICK_MS, createCollector } from './collector.js'
 import { STORE_KEYS, commandAnswer, commandChoice, nextNeedsYou, openGroupsAfterPress, parseGodArgs, selectionOf, settingsOf, storeOf, toggledGroup, toggledMode, type BoardChoice } from './control.js'
 import { GOD_ARGUMENT_HINT, GOD_COMMAND_DESCRIPTION, GOD_FAILED, PANE_TITLE } from './copy.js'
+import { detailAfterBack, detailAfterNextTab, detailAfterRowPress, detailAfterScroll, detailAfterSelect, detailAfterTab } from './detail-control.js'
 import { engineClock, engineHost } from './engine.js'
-import { BOARD, OPEN_GROUPS, SELECTED, THEME } from './state.js'
+import { BOARD, DETAIL, OPEN_GROUPS, SELECTED, THEME } from './state.js'
 import type { Settings, StoreState } from './types.js'
 import { drawPane, type PaneActions } from './ui/board.js'
 import { themeOf } from './ui/theme.js'
-import { cannotDrawView, paneView } from './view/pane.js'
+import type { DetailState } from './view/detail-pane.js'
+import { cannotDrawView, layoutOf, paneView } from './view/pane.js'
+import type { PaneLayout } from './view/types.js'
 
-/** The id of the pane, and the width that it asks for beside a fullscreen transcript. */
+/** The id of the pane, the width that it asks for beside a fullscreen transcript, and the rows above the prompt. */
 const PANE = 'god'
 const PANE_COLUMNS = 110
+const PANE_ROWS = 20
 
 /**
  * The state of 1 load of the module: the settings, whether the pane is on the screen, the board once it runs, and the
@@ -84,7 +92,7 @@ function start($: EngineInterface, runtime: Runtime): Promise<BoardLoop> {
 
 /** Opens the pane, starts the board, and tells the board whether the pane is on the screen. */
 async function openPane($: EngineInterface, runtime: Runtime): Promise<{ loop: BoardLoop; isPlaced: boolean }> {
-  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS })
+  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS, rows: PANE_ROWS })
   runtime.isPaneOpen = opened.isPlaced
   const loop = await start($, runtime)
   loop.setPaneOpen(opened.isPlaced)
@@ -103,31 +111,67 @@ async function choose($: EngineInterface, runtime: Runtime, choice: (store: Stor
   await loop.choose(choice(loop.store()))
 }
 
-async function selectNext($: EngineInterface): Promise<void> {
-  const next = nextNeedsYou((await read($, BOARD)) ?? undefined, (await read($, SELECTED)) || undefined)
-  if (next === undefined) return
-  await update($, SELECTED, () => next)
-  await $.ui.focus({ requestId: PANE, key: next })
+/** Selects the row `key`. A new selected row starts the detail at the top of its tab. */
+async function select($: EngineInterface, key: string): Promise<void> {
+  const before = await read($, SELECTED)
+  if (before === key) return
+  await update($, SELECTED, () => key)
+  await update($, DETAIL, (state) => detailAfterSelect(state, before, key))
 }
 
-async function pressRow($: EngineInterface, key: string): Promise<void> {
+/** Selects the row `key` and moves the focus ring onto it, so the arrows and Tab go on from there. */
+async function selectAndFocus($: EngineInterface, key: string): Promise<void> {
+  await select($, key)
+  await $.ui.focus({ requestId: PANE, key })
+}
+
+async function selectNext($: EngineInterface): Promise<void> {
+  const next = nextNeedsYou((await read($, BOARD)) ?? undefined, (await read($, SELECTED)) || undefined)
+  if (next !== undefined) await selectAndFocus($, next)
+}
+
+async function pressRow($: EngineInterface, key: string, layout: PaneLayout): Promise<void> {
   const snapshot = (await read($, BOARD)) ?? undefined
   await update($, OPEN_GROUPS, (groups) => openGroupsAfterPress(groups, key, snapshot))
-  await update($, SELECTED, () => key)
+  await select($, key)
+  await update($, DETAIL, (state) => detailAfterRowPress(state, key, snapshot, layout))
+}
+
+async function changeDetail($: EngineInterface, change: (state: DetailState) => DetailState): Promise<void> {
+  await update($, DETAIL, change)
+}
+
+/** b: the board again, with the focus ring on the selected row. */
+async function backToBoard($: EngineInterface): Promise<void> {
+  await update($, DETAIL, detailAfterBack)
+  const selected = await read($, SELECTED)
+  if (selected !== '') await $.ui.focus({ requestId: PANE, key: selected })
 }
 
 /** The presses of the pane. A press that fails changes nothing, and the next press tries again. */
-function actionsOf($: EngineInterface, runtime: Runtime): PaneActions {
+function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): PaneActions {
   const quiet = (work: Promise<void>): void => void work.catch(() => undefined)
   return {
-    onRow: (key) => quiet(pressRow($, key)),
+    onRow: (key) => quiet(pressRow($, key, layout)),
+    onMore: (key) => quiet(selectAndFocus($, key)),
     keys: {
       n: () => quiet(selectNext($)),
       f: () => quiet(choose($, runtime, toggledMode)),
       g: () => quiet(choose($, runtime, toggledGroup)),
+      t: () => quiet(changeDetail($, detailAfterNextTab)),
+      b: () => quiet(backToBoard($)),
+    },
+    detail: {
+      onTab: (tab) => quiet(changeDetail($, (state) => detailAfterTab(state, tab))),
+      onScroll: (scroll) => quiet(changeDetail($, (state) => detailAfterScroll(state, scroll))),
+      // the digits and the answer come with the answer path: until then a press on an option does nothing
+      onOption: () => undefined,
     },
   }
 }
+
+/** The presses of the line that says the pane cannot draw: it has no Button. */
+const NO_ACTIONS: PaneActions = { onRow: () => undefined, onMore: () => undefined, keys: {}, detail: { onTab: () => undefined, onScroll: () => undefined, onOption: () => undefined } }
 
 export function register(on: On, options: PluginOptions): void {
   const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false }
@@ -153,7 +197,7 @@ export function register(on: On, options: PluginOptions): void {
 
   on('ui.render', { component: 'Pane', requestId: 'god' }, async ($, e) => {
     markPaneShown(runtime)
-    const [snapshot, selected, openGroups, colors] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME)])
+    const [snapshot, selected, openGroups, colors, detail] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME), read($, DETAIL)])
     const view = paneView({
       ...(snapshot === null ? {} : { snapshot }),
       bodyColumns: e.props.bodyColumns,
@@ -162,14 +206,15 @@ export function register(on: On, options: PluginOptions): void {
       ...(selected === '' ? {} : { selectedKey: selected }),
       openGroups,
       promptHoldsKeys: !e.props.isFocused,
+      detail,
     })
-    return drawPane($.ui.resolve(e), view, colors, actionsOf($, runtime))
-  }).catch(($, e) => drawPane($.ui.resolve(e), cannotDrawView('failed', e.props.bodyColumns), 'dark', { onRow: () => undefined, keys: {} }))
+    return drawPane($.ui.resolve(e), view, colors, actionsOf($, runtime, layoutOf(e.props.bodyColumns)))
+  }).catch(($, e) => drawPane($.ui.resolve(e), cannotDrawView('failed', e.props.bodyColumns), 'dark', NO_ACTIONS))
 
   on('ui.focus', { component: 'Pane', requestId: 'god' }, async ($, e, next) => {
     const moved = await next(e)
     const key = moved.deny === undefined ? selectionOf(e.element, (await read($, BOARD)) ?? undefined) : undefined
-    if (key !== undefined) await update($, SELECTED, () => key)
+    if (key !== undefined) await select($, key)
     return moved
   }).catch(($, e, next) => next(e))
 

@@ -49,7 +49,7 @@ export type Calls = {
   boardWrites: number
   storeSets: Array<[string, unknown]>
   statuses: Array<string | undefined>
-  opens: Array<{ id: string; title?: string; columns?: number }>
+  opens: Array<{ id: string; title?: string; columns?: number; rows?: number }>
 }
 
 /** The folder name of a cwd under the projects folder, as Claude Code writes it. */
@@ -125,7 +125,7 @@ export function installMachine(on: On, machine: Machine): Calls {
     return { value: [row] }
   })
   on('ui.open', (_$, e) => {
-    calls.opens.push({ id: e.id, ...(e.title === undefined ? {} : { title: e.title }), ...(e.columns === undefined ? {} : { columns: e.columns }) })
+    calls.opens.push({ id: e.id, ...(e.title === undefined ? {} : { title: e.title }), ...(e.columns === undefined ? {} : { columns: e.columns }), ...(e.rows === undefined ? {} : { rows: e.rows }) })
     const isPlaced = calls.opens.length > (machine.unplacedOpens ?? 0)
     return { value: isPlaced ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'the terminal is too narrow' } }
   })
@@ -184,6 +184,13 @@ export const reply = (text: string, ms: number): string[] => [
   JSON.stringify({ type: 'assistant', timestamp: at(ms), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text }] } }),
   JSON.stringify({ type: 'system', subtype: 'turn_duration', durationMs: 1000, timestamp: at(ms) }),
 ]
+
+/** `count` whole turns, 1 min apart and the last 1 min before `ms`: each a prompt, a reply and the end of the turn. */
+export const turns = (count: number, ms: number): string[] =>
+  Array.from({ length: count }, (_, index) => {
+    const at = ms - (count - index) * 60_000
+    return [prompt(`Run step ${index + 1} of the plan.`, at), ...reply(`Step ${index + 1} is done.`, at + 30_000)]
+  }).flat()
 
 /** An API error at the end of the transcript. */
 export const apiError = (text: string, ms: number): string => JSON.stringify({ type: 'system', subtype: 'api_error', error: { message: text }, timestamp: at(ms) })

@@ -7,6 +7,8 @@
  * - The digits name the options of the open question of the selected session (`1-3`), else `1-9`.
  * - While the prompt holds the keys, the row ends with the key that gives them to the pane.
  * - With no cmux on the machine, jump, the digits and reply show dim, and 1 more line says why.
+ * - While the narrow pane shows the detail in place of the board, the row starts with b, which goes back to the
+ *   board, in place of the arrows: the arrows select a session only on the board.
  */
 import type { BoardMode } from '../types.js'
 import { DIM } from '../ui/theme.js'
@@ -30,6 +32,8 @@ export type KeyRowInput = {
   answerCount?: number
   /** the mode of the board: f switches to the other one */
   mode: BoardMode
+  /** true while the narrow pane shows the detail in place of the board */
+  isDetail?: boolean
 }
 
 /** What f does in each mode: it shows the other mode. */
@@ -47,9 +51,12 @@ const answerKeys = (count: number | undefined): string => {
   return last === 1 ? '1' : `1-${last}`
 }
 
+/** A key that 1 Button presses, in the form that the engine paints it: the key, a colon, a space, the label. */
+export const pressSegment = (hotkey: string, label: string): Segment => ({ text: `${hotkey}: ${label}`, press: { hotkey, label } })
+
 function hintItem(hint: KeyHint): Segment[] {
   if (hint.hotkey !== undefined) {
-    const pressed: Segment = { text: `${hint.hotkey}: ${hint.label}`, press: { hotkey: hint.hotkey, label: hint.label } }
+    const pressed = pressSegment(hint.hotkey, hint.label)
     return [hint.isOff ? { ...pressed, ...DIM } : pressed]
   }
   return hint.isOff ? [{ text: hint.keys, ...DIM }, { text: ` ${hint.label}`, ...DIM }] : [{ text: hint.keys, bold: true }, { text: ` ${hint.label}` }]
@@ -59,7 +66,7 @@ function hintItem(hint: KeyHint): Segment[] {
 export function keyRow(input: KeyRowInput): KeyRow {
   const off = input.isCmuxMissing
   const hints: KeyHint[] = [
-    { keys: '↑↓', label: 'select', isOff: false },
+    input.isDetail === true ? { keys: 'b', label: 'back', hotkey: 'b', isOff: false } : { keys: '↑↓', label: 'select', isOff: false },
     { keys: 'j', label: 'jump', hotkey: 'j', isOff: off },
     { keys: 'n', label: 'next', hotkey: 'n', isOff: false },
     { keys: answerKeys(input.answerCount), label: 'answer', isOff: off },

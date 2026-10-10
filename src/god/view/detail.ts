@@ -10,9 +10,10 @@
  *   of the running agents and the newest PR number;
  * - 1 line for each overlap flag: `SAME TREE: <name>`, `SAME FILES: <name> (<file>)`, `SAME REPO: <name>`.
  * Every text shows whole: it wraps at whole words, never cut. Only the row budget cuts, and only the tab content:
- * a window over it with a count line above (`+N lines (w)`) and below (`+N lines (z)`) that names the key that
+ * a window over it with a count line above (`w: +N lines`) and below (`z: +N lines`) that names the key that
  * shows the rest. When fewer than 3 rows are left for content that does not fit, the detail says that the pane is
- * too short. No line is wider than `width`. The clock comes in as `now`.
+ * too short. A tab whose source is not in this build shows 1 line (`placeholder`) in place of its content. No line
+ * is wider than `width`. The clock comes in as `now`.
  */
 import type { DeliverOutcome, DetailTab, GodSession, PrLink, RecapState, ScreenRead, ContextFacts } from '../types.js'
 import { ACCENT, DIM, FLAG_PAINT } from '../ui/theme.js'
@@ -57,6 +58,8 @@ export type DetailInput = {
   screen?: ScreenRead
   recap?: RecapState
   outcome?: DeliverOutcome
+  /** a line that the open tab shows in place of its content, when the source of the tab is not in this build */
+  placeholder?: string
 }
 
 /**
@@ -114,8 +117,11 @@ function tabRowsOf(open: DetailTab, width: number): TabCell[][] {
   return rows
 }
 
+/** The space before the tab at `index` of a tab row: 1 before the first tab, 2 between tabs. */
+export const tabGap = (index: number): string => (index === 0 ? ' ' : '  ')
+
 /** 1 row of tab Buttons as 1 line. */
-const tabLine = (row: readonly TabCell[]): Line => ({ segments: row.flatMap((cell, index) => [{ text: index === 0 ? ' ' : '  ' }, ...cell.segments]) })
+const tabLine = (row: readonly TabCell[]): Line => ({ segments: row.flatMap((cell, index) => [{ text: tabGap(index) }, ...cell.segments]) })
 
 function footLines(session: GodSession, width: number): Line[] {
   const transcript = session.transcript
@@ -142,7 +148,7 @@ export function detailView(input: DetailInput): DetailView {
   const head = headLines(session, width)
   const tabRows = tabRowsOf(input.tab, width)
   const foot = footLines(session, width)
-  const content = tabContent(input.tab, input)
+  const content = input.placeholder === undefined ? tabContent(input.tab, input) : { lines: messageLines(input.placeholder, width), options: [] }
   const room = rows - head.length - tabRows.length - foot.length
   if (content.lines.length > room && room < MIN_WINDOW) return { kind: 'too-short', lines: messageLines(CANNOT_DRAW['too-short'], width) }
   const { lines: body, window } = windowOf(content.lines, room, input.scroll)

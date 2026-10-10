@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest'
 import { HOUR, MINUTE, SECOND, busy, transcript, waiting } from '../../../test/fixtures/god/sessions.js'
 import { NOW, QUESTION, boardSessions, boardSnapshot, byRepoSnapshot, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
 import { LEVEL_ORDER, type BoardSnapshot, type Level } from '../types.js'
-import { STALE_GROUP_KEY, boardLines, levelTime, LEVEL_GLYPH, type BoardViewInput } from './board.js'
+import { MORE_KEYS, STALE_GROUP_KEY, boardLines, boardWindow, levelTime, LEVEL_GLYPH, type BoardViewInput } from './board.js'
 import { cellWidth, graphemes } from './cells.js'
 import type { Line } from './types.js'
 
@@ -155,11 +155,47 @@ describe('only the lines that fit, with the selected row in view', () => {
           const match = /^ \+(\d+) sessions? \((↑|↓)\)$/.exec(line)
           return match === null ? [] : [Number(match[1])]
         })
-        const shown = lines.filter((line) => line.key !== undefined && line.key !== STALE_GROUP_KEY).length
+        const shown = lines.filter((line) => line.key !== undefined && line.key !== STALE_GROUP_KEY && line.key !== MORE_KEYS.up && line.key !== MORE_KEYS.down).length
         const staleShown = lines.some((line) => line.key === STALE_GROUP_KEY) ? 2 : 0
         expect(shown + staleShown + counted.reduce((sum, count) => sum + count, 0), `${rows} rows, ${selectedKey}: each session shows or counts`).toBe(total)
       }
     }
+  })
+
+  it('keys each count line as a Button whose target is the first hidden row in its direction, and keeps its text', () => {
+    const snapshot = snapshotOf(sessions())
+    const all = view(snapshot, { rows: 40 }).flatMap((line) => (line.key === undefined ? [] : [line.key]))
+    expect(MORE_KEYS).toEqual({ up: 'more-up', down: 'more-down' })
+    const countKeys = new Set<string>(Object.values(MORE_KEYS))
+    for (const rows of [3, 5, 8]) {
+      for (const selectedKey of all) {
+        const { lines, more } = boardWindow({ snapshot, width: 60, rows, now: NOW, openGroups: [], selectedKey })
+        const shown = lines.flatMap((line) => (line.key === undefined || countKeys.has(line.key) ? [] : [line.key]))
+        const below = all.slice(all.indexOf(shown.at(-1)!) + 1)
+        const above = all.slice(0, all.indexOf(shown[0]!))
+        const down = lines.find((line) => line.key === MORE_KEYS.down)
+        const up = lines.find((line) => line.key === MORE_KEYS.up)
+        expect(down === undefined, `${rows} rows, ${selectedKey}: a Button below while a row hides below`).toBe(below.length === 0)
+        expect(up === undefined, `${rows} rows, ${selectedKey}: a Button above while a row hides above`).toBe(above.length === 0)
+        if (down !== undefined) expect(text(down)).toMatch(/^ \+\d+ sessions? \(↓\)$/)
+        if (up !== undefined) expect(text(up)).toMatch(/^ \+\d+ sessions? \(↑\)$/)
+        expect(more).toEqual({ ...(below.length === 0 ? {} : { [MORE_KEYS.down]: below[0] }), ...(above.length === 0 ? {} : { [MORE_KEYS.up]: above.at(-1) }) })
+      }
+    }
+  })
+
+  it('reaches every row with presses on the count line below alone, and back to the first with the one above', () => {
+    const snapshot = snapshotOf(sessions())
+    const all = view(snapshot, { rows: 40 }).flatMap((line) => (line.key === undefined ? [] : [line.key]))
+    const step = (selectedKey: string | undefined, key: string): string | undefined =>
+      boardWindow({ snapshot, width: 60, rows: 5, now: NOW, openGroups: [], ...(selectedKey === undefined ? {} : { selectedKey }) }).more[key]
+    const reached: string[] = []
+    for (let target = step(undefined, MORE_KEYS.down); target !== undefined; target = step(target, MORE_KEYS.down)) reached.push(target)
+    expect(reached.at(-1)).toBe(all.at(-1))
+    expect(new Set(reached).size).toBe(reached.length)
+    let selected = reached.at(-1)
+    for (let target = step(selected, MORE_KEYS.up); target !== undefined; target = step(target, MORE_KEYS.up)) selected = target
+    expect(selected).toBe(all[0])
   })
 
   it('marks no row when the selected session is not on the board', () => {

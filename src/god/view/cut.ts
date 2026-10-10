@@ -3,7 +3,8 @@
  * and each list that it shortens says how many items it left out and which key shows them:
  * - a text in a row cell ends with `…+N`, where N is the count of the characters (graphemes) that it cut. The row
  *   is the key to the rest: the person selects it, and the detail shows the text whole;
- * - a list ends with a line such as `+3 sessions (↓)`: the count, the unit and the key.
+ * - a list ends with a line such as `+3 sessions (↓)`: the count, the unit and the key. A list that a hotkey
+ *   pages shows the key as the engine paints its Button, then the count: `z: +12 lines` (src/god/view/window.ts).
  * A cut falls at the last whole word that fits, else at the last character that fits (the rule of truncate in
  * src/cli/tty.ts), and never inside a grapheme.
  */
@@ -15,9 +16,14 @@ export function cutMark(count: number): string {
   return `…+${count}`
 }
 
-/** A list line: `+N <unit> (<key>)`. The unit is the singular and the plural word. */
+/** The count of the items that a view left out: `+N <unit>`. The unit is the singular and the plural word. */
+export function countText(count: number, unit: readonly [string, string]): string {
+  return `+${count} ${count === 1 ? unit[0] : unit[1]}`
+}
+
+/** A list line: `+N <unit> (<key>)`. */
 export function moreText(count: number, unit: readonly [string, string], key: string): string {
-  return `+${count} ${count === 1 ? unit[0] : unit[1]} (${key})`
+  return `${countText(count, unit)} (${key})`
 }
 
 /**

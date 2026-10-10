@@ -9,7 +9,9 @@
  * - every row is exactly `width` cells. The names share 1 column. A text that does not fit is cut with its count
  *   (src/god/view/cut.ts): the detail of the session shows it whole;
  * - only `rows` lines: the window keeps the selected row in view, and a line above and below counts the sessions
- *   that it leaves out and names the arrow key that shows them.
+ *   that it leaves out and names the arrow key that shows them. Each count line is a row that the person can
+ *   press (key MORE_KEYS.up or MORE_KEYS.down): the press selects the first hidden row on its side, so the window
+ *   moves and the person reaches every row, also in a pane too short for the ring to reach a row out of view.
  * The glyph tells the level with no color, for a reader who cannot tell the colors apart. Outside text (a name, a
  * summary, a repo name) shows on 1 line: each run of white space becomes 1 space. The clock comes in as `now`.
  */
@@ -51,6 +53,12 @@ const NAME_MIN = 6
 const NAME_MAX = 24
 /** the fewest lines that a window needs: the count above, the selected row, the count below */
 export const MIN_WINDOW_ROWS = 3
+
+/** The keys of the count lines above and below the window: each is a row that a press moves past the window. */
+export const MORE_KEYS = { up: 'more-up', down: 'more-down' } as const
+
+/** The board column and, for each count line, the key of the row that a press on it selects. */
+export type BoardWindow = { lines: Line[]; more: Readonly<Record<string, string>> }
 
 /** The key of a group heading that the person opens and closes. */
 export const groupKey = (key: string): string => `group:${key}`
@@ -132,12 +140,20 @@ function sessionLine(session: GodSession, input: BoardViewInput, nameColumn: num
   }
 }
 
-/** The lines that fit `rows`, with the selected line in view and a count line for each side that it leaves out. */
-function windowOf(items: readonly Item[], rows: number, selected: number): Line[] {
-  if (items.length <= rows) return items.map((item) => item.line)
+/**
+ * The lines that fit `rows`, with the selected line in view and a count line for each side that it leaves out.
+ * A count line is keyed when a hidden row on its side has a key: the nearest one is its target.
+ */
+function windowOf(items: readonly Item[], rows: number, selected: number): BoardWindow {
+  if (items.length <= rows) return { lines: items.map((item) => item.line), more: {} }
   const room = Math.max(MIN_WINDOW_ROWS, rows)
   const sessions = (from: number, to: number): number => items.slice(from, to).reduce((sum, item) => sum + item.sessions, 0)
-  const countLine = (count: number, key: string): Line => ({ segments: [{ text: ' ' }, { text: moreText(count, SESSION_UNIT, key), ...DIM }] })
+  const more: Record<string, string> = {}
+  const countLine = (count: number, arrow: string, key: string, hidden: readonly Item[]): Line => {
+    const target = hidden.find((item) => item.line.key !== undefined)?.line.key
+    if (target !== undefined) more[key] = target
+    return { ...(target === undefined ? {} : { key }), segments: [{ text: ' ' }, { text: moreText(count, SESSION_UNIT, arrow), ...DIM }] }
+  }
   let start = 0
   let end = room - 1
   if (selected >= end) {
@@ -146,15 +162,21 @@ function windowOf(items: readonly Item[], rows: number, selected: number): Line[
     // a count line for a heading alone would count 0 sessions: show the heading in its place
     if (start === 1 && items[0]!.sessions === 0) start = 0
   }
-  return [
-    ...(start > 0 ? [countLine(sessions(0, start), '↑')] : []),
+  const lines = [
+    ...(start > 0 ? [countLine(sessions(0, start), '↑', MORE_KEYS.up, items.slice(0, start).reverse())] : []),
     ...items.slice(start, end).map((item) => item.line),
-    ...(end < items.length ? [countLine(sessions(end, items.length), '↓')] : []),
+    ...(end < items.length ? [countLine(sessions(end, items.length), '↓', MORE_KEYS.down, items.slice(end))] : []),
   ]
+  return { lines, more }
 }
 
 /** The lines of the board column. */
 export function boardLines(input: BoardViewInput): Line[] {
+  return boardWindow(input).lines
+}
+
+/** The lines of the board column, and the row that a press on each count line selects. */
+export function boardWindow(input: BoardViewInput): BoardWindow {
   const { snapshot, width } = input
   const byId = new Map(snapshot.sessions.map((session) => [session.sessionId, session]))
   const shown = snapshot.groups.map((group) => ({

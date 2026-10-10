@@ -41,7 +41,7 @@ for (const surface of SURFACES) {
     on('session.start', (_$, e) => ({ cwd: e.cwd }))
     await $.session.start({ cwd: HOME, surface, isInteractive: true })
     await clock.settle()
-    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 110 }])
+    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 110, rows: 20 }])
     expect(calls.runs.map((run) => run.argv.slice(0, 2).join(' '))).toContain('claude agents')
     expect(calls.boardWrites).toBeGreaterThan(0)
   })

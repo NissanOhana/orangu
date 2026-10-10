@@ -56,6 +56,14 @@ describe('the key row', () => {
     expect(segments.filter((segment) => segment.text.includes('select') || segment.text.includes('answer')).every((segment) => segment.press === undefined)).toBe(true)
   })
 
+  it('starts with b: back in place of the arrows while the narrow pane shows the detail', () => {
+    const row = keyRow({ ...BASE, isDetail: true })
+    expect(row.lines.map(text)).toEqual([' b: back  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  f: repos  g: group'])
+    expect(row.hints[0]).toEqual({ keys: 'b', label: 'back', hotkey: 'b', isOff: false })
+    expect(row.hints.some((hint) => hint.keys === '↑↓')).toBe(false)
+    expect(keyRow(BASE).hints.some((hint) => hint.hotkey === 'b')).toBe(false)
+  })
+
   it('names the mode that f shows next: the repos from all, all from the repos', () => {
     const label = (mode: 'all' | 'repos'): string | undefined =>
       keyRow({ ...BASE, mode })

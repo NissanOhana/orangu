@@ -171,8 +171,11 @@ function flowItems(items, width) {
 function cutMark(count2) {
   return `\u2026+${count2}`;
 }
+function countText(count2, unit) {
+  return `+${count2} ${count2 === 1 ? unit[0] : unit[1]}`;
+}
 function moreText(count2, unit, key) {
-  return `+${count2} ${count2 === 1 ? unit[0] : unit[1]} (${key})`;
+  return `${countText(count2, unit)} (${key})`;
 }
 function keptCount(chars, room, hiddenAfter) {
   let width = 0;
@@ -246,6 +249,7 @@ var SESSION_UNIT = ["session", "sessions"];
 var NAME_MIN = 6;
 var NAME_MAX = 24;
 var MIN_WINDOW_ROWS = 3;
+var MORE_KEYS = { up: "more-up", down: "more-down" };
 var groupKey = (key) => `group:${key}`;
 var STALE_GROUP_KEY = groupKey("stale");
 function levelTime(since, now) {
@@ -295,10 +299,15 @@ function sessionLine(session, input, nameColumn) {
   };
 }
 function windowOf(items, rows, selected) {
-  if (items.length <= rows) return items.map((item) => item.line);
+  if (items.length <= rows) return { lines: items.map((item) => item.line), more: {} };
   const room = Math.max(MIN_WINDOW_ROWS, rows);
   const sessions = (from, to) => items.slice(from, to).reduce((sum, item) => sum + item.sessions, 0);
-  const countLine = (count2, key) => ({ segments: [{ text: " " }, { text: moreText(count2, SESSION_UNIT, key), ...DIM }] });
+  const more = {};
+  const countLine = (count2, arrow, key, hidden) => {
+    const target = hidden.find((item) => item.line.key !== void 0)?.line.key;
+    if (target !== void 0) more[key] = target;
+    return { ...target === void 0 ? {} : { key }, segments: [{ text: " " }, { text: moreText(count2, SESSION_UNIT, arrow), ...DIM }] };
+  };
   let start2 = 0;
   let end = room - 1;
   if (selected >= end) {
@@ -306,13 +315,17 @@ function windowOf(items, rows, selected) {
     start2 = end - (room - 1 - (end < items.length ? 1 : 0));
     if (start2 === 1 && items[0].sessions === 0) start2 = 0;
   }
-  return [
-    ...start2 > 0 ? [countLine(sessions(0, start2), "\u2191")] : [],
+  const lines = [
+    ...start2 > 0 ? [countLine(sessions(0, start2), "\u2191", MORE_KEYS.up, items.slice(0, start2).reverse())] : [],
     ...items.slice(start2, end).map((item) => item.line),
-    ...end < items.length ? [countLine(sessions(end, items.length), "\u2193")] : []
+    ...end < items.length ? [countLine(sessions(end, items.length), "\u2193", MORE_KEYS.down, items.slice(end))] : []
   ];
+  return { lines, more };
 }
 function boardLines(input) {
+  return boardWindow(input).lines;
+}
+function boardWindow(input) {
   const { snapshot, width } = input;
   const byId = new Map(snapshot.sessions.map((session) => [session.sessionId, session]));
   const shown = snapshot.groups.map((group) => ({
@@ -2007,10 +2020,10 @@ function callText(name, input, clean) {
   return clean(summarizeToolInput(clean(name), cleanValue(input, clean)));
 }
 function promptOf(r) {
-  const message = obj2(r["message"]);
-  if (!message || r["isCompactSummary"] === true) return void 0;
-  if (list(message["content"]).some((block) => obj2(block)?.["type"] === "tool_result")) return void 0;
-  const text = textOf2(message["content"]);
+  const message2 = obj2(r["message"]);
+  if (!message2 || r["isCompactSummary"] === true) return void 0;
+  if (list(message2["content"]).some((block) => obj2(block)?.["type"] === "tool_result")) return void 0;
+  const text = textOf2(message2["content"]);
   return { kind: classifyPrompt(r, text, r["isMeta"] === true), text };
 }
 function noteTitlePrompt(title, kind, text) {
@@ -2105,16 +2118,16 @@ function readCall(s, block, at) {
   if (task) s.agents.push(task);
 }
 function readAssistant(s, r, at) {
-  const message = obj2(r["message"]);
-  if (!message) return;
-  const model = str2(message["model"]);
+  const message2 = obj2(r["message"]);
+  if (!message2) return;
+  const model = str2(message2["model"]);
   const isApiError = r["isApiErrorMessage"] === true;
   const isReply = !isApiError && !resolveModel(model).synthetic;
-  const usage = obj2(message["usage"]);
+  const usage = obj2(message2["usage"]);
   if (isReply) delete s.errorTail;
-  if (isApiError) s.errorTail = defined({ kind: "api-error", text: textOf2(message["content"]), at });
+  if (isApiError) s.errorTail = defined({ kind: "api-error", text: textOf2(message2["content"]), at });
   if (isReply && usage) s.context = defined({ tokens: count(usage["input_tokens"]) + count(usage["cache_read_input_tokens"]) + count(usage["cache_creation_input_tokens"]), model });
-  for (const value of list(message["content"])) {
+  for (const value of list(message2["content"])) {
     const block = obj2(value);
     const text = str2(block?.["text"]);
     if (block?.["type"] === "tool_use") readCall(s, block, at);
@@ -2643,6 +2656,442 @@ function createCollector({ host, home, clock }) {
   };
 }
 
+// src/god/view/keys.ts
+var KEY_ROW_PROMPT = "ctrl+x tab: keys to the pane";
+var KEY_ROW_NO_CMUX = "Jump, answer and reply are off: cmux is not on this machine.";
+var MODE_KEY_LABEL = { all: "repos", repos: "all" };
+var GROUP_KEY_LABEL = "group";
+var answerKeys = (count2) => {
+  if (count2 === void 0 || count2 < 1) return "1-9";
+  const last = Math.min(9, count2);
+  return last === 1 ? "1" : `1-${last}`;
+};
+var pressSegment = (hotkey, label) => ({ text: `${hotkey}: ${label}`, press: { hotkey, label } });
+function hintItem(hint) {
+  if (hint.hotkey !== void 0) {
+    const pressed = pressSegment(hint.hotkey, hint.label);
+    return [hint.isOff ? { ...pressed, ...DIM } : pressed];
+  }
+  return hint.isOff ? [{ text: hint.keys, ...DIM }, { text: ` ${hint.label}`, ...DIM }] : [{ text: hint.keys, bold: true }, { text: ` ${hint.label}` }];
+}
+function keyRow(input) {
+  const off2 = input.isCmuxMissing;
+  const hints = [
+    input.isDetail === true ? { keys: "b", label: "back", hotkey: "b", isOff: false } : { keys: "\u2191\u2193", label: "select", isOff: false },
+    { keys: "j", label: "jump", hotkey: "j", isOff: off2 },
+    { keys: "n", label: "next", hotkey: "n", isOff: false },
+    { keys: answerKeys(input.answerCount), label: "answer", isOff: off2 },
+    { keys: "r", label: "reply", hotkey: "r", isOff: off2 },
+    { keys: "m", label: "message", hotkey: "m", isOff: false },
+    { keys: "t", label: "tab", hotkey: "t", isOff: false },
+    { keys: "s", label: "sound", hotkey: "s", isOff: false },
+    { keys: "f", label: MODE_KEY_LABEL[input.mode], hotkey: "f", isOff: false },
+    { keys: "g", label: GROUP_KEY_LABEL, hotkey: "g", isOff: false }
+  ];
+  const items = hints.map(hintItem);
+  if (input.promptHoldsKeys) items.push([{ text: KEY_ROW_PROMPT, ...DIM }]);
+  const lines = flowItems(items, input.width);
+  if (off2) lines.push(...wrapWords(KEY_ROW_NO_CMUX, input.width - 1).map((text) => ({ segments: [{ text: ` ${text}` }] })));
+  return { hints, lines };
+}
+
+// src/god/view/window.ts
+var SCROLL_KEYS = { up: "w", down: "z" };
+var MIN_WINDOW = 3;
+var LINE_UNIT = ["line", "lines"];
+function scrollBy(window, direction) {
+  if (direction === "down") return window.first + window.shown;
+  const first = window.first - window.page;
+  return first <= 1 ? 0 : first;
+}
+function windowOf2(lines, room, scroll) {
+  const total = lines.length;
+  const page = Math.max(1, room - 2);
+  if (total <= room) return { lines: [...lines], window: { first: 0, shown: total, total, page } };
+  const first = Math.min(Math.max(0, Number.isFinite(scroll) ? Math.floor(scroll) : 0), total - (room - 1));
+  const top = first > 0 ? 1 : 0;
+  const hasBottom = first + room - top < total;
+  const shown = room - top - (hasBottom ? 1 : 0);
+  const count2 = (hidden, key) => ({ segments: [{ text: " " }, { ...pressSegment(key, countText(hidden, LINE_UNIT)), ...DIM }] });
+  return {
+    lines: [...top > 0 ? [count2(first, SCROLL_KEYS.up)] : [], ...lines.slice(first, first + shown), ...hasBottom ? [count2(total - first - shown, SCROLL_KEYS.down)] : []],
+    window: { first, shown, total, page }
+  };
+}
+
+// src/god/view/wrap.ts
+var LINE_BREAK = /\r\n|[\n\r\u2028\u2029\u0085\v\f]/;
+var flat2 = (text) => text.replace(/\s+/g, " ").trim();
+var styleOf = ({ text: _text, ...style }) => style;
+var sameStyle = (a, b) => a.token === b.token && a.bold === b.bold && a.dim === b.dim;
+function merged2(segments) {
+  const out = [];
+  for (const segment of segments) {
+    if (segment.text === "") continue;
+    const last = out.at(-1);
+    if (last !== void 0 && sameStyle(styleOf(last), styleOf(segment))) out[out.length - 1] = { ...last, text: last.text + segment.text };
+    else out.push({ ...segment });
+  }
+  return out;
+}
+function splitAt(text, room) {
+  const chars = graphemes(text);
+  let head = chars[0] ?? "";
+  let index = 1;
+  while (index < chars.length && cellWidth(head + chars[index]) <= room) head += chars[index++];
+  return [head, chars.slice(index).join("")];
+}
+function wrapSegments(segments, width, indent = 1, hang = indent) {
+  const clean = segments.map((segment) => ({ ...segment, text: segment.text.replace(/\t/g, "  ").replace(new RegExp(LINE_BREAK.source, "g"), " ") }));
+  if (indent + clean.reduce((sum, segment) => sum + cellWidth(segment.text), 0) <= width) return [{ segments: merged2([{ text: " ".repeat(indent) }, ...clean]) }];
+  const words = clean.flatMap((segment) => segment.text.split(/\s+/).filter((word) => word !== "").map((word) => ({ ...segment, text: word })));
+  const lines = [];
+  let line = [];
+  let used = 0;
+  const room = () => width - (lines.length === 0 ? indent : hang);
+  const flush = () => {
+    lines.push(line);
+    line = [];
+    used = 0;
+  };
+  for (const word of words) {
+    let rest = word.text;
+    while (rest !== "") {
+      const gap = line.length > 0 ? 1 : 0;
+      if (used + gap + cellWidth(rest) <= room()) {
+        const last = line.at(-1);
+        if (last !== void 0) line.push({ ...sameStyle(styleOf(last), styleOf(word)) ? styleOf(word) : {}, text: " " });
+        line.push({ ...word, text: rest });
+        used += gap + cellWidth(rest);
+        rest = "";
+      } else if (line.length > 0) {
+        flush();
+      } else {
+        const [head, tail] = splitAt(rest, room());
+        line.push({ ...word, text: head });
+        rest = tail;
+        flush();
+      }
+    }
+  }
+  if (line.length > 0) lines.push(line);
+  return lines.map((parts, index) => ({ segments: merged2([{ text: " ".repeat(index === 0 ? indent : hang) }, ...parts]) }));
+}
+function textLines(text, width, indent, style = {}) {
+  const out = [];
+  for (const source of text.split(LINE_BREAK)) {
+    if (source.trim() === "") {
+      if (out.length > 0 && out.at(-1).segments.length > 0) out.push({ segments: [] });
+      continue;
+    }
+    out.push(...wrapSegments([{ ...style, text: source.trimEnd() }], width, indent));
+  }
+  while (out.at(-1)?.segments.length === 0) out.pop();
+  return out;
+}
+function keptLines(text, width, indent, isTrimmed = false) {
+  const rows = text.replace(/\t/g, "  ").split(LINE_BREAK).map((row) => isTrimmed ? row.trimEnd() : row);
+  while (rows.length > 0 && rows.at(-1).trim() === "") rows.pop();
+  const pad = " ".repeat(indent);
+  return rows.flatMap((row) => {
+    if (row === "") return [{ segments: [] }];
+    const pieces = [];
+    let rest = row;
+    while (rest !== "") {
+      const [head, tail] = splitAt(rest, width - indent);
+      pieces.push(head);
+      rest = tail;
+    }
+    return pieces.map((piece) => ({ segments: [{ text: pad + piece }] }));
+  });
+}
+var screenLines = (text, width) => keptLines(text, width, 1, true);
+
+// src/god/view/confirm.ts
+var MULTI_DIALOG = "This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.";
+var MULTI_DIALOG_NO_CMUX = "This dialog has more than 1 question or more than 1 choice. Answer it in its tab.";
+var REFUSAL_TEXT = {
+  "no-cmux": "cmux is not on this machine, so the pane sent nothing.",
+  "no-tab": "The session has no cmux tab, so the pane sent nothing.",
+  "stale-screen": "The screen or the session facts are too old, so the pane sent nothing. Press y again.",
+  "screen-changed": "The screen or the session changed, so the pane sent nothing.",
+  "label-not-found": "The screen shows no option with the exact label Yes or No, so the pane sent nothing.",
+  "multi-question": MULTI_DIALOG,
+  empty: "The text is empty, so the pane sent nothing.",
+  "control-char": "The text has a control character, so the pane sent nothing.",
+  "backslash-escape": "A line ends with a backslash, or holds \\n, \\r or \\t, so the pane sent nothing."
+};
+var NOT_DELIVERED = "Not delivered. Check the Screen tab.";
+var PEER_NOT_DELIVERED = "The peer message did not arrive.";
+var SEND_FAILED = "A cmux command failed, so the keys after it did not go out. Check the Screen tab.";
+function outcomeLines(outcome, width) {
+  const name = flat2(outcome.intent.target.name);
+  switch (outcome.status) {
+    case "refused":
+      return wrapSegments([{ text: REFUSAL_TEXT[outcome.refusal], token: outcome.refusal === "stale-screen" ? "--warn" : "--bad" }], width);
+    case "not-delivered":
+      return wrapSegments([{ text: outcome.intent.kind === "peer" ? PEER_NOT_DELIVERED : NOT_DELIVERED, token: "--warn" }], width);
+    case "failed":
+      return wrapSegments([{ text: SEND_FAILED, token: "--bad" }], width);
+    case "sent":
+      return wrapSegments([{ text: `Sent to ${name}. The next refresh checks it.` }], width);
+    case "delivered":
+      return wrapSegments([{ text: `Delivered to ${name}.`, token: "--good" }], width);
+  }
+}
+
+// src/god/view/detail-tabs.ts
+var NO_HISTORY = "The part of the transcript that the pane read has no turn.";
+var NO_AGENTS = "This session has no subagent and no background task.";
+var SCREEN_NO_CMUX = "cmux is not on this machine, so the pane cannot show the screen.";
+var SCREEN_NO_TAB = "This session has no cmux tab, so the pane cannot show its screen.";
+var SCREEN_READING = "Reading the screen.";
+var RECAP_HINT = "Press x to make a Recap. The Recap is model text, and it uses tokens.";
+var RECAP_RUNNING = "The model writes the Recap.";
+var MODEL_TEXT = "model text";
+var RECAP_FAILURE = {
+  "api-error": "The model call failed. Press x to try again.",
+  "empty-reply": "The model gave no text. Press x to try again.",
+  aborted: "The Recap stopped before its end. Press x to try again.",
+  refused: "Claude Code refused the model call. Press x to try again."
+};
+var TEXT_INDENT = 3;
+var optionKey = (digit) => `option:${digit}`;
+function ago(at, now) {
+  if (at === void 0) return "";
+  const time = levelTime(at, now);
+  return time === "now" ? time : `${time} ago`;
+}
+function waitText(ms) {
+  const seconds = Math.floor(Math.max(0, ms) / 1e3);
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return minutes % 60 === 0 ? `${hours}h` : `${hours}h ${minutes % 60}m`;
+  const days = Math.floor(hours / 24);
+  return hours % 24 === 0 ? `${days}d` : `${days}d ${hours % 24}h`;
+}
+var waitChip = ({ session, now }) => session.level === "needs-you" ? [{ text: ` \xB7 waits ${waitText(now - session.levelSince)}`, ...DIM }] : [];
+var message = (text, width, style = {}) => wrapSegments([{ ...style, text }], width);
+function labelLine(width, label, text = "", time = "") {
+  return wrapSegments([{ bold: true, ...label }, ...text === "" ? [] : [{ text: `  ${text}` }], ...time === "" ? [] : [{ text: `  ${time}`, ...DIM }]], width, 1, TEXT_INDENT);
+}
+function questionLines(input, question, index, hasDigits) {
+  const { width } = input;
+  const lines = [...wrapSegments([{ text: `\u2610 ${flat2(question.header)}`, bold: true }, ...index === 0 ? waitChip(input) : []], width), ...textLines(question.text, width, 1)];
+  const options = [];
+  question.options.forEach((option, at) => {
+    const digit = at + 1;
+    const keyed = hasDigits && digit <= 9;
+    const mark2 = keyed ? { text: String(digit), ...input.isCmuxMissing ? DIM : { bold: true } } : { text: hasDigits ? String(digit) : "\u2022", ...DIM };
+    const about = option.description === void 0 || flat2(option.description) === "" ? [] : [{ text: `  ${flat2(option.description)}`, ...DIM }];
+    const [first, ...rest] = wrapSegments([mark2, { text: ` ${flat2(option.label)}` }, ...about], width, 1, TEXT_INDENT);
+    if (!keyed) {
+      lines.push(first, ...rest);
+      return;
+    }
+    lines.push({ ...first, key: optionKey(digit) }, ...rest);
+    options.push({ key: optionKey(digit), digit, isOff: input.isCmuxMissing });
+  });
+  return { lines, options };
+}
+function openQuestionLines(input) {
+  const questions = input.session.transcript?.openQuestion?.questions ?? [];
+  const isMulti = questions.length > 1;
+  const isMultiSelect = questions.some((question) => question.multiSelect);
+  const parts = questions.map((question, index) => questionLines(input, question, index, !isMulti && !isMultiSelect));
+  const lines = parts.flatMap((part) => part.lines);
+  if (isMulti || isMultiSelect) lines.push(...message(input.isCmuxMissing ? MULTI_DIALOG_NO_CMUX : MULTI_DIALOG, input.width));
+  return { lines, options: parts.flatMap((part) => part.options) };
+}
+function nowContent(input) {
+  const { session, width, now } = input;
+  const transcript = session.transcript;
+  if (transcript === void 0) return { lines: message(NO_TRANSCRIPT, width), options: [] };
+  const activity = transcript.activity;
+  let top = { lines: [], options: [] };
+  if (transcript.openQuestion !== void 0 && transcript.openQuestion.questions.length > 0) top = openQuestionLines(input);
+  else if (session.level === "needs-you" && session.waitingFor === "permission prompt" && activity?.isOpen === true) {
+    const request = [...wrapSegments([{ text: "\u2610 Permission", bold: true }, ...waitChip(input)], width), ...wrapSegments([{ text: flat2(activity.text) }], width)];
+    const toolInput = activity.input === void 0 ? labelLine(width, { text: "Input" }, "none") : [...labelLine(width, { text: "Input" }), ...keptLines(activity.input, width, TEXT_INDENT)];
+    top = { lines: [...request, ...toolInput], options: [] };
+  } else {
+    if (activity !== void 0) top.lines.push(...labelLine(width, { text: activity.isOpen ? "Runs" : "Last tool" }, flat2(activity.text), ago(activity.at, now)));
+    const error = transcript.errorTail;
+    if (error !== void 0) top.lines.push(...labelLine(width, { text: error.kind === "api-error" ? "API error" : "API retry", token: "--warn" }, flat2(error.text)));
+    if (session.level === "needs-you") top.lines.push(...session.waitingFor === void 0 ? message(WAITS, width) : labelLine(width, { text: "Waits for" }, flat2(session.waitingFor)));
+  }
+  const reply = [...labelLine(width, { text: "Last reply" }), ...textLines(transcript.lastReply ?? NO_REPLY, width, TEXT_INDENT)];
+  return { lines: [...top.lines, ...reply], options: top.options };
+}
+function historyLines({ session, width, now }) {
+  const history = session.transcript?.history ?? [];
+  if (history.length === 0) return message(NO_HISTORY, width);
+  return [...history].reverse().flatMap((turn) => [
+    ...turn.prompt === void 0 ? [] : [...labelLine(width, { text: "You" }, "", ago(turn.promptAt, now)), ...textLines(turn.prompt, width, TEXT_INDENT)],
+    ...labelLine(width, { text: "Reply" }, "", ago(turn.replyAt, now)),
+    ...textLines(turn.reply ?? NO_REPLY, width, TEXT_INDENT)
+  ]);
+}
+var newestFirst = (a, b) => (b.at ?? 0) - (a.at ?? 0);
+function agentRows(session) {
+  const tasks = session.transcript?.agents ?? [];
+  const typeOf = (task) => task.agentType ?? session.subagents.find((file) => file.toolUseId === task.toolUseId)?.agentType;
+  const row = (task) => {
+    const type = typeOf(task);
+    const at = task.isRunning ? task.startedAt : task.endedAt ?? task.startedAt;
+    return { status: task.isRunning ? "runs" : "ended", text: task.text, ...type === void 0 ? {} : { type }, ...at === void 0 ? {} : { at } };
+  };
+  const named = new Set(tasks.map((task) => task.toolUseId));
+  const older = session.subagents.filter((file) => file.toolUseId === void 0 || !named.has(file.toolUseId)).map((file) => ({ status: "older", text: file.description ?? file.agentId, ...file.agentType === void 0 ? {} : { type: file.agentType }, at: file.mtimeMs }));
+  return [...tasks.filter((task) => task.isRunning).map(row).sort(newestFirst), ...tasks.filter((task) => !task.isRunning).map(row).sort(newestFirst), ...older.sort(newestFirst)];
+}
+function agentLines({ session, width, now }) {
+  const rows = agentRows(session);
+  if (rows.length === 0) return message(NO_AGENTS, width);
+  return rows.flatMap((row) => {
+    const status = { text: row.status, ...row.status === "runs" ? { bold: true } : DIM };
+    const parts = [status, { text: " ".repeat(7 - row.status.length) }, { text: flat2(row.text) }];
+    if (row.type !== void 0 && flat2(row.type) !== "") parts.push({ text: `  ${flat2(row.type)}` });
+    const time = ago(row.at, now);
+    if (time !== "") parts.push({ text: `  ${time}`, ...DIM });
+    return wrapSegments(parts, width, 1, 8);
+  });
+}
+function screenTabLines({ session, width, isCmuxMissing, screen, outcome }) {
+  if (isCmuxMissing) return message(SCREEN_NO_CMUX, width);
+  if (session.tab === void 0) return message(SCREEN_NO_TAB, width);
+  const own = outcome !== void 0 && outcome.intent.target.sessionId === session.sessionId ? outcome : void 0;
+  const notice = own !== void 0 && (own.status === "refused" || own.status === "not-delivered" || own.status === "failed") ? outcomeLines(own, width) : [];
+  const fresh = own !== void 0 && "screen" in own ? own.screen : void 0;
+  const reads = [screen, fresh].filter((read2) => read2 !== void 0 && read2.sessionId === session.sessionId);
+  const newest = reads.sort((a, b) => b.readAt - a.readAt)[0];
+  return [...notice, ...newest === void 0 ? message(SCREEN_READING, width) : screenLines(newest.text, width)];
+}
+var tokenCount = (tokens) => `${String(Math.max(0, Math.round(tokens))).replace(/\B(?=(\d{3})+(?!\d))/g, ",")} tokens`;
+function recapLines({ session, width, recap }) {
+  if (recap === void 0 || recap.sessionId !== session.sessionId) return message(RECAP_HINT, width);
+  if (recap.status === "running") return message(RECAP_RUNNING, width);
+  const count2 = message(tokenCount(recap.tokens), width, DIM);
+  if (recap.status === "failed") return [...message(RECAP_FAILURE[recap.reason], width, { token: "--warn" }), ...count2];
+  return [...message(MODEL_TEXT, width, DIM), ...textLines(recap.text, width, TEXT_INDENT), ...count2];
+}
+function tabContent(tab, input) {
+  if (tab === "now") return nowContent(input);
+  const lines = tab === "history" ? historyLines(input) : tab === "agents" ? agentLines(input) : tab === "screen" ? screenTabLines(input) : recapLines(input);
+  return { lines, options: [] };
+}
+
+// src/god/view/states.ts
+var STATE_TEXT = {
+  reading: "Reading sessions.",
+  "no-sessions": "No other Claude Code session runs now.",
+  "no-repo-set": NO_REPO_SET,
+  "no-repo-match": "No session of the selected repos runs now. Press f to show every session."
+};
+var CANNOT_DRAW = {
+  "too-narrow": `The pane is too narrow. Make it ${BOARD_COLUMNS} columns or wider.`,
+  "too-short": "The pane is too short. Make it taller.",
+  failed: "The pane cannot draw the board. Run /god to open it again."
+};
+function boardStateOf(snapshot) {
+  if (snapshot === void 0 || !snapshot.firstRefreshDone) return "reading";
+  if (snapshot.sessions.length === 0) return "no-sessions";
+  if (snapshot.mode === "repos" && snapshot.repos.length === 0) return "no-repo-set";
+  if (snapshot.groups.length === 0) return "no-repo-match";
+  return void 0;
+}
+function messageLines(text, width) {
+  return wrapWords(text, Math.max(1, width - 1)).map((line) => ({ segments: [{ text: ` ${line}` }] }));
+}
+
+// src/god/view/detail.ts
+var DETAIL_TABS = ["now", "history", "agents", "screen", "recap"];
+var TAB_LABEL = { now: "Now", history: "History", agents: "Agents", screen: "Screen", recap: "Recap" };
+var FLAG_LABEL = { "same-tree": "SAME TREE", "same-files": "SAME FILES", "same-repo": "SAME REPO" };
+var nextTab = (tab) => DETAIL_TABS[(DETAIL_TABS.indexOf(tab) + 1) % DETAIL_TABS.length];
+function contextPercent(context) {
+  if (context === void 0 || context.window <= 0) return void 0;
+  return `${context.isEstimated ? "~" : ""}${Math.round(context.tokens / context.window * 100)}%`;
+}
+var newestPr = (links) => [...links].reverse().find((link) => link.number !== void 0)?.number;
+function tabTitle(session) {
+  const tab = session.tab;
+  return tab === void 0 ? "" : [tab.workspaceTitle, tab.surfaceTitle ?? ""].map(flat2).filter((title) => title !== "").join(" \u203A ");
+}
+function headLines(session, width) {
+  const second = tabTitle(session) || flat2(session.transcript?.title ?? "");
+  const title = wrapSegments([{ text: flat2(session.name), bold: true }, ...second === "" ? [] : [{ text: ` \xB7 ${second}` }]], width);
+  const repo = session.repo === void 0 ? NO_REPO : `${flat2(session.repo.name)}${session.repo.isWorktree ? " (worktree)" : ""}`;
+  const facts = [repo, flat2(session.transcript?.branch ?? ""), flat2(session.transcript?.permissionMode ?? "")].filter((fact) => fact !== "");
+  return [...title, ...wrapSegments([{ text: facts.join(" \xB7 ") }], width)];
+}
+function tabRowsOf(open, width) {
+  const rows = [];
+  let used = 0;
+  for (const tab of DETAIL_TABS) {
+    const cell = { tab, key: `tab:${tab}`, segments: [tab === open ? { text: `[${TAB_LABEL[tab]}]`, ...ACCENT, bold: true } : { text: TAB_LABEL[tab] }] };
+    const cellWidthNow = cellWidth(cell.segments[0].text);
+    const row = rows.at(-1);
+    if (row !== void 0 && used + 2 + cellWidthNow <= width) {
+      row.push(cell);
+      used += 2 + cellWidthNow;
+    } else {
+      rows.push([cell]);
+      used = 1 + cellWidthNow;
+    }
+  }
+  return rows;
+}
+var tabGap = (index) => index === 0 ? " " : "  ";
+var tabLine = (row) => ({ segments: row.flatMap((cell, index) => [{ text: tabGap(index) }, ...cell.segments]) });
+function footLines(session, width) {
+  const transcript = session.transcript;
+  const parts = [];
+  const percent = contextPercent(transcript?.context);
+  if (percent !== void 0 && transcript?.context !== void 0) {
+    const used = Math.min(10, Math.max(0, Math.round(transcript.context.tokens / transcript.context.window * 10)));
+    parts.push([{ text: "ctx", ...DIM }, { text: ` ${"\u25B0".repeat(used)}` }, { text: "\u25B1".repeat(10 - used), ...DIM }, { text: ` ${percent}` }]);
+  }
+  const running = (transcript?.agents ?? []).filter((task) => task.isRunning).length;
+  if (running > 0) parts.push([{ text: `${running} ${running === 1 ? "agent" : "agents"}` }]);
+  const pr = newestPr(transcript?.prLinks ?? []);
+  if (pr !== void 0) parts.push([{ text: `PR #${pr}` }]);
+  const context = parts.length === 0 ? [] : wrapSegments(parts.flatMap((part, index) => index === 0 ? part : [{ text: " \xB7 ", ...DIM }, ...part]), width);
+  const flags = session.flags.flatMap(
+    (flag) => wrapSegments([{ text: `${FLAG_LABEL[flag.kind]}:`, ...FLAG_PAINT[flag.kind], bold: true }, { text: ` ${flat2(flag.otherName)}${flag.file === void 0 ? "" : ` (${flat2(flag.file)})`}` }], width, 1, 3)
+  );
+  return [...context, ...flags];
+}
+function detailView(input) {
+  const { session, width, rows } = input;
+  const head = headLines(session, width);
+  const tabRows = tabRowsOf(input.tab, width);
+  const foot = footLines(session, width);
+  const content = input.placeholder === void 0 ? tabContent(input.tab, input) : { lines: messageLines(input.placeholder, width), options: [] };
+  const room = rows - head.length - tabRows.length - foot.length;
+  if (content.lines.length > room && room < MIN_WINDOW) return { kind: "too-short", lines: messageLines(CANNOT_DRAW["too-short"], width) };
+  const { lines: body, window } = windowOf2(content.lines, room, input.scroll);
+  const shown = new Set(body.flatMap((line) => line.key === void 0 ? [] : [line.key]));
+  return { kind: "detail", head, tabRows, body, foot, options: content.options.filter((option) => shown.has(option.key)), window };
+}
+function detailLines(view) {
+  if (view.kind === "too-short") return [...view.lines];
+  return [...view.head, ...view.tabRows.map(tabLine), ...view.body, ...view.foot];
+}
+
+// src/god/detail-control.ts
+var detailAfterNextTab = (state) => ({ ...state, tab: nextTab(state.tab), scroll: 0 });
+var detailAfterTab = (state, tab) => tab === state.tab ? state : { ...state, tab, scroll: 0 };
+var detailAfterScroll = (state, scroll) => ({ ...state, scroll });
+var detailAfterSelect = (state, before, after) => before === after ? state : { ...state, scroll: 0 };
+function detailAfterRowPress(state, key, snapshot, layout) {
+  const isSession = snapshot?.sessions.some((session) => session.sessionId === key) === true;
+  return layout.kind === "narrow" && isSession ? { ...state, isOpen: true, scroll: 0 } : state;
+}
+var detailAfterBack = (state) => ({ ...state, isOpen: false });
+
 // src/god/host.ts
 var ALLOWED_COMMANDS = ["claude", "cmux", "ps", "git", "tail", "head", "stat"];
 var HOST_TIMEOUT_MS = 5e3;
@@ -2693,75 +3142,126 @@ function engineHost($) {
 
 // src/god/state.tsx
 import { atom } from "claude-code";
+
+// src/god/view/detail-pane.ts
+var DEFAULT_DETAIL = { tab: "now", scroll: 0, isOpen: false };
+var NO_DETAIL = "Select a session on the board to show its detail.";
+var TAB_NOT_IN_BUILD = {
+  screen: "The Screen tab is not in this build.",
+  recap: "The Recap tab is not in this build."
+};
+function scrollTargets(view) {
+  if (view.kind !== "detail") return {};
+  const { window } = view;
+  return {
+    ...window.first > 0 ? { [SCROLL_KEYS.up]: scrollBy(window, "up") } : {},
+    ...window.first + window.shown < window.total ? { [SCROLL_KEYS.down]: scrollBy(window, "down") } : {}
+  };
+}
+function paneDetail(input) {
+  const { snapshot, width } = input;
+  const session = snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey);
+  if (session === void 0) return { kind: "none", lines: messageLines(NO_DETAIL, width) };
+  const placeholder = TAB_NOT_IN_BUILD[input.state.tab];
+  const view = detailView({
+    session,
+    width,
+    rows: input.rows,
+    now: input.now,
+    tab: input.state.tab,
+    scroll: input.state.scroll,
+    isCmuxMissing: snapshot.sources.cmux.status === "missing",
+    ...placeholder === void 0 ? {} : { placeholder }
+  });
+  return { kind: "session", sessionId: session.sessionId, view, scrollTo: scrollTargets(view) };
+}
+function paneDetailLines(detail) {
+  return detail.kind === "none" ? [...detail.lines] : detailLines(detail.view);
+}
+
+// src/god/state.tsx
 var BOARD = atom({ plugin: "orangu-god", key: "board" }, null);
 var SELECTED = atom({ plugin: "orangu-god", key: "selected" }, "");
 var OPEN_GROUPS = atom({ plugin: "orangu-god", key: "openGroups" }, []);
 var THEME = atom({ plugin: "orangu-god", key: "theme" }, "dark");
-
-// src/god/view/states.ts
-var STATE_TEXT = {
-  reading: "Reading sessions.",
-  "no-sessions": "No other Claude Code session runs now.",
-  "no-repo-set": NO_REPO_SET,
-  "no-repo-match": "No session of the selected repos runs now. Press f to show every session."
-};
-var CANNOT_DRAW = {
-  "too-narrow": `The pane is too narrow. Make it ${BOARD_COLUMNS} columns or wider.`,
-  "too-short": "The pane is too short. Make it taller.",
-  failed: "The pane cannot draw the board. Run /god to open it again."
-};
-function boardStateOf(snapshot) {
-  if (snapshot === void 0 || !snapshot.firstRefreshDone) return "reading";
-  if (snapshot.sessions.length === 0) return "no-sessions";
-  if (snapshot.mode === "repos" && snapshot.repos.length === 0) return "no-repo-set";
-  if (snapshot.groups.length === 0) return "no-repo-match";
-  return void 0;
-}
-function messageLines(text, width) {
-  return wrapWords(text, Math.max(1, width - 1)).map((line) => ({ segments: [{ text: ` ${line}` }] }));
-}
+var DETAIL = atom({ plugin: "orangu-god", key: "detail" }, DEFAULT_DETAIL);
 
 // src/god/view/frame.ts
-var DETAIL_PLACEHOLDER = "The detail of the selected session is not in this build.";
 var BLANK = { segments: [{ text: " " }] };
-var padded = (lines, height) => [...lines, ...Array.from({ length: height - lines.length }, () => BLANK)];
-function wideColumns(board, detail) {
-  const height = Math.max(board.length, detail.length);
+var blanks = (count2) => Array.from({ length: Math.max(0, count2) }, () => BLANK);
+function wideColumns(board, detailHeight) {
+  const height = Math.max(board.length, detailHeight);
   return {
-    board: padded(board, height),
+    board: [...board, ...blanks(height - board.length)],
     rule: Array.from({ length: height }, () => ({ segments: [{ text: "\u2502", ...DIM }] })),
-    detail: padded(detail, height)
+    detailPad: blanks(height - detailHeight)
   };
 }
-function detailPlaceholder(width) {
-  return messageLines(DETAIL_PLACEHOLDER, width);
+
+// src/god/ui/line.tsx
+function segmentText(ui, segment, theme) {
+  const { Text } = ui;
+  return /* @__PURE__ */ h(Text, { ...segment.token === void 0 ? {} : { color: colorOf(segment.token, theme) }, ...segment.bold ? { bold: true } : {}, ...segment.dim ? { dimColor: true } : {} }, segment.text);
+}
+function keySegment(ui, segment, theme, keys) {
+  const { Button } = ui;
+  const action = segment.press === void 0 ? void 0 : keys[segment.press.hotkey];
+  if (segment.press === void 0 || action === void 0) return segmentText(ui, segment, theme);
+  return /* @__PURE__ */ h(Button, { key: `key:${segment.press.hotkey}`, hotkey: segment.press.hotkey, plain: true, label: segment.press.label, ...segment.dim ? { dimColor: true } : {}, onPress: action });
+}
+function drawLine(ui, line, theme, onKeyed, keys) {
+  const { Box, Text, Button } = ui;
+  const key = line.key;
+  if (key !== void 0) {
+    return /* @__PURE__ */ h(Button, { key, plain: true, onPress: () => onKeyed(key) }, line.segments.map((segment) => segmentText(ui, segment, theme)));
+  }
+  if (line.segments.some((segment) => segment.press !== void 0)) return /* @__PURE__ */ h(Box, { flexDirection: "row" }, line.segments.map((segment) => keySegment(ui, segment, theme, keys)));
+  return /* @__PURE__ */ h(Text, null, line.segments.map((segment) => segmentText(ui, segment, theme)));
+}
+
+// src/god/ui/detail.tsx
+function detailRows(ui, detail, theme, actions) {
+  const { Box, Text, Button } = ui;
+  const text = (line) => drawLine(ui, line, theme, () => void 0, {});
+  if (detail.kind === "none") return detail.lines.map(text);
+  const view = detail.view;
+  if (view.kind === "too-short") return view.lines.map(text);
+  const scrollKeys = Object.fromEntries(
+    Object.entries(detail.scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]])
+  );
+  const digits = new Map(view.options.map((option) => [option.key, option.digit]));
+  const onOption = (key) => {
+    const digit = digits.get(key);
+    if (digit !== void 0) actions.onOption(digit);
+  };
+  const tabRow = (row) => /* @__PURE__ */ h(Box, { flexDirection: "row" }, row.flatMap((cell, index) => [
+    /* @__PURE__ */ h(Text, null, tabGap(index)),
+    /* @__PURE__ */ h(Button, { key: cell.key, plain: true, onPress: () => actions.onTab(cell.tab) }, cell.segments.map((segment) => segmentText(ui, segment, theme)))
+  ]));
+  return [...view.head.map(text), ...view.tabRows.map(tabRow), ...view.body.map((line) => drawLine(ui, line, theme, onOption, scrollKeys)), ...view.foot.map(text)];
 }
 
 // src/god/ui/board.tsx
 function drawPane(ui, view, theme, actions) {
-  const { Box, Text, Button } = ui;
-  const styled = (segment) => /* @__PURE__ */ h(Text, { ...segment.token === void 0 ? {} : { color: colorOf(segment.token, theme) }, ...segment.bold ? { bold: true } : {}, ...segment.dim ? { dimColor: true } : {} }, segment.text);
-  const keyButton = (segment) => {
-    const action = segment.press === void 0 ? void 0 : actions.keys[segment.press.hotkey];
-    if (segment.press === void 0 || action === void 0) return styled(segment);
-    return /* @__PURE__ */ h(Button, { key: `key:${segment.press.hotkey}`, hotkey: segment.press.hotkey, plain: true, label: segment.press.label, ...segment.dim ? { dimColor: true } : {}, onPress: action });
+  const { Box } = ui;
+  const more = view.kind === "board" ? view.more : {};
+  const onKeyed = (key) => {
+    const target = more[key];
+    if (target === void 0) actions.onRow(key);
+    else actions.onMore(target);
   };
-  const row = (line) => {
-    const key = line.key;
-    if (key !== void 0) {
-      return /* @__PURE__ */ h(Button, { key, plain: true, onPress: () => actions.onRow(key) }, line.segments.map(styled));
-    }
-    if (line.segments.some((segment) => segment.press !== void 0)) return /* @__PURE__ */ h(Box, { flexDirection: "row" }, line.segments.map(keyButton));
-    return /* @__PURE__ */ h(Text, null, line.segments.map(styled));
-  };
+  const row = (line) => drawLine(ui, line, theme, onKeyed, actions.keys);
   if (view.kind === "cannot-draw") return /* @__PURE__ */ h(Box, { flexDirection: "column" }, view.lines.map(row));
   if (view.kind === "message") {
     const after = [...view.bottomRule === void 0 ? [] : [view.bottomRule], ...view.keys ?? []];
     return /* @__PURE__ */ h(Box, { flexDirection: "column" }, [...view.header, view.topRule, ...view.body, ...after].map(row));
   }
-  const { layout } = view;
-  const columns = layout.kind === "wide" ? wideColumns(view.body, detailPlaceholder(layout.detailColumns)) : void 0;
-  const body = layout.kind === "wide" && columns !== void 0 ? /* @__PURE__ */ h(Box, { flexDirection: "row" }, /* @__PURE__ */ h(Box, { flexDirection: "column", width: layout.boardColumns }, columns.board.map(row)), /* @__PURE__ */ h(Box, { flexDirection: "column", width: 1 }, columns.rule.map(row)), /* @__PURE__ */ h(Box, { flexDirection: "column", width: layout.detailColumns }, columns.detail.map(row))) : view.body.map(row);
+  if (view.kind === "detail") {
+    return /* @__PURE__ */ h(Box, { flexDirection: "column" }, view.header.map(row), row(view.topRule), detailRows(ui, view.detail, theme, actions.detail), row(view.bottomRule), view.keys.map(row));
+  }
+  const { layout, detail } = view;
+  const columns = layout.kind === "wide" && detail !== void 0 ? wideColumns(view.body, paneDetailLines(detail).length) : void 0;
+  const body = layout.kind === "wide" && detail !== void 0 && columns !== void 0 ? /* @__PURE__ */ h(Box, { flexDirection: "row" }, /* @__PURE__ */ h(Box, { flexDirection: "column", width: layout.boardColumns }, columns.board.map(row)), /* @__PURE__ */ h(Box, { flexDirection: "column", width: 1 }, columns.rule.map(row)), /* @__PURE__ */ h(Box, { flexDirection: "column", width: layout.detailColumns }, [...detailRows(ui, detail, theme, actions.detail), ...columns.detailPad.map(row)])) : view.body.map(row);
   return /* @__PURE__ */ h(Box, { flexDirection: "column" }, view.header.map(row), row(view.topRule), body, row(view.bottomRule), view.keys.map(row));
 }
 
@@ -2811,44 +3311,6 @@ function headerLines(input) {
   return flowItems(items, width);
 }
 
-// src/god/view/keys.ts
-var KEY_ROW_PROMPT = "ctrl+x tab: keys to the pane";
-var KEY_ROW_NO_CMUX = "Jump, answer and reply are off: cmux is not on this machine.";
-var MODE_KEY_LABEL = { all: "repos", repos: "all" };
-var GROUP_KEY_LABEL = "group";
-var answerKeys = (count2) => {
-  if (count2 === void 0 || count2 < 1) return "1-9";
-  const last = Math.min(9, count2);
-  return last === 1 ? "1" : `1-${last}`;
-};
-function hintItem(hint) {
-  if (hint.hotkey !== void 0) {
-    const pressed = { text: `${hint.hotkey}: ${hint.label}`, press: { hotkey: hint.hotkey, label: hint.label } };
-    return [hint.isOff ? { ...pressed, ...DIM } : pressed];
-  }
-  return hint.isOff ? [{ text: hint.keys, ...DIM }, { text: ` ${hint.label}`, ...DIM }] : [{ text: hint.keys, bold: true }, { text: ` ${hint.label}` }];
-}
-function keyRow(input) {
-  const off2 = input.isCmuxMissing;
-  const hints = [
-    { keys: "\u2191\u2193", label: "select", isOff: false },
-    { keys: "j", label: "jump", hotkey: "j", isOff: off2 },
-    { keys: "n", label: "next", hotkey: "n", isOff: false },
-    { keys: answerKeys(input.answerCount), label: "answer", isOff: off2 },
-    { keys: "r", label: "reply", hotkey: "r", isOff: off2 },
-    { keys: "m", label: "message", hotkey: "m", isOff: false },
-    { keys: "t", label: "tab", hotkey: "t", isOff: false },
-    { keys: "s", label: "sound", hotkey: "s", isOff: false },
-    { keys: "f", label: MODE_KEY_LABEL[input.mode], hotkey: "f", isOff: false },
-    { keys: "g", label: GROUP_KEY_LABEL, hotkey: "g", isOff: false }
-  ];
-  const items = hints.map(hintItem);
-  if (input.promptHoldsKeys) items.push([{ text: KEY_ROW_PROMPT, ...DIM }]);
-  const lines = flowItems(items, input.width);
-  if (off2) lines.push(...wrapWords(KEY_ROW_NO_CMUX, input.width - 1).map((text) => ({ segments: [{ text: ` ${text}` }] })));
-  return { hints, lines };
-}
-
 // src/god/view/pane.ts
 var WIDE_FROM_COLUMNS = 90;
 function layoutOf(bodyColumns) {
@@ -2871,31 +3333,43 @@ function paneView(input) {
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView("too-narrow", bodyColumns);
   const header = headerLines({ ...snapshot === void 0 ? {} : { snapshot }, width: bodyColumns, now });
   const state = boardStateOf(snapshot);
-  const keysOf = (board2) => keyRow({
+  const keysOf = (board2, isDetail2 = false) => keyRow({
     width: bodyColumns,
     isCmuxMissing: board2.sources.cmux.status === "missing",
     promptHoldsKeys: input.promptHoldsKeys,
     answerCount: answerCountOf(board2, input.selectedKey),
-    mode: board2.mode
+    mode: board2.mode,
+    isDetail: isDetail2
   });
   if (state !== void 0 || snapshot === void 0) {
-    const body = messageLines(STATE_TEXT[state ?? "reading"], bodyColumns);
+    const body2 = messageLines(STATE_TEXT[state ?? "reading"], bodyColumns);
     const keys2 = (state === "no-repo-match" || state === "no-repo-set") && snapshot !== void 0 ? keysOf(snapshot).lines : [];
-    if (header.length + 1 + body.length + (keys2.length > 0 ? 1 + keys2.length : 0) > bodyRows) return cannotDrawView("too-short", bodyColumns);
-    const message = { kind: "message", header, topRule: ruleLine(bodyColumns), body };
-    return keys2.length > 0 ? { ...message, bottomRule: ruleLine(bodyColumns), keys: keys2 } : message;
+    if (header.length + 1 + body2.length + (keys2.length > 0 ? 1 + keys2.length : 0) > bodyRows) return cannotDrawView("too-short", bodyColumns);
+    const message2 = { kind: "message", header, topRule: ruleLine(bodyColumns), body: body2 };
+    return keys2.length > 0 ? { ...message2, bottomRule: ruleLine(bodyColumns), keys: keys2 } : message2;
   }
   const layout = layoutOf(bodyColumns);
-  const keys = keysOf(snapshot);
+  const detailState = input.detail ?? DEFAULT_DETAIL;
+  const isDetail = layout.kind === "narrow" && detailState.isOpen;
+  const keys = keysOf(snapshot, isDetail);
   const room = bodyRows - header.length - 2 - keys.lines.length;
+  const selection = input.selectedKey === void 0 ? {} : { selectedKey: input.selectedKey };
+  const detailOf = (width) => paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState });
+  if (isDetail) {
+    if (room < MIN_WINDOW_ROWS) return cannotDrawView("too-short", bodyColumns);
+    return { kind: "detail", header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), keys: keys.lines, hints: keys.hints };
+  }
   const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey };
   if (room < MIN_WINDOW_ROWS && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length > Math.max(0, room)) return cannotDrawView("too-short", bodyColumns);
+  const { lines: body, more } = boardWindow({ ...board, rows: room });
   return {
     kind: "board",
     layout,
     header,
     topRule: ruleLine(bodyColumns, layout, "\u252C"),
-    body: boardLines({ ...board, rows: room }),
+    body,
+    more,
+    ...layout.kind === "wide" ? { detail: detailOf(layout.detailColumns) } : {},
     bottomRule: ruleLine(bodyColumns, layout, "\u2534"),
     keys: keys.lines,
     hints: keys.hints
@@ -2905,6 +3379,7 @@ function paneView(input) {
 // src/god/register.tsx
 var PANE = "god";
 var PANE_COLUMNS = 110;
+var PANE_ROWS = 20;
 async function readTheme($, runtime) {
   const next = themeOf((await $.config.list()).find((row) => row.key === "theme")?.value);
   if (next === runtime.theme) return;
@@ -2949,7 +3424,7 @@ function start($, runtime) {
   return runtime.starting;
 }
 async function openPane($, runtime) {
-  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS });
+  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS, rows: PANE_ROWS });
   runtime.isPaneOpen = opened.isPlaced;
   const loop = await start($, runtime);
   loop.setPaneOpen(opened.isPlaced);
@@ -2964,28 +3439,55 @@ async function choose($, runtime, choice) {
   const loop = await start($, runtime);
   await loop.choose(choice(loop.store()));
 }
+async function select($, key) {
+  const before = await read($, SELECTED);
+  if (before === key) return;
+  await update($, SELECTED, () => key);
+  await update($, DETAIL, (state) => detailAfterSelect(state, before, key));
+}
+async function selectAndFocus($, key) {
+  await select($, key);
+  await $.ui.focus({ requestId: PANE, key });
+}
 async function selectNext($) {
   const next = nextNeedsYou(await read($, BOARD) ?? void 0, await read($, SELECTED) || void 0);
-  if (next === void 0) return;
-  await update($, SELECTED, () => next);
-  await $.ui.focus({ requestId: PANE, key: next });
+  if (next !== void 0) await selectAndFocus($, next);
 }
-async function pressRow($, key) {
+async function pressRow($, key, layout) {
   const snapshot = await read($, BOARD) ?? void 0;
   await update($, OPEN_GROUPS, (groups) => openGroupsAfterPress(groups, key, snapshot));
-  await update($, SELECTED, () => key);
+  await select($, key);
+  await update($, DETAIL, (state) => detailAfterRowPress(state, key, snapshot, layout));
 }
-function actionsOf($, runtime) {
+async function changeDetail($, change) {
+  await update($, DETAIL, change);
+}
+async function backToBoard($) {
+  await update($, DETAIL, detailAfterBack);
+  const selected = await read($, SELECTED);
+  if (selected !== "") await $.ui.focus({ requestId: PANE, key: selected });
+}
+function actionsOf($, runtime, layout) {
   const quiet = (work) => void work.catch(() => void 0);
   return {
-    onRow: (key) => quiet(pressRow($, key)),
+    onRow: (key) => quiet(pressRow($, key, layout)),
+    onMore: (key) => quiet(selectAndFocus($, key)),
     keys: {
       n: () => quiet(selectNext($)),
       f: () => quiet(choose($, runtime, toggledMode)),
-      g: () => quiet(choose($, runtime, toggledGroup))
+      g: () => quiet(choose($, runtime, toggledGroup)),
+      t: () => quiet(changeDetail($, detailAfterNextTab)),
+      b: () => quiet(backToBoard($))
+    },
+    detail: {
+      onTab: (tab) => quiet(changeDetail($, (state) => detailAfterTab(state, tab))),
+      onScroll: (scroll) => quiet(changeDetail($, (state) => detailAfterScroll(state, scroll))),
+      // the digits and the answer come with the answer path: until then a press on an option does nothing
+      onOption: () => void 0
     }
   };
 }
+var NO_ACTIONS = { onRow: () => void 0, onMore: () => void 0, keys: {}, detail: { onTab: () => void 0, onScroll: () => void 0, onOption: () => void 0 } };
 function register(on, options) {
   const runtime = { settings: settingsOf(options), isPaneOpen: false };
   on("session.start", async ($, e, next) => {
@@ -3007,7 +3509,7 @@ function register(on, options) {
   }).catch(() => ({ text: GOD_FAILED }));
   on("ui.render", { component: "Pane", requestId: "god" }, async ($, e) => {
     markPaneShown(runtime);
-    const [snapshot, selected, openGroups, colors] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME)]);
+    const [snapshot, selected, openGroups, colors, detail] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME), read($, DETAIL)]);
     const view = paneView({
       ...snapshot === null ? {} : { snapshot },
       bodyColumns: e.props.bodyColumns,
@@ -3015,14 +3517,15 @@ function register(on, options) {
       now: engineClock(),
       ...selected === "" ? {} : { selectedKey: selected },
       openGroups,
-      promptHoldsKeys: !e.props.isFocused
+      promptHoldsKeys: !e.props.isFocused,
+      detail
     });
-    return drawPane($.ui.resolve(e), view, colors, actionsOf($, runtime));
-  }).catch(($, e) => drawPane($.ui.resolve(e), cannotDrawView("failed", e.props.bodyColumns), "dark", { onRow: () => void 0, keys: {} }));
+    return drawPane($.ui.resolve(e), view, colors, actionsOf($, runtime, layoutOf(e.props.bodyColumns)));
+  }).catch(($, e) => drawPane($.ui.resolve(e), cannotDrawView("failed", e.props.bodyColumns), "dark", NO_ACTIONS));
   on("ui.focus", { component: "Pane", requestId: "god" }, async ($, e, next) => {
     const moved = await next(e);
     const key = moved.deny === void 0 ? selectionOf(e.element, await read($, BOARD) ?? void 0) : void 0;
-    if (key !== void 0) await update($, SELECTED, () => key);
+    if (key !== void 0) await select($, key);
     return moved;
   }).catch(($, e, next) => next(e));
   on("ui.close", { id: "god" }, async ($, e, next) => {

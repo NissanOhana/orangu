@@ -6,15 +6,22 @@
 import { describe, expect, it } from 'vitest'
 import { HOUR, MINUTE, busy, transcript, waiting } from '../../../test/fixtures/god/sessions.js'
 import { NOW, boardSessions, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
+import { detailSnapshot } from '../../../test/fixtures/god/detail.js'
 import type { BoardSnapshot } from '../types.js'
 import { cellWidth } from './cells.js'
-import { BOARD_COLUMNS } from './board.js'
+import { BOARD_COLUMNS, MORE_KEYS } from './board.js'
+import { DEFAULT_DETAIL, NO_DETAIL, paneDetailLines } from './detail-pane.js'
 import { layoutOf, paneLines, paneView, type PaneInput } from './pane.js'
 import type { Line, PaneView } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
 const pane = (snapshot: BoardSnapshot, over: Partial<PaneInput> = {}): PaneView =>
   paneView({ snapshot, bodyColumns: 110, bodyRows: 40, now: NOW, openGroups: [], promptHoldsKeys: false, ...over })
+/** the rows that a view takes on the screen: in the wide body the board and the detail sit side by side */
+const rowsOf = (view: PaneView): number => {
+  if (view.kind === 'board') return view.header.length + 2 + Math.max(view.body.length, view.detail === undefined ? 0 : paneDetailLines(view.detail).length) + view.keys.length
+  return paneLines(view).length
+}
 
 /** every snapshot of the fixtures, and 1 with wide characters, a long name and a long summary */
 function snapshots(): Array<[string, BoardSnapshot]> {
@@ -50,7 +57,8 @@ describe('the layout', () => {
     expect(text(view.topRule)).toBe(`${'─'.repeat(30)}┬${'─'.repeat(79)}`)
     expect(text(view.bottomRule)).toBe(`${'─'.repeat(30)}┴${'─'.repeat(79)}`)
     expect(view.topRule.segments.every((segment) => segment.dim === true)).toBe(true)
-    expect(paneLines(view).map(text)).toEqual([...view.header, view.topRule, ...view.body, view.bottomRule, ...view.keys].map(text))
+    const detail = view.detail === undefined ? [] : paneDetailLines(view.detail)
+    expect(paneLines(view).map(text)).toEqual([...view.header, view.topRule, ...view.body, ...detail, view.bottomRule, ...view.keys].map(text))
     const narrow = pane(boardSnapshot(), { bodyColumns: 89 })
     if (narrow.kind !== 'board') throw new Error(narrow.kind)
     expect(text(narrow.topRule)).toBe('─'.repeat(89))
@@ -96,7 +104,7 @@ describe('only the rows that fit', () => {
       for (const columns of [60, 110]) {
         for (const selectedKey of ['s-wait', 's-more-10', 's-idle']) {
           const view = pane(many(), { bodyRows, bodyColumns: columns, selectedKey })
-          expect(paneLines(view).length, `${bodyRows} rows at ${columns}`).toBeLessThanOrEqual(bodyRows)
+          expect(rowsOf(view), `${bodyRows} rows at ${columns}`).toBeLessThanOrEqual(bodyRows)
           if (view.kind !== 'board') throw new Error(`${bodyRows} rows at ${columns}: ${view.kind}`)
           expect(view.body.some((line) => line.key === selectedKey), `${bodyRows} rows at ${columns}: ${selectedKey}`).toBe(true)
         }
@@ -107,5 +115,66 @@ describe('only the rows that fit', () => {
   it('says the pane is too short when the board does not fit and fewer than 3 rows are left for it', () => {
     expect(pane(many(), { bodyRows: 6 }).kind).toBe('cannot-draw')
     expect(pane(many(), { bodyRows: 7 }).kind).toBe('board')
+  })
+})
+
+describe('the detail', () => {
+  const detailRoom = (view: Extract<PaneView, { kind: 'board' | 'detail' }>): number => 30 - view.header.length - 2 - view.keys.length
+
+  it('shows the detail of the selected session right of the board from 90 columns, in the rows of the board', () => {
+    for (const columns of [90, 110]) {
+      const view = pane(detailSnapshot(), { bodyColumns: columns, bodyRows: 30, selectedKey: 's-wait' })
+      if (view.kind !== 'board' || view.detail?.kind !== 'session') throw new Error(`${columns}: ${view.kind}`)
+      const lines = paneDetailLines(view.detail).map(text)
+      expect(lines[0]).toBe(' api-7 · Eval set › tab 2')
+      expect(lines.length).toBeLessThanOrEqual(detailRoom(view))
+      for (const line of lines) expect(cellWidth(line), line).toBeLessThanOrEqual(columns - BOARD_COLUMNS - 1)
+      expect(rowsOf(view)).toBeLessThanOrEqual(30)
+    }
+  })
+
+  it('asks for a selection in the detail column when no session is selected', () => {
+    const view = pane(detailSnapshot())
+    if (view.kind !== 'board') throw new Error(view.kind)
+    expect(view.detail).toEqual({ kind: 'none', lines: [{ segments: [{ text: ` ${NO_DETAIL}` }] }] })
+  })
+
+  it('shows the board alone below 90 columns, and the detail in its place once the detail is open', () => {
+    const closed = pane(detailSnapshot(), { bodyColumns: 89, selectedKey: 's-wait' })
+    if (closed.kind !== 'board') throw new Error(closed.kind)
+    expect(closed.detail).toBeUndefined()
+    for (const columns of [60, 89]) {
+      const view = pane(detailSnapshot(), { bodyColumns: columns, bodyRows: 30, selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, isOpen: true } })
+      if (view.kind !== 'detail') throw new Error(`${columns}: ${view.kind}`)
+      expect(text(view.topRule)).toBe('─'.repeat(columns))
+      expect(paneLines(view).map(text)).toEqual([...view.header, view.topRule, ...paneDetailLines(view.detail), view.bottomRule, ...view.keys].map(text))
+      expect(paneDetailLines(view.detail).map(text)[0]).toBe(' api-7 · Eval set › tab 2')
+      expect(paneLines(view).length).toBeLessThanOrEqual(30)
+      for (const line of paneLines(view)) expect(cellWidth(text(line)), line.segments.map((segment) => segment.text).join('')).toBeLessThanOrEqual(columns)
+      const keys = view.keys.map(text).join('')
+      expect(keys).toMatch(/^ b: back {2}j: jump/)
+      expect(keys).not.toContain('↑↓')
+    }
+  })
+
+  it('keeps the board and the detail side by side from 90 columns, open or not', () => {
+    const view = pane(detailSnapshot(), { bodyColumns: 90, selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, isOpen: true } })
+    expect(view.kind).toBe('board')
+  })
+
+  it('opens the detail of the selected session only: with no selection the narrow detail asks for one', () => {
+    const view = pane(detailSnapshot(), { bodyColumns: 60, detail: { ...DEFAULT_DETAIL, isOpen: true } })
+    if (view.kind !== 'detail') throw new Error(view.kind)
+    expect(view.detail.kind).toBe('none')
+    expect(view.keys.map(text).join('')).toMatch(/^ b: back/)
+  })
+
+  it('gives each count line of the board its target, so a press moves the selection past the window', () => {
+    const many = snapshotOf([...boardSessions(), ...Array.from({ length: 20 }, (_, index) => busy(`s-more-${index}`, { name: `more-${index}`, statusSince: NOW - (index + 1) * MINUTE }))])
+    const view = pane(many, { bodyRows: 10, bodyColumns: 60 })
+    if (view.kind !== 'board') throw new Error(view.kind)
+    expect(view.body.some((line) => line.key === MORE_KEYS.down)).toBe(true)
+    expect(view.more[MORE_KEYS.down]).toBeDefined()
+    expect(view.body.some((line) => line.key === view.more[MORE_KEYS.down])).toBe(false)
   })
 })

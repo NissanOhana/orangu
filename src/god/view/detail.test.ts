@@ -121,7 +121,7 @@ describe('only the rows that fit, and no silent cut', () => {
     const reply = Array.from({ length: 40 }, (_, index) => `Line ${index + 1} of the reply.`).join('\n')
     return snapshotOf([busy('s-long', { name: 'long-1', transcript: transcript({ lastReply: reply }) })]).sessions[0]!
   }
-  const COUNT = /^ \+(\d+) lines? \(([wz])\)$/
+  const COUNT = /^ ([wz]): \+(\d+) lines?$/
 
   it('shows a count line with the key that shows the rest, and the counts add up to the whole tab', () => {
     const session = long()
@@ -131,12 +131,12 @@ describe('only the rows that fit, and no silent cut', () => {
     expect(lines.length).toBeLessThanOrEqual(20)
     const last = text(first.body.at(-1)!)
     expect(last).toMatch(COUNT)
-    expect(COUNT.exec(last)![2]).toBe('z')
-    expect(Number(COUNT.exec(last)![1]) + first.body.length - 1).toBe(first.window.total)
+    expect(COUNT.exec(last)![1]).toBe('z')
+    expect(Number(COUNT.exec(last)![2]) + first.body.length - 1).toBe(first.window.total)
     const next = detailView(input(session, { rows: 20, scroll: scrollBy(first.window, 'down') }))
     if (next.kind !== 'detail') throw new Error(next.kind)
-    expect(text(next.body[0]!)).toMatch(/^ \+\d+ lines \(w\)$/)
-    const counts = next.body.map(text).filter((line) => COUNT.test(line)).map((line) => Number(COUNT.exec(line)![1]))
+    expect(text(next.body[0]!)).toMatch(/^ w: \+\d+ lines$/)
+    const counts = next.body.map(text).filter((line) => COUNT.test(line)).map((line) => Number(COUNT.exec(line)![2]))
     expect(counts.reduce((sum, count) => sum + count, 0) + next.body.length - counts.length).toBe(next.window.total)
     expect(scrollBy(next.window, 'up')).toBe(0)
   })
@@ -156,7 +156,7 @@ describe('only the rows that fit, and no silent cut', () => {
     const end = detailView(input(session, { rows: 14, scroll: 999 }))
     if (end.kind !== 'detail') throw new Error(end.kind)
     expect(text(end.body.at(-1)!)).toBe('   Line 40 of the reply.')
-    expect(text(end.body[0]!)).toMatch(/\(w\)$/)
+    expect(text(end.body[0]!)).toMatch(/^ w: /)
   })
 
   it('lists only the options in view, so a digit never answers an option that the person cannot see', () => {

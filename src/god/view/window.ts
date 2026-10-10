@@ -1,10 +1,12 @@
 /**
  * The window over lines that do not fit their rows: the detail scrolls its tab content in it, and the confirm bar
- * scrolls a long prompt or tool input in it. It never cuts in silence: a count line above names the lines that it
- * leaves out and the key that shows them (`+N lines (w)`), and a count line below does the same (`+N lines (z)`).
+ * scrolls a long prompt or tool input in it. It never cuts in silence: a count line above names the key that shows
+ * the lines that it leaves out and their count (`w: +N lines`), and a count line below does the same (`z: +N
+ * lines`). Each count is 1 key that 1 Button presses, so it shows in the form that the engine paints the Button.
  */
 import { DIM } from '../ui/theme.js'
-import { moreText } from './cut.js'
+import { countText } from './cut.js'
+import { pressSegment } from './keys.js'
 import type { Line } from './types.js'
 
 /** The key that shows the lines above the window, and the key that shows the lines below it. */
@@ -34,7 +36,7 @@ export function windowOf(lines: readonly Line[], room: number, scroll: number): 
   const top = first > 0 ? 1 : 0
   const hasBottom = first + room - top < total
   const shown = room - top - (hasBottom ? 1 : 0)
-  const count = (hidden: number, key: string): Line => ({ segments: [{ text: ' ' }, { text: moreText(hidden, LINE_UNIT, key), ...DIM }] })
+  const count = (hidden: number, key: string): Line => ({ segments: [{ text: ' ' }, { ...pressSegment(key, countText(hidden, LINE_UNIT)), ...DIM }] })
   return {
     lines: [...(top > 0 ? [count(first, SCROLL_KEYS.up)] : []), ...lines.slice(first, first + shown), ...(hasBottom ? [count(total - first - shown, SCROLL_KEYS.down)] : [])],
     window: { first, shown, total, page },

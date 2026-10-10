@@ -1,34 +1,26 @@
 /**
  * The body of the wide pane (90 columns or more): the board column, the column rule `│` and the detail column, side
  * by side. Each column has as many lines as the tallest one, so the rule runs from the top rule to the bottom rule,
- * and a short column ends with blank lines. Until the detail view lands, the detail column shows 1 short line.
+ * and a short column ends with blank lines. The detail column holds Buttons, so the engine shell draws it from the
+ * detail view and adds the blank lines that this module gives.
  */
 import { DIM } from '../ui/theme.js'
-import { messageLines } from './states.js'
 import type { Line } from './types.js'
 
-/** The line of the detail column in a build that has no detail view yet. */
-export const DETAIL_PLACEHOLDER = 'The detail of the selected session is not in this build.'
-
-/** The 3 columns of the wide body. */
-export type WideColumns = { board: Line[]; rule: Line[]; detail: Line[] }
+/** The 3 columns of the wide body: the board, the rule, and the blank lines under the detail. */
+export type WideColumns = { board: Line[]; rule: Line[]; detailPad: Line[] }
 
 /** A line with 1 space: a blank line that a terminal still draws 1 row high. */
 const BLANK: Line = { segments: [{ text: ' ' }] }
 
-const padded = (lines: readonly Line[], height: number): Line[] => [...lines, ...Array.from({ length: height - lines.length }, () => BLANK)]
+const blanks = (count: number): Line[] => Array.from({ length: Math.max(0, count) }, () => BLANK)
 
-/** The board, the column rule and the detail, each as tall as the tallest of the board and the detail. */
-export function wideColumns(board: readonly Line[], detail: readonly Line[]): WideColumns {
-  const height = Math.max(board.length, detail.length)
+/** The board, the column rule and the blank lines under the detail, each column as tall as the taller of the 2. */
+export function wideColumns(board: readonly Line[], detailHeight: number): WideColumns {
+  const height = Math.max(board.length, detailHeight)
   return {
-    board: padded(board, height),
+    board: [...board, ...blanks(height - board.length)],
     rule: Array.from({ length: height }, (): Line => ({ segments: [{ text: '│', ...DIM }] })),
-    detail: padded(detail, height),
+    detailPad: blanks(height - detailHeight),
   }
-}
-
-/** The detail column of this build: the placeholder line, wrapped at whole words to the column width. */
-export function detailPlaceholder(width: number): Line[] {
-  return messageLines(DETAIL_PLACEHOLDER, width)
 }

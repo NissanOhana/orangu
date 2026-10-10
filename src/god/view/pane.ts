@@ -1,7 +1,9 @@
 /**
  * The whole god pane from 1 board snapshot, top to bottom: the header, a rule, the body, a rule, the key row.
- * - At WIDE_FROM_COLUMNS or more, the body is the board column (BOARD_COLUMNS cells) left of the detail, and each
- *   rule meets the column rule at the board width. Below, the board takes the whole body.
+ * - At WIDE_FROM_COLUMNS or more, the body is the board column (BOARD_COLUMNS cells) left of the detail of the
+ *   selected session (src/god/view/detail-pane.ts), and each rule meets the column rule at the board width. The
+ *   detail takes no more rows than the board has. Below, the board takes the whole body, and once the person opens
+ *   the detail, the detail takes it in place of the board, and the key row starts with b, which goes back.
  * - A board state (reading, no session, no session in the selected repos) shows its message under the header in
  *   place of the board. The 2 states of the repos mode (no repo selected, no session of the selected repos) keep a
  *   rule and the key row under their message, because f leaves them, and a key works only while its Button is drawn.
@@ -12,7 +14,8 @@
  */
 import { DIM } from '../ui/theme.js'
 import type { BoardSnapshot } from '../types.js'
-import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines } from './board.js'
+import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow } from './board.js'
+import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState } from './detail-pane.js'
 import { headerLines } from './header.js'
 import { keyRow } from './keys.js'
 import { CANNOT_DRAW, STATE_TEXT, boardStateOf, messageLines, type CannotDraw } from './states.js'
@@ -36,6 +39,8 @@ export type PaneInput = {
   openGroups: readonly string[]
   /** true while the prompt holds the keys (`e.props.isFocused` is false) */
   promptHoldsKeys: boolean
+  /** the open tab of the detail, its scroll, and whether the narrow pane shows the detail; absent, the defaults */
+  detail?: DetailState
 }
 
 /** Where the board goes at a body width. */
@@ -69,13 +74,14 @@ export function paneView(input: PaneInput): PaneView {
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView('too-narrow', bodyColumns)
   const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now })
   const state = boardStateOf(snapshot)
-  const keysOf = (board: BoardSnapshot) =>
+  const keysOf = (board: BoardSnapshot, isDetail = false) =>
     keyRow({
       width: bodyColumns,
       isCmuxMissing: board.sources.cmux.status === 'missing',
       promptHoldsKeys: input.promptHoldsKeys,
       answerCount: answerCountOf(board, input.selectedKey),
       mode: board.mode,
+      isDetail,
     })
   if (state !== undefined || snapshot === undefined) {
     const body = messageLines(STATE_TEXT[state ?? 'reading'], bodyColumns)
@@ -85,25 +91,37 @@ export function paneView(input: PaneInput): PaneView {
     return keys.length > 0 ? { ...message, bottomRule: ruleLine(bodyColumns), keys } : message
   }
   const layout = layoutOf(bodyColumns)
-  const keys = keysOf(snapshot)
+  const detailState = input.detail ?? DEFAULT_DETAIL
+  const isDetail = layout.kind === 'narrow' && detailState.isOpen
+  const keys = keysOf(snapshot, isDetail)
   const room = bodyRows - header.length - 2 - keys.lines.length
+  const selection = input.selectedKey === undefined ? {} : { selectedKey: input.selectedKey }
+  const detailOf = (width: number) => paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState })
+  if (isDetail) {
+    if (room < MIN_WINDOW_ROWS) return cannotDrawView('too-short', bodyColumns)
+    return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), keys: keys.lines, hints: keys.hints }
+  }
   const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey }
   if (room < MIN_WINDOW_ROWS && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length > Math.max(0, room)) return cannotDrawView('too-short', bodyColumns)
+  const { lines: body, more } = boardWindow({ ...board, rows: room })
   return {
     kind: 'board',
     layout,
     header,
     topRule: ruleLine(bodyColumns, layout, '┬'),
-    body: boardLines({ ...board, rows: room }),
+    body,
+    more,
+    ...(layout.kind === 'wide' ? { detail: detailOf(layout.detailColumns) } : {}),
     bottomRule: ruleLine(bodyColumns, layout, '┴'),
     keys: keys.lines,
     hints: keys.hints,
   }
 }
 
-/** Every line of a pane view, top to bottom. */
+/** Every line of a pane view, top to bottom. In the wide body, the lines of the board column come before the detail. */
 export function paneLines(view: PaneView): Line[] {
   if (view.kind === 'cannot-draw') return [...view.lines]
   if (view.kind === 'message') return [...view.header, view.topRule, ...view.body, ...(view.bottomRule === undefined ? [] : [view.bottomRule]), ...(view.keys ?? [])]
-  return [...view.header, view.topRule, ...view.body, view.bottomRule, ...view.keys]
+  if (view.kind === 'detail') return [...view.header, view.topRule, ...paneDetailLines(view.detail), view.bottomRule, ...view.keys]
+  return [...view.header, view.topRule, ...view.body, ...(view.detail === undefined ? [] : paneDetailLines(view.detail)), view.bottomRule, ...view.keys]
 }

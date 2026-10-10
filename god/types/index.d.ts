@@ -17,6 +17,8 @@ declare module 'claude-code' {
       openGroups: readonly string[]
       /** the color set of the session theme */
       theme: 'dark' | 'light' | 'theme-keys'
+      /** the open tab of the detail, the first line of its content, and whether the narrow pane shows the detail */
+      detail: { tab: 'now' | 'history' | 'agents' | 'screen' | 'recap'; scroll: number; isOpen: boolean }
     }
   }
 }

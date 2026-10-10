@@ -17,8 +17,19 @@ import type { Line, PaneView } from './types.js'
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
 const pane = (snapshot: BoardSnapshot | undefined, over: Partial<PaneInput> = {}): PaneView =>
   paneView({ ...(snapshot === undefined ? {} : { snapshot }), bodyColumns: 110, bodyRows: 30, now: NOW, openGroups: [], promptHoldsKeys: false, ...over })
-const all = (view: PaneView): string[] => (view.kind === 'cannot-draw' ? view.lines : [...view.header, view.topRule, ...view.body, ...(view.kind === 'board' ? [view.bottomRule, ...view.keys] : [])]).map(text)
-const bodyOf = (view: PaneView): string[] => (view.kind === 'cannot-draw' ? [] : view.body.map(text))
+/** a view of the board: these states never open the detail */
+const boardOnly = (view: PaneView): Exclude<PaneView, { kind: 'detail' }> => {
+  if (view.kind === 'detail') throw new Error('a board state shows no detail')
+  return view
+}
+const all = (shown: PaneView): string[] => {
+  const view = boardOnly(shown)
+  return (view.kind === 'cannot-draw' ? view.lines : [...view.header, view.topRule, ...view.body, ...(view.kind === 'board' ? [view.bottomRule, ...view.keys] : [])]).map(text)
+}
+const bodyOf = (shown: PaneView): string[] => {
+  const view = boardOnly(shown)
+  return view.kind === 'cannot-draw' ? [] : view.body.map(text)
+}
 
 describe('the states of the board pane', () => {
   it('first refresh not done: the header, a rule and 1 line that says the pane reads the sessions', () => {

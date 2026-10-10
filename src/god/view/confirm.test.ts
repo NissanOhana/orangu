@@ -22,7 +22,7 @@ const text = (line: Line): string => line.segments.map((segment) => segment.text
 const view = (intent: DeliverIntent, over: Partial<ConfirmInput> = {}): ConfirmView => confirmView({ intent, width: 110, rows: 20, scroll: 0, ...over })
 const bar = (intent: DeliverIntent, over: Partial<ConfirmInput> = {}): string[] => view(intent, over).lines.map(text)
 const squeeze = (value: string): string => value.replace(/\s+/g, '')
-const COUNT = /^ \+(\d+) lines? \(([wz])\)$/
+const COUNT = /^ ([wz]): \+(\d+) lines?$/
 
 /** every refusal code of the contract: a code that the record misses fails the type check of REFUSAL_TEXT */
 const CODES: readonly DeliverRefusal[] = ['no-cmux', 'no-tab', 'stale-screen', 'screen-changed', 'label-not-found', 'multi-question', 'empty', 'control-char', 'backslash-escape']
@@ -106,10 +106,10 @@ describe('the row limit of the confirm bar', () => {
       for (const line of lines) expect(cellWidth(line), line).toBeLessThanOrEqual(60)
       expect(lines.slice(0, 2)).toEqual([' Send "Yes" to the Bash request of ops-4?  y send  c cancel', ' Input'])
       const body = lines.slice(2)
-      if (scroll > 0) expect(body[0]).toMatch(/^ \+\d+ lines \(w\)$/)
+      if (scroll > 0) expect(body[0]).toMatch(/^ w: \+\d+ lines$/)
       body.filter((line) => !COUNT.test(line)).forEach((line, index) => pieces.set(page.window.first + index, line.slice(3)))
       if (page.window.first + page.window.shown >= page.window.total) break
-      expect(body.at(-1)).toMatch(/^ \+\d+ lines \(z\)$/)
+      expect(body.at(-1)).toMatch(/^ z: \+\d+ lines$/)
       scroll = scrollBy(page.window, 'down')
     }
     expect(pages).toBeGreaterThan(3)
@@ -123,7 +123,7 @@ describe('the row limit of the confirm bar', () => {
     const lines = page.lines.map(text)
     expect(lines).toHaveLength(10)
     expect(lines[0]).toBe(' Send this prompt to api-7?  y send  c cancel')
-    const hidden = Number(COUNT.exec(lines.at(-1)!)![1])
+    const hidden = Number(COUNT.exec(lines.at(-1)!)![2])
     expect(hidden + lines.length - 2).toBe(30)
   })
 
@@ -135,7 +135,7 @@ describe('the row limit of the confirm bar', () => {
   it('takes its fixed lines and 3 more when the row limit is smaller, so the text never hides', () => {
     const lines = bar({ ...INTENTS.permission, input: longInput() } as DeliverIntent, { width: 60, rows: 2 })
     expect(lines).toHaveLength(2 + 3)
-    expect(lines.at(-1)).toMatch(/^ \+\d+ lines \(z\)$/)
+    expect(lines.at(-1)).toMatch(/^ z: \+\d+ lines$/)
   })
 })
 
