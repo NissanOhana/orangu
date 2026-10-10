@@ -1,6 +1,6 @@
 /**
- * The cmux tab map: `cmux capabilities` once at start, `cmux tree --all --json`, `ps` in UTC, and the map from a
- * PID to its TTY to the cmux workspace and surface. Fixtures are synthetic (test/fixtures/god): a tree with 2
+ * The cmux tab map: `cmux capabilities` once at start, `cmux tree --all --json --id-format both`, `ps` in UTC, and
+ * the map from a PID to its TTY to the cmux workspace and surface, by their UUIDs. Fixtures are synthetic (test/fixtures/god): a tree with 2
  * windows, 3 workspaces, a browser surface and a plain shell, and a ps read of 5 PIDs.
  */
 import { readFileSync } from 'node:fs'
@@ -13,6 +13,9 @@ import { mapTabs, parseCmuxTree, parsePs, readCmuxCapabilities, readCmuxTree, re
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), '../../../test/fixtures/god')
 const fixture = (name: string): string => readFileSync(join(FIXTURES, name), 'utf8')
 const keep = (text: string): string => text
+/** the UUIDs that the fixture tree gives to workspace N and surface N */
+const WS = (n: number): string => `00000000-0000-4000-8000-00000000a00${n}`
+const SF = (n: number): string => `00000000-0000-4000-8000-00000000b00${n}`
 
 const refuse = async (): Promise<never> => {
   throw new Error('this test gives no such call')
@@ -65,15 +68,15 @@ describe('readCmuxCapabilities: cmux capabilities, once at start', () => {
   })
 })
 
-describe('parseCmuxTree and readCmuxTree: cmux tree --all --json', () => {
-  it('lists each terminal surface that has a TTY, across the 2 windows, and leaves out a browser surface', () => {
+describe('parseCmuxTree and readCmuxTree: cmux tree --all --json --id-format both', () => {
+  it('lists each terminal surface that has a TTY, across the 2 windows, by the UUIDs of its workspace and itself, and leaves out a browser surface', () => {
     const tree = parseCmuxTree(fixture('cmux-tree.json'), keep)
     expect(tree?.parseErrors).toBe(0)
     expect(tree?.surfaces).toEqual([
-      { tty: 'ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: 'alpha', surfaceTitle: 'alpha main' },
-      { tty: 'ttys007', workspaceRef: 'workspace:2', surfaceRef: 'surface:3', workspaceTitle: 'beta', surfaceTitle: 'beta docs' },
-      { tty: 'ttys004', workspaceRef: 'workspace:3', surfaceRef: 'surface:4', workspaceTitle: 'alpha feature', surfaceTitle: 'Claude Code' },
-      { tty: 'ttys005', workspaceRef: 'workspace:3', surfaceRef: 'surface:5', workspaceTitle: 'alpha feature', surfaceTitle: 'zsh' },
+      { tty: 'ttys001', workspaceRef: WS(1), surfaceRef: SF(1), workspaceTitle: 'alpha', surfaceTitle: 'alpha main' },
+      { tty: 'ttys007', workspaceRef: WS(2), surfaceRef: SF(3), workspaceTitle: 'beta', surfaceTitle: 'beta docs' },
+      { tty: 'ttys004', workspaceRef: WS(3), surfaceRef: SF(4), workspaceTitle: 'alpha feature', surfaceTitle: 'Claude Code' },
+      { tty: 'ttys005', workspaceRef: WS(3), surfaceRef: SF(5), workspaceTitle: 'alpha feature', surfaceTitle: 'zsh' },
     ])
   })
 
@@ -82,7 +85,7 @@ describe('parseCmuxTree and readCmuxTree: cmux tree --all --json', () => {
     const first = raw.windows[0]?.workspaces[0]?.panes[0]?.surfaces[0]
     if (first) first.title = ''
     const tree = parseCmuxTree(JSON.stringify(raw), (text) => `[${text}]`)
-    expect(tree?.surfaces[0]).toEqual({ tty: 'ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: '[alpha]' })
+    expect(tree?.surfaces[0]).toEqual({ tty: 'ttys001', workspaceRef: WS(1), surfaceRef: SF(1), workspaceTitle: '[alpha]' })
     expect(tree?.surfaces[1]).toMatchObject({ workspaceTitle: '[beta]', surfaceTitle: '[beta docs]' })
   })
 
@@ -94,16 +97,28 @@ describe('parseCmuxTree and readCmuxTree: cmux tree --all --json', () => {
     expect(tree?.parseErrors).toBe(3)
   })
 
+  it('gives no surface for a workspace or a surface with no UUID, and counts each as a parse error: a short ref can renumber', () => {
+    type Node = { id?: string; ref: string; panes?: { surfaces: Node[] }[] }
+    const raw = JSON.parse(fixture('cmux-tree.json')) as { windows: { workspaces: Node[] }[] }
+    const workspaces = raw.windows.flatMap((window) => window.workspaces)
+    delete workspaces.find((workspace) => workspace.ref === 'workspace:2')!.id
+    const surface4 = workspaces.flatMap((workspace) => workspace.panes ?? []).flatMap((pane) => pane.surfaces).find((surface) => surface.ref === 'surface:4')!
+    surface4.id = 'surface:4'
+    const tree = parseCmuxTree(JSON.stringify(raw), keep)
+    expect(tree?.surfaces.map((surface) => surface.surfaceRef)).toEqual([SF(1), SF(5)])
+    expect(tree?.parseErrors).toBe(2)
+  })
+
   it('gives no tree when the output has no windows list', () => {
     expect(parseCmuxTree('{"windows": {}}', keep)).toBeUndefined()
     expect(parseCmuxTree('[]', keep)).toBeUndefined()
     expect(parseCmuxTree('not json', keep)).toBeUndefined()
   })
 
-  it('runs cmux tree --all --json, and a failure is off, never missing', async () => {
+  it('runs cmux tree --all --json --id-format both, and a failure is off, never missing', async () => {
     const { host, calls } = runHost(async () => result(fixture('cmux-tree.json')))
     const read = await readCmuxTree(host, keep)
-    expect(calls).toEqual([{ argv: ['cmux', 'tree', '--all', '--json'] }])
+    expect(calls).toEqual([{ argv: ['cmux', 'tree', '--all', '--json', '--id-format', 'both'] }])
     expect(read.ok && read.value.surfaces).toHaveLength(4)
     for (const answer of [fails, async () => result('', 1), async () => result('{"windows":')]) {
       const failed = await readCmuxTree(runHost(answer).host, keep)
@@ -164,9 +179,9 @@ describe('mapTabs: PID to TTY to the cmux workspace and surface', () => {
   it('a cmux tree with 2 windows maps each TTY', () => {
     const tabs = mapTabs(parsePs(fixture('ps.txt')).rows, surfaces())
     expect(tabs).toEqual([
-      { pid: 41001, tty: 'ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: 'alpha', surfaceTitle: 'alpha main' },
-      { pid: 41002, tty: 'ttys004', workspaceRef: 'workspace:3', surfaceRef: 'surface:4', workspaceTitle: 'alpha feature', surfaceTitle: 'Claude Code' },
-      { pid: 41003, tty: 'ttys007', workspaceRef: 'workspace:2', surfaceRef: 'surface:3', workspaceTitle: 'beta', surfaceTitle: 'beta docs' },
+      { pid: 41001, tty: 'ttys001', workspaceRef: WS(1), surfaceRef: SF(1), workspaceTitle: 'alpha', surfaceTitle: 'alpha main' },
+      { pid: 41002, tty: 'ttys004', workspaceRef: WS(3), surfaceRef: SF(4), workspaceTitle: 'alpha feature', surfaceTitle: 'Claude Code' },
+      { pid: 41003, tty: 'ttys007', workspaceRef: WS(2), surfaceRef: SF(3), workspaceTitle: 'beta', surfaceTitle: 'beta docs' },
     ])
   })
 
@@ -177,7 +192,7 @@ describe('mapTabs: PID to TTY to the cmux workspace and surface', () => {
   })
 
   it('gives no tab when 2 surfaces show the same TTY: a key must never go to the wrong tab', () => {
-    const twice = [...surfaces(), { tty: 'ttys001', workspaceRef: 'workspace:9', surfaceRef: 'surface:9', workspaceTitle: 'copy' }]
+    const twice = [...surfaces(), { tty: 'ttys001', workspaceRef: WS(9), surfaceRef: 'surface:9', workspaceTitle: 'copy' }]
     const tabs = mapTabs([{ pid: 41001, tty: 'ttys001', lstart: 'Fri Oct  9 08:00:00 2026' }], twice)
     expect(tabs).toEqual([])
   })
@@ -192,8 +207,8 @@ describe('mapTabs: PID to TTY to the cmux workspace and surface', () => {
   })
 
   it('matches a surface TTY written with its /dev/ folder', () => {
-    const devPath = [{ tty: '/dev/ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: 'alpha' }]
+    const devPath = [{ tty: '/dev/ttys001', workspaceRef: WS(1), surfaceRef: SF(1), workspaceTitle: 'alpha' }]
     const tabs = mapTabs([{ pid: 41001, tty: 'ttys001', lstart: 'Fri Oct  9 08:00:00 2026' }], devPath)
-    expect(tabs).toEqual([{ pid: 41001, tty: 'ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: 'alpha' }])
+    expect(tabs).toEqual([{ pid: 41001, tty: 'ttys001', workspaceRef: WS(1), surfaceRef: SF(1), workspaceTitle: 'alpha' }])
   })
 })

@@ -4,8 +4,8 @@
  * - The 2 s tick (refresh) reads the registry files that changed and the transcripts that grew. It makes the facts
  *   from them and from the last results of the 15 s loop. `claude agents --json` waits 330 to 630 ms, so it never
  *   runs in the tick, and the 2 s registry read shows a new wait first.
- * - The 15 s loop reads `claude agents --json`, the cmux tab map (`cmux tree --all --json`, and `ps` in UTC for the
- *   TTY of each PID) and git for each new cwd. A refresh starts it when LOOP_MS passed since the last one started,
+ * - The 15 s loop reads `claude agents --json`, the cmux tab map (`cmux tree --all --json --id-format both`, and
+ *   `ps` in UTC for the TTY of each PID) and git for each new cwd. A refresh starts it when LOOP_MS passed since the last one started,
  *   or when the clock moved back, and does not wait for it, so a slow command never holds the tick. Only the first refresh waits for it, so the
  *   first board is whole. While cmux is missing (a timeout reads missing too), each loop asks `cmux capabilities`
  *   again: cmux can start after the pane.

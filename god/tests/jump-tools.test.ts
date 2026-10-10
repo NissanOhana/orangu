@@ -16,13 +16,19 @@ const KEY = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
 const JUMP_VERBS = ['select-workspace', 'focus-panel']
 const LEVELS = ['NEEDS YOU', 'YOUR TURN', 'STUCK', 'WORKING', 'IDLE', 'STALE']
 
+/** The UUIDs of the 2 workspaces and the 2 surfaces of the fake cmux. */
+const WS_ASK = '00000000-0000-4000-8000-00000000a002'
+const SF_ASK = '00000000-0000-4000-8000-00000000b005'
+const WS_TURN = '00000000-0000-4000-8000-00000000a003'
+const SF_TURN = '00000000-0000-4000-8000-00000000b009'
+
 /** The tab of the waiting session and of the session whose turn ended; the busy session has no tab. */
 const CMUX: FakeCmux = {
   tabs: {
-    45001: { tty: 'ttys005', workspaceRef: 'workspace:2', surfaceRef: 'surface:5', title: 'ask' },
-    45002: { tty: 'ttys009', workspaceRef: 'workspace:3', surfaceRef: 'surface:9', title: 'turn' },
+    45001: { tty: 'ttys005', workspaceRef: WS_ASK, surfaceRef: SF_ASK, title: 'ask' },
+    45002: { tty: 'ttys009', workspaceRef: WS_TURN, surfaceRef: SF_TURN, title: 'turn' },
   },
-  screens: { 'surface:5': 'The first screen.' },
+  screens: { [SF_ASK]: 'The first screen.' },
 }
 
 /** A waiting session, a session whose turn ended after the person last saw it (YOUR TURN) with a secret in its reply, a busy session. */
@@ -84,14 +90,15 @@ const CLOSER = {
 }
 
 for (const surface of SURFACES) {
-  test(`${surface}: j runs exactly 2 cmux calls in order, with the refs of the mapped tab of the selected session`, async ($, on) => {
+  test(`${surface}: j runs exactly 2 cmux calls in order, with the UUIDs of the mapped tab of the selected session`, async ($, on) => {
     const { calls } = await begin($, on, surface)
+    expect(calls.runs.find((run) => run.argv[1] === 'tree')?.argv).toEqual(['cmux', 'tree', '--all', '--json', '--id-format', 'both'])
     const ui = await mount($, surface)
     await select($, 'ses-wait')
     await ui.press({ key: 'key:j' })
     expect(jumps(calls).map((run) => run.argv)).toEqual([
-      ['cmux', 'select-workspace', '--workspace', 'workspace:2'],
-      ['cmux', 'focus-panel', '--panel', 'surface:5', '--workspace', 'workspace:2'],
+      ['cmux', 'select-workspace', '--workspace', WS_ASK],
+      ['cmux', 'focus-panel', '--panel', SF_ASK, '--workspace', WS_ASK],
     ])
     for (const run of jumps(calls)) expect(run.init).toEqual({ timeoutMs: 5000 })
   })
@@ -118,6 +125,23 @@ for (const surface of SURFACES) {
     expect(jumps(calls).map((run) => run.argv[1])).toEqual(['select-workspace'])
     expect((await lines(ui)).at(-1)).toBe(' The jump failed: cmux did not show the tab of this session. Press j to try again.')
     expect(calls.storeSets.filter(([key, value]) => key === 'seenAt' && Object.hasOwn(value as object, 'ses-wait') && (value as Record<string, number>)['ses-wait']! > 0).length).toBeLessThanOrEqual(1)
+  })
+
+  // the 15 s loop reads the collector clock, which the kit does not move, so an old tab map after a failed read is
+  // proven in src/god/act/jump.test.ts and src/god/screen-loop.test.ts; here the tree read fails from the start
+  test(`${surface}: when the cmux tree read fails, j runs no cmux call and the Screen tab reads nothing`, async ($, on) => {
+    const { calls, clock } = await begin($, on, surface, { cmux: { ...CMUX, failing: ['tree'] } })
+    const ui = await mount($, surface)
+    expect((await lines(ui))[0]).toContain('cmux off')
+    await select($, 'ses-wait')
+    await ui.press({ key: 'key:j' })
+    expect(jumps(calls)).toEqual([])
+    expect((await lines(ui)).at(-1)).toBe(' This session has no cmux tab, so j cannot jump to it.')
+    await ui.press({ key: 'tab:screen' })
+    await lines(ui)
+    await clock.advance(2000)
+    expect(reads(calls)).toEqual([])
+    expect((await lines(ui)).some((line) => line.endsWith('│ This session has no cmux tab, so the pane cannot show its screen.'))).toBe(true)
   })
 
   test(`${surface}: a jump and an open mark the session seen, so its YOUR TURN row goes to IDLE`, async ($, on) => {
@@ -183,7 +207,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'tab:screen' })
     await lines(ui)
     expect((await lines(ui)).some((line) => line.endsWith('│ The first screen.'))).toBe(true)
-    expect(reads(calls)[0]?.argv).toEqual(['cmux', 'read-screen', '--workspace', 'workspace:2', '--surface', 'surface:5', '--lines', '40'])
+    expect(reads(calls)[0]?.argv).toEqual(['cmux', 'read-screen', '--workspace', WS_ASK, '--surface', SF_ASK, '--lines', '40'])
     for (const run of reads(calls)) expect(run.init).toEqual({ timeoutMs: 5000 })
     const first = reads(calls).length
     for (let step = 0; step < 3; step += 1) {
@@ -230,7 +254,7 @@ for (const surface of SURFACES) {
   })
 
   test(`${surface}: a screen with an escape sequence and a secret shows with no control character and the secret masked`, async ($, on) => {
-    await begin($, on, surface, { cmux: { ...CMUX, screens: { 'surface:5': `${ESC}[1mBold${ESC}[0m line\n> export TOKEN=${KEY}\n${ESC}]0;title${String.fromCharCode(0x07)}end` } } })
+    await begin($, on, surface, { cmux: { ...CMUX, screens: { [SF_ASK]: `${ESC}[1mBold${ESC}[0m line\n> export TOKEN=${KEY}\n${ESC}]0;title${String.fromCharCode(0x07)}end` } } })
     const ui = await mount($, surface)
     await select($, 'ses-wait')
     await ui.press({ key: 'tab:screen' })

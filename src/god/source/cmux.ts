@@ -1,12 +1,14 @@
 /**
- * The cmux tab map of orangu god: `cmux capabilities` once at start, `cmux tree --all --json`, and
+ * The cmux tab map of orangu god: `cmux capabilities` once at start, `cmux tree --all --json --id-format both`, and
  * `ps -o pid=,tty=,lstart=` in UTC. A session shows in cmux through its PID, then its TTY, then the 1 cmux surface
  * that has that TTY.
  *
  * Each read returns plain data or a source failure and never throws. Only the start check can find cmux missing
  * (the command did not start). After that, a failed read is off, and the collector keeps the last good map.
  * The map fails closed: a TTY that 2 surfaces or 2 PIDs share gives no tab, because a jump or a key on that tab
- * could reach the wrong session.
+ * could reach the wrong session. The tree read asks for the UUIDs (`--id-format both`), and a tab takes the UUID of
+ * its workspace and of its surface, never the short ref, which cmux can renumber between 2 reads. A workspace or a
+ * surface with no UUID counts as a parse error and gives no tab.
  */
 import type { Host } from '../host.js'
 import type { TabRef } from '../types.js'
@@ -60,6 +62,10 @@ export type CmuxTree = { surfaces: readonly CmuxSurface[]; parseErrors: number }
 
 const listOf = (value: unknown): readonly unknown[] | undefined => (Array.isArray(value) ? value : undefined)
 
+/** A cmux UUID, as `--id-format both` writes the `id` of a node. */
+const UUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/
+const uuidOf = (value: unknown): string | undefined => (typeof value === 'string' && UUID.test(value) ? value : undefined)
+
 /** Collects the surfaces of 1 tree and counts each window, workspace, pane or surface node that has the wrong form. */
 class TreeWalk {
   readonly surfaces: CmuxSurface[] = []
@@ -75,12 +81,13 @@ class TreeWalk {
 
   private workspace(value: unknown): void {
     const panes = isObject(value) ? listOf(value.panes) : undefined
-    if (!isObject(value) || typeof value.ref !== 'string' || !panes) {
+    const id = isObject(value) ? uuidOf(value.id) : undefined
+    if (!isObject(value) || id === undefined || !panes) {
       this.parseErrors += 1
       return
     }
     const title = textOf(value.title)
-    const workspace = { workspaceRef: value.ref, workspaceTitle: title ? this.clean(title) : '' }
+    const workspace = { workspaceRef: id, workspaceTitle: title ? this.clean(title) : '' }
     for (const pane of panes) {
       const surfaces = isObject(pane) ? listOf(pane.surfaces) : undefined
       if (!surfaces) this.parseErrors += 1
@@ -89,20 +96,21 @@ class TreeWalk {
   }
 
   private surface(value: unknown, workspace: Pick<CmuxSurface, 'workspaceRef' | 'workspaceTitle'>): void {
-    if (!isObject(value) || typeof value.ref !== 'string') {
+    const id = isObject(value) ? uuidOf(value.id) : undefined
+    if (!isObject(value) || id === undefined) {
       this.parseErrors += 1
       return
     }
     const tty = textOf(value.tty)
     if (!tty) return // a browser surface has no TTY
-    const surface: CmuxSurface = { tty, workspaceRef: workspace.workspaceRef, surfaceRef: value.ref, workspaceTitle: workspace.workspaceTitle }
+    const surface: CmuxSurface = { tty, workspaceRef: workspace.workspaceRef, surfaceRef: id, workspaceTitle: workspace.workspaceTitle }
     const title = textOf(value.title)
     if (title) surface.surfaceTitle = this.clean(title)
     this.surfaces.push(surface)
   }
 }
 
-/** The surfaces of `cmux tree --all --json` that have a TTY, or nothing when the output has no windows list. */
+/** The surfaces of `cmux tree --all --json --id-format both` that have a TTY, or nothing when the output has no windows list. */
 export function parseCmuxTree(stdout: string, clean: CleanText): CmuxTree | undefined {
   const tree = parseJson(stdout)
   const windows = isObject(tree) ? listOf(tree.windows) : undefined
@@ -112,10 +120,10 @@ export function parseCmuxTree(stdout: string, clean: CleanText): CmuxTree | unde
   return { surfaces: walk.surfaces, parseErrors: walk.parseErrors }
 }
 
-/** Runs `cmux tree --all --json`. */
+/** Runs `cmux tree --all --json --id-format both`. */
 export async function readCmuxTree(host: Host, clean: CleanText): Promise<SourceResult<CmuxTree>> {
   try {
-    const result = await tryRun(host, ['cmux', 'tree', '--all', '--json'])
+    const result = await tryRun(host, ['cmux', 'tree', '--all', '--json', '--id-format', 'both'])
     if (!result) return off(notRunReason('cmux tree'))
     if (result.exitCode !== 0) return off(exitReason('cmux tree', result.exitCode))
     const tree = parseCmuxTree(result.stdout, clean)

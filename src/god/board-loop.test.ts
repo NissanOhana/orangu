@@ -212,6 +212,35 @@ describe('the board loop', () => {
     expect(recorded.snapshots.at(-1)!.sessions.find((session) => session.sessionId === 's-turn')!.level).toBe('idle')
   })
 
+  it('keeps a seen mark that comes while a first-sight write is held open: the write does not undo it', async () => {
+    const turn = idle('s-turn', { name: 't', statusSince: NOW - MINUTE, transcript: { ...idle('x').transcript!, lastTurnEndedAt: NOW - MINUTE } })
+    const writes: Array<[string, unknown]> = []
+    const gate: { isHeld: boolean; open?: () => void } = { isHeld: false }
+    const { loop, recorded } = loopOf([facts([turn]), facts([turn, idle('s-new', { name: 'n' })])], {
+      ports: {
+        writeStore: async (key, value) => {
+          if (gate.isHeld) {
+            gate.isHeld = false
+            await new Promise<void>((resolve) => (gate.open = resolve))
+          }
+          writes.push([key, value])
+        },
+      },
+    })
+    await loop.tick()
+    gate.isHeld = true
+    const tick = loop.tick()
+    while (gate.open === undefined) await new Promise((resolve) => setTimeout(resolve, 0))
+    const seen = loop.seen('s-turn', NOW)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    gate.open()
+    await tick
+    await seen
+    expect(loop.store().seenAt).toEqual({ 's-turn': NOW, 's-new': PANE_START })
+    expect(writes.at(-1)).toEqual(['seenAt', { 's-turn': NOW, 's-new': PANE_START }])
+    expect(recorded.snapshots.at(-1)!.sessions.find((session) => session.sessionId === 's-turn')!.level).toBe('idle')
+  })
+
   it('marks nothing for a session that is not on the board', async () => {
     const { loop, recorded } = loopOf([facts([idle('s-b', { name: 'b' })])])
     await loop.tick()

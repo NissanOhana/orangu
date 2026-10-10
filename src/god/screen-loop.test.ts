@@ -51,8 +51,13 @@ function loopOf(answers: Array<string | undefined> = []) {
     for (const timer of timers.filter((one) => !one.isCancelled)) timer.fn()
     await settle()
   }
+  /** fires each live timer once and answers no read: a read in flight stays in flight */
+  const fire = (): void => {
+    time += SCREEN_MS
+    for (const timer of timers.filter((one) => !one.isCancelled)) timer.fn()
+  }
   const live = (): number => timers.filter((timer) => !timer.isCancelled).length
-  return { loop, reads, writes, timers, settle, tick, live }
+  return { loop, reads, writes, timers, settle, tick, fire, live }
 }
 
 describe('screenWanted', () => {
@@ -60,12 +65,15 @@ describe('screenWanted', () => {
     expect(screenWanted(detailSnapshot(), 's-wait', 'screen')).toEqual(WAIT)
   })
 
-  it('asks for nothing in another tab, with no selection, for a session with no tab, with no cmux, or with no board', () => {
+  it('asks for nothing in another tab, with no selection, for a session with no tab, with no cmux or an old tab map, or with no board', () => {
     expect(screenWanted(detailSnapshot(), 's-wait', 'now')).toBeUndefined()
     expect(screenWanted(detailSnapshot(), undefined, 'screen')).toBeUndefined()
     expect(screenWanted(detailSnapshot(), 's-idle', 'screen')).toBeUndefined()
     const noCmux = { ...degradedSnapshot({ cmux: { status: 'missing' } }), sessions: detailSnapshot().sessions }
     expect(screenWanted(noCmux, 's-wait', 'screen')).toBeUndefined()
+    for (const cmux of [{ status: 'off' }, { status: 'unread' }] as const) {
+      expect(screenWanted({ ...degradedSnapshot({ cmux }), sessions: detailSnapshot().sessions }, 's-wait', 'screen'), cmux.status).toBeUndefined()
+    }
     expect(screenWanted(undefined, 's-wait', 'screen')).toBeUndefined()
   })
 })
@@ -171,6 +179,19 @@ describe('the screen loop', () => {
     for (const timer of timers) timer.fn()
     for (const timer of timers) timer.fn()
     expect(reads).toHaveLength(1)
+  })
+
+  it('counts no idle tick while a read runs: a read that ends after the lease still writes, and the reads go on', async () => {
+    const { loop, reads, writes, settle, tick, fire, live } = loopOf(['late', 'next'])
+    loop.want(WAIT, true)
+    for (let step = 0; step < SCREEN_LEASE_TICKS + 3; step += 1) fire()
+    expect(live()).toBe(1)
+    expect(reads).toHaveLength(1)
+    await settle()
+    expect(writes.map((state) => state.read?.text)).toEqual(['late'])
+    await tick()
+    expect(reads).toHaveLength(2)
+    expect(writes.map((state) => state.read?.text)).toEqual(['late', 'next'])
   })
 
   it('marks a failed read and keeps the last good read of the same session under it', async () => {

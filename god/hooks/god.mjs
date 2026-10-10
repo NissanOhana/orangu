@@ -16,8 +16,9 @@ function jumpPlan(snapshot, selectedKey) {
   const session = snapshot?.sessions.find((candidate) => candidate.sessionId === selectedKey);
   if (snapshot === void 0 || session === void 0) return { kind: "off", reason: "no-session" };
   const { sessionId } = session;
-  if (snapshot.sources.cmux.status === "missing") return { kind: "off", reason: "no-cmux", sessionId };
-  const refs = tabRefs(session.tab);
+  const cmux = snapshot.sources.cmux.status;
+  if (cmux === "missing") return { kind: "off", reason: "no-cmux", sessionId };
+  const refs = cmux === "ok" ? tabRefs(session.tab) : void 0;
   if (refs === void 0) return { kind: "off", reason: "no-tab", sessionId };
   return {
     kind: "jump",
@@ -869,14 +870,16 @@ function createBoardLoop(options) {
     snapshot: () => written,
     facts: () => latest2,
     recentStats: () => recent,
-    seen: async (sessionId, at) => {
+    // in the queue of the publishes: a first-sight write that runs builds its seenAt before its await, so a mark made
+    // beside it would be lost
+    seen: (sessionId, at) => serial(async () => {
       const sessions = written?.sessions ?? [];
       if (!sessions.some((session) => session.sessionId === sessionId)) return;
       const kept = sessions.flatMap(({ sessionId: id }) => Object.hasOwn(store.seenAt, id) ? [[id, store.seenAt[id]]] : []);
       store = { ...store, seenAt: { ...Object.fromEntries(kept), [sessionId]: at } };
       await ports.writeStore("seenAt", store.seenAt).catch(() => void 0);
-      await serial(publish).catch(() => void 0);
-    }
+      await publish();
+    }).catch(() => void 0)
   };
 }
 
@@ -1628,6 +1631,8 @@ async function readCmuxCapabilities(host) {
   return { ok: true, value: capabilities };
 }
 var listOf = (value) => Array.isArray(value) ? value : void 0;
+var UUID = /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/;
+var uuidOf = (value) => typeof value === "string" && UUID.test(value) ? value : void 0;
 var TreeWalk = class {
   constructor(clean) {
     this.clean = clean;
@@ -1642,12 +1647,13 @@ var TreeWalk = class {
   }
   workspace(value) {
     const panes = isObject(value) ? listOf(value.panes) : void 0;
-    if (!isObject(value) || typeof value.ref !== "string" || !panes) {
+    const id = isObject(value) ? uuidOf(value.id) : void 0;
+    if (!isObject(value) || id === void 0 || !panes) {
       this.parseErrors += 1;
       return;
     }
     const title = textOf(value.title);
-    const workspace = { workspaceRef: value.ref, workspaceTitle: title ? this.clean(title) : "" };
+    const workspace = { workspaceRef: id, workspaceTitle: title ? this.clean(title) : "" };
     for (const pane of panes) {
       const surfaces = isObject(pane) ? listOf(pane.surfaces) : void 0;
       if (!surfaces) this.parseErrors += 1;
@@ -1655,13 +1661,14 @@ var TreeWalk = class {
     }
   }
   surface(value, workspace) {
-    if (!isObject(value) || typeof value.ref !== "string") {
+    const id = isObject(value) ? uuidOf(value.id) : void 0;
+    if (!isObject(value) || id === void 0) {
       this.parseErrors += 1;
       return;
     }
     const tty = textOf(value.tty);
     if (!tty) return;
-    const surface = { tty, workspaceRef: workspace.workspaceRef, surfaceRef: value.ref, workspaceTitle: workspace.workspaceTitle };
+    const surface = { tty, workspaceRef: workspace.workspaceRef, surfaceRef: id, workspaceTitle: workspace.workspaceTitle };
     const title = textOf(value.title);
     if (title) surface.surfaceTitle = this.clean(title);
     this.surfaces.push(surface);
@@ -1677,7 +1684,7 @@ function parseCmuxTree(stdout, clean) {
 }
 async function readCmuxTree(host, clean) {
   try {
-    const result = await tryRun(host, ["cmux", "tree", "--all", "--json"]);
+    const result = await tryRun(host, ["cmux", "tree", "--all", "--json", "--id-format", "both"]);
     if (!result) return off(notRunReason("cmux tree"));
     if (result.exitCode !== 0) return off(exitReason("cmux tree", result.exitCode));
     const tree = parseCmuxTree(result.stdout, clean);
@@ -2372,6 +2379,7 @@ function promptOf(r) {
   const text = textOf2(message2["content"]);
   return { kind: classifyPrompt(r, text, r["isMeta"] === true), text };
 }
+var SHELL_RECORD_RE = /^\s*<bash-(?:input|stdout|stderr)>/;
 function noteTitlePrompt(title, kind, text) {
   const preview = previewOf(text);
   if (!title.firstHumanPreview && kind === "human") title.firstHumanPreview = preview;
@@ -2434,6 +2442,7 @@ function readUser(s, r, at) {
   }
   const prompt = promptOf(r);
   if (prompt?.kind === "notification") readNotifications(s, prompt.text, at);
+  else if (prompt && TURN_STARTING_KINDS.has(prompt.kind) && SHELL_RECORD_RE.test(prompt.text)) noteTitlePrompt(s.tail, prompt.kind, prompt.text);
   else if (prompt && TURN_STARTING_KINDS.has(prompt.kind)) startTurn(s, prompt.kind, prompt.text, at);
 }
 function taskOf(s, call) {
@@ -3312,9 +3321,9 @@ function agentLines({ session, width, now }) {
     return wrapSegments(parts, width, 1, 8);
   });
 }
-function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed, outcome }) {
+function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed, isTabMapOld, outcome }) {
   if (isCmuxMissing) return message(SCREEN_NO_CMUX, width);
-  if (session.tab === void 0) return message(SCREEN_NO_TAB, width);
+  if (session.tab === void 0 || isTabMapOld === true) return message(SCREEN_NO_TAB, width);
   const own = outcome !== void 0 && outcome.intent.target.sessionId === session.sessionId ? outcome : void 0;
   const notice = own !== void 0 && (own.status === "refused" || own.status === "not-delivered" || own.status === "failed") ? outcomeLines(own, width) : [];
   const fresh = own !== void 0 && "screen" in own ? own.screen : void 0;
@@ -3499,7 +3508,7 @@ function engineHost($) {
 var SCREEN_MS = 1e3;
 var SCREEN_LEASE_TICKS = 2;
 function screenWanted(snapshot, selectedKey, tab) {
-  if (tab !== "screen" || snapshot === void 0 || snapshot.sources.cmux.status === "missing") return void 0;
+  if (tab !== "screen" || snapshot === void 0 || snapshot.sources.cmux.status !== "ok") return void 0;
   const session = snapshot.sessions.find((candidate) => candidate.sessionId === selectedKey);
   const refs = tabRefs(session?.tab);
   return session === void 0 || refs === void 0 ? void 0 : { sessionId: session.sessionId, ...refs };
@@ -3539,7 +3548,7 @@ function createScreenLoop(ports) {
     });
   }
   function tick() {
-    if (target === void 0) return;
+    if (target === void 0 || reading === keyOf(target)) return;
     idleTicks += 1;
     if (idleTicks > SCREEN_LEASE_TICKS) stop();
     else readOnce(target);
@@ -3607,6 +3616,7 @@ function paneDetail(input) {
     tab: input.state.tab,
     scroll: input.state.scroll,
     isCmuxMissing: snapshot.sources.cmux.status === "missing",
+    ...snapshot.sources.cmux.status === "off" || snapshot.sources.cmux.status === "unread" ? { isTabMapOld: true } : {},
     ...screen?.read === void 0 ? {} : { screen: screen.read },
     ...screen?.isFailed === true ? { isScreenFailed: true } : {},
     ...placeholder === void 0 ? {} : { placeholder }

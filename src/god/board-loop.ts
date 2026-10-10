@@ -18,7 +18,7 @@
  * - A choice (a /god form, the f or g key) goes to the store, field by field, and publishes at once.
  * - A jump to a session and an open of its row mark it seen: its seenAt takes that time, goes to the store with the
  *   seenAt of the other sessions of the board, and the loop publishes at once, so YOUR TURN turns to IDLE. A session
- *   that is not on the board is not marked.
+ *   that is not on the board is not marked. The mark runs in the queue of the publishes, after the one that runs.
  * - The loop keeps the stats of the last RECENT_STATS refreshes for /god stats, each refresh once: a tick that the
  *   collector dropped gives the last facts again, with the same time.
  * - A failed port does not stop the loop: a store write that fails leaves the choice in memory, and a snapshot that
@@ -172,13 +172,16 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
     snapshot: () => written,
     facts: () => latest,
     recentStats: () => recent,
-    seen: async (sessionId, at) => {
-      const sessions = written?.sessions ?? []
-      if (!sessions.some((session) => session.sessionId === sessionId)) return
-      const kept = sessions.flatMap(({ sessionId: id }) => (Object.hasOwn(store.seenAt, id) ? [[id, store.seenAt[id]!] as const] : []))
-      store = { ...store, seenAt: { ...Object.fromEntries(kept), [sessionId]: at } }
-      await ports.writeStore('seenAt', store.seenAt).catch(() => undefined)
-      await serial(publish).catch(() => undefined)
-    },
+    // in the queue of the publishes: a first-sight write that runs builds its seenAt before its await, so a mark made
+    // beside it would be lost
+    seen: (sessionId, at) =>
+      serial(async () => {
+        const sessions = written?.sessions ?? []
+        if (!sessions.some((session) => session.sessionId === sessionId)) return
+        const kept = sessions.flatMap(({ sessionId: id }) => (Object.hasOwn(store.seenAt, id) ? [[id, store.seenAt[id]!] as const] : []))
+        store = { ...store, seenAt: { ...Object.fromEntries(kept), [sessionId]: at } }
+        await ports.writeStore('seenAt', store.seenAt).catch(() => undefined)
+        await publish()
+      }).catch(() => undefined),
   }
 }

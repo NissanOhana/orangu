@@ -4,14 +4,15 @@
  * ports to `$`.
  *
  * - screenWanted gives the tab that the shared state asks for: the Screen tab is open, a session of the board is
- *   selected, cmux is on the machine, and the session has a mapped tab whose refs the guard takes. Every surface
- *   gives the same answer, because the state is shared.
+ *   selected, the last cmux read worked (after a failed read the tab map can be old), and the session has a mapped
+ *   tab whose refs the guard takes. Every surface gives the same answer, because the state is shared.
  * - Each draw of the pane calls want with that answer and whether this draw shows the Screen tab of the session (a
  *   narrow board, a message or a pane that cannot draw shows none). No answer stops the loop at once: the tab
  *   closed, the selection moved to a session with no tab, or cmux left. A new answer reads the new tab at once. A
  *   draw that shows the tab starts the loop, or renews it.
- * - A timer tick reads the screen once, and never while a read of the same tab runs. A tick after more than
- *   SCREEN_LEASE_TICKS ticks with no draw that shows the tab stops the loop: no surface draws the pane, so it hid.
+ * - A timer tick reads the screen once, and never while a read of the same tab runs. A tick while that read runs
+ *   does not count, so a slow read ends with its result. A tick after more than SCREEN_LEASE_TICKS counted ticks
+ *   with no draw that shows the tab stops the loop: no surface draws the pane, so it hid.
  *   Each read writes the engine state, and the pane that shows it draws again, so a shown tab renews itself. A draw
  *   of a surface that does not show the tab does not renew it, and does not stop it either, so 2 surfaces of 1
  *   session with 2 layouts do not start and stop the reads in turn.
@@ -48,7 +49,7 @@ export type ScreenLoop = {
 
 /** The tab that the shared state asks the Screen tab to read, the same on every surface. */
 export function screenWanted(snapshot: BoardSnapshot | undefined, selectedKey: string | undefined, tab: DetailTab): ScreenTarget | undefined {
-  if (tab !== 'screen' || snapshot === undefined || snapshot.sources.cmux.status === 'missing') return undefined
+  if (tab !== 'screen' || snapshot === undefined || snapshot.sources.cmux.status !== 'ok') return undefined
   const session = snapshot.sessions.find((candidate) => candidate.sessionId === selectedKey)
   const refs = tabRefs(session?.tab)
   return session === undefined || refs === undefined ? undefined : { sessionId: session.sessionId, ...refs }
@@ -103,7 +104,8 @@ export function createScreenLoop(ports: ScreenPorts): ScreenLoop {
   }
 
   function tick(): void {
-    if (target === undefined) return
+    // a read in flight (up to the 5 s timeout of the host port) holds the lease: its result still comes
+    if (target === undefined || reading === keyOf(target)) return
     idleTicks += 1
     if (idleTicks > SCREEN_LEASE_TICKS) stop()
     else readOnce(target)

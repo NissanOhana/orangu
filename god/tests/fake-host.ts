@@ -29,10 +29,13 @@ export type FakeSession = {
   fileMtimeMs: number
 }
 
-/** The cmux of the fake machine: the tab of each session PID, the screen of each surface, and the calls that exit 1. */
+/**
+ * The cmux of the fake machine: the tab of each session PID by the UUIDs of its workspace and surface, the screen of
+ * each surface, and the calls that exit 1. The tree gives each node its UUID as `id` and a short ref by its place.
+ */
 export type FakeCmux = {
   tabs: Record<number, { tty: string; workspaceRef: string; surfaceRef: string; title: string }>
-  /** the text that `read-screen` gives for each surface ref */
+  /** the text that `read-screen` gives for each surface UUID */
   screens?: Record<string, string>
   /** the cmux subcommands that exit 1 */
   failing?: string[]
@@ -186,10 +189,12 @@ function cmuxRun(cmux: FakeCmux, argv: readonly string[]) {
   if (cmux.failing?.includes(verb)) return ran('', 1)
   if (verb === 'capabilities') return ran(JSON.stringify({ methods: ['system.tree', 'surface.read_text'] }))
   if (verb === 'tree') {
-    const workspaces = [...new Set(Object.values(cmux.tabs).map((tab) => tab.workspaceRef))].map((ref) => ({
-      ref,
-      title: `space ${ref.slice(ref.indexOf(':') + 1)}`,
-      panes: [{ ref: 'pane:1', surfaces: Object.values(cmux.tabs).filter((tab) => tab.workspaceRef === ref).map((tab) => ({ ref: tab.surfaceRef, tty: tab.tty, title: tab.title })) }],
+    const tabs = Object.values(cmux.tabs)
+    const workspaces = [...new Set(tabs.map((tab) => tab.workspaceRef))].map((id, index) => ({
+      ref: `workspace:${index + 1}`,
+      id,
+      title: `space ${index + 1}`,
+      panes: [{ ref: 'pane:1', surfaces: tabs.filter((tab) => tab.workspaceRef === id).map((tab) => ({ ref: `surface:${tabs.indexOf(tab) + 1}`, id: tab.surfaceRef, tty: tab.tty, title: tab.title })) }],
     }))
     return ran(JSON.stringify({ windows: [{ ref: 'window:1', workspaces }] }))
   }

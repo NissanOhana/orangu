@@ -7,7 +7,7 @@
  * - Agents: the running subagents and background tasks first, then the ended ones, then the subagent files that
  *   no task of the read part names.
  * - Screen: the last read of the cmux tab, with its spaces, under the line of a refusal, and under the line that says
- *   that the newest read failed.
+ *   that the newest read failed. While the tab map can be old (the last cmux read failed), the no-tab line only.
  * - Recap: the hint, or the model text under its label and its token count.
  * The session texts are sanitized and redacted before they come here. Outside text that the detail shows on 1 line
  * is flattened, so no line break gets into a line. The clock comes in as `now`.
@@ -53,6 +53,8 @@ export type TabInput = {
   screen?: ScreenRead
   /** true when the newest screen read of this session failed: the Screen tab says so over the last read */
   isScreenFailed?: boolean
+  /** true when the last cmux read failed or did not end: the tab map can be old, so the Screen tab reads nothing */
+  isTabMapOld?: boolean
   /** the last Recap: the Recap tab shows it when it is a Recap of this session */
   recap?: RecapState
   /** the last outcome of the key path: the Screen tab shows a refusal of this session above its screen */
@@ -195,9 +197,9 @@ function agentLines({ session, width, now }: TabInput): Line[] {
 }
 
 /** The Screen tab: why it has no screen, or the newest read of this session under the line of a refusal. */
-function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed, outcome }: TabInput): Line[] {
+function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed, isTabMapOld, outcome }: TabInput): Line[] {
   if (isCmuxMissing) return message(SCREEN_NO_CMUX, width)
-  if (session.tab === undefined) return message(SCREEN_NO_TAB, width)
+  if (session.tab === undefined || isTabMapOld === true) return message(SCREEN_NO_TAB, width)
   const own = outcome !== undefined && outcome.intent.target.sessionId === session.sessionId ? outcome : undefined
   const notice = own !== undefined && (own.status === 'refused' || own.status === 'not-delivered' || own.status === 'failed') ? outcomeLines(own, width) : []
   const fresh = own !== undefined && 'screen' in own ? own.screen : undefined

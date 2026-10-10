@@ -14,7 +14,7 @@ import { cellWidth } from './cells.js'
 import { DETAIL_TABS, scrollBy } from './detail.js'
 import type { ScreenState } from '../source/screen.js'
 import { DEFAULT_DETAIL, NO_DETAIL, TAB_NOT_IN_BUILD, paneDetail, paneDetailLines, type PaneDetail, type PaneDetailInput } from './detail-pane.js'
-import { SCREEN_FAILED, SCREEN_READING } from './detail-tabs.js'
+import { SCREEN_FAILED, SCREEN_NO_TAB, SCREEN_READING } from './detail-tabs.js'
 import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -67,6 +67,15 @@ describe('the detail of the selected session', () => {
     // a read of another session is not this screen
     expect(body({ sessionId: 's-work', read: { ...read, sessionId: 's-work' }, isFailed: true })).toEqual([` ${SCREEN_READING}`])
     expect(SCREEN_FAILED).toBe('cmux did not read the screen. The pane tries again in 1 s.')
+  })
+
+  it('shows the no-tab line in the Screen tab while the last cmux read failed, and not the last read, which can be of an old tab', () => {
+    const read = { sessionId: 's-wait', workspaceRef: 'workspace:7', surfaceRef: 'surface:12', text: 'An old screen.', readAt: NOW }
+    const snapshot = detailSnapshot()
+    const off = { ...snapshot, sources: { ...snapshot.sources, cmux: { status: 'off' as const } } }
+    const detail = sessionDetail(detailOf(off, { state: { ...DEFAULT_DETAIL, tab: 'screen' }, screen: { sessionId: 's-wait', read, isFailed: false } }))
+    if (detail.view.kind !== 'detail') throw new Error(detail.view.kind)
+    expect(detail.view.body.map(text)).toEqual([` ${SCREEN_NO_TAB}`])
   })
 
   it('holds every line to the width and the rows, in every tab of every session', () => {

@@ -9,6 +9,10 @@
  *   record) give the title order only: the bytes between them and the tail were not read, so a tool use in them
  *   has no result to pair with, and it never opens a question.
  * - lastPrompt: the last prompt that classifyPrompt calls human. lastReply: the last text of a model reply.
+ * - A shell record (the input line or the output of a `!` command: `<bash-input>`, `<bash-stdout>`,
+ *   `<bash-stderr>`) is not a prompt of the person and starts no turn here: its output would read as the words of
+ *   the person. It still counts in the title order, which is the report's, so the god title stays the report title.
+ *   classifyPrompt does not change: its kinds are in cached analyses.
  * - openQuestion and activity: a call is open until its result comes. A new turn closes every call of the turn
  *   before it, and ends each subagent that had no result.
  * - agents: an Agent call runs until its result. An Agent call that the result says was launched, and a Bash
@@ -138,6 +142,9 @@ function promptOf(r: JsonObject): { kind: PromptKind; text: string } | undefined
   return { kind: classifyPrompt(r, text, r['isMeta'] === true), text }
 }
 
+/** A record of the shell mode of the prompt: the input line or the output of a `!` command, not words of the person. */
+const SHELL_RECORD_RE = /^\s*<bash-(?:input|stdout|stderr)>/
+
 /** Notes a turn-starting prompt in the title facts of 1 part, as parse.ts keeps its first prompt and first turn. */
 function noteTitlePrompt(title: TitleFacts, kind: PromptKind, text: string): void {
   const preview = previewOf(text)
@@ -211,6 +218,7 @@ function readUser(s: RecordState, r: JsonObject, at: number | undefined): void {
   }
   const prompt = promptOf(r)
   if (prompt?.kind === 'notification') readNotifications(s, prompt.text, at)
+  else if (prompt && TURN_STARTING_KINDS.has(prompt.kind) && SHELL_RECORD_RE.test(prompt.text)) noteTitlePrompt(s.tail, prompt.kind, prompt.text)
   else if (prompt && TURN_STARTING_KINDS.has(prompt.kind)) startTurn(s, prompt.kind, prompt.text, at)
 }
 

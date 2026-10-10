@@ -58,6 +58,8 @@ export type DetailInput = {
   screen?: ScreenRead
   /** true when the newest screen read of this session failed */
   isScreenFailed?: boolean
+  /** true when the last cmux read failed or did not end, so the tab map can be old */
+  isTabMapOld?: boolean
   recap?: RecapState
   outcome?: DeliverOutcome
   /** a line that the open tab shows in place of its content, when the source of the tab is not in this build */

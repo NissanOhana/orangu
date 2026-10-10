@@ -5,7 +5,8 @@
  * - The selected session is the selected row of the board when it is a session of the snapshot. A heading, no
  *   selection, or a session that left the board selects none.
  * - The Screen tab shows the screen state of the selected session (src/god/screen-loop.ts): its last good read, and
- *   whether the newest read failed. A state of another session shows nothing of it.
+ *   whether the newest read failed. A state of another session shows nothing of it. While the last cmux read failed,
+ *   the tab says that the session has no tab, because the tab map can be old.
  * - The Recap tab shows 1 line that says that it is not in this build: the Recap call comes with its own chunk of
  *   work, and a tab never says that it reads what nothing reads.
  * - For each side that the window over the tab content cuts, the view gives the scroll that its key goes to: w the
@@ -86,6 +87,7 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
     tab: input.state.tab,
     scroll: input.state.scroll,
     isCmuxMissing: snapshot.sources.cmux.status === 'missing',
+    ...(snapshot.sources.cmux.status === 'off' || snapshot.sources.cmux.status === 'unread' ? { isTabMapOld: true } : {}),
     ...(screen?.read === undefined ? {} : { screen: screen.read }),
     ...(screen?.isFailed === true ? { isScreenFailed: true } : {}),
     ...(placeholder === undefined ? {} : { placeholder }),

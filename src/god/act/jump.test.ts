@@ -103,6 +103,13 @@ describe('jumpPlan', () => {
     expect(jumpPlan(withTab(tab('workspace:7', '--window')), 's-wait')).toEqual({ kind: 'off', reason: 'no-tab', sessionId: 's-wait' })
   })
 
+  it('is off with no-tab while the last cmux read failed or no read ended yet: the tab map can be old', () => {
+    for (const cmux of [{ status: 'off', reason: 'The cmux tree command exited 1.' }, { status: 'unread' }] as const) {
+      const snapshot = degradedSnapshot({ cmux })
+      expect(jumpPlan({ ...snapshot, sessions: detailSnapshot().sessions }, 's-wait'), cmux.status).toEqual({ kind: 'off', reason: 'no-tab', sessionId: 's-wait' })
+    }
+  })
+
   it('is off with no-session when no session is selected, a heading is selected, the session left, or no board exists', () => {
     expect(jumpPlan(detailSnapshot(), undefined)).toEqual({ kind: 'off', reason: 'no-session' })
     expect(jumpPlan(detailSnapshot(), STALE_GROUP_KEY)).toEqual({ kind: 'off', reason: 'no-session' })

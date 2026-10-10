@@ -41,8 +41,10 @@ const registryRow = (who: Identity, over: Record<string, unknown> = {}): Record<
   statusUpdatedAt: T0 - MINUTE,
   ...over,
 })
+const WS_ID = '00000000-0000-4000-8000-00000000a001'
+const SF_ID = '00000000-0000-4000-8000-00000000b001'
 const treeOf = (title: string): unknown => ({
-  windows: [{ ref: 'window:1', workspaces: [{ ref: 'workspace:1', title, panes: [{ ref: 'pane:1', surfaces: [{ ref: 'surface:1', tty: 'ttys001', title: 'claude' }] }] }] }],
+  windows: [{ ref: 'window:1', workspaces: [{ ref: 'workspace:1', id: WS_ID, title, panes: [{ ref: 'pane:1', surfaces: [{ ref: 'surface:1', id: SF_ID, tty: 'ttys001', title: 'claude' }] }] }] }],
 })
 const transcriptOf = (who: Identity, build: (b: SessionBuilder) => void): string => {
   const b = new SessionBuilder({ sessionId: who.sessionId, cwd: who.cwd, startAt: new Date(T0 - 5 * MINUTE).toISOString() })
@@ -256,12 +258,12 @@ describe('the 2 s tick and the 15 s loop', () => {
       status: 'busy',
       statusSince: T0 - MINUTE,
       repo: { commonDir: `${A.cwd}/.git`, topLevel: A.cwd, name: 'alpha', isWorktree: false },
-      tab: { pid: A.pid, tty: 'ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: 'alpha' },
+      tab: { pid: A.pid, tty: 'ttys001', workspaceRef: WS_ID, surfaceRef: SF_ID, workspaceTitle: 'alpha' },
       transcript: { lastPrompt: 'Fix the parser.', lastReply: 'The parser test passes.' },
       lastWriteAt: T0,
       subagents: [],
     })
-    expect(m.commands()).toEqual(expect.arrayContaining(['claude agents --json', 'cmux capabilities', 'cmux tree --all --json', 'ps -o pid=,tty=,lstart= -p 41001']))
+    expect(m.commands()).toEqual(expect.arrayContaining(['claude agents --json', 'cmux capabilities', 'cmux tree --all --json --id-format both', 'ps -o pid=,tty=,lstart= -p 41001']))
     expect(m.runs.find((run) => run.argv.startsWith('ps '))?.options).toEqual({ env: { TZ: 'UTC' } })
     expect(m.runs.find((run) => run.argv.startsWith('git '))?.options).toEqual({ cwd: A.cwd })
   })
@@ -500,13 +502,13 @@ describe('cmux', () => {
     const first = await c.refresh()
     expect(first.sources.cmux).toEqual({ status: 'missing', reason: 'The cmux command did not start.' })
     expect(only(first).tab).toBeUndefined()
-    expect(m.commands()).not.toContain('cmux tree --all --json')
+    expect(m.commands()).not.toContain('cmux tree --all --json --id-format both')
     m.heal('run cmux capabilities')
     const found = await afterLoop(m, c)
     expect(found.sources.cmux.status).toBe('ok')
-    expect(only(found).tab).toMatchObject({ workspaceRef: 'workspace:1', surfaceRef: 'surface:1' })
+    expect(only(found).tab).toMatchObject({ workspaceRef: WS_ID, surfaceRef: SF_ID })
     await afterLoop(m, c)
-    expect([m.count('cmux capabilities'), m.count('cmux tree --all --json')]).toEqual([2, 2])
+    expect([m.count('cmux capabilities'), m.count('cmux tree --all --json --id-format both')]).toEqual([2, 2])
   })
 })
 
