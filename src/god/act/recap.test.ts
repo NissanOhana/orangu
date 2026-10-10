@@ -13,7 +13,7 @@ import { textCleaner } from '../sanitize.js'
 import type { GodSession, HistoryTurn } from '../types.js'
 import { RECAP_STALE_MS } from '../view/detail-tabs.js'
 import { TOOL_QUOTE_RULE } from '../view/tool-text.js'
-import { RECAP_MAX_TOKENS, RECAP_MODEL, RECAP_TEXT_MAX, RECAP_TIMEOUT_MS, RECAP_TURNS, recapRequest, recapState, recapTokens, runRecap } from './recap.js'
+import { RECAP_MAX_TOKENS, RECAP_MODEL, RECAP_PROMPT_MAX_BYTES, RECAP_TEXT_MAX, RECAP_TIMEOUT_MS, RECAP_TURNS, recapRequest, recapState, recapTokens, runRecap, utf8Length } from './recap.js'
 
 const HOME = '/tmp/god-home'
 const clean = textCleaner(HOME)
@@ -58,10 +58,63 @@ describe('the Recap request', () => {
     expect(RECAP_TIMEOUT_MS).toBeLessThan(RECAP_STALE_MS)
   })
 
-  it('keeps the session texts of 1 Recap under about 20 KB', () => {
-    const long = 'The tests pass. '.repeat(400)
-    const request = recapRequest(waitingRow(Array.from({ length: 10 }, () => ({ prompt: long, reply: long }))), clean)
-    expect(request.prompt.length).toBeLessThan(20_000)
+  it('counts the UTF-8 bytes of a text as the wire does', () => {
+    for (const text of ['abc', 'é', '日本語', 'a\u{1F600}b', JSON.stringify('\ud800 x'), 'He said "stop".\n']) expect(utf8Length(text), text).toBe(Buffer.byteLength(text, 'utf8'))
+  })
+
+  it('holds the prompt at RECAP_PROMPT_MAX_BYTES UTF-8 bytes or fewer, with long facts, quotes and line breaks, or wide characters', () => {
+    expect(RECAP_PROMPT_MAX_BYTES).toBe(20_000)
+    const long = (unit: string): string => unit.repeat(Math.ceil((RECAP_TEXT_MAX * 2) / unit.length))
+    const cases: Array<[string, string]> = [
+      ['long facts', long('The tests pass. ')],
+      ['quotes and line breaks', long('"a"\n\\')],
+      ['wide characters', long('日本語の質問')],
+      ['emoji', long('\u{1F600}')],
+    ]
+    for (const [name, text] of cases) {
+      const history = Array.from({ length: 10 }, () => ({ prompt: text, reply: text }))
+      const base = waitingRow(history)
+      const row: GodSession = {
+        ...base,
+        name: text,
+        waitingFor: text,
+        transcript: { ...base.transcript!, title: text, activity: { ...base.transcript!.activity!, text }, openQuestion: { toolUseId: 'tu-ask', questions: [1, 2, 3].map(() => ({ text, header: 'h', multiSelect: false, options: [] })) } },
+      }
+      const prompt = recapRequest(row, clean).prompt
+      expect(Buffer.byteLength(prompt, 'utf8'), name).toBeLessThanOrEqual(RECAP_PROMPT_MAX_BYTES)
+      expect(prompt.split('\n')[0]!.startsWith('Session: '), name).toBe(true)
+      expect(prompt, name).toContain('Level: NEEDS YOU')
+      // each fact keeps its line, and a cut fact ends with the count of the characters that the cut hid
+      const facts = prompt.split('\n').filter((line) => !/^(Prompt|Reply|Level): /.test(line))
+      expect(facts.map((line) => line.slice(0, line.indexOf(': '))), name).toEqual(['Session', 'Title', 'Waits for', 'Open question', 'Open question', 'Open question', 'Last tool'])
+      const whole = Array.from(clean(text))
+      for (const line of facts) {
+        const [, frame, hidden] = /^[^:]+: (".*")(?:…\+(\d+))?$/.exec(line)!
+        const shown = Array.from(JSON.parse(frame!) as string)
+        expect(whole.slice(0, shown.length), name).toEqual(shown)
+        expect(shown.length + Number(hidden ?? 0), name).toBe(whole.length)
+      }
+    }
+  })
+
+  it('leaves out the fact lines that do not fit with their share, so very many open questions stay under the cap', () => {
+    const base = waitingRow()
+    const questions = Array.from({ length: 1000 }, (_, index) => ({ text: `Which eval set ${index}?`, header: 'h', multiSelect: false, options: [] }))
+    const prompt = recapRequest({ ...base, transcript: { ...base.transcript!, openQuestion: { toolUseId: 'tu-ask', questions } } }, clean).prompt
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThanOrEqual(RECAP_PROMPT_MAX_BYTES)
+    expect(prompt.split('\n').slice(0, 5)).toEqual(['Session: "api-7"', 'Title: "Fix the parser"', 'Level: NEEDS YOU', 'Waits for: "input needed"', 'Open question: "Which eval set 0?"'])
+    expect(prompt).not.toContain('Last tool: ')
+  })
+
+  it('drops the oldest turns first when the prompt would pass its cap', () => {
+    // each text is cut to RECAP_TEXT_MAX characters of 2 to 3 bytes, so only some of the last turns fit
+    const big = (word: string): HistoryTurn => ({ prompt: `${word}日本語 `.repeat(400), reply: `${word}日本語 `.repeat(400) })
+    const request = recapRequest(waitingRow(WORDS.map(big)), clean)
+    const kept = request.prompt.split('\n').flatMap((line) => /^Prompt: "([a-z]+)/.exec(line)?.[1] ?? [])
+    expect(kept.length).toBeGreaterThan(0)
+    expect(kept.length).toBeLessThan(RECAP_TURNS)
+    expect(kept).toEqual(WORDS.slice(-kept.length))
+    expect(Buffer.byteLength(request.prompt, 'utf8')).toBeLessThanOrEqual(RECAP_PROMPT_MAX_BYTES)
   })
 
   it('names the Recap model, the limits, and a system text with the quote rule', () => {

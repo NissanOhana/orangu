@@ -9,6 +9,9 @@
  *   character, the secrets masked, the home folder as `~`), then cut to RECAP_TEXT_MAX characters with `…+N` for the
  *   characters that it cut, then framed as a JSON string literal, so a quote, a backslash or a line break in it cannot
  *   end its frame or start a new prompt line. The cut comes after the redaction, so a cut never splits a secret open.
+ * - The prompt holds RECAP_PROMPT_MAX_BYTES UTF-8 bytes or fewer. The oldest turns go first. If the facts alone pass
+ *   the cap, each fact text gets an equal share of the bytes (FACT_MIN_BYTES or more), with `…+N` for what its cut
+ *   hid. The fact lines that still do not fit (only with very many open questions) are left out, the last first.
  * - The reply text is cleaned too: a model can echo a control character. The token count is the sum of the 4 usage
  *   counts. A reply with no text keeps its reason, and a call that the engine refuses to send gives `refused`.
  * The clock comes in through the ports.
@@ -26,11 +29,11 @@ export const RECAP_MODEL = 'claude-haiku-5-5'
 /** The Recap reads this many of the last turns of the session. */
 export const RECAP_TURNS = 6
 
-/**
- * Each session text of the prompt keeps this many characters (code points) or fewer, so the session texts of 1 Recap
- * stay under about 20 KB (RECAP_TURNS prompts and replies), the limit at which orangu asks before a model reads more.
- */
+/** Each session text of the prompt keeps this many characters (code points) or fewer. */
 export const RECAP_TEXT_MAX = 1500
+
+/** The framed prompt of 1 Recap holds this many UTF-8 bytes or fewer: the limit at which orangu asks before a model reads more. */
+export const RECAP_PROMPT_MAX_BYTES = 20_000
 
 /** The reply cap of the Recap, in tokens. */
 export const RECAP_MAX_TOKENS = 600
@@ -47,27 +50,71 @@ export type RecapPorts = {
   clean: (text: string) => string
 }
 
-/** A session text in its frame: cleaned, cut to its limit with the count of what it cut, then a JSON string. */
-function framed(text: string, clean: (text: string) => string): string {
+const encoder = new TextEncoder()
+
+/** The UTF-8 bytes of a text, as the wire sends it. */
+export function utf8Length(text: string): number {
+  return encoder.encode(text).length
+}
+
+/** The UTF-8 bytes of prompt lines, with a line break between each 2. */
+const bytesOf = (lines: readonly string[]): number => utf8Length(lines.join('\n'))
+
+/** The bytes of the longest label, its `: ` and its line break: the most that a fact line adds to its text. */
+const LINE_BYTES = Math.max(...Object.values(RECAP_LABEL).map(utf8Length)) + 3
+
+/** A fact text keeps this many bytes or more when the facts share the cap, so very many lines push the last out, not cut each fact to its mark. */
+const FACT_MIN_BYTES = 256
+
+/** A session text in its frame: cleaned, cut to RECAP_TEXT_MAX characters and to maxBytes UTF-8 bytes with the count of what it cut, then a JSON string. */
+function framed(text: string, clean: (text: string) => string, maxBytes: number): string {
   const chars = Array.from(clean(text))
-  if (chars.length <= RECAP_TEXT_MAX) return JSON.stringify(chars.join(''))
-  return `${JSON.stringify(chars.slice(0, RECAP_TEXT_MAX).join(''))}${cutMark(chars.length - RECAP_TEXT_MAX)}`
+  const whole = JSON.stringify(chars.join(''))
+  if (chars.length <= RECAP_TEXT_MAX && utf8Length(whole) <= maxBytes) return whole
+  const room = maxBytes - utf8Length(cutMark(chars.length))
+  let kept = 0
+  let bytes = 2 // the 2 quotes of the frame
+  while (kept < Math.min(chars.length, RECAP_TEXT_MAX)) {
+    const next = utf8Length(JSON.stringify(chars[kept])) - 2
+    if (bytes + next > room) break
+    bytes += next
+    kept += 1
+  }
+  return `${JSON.stringify(chars.slice(0, kept).join(''))}${cutMark(chars.length - kept)}`
+}
+
+/** The first lines that fit in RECAP_PROMPT_MAX_BYTES together. */
+function within(lines: readonly string[]): string[] {
+  let bytes = -1 // the first line has no line break before it
+  const kept: string[] = []
+  for (const line of lines) {
+    bytes += utf8Length(line) + 1
+    if (bytes > RECAP_PROMPT_MAX_BYTES) break
+    kept.push(line)
+  }
+  return kept
 }
 
 /** The request of the Recap of 1 session. */
 export function recapRequest(session: GodSession, clean: (text: string) => string): ModelRequest {
   const transcript = session.transcript
-  const fact = (label: string, text: string | undefined): string[] => (text === undefined || text === '' ? [] : [`${label}: ${framed(text, clean)}`])
-  const turns = (transcript?.history ?? []).slice(-RECAP_TURNS).flatMap((turn) => [...fact(RECAP_LABEL.prompt, turn.prompt), ...fact(RECAP_LABEL.reply, turn.reply)])
-  const lines = [
-    ...fact(RECAP_LABEL.session, session.name),
-    ...fact(RECAP_LABEL.title, transcript?.title),
+  const line = (label: string, text: string | undefined, maxBytes = Number.POSITIVE_INFINITY): string[] =>
+    text === undefined || text === '' ? [] : [`${label}: ${framed(text, clean, maxBytes)}`]
+  const facts = (maxBytes?: number): string[] => [
+    ...line(RECAP_LABEL.session, session.name, maxBytes),
+    ...line(RECAP_LABEL.title, transcript?.title, maxBytes),
     `${RECAP_LABEL.level}: ${LEVEL_HEADING[session.level]}`,
-    ...fact(RECAP_LABEL.waits, session.waitingFor),
-    ...(transcript?.openQuestion?.questions ?? []).flatMap((question) => fact(RECAP_LABEL.question, question.text)),
-    ...fact(RECAP_LABEL.tool, transcript?.activity?.text),
-    ...turns,
+    ...line(RECAP_LABEL.waits, session.waitingFor, maxBytes),
+    ...(transcript?.openQuestion?.questions ?? []).flatMap((question) => line(RECAP_LABEL.question, question.text, maxBytes)),
+    ...line(RECAP_LABEL.tool, transcript?.activity?.text, maxBytes),
   ]
+  const whole = facts()
+  const share = Math.max(Math.floor(RECAP_PROMPT_MAX_BYTES / whole.length) - LINE_BYTES, FACT_MIN_BYTES)
+  const head = bytesOf(whole) <= RECAP_PROMPT_MAX_BYTES ? whole : within(facts(share))
+  const turns = (transcript?.history ?? []).slice(-RECAP_TURNS).map((turn) => [...line(RECAP_LABEL.prompt, turn.prompt), ...line(RECAP_LABEL.reply, turn.reply)])
+  let oldest = 0
+  while (oldest < turns.length && bytesOf([...head, ...turns.slice(oldest).flat()]) > RECAP_PROMPT_MAX_BYTES) oldest += 1
+  const lines = [...head, ...turns.slice(oldest).flat()]
   return { model: RECAP_MODEL, system: `${RECAP_SYSTEM} ${TOOL_QUOTE_RULE}`, prompt: lines.join('\n'), maxTokens: RECAP_MAX_TOKENS, timeoutMs: RECAP_TIMEOUT_MS }
 }
 

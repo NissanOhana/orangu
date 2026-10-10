@@ -157,6 +157,14 @@ for (const surface of SURFACES) {
     })
   }
 
+  test(`${surface}: 2 presses of x in 1 frame make exactly 1 model call`, async ($, on) => {
+    const { calls, ui } = await begin($, on, surface)
+    await select($, 'ses-a')
+    await ui.press({ key: 'tab:recap' })
+    await Promise.all([ui.press({ key: 'key:x' }), ui.press({ key: 'key:x' })])
+    expect(calls.models).toHaveLength(1)
+  })
+
   test(`${surface}: while the model writes a Recap, the Recap tab has no x key, so a second call cannot start`, async ($, on) => {
     const gate: { sleep?: () => Promise<void> } = {}
     const { calls, clock, ui } = await begin($, on, surface, { modelDelay: () => gate.sleep?.() ?? Promise.resolve() })

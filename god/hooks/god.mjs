@@ -4470,26 +4470,59 @@ function sessionToolText(snapshot, name, width, now) {
 var RECAP_MODEL = "claude-haiku-5-5";
 var RECAP_TURNS = 6;
 var RECAP_TEXT_MAX = 1500;
+var RECAP_PROMPT_MAX_BYTES = 2e4;
 var RECAP_MAX_TOKENS = 600;
 var RECAP_TIMEOUT_MS = 6e4;
-function framed(text, clean) {
+var encoder2 = new TextEncoder();
+function utf8Length(text) {
+  return encoder2.encode(text).length;
+}
+var bytesOf = (lines) => utf8Length(lines.join("\n"));
+var LINE_BYTES = Math.max(...Object.values(RECAP_LABEL).map(utf8Length)) + 3;
+var FACT_MIN_BYTES = 256;
+function framed(text, clean, maxBytes) {
   const chars = Array.from(clean(text));
-  if (chars.length <= RECAP_TEXT_MAX) return JSON.stringify(chars.join(""));
-  return `${JSON.stringify(chars.slice(0, RECAP_TEXT_MAX).join(""))}${cutMark(chars.length - RECAP_TEXT_MAX)}`;
+  const whole = JSON.stringify(chars.join(""));
+  if (chars.length <= RECAP_TEXT_MAX && utf8Length(whole) <= maxBytes) return whole;
+  const room = maxBytes - utf8Length(cutMark(chars.length));
+  let kept = 0;
+  let bytes = 2;
+  while (kept < Math.min(chars.length, RECAP_TEXT_MAX)) {
+    const next = utf8Length(JSON.stringify(chars[kept])) - 2;
+    if (bytes + next > room) break;
+    bytes += next;
+    kept += 1;
+  }
+  return `${JSON.stringify(chars.slice(0, kept).join(""))}${cutMark(chars.length - kept)}`;
+}
+function within(lines) {
+  let bytes = -1;
+  const kept = [];
+  for (const line of lines) {
+    bytes += utf8Length(line) + 1;
+    if (bytes > RECAP_PROMPT_MAX_BYTES) break;
+    kept.push(line);
+  }
+  return kept;
 }
 function recapRequest(session, clean) {
   const transcript = session.transcript;
-  const fact = (label, text) => text === void 0 || text === "" ? [] : [`${label}: ${framed(text, clean)}`];
-  const turns = (transcript?.history ?? []).slice(-RECAP_TURNS).flatMap((turn) => [...fact(RECAP_LABEL.prompt, turn.prompt), ...fact(RECAP_LABEL.reply, turn.reply)]);
-  const lines = [
-    ...fact(RECAP_LABEL.session, session.name),
-    ...fact(RECAP_LABEL.title, transcript?.title),
+  const line = (label, text, maxBytes = Number.POSITIVE_INFINITY) => text === void 0 || text === "" ? [] : [`${label}: ${framed(text, clean, maxBytes)}`];
+  const facts = (maxBytes) => [
+    ...line(RECAP_LABEL.session, session.name, maxBytes),
+    ...line(RECAP_LABEL.title, transcript?.title, maxBytes),
     `${RECAP_LABEL.level}: ${LEVEL_HEADING[session.level]}`,
-    ...fact(RECAP_LABEL.waits, session.waitingFor),
-    ...(transcript?.openQuestion?.questions ?? []).flatMap((question) => fact(RECAP_LABEL.question, question.text)),
-    ...fact(RECAP_LABEL.tool, transcript?.activity?.text),
-    ...turns
+    ...line(RECAP_LABEL.waits, session.waitingFor, maxBytes),
+    ...(transcript?.openQuestion?.questions ?? []).flatMap((question) => line(RECAP_LABEL.question, question.text, maxBytes)),
+    ...line(RECAP_LABEL.tool, transcript?.activity?.text, maxBytes)
   ];
+  const whole = facts();
+  const share = Math.max(Math.floor(RECAP_PROMPT_MAX_BYTES / whole.length) - LINE_BYTES, FACT_MIN_BYTES);
+  const head = bytesOf(whole) <= RECAP_PROMPT_MAX_BYTES ? whole : within(facts(share));
+  const turns = (transcript?.history ?? []).slice(-RECAP_TURNS).map((turn) => [...line(RECAP_LABEL.prompt, turn.prompt), ...line(RECAP_LABEL.reply, turn.reply)]);
+  let oldest = 0;
+  while (oldest < turns.length && bytesOf([...head, ...turns.slice(oldest).flat()]) > RECAP_PROMPT_MAX_BYTES) oldest += 1;
+  const lines = [...head, ...turns.slice(oldest).flat()];
   return { model: RECAP_MODEL, system: `${RECAP_SYSTEM} ${TOOL_QUOTE_RULE}`, prompt: lines.join("\n"), maxTokens: RECAP_MAX_TOKENS, timeoutMs: RECAP_TIMEOUT_MS };
 }
 function recapTokens(usage) {
@@ -4508,10 +4541,10 @@ async function runRecap(ports, session) {
 // src/god/recap-keys.tsx
 async function makeRecap($, runtime, sessionId) {
   if (runtime.isRunning) return;
-  const session = (await read2($, BOARD) ?? void 0)?.sessions.find((candidate) => candidate.sessionId === sessionId);
-  if (session === void 0) return;
   runtime.isRunning = true;
   try {
+    const session = (await read2($, BOARD) ?? void 0)?.sessions.find((candidate) => candidate.sessionId === sessionId);
+    if (session === void 0) return;
     const clean = textCleaner(await $.env.get("HOME") ?? "");
     await update2($, RECAP, () => ({ status: "running", sessionId, startedAt: engineClock() }));
     const recap = await runRecap({ complete: engineEffects($).complete, clock: engineClock, clean }, session);
