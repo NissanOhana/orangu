@@ -63,7 +63,8 @@ export function reportFindings(report) {
     for (const note of section.notes ?? []) {
       const match = /^\S+ (hooks|calls|env reads|env writes): (.*)$/.exec(note)
       if (!match) continue
-      const values = match[2].split(',').map((value) => value.trim()).filter((value) => value && value !== 'nothing')
+      // a comma inside parentheses parts the helpers of 1 call (`$.ui.focus (via one, two)`), not 2 calls
+      const values = match[2].split(/,(?![^(]*\))/).map((value) => value.trim()).filter((value) => value && value !== 'nothing')
       if (match[1] === 'hooks') hooksNote = true
       if (match[1] === 'calls') {
         callsNote = true
