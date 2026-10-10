@@ -28,6 +28,8 @@ export type FakeSession = {
   transcriptMtimeMs?: number
   /** the mtime of the registry file: a test moves it when it changes the session */
   fileMtimeMs: number
+  /** the process start that the registry file writes; absent, the start that the fake ps gives */
+  procStart?: string
 }
 
 /**
@@ -36,8 +38,14 @@ export type FakeSession = {
  */
 export type FakeCmux = {
   tabs: Record<number, { tty: string; workspaceRef: string; surfaceRef: string; title: string }>
-  /** the text that `read-screen` gives for each surface UUID */
-  screens?: Record<string, string>
+  /** the text that `read-screen` gives for each surface UUID, or a function of the text typed into its input box */
+  screens?: Record<string, string | ((typed: string) => string)>
+  /** the text that send and send-key typed into the input box of each surface so far; enter empties it */
+  typed?: Record<string, string>
+  /** runs after each send or send-key, with the surface and the count of keys so far: a test changes the machine there */
+  onKey?: (surface: string, keys: number) => void
+  /** the count of send and send-key calls so far */
+  keyCount?: number
   /** the cmux subcommands that exit 1 */
   failing?: string[]
   /** a wait before a cmux subcommand answers, as a slow cmux: a test passes the sleep of its mock clock */
@@ -83,9 +91,12 @@ const registryPath = (pid: number): string => `${HOME}/.claude/sessions/${pid}.j
 
 const ran = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
 
+/** The process start of every PID that the fake ps gives, in UTC. */
+export const PS_START = 'Fri Oct  9 08:00:00 2026'
+
 function registryText(session: FakeSession): string {
   const { pid, sessionId, cwd, name, status, waitingFor, statusUpdatedAt } = session
-  return JSON.stringify({ pid, sessionId, cwd, name, kind: 'interactive', status, ...(status === 'waiting' && waitingFor ? { waitingFor } : {}), statusUpdatedAt, startedAt: statusUpdatedAt })
+  return JSON.stringify({ pid, sessionId, cwd, name, kind: 'interactive', status, ...(status === 'waiting' && waitingFor ? { waitingFor } : {}), statusUpdatedAt, startedAt: statusUpdatedAt, procStart: session.procStart ?? PS_START })
 }
 
 const fileOf = (machine: Machine, path: string): FakeSession | undefined =>
@@ -110,7 +121,7 @@ export function installMachine(on: On, machine: Machine): Calls {
     }
     if (command === 'ps' && machine.cmux) {
       const pids = (rest[3] ?? '').split(',').map(Number)
-      const rows = pids.flatMap((pid) => (machine.cmux!.tabs[pid] ? [`${pid} ${machine.cmux!.tabs[pid]!.tty}  Fri Oct  9 08:00:00 2026`] : [`${pid} ??       Fri Oct  9 08:00:00 2026`]))
+      const rows = pids.flatMap((pid) => (machine.cmux!.tabs[pid] ? [`${pid} ${machine.cmux!.tabs[pid]!.tty}  ${PS_START}`] : [`${pid} ??       ${PS_START}`]))
       return ran(`${rows.join('\n')}\n`)
     }
     if (command === 'git') {
@@ -210,7 +221,19 @@ function cmuxRun(cmux: FakeCmux, argv: readonly string[]) {
     }))
     return ran(JSON.stringify({ windows: [{ ref: 'window:1', workspaces }] }))
   }
-  if (verb === 'read-screen') return ran(cmux.screens?.[flagValue(argv, '--surface') ?? ''] ?? '')
+  const surface = flagValue(argv, '--surface') ?? ''
+  const typed = (cmux.typed ??= {})
+  if (verb === 'read-screen') {
+    const screen = cmux.screens?.[surface] ?? ''
+    return ran(typeof screen === 'string' ? screen : screen(typed[surface] ?? ''))
+  }
+  if (verb === 'send' || verb === 'send-key') {
+    const value = argv.at(-1) ?? ''
+    const before = typed[surface] ?? ''
+    typed[surface] = verb === 'send' ? before + value : value === 'shift+enter' ? `${before}\n` : value === 'enter' ? '' : before
+    cmux.keyCount = (cmux.keyCount ?? 0) + 1
+    cmux.onKey?.(surface, cmux.keyCount)
+  }
   return ran('')
 }
 
@@ -245,6 +268,12 @@ export const bash = (id: string, command: string, description: string, ms: numbe
 /** The result of a call: the answer of a question or the outcome of a tool. */
 export const toolResult = (id: string, text: string, ms: number): string =>
   JSON.stringify({ type: 'user', timestamp: at(ms), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: text }] } })
+
+/** A Bash call that runs in the background: its call, and the result that says it started. It runs until a task notification. */
+export const backgroundTask = (id: string, ms: number): string[] => [
+  JSON.stringify({ type: 'assistant', timestamp: at(ms), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id, name: 'Bash', input: { command: 'npm run dev', description: 'Start the server', run_in_background: true } }] } }),
+  JSON.stringify({ type: 'user', timestamp: at(ms + 1000), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'Command running in background with ID: b1' }] }, toolUseResult: { backgroundTaskId: 'b1' } }),
+]
 
 /** An open Edit call. */
 export const edit = (id: string, path: string, ms: number): string =>

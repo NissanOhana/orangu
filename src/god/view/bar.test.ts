@@ -31,6 +31,17 @@ describe('the bar', () => {
     expect(Object.keys(cut.scrollTo)).toEqual(['z'])
   })
 
+  it('gives the intent that it shows, for y to send', () => {
+    expect(barView(input({ scroll: 0, intent: INTENTS.answer }))!.intent).toEqual(INTENTS.answer)
+    expect(barView(input({ scroll: 0, outcome: OUTCOMES.sent }))!.intent).toBeUndefined()
+  })
+
+  it('draws no y and no c while the keys go out', () => {
+    const bar = barView(input({ scroll: 0, intent: INTENTS.answer, isSending: true }))!
+    expect(bar.lines.flatMap((line) => line.segments).some((segment) => segment.press !== undefined)).toBe(false)
+    expect(bar.isOpen).toBe(false)
+  })
+
   it('shows the stale line above the bar, which stays open for y again', () => {
     const stale = { ...OUTCOMES.refused, refusal: 'stale-screen' as const }
     const bar = barView(input({ scroll: 0, intent: INTENTS.answer, outcome: stale }))!

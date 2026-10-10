@@ -4,7 +4,8 @@
  * and the engine paints that Button as `j: jump`, so the segment holds that form. The arrows walk the row Buttons
  * by themselves, and the digits belong to the option Buttons of the detail, so neither has a hotkey here.
  * - f shows the mode that it switches to: `f: repos` in the all mode, `f: all` in the repos mode. g groups the rows.
- * - The digits name the options of the open question of the selected session (`1-3`), else `1-9`.
+ * - The digits name the options of the open question of the selected session (`1-3`) while the detail draws their
+ *   Buttons, else `1-9`. While a draft of r or m is open they draw dim: a digit types into the draft.
  * - While the prompt holds the keys, the row ends with the key that gives them to the pane.
  * - With no cmux on the machine, jump, the digits and reply show dim, and 1 more line says why.
  * - A notice of the last key (why the last j did not jump) shows under the row in the warn color, wrapped, never cut.
@@ -36,8 +37,10 @@ export type KeyRowInput = {
   isCmuxMissing: boolean
   /** true while the prompt holds the keys, not the pane */
   promptHoldsKeys: boolean
-  /** the option count of the open question of the selected session, when it has 1 question with 1 choice */
+  /** the option count of the open question of the selected session, when it has 1 question with 1 choice and the detail draws its Buttons */
   answerCount?: number
+  /** true while a draft of r or m is open: the digits have no hotkey */
+  isAnswerOff?: boolean
   /** the mode of the board: f switches to the other one */
   mode: BoardMode
   /** true while the narrow pane shows the detail in place of the board */
@@ -79,7 +82,7 @@ export function keyRow(input: KeyRowInput): KeyRow {
     input.isDetail === true ? { keys: 'b', label: 'back', hotkey: 'b', isOff: false } : { keys: '↑↓', label: 'select', isOff: false },
     { keys: 'j', label: 'jump', hotkey: 'j', isOff: off },
     { keys: 'n', label: 'next', hotkey: 'n', isOff: false },
-    { keys: answerKeys(input.answerCount), label: 'answer', isOff: off },
+    { keys: answerKeys(input.answerCount), label: 'answer', isOff: off || input.isAnswerOff === true },
     { keys: 'r', label: 'reply', hotkey: 'r', isOff: off },
     { keys: 'm', label: 'message', hotkey: 'm', isOff: false },
     { keys: 't', label: 'tab', hotkey: 't', isOff: false },

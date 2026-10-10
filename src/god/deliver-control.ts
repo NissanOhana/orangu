@@ -6,8 +6,12 @@
  *   question is the only one of its dialog and takes 1 choice, and only with cmux on the machine.
  * - The Yes or the No of a request opens the bar only for an open Bash request of a session that waits on a
  *   permission prompt: the screen check ties only a shell command to its dialog. Any other tool gets j only.
+ * - While a draft is open, a digit and the Yes or No keep the draft and open no bar, so a digit typed for the draft
+ *   never arms y.
  * - r opens a prompt draft for the selected session, only with cmux. m opens a peer message draft, with or without
  *   cmux, because the engine sends it. A new bar or draft closes the one before it and the note of the last outcome.
+ * - y sends only the intent that the bar of its drawing shows, while the state still holds that intent and no y runs.
+ *   While the keys go out the state is marked as sending, so the bar draws no y and no c; the outcome ends the mark.
  * - Each line of a draft adds its text, split at its line breaks (a paste can hold them). An empty line ends the
  *   draft: with 1 or more lines it opens the bar with the whole text, else it closes the draft.
  * - c closes the bar and the draft. A delivery closes the bar of its intent, but after stale-screen, when the bar
@@ -65,6 +69,9 @@ const checkOf = (state: DeliverState): Pick<DeliverState, 'check'> => (state.che
 /** The bar of a new intent, from its top. */
 export const withIntent = (state: DeliverState, intent: DeliverIntent): DeliverState => ({ scroll: 0, intent, ...checkOf(state) })
 
+/** A digit or the Yes or No: the bar of its intent, or the same state while a draft is open. */
+export const withPicked = (state: DeliverState, intent: DeliverIntent): DeliverState => (state.draft === undefined ? withIntent(state, intent) : state)
+
 /** A new draft, in place of the bar. */
 export const withDraft = (state: DeliverState, draft: Draft): DeliverState => ({ scroll: 0, draft, ...checkOf(state) })
 
@@ -89,7 +96,25 @@ export const scrolled = (state: DeliverState, scroll: number): DeliverState => (
 
 const sameIntent = (a: DeliverIntent | undefined, b: DeliverIntent): boolean => a !== undefined && JSON.stringify(a) === JSON.stringify(b)
 
-/** The state after the delivery of `intent` gave `result`. */
+/** True when y of a drawing that shows `shown` may send it: the state still holds that intent, and no y runs. */
+export const isSendable = (state: DeliverState, shown: DeliverIntent | undefined): shown is DeliverIntent => shown !== undefined && state.isSending !== true && sameIntent(state.intent, shown)
+
+/** The state while the keys of its intent go out: the bar draws no y and no c. */
+export const sending = (state: DeliverState): DeliverState => ({ ...state, isSending: true })
+
+/** The state with no sending mark. */
+export function notSending(state: DeliverState): DeliverState {
+  const { isSending: _isSending, ...rest } = state
+  return rest
+}
+
+/** y of a drawing that shows `shown`: the state marked as sending when isSendable takes it, else the same state. */
+export const sendPressed = (state: DeliverState, shown: DeliverIntent | undefined): DeliverState => (isSendable(state, shown) ? sending(state) : state)
+
+/** True when the state is marked as sending `intent`: the y that marked it sends that intent. */
+export const isSendingOf = (state: DeliverState, intent: DeliverIntent): boolean => state.isSending === true && sameIntent(state.intent, intent)
+
+/** The state after the delivery of `intent` gave `result`. The sending mark ends. */
 export function afterDelivery(state: DeliverState, intent: DeliverIntent, result: DeliverResult): DeliverState {
   const { outcome, check } = result
   const isStale = outcome.status === 'refused' && outcome.refusal === 'stale-screen'

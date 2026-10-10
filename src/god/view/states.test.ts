@@ -17,9 +17,9 @@ import type { Line, PaneView } from './types.js'
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
 const pane = (snapshot: BoardSnapshot | undefined, over: Partial<PaneInput> = {}): PaneView =>
   paneView({ ...(snapshot === undefined ? {} : { snapshot }), bodyColumns: 110, bodyRows: 30, now: NOW, openGroups: [], promptHoldsKeys: false, ...over })
-/** a view of the board: these states never open the detail */
-const boardOnly = (view: PaneView): Exclude<PaneView, { kind: 'detail' }> => {
-  if (view.kind === 'detail') throw new Error('a board state shows no detail')
+/** a view of the board: these states never open the detail, and no bar takes the place of the board */
+const boardOnly = (view: PaneView): Exclude<PaneView, { kind: 'detail' | 'bar' }> => {
+  if (view.kind === 'detail' || view.kind === 'bar') throw new Error(`a board state shows no ${view.kind}`)
   return view
 }
 const all = (shown: PaneView): string[] => {

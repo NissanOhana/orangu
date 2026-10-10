@@ -86,6 +86,8 @@ export type PaneLayout =
  *   board, a rule, the bar of the key path when it has lines, the key row;
  * - message: the header, a rule and 1 message across the body, in place of the board (no session yet, or none).
  *   When the message names a key (no session of the selected repos), a rule and the key row follow it;
+ * - bar: a pane too short for the board or the detail while the bar of the key path holds an intent or a draft: the
+ *   header, a rule, the bar (its y and c stay), the key row;
  * - cannot-draw: 1 message with the reason, and nothing else.
  */
 export type PaneView =
@@ -105,4 +107,5 @@ export type PaneView =
     }
   | { kind: 'detail'; header: readonly Line[]; topRule: Line; detail: PaneDetail; bottomRule: Line; bar?: BarView; keys: readonly Line[]; hints: readonly KeyHint[] }
   | { kind: 'message'; header: readonly Line[]; topRule: Line; body: readonly Line[]; bottomRule?: Line; keys?: readonly Line[] }
+  | { kind: 'bar'; header: readonly Line[]; topRule: Line; bar: BarView; keys: readonly Line[]; hints: readonly KeyHint[] }
   | { kind: 'cannot-draw'; lines: readonly Line[] }

@@ -55,6 +55,8 @@ export type DetailInput = {
   scroll: number
   /** true when cmux is not on the machine: the digits draw dim, and the Screen tab says why it is empty */
   isCmuxMissing: boolean
+  /** true while a draft of r or m is open: the digits draw dim with no hotkey */
+  isDraftOpen?: boolean
   screen?: ScreenRead
   /** true when the newest screen read of this session failed */
   isScreenFailed?: boolean

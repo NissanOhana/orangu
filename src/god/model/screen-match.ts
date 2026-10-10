@@ -13,6 +13,8 @@
  *   `Do you want to proceed?`, then the numbered options. Only an option labeled exactly `Yes` or `No` counts.
  * - the prompt: the input box, a rule row, `❯` and a space (a no-break space in this build) and the typed text,
  *   then a rule row. The transcript shows the earlier prompts in the same form, so only the last prompt row counts.
+ * - between 2 steps of a prompt: the input box, from the last prompt row (a rule row right above it) down to the next
+ *   rule row. The rows after the first are the next lines of the text, or a long line that the box wraps.
  * The transcript can quote a dialog. So a match needs exactly 1 dialog, with no prompt row and no numbered row
  * below it. An answer also needs every option row to show the open question of the transcript: the same count,
  * and for each option the same label and the same description on exactly 1 row, so a question that the model asks
@@ -361,4 +363,38 @@ export function matchPermission(view: ScreenView, want: Pick<PermissionIntent, '
 export function matchPrompt(view: ScreenView): DeliverRefusal | undefined {
   if (view.dialogs.length > 0 || view.promptLine < 0 || !view.isPromptFramed || view.lastMark > view.promptLine || view.promptText !== '') return 'screen-changed'
   return undefined
+}
+
+/** The text with no white space: the box can wrap a long line at a space and drop that space. */
+const squeeze = (text: string): string => text.replace(/\s+/gu, '')
+
+/**
+ * The input box: the text of the last prompt row, then each row under it down to the next rule row, with the indent
+ * of a next row (2 spaces) removed, and the index of that rule row. Undefined when no rule row is right above the
+ * prompt row, or no rule row closes the box.
+ */
+function inputBox(rows: readonly string[], promptLine: number, promptText: string): { text: string; end: number } | undefined {
+  if (promptLine < 1 || !RULE_ROW.test(rows[promptLine - 1] ?? '')) return undefined
+  const next: string[] = []
+  for (let i = promptLine + 1; i < rows.length; i++) {
+    const row = rows[i] ?? ''
+    if (RULE_ROW.test(row)) return { text: [promptText, ...next].join('\n'), end: i }
+    next.push(row.replace(/^[ \u00a0]{1,2}/u, ''))
+  }
+  return undefined
+}
+
+/**
+ * Checks the screen between 2 steps of a prompt: no dialog, no numbered row under the box, and an input box that
+ * holds the text typed so far, the same characters in the same order. A numbered row inside the box is a line of the
+ * text, so it must match like any other. White space does not count, because the box wraps a long line at a space
+ * with no mark: a key that went to a dialog, a lost key, an extra key or ghost text changes the other characters, and
+ * the dialog rule covers the rest.
+ */
+export function matchTyped(text: string, typed: string): DeliverRefusal | undefined {
+  const view = readScreen(text)
+  if (view.dialogs.length > 0 || view.promptLine < 0) return 'screen-changed'
+  const box = inputBox(text.split('\n').map(trimEnd), view.promptLine, view.promptText)
+  if (box === undefined || view.lastMark > box.end) return 'screen-changed'
+  return squeeze(box.text) === squeeze(typed) ? undefined : 'screen-changed'
 }

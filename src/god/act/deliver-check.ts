@@ -3,12 +3,15 @@
  * board after the send. It reads no host and no clock, so the engine shell runs it after each tick.
  *
  * - An answer is in when the open question of the session is no longer the question that it answered.
- * - A Bash permission is in when its call has no open request: the open call has another id, or no call is open.
- *   When the fresh read at y gave no open call, it is in when the session waits on no permission prompt.
- * - A prompt is in when a turn of the transcript has it as the human prompt of the person (the record reducer keeps
- *   only a prompt that classifyPrompt calls human), written after the send less PROMPT_CLOCK_SLACK_MS. The text
- *   compares after the same text cleaner as the transcript text, with the white space at its 2 ends trimmed. A prompt
- *   that starts a mode (`!`, `/`, `?`) is no human prompt, so it reads as not delivered.
+ * - A Bash permission is in when its call has no open request: the session waits on no permission prompt, or the
+ *   open call has another id, or no call is open. After Yes the command runs, so its call stays open while the
+ *   session works: that reads as in. When the fresh read at y gave no open call, it is in when the session waits on
+ *   no permission prompt.
+ * - A prompt is in when a turn of the transcript has it as its prompt (the record reducer keeps a prompt that
+ *   classifyPrompt calls human, and a command under its title, which is its text: `/compact` reads as in), written
+ *   after the send less PROMPT_CLOCK_SLACK_MS. The text compares after the same text cleaner as the transcript text,
+ *   with the white space at its 2 ends trimmed. A shell line (`!`) and the help (`?`) write no such prompt, so they
+ *   read as not delivered.
  * - Only a refresh that started after the send counts as a miss: its start is its end less its compute and wait
  *   time, which is never later than the true start. A refresh that ran during the send can have read the transcript
  *   before the keys. A refresh that shows the keys in counts at once, whenever it started. A tick that the collector
@@ -54,8 +57,9 @@ function shows(expect: DeliverExpect, session: SessionFacts): boolean {
   if (transcript === undefined) return false
   if (expect.kind === 'question') return transcript.openQuestion?.toolUseId !== expect.toolUseId
   if (expect.kind === 'prompt') return transcript.history.some((turn) => turn.prompt?.trim() === expect.text && turn.promptAt !== undefined && turn.promptAt >= expect.after)
-  if (expect.toolUseId !== undefined) return !(transcript.activity?.toolUseId === expect.toolUseId && transcript.activity.isOpen)
-  return !(session.status === 'waiting' && session.waitingFor === 'permission prompt')
+  const asks = session.status === 'waiting' && session.waitingFor === 'permission prompt'
+  if (expect.toolUseId !== undefined) return !(asks && transcript.activity?.toolUseId === expect.toolUseId && transcript.activity.isOpen)
+  return !asks
 }
 
 const waiting = (check: DeliverCheck): CheckResult => ({ status: 'waiting', check })

@@ -7,7 +7,8 @@
  * - the state comes from the registry and the transcript, which a session cannot draw on its screen. An answer
  *   needs a session that waits for input on the same open question (1 question, 1 selection, the same header,
  *   question and label at the digit). A permission answer needs a session that waits on a permission prompt. A
- *   prompt needs an idle session with no open question. So a busy session that prints a dialog or an input box
+ *   prompt needs an idle session with no open question, and with no running background task or subagent, which can
+ *   open a dialog while the keys go out (task-running). So a busy session that prints a dialog or an input box
  *   gets no key;
  * - the screen must be of the target session, from a tab whose refs are `workspace:N` and `surface:N` or UUIDs
  *   (never a bare index, which cmux resolves in the current window), read 1 s or less before the
@@ -26,8 +27,12 @@
  *   prompt would stay in the input box and block each later prompt.
  * Each argv names the workspace and the surface, and puts `--` right before the text or the key, so a text that
  * looks like a flag stays text. A peer message has no keys: the engine sends it, and this plan refuses it.
+ * A prompt has more than 1 step, and a dialog can open between 2 of them. So before each next step the executor reads
+ * the registry file and the screen again, and nextStepRefusal checks them: the read is 1 s old or less and the facts
+ * do not lag it, the session is still idle with no wait, no dialog is on the screen, and the input box holds the text
+ * of the steps before (typedBy). The executor stops at the first refusal, and no later step goes out.
  */
-import { matchAnswer, matchPermission, matchPrompt, readScreen, type ScreenMatch } from '../model/screen-match.js'
+import { matchAnswer, matchPermission, matchPrompt, matchTyped, readScreen, type ScreenMatch } from '../model/screen-match.js'
 import type { DeliverIntent, DeliverPlan, DeliverRefusal, ScreenRead, SessionFacts, TranscriptFacts } from '../types.js'
 
 /** A screen read older than this, at the plan time, is stale. */
@@ -44,7 +49,8 @@ export type KeyIntent = Exclude<DeliverIntent, { kind: 'peer' }>
  * transcript, with the time of that read. A SessionFacts or a GodSession of the target, with factsAt, fits it.
  */
 export type TargetFacts = Pick<SessionFacts, 'sessionId' | 'status' | 'waitingFor'> & {
-  transcript?: Pick<TranscriptFacts, 'openQuestion'>
+  /** the open question, and the subagents and background tasks; absent between 2 steps of a prompt, which read the registry only */
+  transcript?: Pick<TranscriptFacts, 'openQuestion'> & Partial<Pick<TranscriptFacts, 'agents'>>
   /** when the executor read the registry file and the transcript tail (engine time, in ms): just before the screen read */
   factsAt: number
 }
@@ -74,7 +80,10 @@ export function textRefusal(text: string): DeliverRefusal | undefined {
 function stateRefusal(intent: KeyIntent, facts: TargetFacts): DeliverRefusal | undefined {
   if (facts.sessionId !== intent.target.sessionId) return 'screen-changed'
   const open = facts.transcript?.openQuestion
-  if (intent.kind === 'prompt') return facts.status === 'idle' && facts.waitingFor === undefined && open === undefined ? undefined : 'screen-changed'
+  if (intent.kind === 'prompt') {
+    if (facts.status !== 'idle' || facts.waitingFor !== undefined || open !== undefined) return 'screen-changed'
+    return (facts.transcript?.agents ?? []).some((task) => task.isRunning) ? 'task-running' : undefined
+  }
   if (intent.kind === 'permission') return facts.status === 'waiting' && facts.waitingFor === 'permission prompt' ? undefined : 'screen-changed'
   if (facts.status !== 'waiting' || facts.waitingFor !== 'input needed' || !open || open.toolUseId !== intent.toolUseId) return 'screen-changed'
   const [question, ...more] = open.questions
@@ -131,4 +140,25 @@ export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: Targe
     default:
       return refuse('screen-changed')
   }
+}
+
+/** The text that the steps typed into the input box: the text of each send, and a line break for each shift+enter. */
+export function typedBy(steps: readonly (readonly string[])[]): string {
+  return steps.map((argv) => (argv[1] === 'send' ? (argv.at(-1) ?? '') : argv.at(-1) === 'shift+enter' ? '\n' : '')).join('')
+}
+
+/**
+ * Why the next step of a prompt cannot go out, or undefined when it can: a fresh read of the screen at `now` (engine
+ * time, in ms), the registry state of the target read just before it, and the text of the steps before. An answer
+ * and a permission have 1 step, so they never take a next step.
+ */
+export function nextStepRefusal(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, typed: string, now: number): DeliverRefusal | undefined {
+  if (intent.kind !== 'prompt') return 'screen-changed'
+  if (!WORKSPACE_REF.test(screen.workspaceRef) || !SURFACE_REF.test(screen.surfaceRef)) return 'no-tab'
+  if (screen.sessionId !== intent.target.sessionId || facts.sessionId !== intent.target.sessionId) return 'screen-changed'
+  const age = now - screen.readAt
+  const lag = screen.readAt - facts.factsAt
+  if (!(age >= 0 && age <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS)) return 'stale-screen'
+  if (facts.status !== 'idle' || facts.waitingFor !== undefined) return 'screen-changed'
+  return matchTyped(screen.text, typed)
 }

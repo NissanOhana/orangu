@@ -26,13 +26,14 @@ declare module 'claude-code' {
       screen: { sessionId: string; read?: { sessionId: string; workspaceRef: string; surfaceRef: string; text: string; readAt: number }; isFailed: boolean } | null
       /** the note of the last j that did not jump: the session and the reason */
       jump: { sessionId: string; reason: 'no-tab' | 'failed' } | null
-      /** the key path: the intent of the confirm bar and its scroll, the draft of r or m, the last outcome, and the check of the refreshes after a send */
+      /** the key path: the intent of the confirm bar and its scroll, the draft of r or m, the last outcome, the check of the refreshes after a send, and whether the keys go out now */
       deliver: {
         intent?: OranguGodDeliverValue
         scroll: number
         draft?: { kind: 'prompt' | 'peer'; target: { sessionId: string; name: string }; lines: readonly string[] }
         outcome?: OranguGodDeliverValue
         check?: OranguGodDeliverValue
+        isSending?: boolean
       }
     }
   }

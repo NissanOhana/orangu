@@ -6,7 +6,9 @@
  * - a prompt or a peer message: the whole text.
  * The keys show in the form that the engine paints a hotkey Button (`y: send  c: cancel`), each 1 segment that the
  * shell draws as its Button. The bar of a prompt also names the mode that the target opens when the first line starts
- * with `!` (shell), `/` (a command) or `?` (help), because the session reads that first character as a key.
+ * with `!` (shell), `/` (a command) or `?` (help), because the session reads that first character as a key. The box
+ * takes the first line that is not empty as its first text, so that line names the mode. While y runs, the bar shows
+ * that the pane sends in place of y and c.
  * The target and the question stay fixed. A long prompt or tool input scrolls with w and z in the row limit of the
  * bar (src/god/view/window.ts), with a count line for each side that the window leaves out, so the person can read
  * all of it before y. When the limit leaves fewer than 3 rows, the bar takes its fixed lines and 3 more: a text
@@ -47,6 +49,7 @@ export const REFUSAL_TEXT: Readonly<Record<DeliverRefusal, string>> = {
   empty: 'The text is empty, so the pane sent nothing.',
   'control-char': 'The text has a control character, so the pane sent nothing.',
   'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
+  'task-running': 'The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.',
 }
 
 /** The line of the mode that the target opens for a prompt whose first character is 1 of these. */
@@ -65,6 +68,22 @@ export const PEER_NOT_DELIVERED = 'The peer message did not arrive.'
 /** A cmux command of the plan failed, so the steps after it did not run. */
 export const SEND_FAILED = 'A cmux command failed, so the keys after it did not go out. Check the Screen tab.'
 
+/**
+ * Why a delivery failed, by the reason that the executor gives (src/god/act/deliver.ts): a read before the keys, a
+ * cmux command of the plan, a change that the check between 2 steps of a prompt saw, or c. Any other reason shows the
+ * line of a cmux command that failed.
+ */
+export const FAILURE_TEXT: Readonly<Record<string, string>> = {
+  'facts-unread': 'The pane could not read the session again, so it sent nothing.',
+  'screen-unread': 'cmux did not read the screen, so the pane sent nothing.',
+  'step-failed': SEND_FAILED,
+  stopped: 'The screen or the session changed while the pane typed, so it sent no more keys. Check the Screen tab.',
+  cancelled: 'You pressed c, so the pane sent no more keys.',
+}
+
+/** What the bar shows in place of its keys while y runs. */
+export const SENDING = 'The pane sends it now.'
+
 /** What the bar reads. */
 export type ConfirmInput = {
   intent: DeliverIntent
@@ -74,6 +93,8 @@ export type ConfirmInput = {
   rows: number
   /** the first line of the scrolled text to show: 0, or what scrollBy gave. The shell sets 0 for a new intent */
   scroll: number
+  /** true while y runs: the bar shows that the pane sends, in place of y and c */
+  isSending?: boolean
 }
 
 /** The bar, its keys, and the window over its scrolled text. */
@@ -88,21 +109,21 @@ function askText(intent: DeliverIntent): string {
 }
 
 /** The lines that stay fixed (the target and the question), and the text that scrolls under them. */
-function partsOf(intent: DeliverIntent, width: number): { fixed: Line[]; text: Line[] } {
-  const keys: Segment[] = CONFIRM_HINTS.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), pressSegment(hint.hotkey ?? hint.keys, hint.label)])
+function partsOf(intent: DeliverIntent, width: number, isSending: boolean): { fixed: Line[]; text: Line[] } {
+  const keys: Segment[] = isSending ? [{ text: SENDING, dim: true }] : CONFIRM_HINTS.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), pressSegment(hint.hotkey ?? hint.keys, hint.label)])
   const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width)
   if (intent.kind === 'answer') return { fixed: [...ask, ...wrapSegments([{ text: `☐ ${flat(intent.header)}`, bold: true }, { text: `  ${flat(intent.question)}` }], width, 1, 3)], text: [] }
   if (intent.kind === 'permission') {
     if (intent.input === undefined) return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }, { text: '  none' }], width)], text: [] }
     return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }], width)], text: keptLines(intent.input, width, 3) }
   }
-  const mode = intent.kind === 'prompt' ? PROMPT_MODE_TEXT[intent.text.charAt(0)] : undefined
+  const mode = intent.kind === 'prompt' ? PROMPT_MODE_TEXT[intent.text.split('\n').find((line) => line !== '')?.charAt(0) ?? ''] : undefined
   return { fixed: [...ask, ...(mode === undefined ? [] : wrapSegments([{ text: mode, token: '--warn' }], width))], text: textLines(intent.text, width, 3) }
 }
 
 /** The confirm bar of 1 intent. */
 export function confirmView(input: ConfirmInput): ConfirmView {
-  const { fixed, text } = partsOf(input.intent, input.width)
+  const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true)
   const { lines, window } = windowOf(text, Math.max(MIN_WINDOW, input.rows - fixed.length), input.scroll)
   return { lines: [...fixed, ...lines], hints: CONFIRM_HINTS, window }
 }
@@ -116,7 +137,7 @@ export function outcomeLines(outcome: DeliverOutcome, width: number): Line[] {
     case 'not-delivered':
       return wrapSegments([{ text: outcome.intent.kind === 'peer' ? PEER_NOT_DELIVERED : NOT_DELIVERED, token: '--warn' }], width)
     case 'failed':
-      return wrapSegments([{ text: SEND_FAILED, token: '--bad' }], width)
+      return wrapSegments([{ text: (Object.hasOwn(FAILURE_TEXT, outcome.reason) ? FAILURE_TEXT[outcome.reason] : undefined) ?? SEND_FAILED, token: outcome.reason === 'cancelled' ? '--warn' : '--bad' }], width)
     case 'sent':
       return wrapSegments([{ text: `Sent to ${name}. The next refresh checks it.` }], width)
     case 'delivered':

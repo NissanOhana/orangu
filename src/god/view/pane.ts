@@ -14,7 +14,10 @@
  *   in the narrow detail, and its rows come from the board: it takes at most half of the rows under the header. While
  *   the bar shows a count line, w and z scroll the bar, so the detail draws its own count lines with no key.
  * - The digits of the key row name the options of the open question of the selected session, or the Yes and No of
- *   its Bash request.
+ *   its Bash request, while the Now tab of the detail draws their Buttons. While a draft is open they draw dim.
+ * - When the bar leaves too few rows for a window over the board or the detail, a note of the last outcome gives way
+ *   (it has no key), and a bar that holds an intent or a draft takes the place of the board: the header, a rule, the
+ *   bar and the key row, so y and c stay.
  * - When the pane cannot draw (a body under BOARD_COLUMNS, or too few rows for a window over the board), it shows
  *   1 message with the reason and nothing else.
  * No line is wider than `bodyColumns`, and no line of the board column is wider than the board.
@@ -91,6 +94,9 @@ function answerCountOf(snapshot: BoardSnapshot, selectedKey: string | undefined)
 /** The rows of the bar, its text field included. */
 const barHeight = (bar: BarView | undefined): number => (bar === undefined ? 0 : bar.lines.length + (bar.field === undefined ? 0 : 1))
 
+/** True when the bar is only the note of the last outcome: no intent, no draft and no key. */
+const isNote = (bar: BarView): boolean => bar.intent === undefined && bar.field === undefined
+
 /** The detail with no scroll keys: the bar shows a count line, so w and z scroll the bar. */
 function withoutScroll(detail: PaneDetail, bar: BarView | undefined): PaneDetail {
   return detail.kind === 'session' && bar !== undefined && Object.keys(bar.scrollTo).length > 0 ? { ...detail, scrollTo: {} } : detail
@@ -104,12 +110,14 @@ export function paneView(input: PaneInput): PaneView {
   const state = boardStateOf(snapshot)
   const note = input.jumpNote ?? undefined
   const notice = note !== undefined && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {}
-  const keysOf = (board: BoardSnapshot, isDetail = false) =>
+  const isDraftOpen = input.deliver?.draft !== undefined
+  const keysOf = (board: BoardSnapshot, isDetail = false, showsDigits = false) =>
     keyRow({
       width: bodyColumns,
       isCmuxMissing: board.sources.cmux.status === 'missing',
       promptHoldsKeys: input.promptHoldsKeys,
-      answerCount: answerCountOf(board, input.selectedKey),
+      ...(showsDigits ? { answerCount: answerCountOf(board, input.selectedKey) } : {}),
+      isAnswerOff: isDraftOpen,
       mode: board.mode,
       isDetail,
       ...notice,
@@ -124,21 +132,29 @@ export function paneView(input: PaneInput): PaneView {
   const layout = layoutOf(bodyColumns)
   const detailState = input.detail ?? DEFAULT_DETAIL
   const isDetail = layout.kind === 'narrow' && detailState.isOpen
-  const keys = keysOf(snapshot, isDetail)
+  const showsDigits = (layout.kind === 'wide' || isDetail) && detailState.tab === 'now' && !isDraftOpen
+  const keys = keysOf(snapshot, isDetail, showsDigits)
   const selection = input.selectedKey === undefined ? {} : { selectedKey: input.selectedKey }
   const under = bodyRows - header.length - 2 - keys.lines.length
-  const bar = input.deliver === undefined ? undefined : barView({ deliver: input.deliver, width: bodyColumns, rows: Math.floor(under / 2), ...selection, isScreenOpen: detailState.tab === 'screen' })
-  const withBar = bar === undefined ? {} : { bar }
+  const barOf = (rows: number): BarView | undefined =>
+    input.deliver === undefined ? undefined : barView({ deliver: input.deliver, width: bodyColumns, rows, ...selection, isScreenOpen: detailState.tab === 'screen' })
+  const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey }
+  const fits = (room: number): boolean => room >= MIN_WINDOW_ROWS || (!isDetail && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length <= Math.max(0, room))
+  const shared = barOf(Math.floor(under / 2))
+  const bar = shared !== undefined && isNote(shared) && !fits(under - barHeight(shared)) ? undefined : shared
   const room = under - barHeight(bar)
+  if (!fits(room)) {
+    // the bar holds an intent or a draft: it takes the place of the board, so its y and c stay
+    const whole = bar === undefined ? undefined : barOf(bodyRows - header.length - 1 - keys.lines.length)
+    if (whole === undefined || header.length + 1 + barHeight(whole) + keys.lines.length > bodyRows) return cannotDrawView('too-short', bodyColumns)
+    return { kind: 'bar', header, topRule: ruleLine(bodyColumns), bar: whole, keys: keys.lines, hints: keys.hints }
+  }
+  const withBar = bar === undefined ? {} : { bar }
   const screen = input.screen === undefined || input.screen === null ? {} : { screen: input.screen }
   const outcome = input.deliver?.outcome === undefined ? {} : { outcome: input.deliver.outcome }
-  const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome }), bar)
-  if (isDetail) {
-    if (room < MIN_WINDOW_ROWS) return cannotDrawView('too-short', bodyColumns)
-    return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints }
-  }
-  const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey }
-  if (room < MIN_WINDOW_ROWS && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length > Math.max(0, room)) return cannotDrawView('too-short', bodyColumns)
+  const draft = isDraftOpen ? { isDraftOpen } : {}
+  const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome, ...draft }), bar)
+  if (isDetail) return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints }
   const { lines: body, more } = boardWindow({ ...board, rows: room })
   return {
     kind: 'board',
@@ -162,6 +178,7 @@ export function paneView(input: PaneInput): PaneView {
 export function paneLines(view: PaneView): Line[] {
   if (view.kind === 'cannot-draw') return [...view.lines]
   if (view.kind === 'message') return [...view.header, view.topRule, ...view.body, ...(view.bottomRule === undefined ? [] : [view.bottomRule]), ...(view.keys ?? [])]
+  if (view.kind === 'bar') return [...view.header, view.topRule, ...view.bar.lines, ...view.keys]
   const bar = view.bar?.lines ?? []
   if (view.kind === 'detail') return [...view.header, view.topRule, ...paneDetailLines(view.detail), view.bottomRule, ...bar, ...view.keys]
   return [...view.header, view.topRule, ...view.body, ...(view.detail === undefined ? [] : paneDetailLines(view.detail)), view.bottomRule, ...bar, ...view.keys]

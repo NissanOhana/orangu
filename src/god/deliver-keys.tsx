@@ -3,9 +3,14 @@
 // src/god/deliver-control.ts (the bar and the draft) and src/god/act/deliver.ts (the executor). Every function that
 // takes `$` is a function declaration at the top of the file, as the engine asks.
 // - A digit, Yes or No, r and m only open the confirm bar or the draft in the engine state. Nothing goes out until y.
-// - y takes the intent of the bar from the engine state and delivers it: a peer message through the engine, any other
-//   intent through the executor over the host port, with the row of its target and the state of cmux from the last
-//   board snapshot. 1 y runs at a time: a y while one runs does nothing, so a key never goes out twice.
+//   While a draft is open, a digit and Yes or No keep the draft.
+// - y takes the intent that the bar of its drawing shows, and delivers it only while the engine state still holds
+//   that intent: a peer message through the engine, any other intent through the executor over the host port, with
+//   the row of its target and the state of cmux from the last board snapshot. 1 y runs at a time: a y while one runs
+//   does nothing, so a key never goes out twice. While it runs, the state is marked as sending, so the bar draws no
+//   y and no c.
+// - c while the keys go out (from a drawing made before y) sets the cancel mark, which the executor reads before each
+//   step, so the steps that did not go out never go out.
 // - A refusal or a failure with a fresh screen selects its session and opens its Screen tab.
 // - The text field of a draft takes the focus ring when it opens and after each line, so the person types on.
 // - After each tick of the board, the check of the last send reads the newest facts.
@@ -13,7 +18,23 @@ import { read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import { deliver, deliverPeer, type DeliverResult } from './act/deliver.js'
-import { afterDelivery, afterDraftLine, afterRefresh, answerIntent, cancelled, draftFor, opensScreen, permissionIntent, screenDetail, scrolled, withDraft, withIntent } from './deliver-control.js'
+import {
+  afterDelivery,
+  afterDraftLine,
+  afterRefresh,
+  answerIntent,
+  cancelled,
+  draftFor,
+  isSendingOf,
+  notSending,
+  opensScreen,
+  permissionIntent,
+  screenDetail,
+  scrolled,
+  sendPressed,
+  withDraft,
+  withPicked,
+} from './deliver-control.js'
 import { engineClock, engineEffects, engineHost } from './engine.js'
 import { textCleaner } from './sanitize.js'
 import { BOARD, DELIVER, DETAIL, JUMP, SELECTED } from './state.js'
@@ -23,15 +44,15 @@ import { draftKey, type Draft } from './view/bar.js'
 /** The id of the pane. */
 export const PANE = 'god'
 
-/** The key path of 1 load of the module: true while a y runs. */
-export type DeliverRuntime = { isDelivering: boolean }
+/** The key path of 1 load of the module: true while a y runs, and the cancel mark of a c while it runs. */
+export type DeliverRuntime = { isDelivering: boolean; isCancelled: boolean }
 
 async function selection($: EngineInterface): Promise<{ snapshot: BoardSnapshot | undefined; selectedKey: string | undefined }> {
   return { snapshot: (await read($, BOARD)) ?? undefined, selectedKey: (await read($, SELECTED)) || undefined }
 }
 
 async function openBar($: EngineInterface, intent: DeliverIntent | undefined): Promise<void> {
-  if (intent !== undefined) await update($, DELIVER, (state) => withIntent(state, intent))
+  if (intent !== undefined) await update($, DELIVER, (state) => withPicked(state, intent))
 }
 
 /** A digit on an option of the open question of the selected session: the confirm bar of that answer. */
@@ -66,8 +87,9 @@ export async function addDraftLine($: EngineInterface, value: string): Promise<v
   if (next.draft !== undefined) await focusDraft($, next.draft)
 }
 
-/** c: the bar and the draft close. */
-export async function cancelBar($: EngineInterface): Promise<void> {
+/** c: the bar and the draft close. While a y runs, the steps that did not go out stop. */
+export async function cancelBar($: EngineInterface, runtime: DeliverRuntime): Promise<void> {
+  if (runtime.isDelivering) runtime.isCancelled = true
   await update($, DELIVER, cancelled)
 }
 
@@ -77,12 +99,12 @@ export async function scrollBar($: EngineInterface, scroll: number): Promise<voi
 }
 
 /** The delivery of 1 intent: a peer message through the engine, keys through the executor. */
-async function deliverIntent($: EngineInterface, intent: DeliverIntent): Promise<DeliverResult> {
+async function deliverIntent($: EngineInterface, intent: DeliverIntent, runtime: DeliverRuntime): Promise<DeliverResult> {
   if (intent.kind === 'peer') return { outcome: await deliverPeer(engineEffects($).peer, intent, () => $.clock.now()) }
   const snapshot = (await read($, BOARD)) ?? undefined
   const session = snapshot?.sessions.find((candidate) => candidate.sessionId === intent.target.sessionId)
   const home = (await $.env.get('HOME')) ?? ''
-  const ports = { host: engineHost($), home, clean: textCleaner(home), clock: engineClock }
+  const ports = { host: engineHost($), home, clean: textCleaner(home), clock: engineClock, isCancelled: () => runtime.isCancelled }
   return deliver(ports, { intent, ...(session === undefined ? {} : { session }), cmux: snapshot?.sources.cmux.status ?? 'unread' })
 }
 
@@ -93,16 +115,20 @@ async function showScreen($: EngineInterface, sessionId: string): Promise<void> 
   await update($, JUMP, () => null)
 }
 
-/** y: the intent of the bar goes out, once. */
-export async function sendConfirmed($: EngineInterface, runtime: DeliverRuntime): Promise<void> {
-  if (runtime.isDelivering) return
+/** y of a drawing that shows `shown`: that intent goes out, once, while the state still holds it. */
+export async function sendConfirmed($: EngineInterface, runtime: DeliverRuntime, shown: DeliverIntent | undefined): Promise<void> {
+  if (runtime.isDelivering || shown === undefined) return
   runtime.isDelivering = true
+  runtime.isCancelled = false
   try {
-    const intent = (await read($, DELIVER)).intent
-    if (intent === undefined) return
-    const result = await deliverIntent($, intent)
-    await update($, DELIVER, (state) => afterDelivery(state, intent, result))
-    if (opensScreen(result.outcome)) await showScreen($, intent.target.sessionId)
+    const marked = await update($, DELIVER, (state) => sendPressed(state, shown))
+    if (!isSendingOf(marked, shown)) return
+    const result = await deliverIntent($, shown, runtime).catch(async (error: unknown) => {
+      await update($, DELIVER, notSending)
+      throw error
+    })
+    await update($, DELIVER, (state) => afterDelivery(state, shown, result))
+    if (opensScreen(result.outcome)) await showScreen($, shown.target.sessionId)
   } finally {
     runtime.isDelivering = false
   }

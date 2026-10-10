@@ -67,6 +67,15 @@ describe('the Now tab', () => {
     expect(off.body.map(text).slice(2, 5)).toEqual([' 1 Small  Only the fast tests.', ' 2 All', ' 3 None  Skip the eval.'])
   })
 
+  it('gives no digit a hotkey while a draft of r or m is open, so a digit types into the draft and arms no y', () => {
+    for (const sessionId of ['s-wait', 's-perm']) {
+      const view = detail(sessionId, { isDraftOpen: true })
+      expect(view.body.every((line) => line.hotkey === undefined), sessionId).toBe(true)
+      expect(view.options.every((option) => option.isOff)).toBe(true)
+    }
+    expect(body('s-wait', { isDraftOpen: true }).slice(2, 5)).toEqual([' 1 Small  Only the fast tests.', ' 2 All', ' 3 None  Skip the eval.'])
+  })
+
   it('wraps a long option label under its painted hotkey, with the rest of the label after the hang', () => {
     const wait = detailSession('s-wait')
     const open = wait.transcript!.openQuestion!

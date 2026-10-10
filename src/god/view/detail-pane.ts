@@ -64,6 +64,8 @@ export type PaneDetailInput = {
   screen?: ScreenState
   /** the last outcome of the key path */
   outcome?: DeliverOutcome
+  /** true while a draft of r or m is open: the digits of the Now tab have no hotkey */
+  isDraftOpen?: boolean
 }
 
 /** The scroll that each key goes to: w while lines hide above the window, z while lines hide below it. */
@@ -96,6 +98,7 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
     ...(screen?.isFailed === true ? { isScreenFailed: true } : {}),
     ...(placeholder === undefined ? {} : { placeholder }),
     ...(input.outcome === undefined ? {} : { outcome: input.outcome }),
+    ...(input.isDraftOpen === true ? { isDraftOpen: true } : {}),
   })
   return { kind: 'session', sessionId: session.sessionId, view, scrollTo: scrollTargets(view) }
 }

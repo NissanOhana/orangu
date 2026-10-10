@@ -20,7 +20,8 @@ const pane = (snapshot: BoardSnapshot, over: Partial<PaneInput> = {}): PaneView 
   paneView({ snapshot, bodyColumns: 110, bodyRows: 40, now: NOW, openGroups: [], promptHoldsKeys: false, ...over })
 /** the rows that a view takes on the screen: in the wide body the board and the detail sit side by side */
 const rowsOf = (view: PaneView): number => {
-  const bar = view.kind === 'board' || view.kind === 'detail' ? (view.bar === undefined ? 0 : view.bar.lines.length + (view.bar.field === undefined ? 0 : 1)) : 0
+  const bar = view.kind === 'board' || view.kind === 'detail' || view.kind === 'bar' ? (view.bar === undefined ? 0 : view.bar.lines.length + (view.bar.field === undefined ? 0 : 1)) : 0
+  if (view.kind === 'bar') return view.header.length + 1 + bar + view.keys.length
   if (view.kind === 'board') return view.header.length + 2 + Math.max(view.body.length, view.detail === undefined ? 0 : paneDetailLines(view.detail).length) + bar + view.keys.length
   return paneLines(view).length + (view.kind === 'detail' && view.bar?.field !== undefined ? 1 : 0)
 }
@@ -254,5 +255,51 @@ describe('the bar of the key path', () => {
     const view = pane(detailSnapshot(), { selectedKey: 's-perm' })
     if (view.kind !== 'board') throw new Error(view.kind)
     expect(view.hints.find((hint) => hint.label === 'answer')?.keys).toBe('1-2')
+  })
+})
+
+describe('a short pane with the bar open', () => {
+  it('drops the body below 3 free rows, and keeps the header, the bar with y and c, and the key row', () => {
+    for (const bodyRows of [8, 9, 10, 11]) {
+      for (const intent of [INTENTS.answer, INTENTS.prompt]) {
+        const view = pane(detailSnapshot(), { bodyRows, selectedKey: 's-wait', deliver: { scroll: 0, intent } })
+        expect(view.kind, `${bodyRows} rows`).not.toBe('cannot-draw')
+        if (view.kind !== 'bar' && view.kind !== 'board') throw new Error(view.kind)
+        const keys = (view.bar?.lines ?? []).flatMap((line) => line.segments).flatMap((segment) => (segment.press === undefined ? [] : [segment.press.hotkey]))
+        expect(keys, `${bodyRows} rows`).toEqual(expect.arrayContaining(['y', 'c']))
+        expect(rowsOf(view), `${bodyRows} rows`).toBeLessThanOrEqual(bodyRows)
+      }
+    }
+    const short = pane(detailSnapshot(), { bodyRows: 8, selectedKey: 's-wait', deliver: { scroll: 0, intent: INTENTS.answer } })
+    expect(short.kind).toBe('bar')
+    if (short.kind === 'bar') expect(paneLines(short).map(text)).toEqual([...short.header.map(text), text(short.topRule), ...short.bar.lines.map(text), ...short.keys.map(text)])
+  })
+
+  it('drops the note of the last outcome where it leaves too few rows, so the board keeps its row Buttons', () => {
+    let dropped = 0
+    for (const bodyColumns of [110, 80]) {
+      for (const bodyRows of [7, 8, 9, 10, 11, 12]) {
+        const plain = pane(detailSnapshot(), { bodyColumns, bodyRows, selectedKey: 's-wait' })
+        const noted = pane(detailSnapshot(), { bodyColumns, bodyRows, selectedKey: 's-wait', deliver: { scroll: 0, outcome: OUTCOMES.refused } })
+        expect(noted.kind, `${bodyColumns} columns, ${bodyRows} rows`).toBe(plain.kind)
+        expect(rowsOf(noted), `${bodyColumns} columns, ${bodyRows} rows`).toBeLessThanOrEqual(bodyRows)
+        if (noted.kind === 'board' && noted.bar === undefined) dropped += 1
+      }
+    }
+    expect(dropped).toBeGreaterThan(0)
+  })
+})
+
+describe('the answer hint of the key row', () => {
+  it('names the option count only while the pane draws the digit Buttons', () => {
+    const hint = (view: PaneView): string | undefined => (view.kind === 'board' || view.kind === 'detail' ? view.hints.find((one) => one.label === 'answer')?.keys : undefined)
+    expect(hint(pane(detailSnapshot(), { selectedKey: 's-wait' }))).toBe('1-3')
+    expect(hint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyColumns: 80 }))).toBe('1-9')
+    expect(hint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyColumns: 80, detail: { ...DEFAULT_DETAIL, isOpen: true } }))).toBe('1-3')
+    // the option Buttons are in the Now tab only
+    expect(hint(pane(detailSnapshot(), { selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, tab: 'history' } }))).toBe('1-9')
+    const drafted = pane(detailSnapshot(), { selectedKey: 's-wait', deliver: { scroll: 0, draft: { kind: 'prompt', target: { sessionId: 's-wait', name: 'api-7' }, lines: [] } } })
+    expect(hint(drafted)).toBe('1-9')
+    if (drafted.kind === 'board') expect(drafted.hints.find((one) => one.label === 'answer')?.isOff).toBe(true)
   })
 })

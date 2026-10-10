@@ -7,7 +7,26 @@ import { describe, expect, it } from 'vitest'
 import { INTENTS, OUTCOMES, SCREEN, detailSnapshot } from '../../test/fixtures/god/detail.js'
 import { NOW, SECOND, facts, idle, transcript } from '../../test/fixtures/god/sessions.js'
 import type { DeliverCheck } from './act/deliver-check.js'
-import { afterDelivery, afterDraftLine, afterRefresh, answerIntent, cancelled, draftFor, opensScreen, permissionIntent, screenDetail, scrolled, withDraft, withIntent } from './deliver-control.js'
+import {
+  afterDelivery,
+  afterDraftLine,
+  afterRefresh,
+  answerIntent,
+  cancelled,
+  draftFor,
+  isSendable,
+  isSendingOf,
+  notSending,
+  opensScreen,
+  permissionIntent,
+  screenDetail,
+  scrolled,
+  sendPressed,
+  sending,
+  withDraft,
+  withIntent,
+  withPicked,
+} from './deliver-control.js'
 import type { BoardSnapshot, DeliverOutcome } from './types.js'
 import { NO_DELIVERY, type DeliverState } from './view/bar.js'
 
@@ -136,5 +155,45 @@ describe('afterRefresh', () => {
   it('gives the same state for a refresh that does not count', () => {
     const state: DeliverState = { scroll: 0, outcome: OUTCOMES.sent, check }
     expect(afterRefresh(state, later(NOW - SECOND))).toBe(state)
+  })
+})
+
+describe('a digit or Yes and No while a draft is open', () => {
+  it('keeps the draft and opens no bar, so the digit arms no y', () => {
+    const state = withDraft(NO_DELIVERY, draftFor(SNAPSHOT, 's-idle', 'prompt')!)
+    expect(withPicked(state, INTENTS.answer)).toBe(state)
+    expect(withPicked(state, INTENTS.permission)).toBe(state)
+    expect(withPicked(NO_DELIVERY, INTENTS.answer)).toEqual({ scroll: 0, intent: INTENTS.answer })
+  })
+})
+
+describe('y while the keys go out', () => {
+  it('marks the state as sending, and the outcome of the delivery ends the mark', () => {
+    const state = sending({ scroll: 0, intent: INTENTS.answer })
+    expect(state).toEqual({ scroll: 0, intent: INTENTS.answer, isSending: true })
+    expect(afterDelivery(state, INTENTS.answer, { outcome: OUTCOMES.refused })).toEqual({ scroll: 0, outcome: OUTCOMES.refused })
+    const stale = { ...OUTCOMES.refused, refusal: 'stale-screen' as const }
+    expect(afterDelivery(state, INTENTS.answer, { outcome: stale })).toEqual({ scroll: 0, intent: INTENTS.answer, outcome: stale })
+  })
+
+  it('sends only the intent that the bar shows, while the bar still shows it and no y runs', () => {
+    const state: DeliverState = { scroll: 0, intent: INTENTS.answer }
+    expect(isSendable(state, INTENTS.answer)).toBe(true)
+    expect(isSendable(state, INTENTS.prompt)).toBe(false)
+    expect(isSendable({ scroll: 0 }, INTENTS.answer)).toBe(false)
+    expect(isSendable(sending(state), INTENTS.answer)).toBe(false)
+    expect(isSendable(state, undefined)).toBe(false)
+  })
+
+  it('marks the state at the press of y only for the intent that its drawing shows, and the mark names that intent', () => {
+    const state: DeliverState = { scroll: 0, intent: INTENTS.answer }
+    const marked = sendPressed(state, INTENTS.answer)
+    expect(marked).toEqual(sending(state))
+    expect(isSendingOf(marked, INTENTS.answer)).toBe(true)
+    expect(isSendingOf(marked, INTENTS.prompt)).toBe(false)
+    for (const shown of [INTENTS.prompt, undefined]) expect(sendPressed(state, shown)).toBe(state)
+    expect(sendPressed(marked, INTENTS.answer)).toBe(marked)
+    expect(isSendingOf(state, INTENTS.answer)).toBe(false)
+    expect(notSending(marked)).toEqual(state)
   })
 })

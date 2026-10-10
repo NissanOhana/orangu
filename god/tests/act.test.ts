@@ -4,7 +4,7 @@
 // a state that changed gets no key, and the Screen tab shows the fresh screen under the refusal line. An old read keeps
 // the bar open for y again. 1 y runs at a time. The next refreshes check that the keys reached the session.
 import { expect, test } from 'claude-code/testing'
-import { HOME, SURFACES, toolResult } from './fake-host'
+import { HOME, SURFACES, paneProps, toolResult } from './fake-host'
 import { PROMPT_SCREEN, QUESTION_SCREEN, SF, WS, begin, cmuxSince, has, keysSince, lines, press, readScreen, select, sendKey } from './act-machine'
 
 for (const surface of SURFACES) {
@@ -179,5 +179,86 @@ for (const surface of SURFACES) {
     wait.transcriptMtimeMs = Date.now()
     await clock.advance(2000)
     expect(await lines(ui)).toContain(' Delivered to ask-a.')
+  })
+
+  test(`${surface}: while y runs the bar draws no y and no c, and says that the pane sends`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    await press(ui, 'option:1')
+    // cmux answers the screen read late, so the delivery runs while the test looks at the pane
+    machine.cmux!.delay = (verb) => (verb === 'read-screen' ? clock.sleep(500) : undefined)
+    const atY = calls.runs.length
+    const sending = press(ui, 'key:y')
+    await clock.settle()
+    const during = await lines(ui)
+    expect(await ui.find({ key: 'key:c' })).toBeUndefined()
+    expect(await ui.find({ key: 'key:y' })).toBeUndefined()
+    expect(during, during.join('\n')).toContain(' Send "1 Red" to ask-a?  The pane sends it now.')
+    await clock.advance(500)
+    await sending
+    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+  })
+
+  test(`${surface}: a c that the drawing before y still holds stops the keys, and the pane says so`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    await press(ui, 'option:1')
+    await ui.redraw()
+    machine.cmux!.delay = (verb) => (verb === 'read-screen' ? clock.sleep(500) : undefined)
+    const atY = calls.runs.length
+    // y and then c on the same drawing, before the pane draws the bar with no keys
+    const sending = ui.press({ key: 'key:y' })
+    const cancelling = ui.press({ key: 'key:c' })
+    await clock.settle()
+    await clock.advance(500)
+    await Promise.all([sending, cancelling])
+    expect(keysSince(calls, atY)).toEqual([])
+    // the Screen tab shows what the keys before c left in the tab, under the line of the cancel
+    const shown = await lines(ui)
+    expect(shown.some((line) => line.endsWith('│ You pressed c, so the pane sent no more keys.')), shown.join('\n')).toBe(true)
+    expect(has(shown, '[Screen]')).toBe(true)
+  })
+
+  test(`${surface}: y sends the intent of the drawing that it belongs to, and a bar that opened since then stays for its own y`, async ($, on) => {
+    const { calls, clock, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    await press(ui, 'option:1')
+    await ui.redraw()
+    const atY = calls.runs.length
+    // a press on option 2 and y on the same drawing, which shows the bar of option 1
+    const picking = ui.press({ key: 'option:2' })
+    const sending = ui.press({ key: 'key:y' })
+    await clock.settle()
+    await Promise.all([picking, sending])
+    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+  })
+
+  test(`${surface}: y reads ps for the PID in UTC, and a process that started at another time gets no key`, async ($, on) => {
+    const { machine, calls, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    const wait = machine.sessions[0]!
+    wait.procStart = 'Sat Oct 10 09:00:00 2026'
+    wait.fileMtimeMs += 1000
+    await press(ui, 'option:1')
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    const ps = calls.runs.slice(atY).find((run) => run.argv[0] === 'ps')
+    expect(ps?.argv).toEqual(['ps', '-o', 'pid=,tty=,lstart=', '-p', '46001'])
+    expect(ps?.init).toEqual({ timeoutMs: 5000, env: { TZ: 'UTC' } })
+    expect(keysSince(calls, atY)).toEqual([])
+  })
+
+  test(`${surface}: a pane too short for the board keeps the bar with y and c above the key row`, async ($, on) => {
+    const { calls, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    await press(ui, 'option:1')
+    await ui.redraw(paneProps(110, 8))
+    const shown = await lines(ui)
+    expect(shown, shown.join('\n')).toContain(' Send "1 Red" to ask-a?  y: send  c: cancel')
+    expect(shown.length).toBeLessThanOrEqual(8)
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
   })
 }

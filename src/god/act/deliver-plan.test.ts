@@ -337,3 +337,17 @@ describe('textRefusal', () => {
     for (const text of ['line one\nline two', 'a\\b', 'a\\x41', 'a\\u0041', 'a\\ b', `a${ch(0x200b)}b`]) expect(textRefusal(text), text).toBeUndefined()
   })
 })
+
+describe('planDelivery: a prompt to a session that runs a task', () => {
+  const task = (isRunning: boolean) => ({ toolUseId: 'toolu_task', kind: 'background' as const, text: 'Bash Start the server', isRunning })
+
+  it('refuses a prompt while a background task or a subagent of the idle session runs, because it can open a dialog', () => {
+    expect(plan(prompt('Run the tests.'), screen('prompt-empty'), facts({ transcript: { agents: [task(true)] } }))).toEqual(refused('task-running'))
+    expect(plan(prompt('Run the tests.'), screen('prompt-empty'), facts({ transcript: { agents: [{ ...task(true), kind: 'subagent' }] } }))).toEqual(refused('task-running'))
+  })
+
+  it('sends the prompt when every task of the session ended, and refuses no answer for a task', () => {
+    expect(plan(prompt('Run the tests.'), screen('prompt-empty'), facts({ transcript: { agents: [task(false)] } })).kind).toBe('send')
+    expect(plan(ANSWER, screen('question'), { ...ASKS, transcript: { openQuestion: QUESTION, agents: [task(true)] } }).kind).toBe('send')
+  })
+})

@@ -9,8 +9,8 @@
 //   in place of the board (src/god/view/detail-pane.ts);
 // - screen: the screen state of the Screen tab, null before its first read (src/god/screen-loop.ts);
 // - jump: the note of the last j that did not jump, null for none (src/god/act/jump.ts);
-// - deliver: the key path: the intent of the confirm bar, its scroll, the draft of r or m, the last outcome and the
-//   check of the refreshes after a send (src/god/view/bar.ts).
+// - deliver: the key path: the intent of the confirm bar, its scroll, the draft of r or m, the last outcome, the
+//   check of the refreshes after a send, and the mark while the keys go out (src/god/view/bar.ts).
 import { atom } from 'claude-code'
 
 import type { JumpNote } from './act/jump.js'

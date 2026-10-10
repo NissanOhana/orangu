@@ -19,7 +19,12 @@ export const SF = { ask: '00000000-0000-4000-8000-00000000b011', idle: '00000000
 
 /** The screens as Claude Code draws them: the question dialog, an empty prompt, and a Bash permission dialog. */
 export const QUESTION_SCREEN = ['❯ Pick a color.', '', RULE, ' ☐ Pick', '', 'Which color?', '', '❯ 1. Red', '     Red', '  2. Green', '     Green', '  3. Type something.', RULE, '  4. Chat about this', '', 'Enter to select · ↑/↓ to navigate · Esc to cancel'].join('\n')
-export const PROMPT_SCREEN = ['❯ Run the build.', '', '⏺ The build is done.', '', RULE, `❯${NBSP}`, RULE, '  ? for shortcuts'].join('\n')
+/** The screen of an idle session whose input box holds `typed`: the first line after the prompt mark, the next ones after 2 spaces. */
+export function promptScreen(typed = ''): string {
+  const [first = '', ...rest] = typed.split('\n')
+  return ['❯ Run the build.', '', '⏺ The build is done.', '', RULE, `❯${NBSP}${first}`, ...rest.map((line) => `  ${line}`), RULE, '  ? for shortcuts'].join('\n')
+}
+export const PROMPT_SCREEN = promptScreen()
 export const PERMISSION_SCREEN = [
   '❯ Make the probe file.',
   '',
@@ -56,7 +61,7 @@ export function machineAt(t0: number): Machine {
       46003: { tty: 'ttys013', workspaceRef: WS.perm, surfaceRef: SF.perm, title: 'perm' },
       46004: { tty: 'ttys014', workspaceRef: WS.edit, surfaceRef: SF.edit, title: 'edit' },
     },
-    screens: { [SF.ask]: QUESTION_SCREEN, [SF.idle]: PROMPT_SCREEN, [SF.perm]: PERMISSION_SCREEN, [SF.edit]: PROMPT_SCREEN },
+    screens: { [SF.ask]: QUESTION_SCREEN, [SF.idle]: promptScreen, [SF.perm]: PERMISSION_SCREEN, [SF.edit]: PROMPT_SCREEN },
   }
   return { sessions, repos: { [A]: [`${A}/.git`, `${A}/.git`, A] }, cmux }
 }
@@ -91,6 +96,8 @@ export const readScreen = (ws: string, sf: string): string[] => ['cmux', 'read-s
 export const sendKey = (ws: string, sf: string, key: string): string[] => ['cmux', 'send-key', '--workspace', ws, '--surface', sf, '--', key]
 export const sendText = (ws: string, sf: string, text: string): string[] => ['cmux', 'send', '--workspace', ws, '--surface', sf, '--', text]
 export const has = (shown: readonly string[], part: string): boolean => shown.some((line) => line.includes(part))
+/** The text of the detail column of the wide pane: the part of each line after the column rule, joined with 1 space. */
+export const detailText = (shown: readonly string[]): string => shown.flatMap((line) => (line.includes('│') ? [line.slice(line.indexOf('│') + 1).trim()] : [])).join(' ')
 /** Presses the Button keyed `key` of the pane as it draws now: a press reaches only an element that is drawn. */
 export const press = async (ui: Mounted<'terminal' | 'desktop', 'Pane'>, key: string) => {
   await ui.redraw()

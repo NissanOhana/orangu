@@ -5,7 +5,7 @@
  * delivered after CHECK_REFRESHES such refreshes that did not show it.
  */
 import { describe, expect, it } from 'vitest'
-import { HOUR, NOW, SECOND, facts, transcript, waiting, idle } from '../../../test/fixtures/god/sessions.js'
+import { HOUR, NOW, SECOND, busy, facts, idle, transcript, waiting } from '../../../test/fixtures/god/sessions.js'
 import type { Facts, SessionFacts } from '../types.js'
 import { CHECK_REFRESHES, checkDelivery, type DeliverCheck } from './deliver-check.js'
 
@@ -60,8 +60,12 @@ describe('checkDelivery', () => {
       waiting('s-wait', { waitingFor: 'permission prompt', transcript: transcript({ activity: { toolUseId, tool: 'Bash', text: 'Bash npm test', isOpen } }) })
     const byCall = check({ kind: 'permission', toolUseId: 'tu-bash' })
     expect(checkDelivery(byCall, refresh([open(true)], SENT_AT + 2 * SECOND))).toMatchObject({ status: 'waiting' })
-    expect(checkDelivery(byCall, refresh([open(false)], SENT_AT + 2 * SECOND))).toEqual({ status: 'delivered' })
+    // after Yes the command runs: its call is still open, but the session waits on no permission prompt
+    const runs = busy('s-wait', { transcript: transcript({ activity: { toolUseId: 'tu-bash', tool: 'Bash', text: 'Bash npm test', isOpen: true } }) })
+    expect(checkDelivery(byCall, refresh([runs], SENT_AT + 2 * SECOND))).toEqual({ status: 'delivered' })
+    // the session waits on a permission prompt of another call: the answer reached the first one
     expect(checkDelivery(byCall, refresh([open(true, 'tu-next')], SENT_AT + 2 * SECOND))).toEqual({ status: 'delivered' })
+    expect(checkDelivery(byCall, refresh([open(false)], SENT_AT + 2 * SECOND))).toEqual({ status: 'delivered' })
     const byState = check({ kind: 'permission' })
     expect(checkDelivery(byState, refresh([open(true)], SENT_AT + 2 * SECOND))).toMatchObject({ status: 'waiting' })
     expect(checkDelivery(byState, refresh([answered()], SENT_AT + 2 * SECOND))).toEqual({ status: 'delivered' })
@@ -75,5 +79,8 @@ describe('checkDelivery', () => {
     // the same text from an older turn, and another text, are not this prompt
     expect(checkDelivery(typed, refresh([prompted('Run the tests.\nThen fix the lint.', SENT_AT - HOUR)], SENT_AT + 2 * SECOND))).toMatchObject({ status: 'waiting' })
     expect(checkDelivery(typed, refresh([prompted('Run the tests.', SENT_AT)], SENT_AT + 2 * SECOND))).toMatchObject({ status: 'waiting' })
+    // a command shows in the history under its title, which is its text: /compact reads as delivered
+    const command = check({ kind: 'prompt', text: '/compact', after: SENT_AT - SECOND })
+    expect(checkDelivery(command, refresh([prompted('/compact', SENT_AT)], SENT_AT + 2 * SECOND))).toEqual({ status: 'delivered' })
   })
 })

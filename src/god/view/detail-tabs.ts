@@ -5,8 +5,8 @@
  *   request and its whole input with its spaces as written, or the current tool call and the API error at the end; then the last reply.
  *   Each option that a digit answers is 1 Button whose hotkey is its digit, and the engine paints that digit as
  *   `1: ` before the label. A Bash request also gets `1: Yes` and `2: No`, the 2 answers that the pane can send to
- *   it; a request of any other tool gets 1 line that says to answer it in its tab. With no cmux, the digits draw dim
- *   and no Button has a hotkey.
+ *   it; a request of any other tool gets 1 line that says to answer it in its tab. With no cmux, or while a draft of
+ *   r or m is open (a digit then types into the draft), the digits draw dim and no Button has a hotkey.
  * - History: the last turns, the newest first, each as your prompt and then the reply.
  * - Agents: the running subagents and background tasks first, then the ended ones, then the subagent files that
  *   no task of the read part names.
@@ -71,6 +71,8 @@ export type TabInput = {
   width: number
   now: number
   isCmuxMissing: boolean
+  /** true while a draft of r or m is open: the digits draw dim with no hotkey, so a digit arms no y */
+  isDraftOpen?: boolean
   /** the last read of a screen: the Screen tab shows it when it is a read of this session */
   screen?: ScreenRead
   /** true when the newest screen read of this session failed: the Screen tab says so over the last read */
@@ -85,6 +87,9 @@ export type TabInput = {
 
 /** The text under a label starts at this column. */
 const TEXT_INDENT = 3
+
+/** True when the digits draw dim with no hotkey: no cmux, or a draft is open. */
+const areDigitsOff = (input: TabInput): boolean => input.isCmuxMissing || input.isDraftOpen === true
 
 /** The key of the line of option n. */
 export const optionKey = (digit: number): string => `option:${digit}`
@@ -149,7 +154,7 @@ function questionLines(input: TabInput, question: Question, index: number, hasDi
     const digit = at + 1
     const keyed = hasDigits && digit <= 9
     const about = option.description === undefined || flat(option.description) === '' ? [] : [{ text: `  ${flat(option.description)}`, ...DIM }]
-    if (keyed && !input.isCmuxMissing) {
+    if (keyed && !areDigitsOff(input)) {
       lines.push(...keyedLines(optionKey(digit), digit, [{ text: flat(option.label) }, ...about], width))
       options.push({ key: optionKey(digit), digit, isOff: false })
       return
@@ -174,9 +179,10 @@ function permissionAnswers(input: TabInput, tool: string): TabContent {
   const options: OptionKey[] = []
   for (const { choice, label, digit } of PERMISSION_ANSWERS) {
     const key = permissionKey(choice)
-    if (input.isCmuxMissing) lines.push({ key, segments: [{ text: ' ' }, { text: String(digit), ...DIM }, { text: ` ${label}` }] })
+    const isOff = areDigitsOff(input)
+    if (isOff) lines.push({ key, segments: [{ text: ' ' }, { text: String(digit), ...DIM }, { text: ` ${label}` }] })
     else lines.push(...keyedLines(key, digit, [{ text: label }], width))
-    options.push({ key, digit, isOff: input.isCmuxMissing, choice })
+    options.push({ key, digit, isOff, choice })
   }
   return { lines, options }
 }

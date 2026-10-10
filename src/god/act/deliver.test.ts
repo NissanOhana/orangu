@@ -5,112 +5,41 @@
  *   the plan, so each delivery reads the screen again and no fact of an older tick reaches the plan. The time of the
  *   facts is the host clock just before those reads.
  * - It runs only the plan steps, in order, and stops at the first one that fails. Its host runs only cmux send,
- *   send-key and read-screen, and the reads of the transcript.
+ *   send-key and read-screen, ps of 1 PID in UTC, and the reads of the transcript.
  * - A peer message goes through the engine with no screen check.
- * The screens are the synthetic fixtures under test/fixtures/god/screens, and every session fact is made up.
+ * The checks between the steps of a prompt, the cancel mark and the process check are in deliver-steps.test.ts. The
+ * fake machine is test/fixtures/god/deliver-machine.ts.
  */
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import type { DirEntry, Host, PeerOutcome, RunResult } from '../host.js'
-import { transcriptPath } from '../source/transcript.js'
+import {
+  ANSWER,
+  HOME,
+  ID,
+  PERMISSION,
+  REGISTRY,
+  ROW,
+  SF,
+  T0,
+  TARGET,
+  TRANSCRIPT,
+  WS,
+  askLines,
+  askPermission,
+  asks,
+  idle,
+  keyRuns,
+  machine,
+  prompt,
+  request,
+  resultLine,
+  screenFixture,
+  screenRuns,
+  sendKey,
+  sendText,
+} from '../../../test/fixtures/god/deliver-machine.js'
+import type { PeerOutcome } from '../host.js'
 import type { DeliverIntent, SourceState } from '../types.js'
-import { REFUSED_DELIVER_ARGV, deliver, deliverHost, deliverPeer, isDeliverArgv, type DeliverPorts, type DeliverRequest, type DeliverRow } from './deliver.js'
-import type { KeyIntent } from './deliver-plan.js'
-
-const SCREENS = join(dirname(fileURLToPath(import.meta.url)), '../../../test/fixtures/god/screens')
-const screenFixture = (name: string): string => readFileSync(join(SCREENS, `${name}.txt`), 'utf8')
-
-const HOME = '/tmp/god-home'
-const CWD = '/tmp/god-test/repo-a'
-const PID = 4242
-const ID = 'session-color'
-const WS = '0f8e2c1a-5b6d-4e7f-8a9b-0c1d2e3f4a5b'
-const SF = '9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d'
-const T0 = Date.UTC(2026, 9, 9, 12, 0, 0)
-const TARGET = { sessionId: ID, name: 'color-picker' }
-const ROW: DeliverRow = { pid: PID, sessionId: ID, cwd: CWD, tab: { pid: PID, tty: 'ttys005', workspaceRef: WS, surfaceRef: SF, workspaceTitle: 'color' } }
-const REGISTRY = `${HOME}/.claude/sessions/${PID}.json`
-const TRANSCRIPT = transcriptPath(HOME, CWD, ID)
-
-const OPTIONS = [
-  { label: 'Red', description: 'A warm color for the main action.' },
-  { label: 'Green', description: 'A calm color that means go.' },
-  { label: 'Blue', description: 'A cool color that fits the brand.' },
-]
-const QUESTION_TEXT = 'Which color should the button use?'
-const ANSWER: KeyIntent = { kind: 'answer', target: TARGET, toolUseId: 'toolu_color', header: 'Color', question: QUESTION_TEXT, option: 1, label: 'Red' }
-const TOUCH = { command: 'touch probe-yes.txt', description: 'Make an empty probe file' }
-const PERMISSION: KeyIntent = { kind: 'permission', target: TARGET, choice: 'no', tool: 'Bash', input: JSON.stringify(TOUCH) }
-const prompt = (text: string): KeyIntent => ({ kind: 'prompt', target: TARGET, text })
-
-const at = (ms: number): string => new Date(ms).toISOString()
-const askLine = JSON.stringify({ type: 'assistant', timestamp: at(T0 - 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: 'toolu_color', name: 'AskUserQuestion', input: { questions: [{ question: QUESTION_TEXT, header: 'Color', multiSelect: false, options: OPTIONS }] } }] } })
-const bashLine = JSON.stringify({ type: 'assistant', timestamp: at(T0 - 60_000), message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: 'toolu_bash', name: 'Bash', input: TOUCH }] } })
-const promptLine = (text: string, ms: number): string => JSON.stringify({ type: 'user', timestamp: at(ms), message: { role: 'user', content: text } })
-const resultLine = JSON.stringify({ type: 'user', timestamp: at(T0 - 30_000), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_color', content: 'Red' }] }, toolUseResult: { answers: { [QUESTION_TEXT]: 'Red' } } })
-
-/** The target as the fake machine holds it: its registry state, its transcript lines and the screen of its tab. */
-type Target = { status: 'busy' | 'idle' | 'waiting'; waitingFor?: string; sessionId?: string; lines?: string[]; screen: string }
-
-/** The registry, transcript and screen of a target that waits on the color question, with the given fields over them. */
-const asks = (over: Partial<Target> = {}): Target => ({ status: 'waiting', waitingFor: 'input needed', lines: [promptLine('Pick a color.', T0 - 90_000), askLine], screen: screenFixture('question'), ...over })
-const askPermission = (over: Partial<Target> = {}): Target => ({ status: 'waiting', waitingFor: 'permission prompt', lines: [promptLine('Make the file.', T0 - 90_000), bashLine], screen: screenFixture('permission'), ...over })
-const idle = (over: Partial<Target> = {}): Target => ({ status: 'idle', lines: [promptLine('Run the tests.', T0 - 90_000)], screen: screenFixture('prompt-empty'), ...over })
-
-const ran = (stdout: string, exitCode = 0): RunResult => ({ exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
-
-/**
- * A fake machine with 1 target. It logs each call in order, as `run <argv>`, `list <path>` or `read <path>`. The host
- * clock is `clock.t`, and `onRun` can move it while a command runs. `failing` names the cmux verbs that exit 1.
- */
-function machine(target: Target, options: { failing?: string[]; onRun?: (argv: readonly string[], clock: { t: number }) => void; failRead?: boolean } = {}) {
-  const log: string[] = []
-  const runs: string[][] = []
-  const clock = { t: T0 }
-  const content = (): string => `${(target.lines ?? []).join('\n')}\n`
-  const registry = (): string => JSON.stringify({ pid: PID, sessionId: target.sessionId ?? ID, cwd: CWD, name: 'color-picker', kind: 'interactive', status: target.status, ...(target.waitingFor === undefined ? {} : { waitingFor: target.waitingFor }), statusUpdatedAt: T0 - 60_000 })
-  const host: Host = {
-    run: async (argv) => {
-      log.push(`run ${argv.join(' ')}`)
-      runs.push([...argv])
-      options.onRun?.(argv, clock)
-      const [command, verb = ''] = argv
-      if (command === 'stat') return ran(`7001 ${TRANSCRIPT}`)
-      if (command === 'tail') return options.failRead === true ? ran('', 1) : ran(content().slice(Number((argv[2] ?? '+1').slice(1)) - 1))
-      if (command === 'head') return ran(content().slice(0, Number(argv[2])))
-      if (command === 'cmux' && options.failing?.includes(verb)) return ran('', 1)
-      if (command === 'cmux' && verb === 'read-screen') return ran(target.screen)
-      if (command === 'cmux') return ran('')
-      throw new Error(`the fake machine has no ${command}`)
-    },
-    list: async (path) => {
-      log.push(`list ${path}`)
-      const entry: DirEntry = { name: `${PID}.json`, kind: 'file', size: registry().length, mtimeMs: T0 - 60_000, isLink: false }
-      return path === `${HOME}/.claude/sessions` ? [entry] : []
-    },
-    read: async (path) => {
-      log.push(`read ${path}`)
-      if (path !== REGISTRY) throw new Error('no such file')
-      return registry()
-    },
-    stat: async (path) => {
-      log.push(`stat ${path}`)
-      if (path !== TRANSCRIPT || target.lines === undefined) throw new Error('no such file')
-      return { kind: 'file', size: content().length, mtimeMs: T0 - 60_000, isLink: false }
-    },
-    now: async () => clock.t,
-  }
-  const ports: DeliverPorts = { host, home: HOME, clean: (text) => text, clock: () => T0 + 5000 }
-  return { log, runs, clock, ports }
-}
-
-const request = (intent: KeyIntent, over: Partial<DeliverRequest> = {}): DeliverRequest => ({ intent, session: ROW, cmux: 'ok', ...over })
-const keyRuns = (runs: readonly string[][]): string[][] => runs.filter((argv) => argv[0] === 'cmux' && (argv[1] === 'send' || argv[1] === 'send-key'))
-const screenRuns = (runs: readonly string[][]): string[][] => runs.filter((argv) => argv[0] === 'cmux' && argv[1] === 'read-screen')
-const sendKey = (key: string): string[] => ['cmux', 'send-key', '--workspace', WS, '--surface', SF, '--', key]
-const sendText = (text: string): string[] => ['cmux', 'send', '--workspace', WS, '--surface', SF, '--', text]
+import { REFUSED_DELIVER_ARGV, deliver, deliverHost, deliverPeer, isDeliverArgv, type DeliverRequest, type DeliverRow } from './deliver.js'
 
 describe('deliver: the checks before any read', () => {
   it('refuses with no cmux, with no cmux read that worked, and with no usable tab, and runs no host call', async () => {
@@ -166,7 +95,7 @@ describe('deliver: the fresh reads, then the plan', () => {
   })
 
   it('reads the state on disk, not the board: a question that closed since the last tick gets no key', async () => {
-    const fake = machine(asks({ status: 'idle', waitingFor: undefined, lines: [promptLine('Pick a color.', T0 - 90_000), askLine, resultLine] }))
+    const fake = machine(asks({ status: 'idle', waitingFor: undefined, lines: [...askLines, resultLine] }))
     expect((await deliver(fake.ports, request(ANSWER))).outcome).toMatchObject({ status: 'refused', refusal: 'screen-changed' })
     expect(keyRuns(fake.runs)).toEqual([])
   })
@@ -194,12 +123,12 @@ describe('deliver: the fresh reads, then the plan', () => {
     expect(screenRuns(fake.runs)).toEqual([])
   })
 
-  it('fails with no key when the transcript or the screen read fails', async () => {
+  it('fails with no key when the transcript or the screen read fails, and says which read failed', async () => {
     const noTranscript = machine(asks(), { failRead: true })
-    expect((await deliver(noTranscript.ports, request(ANSWER))).outcome.status).toBe('failed')
+    expect((await deliver(noTranscript.ports, request(ANSWER))).outcome).toMatchObject({ status: 'failed', reason: 'facts-unread' })
     expect(screenRuns(noTranscript.runs)).toEqual([])
     const noScreen = machine(asks(), { failing: ['read-screen'] })
-    expect((await deliver(noScreen.ports, request(ANSWER))).outcome.status).toBe('failed')
+    expect((await deliver(noScreen.ports, request(ANSWER))).outcome).toMatchObject({ status: 'failed', reason: 'screen-unread' })
     expect(keyRuns(noScreen.runs)).toEqual([])
   })
 
@@ -209,23 +138,25 @@ describe('deliver: the fresh reads, then the plan', () => {
     expect(keyRuns(fake.runs)).toEqual([sendKey('4')])
   })
 
-  it('types a 2-line prompt as send, shift+enter, send, enter, after 1 screen read', async () => {
+  it('types a 2-line prompt as send, shift+enter, send, enter, and reads the registry and the screen again before each next step', async () => {
     const fake = machine(idle())
     const result = await deliver(fake.ports, request(prompt('Run the tests.\nThen fix the lint.')))
     expect(result.outcome.status).toBe('sent')
-    expect(fake.runs.filter((argv) => argv[0] === 'cmux')).toEqual([
-      ['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40'],
-      sendText('Run the tests.'),
-      sendKey('shift+enter'),
-      sendText('Then fix the lint.'),
-      sendKey('enter'),
-    ])
+    const read = ['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40']
+    expect(fake.runs.filter((argv) => argv[0] === 'cmux')).toEqual([read, sendText('Run the tests.'), read, sendKey('shift+enter'), read, sendText('Then fix the lint.'), read, sendKey('enter')])
+    // each check reads the registry file, then the screen, after the step before it
+    const keyLines = fake.log.flatMap((line, index) => (line.startsWith('run cmux send') ? [index] : []))
+    for (const [from, to] of keyLines.slice(0, -1).map((index, at) => [index, keyLines[at + 1]!] as const)) {
+      const between = fake.log.slice(from + 1, to)
+      expect(between.indexOf(`read ${REGISTRY}`), between.join('\n')).toBeGreaterThanOrEqual(0)
+      expect(between.indexOf(`read ${REGISTRY}`)).toBeLessThan(between.findIndex((line) => line.includes('read-screen')))
+    }
   })
 
   it('stops at the first step that fails, and runs none after it', async () => {
     const fake = machine(idle(), { failing: ['send'] })
     const { outcome } = await deliver(fake.ports, request(prompt('Run the tests.\nThen fix the lint.')))
-    expect(outcome).toMatchObject({ status: 'failed', screen: { text: screenFixture('prompt-empty') } })
+    expect(outcome).toMatchObject({ status: 'failed', reason: 'step-failed', screen: { text: screenFixture('prompt-empty') } })
     expect(keyRuns(fake.runs)).toEqual([sendText('Run the tests.')])
   })
 
@@ -243,7 +174,7 @@ describe('deliver: the fresh reads, then the plan', () => {
 
 describe('isDeliverArgv: the only commands of the executor', () => {
   it('takes cmux send and send-key with both refs and -- right before 1 value, the screen read, and the transcript reads', () => {
-    for (const argv of [sendKey('1'), sendText('--surface x'), ['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40'], ['stat', '-f', '%i %N', TRANSCRIPT], ['tail', '-c', '+1', TRANSCRIPT], ['head', '-c', '100', TRANSCRIPT]]) {
+    for (const argv of [sendKey('1'), sendText('--surface x'), ['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40'], ['stat', '-f', '%i %N', TRANSCRIPT], ['tail', '-c', '+1', TRANSCRIPT], ['head', '-c', '100', TRANSCRIPT], ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242']]) {
       expect(isDeliverArgv(argv), argv.join(' ')).toBe(true)
     }
   })
@@ -261,6 +192,9 @@ describe('isDeliverArgv: the only commands of the executor', () => {
       ['claude', '-p', 'hi'],
       ['git', 'push'],
       ['ps', '-o', 'pid='],
+      ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242,4243'],
+      ['ps', '-o', 'pid=,tty=,lstart=', '-p', '-1'],
+      ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242', '-e'],
       [],
     ]) {
       expect(isDeliverArgv(argv), argv.join(' ')).toBe(false)
@@ -276,7 +210,13 @@ describe('deliverHost: the host of the executor', () => {
     for (const argv of [['cmux', 'notify', '--title', 't', '--body', 'b'], ['cmux', 'select-workspace', '--workspace', WS], ['git', 'push'], ['claude', '-p', 'hi']]) {
       await expect(host.run(argv)).rejects.toThrow(REFUSED_DELIVER_ARGV)
     }
-    expect(fake.runs).toEqual([sendKey('1')])
+    // ps runs only in UTC, and no other command sets the environment
+    const ps = ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242']
+    await expect(host.run(ps)).rejects.toThrow(REFUSED_DELIVER_ARGV)
+    await expect(host.run(ps, { env: { TZ: 'Asia/Jerusalem' } })).rejects.toThrow(REFUSED_DELIVER_ARGV)
+    await expect(host.run(sendKey('1'), { env: { TZ: 'UTC' } })).rejects.toThrow(REFUSED_DELIVER_ARGV)
+    await host.run(ps, { env: { TZ: 'UTC' } })
+    expect(fake.runs).toEqual([sendKey('1'), ps])
   })
 })
 

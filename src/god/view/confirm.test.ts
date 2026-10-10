@@ -13,7 +13,7 @@ import { INTENTS, NOW, OUTCOMES, QUESTION } from '../../../test/fixtures/god/det
 import { planDelivery, type KeyIntent, type TargetFacts } from '../act/deliver-plan.js'
 import type { DeliverIntent, DeliverRefusal, OpenQuestion, ScreenRead } from '../types.js'
 import { cellWidth } from './cells.js'
-import { CONFIRM_HINTS, NOT_DELIVERED, PEER_NOT_DELIVERED, REFUSAL_TEXT, SEND_FAILED, confirmView, outcomeLines, type ConfirmInput, type ConfirmView } from './confirm.js'
+import { CONFIRM_HINTS, FAILURE_TEXT, NOT_DELIVERED, PEER_NOT_DELIVERED, REFUSAL_TEXT, SEND_FAILED, SENDING, confirmView, outcomeLines, type ConfirmInput, type ConfirmView } from './confirm.js'
 import { MULTI_DIALOG } from './confirm.js'
 import { scrollBy } from './detail.js'
 import type { Line } from './types.js'
@@ -25,7 +25,7 @@ const squeeze = (value: string): string => value.replace(/\s+/g, '')
 const COUNT = /^ ([wz]): \+(\d+) lines?$/
 
 /** every refusal code of the contract: a code that the record misses fails the type check of REFUSAL_TEXT */
-const CODES: readonly DeliverRefusal[] = ['no-cmux', 'no-tab', 'stale-screen', 'screen-changed', 'label-not-found', 'multi-question', 'empty', 'control-char', 'backslash-escape']
+const CODES: readonly DeliverRefusal[] = ['no-cmux', 'no-tab', 'stale-screen', 'screen-changed', 'label-not-found', 'multi-question', 'empty', 'control-char', 'backslash-escape', 'task-running']
 
 /** the line of each code, word for word as the pane shows it */
 const LINES: Readonly<Record<DeliverRefusal, string>> = {
@@ -38,6 +38,7 @@ const LINES: Readonly<Record<DeliverRefusal, string>> = {
   empty: 'The text is empty, so the pane sent nothing.',
   'control-char': 'The text has a control character, so the pane sent nothing.',
   'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
+  'task-running': 'The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.',
 }
 
 /** A Bash input of 2,483 characters with runs of spaces in it, as a tool call can write it. */
@@ -98,7 +99,15 @@ describe('the confirm bar', () => {
       expect(lines[1]!.segments[1]).toEqual({ text: line, token: '--warn' })
     }
     for (const prompt of [' !status', 'status !', 'Then /stop']) expect(bar({ ...INTENTS.prompt, text: prompt } as DeliverIntent)).toHaveLength(2)
+    // the box takes the first line that is not empty as its first text, so the mode comes from it
+    expect(bar({ ...INTENTS.prompt, text: '\n\n!status' } as DeliverIntent)[1]).toBe(` ${MODE['!']}`)
     expect(bar({ ...INTENTS.peer, text: '/stop now' } as DeliverIntent)).toHaveLength(2)
+  })
+
+  it('shows no y and no c while the keys go out, and says so in their place', () => {
+    const lines = view(INTENTS.answer, { isSending: true }).lines
+    expect(lines.flatMap((line) => line.segments).some((segment) => segment.press !== undefined)).toBe(false)
+    expect(lines.map(text)[0]).toBe(` Send "2 All" to api-7?  ${SENDING}`)
   })
 
   it('wraps a long label whole, and puts the keys after it', () => {
@@ -184,6 +193,18 @@ describe('the outcome lines', () => {
     expect(outcomeLines(OUTCOMES.delivered, 110).map(text)).toEqual([' Delivered to api-7.'])
     expect(outcomeLines(OUTCOMES.failed, 110).map(text)).toEqual([` ${SEND_FAILED}`])
     expect(outcomeLines({ ...OUTCOMES['not-delivered'], intent: INTENTS.peer }, 110).map(text)).toEqual([` ${PEER_NOT_DELIVERED}`])
+  })
+
+  it('says which part of a failed delivery failed, and the command line for any other reason', () => {
+    expect(FAILURE_TEXT).toEqual({
+      'facts-unread': 'The pane could not read the session again, so it sent nothing.',
+      'screen-unread': 'cmux did not read the screen, so the pane sent nothing.',
+      'step-failed': SEND_FAILED,
+      stopped: 'The screen or the session changed while the pane typed, so it sent no more keys. Check the Screen tab.',
+      cancelled: 'You pressed c, so the pane sent no more keys.',
+    })
+    for (const [reason, line] of Object.entries(FAILURE_TEXT)) expect(outcomeLines({ ...OUTCOMES.failed, reason } as never, 110).map(text)).toEqual([` ${line}`])
+    expect(outcomeLines(OUTCOMES.failed, 110).map(text)).toEqual([` ${SEND_FAILED}`])
   })
 })
 

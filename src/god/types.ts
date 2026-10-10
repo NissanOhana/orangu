@@ -493,7 +493,8 @@ export type DeliverIntent =
  * - multi-question: the dialog has more than 1 question or takes more than 1 selection;
  * - empty: the text is empty;
  * - control-char: the text holds a control character other than a newline;
- * - backslash-escape: the text holds the 2 characters of a backslash escape that cmux types as a key.
+ * - backslash-escape: the text holds the 2 characters of a backslash escape that cmux types as a key;
+ * - task-running: the idle session runs a background task or a subagent, which can open a dialog while the pane types.
  */
 export type DeliverRefusal =
   | 'no-cmux'
@@ -505,6 +506,7 @@ export type DeliverRefusal =
   | 'empty'
   | 'control-char'
   | 'backslash-escape'
+  | 'task-running'
 
 /** The plan of 1 delivery from an intent and a fresh screen: the argv lists to run in order, or 1 refusal. */
 export type DeliverPlan =

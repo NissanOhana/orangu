@@ -226,8 +226,8 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
       onPermission: (choice) => quiet(openPermission($, choice)),
     },
     bar: {
-      onSend: () => quiet(sendConfirmed($, runtime.deliver)),
-      onCancel: () => quiet(cancelBar($)),
+      onSend: (shown) => quiet(sendConfirmed($, runtime.deliver, shown)),
+      onCancel: () => quiet(cancelBar($, runtime.deliver)),
       onScroll: (scroll) => quiet(scrollBar($, scroll)),
       onDraft: (value) => quiet(addDraftLine($, value)),
     },
@@ -246,7 +246,7 @@ const NO_ACTIONS: PaneActions = {
 }
 
 export function register(on: On, options: PluginOptions): void {
-  const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false } }
+  const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false, isCancelled: false } }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'god', description: GOD_COMMAND_DESCRIPTION, argumentHint: GOD_ARGUMENT_HINT })

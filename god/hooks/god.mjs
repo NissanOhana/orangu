@@ -206,6 +206,24 @@ function matchPrompt(view) {
   if (view.dialogs.length > 0 || view.promptLine < 0 || !view.isPromptFramed || view.lastMark > view.promptLine || view.promptText !== "") return "screen-changed";
   return void 0;
 }
+var squeeze = (text) => text.replace(/\s+/gu, "");
+function inputBox(rows, promptLine, promptText) {
+  if (promptLine < 1 || !RULE_ROW.test(rows[promptLine - 1] ?? "")) return void 0;
+  const next = [];
+  for (let i = promptLine + 1; i < rows.length; i++) {
+    const row = rows[i] ?? "";
+    if (RULE_ROW.test(row)) return { text: [promptText, ...next].join("\n"), end: i };
+    next.push(row.replace(/^[ \u00a0]{1,2}/u, ""));
+  }
+  return void 0;
+}
+function matchTyped(text, typed) {
+  const view = readScreen(text);
+  if (view.dialogs.length > 0 || view.promptLine < 0) return "screen-changed";
+  const box = inputBox(text.split("\n").map(trimEnd), view.promptLine, view.promptText);
+  if (box === void 0 || view.lastMark > box.end) return "screen-changed";
+  return squeeze(box.text) === squeeze(typed) ? void 0 : "screen-changed";
+}
 
 // src/god/act/deliver-plan.ts
 var SCREEN_MAX_AGE_MS = 1e3;
@@ -225,7 +243,10 @@ function textRefusal(text) {
 function stateRefusal(intent, facts) {
   if (facts.sessionId !== intent.target.sessionId) return "screen-changed";
   const open = facts.transcript?.openQuestion;
-  if (intent.kind === "prompt") return facts.status === "idle" && facts.waitingFor === void 0 && open === void 0 ? void 0 : "screen-changed";
+  if (intent.kind === "prompt") {
+    if (facts.status !== "idle" || facts.waitingFor !== void 0 || open !== void 0) return "screen-changed";
+    return (facts.transcript?.agents ?? []).some((task) => task.isRunning) ? "task-running" : void 0;
+  }
   if (intent.kind === "permission") return facts.status === "waiting" && facts.waitingFor === "permission prompt" ? void 0 : "screen-changed";
   if (facts.status !== "waiting" || facts.waitingFor !== "input needed" || !open || open.toolUseId !== intent.toolUseId) return "screen-changed";
   const [question, ...more] = open.questions;
@@ -269,6 +290,19 @@ function planDelivery(intent, screen, facts, now) {
     default:
       return refuse2("screen-changed");
   }
+}
+function typedBy(steps) {
+  return steps.map((argv) => argv[1] === "send" ? argv.at(-1) ?? "" : argv.at(-1) === "shift+enter" ? "\n" : "").join("");
+}
+function nextStepRefusal(intent, screen, facts, typed, now) {
+  if (intent.kind !== "prompt") return "screen-changed";
+  if (!WORKSPACE_REF.test(screen.workspaceRef) || !SURFACE_REF.test(screen.surfaceRef)) return "no-tab";
+  if (screen.sessionId !== intent.target.sessionId || facts.sessionId !== intent.target.sessionId) return "screen-changed";
+  const age2 = now - screen.readAt;
+  const lag = screen.readAt - facts.factsAt;
+  if (!(age2 >= 0 && age2 <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS)) return "stale-screen";
+  if (facts.status !== "idle" || facts.waitingFor !== void 0) return "screen-changed";
+  return matchTyped(screen.text, typed);
 }
 
 // src/god/act/jump.ts
@@ -3318,7 +3352,7 @@ function keyRow(input) {
     input.isDetail === true ? { keys: "b", label: "back", hotkey: "b", isOff: false } : { keys: "\u2191\u2193", label: "select", isOff: false },
     { keys: "j", label: "jump", hotkey: "j", isOff: off2 },
     { keys: "n", label: "next", hotkey: "n", isOff: false },
-    { keys: answerKeys(input.answerCount), label: "answer", isOff: off2 },
+    { keys: answerKeys(input.answerCount), label: "answer", isOff: off2 || input.isAnswerOff === true },
     { keys: "r", label: "reply", hotkey: "r", isOff: off2 },
     { keys: "m", label: "message", hotkey: "m", isOff: false },
     { keys: "t", label: "tab", hotkey: "t", isOff: false },
@@ -3470,7 +3504,8 @@ var REFUSAL_TEXT = {
   "multi-question": MULTI_DIALOG,
   empty: "The text is empty, so the pane sent nothing.",
   "control-char": "The text has a control character, so the pane sent nothing.",
-  "backslash-escape": "A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing."
+  "backslash-escape": "A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.",
+  "task-running": "The session runs a background task or a subagent that can open a dialog, so the pane sent nothing."
 };
 var PROMPT_MODE_TEXT = {
   "!": "The first line starts with !, so the session runs it as a shell command.",
@@ -3480,25 +3515,33 @@ var PROMPT_MODE_TEXT = {
 var NOT_DELIVERED = "Not delivered. Check the Screen tab.";
 var PEER_NOT_DELIVERED = "The peer message did not arrive.";
 var SEND_FAILED = "A cmux command failed, so the keys after it did not go out. Check the Screen tab.";
+var FAILURE_TEXT = {
+  "facts-unread": "The pane could not read the session again, so it sent nothing.",
+  "screen-unread": "cmux did not read the screen, so the pane sent nothing.",
+  "step-failed": SEND_FAILED,
+  stopped: "The screen or the session changed while the pane typed, so it sent no more keys. Check the Screen tab.",
+  cancelled: "You pressed c, so the pane sent no more keys."
+};
+var SENDING = "The pane sends it now.";
 function askText(intent) {
   const name = flat2(intent.target.name);
   if (intent.kind === "answer") return `Send "${intent.option} ${flat2(intent.label)}" to ${name}?`;
   if (intent.kind === "permission") return `Send "${intent.choice === "yes" ? "Yes" : "No"}" to the ${flat2(intent.tool)} request of ${name}?`;
   return intent.kind === "prompt" ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`;
 }
-function partsOf(intent, width) {
-  const keys = CONFIRM_HINTS.flatMap((hint, index) => [...index === 0 ? [] : [{ text: "  " }], pressSegment(hint.hotkey ?? hint.keys, hint.label)]);
+function partsOf(intent, width, isSending) {
+  const keys = isSending ? [{ text: SENDING, dim: true }] : CONFIRM_HINTS.flatMap((hint, index) => [...index === 0 ? [] : [{ text: "  " }], pressSegment(hint.hotkey ?? hint.keys, hint.label)]);
   const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width);
   if (intent.kind === "answer") return { fixed: [...ask, ...wrapSegments([{ text: `\u2610 ${flat2(intent.header)}`, bold: true }, { text: `  ${flat2(intent.question)}` }], width, 1, 3)], text: [] };
   if (intent.kind === "permission") {
     if (intent.input === void 0) return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }, { text: "  none" }], width)], text: [] };
     return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }], width)], text: keptLines(intent.input, width, 3) };
   }
-  const mode = intent.kind === "prompt" ? PROMPT_MODE_TEXT[intent.text.charAt(0)] : void 0;
+  const mode = intent.kind === "prompt" ? PROMPT_MODE_TEXT[intent.text.split("\n").find((line) => line !== "")?.charAt(0) ?? ""] : void 0;
   return { fixed: [...ask, ...mode === void 0 ? [] : wrapSegments([{ text: mode, token: "--warn" }], width)], text: textLines(intent.text, width, 3) };
 }
 function confirmView(input) {
-  const { fixed, text } = partsOf(input.intent, input.width);
+  const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true);
   const { lines, window } = windowOf2(text, Math.max(MIN_WINDOW, input.rows - fixed.length), input.scroll);
   return { lines: [...fixed, ...lines], hints: CONFIRM_HINTS, window };
 }
@@ -3510,7 +3553,7 @@ function outcomeLines(outcome, width) {
     case "not-delivered":
       return wrapSegments([{ text: outcome.intent.kind === "peer" ? PEER_NOT_DELIVERED : NOT_DELIVERED, token: "--warn" }], width);
     case "failed":
-      return wrapSegments([{ text: SEND_FAILED, token: "--bad" }], width);
+      return wrapSegments([{ text: (Object.hasOwn(FAILURE_TEXT, outcome.reason) ? FAILURE_TEXT[outcome.reason] : void 0) ?? SEND_FAILED, token: outcome.reason === "cancelled" ? "--warn" : "--bad" }], width);
     case "sent":
       return wrapSegments([{ text: `Sent to ${name}. The next refresh checks it.` }], width);
     case "delivered":
@@ -3542,6 +3585,7 @@ var PERMISSION_ANSWERS = [
 ];
 var ANSWERED_TOOL = "Bash";
 var TEXT_INDENT = 3;
+var areDigitsOff = (input) => input.isCmuxMissing || input.isDraftOpen === true;
 var optionKey = (digit) => `option:${digit}`;
 var permissionKey = (choice) => `permission:${choice}`;
 function ago(at, now) {
@@ -3584,7 +3628,7 @@ function questionLines(input, question, index, hasDigits) {
     const digit = at + 1;
     const keyed = hasDigits && digit <= 9;
     const about = option.description === void 0 || flat2(option.description) === "" ? [] : [{ text: `  ${flat2(option.description)}`, ...DIM }];
-    if (keyed && !input.isCmuxMissing) {
+    if (keyed && !areDigitsOff(input)) {
       lines.push(...keyedLines(optionKey(digit), digit, [{ text: flat2(option.label) }, ...about], width));
       options.push({ key: optionKey(digit), digit, isOff: false });
       return;
@@ -3607,9 +3651,10 @@ function permissionAnswers(input, tool) {
   const options = [];
   for (const { choice, label, digit } of PERMISSION_ANSWERS) {
     const key = permissionKey(choice);
-    if (input.isCmuxMissing) lines.push({ key, segments: [{ text: " " }, { text: String(digit), ...DIM }, { text: ` ${label}` }] });
+    const isOff = areDigitsOff(input);
+    if (isOff) lines.push({ key, segments: [{ text: " " }, { text: String(digit), ...DIM }, { text: ` ${label}` }] });
     else lines.push(...keyedLines(key, digit, [{ text: label }], width));
-    options.push({ key, digit, isOff: input.isCmuxMissing, choice });
+    options.push({ key, digit, isOff, choice });
   }
   return { lines, options };
 }
@@ -3913,8 +3958,9 @@ function shows(expect, session) {
   if (transcript === void 0) return false;
   if (expect.kind === "question") return transcript.openQuestion?.toolUseId !== expect.toolUseId;
   if (expect.kind === "prompt") return transcript.history.some((turn) => turn.prompt?.trim() === expect.text && turn.promptAt !== void 0 && turn.promptAt >= expect.after);
-  if (expect.toolUseId !== void 0) return !(transcript.activity?.toolUseId === expect.toolUseId && transcript.activity.isOpen);
-  return !(session.status === "waiting" && session.waitingFor === "permission prompt");
+  const asks = session.status === "waiting" && session.waitingFor === "permission prompt";
+  if (expect.toolUseId !== void 0) return !(asks && transcript.activity?.toolUseId === expect.toolUseId && transcript.activity.isOpen);
+  return !asks;
 }
 var waiting = (check) => ({ status: "waiting", check });
 function checkDelivery(check, facts) {
@@ -3929,20 +3975,24 @@ function checkDelivery(check, facts) {
 
 // src/god/act/deliver.ts
 var READ_COMMANDS = ["stat", "tail", "head"];
-var REFUSED_DELIVER_ARGV = "The key path runs only cmux send, send-key and read-screen, and the reads of the transcript.";
-var FACTS_UNREAD = "The pane could not read the transcript of the session again.";
-var SCREEN_UNREAD = "cmux did not read the screen of the tab.";
-var STEP_FAILED = "A cmux command of the plan failed.";
+var REFUSED_DELIVER_ARGV = "The key path runs only cmux send, send-key and read-screen, ps of 1 process, and the reads of the transcript.";
+var PS_HEAD = ["ps", "-o", "pid=,tty=,lstart=", "-p"];
 var isRefs = (workspaceRef, surfaceRef) => WORKSPACE_REF.test(workspaceRef ?? "") && SURFACE_REF.test(surfaceRef ?? "");
 function isDeliverArgv(argv) {
   const [command, verb, workspaceFlag, workspaceRef, surfaceFlag, surfaceRef, ...rest] = argv;
+  if (command === "ps") return argv.length === PS_HEAD.length + 1 && PS_HEAD.every((arg, index) => argv[index] === arg) && /^[1-9][0-9]{0,9}$/.test(argv.at(-1) ?? "");
   if (command !== "cmux") return command !== void 0 && READ_COMMANDS.includes(command);
   if (workspaceFlag !== "--workspace" || surfaceFlag !== "--surface" || !isRefs(workspaceRef, surfaceRef)) return false;
   if (verb === "read-screen") return rest.length === 2 && rest[0] === "--lines" && /^[1-9][0-9]{0,3}$/.test(rest[1] ?? "");
   return (verb === "send" || verb === "send-key") && rest.length === 2 && rest[0] === "--";
 }
+function isDeliverEnv(argv, options) {
+  const env = options?.env ?? {};
+  const keys = Object.keys(env);
+  return argv[0] === "ps" ? keys.length === 1 && env["TZ"] === "UTC" : keys.length === 0;
+}
 function deliverHost(host) {
-  return { ...host, run: (argv, options) => isDeliverArgv(argv) ? host.run(argv, options) : Promise.reject(new Error(REFUSED_DELIVER_ARGV)) };
+  return { ...host, run: (argv, options) => isDeliverArgv(argv) && isDeliverEnv(argv, options) ? host.run(argv, options) : Promise.reject(new Error(REFUSED_DELIVER_ARGV)) };
 }
 async function readFresh(host, ports, row) {
   const factsAt = await host.now();
@@ -3952,7 +4002,21 @@ async function readFresh(host, ports, row) {
   if (read3 === void 0 || read3.status !== "read" && read3.status !== "missing") return { kind: "unread" };
   const transcript = read3.status === "read" ? reduceRecords(read3.records, { home: ports.home, headRecords: read3.headRecords, parseErrors: read3.parseErrors }) : void 0;
   const state = { sessionId: registry.sessionId, status: registry.status, ...registry.waitingFor === void 0 ? {} : { waitingFor: registry.waitingFor } };
-  return { kind: "read", facts: { ...state, ...transcript === void 0 ? {} : { transcript }, factsAt }, ...transcript === void 0 ? {} : { transcript } };
+  const procStart = registry.procStart === void 0 ? {} : { procStart: registry.procStart };
+  return { kind: "read", facts: { ...state, ...transcript === void 0 ? {} : { transcript }, factsAt }, ...transcript === void 0 ? {} : { transcript }, ...procStart };
+}
+function isSameProcess(rows, pid, procStart, tty) {
+  const row = rows.find((candidate) => candidate.pid === pid);
+  return row !== void 0 && procStart !== void 0 && procStart !== "" && row.lstart === procStart && tty !== void 0 && row.tty === tty;
+}
+async function nextStep(host, ports, row, refs, intent, typed) {
+  const factsAt = await host.now();
+  const registry = await readRegistryFile(host, ports.home, row.pid, ports.clean);
+  const screen = await readScreenOf(host, { sessionId: row.sessionId, ...refs }, ports.clean, () => host.now());
+  if (registry === void 0 || screen === void 0) return { refusal: "screen-changed", ...screen === void 0 ? {} : { screen } };
+  const facts = { sessionId: registry.sessionId, status: registry.status, ...registry.waitingFor === void 0 ? {} : { waitingFor: registry.waitingFor }, factsAt };
+  const refusal = nextStepRefusal(intent, screen, facts, ports.clean(typed), await host.now());
+  return { ...refusal === void 0 ? {} : { refusal }, screen };
 }
 async function deliver(ports, request) {
   const { intent, session } = request;
@@ -3960,26 +4024,37 @@ async function deliver(ports, request) {
   const at = () => host.now().catch(() => ports.clock());
   const refused = async (refusal, screen2) => ({ outcome: { status: "refused", intent, at: await at(), refusal, ...screen2 === void 0 ? {} : { screen: screen2 } } });
   const failed = async (reason, screen2) => ({ outcome: { status: "failed", intent, at: await at(), reason, ...screen2 === void 0 ? {} : { screen: screen2 } } });
+  const isCancelled = () => ports.isCancelled?.() === true;
   if (request.cmux === "missing") return refused("no-cmux");
   const textRefused = intent.kind === "prompt" ? textRefusal(intent.text) : void 0;
   if (textRefused !== void 0) return refused(textRefused);
   if (session === void 0 || session.sessionId !== intent.target.sessionId) return refused("screen-changed");
   const refs = request.cmux === "ok" ? tabRefs(session.tab) : void 0;
   if (refs === void 0) return refused("no-tab");
+  const ps = await readPs(host, [session.pid]);
+  if (!ps.ok) return failed("facts-unread");
   const fresh = await readFresh(host, ports, session).catch(() => ({ kind: "unread" }));
   if (fresh.kind === "gone") return refused("screen-changed");
-  if (fresh.kind === "unread") return failed(FACTS_UNREAD);
+  if (fresh.kind === "unread") return failed("facts-unread");
+  if (!isSameProcess(ps.value.rows, session.pid, fresh.procStart, session.tab?.tty)) return refused("screen-changed");
   const screen = await readScreenOf(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now());
-  if (screen === void 0) return failed(SCREEN_UNREAD);
+  if (screen === void 0) return failed("screen-unread");
   const now = await host.now().catch(() => Number.NaN);
   const plan = planDelivery(intent, screen, fresh.facts, now);
   if (plan.kind === "refuse") return refused(plan.refusal, screen);
-  for (const step of plan.steps) {
+  let newest = screen;
+  for (const [index, step] of plan.steps.entries()) {
+    if (index > 0) {
+      const between = await nextStep(host, ports, session, refs, intent, typedBy(plan.steps.slice(0, index))).catch(() => ({ refusal: "screen-changed" }));
+      if (between.screen !== void 0) newest = between.screen;
+      if (between.refusal !== void 0) return failed("stopped", newest);
+    }
+    if (isCancelled()) return failed("cancelled", newest);
     const exitCode = await host.run(step).then(
       (result) => result.exitCode,
       () => void 0
     );
-    if (exitCode !== 0) return failed(STEP_FAILED, screen);
+    if (exitCode !== 0) return failed("step-failed", newest);
   }
   const sentAt = ports.clock();
   const check = { sessionId: session.sessionId, expect: expectOf(intent, fresh.transcript, ports.clean, sentAt), sentAt, misses: 0 };
@@ -4018,6 +4093,7 @@ function draftFor(snapshot, selectedKey, kind) {
 }
 var checkOf = (state) => state.check === void 0 ? {} : { check: state.check };
 var withIntent = (state, intent) => ({ scroll: 0, intent, ...checkOf(state) });
+var withPicked = (state, intent) => state.draft === void 0 ? withIntent(state, intent) : state;
 var withDraft = (state, draft) => ({ scroll: 0, draft, ...checkOf(state) });
 function afterDraftLine(state, value) {
   const draft = state.draft;
@@ -4033,6 +4109,14 @@ function cancelled(state) {
 }
 var scrolled = (state, scroll) => ({ ...state, scroll });
 var sameIntent = (a, b) => a !== void 0 && JSON.stringify(a) === JSON.stringify(b);
+var isSendable = (state, shown) => shown !== void 0 && state.isSending !== true && sameIntent(state.intent, shown);
+var sending = (state) => ({ ...state, isSending: true });
+function notSending(state) {
+  const { isSending: _isSending, ...rest } = state;
+  return rest;
+}
+var sendPressed = (state, shown) => isSendable(state, shown) ? sending(state) : state;
+var isSendingOf = (state, intent) => state.isSending === true && sameIntent(state.intent, intent);
 function afterDelivery(state, intent, result) {
   const { outcome, check } = result;
   const isStale = outcome.status === "refused" && outcome.refusal === "stale-screen";
@@ -4085,8 +4169,9 @@ function barView(input) {
   if (intent !== void 0) {
     const isStale = outcome?.status === "refused" && outcome.refusal === "stale-screen" && JSON.stringify(outcome.intent) === JSON.stringify(intent);
     const stale = isStale ? outcomeLines(outcome, width) : [];
-    const bar = confirmView({ intent, width, rows: input.rows - stale.length, scroll: deliver2.scroll });
-    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: true };
+    const isSending = deliver2.isSending === true;
+    const bar = confirmView({ intent, width, rows: input.rows - stale.length, scroll: deliver2.scroll, isSending });
+    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: !isSending, intent };
   }
   if (draft !== void 0) {
     const head = appendItem(wrapSegments([{ text: draftText(draft), ...ACCENT, bold: true }], width), [pressSegment("c", "cancel")], width);
@@ -4129,7 +4214,8 @@ function paneDetail(input) {
     ...screen?.read === void 0 ? {} : { screen: screen.read },
     ...screen?.isFailed === true ? { isScreenFailed: true } : {},
     ...placeholder === void 0 ? {} : { placeholder },
-    ...input.outcome === void 0 ? {} : { outcome: input.outcome }
+    ...input.outcome === void 0 ? {} : { outcome: input.outcome },
+    ...input.isDraftOpen === true ? { isDraftOpen: true } : {}
   });
   return { kind: "session", sessionId: session.sessionId, view, scrollTo: scrollTargets2(view) };
 }
@@ -4153,7 +4239,7 @@ async function selection($) {
   return { snapshot: await read($, BOARD) ?? void 0, selectedKey: await read($, SELECTED) || void 0 };
 }
 async function openBar($, intent) {
-  if (intent !== void 0) await update($, DELIVER, (state) => withIntent(state, intent));
+  if (intent !== void 0) await update($, DELIVER, (state) => withPicked(state, intent));
 }
 async function openAnswer($, digit) {
   const { snapshot, selectedKey } = await selection($);
@@ -4177,18 +4263,19 @@ async function addDraftLine($, value) {
   const next = await update($, DELIVER, (state) => afterDraftLine(state, value));
   if (next.draft !== void 0) await focusDraft($, next.draft);
 }
-async function cancelBar($) {
+async function cancelBar($, runtime) {
+  if (runtime.isDelivering) runtime.isCancelled = true;
   await update($, DELIVER, cancelled);
 }
 async function scrollBar($, scroll) {
   await update($, DELIVER, (state) => scrolled(state, scroll));
 }
-async function deliverIntent($, intent) {
+async function deliverIntent($, intent, runtime) {
   if (intent.kind === "peer") return { outcome: await deliverPeer(engineEffects($).peer, intent, () => $.clock.now()) };
   const snapshot = await read($, BOARD) ?? void 0;
   const session = snapshot?.sessions.find((candidate) => candidate.sessionId === intent.target.sessionId);
   const home = await $.env.get("HOME") ?? "";
-  const ports = { host: engineHost($), home, clean: textCleaner(home), clock: engineClock };
+  const ports = { host: engineHost($), home, clean: textCleaner(home), clock: engineClock, isCancelled: () => runtime.isCancelled };
   return deliver(ports, { intent, ...session === void 0 ? {} : { session }, cmux: snapshot?.sources.cmux.status ?? "unread" });
 }
 async function showScreen($, sessionId) {
@@ -4196,15 +4283,19 @@ async function showScreen($, sessionId) {
   await update($, DETAIL, screenDetail);
   await update($, JUMP, () => null);
 }
-async function sendConfirmed($, runtime) {
-  if (runtime.isDelivering) return;
+async function sendConfirmed($, runtime, shown) {
+  if (runtime.isDelivering || shown === void 0) return;
   runtime.isDelivering = true;
+  runtime.isCancelled = false;
   try {
-    const intent = (await read($, DELIVER)).intent;
-    if (intent === void 0) return;
-    const result = await deliverIntent($, intent);
-    await update($, DELIVER, (state) => afterDelivery(state, intent, result));
-    if (opensScreen(result.outcome)) await showScreen($, intent.target.sessionId);
+    const marked = await update($, DELIVER, (state) => sendPressed(state, shown));
+    if (!isSendingOf(marked, shown)) return;
+    const result = await deliverIntent($, shown, runtime).catch(async (error) => {
+      await update($, DELIVER, notSending);
+      throw error;
+    });
+    await update($, DELIVER, (state) => afterDelivery(state, shown, result));
+    if (opensScreen(result.outcome)) await showScreen($, shown.target.sessionId);
   } finally {
     runtime.isDelivering = false;
   }
@@ -4509,7 +4600,7 @@ function drawLine(ui, line, theme, onKeyed, keys) {
 function barRows(ui, bar, theme, actions) {
   if (bar === void 0) return [];
   const scrollKeys = Object.entries(bar.scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]]);
-  const keys = bar.isOpen ? { y: actions.onSend, c: actions.onCancel, ...Object.fromEntries(scrollKeys) } : {};
+  const keys = { ...bar.isOpen ? { y: () => actions.onSend(bar.intent), c: actions.onCancel } : {}, ...Object.fromEntries(scrollKeys) };
   const rows = bar.lines.map((line) => drawLine(ui, line, theme, () => void 0, keys));
   const { Input } = ui;
   const field2 = bar.field;
@@ -4555,6 +4646,9 @@ function drawPane(ui, view, theme, actions) {
   if (view.kind === "message") {
     const after = [...view.bottomRule === void 0 ? [] : [view.bottomRule], ...view.keys ?? []];
     return /* @__PURE__ */ h(Box, { flexDirection: "column" }, [...view.header, view.topRule, ...view.body, ...after].map(row));
+  }
+  if (view.kind === "bar") {
+    return /* @__PURE__ */ h(Box, { flexDirection: "column" }, view.header.map(row), row(view.topRule), barRows(ui, view.bar, theme, actions.bar), view.keys.map(row));
   }
   if (view.kind === "detail") {
     return /* @__PURE__ */ h(Box, { flexDirection: "column" }, view.header.map(row), row(view.topRule), detailRows(ui, view.detail, theme, actions.detail), row(view.bottomRule), barRows(ui, view.bar, theme, actions.bar), view.keys.map(row));
@@ -4632,6 +4726,7 @@ function answerCountOf(snapshot, selectedKey) {
   return only === void 0 || only.multiSelect ? void 0 : only.options.length;
 }
 var barHeight = (bar) => bar === void 0 ? 0 : bar.lines.length + (bar.field === void 0 ? 0 : 1);
+var isNote = (bar) => bar.intent === void 0 && bar.field === void 0;
 function withoutScroll(detail, bar) {
   return detail.kind === "session" && bar !== void 0 && Object.keys(bar.scrollTo).length > 0 ? { ...detail, scrollTo: {} } : detail;
 }
@@ -4642,11 +4737,13 @@ function paneView(input) {
   const state = boardStateOf(snapshot);
   const note = input.jumpNote ?? void 0;
   const notice = note !== void 0 && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {};
-  const keysOf = (board2, isDetail2 = false) => keyRow({
+  const isDraftOpen = input.deliver?.draft !== void 0;
+  const keysOf = (board2, isDetail2 = false, showsDigits2 = false) => keyRow({
     width: bodyColumns,
     isCmuxMissing: board2.sources.cmux.status === "missing",
     promptHoldsKeys: input.promptHoldsKeys,
-    answerCount: answerCountOf(board2, input.selectedKey),
+    ...showsDigits2 ? { answerCount: answerCountOf(board2, input.selectedKey) } : {},
+    isAnswerOff: isDraftOpen,
     mode: board2.mode,
     isDetail: isDetail2,
     ...notice
@@ -4661,21 +4758,27 @@ function paneView(input) {
   const layout = layoutOf(bodyColumns);
   const detailState = input.detail ?? DEFAULT_DETAIL;
   const isDetail = layout.kind === "narrow" && detailState.isOpen;
-  const keys = keysOf(snapshot, isDetail);
+  const showsDigits = (layout.kind === "wide" || isDetail) && detailState.tab === "now" && !isDraftOpen;
+  const keys = keysOf(snapshot, isDetail, showsDigits);
   const selection2 = input.selectedKey === void 0 ? {} : { selectedKey: input.selectedKey };
   const under = bodyRows - header.length - 2 - keys.lines.length;
-  const bar = input.deliver === void 0 ? void 0 : barView({ deliver: input.deliver, width: bodyColumns, rows: Math.floor(under / 2), ...selection2, isScreenOpen: detailState.tab === "screen" });
-  const withBar = bar === void 0 ? {} : { bar };
+  const barOf = (rows) => input.deliver === void 0 ? void 0 : barView({ deliver: input.deliver, width: bodyColumns, rows, ...selection2, isScreenOpen: detailState.tab === "screen" });
+  const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey };
+  const fits = (room2) => room2 >= MIN_WINDOW_ROWS || !isDetail && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length <= Math.max(0, room2);
+  const shared = barOf(Math.floor(under / 2));
+  const bar = shared !== void 0 && isNote(shared) && !fits(under - barHeight(shared)) ? void 0 : shared;
   const room = under - barHeight(bar);
+  if (!fits(room)) {
+    const whole = bar === void 0 ? void 0 : barOf(bodyRows - header.length - 1 - keys.lines.length);
+    if (whole === void 0 || header.length + 1 + barHeight(whole) + keys.lines.length > bodyRows) return cannotDrawView("too-short", bodyColumns);
+    return { kind: "bar", header, topRule: ruleLine(bodyColumns), bar: whole, keys: keys.lines, hints: keys.hints };
+  }
+  const withBar = bar === void 0 ? {} : { bar };
   const screen = input.screen === void 0 || input.screen === null ? {} : { screen: input.screen };
   const outcome = input.deliver?.outcome === void 0 ? {} : { outcome: input.deliver.outcome };
-  const detailOf = (width) => withoutScroll(paneDetail({ snapshot, ...selection2, width, rows: room, now, state: detailState, ...screen, ...outcome }), bar);
-  if (isDetail) {
-    if (room < MIN_WINDOW_ROWS) return cannotDrawView("too-short", bodyColumns);
-    return { kind: "detail", header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints };
-  }
-  const board = { snapshot, width: layout.boardColumns, now, openGroups: input.openGroups, selectedKey: input.selectedKey };
-  if (room < MIN_WINDOW_ROWS && boardLines({ ...board, rows: Number.POSITIVE_INFINITY }).length > Math.max(0, room)) return cannotDrawView("too-short", bodyColumns);
+  const draft = isDraftOpen ? { isDraftOpen } : {};
+  const detailOf = (width) => withoutScroll(paneDetail({ snapshot, ...selection2, width, rows: room, now, state: detailState, ...screen, ...outcome, ...draft }), bar);
+  if (isDetail) return { kind: "detail", header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints };
   const { lines: body, more } = boardWindow({ ...board, rows: room });
   return {
     kind: "board",
@@ -4833,8 +4936,8 @@ function actionsOf($, runtime, layout) {
       onPermission: (choice) => quiet(openPermission($, choice))
     },
     bar: {
-      onSend: () => quiet(sendConfirmed($, runtime.deliver)),
-      onCancel: () => quiet(cancelBar($)),
+      onSend: (shown) => quiet(sendConfirmed($, runtime.deliver, shown)),
+      onCancel: () => quiet(cancelBar($, runtime.deliver)),
       onScroll: (scroll) => quiet(scrollBar($, scroll)),
       onDraft: (value) => quiet(addDraftLine($, value))
     }
@@ -4849,7 +4952,7 @@ var NO_ACTIONS = {
   bar: { onSend: NONE, onCancel: NONE, onScroll: NONE, onDraft: NONE }
 };
 function register(on, options) {
-  const runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false } };
+  const runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false, isCancelled: false } };
   on("session.start", async ($, e, next) => {
     await $.command.register({ name: "god", description: GOD_COMMAND_DESCRIPTION, argumentHint: GOD_ARGUMENT_HINT });
     if (await $.env.get("ORANGU_GOD") === "1") {

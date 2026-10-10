@@ -2,7 +2,8 @@
  * The bar of the key path: the lines under the bottom rule of the pane and above the key row. Nothing goes out from
  * the bar until the person presses y. It shows 1 of 3 things:
  * - the confirm bar of the intent (src/god/view/confirm.ts). After an old read (stale-screen) the intent and the bar
- *   stay, with the line of that refusal above them, so y reads the facts and the screen again;
+ *   stay, with the line of that refusal above them, so y reads the facts and the screen again. While the keys go
+ *   out, the bar has no y and no c;
  * - the draft of r or m: its target, its line count and c, then 1 text field. The field of the engine holds 1 line,
  *   so each Enter adds the line that it holds, and Enter on an empty field ends the draft and opens the confirm bar
  *   with the whole text. Each line gets a new field key, so the field is empty for the next line. The confirm bar
@@ -30,9 +31,10 @@ export type Draft = { kind: 'prompt' | 'peer'; target: DeliverTarget; lines: rea
  * - scroll: the first line of the scrolled text of the bar;
  * - draft: the draft of r or m, while it is open;
  * - outcome: what became of the last intent after y;
- * - check: what the refreshes after a send look for (src/god/act/deliver-check.ts).
+ * - check: what the refreshes after a send look for (src/god/act/deliver-check.ts);
+ * - isSending: true while the keys of the intent go out, so the bar draws no y and no c.
  */
-export type DeliverState = { intent?: DeliverIntent; scroll: number; draft?: Draft; outcome?: DeliverOutcome; check?: DeliverCheck }
+export type DeliverState = { intent?: DeliverIntent; scroll: number; draft?: Draft; outcome?: DeliverOutcome; check?: DeliverCheck; isSending?: boolean }
 
 /** The key path before any key: no bar, no draft, no outcome. */
 export const NO_DELIVERY: DeliverState = { scroll: 0 }
@@ -55,10 +57,11 @@ export function draftText(draft: Draft): string {
 export type DraftField = { key: string; label: string; placeholder: string; submitLabel: string }
 
 /**
- * The bar: its lines, the text field of a draft, the scroll that each count key goes to, and whether it is open (a
- * confirm bar or a draft, which own c, and y in the confirm bar).
+ * The bar: its lines, the text field of a draft, the scroll that each count key goes to, whether it is open (a
+ * confirm bar or a draft, which own c, and y in the confirm bar), and the intent that the confirm bar shows, which
+ * its y sends. While the keys go out the bar is not open, so it has no y and no c, and w and z still scroll it.
  */
-export type BarView = { lines: Line[]; field?: DraftField; scrollTo: Readonly<Partial<Record<string, number>>>; isOpen: boolean }
+export type BarView = { lines: Line[]; field?: DraftField; scrollTo: Readonly<Partial<Record<string, number>>>; isOpen: boolean; intent?: DeliverIntent }
 
 /** What the bar reads. */
 export type BarInput = {
@@ -91,8 +94,9 @@ export function barView(input: BarInput): BarView | undefined {
   if (intent !== undefined) {
     const isStale = outcome?.status === 'refused' && outcome.refusal === 'stale-screen' && JSON.stringify(outcome.intent) === JSON.stringify(intent)
     const stale = isStale ? outcomeLines(outcome, width) : []
-    const bar = confirmView({ intent, width, rows: input.rows - stale.length, scroll: deliver.scroll })
-    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: true }
+    const isSending = deliver.isSending === true
+    const bar = confirmView({ intent, width, rows: input.rows - stale.length, scroll: deliver.scroll, isSending })
+    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: !isSending, intent }
   }
   if (draft !== undefined) {
     const head = appendItem(wrapSegments([{ text: draftText(draft), ...ACCENT, bold: true }], width), [pressSegment('c', 'cancel')], width)
