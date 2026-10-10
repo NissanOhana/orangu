@@ -4,10 +4,12 @@
 // does not run; a machine with a cmux answers its tree, ps in UTC, the jump calls and the screen of each tab.
 // Its cmux keys work as the real cmux 0.64 keys do: send-key takes only a named key and exits 1 on a digit or a
 // letter, and a send of 1 digit answers the dialog that the screen of the surface shows.
-// A peer message goes to a session.send hook that records it and says it was delivered.
+// A peer message goes to a session.send hook that records it and says it was delivered. A tone, a notification and a
+// model call go to hooks that record them: the notification says a channel sent it, and the model gives the reply of
+// the machine.
 // screenOf draws a pane tree as text lines, the way the terminal paints it: a plain Button with a hotkey shows
 // `<key>: <label>`, the columns of a row Box sit side by side, each padded to its width.
-import type { On } from 'claude-code'
+import type { ModelCompleteResult, On } from 'claude-code'
 
 export const HOME = '/tmp/god-home'
 export const SELF_ID = 'god-self-session'
@@ -74,6 +76,17 @@ export type Machine = {
   theme?: string
   /** a wait before the engine writes a value of the pane, as a slow engine: a test gives a promise that it resolves */
   writeDelay?: (key: string, value: unknown) => Promise<void> | undefined
+  /** what the model gives a model call; `refuse`, the engine refuses to send it; absent, MODEL_REPLY */
+  model?: ModelCompleteResult | 'refuse'
+  /** a wait before the model answers, as a slow model: a test passes the sleep of its mock clock */
+  modelDelay?: () => Promise<void>
+}
+
+/** The reply of the fake model: a text and the 4 token counts, which add up to 1,834. */
+export const MODEL_REPLY: ModelCompleteResult = {
+  isAnswered: true,
+  text: 'The session waits for your choice.',
+  usage: { input_tokens: 1200, output_tokens: 34, cache_read_input_tokens: 500, cache_creation_input_tokens: 100 },
 }
 
 /** What the plugin asked the machine and the engine for. */
@@ -88,6 +101,12 @@ export type Calls = {
   tools: Array<{ name: string; description: string; inputSchema?: Record<string, unknown>; isDeferred?: boolean }>
   /** the peer messages that the plugin sent, each as its address and its text */
   peers: Array<{ to: string; text: string }>
+  /** the tones that the plugin played */
+  tones: Array<{ base64?: string; mime?: string }>
+  /** the native notifications that the plugin sent */
+  notices: Array<{ text: string; title?: string }>
+  /** the model calls that the plugin made */
+  models: Array<{ model: string; prompt: string; system?: string }>
 }
 
 /** The folder name of a cwd under the projects folder, as Claude Code writes it. */
@@ -110,7 +129,7 @@ const fileOf = (machine: Machine, path: string): FakeSession | undefined =>
 
 /** Installs the machine beneath the plugin. The god session itself is in the agents list, so the board must leave it out. */
 export function installMachine(on: On, machine: Machine): Calls {
-  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [], tools: [], peers: [] }
+  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [], tools: [], peers: [], tones: [], notices: [], models: [] }
   const content = (session: FakeSession): string => `${(session.transcript ?? []).join('\n')}\n`
 
   on('process.run', async (_$, e) => {
@@ -190,6 +209,19 @@ export function installMachine(on: On, machine: Machine): Calls {
     return { isDelivered: true as const }
   })
   on('ui.invalidate', () => ({ value: undefined }))
+  on('audio.play', (_$, e) => {
+    calls.tones.push({ ...(e.clip.base64 === undefined ? {} : { base64: e.clip.base64 }), ...(e.clip.mime === undefined ? {} : { mime: e.clip.mime }) })
+    return { value: undefined }
+  })
+  on('ui.notify', (_$, e) => {
+    calls.notices.push({ text: e.text, ...(e.title === undefined ? {} : { title: e.title }) })
+    return { value: { isSent: true as const, channel: 'ghostty' as const } }
+  })
+  on('model.complete', async (_$, e) => {
+    calls.models.push({ model: e.model, prompt: e.prompt, ...(e.system === undefined ? {} : { system: e.system }) })
+    await machine.modelDelay?.()
+    return machine.model === 'refuse' ? { deny: 'the engine refused the model' } : { value: machine.model ?? MODEL_REPLY }
+  })
   on('ui.status', (_$, e) => {
     calls.statuses.push(e.text)
     return { value: undefined }

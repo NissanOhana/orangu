@@ -4,6 +4,8 @@
  * and the engine paints that Button as `j: jump`, so the segment holds that form. The arrows walk the row Buttons
  * by themselves, and the digits belong to the option Buttons of the detail, so neither has a hotkey here.
  * - f shows the mode that it switches to: `f: repos` in the all mode, `f: all` in the repos mode. g groups the rows.
+ *   s turns the tones off and on, and u mutes the selected session and unmutes it: the header and the facts line of
+ *   the detail show their state, so their labels stay.
  * - The digits name the options of the open question of the selected session (`1-3`) while the detail draws their
  *   Buttons, else `1-9`, dim where no digit Button shows (a draft of r or m, the narrow board, another tab).
  * - While the prompt holds the keys, the row ends with the key that gives them to the pane.
@@ -87,6 +89,7 @@ export function keyRow(input: KeyRowInput): KeyRow {
     { keys: 'm', label: 'message', hotkey: 'm', isOff: false },
     { keys: 't', label: 'tab', hotkey: 't', isOff: false },
     { keys: 's', label: 'sound', hotkey: 's', isOff: false },
+    { keys: 'u', label: 'mute', hotkey: 'u', isOff: false },
     { keys: 'f', label: MODE_KEY_LABEL[input.mode], hotkey: 'f', isOff: false },
     { keys: 'g', label: GROUP_KEY_LABEL, hotkey: 'g', isOff: false },
   ]

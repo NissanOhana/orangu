@@ -1,20 +1,20 @@
 /**
  * The detail that the pane shows: the detail of the selected session (src/god/view/detail.ts), or 1 line that asks
- * for a selection. The Recap tab shows 1 line that says that it is not in this build. The Screen tab shows the last
- * screen read of the selected session. The view gives the scroll that w and z go to, only for a side that the
+ * for a selection. The Recap tab shows the Recap of the selected session that the engine state holds. The Screen tab
+ * shows the last screen read of the selected session. The view gives the scroll that w and z go to, only for a side that the
  * window cuts.
  */
 import { describe, expect, it } from 'vitest'
 import { busy, transcript } from '../../../test/fixtures/god/sessions.js'
 import { NOW, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
-import { detailSnapshot } from '../../../test/fixtures/god/detail.js'
+import { RECAPS, detailSnapshot } from '../../../test/fixtures/god/detail.js'
 import type { BoardSnapshot, DetailTab } from '../types.js'
 import { STALE_GROUP_KEY } from './board.js'
 import { cellWidth } from './cells.js'
 import { DETAIL_TABS, scrollBy } from './detail.js'
 import type { ScreenState } from '../source/screen.js'
-import { DEFAULT_DETAIL, NO_DETAIL, TAB_NOT_IN_BUILD, paneDetail, paneDetailLines, type PaneDetail, type PaneDetailInput } from './detail-pane.js'
-import { SCREEN_FAILED, SCREEN_NO_TAB, SCREEN_READING } from './detail-tabs.js'
+import { DEFAULT_DETAIL, NO_DETAIL, paneDetail, paneDetailLines, type PaneDetail, type PaneDetailInput } from './detail-pane.js'
+import { MODEL_TEXT, RECAP_HINT, SCREEN_FAILED, SCREEN_NO_TAB, SCREEN_READING } from './detail-tabs.js'
 import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -43,11 +43,15 @@ describe('the detail of the selected session', () => {
     expect(NO_DETAIL).toBe('Select a session on the board to show its detail.')
   })
 
-  it('shows 1 line in the Recap tab, which is not in this build, and the other tabs as they are', () => {
-    expect(TAB_NOT_IN_BUILD).toEqual({ recap: 'The Recap tab is not in this build.' })
-    const recap = sessionDetail(detailOf(detailSnapshot(), { state: { ...DEFAULT_DETAIL, tab: 'recap' } }))
-    if (recap.view.kind !== 'detail') throw new Error(recap.view.kind)
-    expect(recap.view.body.map(text)).toEqual([` ${TAB_NOT_IN_BUILD.recap}`])
+  it('shows in the Recap tab the Recap that the engine state holds, only for its session, and the other tabs as they are', () => {
+    const recapBody = (over: Partial<PaneDetailInput>): string[] => {
+      const detail = sessionDetail(detailOf(detailSnapshot(), { state: { ...DEFAULT_DETAIL, tab: 'recap' }, ...over }))
+      if (detail.view.kind !== 'detail') throw new Error(detail.view.kind)
+      return detail.view.body.map(text)
+    }
+    expect(recapBody({})).toContain(` ${RECAP_HINT}`)
+    expect(recapBody({ recap: RECAPS.answered })).toContain(` ${MODEL_TEXT}`)
+    expect(recapBody({ selectedKey: 's-work', recap: RECAPS.answered })).not.toContain(` ${MODEL_TEXT}`)
     const history = sessionDetail(detailOf(detailSnapshot(), { state: { ...DEFAULT_DETAIL, tab: 'history' } }))
     if (history.view.kind !== 'detail') throw new Error(history.view.kind)
     expect(history.view.body.map(text).join('\n')).toContain('Read the parser.')

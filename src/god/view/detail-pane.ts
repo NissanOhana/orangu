@@ -7,15 +7,15 @@
  * - The Screen tab shows the screen state of the selected session (src/god/screen-loop.ts): its last good read, and
  *   whether the newest read failed. A state of another session shows nothing of it. While the last cmux read failed,
  *   the tab says that the session has no tab, because the tab map can be old.
- * - The Recap tab shows 1 line that says that it is not in this build: the Recap call comes with its own chunk of
- *   work, and a tab never says that it reads what nothing reads.
+ * - The Recap tab shows the last Recap that the engine state holds (src/god/act/recap.ts) when it is of the selected
+ *   session, and the x key that makes one while no Recap runs.
  * - The last outcome of the key path goes to the detail, so the Screen tab of its session shows the line of a refusal,
  *   a failure or a miss above the screen, and the fresh screen of a refusal.
  * - For each side that the window over the tab content cuts, the view gives the scroll that its key goes to: w the
  *   page above, z the page below (scrollBy in src/god/view/window.ts). The engine shell keeps only the number.
  */
 import type { ScreenState } from '../source/screen.js'
-import type { BoardSnapshot, DeliverOutcome, DetailTab } from '../types.js'
+import type { BoardSnapshot, DeliverOutcome, DetailTab, RecapState } from '../types.js'
 import { detailLines, detailView, scrollBy, SCROLL_KEYS, type DetailView } from './detail.js'
 import { messageLines } from './states.js'
 import type { Line } from './types.js'
@@ -34,11 +34,6 @@ export const DEFAULT_DETAIL: DetailState = { tab: 'now', scroll: 0, isOpen: fals
 
 /** The line of the detail when no session of the board is selected. */
 export const NO_DETAIL = 'Select a session on the board to show its detail.'
-
-/** The line of each tab whose source is not in this build, in place of its content. */
-export const TAB_NOT_IN_BUILD: Readonly<Partial<Record<DetailTab, string>>> = {
-  recap: 'The Recap tab is not in this build.',
-}
 
 /**
  * The detail of the pane:
@@ -64,6 +59,8 @@ export type PaneDetailInput = {
   screen?: ScreenState
   /** the last outcome of the key path */
   outcome?: DeliverOutcome
+  /** the last Recap, of any session */
+  recap?: RecapState
   /** true while a draft of r or m is open: the digits of the Now tab have no hotkey */
   isDraftOpen?: boolean
 }
@@ -83,7 +80,6 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
   const { snapshot, width } = input
   const session = snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey)
   if (session === undefined) return { kind: 'none', lines: messageLines(NO_DETAIL, width) }
-  const placeholder = TAB_NOT_IN_BUILD[input.state.tab]
   const screen = input.screen?.sessionId === session.sessionId ? input.screen : undefined
   const view = detailView({
     session,
@@ -96,8 +92,8 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
     ...(snapshot.sources.cmux.status === 'off' || snapshot.sources.cmux.status === 'unread' ? { isTabMapOld: true } : {}),
     ...(screen?.read === undefined ? {} : { screen: screen.read }),
     ...(screen?.isFailed === true ? { isScreenFailed: true } : {}),
-    ...(placeholder === undefined ? {} : { placeholder }),
     ...(input.outcome === undefined ? {} : { outcome: input.outcome }),
+    ...(input.recap === undefined ? {} : { recap: input.recap }),
     ...(input.isDraftOpen === true ? { isDraftOpen: true } : {}),
   })
   return { kind: 'session', sessionId: session.sessionId, view, scrollTo: scrollTargets(view) }

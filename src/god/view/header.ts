@@ -9,6 +9,7 @@
  *   the names left out and the command that prints them all;
  * - a dim chip for each source whose last read failed (`agents off`). A source that is not on the machine (no cmux)
  *   gets no chip: the key row says what it turns off;
+ * - a dim `sound off` chip while s keeps every tone off;
  * - the age of the facts in the warn color once they are more than 10 s old (`old 12s`).
  * Before the first refresh ends, the header shows the brand only. The clock comes in as `now`.
  */
@@ -40,6 +41,8 @@ export type HeaderInput = {
   snapshot?: BoardSnapshot
   width: number
   now: number
+  /** true while s keeps every tone off */
+  isSoundOff?: boolean
 }
 
 /** An age as `12s`, `3m`, `2h` or `1d`. */
@@ -82,6 +85,7 @@ export function headerLines(input: HeaderInput): Line[] {
   }
   items.push(...modeItems(snapshot, width))
   for (const source of SOURCES) if (snapshot.sources[source].status === 'off') items.push([{ text: `${source} off`, ...DIM }])
+  if (input.isSoundOff === true) items.push([{ text: 'sound off', ...DIM }])
   if (snapshot.factsAt !== undefined && now - snapshot.factsAt > OLD_AFTER_MS) items.push([{ text: `old ${age(now - snapshot.factsAt)}`, ...OLD_FACTS }])
   return flowItems(items, width)
 }

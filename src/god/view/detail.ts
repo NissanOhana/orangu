@@ -2,7 +2,8 @@
  * The detail of 1 session, as the pane draws it beside the board (90 columns or more) or in place of it, top to
  * bottom:
  * - the title line: the name, then `·` and the cmux tab title (the transcript title when the session has no tab);
- * - the facts line: the repo, the branch and the permission mode;
+ * - the facts line: the repo, the branch and the permission mode, then `muted` while u keeps the session from its
+ *   alerts;
  * - the tab row: Now, History, Agents, Screen, Recap. Each tab is 1 Button with the key tab:<tab>, and the open
  *   tab shows in brackets. `t` moves to the next tab;
  * - the content of the open tab (src/god/view/detail-tabs.ts);
@@ -12,8 +13,7 @@
  * Every text shows whole: it wraps at whole words, never cut. Only the row budget cuts, and only the tab content:
  * a window over it with a count line above (`w: +N lines`) and below (`z: +N lines`) that names the key that
  * shows the rest. When fewer than 3 rows are left for content that does not fit, the detail says that the pane is
- * too short. A tab whose source is not in this build shows 1 line (`placeholder`) in place of its content. No line
- * is wider than `width`. The clock comes in as `now`.
+ * too short. No line is wider than `width`. The clock comes in as `now`.
  */
 import type { DeliverOutcome, DetailTab, GodSession, PrLink, RecapState, ScreenRead, ContextFacts } from '../types.js'
 import { ACCENT, DIM, FLAG_PAINT } from '../ui/theme.js'
@@ -62,10 +62,9 @@ export type DetailInput = {
   isScreenFailed?: boolean
   /** true when the last cmux read failed or did not end, so the tab map can be old */
   isTabMapOld?: boolean
+  /** the last Recap: the Recap tab shows it when it is a Recap of this session, and no x key while any Recap runs */
   recap?: RecapState
   outcome?: DeliverOutcome
-  /** a line that the open tab shows in place of its content, when the source of the tab is not in this build */
-  placeholder?: string
 }
 
 /**
@@ -100,7 +99,7 @@ function headLines(session: GodSession, width: number): Line[] {
   const second = tabTitle(session) || flat(session.transcript?.title ?? '')
   const title = wrapSegments([{ text: flat(session.name), bold: true }, ...(second === '' ? [] : [{ text: ` · ${second}` }])], width)
   const repo = session.repo === undefined ? NO_REPO : `${flat(session.repo.name)}${session.repo.isWorktree ? ' (worktree)' : ''}`
-  const facts = [repo, flat(session.transcript?.branch ?? ''), flat(session.transcript?.permissionMode ?? '')].filter((fact) => fact !== '')
+  const facts = [repo, flat(session.transcript?.branch ?? ''), flat(session.transcript?.permissionMode ?? ''), session.muted ? 'muted' : ''].filter((fact) => fact !== '')
   return [...title, ...wrapSegments([{ text: facts.join(' · ') }], width)]
 }
 
@@ -154,7 +153,7 @@ export function detailView(input: DetailInput): DetailView {
   const head = headLines(session, width)
   const tabRows = tabRowsOf(input.tab, width)
   const foot = footLines(session, width)
-  const content = input.placeholder === undefined ? tabContent(input.tab, input) : { lines: messageLines(input.placeholder, width), options: [] }
+  const content = tabContent(input.tab, input)
   const room = rows - head.length - tabRows.length - foot.length
   if (content.lines.length > room && room < MIN_WINDOW) return { kind: 'too-short', lines: messageLines(CANNOT_DRAW['too-short'], width) }
   const { lines: body, window } = windowOf(content.lines, room, input.scroll)

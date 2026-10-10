@@ -51,6 +51,14 @@ describe('the header', () => {
     expect(lines.map(text).join('')).not.toMatch(/cmux/)
   })
 
+  it('shows a dim sound off chip while s keeps every tone off, and none while the sound is on', () => {
+    const off = headerLines({ snapshot: boardSnapshot(), width: 110, now: NOW, isSoundOff: true })
+    expect(off.map(text)).toEqual([' ◉ orangu god  8 live  ⚠ 1  ● 1  ✕ 1  ⠋ 2  all  sound off'])
+    expect(segmentOf(off, 'sound off')).toEqual({ text: 'sound off', dim: true })
+    expect(headerLines({ snapshot: boardSnapshot(), width: 110, now: NOW, isSoundOff: false }).map(text).join('')).not.toMatch(/sound/)
+    expect(headerLines({ snapshot: readingSnapshot(), width: 110, now: NOW, isSoundOff: true }).map(text)).toEqual([' ◉ orangu god'])
+  })
+
   it('shows the age of the facts in the warn color once they are more than 10 s old, and nothing before', () => {
     const old = headerLines({ snapshot: degradedSnapshot({}, 12 * SECOND), width: 110, now: NOW })
     expect(segmentOf(old, 'old 12s')).toEqual({ text: 'old 12s', token: '--warn' })

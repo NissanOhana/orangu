@@ -23,6 +23,11 @@
 // - The key path (src/god/deliver-keys.tsx): a digit on an option, the Yes or No of a Bash request, r and m open the
 //   confirm bar or the draft, and only y in the bar sends. After each tick the check of the last send reads the
 //   newest facts.
+// - The alerts (src/god/alert-keys.tsx): each tick of the board hands its turn to the alert loop, which plays the tone,
+//   sends the notification and rings the cmux tab of an alert. s turns the tones off and on, and u mutes the selected
+//   session. /god stats adds the counts of the alert loop.
+// - The Recap (src/god/recap-keys.tsx): only x on the Recap tab of a session makes a model call, 1 at a time.
+// - The selection keys are in src/god/select-keys.tsx.
 // - The pane asks for its rows inline above the prompt and for its columns in the dock.
 // - The pane is on the screen from its first draw (the engine can place an unasked pane later) until ui.close. The
 //   status line shows only while it is not.
@@ -30,23 +35,25 @@
 import { read, update } from 'claude-code'
 import type { EngineInterface, On, PluginOptions } from 'claude-code'
 
-import { jumpNoteOf, jumpPlan, jumpedSessionOf, runJump } from './act/jump.js'
+import { alertLoopOf, toggleMute, toggleSound } from './alert-keys.js'
+import type { AlertLoop } from './alert-loop.js'
 import { createBoardLoop, type BoardLoop } from './board-loop.js'
 import { TICK_MS, createCollector } from './collector.js'
-import { STORE_KEYS, commandAnswer, commandChoice, nextNeedsYou, openGroupsAfterPress, openedSessionOf, parseGodArgs, selectionOf, settingsOf, statsAnswer, storeOf, toggledGroup, toggledMode, type BoardChoice } from './control.js'
+import { STORE_KEYS, commandAnswer, commandChoice, parseGodArgs, selectionOf, settingsOf, statsAnswer, storeOf, toggledGroup, toggledMode, type BoardChoice } from './control.js'
 import { GOD_ARGUMENT_HINT, GOD_COMMAND_DESCRIPTION, GOD_FAILED, PANE_TITLE, TOOL_FAILED } from './copy.js'
-import { detailAfterBack, detailAfterNextTab, detailAfterRowPress, detailAfterScroll, detailAfterSelect, detailAfterTab } from './detail-control.js'
+import { detailAfterNextTab, detailAfterScroll, detailAfterTab } from './detail-control.js'
 import { engineClock, engineHost } from './engine.js'
+import { makeRecap, type RecapRuntime } from './recap-keys.js'
 import { textCleaner } from './sanitize.js'
 import { PANE, addDraftLine, cancelBar, checkSent, openAnswer, openDraft, openPermission, scrollBar, sendConfirmed, type DeliverRuntime } from './deliver-keys.js'
 import { createScreenLoop, isScreenShown, screenWanted, type ScreenLoop } from './screen-loop.js'
+import { backToBoard, changeDetail, jumpSelected, pressRow, select, selectAndFocus, selectNext } from './select-keys.js'
 import { readScreenOf } from './source/screen.js'
-import { BOARD, DELIVER, DETAIL, JUMP, OPEN_GROUPS, SCREEN, SELECTED, THEME } from './state.js'
+import { BOARD, DELIVER, DETAIL, JUMP, OPEN_GROUPS, RECAP, SCREEN, SELECTED, THEME } from './state.js'
 import { BOARD_TOOL, SESSION_TOOL, boardToolAnswer, sessionToolAnswer, type ToolBoard } from './tools.js'
 import type { Settings, StoreState } from './types.js'
 import { drawPane, type PaneActions } from './ui/board.js'
 import { themeOf } from './ui/theme.js'
-import type { DetailState } from './view/detail-pane.js'
 import { cannotDrawView, layoutOf, paneView } from './view/pane.js'
 import type { PaneLayout } from './view/types.js'
 
@@ -55,10 +62,22 @@ const PANE_COLUMNS = 110
 const PANE_ROWS = 20
 
 /**
- * The state of 1 load of the module: the settings, whether the pane is on the screen, the board and the screen loop
- * once they run, the last theme that it read, whether the 2 tools are registered, and the key path.
+ * The state of 1 load of the module: the settings, whether the pane is on the screen, the board, the screen loop and
+ * the alert loop once they run, the last theme that it read, whether the 2 tools are registered, the key path and
+ * the Recap.
  */
-type Runtime = { settings: Settings; isPaneOpen: boolean; starting?: Promise<BoardLoop>; board?: BoardLoop; screen?: ScreenLoop; theme?: string; hasTools?: boolean; deliver: DeliverRuntime }
+type Runtime = {
+  settings: Settings
+  isPaneOpen: boolean
+  starting?: Promise<BoardLoop>
+  board?: BoardLoop
+  screen?: ScreenLoop
+  alerts?: AlertLoop
+  theme?: string
+  hasTools?: boolean
+  deliver: DeliverRuntime
+  recap: RecapRuntime
+}
 
 async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
   const next = themeOf((await $.config.list()).find((row) => row.key === 'theme')?.value)
@@ -80,6 +99,8 @@ async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLo
     },
     every: (ms, fn) => $.clock.every(ms, fn),
   })
+  const alerts = alertLoopOf($, host, clean)
+  runtime.alerts = alerts
   const loop = createBoardLoop({
     ports: {
       refresh: () => collector.refresh(),
@@ -91,6 +112,7 @@ async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLo
       writeStore: (key, value) => $.store.set(key, value),
       showStatus: (text) => $.ui.status(text),
       redraw: () => $.ui.invalidate('ui.render'),
+      onRefresh: (turn) => alerts.onRefresh(turn),
     },
     store: storeOf(Object.fromEntries(stored)),
     settings: runtime.settings,
@@ -155,62 +177,24 @@ async function choose($: EngineInterface, runtime: Runtime, choice: (store: Stor
   await loop.choose(choice(loop.store()))
 }
 
-/** Selects the row `key`. A new selected row starts the detail at the top of its tab. */
-async function select($: EngineInterface, key: string): Promise<void> {
-  const before = await read($, SELECTED)
-  if (before === key) return
-  await update($, SELECTED, () => key)
-  await update($, DETAIL, (state) => detailAfterSelect(state, before, key))
-  await update($, JUMP, () => null)
+/** s: every tone off, or on again, over the board, started once. */
+async function soundKey($: EngineInterface, runtime: Runtime): Promise<void> {
+  await toggleSound($, await start($, runtime))
 }
 
-/** Selects the row `key` and moves the focus ring onto it, so the arrows and Tab go on from there. */
-async function selectAndFocus($: EngineInterface, key: string): Promise<void> {
-  await select($, key)
-  await $.ui.focus({ requestId: PANE, key })
-}
-
-async function selectNext($: EngineInterface): Promise<void> {
-  const next = nextNeedsYou((await read($, BOARD)) ?? undefined, (await read($, SELECTED)) || undefined)
-  if (next !== undefined) await selectAndFocus($, next)
-}
-
-async function pressRow($: EngineInterface, runtime: Runtime, key: string, layout: PaneLayout): Promise<void> {
-  const snapshot = (await read($, BOARD)) ?? undefined
-  await update($, OPEN_GROUPS, (groups) => openGroupsAfterPress(groups, key, snapshot))
-  await select($, key)
-  await update($, DETAIL, (state) => detailAfterRowPress(state, key, snapshot, layout))
-  const opened = openedSessionOf(key, snapshot)
-  if (opened !== undefined) await runtime.board?.seen(opened, engineClock())
-}
-
-/** j: the jump to the tab of the selected session, the note of a j that did not jump, and the seen mark of a jump. */
-async function jumpSelected($: EngineInterface, runtime: Runtime): Promise<void> {
-  const outcome = await runJump(engineHost($), jumpPlan((await read($, BOARD)) ?? undefined, (await read($, SELECTED)) || undefined))
-  await update($, JUMP, () => jumpNoteOf(outcome))
-  const jumped = jumpedSessionOf(outcome)
-  if (jumped !== undefined) await runtime.board?.seen(jumped, engineClock())
-}
-
-async function changeDetail($: EngineInterface, change: (state: DetailState) => DetailState): Promise<void> {
-  await update($, DETAIL, change)
-}
-
-/** b: the board again, with the focus ring on the selected row. */
-async function backToBoard($: EngineInterface): Promise<void> {
-  await update($, DETAIL, detailAfterBack)
-  const selected = await read($, SELECTED)
-  if (selected !== '') await $.ui.focus({ requestId: PANE, key: selected })
+/** u: the selected session muted, or unmuted again, over the board, started once. */
+async function muteKey($: EngineInterface, runtime: Runtime): Promise<void> {
+  await toggleMute($, await start($, runtime))
 }
 
 /** The presses of the pane. A press that fails changes nothing, and the next press tries again. */
 function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): PaneActions {
   const quiet = (work: Promise<void>): void => void work.catch(() => undefined)
   return {
-    onRow: (key) => quiet(pressRow($, runtime, key, layout)),
+    onRow: (key) => quiet(pressRow($, runtime.board, key, layout)),
     onMore: (key) => quiet(selectAndFocus($, key)),
     keys: {
-      j: () => quiet(jumpSelected($, runtime)),
+      j: () => quiet(jumpSelected($, runtime.board)),
       n: () => quiet(selectNext($)),
       r: () => quiet(openDraft($, 'prompt')),
       m: () => quiet(openDraft($, 'peer')),
@@ -218,12 +202,15 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
       g: () => quiet(choose($, runtime, toggledGroup)),
       t: () => quiet(changeDetail($, detailAfterNextTab)),
       b: () => quiet(backToBoard($)),
+      s: () => quiet(soundKey($, runtime)),
+      u: () => quiet(muteKey($, runtime)),
     },
     detail: {
       onTab: (tab) => quiet(changeDetail($, (state) => detailAfterTab(state, tab))),
       onScroll: (scroll) => quiet(changeDetail($, (state) => detailAfterScroll(state, scroll))),
       onOption: (digit) => quiet(openAnswer($, digit)),
       onPermission: (choice) => quiet(openPermission($, choice)),
+      onRecap: (sessionId) => quiet(makeRecap($, runtime.recap, sessionId)),
     },
     bar: {
       onSend: (shown) => quiet(sendConfirmed($, runtime.deliver, shown)),
@@ -241,12 +228,12 @@ const NO_ACTIONS: PaneActions = {
   onRow: NONE,
   onMore: NONE,
   keys: {},
-  detail: { onTab: NONE, onScroll: NONE, onOption: NONE, onPermission: NONE },
+  detail: { onTab: NONE, onScroll: NONE, onOption: NONE, onPermission: NONE, onRecap: NONE },
   bar: { onSend: NONE, onCancel: NONE, onScroll: NONE, onDraft: NONE },
 }
 
 export function register(on: On, options: PluginOptions): void {
-  const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false, isCancelled: false } }
+  const runtime: Runtime = { settings: settingsOf(options), isPaneOpen: false, deliver: { isDelivering: false, isCancelled: false }, recap: { isRunning: false } }
 
   on('session.start', async ($, e, next) => {
     await $.command.register({ name: 'god', description: GOD_COMMAND_DESCRIPTION, argumentHint: GOD_ARGUMENT_HINT })
@@ -261,7 +248,7 @@ export function register(on: On, options: PluginOptions): void {
   on('command.run', { command: 'god' }, async ($, e) => {
     const command = parseGodArgs(e.args)
     if (command.kind === 'unknown') return { text: commandAnswer(command, { isPlaced: false, repos: [] }) }
-    if (command.kind === 'stats') return { text: statsAnswer(runtime.board?.recentStats()) }
+    if (command.kind === 'stats') return { text: statsAnswer(runtime.board?.recentStats(), runtime.alerts?.counts()) }
     if (command.kind === 'show-repos') {
       const repos = runtime.board?.store().repos ?? storeOf({ repos: await $.store.get('repos') }).repos
       return { text: commandAnswer(command, { isPlaced: false, repos }) }
@@ -274,7 +261,17 @@ export function register(on: On, options: PluginOptions): void {
 
   on('ui.render', { component: 'Pane', requestId: 'god' }, async ($, e) => {
     markPaneShown(runtime)
-    const [snapshot, selected, openGroups, colors, detail, screen, jumpNote, deliverState] = await Promise.all([read($, BOARD), read($, SELECTED), read($, OPEN_GROUPS), read($, THEME), read($, DETAIL), read($, SCREEN), read($, JUMP), read($, DELIVER)])
+    const [snapshot, selected, openGroups, colors, detail, screen, jumpNote, deliverState, recap] = await Promise.all([
+      read($, BOARD),
+      read($, SELECTED),
+      read($, OPEN_GROUPS),
+      read($, THEME),
+      read($, DETAIL),
+      read($, SCREEN),
+      read($, JUMP),
+      read($, DELIVER),
+      read($, RECAP),
+    ])
     const view = paneView({
       ...(snapshot === null ? {} : { snapshot }),
       bodyColumns: e.props.bodyColumns,
@@ -287,6 +284,8 @@ export function register(on: On, options: PluginOptions): void {
       screen,
       jumpNote,
       deliver: deliverState,
+      recap,
+      isSoundOff: runtime.board?.store().sound === false,
     })
     const wanted = screenWanted(snapshot ?? undefined, selected || undefined, detail.tab)
     runtime.screen?.want(wanted, isScreenShown(view, wanted))

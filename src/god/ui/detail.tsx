@@ -7,12 +7,15 @@
 //   opens the confirm bar for it: nothing goes out until y. With no cmux they have no hotkey, and a press does nothing.
 // - Each count line of the window over the tab content is the hotkey Button of its key (w above, z below): a press
 //   goes to the scroll that the view gave for the key.
+// - The x key of the Recap tab is the hotkey Button that makes the Recap of the session of this detail. The view draws
+//   it only while no Recap runs.
 // - With no selected session, or a detail that the rows cannot hold, the lines of the view are Texts.
 import type { RenderElement } from 'claude-code'
 
 import type { DetailTab } from '../types.js'
 import { tabGap, type TabCell } from '../view/detail.js'
 import type { PaneDetail } from '../view/detail-pane.js'
+import { RECAP_KEY } from '../view/detail-tabs.js'
 import type { Line } from '../view/types.js'
 import { drawLine, segmentText, type KeyActions, type PaneElements } from './line.js'
 import type { ThemeSet } from './theme.js'
@@ -27,6 +30,8 @@ export type DetailActions = {
   onOption: (digit: number) => void
   /** a press on the Yes or the No of a Bash request */
   onPermission: (choice: 'yes' | 'no') => void
+  /** x on the Recap tab: the Recap of the session of the detail */
+  onRecap: (sessionId: string) => void
 }
 
 /** The rows of the detail, top to bottom: 1 element for each line of the view. */
@@ -37,9 +42,11 @@ export function detailRows(ui: PaneElements, detail: PaneDetail, theme: ThemeSet
   const view = detail.view
   if (view.kind === 'too-short') return view.lines.map(text)
 
-  const scrollKeys: KeyActions = Object.fromEntries(
-    Object.entries(detail.scrollTo).flatMap(([hotkey, scroll]) => (scroll === undefined ? [] : [[hotkey, () => actions.onScroll(scroll)]])),
-  )
+  const sessionId = detail.sessionId
+  const bodyKeys: KeyActions = {
+    ...Object.fromEntries(Object.entries(detail.scrollTo).flatMap(([hotkey, scroll]) => (scroll === undefined ? [] : [[hotkey, () => actions.onScroll(scroll)]]))),
+    [RECAP_KEY]: () => actions.onRecap(sessionId),
+  }
   const picks = new Map(view.options.map((option) => [option.key, option]))
   const onOption = (key: string): void => {
     const pick = picks.get(key)
@@ -57,5 +64,5 @@ export function detailRows(ui: PaneElements, detail: PaneDetail, theme: ThemeSet
       ])}
     </Box>
   )
-  return [...view.head.map(text), ...view.tabRows.map(tabRow), ...view.body.map((line) => drawLine(ui, line, theme, onOption, scrollKeys)), ...view.foot.map(text)]
+  return [...view.head.map(text), ...view.tabRows.map(tabRow), ...view.body.map((line) => drawLine(ui, line, theme, onOption, bodyKeys)), ...view.foot.map(text)]
 }

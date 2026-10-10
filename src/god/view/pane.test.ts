@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import { HOUR, MINUTE, busy, transcript, waiting } from '../../../test/fixtures/god/sessions.js'
 import { NOW, boardSessions, boardSnapshot, byRepoSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
-import { INTENTS, OUTCOMES, detailSnapshot } from '../../../test/fixtures/god/detail.js'
+import { INTENTS, OUTCOMES, RECAPS, detailSnapshot } from '../../../test/fixtures/god/detail.js'
 import type { BoardSnapshot } from '../types.js'
 import { cellWidth } from './cells.js'
 import { BOARD_COLUMNS, MORE_KEYS } from './board.js'
@@ -203,6 +203,13 @@ describe('the jump note and the screen read', () => {
     const screen = { sessionId: 's-wait', read: { sessionId: 's-wait', workspaceRef: 'workspace:7', surfaceRef: 'surface:12', text: 'The screen of the session.', readAt: NOW }, isFailed: false }
     const lines = paneLines(pane(detailSnapshot(), { selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, tab: 'screen' }, screen })).map(text)
     expect(lines.some((line) => line.endsWith('The screen of the session.')), lines.join('\n')).toBe(true)
+  })
+
+  it('shows the Recap of the selected session in its Recap tab, and the sound off chip in the header', () => {
+    const lines = paneLines(pane(detailSnapshot(), { selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, tab: 'recap' }, recap: RECAPS.answered, isSoundOff: true })).map(text)
+    expect(lines.some((line) => line.endsWith('1,834 tokens')), lines.join('\n')).toBe(true)
+    expect(lines[0]).toMatch(/ {2}sound off$/)
+    expect(paneLines(pane(detailSnapshot(), { selectedKey: 's-wait' })).map(text)[0]).not.toMatch(/sound off/)
   })
 })
 

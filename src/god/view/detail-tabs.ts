@@ -13,7 +13,11 @@
  * - Screen: the last read of the cmux tab, with its spaces, under the line of a refusal, and under the line that says
  *   that the newest read failed. While the tab map can be old (the last cmux read failed), the no-tab line only, and
  *   with no cmux the no-cmux line only, each under the line of a refusal.
- * - Recap: the hint, or the model text under its label and its token count.
+ * - Recap: the x key, which makes the Recap of this session, then the hint, or the model text under its label and its
+ *   token count, or the reason that the Recap has no text. The x key is 1 segment that a hotkey Button presses, and it
+ *   shows only while no Recap runs, so 1 model call runs at a time. While a Recap of this session runs, the tab says
+ *   so, and while a Recap of another session runs, it says that. A Recap that runs for RECAP_STALE_MS or more is a
+ *   call that a reload of the code cut (the call itself stops at its time limit first), so the x key shows again.
  * The session texts are sanitized and redacted before they come here. Outside text that the detail shows on 1 line
  * is flattened, so no line break gets into a line. The clock comes in as `now`.
  */
@@ -23,6 +27,7 @@ import { DIM } from '../ui/theme.js'
 import { levelTime } from './board.js'
 import { cellWidth } from './cells.js'
 import { MULTI_DIALOG, MULTI_DIALOG_NO_CMUX, outcomeLines } from './confirm.js'
+import { pressSegment } from './keys.js'
 import type { Line, Segment } from './types.js'
 import { flat, keptLines, screenLines, textLines, wrapSegments } from './wrap.js'
 
@@ -32,8 +37,15 @@ export const SCREEN_NO_CMUX = 'cmux is not on this machine, so the pane cannot s
 export const SCREEN_NO_TAB = 'This session has no cmux tab, so the pane cannot show its screen.'
 export const SCREEN_READING = 'Reading the screen.'
 export const SCREEN_FAILED = 'cmux did not read the screen. The pane tries again in 1 s.'
-export const RECAP_HINT = 'Press x to make a Recap. The Recap is model text, and it uses tokens.'
+export const RECAP_HINT = 'The Recap is model text, and it uses tokens.'
 export const RECAP_RUNNING = 'The model writes the Recap.'
+export const RECAP_BUSY = 'The model writes a Recap of another session now. Wait for it to end.'
+/** What the x key does, as the engine paints its Button: `x: make a Recap`. */
+export const RECAP_KEY_LABEL = 'make a Recap'
+/** The key that makes a Recap. */
+export const RECAP_KEY = 'x'
+/** A Recap that runs this long is a cut call: longer than the time limit of the call (src/god/act/recap.ts, a test holds the order). */
+export const RECAP_STALE_MS = 2 * 60_000
 /** The label above a Recap: the only model text of the pane. */
 export const MODEL_TEXT = 'model text'
 export const RECAP_FAILURE: Readonly<Record<RecapFailure, string>> = {
@@ -284,13 +296,16 @@ function screenTabLines({ session, width, isCmuxMissing, screen, isScreenFailed,
 /** A token count with a comma between each group of 3 digits. */
 const tokenCount = (tokens: number): string => `${String(Math.max(0, Math.round(tokens))).replace(/\B(?=(\d{3})+(?!\d))/g, ',')} tokens`
 
+/** The line of the x key: 1 space, then the key as the engine paints its Button. */
+const recapKeyLine = (): Line => ({ segments: [{ text: ' ' }, pressSegment(RECAP_KEY, RECAP_KEY_LABEL)] })
+
 /** The Recap tab. */
-function recapLines({ session, width, recap }: TabInput): Line[] {
-  if (recap === undefined || recap.sessionId !== session.sessionId) return message(RECAP_HINT, width)
-  if (recap.status === 'running') return message(RECAP_RUNNING, width)
+function recapLines({ session, width, recap, now }: TabInput): Line[] {
+  if (recap?.status === 'running' && now - recap.startedAt < RECAP_STALE_MS) return message(recap.sessionId === session.sessionId ? RECAP_RUNNING : RECAP_BUSY, width)
+  if (recap === undefined || recap.status === 'running' || recap.sessionId !== session.sessionId) return [recapKeyLine(), ...message(RECAP_HINT, width)]
   const count = message(tokenCount(recap.tokens), width, DIM)
-  if (recap.status === 'failed') return [...message(RECAP_FAILURE[recap.reason], width, { token: '--warn' }), ...count]
-  return [...message(MODEL_TEXT, width, DIM), ...textLines(recap.text, width, TEXT_INDENT), ...count]
+  if (recap.status === 'failed') return [recapKeyLine(), ...message(RECAP_FAILURE[recap.reason], width, { token: '--warn' }), ...count]
+  return [recapKeyLine(), ...message(MODEL_TEXT, width, DIM), ...textLines(recap.text, width, TEXT_INDENT), ...count]
 }
 
 /** The content of the open tab. */

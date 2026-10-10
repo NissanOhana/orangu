@@ -26,7 +26,7 @@
 import type { JumpNote } from '../act/jump.js'
 import type { ScreenState } from '../source/screen.js'
 import { DIM } from '../ui/theme.js'
-import type { BoardSnapshot } from '../types.js'
+import type { BoardSnapshot, RecapState } from '../types.js'
 import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow } from './board.js'
 import { barView, type BarView, type DeliverState } from './bar.js'
 import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState, type PaneDetail } from './detail-pane.js'
@@ -62,6 +62,10 @@ export type PaneInput = {
   screen?: ScreenState | null
   /** the state of the key path: the confirm bar, the draft of r or m, the last outcome */
   deliver?: DeliverState
+  /** the last Recap, of any session */
+  recap?: RecapState | null
+  /** true while s keeps every tone off: the header says so */
+  isSoundOff?: boolean
 }
 
 /** Where the board goes at a body width. */
@@ -107,7 +111,7 @@ function withoutScroll(detail: PaneDetail, bar: BarView | undefined): PaneDetail
 export function paneView(input: PaneInput): PaneView {
   const { snapshot, bodyColumns, bodyRows, now } = input
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView('too-narrow', bodyColumns)
-  const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now })
+  const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now, ...(input.isSoundOff === true ? { isSoundOff: true } : {}) })
   const state = boardStateOf(snapshot)
   const note = input.jumpNote ?? undefined
   const notice = note !== undefined && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {}
@@ -155,8 +159,9 @@ export function paneView(input: PaneInput): PaneView {
   const withBar = bar === undefined ? {} : { bar }
   const screen = input.screen === undefined || input.screen === null ? {} : { screen: input.screen }
   const outcome = input.deliver?.outcome === undefined ? {} : { outcome: input.deliver.outcome }
+  const recap = input.recap === undefined || input.recap === null ? {} : { recap: input.recap }
   const draft = isDraftOpen ? { isDraftOpen } : {}
-  const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome, ...draft }), bar)
+  const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome, ...recap, ...draft }), bar)
   if (isDetail) return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints }
   const { lines: body, more } = boardWindow({ ...board, rows: room })
   return {

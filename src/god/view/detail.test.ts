@@ -55,6 +55,13 @@ describe('the head of the detail', () => {
     expect(text(detail('s-new').head[1]!)).toBe(' No repo')
   })
 
+  it('ends the facts line with muted while u keeps the session from its alerts', () => {
+    const muted = detailView(input({ ...detailSession('s-wait'), muted: true }))
+    if (muted.kind !== 'detail') throw new Error(muted.kind)
+    expect(text(muted.head[1]!)).toBe(' api · main · default · muted')
+    expect(text(detail('s-wait').head[1]!)).not.toContain('muted')
+  })
+
   it('wraps a long title line at whole words and cuts nothing', () => {
     const long = { ...withoutTab(detailSession('s-wait')), name: 'name-'.repeat(12) }
     const view = detailView(input(long, { width: 30 }))

@@ -9,13 +9,13 @@ import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
 const BASE = { width: 110, isCmuxMissing: false, promptHoldsKeys: false, mode: 'all' } as const
-const ROW = ' ↑↓ select  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  f: repos  g: group'
+const ROW = ' ↑↓ select  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  u: mute  f: repos  g: group'
 
 describe('the key row', () => {
   it('shows the keys of the board in 1 row', () => {
     const row = keyRow(BASE)
     expect(row.lines.map(text)).toEqual([ROW])
-    expect(row.hints.filter((hint) => hint.hotkey !== undefined).map((hint) => hint.hotkey)).toEqual(['j', 'n', 'r', 'm', 't', 's', 'f', 'g'])
+    expect(row.hints.filter((hint) => hint.hotkey !== undefined).map((hint) => hint.hotkey)).toEqual(['j', 'n', 'r', 'm', 't', 's', 'u', 'f', 'g'])
     expect(row.hints.every((hint) => !hint.isOff)).toBe(true)
   })
 
@@ -64,6 +64,7 @@ describe('the key row', () => {
       { hotkey: 'm', label: 'message' },
       { hotkey: 't', label: 'tab' },
       { hotkey: 's', label: 'sound' },
+      { hotkey: 'u', label: 'mute' },
       { hotkey: 'f', label: 'repos' },
       { hotkey: 'g', label: 'group' },
     ])
@@ -73,7 +74,7 @@ describe('the key row', () => {
 
   it('starts with b: back in place of the arrows while the narrow pane shows the detail', () => {
     const row = keyRow({ ...BASE, isDetail: true })
-    expect(row.lines.map(text)).toEqual([' b: back  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  f: repos  g: group'])
+    expect(row.lines.map(text)).toEqual([' b: back  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  u: mute  f: repos  g: group'])
     expect(row.hints[0]).toEqual({ keys: 'b', label: 'back', hotkey: 'b', isOff: false })
     expect(row.hints.some((hint) => hint.keys === '↑↓')).toBe(false)
     expect(keyRow(BASE).hints.some((hint) => hint.hotkey === 'b')).toBe(false)

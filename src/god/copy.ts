@@ -55,6 +55,37 @@ export function godStats(last: { computeMs: number; waitMs: number; sessions: nu
   return `The last refresh took ${last.computeMs} ms of engine work and ${last.waitMs} ms of wait for host commands, for ${sessions}. The most engine work in the last ${kept} was ${mostComputeMs} ms.`
 }
 
+/** What /god stats adds once the board runs: the tones that played and the notifications that a channel sent. */
+export function alertCountsText(counts: { tones: number; notifications: number }): string {
+  const tones = `${counts.tones} ${counts.tones === 1 ? 'tone' : 'tones'}`
+  const notifications = `${counts.notifications} ${counts.notifications === 1 ? 'notification' : 'notifications'}`
+  return `The pane played ${tones} and sent ${notifications} since it started.`
+}
+
+/**
+ * The body of the notification and of the ring of an alert: the session name and why the session wants a look. It
+ * starts with words of the pane, so the name never starts a value that cmux reads.
+ */
+export function alertBody(name: string, kind: 'needs-you' | 'stuck'): string {
+  return kind === 'needs-you' ? `The session ${name} needs you.` : `The session ${name} is stuck.`
+}
+
+/** What the Recap model reads first: the task and the limits of the Recap. The quote rule of the tools follows it. */
+export const RECAP_SYSTEM =
+  'You write a recap of 1 Claude Code session for the person who runs it. Write 3 short sentences or fewer. Say what the person asked, what the session did last, and what it waits for now. Use only the facts that follow, and write no secret.'
+
+/** The label in front of each fact of the Recap prompt. */
+export const RECAP_LABEL = {
+  session: 'Session',
+  title: 'Title',
+  level: 'Level',
+  waits: 'Waits for',
+  question: 'Open question',
+  tool: 'Last tool',
+  prompt: 'Prompt',
+  reply: 'Reply',
+} as const
+
 /** What the model reads about the board tool. */
 export const BOARD_TOOL_DESCRIPTION =
   'This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the name, the repo, the context percent, the summary and the title. The tool only reads, and it changes nothing.'

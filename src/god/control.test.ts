@@ -22,6 +22,8 @@ import {
   storeOf,
   toggledGroup,
   toggledMode,
+  toggledMute,
+  toggledSound,
 } from './control.js'
 import type { StoreState } from './types.js'
 import { STALE_GROUP_KEY } from './view/board.js'
@@ -79,6 +81,25 @@ describe('the stored choices', () => {
     expect(toggledGroup(DEFAULT_STORE)).toEqual({ groupBy: 'repo' })
     expect(toggledGroup({ ...DEFAULT_STORE, groupBy: 'repo' })).toEqual({ groupBy: 'level' })
   })
+
+  it('s turns every tone off and on again', () => {
+    expect(toggledSound(DEFAULT_STORE)).toEqual({ sound: false })
+    expect(toggledSound({ ...DEFAULT_STORE, sound: false })).toEqual({ sound: true })
+  })
+
+  it('u mutes the selected session and unmutes it again, and keeps the other muted sessions', () => {
+    const snapshot = boardSnapshot()
+    expect(toggledMute(DEFAULT_STORE, 's-wait', snapshot)).toEqual({ muted: ['s-wait'] })
+    expect(toggledMute({ ...DEFAULT_STORE, muted: ['s-idle', 's-wait'] }, 's-wait', snapshot)).toEqual({ muted: ['s-idle'] })
+    expect(toggledMute({ ...DEFAULT_STORE, muted: ['s-gone'] }, 's-work', snapshot)).toEqual({ muted: ['s-gone', 's-work'] })
+  })
+
+  it('u changes nothing with no session selected: a heading, a session that left the board, or no snapshot', () => {
+    expect(toggledMute(DEFAULT_STORE, STALE_GROUP_KEY, boardSnapshot())).toBeUndefined()
+    expect(toggledMute(DEFAULT_STORE, 's-gone', boardSnapshot())).toBeUndefined()
+    expect(toggledMute(DEFAULT_STORE, undefined, boardSnapshot())).toBeUndefined()
+    expect(toggledMute(DEFAULT_STORE, 's-wait', undefined)).toBeUndefined()
+  })
 })
 
 describe('what /god answers', () => {
@@ -102,6 +123,14 @@ describe('what /god stats answers', () => {
       'The last refresh took 23 ms of engine work and 411 ms of wait for host commands, for 15 sessions. The most engine work in the last 3 refreshes was 31 ms.',
     )
     expect(statsAnswer([stats(1, 7, 90, 1)])).toBe('The last refresh took 7 ms of engine work and 90 ms of wait for host commands, for 1 session. The most engine work in the last 1 refresh was 7 ms.')
+  })
+
+  it('adds the tones that played and the notifications that a channel sent since the pane started', () => {
+    expect(statsAnswer([stats(1, 7, 90, 1)], { tones: 1, notifications: 1 })).toBe(
+      'The last refresh took 7 ms of engine work and 90 ms of wait for host commands, for 1 session. The most engine work in the last 1 refresh was 7 ms. The pane played 1 tone and sent 1 notification since it started.',
+    )
+    expect(statsAnswer([stats(1, 7, 90, 1)], { tones: 0, notifications: 2 })).toMatch(/ The pane played 0 tones and sent 2 notifications since it started\.$/)
+    expect(statsAnswer([], { tones: 1, notifications: 1 })).toBe('The god pane reads the sessions now. Run /god stats again in 2 s.')
   })
 
   it('says that no refresh ended yet, and that the board does not run before /god', () => {

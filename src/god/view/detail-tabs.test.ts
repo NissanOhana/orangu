@@ -17,9 +17,12 @@ import {
   NO_HISTORY,
   PERMISSION_JUMP,
   PERMISSION_JUMP_NO_CMUX,
+  RECAP_BUSY,
   RECAP_FAILURE,
   RECAP_HINT,
+  RECAP_KEY_LABEL,
   RECAP_RUNNING,
+  RECAP_STALE_MS,
   SCREEN_NO_CMUX,
   SCREEN_NO_TAB,
   SCREEN_READING,
@@ -253,22 +256,43 @@ describe('the Screen tab', () => {
 })
 
 describe('the Recap tab', () => {
-  it('says which key makes a Recap, and that the model text uses tokens', () => {
-    expect(RECAP_HINT).toMatch(/Press x/)
+  const KEY_LINE = ` x: ${RECAP_KEY_LABEL}`
+
+  it('starts with the x key, then says that the Recap is model text and uses tokens', () => {
+    expect(RECAP_HINT).toMatch(/model text/)
     expect(RECAP_HINT).toMatch(/tokens/)
-    expect(body('s-wait', { tab: 'recap' })).toEqual([` ${RECAP_HINT}`])
-    expect(body('s-work', { tab: 'recap', recap: RECAPS.answered })).toEqual([` ${RECAP_HINT}`])
+    expect(body('s-wait', { tab: 'recap' })).toEqual([KEY_LINE, ` ${RECAP_HINT}`])
+    expect(body('s-work', { tab: 'recap', recap: RECAPS.answered })).toEqual([KEY_LINE, ` ${RECAP_HINT}`])
+  })
+
+  it('draws the x key as 1 segment that a hotkey Button presses, in the form that the engine paints', () => {
+    const line = detail('s-wait', { tab: 'recap' }).body[0]!
+    expect(line.key).toBeUndefined()
+    expect(line.segments.find((segment) => segment.press !== undefined)).toEqual({ text: `x: ${RECAP_KEY_LABEL}`, press: { hotkey: 'x', label: RECAP_KEY_LABEL } })
+  })
+
+  it('has no x key while a Recap runs: it says which session the model writes for', () => {
     expect(body('s-wait', { tab: 'recap', recap: RECAPS.running })).toEqual([` ${RECAP_RUNNING}`])
+    expect(body('s-work', { tab: 'recap', recap: RECAPS.running })).toEqual([` ${RECAP_BUSY}`])
+    for (const view of [detail('s-wait', { tab: 'recap', recap: RECAPS.running }), detail('s-work', { tab: 'recap', recap: RECAPS.running })]) {
+      expect(view.body.flatMap((line) => line.segments).some((segment) => segment.press?.hotkey === 'x')).toBe(false)
+    }
   })
 
-  it('shows the model text label above the text and the token count under it', () => {
+  it('shows the x key again for a Recap that runs too long: a reload of the code cut its call', () => {
+    const cut = { ...RECAPS.running, startedAt: NOW - RECAP_STALE_MS }
+    expect(body('s-wait', { tab: 'recap', recap: cut })).toEqual([KEY_LINE, ` ${RECAP_HINT}`])
+    expect(body('s-work', { tab: 'recap', recap: cut })).toEqual([KEY_LINE, ` ${RECAP_HINT}`])
+  })
+
+  it('shows the x key, the model text label above the text, and the token count under it', () => {
     const view = detail('s-wait', { tab: 'recap', recap: RECAPS.answered })
-    expect(view.body.map(text)).toEqual([` ${MODEL_TEXT}`, '   The session waits for your choice of the eval set. The eval tests pass.', ' 1,834 tokens'])
-    expect(view.body[0]!.segments[1]).toEqual({ text: MODEL_TEXT, dim: true })
+    expect(view.body.map(text)).toEqual([KEY_LINE, ` ${MODEL_TEXT}`, '   The session waits for your choice of the eval set. The eval tests pass.', ' 1,834 tokens'])
+    expect(view.body[1]!.segments[1]).toEqual({ text: MODEL_TEXT, dim: true })
   })
 
-  it('shows the reason of a failed Recap and its token count', () => {
-    expect(body('s-wait', { tab: 'recap', recap: RECAPS.failed })).toEqual([` ${RECAP_FAILURE['api-error']}`, ' 0 tokens'])
+  it('shows the x key, the reason of a failed Recap and its token count', () => {
+    expect(body('s-wait', { tab: 'recap', recap: RECAPS.failed })).toEqual([KEY_LINE, ` ${RECAP_FAILURE['api-error']}`, ' 0 tokens'])
     expect(Object.keys(RECAP_FAILURE).sort()).toEqual(['aborted', 'api-error', 'empty-reply', 'refused'])
   })
 })

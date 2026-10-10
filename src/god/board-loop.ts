@@ -21,6 +21,11 @@
  *   that is not on the board is not marked. The mark runs in the queue of the publishes, after the one that runs.
  * - The loop keeps the stats of the last RECENT_STATS refreshes for /god stats, each refresh once: a tick that the
  *   collector dropped gives the last facts again, with the same time.
+ * - After the publish of each tick, a dropped one too, the alert decision (src/god/alert-loop.ts) reads the turn: the
+ *   snapshot of the tick before and its time, the new snapshot, the stored choices and whether the pane is on the
+ *   screen. The snapshot of the tick before, not the last written one: a choice or a seen mark can write a snapshot
+ *   between 2 ticks (a session that crossed the stuck limit), and that change must still count once. The first tick
+ *   of a load has no tick before, so it decides nothing. The decision runs in the queue of the publishes.
  * - A failed port does not stop the loop: a store write that fails leaves the choice in memory, and a snapshot that
  *   the engine did not take is written on the next tick.
  */
@@ -43,6 +48,22 @@ export type BoardPorts = {
   showStatus: (text: string | undefined) => void
   /** asks the pane to draw again */
   redraw: () => void
+  /** the alert decision of 1 tick; a failure stops nothing */
+  onRefresh: (turn: RefreshTurn) => Promise<void>
+}
+
+/** What the alert decision of 1 tick reads. */
+export type RefreshTurn = {
+  /** the snapshot of the tick before; absent on the first tick of the load */
+  last?: BoardSnapshot
+  next: BoardSnapshot
+  /** the time of the tick before, whatever it changed; absent on the first tick of the load */
+  lastRefreshAt?: number
+  store: StoreState
+  /** true when the pane is on the screen of this session */
+  isPaneOpen: boolean
+  /** the time of this tick: the time of `next` */
+  now: number
 }
 
 export type BoardLoopOptions = {
@@ -95,10 +116,11 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
   let shownStatus: string | undefined
   let queue: Promise<void> = Promise.resolve()
   let recent: RefreshStats[] = []
+  let lastTick: BoardSnapshot | undefined
 
   /** Runs 1 publish after the ones before it. */
-  const serial = (work: () => Promise<void>): Promise<void> => {
-    const run = queue.then(work)
+  const serial = (work: () => Promise<unknown>): Promise<void> => {
+    const run = queue.then(work).then(() => undefined)
     queue = run.catch(() => undefined)
     return run
   }
@@ -123,7 +145,7 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
     }
   }
 
-  async function publish(): Promise<void> {
+  async function publish(): Promise<BoardSnapshot> {
     const now = ports.clock()
     const { snapshot, firstSight } = makeSnapshot({
       ...(latest === undefined ? {} : { facts: latest }),
@@ -145,6 +167,16 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
       ports.redraw()
     }
     updateStatus()
+    return snapshot
+  }
+
+  /** The publish of a tick, then the alert decision of its turn. */
+  async function publishTick(): Promise<void> {
+    const next = await publish()
+    const last = lastTick
+    lastTick = next
+    const before = last === undefined ? {} : { last, lastRefreshAt: last.at }
+    await ports.onRefresh({ ...before, next, store, isPaneOpen, now: next.at }).catch(() => undefined)
   }
 
   return {
@@ -154,7 +186,7 @@ export function createBoardLoop(options: BoardLoopOptions): BoardLoop {
         const facts = await ports.refresh()
         if (latest === undefined || facts.stats.at >= latest.stats.at) latest = facts
         if (recent.length === 0 || facts.stats.at > recent.at(-1)!.at) recent = [...recent, facts.stats].slice(-RECENT_STATS)
-        await serial(publish)
+        await serial(publishTick)
       } catch {
         // a refresh never rejects, and a failed write tries again on the next tick
       }

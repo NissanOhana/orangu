@@ -9,6 +9,7 @@ import { INTENTS as GOD_INTENTS, OUTCOMES as GOD_OUTCOMES, RECAPS as GOD_RECAPS,
 import type { BoardSnapshot, DeliverIntent, DeliverOutcome, DeliverRefusal } from '../src/god/types.js'
 import { barView } from '../src/god/view/bar.js'
 import { statsAnswer } from '../src/god/control.js'
+import { alertBody } from '../src/god/copy.js'
 import { JUMP_NOTE } from '../src/god/view/keys.js'
 import { confirmView, outcomeLines, PROMPT_MODE_TEXT, REFUSAL_TEXT } from '../src/god/view/confirm.js'
 import { DETAIL_TABS, detailLines, detailView } from '../src/god/view/detail.js'
@@ -23,8 +24,9 @@ const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
  * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
  * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then the
  * pane with the detail open in each tab at 60 columns (the detail in place of the board) and 110, the wide pane
- * with no session selected, the pane with each jump note, and each line of a pane that cannot draw. Then each
- * answer of /god stats. The fixture session texts are short and clean, so the row scores the pane.
+ * with no session selected, the pane with each jump note, the pane with the sound off and a muted session, and each
+ * line of a pane that cannot draw. Then each answer of /god stats, with and without the alert counts, and the body of
+ * each alert. The fixture session texts are short and clean, so the row scores the pane.
  */
 export function godViews(): RenderedView[] {
   const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -57,9 +59,17 @@ export function godViews(): RenderedView[] {
       return { file: `${GOD_DETAIL_FIXTURE}#jump-note.${reason}.${bodyColumns}`, lines: paneLines(view).map(text) }
     }),
   )
+  const quiet = detailSnapshot()
+  const mutedSnapshot = { ...quiet, sessions: quiet.sessions.map((session) => (session.sessionId === 's-wait' ? { ...session, muted: true } : session)) }
+  const soundOff = [60, 110].map((bodyColumns) => {
+    const view = paneView({ snapshot: mutedSnapshot, bodyColumns, bodyRows: 40, now: GOD_NOW, selectedKey: 's-wait', openGroups: [], promptHoldsKeys: true, isSoundOff: true })
+    return { file: `${GOD_DETAIL_FIXTURE}#sound-off-muted.${bodyColumns}`, lines: paneLines(view).map(text) }
+  })
   const stats = { at: GOD_NOW, computeMs: 23, waitMs: 410, sessions: 15 }
   const statsViews = [undefined, [], [stats], [stats, { ...stats, sessions: 1 }]].map((recent, index) => ({ file: `${GOD_FIXTURE}#stats.${index}`, lines: [statsAnswer(recent)] }))
-  return [...panes, ...opened, noSelection, ...noted, ...cannotDraw, ...statsViews, ...godDetailViews()]
+  const counted = [{ tones: 1, notifications: 1 }, { tones: 0, notifications: 3 }].map((counts, index) => ({ file: `${GOD_FIXTURE}#stats.alerts.${index}`, lines: [statsAnswer([stats], counts)] }))
+  const alerts = (['needs-you', 'stuck'] as const).map((kind) => ({ file: `${GOD_FIXTURE}#alert.${kind}`, lines: [alertBody('api-7', kind)] }))
+  return [...panes, ...opened, noSelection, ...noted, ...soundOff, ...cannotDraw, ...statsViews, ...counted, ...alerts, ...godDetailViews()]
 }
 
 const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'
@@ -91,6 +101,8 @@ export function godDetailViews(): RenderedView[] {
   const wait = snapshot.sessions.find((session) => session.sessionId === GOD_SCREEN.sessionId)!
   const states = [
     detail('recap.running', { session: wait, width: 79, tab: 'recap', isCmuxMissing: false, recap: GOD_RECAPS.running }),
+    detail('recap.busy', { session: snapshot.sessions.find((session) => session.sessionId !== wait.sessionId)!, width: 79, tab: 'recap', isCmuxMissing: false, recap: GOD_RECAPS.running }),
+    detail('recap.none', { session: wait, width: 79, tab: 'recap', isCmuxMissing: false }),
     detail('recap.failed', { session: wait, width: 79, tab: 'recap', isCmuxMissing: false, recap: GOD_RECAPS.failed }),
     detail('screen.refused', { session: wait, width: 79, tab: 'screen', isCmuxMissing: false, outcome: GOD_OUTCOMES.refused }),
     detail('screen.failed', { session: wait, width: 79, tab: 'screen', isCmuxMissing: false, screen: GOD_SCREEN, isScreenFailed: true }),

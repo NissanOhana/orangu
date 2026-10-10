@@ -8,6 +8,9 @@ export type OranguGodBoard = { readonly [field: string]: unknown }
 /** 1 value of the key path (an intent, an outcome, the check after a send), as plain JSON. */
 export type OranguGodDeliverValue = { readonly [field: string]: unknown }
 
+/** The Recap of 1 session, as plain JSON: running, answered with its model text and tokens, or failed with its reason. */
+export type OranguGodRecap = { readonly [field: string]: unknown }
+
 declare module 'claude-code' {
   interface PluginState {
     /** the values of the god pane in the engine state */
@@ -35,6 +38,10 @@ declare module 'claude-code' {
         check?: OranguGodDeliverValue
         isSending?: boolean
       }
+      /** the times of the last alert and the last done tone of each session in the last 5 min */
+      alerts: { alertAt: { readonly [sessionId: string]: number }; doneAt: { readonly [sessionId: string]: number } }
+      /** the last Recap, of any session, null before the first x */
+      recap: OranguGodRecap | null
     }
   }
 }

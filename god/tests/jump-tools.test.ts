@@ -3,7 +3,7 @@
 // open mark the session seen; the Screen tab reads the tab every 1 s while a surface draws it, and stops when the
 // tab closes, the pane closes or the pane hides; each read comes out with no control character and no secret; the 2
 // tools give the board and the detail of a session as quoted data, with each secret masked; /god stats gives the
-// times of the last refresh. The escape byte is built from its code point, so this file spells no escape sequence.
+// times of the last refresh and the alert counts. The escape byte is built from its code point, so this file spells no escape sequence.
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, Mounted } from 'claude-code/testing'
 import type { On } from 'claude-code'
@@ -273,6 +273,6 @@ for (const surface of SURFACES) {
     expect(calls.runs).toEqual([])
     await $.command.run(god())
     await clock.settle()
-    expect((await $.command.run(god('stats'))).text).toMatch(/^The last refresh took \d+ ms of engine work and \d+ ms of wait for host commands, for \d+ sessions\. The most engine work in the last \d+ refresh(?:es)? was \d+ ms\.$/)
+    expect((await $.command.run(god('stats'))).text).toMatch(/^The last refresh took \d+ ms of engine work and \d+ ms of wait for host commands, for \d+ sessions\. The most engine work in the last \d+ refresh(?:es)? was \d+ ms\. The pane played 0 tones and sent 0 notifications since it started\.$/)
   })
 }

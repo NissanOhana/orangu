@@ -5,17 +5,17 @@
  */
 import { describe, expect, it } from 'vitest'
 import { MINUTE, NOW, PANE_START, SECOND, SETTINGS, STORE, busy, facts, idle, waiting } from '../../test/fixtures/god/sessions.js'
-import { createBoardLoop, type BoardPorts } from './board-loop.js'
+import { createBoardLoop, type BoardPorts, type RefreshTurn } from './board-loop.js'
 import type { BoardSnapshot, Facts, StoreState } from './types.js'
 
 const SELF = 'god-self'
 
-type Recorded = { snapshots: BoardSnapshot[]; store: Array<[string, unknown]>; statuses: Array<string | undefined>; redraws: number }
+type Recorded = { snapshots: BoardSnapshot[]; store: Array<[string, unknown]>; statuses: Array<string | undefined>; redraws: number; turns: RefreshTurn[] }
 
 /** A loop over fake ports: the clock reads `time.now`, and each refresh answers the next queued facts. */
 function loopOf(queue: Array<Facts | Promise<Facts>>, over: { store?: StoreState; isPaneOpen?: boolean; ports?: Partial<BoardPorts> } = {}) {
   const time = { now: NOW, selfId: SELF }
-  const recorded: Recorded = { snapshots: [], store: [], statuses: [], redraws: 0 }
+  const recorded: Recorded = { snapshots: [], store: [], statuses: [], redraws: 0, turns: [] }
   let last: Facts | Promise<Facts> | undefined
   const ports: BoardPorts = {
     refresh: () => {
@@ -35,6 +35,9 @@ function loopOf(queue: Array<Facts | Promise<Facts>>, over: { store?: StoreState
     },
     redraw: () => {
       recorded.redraws += 1
+    },
+    onRefresh: async (turn) => {
+      recorded.turns.push(turn)
     },
     ...over.ports,
   }
@@ -248,5 +251,50 @@ describe('the board loop', () => {
     await loop.seen('s-gone', NOW)
     expect(recorded.store).toHaveLength(writes)
     expect(loop.store().seenAt).not.toHaveProperty('s-gone')
+  })
+
+  it('gives the alert decision each tick: the snapshot and the time of the tick before, the store and the pane state', async () => {
+    const ask = facts([waiting('s-a', { name: 'a' })])
+    const { loop, time, recorded } = loopOf([facts([busy('s-a', { name: 'a' })]), ask, ask], { isPaneOpen: false })
+    await loop.tick()
+    expect(recorded.turns).toHaveLength(1)
+    expect(recorded.turns[0]).not.toHaveProperty('last')
+    expect(recorded.turns[0]).not.toHaveProperty('lastRefreshAt')
+    expect(recorded.turns[0]).toMatchObject({ store: STORE, isPaneOpen: false, now: NOW })
+    expect(recorded.turns[0]!.next.sessions[0]!.level).toBe('working')
+    time.now = NOW + 2 * SECOND
+    loop.setPaneOpen(true)
+    await loop.tick()
+    expect(recorded.turns[1]!.last).toBe(recorded.turns[0]!.next)
+    expect(recorded.turns[1]).toMatchObject({ lastRefreshAt: NOW, isPaneOpen: true, now: NOW + 2 * SECOND })
+    expect(recorded.turns[1]!.next.sessions[0]!.level).toBe('needs-you')
+    // the snapshot did not change, so nothing is written, but the decision still comes, with the time of this tick before
+    time.now = NOW + 4 * SECOND
+    await loop.tick()
+    expect(recorded.snapshots).toHaveLength(2)
+    expect(recorded.turns[2]).toMatchObject({ lastRefreshAt: NOW + 2 * SECOND, now: NOW + 4 * SECOND })
+    expect(recorded.turns[2]!.last).toBe(recorded.turns[1]!.next)
+  })
+
+  it('compares with the snapshot of the tick before, so a change that a choice wrote between 2 ticks still counts', async () => {
+    // the busy session crosses the stuck limit while the person presses g: the choice writes the stuck row first
+    const quiet = facts([busy('s-a', { name: 'a' })])
+    const { loop, time, recorded } = loopOf([quiet, quiet])
+    await loop.tick()
+    time.now = NOW + 10 * MINUTE
+    await loop.choose({ groupBy: 'repo' })
+    expect(recorded.snapshots.at(-1)!.sessions[0]!.level).toBe('stuck')
+    await loop.tick()
+    expect(recorded.turns).toHaveLength(2)
+    expect(recorded.turns[1]!.last!.sessions[0]!.level).toBe('working')
+    expect(recorded.turns[1]!.next.sessions[0]!.level).toBe('stuck')
+    expect(recorded.turns[1]!.store.groupBy).toBe('repo')
+  })
+
+  it('goes on when the alert decision fails', async () => {
+    const { loop, recorded } = loopOf([facts([idle('s-b', { name: 'b' })])], { ports: { onRefresh: async () => Promise.reject(new Error('state read refused')) } })
+    await expect(loop.tick()).resolves.toBeUndefined()
+    await expect(loop.tick()).resolves.toBeUndefined()
+    expect(recorded.snapshots).toHaveLength(1)
   })
 })

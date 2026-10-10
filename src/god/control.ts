@@ -7,17 +7,20 @@
  * - the settings from the userConfig values, and the stored choices from the store, each value checked, else its
  *   default. A seenAt entry needs a finite number under a key of its own;
  * - the answer of /god: what the form did, or that the engine keeps the pane off the screen for now;
- * - the keys: f switches between all and the repos and keeps the set, g switches between level and repo. A press on
- *   the heading of a group that starts closed opens it, and a second press closes it;
+ * - the keys: f switches between all and the repos and keeps the set, g switches between level and repo, s turns every
+ *   tone off and on again, and u mutes the selected session and unmutes it again (a heading, or a session that left
+ *   the board, changes nothing). A press on the heading of a group that starts closed opens it, and a second press
+ *   closes it;
  * - the selection: a move of the focus ring onto a session row or onto a heading that opens and closes selects
  *   that row. A move onto a key Button keeps the selection. n selects the next session that needs you after the
  *   selected row, in the order of the groups that the mode keeps, and goes round to the first;
  * - the status line: `god: N need you` while the pane is not on the screen and N sessions of the board need you;
+ * - /god stats adds the tones that played and the notifications that a channel sent, once a refresh ended;
  * - the session that a press opens: a press on a session row (Enter, or a click) opens that session, in both
  *   layouts, so it marks the session seen. A move of the ring only selects a row: the person walks the board with it.
  */
-import { GOD_NOT_PLACED, GOD_OPENED, GOD_SHOWS_ALL, GOD_STATS_OFF, GOD_STATS_READING, GOD_USAGE, godShowsRepos, godStats, needYouStatus, reposSetText } from './copy.js'
-import type { BoardMode, BoardSnapshot, GroupBy, RefreshStats, Settings, StoreState } from './types.js'
+import { GOD_NOT_PLACED, GOD_OPENED, GOD_SHOWS_ALL, GOD_STATS_OFF, GOD_STATS_READING, GOD_USAGE, alertCountsText, godShowsRepos, godStats, needYouStatus, reposSetText } from './copy.js'
+import type { AlertCounts, BoardMode, BoardSnapshot, GroupBy, RefreshStats, Settings, StoreState } from './types.js'
 import { groupKey } from './view/board.js'
 
 /** What /god does with its arguments. */
@@ -88,7 +91,7 @@ export function storeOf(values: Readonly<Partial<Record<StoreKey, unknown>>>): S
 }
 
 /** A choice of the board: the fields of the stored choices that a command or a key changes. */
-export type BoardChoice = Partial<Pick<StoreState, 'mode' | 'repos' | 'groupBy'>>
+export type BoardChoice = Partial<Pick<StoreState, 'mode' | 'repos' | 'groupBy' | 'sound' | 'muted'>>
 
 /** The choice that a /god form makes: all shows every session and clears the repo set, repos sets it. */
 export function commandChoice(command: GodCommand): BoardChoice | undefined {
@@ -111,6 +114,15 @@ export const toggledMode = (store: Pick<StoreState, 'mode'>): Pick<StoreState, '
 
 /** The choice that g makes: the other grouping. */
 export const toggledGroup = (store: Pick<StoreState, 'groupBy'>): Pick<StoreState, 'groupBy'> => ({ groupBy: store.groupBy === 'level' ? 'repo' : 'level' })
+
+/** The choice that s makes: every tone off, or on again. */
+export const toggledSound = (store: Pick<StoreState, 'sound'>): Pick<StoreState, 'sound'> => ({ sound: !store.sound })
+
+/** The choice that u makes: the selected session muted, or unmuted again. Undefined when no session of the board is selected. */
+export function toggledMute(store: Pick<StoreState, 'muted'>, selectedKey: string | undefined, snapshot: BoardSnapshot | undefined): Pick<StoreState, 'muted'> | undefined {
+  if (selectedKey === undefined || snapshot?.sessions.some((session) => session.sessionId === selectedKey) !== true) return undefined
+  return { muted: store.muted.includes(selectedKey) ? store.muted.filter((id) => id !== selectedKey) : [...store.muted, selectedKey] }
+}
 
 /** The keys of the rows that the board shows, in the order of the groups: each closed heading, then its sessions. */
 function rowKeys(snapshot: BoardSnapshot): string[] {
@@ -148,14 +160,16 @@ export function statusText(snapshot: BoardSnapshot | undefined, isPaneOpen: bool
 
 /**
  * What /god stats answers from the stats of the last refreshes, oldest first: the 2 times of the newest one and its
- * session count, then the most engine work of all of them. Undefined: the board does not run.
+ * session count, then the most engine work of all of them, then the alert counts when the pane has them. Undefined:
+ * the board does not run.
  */
-export function statsAnswer(recent: readonly RefreshStats[] | undefined): string {
+export function statsAnswer(recent: readonly RefreshStats[] | undefined, counts?: AlertCounts): string {
   if (recent === undefined) return GOD_STATS_OFF
   const last = recent.at(-1)
   if (last === undefined) return GOD_STATS_READING
   const most = Math.max(...recent.map((stats) => stats.computeMs))
-  return godStats({ computeMs: Math.round(last.computeMs), waitMs: Math.round(last.waitMs), sessions: last.sessions }, Math.round(most), recent.length)
+  const times = godStats({ computeMs: Math.round(last.computeMs), waitMs: Math.round(last.waitMs), sessions: last.sessions }, Math.round(most), recent.length)
+  return counts === undefined ? times : `${times} ${alertCountsText(counts)}`
 }
 
 /** The session that a press on the row `key` opens: the session of a session row, else none. */
