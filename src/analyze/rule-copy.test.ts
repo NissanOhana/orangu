@@ -123,8 +123,10 @@ const INSTRUCTION_WORDS = 20
  * CLAUDE.md line, its title and the corrections signal name "broken / not working", and the detector finds a complaint
  * anywhere in the prompt. Words changed, so the 0.9.0 fingerprint check that proved "no word changed" is deleted, as
  * its own comment asked. Qualifier audit of the new text: no "may", "might", "can" or "should" in the improvement.
+ * 2026-10-10, generation 6 with no copy change: the shared redaction changed the tool error signatures that a
+ * cached payload carries (src/analyze/tools.ts errorSignature). 0.11.0 ships generation 5, so the generation moved.
  */
-const COPY_FINGERPRINT = { generation: 5, sha256: '6aba92002b9d868143a0771a1e918c8e21b8f6330cb48c6b99af952619b6a7fb' }
+const COPY_FINGERPRINT = { generation: 6, sha256: '6aba92002b9d868143a0771a1e918c8e21b8f6330cb48c6b99af952619b6a7fb' }
 /**
  * The texts whose parts do not join in their 0.9.0 sentence order: a conditional instruction came after the
  * reason, and it now moves into the improvement. Each entry gives the opening words of each sentence, in the

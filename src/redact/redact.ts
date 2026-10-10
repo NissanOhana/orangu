@@ -10,6 +10,10 @@
  */
 import type { Analysis } from '../model/analysis.js'
 import { STRIPPED_KEY } from '../model/app-data.js'
+import { applyRule, homeRegExp, homeSlugRegExp, PATTERNS } from './rules.js'
+import { isSecretKey, maskedSecret } from './secret-name.js'
+
+export { scrubWithOrigins } from './rules.js'
 
 export interface RedactOptions {
   /** mask secrets/emails/keys inside previews and summaries (default true) */
@@ -30,39 +34,8 @@ export interface RedactOptions {
   home?: string
 }
 
-const PATTERNS: Array<[RegExp, string]> = [
-  // key material first: its body would otherwise be cut into the blobs and hashes below
-  [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '‹private-key›'],
-  // API keys / tokens (do these before generic ones)
-  [/\bsk-ant-[A-Za-z0-9_-]{10,}/g, '‹anthropic-key›'],
-  [/\bsk-proj-[A-Za-z0-9_-]{20,}/g, '‹openai-project-key›'],
-  [/\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/g, '‹stripe-key›'],
-  [/\bwhsec_[A-Za-z0-9]{16,}/g, '‹stripe-webhook-secret›'],
-  [/\bsk-[A-Za-z0-9]{20,}/g, '‹api-key›'],
-  [/\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}/g, '‹github-token›'],
-  [/\bglpat-[A-Za-z0-9_-]{20,}/g, '‹gitlab-token›'],
-  [/\bnpm_[A-Za-z0-9]{30,}/g, '‹npm-token›'],
-  [/\bhf_[A-Za-z0-9]{30,}/g, '‹huggingface-token›'],
-  [/\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, '‹sendgrid-key›'],
-  [/\bdop_v1_[A-Za-z0-9]{60,}/g, '‹digitalocean-token›'],
-  [/\bxox[baprs]-[A-Za-z0-9-]{10,}/g, '‹slack-token›'],
-  [/\bAKIA[0-9A-Z]{16}\b/g, '‹aws-key›'],
-  [/\bAIza[0-9A-Za-z_-]{30,}/g, '‹google-key›'],
-  [/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{5,}/g, '‹jwt›'],
-  [/\b[A-Fa-f0-9]{40}\b/g, '‹hash40›'],
-  // connection strings
-  [/\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s'"]+/gi, '‹db-url›'],
-  // bearer/authorization
-  [/\bBearer\s+[A-Za-z0-9._-]{12,}/g, 'Bearer ‹token›'],
-  // key=value assignments, including env-style names around the secret word (AWS_SECRET_ACCESS_KEY=,
-  // DB_PASSWORD=, _authToken=). A bare plural such as `tokens:` never matches, and a value a rule above
-  // already masked (‹…›) keeps that marker.
-  [/\b([A-Za-z0-9_-]*?(?:password|passwd|secret|token|api[_-]?key|access[_-]?key|auth)(?:[_-][A-Za-z0-9]+)*)\s*[:=]\s*['"]?[^\s'"‹]{6,}/gi, '$1=‹redacted›'],
-  // email
-  [/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, '‹email›'],
-  // long hex/base64 blobs
-  [/\b[A-Za-z0-9+/]{60,}={0,2}\b/g, '‹blob›'],
-]
+/** each masked part adds 1 to the RedactionReport count */
+const count = (): void => void counter++
 
 export interface RedactionReport {
   applied: number
@@ -73,16 +46,9 @@ export interface RedactionReport {
 
 let counter = 0
 function scrubStr(s: string): string {
-  let out = s
-  for (const [re, rep] of PATTERNS) {
-    out = out.replace(re, (...m: unknown[]) => {
-      counter++
-      // a replacer callback returns its text verbatim, so `$1` (the captured key name) is expanded here
-      return rep.replace(/\$(\d)/g, (_, i: string) => String(m[Number(i)] ?? ''))
-    })
-  }
-  return out
+  return PATTERNS.reduce((out, rule) => applyRule(out, rule, count), s)
 }
+
 /** The last path segment only (see RedactOptions.stripPaths for why never two). */
 function basename(p: string): string {
   return p.split(/[\\/]/).filter(Boolean).at(-1) ?? p
@@ -126,26 +92,6 @@ function projectIdentity(value: string, opts: WalkOpts): string {
 function detectHome(): string {
   const proc = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
   return proc?.env?.['HOME'] ?? proc?.env?.['USERPROFILE'] ?? ''
-}
-
-function homeRegExp(home: string): RegExp | null {
-  if (home.length < 2) return null
-  const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  // only when the prefix ends a path segment: <home>/x becomes ~/x, but a sibling prefix stays
-  return new RegExp(escaped + '(?![A-Za-z0-9_.-])', 'g')
-}
-
-/**
- * The same home prefix as Claude Code encodes it inside a project slug (`/Users/<user>` → `-Users-<user>`, see
- * src/discover/discover.ts projectSlug), so `~/.claude/projects/-Users-me-Code-x/…` and a slug quoted in
- * prose lose the username too. Anchored on a segment boundary: `-Users-me2` is a different home.
- */
-function homeSlugRegExp(home: string): RegExp | null {
-  if (home.length < 2) return null
-  const slug = home.replace(/[^A-Za-z0-9-]/g, '-')
-  if (slug.length < 2 || !/[A-Za-z0-9]/.test(slug)) return null
-  const escaped = slug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(escaped + '(?![A-Za-z0-9_.])', 'g')
 }
 
 /**
@@ -240,6 +186,7 @@ function scrubOne(s: string, opts: WalkOpts): string {
   }
   return out
 }
+
 
 function isAgentRecord(obj: Record<string, unknown>): boolean {
   // AgentStat has spawnDepth + agentId/hasTranscript. Insight evidence carries
@@ -380,7 +327,9 @@ function walk(obj: unknown, opts: WalkOpts): unknown {
         )
         continue
       }
-      out.set(k, typeof v === 'string' ? scrubOne(v, opts) : walk(v, opts))
+      // a value that only its key names as a secret ({ "API_KEY": "…" }): no text rule sees the pair
+      if (opts.scrub && isSecretKey(k)) out.set(k, maskedSecret(v && typeof v === 'object' ? walk(v, opts) : v, count))
+      else out.set(k, typeof v === 'string' ? scrubOne(v, opts) : walk(v, opts))
     }
     return Object.fromEntries(out)
   }

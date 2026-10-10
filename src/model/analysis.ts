@@ -39,8 +39,13 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *   5 (2026-10-09): Analysis.instructions (the rules in context and the calls that broke them, note writes,
  *     memory index cuts); the correction detector also finds a complaint that does not start the prompt
  *     ("broken on desktop"), and the user-corrections text now asks for a check before a CLAUDE.md line
+ *   6 (2026-10-10): the shared redaction masks a quoted secret pair (`"api_key": "…"`, `"api key": 123456789`),
+ *     URL credentials, more secret key names and `Authorization: Basic`, and a free-text name takes a `.` or `/` part
+ *     only before its secret word. tools.errorGroups[].signature runs that
+ *     redaction in the analyzer (src/analyze/tools.ts errorSignature), so a cached payload carries the old signature
+ *     and grouping. 0.11.0 ships generation 5
  */
-export const ANALYSIS_PAYLOAD_GENERATION = 5
+export const ANALYSIS_PAYLOAD_GENERATION = 6
 
 export interface AnalysisSessionInfo {
   id: string
