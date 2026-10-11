@@ -13,13 +13,16 @@ import { deliver } from './deliver.js'
 
 const W = 99
 const GUTTER = ' │ '
+/** a full row of a wrap is 1 cell narrower than the rule, as the live check saw it: the gutter and 95 characters */
+const FULL = W - 1
+const CHUNK = FULL - GUTTER.length
 const DESCRIPTION = 'Make an empty probe file'
 const clean = textCleaner(HOME)
 /** a command of 118 characters with the home folder whole on row 1 of its wrap */
 const COMMAND = `touch ${HOME}/${'word-'.repeat(18)}/yes.txt`
 
-/** The gutter rows of 1 command line that wraps at the box width. */
-const wrapped = (line: string): string[] => [0, W - GUTTER.length].map((at) => `${GUTTER}${line.slice(at, at + W - GUTTER.length)}`)
+/** The 2 gutter rows of 1 command line that wraps: the first is full. */
+const wrapped = (line: string): string[] => [0, CHUNK].map((at) => `${GUTTER}${line.slice(at, at + CHUNK)}`)
 
 /** The screen of a 2.1.296 Bash dialog with the rows of `box` between the 2 dashed rules. */
 function boxScreen(box: readonly string[]): string {
@@ -43,7 +46,7 @@ async function deliverOn(box: readonly string[], intent: KeyIntent, lines: strin
 
 describe('deliver: a Bash dialog whose wrapped command holds the home folder', () => {
   it('sends the digit 1 alone, because the box is measured on the raw rows and compared with the raw command', async () => {
-    expect([...(wrapped(COMMAND)[0] ?? '')].length).toBe(W)
+    expect([...(wrapped(COMMAND)[0] ?? '')].length).toBe(FULL)
     const { fake, result } = await deliverOn(wrapped(COMMAND), yes(COMMAND), asksToRun(COMMAND))
     expect(result.outcome).toMatchObject({ status: 'sent' })
     expect(keyRuns(fake.runs)).toEqual([sendText('1')])
@@ -78,9 +81,9 @@ describe('deliver: the answer binds to the only open call', () => {
   })
 
   it('never takes the dialog of a command whose lines start with │ for the shorter command that its rows look like', async () => {
-    const crafted = `│ ${'x'.repeat(W - 3)}\n│ yy`
-    const shorter = `${'x'.repeat(W - 3)}yy`
-    const drawn = [` │ ${'x'.repeat(W - 3)}`, ' │ yy']
+    const crafted = `│ ${'x'.repeat(CHUNK)}\n│ yy`
+    const shorter = `${'x'.repeat(CHUNK)}yy`
+    const drawn = [` │ ${'x'.repeat(CHUNK)}`, ' │ yy']
     for (const [intent, lines] of [
       [yes(shorter), asksToRun(crafted, shorter)],
       [yes(shorter), asksToRun(crafted)],

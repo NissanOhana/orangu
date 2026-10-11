@@ -12,8 +12,8 @@
  * - a shell permission dialog: a rule, the title `Bash command`, the description, the command rows, the question
  *   `Do you want to proceed?`, then the numbered options. Only an option labeled exactly `Yes` or `No` counts. From
  *   2.1.296 the command rows sit in a box between 2 dashed rules (U+254C) as wide as the tab. A command line that fits
- *   takes 1 plain row. A wider line wraps at the box width, inside a word, and then each command row starts with the
- *   gutter ` │ `, so each row of a wrap but the last ends at the box width. The cleaner can change the width of a
+ *   takes 1 plain row. A wider line wraps inside a word, and then each command row starts with the gutter ` │ `.
+ *   Each row of a wrap but the last is full: 1 cell narrower than the rules. The cleaner can change the width of a
  *   row, so the plan also gives the raw text of the same read and the raw command of the 1 open call (RawScreen):
  *   the box is measured on the raw rows and compared with the raw command.
  * - the prompt: the input box, a rule row, `❯` and a space (a no-break space in this build) and the typed text,
@@ -369,15 +369,17 @@ function showsHead(rows: readonly string[], expected: readonly string[]): boolea
 }
 
 /**
- * The command lines of a box `width` columns wide, each trimmed, empty lines left out, or undefined when a row is wider
- * than the box. With no row that wraps, each row is 1 line. A row with the gutter that fills the box shows a wrap: then
- * every row that is not blank must have the gutter, the gutter goes, and a row that fills the box joins the row under
- * it. A row of a wrap that does not fill the box (a wide letter or a space at the edge) ends its line there.
+ * The command lines of a box whose rules are `width` columns wide, each trimmed, empty lines left out, or undefined
+ * when a row is wider than a full row. A full row is 1 cell narrower than the rules: the live check (a 99-column tab)
+ * showed rules of 99 cells and a full row of a wrap of 98. With no row that wraps, each row is 1 line. A full row with
+ * the gutter shows a wrap: then every row that is not blank must have the gutter, the gutter goes, and a full row joins
+ * the row under it. A row of a wrap that is not full (a wide letter or a space at the edge) ends its line there.
  */
 function boxLines(rows: readonly string[], width: number): string[] | undefined {
+  const full = width - 1
   const widths = rows.map(columns)
-  if (widths.some((cells) => cells !== undefined && cells > width)) return undefined
-  const fills = (k: number): boolean => widths[k] === width && GUTTER_ROW.test(rows[k] ?? '')
+  if (widths.some((cells) => cells !== undefined && cells > full)) return undefined
+  const fills = (k: number): boolean => widths[k] === full && GUTTER_ROW.test(rows[k] ?? '')
   if (!rows.some((_, k) => fills(k))) return rows.map(trim).filter((row) => row !== '')
   if (rows.some((row) => !isBlank(row) && !GUTTER_ROW.test(row))) return undefined
   const lines: string[] = []

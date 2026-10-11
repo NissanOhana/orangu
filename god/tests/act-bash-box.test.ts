@@ -1,6 +1,7 @@
 // The key path on the Bash dialog of Claude Code 2.1.296, over the fake machine of act-machine.ts. The dialog draws the
 // command between 2 dashed rules (U+254C) as wide as the tab, here 99 columns: a command that fits takes 1 plain row,
-// and a wider command wraps at the box width with the gutter ` │ ` on each row. 1 then y reads the screen again and
+// and a wider command wraps with the gutter ` │ ` on each row, a full row 1 cell narrower than the rule, as the live
+// check saw it. 1 then y reads the screen again and
 // sends exactly 1 send of the digit 1, which answers the dialog. A home folder on row 1 of a wrap shows as ~ in the
 // pane, and the match measures the raw row of the same read. With 2 open Bash calls the dialog can be for either one,
 // so y sends no key. Every screen and every command is synthetic.
@@ -11,7 +12,10 @@ import { SF, WS, begin, cmuxSince, detailText, has, lines, press, readScreen, se
 const W = 99
 const DASHED = '╌'.repeat(W)
 const GUTTER = ' │ '
-/** a command of 119 characters: row 1 takes 96 of them after the gutter and fills the box, row 2 takes 23 */
+/** a full row of a wrap: the gutter and 95 characters, 98 cells, 1 less than the rule */
+const FULL = W - 1
+const CHUNK = FULL - GUTTER.length
+/** a command of 119 characters: row 1 takes 95 of them after the gutter and is full, row 2 takes 24 */
 const LONG = `touch /tmp/god-test/plain/${'word-'.repeat(16)}probe/yes.txt`
 
 /** The screen of a 2.1.296 Bash dialog with the rows of `box` between the 2 dashed rules. */
@@ -59,8 +63,8 @@ for (const surface of SURFACES) {
     perm.transcript = [prompt('Make the probe file.', Date.now() - 90_000), bash('toolu_b2', LONG, 'Make an empty probe file', Date.now() - 1000)]
     perm.transcriptMtimeMs = Date.now()
     perm.fileMtimeMs += 1000
-    const rows = [`${GUTTER}${LONG.slice(0, W - GUTTER.length)}`, `${GUTTER}${LONG.slice(W - GUTTER.length)}`]
-    expect(rows.map((row) => [...row].length)).toEqual([W, 26])
+    const rows = [`${GUTTER}${LONG.slice(0, CHUNK)}`, `${GUTTER}${LONG.slice(CHUNK)}`]
+    expect(rows.map((row) => [...row].length)).toEqual([FULL, 27])
     machine.cmux!.screens![SF.perm] = boxScreen(LONG, rows)
     await clock.advance(2000)
     await select($, 'ses-perm')
@@ -83,9 +87,9 @@ for (const surface of SURFACES) {
     perm.transcript = [prompt('Make the probe file.', Date.now() - 90_000), bash('toolu_b3', command, 'Make an empty probe file', Date.now() - 1000)]
     perm.transcriptMtimeMs = Date.now()
     perm.fileMtimeMs += 1000
-    const rows = [`${GUTTER}${command.slice(0, W - GUTTER.length)}`, `${GUTTER}${command.slice(W - GUTTER.length)}`]
+    const rows = [`${GUTTER}${command.slice(0, CHUNK)}`, `${GUTTER}${command.slice(CHUNK)}`]
     expect(rows[0]).toContain(`${HOME}/`)
-    expect([...rows[0]!].length).toBe(W)
+    expect([...rows[0]!].length).toBe(FULL)
     machine.cmux!.screens![SF.perm] = boxScreen(command, rows)
     await clock.advance(2000)
     await select($, 'ses-perm')

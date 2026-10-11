@@ -1,9 +1,10 @@
 /**
  * The shell permission dialog of Claude Code 2.1.296 draws the command between 2 dashed rules (U+254C) as wide as the
- * tab, here 99 columns. A command line that fits takes 1 plain row. A wider line wraps at the box width, inside a
- * word, and then each command row starts with the gutter ` │ `, so the first row of a wrap ends at the box width.
- * Every screen here is synthetic. A match joins the rows of 1 wrapped line only when each row before the last fills
- * the box, and compares the joined text with the confirmed line for equality: any other shape gives a refusal.
+ * tab, here 99 columns. A command line that fits takes 1 plain row. A wider line wraps inside a word, and then each
+ * command row starts with the gutter ` │ `. The live check (a 99-column tab) showed a full row of a wrap 1 cell
+ * narrower than the rule: 98 cells, the gutter and 95 characters. Every screen here is synthetic. A match joins the
+ * rows of 1 wrapped line only when each row before the last is full, and compares the joined text with the confirmed
+ * line for equality: any other shape gives a refusal.
  */
 import { describe, expect, it } from 'vitest'
 import { cleanText, cleanValue } from '../sanitize.js'
@@ -12,6 +13,10 @@ import { matchPermission, readScreen } from './screen-match.js'
 const W = 99
 const DASHED = '╌'.repeat(W)
 const GUTTER = ' │ '
+/** the cells of a full row of a wrap: 1 less than the rule */
+const FULL = W - 1
+/** the characters of a command line that a full row holds after the gutter */
+const CHUNK = FULL - GUTTER.length
 const DESCRIPTION = 'Create empty gx.txt file in /tmp'
 const TIP = `Tip: auto mode handles these prompts for you ${String.fromCharCode(0x2014)} choose "switch to auto mode" below`
 const CHANGED = { isMatch: false, refusal: 'screen-changed' }
@@ -45,10 +50,10 @@ function boxScreen(box: readonly string[], shape: Shape = {}): string {
   ].join('\n')
 }
 
-/** The gutter rows of 1 command line that wraps at the box width: each row but the last holds W - 3 characters. */
+/** The gutter rows of 1 command line that wraps: each row but the last is full and holds CHUNK characters. */
 function wrapped(line: string): string[] {
   const rows: string[] = []
-  for (let at = 0; at < line.length; at += W - GUTTER.length) rows.push(`${GUTTER}${line.slice(at, at + W - GUTTER.length)}`)
+  for (let at = 0; at < line.length; at += CHUNK) rows.push(`${GUTTER}${line.slice(at, at + CHUNK)}`)
   return rows
 }
 
@@ -58,11 +63,11 @@ const match = (box: readonly string[], command: string, shape?: Shape) => matchP
 /** The dialog with no box (Claude Code 2.1.295): the same rows with the 2 dashed rules taken out. */
 const noBox = (rows: readonly string[], shape?: Shape): string => boxScreen(rows, shape).replace(`${DASHED}\n`, '').replace(`${DASHED}\n`, '')
 
-/** the wrap of the live check, cut to fit 99 columns: row 1 is the gutter and 96 characters, and the break falls inside a word */
-const ROW_1 = ` │ touch /private/tmp/scratch-0123456789abcdef/${'a'.repeat(50)}/s`
+/** the wrap of the live check: a command of 127 characters, rows of 98 and 35 cells, and the break falls inside a word */
+const ROW_1 = ` │ touch /private/tmp/scratch-0123456789abcdef/${'a'.repeat(49)}/s`
 const ROW_2 = ' │ cratchpad/god-live/plain/yes.txt'
-const LONG = `touch /private/tmp/scratch-0123456789abcdef/${'a'.repeat(50)}/scratchpad/god-live/plain/yes.txt`
-/** a command line of 202 characters: 3 rows, 96 + 96 + 10 */
+const LONG = `touch /private/tmp/scratch-0123456789abcdef/${'a'.repeat(49)}/scratchpad/god-live/plain/yes.txt`
+/** a command line of 202 characters: 3 rows, 95 + 95 + 12 */
 const LONGER = `touch /private/tmp/scratch-0123456789abcdef/${'b'.repeat(150)}/yes.txt`
 
 describe('matchPermission: the command box of 2.1.296', () => {
@@ -71,14 +76,14 @@ describe('matchPermission: the command box of 2.1.296', () => {
     expect(matchPermission(readScreen(boxScreen([' touch /tmp/gx.txt'])), bash('touch /tmp/gx.txt', 'no'))).toEqual({ isMatch: true, digit: 4 })
   })
 
-  it('joins a command line that wraps over 2 rows, when row 1 fills the box', () => {
-    expect([...ROW_1].length).toBe(W)
+  it('joins a command line that wraps over 2 rows, when row 1 is full: the live shape, rule 99 and rows 98 and 35', () => {
+    expect([LONG.length, [...DASHED].length, [...ROW_1].length, [...ROW_2].length]).toEqual([127, 99, 98, 35])
     expect(wrapped(LONG)).toEqual([ROW_1, ROW_2])
     expect(match([ROW_1, ROW_2], LONG)).toEqual(YES)
   })
 
-  it('joins a command line that wraps over 3 rows, when rows 1 and 2 fill the box', () => {
-    expect(wrapped(LONGER).map((row) => [...row].length)).toEqual([W, W, 13])
+  it('joins a command line that wraps over 3 rows, when rows 1 and 2 are full', () => {
+    expect(wrapped(LONGER).map((row) => [...row].length)).toEqual([FULL, FULL, 15])
     expect(match(wrapped(LONGER), LONGER)).toEqual(YES)
   })
 
@@ -107,7 +112,8 @@ describe('matchPermission: the command box of 2.1.296', () => {
 })
 
 describe('matchPermission: each box shape that refuses', () => {
-  it('refuses a row before the last that is 1 cell short of the box, or 1 cell wider', () => {
+  it('refuses a row before the last of 97 cells, 1 short of a full row, or of 99 cells, as wide as the rule', () => {
+    expect([[...ROW_1.slice(0, -1)].length, [...`${ROW_1}s`].length]).toEqual([FULL - 1, W])
     expect(match([ROW_1.slice(0, -1), ` │ s${ROW_2.slice(GUTTER.length)}`], LONG)).toEqual(CHANGED)
     expect(match([`${ROW_1}s`, ` │ ${ROW_2.slice(GUTTER.length + 1)}`], LONG)).toEqual(CHANGED)
     const [first = '', second = '', third = ''] = wrapped(LONGER)
@@ -171,7 +177,8 @@ const AT_HOME = `touch ${HOME}/${filler(90)}/yes.txt`
 describe('matchPermission: the box measured on the raw text of the same read', () => {
   it('matches a home folder that a row before the last holds whole, or that the wrap splits, over 2 and 3 rows', () => {
     expect(withRaw(AT_HOME)).toEqual(YES)
-    expect(withRaw(`touch ${filler(85)}${HOME}/yes.txt`)).toEqual(YES)
+    expect(wrapped(`touch ${filler(84)}${HOME}/yes.txt`)[1]).toBe(`${GUTTER}god-home/yes.txt`)
+    expect(withRaw(`touch ${filler(84)}${HOME}/yes.txt`)).toEqual(YES)
     expect(wrapped(`cp ${HOME}/${filler(100)} ${HOME}/${filler(100)}`)).toHaveLength(3)
     expect(withRaw(`cp ${HOME}/${filler(100)} ${HOME}/${filler(100)}`)).toEqual(YES)
   })
@@ -207,14 +214,14 @@ describe('matchPermission: the shapes that a crafted command can use', () => {
     expect(match([' echo a', ` ${rule}`], `echo a\n${rule}`)).toEqual(CHANGED)
   })
 
-  it('compares the lines of a command that start with │ as drawn: a short one matches whole, one that fills the box never does', () => {
+  it('compares the lines of a command that start with │ as drawn: a short one matches whole, a full one never does', () => {
     expect(withRaw('│ ls /tmp', boxScreen([' │ ls /tmp']))).toEqual(YES)
-    const drawn = [` │ ${'x'.repeat(W - 3)}`, ' │ yy']
-    expect([...(drawn[0] ?? '')].length).toBe(W)
-    expect(withRaw(`│ ${'x'.repeat(W - 3)}\n│ yy`, boxScreen(drawn))).toEqual(CHANGED)
+    const drawn = [` │ ${'x'.repeat(CHUNK)}`, ' │ yy']
+    expect([...(drawn[0] ?? '')].length).toBe(FULL)
+    expect(withRaw(`│ ${'x'.repeat(CHUNK)}\n│ yy`, boxScreen(drawn))).toEqual(CHANGED)
     // the same rows are the wrap of 1 line, so the match alone cannot tell the 2 commands apart: the plan binds the
     // answer to the 1 open call, and the deliver tests refuse this screen for the shorter command
-    expect(withRaw(`${'x'.repeat(W - 3)}yy`, boxScreen(drawn))).toEqual(YES)
+    expect(withRaw(`${'x'.repeat(CHUNK)}yy`, boxScreen(drawn))).toEqual(YES)
   })
 
   it('reads lines like the tip, the description or the question inside the box as command lines', () => {
@@ -270,8 +277,8 @@ describe('matchPermission: with no raw text, the box measured on the cleaned row
   const cleaned = (command: string) => matchPermission(readScreen(clean(boxScreen(wrapped(command)))), cleanedBash(command))
 
   it('matches when the cleaner changes only the last row of the wrap: like with like', () => {
-    expect(wrapped(`touch ${filler(90)} ${HOME}/yes.txt`)[1]).toBe(`${GUTTER} ${HOME}/yes.txt`)
-    expect(cleaned(`touch ${filler(90)} ${HOME}/yes.txt`)).toEqual(YES)
+    expect(wrapped(`touch ${filler(89)} ${HOME}/yes.txt`)[1]).toBe(`${GUTTER} ${HOME}/yes.txt`)
+    expect(cleaned(`touch ${filler(89)} ${HOME}/yes.txt`)).toEqual(YES)
   })
 
   it('refuses a home folder that a row before the last holds whole, so the row no longer fills the box', () => {
@@ -279,8 +286,8 @@ describe('matchPermission: with no raw text, the box measured on the cleaned row
   })
 
   it('refuses a home folder that the wrap splits: the screen keeps it raw, and the input shows ~', () => {
-    expect(wrapped(`touch ${filler(85)}${HOME}/yes.txt`)[1]).toBe(`${GUTTER}god-home/yes.txt`)
-    expect(cleaned(`touch ${filler(85)}${HOME}/yes.txt`)).toEqual(CHANGED)
+    expect(wrapped(`touch ${filler(84)}${HOME}/yes.txt`)[1]).toBe(`${GUTTER}god-home/yes.txt`)
+    expect(cleaned(`touch ${filler(84)}${HOME}/yes.txt`)).toEqual(CHANGED)
   })
 
   it('refuses a run of 60 or more letters, digits and slashes in a row before the last: the redaction masks it as a blob', () => {
