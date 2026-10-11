@@ -124,7 +124,7 @@ The text checks cover the first character, the exit words, the control character
 
 A prompt that starts with `/` can go out after the same checks. Its confirm bar says that the session runs it as a command.
 
-`m` sends a peer message through Claude Code, with no screen check. The session reads it as a message from a peer, not as your prompt. The confirm bar is the only guard of a peer message.
+`m` sends a peer message through Claude Code, with no screen check. The session reads it as a message from a peer, not as your prompt. The confirm bar is the only guard of a peer message. The pane does not send a peer message with a control character or a character that does not show. The bar then shows the reason and offers only `c`.
 
 ## What it reads
 
