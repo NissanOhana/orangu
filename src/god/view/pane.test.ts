@@ -298,6 +298,11 @@ describe('a short pane with the bar open', () => {
 })
 
 describe('the answer hint of the key row', () => {
+  const answerHint = (view: PaneView): { keys: string; isOff: boolean } | undefined => {
+    const hint = view.kind === 'cannot-draw' || view.kind === 'message' ? undefined : view.hints.find((one) => one.label === 'answer')
+    return hint === undefined ? undefined : { keys: hint.keys, isOff: hint.isOff }
+  }
+
   it('names the option count only while the pane draws the digit Buttons', () => {
     const hint = (view: PaneView): string | undefined => (view.kind === 'board' || view.kind === 'detail' ? view.hints.find((one) => one.label === 'answer')?.keys : undefined)
     expect(hint(pane(detailSnapshot(), { selectedKey: 's-wait' }))).toBe('1-3')
@@ -320,5 +325,15 @@ describe('the answer hint of the key row', () => {
     expect(isOff(pane(detailSnapshot(), { selectedKey: 's-wait', detail: { ...DEFAULT_DETAIL, tab: 'history' } }))).toBe(true)
     expect(isOff(pane(detailSnapshot(), { selectedKey: 's-idle' }))).toBe(true)
     expect(isOff(pane(detailSnapshot()))).toBe(true)
+    // a short pane: the narrow detail of 14 rows draws no option Button, the detail of 11 rows says that the pane is too short, and the bar of 8 rows takes the place of the detail
+    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyColumns: 80, bodyRows: 14, detail: { ...DEFAULT_DETAIL, isOpen: true } }))).toEqual({ keys: '1-9', isOff: true })
+    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 11 }))).toEqual({ keys: '1-9', isOff: true })
+    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 8, deliver: { scroll: 0, intent: INTENTS.answer } }))).toEqual({ keys: '1-9', isOff: true })
+  })
+
+  it('names only the digits of the option Buttons that the detail draws', () => {
+    // 14 rows hold the Button of option 1 only, and a scroll of 3 lines moves option 1 out of the window
+    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 14 }))).toEqual({ keys: '1', isOff: false })
+    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 16, detail: { ...DEFAULT_DETAIL, scroll: 3 } }))).toEqual({ keys: '2-3', isOff: false })
   })
 })

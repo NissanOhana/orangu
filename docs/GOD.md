@@ -16,7 +16,9 @@ To open the pane each time you start the god session, add a `god` alias to your 
 alias god='CLAUDE_CODE_NO_FLICKER=1 ORANGU_GOD=1 claude --plugin-dir <repo>/god'
 ```
 
-`ORANGU_GOD=1` opens the pane when the session starts. `CLAUDE_CODE_NO_FLICKER=1` starts the fullscreen layout of Claude Code, where the pane docks beside the transcript. In the normal layout, the pane opens above the prompt.
+`ORANGU_GOD=1` opens the pane when the session starts. `CLAUDE_CODE_NO_FLICKER=1` starts the fullscreen layout of Claude Code. In that layout, `/god` docks the pane beside the transcript when the terminal has 110 columns or more. In a narrower terminal, and in the normal layout, the pane shows inline above the prompt. A pane that `ORANGU_GOD=1` opens waits for a terminal of 144 columns. After you open the pane once and do not close it, it waits for 110 columns.
+
+An inline pane can be short. In a terminal of 35 rows, it got about 11 rows. That is too short for the detail of a question. The detail then shows `The pane is too short. Make it taller.`, and no digit answers the question.
 
 Without `/god` or `ORANGU_GOD=1`, the mod only registers the `/god` command. It runs no host command, reads no file, starts no timer and opens no pane.
 
@@ -30,7 +32,9 @@ The `/god` command takes these forms:
 | `/god all` | It shows every live session and clears the repo set. |
 | `/god repos <name>...` | It shows only the sessions of these repos. A linked worktree counts as its repo. |
 | `/god repos` | It shows the repos that the repos mode keeps. |
-| `/god stats` | It shows how long the last refresh took, and the count of tones and notifications since the start. |
+| `/god stats` | It shows how long the last refresh took, and the count of tones since the start. It also counts the notifications that the notification channel of Claude Code wrote. A notice that only your Notification hook shows does not count. |
+
+The repos mode changes only the board. The alerts, the status line and the 2 tools of the mod cover every live session in each mode.
 
 ## The board
 
@@ -61,7 +65,9 @@ A board row shows `TREE` or `FILES` after the name. At 90 columns or more, the p
 
 ## Keys
 
-Press `ctrl+x tab` to give the keys to the pane. The key row at the bottom of the pane shows the keys of the board. A key that cannot work now shows dim.
+Press `ctrl+x tab`, or click the pane, to give the keys to the pane. Press Esc to give the keys back to the prompt. Claude Code does both, and the pane stays open after Esc.
+
+The key row at the bottom of the pane shows the keys of the board. With no cmux, `j`, `r` and the digits show dim. The digits also show dim when the detail shows no option that a digit answers. Else the key row names the digits of the options that the detail shows, for example `1-3`.
 
 | Key | What it does |
 |---|---|
@@ -155,6 +161,7 @@ The Recap tab shows the reply under a `model text` label, with its token count.
 ## Alerts
 
 - An alert starts when a session goes into NEEDS YOU or STUCK. It is 1 tone, 1 native notification and 1 ring on the cmux tab of the session.
+- 1 refresh plays 1 tone at most. When more sessions change in 1 refresh, the first gets the tone: NEEDS YOU, then STUCK, then YOUR TURN. The other alerts send their notification and their ring with no tone.
 - When a session goes into YOUR TURN, the pane plays a done tone. A done tone has no notification and no ring.
 - A session gets at most 1 alert in 5 min. A done tone also waits 5 min after the last alert or done tone of that session.
 - The first refresh after the start sends no alert. A refresh more than 5 min after the last one sends no alert either.

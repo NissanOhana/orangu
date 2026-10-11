@@ -137,6 +137,20 @@ for (const surface of SURFACES) {
     expect(detailText(await lines(ui))).toContain('The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.')
   })
 
+  test(`${surface}: /god repos that hides the selected session clears the selection, and the open confirm bar keeps its own target`, async ($, on) => {
+    const { calls, ui } = await begin($, on, surface)
+    await select($, 'ses-idle')
+    await press(ui, 'key:r')
+    await typeDraft(ui, ['Run the tests.'])
+    await $.command.run({ command: 'god', args: 'repos repo-a', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
+    const shown = await lines(ui)
+    expect(shown, shown.join('\n')).toContain(' Send this prompt to idle-p?  y: send  c: cancel')
+    expect(detailText(shown)).toContain('Select a session on the board to show its detail.')
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(keysSince(calls, atY)).toEqual([sendText(WS.idle, SF.idle, 'Run the tests.'), sendKey(WS.idle, SF.idle, 'enter')])
+  })
+
   test(`${surface}: while a draft is open the digits have no hotkey, and a press on an option keeps the draft and arms no y`, async ($, on) => {
     const { calls, ui } = await begin($, on, surface)
     await select($, 'ses-wait')

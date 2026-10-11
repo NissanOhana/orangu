@@ -13,9 +13,10 @@
  * - The bar of the key path (src/god/view/bar.ts) sits under the bottom rule and above the key row, in the board and
  *   in the narrow detail, and its rows come from the board: it takes at most half of the rows under the header. While
  *   the bar shows a count line, w and z scroll the bar, so the detail draws its own count lines with no key.
- * - The digits of the key row name the options of the open question of the selected session, or the Yes and No of
- *   its Bash request, while the Now tab of the detail draws their Buttons. Where no digit Button shows (the narrow
- *   board, another tab, a draft, nothing to answer) the row shows `1-9` dim.
+ * - The digits of the key row name the option Buttons that the detail draws: the options of the open question of the
+ *   selected session, or the Yes and No of its Bash request, in the window of the Now tab. Where no digit Button
+ *   shows (the narrow board, another tab, a draft, nothing to answer, a detail too short for them, the bar in place
+ *   of the board) the row shows `1-9` dim. The rows of the key row come from `1-9`, its widest form.
  * - When the bar leaves too few rows for a window over the board or the detail, a note of the last outcome gives way
  *   (it has no key), and a bar that holds an intent or a draft takes the place of the board: the header, a rule, the
  *   bar and the key row, so y and c stay.
@@ -32,7 +33,6 @@ import type { BoardSnapshot, RecapState } from '../types.js'
 import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow } from './board.js'
 import { barView, type BarView, type DeliverState } from './bar.js'
 import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState, type PaneDetail } from './detail-pane.js'
-import { ANSWERED_TOOL, PERMISSION_ANSWERS } from './detail-tabs.js'
 import { headerLines } from './header.js'
 import { JUMP_NOTE, keyRow } from './keys.js'
 import type { PaneMotion } from './motion.js'
@@ -91,14 +91,10 @@ export function cannotDrawView(reason: CannotDraw, bodyColumns: number): PaneVie
   return { kind: 'cannot-draw', lines: messageLines(CANNOT_DRAW[reason], bodyColumns) }
 }
 
-/** The count of the choices that the digits answer for the selected session: its open question, or its Bash request. */
-function answerCountOf(snapshot: BoardSnapshot, selectedKey: string | undefined): number | undefined {
-  const session = snapshot.sessions.find((candidate) => candidate.sessionId === selectedKey)
-  const questions = session?.transcript?.openQuestion?.questions
-  const activity = session?.transcript?.activity
-  if ((questions === undefined || questions.length === 0) && session?.waitingFor === 'permission prompt' && activity?.isOpen === true && activity.tool === ANSWERED_TOOL) return PERMISSION_ANSWERS.length
-  const only = questions?.length === 1 ? questions[0] : undefined
-  return only === undefined || only.multiSelect ? undefined : only.options.length
+/** The digits of the option Buttons that a detail draws: the option lines in its window that a digit presses. */
+function drawnDigits(detail: PaneDetail | undefined): number[] {
+  if (detail?.kind !== 'session' || detail.view.kind !== 'detail') return []
+  return detail.view.options.flatMap((option) => (option.isOff ? [] : [option.digit]))
 }
 
 /** The rows of the bar, its text field included. */
@@ -122,14 +118,14 @@ export function paneView(input: PaneInput): PaneView {
   const note = input.jumpNote ?? undefined
   const notice = note !== undefined && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {}
   const isDraftOpen = input.deliver?.draft !== undefined
-  const keysOf = (board: BoardSnapshot, isDetail = false, showsDigits = false) => {
-    const answerCount = showsDigits ? answerCountOf(board, input.selectedKey) : undefined
+  const keysOf = (board: BoardSnapshot, isDetail = false, detail?: PaneDetail) => {
+    const answerDigits = drawnDigits(detail)
     return keyRow({
       width: bodyColumns,
       isCmuxMissing: board.sources.cmux.status === 'missing',
       promptHoldsKeys: input.promptHoldsKeys,
-      ...(answerCount === undefined ? {} : { answerCount }),
-      isAnswerOff: answerCount === undefined,
+      answerDigits,
+      isAnswerOff: answerDigits.length === 0,
       mode: board.mode,
       isDetail,
       ...notice,
@@ -145,8 +141,8 @@ export function paneView(input: PaneInput): PaneView {
   const layout = layoutOf(bodyColumns)
   const detailState = input.detail ?? DEFAULT_DETAIL
   const isDetail = layout.kind === 'narrow' && detailState.isOpen
-  const showsDigits = (layout.kind === 'wide' || isDetail) && detailState.tab === 'now' && !isDraftOpen
-  const keys = keysOf(snapshot, isDetail, showsDigits)
+  // the rows of the key row with no digit Button: `1-9` is the widest hint, so the drawn row takes no more rows
+  const keys = keysOf(snapshot, isDetail)
   const selection = input.selectedKey === undefined ? {} : { selectedKey: input.selectedKey }
   const under = bodyRows - header.length - 2 - keys.lines.length
   const barOf = (rows: number): BarView | undefined =>
@@ -168,8 +164,14 @@ export function paneView(input: PaneInput): PaneView {
   const recap = input.recap === undefined || input.recap === null ? {} : { recap: input.recap }
   const draft = isDraftOpen ? { isDraftOpen } : {}
   const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome, ...recap, ...draft }), bar)
-  if (isDetail) return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints }
+  if (isDetail) {
+    const detail = detailOf(bodyColumns)
+    const drawn = keysOf(snapshot, true, detail)
+    return { kind: 'detail', header, topRule: ruleLine(bodyColumns), detail, bottomRule: ruleLine(bodyColumns), ...withBar, keys: drawn.lines, hints: drawn.hints }
+  }
   const { lines: body, more } = boardWindow({ ...board, rows: room })
+  const detail = layout.kind === 'wide' ? detailOf(layout.detailColumns) : undefined
+  const drawn = keysOf(snapshot, false, detail)
   return {
     kind: 'board',
     layout,
@@ -177,11 +179,11 @@ export function paneView(input: PaneInput): PaneView {
     topRule: ruleLine(bodyColumns, layout, '┬'),
     body,
     more,
-    ...(layout.kind === 'wide' ? { detail: detailOf(layout.detailColumns) } : {}),
+    ...(detail === undefined ? {} : { detail }),
     bottomRule: ruleLine(bodyColumns, layout, '┴'),
     ...withBar,
-    keys: keys.lines,
-    hints: keys.hints,
+    keys: drawn.lines,
+    hints: drawn.hints,
   }
 }
 

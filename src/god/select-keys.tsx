@@ -3,13 +3,15 @@
 // and src/god/act/jump.ts. Every function that takes `$` is a function declaration at the top of the file, as the
 // engine asks.
 // - Each new selection starts the detail at its top, and clears the note of the last j.
+// - A choice of the board (f, g, a /god form) clears a selected row that the new board does not show, so the detail,
+//   the jump note and the keys leave it. The confirm bar keeps its own target.
 // - A press on a session row (an open) and a jump mark the session seen through the board loop.
 import { read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import { jumpNoteOf, jumpPlan, jumpedSessionOf, runJump } from './act/jump.js'
 import type { BoardLoop } from './board-loop.js'
-import { nextNeedsYou, openGroupsAfterPress, openedSessionOf } from './control.js'
+import { nextNeedsYou, openGroupsAfterPress, openedSessionOf, selectionOf } from './control.js'
 import { detailAfterBack, detailAfterRowPress, detailAfterSelect } from './detail-control.js'
 import { PANE } from './deliver-keys.js'
 import { engineClock, engineHost } from './engine.js'
@@ -30,6 +32,12 @@ export async function select($: EngineInterface, key: string): Promise<void> {
 export async function selectAndFocus($: EngineInterface, key: string): Promise<void> {
   await select($, key)
   await $.ui.focus({ requestId: PANE, key })
+}
+
+/** After a choice of the board: no selection when the selected row is not a row of the new board. */
+export async function dropHiddenSelection($: EngineInterface): Promise<void> {
+  const selected = await read($, SELECTED)
+  if (selected !== '' && selectionOf(selected, (await read($, BOARD)) ?? undefined) === undefined) await select($, '')
 }
 
 /** n: the next session that needs you. */

@@ -19,9 +19,10 @@ describe('the key row', () => {
     expect(row.hints.every((hint) => !hint.isOff)).toBe(true)
   })
 
-  it('names the digits of the open question of the selected session', () => {
-    expect(keyRow({ ...BASE, answerCount: 3 }).lines.map(text).join('')).toMatch(/ {2}1-3 answer {2}/)
-    expect(keyRow({ ...BASE, answerCount: 1 }).lines.map(text).join('')).toMatch(/ {2}1 answer {2}/)
+  it('names the digits of the option Buttons that the detail draws', () => {
+    expect(keyRow({ ...BASE, answerDigits: [1, 2, 3] }).lines.map(text).join('')).toMatch(/ {2}1-3 answer {2}/)
+    expect(keyRow({ ...BASE, answerDigits: [1] }).lines.map(text).join('')).toMatch(/ {2}1 answer {2}/)
+    expect(keyRow({ ...BASE, answerDigits: [2, 3] }).lines.map(text).join('')).toMatch(/ {2}2-3 answer {2}/)
   })
 
   it('ends with the ctrl+x tab line while the prompt holds the keys', () => {

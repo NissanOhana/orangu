@@ -125,11 +125,11 @@ describe('what /god stats answers', () => {
     expect(statsAnswer([stats(1, 7, 90, 1)])).toBe('The last refresh took 7 ms of engine work and 90 ms of wait for host commands, for 1 session. The most engine work in the last 1 refresh was 7 ms.')
   })
 
-  it('adds the tones that played and the notifications that a channel sent since the pane started', () => {
+  it('adds the tones that played and the notifications that the notification channel wrote since the pane started', () => {
     expect(statsAnswer([stats(1, 7, 90, 1)], { tones: 1, notifications: 1 })).toBe(
-      'The last refresh took 7 ms of engine work and 90 ms of wait for host commands, for 1 session. The most engine work in the last 1 refresh was 7 ms. The pane played 1 tone and sent 1 notification since it started.',
+      'The last refresh took 7 ms of engine work and 90 ms of wait for host commands, for 1 session. The most engine work in the last 1 refresh was 7 ms. The pane played 1 tone since it started, and the notification channel of Claude Code wrote 1 notification. A Notification hook can show more.',
     )
-    expect(statsAnswer([stats(1, 7, 90, 1)], { tones: 0, notifications: 2 })).toMatch(/ The pane played 0 tones and sent 2 notifications since it started\.$/)
+    expect(statsAnswer([stats(1, 7, 90, 1)], { tones: 0, notifications: 2 })).toMatch(/ The pane played 0 tones since it started, and the notification channel of Claude Code wrote 2 notifications\. A Notification hook can show more\.$/)
     expect(statsAnswer([], { tones: 1, notifications: 1 })).toBe('The god pane reads the sessions now. Run /god stats again in 2 s.')
   })
 

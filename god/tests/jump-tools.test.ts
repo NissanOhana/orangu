@@ -127,6 +127,30 @@ for (const surface of SURFACES) {
     expect(calls.storeSets.filter(([key, value]) => key === 'seenAt' && Object.hasOwn(value as object, 'ses-wait') && (value as Record<string, number>)['ses-wait']! > 0).length).toBeLessThanOrEqual(1)
   })
 
+  test(`${surface}: /god repos and f clear the selection of a session that the board no longer shows, and its jump note`, async ($, on) => {
+    await begin($, on, surface)
+    const ui = await mount($, surface)
+    const noteLoose = async (): Promise<void> => {
+      await select($, 'ses-loose')
+      await ui.press({ key: 'key:j' })
+      expect((await lines(ui)).at(-1)).toBe(' This session has no cmux tab, so j cannot jump to it.')
+    }
+    const expectCleared = async (): Promise<void> => {
+      const shown = await lines(ui)
+      expect(shown.some((line) => line.includes('loose-p')), shown.join('\n')).toBe(false)
+      expect(shown.some((line) => line.endsWith('│ Select a session on the board to show its detail.')), shown.join('\n')).toBe(true)
+      expect(shown.join('\n')).not.toContain('no cmux tab')
+    }
+    await noteLoose()
+    await $.command.run(god('repos repo-a'))
+    await expectCleared()
+    // f shows every session again, and f once more hides loose-p
+    await ui.press({ key: 'key:f' })
+    await noteLoose()
+    await ui.press({ key: 'key:f' })
+    await expectCleared()
+  })
+
   // the 15 s loop reads the collector clock, which the kit does not move, so an old tab map after a failed read is
   // proven in src/god/act/jump.test.ts and src/god/screen-loop.test.ts; here the tree read fails from the start
   test(`${surface}: when the cmux tree read fails, j runs no cmux call and the Screen tab reads nothing`, async ($, on) => {
@@ -273,6 +297,6 @@ for (const surface of SURFACES) {
     expect(calls.runs).toEqual([])
     await $.command.run(god())
     await clock.settle()
-    expect((await $.command.run(god('stats'))).text).toMatch(/^The last refresh took \d+ ms of engine work and \d+ ms of wait for host commands, for \d+ sessions\. The most engine work in the last \d+ refresh(?:es)? was \d+ ms\. The pane played 0 tones and sent 0 notifications since it started\.$/)
+    expect((await $.command.run(god('stats'))).text).toMatch(/^The last refresh took \d+ ms of engine work and \d+ ms of wait for host commands, for \d+ sessions\. The most engine work in the last \d+ refresh(?:es)? was \d+ ms\. The pane played 0 tones since it started, and the notification channel of Claude Code wrote 0 notifications\. A Notification hook can show more\.$/)
   })
 }

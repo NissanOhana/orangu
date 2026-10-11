@@ -85,7 +85,7 @@ for (const surface of SURFACES) {
     await clock.advance(2000)
     expect([calls.tones.length, calls.notices.length, rings(calls).length]).toEqual([1, 1, 1])
     const stats = await $.command.run(god('stats'))
-    expect(stats.text).toMatch(/ The pane played 1 tone and sent 1 notification since it started\.$/)
+    expect(stats.text).toMatch(/ The pane played 1 tone since it started, and the notification channel of Claude Code wrote 1 notification\. A Notification hook can show more\.$/)
   })
 
   test(`${surface}: s turns the tones off and says so in the header, and the notification and the ring stay`, async ($, on) => {

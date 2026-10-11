@@ -9,7 +9,8 @@
 // - The pane draws the last snapshot from the engine state through the view (src/god/view/pane.ts). The selected
 //   row comes from the moves of the focus ring (ui.focus), n, a press on a row, and a press on a count line of the
 //   board, which also moves the ring onto the row that it selects. Each new selection starts the detail at its
-//   top. The keys j, n, f, g, t and b are hotkey Buttons of the key row, and w and z the count lines of the detail.
+//   top. A choice of the board (f, g, a /god form) clears a selected row that the new board does not show. The keys
+//   j, n, f, g, t and b are hotkey Buttons of the key row, and w and z the count lines of the detail.
 //   The rules of the detail controls are in src/god/detail-control.ts.
 // - j jumps to the cmux tab of the selected session (src/god/act/jump.ts). A jump and a press on a session row (an
 //   open) mark the session seen. The note of a j that did not jump goes to the engine state for the key row.
@@ -49,7 +50,7 @@ import { makeRecap, type RecapRuntime } from './recap-keys.js'
 import { textCleaner } from './sanitize.js'
 import { PANE, addDraftLine, cancelBar, checkSent, openAnswer, openDraft, openPermission, scrollBar, sendConfirmed, type DeliverRuntime } from './deliver-keys.js'
 import { createScreenLoop, isScreenShown, screenWanted, type ScreenLoop } from './screen-loop.js'
-import { backToBoard, changeDetail, jumpSelected, pressRow, select, selectAndFocus, selectNext } from './select-keys.js'
+import { backToBoard, changeDetail, dropHiddenSelection, jumpSelected, pressRow, select, selectAndFocus, selectNext } from './select-keys.js'
 import { readScreenOf } from './source/screen.js'
 import { BOARD, DELIVER, DETAIL, JUMP, OPEN_GROUPS, RECAP, SCREEN, SELECTED, THEME } from './state.js'
 import { BOARD_TOOL, SESSION_TOOL, boardToolAnswer, sessionToolAnswer, type ToolBoard } from './tools.js'
@@ -177,9 +178,11 @@ function markPaneShown(runtime: Runtime): void {
   runtime.board?.setPaneOpen(true)
 }
 
+/** A choice of the board (f, g, a /god form), then no selection when the new board does not show the selected row. */
 async function choose($: EngineInterface, runtime: Runtime, choice: (store: StoreState) => BoardChoice): Promise<void> {
   const loop = await start($, runtime)
   await loop.choose(choice(loop.store()))
+  await dropHiddenSelection($)
 }
 
 /** s: every tone off, or on again, over the board, started once. */
@@ -249,7 +252,7 @@ export function register(on: On, options: PluginOptions): void {
     }
     const { loop, isPlaced } = await openPane($, runtime)
     const choice = commandChoice(command)
-    if (choice !== undefined) await loop.choose(choice)
+    if (choice !== undefined) await choose($, runtime, () => choice)
     return { text: commandAnswer(command, { isPlaced, repos: loop.store().repos }) }
   }).catch(() => ({ text: GOD_FAILED }))
 

@@ -55,11 +55,14 @@ export function godStats(last: { computeMs: number; waitMs: number; sessions: nu
   return `The last refresh took ${last.computeMs} ms of engine work and ${last.waitMs} ms of wait for host commands, for ${sessions}. The most engine work in the last ${kept} was ${mostComputeMs} ms.`
 }
 
-/** What /god stats adds once the board runs: the tones that played and the notifications that a channel sent. */
+/**
+ * What /god stats adds once the board runs: the tones that played and the notifications that the notification channel
+ * of Claude Code wrote. The engine runs the Notification hooks first, so a notice that only a hook shows does not count.
+ */
 export function alertCountsText(counts: { tones: number; notifications: number }): string {
   const tones = `${counts.tones} ${counts.tones === 1 ? 'tone' : 'tones'}`
   const notifications = `${counts.notifications} ${counts.notifications === 1 ? 'notification' : 'notifications'}`
-  return `The pane played ${tones} and sent ${notifications} since it started.`
+  return `The pane played ${tones} since it started, and the notification channel of Claude Code wrote ${notifications}. A Notification hook can show more.`
 }
 
 /**

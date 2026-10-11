@@ -15,7 +15,8 @@
  *   that row. A move onto a key Button keeps the selection. n selects the next session that needs you after the
  *   selected row, in the order of the groups that the mode keeps, and goes round to the first;
  * - the status line: `god: N need you` while the pane is not on the screen and N sessions of the board need you;
- * - /god stats adds the tones that played and the notifications that a channel sent, once a refresh ended;
+ * - /god stats adds the tones that played and the notifications that the notification channel wrote, once a refresh
+ *   ended;
  * - the session that a press opens: a press on a session row (Enter, or a click) opens that session, in both
  *   layouts, so it marks the session seen. A move of the ring only selects a row: the person walks the board with it.
  */
