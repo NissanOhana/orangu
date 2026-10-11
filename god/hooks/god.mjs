@@ -69,7 +69,7 @@ function godStats(last, mostComputeMs, refreshes) {
 function alertCountsText(counts) {
   const tones = `${counts.tones} ${counts.tones === 1 ? "tone" : "tones"}`;
   const notifications = `${counts.notifications} ${counts.notifications === 1 ? "notification" : "notifications"}`;
-  return `The pane played ${tones} and sent ${notifications} since it started.`;
+  return `The pane played ${tones} since it started, and the notification channel of Claude Code wrote ${notifications}. A Notification hook can show more.`;
 }
 function alertBody(name, kind) {
   return kind === "needs-you" ? `The session ${name} needs you.` : `The session ${name} is stuck.`;
@@ -1258,10 +1258,11 @@ var JUMP_NOTE = {
 };
 var MODE_KEY_LABEL = { all: "repos", repos: "all" };
 var GROUP_KEY_LABEL = "group";
-var answerKeys = (count2) => {
-  if (count2 === void 0 || count2 < 1) return "1-9";
-  const last = Math.min(9, count2);
-  return last === 1 ? "1" : `1-${last}`;
+var answerKeys = (digits) => {
+  const first = digits?.[0];
+  const last = digits?.at(-1);
+  if (first === void 0 || last === void 0) return "1-9";
+  return first === last ? String(first) : `${first}-${last}`;
 };
 var pressSegment = (hotkey, label) => ({ text: `${hotkey}: ${label}`, press: { hotkey, label } });
 function hintItem(hint) {
@@ -1277,7 +1278,7 @@ function keyRow(input) {
     input.isDetail === true ? { keys: "b", label: "back", hotkey: "b", isOff: false } : { keys: "\u2191\u2193", label: "select", isOff: false },
     { keys: "j", label: "jump", hotkey: "j", isOff: off2 },
     { keys: "n", label: "next", hotkey: "n", isOff: false },
-    { keys: answerKeys(input.answerCount), label: "answer", isOff: off2 || input.isAnswerOff === true },
+    { keys: answerKeys(input.answerDigits), label: "answer", isOff: off2 || input.isAnswerOff === true },
     { keys: "r", label: "reply", hotkey: "r", isOff: off2 },
     { keys: "m", label: "message", hotkey: "m", isOff: false },
     { keys: "t", label: "tab", hotkey: "t", isOff: false },
@@ -5096,6 +5097,10 @@ async function selectAndFocus($, key) {
   await select($, key);
   await $.ui.focus({ requestId: PANE, key });
 }
+async function dropHiddenSelection($) {
+  const selected = await read5($, SELECTED);
+  if (selected !== "" && selectionOf(selected, await read5($, BOARD) ?? void 0) === void 0) await select($, "");
+}
 async function selectNext($) {
   const next = nextNeedsYou(await read5($, BOARD) ?? void 0, await read5($, SELECTED) || void 0);
   if (next !== void 0) await selectAndFocus($, next);
@@ -5323,13 +5328,9 @@ function ruleLine(width, layout, joint = "\u252C") {
 function cannotDrawView(reason, bodyColumns) {
   return { kind: "cannot-draw", lines: messageLines(CANNOT_DRAW[reason], bodyColumns) };
 }
-function answerCountOf(snapshot, selectedKey) {
-  const session = snapshot.sessions.find((candidate) => candidate.sessionId === selectedKey);
-  const questions = session?.transcript?.openQuestion?.questions;
-  const activity = session?.transcript?.activity;
-  if ((questions === void 0 || questions.length === 0) && session?.waitingFor === "permission prompt" && activity?.isOpen === true && activity.tool === ANSWERED_TOOL) return PERMISSION_ANSWERS.length;
-  const only = questions?.length === 1 ? questions[0] : void 0;
-  return only === void 0 || only.multiSelect ? void 0 : only.options.length;
+function drawnDigits(detail) {
+  if (detail?.kind !== "session" || detail.view.kind !== "detail") return [];
+  return detail.view.options.flatMap((option) => option.isOff ? [] : [option.digit]);
 }
 var barHeight = (bar) => bar === void 0 ? 0 : bar.lines.length + (bar.field === void 0 ? 0 : 1);
 var isNote = (bar) => bar.intent === void 0 && bar.field === void 0;
@@ -5345,14 +5346,14 @@ function paneView(input) {
   const note = input.jumpNote ?? void 0;
   const notice = note !== void 0 && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {};
   const isDraftOpen = input.deliver?.draft !== void 0;
-  const keysOf = (board2, isDetail2 = false, showsDigits2 = false) => {
-    const answerCount = showsDigits2 ? answerCountOf(board2, input.selectedKey) : void 0;
+  const keysOf = (board2, isDetail2 = false, detail2) => {
+    const answerDigits = drawnDigits(detail2);
     return keyRow({
       width: bodyColumns,
       isCmuxMissing: board2.sources.cmux.status === "missing",
       promptHoldsKeys: input.promptHoldsKeys,
-      ...answerCount === void 0 ? {} : { answerCount },
-      isAnswerOff: answerCount === void 0,
+      answerDigits,
+      isAnswerOff: answerDigits.length === 0,
       mode: board2.mode,
       isDetail: isDetail2,
       ...notice
@@ -5368,8 +5369,7 @@ function paneView(input) {
   const layout = layoutOf(bodyColumns);
   const detailState = input.detail ?? DEFAULT_DETAIL;
   const isDetail = layout.kind === "narrow" && detailState.isOpen;
-  const showsDigits = (layout.kind === "wide" || isDetail) && detailState.tab === "now" && !isDraftOpen;
-  const keys = keysOf(snapshot, isDetail, showsDigits);
+  const keys = keysOf(snapshot, isDetail);
   const selection2 = input.selectedKey === void 0 ? {} : { selectedKey: input.selectedKey };
   const under = bodyRows - header.length - 2 - keys.lines.length;
   const barOf = (rows) => input.deliver === void 0 ? void 0 : barView({ deliver: input.deliver, width: bodyColumns, rows, ...selection2, isScreenOpen: detailState.tab === "screen" });
@@ -5389,8 +5389,14 @@ function paneView(input) {
   const recap = input.recap === void 0 || input.recap === null ? {} : { recap: input.recap };
   const draft = isDraftOpen ? { isDraftOpen } : {};
   const detailOf = (width) => withoutScroll(paneDetail({ snapshot, ...selection2, width, rows: room, now, state: detailState, ...screen, ...outcome, ...recap, ...draft }), bar);
-  if (isDetail) return { kind: "detail", header, topRule: ruleLine(bodyColumns), detail: detailOf(bodyColumns), bottomRule: ruleLine(bodyColumns), ...withBar, keys: keys.lines, hints: keys.hints };
+  if (isDetail) {
+    const detail2 = detailOf(bodyColumns);
+    const drawn2 = keysOf(snapshot, true, detail2);
+    return { kind: "detail", header, topRule: ruleLine(bodyColumns), detail: detail2, bottomRule: ruleLine(bodyColumns), ...withBar, keys: drawn2.lines, hints: drawn2.hints };
+  }
   const { lines: body, more } = boardWindow({ ...board, rows: room });
+  const detail = layout.kind === "wide" ? detailOf(layout.detailColumns) : void 0;
+  const drawn = keysOf(snapshot, false, detail);
   return {
     kind: "board",
     layout,
@@ -5398,11 +5404,11 @@ function paneView(input) {
     topRule: ruleLine(bodyColumns, layout, "\u252C"),
     body,
     more,
-    ...layout.kind === "wide" ? { detail: detailOf(layout.detailColumns) } : {},
+    ...detail === void 0 ? {} : { detail },
     bottomRule: ruleLine(bodyColumns, layout, "\u2534"),
     ...withBar,
-    keys: keys.lines,
-    hints: keys.hints
+    keys: drawn.lines,
+    hints: drawn.hints
   };
 }
 
@@ -5491,6 +5497,7 @@ function markPaneShown(runtime) {
 async function choose($, runtime, choice) {
   const loop = await start($, runtime);
   await loop.choose(choice(loop.store()));
+  await dropHiddenSelection($);
 }
 async function soundKey($, runtime) {
   await toggleSound($, await start($, runtime));
@@ -5550,7 +5557,7 @@ function register(on, options) {
     }
     const { loop, isPlaced } = await openPane($, runtime);
     const choice = commandChoice(command);
-    if (choice !== void 0) await loop.choose(choice);
+    if (choice !== void 0) await choose($, runtime, () => choice);
     return { text: commandAnswer(command, { isPlaced, repos: loop.store().repos }) };
   }).catch(() => ({ text: GOD_FAILED }));
   on("ui.render", { component: "Pane", requestId: "god" }, async ($, e) => {
