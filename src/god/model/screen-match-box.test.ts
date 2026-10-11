@@ -1,0 +1,172 @@
+/**
+ * The shell permission dialog of Claude Code 2.1.296 draws the command between 2 dashed rules (U+254C) as wide as the
+ * tab, here 99 columns. A command line that fits takes 1 plain row. A wider line wraps at the box width, inside a
+ * word, and then each command row starts with the gutter ` │ `, so the first row of a wrap ends at the box width.
+ * Every screen here is synthetic. A match joins the rows of 1 wrapped line only when each row before the last fills
+ * the box, and compares the joined text with the confirmed line for equality: any other shape gives a refusal.
+ */
+import { describe, expect, it } from 'vitest'
+import { cleanText, cleanValue } from '../sanitize.js'
+import { matchPermission, readScreen } from './screen-match.js'
+
+const W = 99
+const DASHED = '╌'.repeat(W)
+const GUTTER = ' │ '
+const DESCRIPTION = 'Create empty gx.txt file in /tmp'
+const TIP = 'Tip: auto mode handles these prompts for you — choose "switch to auto mode" below'
+const CHANGED = { isMatch: false, refusal: 'screen-changed' }
+const YES = { isMatch: true, digit: 1 }
+
+type Shape = { description?: string | null; close?: string | null; after?: readonly string[] }
+
+/** The screen of a 2.1.296 Bash dialog with the rows of `box` between the 2 dashed rules, as the live check saw it. */
+function boxScreen(box: readonly string[], shape: Shape = {}): string {
+  const { description = DESCRIPTION, close = DASHED, after = [] } = shape
+  return [
+    '❯ Make the probe file.',
+    '',
+    '⏺ Bash(touch /tmp/gx.txt)',
+    '',
+    '─'.repeat(W),
+    ' Bash command',
+    ` ${TIP}`,
+    ...(description === null ? [] : [` ${description}`]),
+    DASHED,
+    ...box,
+    ...(close === null ? [] : [close]),
+    ...after,
+    ' Do you want to proceed?',
+    ' ❯ 1. Yes',
+    '   2. Yes, and always allow access to /tmp from this project',
+    '   3. Yes, and switch to auto mode · auto mode handles these prompts for you',
+    '   4. No',
+    '',
+    ' Esc to cancel · Tab to amend',
+  ].join('\n')
+}
+
+/** The gutter rows of 1 command line that wraps at the box width: each row but the last holds W - 3 characters. */
+function wrapped(line: string): string[] {
+  const rows: string[] = []
+  for (let at = 0; at < line.length; at += W - GUTTER.length) rows.push(`${GUTTER}${line.slice(at, at + W - GUTTER.length)}`)
+  return rows
+}
+
+/** The confirmed Bash request: its command and its description. */
+const bash = (command: string, choice: 'yes' | 'no' = 'yes', description = DESCRIPTION) => ({ tool: 'Bash', input: JSON.stringify({ command, description }), choice })
+const match = (box: readonly string[], command: string, shape?: Shape) => matchPermission(readScreen(boxScreen(box, shape)), bash(command))
+
+/** the wrap of the live check, cut to fit 99 columns: row 1 is the gutter and 96 characters, and the break falls inside a word */
+const ROW_1 = ` │ touch /private/tmp/scratch-0123456789abcdef/${'a'.repeat(50)}/s`
+const ROW_2 = ' │ cratchpad/god-live/plain/yes.txt'
+const LONG = `touch /private/tmp/scratch-0123456789abcdef/${'a'.repeat(50)}/scratchpad/god-live/plain/yes.txt`
+/** a command line of 202 characters: 3 rows, 96 + 96 + 10 */
+const LONGER = `touch /private/tmp/scratch-0123456789abcdef/${'b'.repeat(150)}/yes.txt`
+
+describe('matchPermission: the command box of 2.1.296', () => {
+  it('matches a short command on 1 plain row, for Yes and for No', () => {
+    expect(match([' touch /tmp/gx.txt'], 'touch /tmp/gx.txt')).toEqual(YES)
+    expect(matchPermission(readScreen(boxScreen([' touch /tmp/gx.txt'])), bash('touch /tmp/gx.txt', 'no'))).toEqual({ isMatch: true, digit: 4 })
+  })
+
+  it('joins a command line that wraps over 2 rows, when row 1 fills the box', () => {
+    expect([...ROW_1].length).toBe(W)
+    expect(wrapped(LONG)).toEqual([ROW_1, ROW_2])
+    expect(match([ROW_1, ROW_2], LONG)).toEqual(YES)
+  })
+
+  it('joins a command line that wraps over 3 rows, when rows 1 and 2 fill the box', () => {
+    expect(wrapped(LONGER).map((row) => [...row].length)).toEqual([W, W, 13])
+    expect(match(wrapped(LONGER), LONGER)).toEqual(YES)
+  })
+
+  it('matches a command of more lines: 1 plain row each, or gutter rows when 1 line wraps', () => {
+    expect(match([' cd /tmp', ' touch gx.txt'], 'cd /tmp\ntouch gx.txt')).toEqual(YES)
+    expect(match([...wrapped(LONG), ' │ ls /tmp'], `${LONG}\nls /tmp`)).toEqual(YES)
+    expect(match([' │ ls /tmp', ...wrapped(LONGER)], `ls /tmp\n${LONGER}`)).toEqual(YES)
+  })
+
+  it('keeps the old form with no box', () => {
+    const old = boxScreen([' touch /tmp/gx.txt']).replace(`${DASHED}\n`, '').replace(`${DASHED}\n`, '')
+    expect(matchPermission(readScreen(old), bash('touch /tmp/gx.txt'))).toEqual(YES)
+  })
+})
+
+describe('matchPermission: each box shape that refuses', () => {
+  it('refuses a row before the last that is 1 cell short of the box, or 1 cell wider', () => {
+    expect(match([ROW_1.slice(0, -1), ` │ s${ROW_2.slice(GUTTER.length)}`], LONG)).toEqual(CHANGED)
+    expect(match([`${ROW_1}s`, ` │ ${ROW_2.slice(GUTTER.length + 1)}`], LONG)).toEqual(CHANGED)
+    const [first = '', second = '', third = ''] = wrapped(LONGER)
+    expect(match([first, second.slice(0, -1), ` │ ${second.at(-1) ?? ''}${third.slice(GUTTER.length)}`], LONGER)).toEqual(CHANGED)
+  })
+
+  it('refuses an extra row in the box, with or without the gutter', () => {
+    expect(match([ROW_1, ROW_2, ' │ rm -rf build'], LONG)).toEqual(CHANGED)
+    expect(match([' touch /tmp/gx.txt', ' rm -rf build'], 'touch /tmp/gx.txt')).toEqual(CHANGED)
+  })
+
+  it('refuses a box with no closing rule, a closing rule of another width, and a third rule', () => {
+    expect(match([ROW_1, ROW_2], LONG, { close: null })).toEqual(CHANGED)
+    expect(match([' touch /tmp/gx.txt'], 'touch /tmp/gx.txt', { close: null })).toEqual(CHANGED)
+    expect(match([ROW_1, ROW_2], LONG, { close: '╌'.repeat(W - 1) })).toEqual(CHANGED)
+    expect(match([' touch /tmp/gx.txt', DASHED, ' rm -rf build'], 'touch /tmp/gx.txt')).toEqual(CHANGED)
+  })
+
+  it('refuses a cut command: a missing last row, a last row cut short, and a screen with fewer lines', () => {
+    expect(match([ROW_1], LONG)).toEqual(CHANGED)
+    expect(match([ROW_1, ' │ cratchpad/god-live/plain/ye…'], LONG)).toEqual(CHANGED)
+    expect(match(wrapped(LONG), `${LONG}\nls /tmp`)).toEqual(CHANGED)
+  })
+
+  it('refuses a command that only starts the same, on either side', () => {
+    expect(match([ROW_1, `${ROW_2}.bak`], LONG)).toEqual(CHANGED)
+    expect(match([ROW_1, ROW_2], `${LONG}.bak`)).toEqual(CHANGED)
+    expect(match([ROW_1, ROW_2], ROW_1.slice(GUTTER.length))).toEqual(CHANGED)
+    expect(match([' touch /tmp/gx.txt'], 'touch /tmp/gx')).toEqual(CHANGED)
+  })
+
+  it('refuses a gutter row in a box that does not wrap, and a plain row in a box that wraps', () => {
+    expect(match([' │ touch /tmp/gx.txt'], 'touch /tmp/gx.txt')).toEqual(CHANGED)
+    expect(match([...wrapped(LONG), ' ls /tmp'], `${LONG}\nls /tmp`)).toEqual(CHANGED)
+    expect(match([...wrapped(LONG), ' rm -rf build'], LONG)).toEqual(CHANGED)
+  })
+
+  it('refuses 2 lines that the screen shows as 1 wrapped line, and 1 line that the screen shows as 2', () => {
+    expect(match([ROW_1, ROW_2], `${ROW_1.slice(GUTTER.length)}\n${ROW_2.slice(GUTTER.length)}`)).toEqual(CHANGED)
+    expect(match([' touch /private', ' /tmp/gx.txt'], 'touch /private /tmp/gx.txt')).toEqual(CHANGED)
+  })
+
+  it('refuses a row between the closing rule and the question, a description in the box, and a command over the box', () => {
+    expect(match([' touch /tmp/gx.txt'], 'touch /tmp/gx.txt', { after: [' Permission rule Bash asks for this command.'] })).toEqual(CHANGED)
+    expect(match([` ${DESCRIPTION}`, ' touch /tmp/gx.txt'], 'touch /tmp/gx.txt', { description: null })).toEqual(CHANGED)
+    expect(match([], 'touch /tmp/gx.txt', { description: `${DESCRIPTION}\n touch /tmp/gx.txt` })).toEqual(CHANGED)
+  })
+})
+
+describe('matchPermission: a box after the text cleaner of the deliver path', () => {
+  const HOME = '/tmp/god-home'
+  const clean = (text: string): string => cleanText(text, HOME)
+  /** `n` characters in runs of 4 letters, so no rule of the redaction takes them for a secret or a blob */
+  const filler = (n: number): string => 'word-'.repeat(Math.ceil(n / 5)).slice(0, n)
+  /** The screen and the input as the deliver path compares them: each through the text cleaner of the home folder. */
+  const cleaned = (command: string) => matchPermission(readScreen(clean(boxScreen(wrapped(command)))), { tool: 'Bash', input: JSON.stringify(cleanValue({ command, description: DESCRIPTION }, clean)), choice: 'yes' as const })
+
+  it('matches when the cleaner changes only the last row of the wrap: like with like', () => {
+    expect(wrapped(`touch ${filler(90)} ${HOME}/yes.txt`)[1]).toBe(`${GUTTER} ${HOME}/yes.txt`)
+    expect(cleaned(`touch ${filler(90)} ${HOME}/yes.txt`)).toEqual(YES)
+  })
+
+  it('refuses a home folder that a row before the last holds whole, so the row no longer fills the box', () => {
+    expect(cleaned(`touch ${HOME}/${filler(90)}/yes.txt`)).toEqual(CHANGED)
+  })
+
+  it('refuses a home folder that the wrap splits: the screen keeps it raw, and the input shows ~', () => {
+    expect(wrapped(`touch ${filler(85)}${HOME}/yes.txt`)[1]).toBe(`${GUTTER}god-home/yes.txt`)
+    expect(cleaned(`touch ${filler(85)}${HOME}/yes.txt`)).toEqual(CHANGED)
+  })
+
+  it('refuses a run of 60 or more letters, digits and slashes in a row before the last: the redaction masks it as a blob', () => {
+    expect(clean(LONG)).not.toBe(LONG)
+    expect(cleaned(LONG)).toEqual(CHANGED)
+  })
+})

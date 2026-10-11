@@ -3,14 +3,17 @@
  * and checks it against what the person confirmed. Every rule fails closed: a screen that the rules cannot read
  * the way Claude Code draws it gives a refusal, and the key path sends nothing.
  *
- * The layout that the rules read (Claude Code 2.1.295 on a Unicode terminal):
+ * The layout that the rules read (Claude Code 2.1.295 and 2.1.296 on a Unicode terminal):
  * - a question dialog: a chip row `☐ <header>`, the question, then 1 row for each option: `❯ 1. <label>` on the
  *   row with the cursor, `  1. <label>` on the others, each with its description rows under it. Then
  *   `<n>. Type something.` and, below a rule, `<n+1>. Chat about this`. A dialog with more than 1 question, or one
  *   that takes more than 1 selection, shows the arrows and a Submit tab on its chip row, and a multi select writes
  *   `Type something` with no period.
  * - a shell permission dialog: a rule, the title `Bash command`, the description, the command rows, the question
- *   `Do you want to proceed?`, then the numbered options. Only an option labeled exactly `Yes` or `No` counts.
+ *   `Do you want to proceed?`, then the numbered options. Only an option labeled exactly `Yes` or `No` counts. From
+ *   2.1.296 the command rows sit in a box between 2 dashed rules (U+254C) as wide as the tab. A command line that fits
+ *   takes 1 plain row. A wider line wraps at the box width, inside a word, and then each command row starts with the
+ *   gutter ` │ `, so each row of a wrap but the last ends at the box width.
  * - the prompt: the input box, a rule row, `❯` and a space (a no-break space in this build) and the typed text,
  *   then a rule row. The transcript shows the earlier prompts in the same form, so only the last prompt row counts.
  * - between 2 steps of a prompt: the input box, from the last prompt row (a rule row right above it) down to the next
@@ -71,7 +74,10 @@ export type QuestionDialog = {
 /** A permission dialog: the rows of its request, its question and its numbered options. */
 export type PermissionDialog = {
   kind: 'permission'
-  /** the rows between the rule over the dialog and its question, each trimmed, blank rows left out; absent with no rule */
+  /**
+   * the rows between the rule over the dialog and its question as the screen shows them: only the padding spaces at
+   * the end of each row removed, blank rows kept; absent with no rule
+   */
   request?: readonly string[]
   /** the question row, trimmed */
   question: string
@@ -109,6 +115,10 @@ const RULE_ROW = /^ *─{3,}/u
 const FULL_RULE = /^ *─+$/u
 const TYPE_SOMETHING = /^Type something\.?$/
 const BASH_TITLE = /^Bash command(?: \([^()]*\))?$/
+/** a rule of the command box of a shell dialog: dashed (U+254C) */
+const DASHED_RULE = /^ *╌{3,}$/u
+/** a command row of a box that wraps: the gutter, then the text of the row (none on the row of an empty line) */
+const GUTTER_ROW = /^ │(?: (.*))?$/u
 /** how far up from its question a permission dialog looks for its rule */
 const REQUEST_ROWS = 40
 /** the columns that a row may lose to the padding of its dialog, when the width rule asks if a word fits */
@@ -224,11 +234,11 @@ function questionAt(rows: readonly string[], c: number, width: number): Question
   }
 }
 
-/** The rows between the nearest rule over the question row q and q, or undefined when no rule is near. */
+/** The rows between the nearest rule over the question row q and q, as the screen shows them, or undefined when no rule is near. */
 function requestRows(rows: readonly string[], q: number): string[] | undefined {
   for (let i = q - 1; i >= Math.max(0, q - REQUEST_ROWS); i--) {
     const row = rows[i] ?? ''
-    if (RULE_ROW.test(row)) return rows.slice(i + 1, q).map(trim).filter((text) => text !== '')
+    if (RULE_ROW.test(row)) return rows.slice(i + 1, q)
     if (optionRow(rows, i) || PROMPT_ROW.test(row)) return undefined
   }
   return undefined
@@ -309,8 +319,11 @@ export function matchAnswer(view: ScreenView, want: Pick<AnswerIntent, 'header' 
   return { isMatch: true, digit: option.digit }
 }
 
-/** The rows that a shell permission dialog shows for a request: its description rows, then its command rows. */
-function requestOf(tool: string, input: string | undefined): string[] | undefined {
+/** What a shell permission dialog shows for a request: its description lines and its command lines, each trimmed, empty lines left out. */
+type ShellRequest = { description: readonly string[]; command: readonly string[] }
+
+/** The request of the confirmed tool and input, or undefined when it is not a Bash command. */
+function requestOf(tool: string, input: string | undefined): ShellRequest | undefined {
   if (tool !== 'Bash' || input === undefined) return undefined
   let parsed: unknown
   try {
@@ -322,22 +335,67 @@ function requestOf(tool: string, input: string | undefined): string[] | undefine
   if (typeof command !== 'string') return undefined
   const rowsOf = (text: string): string[] => text.split('\n').map(trim).filter((row) => row !== '')
   const commandRows = rowsOf(command)
-  return commandRows.length > 0 ? [...(typeof description === 'string' ? rowsOf(description) : []), ...commandRows] : undefined
+  return commandRows.length > 0 ? { description: typeof description === 'string' ? rowsOf(description) : [], command: commandRows } : undefined
 }
 
 /** True when the row is the auto mode tip that this build draws under the title. */
 const isAutoModeTip = (row: string | undefined): boolean => row === 'Tip: auto mode handles these prompts for you \u2014 choose "switch to auto mode" below'
 
+const sameRows = (rows: readonly string[], expected: readonly string[]): boolean => rows.length === expected.length && rows.every((row, k) => row === expected[k])
+
+/** True when the rows are the title, then (the tip), then exactly the expected rows, each trimmed, blank rows left out. */
+function showsHead(rows: readonly string[], expected: readonly string[]): boolean {
+  const [title, ...rest] = rows.map(trim).filter((row) => row !== '')
+  if (title === undefined || !BASH_TITLE.test(title)) return false
+  return sameRows(isAutoModeTip(rest[0]) ? rest.slice(1) : rest, expected)
+}
+
 /**
- * True when the dialog is a shell permission dialog for exactly this request: the title, then (the tip), then the
- * description and command rows and no other row, then the question. So no row of another request, no reason row and
- * no wrapped or cut command row passes.
+ * The command lines of a box `width` columns wide, each trimmed, empty lines left out, or undefined when a row is wider
+ * than the box. With no row that wraps, each row is 1 line. A row with the gutter that fills the box shows a wrap: then
+ * every row that is not blank must have the gutter, the gutter goes, and a row that fills the box joins the row under
+ * it. A row of a wrap that does not fill the box (a wide letter or a space at the edge) ends its line there.
+ *
+ * The deliver path cleans the screen as 1 text and the input value by value (src/god/act/deliver.ts, ports.clean),
+ * and this compares the 2 cleaned texts. A home folder that a row holds whole shows as ~ on both sides, but it makes
+ * that row narrower, so the row no longer fills the box. A home folder that a wrap splits stays raw on the screen and
+ * shows as ~ in the input. A secret or a blob that the redaction masks changes a row the same way. In each case the
+ * lines differ and the match refuses: it fails closed, and no rule tries to undo the cleaner.
  */
-function showsRequest(dialog: PermissionDialog, expected: readonly string[]): boolean {
-  const [title, ...rest] = dialog.request ?? []
-  if (dialog.question !== 'Do you want to proceed?' || title === undefined || !BASH_TITLE.test(title)) return false
-  const body = isAutoModeTip(rest[0]) ? rest.slice(1) : rest
-  return body.length === expected.length && body.every((row, k) => row === expected[k])
+function boxLines(rows: readonly string[], width: number): string[] | undefined {
+  const widths = rows.map(columns)
+  if (widths.some((cells) => cells !== undefined && cells > width)) return undefined
+  const fills = (k: number): boolean => widths[k] === width && GUTTER_ROW.test(rows[k] ?? '')
+  if (!rows.some((_, k) => fills(k))) return rows.map(trim).filter((row) => row !== '')
+  if (rows.some((row) => !isBlank(row) && !GUTTER_ROW.test(row))) return undefined
+  const lines: string[] = []
+  let line = ''
+  for (const [k, row] of rows.entries()) {
+    line += GUTTER_ROW.exec(row)?.[1] ?? ''
+    if (fills(k) && GUTTER_ROW.test(rows[k + 1] ?? '')) continue
+    lines.push(trim(line))
+    line = ''
+  }
+  return lines.filter((text) => text !== '')
+}
+
+/**
+ * True when the dialog is a shell permission dialog for exactly this request. With no box: the title, then (the tip),
+ * then the description and command rows and no other row, then the question. With a box: the title, (the tip) and the
+ * description rows, then 1 dashed rule, the command rows, 1 dashed rule of the same width, and then only blank rows
+ * before the question. So no row of another request, no reason row, no row of another width in a wrap, no box with a
+ * missing rule and no cut command passes.
+ */
+function showsRequest(dialog: PermissionDialog, expected: ShellRequest): boolean {
+  const rows = dialog.request
+  if (dialog.question !== 'Do you want to proceed?' || rows === undefined) return false
+  const rules = rows.flatMap((row, k) => (DASHED_RULE.test(row) ? [k] : []))
+  if (rules.length === 0) return showsHead(rows, [...expected.description, ...expected.command])
+  const [open = -1, close = -1] = rules
+  const width = columns(rows[open] ?? '')
+  if (rules.length !== 2 || width === undefined || columns(rows[close] ?? '') !== width || rows.slice(close + 1).some((row) => !isBlank(row))) return false
+  const lines = boxLines(rows.slice(open + 1, close), width)
+  return lines !== undefined && showsHead(rows.slice(0, open), expected.description) && sameRows(lines, expected.command)
 }
 
 /**

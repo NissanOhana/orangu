@@ -95,7 +95,7 @@ describe('readScreen: a permission dialog and the prompt', () => {
       [3, 'Yes, and switch to auto mode', false],
       [4, 'No', false],
     ])
-    expect(dialog.request).toEqual(['Bash command', 'Make an empty probe file', 'touch probe-yes.txt'])
+    expect(dialog.request).toEqual([' Bash command', '', ' Make an empty probe file', '', '   touch probe-yes.txt', ''])
   })
 
   it('reads the last prompt row: empty after a no-break space, empty after a plain space, or the typed text', () => {

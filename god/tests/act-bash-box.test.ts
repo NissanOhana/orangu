@@ -1,0 +1,75 @@
+// The key path on the Bash dialog of Claude Code 2.1.296, over the fake machine of act-machine.ts. The dialog draws the
+// command between 2 dashed rules (U+254C) as wide as the tab, here 99 columns: a command that fits takes 1 plain row,
+// and a wider command wraps at the box width with the gutter ` │ ` on each row. 1 then y reads the screen again and
+// sends exactly 1 send of the digit 1, which answers the dialog. Every screen and every command is synthetic.
+import { expect, test } from 'claude-code/testing'
+import { SURFACES, bash, prompt } from './fake-host'
+import { SF, WS, begin, cmuxSince, detailText, lines, press, readScreen, select, sendText } from './act-machine'
+
+const W = 99
+const DASHED = '╌'.repeat(W)
+const GUTTER = ' │ '
+/** a command of 119 characters: row 1 takes 96 of them after the gutter and fills the box, row 2 takes 23 */
+const LONG = `touch /tmp/god-test/plain/${'word-'.repeat(16)}probe/yes.txt`
+
+/** The screen of a 2.1.296 Bash dialog with the rows of `box` between the 2 dashed rules. */
+function boxScreen(command: string, box: readonly string[]): string {
+  return [
+    '❯ Make the probe file.',
+    '',
+    `⏺ Bash(${command.slice(0, 40)})`,
+    '',
+    '─'.repeat(W),
+    ' Bash command',
+    ' Tip: auto mode handles these prompts for you — choose "switch to auto mode" below',
+    ' Make an empty probe file',
+    DASHED,
+    ...box,
+    DASHED,
+    ' Do you want to proceed?',
+    ' ❯ 1. Yes',
+    '   2. Yes, and always allow access to probe/ from this project',
+    '   3. Yes, and switch to auto mode · auto mode handles these prompts for you',
+    '   4. No',
+    '',
+    ' Esc to cancel · Tab to amend',
+  ].join('\n')
+}
+
+for (const surface of SURFACES) {
+  test(`${surface}: 1 then y on a Bash dialog with the command in a dashed box records read-screen and then exactly 1 send -- 1`, async ($, on) => {
+    const { machine, calls, ui } = await begin($, on, surface)
+    machine.cmux!.screens![SF.perm] = boxScreen('touch probe-yes.txt', [' touch probe-yes.txt'])
+    await select($, 'ses-perm')
+    expect((await ui.find({ key: 'permission:yes' }))?.props['hotkey']).toBe('1')
+    await press(ui, 'permission:yes')
+    expect(await lines(ui)).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '1')])
+    expect(machine.cmux!.answered).toEqual({ [SF.perm]: ['1'] })
+  })
+
+  test(`${surface}: 1 then y on a boxed Bash dialog whose command wraps over 2 gutter rows sends exactly 1 send -- 1`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    // the session asks to run a longer command: the next refresh reads the new call
+    const perm = machine.sessions[2]!
+    perm.transcript = [prompt('Make the probe file.', Date.now() - 90_000), bash('toolu_b2', LONG, 'Make an empty probe file', Date.now() - 1000)]
+    perm.transcriptMtimeMs = Date.now()
+    perm.fileMtimeMs += 1000
+    const rows = [`${GUTTER}${LONG.slice(0, W - GUTTER.length)}`, `${GUTTER}${LONG.slice(W - GUTTER.length)}`]
+    expect(rows.map((row) => [...row].length)).toEqual([W, 26])
+    machine.cmux!.screens![SF.perm] = boxScreen(LONG, rows)
+    await clock.advance(2000)
+    await select($, 'ses-perm')
+    await press(ui, 'permission:yes')
+    const bar = await lines(ui)
+    expect(bar).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
+    // the bar holds the new call, so the y below checks the screen against the long command
+    expect(detailText(bar), bar.join('\n')).toContain('word-probe/yes.txt')
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '1')])
+    expect(machine.cmux!.answered).toEqual({ [SF.perm]: ['1'] })
+  })
+}
