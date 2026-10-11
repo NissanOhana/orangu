@@ -83,7 +83,10 @@ export const backgroundLines = [
   JSON.stringify({ type: 'user', timestamp: at(T0 - 79_000), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_server', content: 'Command running in background with ID: b1' }] }, toolUseResult: { backgroundTaskId: 'b1' } }),
 ]
 
-const ran = (stdout: string, exitCode = 0): RunResult => ({ exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false })
+const ran = (stdout: string, exitCode = 0, stderr = ''): RunResult => ({ exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false })
+
+/** Named keys that the real cmux send-key takes. It exits 1 on every other key, a digit or a letter among them. */
+const NAMED_KEYS = new Set(['enter', 'shift+enter', 'tab', 'escape', 'down', 'backspace'])
 
 /**
  * What a test changes on the machine: `failing` names the cmux verbs that exit 1, `onRun` can move the clock while a
@@ -128,6 +131,7 @@ export function machine(target: Target, options: MachineOptions = {}) {
       }
       if (command === 'cmux' && options.failing?.includes(verb)) return ran('', 1)
       if (command === 'cmux' && verb === 'read-screen') return ran(typeof target.screen === 'string' ? target.screen : target.screen(typed))
+      if (command === 'cmux' && verb === 'send-key' && !NAMED_KEYS.has(argv.at(-1) ?? '')) return ran('', 1, 'Error: invalid_params: Unknown key\n')
       if (command === 'cmux' && (verb === 'send' || verb === 'send-key')) {
         const value = argv.at(-1) ?? ''
         typed = verb === 'send' ? typed + value : value === 'shift+enter' ? `${typed}\n` : ''

@@ -2,6 +2,8 @@
 // pane makes, answered by hooks beneath the plugin (the store in memory too), and each call recorded. Every value is synthetic: the home
 // folder is /tmp/god-home and the repos live under /tmp/god-test. A machine with no cmux answers no cmux call, so ps
 // does not run; a machine with a cmux answers its tree, ps in UTC, the jump calls and the screen of each tab.
+// Its cmux keys work as the real cmux 0.64 keys do: send-key takes only a named key and exits 1 on a digit or a
+// letter, and a send of 1 digit answers the dialog that the screen of the surface shows.
 // A peer message goes to a session.send hook that records it and says it was delivered.
 // screenOf draws a pane tree as text lines, the way the terminal paints it: a plain Button with a hotkey shows
 // `<key>: <label>`, the columns of a row Box sit side by side, each padded to its width.
@@ -42,9 +44,11 @@ export type FakeCmux = {
   screens?: Record<string, string | ((typed: string) => string)>
   /** the text that send and send-key typed into the input box of each surface so far; enter empties it */
   typed?: Record<string, string>
-  /** runs after each send or send-key, with the surface and the count of keys so far: a test changes the machine there */
+  /** the digits that a send gave to the open dialog of each surface so far, in order */
+  answered?: Record<string, string[]>
+  /** runs after each send or send-key that cmux took, with the surface and the count of keys so far: a test changes the machine there */
   onKey?: (surface: string, keys: number) => void
-  /** the count of send and send-key calls so far */
+  /** the count of send and send-key calls that cmux took so far */
   keyCount?: number
   /** the cmux subcommands that exit 1 */
   failing?: string[]
@@ -91,7 +95,7 @@ const slug = (cwd: string): string => cwd.replace(/[^A-Za-z0-9-]/g, '-')
 export const transcriptPath = (session: Pick<FakeSession, 'cwd' | 'sessionId'>): string => `${HOME}/.claude/projects/${slug(session.cwd)}/${session.sessionId}.jsonl`
 const registryPath = (pid: number): string => `${HOME}/.claude/sessions/${pid}.json`
 
-const ran = (stdout: string, exitCode = 0) => ({ value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } })
+const ran = (stdout: string, exitCode = 0, stderr = '') => ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
 
 /** The process start of every PID that the fake ps gives, in UTC. */
 export const PS_START = 'Fri Oct  9 08:00:00 2026'
@@ -209,6 +213,11 @@ export function installMachine(on: On, machine: Machine): Calls {
 /** The value after a flag of an argv. */
 const flagValue = (argv: readonly string[], flag: string): string | undefined => argv[argv.indexOf(flag) + 1]
 
+/** Named keys that the real cmux send-key takes. It exits 1 on every other key, a digit or a letter among them. */
+const NAMED_KEYS = new Set(['enter', 'shift+enter', 'tab', 'escape', 'down', 'backspace'])
+/** The last row of an open dialog of Claude Code: a question and a permission dialog both end with it. */
+const DIALOG_END = /Esc to cancel/
+
 /** What the fake cmux gives: its methods, its tree of the session tabs, the screen of a surface, and 0 for a jump. */
 function cmuxRun(cmux: FakeCmux, argv: readonly string[]) {
   const [verb = ''] = argv
@@ -226,14 +235,19 @@ function cmuxRun(cmux: FakeCmux, argv: readonly string[]) {
   }
   const surface = flagValue(argv, '--surface') ?? ''
   const typed = (cmux.typed ??= {})
-  if (verb === 'read-screen') {
+  const screenNow = (): string => {
     const screen = cmux.screens?.[surface] ?? ''
-    return ran(typeof screen === 'string' ? screen : screen(typed[surface] ?? ''))
+    return typeof screen === 'string' ? screen : screen(typed[surface] ?? '')
   }
+  if (verb === 'read-screen') return ran(screenNow())
+  const value = argv.at(-1) ?? ''
+  if (verb === 'send-key' && !NAMED_KEYS.has(value)) return ran('', 1, 'Error: invalid_params: Unknown key\n')
   if (verb === 'send' || verb === 'send-key') {
-    const value = argv.at(-1) ?? ''
     const before = typed[surface] ?? ''
-    typed[surface] = verb === 'send' ? before + value : value === 'shift+enter' ? `${before}\n` : value === 'enter' ? '' : before
+    if (verb === 'send' && /^[0-9]$/.test(value) && DIALOG_END.test(screenNow())) {
+      const answered = (cmux.answered ??= {})
+      answered[surface] = [...(answered[surface] ?? []), value]
+    } else typed[surface] = verb === 'send' ? before + value : value === 'shift+enter' ? `${before}\n` : value === 'enter' ? '' : before
     cmux.keyCount = (cmux.keyCount ?? 0) + 1
     cmux.onKey?.(surface, cmux.keyCount)
   }

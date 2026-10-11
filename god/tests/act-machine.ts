@@ -93,7 +93,9 @@ export type Calls = ReturnType<typeof installMachine>
 export const cmuxSince = (calls: Calls, from: number): string[][] => calls.runs.slice(from).flatMap((run) => (run.argv[0] === 'cmux' ? [[...run.argv]] : []))
 export const keysSince = (calls: Calls, from: number): string[][] => cmuxSince(calls, from).filter((argv) => KEY_VERBS.includes(argv[1] ?? ''))
 export const readScreen = (ws: string, sf: string): string[] => ['cmux', 'read-screen', '--workspace', ws, '--surface', sf, '--lines', '40']
+/** a send-key argv: the real cmux takes only a named key, such as enter or shift+enter, and exits 1 on a digit */
 export const sendKey = (ws: string, sf: string, key: string): string[] => ['cmux', 'send-key', '--workspace', ws, '--surface', sf, '--', key]
+/** a send argv: a line of a prompt, or the digit that answers a dialog */
 export const sendText = (ws: string, sf: string, text: string): string[] => ['cmux', 'send', '--workspace', ws, '--surface', sf, '--', text]
 export const has = (shown: readonly string[], part: string): boolean => shown.some((line) => line.includes(part))
 /** The text of the detail column of the wide pane: the part of each line after the column rule, joined with 1 space. */

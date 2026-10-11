@@ -73,15 +73,15 @@ const refused = (refusal: DeliverRefusal): DeliverPlan => ({ kind: 'refuse', ref
 const CHANGED = refused('screen-changed')
 
 describe('planDelivery: the keys it sends', () => {
-  it('answers a question with the option digit alone, and no Enter', () => {
-    expect(plan(ANSWER, screen('question'))).toEqual({ kind: 'send', steps: [sendKey('1')] })
-    expect(plan({ ...ANSWER, option: 3, label: 'Blue' }, screen('question'))).toEqual({ kind: 'send', steps: [sendKey('3')] })
+  it('answers a question with the option digit alone as typed text, since cmux send-key takes no digit, and no Enter', () => {
+    expect(plan(ANSWER, screen('question'))).toEqual({ kind: 'send', steps: [sendText('1')] })
+    expect(plan({ ...ANSWER, option: 3, label: 'Blue' }, screen('question'))).toEqual({ kind: 'send', steps: [sendText('3')] })
   })
 
   it('answers a permission with the digit of Yes or No on the screen, and follows No when it moves', () => {
-    expect(plan(permission('yes'), screen('permission'))).toEqual({ kind: 'send', steps: [sendKey('1')] })
-    expect(plan(permission('no'), screen('permission'))).toEqual({ kind: 'send', steps: [sendKey('4')] })
-    expect(plan(permission('no'), screen('permission-older'))).toEqual({ kind: 'send', steps: [sendKey('3')] })
+    expect(plan(permission('yes'), screen('permission'))).toEqual({ kind: 'send', steps: [sendText('1')] })
+    expect(plan(permission('no'), screen('permission'))).toEqual({ kind: 'send', steps: [sendText('4')] })
+    expect(plan(permission('no'), screen('permission-older'))).toEqual({ kind: 'send', steps: [sendText('3')] })
   })
 
   it('sends a 2-line prompt as exactly send, shift+enter, send, enter', () => {
@@ -246,7 +246,7 @@ describe('planDelivery: a question that the model asks again', () => {
 
   it('refuses a changed description even with fresh facts that keep the confirmed id', () => {
     expect(plan(YES, read, asks(deploy('toolu_deploy_1', 'Deploy to staging.')))).toEqual(CHANGED)
-    expect(plan(YES, read, asks(deploy('toolu_deploy_1', 'Deploy to production.')))).toEqual({ kind: 'send', steps: [sendKey('1')] })
+    expect(plan(YES, read, asks(deploy('toolu_deploy_1', 'Deploy to production.')))).toEqual({ kind: 'send', steps: [sendText('1')] })
   })
 })
 
@@ -280,7 +280,7 @@ describe('planDelivery: the screen read', () => {
   it('takes a UUID ref for the workspace and the surface', () => {
     const workspaceRef = 'A019816D-6F57-4D6F-A83C-CD7AF2FAD8E4'
     const surfaceRef = '0f8c2b1e-4a7d-4c3e-9b6a-1d2e3f405162'
-    const steps = [['cmux', 'send-key', '--workspace', workspaceRef, '--surface', surfaceRef, '--', '1']]
+    const steps = [['cmux', 'send', '--workspace', workspaceRef, '--surface', surfaceRef, '--', '1']]
     expect(plan(ANSWER, screen('question', { workspaceRef, surfaceRef }))).toEqual({ kind: 'send', steps })
     expect(plan(ANSWER, screen('question', { workspaceRef: `${workspaceRef}0` }))).toEqual(refused('no-tab'))
   })

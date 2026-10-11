@@ -73,7 +73,7 @@ describe('deliver: the checks before any read', () => {
 })
 
 describe('deliver: the fresh reads, then the plan', () => {
-  it('reads the registry file and the transcript of the target, then its screen, then sends the digit alone', async () => {
+  it('reads the registry file and the transcript of the target, then its screen, then sends the digit alone with cmux send', async () => {
     const fake = machine(asks())
     const result = await deliver(fake.ports, request(ANSWER))
     expect(result.outcome).toMatchObject({ status: 'sent', intent: ANSWER })
@@ -82,8 +82,8 @@ describe('deliver: the fresh reads, then the plan', () => {
     expect(fake.log.findIndex((line) => line.startsWith('run tail'))).toBeLessThan(screenAt)
     expect(fake.log.indexOf(`read ${REGISTRY}`)).toBeLessThan(screenAt)
     expect(screenRuns(fake.runs)).toEqual([['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40']])
-    expect(keyRuns(fake.runs)).toEqual([sendKey('1')])
-    expect(fake.log.at(-1)).toBe(`run ${sendKey('1').join(' ')}`)
+    expect(keyRuns(fake.runs)).toEqual([sendText('1')])
+    expect(fake.log.at(-1)).toBe(`run ${sendText('1').join(' ')}`)
   })
 
   it('takes the time of the facts from the host clock before the reads, so slow reads make the plan refuse', async () => {
@@ -106,9 +106,8 @@ describe('deliver: the fresh reads, then the plan', () => {
     await deliver(fake.ports, request(ANSWER))
     await deliver(fake.ports, request(ANSWER))
     expect(screenRuns(fake.runs)).toHaveLength(2)
-    expect(fake.runs.map((argv) => argv[1])).toEqual(expect.arrayContaining(['read-screen', 'send-key']))
     const order = fake.runs.filter((argv) => argv[0] === 'cmux').map((argv) => argv[1])
-    expect(order).toEqual(['read-screen', 'send-key', 'read-screen', 'send-key'])
+    expect(order).toEqual(['read-screen', 'send', 'read-screen', 'send'])
   })
 
   it('refuses a screen that changed, and keeps the fresh screen in the outcome', async () => {
@@ -136,7 +135,7 @@ describe('deliver: the fresh reads, then the plan', () => {
   it('answers a Bash permission with the digit of the exact No on the screen', async () => {
     const fake = machine(askPermission())
     expect((await deliver(fake.ports, request(PERMISSION))).outcome.status).toBe('sent')
-    expect(keyRuns(fake.runs)).toEqual([sendKey('4')])
+    expect(keyRuns(fake.runs)).toEqual([sendText('4')])
   })
 
   it('types a 2-line prompt as send, shift+enter, send, enter, and reads the registry and the screen again before each next step', async () => {

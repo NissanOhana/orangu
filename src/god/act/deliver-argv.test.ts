@@ -1,8 +1,9 @@
 /**
- * The host of the executor takes only the argv forms that the key path runs: cmux send of 1 text and send-key of 1 key
- * that the plan sends, both with the refs and `--`; cmux read-screen of 1 tab; ps of 1 PID in UTC; and the 3 reads of
- * the transcript (stat of the inode, tail from a byte, head of at most 64 KiB) of a .jsonl file under the projects
- * folder of the home. Each pin has a test with the argv that only that pin refuses.
+ * The host of the executor takes only the argv forms that the key path runs: cmux send of 1 text (a line of a prompt
+ * or the digit of an option) and send-key of enter or shift+enter, both with the refs and `--`; cmux read-screen of 1
+ * tab; ps of 1 PID in UTC; and the 3 reads of the transcript (stat of the inode, tail from a byte, head of at most
+ * 64 KiB) of a .jsonl file under the projects folder of the home. Each pin has a test with the argv that only that
+ * pin refuses.
  */
 import { describe, expect, it } from 'vitest'
 import { HOME, SF, TRANSCRIPT, WS, asks, machine, sendKey, sendText } from '../../../test/fixtures/god/deliver-machine.js'
@@ -14,7 +15,8 @@ const PROJECTS = `${HOME}/.claude/projects`
 describe('isDeliverArgv: the only commands of the executor', () => {
   it('takes cmux send and send-key with both refs and -- right before 1 value, the screen read, ps and the transcript reads', () => {
     for (const argv of [
-      sendKey('1'),
+      sendText('1'),
+      sendKey('enter'),
       sendText('--surface x'),
       ['cmux', 'read-screen', '--workspace', WS, '--surface', SF, '--lines', '40'],
       ['stat', '-f', '%i %N', TRANSCRIPT],
@@ -51,9 +53,9 @@ describe('isDeliverArgv: the only commands of the executor', () => {
     }
   })
 
-  it('takes send-key only with a key that the plan sends: a digit 1 to 9, enter or shift+enter', () => {
-    for (const key of ['1', '5', '9', 'enter', 'shift+enter']) expect(takes(sendKey(key)), key).toBe(true)
-    for (const key of ['0', '10', 'escape', 'esc', 'tab', 'shift+tab', 'ctrl+c', 'Enter', 'y', 'up', 'backspace', '', ' 1']) expect(takes(sendKey(key)), JSON.stringify(key)).toBe(false)
+  it('takes send-key only with a key that the plan sends: enter or shift+enter, and no digit, which cmux send-key rejects', () => {
+    for (const key of ['enter', 'shift+enter']) expect(takes(sendKey(key)), key).toBe(true)
+    for (const key of ['1', '5', '9', '0', '10', 'escape', 'esc', 'tab', 'shift+tab', 'ctrl+c', 'Enter', 'y', 'up', 'backspace', '', ' 1']) expect(takes(sendKey(key)), JSON.stringify(key)).toBe(false)
   })
 
   it('takes stat only as the inode read of 1 transcript', () => {
@@ -118,16 +120,16 @@ describe('deliverHost: the host of the executor', () => {
   it('runs an argv that isDeliverArgv takes, and refuses any other one before the host port sees it', async () => {
     const fake = machine(asks())
     const host = deliverHost(fake.ports.host, HOME)
-    await host.run(sendKey('1'))
-    for (const argv of [['cmux', 'notify', '--title', 't', '--body', 'b'], ['cmux', 'select-workspace', '--workspace', WS], ['git', 'push'], ['claude', '-p', 'hi'], sendKey('escape'), ['tail', '-c', '+1', '/etc/passwd']]) {
+    await host.run(sendText('1'))
+    for (const argv of [['cmux', 'notify', '--title', 't', '--body', 'b'], ['cmux', 'select-workspace', '--workspace', WS], ['git', 'push'], ['claude', '-p', 'hi'], sendKey('1'), sendKey('escape'), ['tail', '-c', '+1', '/etc/passwd']]) {
       await expect(host.run(argv)).rejects.toThrow(REFUSED_DELIVER_ARGV)
     }
     // ps runs only in UTC, and no other command sets the environment
     const ps = ['ps', '-o', 'pid=,tty=,lstart=', '-p', '4242']
     await expect(host.run(ps)).rejects.toThrow(REFUSED_DELIVER_ARGV)
     await expect(host.run(ps, { env: { TZ: 'Asia/Jerusalem' } })).rejects.toThrow(REFUSED_DELIVER_ARGV)
-    await expect(host.run(sendKey('1'), { env: { TZ: 'UTC' } })).rejects.toThrow(REFUSED_DELIVER_ARGV)
+    await expect(host.run(sendText('1'), { env: { TZ: 'UTC' } })).rejects.toThrow(REFUSED_DELIVER_ARGV)
     await host.run(ps, { env: { TZ: 'UTC' } })
-    expect(fake.runs).toEqual([sendKey('1'), ps])
+    expect(fake.runs).toEqual([sendText('1'), ps])
   })
 })

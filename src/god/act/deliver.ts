@@ -20,10 +20,10 @@
  *    nextStepRefusal checks the rest. The box shows through the text cleaner, so the typed text goes through it too.
  *    A check that refuses or fails stops. Before each step it reads the cancel mark of c. A stop keeps the newest
  *    screen, and no later step goes out.
- * 5. Its host runs only cmux send and send-key in the exact form of the plan (send-key only with a key that the plan
- *    sends), cmux read-screen of 1 tab, ps of 1 PID in UTC, and the 3 reads of 1 transcript under the projects folder
- *    in their exact forms (stat, tail, head). Any other command, another cmux subcommand among them, is refused before
- *    the engine sees it: the host port checks only the command name.
+ * 5. Its host runs only cmux send and send-key in the exact form of the plan (send for a text or a digit, send-key
+ *    only for enter or shift+enter), cmux read-screen of 1 tab, ps of 1 PID in UTC, and the 3 reads of 1 transcript
+ *    under the projects folder in their exact forms (stat, tail, head). Any other command, another cmux subcommand
+ *    among them, is refused before the engine sees it: the host port checks only the command name.
  * 6. After the last step it gives the check of the next refreshes (src/god/act/deliver-check.ts), timed on the clock
  *    of the collector, which the refresh stats use.
  * A peer message has no keys: deliverPeer sends it through the engine with no screen check, and the confirm bar is its
@@ -52,8 +52,11 @@ export type FailureReason = 'facts-unread' | 'screen-unread' | 'step-failed' | '
 /** The ps argv of the process check: the PID, the TTY and the start time of 1 PID. */
 const PS_HEAD: readonly string[] = ['ps', '-o', 'pid=,tty=,lstart=', '-p']
 
-/** The keys that the plan sends (src/god/act/deliver-plan.ts): the digit of an option, and the 2 keys of a prompt. */
-const PLAN_KEYS: ReadonlySet<string> = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9', 'enter', 'shift+enter'])
+/**
+ * The keys that the plan sends with send-key (src/god/act/deliver-plan.ts): the 2 keys of a prompt. The digit of an
+ * option goes out with send, because cmux send-key exits 1 on a digit.
+ */
+const PLAN_KEYS: ReadonlySet<string> = new Set(['enter', 'shift+enter'])
 
 /** True when the 2 refs are in the forms that the key guard takes. */
 const isRefs = (workspaceRef: string | undefined, surfaceRef: string | undefined): boolean => WORKSPACE_REF.test(workspaceRef ?? '') && SURFACE_REF.test(surfaceRef ?? '')
@@ -76,9 +79,9 @@ function isTranscriptRead(argv: readonly string[], home: string): boolean {
 }
 
 /**
- * True when the executor may run the argv: `cmux send` of 1 text or `cmux send-key` of 1 key that the plan sends, each
- * with both refs and `--` right before the value, `cmux read-screen` of 1 tab, ps of 1 PID, or a transcript read
- * under the projects folder of `home`.
+ * True when the executor may run the argv: `cmux send` of 1 text (a line of a prompt or the digit of an option) or
+ * `cmux send-key` of enter or shift+enter, each with both refs and `--` right before the value, `cmux read-screen` of
+ * 1 tab, ps of 1 PID, or a transcript read under the projects folder of `home`. A send-key of a digit is refused.
  */
 export function isDeliverArgv(argv: readonly string[], home: string): boolean {
   const [command, verb, workspaceFlag, workspaceRef, surfaceFlag, surfaceRef, ...rest] = argv

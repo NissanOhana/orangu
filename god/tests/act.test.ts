@@ -1,16 +1,16 @@
 // The key path of the god pane on the terminal and the desktop surfaces, over the fake machine of act-machine.ts: a
 // digit and the Yes or No of a Bash request open the confirm bar, and only y sends. Each y reads the registry file, the
-// transcript tail and the screen of the target again, then sends only the keys of the plan: a digit alone. A screen or
-// a state that changed gets no key, and the Screen tab shows the fresh screen under the refusal line. An old read keeps
-// the bar open for y again. 1 y runs at a time. A c closes only the bar of its own drawing. The next refreshes check
-// that the keys reached the session.
+// transcript tail and the screen of the target again, then sends only the keys of the plan: a digit alone, as typed
+// text, because cmux send-key exits 1 on a digit. A screen or a state that changed gets no key, and the Screen tab
+// shows the fresh screen under the refusal line. An old read keeps the bar open for y again. 1 y runs at a time. A c
+// closes only the bar of its own drawing. The next refreshes check that the keys reached the session.
 import { expect, test } from 'claude-code/testing'
 import { HOME, SURFACES, paneProps, toolResult } from './fake-host'
-import { PROMPT_SCREEN, QUESTION_SCREEN, SF, WS, begin, cmuxSince, has, keysSince, lines, press, readScreen, select, sendKey } from './act-machine'
+import { PROMPT_SCREEN, QUESTION_SCREEN, SF, WS, begin, cmuxSince, has, keysSince, lines, press, readScreen, select, sendText } from './act-machine'
 
 for (const surface of SURFACES) {
-  test(`${surface}: 1 then y records read-screen and then exactly 1 send-key -- 1, with the refs of the mapped tab`, async ($, on) => {
-    const { calls, ui } = await begin($, on, surface)
+  test(`${surface}: 1 then y records read-screen and then exactly 1 send -- 1, with the refs of the mapped tab, and the digit answers the dialog`, async ($, on) => {
+    const { machine, calls, ui } = await begin($, on, surface)
     await select($, 'ses-wait')
     expect(await ui.find({ key: 'key:y' })).toBeUndefined()
     const option = await ui.find({ key: 'option:1' })
@@ -22,8 +22,11 @@ for (const surface of SURFACES) {
     expect(cmuxSince(calls, before)).toEqual([])
     const atY = calls.runs.length
     await press(ui, 'key:y')
-    expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.ask, SF.ask), sendKey(WS.ask, SF.ask, '1')])
+    expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.ask, SF.ask), sendText(WS.ask, SF.ask, '1')])
     for (const run of calls.runs.slice(atY).filter((one) => one.argv[0] === 'cmux')) expect(run.init).toEqual({ timeoutMs: 5000 })
+    // the digit went to the open dialog, and not into the input box
+    expect(machine.cmux!.answered).toEqual({ [SF.ask]: ['1'] })
+    expect(machine.cmux!.typed?.[SF.ask] ?? '').toBe('')
     const after = await lines(ui)
     expect(has(after, 'y: send')).toBe(false)
     expect(after).toContain(' Sent to ask-a. The next refresh checks it.')
@@ -35,7 +38,7 @@ for (const surface of SURFACES) {
     await ui.redraw()
     const atY = calls.runs.length
     await Promise.all([ui.press({ key: 'key:y' }), ui.press({ key: 'key:y' })])
-    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(keysSince(calls, atY)).toEqual([sendText(WS.ask, SF.ask, '1')])
     expect(cmuxSince(calls, atY).filter((argv) => argv[1] === 'read-screen')).toHaveLength(1)
   })
   test(`${surface}: c closes the bar and records no argv`, async ($, on) => {
@@ -87,7 +90,7 @@ for (const surface of SURFACES) {
     await press(ui, 'option:1')
     atY = calls.runs.length
     await press(ui, 'key:y')
-    expect(cmuxSince(calls, atY).slice(-2)).toEqual([readScreen(WS.ask, SF.ask), sendKey(WS.ask, SF.ask, '1')])
+    expect(cmuxSince(calls, atY).slice(-2)).toEqual([readScreen(WS.ask, SF.ask), sendText(WS.ask, SF.ask, '1')])
   })
   test(`${surface}: y reads the registry file and the transcript again, so a question that closed since the last tick gets no key`, async ($, on) => {
     const { machine, calls, ui } = await begin($, on, surface)
@@ -126,7 +129,7 @@ for (const surface of SURFACES) {
     expect(stale).toContain(' Send "1 Red" to ask-a?  y: send  c: cancel')
     const again = calls.runs.length
     await press(ui, 'key:y')
-    expect(cmuxSince(calls, again).slice(-2)).toEqual([readScreen(WS.ask, SF.ask), sendKey(WS.ask, SF.ask, '1')])
+    expect(cmuxSince(calls, again).slice(-2)).toEqual([readScreen(WS.ask, SF.ask), sendText(WS.ask, SF.ask, '1')])
   })
   test(`${surface}: a Bash request gets Yes and No digit Buttons, and No sends the digit of the exact No on the screen`, async ($, on) => {
     const { calls, ui } = await begin($, on, surface)
@@ -142,11 +145,11 @@ for (const surface of SURFACES) {
     expect(has(bar, '{"command":"touch probe-yes.txt","description":"Make an empty probe file"}')).toBe(true)
     let atY = calls.runs.length
     await press(ui, 'key:y')
-    expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendKey(WS.perm, SF.perm, '4')])
+    expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '4')])
     await press(ui, 'permission:yes')
     atY = calls.runs.length
     await press(ui, 'key:y')
-    expect(keysSince(calls, atY)).toEqual([sendKey(WS.perm, SF.perm, '1')])
+    expect(keysSince(calls, atY)).toEqual([sendText(WS.perm, SF.perm, '1')])
   })
   test(`${surface}: a request of any other tool gets no digit, only the line that says to answer it in its tab`, async ($, on) => {
     const { ui } = await begin($, on, surface)
@@ -161,7 +164,7 @@ for (const surface of SURFACES) {
     await select($, 'ses-wait')
     await press(ui, 'option:1')
     await press(ui, 'key:y')
-    expect(keysSince(calls, 0)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(keysSince(calls, 0)).toEqual([sendText(WS.ask, SF.ask, '1')])
     await clock.advance(2000)
     expect(await lines(ui)).not.toContain(' Not delivered. Check the Screen tab.')
     for (let tick = 0; tick < 3; tick += 1) await clock.advance(2000)
@@ -197,7 +200,7 @@ for (const surface of SURFACES) {
     expect(during, during.join('\n')).toContain(' Send "1 Red" to ask-a?  The pane sends it now.')
     await clock.advance(500)
     await sending
-    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(keysSince(calls, atY)).toEqual([sendText(WS.ask, SF.ask, '1')])
   })
 
   test(`${surface}: a c that the drawing before y still holds stops the keys, and the pane says so`, async ($, on) => {
@@ -233,7 +236,7 @@ for (const surface of SURFACES) {
     await press(ui, 'key:c')
     await clock.advance(500)
     await sending
-    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(keysSince(calls, atY)).toEqual([sendText(WS.ask, SF.ask, '1')])
     expect(has(await lines(ui), 'Send "2 Green"')).toBe(false)
   })
 
@@ -252,7 +255,7 @@ for (const surface of SURFACES) {
     release()
     await cancelling
     expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
-    expect(cmuxSince(calls, 0).filter((argv) => argv[1] === 'send-key')).toEqual([])
+    expect(keysSince(calls, 0)).toEqual([])
   })
 
   test(`${surface}: y sends the intent of the drawing that it belongs to, and a bar that opened since then stays for its own y`, async ($, on) => {
@@ -266,7 +269,7 @@ for (const surface of SURFACES) {
     const sending = ui.press({ key: 'key:y' })
     await clock.settle()
     await Promise.all([picking, sending])
-    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(keysSince(calls, atY)).toEqual([sendText(WS.ask, SF.ask, '1')])
     expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
   })
 
@@ -295,6 +298,6 @@ for (const surface of SURFACES) {
     expect(shown.length).toBeLessThanOrEqual(8)
     const atY = calls.runs.length
     await press(ui, 'key:y')
-    expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
+    expect(keysSince(calls, atY)).toEqual([sendText(WS.ask, SF.ask, '1')])
   })
 }

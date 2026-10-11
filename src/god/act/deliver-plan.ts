@@ -16,9 +16,10 @@
  *   stale-screen: the plan inputs are not of 1 moment, and the executor reads both again;
  * - an answer is the option digit alone, with no Enter, and only when the screen still shows the confirmed header,
  *   question and label at that digit, and each option of the open question with its description
- *   (src/god/model/screen-match.ts);
+ *   (src/god/model/screen-match.ts). The digit goes out as text, with `cmux send`: `cmux send-key` takes only a
+ *   named key, such as enter, tab or escape, and exits 1 on a digit with "Unknown key";
  * - a permission answer is the digit of the option labeled exactly Yes or exactly No, on a dialog that shows the
- *   confirmed shell command;
+ *   confirmed shell command, also with `cmux send`;
  * - a prompt is 1 `cmux send` for each line, `shift+enter` between the lines and `enter` at the end, only on an
  *   empty prompt row with no dialog on the screen. Its text passes these rules (textRefusal) before any host call:
  *   it holds a visible character (empty). It holds no control character but the newline, no line or paragraph
@@ -123,8 +124,9 @@ function cmux(verb: 'send' | 'send-key', screen: ScreenRead, value: string): rea
   return ['cmux', verb, '--workspace', screen.workspaceRef, '--surface', screen.surfaceRef, '--', value]
 }
 
+/** The plan of an answer or a permission: the digit as typed text, since send-key takes no digit. */
 const digitPlan = (match: ScreenMatch, screen: ScreenRead): DeliverPlan =>
-  match.isMatch ? { kind: 'send', steps: [cmux('send-key', screen, String(match.digit))] } : refuse(match.refusal)
+  match.isMatch ? { kind: 'send', steps: [cmux('send', screen, String(match.digit))] } : refuse(match.refusal)
 
 /** The steps of a prompt: each line that is not empty as text, shift+enter between the lines, then enter. */
 function promptSteps(text: string, screen: ScreenRead): (readonly string[])[] {

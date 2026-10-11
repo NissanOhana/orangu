@@ -95,7 +95,7 @@ describe('deliver: the process of the target', () => {
     const at = fake.runs.findIndex((argv) => argv[0] === 'ps')
     expect(fake.runs[at]).toEqual(['ps', '-o', 'pid=,tty=,lstart=', '-p', String(PID)])
     expect(fake.envs[at]).toEqual({ TZ: 'UTC' })
-    expect(at).toBeLessThan(fake.runs.findIndex((argv) => argv[1] === 'send-key'))
+    expect(at).toBeLessThan(fake.runs.findIndex((argv) => argv[1] === 'send'))
   })
 
   it('refuses when the process has another start time, another TTY, or is gone, and fails when ps does not run', async () => {
