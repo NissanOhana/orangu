@@ -96,7 +96,7 @@ WARNING: A key that goes to the wrong dialog can approve a tool call in another 
 
 The pane types into another session only through cmux. Each answer and each prompt goes through these steps:
 
-1. You press `y` in the confirm bar. The bar shows the session name and what goes to it. That is the option and its question, `Yes` or `No` and the whole tool input, or the whole text. A long text scrolls with `w` and `z`, so you can read all of it before `y`.
+1. You press `y` in the confirm bar. The bar shows the session name and what goes to it. That is the option and its question, `Yes` or `No` and the whole tool input, or each visible character of the text. Only white space can differ from what goes out: for example, the bar shows a run of empty lines as 1 empty line. A long text scrolls with `w` and `z`, so you can read all of it before `y`.
 2. The pane reads the process of the session with `ps`. Then it reads the registry file and the transcript of the session again, and then the screen of its cmux tab.
 3. The pane checks that the process still runs with the start time of the registry file, on the terminal of the cmux tab.
 4. The pane checks that it read the screen 1 s ago or less, and the session facts 1 s or less before the screen.
