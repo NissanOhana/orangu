@@ -107,15 +107,6 @@ describe('the Recap request', () => {
     expect(prompt).not.toContain('Last tool: ')
   })
 
-  it('keeps each of 70 open questions of 1,600 characters, because each fact share leaves room for its label', () => {
-    const base = waitingRow()
-    const questions = Array.from({ length: 70 }, () => ({ text: 'Which eval set? '.repeat(100), header: 'h', multiSelect: false, options: [] }))
-    const prompt = recapRequest({ ...base, transcript: { ...base.transcript!, openQuestion: { toolUseId: 'tu-ask', questions } } }, clean).prompt
-    expect(questions[0]!.text).toHaveLength(1600)
-    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThanOrEqual(RECAP_PROMPT_MAX_BYTES)
-    expect(prompt.split('\n').filter((line) => line.startsWith('Open question: '))).toHaveLength(70)
-  })
-
   it('keeps each of 70 long open questions with its share, since the share counts the label and the frame of a line', () => {
     const base = waitingRow()
     const questions = Array.from({ length: 70 }, (_, index) => ({ text: `${index} ${'Which eval set? '.repeat(100)}`, header: 'h', multiSelect: false, options: [] }))
