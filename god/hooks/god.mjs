@@ -973,6 +973,7 @@ function fitSegments(parts, room) {
 
 // src/god/view/board.ts
 var BOARD_COLUMNS = 30;
+var isOnBoard = (snapshot, key) => key !== void 0 && snapshot.groups.some((group) => group.sessionIds.includes(key));
 var LEVEL_GLYPH = { "needs-you": "\u26A0", "your-turn": "\u25CF", stuck: "\u2715", working: "\u280B", idle: "\xB7", stale: "\u25CB" };
 var LEVEL_HEADING = {
   "needs-you": "NEEDS YOU",
@@ -1803,7 +1804,7 @@ function scrollTargets2(view) {
 }
 function paneDetail(input) {
   const { snapshot, width } = input;
-  const session = snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey);
+  const session = isOnBoard(snapshot, input.selectedKey) ? snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey) : void 0;
   if (session === void 0) return { kind: "none", lines: messageLines(NO_DETAIL, width) };
   const screen = input.screen?.sessionId === session.sessionId ? input.screen : void 0;
   const view = detailView({
@@ -5344,7 +5345,7 @@ function paneView(input) {
   const header = headerLines({ ...snapshot === void 0 ? {} : { snapshot }, width: bodyColumns, now, ...input.isSoundOff === true ? { isSoundOff: true } : {}, ...spark === void 0 ? {} : { spark } });
   const state = boardStateOf(snapshot);
   const note = input.jumpNote ?? void 0;
-  const notice = note !== void 0 && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {};
+  const notice = note !== void 0 && note.sessionId === input.selectedKey && snapshot !== void 0 && isOnBoard(snapshot, note.sessionId) ? { notice: JUMP_NOTE[note.reason] } : {};
   const isDraftOpen = input.deliver?.draft !== void 0;
   const keysOf = (board2, isDetail2 = false, detail2) => {
     const answerDigits = drawnDigits(detail2);
