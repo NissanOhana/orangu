@@ -13,7 +13,7 @@ const W = 99
 const DASHED = '╌'.repeat(W)
 const GUTTER = ' │ '
 const DESCRIPTION = 'Create empty gx.txt file in /tmp'
-const TIP = 'Tip: auto mode handles these prompts for you — choose "switch to auto mode" below'
+const TIP = `Tip: auto mode handles these prompts for you ${String.fromCharCode(0x2014)} choose "switch to auto mode" below`
 const CHANGED = { isMatch: false, refusal: 'screen-changed' }
 const YES = { isMatch: true, digit: 1 }
 
@@ -143,13 +143,51 @@ describe('matchPermission: each box shape that refuses', () => {
   })
 })
 
-describe('matchPermission: a box after the text cleaner of the deliver path', () => {
-  const HOME = '/tmp/god-home'
-  const clean = (text: string): string => cleanText(text, HOME)
-  /** `n` characters in runs of 4 letters, so no rule of the redaction takes them for a secret or a blob */
-  const filler = (n: number): string => 'word-'.repeat(Math.ceil(n / 5)).slice(0, n)
-  /** The screen and the input as the deliver path compares them: each through the text cleaner of the home folder. */
-  const cleaned = (command: string) => matchPermission(readScreen(clean(boxScreen(wrapped(command)))), { tool: 'Bash', input: JSON.stringify(cleanValue({ command, description: DESCRIPTION }, clean)), choice: 'yes' as const })
+const HOME = '/tmp/god-home'
+const clean = (text: string): string => cleanText(text, HOME)
+/** `n` characters in runs of 4 letters, so no rule of the redaction takes them for a secret or a blob */
+const filler = (n: number): string => 'word-'.repeat(Math.ceil(n / 5)).slice(0, n)
+/** The confirmed Bash request as the transcript source gives it: each value through the text cleaner of the home folder. */
+const cleanedBash = (command: string) => ({ tool: 'Bash', input: JSON.stringify(cleanValue({ command, description: DESCRIPTION }, clean)), choice: 'yes' as const })
+/** The deliver path: the view of the cleaned screen, the cleaned input, and the raw text of the same read with the cleaner. */
+const withRaw = (command: string, screen = boxScreen(wrapped(command)), raw = screen) => matchPermission(readScreen(clean(screen)), cleanedBash(command), { text: raw, clean })
+/** a wrapped command with the home folder whole on row 1 */
+const AT_HOME = `touch ${HOME}/${filler(90)}/yes.txt`
+
+describe('matchPermission: the box measured on the raw text of the same read', () => {
+  it('matches a home folder that a row before the last holds whole, or that the wrap splits, over 2 and 3 rows', () => {
+    expect(withRaw(AT_HOME)).toEqual(YES)
+    expect(withRaw(`touch ${filler(85)}${HOME}/yes.txt`)).toEqual(YES)
+    expect(wrapped(`cp ${HOME}/${filler(100)} ${HOME}/${filler(100)}`)).toHaveLength(3)
+    expect(withRaw(`cp ${HOME}/${filler(100)} ${HOME}/${filler(100)}`)).toEqual(YES)
+  })
+
+  it('matches a run that the redaction masks as a blob, a short command and a command of more lines', () => {
+    expect(withRaw(LONG)).toEqual(YES)
+    expect(withRaw(`touch ${HOME}/gx.txt`, boxScreen([` touch ${HOME}/gx.txt`]))).toEqual(YES)
+    expect(withRaw(`${AT_HOME}\nls ${HOME}`, boxScreen([...wrapped(AT_HOME), ` │ ls ${HOME}`]))).toEqual(YES)
+  })
+
+  it('still refuses a raw row before the last that does not fill the box, an extra row and a cut command', () => {
+    const [first = '', second = ''] = wrapped(AT_HOME)
+    expect(withRaw(AT_HOME, boxScreen([first.slice(0, -1), `${GUTTER}${first.at(-1) ?? ''}${second.slice(GUTTER.length)}`]))).toEqual(CHANGED)
+    expect(withRaw(AT_HOME, boxScreen([first, second, ' │ rm -rf build']))).toEqual(CHANGED)
+    expect(withRaw(AT_HOME, boxScreen([first]))).toEqual(CHANGED)
+    expect(withRaw(`${AT_HOME}.bak`, boxScreen([first, second]))).toEqual(CHANGED)
+  })
+
+  it('refuses a raw text that does not line up with the cleaned screen, and a raw text that shows another command', () => {
+    const screen = boxScreen(wrapped(AT_HOME))
+    expect(withRaw(AT_HOME, screen, `❯ one more row\n${screen}`)).toEqual(CHANGED)
+    expect(withRaw(AT_HOME, screen, screen.replace(' Do you want to proceed?', ' Do you want to make this edit?'))).toEqual(CHANGED)
+    expect(withRaw(AT_HOME, screen, screen.replace(`${DASHED}\n Do you`, `${'╌'.repeat(W - 1)}\n Do you`))).toEqual(CHANGED)
+    expect(withRaw(AT_HOME, boxScreen(wrapped(AT_HOME)), boxScreen(wrapped(AT_HOME.replace('yes.txt', 'no.txt'))))).toEqual(CHANGED)
+  })
+})
+
+describe('matchPermission: with no raw text, the box measured on the cleaned rows', () => {
+  /** The screen and the input, each through the text cleaner of the home folder, and no raw text. */
+  const cleaned = (command: string) => matchPermission(readScreen(clean(boxScreen(wrapped(command)))), cleanedBash(command))
 
   it('matches when the cleaner changes only the last row of the wrap: like with like', () => {
     expect(wrapped(`touch ${filler(90)} ${HOME}/yes.txt`)[1]).toBe(`${GUTTER} ${HOME}/yes.txt`)

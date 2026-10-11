@@ -1,9 +1,10 @@
 // The key path on the Bash dialog of Claude Code 2.1.296, over the fake machine of act-machine.ts. The dialog draws the
 // command between 2 dashed rules (U+254C) as wide as the tab, here 99 columns: a command that fits takes 1 plain row,
 // and a wider command wraps at the box width with the gutter ` │ ` on each row. 1 then y reads the screen again and
-// sends exactly 1 send of the digit 1, which answers the dialog. Every screen and every command is synthetic.
+// sends exactly 1 send of the digit 1, which answers the dialog. A home folder on row 1 of a wrap shows as ~ in the
+// pane, and the match measures the raw row of the same read. Every screen and every command is synthetic.
 import { expect, test } from 'claude-code/testing'
-import { SURFACES, bash, prompt } from './fake-host'
+import { HOME, SURFACES, bash, prompt } from './fake-host'
 import { SF, WS, begin, cmuxSince, detailText, lines, press, readScreen, select, sendText } from './act-machine'
 
 const W = 99
@@ -21,7 +22,7 @@ function boxScreen(command: string, box: readonly string[]): string {
     '',
     '─'.repeat(W),
     ' Bash command',
-    ' Tip: auto mode handles these prompts for you — choose "switch to auto mode" below',
+    ` Tip: auto mode handles these prompts for you ${String.fromCharCode(0x2014)} choose "switch to auto mode" below`,
     ' Make an empty probe file',
     DASHED,
     ...box,
@@ -67,6 +68,29 @@ for (const surface of SURFACES) {
     expect(bar).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
     // the bar holds the new call, so the y below checks the screen against the long command
     expect(detailText(bar), bar.join('\n')).toContain('word-probe/yes.txt')
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '1')])
+    expect(machine.cmux!.answered).toEqual({ [SF.perm]: ['1'] })
+  })
+
+  test(`${surface}: 1 then y on a boxed Bash dialog whose command holds the home folder on row 1 of its wrap sends exactly 1 send -- 1`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    // the pane shows the home folder as ~, which makes row 1 narrower than the box: the match measures the raw row
+    const command = `touch ${HOME}/${'word-'.repeat(18)}/yes.txt`
+    const perm = machine.sessions[2]!
+    perm.transcript = [prompt('Make the probe file.', Date.now() - 90_000), bash('toolu_b3', command, 'Make an empty probe file', Date.now() - 1000)]
+    perm.transcriptMtimeMs = Date.now()
+    perm.fileMtimeMs += 1000
+    const rows = [`${GUTTER}${command.slice(0, W - GUTTER.length)}`, `${GUTTER}${command.slice(W - GUTTER.length)}`]
+    expect(rows[0]).toContain(`${HOME}/`)
+    expect([...rows[0]!].length).toBe(W)
+    machine.cmux!.screens![SF.perm] = boxScreen(command, rows)
+    await clock.advance(2000)
+    await select($, 'ses-perm')
+    await press(ui, 'permission:yes')
+    const bar = await lines(ui)
+    expect(detailText(bar), bar.join('\n')).toContain('touch ~/word-')
     const atY = calls.runs.length
     await press(ui, 'key:y')
     expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '1')])

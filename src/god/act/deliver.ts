@@ -13,8 +13,11 @@
  *    and the open question and the running tasks come only from this fresh transcript read. The screen is read again
  *    for each delivery, never taken from the Screen tab or an earlier y.
  * 3. planDelivery (src/god/act/deliver-plan.ts) makes the plan of the intent from that screen and those facts, with
- *    the host clock right after the screen read. A refusal keeps the fresh screen for the Screen tab. The plan of an
- *    answer or a permission must be exactly 1 send of 1 digit 1 to 9 to the mapped tab (isDigitStep), or it is refused.
+ *    the host clock right after the screen read. It also gets the raw text of the same read and the text cleaner, so
+ *    the match of a shell dialog measures the rows of its command box before the cleaner changes their width. The raw
+ *    text stays in this call: no outcome, Screen tab or check holds it. A refusal keeps the fresh cleaned screen for
+ *    the Screen tab. The plan of an answer or a permission must be exactly 1 send of 1 digit 1 to 9 to the mapped tab
+ *    (isDigitStep), or it is refused.
  * 4. It runs the plan steps in order and stops at the first one that fails: an exit code that is not 0, or a reject.
  *    Before each next step of a prompt it reads the registry file, the size of the transcript and the screen again,
  *    because a dialog can open between 2 steps: a new status time or another transcript size stops it, and
@@ -35,7 +38,7 @@ import type { Effects, Host, RunOptions } from '../host.js'
 import { readRegistryFile } from '../source/agents.js'
 import { readPs, type PsRow } from '../source/cmux.js'
 import { reduceRecords } from '../source/records.js'
-import { readScreenOf } from '../source/screen.js'
+import { readScreenAndRaw, readScreenOf } from '../source/screen.js'
 import { HEAD_BYTES, projectsDir, readTranscripts } from '../source/transcript.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal, ScreenRead, SessionFacts, SourceState, TranscriptFacts } from '../types.js'
 import { expectOf, type DeliverCheck } from './deliver-check.js'
@@ -224,10 +227,11 @@ export async function deliver(ports: DeliverPorts, request: DeliverRequest): Pro
   if (fresh.kind === 'gone') return refused('screen-changed')
   if (fresh.kind === 'unread') return failed('facts-unread')
   if (!isSameProcess(ps.value.rows, session.pid, fresh.procStart, session.tab?.tty)) return refused('screen-changed')
-  const screen = await readScreenOf(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now())
-  if (screen === undefined) return failed('screen-unread')
+  const screenRead = await readScreenAndRaw(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now())
+  if (screenRead === undefined) return failed('screen-unread')
+  const screen = screenRead.read
   const now = await host.now().catch(() => Number.NaN)
-  const plan = planDelivery(intent, screen, fresh.facts, now)
+  const plan = planDelivery(intent, screen, fresh.facts, now, { text: screenRead.raw, clean: ports.clean })
   if (plan.kind === 'refuse') return refused(plan.refusal, screen)
   if (intent.kind !== 'prompt' && !isDigitStep(plan.steps, refs)) return refused('screen-changed', screen)
 

@@ -9,7 +9,8 @@
  *   the board for the Screen tab, and the host clock for the key path, which times its facts with the same clock.
  * - A read that exits with a code that is not 0, or that the host port rejects (a timeout), gives nothing: the
  *   Screen tab then says that the read failed and keeps the last good read of the session (src/god/screen-loop.ts).
- * The Screen tab only shows the read. The key path reads the screen again for itself, just before it types.
+ * The Screen tab only shows the read. The key path reads the screen again for itself, just before it types. For its plan
+ * it keeps the raw text of that read too, for the match of a shell dialog only (readScreenAndRaw).
  */
 import { guardedRefs } from '../act/jump.js'
 import type { Host } from '../host.js'
@@ -34,12 +35,21 @@ export function screenArgv(target: ScreenTarget): readonly string[] {
 
 /** 1 read of the tab, cleaned, or undefined when the refs are refused or the read failed. */
 export async function readScreenOf(host: Host, target: ScreenTarget, clean: (text: string) => string, clock: () => number | Promise<number>): Promise<ScreenRead | undefined> {
+  return (await readScreenAndRaw(host, target, clean, clock))?.read
+}
+
+/**
+ * 1 read of the tab for the plan of the key path: the cleaned read, and the raw text of the same read. Only the match
+ * of a shell dialog reads the raw text (src/god/model/screen-match.ts, RawScreen), to measure the rows of its command
+ * box. The raw text never enters a ScreenRead, so it never reaches the pane, a tool result or the store.
+ */
+export async function readScreenAndRaw(host: Host, target: ScreenTarget, clean: (text: string) => string, clock: () => number | Promise<number>): Promise<{ read: ScreenRead; raw: string } | undefined> {
   const refs = guardedRefs(target.workspaceRef, target.surfaceRef)
   if (refs === undefined) return undefined
   try {
     const result = await host.run(screenArgv(target))
     if (result.exitCode !== 0) return undefined
-    return { sessionId: target.sessionId, ...refs, text: clean(result.stdout), readAt: await clock() }
+    return { read: { sessionId: target.sessionId, ...refs, text: clean(result.stdout), readAt: await clock() }, raw: result.stdout }
   } catch {
     return undefined
   }

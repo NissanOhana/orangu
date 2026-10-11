@@ -19,7 +19,8 @@
  *   (src/god/model/screen-match.ts). The digit goes out as text, with `cmux send`: `cmux send-key` takes only a
  *   named key, such as enter, tab or escape, and exits 1 on a digit with "Unknown key";
  * - a permission answer is the digit of the option labeled exactly Yes or exactly No, on a dialog that shows the
- *   confirmed shell command, also with `cmux send`;
+ *   confirmed shell command, also with `cmux send`. The executor gives the raw text of the same screen read with its
+ *   cleaner (RawScreen), so the match measures a wrapped command on the raw rows, and only the digit comes back;
  * - a prompt is 1 `cmux send` for each line, `shift+enter` between the lines and `enter` at the end, only on an
  *   empty prompt row with no dialog on the screen. Its text passes these rules (textRefusal) before any host call:
  *   it holds a visible character (empty). It holds no control character but the newline, no line or paragraph
@@ -40,7 +41,7 @@
  * do not lag it, the session is still idle with no wait, no dialog is on the screen, and the input box holds the text
  * of the steps before (typedBy). The executor stops at the first refusal, and no later step goes out.
  */
-import { matchAnswer, matchPermission, matchPrompt, matchTyped, readScreen, type ScreenMatch } from '../model/screen-match.js'
+import { matchAnswer, matchPermission, matchPrompt, matchTyped, readScreen, type RawScreen, type ScreenMatch } from '../model/screen-match.js'
 import type { DeliverIntent, DeliverPlan, DeliverRefusal, ScreenRead, SessionFacts, TranscriptFacts } from '../types.js'
 
 /** A screen read older than this, at the plan time, is stale. */
@@ -150,9 +151,10 @@ function promptSteps(text: string, screen: ScreenRead): (readonly string[])[] {
 /**
  * The plan of 1 confirmed intent on 1 fresh screen read and the state of the target, made at `now` (engine time, in
  * ms). The text checks of a prompt come first, then the tab refs, the session of the read, the age of the read and
- * of the state, the state of the session, then the match of the screen.
+ * of the state, the state of the session, then the match of the screen. `raw` is the same read before the cleaner,
+ * for the match of a permission answer only.
  */
-export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, now: number): DeliverPlan {
+export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, now: number, raw?: RawScreen): DeliverPlan {
   if (intent.kind === 'prompt') {
     const refusal = textRefusal(intent.text)
     if (refusal) return refuse(refusal)
@@ -169,7 +171,7 @@ export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: Targe
     case 'answer':
       return digitPlan(matchAnswer(view, { ...intent, options: facts.transcript?.openQuestion?.questions[0]?.options ?? [] }), screen)
     case 'permission':
-      return digitPlan(matchPermission(view, intent), screen)
+      return digitPlan(matchPermission(view, intent, raw), screen)
     case 'prompt': {
       const refusal = matchPrompt(view)
       return refusal ? refuse(refusal) : { kind: 'send', steps: promptSteps(intent.text, screen) }

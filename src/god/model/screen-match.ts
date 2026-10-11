@@ -13,7 +13,8 @@
  *   `Do you want to proceed?`, then the numbered options. Only an option labeled exactly `Yes` or `No` counts. From
  *   2.1.296 the command rows sit in a box between 2 dashed rules (U+254C) as wide as the tab. A command line that fits
  *   takes 1 plain row. A wider line wraps at the box width, inside a word, and then each command row starts with the
- *   gutter ` │ `, so each row of a wrap but the last ends at the box width.
+ *   gutter ` │ `, so each row of a wrap but the last ends at the box width. The cleaner can change the width of a row,
+ *   so the deliver path also gives the raw text of the same read (RawScreen) to measure the rows of the box.
  * - the prompt: the input box, a rule row, `❯` and a space (a no-break space in this build) and the typed text,
  *   then a rule row. The transcript shows the earlier prompts in the same form, so only the last prompt row counts.
  * - between 2 steps of a prompt: the input box, from the last prompt row (a rule row right above it) down to the next
@@ -104,6 +105,12 @@ export type ScreenView = {
 
 /** A digit to send, or the reason to send nothing. */
 export type ScreenMatch = { isMatch: true; digit: number } | { isMatch: false; refusal: DeliverRefusal }
+
+/**
+ * The raw text of the same screen read, before the text cleaner, and that cleaner (src/god/act/deliver.ts, ports.clean).
+ * Only the command box of a shell dialog reads it, and no raw text leaves the match: only the digit or the refusal does.
+ */
+export type RawScreen = { text: string; clean: (text: string) => string }
 
 type AnswerIntent = Extract<DeliverIntent, { kind: 'answer' }>
 type PermissionIntent = Extract<DeliverIntent, { kind: 'permission' }>
@@ -355,12 +362,6 @@ function showsHead(rows: readonly string[], expected: readonly string[]): boolea
  * than the box. With no row that wraps, each row is 1 line. A row with the gutter that fills the box shows a wrap: then
  * every row that is not blank must have the gutter, the gutter goes, and a row that fills the box joins the row under
  * it. A row of a wrap that does not fill the box (a wide letter or a space at the edge) ends its line there.
- *
- * The deliver path cleans the screen as 1 text and the input value by value (src/god/act/deliver.ts, ports.clean),
- * and this compares the 2 cleaned texts. A home folder that a row holds whole shows as ~ on both sides, but it makes
- * that row narrower, so the row no longer fills the box. A home folder that a wrap splits stays raw on the screen and
- * shows as ~ in the input. A secret or a blob that the redaction masks changes a row the same way. In each case the
- * lines differ and the match refuses: it fails closed, and no rule tries to undo the cleaner.
  */
 function boxLines(rows: readonly string[], width: number): string[] | undefined {
   const widths = rows.map(columns)
@@ -379,34 +380,67 @@ function boxLines(rows: readonly string[], width: number): string[] | undefined 
   return lines.filter((text) => text !== '')
 }
 
+/** The command box in the request rows: the index of its 2 dashed rules and its width. */
+type Box = { open: number; close: number; width: number }
+
+/** The box of the request rows, `none` with no dashed rule, or undefined when the rules make no box with only blank rows under it. */
+function boxOf(rows: readonly string[]): Box | 'none' | undefined {
+  const rules = rows.flatMap((row, k) => (DASHED_RULE.test(row) ? [k] : []))
+  if (rules.length === 0) return 'none'
+  const [open = -1, close = -1] = rules
+  const width = columns(rows[open] ?? '')
+  if (rules.length !== 2 || width === undefined || columns(rows[close] ?? '') !== width || rows.slice(close + 1).some((row) => !isBlank(row))) return undefined
+  return { open, close, width }
+}
+
+/**
+ * The command lines of the box from the raw rows of the same read, or undefined when they do not line up. The deliver
+ * path cleans the screen as 1 text, and a home folder, a secret or a blob that the cleaner rewrites changes the width of
+ * its row. So the raw rows give the widths: the 2 rules and the question row of the raw text must clean to the rows
+ * that the cleaned screen shows at the same places. Then boxLines measures and joins the raw rows, and each joined line
+ * goes through the same cleaner as the expected input. The raw rows and lines stay in this function.
+ */
+function rawBoxLines(dialog: PermissionDialog, box: Box, raw: RawScreen): string[] | undefined {
+  const request = dialog.request ?? []
+  const start = dialog.firstLine - request.length
+  if (start < 0) return undefined
+  const rows = raw.text.split('\n').map(trimEnd).slice(start, dialog.firstLine + 1)
+  const cleanRow = (k: number): string => trimEnd(raw.clean(rows[k] ?? ''))
+  if (rows.length !== request.length + 1) return undefined
+  if (cleanRow(box.open) !== request[box.open] || cleanRow(box.close) !== request[box.close] || trim(cleanRow(request.length)) !== dialog.question) return undefined
+  return boxLines(rows.slice(box.open + 1, box.close), box.width)?.map((line) => trim(raw.clean(line))).filter((line) => line !== '')
+}
+
 /**
  * True when the dialog is a shell permission dialog for exactly this request. With no box: the title, then (the tip),
  * then the description and command rows and no other row, then the question. With a box: the title, (the tip) and the
  * description rows, then 1 dashed rule, the command rows, 1 dashed rule of the same width, and then only blank rows
  * before the question. So no row of another request, no reason row, no row of another width in a wrap, no box with a
  * missing rule and no cut command passes.
+ *
+ * With the raw text, the command lines come from rawBoxLines. With none, boxLines reads the cleaned rows: then a home
+ * folder, a secret or a blob that the cleaner rewrites in a row before the last row of a wrap changes the width of that
+ * row, and the match refuses (it fails closed).
  */
-function showsRequest(dialog: PermissionDialog, expected: ShellRequest): boolean {
+function showsRequest(dialog: PermissionDialog, expected: ShellRequest, raw: RawScreen | undefined): boolean {
   const rows = dialog.request
   if (dialog.question !== 'Do you want to proceed?' || rows === undefined) return false
-  const rules = rows.flatMap((row, k) => (DASHED_RULE.test(row) ? [k] : []))
-  if (rules.length === 0) return showsHead(rows, [...expected.description, ...expected.command])
-  const [open = -1, close = -1] = rules
-  const width = columns(rows[open] ?? '')
-  if (rules.length !== 2 || width === undefined || columns(rows[close] ?? '') !== width || rows.slice(close + 1).some((row) => !isBlank(row))) return false
-  const lines = boxLines(rows.slice(open + 1, close), width)
-  return lines !== undefined && showsHead(rows.slice(0, open), expected.description) && sameRows(lines, expected.command)
+  const box = boxOf(rows)
+  if (box === 'none') return showsHead(rows, [...expected.description, ...expected.command])
+  if (box === undefined || !showsHead(rows.slice(0, box.open), expected.description)) return false
+  const lines = raw === undefined ? boxLines(rows.slice(box.open + 1, box.close), box.width) : rawBoxLines(dialog, box, raw)
+  return lines !== undefined && sameRows(lines, expected.command)
 }
 
 /**
  * Checks a permission answer: the screen shows 1 shell permission dialog for exactly the confirmed request, with
  * the cursor on 1 row, and exactly 1 option labeled exactly `Yes` (or `No`), whole. Any other tool gives
- * screen-changed: the plan ties only a shell command to the screen.
+ * screen-changed: the plan ties only a shell command to the screen. `raw` is the same read before the cleaner.
  */
-export function matchPermission(view: ScreenView, want: Pick<PermissionIntent, 'choice' | 'tool' | 'input'>): ScreenMatch {
+export function matchPermission(view: ScreenView, want: Pick<PermissionIntent, 'choice' | 'tool' | 'input'>, raw?: RawScreen): ScreenMatch {
   const dialog = soleDialog(view)
   const expected = requestOf(want.tool, want.input)
-  if (dialog?.kind !== 'permission' || !expected || !showsRequest(dialog, expected)) return refuse('screen-changed')
+  if (dialog?.kind !== 'permission' || !expected || !showsRequest(dialog, expected, raw)) return refuse('screen-changed')
   if (dialog.options.filter((row) => row.hasCursor).length !== 1) return refuse('screen-changed')
   const label = want.choice === 'yes' ? 'Yes' : 'No'
   const hits = dialog.options.filter((row) => row.label === label)

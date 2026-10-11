@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Host, RunResult } from '../host.js'
 import { textCleaner } from '../sanitize.js'
-import { SCREEN_LINES, readScreenOf, screenArgv, type ScreenTarget } from './screen.js'
+import { SCREEN_LINES, readScreenAndRaw, readScreenOf, screenArgv, type ScreenTarget } from './screen.js'
 
 const ESC = String.fromCharCode(0x1b)
 const KEY = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
@@ -61,5 +61,16 @@ describe('readScreenOf', () => {
       expect(await readScreenOf(host, target, clean, () => 1)).toBeUndefined()
       expect(runs).toEqual([])
     }
+  })
+})
+
+describe('readScreenAndRaw', () => {
+  it('runs the same 1 read and gives the cleaned read and the raw text of that read, apart', async () => {
+    const stdout = ' │ touch /Users/test/Code/demo/a.txt\n'
+    const { host, runs } = hostOf({ stdout })
+    const pair = await readScreenAndRaw(host, TARGET, clean, () => 1234)
+    expect(runs).toEqual([screenArgv(TARGET)])
+    expect(pair).toEqual({ read: { sessionId: 's-wait', workspaceRef: 'workspace:7', surfaceRef: 'surface:12', readAt: 1234, text: ' │ touch ~/Code/demo/a.txt\n' }, raw: stdout })
+    expect(await readScreenAndRaw(hostOf({ exitCode: 1, stdout }).host, TARGET, clean, () => 1)).toBeUndefined()
   })
 })
