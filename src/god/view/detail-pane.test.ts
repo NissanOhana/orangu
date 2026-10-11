@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { busy, transcript } from '../../../test/fixtures/god/sessions.js'
-import { NOW, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
+import { NOW, boardSessions, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
 import { RECAPS, detailSnapshot } from '../../../test/fixtures/god/detail.js'
 import type { BoardSnapshot, DetailTab } from '../types.js'
 import { STALE_GROUP_KEY } from './board.js'
@@ -41,6 +41,13 @@ describe('the detail of the selected session', () => {
       expect(detail).toEqual({ kind: 'none', lines: [{ segments: [{ text: ` ${NO_DETAIL}` }] }] })
     }
     expect(NO_DETAIL).toBe('Select a session on the board to show its detail.')
+  })
+
+  it('asks for a selection when the repos mode takes the selected session off the board', () => {
+    const repos = snapshotOf(boardSessions(), {}, { mode: 'repos', repos: ['api'] })
+    expect(repos.groups.flatMap((group) => group.sessionIds)).not.toContain('s-new')
+    expect(detailOf(repos, { selectedKey: 's-new' }).kind).toBe('none')
+    expect(detailOf(repos, { selectedKey: 's-wait' }).kind).toBe('session')
   })
 
   it('shows in the Recap tab the Recap that the engine state holds, only for its session, and the other tabs as they are', () => {

@@ -2,8 +2,8 @@
  * The detail that the pane shows beside the board (90 columns or more) or in place of it (below 90, once the
  * person opens it): the detail of the selected session (src/god/view/detail.ts), or 1 line that asks for a
  * selection when no session of the board is selected.
- * - The selected session is the selected row of the board when it is a session of the snapshot. A heading, no
- *   selection, or a session that left the board selects none.
+ * - The selected session is the selected row of the board when it is a session that a group of the board holds. A
+ *   heading, no selection, a session that left the board, or a session that the repos mode hides selects none.
  * - The Screen tab shows the screen state of the selected session (src/god/screen-loop.ts): its last good read, and
  *   whether the newest read failed. A state of another session shows nothing of it. While the last cmux read failed,
  *   the tab says that the session has no tab, because the tab map can be old.
@@ -16,6 +16,7 @@
  */
 import type { ScreenState } from '../source/screen.js'
 import type { BoardSnapshot, DeliverOutcome, DetailTab, RecapState } from '../types.js'
+import { isOnBoard } from './board.js'
 import { detailLines, detailView, scrollBy, SCROLL_KEYS, type DetailView } from './detail.js'
 import { messageLines } from './states.js'
 import type { Line } from './types.js'
@@ -78,7 +79,7 @@ function scrollTargets(view: DetailView): Partial<Record<string, number>> {
 /** The detail of the selected session, or the line that asks for a selection. */
 export function paneDetail(input: PaneDetailInput): PaneDetail {
   const { snapshot, width } = input
-  const session = snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey)
+  const session = isOnBoard(snapshot, input.selectedKey) ? snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey) : undefined
   if (session === undefined) return { kind: 'none', lines: messageLines(NO_DETAIL, width) }
   const screen = input.screen?.sessionId === session.sessionId ? input.screen : undefined
   const view = detailView({

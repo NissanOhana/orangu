@@ -190,6 +190,10 @@ describe('the jump note and the screen read', () => {
       const other = paneLines(pane(detailSnapshot(), { bodyColumns, selectedKey: 's-work', jumpNote: { sessionId: 's-wait', reason: 'no-tab' } })).map(text)
       expect(other.join('\n')).not.toContain(JUMP_NOTE['no-tab'])
     }
+    // the repos mode takes s-new off the board, so its note and its detail show nowhere
+    const hidden = paneLines(pane(snapshotOf(boardSessions(), {}, { mode: 'repos', repos: ['api'] }), { selectedKey: 's-new', jumpNote: { sessionId: 's-new', reason: 'no-tab' } })).map(text)
+    expect(hidden.join('\n')).not.toContain(JUMP_NOTE['no-tab'])
+    expect(hidden.some((line) => line.endsWith(NO_DETAIL)), hidden.join('\n')).toBe(true)
   })
 
   it('takes the room of the note from the board, so the pane still fits its rows', () => {

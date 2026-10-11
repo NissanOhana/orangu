@@ -28,6 +28,9 @@ import type { Line, Segment } from './types.js'
 /** The board width in the wide layout, and the narrowest board that the row layout fits. */
 export const BOARD_COLUMNS = 30
 
+/** True when a group of the board holds the session `key`. The snapshot holds every session, also those that the repos mode hides. */
+export const isOnBoard = (snapshot: BoardSnapshot, key: string | undefined): boolean => key !== undefined && snapshot.groups.some((group) => group.sessionIds.includes(key))
+
 /** The glyph of each level. WORKING shows a frame of the braille spinner. */
 export const LEVEL_GLYPH: Readonly<Record<Level, string>> = { 'needs-you': '⚠', 'your-turn': '●', stuck: '✕', working: '⠋', idle: '·', stale: '○' }
 

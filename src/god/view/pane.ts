@@ -8,8 +8,8 @@
  *   place of the board. The 2 states of the repos mode (no repo selected, no session of the selected repos) keep a
  *   rule and the key row under their message, because f leaves them, and a key works only while its Button is drawn.
  * - The pane takes no more rows than `bodyRows`: the board shows only the lines that fit, around the selected row.
- * - The jump note of the selected session (why its last j did not jump) shows under the key row. The note of another
- *   session shows nothing.
+ * - The jump note of the selected session (why its last j did not jump) shows under the key row while the board shows
+ *   that session. The note of another session, or of a session that the repos mode hides, shows nothing.
  * - The bar of the key path (src/god/view/bar.ts) sits under the bottom rule and above the key row, in the board and
  *   in the narrow detail, and its rows come from the board: it takes at most half of the rows under the header. While
  *   the bar shows a count line, w and z scroll the bar, so the detail draws its own count lines with no key.
@@ -30,7 +30,7 @@ import type { JumpNote } from '../act/jump.js'
 import type { ScreenState } from '../source/screen.js'
 import { DIM } from '../ui/theme.js'
 import type { BoardSnapshot, RecapState } from '../types.js'
-import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow } from './board.js'
+import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow, isOnBoard } from './board.js'
 import { barView, type BarView, type DeliverState } from './bar.js'
 import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState, type PaneDetail } from './detail-pane.js'
 import { headerLines } from './header.js'
@@ -116,7 +116,7 @@ export function paneView(input: PaneInput): PaneView {
   const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now, ...(input.isSoundOff === true ? { isSoundOff: true } : {}), ...(spark === undefined ? {} : { spark }) })
   const state = boardStateOf(snapshot)
   const note = input.jumpNote ?? undefined
-  const notice = note !== undefined && note.sessionId === input.selectedKey ? { notice: JUMP_NOTE[note.reason] } : {}
+  const notice = note !== undefined && note.sessionId === input.selectedKey && snapshot !== undefined && isOnBoard(snapshot, note.sessionId) ? { notice: JUMP_NOTE[note.reason] } : {}
   const isDraftOpen = input.deliver?.draft !== undefined
   const keysOf = (board: BoardSnapshot, isDetail = false, detail?: PaneDetail) => {
     const answerDigits = drawnDigits(detail)
