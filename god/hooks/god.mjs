@@ -481,24 +481,35 @@ function boxOf(rows) {
   if (rules.length !== 2 || width === void 0 || columns(rows[close] ?? "") !== width || rows.slice(close + 1).some((row) => !isBlank(row))) return void 0;
   return { open, close, width };
 }
-function rawBoxLines(dialog, box, raw) {
+function rawRequestRows(dialog, raw) {
   const request = dialog.request ?? [];
   const start2 = dialog.firstLine - request.length;
   if (start2 < 0) return void 0;
   const rows = raw.text.split("\n").map(trimEnd).slice(start2, dialog.firstLine + 1);
-  const cleanRow = (k) => trimEnd(raw.clean(rows[k] ?? ""));
-  if (rows.length !== request.length + 1) return void 0;
-  if (cleanRow(box.open) !== request[box.open] || cleanRow(box.close) !== request[box.close] || trim(cleanRow(request.length)) !== dialog.question) return void 0;
-  return boxLines(rows.slice(box.open + 1, box.close), box.width);
+  const cleanRow = (row) => trimEnd(raw.clean(row ?? ""));
+  if (rows.length !== request.length + 1 || !request.every((row, k) => cleanRow(rows[k]) === row) || trim(cleanRow(rows[request.length])) !== dialog.question) return void 0;
+  return rows.slice(0, request.length);
+}
+function rawCommandLines(dialog, box, raw) {
+  const rows = rawRequestRows(dialog, raw);
+  if (rows === void 0) return void 0;
+  if (box !== "none") return boxLines(rows.slice(box.open + 1, box.close), box.width);
+  const lines = rows.map(trim).filter((row) => row !== "");
+  return lines.slice(Math.max(1, lines.length - linesOf(raw.command).length));
 }
 function showsRequest(dialog, expected, raw) {
   const rows = dialog.request;
   if (dialog.question !== "Do you want to proceed?" || rows === void 0) return false;
   const box = boxOf(rows);
-  if (box === "none") return showsHead(rows, [...expected.description, ...expected.command]);
-  if (box === void 0 || !showsHead(rows.slice(0, box.open), expected.description)) return false;
-  const lines = raw === void 0 ? boxLines(rows.slice(box.open + 1, box.close), box.width) : rawBoxLines(dialog, box, raw);
-  return lines !== void 0 && sameRows(lines, raw === void 0 ? expected.command : linesOf(raw.command));
+  if (box === void 0) return false;
+  if (box === "none" ? !showsHead(rows, [...expected.description, ...expected.command]) : !showsHead(rows.slice(0, box.open), expected.description)) return false;
+  if (raw !== void 0) {
+    const lines2 = rawCommandLines(dialog, box, raw);
+    return lines2 !== void 0 && sameRows(lines2, linesOf(raw.command));
+  }
+  if (box === "none") return true;
+  const lines = boxLines(rows.slice(box.open + 1, box.close), box.width);
+  return lines !== void 0 && sameRows(lines, expected.command);
 }
 function matchPermission(view, want, raw) {
   const dialog = soleDialog(view);
