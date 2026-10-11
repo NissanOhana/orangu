@@ -114,10 +114,13 @@ The pane does not send these. Press `j` and do them in the tab of the session:
 - Any option of a Bash prompt but the 2 options labeled exactly `Yes` and `No`.
 - An answer to a dialog with more than 1 question or more than 1 choice.
 - A prompt whose first character after white space is `!` (a shell command) or `?` (the help).
-- A prompt whose first line is `exit`, `quit`, `:q`, `:q!`, `:wq`, `:wq!`, `/exit` or `/quit`, in any case.
+- A prompt whose first line is `exit`, `quit`, `:q`, `:q!`, `:wq` or `:wq!`, in any case.
+- A prompt whose first word is `/exit` or `/quit`, in any case. Claude Code reads the command up to the first space, so `/exit now` also ends the session.
 - A prompt with a control character, or with a character that does not show. Some emoji hold such a character.
 - A prompt with a backslash before `n`, `r` or `t` in any case, or with a line that ends with a backslash.
 - A prompt to a session that runs a background task or a subagent. Either can open a dialog while the keys go out.
+
+The text checks cover the first character, the exit words, the control characters and the backslashes. When a text check refuses a prompt, the confirm bar shows the reason before you press `y`. The bar then offers only `c`, and `y` sends nothing. The pane checks for a background task when you press `y`.
 
 A prompt that starts with `/` can go out after the same checks. Its confirm bar says that the session runs it as a command.
 
