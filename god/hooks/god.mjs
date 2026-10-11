@@ -244,9 +244,14 @@ function isNotPrompt(text) {
   const command = (start2.split(/\s/, 1)[0] ?? "").toLowerCase();
   return MODE_MARKS.has(start2.charAt(0)) || EXIT_WORDS.has(firstLine) || EXIT_COMMANDS.has(command);
 }
-function textRefusal(text) {
+function peerRefusal(text) {
   if (BLANK.test(text)) return "empty";
   if (CONTROL_CHAR.test(text) || HIDDEN_CHAR.test(text)) return "control-char";
+  return void 0;
+}
+function textRefusal(text) {
+  const shown2 = peerRefusal(text);
+  if (shown2) return shown2;
   if (BACKSLASH_ESCAPE.test(text) || LINE_END_BACKSLASH.test(text)) return "backslash-escape";
   if (isNotPrompt(text)) return "not-a-prompt";
   return void 0;
@@ -3552,11 +3557,12 @@ function partsOf(intent, width, isSending, refusal) {
     if (intent.input === void 0) return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }, { text: "  none" }], width)], text: [] };
     return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }], width)], text: keptLines(intent.input, width, 3) };
   }
-  const note = intent.kind !== "prompt" ? void 0 : refusal !== void 0 ? REFUSAL_TEXT[refusal] : PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)];
+  const note = refusal !== void 0 ? REFUSAL_TEXT[refusal] : intent.kind === "prompt" ? PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)] : void 0;
   return { fixed: [...ask, ...note === void 0 ? [] : wrapSegments([{ text: note, token: "--warn" }], width)], text: textLines(intent.text, width, 3) };
 }
 function confirmView(input) {
-  const refusal = input.intent.kind === "prompt" ? textRefusal(input.intent.text) : void 0;
+  const { intent } = input;
+  const refusal = intent.kind === "prompt" ? textRefusal(intent.text) : intent.kind === "peer" ? peerRefusal(intent.text) : void 0;
   const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true, refusal);
   const { lines, window } = windowOf2(text, Math.max(MIN_WINDOW, input.rows - fixed.length), input.scroll);
   return { lines: [...fixed, ...lines], hints: refusal === void 0 ? CONFIRM_HINTS : CANCEL_HINTS, window };
@@ -4016,6 +4022,12 @@ function isDeliverArgv(argv, home) {
   if (rest.length !== 2 || rest[0] !== "--") return false;
   return verb === "send" || verb === "send-key" && PLAN_KEYS.has(rest[1] ?? "");
 }
+function isDigitStep(steps, refs) {
+  const [step, ...more] = steps;
+  const head = ["cmux", "send", "--workspace", refs.workspaceRef, "--surface", refs.surfaceRef, "--"];
+  if (step === void 0 || more.length > 0 || step.length !== head.length + 1) return false;
+  return head.every((arg, index) => step[index] === arg) && /^[1-9]$/.test(step[head.length] ?? "");
+}
 function isDeliverEnv(argv, options) {
   const env = options?.env ?? {};
   const keys = Object.keys(env);
@@ -4078,6 +4090,7 @@ async function deliver(ports, request) {
   const now = await host.now().catch(() => Number.NaN);
   const plan = planDelivery(intent, screen, fresh.facts, now);
   if (plan.kind === "refuse") return refused(plan.refusal, screen);
+  if (intent.kind !== "prompt" && !isDigitStep(plan.steps, refs)) return refused("screen-changed", screen);
   let newest = screen;
   for (const [index, step] of plan.steps.entries()) {
     if (index > 0) {
@@ -4098,7 +4111,8 @@ async function deliver(ports, request) {
   return { outcome: { status: "sent", intent, at: await at() }, check };
 }
 async function deliverPeer(peer, intent, now) {
-  if (textRefusal(intent.text) === "empty") return { status: "refused", intent, at: await now(), refusal: "empty" };
+  const refusal = peerRefusal(intent.text);
+  if (refusal !== void 0) return { status: "refused", intent, at: await now(), refusal };
   const sent = await peer(intent.target.sessionId, intent.text).catch(() => void 0);
   return { status: sent?.isDelivered === true ? "delivered" : "not-delivered", intent, at: await now() };
 }
@@ -4213,15 +4227,15 @@ function barView(input) {
     const stale = isStale ? outcomeLines(outcome, width) : [];
     const isSending = deliver2.isSending === true;
     const bar = confirmView({ intent, width, rows: input.rows - stale.length, scroll: deliver2.scroll, isSending });
-    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: !isSending, intent };
+    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: !isSending, hints: isSending ? [] : bar.hints, intent };
   }
   if (draft !== void 0) {
     const head = appendItem(wrapSegments([{ text: draftText(draft), ...ACCENT, bold: true }], width), [pressSegment("c", "cancel")], width);
-    return { lines: head, field: { key: draftKey(draft), label: DRAFT_LABEL, placeholder: DRAFT_PLACEHOLDER, submitLabel: DRAFT_SUBMIT }, scrollTo: {}, isOpen: true };
+    return { lines: head, field: { key: draftKey(draft), label: DRAFT_LABEL, placeholder: DRAFT_PLACEHOLDER, submitLabel: DRAFT_SUBMIT }, scrollTo: {}, isOpen: true, hints: CANCEL_HINTS };
   }
   if (outcome === void 0 || outcome.intent.target.sessionId !== input.selectedKey) return void 0;
   if (input.isScreenOpen && isScreenLine(outcome)) return void 0;
-  return { lines: outcomeLines(outcome, width), scrollTo: {}, isOpen: false };
+  return { lines: outcomeLines(outcome, width), scrollTo: {}, isOpen: false, hints: [] };
 }
 
 // src/god/view/detail-pane.ts
@@ -4644,7 +4658,8 @@ function drawLine(ui, line, theme, onKeyed, keys) {
 function barRows(ui, bar, theme, actions) {
   if (bar === void 0) return [];
   const scrollKeys = Object.entries(bar.scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]]);
-  const keys = { ...bar.isOpen ? { y: () => actions.onSend(bar.intent), c: () => actions.onCancel(bar.intent) } : {}, ...Object.fromEntries(scrollKeys) };
+  const canSend = bar.isOpen && bar.hints.some((hint) => hint.hotkey === "y");
+  const keys = { ...canSend ? { y: () => actions.onSend(bar.intent) } : {}, ...bar.isOpen ? { c: () => actions.onCancel(bar.intent) } : {}, ...Object.fromEntries(scrollKeys) };
   const rows = bar.lines.map((line) => drawLine(ui, line, theme, () => void 0, keys));
   const { Input } = ui;
   const field2 = bar.field;
