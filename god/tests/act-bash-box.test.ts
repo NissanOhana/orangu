@@ -2,10 +2,11 @@
 // command between 2 dashed rules (U+254C) as wide as the tab, here 99 columns: a command that fits takes 1 plain row,
 // and a wider command wraps at the box width with the gutter ` │ ` on each row. 1 then y reads the screen again and
 // sends exactly 1 send of the digit 1, which answers the dialog. A home folder on row 1 of a wrap shows as ~ in the
-// pane, and the match measures the raw row of the same read. Every screen and every command is synthetic.
+// pane, and the match measures the raw row of the same read. With 2 open Bash calls the dialog can be for either one,
+// so y sends no key. Every screen and every command is synthetic.
 import { expect, test } from 'claude-code/testing'
 import { HOME, SURFACES, bash, prompt } from './fake-host'
-import { SF, WS, begin, cmuxSince, detailText, lines, press, readScreen, select, sendText } from './act-machine'
+import { SF, WS, begin, cmuxSince, detailText, has, lines, press, readScreen, select, sendText } from './act-machine'
 
 const W = 99
 const DASHED = '╌'.repeat(W)
@@ -95,5 +96,23 @@ for (const surface of SURFACES) {
     await press(ui, 'key:y')
     expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '1')])
     expect(machine.cmux!.answered).toEqual({ [SF.perm]: ['1'] })
+  })
+
+  test(`${surface}: 1 then y while 2 Bash calls of the session wait sends no key, even when the screen shows the confirmed command`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    // a second call with no result: the dialog on the screen can be for either one
+    const perm = machine.sessions[2]!
+    perm.transcript = [...perm.transcript!, bash('toolu_b4', 'rm -rf build', 'Clean the build', Date.now() - 500)]
+    perm.transcriptMtimeMs = Date.now()
+    perm.fileMtimeMs += 1000
+    machine.cmux!.screens![SF.perm] = boxScreen('rm -rf build', [' rm -rf build']).replace(' Make an empty probe file', ' Clean the build')
+    await clock.advance(2000)
+    await select($, 'ses-perm')
+    await press(ui, 'permission:yes')
+    expect(has(await lines(ui), 'rm -rf build')).toBe(true)
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(cmuxSince(calls, atY).filter((argv) => argv[1] === 'send' || argv[1] === 'send-key')).toEqual([])
+    expect(machine.cmux!.answered ?? {}).toEqual({})
   })
 }

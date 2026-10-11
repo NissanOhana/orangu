@@ -149,8 +149,8 @@ const clean = (text: string): string => cleanText(text, HOME)
 const filler = (n: number): string => 'word-'.repeat(Math.ceil(n / 5)).slice(0, n)
 /** The confirmed Bash request as the transcript source gives it: each value through the text cleaner of the home folder. */
 const cleanedBash = (command: string) => ({ tool: 'Bash', input: JSON.stringify(cleanValue({ command, description: DESCRIPTION }, clean)), choice: 'yes' as const })
-/** The deliver path: the view of the cleaned screen, the cleaned input, and the raw text of the same read with the cleaner. */
-const withRaw = (command: string, screen = boxScreen(wrapped(command)), raw = screen) => matchPermission(readScreen(clean(screen)), cleanedBash(command), { text: raw, clean })
+/** The deliver path: the view of the cleaned screen, the cleaned input, and the raw side: the same read, the raw command and the cleaner. */
+const withRaw = (command: string, screen = boxScreen(wrapped(command)), raw = screen) => matchPermission(readScreen(clean(screen)), cleanedBash(command), { text: raw, command, clean })
 /** a wrapped command with the home folder whole on row 1 */
 const AT_HOME = `touch ${HOME}/${filler(90)}/yes.txt`
 
@@ -182,6 +182,54 @@ describe('matchPermission: the box measured on the raw text of the same read', (
     expect(withRaw(AT_HOME, screen, screen.replace(' Do you want to proceed?', ' Do you want to make this edit?'))).toEqual(CHANGED)
     expect(withRaw(AT_HOME, screen, screen.replace(`${DASHED}\n Do you`, `${'╌'.repeat(W - 1)}\n Do you`))).toEqual(CHANGED)
     expect(withRaw(AT_HOME, boxScreen(wrapped(AT_HOME)), boxScreen(wrapped(AT_HOME.replace('yes.txt', 'no.txt'))))).toEqual(CHANGED)
+  })
+})
+
+describe('matchPermission: the shapes that a crafted command can use', () => {
+  it('refuses a command with its own dashed row, of the box width or shorter: the box then has 3 rules', () => {
+    const rule = '╌'.repeat(W - 1)
+    expect(withRaw(`echo a\n${rule}`, boxScreen([' echo a', ` ${rule}`]))).toEqual(CHANGED)
+    expect(withRaw('echo a\n╌╌╌\necho b', boxScreen([' echo a', ' ╌╌╌', ' echo b']))).toEqual(CHANGED)
+    expect(match([' echo a', ` ${rule}`], `echo a\n${rule}`)).toEqual(CHANGED)
+  })
+
+  it('compares the lines of a command that start with │ as drawn: a short one matches whole, one that fills the box never does', () => {
+    expect(withRaw('│ ls /tmp', boxScreen([' │ ls /tmp']))).toEqual(YES)
+    const drawn = [` │ ${'x'.repeat(W - 3)}`, ' │ yy']
+    expect([...(drawn[0] ?? '')].length).toBe(W)
+    expect(withRaw(`│ ${'x'.repeat(W - 3)}\n│ yy`, boxScreen(drawn))).toEqual(CHANGED)
+    // the same rows are the wrap of 1 line, so the match alone cannot tell the 2 commands apart: the plan binds the
+    // answer to the 1 open call, and the deliver tests refuse this screen for the shorter command
+    expect(withRaw(`${'x'.repeat(W - 3)}yy`, boxScreen(drawn))).toEqual(YES)
+  })
+
+  it('reads lines like the tip, the description or the question inside the box as command lines', () => {
+    const command = `${TIP}\n${DESCRIPTION}\nDo you want to proceed?\ntouch /tmp/gx.txt`
+    const box = command.split('\n').map((line) => ` ${line}`)
+    expect(withRaw(command, boxScreen(box))).toEqual(YES)
+    expect(withRaw('touch /tmp/gx.txt', boxScreen(box))).toEqual(CHANGED)
+    expect(withRaw('touch /tmp/gx.txt', boxScreen([` ${DESCRIPTION}`, ' touch /tmp/gx.txt']))).toEqual(CHANGED)
+    expect(withRaw('touch /tmp/gx.txt', boxScreen([' touch /tmp/gx.txt'], { description: `${DESCRIPTION}\n${DASHED}\n touch /tmp/gx.txt` }))).toEqual(CHANGED)
+  })
+
+  it('binds to the live dialog right above the options: an old dialog above refuses, and a quoted box above its rule does not count', () => {
+    const live = boxScreen([' touch /tmp/gx.txt'])
+    expect(withRaw('touch /tmp/gx.txt', `${boxScreen([' rm -rf /tmp/old'])}\n${live}`)).toEqual(CHANGED)
+    const quote = (command: string): string => ['⏺ The last dialog was:', DASHED, ` ${command}`, DASHED, ''].join('\n')
+    expect(withRaw('touch /tmp/gx.txt', `${quote('touch /tmp/gx.txt')}\n${boxScreen([' rm -rf /tmp/old'])}`)).toEqual(CHANGED)
+    expect(withRaw('touch /tmp/gx.txt', `${quote('rm -rf /tmp/old')}\n${live}`)).toEqual(YES)
+  })
+
+  it('compares the raw lines with the raw command, so 2 commands that clean to the same text do not pass', () => {
+    const key = (c: string): string => `export ANTHROPIC_API_KEY=sk-ant-api03-${c.repeat(24)}`
+    expect(clean(key('A'))).toBe(clean(key('B')))
+    expect(withRaw(key('A'), boxScreen([` ${key('A')}`]))).toEqual(YES)
+    expect(withRaw(key('A'), boxScreen([` ${key('B')}`]))).toEqual(CHANGED)
+    const long = (c: string): string => `${key(c)} && ${filler(80)}`
+    expect(withRaw(long('A'))).toEqual(YES)
+    expect(withRaw(long('A'), boxScreen(wrapped(long('B'))))).toEqual(CHANGED)
+    // with no raw side the cleaned rows cannot tell them apart, so the plan refuses a permission with no raw side
+    expect(matchPermission(readScreen(clean(boxScreen([` ${key('B')}`]))), cleanedBash(key('A')))).toEqual(YES)
   })
 })
 

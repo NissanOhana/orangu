@@ -6,8 +6,8 @@
  * Every rule fails closed:
  * - the state comes from the registry and the transcript, which a session cannot draw on its screen. An answer
  *   needs a session that waits for input on the same open question (1 question, 1 selection, the same header,
- *   question and label at the digit). A permission answer needs a session that waits on a permission prompt. A
- *   prompt needs an idle session with no open question, and with no running background task or subagent, which can
+ *   question and label at the digit). A permission answer needs a session that waits on a permission prompt, with no
+ *   running subagent, whose own dialog can show in the same tab (task-running). A prompt needs an idle session with no open question, and with no running background task or subagent, which can
  *   open a dialog while the keys go out (task-running). So a busy session that prints a dialog or an input box
  *   gets no key;
  * - the screen must be of the target session, from a tab whose refs are `workspace:N` and `surface:N` or UUIDs
@@ -19,8 +19,10 @@
  *   (src/god/model/screen-match.ts). The digit goes out as text, with `cmux send`: `cmux send-key` takes only a
  *   named key, such as enter, tab or escape, and exits 1 on a digit with "Unknown key";
  * - a permission answer is the digit of the option labeled exactly Yes or exactly No, on a dialog that shows the
- *   confirmed shell command, also with `cmux send`. The executor gives the raw text of the same screen read with its
- *   cleaner (RawScreen), so the match measures a wrapped command on the raw rows, and only the digit comes back;
+ *   confirmed shell command, also with `cmux send`. The executor gives the raw text of the same screen read, the open
+ *   calls of the fresh transcript read and the cleaner (RawFacts). The answer binds to the only open call, a Bash call
+ *   with the confirmed input (boundCommand), and the match compares the raw rows of the box with its raw command. Only
+ *   the digit or a refusal comes back;
  * - a prompt is 1 `cmux send` for each line, `shift+enter` between the lines and `enter` at the end, only on an
  *   empty prompt row with no dialog on the screen. Its text passes these rules (textRefusal) before any host call:
  *   it holds a visible character (empty). It holds no control character but the newline, no line or paragraph
@@ -41,7 +43,8 @@
  * do not lag it, the session is still idle with no wait, no dialog is on the screen, and the input box holds the text
  * of the steps before (typedBy). The executor stops at the first refusal, and no later step goes out.
  */
-import { matchAnswer, matchPermission, matchPrompt, matchTyped, readScreen, type RawScreen, type ScreenMatch } from '../model/screen-match.js'
+import { matchAnswer, matchPermission, matchPrompt, matchTyped, readScreen, type ScreenMatch } from '../model/screen-match.js'
+import { cleanValue } from '../sanitize.js'
 import type { DeliverIntent, DeliverPlan, DeliverRefusal, ScreenRead, SessionFacts, TranscriptFacts } from '../types.js'
 
 /** A screen read older than this, at the plan time, is stale. */
@@ -121,7 +124,10 @@ function stateRefusal(intent: KeyIntent, facts: TargetFacts): DeliverRefusal | u
     if (facts.status !== 'idle' || facts.waitingFor !== undefined || open !== undefined) return 'screen-changed'
     return (facts.transcript?.agents ?? []).some((task) => task.isRunning) ? 'task-running' : undefined
   }
-  if (intent.kind === 'permission') return facts.status === 'waiting' && facts.waitingFor === 'permission prompt' ? undefined : 'screen-changed'
+  if (intent.kind === 'permission') {
+    if (facts.status !== 'waiting' || facts.waitingFor !== 'permission prompt') return 'screen-changed'
+    return (facts.transcript?.agents ?? []).some((task) => task.isRunning && task.kind === 'subagent') ? 'task-running' : undefined
+  }
   if (facts.status !== 'waiting' || facts.waitingFor !== 'input needed' || !open || open.toolUseId !== intent.toolUseId) return 'screen-changed'
   const [question, ...more] = open.questions
   if (!question) return 'screen-changed'
@@ -131,6 +137,30 @@ function stateRefusal(intent: KeyIntent, facts: TargetFacts): DeliverRefusal | u
 }
 
 const refuse = (refusal: DeliverRefusal): DeliverPlan => ({ kind: 'refuse', refusal })
+
+/** 1 call with no result in the fresh transcript read, as the transcript wrote it: its tool name and its raw input. */
+export type OpenCall = { name: string; input: unknown }
+
+/**
+ * The raw side of a permission answer, from the executor: the raw text of the same screen read, the calls with no
+ * result of the fresh transcript read, and the text cleaner of the home folder. It stays in the plan: only the digit or
+ * a refusal leaves it.
+ */
+export type RawFacts = { screen: string; calls: readonly OpenCall[]; clean: (text: string) => string }
+
+/**
+ * The raw command of the 1 call that a permission answer binds to, or undefined. The fresh read must have exactly 1 call
+ * with no result: a Bash call whose input, cleaned as the transcript source cleans it, is the input that the person
+ * confirmed. With 2 open calls the dialog on the screen can be for either one, and the dialog of a command whose lines
+ * start with `│ ` looks like the wrap of another command. So 2 open calls give a refusal.
+ */
+function boundCommand(intent: Extract<KeyIntent, { kind: 'permission' }>, raw: RawFacts): string | undefined {
+  const [call, ...more] = raw.calls
+  if (call === undefined || more.length > 0 || call.name !== 'Bash' || intent.tool !== 'Bash') return undefined
+  if (JSON.stringify(cleanValue(call.input, raw.clean)) !== intent.input) return undefined
+  const command = typeof call.input === 'object' && call.input !== null ? (call.input as Record<string, unknown>)['command'] : undefined
+  return typeof command === 'string' ? command : undefined
+}
 
 /** The argv of 1 cmux call to the tab of the screen, with `--` right before the text or the key. */
 function cmux(verb: 'send' | 'send-key', screen: ScreenRead, value: string): readonly string[] {
@@ -151,10 +181,10 @@ function promptSteps(text: string, screen: ScreenRead): (readonly string[])[] {
 /**
  * The plan of 1 confirmed intent on 1 fresh screen read and the state of the target, made at `now` (engine time, in
  * ms). The text checks of a prompt come first, then the tab refs, the session of the read, the age of the read and
- * of the state, the state of the session, then the match of the screen. `raw` is the same read before the cleaner,
- * for the match of a permission answer only.
+ * of the state, the state of the session, then the match of the screen. A permission answer needs `raw`, which the
+ * executor always gives: with none it is refused.
  */
-export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, now: number, raw?: RawScreen): DeliverPlan {
+export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, now: number, raw?: RawFacts): DeliverPlan {
   if (intent.kind === 'prompt') {
     const refusal = textRefusal(intent.text)
     if (refusal) return refuse(refusal)
@@ -170,8 +200,10 @@ export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: Targe
   switch (intent.kind) {
     case 'answer':
       return digitPlan(matchAnswer(view, { ...intent, options: facts.transcript?.openQuestion?.questions[0]?.options ?? [] }), screen)
-    case 'permission':
-      return digitPlan(matchPermission(view, intent, raw), screen)
+    case 'permission': {
+      const command = raw === undefined ? undefined : boundCommand(intent, raw)
+      return raw === undefined || command === undefined ? refuse('screen-changed') : digitPlan(matchPermission(view, intent, { text: raw.screen, command, clean: raw.clean }), screen)
+    }
     case 'prompt': {
       const refusal = matchPrompt(view)
       return refusal ? refuse(refusal) : { kind: 'send', steps: promptSteps(intent.text, screen) }

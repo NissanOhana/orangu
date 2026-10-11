@@ -13,10 +13,10 @@
  *    and the open question and the running tasks come only from this fresh transcript read. The screen is read again
  *    for each delivery, never taken from the Screen tab or an earlier y.
  * 3. planDelivery (src/god/act/deliver-plan.ts) makes the plan of the intent from that screen and those facts, with
- *    the host clock right after the screen read. It also gets the raw text of the same read and the text cleaner, so
- *    the match of a shell dialog measures the rows of its command box before the cleaner changes their width. The raw
- *    text stays in this call: no outcome, Screen tab or check holds it. A refusal keeps the fresh cleaned screen for
- *    the Screen tab. The plan of an answer or a permission must be exactly 1 send of 1 digit 1 to 9 to the mapped tab
+ *    the host clock right after the screen read. It also gets the raw text of the same read, the calls with no result
+ *    of the fresh transcript read with their raw input, and the text cleaner. So a permission answer binds to the only
+ *    open call, and the match compares the raw rows of its command box with its raw command. The raw text stays in
+ *    this call: no outcome, Screen tab or check holds it. A refusal keeps the fresh cleaned screen for the Screen tab. The plan of an answer or a permission must be exactly 1 send of 1 digit 1 to 9 to the mapped tab
  *    (isDigitStep), or it is refused.
  * 4. It runs the plan steps in order and stops at the first one that fails: an exit code that is not 0, or a reject.
  *    Before each next step of a prompt it reads the registry file, the size of the transcript and the screen again,
@@ -37,12 +37,12 @@
 import type { Effects, Host, RunOptions } from '../host.js'
 import { readRegistryFile } from '../source/agents.js'
 import { readPs, type PsRow } from '../source/cmux.js'
-import { reduceRecords } from '../source/records.js'
+import { emptyRecordState, readRecords, transcriptFacts } from '../source/records.js'
 import { readScreenAndRaw, readScreenOf } from '../source/screen.js'
 import { HEAD_BYTES, projectsDir, readTranscripts } from '../source/transcript.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal, ScreenRead, SessionFacts, SourceState, TranscriptFacts } from '../types.js'
 import { expectOf, type DeliverCheck } from './deliver-check.js'
-import { SURFACE_REF, WORKSPACE_REF, nextStepRefusal, peerRefusal, planDelivery, textRefusal, typedBy, type KeyIntent, type TargetFacts } from './deliver-plan.js'
+import { SURFACE_REF, WORKSPACE_REF, nextStepRefusal, peerRefusal, planDelivery, textRefusal, typedBy, type KeyIntent, type OpenCall, type TargetFacts } from './deliver-plan.js'
 import { tabRefs } from './jump.js'
 
 /** The reason when the host of the executor refuses a command. */
@@ -150,7 +150,7 @@ export type DeliverResult = { outcome: DeliverOutcome; check?: DeliverCheck }
  * The facts of the target read again, with the transcript facts for the check and the process start that the
  * registry file writes, or why they are not there.
  */
-type FreshFacts = { kind: 'read'; facts: TargetFacts; transcript?: TranscriptFacts; procStart?: string; marks: WriteMarks } | { kind: 'gone' } | { kind: 'unread' }
+type FreshFacts = { kind: 'read'; facts: TargetFacts; transcript?: TranscriptFacts; calls: readonly OpenCall[]; procStart?: string; marks: WriteMarks } | { kind: 'gone' } | { kind: 'unread' }
 
 /**
  * What the plan read saw of the writes of the session: the status time of its registry file, and the path and the
@@ -158,20 +158,25 @@ type FreshFacts = { kind: 'read'; facts: TargetFacts; transcript?: TranscriptFac
  */
 type WriteMarks = { statusUpdatedAt?: number; transcript?: { path: string; size: number } }
 
-/** The registry file and the transcript tail of the target, read again at once, timed just before the reads. */
+/**
+ * The registry file and the transcript tail of the target, read again at once, timed just before the reads. The calls
+ * with no result keep their raw input, for the plan of a permission answer only (RawFacts).
+ */
 async function readFresh(host: Host, ports: DeliverPorts, row: DeliverRow): Promise<FreshFacts> {
   const factsAt = await host.now()
   const [registry, reads] = await Promise.all([readRegistryFile(host, ports.home, row.pid, ports.clean), readTranscripts(host, ports.home, [{ sessionId: row.sessionId, cwd: row.cwd }])])
   if (registry === undefined || registry.sessionId !== row.sessionId) return { kind: 'gone' }
   const read = reads[0]
   if (read === undefined || (read.status !== 'read' && read.status !== 'missing')) return { kind: 'unread' }
-  const transcript = read.status === 'read' ? reduceRecords(read.records, { home: ports.home, headRecords: read.headRecords, parseErrors: read.parseErrors }) : undefined
+  const records = read.status === 'read' ? readRecords(emptyRecordState(ports.home), read.records, { headRecords: read.headRecords, parseErrors: read.parseErrors }) : undefined
+  const transcript = records === undefined ? undefined : transcriptFacts(records)
+  const calls = (records?.open ?? []).map(({ name, input }): OpenCall => ({ name, input }))
   const state = { sessionId: registry.sessionId, status: registry.status, ...(registry.waitingFor === undefined ? {} : { waitingFor: registry.waitingFor }) }
   const procStart = registry.procStart === undefined ? {} : { procStart: registry.procStart }
   const path = read.cursor.path
   const size = read.status === 'read' ? read.cursor.position?.size : undefined
   const marks: WriteMarks = { ...(registry.statusUpdatedAt === undefined ? {} : { statusUpdatedAt: registry.statusUpdatedAt }), ...(path === undefined || size === undefined ? {} : { transcript: { path, size } }) }
-  return { kind: 'read', facts: { ...state, ...(transcript === undefined ? {} : { transcript }), factsAt }, ...(transcript === undefined ? {} : { transcript }), ...procStart, marks }
+  return { kind: 'read', facts: { ...state, ...(transcript === undefined ? {} : { transcript }), factsAt }, ...(transcript === undefined ? {} : { transcript }), calls, ...procStart, marks }
 }
 
 /** True when ps shows the PID with the start time of the registry file and the TTY of the mapped tab. */
@@ -231,7 +236,7 @@ export async function deliver(ports: DeliverPorts, request: DeliverRequest): Pro
   if (screenRead === undefined) return failed('screen-unread')
   const screen = screenRead.read
   const now = await host.now().catch(() => Number.NaN)
-  const plan = planDelivery(intent, screen, fresh.facts, now, { text: screenRead.raw, clean: ports.clean })
+  const plan = planDelivery(intent, screen, fresh.facts, now, { screen: screenRead.raw, calls: fresh.calls, clean: ports.clean })
   if (plan.kind === 'refuse') return refused(plan.refusal, screen)
   if (intent.kind !== 'prompt' && !isDigitStep(plan.steps, refs)) return refused('screen-changed', screen)
 

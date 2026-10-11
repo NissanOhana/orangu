@@ -14,7 +14,8 @@
  *   2.1.296 the command rows sit in a box between 2 dashed rules (U+254C) as wide as the tab. A command line that fits
  *   takes 1 plain row. A wider line wraps at the box width, inside a word, and then each command row starts with the
  *   gutter ` │ `, so each row of a wrap but the last ends at the box width. The cleaner can change the width of a row,
- *   so the deliver path also gives the raw text of the same read (RawScreen) to measure the rows of the box.
+ *   so the plan also gives the raw text of the same read and the raw command of the 1 open call (RawScreen): the box
+ *   is measured on the raw rows and compared with the raw command.
  * - the prompt: the input box, a rule row, `❯` and a space (a no-break space in this build) and the typed text,
  *   then a rule row. The transcript shows the earlier prompts in the same form, so only the last prompt row counts.
  * - between 2 steps of a prompt: the input box, from the last prompt row (a rule row right above it) down to the next
@@ -107,10 +108,12 @@ export type ScreenView = {
 export type ScreenMatch = { isMatch: true; digit: number } | { isMatch: false; refusal: DeliverRefusal }
 
 /**
- * The raw text of the same screen read, before the text cleaner, and that cleaner (src/god/act/deliver.ts, ports.clean).
- * Only the command box of a shell dialog reads it, and no raw text leaves the match: only the digit or the refusal does.
+ * The raw side of a permission answer, from the plan: the raw text of the same screen read, the raw command of the 1
+ * open call that the answer binds to (src/god/act/deliver-plan.ts, boundCommand), and the text cleaner of the deliver
+ * path. Only the command box of a shell dialog reads it, and no raw text leaves the match: only the digit or the
+ * refusal does.
  */
-export type RawScreen = { text: string; clean: (text: string) => string }
+export type RawScreen = { text: string; command: string; clean: (text: string) => string }
 
 type AnswerIntent = Extract<DeliverIntent, { kind: 'answer' }>
 type PermissionIntent = Extract<DeliverIntent, { kind: 'permission' }>
@@ -326,6 +329,9 @@ export function matchAnswer(view: ScreenView, want: Pick<AnswerIntent, 'header' 
   return { isMatch: true, digit: option.digit }
 }
 
+/** The lines of a text as a dialog shows them: each trimmed, empty lines left out. */
+const linesOf = (text: string): string[] => text.split('\n').map(trim).filter((row) => row !== '')
+
 /** What a shell permission dialog shows for a request: its description lines and its command lines, each trimmed, empty lines left out. */
 type ShellRequest = { description: readonly string[]; command: readonly string[] }
 
@@ -340,9 +346,8 @@ function requestOf(tool: string, input: string | undefined): ShellRequest | unde
   }
   const { command, description } = (parsed ?? {}) as { command?: unknown; description?: unknown }
   if (typeof command !== 'string') return undefined
-  const rowsOf = (text: string): string[] => text.split('\n').map(trim).filter((row) => row !== '')
-  const commandRows = rowsOf(command)
-  return commandRows.length > 0 ? { description: typeof description === 'string' ? rowsOf(description) : [], command: commandRows } : undefined
+  const commandRows = linesOf(command)
+  return commandRows.length > 0 ? { description: typeof description === 'string' ? linesOf(description) : [], command: commandRows } : undefined
 }
 
 /** True when the row is the auto mode tip that this build draws under the title. */
@@ -394,11 +399,12 @@ function boxOf(rows: readonly string[]): Box | 'none' | undefined {
 }
 
 /**
- * The command lines of the box from the raw rows of the same read, or undefined when they do not line up. The deliver
- * path cleans the screen as 1 text, and a home folder, a secret or a blob that the cleaner rewrites changes the width of
- * its row. So the raw rows give the widths: the 2 rules and the question row of the raw text must clean to the rows
- * that the cleaned screen shows at the same places. Then boxLines measures and joins the raw rows, and each joined line
- * goes through the same cleaner as the expected input. The raw rows and lines stay in this function.
+ * The raw command lines of the box, from the raw rows of the same read, or undefined when they do not line up. The
+ * deliver path cleans the screen as 1 text, and a home folder, a secret or a blob that the cleaner rewrites changes the
+ * width of its row. So the raw rows give the widths: the 2 rules and the question row of the raw text must clean to the
+ * rows that the cleaned screen shows at the same places. Then boxLines measures and joins the raw rows. No line is
+ * cleaned: the match compares them with the raw command, because the cleaner gives 1 text for 2 commands that differ
+ * only in a secret. The raw rows and lines stay in this function.
  */
 function rawBoxLines(dialog: PermissionDialog, box: Box, raw: RawScreen): string[] | undefined {
   const request = dialog.request ?? []
@@ -408,7 +414,7 @@ function rawBoxLines(dialog: PermissionDialog, box: Box, raw: RawScreen): string
   const cleanRow = (k: number): string => trimEnd(raw.clean(rows[k] ?? ''))
   if (rows.length !== request.length + 1) return undefined
   if (cleanRow(box.open) !== request[box.open] || cleanRow(box.close) !== request[box.close] || trim(cleanRow(request.length)) !== dialog.question) return undefined
-  return boxLines(rows.slice(box.open + 1, box.close), box.width)?.map((line) => trim(raw.clean(line))).filter((line) => line !== '')
+  return boxLines(rows.slice(box.open + 1, box.close), box.width)
 }
 
 /**
@@ -418,9 +424,13 @@ function rawBoxLines(dialog: PermissionDialog, box: Box, raw: RawScreen): string
  * before the question. So no row of another request, no reason row, no row of another width in a wrap, no box with a
  * missing rule and no cut command passes.
  *
- * With the raw text, the command lines come from rawBoxLines. With none, boxLines reads the cleaned rows: then a home
- * folder, a secret or a blob that the cleaner rewrites in a row before the last row of a wrap changes the width of that
- * row, and the match refuses (it fails closed).
+ * With the raw side, the raw box lines (rawBoxLines) must equal the lines of the raw command. With none, boxLines reads
+ * the cleaned rows: then a home folder, a secret or a blob that the cleaner rewrites in a row before the last row of a
+ * wrap changes the width of that row, and the match refuses (it fails closed).
+ *
+ * The rows of a wrap and the rows of a command whose own lines start with `│ ` look the same. So a command of such lines
+ * never matches its own dialog (the gutter goes), and the plan binds the answer to the 1 open call, so no other
+ * command can be on the screen (src/god/act/deliver-plan.ts, boundCommand).
  */
 function showsRequest(dialog: PermissionDialog, expected: ShellRequest, raw: RawScreen | undefined): boolean {
   const rows = dialog.request
@@ -429,7 +439,7 @@ function showsRequest(dialog: PermissionDialog, expected: ShellRequest, raw: Raw
   if (box === 'none') return showsHead(rows, [...expected.description, ...expected.command])
   if (box === undefined || !showsHead(rows.slice(0, box.open), expected.description)) return false
   const lines = raw === undefined ? boxLines(rows.slice(box.open + 1, box.close), box.width) : rawBoxLines(dialog, box, raw)
-  return lines !== undefined && sameRows(lines, expected.command)
+  return lines !== undefined && sameRows(lines, raw === undefined ? expected.command : linesOf(raw.command))
 }
 
 /**

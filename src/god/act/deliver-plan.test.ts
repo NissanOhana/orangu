@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import type { DeliverIntent, DeliverPlan, DeliverRefusal, OpenQuestion, ScreenRead } from '../types.js'
-import { FACTS_MAX_LAG_MS, SCREEN_MAX_AGE_MS, planDelivery, type KeyIntent, type TargetFacts } from './deliver-plan.js'
+import { FACTS_MAX_LAG_MS, SCREEN_MAX_AGE_MS, planDelivery, type KeyIntent, type OpenCall, type RawFacts, type TargetFacts } from './deliver-plan.js'
 
 const SCREENS = join(dirname(fileURLToPath(import.meta.url)), '../../../test/fixtures/god/screens')
 const fixture = (name: string): string => readFileSync(join(SCREENS, `${name}.txt`), 'utf8')
@@ -64,8 +64,11 @@ const prompt = (text: string): KeyIntent => ({ kind: 'prompt', target: TARGET, t
 
 /** The plan with the state that the intent needs, unless a test gives another one. */
 const stateFor = (intent: KeyIntent): State => (intent.kind === 'answer' ? ASKS : intent.kind === 'permission' ? ASKS_PERMISSION : IDLE)
-const plan = (intent: KeyIntent, read: ScreenRead, state: State = stateFor(intent)): DeliverPlan =>
-  planDelivery(intent, read, { ...state, factsAt: state.factsAt ?? read.readAt - 100 }, NOW)
+/** The raw side that the executor gives: the same screen text, the 1 open Bash call of the permission fixtures, and a cleaner that changes nothing. */
+const rawOf = (read: ScreenRead, calls: readonly OpenCall[] = [{ name: 'Bash', input: JSON.parse(TOUCH) as unknown }]): RawFacts => ({ screen: read.text, calls, clean: (text) => text })
+/** `raw` null: the plan gets no raw side. */
+const plan = (intent: KeyIntent, read: ScreenRead, state: State = stateFor(intent), raw: RawFacts | null = rawOf(read)): DeliverPlan =>
+  planDelivery(intent, read, { ...state, factsAt: state.factsAt ?? read.readAt - 100 }, NOW, raw ?? undefined)
 
 const sendText = (text: string): string[] => ['cmux', 'send', '--workspace', WS, '--surface', SURFACE, '--', text]
 const sendKey = (key: string): string[] => ['cmux', 'send-key', '--workspace', WS, '--surface', SURFACE, '--', key]
@@ -196,6 +199,29 @@ describe('planDelivery: the state of the target session, which its screen cannot
     expect(plan(permission('yes'), screen('permission'), IDLE)).toEqual(CHANGED)
     expect(plan(permission('yes'), screen('permission'), facts({ status: 'waiting', waitingFor: 'input needed' }))).toEqual(CHANGED)
     expect(plan(permission('yes'), screen('permission'), facts({ status: 'waiting' }))).toEqual(CHANGED)
+  })
+
+  it('binds a permission to the only open call: a second open call, another tool, another input or none refuses', () => {
+    const read = screen('permission')
+    const touch = { name: 'Bash', input: JSON.parse(TOUCH) as unknown }
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [touch]))).toEqual({ kind: 'send', steps: [sendText('1')] })
+    // 2 calls in 1 reply: the dialog on the screen can be for either one
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ name: 'Bash', input: { command: 'rm -rf build', description: 'Clean' } }, touch]))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [touch, touch]))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ name: 'Edit', input: JSON.parse(TOUCH) as unknown }]))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ name: 'Bash', input: { command: 'touch probe-yes.txt', description: 'Make a probe file' } }]))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, []))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, null)).toEqual(CHANGED)
+    // the form with no box shows no edge between the description and the command, so a request that moves a line
+    // across that edge reads the same: only the input of the open call tells them apart
+    const moved: KeyIntent = { kind: 'permission', target: TARGET, choice: 'yes', tool: 'Bash', input: JSON.stringify({ command: 'Make an empty probe file\ntouch probe-yes.txt', description: '' }) }
+    expect(plan(moved, read, ASKS_PERMISSION, rawOf(read, [touch]))).toEqual(CHANGED)
+  })
+
+  it('refuses a permission while a subagent runs, whose own dialog can show in the same tab, and takes a background command', () => {
+    const task = { toolUseId: 'toolu_task', text: 'Agent explore', isRunning: true }
+    expect(plan(permission('yes'), screen('permission'), facts({ status: 'waiting', waitingFor: 'permission prompt', transcript: { agents: [{ ...task, kind: 'subagent' }] } }))).toEqual(refused('task-running'))
+    expect(plan(permission('yes'), screen('permission'), facts({ status: 'waiting', waitingFor: 'permission prompt', transcript: { agents: [{ ...task, kind: 'background' }] } })).kind).toBe('send')
   })
 
   it('refuses the state of another session', () => {

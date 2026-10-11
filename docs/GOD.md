@@ -118,6 +118,7 @@ The pane does not send these. Press `j` and do them in the tab of the session:
 
 - An answer to a permission prompt of any tool but Bash. The screen check can tie only a shell command to its dialog.
 - Any option of a Bash prompt but the 2 options labeled exactly `Yes` and `No`.
+- A Bash answer to a session with 2 or more open tool calls, or with a running subagent. The dialog on the screen can then be for another command.
 - An answer to a dialog with more than 1 question or more than 1 choice.
 - A prompt whose first character after white space is `!` (a shell command) or `?` (the help).
 - A prompt whose first line is `exit`, `quit`, `:q`, `:q!`, `:wq` or `:wq!`, in any case.
