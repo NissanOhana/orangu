@@ -138,8 +138,8 @@ function stateRefusal(intent: KeyIntent, facts: TargetFacts): DeliverRefusal | u
 
 const refuse = (refusal: DeliverRefusal): DeliverPlan => ({ kind: 'refuse', refusal })
 
-/** 1 call with no result in the fresh transcript read, as the transcript wrote it: its tool name and its raw input. */
-export type OpenCall = { name: string; input: unknown }
+/** 1 call with no result in the fresh transcript read, as the transcript wrote it: its tool use id, its tool name and its raw input. */
+export type OpenCall = { id: string; name: string; input: unknown }
 
 /**
  * The raw side of a permission answer, from the executor: the raw text of the same screen read, the calls with no
@@ -150,13 +150,15 @@ export type RawFacts = { screen: string; calls: readonly OpenCall[]; clean: (tex
 
 /**
  * The raw command of the 1 call that a permission answer binds to, or undefined. The fresh read must have exactly 1 call
- * with no result: a Bash call whose input, cleaned as the transcript source cleans it, is the input that the person
- * confirmed. With 2 open calls the dialog on the screen can be for either one, and the dialog of a command whose lines
- * start with `│ ` looks like the wrap of another command. So 2 open calls give a refusal.
+ * with no result: the Bash call with the tool use id that the confirm bar showed, whose input, cleaned as the transcript
+ * source cleans it, is the input that the person confirmed. The id comes first, because the cleaner gives 1 text for 2
+ * calls that differ only in a secret: a call that opens after the confirmed one closed never passes. With 2 open calls
+ * the dialog on the screen can be for either one, and the dialog of a command whose lines start with `│ ` looks like
+ * the wrap of another command. So 2 open calls give a refusal.
  */
 function boundCommand(intent: Extract<KeyIntent, { kind: 'permission' }>, raw: RawFacts): string | undefined {
   const [call, ...more] = raw.calls
-  if (call === undefined || more.length > 0 || call.name !== 'Bash' || intent.tool !== 'Bash') return undefined
+  if (call === undefined || more.length > 0 || call.id !== intent.toolUseId || call.name !== 'Bash' || intent.tool !== 'Bash') return undefined
   if (JSON.stringify(cleanValue(call.input, raw.clean)) !== intent.input) return undefined
   const command = typeof call.input === 'object' && call.input !== null ? (call.input as Record<string, unknown>)['command'] : undefined
   return typeof command === 'string' ? command : undefined

@@ -170,7 +170,7 @@ async function readFresh(host: Host, ports: DeliverPorts, row: DeliverRow): Prom
   if (read === undefined || (read.status !== 'read' && read.status !== 'missing')) return { kind: 'unread' }
   const records = read.status === 'read' ? readRecords(emptyRecordState(ports.home), read.records, { headRecords: read.headRecords, parseErrors: read.parseErrors }) : undefined
   const transcript = records === undefined ? undefined : transcriptFacts(records)
-  const calls = (records?.open ?? []).map(({ name, input }): OpenCall => ({ name, input }))
+  const calls = (records?.open ?? []).map(({ id, name, input }): OpenCall => ({ id, name, input }))
   const state = { sessionId: registry.sessionId, status: registry.status, ...(registry.waitingFor === undefined ? {} : { waitingFor: registry.waitingFor }) }
   const procStart = registry.procStart === undefined ? {} : { procStart: registry.procStart }
   const path = read.cursor.path

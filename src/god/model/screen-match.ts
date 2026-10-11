@@ -13,9 +13,9 @@
  *   `Do you want to proceed?`, then the numbered options. Only an option labeled exactly `Yes` or `No` counts. From
  *   2.1.296 the command rows sit in a box between 2 dashed rules (U+254C) as wide as the tab. A command line that fits
  *   takes 1 plain row. A wider line wraps at the box width, inside a word, and then each command row starts with the
- *   gutter ` │ `, so each row of a wrap but the last ends at the box width. The cleaner can change the width of a row,
- *   so the plan also gives the raw text of the same read and the raw command of the 1 open call (RawScreen): the box
- *   is measured on the raw rows and compared with the raw command.
+ *   gutter ` │ `, so each row of a wrap but the last ends at the box width. The cleaner can change the width of a
+ *   row, so the plan also gives the raw text of the same read and the raw command of the 1 open call (RawScreen):
+ *   the box is measured on the raw rows and compared with the raw command.
  * - the prompt: the input box, a rule row, `❯` and a space (a no-break space in this build) and the typed text,
  *   then a rule row. The transcript shows the earlier prompts in the same form, so only the last prompt row counts.
  * - between 2 steps of a prompt: the input box, from the last prompt row (a rule row right above it) down to the next
@@ -244,7 +244,10 @@ function questionAt(rows: readonly string[], c: number, width: number): Question
   }
 }
 
-/** The rows between the nearest rule over the question row q and q, as the screen shows them, or undefined when no rule is near. */
+/**
+ * The rows between the nearest rule over the question row q and q, as the screen shows them, or undefined when no
+ * rule is near.
+ */
 function requestRows(rows: readonly string[], q: number): string[] | undefined {
   for (let i = q - 1; i >= Math.max(0, q - REQUEST_ROWS); i--) {
     const row = rows[i] ?? ''
@@ -332,7 +335,10 @@ export function matchAnswer(view: ScreenView, want: Pick<AnswerIntent, 'header' 
 /** The lines of a text as a dialog shows them: each trimmed, empty lines left out. */
 const linesOf = (text: string): string[] => text.split('\n').map(trim).filter((row) => row !== '')
 
-/** What a shell permission dialog shows for a request: its description lines and its command lines, each trimmed, empty lines left out. */
+/**
+ * What a shell permission dialog shows for a request: its description lines and its command lines, each trimmed,
+ * empty lines left out.
+ */
 type ShellRequest = { description: readonly string[]; command: readonly string[] }
 
 /** The request of the confirmed tool and input, or undefined when it is not a Bash command. */
@@ -355,7 +361,7 @@ const isAutoModeTip = (row: string | undefined): boolean => row === 'Tip: auto m
 
 const sameRows = (rows: readonly string[], expected: readonly string[]): boolean => rows.length === expected.length && rows.every((row, k) => row === expected[k])
 
-/** True when the rows are the title, then (the tip), then exactly the expected rows, each trimmed, blank rows left out. */
+/** True when the rows are the title, (the tip), then exactly the expected rows, each trimmed, blank rows left out. */
 function showsHead(rows: readonly string[], expected: readonly string[]): boolean {
   const [title, ...rest] = rows.map(trim).filter((row) => row !== '')
   if (title === undefined || !BASH_TITLE.test(title)) return false
@@ -388,7 +394,10 @@ function boxLines(rows: readonly string[], width: number): string[] | undefined 
 /** The command box in the request rows: the index of its 2 dashed rules and its width. */
 type Box = { open: number; close: number; width: number }
 
-/** The box of the request rows, `none` with no dashed rule, or undefined when the rules make no box with only blank rows under it. */
+/**
+ * The box of the request rows, `none` with no dashed rule, or undefined when the rules make no box with only blank
+ * rows under it.
+ */
 function boxOf(rows: readonly string[]): Box | 'none' | undefined {
   const rules = rows.flatMap((row, k) => (DASHED_RULE.test(row) ? [k] : []))
   if (rules.length === 0) return 'none'
@@ -413,49 +422,60 @@ function rawRequestRows(dialog: PermissionDialog, raw: RawScreen): string[] | un
   return rows.slice(0, request.length)
 }
 
+/** The places of the description rows and of the command rows in the request rows of a dialog with no box. */
+type NoBoxRows = { description: number[]; command: number[] }
+
 /**
- * The raw command lines of the dialog, each trimmed, empty lines left out, or undefined. With a box, boxLines measures
- * and joins the raw rows between the 2 rules: the cleaner can rewrite a home folder, a secret or a blob and change the
- * width of a row. With no box, they are the last raw rows of the request, as many as the raw command has lines (the
- * cleaned rows already passed showsHead). No line is cleaned, because the cleaner gives 1 text for 2 commands that
- * differ only in a secret, a home folder or a masked run.
+ * The description rows and the command rows of a dialog with no box (Claude Code 2.1.295), after its title and its
+ * tip, or undefined. That build indents a description row by 1 space and a command row by 3, so the indent gives the
+ * edge between them. A command line can start with spaces of its own, so a command row has 3 spaces or more. A row of
+ * another indent, or a description row under a command row, gives undefined.
  */
-function rawCommandLines(dialog: PermissionDialog, box: Box | 'none', raw: RawScreen): string[] | undefined {
-  const rows = rawRequestRows(dialog, raw)
-  if (rows === undefined) return undefined
-  if (box !== 'none') return boxLines(rows.slice(box.open + 1, box.close), box.width)
-  const lines = rows.map(trim).filter((row) => row !== '')
-  return lines.slice(Math.max(1, lines.length - linesOf(raw.command).length))
+function noBoxRows(rows: readonly string[]): NoBoxRows | undefined {
+  const [title, ...rest] = rows.flatMap((row, k) => (isBlank(row) ? [] : [k]))
+  if (title === undefined || !BASH_TITLE.test(trim(rows[title] ?? ''))) return undefined
+  const parts: NoBoxRows = { description: [], command: [] }
+  for (const k of isAutoModeTip(trim(rows[rest[0] ?? -1] ?? '')) ? rest.slice(1) : rest) {
+    const cells = indent(rows[k] ?? '')
+    if (cells === 1 && parts.command.length === 0) parts.description.push(k)
+    else if (cells >= 3) parts.command.push(k)
+    else return undefined
+  }
+  return parts
 }
 
 /**
- * True when the dialog is a shell permission dialog for exactly this request. With no box: the title, then (the tip),
- * then the description and command rows and no other row, then the question. With a box: the title, (the tip) and the
- * description rows, then 1 dashed rule, the command rows, 1 dashed rule of the same width, and then only blank rows
- * before the question. So no row of another request, no reason row, no row of another width in a wrap, no box with a
- * missing rule and no cut command passes.
+ * True when the dialog is a shell permission dialog for exactly this request. With no box: the title, (the tip), the
+ * description rows and then the command rows (noBoxRows), and no other row before the question. With a box: the title,
+ * (the tip) and the description rows, then 1 dashed rule, the command rows, 1 dashed rule of the same width, and then
+ * only blank rows before the question. So no row of another request, no reason row, no row of another width in a wrap,
+ * no box with a missing rule and no cut command passes.
  *
- * With the raw side, in both forms, the raw command lines of the dialog (rawCommandLines) must equal the lines of the raw
- * command. With none, the match reads the cleaned rows only, and the plan never asks for it (deliver-plan.ts refuses a
- * permission answer with no raw side).
+ * With the raw side, in both forms, the command lines come from the raw rows (rawRequestRows), and they must equal the
+ * lines of the raw command with no clean step: the cleaner gives 1 text for 2 commands that differ only in a secret, a
+ * home folder or a masked run, and it can change the width of a row that a wrap measures. With no raw side, the match
+ * reads the cleaned rows only, and the plan never asks for it (deliver-plan.ts refuses a permission answer with none).
  *
- * The rows of a wrap and the rows of a command whose own lines start with `│ ` look the same. So a command of such lines
- * never matches its own dialog (the gutter goes), and the plan binds the answer to the 1 open call, so no other
- * command can be on the screen (src/god/act/deliver-plan.ts, boundCommand).
+ * The rows of a wrap and the rows of a command whose own lines start with `│ ` look the same. So a command of such
+ * lines never matches its own dialog (the gutter goes), and the plan binds the answer to the 1 open call with the id
+ * that the bar showed, so no other command can be on the screen (src/god/act/deliver-plan.ts, boundCommand).
  */
 function showsRequest(dialog: PermissionDialog, expected: ShellRequest, raw: RawScreen | undefined): boolean {
   const rows = dialog.request
   if (dialog.question !== 'Do you want to proceed?' || rows === undefined) return false
   const box = boxOf(rows)
-  if (box === undefined) return false
-  if (box === 'none' ? !showsHead(rows, [...expected.description, ...expected.command]) : !showsHead(rows.slice(0, box.open), expected.description)) return false
-  if (raw !== undefined) {
-    const lines = rawCommandLines(dialog, box, raw)
-    return lines !== undefined && sameRows(lines, linesOf(raw.command))
+  const rawRows = raw === undefined ? undefined : rawRequestRows(dialog, raw)
+  if (box === undefined || (raw !== undefined && rawRows === undefined)) return false
+  const source = rawRows ?? rows
+  const want = raw === undefined ? expected.command : linesOf(raw.command)
+  if (want.length === 0) return false
+  if (box === 'none') {
+    const parts = noBoxRows(rows)
+    const at = (from: readonly string[]) => (k: number): string => trim(from[k] ?? '')
+    return parts !== undefined && sameRows(parts.description.map(at(rows)), expected.description) && sameRows(parts.command.map(at(source)), want)
   }
-  if (box === 'none') return true
-  const lines = boxLines(rows.slice(box.open + 1, box.close), box.width)
-  return lines !== undefined && sameRows(lines, expected.command)
+  const lines = boxLines(source.slice(box.open + 1, box.close), box.width)
+  return showsHead(rows.slice(0, box.open), expected.description) && lines !== undefined && sameRows(lines, want)
 }
 
 /**

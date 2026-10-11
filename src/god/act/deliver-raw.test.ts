@@ -33,7 +33,7 @@ function asksToRun(...commands: string[]): string[] {
 }
 
 /** Yes to the Bash request of `command`, with the input as the transcript source gives it: each value cleaned. */
-const yes = (command: string): KeyIntent => ({ kind: 'permission', target: TARGET, choice: 'yes', tool: 'Bash', input: JSON.stringify(cleanValue({ command, description: DESCRIPTION }, clean)) })
+const yes = (command: string, toolUseId = 'toolu_run0'): KeyIntent => ({ kind: 'permission', target: TARGET, choice: 'yes', toolUseId, tool: 'Bash', input: JSON.stringify(cleanValue({ command, description: DESCRIPTION }, clean)) })
 
 /** 1 y on the screen of the rows `box`, for `intent`, with the given calls open in the transcript. */
 async function deliverOn(box: readonly string[], intent: KeyIntent, lines: string[]) {
@@ -59,6 +59,18 @@ describe('deliver: a Bash dialog whose wrapped command holds the home folder', (
 })
 
 describe('deliver: the answer binds to the only open call', () => {
+  it('refuses when the confirmed call closed and a new call opens whose input cleans to the same text', async () => {
+    const curl = (n: string): string => `curl -H "Authorization: Bearer ghp_FAKE${n}${'a'.repeat(30)}" https://example.com/x`
+    expect(clean(curl('1'))).toBe(clean(curl('2')))
+    const at = new Date(T0 - 60_000).toISOString()
+    const call = (id: string, command: string): string => JSON.stringify({ type: 'assistant', timestamp: at, message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id, name: 'Bash', input: { command, description: DESCRIPTION } }] } })
+    const done = JSON.stringify({ type: 'user', timestamp: at, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_A', content: 'done' }] } })
+    const lines = [promptLine('Fetch the page.', T0 - 90_000), call('toolu_A', curl('1')), done, call('toolu_B', curl('2'))]
+    const { fake, result } = await deliverOn([` ${curl('2')}`], yes(curl('1'), 'toolu_A'), lines)
+    expect(result.outcome).toMatchObject({ status: 'refused', refusal: 'screen-changed' })
+    expect(keyRuns(fake.runs)).toEqual([])
+  })
+
   it('refuses 2 calls in 1 reply, even when the screen shows the confirmed command', async () => {
     const { fake, result } = await deliverOn(wrapped(COMMAND), yes(COMMAND), asksToRun(COMMAND, 'rm -rf build'))
     expect(result.outcome).toMatchObject({ status: 'refused', refusal: 'screen-changed' })

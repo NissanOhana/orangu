@@ -5,7 +5,7 @@
 // pane, and the match measures the raw row of the same read. With 2 open Bash calls the dialog can be for either one,
 // so y sends no key. Every screen and every command is synthetic.
 import { expect, test } from 'claude-code/testing'
-import { HOME, SURFACES, bash, prompt } from './fake-host'
+import { HOME, SURFACES, bash, prompt, toolResult } from './fake-host'
 import { SF, WS, begin, cmuxSince, detailText, has, lines, press, readScreen, select, sendText } from './act-machine'
 
 const W = 99
@@ -110,6 +110,29 @@ for (const surface of SURFACES) {
     await select($, 'ses-perm')
     await press(ui, 'permission:yes')
     expect(has(await lines(ui), 'rm -rf build')).toBe(true)
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(cmuxSince(calls, atY).filter((argv) => argv[1] === 'send' || argv[1] === 'send-key')).toEqual([])
+    expect(machine.cmux!.answered ?? {}).toEqual({})
+  })
+
+  test(`${surface}: y after the confirmed call closed and a new call with the same cleaned input opened sends no key`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    const curl = (n: string): string => `curl -H "Authorization: Bearer ghp_FAKE${n}${'a'.repeat(30)}" https://example.com/x`
+    const perm = machine.sessions[2]!
+    perm.transcript = [prompt('Fetch the page.', Date.now() - 90_000), bash('toolu_A', curl('1'), 'Fetch the page', Date.now() - 2000)]
+    perm.transcriptMtimeMs = Date.now()
+    perm.fileMtimeMs += 1000
+    machine.cmux!.screens![SF.perm] = boxScreen(curl('1'), [` ${curl('1')}`]).replace(' Make an empty probe file', ' Fetch the page')
+    await clock.advance(2000)
+    await select($, 'ses-perm')
+    await press(ui, 'permission:yes')
+    expect(await lines(ui)).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
+    // before y, call A closes and call B opens: B cleans to the same text as A, and the screen shows B
+    perm.transcript = [...perm.transcript, toolResult('toolu_A', 'done', Date.now() - 1000), bash('toolu_B', curl('2'), 'Fetch the page', Date.now() - 500)]
+    perm.transcriptMtimeMs = Date.now()
+    perm.fileMtimeMs += 1000
+    machine.cmux!.screens![SF.perm] = boxScreen(curl('2'), [` ${curl('2')}`]).replace(' Make an empty probe file', ' Fetch the page')
     const atY = calls.runs.length
     await press(ui, 'key:y')
     expect(cmuxSince(calls, atY).filter((argv) => argv[1] === 'send' || argv[1] === 'send-key')).toEqual([])

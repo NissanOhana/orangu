@@ -34,7 +34,7 @@ const OPTIONS = [
 const QUESTION_TEXT = 'Which color should the button use?'
 export const ANSWER: KeyIntent = { kind: 'answer', target: TARGET, toolUseId: 'toolu_color', header: 'Color', question: QUESTION_TEXT, option: 1, label: 'Red' }
 const TOUCH = { command: 'touch probe-yes.txt', description: 'Make an empty probe file' }
-export const PERMISSION: KeyIntent = { kind: 'permission', target: TARGET, choice: 'no', tool: 'Bash', input: JSON.stringify(TOUCH) }
+export const PERMISSION: KeyIntent = { kind: 'permission', target: TARGET, choice: 'no', toolUseId: 'toolu_bash', tool: 'Bash', input: JSON.stringify(TOUCH) }
 export const prompt = (text: string): KeyIntent => ({ kind: 'prompt', target: TARGET, text })
 
 const at = (ms: number): string => new Date(ms).toISOString()

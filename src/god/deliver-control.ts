@@ -56,7 +56,7 @@ export function permissionIntent(snapshot: BoardSnapshot | undefined, selectedKe
   const session = selectedSession(snapshot, selectedKey)
   const activity = session?.transcript?.activity
   if (session === undefined || session.status !== 'waiting' || session.waitingFor !== 'permission prompt' || activity?.isOpen !== true || activity.tool !== ANSWERED_TOOL) return undefined
-  return { kind: 'permission', target: targetOf(session), choice, tool: activity.tool, ...(activity.input === undefined ? {} : { input: activity.input }) }
+  return { kind: 'permission', target: targetOf(session), choice, toolUseId: activity.toolUseId, tool: activity.tool, ...(activity.input === undefined ? {} : { input: activity.input }) }
 }
 
 /** The draft of r (a prompt, needs cmux) or m (a peer message) for the selected session. */

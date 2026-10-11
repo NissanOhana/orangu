@@ -55,8 +55,8 @@ describe('answerIntent', () => {
 })
 
 describe('permissionIntent', () => {
-  it('gives Yes or No for the open Bash request of the selected session, with its whole input', () => {
-    expect(permissionIntent(SNAPSHOT, 's-perm', 'no')).toEqual({ kind: 'permission', target: { sessionId: 's-perm', name: 'ops-4' }, choice: 'no', tool: 'Bash', input: '{"command":"npm test","description":"Run the tests"}' })
+  it('gives Yes or No for the open Bash request of the selected session, with its tool use id and its whole input', () => {
+    expect(permissionIntent(SNAPSHOT, 's-perm', 'no')).toEqual({ kind: 'permission', target: { sessionId: 's-perm', name: 'ops-4' }, choice: 'no', toolUseId: 'tu-bash', tool: 'Bash', input: '{"command":"npm test","description":"Run the tests"}' })
   })
 
   it('gives none for a request of another tool, a session that waits on no permission, or no cmux', () => {

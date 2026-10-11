@@ -59,13 +59,13 @@ const IDLE = facts()
 
 const ANSWER: KeyIntent = { kind: 'answer', target: TARGET, toolUseId: 'toolu_color', header: 'Color', question: 'Which color should the button use?', option: 1, label: 'Red' }
 const TOUCH = JSON.stringify({ command: 'touch probe-yes.txt', description: 'Make an empty probe file' })
-const permission = (choice: 'yes' | 'no'): KeyIntent => ({ kind: 'permission', target: TARGET, choice, tool: 'Bash', input: TOUCH })
+const permission = (choice: 'yes' | 'no'): KeyIntent => ({ kind: 'permission', target: TARGET, choice, toolUseId: 'toolu_bash', tool: 'Bash', input: TOUCH })
 const prompt = (text: string): KeyIntent => ({ kind: 'prompt', target: TARGET, text })
 
 /** The plan with the state that the intent needs, unless a test gives another one. */
 const stateFor = (intent: KeyIntent): State => (intent.kind === 'answer' ? ASKS : intent.kind === 'permission' ? ASKS_PERMISSION : IDLE)
 /** The raw side that the executor gives: the same screen text, the 1 open Bash call of the permission fixtures, and a cleaner that changes nothing. */
-const rawOf = (read: ScreenRead, calls: readonly OpenCall[] = [{ name: 'Bash', input: JSON.parse(TOUCH) as unknown }]): RawFacts => ({ screen: read.text, calls, clean: (text) => text })
+const rawOf = (read: ScreenRead, calls: readonly OpenCall[] = [{ id: 'toolu_bash', name: 'Bash', input: JSON.parse(TOUCH) as unknown }]): RawFacts => ({ screen: read.text, calls, clean: (text) => text })
 /** `raw` null: the plan gets no raw side. */
 const plan = (intent: KeyIntent, read: ScreenRead, state: State = stateFor(intent), raw: RawFacts | null = rawOf(read)): DeliverPlan =>
   planDelivery(intent, read, { ...state, factsAt: state.factsAt ?? read.readAt - 100 }, NOW, raw ?? undefined)
@@ -201,20 +201,22 @@ describe('planDelivery: the state of the target session, which its screen cannot
     expect(plan(permission('yes'), screen('permission'), facts({ status: 'waiting' }))).toEqual(CHANGED)
   })
 
-  it('binds a permission to the only open call: a second open call, another tool, another input or none refuses', () => {
+  it('binds a permission to the only open call: a second open call, another id, another tool, another input or none refuses', () => {
     const read = screen('permission')
-    const touch = { name: 'Bash', input: JSON.parse(TOUCH) as unknown }
+    const touch = { id: 'toolu_bash', name: 'Bash', input: JSON.parse(TOUCH) as unknown }
     expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [touch]))).toEqual({ kind: 'send', steps: [sendText('1')] })
     // 2 calls in 1 reply: the dialog on the screen can be for either one
-    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ name: 'Bash', input: { command: 'rm -rf build', description: 'Clean' } }, touch]))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ id: 'toolu_rm', name: 'Bash', input: { command: 'rm -rf build', description: 'Clean' } }, touch]))).toEqual(CHANGED)
     expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [touch, touch]))).toEqual(CHANGED)
-    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ name: 'Edit', input: JSON.parse(TOUCH) as unknown }]))).toEqual(CHANGED)
-    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ name: 'Bash', input: { command: 'touch probe-yes.txt', description: 'Make a probe file' } }]))).toEqual(CHANGED)
+    // the confirmed call closed, and a new call with the same input is the only open one: the bar never showed it
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ ...touch, id: 'toolu_next' }]))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ ...touch, name: 'Edit' }]))).toEqual(CHANGED)
+    expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, [{ ...touch, input: { command: 'touch probe-yes.txt', description: 'Make a probe file' } }]))).toEqual(CHANGED)
     expect(plan(permission('yes'), read, ASKS_PERMISSION, rawOf(read, []))).toEqual(CHANGED)
     expect(plan(permission('yes'), read, ASKS_PERMISSION, null)).toEqual(CHANGED)
     // the form with no box shows no edge between the description and the command, so a request that moves a line
     // across that edge reads the same: only the input of the open call tells them apart
-    const moved: KeyIntent = { kind: 'permission', target: TARGET, choice: 'yes', tool: 'Bash', input: JSON.stringify({ command: 'Make an empty probe file\ntouch probe-yes.txt', description: '' }) }
+    const moved: KeyIntent = { kind: 'permission', target: TARGET, choice: 'yes', toolUseId: 'toolu_bash', tool: 'Bash', input: JSON.stringify({ command: 'Make an empty probe file\ntouch probe-yes.txt', description: '' }) }
     expect(plan(moved, read, ASKS_PERMISSION, rawOf(read, [touch]))).toEqual(CHANGED)
   })
 

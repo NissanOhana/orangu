@@ -55,6 +55,8 @@ function wrapped(line: string): string[] {
 /** The confirmed Bash request: its command and its description. */
 const bash = (command: string, choice: 'yes' | 'no' = 'yes', description = DESCRIPTION) => ({ tool: 'Bash', input: JSON.stringify({ command, description }), choice })
 const match = (box: readonly string[], command: string, shape?: Shape) => matchPermission(readScreen(boxScreen(box, shape)), bash(command))
+/** The dialog with no box (Claude Code 2.1.295): the same rows with the 2 dashed rules taken out. */
+const noBox = (rows: readonly string[], shape?: Shape): string => boxScreen(rows, shape).replace(`${DASHED}\n`, '').replace(`${DASHED}\n`, '')
 
 /** the wrap of the live check, cut to fit 99 columns: row 1 is the gutter and 96 characters, and the break falls inside a word */
 const ROW_1 = ` │ touch /private/tmp/scratch-0123456789abcdef/${'a'.repeat(50)}/s`
@@ -87,8 +89,20 @@ describe('matchPermission: the command box of 2.1.296', () => {
   })
 
   it('keeps the old form with no box', () => {
-    const old = boxScreen([' touch /tmp/gx.txt']).replace(`${DASHED}\n`, '').replace(`${DASHED}\n`, '')
-    expect(matchPermission(readScreen(old), bash('touch /tmp/gx.txt'))).toEqual(YES)
+    expect(matchPermission(readScreen(noBox(['   touch /tmp/gx.txt'])), bash('touch /tmp/gx.txt'))).toEqual(YES)
+  })
+
+  it('splits the form with no box at the indent: a description row has 1 space, a command row 3 or more', () => {
+    // the description d1 + `echo one` with the command `echo two`, against the command `echo one` + `echo two`
+    const screen = noBox(['   echo two'], { description: 'd1\n echo one' })
+    const raw = (command: string) => ({ text: screen, command, clean: (text: string) => text })
+    expect(matchPermission(readScreen(screen), bash('echo one\necho two', 'yes', 'd1'))).toEqual(CHANGED)
+    expect(matchPermission(readScreen(screen), bash('echo one\necho two', 'yes', 'd1'), raw('echo one\necho two'))).toEqual(CHANGED)
+    expect(matchPermission(readScreen(screen), bash('echo two', 'yes', 'd1\necho one'))).toEqual(YES)
+    expect(matchPermission(readScreen(screen), bash('echo two', 'yes', 'd1\necho one'), raw('echo two'))).toEqual(YES)
+    expect(matchPermission(readScreen(noBox(['   echo one', '     echo two'])), bash('echo one\n  echo two'))).toEqual(YES)
+    expect(matchPermission(readScreen(noBox(['  echo two'])), bash('echo two'))).toEqual(CHANGED)
+    expect(matchPermission(readScreen(noBox(['   echo two', ' echo three'])), bash('echo two\necho three'))).toEqual(CHANGED)
   })
 })
 
@@ -242,7 +256,7 @@ describe('matchPermission: the shapes that a crafted command can use', () => {
   })
 
   it('compares the raw command in the form with no box too: 2 commands that clean to the same text do not pass', () => {
-    const old = (command: string): string => boxScreen([` ${command}`]).replace(`${DASHED}\n`, '').replace(`${DASHED}\n`, '')
+    const old = (command: string): string => noBox([`   ${command}`])
     const key = (c: string): string => `export ANTHROPIC_API_KEY=sk-ant-api03-${c.repeat(24)}`
     expect(withRaw(key('A'), old(key('A')))).toEqual(YES)
     expect(withRaw(key('A'), old(key('B')))).toEqual(CHANGED)

@@ -476,6 +476,8 @@ export type DeliverIntent =
       kind: 'permission'
       target: DeliverTarget
       choice: 'yes' | 'no'
+      /** the tool use id of the open call that the confirm bar shows: the answer binds to exactly this call */
+      toolUseId: string
       /** the tool that asks, and its whole input, for the confirm bar */
       tool: string
       input?: string
