@@ -473,21 +473,37 @@ function boxLines(rows, width) {
   }
   return lines.filter((text) => text !== "");
 }
-function showsRequest(dialog, expected) {
-  const rows = dialog.request;
-  if (dialog.question !== "Do you want to proceed?" || rows === void 0) return false;
+function boxOf(rows) {
   const rules = rows.flatMap((row, k) => DASHED_RULE.test(row) ? [k] : []);
-  if (rules.length === 0) return showsHead(rows, [...expected.description, ...expected.command]);
+  if (rules.length === 0) return "none";
   const [open = -1, close = -1] = rules;
   const width = columns(rows[open] ?? "");
-  if (rules.length !== 2 || width === void 0 || columns(rows[close] ?? "") !== width || rows.slice(close + 1).some((row) => !isBlank(row))) return false;
-  const lines = boxLines(rows.slice(open + 1, close), width);
-  return lines !== void 0 && showsHead(rows.slice(0, open), expected.description) && sameRows(lines, expected.command);
+  if (rules.length !== 2 || width === void 0 || columns(rows[close] ?? "") !== width || rows.slice(close + 1).some((row) => !isBlank(row))) return void 0;
+  return { open, close, width };
 }
-function matchPermission(view, want) {
+function rawBoxLines(dialog, box, raw) {
+  const request = dialog.request ?? [];
+  const start2 = dialog.firstLine - request.length;
+  if (start2 < 0) return void 0;
+  const rows = raw.text.split("\n").map(trimEnd).slice(start2, dialog.firstLine + 1);
+  const cleanRow = (k) => trimEnd(raw.clean(rows[k] ?? ""));
+  if (rows.length !== request.length + 1) return void 0;
+  if (cleanRow(box.open) !== request[box.open] || cleanRow(box.close) !== request[box.close] || trim(cleanRow(request.length)) !== dialog.question) return void 0;
+  return boxLines(rows.slice(box.open + 1, box.close), box.width)?.map((line) => trim(raw.clean(line))).filter((line) => line !== "");
+}
+function showsRequest(dialog, expected, raw) {
+  const rows = dialog.request;
+  if (dialog.question !== "Do you want to proceed?" || rows === void 0) return false;
+  const box = boxOf(rows);
+  if (box === "none") return showsHead(rows, [...expected.description, ...expected.command]);
+  if (box === void 0 || !showsHead(rows.slice(0, box.open), expected.description)) return false;
+  const lines = raw === void 0 ? boxLines(rows.slice(box.open + 1, box.close), box.width) : rawBoxLines(dialog, box, raw);
+  return lines !== void 0 && sameRows(lines, expected.command);
+}
+function matchPermission(view, want, raw) {
   const dialog = soleDialog(view);
   const expected = requestOf(want.tool, want.input);
-  if (dialog?.kind !== "permission" || !expected || !showsRequest(dialog, expected)) return refuse("screen-changed");
+  if (dialog?.kind !== "permission" || !expected || !showsRequest(dialog, expected, raw)) return refuse("screen-changed");
   if (dialog.options.filter((row) => row.hasCursor).length !== 1) return refuse("screen-changed");
   const label = want.choice === "yes" ? "Yes" : "No";
   const hits = dialog.options.filter((row) => row.label === label);
@@ -573,7 +589,7 @@ function promptSteps(text, screen) {
   const steps = lines.flatMap((line, i) => [...line === "" ? [] : [cmux("send", screen, line)], ...i < lines.length - 1 ? [cmux("send-key", screen, "shift+enter")] : []]);
   return [...steps, cmux("send-key", screen, "enter")];
 }
-function planDelivery(intent, screen, facts, now) {
+function planDelivery(intent, screen, facts, now, raw) {
   if (intent.kind === "prompt") {
     const refusal = textRefusal(intent.text);
     if (refusal) return refuse2(refusal);
@@ -590,7 +606,7 @@ function planDelivery(intent, screen, facts, now) {
     case "answer":
       return digitPlan(matchAnswer(view, { ...intent, options: facts.transcript?.openQuestion?.questions[0]?.options ?? [] }), screen);
     case "permission":
-      return digitPlan(matchPermission(view, intent), screen);
+      return digitPlan(matchPermission(view, intent, raw), screen);
     case "prompt": {
       const refusal = matchPrompt(view);
       return refusal ? refuse2(refusal) : { kind: "send", steps: promptSteps(intent.text, screen) };
@@ -4731,12 +4747,15 @@ function screenArgv(target) {
   return ["cmux", "read-screen", "--workspace", target.workspaceRef, "--surface", target.surfaceRef, "--lines", String(SCREEN_LINES)];
 }
 async function readScreenOf(host, target, clean, clock) {
+  return (await readScreenAndRaw(host, target, clean, clock))?.read;
+}
+async function readScreenAndRaw(host, target, clean, clock) {
   const refs = guardedRefs(target.workspaceRef, target.surfaceRef);
   if (refs === void 0) return void 0;
   try {
     const result = await host.run(screenArgv(target));
     if (result.exitCode !== 0) return void 0;
-    return { sessionId: target.sessionId, ...refs, text: clean(result.stdout), readAt: await clock() };
+    return { read: { sessionId: target.sessionId, ...refs, text: clean(result.stdout), readAt: await clock() }, raw: result.stdout };
   } catch {
     return void 0;
   }
@@ -4861,10 +4880,11 @@ async function deliver(ports, request) {
   if (fresh.kind === "gone") return refused("screen-changed");
   if (fresh.kind === "unread") return failed("facts-unread");
   if (!isSameProcess(ps.value.rows, session.pid, fresh.procStart, session.tab?.tty)) return refused("screen-changed");
-  const screen = await readScreenOf(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now());
-  if (screen === void 0) return failed("screen-unread");
+  const screenRead = await readScreenAndRaw(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now());
+  if (screenRead === void 0) return failed("screen-unread");
+  const screen = screenRead.read;
   const now = await host.now().catch(() => Number.NaN);
-  const plan = planDelivery(intent, screen, fresh.facts, now);
+  const plan = planDelivery(intent, screen, fresh.facts, now, { text: screenRead.raw, clean: ports.clean });
   if (plan.kind === "refuse") return refused(plan.refusal, screen);
   if (intent.kind !== "prompt" && !isDigitStep(plan.steps, refs)) return refused("screen-changed", screen);
   let newest = screen;
