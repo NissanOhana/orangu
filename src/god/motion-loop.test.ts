@@ -71,6 +71,35 @@ describe('the motion loop', () => {
     expect(live()).toEqual([PULSE_MS])
   })
 
+  it('keeps the 1 timer of a visible pane whose draw comes late: an idle tick between 2 draws does not add up to the lease', () => {
+    const { loop, timers, tick, live } = loopOf()
+    loop.want(SPINNER_MS)
+    tick()
+    for (let step = 0; step <= MOTION_LEASE_TICKS; step += 1) {
+      // the draw of the tick before comes after the next tick: 1 idle tick, then the draw, then the tick that reads it
+      tick()
+      expect(live()).toEqual([SPINNER_MS])
+      loop.want(SPINNER_MS)
+      tick()
+    }
+    expect(timers).toHaveLength(1)
+    expect(loop.elapsed()).toBe((2 * MOTION_LEASE_TICKS + 3) * SPINNER_MS)
+  })
+
+  it('moves the frame once for a period that the engine dispatched before it cancelled the timer of the old period', () => {
+    const { loop, timers, tick, live, redraws } = loopOf()
+    loop.want(SPINNER_MS)
+    tick()
+    loop.want(PULSE_MS)
+    tick()
+    expect(live()).toEqual([PULSE_MS])
+    const moved = { elapsed: loop.elapsed(), redraws: redraws() }
+    // the fake engine fires the cancelled timer of SPINNER_MS once more, as a period already in the queue does
+    timers.find((timer) => timer.isCancelled)!.fn()
+    expect({ elapsed: loop.elapsed(), redraws: redraws() }).toEqual(moved)
+    expect(live()).toEqual([PULSE_MS])
+  })
+
   it('moves to the period that the draws ask for since the last tick, the shortest one first', () => {
     const { loop, tick, live } = loopOf()
     loop.want(SPINNER_MS)

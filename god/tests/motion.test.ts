@@ -142,20 +142,35 @@ for (const surface of SURFACES) {
   })
 }
 
-test('terminal: the header shows the sparkline of the last 30 min as 1 Raster of 30 columns and 1 row, with its label', async ($, on) => {
-  const { clock, ui } = await begin($, on, 'terminal')
+/** The cells of the sparkline Raster, and the color of the WORKING heading Text as a cell color (0x00RRGGBB). */
+async function sparkOf(ui: Ui): Promise<{ words: DataView; working: number }> {
+  await ui.redraw()
+  const rasters = await ui.findAll({ type: 'Raster' })
+  const heading = (await ui.findAll({ type: 'Text', text: 'WORKING' })).find((text) => text.props['color'] !== undefined)
+  const bytes = Uint8Array.from(atob(String(rasters[0]?.props['cells'])), (char) => char.charCodeAt(0))
+  return { words: new DataView(bytes.buffer), working: Number.parseInt(String(heading?.props['color']).slice(1), 16) }
+}
+
+test('terminal: the header shows the sparkline of the last 30 min as 1 Raster of 30 columns and 1 row, with its label, in the WORKING color of the session theme', async ($, on) => {
+  const { clock, ui, machine } = await begin($, on, 'terminal')
   await clock.advance(2000)
   await ui.redraw()
   const rasters = await ui.findAll({ type: 'Raster' })
   expect(rasters.map((raster) => [raster.key, raster.props['columns'], raster.props['rows']])).toEqual([['spark', 30, 1]])
   expect(await ui.find({ type: 'Text', text: ' 30m' })).toBeDefined()
   // each cell is 3 little-endian u32: the glyph, the color and the background. 1 session works in the last minute
-  // (and in the minute before, when the 2 ticks fall in 2 minutes), in the WORKING color of the dark set.
-  const bytes = Uint8Array.from(atob(String(rasters[0]!.props['cells'])), (char) => char.charCodeAt(0))
-  const words = new DataView(bytes.buffer)
-  const glyphs = String.fromCodePoint(...Array.from({ length: 30 }, (_, cell) => words.getUint32(cell * 12, true)))
+  // (and in the minute before, when the 2 ticks fall in 2 minutes), in the WORKING color of the theme set. A plugin
+  // test cannot import src/god/generated/tokens.ts (it is outside god/), so the cell takes the color of the WORKING
+  // heading, which comes from the same token. src/god/ui/theme.test.ts holds that token to the generated value.
+  const dark = await sparkOf(ui)
+  const glyphs = String.fromCodePoint(...Array.from({ length: 30 }, (_, cell) => dark.words.getUint32(cell * 12, true)))
   expect(glyphs).toMatch(/^ {28}[ █]█$/)
-  expect(words.getUint32(29 * 12 + 4, true)).toBe(Number.parseInt('7fa8d8', 16))
+  expect(dark.words.getUint32(29 * 12 + 4, true)).toBe(dark.working)
+  machine.theme = 'light'
+  await clock.advance(2000)
+  const light = await sparkOf(ui)
+  expect(light.working).not.toBe(dark.working)
+  expect(light.words.getUint32(29 * 12 + 4, true)).toBe(light.working)
 })
 
 test('desktop: the tree has no Raster, and the header has no sparkline label', async ($, on) => {
