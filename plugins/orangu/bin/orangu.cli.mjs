@@ -2057,7 +2057,7 @@ function valueCharsEnd(text3, at) {
 var valueRunEnd = (text3, at) => quotedTail(text3, valueCharsEnd(text3, at));
 var opensValue = (c) => c !== void 0 && (VALUE_CHAR.test(c) || c === '"' || c === "'");
 var isSeparator = (c) => c === "=" || c === ":";
-var BLANK = /[ \t]/;
+var BLANK = /[^\S\n\r]/;
 function namesSecretAt(text3, end) {
   let start = end;
   while (start > 0 && NAME_CHAR.test(text3[start - 1])) start--;

@@ -910,7 +910,7 @@ function valueCharsEnd(text, at) {
 var valueRunEnd = (text, at) => quotedTail(text, valueCharsEnd(text, at));
 var opensValue = (c) => c !== void 0 && (VALUE_CHAR.test(c) || c === '"' || c === "'");
 var isSeparator = (c) => c === "=" || c === ":";
-var BLANK = /[ \t]/;
+var BLANK = /[^\S\n\r]/;
 function namesSecretAt(text, end) {
   let start2 = end;
   while (start2 > 0 && NAME_CHAR.test(text[start2 - 1])) start2--;
@@ -1210,7 +1210,7 @@ var STRING = `${ESC}[\\]PX^_]${STRING_TEXT}${STRING_END}?|[\\u0090\\u0098\\u009d
 var ESCAPE = `${ESC}[\\u0021-\\u002f]*[\\u0030-\\u007e]`;
 var SEQUENCES = new RegExp(`(?:${CSI}|${STRING}|${ESCAPE}|${CONTROL})+`, "g");
 var CONTROLS = new RegExp(`(?:${CONTROL})+`, "g");
-var C0_INSIDE = "[\\u0000-\\u0017\\u0019\\u001c-\\u001f]";
+var C0_INSIDE = "[\\u0000-\\u0009\\u000b-\\u0017\\u0019\\u001c-\\u001f]";
 var LOOSE_STRING = `(?:${ESC}[\\]PX^_]|[\\u0090\\u0098\\u009d-\\u009f])${STRING_TEXT}${STRING_END}?`;
 function looseSequences(c0Inside, final) {
   const inside = c0Inside ? `|${C0_INSIDE}` : "";
