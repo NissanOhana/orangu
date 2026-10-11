@@ -107,6 +107,8 @@ export type Calls = {
   notices: Array<{ text: string; title?: string }>
   /** the model calls that the plugin made */
   models: Array<{ model: string; prompt: string; system?: string }>
+  /** the store in memory: a test that sets a value acts as the board of a second /god session on the same store */
+  store: Map<string, unknown>
 }
 
 /** The folder name of a cwd under the projects folder, as Claude Code writes it. */
@@ -129,7 +131,8 @@ const fileOf = (machine: Machine, path: string): FakeSession | undefined =>
 
 /** Installs the machine beneath the plugin. The god session itself is in the agents list, so the board must leave it out. */
 export function installMachine(on: On, machine: Machine): Calls {
-  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [], tools: [], peers: [], tones: [], notices: [], models: [] }
+  const store = new Map<string, unknown>(Object.entries(machine.store ?? {}))
+  const calls: Calls = { runs: [], files: [], boardWrites: 0, storeSets: [], statuses: [], opens: [], tools: [], peers: [], tones: [], notices: [], models: [], store }
   const content = (session: FakeSession): string => `${(session.transcript ?? []).join('\n')}\n`
 
   on('process.run', async (_$, e) => {
@@ -232,7 +235,6 @@ export function installMachine(on: On, machine: Machine): Calls {
     return delay === undefined ? next(e) : delay.then(() => next(e))
   })
   // the store in memory, as the engine keeps the store of a plugin, with each write recorded
-  const store = new Map<string, unknown>(Object.entries(machine.store ?? {}))
   on('store.get', (_$, e) => ({ value: store.get(e.key) }))
   on('store.set', (_$, e) => {
     calls.storeSets.push([e.key, e.value])

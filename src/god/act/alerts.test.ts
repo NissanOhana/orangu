@@ -19,6 +19,11 @@ const WS = '0f8e2c1a-5b6d-4e7f-8a9b-0c1d2e3f4a5b'
 const SF = '9a8b7c6d-5e4f-4a3b-2c1d-0e9f8a7b6c5d'
 const ESC = String.fromCharCode(0x1b)
 const KEY = 'sk-ant-api03-FAKEFAKEFAKEFAKEFAKE'
+const FAKE_VALUE = 'FAKEVALUENL123'
+/** a bidirectional override, an isolate, a zero-width space, a soft hyphen, a word joiner, a byte order mark, a tag and a variation selector */
+const HIDDEN = ['\u202e', '\u2066', '\u200b', '\u00ad', '\u2060', '\ufeff', '\u{e0041}', '\ufe0f']
+
+const ringOf = (title: string, body: string): string[] => ['cmux', 'notify', '--title', title, '--body', body, '--workspace', WS, '--surface', SF]
 
 const tab = (workspaceRef = WS, surfaceRef = SF): TabRef => ({ pid: 4200, tty: 'ttys009', workspaceRef, surfaceRef, workspaceTitle: 'api' })
 
@@ -63,6 +68,13 @@ describe('the notice of an alert', () => {
     expect(body).not.toContain('\u202e')
     expect(body).not.toContain(HOME)
     expect(body).toContain('~/x')
+  })
+
+  it('puts the name on 1 line before it cleans it, so a secret that line breaks split is masked whole', () => {
+    const one = row(`api\n"password":\n"${FAKE_VALUE}"`)
+    const notice = alertNotice(one, 'needs-you', clean)
+    expect(notice.body).toMatch(/^The session api "password": "‹[a-z-]+›" needs you\.$/)
+    expect(JSON.stringify(ringArgv(board(one), one, notice))).not.toContain(FAKE_VALUE)
   })
 })
 
@@ -119,5 +131,18 @@ describe('the ring on the cmux tab', () => {
     await expect(ring.run(good, { env: { TZ: 'UTC' } })).rejects.toThrow(REFUSED_RING_ARGV)
     await expect(ring.run(['git', 'push'])).rejects.toThrow(REFUSED_RING_ARGV)
     expect(runs).toHaveLength(1)
+  })
+
+  it('refuses a title or a body with a character that draws nothing, in the argv check and in the host of the ring', async () => {
+    const { host, runs } = hostOf()
+    const ring = ringHost(host)
+    for (const hidden of HIDDEN) {
+      for (const argv of [ringOf('t', `The session a${hidden}b needs you.`), ringOf(`orangu${hidden} god`, 'b')]) {
+        const name = JSON.stringify(argv.slice(3, 6))
+        expect(isRingArgv(argv), name).toBe(false)
+        await expect(ring.run(argv), name).rejects.toThrow(REFUSED_RING_ARGV)
+      }
+    }
+    expect(runs).toEqual([])
   })
 })

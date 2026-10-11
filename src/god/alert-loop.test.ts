@@ -1,8 +1,10 @@
 /**
  * The alert loop: on each refresh it reads the alert state, asks the alert policy, writes the new state, and then
  * sends what each alert holds: 1 tone (only when the policy plays it), 1 notification and 1 ring on the cmux tab of
- * the session (only for needs-you and stuck). It counts the tones that played and the notifications that a channel
- * sent, for /god stats. A failed state read or write sends nothing, and a failed effect stops nothing.
+ * the session (only for needs-you and stuck). It reads the sound and the muted sessions from the store on each turn,
+ * not from the copy of the board, because the board of a second /god session can change them. It counts the tones
+ * that played and the notifications that a channel sent, for /god stats. A failed read of the state or the store, or
+ * a failed write of the state, sends nothing, and a failed effect stops nothing.
  */
 import { describe, expect, it } from 'vitest'
 import { MINUTE, NOW, SECOND, STORE, facts, session } from '../../test/fixtures/god/sessions.js'
@@ -40,8 +42,8 @@ function turn(last: BoardSnapshot | undefined, next: BoardSnapshot, over: TurnCh
   return { ...(last === undefined ? {} : { last, lastRefreshAt: next.at - 2 * SECOND }), next, store: { ...STORE, ...store }, isPaneOpen: true, now: next.at, ...rest }
 }
 
-/** An alert loop over fake ports that record each effect. */
-function loopOf(over: { notify?: NotifyOutcome; play?: 'reject'; state?: AlertState; readFails?: boolean; writeFails?: boolean } = {}) {
+/** An alert loop over fake ports that record each effect; the store holds sound on and nothing muted, else `store`. */
+function loopOf(over: { notify?: NotifyOutcome; play?: 'reject'; state?: AlertState; readFails?: boolean; writeFails?: boolean; store?: Partial<StoreState>; storeFails?: boolean } = {}) {
   const tones: ToneClip[] = []
   const notices: Array<{ text: string; title: string }> = []
   const runs: Array<{ argv: readonly string[]; options?: RunOptions }> = []
@@ -66,6 +68,10 @@ function loopOf(over: { notify?: NotifyOutcome; play?: 'reject'; state?: AlertSt
       if (over.writeFails === true) throw new Error('state write refused')
       writes.push(next)
       state = next
+    },
+    readChoices: async () => {
+      if (over.storeFails === true) throw new Error('store read refused')
+      return { ...STORE, ...over.store }
     },
     effects: {
       play: async (clip) => {
@@ -124,10 +130,10 @@ describe('the alert loop', () => {
     expect([tones, notices, runs]).toEqual([[], [], []])
   })
 
-  it('stops the tone and keeps the notification and the ring with sound off or with no pane in this session', async () => {
-    const changes: TurnChange[] = [{ store: { sound: false } }, { isPaneOpen: false }]
-    for (const over of changes) {
-      const { loop, tones, notices, runs } = loopOf()
+  it('stops the tone and keeps the notification and the ring with sound off in the store or with no pane in this session', async () => {
+    const changes: Array<[Partial<StoreState>, TurnChange]> = [[{ sound: false }, {}], [{}, { isPaneOpen: false }]]
+    for (const [store, over] of changes) {
+      const { loop, tones, notices, runs } = loopOf({ store })
       await loop.onRefresh(turn(board(T1, [row('s-a', 'working')]), board(T2, [row('s-a', 'stuck', 'api-3')]), over))
       await settle()
       expect(tones, JSON.stringify(over)).toEqual([])
@@ -137,11 +143,21 @@ describe('the alert loop', () => {
     }
   })
 
-  it('sends nothing for a muted session', async () => {
-    const { loop, tones, notices, runs } = loopOf()
-    await loop.onRefresh(turn(board(T1, [row('s-a', 'working')]), board(T2, [row('s-a', 'needs-you')]), { store: { muted: ['s-a'] } }))
+  it('sends nothing for a session that the store holds muted', async () => {
+    const { loop, tones, notices, runs } = loopOf({ store: { muted: ['s-a'] } })
+    await loop.onRefresh(turn(board(T1, [row('s-a', 'working')]), board(T2, [row('s-a', 'needs-you')])))
     await settle()
     expect([tones, notices, runs]).toEqual([[], [], []])
+  })
+
+  it('decides with the sound and the muted sessions of the store, not with the copy that the turn carries', async () => {
+    const stale = loopOf({ store: { sound: true, muted: [] } })
+    await stale.loop.onRefresh(turn(board(T1, [row('s-a', 'working')]), board(T2, [row('s-a', 'needs-you')]), { store: { sound: false, muted: ['s-a'] } }))
+    const fresh = loopOf({ store: { sound: false, muted: ['s-a'] } })
+    await fresh.loop.onRefresh(turn(board(T1, [row('s-a', 'working'), row('s-b', 'working')]), board(T2, [row('s-a', 'needs-you'), row('s-b', 'needs-you')])))
+    await settle()
+    expect([stale.tones.length, stale.notices.length, stale.runs.length]).toEqual([1, 1, 1])
+    expect([fresh.tones.length, fresh.notices.map((notice) => notice.text), fresh.runs.length]).toEqual([0, ['The session s-b needs you.'], 1])
   })
 
   it('plays only the done tone for a change into your turn: no notification and no ring', async () => {
@@ -188,8 +204,8 @@ describe('the alert loop', () => {
     expect(loop.counts()).toEqual({ tones: 0, notifications: 0 })
   })
 
-  it('sends nothing when it cannot read or write the alert state, so a refresh never sends an alert twice', async () => {
-    for (const over of [{ readFails: true }, { writeFails: true }]) {
+  it('sends nothing when it cannot read or write the alert state or read the store, so a refresh never sends an alert twice', async () => {
+    for (const over of [{ readFails: true }, { writeFails: true }, { storeFails: true }]) {
       const { loop, tones, notices, runs } = loopOf(over)
       await expect(loop.onRefresh(turn(board(T1, [row('s-a', 'working')]), board(T2, [row('s-a', 'needs-you')])))).resolves.toBeUndefined()
       await settle()

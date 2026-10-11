@@ -1,7 +1,8 @@
 // The alerts and the Recap of the god pane, on the terminal and the desktop surfaces, over the fake machine: a change
 // into NEEDS YOU plays 1 tone, sends 1 notification and rings the cmux tab once, and a second change within 5 min
-// sends nothing; s turns the tones off and u mutes the selected session; /god stats counts the tones and the
-// notifications; no model call goes out until x on the Recap tab, which shows the model text, its token count, or
+// sends nothing; s turns the tones off and u mutes the selected session; a mute or a sound off that the board of a
+// second /god session writes to the store holds here, and s and u read the store before they write, so they keep
+// it; /god stats counts the tones and the notifications; no model call goes out until x on the Recap tab, which shows the model text, its token count, or
 // the reason that it has none. The secret in a reply never reaches the model. The escape byte is built from its code
 // point, so this file spells no escape sequence.
 import { expect, mock, test } from 'claude-code/testing'
@@ -113,6 +114,27 @@ for (const surface of SURFACES) {
     expect([calls.tones, calls.notices, rings(calls)]).toEqual([[], [], []])
     await ui.press({ key: 'key:u' })
     expect(calls.storeSets.at(-1)).toEqual(['muted', []])
+  })
+
+  test(`${surface}: a mute and a sound off that the board of a second session writes to the store hold here`, async ($, on) => {
+    const { machine, calls, clock, t0 } = await begin($, on, surface)
+    calls.store.set('muted', ['ses-a'])
+    calls.store.set('sound', false)
+    moveTo(machine, 0, 'waiting', t0 + 1000)
+    moveTo(machine, 1, 'waiting', t0 + 1000)
+    await clock.advance(2000)
+    expect([calls.tones.length, calls.notices.map((notice) => notice.text), rings(calls).map((run) => run.argv[7])]).toEqual([0, ['The session web-b needs you.'], [WS_B]])
+  })
+
+  test(`${surface}: u and s read the store before they write, so they keep the choices of the board of a second session`, async ($, on) => {
+    const { calls, ui } = await begin($, on, surface)
+    calls.store.set('muted', ['ses-a'])
+    calls.store.set('sound', false)
+    await select($, 'ses-b')
+    await ui.press({ key: 'key:u' })
+    expect(calls.storeSets.at(-1)).toEqual(['muted', ['ses-a', 'ses-b']])
+    await ui.press({ key: 'key:s' })
+    expect(calls.storeSets.at(-1)).toEqual(['sound', true])
   })
 
   test(`${surface}: no model call goes out until x on the Recap tab, which then shows the model text and its token count`, async ($, on) => {

@@ -59,6 +59,7 @@ export type RefreshTurn = {
   next: BoardSnapshot
   /** the time of the tick before, whatever it changed; absent on the first tick of the load */
   lastRefreshAt?: number
+  /** the stored choices of this board; the alert loop reads the sound and the muted sessions from the store again */
   store: StoreState
   /** true when the pane is on the screen of this session */
   isPaneOpen: boolean

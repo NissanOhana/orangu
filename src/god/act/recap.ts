@@ -8,7 +8,9 @@
  *   RECAP_TURNS turns, oldest first. Each session text is cleaned here again before it leaves the machine (no control
  *   character, the secrets masked, the home folder as `~`), then cut to RECAP_TEXT_MAX characters with `…+N` for the
  *   characters that it cut, then framed as a JSON string literal, so a quote, a backslash or a line break in it cannot
- *   end its frame or start a new prompt line. The cut comes after the redaction, so a cut never splits a secret open.
+ *   end its frame or start a new prompt line. JSON keeps the line separator (U+2028) and the paragraph separator
+ *   (U+2029) as they are, and a line reader can break a line at each, so the frame writes them as `\u2028` and
+ *   `\u2029`. The cut comes after the redaction, so a cut never splits a secret open.
  * - The prompt holds RECAP_PROMPT_MAX_BYTES UTF-8 bytes or fewer. The oldest turns go first. If the facts alone pass
  *   the cap, each fact text gets an equal share of the bytes (FACT_MIN_BYTES or more), with `…+N` for what its cut
  *   hid. The fact lines that still do not fit (only with very many open questions) are left out, the last first.
@@ -66,21 +68,24 @@ const LINE_BYTES = Math.max(...Object.values(RECAP_LABEL).map(utf8Length)) + 3
 /** A fact text keeps this many bytes or more when the facts share the cap, so very many lines push the last out, not cut each fact to its mark. */
 const FACT_MIN_BYTES = 256
 
-/** A session text in its frame: cleaned, cut to RECAP_TEXT_MAX characters and to maxBytes UTF-8 bytes with the count of what it cut, then a JSON string. */
+/** A text as a JSON string literal with the line and paragraph separators escaped, which JSON.stringify keeps as they are, so the literal is 1 line for every reader. */
+const quoted = (text: string): string => JSON.stringify(text).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029')
+
+/** A session text in its frame: cleaned, cut to RECAP_TEXT_MAX characters and to maxBytes UTF-8 bytes with the count of what it cut, then a quoted string. */
 function framed(text: string, clean: (text: string) => string, maxBytes: number): string {
   const chars = Array.from(clean(text))
-  const whole = JSON.stringify(chars.join(''))
+  const whole = quoted(chars.join(''))
   if (chars.length <= RECAP_TEXT_MAX && utf8Length(whole) <= maxBytes) return whole
   const room = maxBytes - utf8Length(cutMark(chars.length))
   let kept = 0
   let bytes = 2 // the 2 quotes of the frame
   while (kept < Math.min(chars.length, RECAP_TEXT_MAX)) {
-    const next = utf8Length(JSON.stringify(chars[kept])) - 2
+    const next = utf8Length(quoted(chars[kept]!)) - 2
     if (bytes + next > room) break
     bytes += next
     kept += 1
   }
-  return `${JSON.stringify(chars.slice(0, kept).join(''))}${cutMark(chars.length - kept)}`
+  return `${quoted(chars.slice(0, kept).join(''))}${cutMark(chars.length - kept)}`
 }
 
 /** The first lines that fit in RECAP_PROMPT_MAX_BYTES together. */

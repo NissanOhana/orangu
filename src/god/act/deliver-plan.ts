@@ -67,8 +67,8 @@ export type TargetFacts = Pick<SessionFacts, 'sessionId' | 'status' | 'waitingFo
 const BLANK = /^[\p{White_Space}\p{Cf}\p{Default_Ignorable_Code_Point}]*$/u
 /** C0 but the newline, DEL, C1, and the line and paragraph separators: a character that cmux can type as a key or a break */
 const CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/
-/** a format character or a default ignorable character: it draws nothing, so the person cannot see it in the bar */
-const HIDDEN_CHAR = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u
+/** a format character or a default ignorable character: it draws nothing, so the person cannot see it in the bar or in a ring */
+export const HIDDEN_CHAR = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u
 /** the first character that opens a mode in place of a prompt: `!` runs a shell command, `?` shows the help */
 const MODE_MARKS = new Set(['!', '?'])
 /** a first line that ends the session in place of a prompt */
