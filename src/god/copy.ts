@@ -75,5 +75,8 @@ export const TOOL_FAILED = 'The orangu god tool failed. Call it again.'
 /** Why the pane types no prompt into an idle session that runs a background task or a subagent: either can open a dialog. */
 export const TASK_RUNNING = 'The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.'
 
-/** Why the pane types no shell command (`!`), help key (`?`) or exit word: the target opens a mode or ends. */
+/** Why the pane types no shell command (`!`), help key (`?`), exit word, /exit or /quit: the target opens a mode or ends. */
 export const NOT_A_PROMPT = 'The pane does not type a shell command, the help or an exit. Press j and type it in its tab.'
+
+/** Why the pane types no text with a control character or a character that draws nothing, as an emoji can hold. */
+export const CONTROL_CHAR = 'The text has a control character or a character that does not show, so the pane sent nothing. An emoji can hold such a character.'

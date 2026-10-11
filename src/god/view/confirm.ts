@@ -7,8 +7,10 @@
  * The keys show in the form that the engine paints a hotkey Button (`y: send  c: cancel`), each 1 segment that the
  * shell draws as its Button. The bar of a prompt also names the command mode when the first character that is not
  * white space, on any line, is `/` (`   \n/clear` is a command), because the session reads it as a key. A prompt that
- * the pane does not type (a shell command, the help or an exit word) shows that line in its place, before y. While y
- * runs, the bar shows that the pane sends in place of y and c.
+ * the text check of the key guard refuses (src/god/act/deliver-plan.ts textRefusal: an empty text, a control or hidden
+ * character, a backslash escape, a shell command, the help or an exit) shows the line of that refusal in its place,
+ * before y, and the bar offers c only, because y can send nothing. While y runs, the bar shows that the pane sends in
+ * place of y and c.
  * The target and the question stay fixed. A long prompt or tool input scrolls with w and z in the row limit of the
  * bar (src/god/view/window.ts), with a count line for each side that the window leaves out, so the person can read
  * all of it before y. When the limit leaves fewer than 3 rows, the bar takes its fixed lines and 3 more: a text
@@ -16,7 +18,7 @@
  * refusal in the bad color, and the not-delivered line in the warn color. No line is wider than `width`.
  */
 import { textRefusal } from '../act/deliver-plan.js'
-import { NOT_A_PROMPT, TASK_RUNNING } from '../copy.js'
+import { CONTROL_CHAR, NOT_A_PROMPT, TASK_RUNNING } from '../copy.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal } from '../types.js'
 import { ACCENT } from '../ui/theme.js'
 import { pressSegment } from './keys.js'
@@ -49,15 +51,16 @@ export const REFUSAL_TEXT: Readonly<Record<DeliverRefusal, string>> = {
   'label-not-found': 'The screen shows no option with the exact label Yes or No, so the pane sent nothing.',
   'multi-question': MULTI_DIALOG,
   empty: 'The text is empty, so the pane sent nothing.',
-  'control-char': 'The text has a control character or a character that does not show, so the pane sent nothing.',
+  'control-char': CONTROL_CHAR,
   'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
   'task-running': TASK_RUNNING,
   'not-a-prompt': NOT_A_PROMPT,
 }
 
 /**
- * The line of the mode that the target opens for a prompt whose first character is 1 of these. A `!` (shell) or `?`
- * (help) prompt gets the not-a-prompt line in place of a mode line, because the pane does not type it.
+ * The line of the mode that the target opens for a prompt whose first character is 1 of these. A prompt that the text
+ * check refuses, such as a `!` (shell) or `?` (help) prompt or /exit, gets the line of its refusal in place of a mode
+ * line, because the pane does not type it.
  */
 export const PROMPT_MODE_TEXT: Readonly<Record<string, string>> = {
   '/': 'The first line starts with /, so the session runs it as a command.',
@@ -112,24 +115,29 @@ function askText(intent: DeliverIntent): string {
   return intent.kind === 'prompt' ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`
 }
 
+/** The keys of the bar of a prompt that the text check refuses: c only, because y can send nothing. */
+const CANCEL_HINTS: readonly KeyHint[] = CONFIRM_HINTS.filter((hint) => hint.keys === 'c')
+
 /** The lines that stay fixed (the target and the question), and the text that scrolls under them. */
-function partsOf(intent: DeliverIntent, width: number, isSending: boolean): { fixed: Line[]; text: Line[] } {
-  const keys: Segment[] = isSending ? [{ text: SENDING, dim: true }] : CONFIRM_HINTS.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), pressSegment(hint.hotkey ?? hint.keys, hint.label)])
+function partsOf(intent: DeliverIntent, width: number, isSending: boolean, refusal: DeliverRefusal | undefined): { fixed: Line[]; text: Line[] } {
+  const hints = refusal === undefined ? CONFIRM_HINTS : CANCEL_HINTS
+  const keys: Segment[] = isSending ? [{ text: SENDING, dim: true }] : hints.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), pressSegment(hint.hotkey ?? hint.keys, hint.label)])
   const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width)
   if (intent.kind === 'answer') return { fixed: [...ask, ...wrapSegments([{ text: `☐ ${flat(intent.header)}`, bold: true }, { text: `  ${flat(intent.question)}` }], width, 1, 3)], text: [] }
   if (intent.kind === 'permission') {
     if (intent.input === undefined) return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }, { text: '  none' }], width)], text: [] }
     return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }], width)], text: keptLines(intent.input, width, 3) }
   }
-  const mode = intent.kind !== 'prompt' ? undefined : textRefusal(intent.text) === 'not-a-prompt' ? NOT_A_PROMPT : PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)]
-  return { fixed: [...ask, ...(mode === undefined ? [] : wrapSegments([{ text: mode, token: '--warn' }], width))], text: textLines(intent.text, width, 3) }
+  const note = intent.kind !== 'prompt' ? undefined : refusal !== undefined ? REFUSAL_TEXT[refusal] : PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)]
+  return { fixed: [...ask, ...(note === undefined ? [] : wrapSegments([{ text: note, token: '--warn' }], width))], text: textLines(intent.text, width, 3) }
 }
 
 /** The confirm bar of 1 intent. */
 export function confirmView(input: ConfirmInput): ConfirmView {
-  const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true)
+  const refusal = input.intent.kind === 'prompt' ? textRefusal(input.intent.text) : undefined
+  const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true, refusal)
   const { lines, window } = windowOf(text, Math.max(MIN_WINDOW, input.rows - fixed.length), input.scroll)
-  return { lines: [...fixed, ...lines], hints: CONFIRM_HINTS, window }
+  return { lines: [...fixed, ...lines], hints: refusal === undefined ? CONFIRM_HINTS : CANCEL_HINTS, window }
 }
 
 /** What became of an intent after y, as the lines that the pane shows. */

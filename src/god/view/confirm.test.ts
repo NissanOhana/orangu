@@ -37,7 +37,7 @@ const LINES: Readonly<Record<DeliverRefusal, string>> = {
   'label-not-found': 'The screen shows no option with the exact label Yes or No, so the pane sent nothing.',
   'multi-question': 'This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.',
   empty: 'The text is empty, so the pane sent nothing.',
-  'control-char': 'The text has a control character or a character that does not show, so the pane sent nothing.',
+  'control-char': 'The text has a control character or a character that does not show, so the pane sent nothing. An emoji can hold such a character.',
   'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
   'task-running': 'The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.',
   'not-a-prompt': 'The pane does not type a shell command, the help or an exit. Press j and type it in its tab.',
@@ -104,6 +104,17 @@ describe('the confirm bar', () => {
     expect(bar({ ...INTENTS.prompt, text: '   \n/clear' } as DeliverIntent)[1]).toBe(` ${COMMAND}`)
     expect(bar({ ...INTENTS.peer, text: '/stop now' } as DeliverIntent)).toHaveLength(2)
     expect(bar({ ...INTENTS.peer, text: '!stop now' } as DeliverIntent)).toHaveLength(2)
+  })
+
+  it('names each text refusal of a prompt before y, and offers c only, because y can send nothing', () => {
+    const texts: Readonly<Record<string, string>> = { empty: '\u200b', 'control-char': 'Ship it \u2764\ufe0f', 'backslash-escape': 'Open C:\\new', 'not-a-prompt': '/exit' }
+    for (const [code, prompt] of Object.entries(texts)) {
+      const shown = view({ ...INTENTS.prompt, text: prompt } as DeliverIntent, { width: 200 })
+      expect(shown.lines.slice(0, 2).map(text), code).toEqual([' Send this prompt to api-7?  c: cancel', ` ${LINES[code as DeliverRefusal]}`])
+      expect(shown.lines[1]!.segments[1], code).toEqual({ text: LINES[code as DeliverRefusal], token: '--warn' })
+      expect(shown.lines.flatMap((line) => line.segments).flatMap((segment) => (segment.press === undefined ? [] : [segment.press.hotkey])), code).toEqual(['c'])
+      expect(shown.hints, code).toEqual([CONFIRM_HINTS[1]])
+    }
   })
 
   it('shows no y and no c while the keys go out, and says so in their place', () => {
@@ -177,7 +188,7 @@ describe('the outcome lines', () => {
     expect(Object.keys(REFUSAL_TEXT).sort()).toEqual([...CODES].sort())
     expect(REFUSAL_TEXT).toEqual(LINES)
     const says = ['multi-question', 'stale-screen', 'not-a-prompt']
-    for (const code of CODES.filter((code) => !says.includes(code))) expect(REFUSAL_TEXT[code], code).toMatch(/, so the pane sent nothing\.$/)
+    for (const code of CODES.filter((code) => !says.includes(code))) expect(REFUSAL_TEXT[code], code).toMatch(/, so the pane sent nothing\./)
     expect(REFUSAL_TEXT['not-a-prompt']).toBe(NOT_A_PROMPT)
     expect(Object.values(REFUSAL_TEXT).join(' ')).not.toMatch(/was sent/)
     expect(REFUSAL_TEXT['multi-question']).toBe(MULTI_DIALOG)
@@ -186,7 +197,7 @@ describe('the outcome lines', () => {
   it('draws an old read in the warn color, every other refusal in the bad color, and the not-delivered line in the warn color', () => {
     for (const code of CODES) {
       const token = code === 'stale-screen' ? '--warn' : '--bad'
-      expect(outcomeLines({ ...OUTCOMES.refused, refusal: code } as never, 110), code).toEqual([{ segments: [{ text: ' ' }, { text: LINES[code], token }] }])
+      expect(outcomeLines({ ...OUTCOMES.refused, refusal: code } as never, 200), code).toEqual([{ segments: [{ text: ' ' }, { text: LINES[code], token }] }])
     }
     expect(NOT_DELIVERED).toBe('Not delivered. Check the Screen tab.')
     expect(outcomeLines(OUTCOMES['not-delivered'], 110)).toEqual([{ segments: [{ text: ' ' }, { text: NOT_DELIVERED, token: '--warn' }] }])

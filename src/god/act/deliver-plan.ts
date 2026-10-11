@@ -20,11 +20,17 @@
  * - a permission answer is the digit of the option labeled exactly Yes or exactly No, on a dialog that shows the
  *   confirmed shell command;
  * - a prompt is 1 `cmux send` for each line, `shift+enter` between the lines and `enter` at the end, only on an
- *   empty prompt row with no dialog on the screen. Its text must hold a visible character, no control character
- *   but the newline, no line or paragraph separator, and no backslash right before n, r or t in either case: cmux types the lowercase pairs as
- *   Enter or Tab and has no escape for them, and the uppercase pairs are not tested. No line may end with a
- *   backslash (spaces after it count as its end): Claude Code reads a backslash and Enter as a new line, so the
- *   prompt would stay in the input box and block each later prompt.
+ *   empty prompt row with no dialog on the screen. Its text passes these rules (textRefusal) before any host call:
+ *   it holds a visible character (empty). It holds no control character but the newline, no line or paragraph
+ *   separator, and no format character or other default ignorable character: such a character draws nothing in the
+ *   confirm bar, so the person cannot see it before y, and an emoji can hold one (control-char). It holds no
+ *   backslash right before n, r or t in either case: cmux types the lowercase pairs as Enter or Tab and has no escape
+ *   for them, and the uppercase pairs are not tested. No line may end with a backslash (spaces after it count as its
+ *   end): Claude Code reads a backslash and Enter as a new line, so the prompt would stay in the input box and block
+ *   each later prompt (backslash-escape). It is a prompt for the model (not-a-prompt): its first character that is
+ *   not white space is not `!` (a shell command) or `?` (the help), its trimmed first line is not an exit word
+ *   (`exit`, `quit`, `:q`, `:q!`, `:wq`, `:wq!`), and its command name is not `/exit` or `/quit`, each in any case.
+ *   The target would open a mode or end, and a prompt that stops in a mode leaves its text in the input box.
  * Each argv names the workspace and the surface, and puts `--` right before the text or the key, so a text that
  * looks like a flag stays text. A peer message has no keys: the engine sends it, and this plan refuses it.
  * A prompt has more than 1 step, and a dialog can open between 2 of them. So before each next step the executor reads
@@ -65,6 +71,8 @@ const HIDDEN_CHAR = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u
 const MODE_MARKS = new Set(['!', '?'])
 /** a first line that ends the session in place of a prompt */
 const EXIT_WORDS = new Set(['exit', 'quit', ':q', ':q!', ':wq', ':wq!'])
+/** a command that ends the session: Claude Code reads the command name up to the first white space */
+const EXIT_COMMANDS = new Set(['/exit', '/quit'])
 /** a backslash right before n, r or t, in either case: cmux send types the lowercase pairs as Enter or Tab */
 const BACKSLASH_ESCAPE = /\\[nrtNRT]/
 /** a backslash at the end of a line, with only spaces after it: Claude Code reads it and Enter as a new line */
@@ -74,10 +82,12 @@ export const WORKSPACE_REF = /^(?:workspace:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f
 /** a cmux surface ref: `surface:N` or a UUID */
 export const SURFACE_REF = /^(?:surface:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/
 
-/** True when the text is no prompt for the model: a shell command, the help, or an exit word on its first line. */
+/** True when the text is no prompt for the model: a shell command, the help, an exit word on its first line, or /exit or /quit. */
 function isNotPrompt(text: string): boolean {
   const start = text.trimStart()
-  return MODE_MARKS.has(start.charAt(0)) || EXIT_WORDS.has((start.split('\n', 1)[0] ?? '').trim().toLowerCase())
+  const firstLine = (start.split('\n', 1)[0] ?? '').trim().toLowerCase()
+  const command = (start.split(/\s/, 1)[0] ?? '').toLowerCase()
+  return MODE_MARKS.has(start.charAt(0)) || EXIT_WORDS.has(firstLine) || EXIT_COMMANDS.has(command)
 }
 
 /** Why a prompt text cannot go out as typed keys, or undefined when it can. */

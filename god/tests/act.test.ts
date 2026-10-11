@@ -2,7 +2,8 @@
 // digit and the Yes or No of a Bash request open the confirm bar, and only y sends. Each y reads the registry file, the
 // transcript tail and the screen of the target again, then sends only the keys of the plan: a digit alone. A screen or
 // a state that changed gets no key, and the Screen tab shows the fresh screen under the refusal line. An old read keeps
-// the bar open for y again. 1 y runs at a time. The next refreshes check that the keys reached the session.
+// the bar open for y again. 1 y runs at a time. A c closes only the bar of its own drawing. The next refreshes check
+// that the keys reached the session.
 import { expect, test } from 'claude-code/testing'
 import { HOME, SURFACES, paneProps, toolResult } from './fake-host'
 import { PROMPT_SCREEN, QUESTION_SCREEN, SF, WS, begin, cmuxSince, has, keysSince, lines, press, readScreen, select, sendKey } from './act-machine'
@@ -234,6 +235,24 @@ for (const surface of SURFACES) {
     await sending
     expect(keysSince(calls, atY)).toEqual([sendKey(WS.ask, SF.ask, '1')])
     expect(has(await lines(ui), 'Send "2 Green"')).toBe(false)
+  })
+
+  test(`${surface}: a c from the drawing of bar 1 that lands after a digit opened bar 2 keeps bar 2 open`, async ($, on) => {
+    const { machine, calls, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    await press(ui, 'option:1')
+    let release = (): void => undefined
+    const held = new Promise<void>((resolve) => (release = resolve))
+    // the engine holds each write that closes the bar, so the c of this drawing lands after the digit writes bar 2
+    machine.writeDelay = (key, value) => (key === 'deliver' && (value as { intent?: unknown }).intent === undefined ? held : undefined)
+    await ui.redraw()
+    const cancelling = ui.press({ key: 'key:c' })
+    await ui.press({ key: 'option:2' })
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    release()
+    await cancelling
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    expect(cmuxSince(calls, 0).filter((argv) => argv[1] === 'send-key')).toEqual([])
   })
 
   test(`${surface}: y sends the intent of the drawing that it belongs to, and a bar that opened since then stays for its own y`, async ($, on) => {

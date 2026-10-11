@@ -1,7 +1,8 @@
 // The drafts of the key path on the terminal and the desktop surfaces, over the fake machine of act-machine.ts: r and
 // m open a draft whose text field takes 1 line for each Enter, and an empty line opens the confirm bar with the whole
 // text. Only y sends: a prompt as each line with shift+enter between the lines and enter at the end, a peer message
-// through the engine with no cmux call. The bar names the mode that a prompt opens with its first character.
+// through the engine with no cmux call. The bar names the mode that a prompt opens with its first character, and a
+// prompt that the pane does not type gets the line of its refusal and c only.
 import { expect, test } from 'claude-code/testing'
 import { SURFACES, backgroundTask, prompt } from './fake-host'
 import { KEY_VERBS, PERMISSION_SCREEN, SF, WS, begin, cmuxSince, detailText, has, keysSince, lines, press, readScreen, select, sendKey, sendText, typeDraft } from './act-machine'
@@ -74,6 +75,13 @@ for (const surface of SURFACES) {
     await typeDraft(ui, ['/compact'])
     const bar = await lines(ui)
     expect(bar).toContain(' The first line starts with /, so the session runs it as a command.')
+    await press(ui, 'key:c')
+    // /exit ends the session: the bar names the refusal before y and offers c only
+    await press(ui, 'key:r')
+    await typeDraft(ui, ['/exit'])
+    const exit = await lines(ui)
+    for (const line of [' Send this prompt to idle-p?  c: cancel', ' The pane does not type a shell command, the help or an exit. Press j and type it in its tab.']) expect(exit, exit.join('\n')).toContain(line)
+    expect(await ui.find({ key: 'key:y' })).toBeUndefined()
     await press(ui, 'key:c')
     await press(ui, 'key:r')
     await typeDraft(ui, [])

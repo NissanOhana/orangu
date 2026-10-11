@@ -233,13 +233,16 @@ var CONTROL_CHAR = /[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/;
 var HIDDEN_CHAR = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/u;
 var MODE_MARKS = /* @__PURE__ */ new Set(["!", "?"]);
 var EXIT_WORDS = /* @__PURE__ */ new Set(["exit", "quit", ":q", ":q!", ":wq", ":wq!"]);
+var EXIT_COMMANDS = /* @__PURE__ */ new Set(["/exit", "/quit"]);
 var BACKSLASH_ESCAPE = /\\[nrtNRT]/;
 var LINE_END_BACKSLASH = /\\[^\S\n]*$/m;
 var WORKSPACE_REF = /^(?:workspace:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/;
 var SURFACE_REF = /^(?:surface:[0-9]{1,9}|[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})$/;
 function isNotPrompt(text) {
   const start2 = text.trimStart();
-  return MODE_MARKS.has(start2.charAt(0)) || EXIT_WORDS.has((start2.split("\n", 1)[0] ?? "").trim().toLowerCase());
+  const firstLine = (start2.split("\n", 1)[0] ?? "").trim().toLowerCase();
+  const command = (start2.split(/\s/, 1)[0] ?? "").toLowerCase();
+  return MODE_MARKS.has(start2.charAt(0)) || EXIT_WORDS.has(firstLine) || EXIT_COMMANDS.has(command);
 }
 function textRefusal(text) {
   if (BLANK.test(text)) return "empty";
@@ -378,6 +381,7 @@ var TOOL_NOT_RUNNING = "The god pane does not run in this session now. Ask the p
 var TOOL_FAILED = "The orangu god tool failed. Call it again.";
 var TASK_RUNNING = "The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.";
 var NOT_A_PROMPT = "The pane does not type a shell command, the help or an exit. Press j and type it in its tab.";
+var CONTROL_CHAR2 = "The text has a control character or a character that does not show, so the pane sent nothing. An emoji can hold such a character.";
 
 // src/god/generated/tokens.ts
 var GOD_TOKENS = {
@@ -3513,7 +3517,7 @@ var REFUSAL_TEXT = {
   "label-not-found": "The screen shows no option with the exact label Yes or No, so the pane sent nothing.",
   "multi-question": MULTI_DIALOG,
   empty: "The text is empty, so the pane sent nothing.",
-  "control-char": "The text has a control character or a character that does not show, so the pane sent nothing.",
+  "control-char": CONTROL_CHAR2,
   "backslash-escape": "A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.",
   "task-running": TASK_RUNNING,
   "not-a-prompt": NOT_A_PROMPT
@@ -3538,21 +3542,24 @@ function askText(intent) {
   if (intent.kind === "permission") return `Send "${intent.choice === "yes" ? "Yes" : "No"}" to the ${flat2(intent.tool)} request of ${name}?`;
   return intent.kind === "prompt" ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`;
 }
-function partsOf(intent, width, isSending) {
-  const keys = isSending ? [{ text: SENDING, dim: true }] : CONFIRM_HINTS.flatMap((hint, index) => [...index === 0 ? [] : [{ text: "  " }], pressSegment(hint.hotkey ?? hint.keys, hint.label)]);
+var CANCEL_HINTS = CONFIRM_HINTS.filter((hint) => hint.keys === "c");
+function partsOf(intent, width, isSending, refusal) {
+  const hints = refusal === void 0 ? CONFIRM_HINTS : CANCEL_HINTS;
+  const keys = isSending ? [{ text: SENDING, dim: true }] : hints.flatMap((hint, index) => [...index === 0 ? [] : [{ text: "  " }], pressSegment(hint.hotkey ?? hint.keys, hint.label)]);
   const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width);
   if (intent.kind === "answer") return { fixed: [...ask, ...wrapSegments([{ text: `\u2610 ${flat2(intent.header)}`, bold: true }, { text: `  ${flat2(intent.question)}` }], width, 1, 3)], text: [] };
   if (intent.kind === "permission") {
     if (intent.input === void 0) return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }, { text: "  none" }], width)], text: [] };
     return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }], width)], text: keptLines(intent.input, width, 3) };
   }
-  const mode = intent.kind !== "prompt" ? void 0 : textRefusal(intent.text) === "not-a-prompt" ? NOT_A_PROMPT : PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)];
-  return { fixed: [...ask, ...mode === void 0 ? [] : wrapSegments([{ text: mode, token: "--warn" }], width)], text: textLines(intent.text, width, 3) };
+  const note = intent.kind !== "prompt" ? void 0 : refusal !== void 0 ? REFUSAL_TEXT[refusal] : PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)];
+  return { fixed: [...ask, ...note === void 0 ? [] : wrapSegments([{ text: note, token: "--warn" }], width)], text: textLines(intent.text, width, 3) };
 }
 function confirmView(input) {
-  const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true);
+  const refusal = input.intent.kind === "prompt" ? textRefusal(input.intent.text) : void 0;
+  const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true, refusal);
   const { lines, window } = windowOf2(text, Math.max(MIN_WINDOW, input.rows - fixed.length), input.scroll);
-  return { lines: [...fixed, ...lines], hints: CONFIRM_HINTS, window };
+  return { lines: [...fixed, ...lines], hints: refusal === void 0 ? CONFIRM_HINTS : CANCEL_HINTS, window };
 }
 function outcomeLines(outcome, width) {
   const name = flat2(outcome.intent.target.name);

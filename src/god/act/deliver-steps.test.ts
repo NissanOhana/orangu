@@ -4,7 +4,8 @@
  *   change: a session that waits or runs, a dialog on the screen, a box that does not hold the text typed so far
  *   (as the text cleaner shows it), a new status time or another transcript size since the plan read, or a read that
  *   took too long. A stop sends no later key, and the outcome keeps the newest screen;
- * - a shell command, the help or an exit word gets no host call, so a box in the shell mode never holds its text;
+ * - a shell command, the help, an exit word, /exit or /quit gets no host call, so a box in the shell mode never holds
+ *   its text;
  * - a prompt to an idle session whose background task or subagent runs gets no key;
  * - the cancel mark of c stops the steps that did not go out;
  * - ps shows the PID of the target with the start time of its registry file and the TTY of its tab, or no key goes out.
@@ -135,6 +136,19 @@ describe('deliver: a text that is no prompt, and the shell mode on the screen', 
       const fake = machine(idle())
       expect((await deliver(fake.ports, request(prompt(text)))).outcome, JSON.stringify(text)).toMatchObject({ status: 'refused', refusal: 'not-a-prompt' })
       expect(fake.log).toEqual([])
+    }
+  })
+
+  it('refuses /exit and /quit before any host call, and types /compact and /clear as any prompt', async () => {
+    for (const text of ['/exit', '/QUIT', '  /exit', '/exit now']) {
+      const fake = machine(idle())
+      expect((await deliver(fake.ports, request(prompt(text)))).outcome, JSON.stringify(text)).toMatchObject({ status: 'refused', refusal: 'not-a-prompt' })
+      expect(fake.log).toEqual([])
+    }
+    for (const text of ['/compact', '/clear']) {
+      const fake = machine(idle())
+      expect((await deliver(fake.ports, request(prompt(text)))).outcome, text).toMatchObject({ status: 'sent' })
+      expect(keyRuns(fake.runs)).toEqual([sendText(text), sendKey('enter')])
     }
   })
 

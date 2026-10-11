@@ -1,8 +1,12 @@
 /**
  * The text check of a prompt (textRefusal), which runs before any host call: an empty text, a control character, a
  * character that does not show, a backslash that cmux types as a key, and a text that is no prompt for the model (a
- * shell command, the help, or an exit that ends the session) each give 1 refusal, so no key goes out.
+ * shell command, the help, or an exit that ends the session) each give 1 refusal, so no key goes out. The header of
+ * the key guard names each of these rules.
  */
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { textRefusal } from './deliver-plan.js'
 
@@ -70,9 +74,24 @@ describe('textRefusal: a text that is no prompt for the model', () => {
     }
   })
 
+  it('refuses /exit and /quit, the commands that end the session, in any case and with any text after the name', () => {
+    // Claude Code reads the command name up to the first white space, so /exit now ends the session too
+    for (const text of ['/exit', '/QUIT', '  /exit', '/Exit now', '/quit\nThen stop.', ' \n/exit', `/exit${ch(0xa0)}now`]) {
+      expect(textRefusal(text), JSON.stringify(text)).toBe('not-a-prompt')
+    }
+  })
+
   it('passes a command, a ! or ? later in the text, and a first line that only starts with an exit word', () => {
-    for (const text of ['/clear', '   \n/compact', 'Run !ls', 'Why? Explain it.', 'exit the loop when it ends', 'quit early', ':qa', 'wq', 'Run the tests.\nexit']) {
+    for (const text of ['/clear', '/compact', '   \n/compact', '/exits', '/quitter', 'Run /exit now', 'Run !ls', 'Why? Explain it.', 'exit the loop when it ends', 'quit early', ':qa', 'wq', 'Run the tests.\nexit']) {
       expect(textRefusal(text), JSON.stringify(text)).toBeUndefined()
     }
+  })
+})
+
+describe('the header of the key guard', () => {
+  it('names each rule of the text check by its refusal code', () => {
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'deliver-plan.ts'), 'utf8')
+    const header = source.slice(0, source.indexOf('\nimport '))
+    for (const code of ['empty', 'control-char', 'backslash-escape', 'not-a-prompt']) expect(header, code).toContain(`(${code})`)
   })
 })

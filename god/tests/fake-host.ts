@@ -68,6 +68,8 @@ export type Machine = {
   selfIdAtStart?: string
   /** the value of the `theme` row of the /config menu; absent, the menu has no theme row */
   theme?: string
+  /** a wait before the engine writes a value of the pane, as a slow engine: a test gives a promise that it resolves */
+  writeDelay?: (key: string, value: unknown) => Promise<void> | undefined
 }
 
 /** What the plugin asked the machine and the engine for. */
@@ -190,7 +192,8 @@ export function installMachine(on: On, machine: Machine): Calls {
   })
   on('state.set', (_$, e, next) => {
     if (e.plugin === PLUGIN && e.key === 'board') calls.boardWrites += 1
-    return next(e)
+    const delay = machine.writeDelay?.(e.key, e.value)
+    return delay === undefined ? next(e) : delay.then(() => next(e))
   })
   // the store in memory, as the engine keeps the store of a plugin, with each write recorded
   const store = new Map<string, unknown>(Object.entries(machine.store ?? {}))
