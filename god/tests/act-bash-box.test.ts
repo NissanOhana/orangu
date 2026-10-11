@@ -115,4 +115,22 @@ for (const surface of SURFACES) {
     expect(cmuxSince(calls, atY).filter((argv) => argv[1] === 'send' || argv[1] === 'send-key')).toEqual([])
     expect(machine.cmux!.answered ?? {}).toEqual({})
   })
+
+  test(`${surface}: 1 then y on a dialog with no box that shows the home folder where the call wrote ~ sends no key, though both clean to the same text`, async ($, on) => {
+    const { machine, calls, clock, ui } = await begin($, on, surface)
+    const perm = machine.sessions[2]!
+    perm.transcript = [prompt('Make the probe file.', Date.now() - 90_000), bash('toolu_b5', 'ls ~/notes', 'List the notes', Date.now() - 1000)]
+    perm.transcriptMtimeMs = Date.now()
+    perm.fileMtimeMs += 1000
+    // the dialog of Claude Code 2.1.295, with no box: the raw command differs, and the cleaner gives ~ for both
+    machine.cmux!.screens![SF.perm] = ['❯ List the notes.', '', '─'.repeat(72), ' Bash command', '', ' List the notes', '', `   ls ${HOME}/notes`, '', ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No', '', ' Esc to cancel'].join('\n')
+    await clock.advance(2000)
+    await select($, 'ses-perm')
+    await press(ui, 'permission:yes')
+    expect(has(await lines(ui), 'ls ~/notes')).toBe(true)
+    const atY = calls.runs.length
+    await press(ui, 'key:y')
+    expect(cmuxSince(calls, atY).filter((argv) => argv[1] === 'send' || argv[1] === 'send-key')).toEqual([])
+    expect(machine.cmux!.answered ?? {}).toEqual({})
+  })
 }

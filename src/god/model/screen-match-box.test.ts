@@ -231,6 +231,24 @@ describe('matchPermission: the shapes that a crafted command can use', () => {
     // with no raw side the cleaned rows cannot tell them apart, so the plan refuses a permission with no raw side
     expect(matchPermission(readScreen(clean(boxScreen([` ${key('B')}`]))), cleanedBash(key('A')))).toEqual(YES)
   })
+
+  it('refuses a ~ that the screen shows as the home folder, and another run that the redaction masks as the same blob', () => {
+    expect(clean('ls ~/notes')).toBe(clean(`ls ${HOME}/notes`))
+    expect(withRaw('ls ~/notes', boxScreen([` ls ${HOME}/notes`]))).toEqual(CHANGED)
+    expect(withRaw(`touch ~/${filler(100)}`, boxScreen(wrapped(`touch ${HOME}/${filler(100)}`)))).toEqual(CHANGED)
+    const blob = (c: string): string => `cat /tmp/${c.repeat(70)}`
+    expect(clean(blob('A'))).toBe(clean(blob('B')))
+    expect(withRaw(blob('A'), boxScreen([` ${blob('B')}`]))).toEqual(CHANGED)
+  })
+
+  it('compares the raw command in the form with no box too: 2 commands that clean to the same text do not pass', () => {
+    const old = (command: string): string => boxScreen([` ${command}`]).replace(`${DASHED}\n`, '').replace(`${DASHED}\n`, '')
+    const key = (c: string): string => `export ANTHROPIC_API_KEY=sk-ant-api03-${c.repeat(24)}`
+    expect(withRaw(key('A'), old(key('A')))).toEqual(YES)
+    expect(withRaw(key('A'), old(key('B')))).toEqual(CHANGED)
+    expect(withRaw('ls ~/notes', old(`ls ${HOME}/notes`))).toEqual(CHANGED)
+    expect(withRaw(`ls ${HOME}/notes`, old(`ls ${HOME}/notes`))).toEqual(YES)
+  })
 })
 
 describe('matchPermission: with no raw text, the box measured on the cleaned rows', () => {

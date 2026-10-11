@@ -89,4 +89,21 @@ describe('deliver: the answer binds to the only open call', () => {
     expect(JSON.stringify(result)).not.toContain('A'.repeat(24))
     expect(JSON.stringify(result)).not.toContain('B'.repeat(24))
   })
+
+  it('refuses the same shapes on the dialog with no box: another raw key, and the home folder where the call wrote ~', async () => {
+    const noBox = (command: string): string => ['❯ Make the file.', '', '─'.repeat(W), ' Bash command', '', ` ${DESCRIPTION}`, '', `   ${command}`, '', ' Do you want to proceed?', ' ❯ 1. Yes', '   2. No', '', ' Esc to cancel'].join('\n')
+    const key = (c: string): string => `export ANTHROPIC_API_KEY=sk-ant-api03-${c.repeat(24)}`
+    for (const [shown, asked] of [
+      [key('B'), key('A')],
+      [`ls ${HOME}/notes`, 'ls ~/notes'],
+    ] as const) {
+      expect(clean(shown)).toBe(clean(asked))
+      const fake = machine(askPermission({ screen: noBox(shown), lines: asksToRun(asked) }), { clean })
+      const result = await deliver(fake.ports, request(yes(asked)))
+      expect(result.outcome).toMatchObject({ status: 'refused', refusal: 'screen-changed' })
+      expect(keyRuns(fake.runs)).toEqual([])
+    }
+    const same = machine(askPermission({ screen: noBox('ls ~/notes'), lines: asksToRun('ls ~/notes') }), { clean })
+    expect((await deliver(same.ports, request(yes('ls ~/notes')))).outcome).toMatchObject({ status: 'sent' })
+  })
 })

@@ -399,22 +399,33 @@ function boxOf(rows: readonly string[]): Box | 'none' | undefined {
 }
 
 /**
- * The raw command lines of the box, from the raw rows of the same read, or undefined when they do not line up. The
- * deliver path cleans the screen as 1 text, and a home folder, a secret or a blob that the cleaner rewrites changes the
- * width of its row. So the raw rows give the widths: the 2 rules and the question row of the raw text must clean to the
- * rows that the cleaned screen shows at the same places. Then boxLines measures and joins the raw rows. No line is
- * cleaned: the match compares them with the raw command, because the cleaner gives 1 text for 2 commands that differ
- * only in a secret. The raw rows and lines stay in this function.
+ * The raw rows of the request, from the raw text of the same read, or undefined when they do not line up: each raw row
+ * of the request and the raw question row must clean to the row that the cleaned screen shows at the same place. The
+ * raw rows stay in the match.
  */
-function rawBoxLines(dialog: PermissionDialog, box: Box, raw: RawScreen): string[] | undefined {
+function rawRequestRows(dialog: PermissionDialog, raw: RawScreen): string[] | undefined {
   const request = dialog.request ?? []
   const start = dialog.firstLine - request.length
   if (start < 0) return undefined
   const rows = raw.text.split('\n').map(trimEnd).slice(start, dialog.firstLine + 1)
-  const cleanRow = (k: number): string => trimEnd(raw.clean(rows[k] ?? ''))
-  if (rows.length !== request.length + 1) return undefined
-  if (cleanRow(box.open) !== request[box.open] || cleanRow(box.close) !== request[box.close] || trim(cleanRow(request.length)) !== dialog.question) return undefined
-  return boxLines(rows.slice(box.open + 1, box.close), box.width)
+  const cleanRow = (row: string | undefined): string => trimEnd(raw.clean(row ?? ''))
+  if (rows.length !== request.length + 1 || !request.every((row, k) => cleanRow(rows[k]) === row) || trim(cleanRow(rows[request.length])) !== dialog.question) return undefined
+  return rows.slice(0, request.length)
+}
+
+/**
+ * The raw command lines of the dialog, each trimmed, empty lines left out, or undefined. With a box, boxLines measures
+ * and joins the raw rows between the 2 rules: the cleaner can rewrite a home folder, a secret or a blob and change the
+ * width of a row. With no box, they are the last raw rows of the request, as many as the raw command has lines (the
+ * cleaned rows already passed showsHead). No line is cleaned, because the cleaner gives 1 text for 2 commands that
+ * differ only in a secret, a home folder or a masked run.
+ */
+function rawCommandLines(dialog: PermissionDialog, box: Box | 'none', raw: RawScreen): string[] | undefined {
+  const rows = rawRequestRows(dialog, raw)
+  if (rows === undefined) return undefined
+  if (box !== 'none') return boxLines(rows.slice(box.open + 1, box.close), box.width)
+  const lines = rows.map(trim).filter((row) => row !== '')
+  return lines.slice(Math.max(1, lines.length - linesOf(raw.command).length))
 }
 
 /**
@@ -424,9 +435,9 @@ function rawBoxLines(dialog: PermissionDialog, box: Box, raw: RawScreen): string
  * before the question. So no row of another request, no reason row, no row of another width in a wrap, no box with a
  * missing rule and no cut command passes.
  *
- * With the raw side, the raw box lines (rawBoxLines) must equal the lines of the raw command. With none, boxLines reads
- * the cleaned rows: then a home folder, a secret or a blob that the cleaner rewrites in a row before the last row of a
- * wrap changes the width of that row, and the match refuses (it fails closed).
+ * With the raw side, in both forms, the raw command lines of the dialog (rawCommandLines) must equal the lines of the raw
+ * command. With none, the match reads the cleaned rows only, and the plan never asks for it (deliver-plan.ts refuses a
+ * permission answer with no raw side).
  *
  * The rows of a wrap and the rows of a command whose own lines start with `│ ` look the same. So a command of such lines
  * never matches its own dialog (the gutter goes), and the plan binds the answer to the 1 open call, so no other
@@ -436,10 +447,15 @@ function showsRequest(dialog: PermissionDialog, expected: ShellRequest, raw: Raw
   const rows = dialog.request
   if (dialog.question !== 'Do you want to proceed?' || rows === undefined) return false
   const box = boxOf(rows)
-  if (box === 'none') return showsHead(rows, [...expected.description, ...expected.command])
-  if (box === undefined || !showsHead(rows.slice(0, box.open), expected.description)) return false
-  const lines = raw === undefined ? boxLines(rows.slice(box.open + 1, box.close), box.width) : rawBoxLines(dialog, box, raw)
-  return lines !== undefined && sameRows(lines, raw === undefined ? expected.command : linesOf(raw.command))
+  if (box === undefined) return false
+  if (box === 'none' ? !showsHead(rows, [...expected.description, ...expected.command]) : !showsHead(rows.slice(0, box.open), expected.description)) return false
+  if (raw !== undefined) {
+    const lines = rawCommandLines(dialog, box, raw)
+    return lines !== undefined && sameRows(lines, linesOf(raw.command))
+  }
+  if (box === 'none') return true
+  const lines = boxLines(rows.slice(box.open + 1, box.close), box.width)
+  return lines !== undefined && sameRows(lines, expected.command)
 }
 
 /**
