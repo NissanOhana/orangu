@@ -458,9 +458,10 @@ function showsHead(rows, expected) {
   return sameRows(isAutoModeTip(rest[0]) ? rest.slice(1) : rest, expected);
 }
 function boxLines(rows, width) {
+  const full = width - 1;
   const widths = rows.map(columns);
-  if (widths.some((cells) => cells !== void 0 && cells > width)) return void 0;
-  const fills = (k) => widths[k] === width && GUTTER_ROW.test(rows[k] ?? "");
+  if (widths.some((cells) => cells !== void 0 && cells > full)) return void 0;
+  const fills = (k) => widths[k] === full && GUTTER_ROW.test(rows[k] ?? "");
   if (!rows.some((_, k) => fills(k))) return rows.map(trim).filter((row) => row !== "");
   if (rows.some((row) => !isBlank(row) && !GUTTER_ROW.test(row))) return void 0;
   const lines = [];
