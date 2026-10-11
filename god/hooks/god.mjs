@@ -625,9 +625,9 @@ var jumpedSessionOf = (outcome) => outcome.result === "jumped" ? outcome.session
 // src/god/act/alerts.ts
 var REFUSED_RING_ARGV = "The alert ring runs only cmux notify on 1 tab, with no environment variable.";
 var CONTROL_OR_BREAK = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
-var isRingValue = (value) => value !== void 0 && value !== "" && !value.startsWith("-") && !CONTROL_OR_BREAK.test(value);
+var isRingValue = (value) => value !== void 0 && value !== "" && !value.startsWith("-") && !CONTROL_OR_BREAK.test(value) && !HIDDEN_CHAR.test(value);
 function alertNotice(session, kind, clean) {
-  return { title: PANE_TITLE, body: alertBody(flat(clean(session.name)), kind) };
+  return { title: PANE_TITLE, body: alertBody(clean(flat(session.name)), kind) };
 }
 function isRingArgv(argv) {
   const [command, verb, titleFlag, title, bodyFlag, body, workspaceFlag, workspaceRef, surfaceFlag, surfaceRef] = argv;
@@ -747,8 +747,8 @@ function createAlertLoop(ports) {
   const ring = ringHost(ports.host);
   async function decide(turn) {
     try {
-      const state = await ports.readState();
-      const decision = decideAlerts({ ...turn, state });
+      const [state, store] = await Promise.all([ports.readState(), ports.readChoices()]);
+      const decision = decideAlerts({ ...turn, store, state });
       if (JSON.stringify(decision.state) !== JSON.stringify(state)) await ports.writeState(decision.state);
       return decision;
     } catch {
@@ -1777,6 +1777,11 @@ var ALERTS = atom({ plugin: "orangu-god", key: "alerts" }, NO_ALERTS);
 var RECAP = atom({ plugin: "orangu-god", key: "recap" }, null);
 
 // src/god/alert-keys.tsx
+async function storedChoices($) {
+  const [sound, muted] = await Promise.all([$.store.get("sound"), $.store.get("muted")]);
+  const stored = storeOf({ sound, muted });
+  return { sound: stored.sound, muted: stored.muted };
+}
 function alertLoopOf($, host, clean) {
   const { play, notify } = engineEffects($);
   return createAlertLoop({
@@ -1784,17 +1789,19 @@ function alertLoopOf($, host, clean) {
     writeState: async (state) => {
       await update($, ALERTS, () => state);
     },
+    readChoices: () => storedChoices($),
     effects: { play, notify },
     host,
     clean
   });
 }
 async function toggleSound($, loop) {
-  await loop.choose(toggledSound(loop.store()));
+  await loop.choose(toggledSound(await storedChoices($)));
   $.ui.invalidate("ui.render");
 }
 async function toggleMute($, loop) {
-  const choice = toggledMute(loop.store(), await read($, SELECTED) || void 0, loop.snapshot());
+  const selected = await read($, SELECTED) || void 0;
+  const choice = toggledMute(await storedChoices($), selected, loop.snapshot());
   if (choice !== void 0) await loop.choose(choice);
 }
 
@@ -4480,20 +4487,21 @@ function utf8Length(text) {
 var bytesOf = (lines) => utf8Length(lines.join("\n"));
 var LINE_BYTES = Math.max(...Object.values(RECAP_LABEL).map(utf8Length)) + 3;
 var FACT_MIN_BYTES = 256;
+var quoted2 = (text) => JSON.stringify(text).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
 function framed(text, clean, maxBytes) {
   const chars = Array.from(clean(text));
-  const whole = JSON.stringify(chars.join(""));
+  const whole = quoted2(chars.join(""));
   if (chars.length <= RECAP_TEXT_MAX && utf8Length(whole) <= maxBytes) return whole;
   const room = maxBytes - utf8Length(cutMark(chars.length));
   let kept = 0;
   let bytes = 2;
   while (kept < Math.min(chars.length, RECAP_TEXT_MAX)) {
-    const next = utf8Length(JSON.stringify(chars[kept])) - 2;
+    const next = utf8Length(quoted2(chars[kept])) - 2;
     if (bytes + next > room) break;
     bytes += next;
     kept += 1;
   }
-  return `${JSON.stringify(chars.slice(0, kept).join(""))}${cutMark(chars.length - kept)}`;
+  return `${quoted2(chars.slice(0, kept).join(""))}${cutMark(chars.length - kept)}`;
 }
 function within(lines) {
   let bytes = -1;
