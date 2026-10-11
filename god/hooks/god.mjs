@@ -270,7 +270,7 @@ var refuse2 = (refusal) => ({ kind: "refuse", refusal });
 function cmux(verb, screen, value) {
   return ["cmux", verb, "--workspace", screen.workspaceRef, "--surface", screen.surfaceRef, "--", value];
 }
-var digitPlan = (match, screen) => match.isMatch ? { kind: "send", steps: [cmux("send-key", screen, String(match.digit))] } : refuse2(match.refusal);
+var digitPlan = (match, screen) => match.isMatch ? { kind: "send", steps: [cmux("send", screen, String(match.digit))] } : refuse2(match.refusal);
 function promptSteps(text, screen) {
   const lines = text.split("\n");
   const steps = lines.flatMap((line, i) => [...line === "" ? [] : [cmux("send", screen, line)], ...i < lines.length - 1 ? [cmux("send-key", screen, "shift+enter")] : []]);
@@ -3992,7 +3992,7 @@ function checkDelivery(check, facts) {
 // src/god/act/deliver.ts
 var REFUSED_DELIVER_ARGV = "The key path runs only cmux send, send-key and read-screen, ps of 1 process, and the reads of the transcript.";
 var PS_HEAD = ["ps", "-o", "pid=,tty=,lstart=", "-p"];
-var PLAN_KEYS = /* @__PURE__ */ new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9", "enter", "shift+enter"]);
+var PLAN_KEYS = /* @__PURE__ */ new Set(["enter", "shift+enter"]);
 var isRefs = (workspaceRef, surfaceRef) => WORKSPACE_REF.test(workspaceRef ?? "") && SURFACE_REF.test(surfaceRef ?? "");
 function isTranscriptPath(path, home) {
   const root = `${projectsDir(home)}/`;
