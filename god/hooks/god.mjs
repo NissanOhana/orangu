@@ -274,6 +274,8 @@ var RULE_ROW = /^ *─{3,}/u;
 var FULL_RULE = /^ *─+$/u;
 var TYPE_SOMETHING = /^Type something\.?$/;
 var BASH_TITLE = /^Bash command(?: \([^()]*\))?$/;
+var DASHED_RULE = /^ *╌{3,}$/u;
+var GUTTER_ROW = /^ │(?: (.*))?$/u;
 var REQUEST_ROWS = 40;
 var WRAP_MARGIN = 6;
 var NARROW = [[32, 126], [160, 767], [880, 1154], [1162, 1327], [1488, 1514], [8208, 8231], [8240, 8286], [8592, 8703], [9472, 9599], [9744, 9746], [10004, 10004], [10095, 10095]];
@@ -372,7 +374,7 @@ function questionAt(rows, c, width) {
 function requestRows(rows, q) {
   for (let i = q - 1; i >= Math.max(0, q - REQUEST_ROWS); i--) {
     const row = rows[i] ?? "";
-    if (RULE_ROW.test(row)) return rows.slice(i + 1, q).map(trim).filter((text) => text !== "");
+    if (RULE_ROW.test(row)) return rows.slice(i + 1, q);
     if (optionRow(rows, i) || PROMPT_ROW.test(row)) return void 0;
   }
   return void 0;
@@ -446,14 +448,41 @@ function requestOf(tool, input) {
   if (typeof command !== "string") return void 0;
   const rowsOf = (text) => text.split("\n").map(trim).filter((row) => row !== "");
   const commandRows = rowsOf(command);
-  return commandRows.length > 0 ? [...typeof description === "string" ? rowsOf(description) : [], ...commandRows] : void 0;
+  return commandRows.length > 0 ? { description: typeof description === "string" ? rowsOf(description) : [], command: commandRows } : void 0;
 }
 var isAutoModeTip = (row) => row === 'Tip: auto mode handles these prompts for you \u2014 choose "switch to auto mode" below';
+var sameRows = (rows, expected) => rows.length === expected.length && rows.every((row, k) => row === expected[k]);
+function showsHead(rows, expected) {
+  const [title, ...rest] = rows.map(trim).filter((row) => row !== "");
+  if (title === void 0 || !BASH_TITLE.test(title)) return false;
+  return sameRows(isAutoModeTip(rest[0]) ? rest.slice(1) : rest, expected);
+}
+function boxLines(rows, width) {
+  const widths = rows.map(columns);
+  if (widths.some((cells) => cells !== void 0 && cells > width)) return void 0;
+  const fills = (k) => widths[k] === width && GUTTER_ROW.test(rows[k] ?? "");
+  if (!rows.some((_, k) => fills(k))) return rows.map(trim).filter((row) => row !== "");
+  if (rows.some((row) => !isBlank(row) && !GUTTER_ROW.test(row))) return void 0;
+  const lines = [];
+  let line = "";
+  for (const [k, row] of rows.entries()) {
+    line += GUTTER_ROW.exec(row)?.[1] ?? "";
+    if (fills(k) && GUTTER_ROW.test(rows[k + 1] ?? "")) continue;
+    lines.push(trim(line));
+    line = "";
+  }
+  return lines.filter((text) => text !== "");
+}
 function showsRequest(dialog, expected) {
-  const [title, ...rest] = dialog.request ?? [];
-  if (dialog.question !== "Do you want to proceed?" || title === void 0 || !BASH_TITLE.test(title)) return false;
-  const body = isAutoModeTip(rest[0]) ? rest.slice(1) : rest;
-  return body.length === expected.length && body.every((row, k) => row === expected[k]);
+  const rows = dialog.request;
+  if (dialog.question !== "Do you want to proceed?" || rows === void 0) return false;
+  const rules = rows.flatMap((row, k) => DASHED_RULE.test(row) ? [k] : []);
+  if (rules.length === 0) return showsHead(rows, [...expected.description, ...expected.command]);
+  const [open = -1, close = -1] = rules;
+  const width = columns(rows[open] ?? "");
+  if (rules.length !== 2 || width === void 0 || columns(rows[close] ?? "") !== width || rows.slice(close + 1).some((row) => !isBlank(row))) return false;
+  const lines = boxLines(rows.slice(open + 1, close), width);
+  return lines !== void 0 && showsHead(rows.slice(0, open), expected.description) && sameRows(lines, expected.command);
 }
 function matchPermission(view, want) {
   const dialog = soleDialog(view);
