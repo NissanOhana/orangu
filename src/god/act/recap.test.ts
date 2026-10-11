@@ -107,6 +107,24 @@ describe('the Recap request', () => {
     expect(prompt).not.toContain('Last tool: ')
   })
 
+  it('keeps each of 70 open questions of 1,600 characters, because each fact share leaves room for its label', () => {
+    const base = waitingRow()
+    const questions = Array.from({ length: 70 }, () => ({ text: 'Which eval set? '.repeat(100), header: 'h', multiSelect: false, options: [] }))
+    const prompt = recapRequest({ ...base, transcript: { ...base.transcript!, openQuestion: { toolUseId: 'tu-ask', questions } } }, clean).prompt
+    expect(questions[0]!.text).toHaveLength(1600)
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThanOrEqual(RECAP_PROMPT_MAX_BYTES)
+    expect(prompt.split('\n').filter((line) => line.startsWith('Open question: '))).toHaveLength(70)
+  })
+
+  it('keeps each of 70 long open questions with its share, since the share counts the label and the frame of a line', () => {
+    const base = waitingRow()
+    const questions = Array.from({ length: 70 }, (_, index) => ({ text: `${index} ${'Which eval set? '.repeat(100)}`, header: 'h', multiSelect: false, options: [] }))
+    const long = { name: 'api seven '.repeat(160), waitingFor: 'input needed '.repeat(120) }
+    const prompt = recapRequest({ ...base, ...long, transcript: { ...base.transcript!, title: 'Fix the parser '.repeat(100), openQuestion: { toolUseId: 'tu-ask', questions } } }, clean).prompt
+    expect(Buffer.byteLength(prompt, 'utf8')).toBeLessThanOrEqual(RECAP_PROMPT_MAX_BYTES)
+    expect(prompt.split('\n').filter((line) => line.startsWith('Open question: '))).toHaveLength(70)
+  })
+
   it('drops the oldest turns first when the prompt would pass its cap', () => {
     // each text is cut to RECAP_TEXT_MAX characters of 2 to 3 bytes, so only some of the last turns fit
     const big = (word: string): HistoryTurn => ({ prompt: `${word}日本語 `.repeat(400), reply: `${word}日本語 `.repeat(400) })
