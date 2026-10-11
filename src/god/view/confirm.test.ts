@@ -117,6 +117,17 @@ describe('the confirm bar', () => {
     }
   })
 
+  it('names the empty and control-char refusals of a peer message before y, offers c only, and keeps y for any other text', () => {
+    const texts: Readonly<Record<string, string>> = { empty: '\u200b \n', 'control-char': 'Stop\u200bthe deploy.' }
+    for (const hidden of ['\u202e', '\u{e0061}', '\u001b']) expect(view({ ...INTENTS.peer, text: `a${hidden}b` } as DeliverIntent).hints, JSON.stringify(hidden)).toEqual([CONFIRM_HINTS[1]])
+    for (const [code, message] of Object.entries(texts)) {
+      const shown = view({ ...INTENTS.peer, text: message } as DeliverIntent, { width: 200 })
+      expect(shown.lines.slice(0, 2).map(text), code).toEqual([' Send this peer message to api-7?  c: cancel', ` ${LINES[code as DeliverRefusal]}`])
+      expect(shown.hints, code).toEqual([CONFIRM_HINTS[1]])
+    }
+    for (const message of ['/exit', '!stop now', 'exit', 'Open C:\\new']) expect(view({ ...INTENTS.peer, text: message } as DeliverIntent).hints, message).toEqual(CONFIRM_HINTS)
+  })
+
   it('shows no y and no c while the keys go out, and says so in their place', () => {
     const lines = view(INTENTS.answer, { isSending: true }).lines
     expect(lines.flatMap((line) => line.segments).some((segment) => segment.press !== undefined)).toBe(false)

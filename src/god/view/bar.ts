@@ -16,9 +16,9 @@
 import type { DeliverCheck } from '../act/deliver-check.js'
 import type { DeliverIntent, DeliverOutcome, DeliverTarget } from '../types.js'
 import { ACCENT } from '../ui/theme.js'
-import { confirmView, outcomeLines } from './confirm.js'
+import { CANCEL_HINTS, confirmView, outcomeLines } from './confirm.js'
 import { pressSegment } from './keys.js'
-import type { Line } from './types.js'
+import type { KeyHint, Line } from './types.js'
 import { SCROLL_KEYS, scrollBy, type ScrollWindow } from './window.js'
 import { appendItem, flat, wrapSegments } from './wrap.js'
 
@@ -58,10 +58,12 @@ export type DraftField = { key: string; label: string; placeholder: string; subm
 
 /**
  * The bar: its lines, the text field of a draft, the scroll that each count key goes to, whether it is open (a
- * confirm bar or a draft, which own c, and y in the confirm bar), and the intent that the confirm bar shows, which
- * its y sends. While the keys go out the bar is not open, so it has no y and no c, and w and z still scroll it.
+ * confirm bar or a draft, which own c, and y in the confirm bar), the keys that its Buttons press, and the intent that
+ * the confirm bar shows, which its y sends. The keys hold y only in a confirm bar that can send: a refused prompt or
+ * peer message and a draft hold c only, so the shell binds no y there. While the keys go out the bar is not open and
+ * holds no key, and w and z still scroll it.
  */
-export type BarView = { lines: Line[]; field?: DraftField; scrollTo: Readonly<Partial<Record<string, number>>>; isOpen: boolean; intent?: DeliverIntent }
+export type BarView = { lines: Line[]; field?: DraftField; scrollTo: Readonly<Partial<Record<string, number>>>; isOpen: boolean; hints: readonly KeyHint[]; intent?: DeliverIntent }
 
 /** What the bar reads. */
 export type BarInput = {
@@ -96,13 +98,13 @@ export function barView(input: BarInput): BarView | undefined {
     const stale = isStale ? outcomeLines(outcome, width) : []
     const isSending = deliver.isSending === true
     const bar = confirmView({ intent, width, rows: input.rows - stale.length, scroll: deliver.scroll, isSending })
-    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: !isSending, intent }
+    return { lines: [...stale, ...bar.lines], scrollTo: scrollTargets(bar.window), isOpen: !isSending, hints: isSending ? [] : bar.hints, intent }
   }
   if (draft !== undefined) {
     const head = appendItem(wrapSegments([{ text: draftText(draft), ...ACCENT, bold: true }], width), [pressSegment('c', 'cancel')], width)
-    return { lines: head, field: { key: draftKey(draft), label: DRAFT_LABEL, placeholder: DRAFT_PLACEHOLDER, submitLabel: DRAFT_SUBMIT }, scrollTo: {}, isOpen: true }
+    return { lines: head, field: { key: draftKey(draft), label: DRAFT_LABEL, placeholder: DRAFT_PLACEHOLDER, submitLabel: DRAFT_SUBMIT }, scrollTo: {}, isOpen: true, hints: CANCEL_HINTS }
   }
   if (outcome === undefined || outcome.intent.target.sessionId !== input.selectedKey) return undefined
   if (input.isScreenOpen && isScreenLine(outcome)) return undefined
-  return { lines: outcomeLines(outcome, width), scrollTo: {}, isOpen: false }
+  return { lines: outcomeLines(outcome, width), scrollTo: {}, isOpen: false, hints: [] }
 }

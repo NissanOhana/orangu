@@ -13,7 +13,8 @@
  *    and the open question and the running tasks come only from this fresh transcript read. The screen is read again
  *    for each delivery, never taken from the Screen tab or an earlier y.
  * 3. planDelivery (src/god/act/deliver-plan.ts) makes the plan of the intent from that screen and those facts, with
- *    the host clock right after the screen read. A refusal keeps the fresh screen for the Screen tab.
+ *    the host clock right after the screen read. A refusal keeps the fresh screen for the Screen tab. The plan of an
+ *    answer or a permission must be exactly 1 send of 1 digit 1 to 9 to the mapped tab (isDigitStep), or it is refused.
  * 4. It runs the plan steps in order and stops at the first one that fails: an exit code that is not 0, or a reject.
  *    Before each next step of a prompt it reads the registry file, the size of the transcript and the screen again,
  *    because a dialog can open between 2 steps: a new status time or another transcript size stops it, and
@@ -26,8 +27,9 @@
  *    among them, is refused before the engine sees it: the host port checks only the command name.
  * 6. After the last step it gives the check of the next refreshes (src/god/act/deliver-check.ts), timed on the clock
  *    of the collector, which the refresh stats use.
- * A peer message has no keys: deliverPeer sends it through the engine with no screen check, and the confirm bar is its
- * only guard. A failure reason (FailureReason) holds no session text.
+ * A peer message has no keys: deliverPeer sends it through the engine with no screen check. It refuses an empty text
+ * and a text with a control character or a character that does not show (peerRefusal), and the confirm bar is its
+ * other guard. A failure reason (FailureReason) holds no session text.
  */
 import type { Effects, Host, RunOptions } from '../host.js'
 import { readRegistryFile } from '../source/agents.js'
@@ -37,7 +39,7 @@ import { readScreenOf } from '../source/screen.js'
 import { HEAD_BYTES, projectsDir, readTranscripts } from '../source/transcript.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal, ScreenRead, SessionFacts, SourceState, TranscriptFacts } from '../types.js'
 import { expectOf, type DeliverCheck } from './deliver-check.js'
-import { SURFACE_REF, WORKSPACE_REF, nextStepRefusal, planDelivery, textRefusal, typedBy, type KeyIntent, type TargetFacts } from './deliver-plan.js'
+import { SURFACE_REF, WORKSPACE_REF, nextStepRefusal, peerRefusal, planDelivery, textRefusal, typedBy, type KeyIntent, type TargetFacts } from './deliver-plan.js'
 import { tabRefs } from './jump.js'
 
 /** The reason when the host of the executor refuses a command. */
@@ -91,6 +93,17 @@ export function isDeliverArgv(argv: readonly string[], home: string): boolean {
   if (verb === 'read-screen') return rest.length === 2 && rest[0] === '--lines' && /^[1-9][0-9]{0,3}$/.test(rest[1] ?? '')
   if (rest.length !== 2 || rest[0] !== '--') return false
   return verb === 'send' || (verb === 'send-key' && PLAN_KEYS.has(rest[1] ?? ''))
+}
+
+/**
+ * True when the steps of an answer or a permission are exactly 1 `cmux send` of 1 digit 1 to 9 to the mapped tab. The
+ * host of the executor takes a send of any text, so this is the only argv pin of the digit.
+ */
+export function isDigitStep(steps: readonly (readonly string[])[], refs: { workspaceRef: string; surfaceRef: string }): boolean {
+  const [step, ...more] = steps
+  const head = ['cmux', 'send', '--workspace', refs.workspaceRef, '--surface', refs.surfaceRef, '--']
+  if (step === undefined || more.length > 0 || step.length !== head.length + 1) return false
+  return head.every((arg, index) => step[index] === arg) && /^[1-9]$/.test(step[head.length] ?? '')
 }
 
 /** True when the run may set its environment so: ps only in UTC, every other command with no variable. */
@@ -216,6 +229,7 @@ export async function deliver(ports: DeliverPorts, request: DeliverRequest): Pro
   const now = await host.now().catch(() => Number.NaN)
   const plan = planDelivery(intent, screen, fresh.facts, now)
   if (plan.kind === 'refuse') return refused(plan.refusal, screen)
+  if (intent.kind !== 'prompt' && !isDigitStep(plan.steps, refs)) return refused('screen-changed', screen)
 
   let newest = screen
   for (const [index, step] of plan.steps.entries()) {
@@ -242,10 +256,12 @@ export type PeerIntent = Extract<DeliverIntent, { kind: 'peer' }>
 
 /**
  * Sends 1 peer message through the engine, with no screen check: delivered when the engine queued it at the session,
- * else not delivered. An empty message is refused and sends nothing.
+ * else not delivered. An empty message, or one with a control character or a character that does not show
+ * (peerRefusal), is refused and sends nothing.
  */
 export async function deliverPeer(peer: Effects['peer'], intent: PeerIntent, now: () => Promise<number>): Promise<DeliverOutcome> {
-  if (textRefusal(intent.text) === 'empty') return { status: 'refused', intent, at: await now(), refusal: 'empty' }
+  const refusal = peerRefusal(intent.text)
+  if (refusal !== undefined) return { status: 'refused', intent, at: await now(), refusal }
   const sent = await peer(intent.target.sessionId, intent.text).catch(() => undefined)
   return { status: sent?.isDelivered === true ? 'delivered' : 'not-delivered', intent, at: await now() }
 }

@@ -33,7 +33,8 @@
  *   (`exit`, `quit`, `:q`, `:q!`, `:wq`, `:wq!`), and its command name is not `/exit` or `/quit`, each in any case.
  *   The target would open a mode or end, and a prompt that stops in a mode leaves its text in the input box.
  * Each argv names the workspace and the surface, and puts `--` right before the text or the key, so a text that
- * looks like a flag stays text. A peer message has no keys: the engine sends it, and this plan refuses it.
+ * looks like a flag stays text. A peer message has no keys: the engine sends it, and this plan refuses it. Its text
+ * passes only the empty and control-char rules (peerRefusal), in deliverPeer and in the confirm bar.
  * A prompt has more than 1 step, and a dialog can open between 2 of them. So before each next step the executor reads
  * the registry file and the screen again, and nextStepRefusal checks them: the read is 1 s old or less and the facts
  * do not lag it, the session is still idle with no wait, no dialog is on the screen, and the input box holds the text
@@ -91,10 +92,21 @@ function isNotPrompt(text: string): boolean {
   return MODE_MARKS.has(start.charAt(0)) || EXIT_WORDS.has(firstLine) || EXIT_COMMANDS.has(command)
 }
 
-/** Why a prompt text cannot go out as typed keys, or undefined when it can. */
-export function textRefusal(text: string): DeliverRefusal | undefined {
+/**
+ * Why a text that the person approves in the bar cannot go out, or undefined when it can: it holds no visible
+ * character (empty), or it holds a character that the bar cannot show (control-char). A peer message takes only these
+ * rules: the engine sends it, so no rule of the input box applies to it.
+ */
+export function peerRefusal(text: string): DeliverRefusal | undefined {
   if (BLANK.test(text)) return 'empty'
   if (CONTROL_CHAR.test(text) || HIDDEN_CHAR.test(text)) return 'control-char'
+  return undefined
+}
+
+/** Why a prompt text cannot go out as typed keys, or undefined when it can: the rules of peerRefusal, then those of the input box. */
+export function textRefusal(text: string): DeliverRefusal | undefined {
+  const shown = peerRefusal(text)
+  if (shown) return shown
   if (BACKSLASH_ESCAPE.test(text) || LINE_END_BACKSLASH.test(text)) return 'backslash-escape'
   if (isNotPrompt(text)) return 'not-a-prompt'
   return undefined

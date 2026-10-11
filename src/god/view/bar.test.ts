@@ -8,6 +8,7 @@ import { INTENTS, OUTCOMES } from '../../../test/fixtures/god/detail.js'
 import { cellWidth } from './cells.js'
 import { REFUSAL_TEXT, confirmView } from './confirm.js'
 import { DRAFT_LABEL, DRAFT_PLACEHOLDER, DRAFT_SUBMIT, NO_DELIVERY, barView, draftKey, type BarInput, type DeliverState, type Draft } from './bar.js'
+import type { DeliverIntent } from '../types.js'
 import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -34,6 +35,16 @@ describe('the bar', () => {
   it('gives the intent that it shows, for y to send', () => {
     expect(barView(input({ scroll: 0, intent: INTENTS.answer }))!.intent).toEqual(INTENTS.answer)
     expect(barView(input({ scroll: 0, outcome: OUTCOMES.sent }))!.intent).toBeUndefined()
+  })
+
+  it('gives the keys of its Buttons, so the shell binds y only on a bar that can send', () => {
+    const hotkeys = (state: DeliverState): Array<string | undefined> | undefined => barView(input(state))?.hints.map((hint) => hint.hotkey)
+    expect(hotkeys({ scroll: 0, intent: INTENTS.answer })).toEqual(['y', 'c'])
+    expect(hotkeys({ scroll: 0, intent: { ...INTENTS.prompt, text: '!ls' } as DeliverIntent })).toEqual(['c'])
+    expect(hotkeys({ scroll: 0, intent: { ...INTENTS.peer, text: 'Stop​now.' } as DeliverIntent })).toEqual(['c'])
+    expect(hotkeys({ scroll: 0, intent: INTENTS.answer, isSending: true })).toEqual([])
+    expect(hotkeys({ scroll: 0, draft: { kind: 'peer', target, lines: [] } })).toEqual(['c'])
+    expect(hotkeys({ scroll: 0, outcome: OUTCOMES.sent })).toEqual([])
   })
 
   it('draws no y and no c while the keys go out', () => {

@@ -1,8 +1,9 @@
 // The drafts of the key path on the terminal and the desktop surfaces, over the fake machine of act-machine.ts: r and
 // m open a draft whose text field takes 1 line for each Enter, and an empty line opens the confirm bar with the whole
 // text. Only y sends: a prompt as each line with shift+enter between the lines and enter at the end, a peer message
-// through the engine with no cmux call. The bar names the mode that a prompt opens with its first character, and a
-// prompt that the pane does not type gets the line of its refusal and c only.
+// through the engine with no cmux call. The bar names the mode that a prompt opens with its first character. A prompt
+// that the pane does not type, and a peer message with a character that does not show, get the line of the refusal and
+// c only.
 import { expect, test } from 'claude-code/testing'
 import { SURFACES, backgroundTask, prompt } from './fake-host'
 import { KEY_VERBS, PERMISSION_SCREEN, SF, WS, begin, cmuxSince, detailText, has, keysSince, lines, press, readScreen, select, sendKey, sendText, typeDraft } from './act-machine'
@@ -67,6 +68,17 @@ for (const surface of SURFACES) {
     expect(calls.peers).toEqual([{ to: expect.stringContaining('ses-wait'), text: 'Stop the deploy now.\nI check the logs first.' }])
     expect(cmuxSince(calls, atY)).toEqual([])
     expect(await lines(ui)).toContain(' Delivered to ask-a.')
+  })
+  test(`${surface}: a peer message with a character that does not show gets the line of its refusal and c only, and goes nowhere`, async ($, on) => {
+    const { calls, ui } = await begin($, on, surface)
+    await select($, 'ses-wait')
+    await press(ui, 'key:m')
+    await typeDraft(ui, [`Stop${String.fromCodePoint(0x200b)}the deploy.`])
+    const bar = await lines(ui)
+    expect(bar, bar.join('\n')).toContain(' Send this peer message to ask-a?  c: cancel')
+    expect(has(bar, 'The text has a control character')).toBe(true)
+    expect(await ui.find({ key: 'key:y' })).toBeUndefined()
+    expect(calls.peers).toEqual([])
   })
   test(`${surface}: the bar names the mode that a prompt opens with its first character, and the draft closes on an empty first line`, async ($, on) => {
     const { calls, ui } = await begin($, on, surface)

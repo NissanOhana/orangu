@@ -205,4 +205,21 @@ describe('deliverPeer: a peer message through the engine', () => {
     expect(await deliverPeer(peer, { ...PEER, text: ' \n ' }, now)).toMatchObject({ status: 'refused', refusal: 'empty' })
     expect(calls).toBe(0)
   })
+
+  it('refuses a control character or a character that does not show, and sends nothing, but types no rule of the input box', async () => {
+    const sent: string[] = []
+    const peer = async (_id: string, text: string): Promise<PeerOutcome> => {
+      sent.push(text)
+      return { isDelivered: true }
+    }
+    for (const code of [0x200b, 0x202e, 0xe0061, 0x1b, 0x7f, 0x9b, 0x2028, 0xfe0f]) {
+      const text = `Stop${String.fromCodePoint(code)}the deploy.`
+      expect(await deliverPeer(peer, { ...PEER, text }, now), `U+${code.toString(16)}`).toMatchObject({ status: 'refused', refusal: 'control-char' })
+    }
+    expect(sent).toEqual([])
+    // a peer message is not typed into the input box: a mode mark, an exit word and a backslash go out as text
+    const plain = ['!stop now', '?', 'exit', '/exit', 'Open C:\\new', 'ends with \\', 'Line one.\nLine two.']
+    for (const text of plain) expect(await deliverPeer(peer, { ...PEER, text }, now), JSON.stringify(text)).toMatchObject({ status: 'delivered' })
+    expect(sent).toEqual(plain)
+  })
 })

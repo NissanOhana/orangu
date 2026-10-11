@@ -9,15 +9,15 @@
  * white space, on any line, is `/` (`   \n/clear` is a command), because the session reads it as a key. A prompt that
  * the text check of the key guard refuses (src/god/act/deliver-plan.ts textRefusal: an empty text, a control or hidden
  * character, a backslash escape, a shell command, the help or an exit) shows the line of that refusal in its place,
- * before y, and the bar offers c only, because y can send nothing. While y runs, the bar shows that the pane sends in
- * place of y and c.
+ * before y, and the bar offers c only, because y can send nothing. A peer message that is empty or holds a control or
+ * hidden character (peerRefusal) does the same. While y runs, the bar shows that the pane sends in place of y and c.
  * The target and the question stay fixed. A long prompt or tool input scrolls with w and z in the row limit of the
  * bar (src/god/view/window.ts), with a count line for each side that the window leaves out, so the person can read
  * all of it before y. When the limit leaves fewer than 3 rows, the bar takes its fixed lines and 3 more: a text
  * that the person approves never hides. Each refusal code has 1 line: an old read in the warn color, every other
  * refusal in the bad color, and the not-delivered line in the warn color. No line is wider than `width`.
  */
-import { textRefusal } from '../act/deliver-plan.js'
+import { peerRefusal, textRefusal } from '../act/deliver-plan.js'
 import { CONTROL_CHAR, NOT_A_PROMPT, TASK_RUNNING } from '../copy.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal } from '../types.js'
 import { ACCENT } from '../ui/theme.js'
@@ -115,8 +115,8 @@ function askText(intent: DeliverIntent): string {
   return intent.kind === 'prompt' ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`
 }
 
-/** The keys of the bar of a prompt that the text check refuses: c only, because y can send nothing. */
-const CANCEL_HINTS: readonly KeyHint[] = CONFIRM_HINTS.filter((hint) => hint.keys === 'c')
+/** The keys of a bar that cannot send (a prompt or a peer message that the text check refuses, or a draft): c only. */
+export const CANCEL_HINTS: readonly KeyHint[] = CONFIRM_HINTS.filter((hint) => hint.keys === 'c')
 
 /** The lines that stay fixed (the target and the question), and the text that scrolls under them. */
 function partsOf(intent: DeliverIntent, width: number, isSending: boolean, refusal: DeliverRefusal | undefined): { fixed: Line[]; text: Line[] } {
@@ -128,13 +128,14 @@ function partsOf(intent: DeliverIntent, width: number, isSending: boolean, refus
     if (intent.input === undefined) return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }, { text: '  none' }], width)], text: [] }
     return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }], width)], text: keptLines(intent.input, width, 3) }
   }
-  const note = intent.kind !== 'prompt' ? undefined : refusal !== undefined ? REFUSAL_TEXT[refusal] : PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)]
+  const note = refusal !== undefined ? REFUSAL_TEXT[refusal] : intent.kind === 'prompt' ? PROMPT_MODE_TEXT[intent.text.trimStart().charAt(0)] : undefined
   return { fixed: [...ask, ...(note === undefined ? [] : wrapSegments([{ text: note, token: '--warn' }], width))], text: textLines(intent.text, width, 3) }
 }
 
 /** The confirm bar of 1 intent. */
 export function confirmView(input: ConfirmInput): ConfirmView {
-  const refusal = input.intent.kind === 'prompt' ? textRefusal(input.intent.text) : undefined
+  const { intent } = input
+  const refusal = intent.kind === 'prompt' ? textRefusal(intent.text) : intent.kind === 'peer' ? peerRefusal(intent.text) : undefined
   const { fixed, text } = partsOf(input.intent, input.width, input.isSending === true, refusal)
   const { lines, window } = windowOf(text, Math.max(MIN_WINDOW, input.rows - fixed.length), input.scroll)
   return { lines: [...fixed, ...lines], hints: refusal === undefined ? CONFIRM_HINTS : CANCEL_HINTS, window }
