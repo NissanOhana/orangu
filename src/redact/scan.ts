@@ -79,7 +79,8 @@ const valueRunEnd = (text: string, at: number): number => quotedTail(text, value
 
 const opensValue = (c: string | undefined): boolean => c !== undefined && (VALUE_CHAR.test(c) || c === '"' || c === "'")
 const isSeparator = (c: string | undefined): boolean => c === '=' || c === ':'
-const BLANK = /[ \t]/
+/** A blank inside a line: each white space character but a line end, the no-break space and U+3000 included. */
+const BLANK = /[^\S\n\r]/
 
 /** True when the run of name characters that ends at `end` names a secret. */
 function namesSecretAt(text: string, end: number): boolean {

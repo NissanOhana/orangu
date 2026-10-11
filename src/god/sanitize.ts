@@ -72,9 +72,10 @@ const CONTROLS = new RegExp(`(?:${CONTROL})+`, 'g')
 /**
  * The sequences as other readers may read them, for the hidden forms only (the pane shows the strict ones above). A
  * space is an intermediate byte. A reader may take the final byte or stop before it, and a C0 control among the bytes
- * (all but CAN, SUB and ESC) may end the sequence or be run while the sequence goes on. An 8-bit string may have no end.
+ * (all but LF, CAN, SUB and ESC) may end the sequence or be run while the sequence goes on. An 8-bit string may have no
+ * end. A sequence never takes a newline, so an open sequence at a line end cannot hide the next line.
  */
-const C0_INSIDE = '[\\u0000-\\u0017\\u0019\\u001c-\\u001f]'
+const C0_INSIDE = '[\\u0000-\\u0009\\u000b-\\u0017\\u0019\\u001c-\\u001f]'
 const LOOSE_STRING = `(?:${ESC}[\\]PX^_]|[\\u0090\\u0098\\u009d-\\u009f])${STRING_TEXT}${STRING_END}?`
 function looseSequences(c0Inside: boolean, final: boolean): RegExp {
   const inside = c0Inside ? `|${C0_INSIDE}` : ''

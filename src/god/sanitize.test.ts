@@ -99,6 +99,16 @@ describe('cleanText', () => {
       }
     }
   })
+
+  it('never lets an open sequence at a line end take the newline, so the next line of a command stays whole', () => {
+    for (const open of [ESC, `${ESC}[`, `${ESC}[1 `, CSI]) {
+      for (const end of ['\n', '\r\n']) {
+        const out = cleanText(`x@example.com${open}${end}rm -rf ~/x`, HOME)
+        expect(out.endsWith('\nrm -rf ~/x'), JSON.stringify(out)).toBe(true)
+      }
+    }
+    expect(cleanText(`"authorization" : 'uayqM5c${CSI}3'\r\nsudo rm -rf ~/x`, HOME)).toBe(`"authorization" : '‹redacted›'\nsudo rm -rf ~/x`)
+  })
 })
 
 describe('textCleaner', () => {

@@ -118,6 +118,13 @@ describe('scrubStr masks a secret that only its key, its URL, its header or a qu
     expect(scrubStr(`Authorization: password = ${v}`)).not.toContain(v.slice(0, 6))
   })
 
+  it('reads each blank inside a line as a blank before a closing quote: a no-break space, a BOM and U+3000 too', () => {
+    for (const blank of ['\u00a0', '\ufeff', '\u2002', '\u3000', ' ', '\t']) {
+      const text = `{"password": "abc passwd=${blank}"${v} x"}`
+      expect(scrubStr(text), JSON.stringify(text)).toBe('{"password": "‹redacted›" x"}')
+    }
+  })
+
   it('masks each inner pair and each whole run that main masks: after a quoted key, a newline or a credential, and around a URL password', () => {
     expect(INNER_PAIR_FORMS).toHaveLength(1_920)
     for (const text of [...INNER_PAIR_FORMS, ...INNER_PAIR_RELATIVES]) expect(scrubStr(text), text).not.toMatch(INNER_SECRET_PART)
