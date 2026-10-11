@@ -490,26 +490,34 @@ function rawRequestRows(dialog, raw) {
   if (rows.length !== request.length + 1 || !request.every((row, k) => cleanRow(rows[k]) === row) || trim(cleanRow(rows[request.length])) !== dialog.question) return void 0;
   return rows.slice(0, request.length);
 }
-function rawCommandLines(dialog, box, raw) {
-  const rows = rawRequestRows(dialog, raw);
-  if (rows === void 0) return void 0;
-  if (box !== "none") return boxLines(rows.slice(box.open + 1, box.close), box.width);
-  const lines = rows.map(trim).filter((row) => row !== "");
-  return lines.slice(Math.max(1, lines.length - linesOf(raw.command).length));
+function noBoxRows(rows) {
+  const [title, ...rest] = rows.flatMap((row, k) => isBlank(row) ? [] : [k]);
+  if (title === void 0 || !BASH_TITLE.test(trim(rows[title] ?? ""))) return void 0;
+  const parts = { description: [], command: [] };
+  for (const k of isAutoModeTip(trim(rows[rest[0] ?? -1] ?? "")) ? rest.slice(1) : rest) {
+    const cells = indent(rows[k] ?? "");
+    if (cells === 1 && parts.command.length === 0) parts.description.push(k);
+    else if (cells >= 3) parts.command.push(k);
+    else return void 0;
+  }
+  return parts;
 }
 function showsRequest(dialog, expected, raw) {
   const rows = dialog.request;
   if (dialog.question !== "Do you want to proceed?" || rows === void 0) return false;
   const box = boxOf(rows);
-  if (box === void 0) return false;
-  if (box === "none" ? !showsHead(rows, [...expected.description, ...expected.command]) : !showsHead(rows.slice(0, box.open), expected.description)) return false;
-  if (raw !== void 0) {
-    const lines2 = rawCommandLines(dialog, box, raw);
-    return lines2 !== void 0 && sameRows(lines2, linesOf(raw.command));
+  const rawRows = raw === void 0 ? void 0 : rawRequestRows(dialog, raw);
+  if (box === void 0 || raw !== void 0 && rawRows === void 0) return false;
+  const source = rawRows ?? rows;
+  const want = raw === void 0 ? expected.command : linesOf(raw.command);
+  if (want.length === 0) return false;
+  if (box === "none") {
+    const parts = noBoxRows(rows);
+    const at = (from) => (k) => trim(from[k] ?? "");
+    return parts !== void 0 && sameRows(parts.description.map(at(rows)), expected.description) && sameRows(parts.command.map(at(source)), want);
   }
-  if (box === "none") return true;
-  const lines = boxLines(rows.slice(box.open + 1, box.close), box.width);
-  return lines !== void 0 && sameRows(lines, expected.command);
+  const lines = boxLines(source.slice(box.open + 1, box.close), box.width);
+  return showsHead(rows.slice(0, box.open), expected.description) && lines !== void 0 && sameRows(lines, want);
 }
 function matchPermission(view, want, raw) {
   const dialog = soleDialog(view);
@@ -1157,7 +1165,7 @@ function stateRefusal(intent, facts) {
 var refuse2 = (refusal) => ({ kind: "refuse", refusal });
 function boundCommand(intent, raw) {
   const [call, ...more] = raw.calls;
-  if (call === void 0 || more.length > 0 || call.name !== "Bash" || intent.tool !== "Bash") return void 0;
+  if (call === void 0 || more.length > 0 || call.id !== intent.toolUseId || call.name !== "Bash" || intent.tool !== "Bash") return void 0;
   if (JSON.stringify(cleanValue(call.input, raw.clean)) !== intent.input) return void 0;
   const command = typeof call.input === "object" && call.input !== null ? call.input["command"] : void 0;
   return typeof command === "string" ? command : void 0;
@@ -4859,7 +4867,7 @@ async function readFresh(host, ports, row) {
   if (read7 === void 0 || read7.status !== "read" && read7.status !== "missing") return { kind: "unread" };
   const records = read7.status === "read" ? readRecords(emptyRecordState(ports.home), read7.records, { headRecords: read7.headRecords, parseErrors: read7.parseErrors }) : void 0;
   const transcript = records === void 0 ? void 0 : transcriptFacts(records);
-  const calls = (records?.open ?? []).map(({ name, input }) => ({ name, input }));
+  const calls = (records?.open ?? []).map(({ id, name, input }) => ({ id, name, input }));
   const state = { sessionId: registry.sessionId, status: registry.status, ...registry.waitingFor === void 0 ? {} : { waitingFor: registry.waitingFor } };
   const procStart = registry.procStart === void 0 ? {} : { procStart: registry.procStart };
   const path = read7.cursor.path;
@@ -4954,7 +4962,7 @@ function permissionIntent(snapshot, selectedKey, choice) {
   const session = selectedSession(snapshot, selectedKey);
   const activity = session?.transcript?.activity;
   if (session === void 0 || session.status !== "waiting" || session.waitingFor !== "permission prompt" || activity?.isOpen !== true || activity.tool !== ANSWERED_TOOL) return void 0;
-  return { kind: "permission", target: targetOf(session), choice, tool: activity.tool, ...activity.input === void 0 ? {} : { input: activity.input } };
+  return { kind: "permission", target: targetOf(session), choice, toolUseId: activity.toolUseId, tool: activity.tool, ...activity.input === void 0 ? {} : { input: activity.input } };
 }
 function draftFor(snapshot, selectedKey, kind) {
   const session = selectedSession(snapshot, selectedKey, kind === "prompt");
