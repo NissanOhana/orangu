@@ -76,8 +76,8 @@ for (const surface of SURFACES) {
     expect(calls.tones).toHaveLength(1)
     expect(calls.tones[0]!.mime).toBe('audio/wav')
     expect(calls.tones[0]!.base64?.startsWith(RIFF)).toBe(true)
-    expect(calls.notices).toEqual([{ text: 'The session api-a needs you.', title: 'orangu god' }])
-    expect(rings(calls).map((run) => run.argv)).toEqual([['cmux', 'notify', '--title', 'orangu god', '--body', 'The session api-a needs you.', '--workspace', WS_A, '--surface', SF_A]])
+    expect(calls.notices).toEqual([{ text: 'The session api needs you.', title: 'orangu god' }])
+    expect(rings(calls).map((run) => run.argv)).toEqual([['cmux', 'notify', '--title', 'orangu god', '--body', 'The session api needs you.', '--workspace', WS_A, '--surface', SF_A]])
     expect(rings(calls)[0]!.init).toEqual({ timeoutMs: 5000 })
     moveTo(machine, 0, 'busy', t0 + 3000)
     await clock.advance(2000)
@@ -123,7 +123,7 @@ for (const surface of SURFACES) {
     moveTo(machine, 0, 'waiting', t0 + 1000)
     moveTo(machine, 1, 'waiting', t0 + 1000)
     await clock.advance(2000)
-    expect([calls.tones.length, calls.notices.map((notice) => notice.text), rings(calls).map((run) => run.argv[7])]).toEqual([0, ['The session web-b needs you.'], [WS_B]])
+    expect([calls.tones.length, calls.notices.map((notice) => notice.text), rings(calls).map((run) => run.argv[7])]).toEqual([0, ['The session web needs you.'], [WS_B]])
   })
 
   test(`${surface}: u and s read the store before they write, so they keep the choices of the board of a second session`, async ($, on) => {

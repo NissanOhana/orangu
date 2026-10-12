@@ -59,7 +59,8 @@ describe('what the tools answer', () => {
       idle('s-b', { name: 'plain' }),
     ])
     const lines = boardToolAnswer({ isRunning: true, snapshot }, NOW).split('\n')
-    const rows = lines.slice(3)
+    // a field that does not fit goes on to a line that starts with 2 spaces; only a new session starts a line with a heading
+    const rows = lines.slice(3).filter((line) => !line.startsWith('  '))
     expect(rows).toHaveLength(2)
     const headings = Object.values(LEVEL_HEADING)
     for (const row of rows) expect(headings.some((heading) => row.startsWith(heading)), row).toBe(true)

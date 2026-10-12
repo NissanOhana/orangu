@@ -34,7 +34,8 @@ import { NO_DELIVERY, type DeliverState } from './view/bar.js'
 
 const SNAPSHOT = detailSnapshot()
 const NO_CMUX: BoardSnapshot = { ...SNAPSHOT, sources: { ...SNAPSHOT.sources, cmux: { status: 'missing', reason: 'no cmux' } } }
-const WAIT = { sessionId: 's-wait', name: 'api-7' }
+// the confirm bar names a session by the name of its row: s-wait shows the title of its cmux tab
+const WAIT = { sessionId: 's-wait', name: 'tab 2' }
 const QUESTION = 'Which eval set do you want for the next run of the tests?'
 
 describe('answerIntent', () => {

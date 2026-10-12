@@ -49,7 +49,7 @@ function plantedSessions(): SessionFacts[] {
   ]
 }
 
-const TAGS_BOARD = ['NAMEA', 'NAMEB', 'TITLEA', 'QUESTIONA', 'REPO']
+const TAGS_BOARD = ['NAMEA', 'NAMEB', 'SURFACEA', 'SURFACEB', 'TITLEA', 'QUESTIONA', 'REPO']
 const TAGS_SESSION = ['NAMEA', 'WAITS', 'TITLEA', 'WORKSPACEA', 'SURFACEA', 'REPO', 'BRANCH', 'MODEA', 'HEADERA', 'QUESTIONA', 'LABELA', 'ABOUTA', 'PROMPTA', 'REPLYA', 'ACTIVITYA', 'INPUTA', 'ERRORA', 'AGENTA', 'TYPEA', 'FILEAGENT', 'FILETYPE', 'NAMEB', 'FILE']
 
 /** every line of both tools for every planted and fixture session, at the width */
@@ -68,15 +68,16 @@ describe('the board tool', () => {
       expect(text[3 + index]!.startsWith(LEVEL_HEADING[session.level]), text[3 + index]).toBe(true)
       expect(quoted(text[3 + index]!)[0], text[3 + index]).toBe(session.name)
     })
-    expect(text[3]).toBe(`NEEDS YOU for 6h  name "api-7"  repo "api"  context 61%  summary ${JSON.stringify(QUESTION)}  title "Pick the eval set"`)
-    expect(text).toContain('STALE for 6h  name "old-a"  repo none  context unknown  summary none  title none')
-    expect(text).toContain('WORKING for 4m  name "api-9"  repo "api"  context ~15%  summary "Edit parse.ts"  title none')
+    expect(text[3]).toBe(`NEEDS YOU for 6h  name "api-7"  row name "tab 2"  repo "api"  context 61%  summary ${JSON.stringify(QUESTION)}  title "Pick the eval set"`)
+    expect(text).toContain('STALE for 6h  name "old-a"  row name "old-a"  repo none  context unknown  summary none  title none')
+    expect(text).toContain('WORKING for 4m  name "api-9"  row name "api-9"  repo "api"  context ~15%  summary "Edit parse.ts"  title none')
   })
 
   it('cuts a quote that does not fit with …+N, the count of the characters that it cut', () => {
     expect(TOOL_CUT_RULE).toMatch(/session tool/)
-    const line = lines(boardToolText(detailSnapshot(), 110, NOW))[3]!
-    expect(cellWidth(line)).toBeLessThanOrEqual(110)
+    // at 60 columns the summary of the first session starts a line of its own, and it does not fit that line
+    const line = lines(boardToolText(detailSnapshot(), 60, NOW)).find((one) => one.includes('summary "Which'))!
+    expect(cellWidth(line)).toBeLessThanOrEqual(60)
     const match = /summary ("(?:[^"\\]|\\.)*")…\+(\d+)/.exec(line)
     expect(match, line).not.toBeNull()
     const kept = JSON.parse(match![1]!) as string
@@ -96,6 +97,7 @@ describe('the session tool', () => {
     expect(lines(sessionToolText(detailSnapshot(), 'api-7', 110, NOW))).toEqual([
       'orangu god session: "api-7".',
       TOOL_QUOTE_RULE,
+      'Row name: "tab 2"',
       'Level: NEEDS YOU for 6h',
       'Waits for: "input needed"',
       'Title: "Pick the eval set"',
@@ -122,6 +124,11 @@ describe('the session tool', () => {
       '  SAME TREE: "api-9"',
       '  SAME REPO: "api-3"',
     ])
+  })
+
+  it('finds a session by the name of its row too, as the pane shows it, and by the session name first', () => {
+    expect(lines(sessionToolText(detailSnapshot(), 'tab 2', 110, NOW))[0]).toBe('orangu god session: "api-7".')
+    expect(lines(sessionToolText(detailSnapshot(), 'api-7', 110, NOW))[0]).toBe('orangu god session: "api-7".')
   })
 
   it('gives the activity, the agents and the files of a working session', () => {
@@ -169,7 +176,8 @@ describe('the session tool', () => {
 describe('every session text sits inside its quote frame', () => {
   it('keeps each planted text inside a JSON string literal, in both tools', () => {
     const snapshot = snapshotOf(plantedSessions())
-    const board = lines(boardToolText(snapshot, 400, NOW))
+    // 600 columns: each board line holds the whole title after the planted row name
+    const board = lines(boardToolText(snapshot, 600, NOW))
     const session = lines(sessionToolText(snapshot, plant('NAMEA'), 400, NOW))
     for (const line of [...board, ...session]) {
       expect(outside(line), line).not.toMatch(/PLANTED|Ignore|Do it/)

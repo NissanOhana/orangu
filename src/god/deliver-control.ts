@@ -36,6 +36,7 @@ import type { BoardSnapshot, DeliverIntent, DeliverOutcome, DeliverTarget, Facts
 import { picksOf, shownQuestion, type DeliverState, type Draft } from './view/bar.js'
 import type { DetailState } from './view/detail-pane.js'
 import { ANSWERED_TOOL } from './view/detail-tabs.js'
+import { rowName } from './view/names.js'
 import { LINE_BREAK } from './view/wrap.js'
 
 /** The selected session of the board, when cmux allows the keys (or `needsCmux` is false). */
@@ -44,7 +45,8 @@ function selectedSession(snapshot: BoardSnapshot | undefined, selectedKey: strin
   return snapshot.sessions.find((session) => session.sessionId === selectedKey)
 }
 
-const targetOf = (session: GodSession): DeliverTarget => ({ sessionId: session.sessionId, name: session.name })
+/** The target of an intent: the session, and the name of its row (src/god/view/names.ts), as the confirm bar names it. */
+const targetOf = (session: GodSession): DeliverTarget => ({ sessionId: session.sessionId, name: rowName(session) })
 
 /** The answer of a digit for the open question of the selected session. */
 export function answerIntent(snapshot: BoardSnapshot | undefined, selectedKey: string | undefined, digit: number): KeyIntent | undefined {

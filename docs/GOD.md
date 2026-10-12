@@ -113,7 +113,7 @@ WARNING: A key that goes to the wrong dialog can approve a tool call in another 
 
 The pane types into another session only through cmux. Each answer and each prompt goes through these steps:
 
-1. You press `y` in the confirm bar. The bar shows the session name and what goes to it. That is the option and its question, `Yes` or `No` and the whole tool input, or each visible character of the text. Only white space can differ from what goes out: for example, the bar shows a run of empty lines as 1 empty line. A long text scrolls with `w` and `z`, so you can read all of it before `y`.
+1. You press `y` in the confirm bar. The bar shows the name of the row of the session and what goes to it. That is the option and its question, `Yes` or `No` and the whole tool input, or each visible character of the text. Only white space can differ from what goes out: for example, the bar shows a run of empty lines as 1 empty line. A long text scrolls with `w` and `z`, so you can read all of it before `y`.
 2. The pane reads the process of the session with `ps`. Then it reads the registry file and the transcript of the session again, and then the screen of its cmux tab.
 3. The pane checks that the process still runs with the start time of the registry file, on the terminal of the cmux tab.
 4. The pane checks that it read the screen 1 s ago or less, and the session facts 1 s or less before the screen.
@@ -171,7 +171,7 @@ The mod runs no command but `claude`, `cmux`, `ps`, `git`, `stat`, `tail` and `h
 
 Before the pane shows a transcript text, a session name, a cmux title or a screen, the mod removes the terminal control characters. Then it masks the secrets with the orangu redaction. The same cleaned text goes to the tools and to the Recap.
 
-The mod gives the god Claude 2 tools: `mcp__orangu-god__board` (1 line for each session) and `mcp__orangu-god__session` (the detail of 1 session). The tools only read. They register when the pane opens for the first time.
+The mod gives the god Claude 2 tools: `mcp__orangu-god__board` (1 line for each session) and `mcp__orangu-god__session` (the detail of 1 session). Both tools give the session name and the name of the row. The session tool finds a session by either name. The tools only read. They register when the pane opens for the first time.
 
 ## Recap
 
@@ -183,7 +183,7 @@ The Recap tab shows the reply under a `model text` label, with its token count.
 
 ## Alerts
 
-- An alert starts when a session goes into NEEDS YOU or STUCK. It is 1 tone, 1 native notification and 1 ring on the cmux tab of the session.
+- An alert starts when a session goes into NEEDS YOU or STUCK. It is 1 tone, 1 native notification and 1 ring on the cmux tab of the session. The notification and the ring name the session by the name of its row.
 - 1 refresh plays 1 tone at most. When more sessions change in 1 refresh, the first gets the tone: NEEDS YOU, then STUCK, then YOUR TURN. The other alerts send their notification and their ring with no tone.
 - When a session goes into YOUR TURN, the pane plays a done tone. A done tone has no notification and no ring.
 - A session gets at most 1 alert in 5 min. A done tone also waits 5 min after the last alert or done tone of that session.

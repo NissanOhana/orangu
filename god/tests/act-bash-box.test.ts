@@ -49,7 +49,7 @@ for (const surface of SURFACES) {
     await select($, 'ses-perm')
     expect((await ui.find({ key: 'permission:yes' }))?.props['hotkey']).toBe('1')
     await press(ui, 'permission:yes')
-    expect(await lines(ui)).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send "Yes" to the Bash request of perm?  y: send  c: cancel')
     const atY = calls.runs.length
     await press(ui, 'key:y')
     expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '1')])
@@ -70,7 +70,7 @@ for (const surface of SURFACES) {
     await select($, 'ses-perm')
     await press(ui, 'permission:yes')
     const bar = await lines(ui)
-    expect(bar).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
+    expect(bar).toContain(' Send "Yes" to the Bash request of perm?  y: send  c: cancel')
     // the bar holds the new call, so the y below checks the screen against the long command
     expect(detailText(bar).replace(/\s+/g, ''), bar.join('\n')).toContain('word-probe/yes.txt')
     const atY = calls.runs.length
@@ -131,7 +131,7 @@ for (const surface of SURFACES) {
     await clock.advance(2000)
     await select($, 'ses-perm')
     await press(ui, 'permission:yes')
-    expect(await lines(ui)).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send "Yes" to the Bash request of perm?  y: send  c: cancel')
     // before y, call A closes and call B opens: B cleans to the same text as A, and the screen shows B
     perm.transcript = [...perm.transcript, toolResult('toolu_A', 'done', Date.now() - 1000), bash('toolu_B', curl('2'), 'Fetch the page', Date.now() - 500)]
     perm.transcriptMtimeMs = Date.now()

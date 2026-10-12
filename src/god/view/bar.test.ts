@@ -73,7 +73,7 @@ describe('the bar', () => {
     expect(two.field?.key).toBe('draft:2')
     expect(draftKey({ ...draft, lines: ['a'] })).toBe('draft:1')
     const peer = barView(input({ scroll: 0, draft: { kind: 'peer', target, lines: ['Stop.'] } }))!
-    expect(peer.lines.map(text)).toEqual([' Write the peer message for api-7. It has 1 line.  c: cancel'])
+    expect(peer.lines.map(text)).toEqual([' Write the peer note for api-7. It has 1 line.  c: cancel'])
   })
 
   it('shows the note of the last outcome only while its session is selected', () => {

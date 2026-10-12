@@ -2,10 +2,11 @@
  * What 1 alert sends outside its tone (src/god/act/alert-policy.ts decides the alerts, src/god/alert-loop.ts sends
  * them): the notice of the native notification, and the ring on the cmux tab of the session.
  *
- * - The notice has the pane title and a body from src/god/copy.ts with the name of the session, put on 1 line and then
- *   cleaned again here (no control character, the secrets masked, the home folder as `~`). The line comes first, so
- *   the redaction sees a secret that line breaks split as 1 text. The body starts with words of the pane, so it never
- *   starts with `-`.
+ * - The notice has the pane title and a body from src/god/copy.ts with the name of the row of the session
+ *   (src/god/view/names.ts: the cmux tab title, else the transcript title, else the session name), put on 1 line
+ *   and then cleaned again here (no control character, the secrets masked, the home folder as `~`). The line comes
+ *   first, so the redaction sees a secret that line breaks split as 1 text. The body starts with words of the pane,
+ *   so it never starts with `-`.
  * - The ring is exactly `cmux notify --title <t> --body <b> --workspace <ws> --surface <s>`. It needs a cmux read
  *   that worked (a failed read can leave an old tab map) and the refs of the mapped tab in the forms that the key
  *   guard takes (src/god/act/deliver-plan.ts): `workspace:N` and `surface:N`, or UUIDs. The title and the body are
@@ -18,6 +19,7 @@
 import { PANE_TITLE, alertBody } from '../copy.js'
 import type { Host } from '../host.js'
 import type { AlertKind, BoardSnapshot, GodSession } from '../types.js'
+import { rowName } from '../view/names.js'
 import { flat } from '../view/wrap.js'
 import { HIDDEN_CHAR, SURFACE_REF, WORKSPACE_REF } from './deliver-plan.js'
 import { tabRefs } from './jump.js'
@@ -35,9 +37,9 @@ const CONTROL_OR_BREAK = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/
 const isRingValue = (value: string | undefined): value is string =>
   value !== undefined && value !== '' && !value.startsWith('-') && !CONTROL_OR_BREAK.test(value) && !HIDDEN_CHAR.test(value)
 
-/** The notice of an alert of the session: the pane title, and the body with its name put on 1 line and then cleaned. */
-export function alertNotice(session: Pick<GodSession, 'name'>, kind: Exclude<AlertKind, 'done'>, clean: (text: string) => string): AlertNotice {
-  return { title: PANE_TITLE, body: alertBody(clean(flat(session.name)), kind) }
+/** The notice of an alert of the session: the pane title, and the body with the name of its row put on 1 line and then cleaned. */
+export function alertNotice(session: Pick<GodSession, 'name' | 'tab' | 'transcript'>, kind: Exclude<AlertKind, 'done'>, clean: (text: string) => string): AlertNotice {
+  return { title: PANE_TITLE, body: alertBody(clean(flat(rowName(session))), kind) }
 }
 
 /** True when the argv is exactly the ring of 1 tab: cmux notify, the title, the body, then the 2 refs. */

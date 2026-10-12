@@ -5,7 +5,7 @@
  * refs of the mapped tab in the forms that the key guard takes. The host of the ring refuses any other argv.
  */
 import { describe, expect, it } from 'vitest'
-import { MINUTE, NOW, session } from '../../../test/fixtures/god/sessions.js'
+import { MINUTE, NOW, session, transcript } from '../../../test/fixtures/god/sessions.js'
 import { degradedSnapshot } from '../../../test/fixtures/god/snapshots.js'
 import { PANE_TITLE } from '../copy.js'
 import type { Host, RunOptions } from '../host.js'
@@ -58,6 +58,11 @@ describe('the notice of an alert', () => {
     expect(alertNotice(row('api-7'), 'needs-you', clean)).toEqual({ title: PANE_TITLE, body: 'The session api-7 needs you.' })
     expect(alertNotice(row('api-3'), 'stuck', clean)).toEqual({ title: PANE_TITLE, body: 'The session api-3 is stuck.' })
     expect(alertNotice(row('-x --surface s'), 'needs-you', clean).body.startsWith('The session ')).toBe(true)
+  })
+
+  it('names the session by the name of its row: the cmux tab title with no status glyph, else the transcript title', () => {
+    expect(alertNotice(row('api-7', { tab: { ...tab(), surfaceTitle: '✳ Fix the parser' } }), 'needs-you', clean).body).toBe('The session Fix the parser needs you.')
+    expect(alertNotice(row('api-7', { transcript: transcript({ title: 'Pick the set' }) }), 'stuck', clean).body).toBe('The session Pick the set is stuck.')
   })
 
   it('cleans the name: no control character, no line break, the secret masked, the home folder as ~', () => {

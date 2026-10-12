@@ -18,7 +18,7 @@ for (const surface of SURFACES) {
     const before = calls.runs.length
     await press(ui, 'option:1')
     const bar = await lines(ui)
-    expect(bar).toContain(' Send "1 Red" to ask-a?  y: send  c: cancel')
+    expect(bar).toContain(' Send "1 Red" to ask?  y: send  c: cancel')
     expect(cmuxSince(calls, before)).toEqual([])
     const atY = calls.runs.length
     await press(ui, 'key:y')
@@ -29,7 +29,7 @@ for (const surface of SURFACES) {
     expect(machine.cmux!.typed?.[SF.ask] ?? '').toBe('')
     const after = await lines(ui)
     expect(has(after, 'y: send')).toBe(false)
-    expect(after).toContain(' Sent to ask-a. The next refresh checks it.')
+    expect(after).toContain(' Sent to ask. The next refresh checks it.')
   })
   test(`${surface}: 2 presses of y at once send the digit once`, async ($, on) => {
     const { calls, ui } = await begin($, on, surface)
@@ -46,7 +46,7 @@ for (const surface of SURFACES) {
     await select($, 'ses-wait')
     const before = calls.runs.length
     await press(ui, 'option:2')
-    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask?  y: send  c: cancel')
     await press(ui, 'key:c')
     expect(has(await lines(ui), 'Send "2 Green"')).toBe(false)
     expect(await ui.find({ key: 'key:y' })).toBeUndefined()
@@ -126,7 +126,7 @@ for (const surface of SURFACES) {
     expect(keysSince(calls, atY)).toEqual([])
     const stale = await lines(ui)
     expect(stale, stale.join('\n')).toContain(' The screen or the session facts are too old, so the pane sent nothing. Press y again.')
-    expect(stale).toContain(' Send "1 Red" to ask-a?  y: send  c: cancel')
+    expect(stale).toContain(' Send "1 Red" to ask?  y: send  c: cancel')
     const again = calls.runs.length
     await press(ui, 'key:y')
     expect(cmuxSince(calls, again).slice(-2)).toEqual([readScreen(WS.ask, SF.ask), sendText(WS.ask, SF.ask, '1')])
@@ -141,7 +141,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'permission:no' }))?.props['hotkey']).toBe('2')
     await press(ui, 'permission:no')
     const bar = await lines(ui)
-    expect(bar).toContain(' Send "No" to the Bash request of perm-p?  y: send  c: cancel')
+    expect(bar).toContain(' Send "No" to the Bash request of perm?  y: send  c: cancel')
     expect(has(bar, '{"command":"touch probe-yes.txt","description":"Make an empty probe file"}')).toBe(true)
     let atY = calls.runs.length
     await press(ui, 'key:y')
@@ -182,7 +182,7 @@ for (const surface of SURFACES) {
     wait.transcript = [...wait.transcript!, toolResult('toolu_q1', 'Red', Date.now())]
     wait.transcriptMtimeMs = Date.now()
     await clock.advance(2000)
-    expect(await lines(ui)).toContain(' Delivered to ask-a.')
+    expect(await lines(ui)).toContain(' Delivered to ask.')
   })
 
   test(`${surface}: while y runs the bar draws no y and no c, and says that the pane sends`, async ($, on) => {
@@ -197,7 +197,7 @@ for (const surface of SURFACES) {
     const during = await lines(ui)
     expect(await ui.find({ key: 'key:c' })).toBeUndefined()
     expect(await ui.find({ key: 'key:y' })).toBeUndefined()
-    expect(during, during.join('\n')).toContain(' Send "1 Red" to ask-a?  The pane sends it now.')
+    expect(during, during.join('\n')).toContain(' Send "1 Red" to ask?  The pane sends it now.')
     await clock.advance(500)
     await sending
     expect(keysSince(calls, atY)).toEqual([sendText(WS.ask, SF.ask, '1')])
@@ -232,7 +232,7 @@ for (const surface of SURFACES) {
     const sending = press(ui, 'key:y')
     await clock.settle()
     await press(ui, 'option:2')
-    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask?  y: send  c: cancel')
     await press(ui, 'key:c')
     await clock.advance(500)
     await sending
@@ -251,10 +251,10 @@ for (const surface of SURFACES) {
     await ui.redraw()
     const cancelling = ui.press({ key: 'key:c' })
     await ui.press({ key: 'option:2' })
-    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask?  y: send  c: cancel')
     release()
     await cancelling
-    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask?  y: send  c: cancel')
     expect(keysSince(calls, 0)).toEqual([])
   })
 
@@ -270,7 +270,7 @@ for (const surface of SURFACES) {
     await clock.settle()
     await Promise.all([picking, sending])
     expect(keysSince(calls, atY)).toEqual([sendText(WS.ask, SF.ask, '1')])
-    expect(await lines(ui)).toContain(' Send "2 Green" to ask-a?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send "2 Green" to ask?  y: send  c: cancel')
   })
 
   test(`${surface}: y reads ps for the PID in UTC, and a process that started at another time gets no key`, async ($, on) => {
@@ -294,7 +294,7 @@ for (const surface of SURFACES) {
     await press(ui, 'option:1')
     await ui.redraw(paneProps(110, 8))
     const shown = await lines(ui)
-    expect(shown, shown.join('\n')).toContain(' Send "1 Red" to ask-a?  y: send  c: cancel')
+    expect(shown, shown.join('\n')).toContain(' Send "1 Red" to ask?  y: send  c: cancel')
     expect(shown.length).toBeLessThanOrEqual(8)
     const atY = calls.runs.length
     await press(ui, 'key:y')

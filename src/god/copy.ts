@@ -140,14 +140,14 @@ export const RECAP_LABEL = {
 
 /** What the model reads about the board tool. */
 export const BOARD_TOOL_DESCRIPTION =
-  'This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the name, the repo, the context percent, the summary and the title. The tool only reads, and it changes nothing.'
+  'This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the session name, the row name, the repo, the context percent, the summary and the title. The row name is the name that the pane shows for the session. The tool only reads, and it changes nothing.'
 
 /** What the model reads about the session tool. */
 export const SESSION_TOOL_DESCRIPTION =
   'This tool shows the detail of the live session with the name that you give. The detail has the open question, the last prompt, the last reply, the activity, the agents and the overlap flags. Get the names from the board tool. The tool only reads, and it changes nothing.'
 
 /** What the model reads about the input of the session tool. */
-export const SESSION_TOOL_NAME_HINT = 'The name of the session, as the board tool shows it.'
+export const SESSION_TOOL_NAME_HINT = 'The session name or the row name of the session, as the board tool shows them.'
 
 /** What a tool answers when the board does not run in this load of the mod. */
 export const TOOL_NOT_RUNNING = 'The god pane does not run in this session now. Ask the person to run /god.'

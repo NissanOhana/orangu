@@ -1,7 +1,7 @@
 /**
  * The confirm bar and the outcome lines of the key path. Nothing goes out until the person presses y, so the bar
  * names the session and what goes to it: the option with its digit and the question, the permission choice with
- * the tool and its whole input, or the whole prompt or peer message. The target and the question stay fixed, and a
+ * the tool and its whole input, or the whole prompt or peer note. The target and the question stay fixed, and a
  * long text scrolls with w and z in the row limit of the bar, so the person can read all of it before y. Each
  * refusal code has 1 line, and a code with 2 meanings has 1 line that names both. No line is wider than the pane.
  */
@@ -88,9 +88,9 @@ describe('the confirm bar', () => {
     expect(bar({ ...INTENTS.permission, input } as DeliverIntent)).toContain(`   ${input}`)
   })
 
-  it('shows the whole prompt and the whole peer message under the question', () => {
+  it('shows the whole prompt and the whole peer note under the question', () => {
     expect(bar(INTENTS.prompt)).toEqual([' Send this prompt to api-7?  y: send  c: cancel', '   Run the eval tests again.', '   Then write the result in the notes.', '   Keep the notes short.'])
-    expect(bar(INTENTS.peer)).toEqual([' Send this peer message to api-7?  y: send  c: cancel', '   Stop the deploy now.', '   I check the logs first.'])
+    expect(bar(INTENTS.peer)).toEqual([' Send this peer note to api-7?  y: send  c: cancel', '   Stop the deploy now.', '   I check the logs first.'])
   })
 
   it('names the command mode of a / prompt, and says before y that the pane does not type a shell command, the help or an exit', () => {
@@ -117,12 +117,12 @@ describe('the confirm bar', () => {
     }
   })
 
-  it('names the empty and control-char refusals of a peer message before y, offers c only, and keeps y for any other text', () => {
+  it('names the empty and control-char refusals of a peer note before y, offers c only, and keeps y for any other text', () => {
     const texts: Readonly<Record<string, string>> = { empty: '\u200b \n', 'control-char': 'Stop\u200bthe deploy.' }
     for (const hidden of ['\u202e', '\u{e0061}', '\u001b']) expect(view({ ...INTENTS.peer, text: `a${hidden}b` } as DeliverIntent).hints, JSON.stringify(hidden)).toEqual([CONFIRM_HINTS[1]])
     for (const [code, message] of Object.entries(texts)) {
       const shown = view({ ...INTENTS.peer, text: message } as DeliverIntent, { width: 200 })
-      expect(shown.lines.slice(0, 2).map(text), code).toEqual([' Send this peer message to api-7?  c: cancel', ` ${LINES[code as DeliverRefusal]}`])
+      expect(shown.lines.slice(0, 2).map(text), code).toEqual([' Send this peer note to api-7?  c: cancel', ` ${LINES[code as DeliverRefusal]}`])
       expect(shown.hints, code).toEqual([CONFIRM_HINTS[1]])
     }
     for (const message of ['/exit', '!stop now', 'exit', 'Open C:\\new']) expect(view({ ...INTENTS.peer, text: message } as DeliverIntent).hints, message).toEqual(CONFIRM_HINTS)
@@ -214,11 +214,12 @@ describe('the outcome lines', () => {
     expect(outcomeLines(OUTCOMES['not-delivered'], 110)).toEqual([{ segments: [{ text: ' ' }, { text: NOT_DELIVERED, token: '--warn' }] }])
   })
 
-  it('says what became of a sent, a delivered, a failed and an undelivered peer message', () => {
+  it('says what became of a sent, a delivered, a failed and an undelivered peer note', () => {
     expect(outcomeLines(OUTCOMES.sent, 110).map(text)).toEqual([' Sent to api-7. The next refresh checks it.'])
     expect(outcomeLines(OUTCOMES.delivered, 110).map(text)).toEqual([' Delivered to api-7.'])
     expect(outcomeLines(OUTCOMES.failed, 110).map(text)).toEqual([` ${SEND_FAILED}`])
     expect(outcomeLines({ ...OUTCOMES['not-delivered'], intent: INTENTS.peer }, 110).map(text)).toEqual([` ${PEER_NOT_DELIVERED}`])
+    expect(PEER_NOT_DELIVERED).toBe('The peer note did not arrive.')
   })
 
   it('says which part of a failed delivery failed, and the command line for any other reason', () => {

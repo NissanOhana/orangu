@@ -1,9 +1,11 @@
 /**
  * The texts of the 2 read-only tools of the god mod, for the god Claude:
  * - the board tool: the count, the quote rule and the cut rule, then 1 line for each live session in board order
- *   (the level and the time in it, the name, the repo, the context percent, the summary and the title);
- * - the session tool: the detail of each session with the name (level, wait, title, tab, repo, branch, mode,
- *   context, PR, open question, last prompt, last reply, activity, agents, flags).
+ *   (the level and the time in it, the session name, the row name, the repo, the context percent, the summary and
+ *   the title). The row name is the name that the pane shows (src/god/view/names.ts);
+ * - the session tool: the detail of each session with the session name, else of each session with the row name
+ *   (row name, level, wait, title, tab, repo, branch, mode, context, PR, open question, last prompt, last reply,
+ *   activity, agents, flags).
  * The quote frame: every text that comes from a session (a name, a title, a reply, a path, a label) is a JSON
  * string literal, so a quote or a backslash in it cannot end the frame, and its line breaks become spaces or new
  * frames. Only orangu words stand outside a frame, and the second line says that a quoted text is data, not an
@@ -20,6 +22,7 @@ import { cellWidth, graphemes, wrapWords } from './cells.js'
 import { cutMark } from './cut.js'
 import { FLAG_LABEL, contextPercent, newestPr, tabTitle } from './detail.js'
 import { agentRows, ago } from './detail-tabs.js'
+import { rowName } from './names.js'
 import { STATE_TEXT } from './states.js'
 import { LINE_BREAK, flat } from './wrap.js'
 
@@ -109,6 +112,7 @@ function boardLine(session: GodSession, width: number, now: number): string[] {
     [
       plain(levelText(session.level, session.levelSince, now)),
       quoted('name', session.name, false),
+      quoted('row name', rowName(session), false),
       quoted('repo', session.repo?.name, false),
       plain(`context ${contextPercent(session.transcript?.context) ?? 'unknown'}`),
       quoted('summary', session.summary, true),
@@ -204,6 +208,7 @@ function sessionLines(session: GodSession, width: number, now: number): string[]
   const lines = [
     ...field('orangu god session:', session.name, width, 0, '.'),
     ...wrapWords(TOOL_QUOTE_RULE, width),
+    ...field('Row name:', rowName(session), width),
     ...wrapWords(`Level: ${levelText(session.level, session.levelSince, now)}`, width),
     ...(session.level === 'needs-you' && session.waitingFor !== undefined ? field('Waits for:', session.waitingFor, width) : []),
     ...field('Title:', transcript?.title, width),
@@ -227,11 +232,12 @@ function sessionLines(session: GodSession, width: number, now: number): string[]
 }
 
 
-/** The text of the session tool: the detail of each live session with the name, or why there is none. */
+/** The text of the session tool: the detail of each live session with the session name, else with the row name, or why there is none. */
 export function sessionToolText(snapshot: BoardSnapshot | undefined, name: string, width: number, now: number): string {
   if (snapshot === undefined || !snapshot.firstRefreshDone) return TOOL_READING
   const wanted = flat(name)
-  const matches = snapshot.sessions.filter((session) => flat(session.name) === wanted)
+  const named = snapshot.sessions.filter((session) => flat(session.name) === wanted)
+  const matches = named.length > 0 ? named : snapshot.sessions.filter((session) => rowName(session) === wanted)
   if (matches.length === 0) {
     const one = `No live session has the name ${quote(wanted)}. Call the board tool for the names.`
     if (cellWidth(one) <= width) return one

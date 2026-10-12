@@ -5,13 +5,13 @@
  * - the answers of a dialog with 2 or more questions: each pick as `<header>: <digit> <label>`, then each header chip
  *   and its question;
  * - a permission: Yes or No and the tool, then its whole input, with the spaces of the input as written;
- * - a prompt or a peer message: the whole text.
+ * - a prompt or a peer note: the whole text.
  * The keys show in the form that the engine paints a hotkey Button (`y: send  c: cancel`), each 1 segment that the
  * shell draws as its Button. The bar of a prompt also names the command mode when the first character that is not
  * white space, on any line, is `/` (`   \n/clear` is a command), because the session reads it as a key. A prompt that
  * the text check of the key guard refuses (src/god/act/deliver-plan.ts textRefusal: an empty text, a control or hidden
  * character, a backslash escape, a shell command, the help or an exit) shows the line of that refusal in its place,
- * before y, and the bar offers c only, because y can send nothing. A peer message that is empty or holds a control or
+ * before y, and the bar offers c only, because y can send nothing. A peer note that is empty or holds a control or
  * hidden character (peerRefusal) does the same. While y runs, the bar shows that the pane sends in place of y and c.
  * The target and the question stay fixed. A long prompt or tool input scrolls with w and z in the row limit of the
  * bar (src/god/view/window.ts), with a count line for each side that the window leaves out, so the person can read
@@ -74,8 +74,8 @@ export const PROMPT_MODE_TEXT: Readonly<Record<string, string>> = {
 /** The keys went out, but the next refresh did not see the answer or the prompt. */
 export const NOT_DELIVERED = 'Not delivered. Check the Screen tab.'
 
-/** The engine did not deliver a peer message. */
-export const PEER_NOT_DELIVERED = 'The peer message did not arrive.'
+/** The engine did not deliver a peer note. */
+export const PEER_NOT_DELIVERED = 'The peer note did not arrive.'
 
 /** A cmux command of the plan failed, so the steps after it did not run. */
 export const SEND_FAILED = 'A cmux command failed, so the keys after it did not go out. Check the Screen tab.'
@@ -119,10 +119,10 @@ function askText(intent: DeliverIntent): string {
   if (intent.kind === 'answer') return `Send "${intent.option} ${flat(intent.label)}" to ${name}?`
   if (intent.kind === 'answers') return answersAsk(name, intent.answers.map((answer) => `${flat(answer.header)}: ${answer.option} ${flat(answer.label)}`))
   if (intent.kind === 'permission') return `Send "${intent.choice === 'yes' ? 'Yes' : 'No'}" to the ${flat(intent.tool)} request of ${name}?`
-  return intent.kind === 'prompt' ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`
+  return intent.kind === 'prompt' ? `Send this prompt to ${name}?` : `Send this peer note to ${name}?`
 }
 
-/** The keys of a bar that cannot send (a prompt or a peer message that the text check refuses, or a draft): c only. */
+/** The keys of a bar that cannot send (a prompt or a peer note that the text check refuses, or a draft): c only. */
 export const CANCEL_HINTS: readonly KeyHint[] = CONFIRM_HINTS.filter((hint) => hint.keys === 'c')
 
 /** The lines that stay fixed (the target and the question), and the text that scrolls under them. */

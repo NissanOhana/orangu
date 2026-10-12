@@ -1,8 +1,8 @@
 // The drafts of the key path on the terminal and the desktop surfaces, over the fake machine of act-machine.ts: r and
 // m open a draft whose text field takes 1 line for each Enter, and an empty line opens the confirm bar with the whole
-// text. Only y sends: a prompt as each line with shift+enter between the lines and enter at the end, a peer message
+// text. Only y sends: a prompt as each line with shift+enter between the lines and enter at the end, a peer note
 // through the engine with no cmux call. The bar names the mode that a prompt opens with its first character. A prompt
-// that the pane does not type, and a peer message with a character that does not show, get the line of the refusal and
+// that the pane does not type, and a peer note with a character that does not show, get the line of the refusal and
 // c only.
 import { expect, test } from 'claude-code/testing'
 import { SURFACES, backgroundTask, prompt } from './fake-host'
@@ -13,11 +13,11 @@ for (const surface of SURFACES) {
     const { machine, calls, clock, ui } = await begin($, on, surface)
     await select($, 'ses-idle')
     await press(ui, 'key:r')
-    expect(await lines(ui)).toContain(' Write the prompt for idle-p. It has 0 lines.  c: cancel')
+    expect(await lines(ui)).toContain(' Write the prompt for idle. It has 0 lines.  c: cancel')
     const before = calls.runs.length
     await typeDraft(ui, ['Run the tests.', 'Then fix the lint.'])
     const bar = await lines(ui)
-    for (const line of [' Send this prompt to idle-p?  y: send  c: cancel', '   Run the tests.', '   Then fix the lint.']) expect(bar, bar.join('\n')).toContain(line)
+    for (const line of [' Send this prompt to idle?  y: send  c: cancel', '   Run the tests.', '   Then fix the lint.']) expect(bar, bar.join('\n')).toContain(line)
     expect(cmuxSince(calls, before)).toEqual([])
     const atY = calls.runs.length
     await press(ui, 'key:y')
@@ -36,7 +36,7 @@ for (const surface of SURFACES) {
     idle.transcript = [...idle.transcript!, prompt('Run the tests.\nThen fix the lint.', Date.now())]
     idle.transcriptMtimeMs = Date.now()
     await clock.advance(2000)
-    expect(await lines(ui)).toContain(' Delivered to idle-p.')
+    expect(await lines(ui)).toContain(' Delivered to idle.')
   })
   test(`${surface}: no key goes out without y, from a bar of each kind`, async ($, on) => {
     const { calls, clock, ui } = await begin($, on, surface)
@@ -57,25 +57,25 @@ for (const surface of SURFACES) {
     expect(cmuxSince(calls, before)).toEqual([])
     expect(calls.peers).toEqual([])
   })
-  test(`${surface}: a peer message from m and y calls session.send once, and runs no cmux command`, async ($, on) => {
+  test(`${surface}: a peer note from m and y calls session.send once, and runs no cmux command`, async ($, on) => {
     const { calls, ui } = await begin($, on, surface)
     await select($, 'ses-wait')
     await press(ui, 'key:m')
     await typeDraft(ui, ['Stop the deploy now.', 'I check the logs first.'])
-    expect(await lines(ui)).toContain(' Send this peer message to ask-a?  y: send  c: cancel')
+    expect(await lines(ui)).toContain(' Send this peer note to ask?  y: send  c: cancel')
     const atY = calls.runs.length
     await press(ui, 'key:y')
     expect(calls.peers).toEqual([{ to: expect.stringContaining('ses-wait'), text: 'Stop the deploy now.\nI check the logs first.' }])
     expect(cmuxSince(calls, atY)).toEqual([])
-    expect(await lines(ui)).toContain(' Delivered to ask-a.')
+    expect(await lines(ui)).toContain(' Delivered to ask.')
   })
-  test(`${surface}: a peer message with a character that does not show gets the line of its refusal and c only, and goes nowhere`, async ($, on) => {
+  test(`${surface}: a peer note with a character that does not show gets the line of its refusal and c only, and goes nowhere`, async ($, on) => {
     const { calls, ui } = await begin($, on, surface)
     await select($, 'ses-wait')
     await press(ui, 'key:m')
     await typeDraft(ui, [`Stop${String.fromCodePoint(0x200b)}the deploy.`])
     const bar = await lines(ui)
-    expect(bar, bar.join('\n')).toContain(' Send this peer message to ask-a?  c: cancel')
+    expect(bar, bar.join('\n')).toContain(' Send this peer note to ask?  c: cancel')
     expect(has(bar, 'The text has a control character')).toBe(true)
     expect(await ui.find({ key: 'key:y' })).toBeUndefined()
     expect(calls.peers).toEqual([])
@@ -92,7 +92,7 @@ for (const surface of SURFACES) {
     await press(ui, 'key:r')
     await typeDraft(ui, ['/exit'])
     const exit = await lines(ui)
-    for (const line of [' Send this prompt to idle-p?  c: cancel', ' The pane does not type a shell command, the help or an exit. Press j and type it in its tab.']) expect(exit, exit.join('\n')).toContain(line)
+    for (const line of [' Send this prompt to idle?  c: cancel', ' The pane does not type a shell command, the help or an exit. Press j and type it in its tab.']) expect(exit, exit.join('\n')).toContain(line)
     expect(await ui.find({ key: 'key:y' })).toBeUndefined()
     await press(ui, 'key:c')
     await press(ui, 'key:r')
@@ -144,7 +144,7 @@ for (const surface of SURFACES) {
     await typeDraft(ui, ['Run the tests.'])
     await $.command.run({ command: 'god', args: 'repos repo-a', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
     const shown = await lines(ui)
-    expect(shown, shown.join('\n')).toContain(' Send this prompt to idle-p?  y: send  c: cancel')
+    expect(shown, shown.join('\n')).toContain(' Send this prompt to idle?  y: send  c: cancel')
     expect(detailText(shown)).toContain('Select a session on the board to show its detail.')
     const atY = calls.runs.length
     await press(ui, 'key:y')
@@ -159,7 +159,7 @@ for (const surface of SURFACES) {
     expect((await ui.find({ key: 'option:1' }))?.props['hotkey']).toBeUndefined()
     await press(ui, 'option:1')
     const shown = await lines(ui)
-    expect(shown).toContain(' Write the peer message for ask-a. It has 0 lines.  c: cancel')
+    expect(shown).toContain(' Write the peer note for ask. It has 0 lines.  c: cancel')
     expect(await ui.find({ key: 'key:y' })).toBeUndefined()
     expect(cmuxSince(calls, 0).filter((argv) => KEY_VERBS.includes(argv[1] ?? ''))).toEqual([])
   })

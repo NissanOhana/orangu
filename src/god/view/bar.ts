@@ -22,7 +22,7 @@ import type { KeyHint, Line } from './types.js'
 import { SCROLL_KEYS, scrollBy, type ScrollWindow } from './window.js'
 import { appendItem, flat, wrapSegments } from './wrap.js'
 
-/** The text of r (a prompt that the pane types into the tab) or m (a peer message), 1 line for each Enter. */
+/** The text of r (a prompt that the pane types into the tab) or m (a peer note), 1 line for each Enter. */
 export type Draft = { kind: 'prompt' | 'peer'; target: DeliverTarget; lines: readonly string[] }
 
 /**
@@ -64,7 +64,7 @@ export const DRAFT_SUBMIT = 'add line'
 /** The first line of a draft: what it is, for which session, and how many lines it has. */
 export function draftText(draft: Draft): string {
   const count = draft.lines.length
-  return `Write the ${draft.kind === 'prompt' ? 'prompt' : 'peer message'} for ${flat(draft.target.name)}. It has ${count} ${count === 1 ? 'line' : 'lines'}.`
+  return `Write the ${draft.kind === 'prompt' ? 'prompt' : 'peer note'} for ${flat(draft.target.name)}. It has ${count} ${count === 1 ? 'line' : 'lines'}.`
 }
 
 /** The text field of a draft, as the shell draws it. */
@@ -74,7 +74,7 @@ export type DraftField = { key: string; label: string; placeholder: string; subm
  * The bar: its lines, the text field of a draft, the scroll that each count key goes to, whether it is open (a
  * confirm bar or a draft, which own c, and y in the confirm bar), the keys that its Buttons press, and the intent that
  * the confirm bar shows, which its y sends. The keys hold y only in a confirm bar that can send: a refused prompt or
- * peer message and a draft hold c only, so the shell binds no y there. While the keys go out the bar is not open and
+ * peer note and a draft hold c only, so the shell binds no y there. While the keys go out the bar is not open and
  * holds no key, and w and z still scroll it.
  */
 export type BarView = { lines: Line[]; field?: DraftField; scrollTo: Readonly<Partial<Record<string, number>>>; isOpen: boolean; hints: readonly KeyHint[]; intent?: DeliverIntent }
