@@ -84,6 +84,7 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
   const screen = input.screen?.sessionId === session.sessionId ? input.screen : undefined
   const view = detailView({
     session,
+    sessions: snapshot.sessions,
     width,
     rows: input.rows,
     now: input.now,

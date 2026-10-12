@@ -4,10 +4,10 @@
  *   its count and a `▸`, and opens when the person opens it (`openGroups`). Its heading is a row that the person
  *   can select, with the key groupKey(<group key>);
  * - 1 row for each session of an open group: the selection mark, the glyph of the level, the name of the row
- *   (src/god/view/names.ts: the cmux tab title, else the transcript title, else the session name), 1 chip for the
- *   same tree and 1 for the same files, the summary, and the time in the level at the right edge. The same repo
- *   gets no chip on the row: the detail shows it. A summary that only says the name again shows nothing. The row
- *   key is the session id;
+ *   (src/god/view/names.ts: the cmux tab title, else the transcript title, else the session name), the `same file`
+ *   chip while another session wrote a file that this one wrote, the summary, and the time in the level at the right
+ *   edge. The same tree and the same repo get no chip: the detail names the working sessions of the folder. A
+ *   summary that only says the name again shows nothing. The row key is the session id;
  * - every row is exactly `width` cells. The names share 1 column of up to 60% of the row and NAME_MAX cells, so a
  *   title shows whole in most cases. A text that does not fit is cut with its count (src/god/view/cut.ts): the
  *   detail of the session shows it whole;
@@ -54,16 +54,16 @@ export const LEVEL_HEADING: Readonly<Record<Level, string>> = {
   stale: 'STALE',
 }
 
-/** The overlap flags that a board row shows as a chip. */
-export type ChipKind = Exclude<FlagKind, 'same-repo'>
+/** The overlap flags that a board row shows as a chip: only the same files. */
+export type ChipKind = Extract<FlagKind, 'same-files'>
 
 /** The chip of each overlap flag that a board row shows. */
-export const FLAG_CHIP: Readonly<Record<ChipKind, string>> = { 'same-tree': 'TREE', 'same-files': 'FILES' }
+export const FLAG_CHIP: Readonly<Record<ChipKind, string>> = { 'same-files': 'same file' }
 
 /** The heading of the repo group of the sessions that have no repo. */
 export const NO_REPO = 'No repo'
 
-const CHIP_KINDS: readonly ChipKind[] = ['same-tree', 'same-files']
+const CHIP_KINDS: readonly ChipKind[] = ['same-files']
 const SESSION_UNIT = ['session', 'sessions'] as const
 /** the name column: at least this many cells when a name needs it, NAME_SHARE of the row at most, and never more than NAME_MAX */
 const NAME_MIN = 6

@@ -20,6 +20,11 @@ export const KEYS_HOLDER = {
   prompt: { holder: 'prompt', handover: 'ctrl+x tab: pane' },
 } as const
 
+/** The line of the detail while 2 or more sessions of its folder work now: the count, the names, and the count of the names left out. */
+export function sharesFolderText(count: number, names: readonly string[], left: number): string {
+  return `Shares its folder with ${count} working ${count === 1 ? 'session' : 'sessions'}: ${names.join(', ')}${left > 0 ? ` and ${left} more` : ''}`
+}
+
 /** What /god answers when it opened the pane. */
 export const GOD_OPENED = 'The god pane is open.'
 

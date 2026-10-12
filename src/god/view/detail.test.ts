@@ -107,14 +107,23 @@ describe('the context bar and the flag lines', () => {
     expect(detail('s-new').foot.map(text)).toEqual([])
   })
 
-  it('shows 1 line for each flag, in its color: same tree, same files with the file, same repo', () => {
-    const foot = detail('s-work').foot
-    expect(foot.slice(1).map(text)).toEqual([' SAME TREE: api-7', ' SAME FILES: web-2 (/work/web/notes.md)', ' SAME REPO: api-3'])
-    expect(foot.slice(1).map((line) => line.segments.find((segment) => segment.text.startsWith('SAME')))).toEqual([
-      { text: 'SAME TREE:', token: '--bad', bold: true },
-      { text: 'SAME FILES:', token: '--cat-edit', bold: true },
-      { text: 'SAME REPO:', dim: true, bold: true },
-    ])
+  it('shows 1 line for the working sessions of the folder, then 1 line for each same file flag, by the names of the rows', () => {
+    const sessions = detailSnapshot().sessions
+    const foot = detail('s-work', { sessions }).foot
+    expect(foot.slice(1).map(text)).toEqual([' Shares its folder with 1 working session: docs-1', ' SAME FILES: web-2 (/work/web/notes.md)'])
+    expect(foot[1]!.segments.slice(1)).toEqual([{ text: 'Shares its folder with 1 working session: docs-1', token: '--bad' }])
+    expect(foot[2]!.segments.find((segment) => segment.text.startsWith('SAME'))).toEqual({ text: 'SAME FILES:', token: '--cat-edit', bold: true })
+    expect(detail('s-wait', { sessions }).foot.slice(1).map(text)).toEqual([' Shares its folder with 2 working sessions: api-9, docs-1'])
+    // the row of web-2 shows the title of its cmux tab, so its flag line does too
+    const named = { ...detailSnapshot(), sessions: detailSnapshot().sessions.map((one) => (one.sessionId === 's-turn' ? { ...one, tab: { ...detailSession('s-wait').tab!, surfaceTitle: '✳ Web setup' } } : one)) }
+    expect(detail('s-work', { sessions: named.sessions }).foot.map(text).at(-1)).toBe(' SAME FILES: Web setup (/work/web/notes.md)')
+  })
+
+  it('shows no line for the same tree and the same repo', () => {
+    for (const session of detailSessions()) {
+      const view = detailView(input(detailSession(session.sessionId)))
+      expect(detailLines(view).map(text).join('\n'), session.sessionId).not.toMatch(/SAME TREE|SAME REPO/)
+    }
   })
 })
 
@@ -162,7 +171,8 @@ describe('only the rows that fit, and no silent cut', () => {
   })
 
   it('lists only the options in view, so a digit never answers an option that the person cannot see', () => {
-    const view = detail('s-wait', { rows: 11 })
+    // 9 rows: the foot is the context bar alone, with no folder line and no flag line
+    const view = detail('s-wait', { rows: 9 })
     expect(view.body.map(text).at(-1)).toMatch(COUNT)
     const shown = view.body.flatMap((line) => (line.key === undefined ? [] : [line.key]))
     expect(view.options.map((option) => option.key)).toEqual(shown)

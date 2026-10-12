@@ -45,19 +45,16 @@ describe('groups and rows', () => {
 
   it('shows each row: the glyph, the name, the flag chips, the summary, then the time in the level', () => {
     const lines = view(boardSnapshot())
-    expect(text(rowOf(lines, 's-turn'))).toMatch(/^ ● web-2 {2}FILES {2}Setup is done\. +12m$/)
+    expect(text(rowOf(lines, 's-turn'))).toMatch(/^ ● web-2 {2}same file {2}Setup is done\. +12m$/)
     expect(text(rowOf(lines, 's-stuck'))).toMatch(/^ ✕ api-3 {3}The API refused the request\. +15m$/)
     expect(text(rowOf(lines, 's-new'))).toMatch(/^ ⠋ docs-1 {2}No transcript yet\. +2m$/)
     expect(text(rowOf(lines, 's-idle'))).toMatch(/^ · api-1 {3}The vendor pick is in the notes\. +2h$/)
   })
 
-  it('colors each flag chip by its kind, shows no chip for the same repo (the detail shows it), and draws the idle row dim', () => {
+  it('shows the same file chip in its color, no chip for the same tree or the same repo, and draws the idle row dim', () => {
     const segments = rowOf(view(boardSnapshot()), 's-work').segments
-    expect(segments.filter((segment) => ['TREE', 'FILES', 'REPO'].includes(segment.text))).toEqual([
-      { text: 'TREE', token: '--bad' },
-      { text: 'FILES', token: '--cat-edit' },
-    ])
-    expect(view(boardSnapshot(), { openGroups: ['stale'] }).map(text).join('\n')).not.toMatch(/REPO/)
+    expect(segments.filter((segment) => segment.token === '--cat-edit' || segment.token === '--bad')).toEqual([{ text: 'same file', token: '--cat-edit' }])
+    expect(view(boardSnapshot(), { openGroups: ['stale'] }).map(text).join('\n')).not.toMatch(/TREE|FILES|REPO/)
     expect(rowOf(view(boardSnapshot()), 's-idle').segments.find((segment) => segment.text === '·')).toEqual({ text: '·', dim: true })
   })
 })
@@ -119,7 +116,7 @@ describe('cuts: no hidden text', () => {
   it('cuts the question of a waiting row with the count of what it cut, and the kept part and the count make the whole question', () => {
     for (const width of [30, 60]) {
       const row = text(rowOf(view(boardSnapshot(), { width }), 's-wait'))
-      const match = /^ ⚠ api-7 {2}TREE {2}(.*)…\+(\d+) +6h$/.exec(row)
+      const match = /^ ⚠ api-7 +(.*)…\+(\d+) +6h$/.exec(row)
       expect(match, `${width} columns: ${row}`).not.toBeNull()
       const kept = match![1]!
       expect(kept.length, `${width} columns: some of the question shows`).toBeGreaterThan(0)
@@ -128,14 +125,16 @@ describe('cuts: no hidden text', () => {
     }
   })
 
-  it('cuts a long name to its column with its count, and the flag chips stay whole or leave with a count', () => {
+  it('cuts a long name to its column with its count, and the same file chip stays whole or leaves with a count', () => {
     const long = 'a-very-long-session-name-for-the-board'
     const snapshot = snapshotOf([...boardSessions(), busy('s-long', { name: long })])
     for (const width of [30, 60]) {
       const row = text(rowOf(view(snapshot, { width }), 's-long'))
       expect(row, `${width} columns`).toMatch(/ a-very[^ ]*…\+\d+ /)
       const work = text(rowOf(view(snapshot, { width }), 's-work'))
-      expect(work.split(/\s+/).filter((word) => /^(?:TREE|FILES|REPO)$/.test(word) || /…\+\d+$/.test(word)).length, `${width} columns: ${work}`).toBeGreaterThan(0)
+      // the chip shows whole, or the cut mark counts it
+      expect(/ same file |…\+\d+ /.test(work), `${width} columns: ${work}`).toBe(true)
+      expect(work, `${width} columns`).not.toMatch(/ same(?! file)/)
     }
   })
 })

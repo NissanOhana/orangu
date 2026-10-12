@@ -10,7 +10,9 @@
  * - the content of the open tab (src/god/view/detail-tabs.ts);
  * - the context bar: 10 cells, `▰` used and `▱` free, the percent (`~` when the window is an estimate), the count
  *   of the running agents and the newest PR number;
- * - 1 line for each overlap flag: `SAME TREE: <name>`, `SAME FILES: <name> (<file>)`, `SAME REPO: <name>`.
+ * - the folder line while 2 or more sessions of its folder work now (src/god/view/folder.ts), then 1 line for each
+ *   same files flag: `SAME FILES: <name> (<file>)`. Each line names a session by the name of its row. The same tree
+ *   and the same repo get no line: the folder line says what matters of them.
  * Every text shows whole: it wraps at whole words, never cut. Only the row budget cuts, and only the tab content:
  * a window over it with a count line above (`w: +N lines`) and below (`z: +N lines`) that names the key that
  * shows the rest. When fewer than 3 rows are left for content that does not fit, the detail says that the pane is
@@ -21,6 +23,7 @@ import { ACCENT, DIM, FLAG_PAINT } from '../ui/theme.js'
 import { NO_REPO } from './board.js'
 import { cellWidth } from './cells.js'
 import { tabContent, type OptionKey } from './detail-tabs.js'
+import { folderLines } from './folder.js'
 import { rowName } from './names.js'
 import { CANNOT_DRAW, messageLines } from './states.js'
 import type { Line, Segment } from './types.js'
@@ -35,7 +38,7 @@ export const DETAIL_TABS: readonly DetailTab[] = ['now', 'history', 'agents', 's
 /** The label of each tab. */
 export const TAB_LABEL: Readonly<Record<DetailTab, string>> = { now: 'Now', history: 'History', agents: 'Agents', screen: 'Screen', recap: 'Recap' }
 
-/** The label of each overlap flag line. */
+/** The label of each overlap flag line. The detail draws only SAME FILES, and the 2 tools draw each. */
 export const FLAG_LABEL = { 'same-tree': 'SAME TREE', 'same-files': 'SAME FILES', 'same-repo': 'SAME REPO' } as const
 
 /** 1 tab of the tab row: 1 Button. */
@@ -47,6 +50,8 @@ export type DetailWindow = ScrollWindow
 /** What the detail reads. The engine shell passes the selection, the pane props, the clock and the last reads. */
 export type DetailInput = {
   session: GodSession
+  /** every session of the board: the folder line and the flag lines name them; absent, no folder line */
+  sessions?: readonly GodSession[]
   /** the detail width in cells */
   width: number
   /** the most lines that the detail may take */
@@ -131,7 +136,7 @@ export const tabGap = (index: number): string => (index === 0 ? ' ' : '  ')
 /** 1 row of tab Buttons as 1 line. */
 const tabLine = (row: readonly TabCell[]): Line => ({ segments: row.flatMap((cell, index) => [{ text: tabGap(index) }, ...cell.segments]) })
 
-function footLines(session: GodSession, width: number): Line[] {
+function footLines(session: GodSession, sessions: readonly GodSession[], width: number): Line[] {
   const transcript = session.transcript
   const parts: Segment[][] = []
   const percent = contextPercent(transcript?.context)
@@ -144,10 +149,14 @@ function footLines(session: GodSession, width: number): Line[] {
   const pr = newestPr(transcript?.prLinks ?? [])
   if (pr !== undefined) parts.push([{ text: `PR #${pr}` }])
   const context = parts.length === 0 ? [] : wrapSegments(parts.flatMap((part, index) => (index === 0 ? part : [{ text: ' · ', ...DIM }, ...part])), width)
+  const nameOf = (flag: GodSession['flags'][number]): string => {
+    const other = sessions.find((candidate) => candidate.sessionId === flag.otherId)
+    return other === undefined ? flat(flag.otherName) : rowName(other)
+  }
   const flags = session.flags.flatMap((flag) =>
-    wrapSegments([{ text: `${FLAG_LABEL[flag.kind]}:`, ...FLAG_PAINT[flag.kind], bold: true }, { text: ` ${flat(flag.otherName)}${flag.file === undefined ? '' : ` (${flat(flag.file)})`}` }], width, 1, 3),
+    flag.kind !== 'same-files' ? [] : wrapSegments([{ text: `${FLAG_LABEL[flag.kind]}:`, ...FLAG_PAINT[flag.kind], bold: true }, { text: ` ${nameOf(flag)}${flag.file === undefined ? '' : ` (${flat(flag.file)})`}` }], width, 1, 3),
   )
-  return [...context, ...flags]
+  return [...context, ...folderLines(session, sessions, width), ...flags]
 }
 
 /** The detail of 1 session. */
@@ -155,7 +164,7 @@ export function detailView(input: DetailInput): DetailView {
   const { session, width, rows } = input
   const head = headLines(session, width)
   const tabRows = tabRowsOf(input.tab, width)
-  const foot = footLines(session, width)
+  const foot = footLines(session, input.sessions ?? [], width)
   const content = tabContent(input.tab, input)
   const room = rows - head.length - tabRows.length - foot.length
   if (content.lines.length > room && room < MIN_WINDOW) return { kind: 'too-short', lines: messageLines(CANNOT_DRAW['too-short'], width) }

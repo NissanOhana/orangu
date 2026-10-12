@@ -76,8 +76,8 @@ const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'
 
 /**
  * The detail of each fixture session in each tab at the detail width of a 60-column pane (the detail alone) and a
- * 110-column pane (beside the board), with the screen read and the answered Recap; the Recap while it runs and
- * when it failed; each tab with no cmux; the confirm bar of each intent and each outcome and refusal line; the
+ * 110-column pane (beside the board), with the folder line, the screen read and the answered Recap; the Recap
+ * while it runs and when it failed; each tab with no cmux; the confirm bar of each intent and each outcome and refusal line; the
  * request of a tool that the pane does not answer; the mode line of a prompt; the bar of each draft with its text
  * field, and the bar after an old read; and the 2 tool texts at 110 columns. The fixture session texts are short and
  * clean, so the row scores what orangu writes.
@@ -95,7 +95,7 @@ export function godDetailViews(): RenderedView[] {
   })
   const tabs = snapshot.sessions.flatMap((session) =>
     [60, 110].flatMap((columns) =>
-      DETAIL_TABS.map((tab) => detail(`${session.sessionId}.${tab}.${columns}`, { session, width: detailWidth(columns), tab, isCmuxMissing: false, screen: GOD_SCREEN, recap: GOD_RECAPS.answered })),
+      DETAIL_TABS.map((tab) => detail(`${session.sessionId}.${tab}.${columns}`, { session, sessions: snapshot.sessions, width: detailWidth(columns), tab, isCmuxMissing: false, screen: GOD_SCREEN, recap: GOD_RECAPS.answered })),
     ),
   )
   const wait = snapshot.sessions.find((session) => session.sessionId === GOD_SCREEN.sessionId)!

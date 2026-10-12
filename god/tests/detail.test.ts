@@ -150,23 +150,31 @@ for (const surface of SURFACES) {
 }
 
 /** A waiting session whose last reply used 100,000 input tokens, and a busy session in a worktree of its repo. */
+/** A session that waits and 2 busy sessions in its folder, which both wrote parse.ts. */
 function footAt(t0: number): Machine {
   const sessions: FakeSession[] = [
     { pid: 44001, sessionId: 'ses-wait', cwd: A, name: 'ask-a', status: 'waiting', waitingFor: 'input needed', statusUpdatedAt: t0 - 60_000, transcript: [prompt('Pick a color.', t0 - 90_000), ...reply('I need 1 choice.', t0 - 80_000, 100_000), question('toolu_q1', 'Which color?', ['Red', 'Green'], t0 - 60_000)], transcriptMtimeMs: t0 - 60_000, fileMtimeMs: t0 - 60_000 },
-    { pid: 44002, sessionId: 'ses-wt', cwd: A_WT, name: 'work-wt', status: 'busy', statusUpdatedAt: t0 - 60_000, transcript: [prompt('Fix the parser.', t0 - 60_000), edit('toolu_e1', `${A_WT}/parse.ts`, t0 - 5_000)], transcriptMtimeMs: t0 - 5_000, fileMtimeMs: t0 - 60_000 },
+    { pid: 44002, sessionId: 'ses-one', cwd: A, name: 'work-1', status: 'busy', statusUpdatedAt: t0 - 60_000, transcript: [prompt('Fix the parser.', t0 - 60_000), edit('toolu_e1', `${A}/parse.ts`, t0 - 5_000)], transcriptMtimeMs: t0 - 5_000, fileMtimeMs: t0 - 60_000 },
+    { pid: 44003, sessionId: 'ses-two', cwd: A, name: 'work-2', status: 'busy', statusUpdatedAt: t0 - 30_000, transcript: [prompt('Fix the lexer.', t0 - 30_000), edit('toolu_e2', `${A}/parse.ts`, t0 - 4_000)], transcriptMtimeMs: t0 - 4_000, fileMtimeMs: t0 - 30_000 },
   ]
-  return { sessions, repos: { [A]: [`${A}/.git`, `${A}/.git`, A], [A_WT]: [`${A}/.git/worktrees/repo-a-wt`, `${A}/.git`, A_WT] } }
+  return { sessions, repos: { [A]: [`${A}/.git`, `${A}/.git`, A] } }
 }
 
 for (const surface of SURFACES) {
-  test(`${surface}: the detail draws the context bar and a flag line under the tab content`, async ($, on) => {
-    const { ui } = await openAt($, on, surface, 110, 30, footAt)
+  test(`${surface}: the detail draws the context bar, then 1 line for the working sessions of its folder, and the rows show only the same file chip`, async ($, on) => {
+    const { ui } = await openAt($, on, surface, 160, 30, footAt)
     await select($, 'ses-wait')
     const shown = await lines(ui)
     const bar = shown.findIndex((line) => /│ ctx [▰▱]{10} ~?\d+%$/.test(line))
-    const flag = shown.findIndex((line) => line.endsWith('│ SAME REPO: work-wt'))
+    const folder = shown.findIndex((line) => line.endsWith('│ Shares its folder with 2 working sessions: Fix the parser., Fix the lexer.'))
     expect(bar, shown.join('\n')).toBeGreaterThan(shown.findIndex((line) => line.includes('Which color?')))
-    expect(flag, shown.join('\n')).toBe(bar + 1)
+    expect(folder, shown.join('\n')).toBe(bar + 1)
+    expect(shown.filter((line) => / same file /.test(line.split('│')[0]!))).toHaveLength(2)
+    expect(shown.join('\n')).not.toMatch(/TREE|REPO|FILES/)
+    await select($, 'ses-one')
+    const one = await lines(ui)
+    expect(one.some((line) => line.endsWith('│ Shares its folder with 1 working session: Fix the lexer.')), one.join('\n')).toBe(true)
+    expect(one.some((line) => line.includes('│ SAME FILES: Fix the lexer. (')), one.join('\n')).toBe(true)
   })
 }
 
