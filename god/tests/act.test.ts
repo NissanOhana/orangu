@@ -119,11 +119,16 @@ for (const surface of SURFACES) {
     machine.cmux!.delay = (verb) => (verb === 'read-screen' ? clock.sleep(1500) : undefined)
     const atY = calls.runs.length
     const pressing = press(ui, 'key:y')
-    await clock.settle()
-    await clock.advance(1500)
+    // the pane reads and plans 1 more time after a late read, before any key: both reads come late here
+    for (let read = 0; read < 2; read++) {
+      await clock.settle()
+      await clock.advance(1500)
+    }
     await pressing
     delete machine.cmux!.delay
     expect(keysSince(calls, atY)).toEqual([])
+    // 2 reads of the plan, then the Screen tab of the refusal can read too
+    expect(cmuxSince(calls, atY).filter((argv) => argv[1] === 'read-screen').length).toBeGreaterThanOrEqual(2)
     const stale = await lines(ui)
     expect(stale, stale.join('\n')).toContain(' The screen or the session facts are too old, so the pane sent nothing. Press y again.')
     expect(stale).toContain(' Send "1 Red" to ask?  y: send  c: cancel')

@@ -141,6 +141,9 @@ export async function sendConfirmed($: EngineInterface, runtime: DeliverRuntime,
   // set before the first wait, so a c of this bar in the same moment as y stops the keys
   runtime.delivering = shown
   try {
+    // the ring leaves the y Button for the row of the target while the pane holds the keys: a ring on an element that
+    // goes gives the keys back to the prompt, so the next digit would land there as text
+    void $.ui.focus({ requestId: PANE, key: shown.target.sessionId }).catch(() => undefined)
     const marked = await update($, DELIVER, (state) => sendPressed(state, shown))
     if (!isSendingOf(marked, shown)) return
     const result = await deliverIntent($, shown, runtime).catch(async (error: unknown) => {
