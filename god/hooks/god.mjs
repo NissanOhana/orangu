@@ -5172,17 +5172,24 @@ async function deliver(ports, request) {
   if (session === void 0 || session.sessionId !== intent.target.sessionId) return refused("screen-changed");
   const refs = request.cmux === "ok" ? tabRefs(session.tab) : void 0;
   if (refs === void 0) return refused("no-tab");
-  const ps = await readPs(host, [session.pid]);
-  if (!ps.ok) return failed("facts-unread");
-  const fresh = await readFresh(host, ports, session).catch(() => ({ kind: "unread" }));
-  if (fresh.kind === "gone") return refused("screen-changed");
-  if (fresh.kind === "unread") return failed("facts-unread");
-  if (!isSameProcess(ps.value.rows, session.pid, fresh.procStart, session.tab?.tty)) return refused("screen-changed");
-  const screenRead = await readScreenAndRaw(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now());
-  if (screenRead === void 0) return failed("screen-unread");
-  const screen = screenRead.read;
-  const now = await host.now().catch(() => Number.NaN);
-  const plan = planDelivery(intent, screen, fresh.facts, now, { screen: screenRead.raw, calls: fresh.calls, clean: ports.clean });
+  const readAndPlan = async () => {
+    const ps = await readPs(host, [session.pid]);
+    if (!ps.ok) return failed("facts-unread");
+    const fresh2 = await readFresh(host, ports, session).catch(() => ({ kind: "unread" }));
+    if (fresh2.kind === "gone") return refused("screen-changed");
+    if (fresh2.kind === "unread") return failed("facts-unread");
+    if (!isSameProcess(ps.value.rows, session.pid, fresh2.procStart, session.tab?.tty)) return refused("screen-changed");
+    const screenRead = await readScreenAndRaw(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now());
+    if (screenRead === void 0) return failed("screen-unread");
+    const screen2 = screenRead.read;
+    const now = await host.now().catch(() => Number.NaN);
+    const plan2 = planDelivery(intent, screen2, fresh2.facts, now, { screen: screenRead.raw, calls: fresh2.calls, clean: ports.clean });
+    return { fresh: fresh2, screen: screen2, plan: plan2 };
+  };
+  let planned = await readAndPlan();
+  if ("plan" in planned && planned.plan.kind === "refuse" && planned.plan.refusal === "stale-screen" && !isCancelled()) planned = await readAndPlan();
+  if (!("plan" in planned)) return planned;
+  const { fresh, screen, plan } = planned;
   if (plan.kind === "refuse") return refused(plan.refusal, screen);
   if (!isPinned(intent, plan.steps, refs)) return refused("screen-changed", screen);
   let newest = screen;
@@ -5218,7 +5225,11 @@ function selectedSession(snapshot, selectedKey, needsCmux = true) {
   if (snapshot === void 0 || needsCmux && snapshot.sources.cmux.status === "missing") return void 0;
   return snapshot.sessions.find((session) => session.sessionId === selectedKey);
 }
-var targetOf = (session) => ({ sessionId: session.sessionId, name: rowName(session) });
+function targetOf(snapshot, session) {
+  const name = rowName(session);
+  const isShared = (snapshot?.sessions ?? []).some((other) => other.sessionId !== session.sessionId && rowName(other) === name);
+  return { sessionId: session.sessionId, name: isShared && name !== session.name ? `${name} (${session.name})` : name };
+}
 function answerIntent(snapshot, selectedKey, digit) {
   const session = selectedSession(snapshot, selectedKey);
   const open = session?.transcript?.openQuestion;
@@ -5226,12 +5237,12 @@ function answerIntent(snapshot, selectedKey, digit) {
   if (session === void 0 || open === void 0 || question === void 0 || more.length > 0 || question.multiSelect) return void 0;
   const option = Number.isInteger(digit) && digit >= 1 && digit <= 9 ? question.options[digit - 1] : void 0;
   if (option === void 0) return void 0;
-  return { kind: "answer", target: targetOf(session), toolUseId: open.toolUseId, header: question.header, question: question.text, option: digit, label: option.label };
+  return { kind: "answer", target: targetOf(snapshot, session), toolUseId: open.toolUseId, header: question.header, question: question.text, option: digit, label: option.label };
 }
 function steppedDialog(snapshot, selectedKey) {
   const session = selectedSession(snapshot, selectedKey);
   const open = session?.transcript?.openQuestion;
-  return session === void 0 || open === void 0 || !isSteppable(open.questions) ? void 0 : { target: targetOf(session), open };
+  return session === void 0 || open === void 0 || !isSteppable(open.questions) ? void 0 : { target: targetOf(snapshot, session), open };
 }
 function answersIntent({ target, open }, digits) {
   const answers2 = open.questions.map((question, k) => {
@@ -5261,11 +5272,11 @@ function permissionIntent(snapshot, selectedKey, choice) {
   const session = selectedSession(snapshot, selectedKey);
   const activity = session?.transcript?.activity;
   if (session === void 0 || session.status !== "waiting" || session.waitingFor !== "permission prompt" || activity?.isOpen !== true || activity.tool !== ANSWERED_TOOL) return void 0;
-  return { kind: "permission", target: targetOf(session), choice, toolUseId: activity.toolUseId, tool: activity.tool, ...activity.input === void 0 ? {} : { input: activity.input } };
+  return { kind: "permission", target: targetOf(snapshot, session), choice, toolUseId: activity.toolUseId, tool: activity.tool, ...activity.input === void 0 ? {} : { input: activity.input } };
 }
 function draftFor(snapshot, selectedKey, kind) {
   const session = selectedSession(snapshot, selectedKey, kind === "prompt");
-  return session === void 0 ? void 0 : { kind, target: targetOf(session), lines: [] };
+  return session === void 0 ? void 0 : { kind, target: targetOf(snapshot, session), lines: [] };
 }
 var sameIntent = (a, b) => a !== void 0 && JSON.stringify(a) === JSON.stringify(b);
 var checkOf = (state) => state.check === void 0 ? {} : { check: state.check };
@@ -5390,6 +5401,7 @@ async function sendConfirmed($, runtime, shown2) {
   runtime.isCancelled = false;
   runtime.delivering = shown2;
   try {
+    void $.ui.focus({ requestId: PANE, key: shown2.target.sessionId }).catch(() => void 0);
     const marked = await update4($, DELIVER, (state) => sendPressed(state, shown2));
     if (!isSendingOf(marked, shown2)) return;
     const result = await deliverIntent($, shown2, runtime).catch(async (error) => {
