@@ -122,7 +122,7 @@ var RECAP_LABEL = {
   prompt: "Prompt",
   reply: "Reply"
 };
-var BOARD_TOOL_DESCRIPTION = "This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the session name, the row name, the repo, the context percent, the summary and the title. The row name is the name that the pane shows for the session. The tool only reads, and it changes nothing.";
+var BOARD_TOOL_DESCRIPTION = "This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the session name, the repo, the context percent, the summary, the title and the row name. The row name is the name that the pane shows for the session. The tool only reads, and it changes nothing.";
 var SESSION_TOOL_DESCRIPTION = "This tool shows the detail of the live session with the name that you give. The detail has the open question, the last prompt, the last reply, the activity, the agents and the overlap flags. Get the names from the board tool. The tool only reads, and it changes nothing.";
 var SESSION_TOOL_NAME_HINT = "The session name or the row name of the session, as the board tool shows them.";
 var TOOL_NOT_RUNNING = "The god pane does not run in this session now. Ask the person to run /god.";
@@ -4811,11 +4811,11 @@ function boardLine(session, width, now) {
     [
       plain(levelText(session.level, session.levelSince, now)),
       quoted("name", session.name, false),
-      quoted("row name", rowName(session), false),
       quoted("repo", session.repo?.name, false),
       plain(`context ${contextPercent(session.transcript?.context) ?? "unknown"}`),
       quoted("summary", session.summary, true),
-      quoted("title", session.transcript?.title, true)
+      quoted("title", session.transcript?.title, true),
+      quoted("row name", rowName(session), false)
     ],
     width
   );
