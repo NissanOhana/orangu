@@ -81,6 +81,14 @@ describe('the draft of r and m', () => {
     expect(draftFor(SNAPSHOT, undefined, 'peer')).toBeUndefined()
   })
 
+  it('adds the session name to the target when another row has the same row name, so 2 bars never read the same', () => {
+    const same = (session: BoardSnapshot['sessions'][number]): BoardSnapshot['sessions'][number] => ({ ...session, tab: { ...(session.tab ?? { pid: 1, tty: 'ttys001', workspaceRef: 'w', surfaceRef: 's', workspaceTitle: 'w' }), surfaceTitle: 'Shared title' } })
+    const twin: BoardSnapshot = { ...SNAPSHOT, sessions: SNAPSHOT.sessions.map(same) }
+    const draft = draftFor(twin, 's-idle', 'peer')
+    expect(draft?.target).toEqual({ sessionId: 's-idle', name: 'Shared title (api-1)' })
+    expect(draftFor(SNAPSHOT, 's-idle', 'peer')?.target).toEqual({ sessionId: 's-idle', name: 'api-1' })
+  })
+
   it('adds each line, splits a pasted value at its line breaks, and opens the bar on an empty line', () => {
     const draft = draftFor(SNAPSHOT, 's-idle', 'prompt')!
     let state = withDraft({ ...NO_DELIVERY, intent: INTENTS.answer }, draft)

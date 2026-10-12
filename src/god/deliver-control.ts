@@ -46,7 +46,15 @@ function selectedSession(snapshot: BoardSnapshot | undefined, selectedKey: strin
 }
 
 /** The target of an intent: the session, and the name of its row (src/god/view/names.ts), as the confirm bar names it. */
-const targetOf = (session: GodSession): DeliverTarget => ({ sessionId: session.sessionId, name: rowName(session) })
+/**
+ * The target of a key intent: the session id, and the row name that the bar shows. A session can set any tab title,
+ * so when another row of the board has the same row name, the bar also shows the session name. The key binds by id.
+ */
+function targetOf(snapshot: BoardSnapshot | undefined, session: GodSession): DeliverTarget {
+  const name = rowName(session)
+  const isShared = (snapshot?.sessions ?? []).some((other) => other.sessionId !== session.sessionId && rowName(other) === name)
+  return { sessionId: session.sessionId, name: isShared && name !== session.name ? `${name} (${session.name})` : name }
+}
 
 /** The answer of a digit for the open question of the selected session. */
 export function answerIntent(snapshot: BoardSnapshot | undefined, selectedKey: string | undefined, digit: number): KeyIntent | undefined {
@@ -56,7 +64,7 @@ export function answerIntent(snapshot: BoardSnapshot | undefined, selectedKey: s
   if (session === undefined || open === undefined || question === undefined || more.length > 0 || question.multiSelect) return undefined
   const option = Number.isInteger(digit) && digit >= 1 && digit <= 9 ? question.options[digit - 1] : undefined
   if (option === undefined) return undefined
-  return { kind: 'answer', target: targetOf(session), toolUseId: open.toolUseId, header: question.header, question: question.text, option: digit, label: option.label }
+  return { kind: 'answer', target: targetOf(snapshot, session), toolUseId: open.toolUseId, header: question.header, question: question.text, option: digit, label: option.label }
 }
 
 /** A dialog with 2 or more single-select questions of the selected session: the target and its open question. */
@@ -66,7 +74,7 @@ export type SteppedDialog = { target: DeliverTarget; open: OpenQuestion }
 export function steppedDialog(snapshot: BoardSnapshot | undefined, selectedKey: string | undefined): SteppedDialog | undefined {
   const session = selectedSession(snapshot, selectedKey)
   const open = session?.transcript?.openQuestion
-  return session === undefined || open === undefined || !isSteppable(open.questions) ? undefined : { target: targetOf(session), open }
+  return session === undefined || open === undefined || !isSteppable(open.questions) ? undefined : { target: targetOf(snapshot, session), open }
 }
 
 /** The answers intent of a pick for each question of the dialog. */
@@ -107,13 +115,13 @@ export function permissionIntent(snapshot: BoardSnapshot | undefined, selectedKe
   const session = selectedSession(snapshot, selectedKey)
   const activity = session?.transcript?.activity
   if (session === undefined || session.status !== 'waiting' || session.waitingFor !== 'permission prompt' || activity?.isOpen !== true || activity.tool !== ANSWERED_TOOL) return undefined
-  return { kind: 'permission', target: targetOf(session), choice, toolUseId: activity.toolUseId, tool: activity.tool, ...(activity.input === undefined ? {} : { input: activity.input }) }
+  return { kind: 'permission', target: targetOf(snapshot, session), choice, toolUseId: activity.toolUseId, tool: activity.tool, ...(activity.input === undefined ? {} : { input: activity.input }) }
 }
 
 /** The draft of r (a prompt, needs cmux) or m (a peer message) for the selected session. */
 export function draftFor(snapshot: BoardSnapshot | undefined, selectedKey: string | undefined, kind: Draft['kind']): Draft | undefined {
   const session = selectedSession(snapshot, selectedKey, kind === 'prompt')
-  return session === undefined ? undefined : { kind, target: targetOf(session), lines: [] }
+  return session === undefined ? undefined : { kind, target: targetOf(snapshot, session), lines: [] }
 }
 
 const sameIntent = (a: DeliverIntent | undefined, b: DeliverIntent): boolean => a !== undefined && JSON.stringify(a) === JSON.stringify(b)
