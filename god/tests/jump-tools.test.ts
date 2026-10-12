@@ -204,8 +204,8 @@ for (const surface of SURFACES) {
     expect(rows).toHaveLength(3)
     for (const name of ['ask-a', 'turn-p', 'loose-p']) expect(rows.filter((row) => row.includes(`name "${name}"`)), text).toHaveLength(1)
     // each line gives the row name too, the name that the pane shows: the title of the cmux tab, else the first prompt
-    expect(text).toContain('name "ask-a"  row name "ask"')
-    expect(text).toContain('name "loose-p"  row name "Run the build."')
+    expect(text).toMatch(/name "ask-a" .* row name "ask"$/m)
+    expect(text).toMatch(/name "loose-p" .* row name "Run the build\."$/m)
     expect(String((await $.tool.call({ tool: 'mcp__orangu-god__session', name: 'turn' })).result)).toMatch(/^orangu god session: "turn-p"\.\n.*\nRow name: "turn"\n/)
     for (const row of rows) expect(LEVELS.some((level) => row.startsWith(level)), row).toBe(true)
     expect(text).not.toContain('god-self-session')

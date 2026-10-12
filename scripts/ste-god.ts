@@ -15,6 +15,7 @@ import { confirmView, outcomeLines, PROMPT_MODE_TEXT, REFUSAL_TEXT } from '../sr
 import { DETAIL_TABS, detailLines, detailView } from '../src/god/view/detail.js'
 import { cannotDrawView, layoutOf, paneLines, paneView } from '../src/god/view/pane.js'
 import { boardToolText, sessionToolText } from '../src/god/view/tool-text.js'
+import { TOOL_WIDTH } from '../src/god/tools.js'
 import type { Line } from '../src/god/view/types.js'
 
 const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
@@ -83,8 +84,8 @@ const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'
  * 110-column pane (beside the board), with the folder line, the screen read and the answered Recap; the Recap
  * while it runs and when it failed; each tab with no cmux; the confirm bar of each intent and each outcome and refusal line; the
  * request of a tool that the pane does not answer; the mode line of a prompt; the bar of each draft with its text
- * field, and the bar after an old read; and the 2 tool texts at 110 columns. The fixture session texts are short and
- * clean, so the row scores what orangu writes.
+ * field, and the bar after an old read; and the 2 tool texts at TOOL_WIDTH, the width that the god Claude reads.
+ * The fixture session texts are short and clean, so the row scores what orangu writes.
  */
 export function godDetailViews(): RenderedView[] {
   const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
@@ -151,8 +152,8 @@ export function godDetailViews(): RenderedView[] {
     ...Object.values(GOD_OUTCOMES).map((outcome) => ({ file: `${GOD_DETAIL_FIXTURE}#bar.note.${outcome.status}`, lines: bar({ scroll: 0, outcome }, 60)!.lines.map(text) })),
   ]
   const tools = [
-    { file: `${GOD_DETAIL_FIXTURE}#tool.board.110`, lines: boardToolText(snapshot, 110, GOD_NOW).split('\n') },
-    ...snapshot.sessions.map((session) => ({ file: `${GOD_DETAIL_FIXTURE}#tool.session.${session.sessionId}`, lines: sessionToolText(snapshot, session.name, 110, GOD_NOW).split('\n') })),
+    { file: `${GOD_DETAIL_FIXTURE}#tool.board.${TOOL_WIDTH}`, lines: boardToolText(snapshot, TOOL_WIDTH, GOD_NOW).split('\n') },
+    ...snapshot.sessions.map((session) => ({ file: `${GOD_DETAIL_FIXTURE}#tool.session.${session.sessionId}`, lines: sessionToolText(snapshot, session.name, TOOL_WIDTH, GOD_NOW).split('\n') })),
   ]
   return [...tabs, ...states, ...confirm, ...windows, ...outcomes, ...requests, ...picked, partial, ...modes, ...bars, ...tools]
 }

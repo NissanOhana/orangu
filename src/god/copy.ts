@@ -140,7 +140,7 @@ export const RECAP_LABEL = {
 
 /** What the model reads about the board tool. */
 export const BOARD_TOOL_DESCRIPTION =
-  'This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the session name, the row name, the repo, the context percent, the summary and the title. The row name is the name that the pane shows for the session. The tool only reads, and it changes nothing.'
+  'This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the session name, the repo, the context percent, the summary, the title and the row name. The row name is the name that the pane shows for the session. The tool only reads, and it changes nothing.'
 
 /** What the model reads about the session tool. */
 export const SESSION_TOOL_DESCRIPTION =

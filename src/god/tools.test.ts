@@ -30,11 +30,11 @@ describe('the tool specs', () => {
 })
 
 describe('what the tools answer', () => {
-  it('gives the board text at the tool width, with 1 line for each session after the 3 head lines', () => {
+  it('gives the board text at the tool width, with 1 line for each session after the 3 head lines, and its next lines after 2 spaces', () => {
     expect(TOOL_WIDTH).toBe(160)
     const snapshot = detailSnapshot()
     const lines = boardToolAnswer({ isRunning: true, snapshot }, NOW).split('\n')
-    expect(lines).toHaveLength(3 + snapshot.sessions.length)
+    expect(lines.slice(3).filter((line) => !line.startsWith('  '))).toHaveLength(snapshot.sessions.length)
     for (const line of lines) expect(cellWidth(line), line).toBeLessThanOrEqual(TOOL_WIDTH)
   })
 

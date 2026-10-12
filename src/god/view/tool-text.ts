@@ -1,8 +1,8 @@
 /**
  * The texts of the 2 read-only tools of the god mod, for the god Claude:
  * - the board tool: the count, the quote rule and the cut rule, then 1 line for each live session in board order
- *   (the level and the time in it, the session name, the row name, the repo, the context percent, the summary and
- *   the title). The row name is the name that the pane shows (src/god/view/names.ts);
+ *   (the level and the time in it, the session name, the repo, the context percent, the summary, the title and the
+ *   row name). The row name is the name that the pane shows (src/god/view/names.ts);
  * - the session tool: the detail of each session with the session name, else of each session with the row name
  *   (row name, level, wait, title, tab, repo, branch, mode, context, PR, open question, last prompt, last reply,
  *   activity, agents, flags).
@@ -112,11 +112,11 @@ function boardLine(session: GodSession, width: number, now: number): string[] {
     [
       plain(levelText(session.level, session.levelSince, now)),
       quoted('name', session.name, false),
-      quoted('row name', rowName(session), false),
       quoted('repo', session.repo?.name, false),
       plain(`context ${contextPercent(session.transcript?.context) ?? 'unknown'}`),
       quoted('summary', session.summary, true),
       quoted('title', session.transcript?.title, true),
+      quoted('row name', rowName(session), false),
     ],
     width,
   )
