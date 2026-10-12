@@ -102,8 +102,8 @@ function partsFrom(rows: readonly string[], from: number): { text: string; line:
 /**
  * The step of the review screen: under the chip row with every chip answered, the title, then for each confirmed
  * question its `●` row (and the rows of its wrap) and its `→` row (and the rows of its wrap) with the confirmed label,
- * the ready row, and the 2 options Submit answers and Cancel with 1 cursor. No other row comes between them, and the
- * dialog that the screen reader finds lies inside them.
+ * the ready row, and the 2 options Submit answers and Cancel with the cursor on Submit answers, as the live dialog
+ * draws it. No other row comes between them, and the dialog that the screen reader finds lies inside them.
  */
 function matchReview(view: ScreenView, rows: readonly string[], want: StepWant): ScreenMatch {
   const chipLine = rows.findIndex((row) => TABS_ROW.test(row))
@@ -123,7 +123,7 @@ function matchReview(view: ScreenView, rows: readonly string[], want: StepWant):
   }
   const [ready, submit, cancel] = parts.slice(at, at + 3)
   if (ready?.text !== REVIEW_READY || submit === undefined || cancel === undefined || !SUBMIT_ROWS[0]!.test(submit.text) || !SUBMIT_ROWS[1]!.test(cancel.text)) return CHANGED
-  if ([submit, cancel].filter((row) => row.text.startsWith('❯')).length !== 1) return CHANGED
+  if (!submit.text.startsWith('❯') || cancel.text.startsWith('❯')) return CHANGED
   const isInside = view.dialogs.length <= 1 && view.dialogs.every((dialog) => dialog.firstLine >= chipLine && dialog.lastLine <= cancel.line)
   if (!isInside || view.promptLine > chipLine || view.lastMark > cancel.line) return CHANGED
   return { isMatch: true, digit: 1 }

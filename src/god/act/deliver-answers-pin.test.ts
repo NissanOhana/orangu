@@ -29,6 +29,8 @@ describe('deliver: the steps of an answers intent', () => {
     ['send-key of a digit', [sendText('2'), sendKey('1'), sendText('1')]],
     ['another tab', [sendText('2'), ['cmux', 'send', '--workspace', WS, '--surface', '00000000-0000-4000-8000-000000000000', '--', '1'], sendText('1')]],
     ['no --', [sendText('2'), sendText('1'), ['cmux', 'send', '--workspace', WS, '--surface', SF, '1']]],
+    ['another digit for question 1', [sendText('3'), sendText('1'), sendText('1')]],
+    ['another digit for question 2', [sendText('2'), sendText('2'), sendText('1')]],
   ]
 
   it.each(forms)('refuses a plan of %s, and sends nothing', async (_form, steps) => {

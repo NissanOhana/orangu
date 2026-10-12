@@ -104,6 +104,7 @@ describe('matchAnswersStep: a review screen that is not the confirmed one', () =
     ['another first option', changeRow(changeRow(REVIEW, '❯ 1. Submit answers', '❯ 1. Cancel'), '  2. Cancel', '  2. Submit answers')],
     ['a third option', changeRow(REVIEW, '  2. Cancel', '  2. Cancel\n  3. Submit again')],
     ['no cursor', changeRow(REVIEW, '❯ 1. Submit answers', '  1. Submit answers')],
+    ['the cursor on Cancel', changeRow(changeRow(REVIEW, '❯ 1. Submit answers', '  1. Submit answers'), '  2. Cancel', '❯ 2. Cancel')],
     ['a chip that is not answered', REVIEW.replace(tabsRow(HEADERS, 2), tabsRow(HEADERS, 1))],
     ['a prompt row under the dialog', `${REVIEW}\n${RULE}\n❯ \n${RULE}`],
     ['a second chip row above', `${tabsRow(HEADERS, 2)}\n\n${REVIEW}`],

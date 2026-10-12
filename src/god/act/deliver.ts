@@ -115,12 +115,13 @@ export function isDigitStep(steps: readonly (readonly string[])[], refs: { works
 
 /**
  * True when the steps of a key intent have the argv forms of its kind: a prompt any steps of its plan, an answer or a
- * permission 1 digit step, and an answers intent 1 digit step for each question and then a send of `1`.
+ * permission 1 digit step, and an answers intent 1 digit step of the confirmed digit for each question and then 1 of `1`.
  */
 function isPinned(intent: KeyIntent, steps: readonly (readonly string[])[], refs: { workspaceRef: string; surfaceRef: string }): boolean {
   if (intent.kind === 'prompt') return true
   if (intent.kind !== 'answers') return isDigitStep(steps, refs)
-  return steps.length === intent.answers.length + 1 && steps.every((step) => isDigitStep([step], refs)) && steps.at(-1)?.at(-1) === '1'
+  const digits = [...intent.answers.map((answer) => String(answer.option)), '1']
+  return steps.length === digits.length && steps.every((step, k) => isDigitStep([step], refs) && step.at(-1) === digits[k])
 }
 
 /** True when the run may set its environment so: ps only in UTC, every other command with no variable. */
