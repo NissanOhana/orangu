@@ -73,10 +73,12 @@ describe('the layout', () => {
     expect(view.keys.map(text).join('')).toMatch(/ {2}1-3 answer {2}/)
   })
 
-  it('ends the key row with the ctrl+x tab line while the prompt holds the keys', () => {
+  it('says in the header who holds the keys, and not in the key row', () => {
     const view = pane(boardSnapshot(), { promptHoldsKeys: true })
     if (view.kind !== 'board') throw new Error(view.kind)
-    expect(view.keys.map(text).join('')).toMatch(/ctrl\+x tab: keys to the pane$/)
+    expect(view.header.map(text).join('')).toContain('keys: prompt · ctrl+x tab: pane')
+    expect(view.keys.map(text).join('')).not.toContain('ctrl+x tab')
+    expect(paneLines(pane(readingSnapshot())).map(text)[0]).toBe(' ◉ orangu god  keys: pane · Esc: prompt')
   })
 })
 
@@ -103,7 +105,7 @@ describe('only the rows that fit', () => {
     snapshotOf([...boardSessions(), ...Array.from({ length: 20 }, (_, index) => busy(`s-more-${index}`, { name: `more-${index}`, statusSince: NOW - (index + 1) * MINUTE }))])
 
   it('takes no more rows than the body has, and keeps the selected row in view', () => {
-    for (const bodyRows of [8, 12, 20]) {
+    for (const bodyRows of [10, 12, 20]) {
       for (const columns of [60, 110]) {
         for (const selectedKey of ['s-wait', 's-more-10', 's-idle']) {
           const view = pane(many(), { bodyRows, bodyColumns: columns, selectedKey })
@@ -116,8 +118,9 @@ describe('only the rows that fit', () => {
   })
 
   it('says the pane is too short when the board does not fit and fewer than 3 rows are left for it', () => {
-    expect(pane(many(), { bodyRows: 6 }).kind).toBe('cannot-draw')
-    expect(pane(many(), { bodyRows: 7 }).kind).toBe('board')
+    // the header (1 line), 2 rules and the key row (2 lines at 110 columns) take 5 rows
+    expect(pane(many(), { bodyRows: 7 }).kind).toBe('cannot-draw')
+    expect(pane(many(), { bodyRows: 8 }).kind).toBe('board')
   })
 })
 
@@ -336,8 +339,9 @@ describe('the answer hint of the key row', () => {
   })
 
   it('names only the digits of the option Buttons that the detail draws', () => {
-    // 14 rows hold the Button of option 1 only, and a scroll of 3 lines moves option 1 out of the window
-    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 14 }))).toEqual({ keys: '1', isOff: false })
-    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 16, detail: { ...DEFAULT_DETAIL, scroll: 3 } }))).toEqual({ keys: '2-3', isOff: false })
+    // 15 rows hold the Button of option 1 only, and a scroll of 3 lines moves option 1 out of the window (the key
+    // row takes 2 lines at 110 columns since r and m got their longer labels)
+    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 15 }))).toEqual({ keys: '1', isOff: false })
+    expect(answerHint(pane(detailSnapshot(), { selectedKey: 's-wait', bodyRows: 17, detail: { ...DEFAULT_DETAIL, scroll: 3 } }))).toEqual({ keys: '2-3', isOff: false })
   })
 })

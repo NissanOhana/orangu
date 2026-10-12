@@ -182,7 +182,7 @@ const selectedRow = (shown: readonly string[]): string | undefined => shown.find
 for (const surface of SURFACES) {
   test(`${surface}: in a short pane the count lines are Buttons, and presses alone reach the last session and the first`, async ($, on) => {
     const { ui, calls } = await openAt($, on, surface, 80, 40, manyAt)
-    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 110, rows: 20 }])
+    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 1000, rows: 20, focus: true }])
     // the board order, from a pane tall enough for every row; then the same pane 10 rows high
     const order = (await keysOf(ui)).flatMap((key) => (key.startsWith('ses-') ? [`run-${key.slice(4)}`] : []))
     expect(order).toHaveLength(12)

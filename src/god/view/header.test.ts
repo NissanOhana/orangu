@@ -66,6 +66,15 @@ describe('the header', () => {
     expect(segmentOf(headerLines({ snapshot: degradedSnapshot({}, 3 * 60 * SECOND), width: 110, now: NOW }), 'old 3m')).toBeDefined()
   })
 
+  it('says who holds the keys, the holder in bold, and the key that hands them over, also before the first refresh ends', () => {
+    const pane = headerLines({ snapshot: boardSnapshot(), width: 160, now: NOW, keysAt: 'pane' })
+    expect(pane.map(text)).toEqual([' ◉ orangu god  8 live  ⚠ 1  ● 1  ✕ 1  ⠋ 2  all  keys: pane · Esc: prompt'])
+    expect(segmentOf(pane, 'pane')).toEqual({ text: 'pane', bold: true })
+    expect(segmentOf(pane, ' · Esc: prompt')).toEqual({ text: ' · Esc: prompt', dim: true })
+    expect(headerLines({ snapshot: boardSnapshot(), width: 160, now: NOW, keysAt: 'prompt' }).map(text).join('')).toMatch(/ {2}all {2}keys: prompt · ctrl\+x tab: pane$/)
+    expect(headerLines({ snapshot: readingSnapshot(), width: 160, now: NOW, keysAt: 'prompt' }).map(text)).toEqual([' ◉ orangu god  keys: prompt · ctrl+x tab: pane'])
+  })
+
   it('shows only the brand before the first refresh ends', () => {
     expect(headerLines({ snapshot: readingSnapshot(), width: 110, now: NOW }).map(text)).toEqual([' ◉ orangu god'])
     expect(headerLines({ width: 110, now: NOW }).map(text)).toEqual([' ◉ orangu god'])

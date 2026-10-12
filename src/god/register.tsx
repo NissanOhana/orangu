@@ -5,7 +5,9 @@
 // - session.start registers /god. When ORANGU_GOD is 1, it also opens the pane and starts the board. Else nothing
 //   runs before /god: no host command, no file read, no timer, no pane.
 // - /god opens the pane and starts the board once: the collector over the host port, the board loop over the
-//   engine state and store, and 1 timer of TICK_MS. The rules of each form are in src/god/control.ts.
+//   engine state and store, and 1 timer of TICK_MS. The rules of each form are in src/god/control.ts. A /god open
+//   asks for the keys (focus), and the open of ORANGU_GOD does not: the engine gives the keys only to an open that
+//   the person asked for.
 // - The pane draws the last snapshot from the engine state through the view (src/god/view/pane.ts). The selected
 //   row comes from the moves of the focus ring (ui.focus), n, a press on a row, and a press on a count line of the
 //   board, which also moves the ring onto the row that it selects. Each new selection starts the detail at its
@@ -30,7 +32,8 @@
 // - The Recap (src/god/recap-keys.tsx): only x on the Recap tab of a session makes a model call, 1 at a time.
 // - The selection keys are in src/god/select-keys.tsx.
 // - The motion (src/god/motion-keys.tsx): each draw tells the motion loop its period, and ui.close stops the loop.
-// - The pane asks for its rows inline above the prompt and for its columns in the dock.
+// - The pane asks for its rows inline above the prompt and for its columns in the dock: more columns than any
+//   terminal has, so the dock takes the full width less the strip that the engine keeps for the transcript.
 // - The pane is on the screen from its first draw (the engine can place an unasked pane later) until ui.close. The
 //   status line shows only while it is not.
 // - Each hook that can fail has a .catch: the pane then draws the line that says it cannot draw.
@@ -61,8 +64,8 @@ import { motionPeriod } from './view/motion.js'
 import { cannotDrawView, layoutOf, paneView } from './view/pane.js'
 import type { PaneLayout } from './view/types.js'
 
-/** The width that the pane asks for beside a fullscreen transcript, and the rows above the prompt. */
-const PANE_COLUMNS = 110
+/** The width that the pane asks for beside a fullscreen transcript (the full width), and the rows above the prompt. */
+const PANE_COLUMNS = 1000
 const PANE_ROWS = 20
 
 /**
@@ -161,10 +164,13 @@ function toolBoard(runtime: Runtime): ToolBoard {
   return { isRunning: runtime.board !== undefined || runtime.starting !== undefined, ...(snapshot === undefined ? {} : { snapshot }) }
 }
 
-/** Opens the pane, starts the board, and tells the board whether the pane is on the screen. */
-async function openPane($: EngineInterface, runtime: Runtime): Promise<{ loop: BoardLoop; isPlaced: boolean }> {
+/**
+ * Opens the pane, starts the board, and tells the board whether the pane is on the screen. An open that the person
+ * asked for (/god) also asks for the keys.
+ */
+async function openPane($: EngineInterface, runtime: Runtime, isAsked: boolean): Promise<{ loop: BoardLoop; isPlaced: boolean }> {
   await registerTools($, runtime).catch(() => undefined)
-  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS, rows: PANE_ROWS })
+  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS, rows: PANE_ROWS, ...(isAsked ? { focus: true as const } : {}) })
   runtime.isPaneOpen = opened.isPlaced
   const loop = await start($, runtime)
   loop.setPaneOpen(opened.isPlaced)
@@ -237,7 +243,7 @@ export function register(on: On, options: PluginOptions): void {
     if ((await $.env.get('ORANGU_GOD')) === '1') {
       // awaited here, so the first prompt of the session lists the tools
       await registerTools($, runtime).catch(() => undefined)
-      void openPane($, runtime).catch(() => undefined)
+      void openPane($, runtime, false).catch(() => undefined)
     }
     return next(e)
   }).catch(($, e, next) => next(e))
@@ -250,7 +256,7 @@ export function register(on: On, options: PluginOptions): void {
       const repos = runtime.board?.store().repos ?? storeOf({ repos: await $.store.get('repos') }).repos
       return { text: commandAnswer(command, { isPlaced: false, repos }) }
     }
-    const { loop, isPlaced } = await openPane($, runtime)
+    const { loop, isPlaced } = await openPane($, runtime, true)
     const choice = commandChoice(command)
     if (choice !== undefined) await choose($, runtime, () => choice)
     return { text: commandAnswer(command, { isPlaced, repos: loop.store().repos }) }

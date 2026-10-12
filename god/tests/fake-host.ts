@@ -96,7 +96,7 @@ export type Calls = {
   boardWrites: number
   storeSets: Array<[string, unknown]>
   statuses: Array<string | undefined>
-  opens: Array<{ id: string; title?: string; columns?: number; rows?: number }>
+  opens: Array<{ id: string; title?: string; columns?: number; rows?: number; focus?: true }>
   /** the tools that the plugin registered, as it gave them */
   tools: Array<{ name: string; description: string; inputSchema?: Record<string, unknown>; isDeferred?: boolean }>
   /** the peer messages that the plugin sent, each as its address and its text */
@@ -197,7 +197,7 @@ export function installMachine(on: On, machine: Machine): Calls {
     return { value: [row] }
   })
   on('ui.open', (_$, e) => {
-    calls.opens.push({ id: e.id, ...(e.title === undefined ? {} : { title: e.title }), ...(e.columns === undefined ? {} : { columns: e.columns }), ...(e.rows === undefined ? {} : { rows: e.rows }) })
+    calls.opens.push({ id: e.id, ...(e.title === undefined ? {} : { title: e.title }), ...(e.columns === undefined ? {} : { columns: e.columns }), ...(e.rows === undefined ? {} : { rows: e.rows }), ...(e.focus === true ? { focus: true as const } : {}) })
     const isPlaced = calls.opens.length > (machine.unplacedOpens ?? 0)
     return { value: isPlaced ? { isPlaced: true as const } : { isPlaced: false as const, reason: 'the terminal is too narrow' } }
   })

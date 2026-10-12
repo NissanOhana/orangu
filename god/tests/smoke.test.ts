@@ -52,7 +52,8 @@ for (const surface of SURFACES) {
       ['board', false],
       ['session', false],
     ])
-    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 110, rows: 20 }])
+    // an open that the person did not ask for may not take the keys, so it asks for none
+    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 1000, rows: 20 }])
     expect(calls.runs.map((run) => run.argv.slice(0, 2).join(' '))).toContain('claude agents')
     expect(calls.boardWrites).toBeGreaterThan(0)
   })

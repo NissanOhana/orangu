@@ -12,9 +12,12 @@
  * - a dim chip for each source whose last read failed (`agents off`). A source that is not on the machine (no cmux)
  *   gets no chip: the key row says what it turns off;
  * - a dim `sound off` chip while s keeps every tone off;
- * - the age of the facts in the warn color once they are more than 10 s old (`old 12s`).
- * Before the first refresh ends, the header shows the brand only. The clock comes in as `now`.
+ * - the age of the facts in the warn color once they are more than 10 s old (`old 12s`);
+ * - who holds the keys and the key that hands them over: `keys: pane · Esc: prompt` while the pane holds them, and
+ *   `keys: prompt · ctrl+x tab: pane` while the prompt does. The engine moves the keys, so the pane only says it.
+ * Before the first refresh ends, the header shows the brand and who holds the keys only. The clock comes in as `now`.
  */
+import { KEYS_HOLDER, KEYS_LABEL } from '../copy.js'
 import { ACCENT, DIM, LEVEL_PAINT, OLD_FACTS } from '../ui/theme.js'
 import type { BoardSnapshot, Level, SourceName } from '../types.js'
 import { LEVEL_GLYPH } from './board.js'
@@ -48,6 +51,20 @@ export type HeaderInput = {
   isSoundOff?: boolean
   /** the count of working sessions in each minute of the sparkline; absent, no sparkline */
   spark?: readonly number[]
+  /** who holds the keys: the pane or the prompt; absent, the header does not say */
+  keysAt?: keyof typeof KEYS_HOLDER
+}
+
+/**
+ * The item that says who holds the keys, the holder in bold, then the key that hands them over, dim. A line too
+ * narrow for the whole item gets 2 items, so the flow moves the key to the next line and cuts nothing.
+ */
+function keysItems(keysAt: keyof typeof KEYS_HOLDER | undefined, width: number): Segment[][] {
+  if (keysAt === undefined) return []
+  const { holder, handover } = KEYS_HOLDER[keysAt]
+  const who: Segment[] = [{ text: `${KEYS_LABEL} ` }, { text: holder, bold: true }]
+  const whole = [...who, { text: ` · ${handover}`, ...DIM }]
+  return 1 + cellWidth(whole.map((segment) => segment.text).join('')) <= width ? [whole] : [who, [{ text: handover, ...DIM }]]
 }
 
 /** An age as `12s`, `3m`, `2h` or `1d`. */
@@ -82,13 +99,14 @@ function modeItems(snapshot: BoardSnapshot, width: number): Segment[][] {
 /** The lines of the header. */
 export function headerLines(input: HeaderInput): Line[] {
   const { snapshot, width, now } = input
-  if (snapshot === undefined || !snapshot.firstRefreshDone) return flowItems([BRAND], width)
+  const keys = keysItems(input.keysAt, width)
+  if (snapshot === undefined || !snapshot.firstRefreshDone) return flowItems([BRAND, ...keys], width)
   const items: Segment[][] = [[...BRAND], [{ text: `${snapshot.sessions.length} live` }]]
   for (const level of HEADER_LEVELS) {
     const count = snapshot.sessions.filter((session) => session.level === level).length
     if (count > 0) items.push([{ text: LEVEL_GLYPH[level], ...LEVEL_PAINT[level] }, { text: ` ${count}` }])
   }
-  items.push(...modeItems(snapshot, width))
+  items.push(...modeItems(snapshot, width), ...keys)
   const chips: Segment[][] = []
   for (const source of SOURCES) if (snapshot.sources[source].status === 'off') chips.push([{ text: `${source} off`, ...DIM }])
   if (input.isSoundOff === true) chips.push([{ text: 'sound off', ...DIM }])

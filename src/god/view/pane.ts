@@ -113,7 +113,8 @@ export function paneView(input: PaneInput): PaneView {
   const { snapshot, bodyColumns, bodyRows, now } = input
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView('too-narrow', bodyColumns)
   const { frame, spark } = input.motion ?? {}
-  const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now, ...(input.isSoundOff === true ? { isSoundOff: true } : {}), ...(spark === undefined ? {} : { spark }) })
+  const keysAt = input.promptHoldsKeys ? 'prompt' : 'pane'
+  const header = headerLines({ ...(snapshot === undefined ? {} : { snapshot }), width: bodyColumns, now, keysAt, ...(input.isSoundOff === true ? { isSoundOff: true } : {}), ...(spark === undefined ? {} : { spark }) })
   const state = boardStateOf(snapshot)
   const note = input.jumpNote ?? undefined
   const notice = note !== undefined && note.sessionId === input.selectedKey && snapshot !== undefined && isOnBoard(snapshot, note.sessionId) ? { notice: JUMP_NOTE[note.reason] } : {}
@@ -123,7 +124,6 @@ export function paneView(input: PaneInput): PaneView {
     return keyRow({
       width: bodyColumns,
       isCmuxMissing: board.sources.cmux.status === 'missing',
-      promptHoldsKeys: input.promptHoldsKeys,
       answerDigits,
       isAnswerOff: answerDigits.length === 0,
       mode: board.mode,

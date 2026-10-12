@@ -1,6 +1,5 @@
 /**
- * The key row of the god pane: the keys of the board, the `ctrl+x tab` line while the prompt holds the keys, and
- * the line that says why jump, answer and reply are off when cmux is not on the machine.
+ * The key row of the god pane: the keys of the board, and the line that says why j, the digits and r are off when cmux is not on the machine.
  */
 import { describe, expect, it } from 'vitest'
 import { cellWidth } from './cells.js'
@@ -8,8 +7,9 @@ import { JUMP_NOTE, KEY_ROW_NO_CMUX, keyRow } from './keys.js'
 import type { Line } from './types.js'
 
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
-const BASE = { width: 110, isCmuxMissing: false, promptHoldsKeys: false, mode: 'all' } as const
-const ROW = ' ↑↓ select  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  u: mute  f: repos  g: group'
+// a pane at the full width of a terminal of 190 columns, as /god asks for it
+const BASE = { width: 160, isCmuxMissing: false, mode: 'all' } as const
+const ROW = ' ↑↓ select  j: jump  n: next  1-9 answer  r: prompt  m: peer note  t: tab  s: sound  u: mute  f: repos  g: group'
 
 describe('the key row', () => {
   it('shows the keys of the board in 1 row', () => {
@@ -25,9 +25,8 @@ describe('the key row', () => {
     expect(keyRow({ ...BASE, answerDigits: [2, 3] }).lines.map(text).join('')).toMatch(/ {2}2-3 answer {2}/)
   })
 
-  it('ends with the ctrl+x tab line while the prompt holds the keys', () => {
-    const lines = keyRow({ ...BASE, promptHoldsKeys: true }).lines.map(text)
-    expect(lines.at(-1)).toMatch(/ ctrl\+x tab: keys to the pane$/)
+  it('names no ctrl+x tab key: the header says who holds the keys', () => {
+    expect(keyRow(BASE).lines.map(text).join('')).not.toContain('ctrl+x tab')
   })
 
   it('says in a line of its own, in the warn color, why the last j did not jump', () => {
@@ -52,7 +51,7 @@ describe('the key row', () => {
     const jump = row.lines[0]!.segments.filter((segment) => segment.text.includes('j'))
     expect(jump.length).toBeGreaterThan(0)
     for (const segment of jump) expect(segment.dim, segment.text).toBe(true)
-    expect(KEY_ROW_NO_CMUX).toBe('Jump, answer and reply are off: cmux is not on this machine.')
+    expect(KEY_ROW_NO_CMUX).toBe('The keys j, r and the digits are off: cmux is not on this machine.')
   })
 
   it('gives each key with a hotkey 1 segment that a Button presses, in the form the engine paints: the key, a colon, the label', () => {
@@ -61,8 +60,8 @@ describe('the key row', () => {
     expect(pressed.map((segment) => segment.press)).toEqual([
       { hotkey: 'j', label: 'jump' },
       { hotkey: 'n', label: 'next' },
-      { hotkey: 'r', label: 'reply' },
-      { hotkey: 'm', label: 'message' },
+      { hotkey: 'r', label: 'prompt' },
+      { hotkey: 'm', label: 'peer note' },
       { hotkey: 't', label: 'tab' },
       { hotkey: 's', label: 'sound' },
       { hotkey: 'u', label: 'mute' },
@@ -75,7 +74,7 @@ describe('the key row', () => {
 
   it('starts with b: back in place of the arrows while the narrow pane shows the detail', () => {
     const row = keyRow({ ...BASE, isDetail: true })
-    expect(row.lines.map(text)).toEqual([' b: back  j: jump  n: next  1-9 answer  r: reply  m: message  t: tab  s: sound  u: mute  f: repos  g: group'])
+    expect(row.lines.map(text)).toEqual([' b: back  j: jump  n: next  1-9 answer  r: prompt  m: peer note  t: tab  s: sound  u: mute  f: repos  g: group'])
     expect(row.hints[0]).toEqual({ keys: 'b', label: 'back', hotkey: 'b', isOff: false })
     expect(row.hints.some((hint) => hint.keys === '↑↓')).toBe(false)
     expect(keyRow(BASE).hints.some((hint) => hint.hotkey === 'b')).toBe(false)
@@ -92,10 +91,9 @@ describe('the key row', () => {
 
   it('moves whole keys to the next line when they do not fit', () => {
     for (const width of [30, 60, 89]) {
-      const lines = keyRow({ ...BASE, width, isCmuxMissing: true, promptHoldsKeys: true }).lines.map(text)
+      const lines = keyRow({ ...BASE, width, isCmuxMissing: true }).lines.map(text)
       for (const line of lines) expect(cellWidth(line), `${width} columns: ${line}`).toBeLessThanOrEqual(width)
       expect(lines.join(' '), `${width} columns`).toMatch(/1-9 answer/)
-      expect(lines.join(' '), `${width} columns`).toMatch(/ctrl\+x tab: keys to the pane/)
     }
   })
 })

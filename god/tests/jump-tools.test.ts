@@ -109,7 +109,7 @@ for (const surface of SURFACES) {
     await select($, 'ses-wait')
     await ui.press({ key: 'key:j' })
     expect(jumps(calls)).toEqual([])
-    expect(await lines(ui)).toContain(' Jump, answer and reply are off: cmux is not on this machine.')
+    expect(await lines(ui)).toContain(' The keys j, r and the digits are off: cmux is not on this machine.')
   })
 
   test(`${surface}: j on a session with no tab runs no cmux call and says why, and a failed jump says so`, async ($, on) => {

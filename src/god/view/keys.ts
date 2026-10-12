@@ -8,8 +8,9 @@
  *   the detail show their state, so their labels stay.
  * - The digits name the option Buttons that the detail draws (`1-3`, or `2-3` when its window cuts option 1), else
  *   `1-9`, dim where no digit Button shows (a draft of r or m, the narrow board, another tab, a detail too short).
- * - While the prompt holds the keys, the row ends with the key that gives them to the pane.
- * - With no cmux on the machine, jump, the digits and reply show dim, and 1 more line says why.
+ * - The header says who holds the keys and the key that hands them over (src/god/view/header.ts), so the row does not.
+ * - With no cmux on the machine, j, the digits and r show dim, and 1 more line says why. r writes a prompt and m a
+ *   peer note, so the 2 labels do not look like 1 action.
  * - A notice of the last key (why the last j did not jump) shows under the row in the warn color, wrapped, never cut.
  * - While the narrow pane shows the detail in place of the board, the row starts with b, which goes back to the
  *   board, in place of the arrows: the arrows select a session only on the board.
@@ -20,11 +21,8 @@ import { DIM } from '../ui/theme.js'
 import { flowItems, wrapWords } from './cells.js'
 import type { KeyHint, Line, Segment } from './types.js'
 
-/** The last item of the key row while the prompt holds the keys. */
-export const KEY_ROW_PROMPT = 'ctrl+x tab: keys to the pane'
-
 /** The line under the key row when cmux is not on the machine. */
-export const KEY_ROW_NO_CMUX = 'Jump, answer and reply are off: cmux is not on this machine.'
+export const KEY_ROW_NO_CMUX = 'The keys j, r and the digits are off: cmux is not on this machine.'
 
 /** The line of the key row for each jump note: why the last j of the selected session did not jump. */
 export const JUMP_NOTE: Readonly<Record<JumpNote['reason'], string>> = {
@@ -35,10 +33,8 @@ export const JUMP_NOTE: Readonly<Record<JumpNote['reason'], string>> = {
 /** What the key row reads. */
 export type KeyRowInput = {
   width: number
-  /** true when cmux is not on the machine: jump, answer and reply need it */
+  /** true when cmux is not on the machine: j, the digits and r need it */
   isCmuxMissing: boolean
-  /** true while the prompt holds the keys, not the pane */
-  promptHoldsKeys: boolean
   /** the digits of the option Buttons that the detail draws, in order: the open question or the Bash request of the selected session */
   answerDigits?: readonly number[]
   /** true where no digit Button shows: the digits do nothing there */
@@ -86,8 +82,8 @@ export function keyRow(input: KeyRowInput): KeyRow {
     { keys: 'j', label: 'jump', hotkey: 'j', isOff: off },
     { keys: 'n', label: 'next', hotkey: 'n', isOff: false },
     { keys: answerKeys(input.answerDigits), label: 'answer', isOff: off || input.isAnswerOff === true },
-    { keys: 'r', label: 'reply', hotkey: 'r', isOff: off },
-    { keys: 'm', label: 'message', hotkey: 'm', isOff: false },
+    { keys: 'r', label: 'prompt', hotkey: 'r', isOff: off },
+    { keys: 'm', label: 'peer note', hotkey: 'm', isOff: false },
     { keys: 't', label: 'tab', hotkey: 't', isOff: false },
     { keys: 's', label: 'sound', hotkey: 's', isOff: false },
     { keys: 'u', label: 'mute', hotkey: 'u', isOff: false },
@@ -95,7 +91,6 @@ export function keyRow(input: KeyRowInput): KeyRow {
     { keys: 'g', label: GROUP_KEY_LABEL, hotkey: 'g', isOff: false },
   ]
   const items = hints.map(hintItem)
-  if (input.promptHoldsKeys) items.push([{ text: KEY_ROW_PROMPT, ...DIM }])
   const lines = flowItems(items, input.width)
   if (off) lines.push(...wrapWords(KEY_ROW_NO_CMUX, input.width - 1).map((text): Line => ({ segments: [{ text: ` ${text}` }] })))
   if (input.notice !== undefined) lines.push(...wrapWords(input.notice, input.width - 1).map((text): Line => ({ segments: [{ text: ' ' }, { text, token: '--warn' }] })))

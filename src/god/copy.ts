@@ -13,6 +13,13 @@ export const GOD_ARGUMENT_HINT = '[all | repos <name>... | stats]'
 /** The title of the pane: its tab while more than 1 pane is open. */
 export const PANE_TITLE = 'orangu god'
 
+/** The header item that says who holds the keys, and the key that gives them to the other: `keys: pane · Esc: prompt`. */
+export const KEYS_LABEL = 'keys:'
+export const KEYS_HOLDER = {
+  pane: { holder: 'pane', handover: 'Esc: prompt' },
+  prompt: { holder: 'prompt', handover: 'ctrl+x tab: pane' },
+} as const
+
 /** What /god answers when it opened the pane. */
 export const GOD_OPENED = 'The god pane is open.'
 

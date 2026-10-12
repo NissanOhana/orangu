@@ -32,10 +32,10 @@ const bodyOf = (shown: PaneView): string[] => {
 }
 
 describe('the states of the board pane', () => {
-  it('first refresh not done: the header, a rule and 1 line that says the pane reads the sessions', () => {
+  it('first refresh not done: the header with who holds the keys, a rule and 1 line that says the pane reads the sessions', () => {
     for (const view of [pane(undefined), pane(readingSnapshot())]) {
       expect(view.kind).toBe('message')
-      expect(all(view)).toEqual([' ◉ orangu god', '─'.repeat(110), ' Reading sessions.'])
+      expect(all(view)).toEqual([' ◉ orangu god  keys: pane · Esc: prompt', '─'.repeat(110), ' Reading sessions.'])
     }
     expect(STATE_TEXT.reading).toBe('Reading sessions.')
   })
@@ -88,11 +88,11 @@ describe('the states of the board pane', () => {
     expect(view.header.flatMap((line) => line.segments).find((segment) => segment.text === 'old 12s')).toEqual({ text: 'old 12s', token: '--warn' })
   })
 
-  it('no cmux: jump, the digits and reply show dim, and the key row says why', () => {
+  it('no cmux: j, the digits and r show dim, and the key row says why', () => {
     const view = pane(degradedSnapshot({ cmux: { status: 'missing' } }))
     if (view.kind !== 'board') throw new Error(view.kind)
     expect(view.hints.filter((hint) => hint.isOff).map((hint) => hint.keys)).toEqual(['j', '1-9', 'r'])
-    expect(view.keys.map(text).at(-1)).toBe(' Jump, answer and reply are off: cmux is not on this machine.')
+    expect(view.keys.map(text).at(-1)).toBe(' The keys j, r and the digits are off: cmux is not on this machine.')
   })
 
   it('a session with no transcript: its row shows the registry facts and says so, cut with its count on the 30-column board', () => {

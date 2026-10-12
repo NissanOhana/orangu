@@ -66,7 +66,7 @@ for (const surface of SURFACES) {
     const { clock, calls } = await begin($, on, surface)
     const out = await $.command.run(god())
     expect(out.text).toBe('The god pane is open.')
-    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 110, rows: 20 }])
+    expect(calls.opens).toEqual([{ id: PANE, title: 'orangu god', columns: 1000, rows: 20, focus: true }])
     await clock.settle()
     const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(80, 30) })
     const lines = screenOf(await ui.drawn())
@@ -144,6 +144,20 @@ for (const surface of SURFACES) {
     expect(wide.some((line) => line.includes('│ Select a session on the board to show its detail.')), wide.join('\n')).toBe(true)
     for (const line of narrow) expect([...line].length, line).toBeLessThanOrEqual(89)
     for (const line of wide) expect([...line].length, line).toBeLessThanOrEqual(110)
+  })
+
+  test(`${surface}: the header says who holds the keys and the key that hands them over, and the key row does not`, async ($, on) => {
+    const { clock } = await begin($, on, surface)
+    await $.command.run(god())
+    await clock.settle()
+    const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(160, 30) })
+    const head = async (): Promise<string> => screenOf(await ui.drawn()).slice(0, 2).join('\n')
+    expect(await head()).toContain('  keys: pane · Esc: prompt')
+    await ui.redraw({ ...paneProps(160, 30), isFocused: false })
+    expect(await head()).toContain('  keys: prompt · ctrl+x tab: pane')
+    expect(screenOf(await ui.drawn()).slice(2).join('\n')).not.toContain('ctrl+x tab')
+    // r writes a prompt and m a peer note: 2 labels that do not look like 1 action
+    expect(screenOf(await ui.drawn()).join('\n')).toContain('  r: prompt  m: peer note  ')
   })
 
   test(`${surface}: every host command runs with the 5 s timeout, only the TZ variable and a command of the allowlist`, async ($, on) => {
