@@ -24,8 +24,8 @@ const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
  * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
  * 44-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then the
  * pane with the detail open in each tab at 60 columns (the detail in place of the board) and 110, the wide pane
- * with no session selected, the pane with each jump note, the pane with the sound off and a muted session, and each
- * line of a pane that cannot draw. Then each answer of /god stats, with and without the alert counts, and the body of
+ * with no session selected, the pane with the help open (h), the pane with each jump note, the pane with the sound
+ * off and a muted session, and each line of a pane that cannot draw. Then each answer of /god stats, with and without the alert counts, and the body of
  * each alert. The fixture session texts are short and clean, so the row scores the pane.
  */
 export function godViews(): RenderedView[] {
@@ -52,6 +52,10 @@ export function godViews(): RenderedView[] {
     }),
   )
   const noSelection = { file: `${GOD_FIXTURE}#no-selection.110`, lines: paneLines(paneView({ snapshot: boardSnapshot(), bodyColumns: 110, bodyRows: 40, now: GOD_NOW, openGroups: [], promptHoldsKeys: true })).map(text) }
+  const help = [60, 110].map((bodyColumns) => {
+    const view = paneView({ snapshot: boardSnapshot(), bodyColumns, bodyRows: 60, now: GOD_NOW, selectedKey: 's-wait', openGroups: [], promptHoldsKeys: false, detail: { tab: 'now', scroll: 0, isOpen: false, isHelp: true } })
+    return { file: `${GOD_FIXTURE}#help.${bodyColumns}`, lines: paneLines(view).map(text) }
+  })
   const cannotDraw = (['too-narrow', 'too-short', 'failed'] as const).map((reason) => ({ file: `${GOD_FIXTURE}#cannot-draw.${reason}`, lines: paneLines(cannotDrawView(reason, 60)).map(text) }))
   const noted = (Object.keys(JUMP_NOTE) as Array<keyof typeof JUMP_NOTE>).flatMap((reason) =>
     [60, 110].map((bodyColumns) => {
@@ -69,7 +73,7 @@ export function godViews(): RenderedView[] {
   const statsViews = [undefined, [], [stats], [stats, { ...stats, sessions: 1 }]].map((recent, index) => ({ file: `${GOD_FIXTURE}#stats.${index}`, lines: [statsAnswer(recent)] }))
   const counted = [{ tones: 1, notifications: 1 }, { tones: 0, notifications: 3 }].map((counts, index) => ({ file: `${GOD_FIXTURE}#stats.alerts.${index}`, lines: [statsAnswer([stats], counts)] }))
   const alerts = (['needs-you', 'stuck'] as const).map((kind) => ({ file: `${GOD_FIXTURE}#alert.${kind}`, lines: [alertBody('api-7', kind)] }))
-  return [...panes, ...opened, noSelection, ...noted, ...soundOff, ...cannotDraw, ...statsViews, ...counted, ...alerts, ...godDetailViews()]
+  return [...panes, ...opened, noSelection, ...help, ...noted, ...soundOff, ...cannotDraw, ...statsViews, ...counted, ...alerts, ...godDetailViews()]
 }
 
 const GOD_DETAIL_FIXTURE = 'test/fixtures/god/detail.ts'

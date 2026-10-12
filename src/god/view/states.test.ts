@@ -56,7 +56,7 @@ describe('the states of the board pane', () => {
     expect(view.bottomRule && text(view.bottomRule)).toBe('─'.repeat(110))
     const keys = (view.keys ?? []).flatMap((line) => line.segments)
     expect(keys.find((segment) => segment.press?.hotkey === 'f')?.press).toEqual({ hotkey: 'f', label: 'all' })
-    expect(paneLines(view).map(text).slice(-2)).toEqual(['─'.repeat(110), ...(view.keys ?? []).map(text)])
+    expect(paneLines(view).map(text).slice(-1 - (view.keys ?? []).length)).toEqual(['─'.repeat(110), ...(view.keys ?? []).map(text)])
     for (const other of [pane(readingSnapshot()), pane(emptySnapshot())]) {
       if (other.kind !== 'message') throw new Error(other.kind)
       expect(other.keys).toBeUndefined()

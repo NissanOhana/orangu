@@ -20,6 +20,43 @@ export const KEYS_HOLDER = {
   prompt: { holder: 'prompt', handover: 'ctrl+x tab: pane' },
 } as const
 
+/** The first line of the help view (h): what it is, and the 2 keys that close it. */
+export const HELP_TITLE = 'What the pane shows. Press h or Esc to close this help.'
+
+/** What each heading of the board means, in the order of the board, by the level of the heading. */
+export const HELP_LEVELS = {
+  'needs-you': 'The session waits for your answer to a question or a permission prompt.',
+  'your-turn': 'The session finished its turn and waits for your next prompt.',
+  stuck: 'The session is busy, but it wrote nothing for a long time, or it got an API error.',
+  working: 'The session works on its task now.',
+  idle: 'The session waits for a prompt, and you saw its last turn.',
+  stale: 'The session is idle for a long time. Press Enter on the heading to show its group.',
+} as const
+
+/** What the same file chip of a board row means. */
+export const HELP_SAME_FILE = 'This session and another session wrote the same file in the last 2 h.'
+
+/** What each key does: the keys of the key row, the 2 keys of the confirm bar, and the 2 keys that move the keys. */
+export const HELP_KEYS: ReadonlyArray<readonly [string, string]> = [
+  ['↑↓', 'Select a session.'],
+  ['Enter', 'Open the selected session.'],
+  ['b', 'Go back to the board from the detail of a narrow pane.'],
+  ['j', 'Jump to the cmux tab of the session.'],
+  ['n', 'Select the next session that needs you.'],
+  ['1-9', 'Pick an option of the open question. Then press y to send it.'],
+  ['y  c', 'Send, or cancel, what the confirm bar shows.'],
+  ['r', 'Write a prompt. The session reads it as your prompt.'],
+  ['m', 'Write a peer note. The session reads it as a note from a peer, not as your prompt.'],
+  ['t', 'Show the next tab of the detail.'],
+  ['s', 'Turn all tones off, or on again.'],
+  ['u', 'Mute the selected session, or unmute it.'],
+  ['f', 'Show every session, or only the sessions of the selected repos.'],
+  ['g', 'Group the rows by level or by repo.'],
+  ['h', 'Show this help, or close it.'],
+  ['Esc', 'Give the keys to the prompt.'],
+  ['ctrl+x tab', 'Give the keys to the pane.'],
+]
+
 /** The line of the detail while 2 or more sessions of its folder work now: the count, the names, and the count of the names left out. */
 export function sharesFolderText(count: number, names: readonly string[], left: number): string {
   return `Shares its folder with ${count} working ${count === 1 ? 'session' : 'sessions'}: ${names.join(', ')}${left > 0 ? ` and ${left} more` : ''}`

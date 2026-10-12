@@ -1,7 +1,7 @@
 // The rows of the god pane on the terminal and the desktop surfaces, over a fake machine with cmux: each row shows
 // the title of the cmux tab of its session with the status glyph left out, else the transcript title, else the
 // session name, and the detail facts line names the session and its repo. The board takes about 40% of a wide body,
-// 60 cells at most.
+// 60 cells at most. h shows the help in place of the detail, and h or Esc closes it.
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
@@ -38,14 +38,15 @@ async function openAt($: Engine, on: On, surface: (typeof SURFACES)[number], col
   await $.session.start({ cwd: PLAIN, surface, isInteractive: true })
   await $.command.run({ command: 'god', args: '', origin: { kind: 'composer' }, presentation: { isFullscreen: true, columns: 200 } })
   await clock.settle()
-  return $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(columns, 30) })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(columns, 30) })
+  return { ui, clock }
 }
 
 const rowOf = (lines: readonly string[], name: string): string | undefined => lines.find((line) => /^[ ▌]. /.test(line) && line.slice(3).startsWith(name))
 
 for (const surface of SURFACES) {
   test(`${surface}: each row shows the cmux tab title with no status glyph, else the transcript title, else the session name`, async ($, on) => {
-    const ui = await openAt($, on, surface, 160)
+    const { ui } = await openAt($, on, surface, 160)
     const lines = screenOf(await ui.drawn())
     for (const name of ['Pick a color', 'Fix the parser', 'Fix the docs.', 'new-p']) expect(rowOf(lines, name), `${name}\n${lines.join('\n')}`).toBeDefined()
     expect(lines.join('\n')).not.toMatch(/[✳⠐]/)
@@ -58,7 +59,7 @@ for (const surface of SURFACES) {
   })
 
   test(`${surface}: the board takes about 40% of a wide body, 60 cells at most, and the board alone below 90 columns`, async ($, on) => {
-    const ui = await openAt($, on, surface, 160)
+    const { ui } = await openAt($, on, surface, 160)
     const ruleAt = async (): Promise<number> => screenOf(await ui.drawn()).find((line) => line.includes('┬'))?.indexOf('┬') ?? -1
     expect(await ruleAt()).toBe(60)
     await ui.redraw(paneProps(110, 30))
@@ -67,5 +68,34 @@ for (const surface of SURFACES) {
     expect(await ruleAt()).toBe(36)
     await ui.redraw(paneProps(89, 30))
     expect(await ruleAt()).toBe(-1)
+  })
+}
+
+const HELP_TOP = '│ What the pane shows. Press h or Esc to close this help.'
+
+for (const surface of SURFACES) {
+  test(`${surface}: h shows the help in place of the detail, h closes it, and Esc closes it when it gives the keys to the prompt`, async ($, on) => {
+    const { ui, clock } = await openAt($, on, surface, 160)
+    const shown = async (props = paneProps(160, 30)): Promise<string[]> => {
+      await ui.redraw(props)
+      return screenOf(await ui.drawn())
+    }
+    expect((await shown()).at(-1)).toMatch(/ {2}g: group {2}h: help$/)
+    expect((await ui.find({ key: 'key:h' }))?.props['hotkey']).toBe('h')
+    await ui.press({ key: 'key:h' })
+    const help = await shown()
+    expect(help.some((line) => line.endsWith(HELP_TOP)), help.join('\n')).toBe(true)
+    expect(help.some((line) => line.endsWith('│ ⚠ NEEDS YOU  The session waits for your answer to a question or a permission prompt.')), help.join('\n')).toBe(true)
+    expect(help.some((line) => line.endsWith('│ m            Write a peer note. The session reads it as a note from a peer, not as your prompt.')), help.join('\n')).toBe(true)
+    await ui.press({ key: 'key:h' })
+    expect((await shown()).some((line) => line.endsWith(HELP_TOP)), 'h closes it').toBe(false)
+    await ui.press({ key: 'key:h' })
+    expect((await shown()).some((line) => line.endsWith(HELP_TOP))).toBe(true)
+    // Esc gives the keys to the prompt: the pane draws with no focus and shows no help, and the next tick closes it
+    const prompt = await shown({ ...paneProps(160, 30), isFocused: false })
+    expect(prompt[0]).toContain('keys: prompt · ctrl+x tab: pane')
+    expect(prompt.some((line) => line.endsWith(HELP_TOP)), 'no help while the prompt holds the keys').toBe(false)
+    await clock.advance(2000)
+    expect((await shown()).some((line) => line.endsWith(HELP_TOP)), 'the help stays closed when the pane takes the keys again').toBe(false)
   })
 }

@@ -12,7 +12,10 @@
 //   row comes from the moves of the focus ring (ui.focus), n, a press on a row, and a press on a count line of the
 //   board, which also moves the ring onto the row that it selects. Each new selection starts the detail at its
 //   top. A choice of the board (f, g, a /god form) clears a selected row that the new board does not show. The keys
-//   j, n, f, g, t and b are hotkey Buttons of the key row, and w and z the count lines of the detail.
+//   j, n, f, g, t, b and h are hotkey Buttons of the key row, and w and z the count lines of the detail.
+// - h shows the help in place of the detail, and h again closes it. Esc closes it too: a draw while the prompt holds
+//   the keys shows no help, and the next tick of the board writes the closed state, because a draw may not write the
+//   engine state. Each draw notes whether the pane holds the keys.
 //   The rules of the detail controls are in src/god/detail-control.ts.
 // - j jumps to the cmux tab of the selected session (src/god/act/jump.ts). A jump and a press on a session row (an
 //   open) mark the session seen. The note of a j that did not jump goes to the engine state for the key row.
@@ -46,7 +49,7 @@ import { createBoardLoop, type BoardLoop } from './board-loop.js'
 import { TICK_MS, createCollector } from './collector.js'
 import { STORE_KEYS, commandAnswer, commandChoice, parseGodArgs, selectionOf, settingsOf, statsAnswer, storeOf, toggledGroup, toggledMode, type BoardChoice } from './control.js'
 import { GOD_ARGUMENT_HINT, GOD_COMMAND_DESCRIPTION, GOD_FAILED, PANE_TITLE, TOOL_FAILED } from './copy.js'
-import { detailAfterNextTab, detailAfterScroll, detailAfterTab } from './detail-control.js'
+import { detailAfterHelp, detailAfterNextTab, detailAfterScroll, detailAfterTab, detailWithoutHelp } from './detail-control.js'
 import { engineClock, engineHost } from './engine.js'
 import { drawnMotion, motionLoopOf, recordSpark, type MotionLoop } from './motion-keys.js'
 import { makeRecap, type RecapRuntime } from './recap-keys.js'
@@ -85,6 +88,8 @@ type Runtime = {
   deliver: DeliverRuntime
   recap: RecapRuntime
   motion?: MotionLoop
+  /** whether the pane held the keys at its last draw; absent before the first draw */
+  hasKeys?: boolean
 }
 
 async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
@@ -92,6 +97,12 @@ async function readTheme($: EngineInterface, runtime: Runtime): Promise<void> {
   if (next === runtime.theme) return
   await update($, THEME, () => next)
   runtime.theme = next
+}
+
+/** The help closed once the prompt holds the keys: Esc gave them back. A draw cannot write, so the tick does. */
+async function closeHelpAway($: EngineInterface, runtime: Runtime): Promise<void> {
+  if (runtime.hasKeys !== false || (await read($, DETAIL)).isHelp !== true) return
+  await update($, DETAIL, detailWithoutHelp)
 }
 
 async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLoop> {
@@ -134,6 +145,7 @@ async function startBoard($: EngineInterface, runtime: Runtime): Promise<BoardLo
       .then(() => checkSent($, loop.facts()))
       .catch(() => undefined)
     void readTheme($, runtime).catch(() => undefined)
+    void closeHelpAway($, runtime).catch(() => undefined)
   }
   $.clock.every(TICK_MS, tick)
   tick()
@@ -216,6 +228,7 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
       g: () => quiet(choose($, runtime, toggledGroup)),
       t: () => quiet(changeDetail($, detailAfterNextTab)),
       b: () => quiet(backToBoard($)),
+      h: () => quiet(changeDetail($, detailAfterHelp)),
       s: () => quiet(soundKey($, runtime)),
       u: () => quiet(muteKey($, runtime)),
     },
@@ -264,6 +277,7 @@ export function register(on: On, options: PluginOptions): void {
 
   on('ui.render', { component: 'Pane', requestId: 'god' }, async ($, e) => {
     markPaneShown(runtime)
+    runtime.hasKeys = e.props.isFocused
     const [snapshot, selected, openGroups, colors, detail, screen, jumpNote, deliverState, recap, motion] = await Promise.all([
       read($, BOARD),
       read($, SELECTED),

@@ -23,6 +23,9 @@
  *   bar and the key row, so y and c stay.
  * - When the pane cannot draw (a body under BOARD_COLUMNS, or too few rows for a window over the board), it shows
  *   1 message with the reason and nothing else.
+ * - While the help is open (h), it takes the place of the detail: beside the board in the wide layout, and in place
+ *   of the board in the narrow layout, where b goes back. It shows only while the pane holds the keys: Esc gives
+ *   them to the prompt, and the engine shell then closes the help.
  * - The motion of the draw (src/god/view/motion.ts) gives the board its spinner and pulse frame, and the header its
  *   sparkline. No motion: the static frame and no sparkline.
  * No line is wider than `bodyColumns`, and no line of the board column is wider than the board.
@@ -106,7 +109,7 @@ const isNote = (bar: BarView): boolean => bar.intent === undefined && bar.field 
 
 /** The detail with no scroll keys: the bar shows a count line, so w and z scroll the bar. */
 function withoutScroll(detail: PaneDetail, bar: BarView | undefined): PaneDetail {
-  return detail.kind === 'session' && bar !== undefined && Object.keys(bar.scrollTo).length > 0 ? { ...detail, scrollTo: {} } : detail
+  return detail.kind !== 'none' && bar !== undefined && Object.keys(bar.scrollTo).length > 0 ? { ...detail, scrollTo: {} } : detail
 }
 
 /** The pane of 1 snapshot. */
@@ -140,8 +143,9 @@ export function paneView(input: PaneInput): PaneView {
     return keys.length > 0 ? { ...message, bottomRule: ruleLine(bodyColumns), keys } : message
   }
   const layout = layoutOf(bodyColumns)
-  const detailState = input.detail ?? DEFAULT_DETAIL
-  const isDetail = layout.kind === 'narrow' && detailState.isOpen
+  const asked = input.detail ?? DEFAULT_DETAIL
+  const detailState = asked.isHelp === true && input.promptHoldsKeys ? { ...asked, isHelp: false } : asked
+  const isDetail = layout.kind === 'narrow' && (detailState.isOpen || detailState.isHelp === true)
   // the rows of the key row with no digit Button: `1-9` is the widest hint, so the drawn row takes no more rows
   const keys = keysOf(snapshot, isDetail)
   const selection = input.selectedKey === undefined ? {} : { selectedKey: input.selectedKey }

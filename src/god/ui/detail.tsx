@@ -10,6 +10,7 @@
 // - The x key of the Recap tab is the hotkey Button that makes the Recap of the session of this detail. The view draws
 //   it only while no Recap runs.
 // - With no selected session, or a detail that the rows cannot hold, the lines of the view are Texts.
+// - The help (h) is Texts too, but for the count lines of its window: each is the hotkey Button of its key.
 import type { RenderElement } from 'claude-code'
 
 import type { DetailTab } from '../types.js'
@@ -34,19 +35,21 @@ export type DetailActions = {
   onRecap: (sessionId: string) => void
 }
 
+/** The action of each scroll key that the view gave: w or z goes to the scroll of its key. */
+const scrollKeys = (scrollTo: Readonly<Partial<Record<string, number>>>, actions: DetailActions): KeyActions =>
+  Object.fromEntries(Object.entries(scrollTo).flatMap(([hotkey, scroll]) => (scroll === undefined ? [] : [[hotkey, () => actions.onScroll(scroll)]])))
+
 /** The rows of the detail, top to bottom: 1 element for each line of the view. */
 export function detailRows(ui: PaneElements, detail: PaneDetail, theme: ThemeSet, actions: DetailActions): RenderElement[] {
   const { Box, Text, Button } = ui
   const text = (line: Line): RenderElement => drawLine(ui, line, theme, () => undefined, {})
   if (detail.kind === 'none') return detail.lines.map(text)
+  if (detail.kind === 'help') return detail.lines.map((line) => drawLine(ui, line, theme, () => undefined, scrollKeys(detail.scrollTo, actions)))
   const view = detail.view
   if (view.kind === 'too-short') return view.lines.map(text)
 
   const sessionId = detail.sessionId
-  const bodyKeys: KeyActions = {
-    ...Object.fromEntries(Object.entries(detail.scrollTo).flatMap(([hotkey, scroll]) => (scroll === undefined ? [] : [[hotkey, () => actions.onScroll(scroll)]]))),
-    [RECAP_KEY]: () => actions.onRecap(sessionId),
-  }
+  const bodyKeys: KeyActions = { ...scrollKeys(detail.scrollTo, actions), [RECAP_KEY]: () => actions.onRecap(sessionId) }
   const picks = new Map(view.options.map((option) => [option.key, option]))
   const onOption = (key: string): void => {
     const pick = picks.get(key)

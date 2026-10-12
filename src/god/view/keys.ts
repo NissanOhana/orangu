@@ -5,7 +5,7 @@
  * by themselves, and the digits belong to the option Buttons of the detail, so neither has a hotkey here.
  * - f shows the mode that it switches to: `f: repos` in the all mode, `f: all` in the repos mode. g groups the rows.
  *   s turns the tones off and on, and u mutes the selected session and unmutes it: the header and the facts line of
- *   the detail show their state, so their labels stay.
+ *   the detail show their state, so their labels stay. h shows the help (src/god/view/help.ts) and closes it.
  * - The digits name the option Buttons that the detail draws (`1-3`, or `2-3` when its window cuts option 1), else
  *   `1-9`, dim where no digit Button shows (a draft of r or m, the narrow board, another tab, a detail too short).
  * - The header says who holds the keys and the key that hands them over (src/god/view/header.ts), so the row does not.
@@ -53,6 +53,9 @@ export const MODE_KEY_LABEL: Readonly<Record<BoardMode, string>> = { all: 'repos
 /** What g does: it groups the rows by attention level or by repo. */
 export const GROUP_KEY_LABEL = 'group'
 
+/** What h does: it shows the help in place of the detail, or closes it. The engine takes no `?` as a hotkey. */
+export const HELP_KEY_LABEL = 'help'
+
 /** The key row: the hints, and the lines that show them. */
 export type KeyRow = { hints: KeyHint[]; lines: Line[] }
 
@@ -89,6 +92,7 @@ export function keyRow(input: KeyRowInput): KeyRow {
     { keys: 'u', label: 'mute', hotkey: 'u', isOff: false },
     { keys: 'f', label: MODE_KEY_LABEL[input.mode], hotkey: 'f', isOff: false },
     { keys: 'g', label: GROUP_KEY_LABEL, hotkey: 'g', isOff: false },
+    { keys: 'h', label: HELP_KEY_LABEL, hotkey: 'h', isOff: false },
   ]
   const items = hints.map(hintItem)
   const lines = flowItems(items, input.width)

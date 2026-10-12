@@ -1,11 +1,12 @@
 /**
  * The pure rules of the detail controls: t and a press on a tab open a tab from its top, w and z take the scroll
  * that the view gave, a new selection starts the tab content at its top, a press on a session row opens the detail
- * in place of the board below 90 columns, and b goes back to the board.
+ * in place of the board below 90 columns, and b goes back to the board. h opens the help in place of the detail and
+ * closes it, and Esc, b and a tab close it.
  */
 import { describe, expect, it } from 'vitest'
 import { boardSnapshot } from '../../test/fixtures/god/snapshots.js'
-import { detailAfterBack, detailAfterNextTab, detailAfterRowPress, detailAfterScroll, detailAfterSelect, detailAfterTab } from './detail-control.js'
+import { detailAfterBack, detailAfterHelp, detailAfterNextTab, detailAfterRowPress, detailAfterScroll, detailAfterSelect, detailAfterTab, detailWithoutHelp } from './detail-control.js'
 import { DEFAULT_DETAIL, type DetailState } from './view/detail-pane.js'
 import { STALE_GROUP_KEY } from './view/board.js'
 import { layoutOf } from './view/pane.js'
@@ -57,5 +58,22 @@ describe('the narrow pane', () => {
 
   it('b goes back to the board and keeps the tab', () => {
     expect(detailAfterBack({ tab: 'agents', scroll: 3, isOpen: true })).toEqual({ tab: 'agents', scroll: 3, isOpen: false })
+  })
+})
+
+describe('the help', () => {
+  const help: DetailState = { tab: 'history', scroll: 0, isOpen: false, isHelp: true }
+
+  it('h opens the help from its top, and h again closes it and shows the detail from the top of its tab', () => {
+    expect(detailAfterHelp(scrolled)).toEqual({ ...scrolled, scroll: 0, isHelp: true })
+    expect(detailAfterHelp({ ...help, scroll: 9 })).toEqual({ tab: 'history', scroll: 0, isOpen: false })
+  })
+
+  it('Esc, b, t and a press on a tab close the help', () => {
+    expect(detailWithoutHelp({ ...help, scroll: 9 })).toEqual({ tab: 'history', scroll: 0, isOpen: false })
+    expect(detailWithoutHelp(scrolled)).toBe(scrolled)
+    expect(detailAfterBack({ ...help, isOpen: true })).toEqual({ tab: 'history', scroll: 0, isOpen: false })
+    expect(detailAfterNextTab(help)).toEqual({ tab: 'agents', scroll: 0, isOpen: false })
+    expect(detailAfterTab(help, 'history')).toEqual({ tab: 'history', scroll: 0, isOpen: false })
   })
 })

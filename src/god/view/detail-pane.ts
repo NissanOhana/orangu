@@ -13,13 +13,17 @@
  *   a failure or a miss above the screen, and the fresh screen of a refusal.
  * - For each side that the window over the tab content cuts, the view gives the scroll that its key goes to: w the
  *   page above, z the page below (scrollBy in src/god/view/window.ts). The engine shell keeps only the number.
+ * - While the help is open (h), the help view (src/god/view/help.ts) takes the place of the detail, with or with no
+ *   selected session, in a window that w and z scroll the same way.
  */
 import type { ScreenState } from '../source/screen.js'
 import type { BoardSnapshot, DeliverOutcome, DetailTab, RecapState } from '../types.js'
 import { isOnBoard } from './board.js'
 import { detailLines, detailView, scrollBy, SCROLL_KEYS, type DetailView } from './detail.js'
-import { messageLines } from './states.js'
+import { helpLines } from './help.js'
+import { CANNOT_DRAW, messageLines } from './states.js'
 import type { Line } from './types.js'
+import { MIN_WINDOW, windowOf, type ScrollWindow } from './window.js'
 
 /** What the person chose for the detail: the open tab, the first line of its content, and the narrow detail. */
 export type DetailState = {
@@ -28,6 +32,8 @@ export type DetailState = {
   scroll: number
   /** true when the narrow pane shows the detail in place of the board */
   isOpen: boolean
+  /** true while the help (h) shows in place of the detail; absent, false */
+  isHelp?: boolean
 }
 
 /** The detail of a first start: Now from its top, and the board in the narrow pane. */
@@ -39,11 +45,13 @@ export const NO_DETAIL = 'Select a session on the board to show its detail.'
 /**
  * The detail of the pane:
  * - session: the detail of the selected session, and the scroll that each key of a cut side goes to;
- * - none: the line that asks for a selection.
+ * - none: the line that asks for a selection;
+ * - help: the window over the help view, and the scroll that each key of a cut side goes to.
  */
 export type PaneDetail =
   | { kind: 'session'; sessionId: string; view: DetailView; scrollTo: Readonly<Partial<Record<string, number>>> }
   | { kind: 'none'; lines: Line[] }
+  | { kind: 'help'; lines: Line[]; scrollTo: Readonly<Partial<Record<string, number>>> }
 
 /** What the detail of the pane reads. The engine shell passes the selection, the room, the clock and the state. */
 export type PaneDetailInput = {
@@ -68,8 +76,10 @@ export type PaneDetailInput = {
 
 /** The scroll that each key goes to: w while lines hide above the window, z while lines hide below it. */
 function scrollTargets(view: DetailView): Partial<Record<string, number>> {
-  if (view.kind !== 'detail') return {}
-  const { window } = view
+  return view.kind === 'detail' ? windowTargets(view.window) : {}
+}
+
+function windowTargets(window: ScrollWindow): Partial<Record<string, number>> {
   return {
     ...(window.first > 0 ? { [SCROLL_KEYS.up]: scrollBy(window, 'up') } : {}),
     ...(window.first + window.shown < window.total ? { [SCROLL_KEYS.down]: scrollBy(window, 'down') } : {}),
@@ -79,6 +89,12 @@ function scrollTargets(view: DetailView): Partial<Record<string, number>> {
 /** The detail of the selected session, or the line that asks for a selection. */
 export function paneDetail(input: PaneDetailInput): PaneDetail {
   const { snapshot, width } = input
+  if (input.state.isHelp === true) {
+    const help = helpLines(width)
+    if (help.length > input.rows && input.rows < MIN_WINDOW) return { kind: 'none', lines: messageLines(CANNOT_DRAW['too-short'], width) }
+    const { lines, window } = windowOf(help, input.rows, input.state.scroll)
+    return { kind: 'help', lines, scrollTo: windowTargets(window) }
+  }
   const session = isOnBoard(snapshot, input.selectedKey) ? snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey) : undefined
   if (session === undefined) return { kind: 'none', lines: messageLines(NO_DETAIL, width) }
   const screen = input.screen?.sessionId === session.sessionId ? input.screen : undefined
@@ -103,5 +119,5 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
 
 /** Every line of the detail of the pane, top to bottom. */
 export function paneDetailLines(detail: PaneDetail): Line[] {
-  return detail.kind === 'none' ? [...detail.lines] : detailLines(detail.view)
+  return detail.kind === 'session' ? detailLines(detail.view) : [...detail.lines]
 }

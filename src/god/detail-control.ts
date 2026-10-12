@@ -7,18 +7,33 @@
  * - in the narrow layout, a press on a session row (Enter, or a click) opens the detail in place of the board,
  *   from the top of its tab. A press on a heading opens or closes its group, and opens no detail. In the wide
  *   layout the detail shows beside the board at all times, so a press opens nothing;
- * - b goes back to the board, and keeps the tab.
+ * - b goes back to the board, and keeps the tab;
+ * - h opens the help in place of the detail from its top, and h again closes it. Esc (the prompt takes the keys), b,
+ *   t and a press on a tab close it too. The detail shows again from the top of its tab.
  */
 import type { BoardSnapshot, DetailTab } from './types.js'
 import { nextTab } from './view/detail.js'
 import type { DetailState } from './view/detail-pane.js'
 import type { PaneLayout } from './view/types.js'
 
-/** t: the next tab, from its top. */
-export const detailAfterNextTab = (state: DetailState): DetailState => ({ ...state, tab: nextTab(state.tab), scroll: 0 })
+/** The state with no help field: the detail shows. */
+function withoutHelp(state: DetailState): DetailState {
+  const { isHelp: _help, ...detail } = state
+  return detail
+}
 
-/** A press on a tab: that tab, from its top when it is not the open tab. */
-export const detailAfterTab = (state: DetailState, tab: DetailTab): DetailState => (tab === state.tab ? state : { ...state, tab, scroll: 0 })
+/** t: the next tab, from its top, and no help. */
+export const detailAfterNextTab = (state: DetailState): DetailState => ({ ...withoutHelp(state), tab: nextTab(state.tab), scroll: 0 })
+
+/** A press on a tab: that tab, from its top when it is not the open tab or the help shows, and no help. */
+export const detailAfterTab = (state: DetailState, tab: DetailTab): DetailState =>
+  tab === state.tab && state.isHelp !== true ? state : { ...withoutHelp(state), tab, scroll: 0 }
+
+/** h: the help from its top, or the detail again from the top of its tab. */
+export const detailAfterHelp = (state: DetailState): DetailState => (state.isHelp === true ? { ...withoutHelp(state), scroll: 0 } : { ...state, scroll: 0, isHelp: true })
+
+/** Esc gave the keys to the prompt: no help, and the detail from the top of its tab. */
+export const detailWithoutHelp = (state: DetailState): DetailState => (state.isHelp === true ? { ...withoutHelp(state), scroll: 0 } : state)
 
 /** w or z: the scroll that the view gave for the key. */
 export const detailAfterScroll = (state: DetailState, scroll: number): DetailState => ({ ...state, scroll })
@@ -32,5 +47,5 @@ export function detailAfterRowPress(state: DetailState, key: string, snapshot: B
   return layout.kind === 'narrow' && isSession ? { ...state, isOpen: true, scroll: 0 } : state
 }
 
-/** b: back to the board. */
-export const detailAfterBack = (state: DetailState): DetailState => ({ ...state, isOpen: false })
+/** b: back to the board, and no help. */
+export const detailAfterBack = (state: DetailState): DetailState => ({ ...withoutHelp(state), isOpen: false, ...(state.isHelp === true ? { scroll: 0 } : {}) })

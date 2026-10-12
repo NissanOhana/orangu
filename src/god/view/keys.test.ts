@@ -9,13 +9,13 @@ import type { Line } from './types.js'
 const text = (line: Line): string => line.segments.map((segment) => segment.text).join('')
 // a pane at the full width of a terminal of 190 columns, as /god asks for it
 const BASE = { width: 160, isCmuxMissing: false, mode: 'all' } as const
-const ROW = ' ↑↓ select  j: jump  n: next  1-9 answer  r: prompt  m: peer note  t: tab  s: sound  u: mute  f: repos  g: group'
+const ROW = ' ↑↓ select  j: jump  n: next  1-9 answer  r: prompt  m: peer note  t: tab  s: sound  u: mute  f: repos  g: group  h: help'
 
 describe('the key row', () => {
   it('shows the keys of the board in 1 row', () => {
     const row = keyRow(BASE)
     expect(row.lines.map(text)).toEqual([ROW])
-    expect(row.hints.filter((hint) => hint.hotkey !== undefined).map((hint) => hint.hotkey)).toEqual(['j', 'n', 'r', 'm', 't', 's', 'u', 'f', 'g'])
+    expect(row.hints.filter((hint) => hint.hotkey !== undefined).map((hint) => hint.hotkey)).toEqual(['j', 'n', 'r', 'm', 't', 's', 'u', 'f', 'g', 'h'])
     expect(row.hints.every((hint) => !hint.isOff)).toBe(true)
   })
 
@@ -67,6 +67,7 @@ describe('the key row', () => {
       { hotkey: 'u', label: 'mute' },
       { hotkey: 'f', label: 'repos' },
       { hotkey: 'g', label: 'group' },
+      { hotkey: 'h', label: 'help' },
     ])
     for (const segment of pressed) expect(segment.text).toBe(`${segment.press!.hotkey}: ${segment.press!.label}`)
     expect(segments.filter((segment) => segment.text.includes('select') || segment.text.includes('answer')).every((segment) => segment.press === undefined)).toBe(true)
@@ -74,7 +75,7 @@ describe('the key row', () => {
 
   it('starts with b: back in place of the arrows while the narrow pane shows the detail', () => {
     const row = keyRow({ ...BASE, isDetail: true })
-    expect(row.lines.map(text)).toEqual([' b: back  j: jump  n: next  1-9 answer  r: prompt  m: peer note  t: tab  s: sound  u: mute  f: repos  g: group'])
+    expect(row.lines.map(text)).toEqual([' b: back  j: jump  n: next  1-9 answer  r: prompt  m: peer note  t: tab  s: sound  u: mute  f: repos  g: group  h: help'])
     expect(row.hints[0]).toEqual({ keys: 'b', label: 'back', hotkey: 'b', isOff: false })
     expect(row.hints.some((hint) => hint.keys === '↑↓')).toBe(false)
     expect(keyRow(BASE).hints.some((hint) => hint.hotkey === 'b')).toBe(false)
