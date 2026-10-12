@@ -130,6 +130,12 @@ var TOOL_FAILED = "The orangu god tool failed. Call it again.";
 var TASK_RUNNING = "The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.";
 var NOT_A_PROMPT = "The pane does not type a shell command, the help or an exit. Press j and type it in its tab.";
 var CONTROL_CHAR = "The text has a control character or a character that does not show, so the pane sent nothing. An emoji can hold such a character.";
+var answerAction = (digits) => `Press ${digits}, then y to send.`;
+var pickAction = (at, count2, digits) => at < count2 ? `Question ${at} of ${count2}. Press ${digits} to pick, then go on to the next question.` : `Question ${at} of ${count2}. Press ${digits} to pick, then y to send.`;
+var pickBackLabel = (at) => `back to question ${at}`;
+var ANSWER_NO_CMUX = "cmux is not on this machine, so answer the question in its tab.";
+var ANSWERS_PARTIAL = "The pane stopped after 1 or more answers, so the dialog stays open with some picks in it. Press j to answer the rest in its tab.";
+var answersAsk = (name, picks) => `Send to ${name}? ${picks.join(" \xB7 ")}`;
 
 // src/god/view/cells.ts
 var ZERO_WIDTH = /^[\p{Mn}\p{Me}\p{Cf}\p{Cc}\p{Default_Ignorable_Code_Point}]/u;
@@ -588,6 +594,91 @@ function matchTyped(text, typed) {
   const box = inputBox(text.split("\n").map(trimEnd), view.promptLine, view.promptText);
   if (box === void 0 || view.lastMark > box.end) return "screen-changed";
   return squeeze(box.text) === squeeze(typed) ? void 0 : "screen-changed";
+}
+
+// src/god/model/question-dialog.ts
+var MOST_OPTIONS = 8;
+var TABS_ROW = /^ *← +(.*?) +✔ Submit +→$/u;
+var CHIP = /^([☐☒]) +(\S.*)$/u;
+var REVIEW_TITLE = "Review your answers";
+var REVIEW_READY = "Ready to submit your answers?";
+var SUBMIT_ROWS = [/^❯? *1\. Submit answers$/u, /^❯? *2\. Cancel$/u];
+var MOST_BLANKS = 2;
+var refuse2 = (refusal) => ({ isMatch: false, refusal });
+var CHANGED = refuse2("screen-changed");
+var trimEnd2 = (text) => text.replace(/ +$/, "");
+var trim2 = (text) => text.replace(/^ +| +$/g, "");
+function isSteppable(questions) {
+  return questions.length >= 2 && questions.every((question) => !question.multiSelect && question.options.length >= 1 && question.options.length <= MOST_OPTIONS);
+}
+function chipsOf(row) {
+  const middle = TABS_ROW.exec(row)?.[1];
+  if (middle === void 0) return void 0;
+  const chips = middle.split(/ +(?=[☐☒])/u).map((part) => CHIP.exec(part));
+  return chips.every((chip) => chip !== null) ? chips.map((chip) => ({ isAnswered: chip[1] === "\u2612", header: chip[2] ?? "" })) : void 0;
+}
+function showsChips(row, want, answered) {
+  const chips = chipsOf(row ?? "");
+  return chips !== void 0 && chips.length === want.questions.length && chips.every((chip, k) => chip.header === want.questions[k]?.header && chip.isAnswered === k < answered);
+}
+function isWanted(rows, want) {
+  if (!isSteppable(want.questions) || want.answers.length !== want.questions.length) return false;
+  const sameAnswers = want.answers.every((answer, k) => {
+    const question = want.questions[k];
+    return question !== void 0 && answer.header === question.header && answer.question === question.text && question.options[answer.option - 1]?.label === answer.label;
+  });
+  return sameAnswers && rows.filter((row) => TABS_ROW.test(row)).length === 1;
+}
+function matchQuestion(view, rows, want, k) {
+  const dialog = soleDialog(view);
+  const question = want.questions[k];
+  const answer = want.answers[k];
+  if (dialog?.kind !== "question" || question === void 0 || answer === void 0 || dialog.isMultiSelect || dialog.other === void 0) return CHANGED;
+  if (!showsChips(rows[dialog.firstLine], want, k) || dialog.question !== question.text) return CHANGED;
+  const cursors = [...dialog.options, dialog.other, ...dialog.chat ? [dialog.chat] : []].filter((row) => row.hasCursor);
+  if (cursors.length !== 1 || !dialog.options.includes(cursors[0])) return CHANGED;
+  if (dialog.options.length !== question.options.length || !dialog.options.every((row, at) => showsOption(row, question.options[at]))) return CHANGED;
+  const option = dialog.options.find((row) => row.digit === answer.option);
+  return option !== void 0 && option.label === answer.label ? { isMatch: true, digit: option.digit } : CHANGED;
+}
+function partsFrom(rows, from) {
+  const parts = [];
+  let blanks2 = 0;
+  for (let line = from; line < rows.length; line++) {
+    const text = trim2(rows[line] ?? "");
+    blanks2 = text === "" ? blanks2 + 1 : 0;
+    if (blanks2 > MOST_BLANKS) return parts.length === 0 ? void 0 : parts;
+    if (text !== "") parts.push({ text, line });
+  }
+  return parts;
+}
+function matchReview(view, rows, want) {
+  const chipLine = rows.findIndex((row) => TABS_ROW.test(row));
+  const parts = partsFrom(rows, chipLine + 1);
+  if (chipLine < 0 || parts === void 0 || !showsChips(rows[chipLine], want, want.questions.length) || parts[0]?.text !== REVIEW_TITLE) return CHANGED;
+  let at = 1;
+  const takeText = (mark2) => {
+    const first = parts[at]?.text;
+    if (first === void 0 || !first.startsWith(`${mark2} `)) return void 0;
+    const texts = [first.slice(mark2.length + 1)];
+    for (at += 1; at < parts.length && !/^(?:●|→) /u.test(parts[at]?.text ?? "") && parts[at]?.text !== REVIEW_READY; at++) texts.push(parts[at]?.text ?? "");
+    return texts.join(" ");
+  };
+  for (const answer of want.answers) {
+    if (takeText("\u25CF") !== answer.question || takeText("\u2192") !== answer.label) return CHANGED;
+  }
+  const [ready, submit, cancel] = parts.slice(at, at + 3);
+  if (ready?.text !== REVIEW_READY || submit === void 0 || cancel === void 0 || !SUBMIT_ROWS[0].test(submit.text) || !SUBMIT_ROWS[1].test(cancel.text)) return CHANGED;
+  if (!submit.text.startsWith("\u276F") || cancel.text.startsWith("\u276F")) return CHANGED;
+  const isInside = view.dialogs.length <= 1 && view.dialogs.every((dialog) => dialog.firstLine >= chipLine && dialog.lastLine <= cancel.line);
+  if (!isInside || view.promptLine > chipLine || view.lastMark > cancel.line) return CHANGED;
+  return { isMatch: true, digit: 1 };
+}
+function matchAnswersStep(text, want, step) {
+  const rows = text.split("\n").map(trimEnd2);
+  if (!Number.isInteger(step) || step < 0 || step > want.questions.length || !isWanted(rows, want)) return CHANGED;
+  const view = readScreen(text);
+  return step < want.questions.length ? matchQuestion(view, rows, want, step) : matchReview(view, rows, want);
 }
 
 // src/redact/origins.ts
@@ -1194,13 +1285,21 @@ function stateRefusal(intent, facts) {
     return (facts.transcript?.agents ?? []).some((task) => task.isRunning && task.kind === "subagent") ? "task-running" : void 0;
   }
   if (facts.status !== "waiting" || facts.waitingFor !== "input needed" || !open || open.toolUseId !== intent.toolUseId) return "screen-changed";
+  if (intent.kind === "answers") {
+    if (!isSteppable(open.questions)) return "multi-question";
+    const isSame = open.questions.length === intent.answers.length && open.questions.every((question2, k) => {
+      const answer = intent.answers[k];
+      return answer !== void 0 && question2.header === answer.header && question2.text === answer.question && question2.options[answer.option - 1]?.label === answer.label;
+    });
+    return isSame ? void 0 : "screen-changed";
+  }
   const [question, ...more] = open.questions;
   if (!question) return "screen-changed";
   if (more.length > 0 || question.multiSelect) return "multi-question";
   const sameOption = question.options[intent.option - 1]?.label === intent.label;
   return question.header === intent.header && question.text === intent.question && sameOption ? void 0 : "screen-changed";
 }
-var refuse2 = (refusal) => ({ kind: "refuse", refusal });
+var refuse3 = (refusal) => ({ kind: "refuse", refusal });
 function boundCommand(intent, raw) {
   const [call, ...more] = raw.calls;
   if (call === void 0 || more.length > 0 || call.id !== intent.toolUseId || call.name !== "Bash" || intent.tool !== "Bash") return void 0;
@@ -1211,38 +1310,44 @@ function boundCommand(intent, raw) {
 function cmux(verb, screen, value) {
   return ["cmux", verb, "--workspace", screen.workspaceRef, "--surface", screen.surfaceRef, "--", value];
 }
-var digitPlan = (match, screen) => match.isMatch ? { kind: "send", steps: [cmux("send", screen, String(match.digit))] } : refuse2(match.refusal);
+var digitPlan = (match, screen) => match.isMatch ? { kind: "send", steps: [cmux("send", screen, String(match.digit))] } : refuse3(match.refusal);
 function promptSteps(text, screen) {
   const lines = text.split("\n");
   const steps = lines.flatMap((line, i) => [...line === "" ? [] : [cmux("send", screen, line)], ...i < lines.length - 1 ? [cmux("send-key", screen, "shift+enter")] : []]);
   return [...steps, cmux("send-key", screen, "enter")];
 }
+function readRefusal(intent, screen, facts, now) {
+  if (!WORKSPACE_REF.test(screen.workspaceRef) || !SURFACE_REF.test(screen.surfaceRef)) return "no-tab";
+  if (screen.sessionId !== intent.target.sessionId) return "screen-changed";
+  const age2 = now - screen.readAt;
+  const lag = screen.readAt - facts.factsAt;
+  return !(age2 >= 0 && age2 <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS) ? "stale-screen" : void 0;
+}
 function planDelivery(intent, screen, facts, now, raw) {
   if (intent.kind === "prompt") {
     const refusal = textRefusal(intent.text);
-    if (refusal) return refuse2(refusal);
+    if (refusal) return refuse3(refusal);
   }
-  if (!WORKSPACE_REF.test(screen.workspaceRef) || !SURFACE_REF.test(screen.surfaceRef)) return refuse2("no-tab");
-  if (screen.sessionId !== intent.target.sessionId) return refuse2("screen-changed");
-  const age2 = now - screen.readAt;
-  const lag = screen.readAt - facts.factsAt;
-  if (!(age2 >= 0 && age2 <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS)) return refuse2("stale-screen");
-  const stateRefused = stateRefusal(intent, facts);
-  if (stateRefused) return refuse2(stateRefused);
+  const readRefused = readRefusal(intent, screen, facts, now) ?? stateRefusal(intent, facts);
+  if (readRefused) return refuse3(readRefused);
   const view = readScreen(screen.text);
   switch (intent.kind) {
     case "answer":
       return digitPlan(matchAnswer(view, { ...intent, options: facts.transcript?.openQuestion?.questions[0]?.options ?? [] }), screen);
+    case "answers": {
+      const match = matchAnswersStep(screen.text, { questions: facts.transcript?.openQuestion?.questions ?? [], answers: intent.answers }, 0);
+      return match.isMatch ? { kind: "send", steps: [...intent.answers.map((answer) => cmux("send", screen, String(answer.option))), cmux("send", screen, "1")] } : refuse3(match.refusal);
+    }
     case "permission": {
       const command = raw === void 0 ? void 0 : boundCommand(intent, raw);
-      return raw === void 0 || command === void 0 ? refuse2("screen-changed") : digitPlan(matchPermission(view, intent, { text: raw.screen, command, clean: raw.clean }), screen);
+      return raw === void 0 || command === void 0 ? refuse3("screen-changed") : digitPlan(matchPermission(view, intent, { text: raw.screen, command, clean: raw.clean }), screen);
     }
     case "prompt": {
       const refusal = matchPrompt(view);
-      return refusal ? refuse2(refusal) : { kind: "send", steps: promptSteps(intent.text, screen) };
+      return refusal ? refuse3(refusal) : { kind: "send", steps: promptSteps(intent.text, screen) };
     }
     default:
-      return refuse2("screen-changed");
+      return refuse3("screen-changed");
   }
 }
 function typedBy(steps) {
@@ -1257,6 +1362,13 @@ function nextStepRefusal(intent, screen, facts, typed, now) {
   if (!(age2 >= 0 && age2 <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS)) return "stale-screen";
   if (facts.status !== "idle" || facts.waitingFor !== void 0) return "screen-changed";
   return matchTyped(screen.text, typed);
+}
+function nextAnswerRefusal(intent, step, screen, facts, now) {
+  if (intent.kind !== "answers") return "screen-changed";
+  const refused = readRefusal(intent, screen, facts, now) ?? stateRefusal(intent, facts);
+  if (refused) return refused;
+  const match = matchAnswersStep(screen.text, { questions: facts.transcript?.openQuestion?.questions ?? [], answers: intent.answers }, step);
+  return match.isMatch ? void 0 : match.refusal;
 }
 
 // src/god/act/jump.ts
@@ -2010,8 +2122,8 @@ var CONFIRM_HINTS = [
   { keys: "y", label: "send", hotkey: "y", isOff: false },
   { keys: "c", label: "cancel", hotkey: "c", isOff: false }
 ];
-var MULTI_DIALOG = "This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.";
-var MULTI_DIALOG_NO_CMUX = "This dialog has more than 1 question or more than 1 choice. Answer it in its tab.";
+var MULTI_DIALOG = "This dialog has a question with more than 1 choice or with no option. Press j to answer it in its tab.";
+var MULTI_DIALOG_NO_CMUX = "This dialog has a question with more than 1 choice or with no option. Answer it in its tab.";
 var REFUSAL_TEXT = {
   "no-cmux": "cmux is not on this machine, so the pane sent nothing.",
   "no-tab": "The session has no cmux tab, so the pane sent nothing.",
@@ -2036,12 +2148,14 @@ var FAILURE_TEXT = {
   "screen-unread": "cmux did not read the screen, so the pane sent nothing.",
   "step-failed": SEND_FAILED,
   stopped: "The screen or the session changed while the pane typed, so it sent no more keys. Check the Screen tab.",
-  cancelled: "You pressed c, so the pane sent no more keys."
+  cancelled: "You pressed c, so the pane sent no more keys.",
+  partial: ANSWERS_PARTIAL
 };
 var SENDING = "The pane sends it now.";
 function askText(intent) {
   const name = flat(intent.target.name);
   if (intent.kind === "answer") return `Send "${intent.option} ${flat(intent.label)}" to ${name}?`;
+  if (intent.kind === "answers") return answersAsk(name, intent.answers.map((answer) => `${flat(answer.header)}: ${answer.option} ${flat(answer.label)}`));
   if (intent.kind === "permission") return `Send "${intent.choice === "yes" ? "Yes" : "No"}" to the ${flat(intent.tool)} request of ${name}?`;
   return intent.kind === "prompt" ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`;
 }
@@ -2051,6 +2165,7 @@ function partsOf(intent, width, isSending, refusal) {
   const keys = isSending ? [{ text: SENDING, dim: true }] : hints.flatMap((hint, index) => [...index === 0 ? [] : [{ text: "  " }], pressSegment(hint.hotkey ?? hint.keys, hint.label)]);
   const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width);
   if (intent.kind === "answer") return { fixed: [...ask, ...wrapSegments([{ text: `\u2610 ${flat(intent.header)}`, bold: true }, { text: `  ${flat(intent.question)}` }], width, 1, 3)], text: [] };
+  if (intent.kind === "answers") return { fixed: ask, text: intent.answers.flatMap((answer) => wrapSegments([{ text: `\u2610 ${flat(answer.header)}`, bold: true }, { text: `  ${flat(answer.question)}` }], width, 1, 3)) };
   if (intent.kind === "permission") {
     if (intent.input === void 0) return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }, { text: "  none" }], width)], text: [] };
     return { fixed: [...ask, ...wrapSegments([{ text: "Input", bold: true }], width)], text: keptLines(intent.input, width, 3) };
@@ -2082,6 +2197,8 @@ function outcomeLines(outcome, width) {
 }
 
 // src/god/view/bar.ts
+var picksOf = (picks, sessionId, toolUseId) => picks !== void 0 && picks.sessionId === sessionId && picks.toolUseId === toolUseId ? picks.digits : [];
+var shownQuestion = (digits, count2) => Math.min(digits.length, count2 - 1);
 var NO_DELIVERY = { scroll: 0 };
 var draftKey = (draft) => `draft:${draft.lines.length}`;
 var DRAFT_LABEL = "Line";
@@ -2213,6 +2330,7 @@ var PERMISSION_ANSWERS = [
   { choice: "no", label: "No", digit: 2 }
 ];
 var ANSWERED_TOOL = "Bash";
+var PICK_BACK_KEY = "p";
 var TEXT_INDENT = 3;
 var areDigitsOff = (input) => input.isCmuxMissing || input.isDraftOpen === true;
 var optionKey = (digit) => `option:${digit}`;
@@ -2249,29 +2367,50 @@ function keyedLines(key, digit, segments, width) {
   const [first, ...rest] = wrapSegments(segments, width, lead, TEXT_INDENT);
   return [{ key, hotkey: String(digit), segments: [{ text: " " }, { text: painted, isPainted: true }, ...dropLead(first?.segments ?? [], lead)] }, ...rest];
 }
-function questionLines(input, question, index, hasDigits) {
+var chipLines = (input, mark2, header, hasWait) => wrapSegments([{ text: `${mark2} ${flat(header)}`, bold: true }, ...hasWait ? waitChip(input) : []], input.width);
+function optionLines(input, question, isKeyed) {
   const { width } = input;
-  const lines = [...wrapSegments([{ text: `\u2610 ${flat(question.header)}`, bold: true }, ...index === 0 ? waitChip(input) : []], width), ...textLines(question.text, width, 1)];
+  const lines = [];
   const options = [];
   question.options.forEach((option, at) => {
     const digit = at + 1;
-    const keyed = hasDigits && digit <= 9;
+    const keyed = isKeyed && digit <= 9;
     const about = option.description === void 0 || flat(option.description) === "" ? [] : [{ text: `  ${flat(option.description)}`, ...DIM }];
     if (keyed && !areDigitsOff(input)) {
       lines.push(...keyedLines(optionKey(digit), digit, [{ text: flat(option.label) }, ...about], width));
       options.push({ key: optionKey(digit), digit, isOff: false });
       return;
     }
-    const mark2 = { text: hasDigits ? String(digit) : "\u2022", ...DIM };
-    const [first, ...rest] = wrapSegments([mark2, { text: ` ${flat(option.label)}` }, ...about], width, 1, TEXT_INDENT);
-    if (!keyed) {
-      lines.push(first, ...rest);
-      return;
-    }
-    lines.push({ ...first, key: optionKey(digit) }, ...rest);
-    options.push({ key: optionKey(digit), digit, isOff: true });
+    const [first, ...rest] = wrapSegments([{ text: `${digit}:`, ...DIM }, { text: ` ${flat(option.label)}` }, ...about], width, 1, TEXT_INDENT);
+    lines.push(keyed ? { ...first, key: optionKey(digit) } : first, ...rest);
+    if (keyed) options.push({ key: optionKey(digit), digit, isOff: true });
   });
   return { lines, options };
+}
+var digitRange = (question) => {
+  const last = Math.min(question.options.length, 9);
+  return last === 1 ? "1" : `1-${last}`;
+};
+function actionLines(input, action) {
+  if (input.isCmuxMissing) return message(ANSWER_NO_CMUX, input.width);
+  return message(action, input.width, input.isDraftOpen === true ? DIM : {});
+}
+function stepLines(input, open) {
+  const { session, width } = input;
+  const { questions } = open;
+  const picks = picksOf(input.picks, session.sessionId, open.toolUseId);
+  const at = shownQuestion(picks, questions.length);
+  const question = questions[at];
+  const done = questions.slice(0, at).flatMap((before, k) => {
+    const digit = picks[k] ?? 0;
+    return wrapSegments([{ text: `\u2612 ${flat(before.header)}:`, bold: true }, { text: ` ${digit} ${flat(before.options[digit - 1]?.label ?? "")}` }], width, 1, TEXT_INDENT);
+  });
+  const shown2 = optionLines(input, question, true);
+  const action = actionLines(input, pickAction(at + 1, questions.length, digitRange(question)));
+  const back = pressSegment(PICK_BACK_KEY, pickBackLabel(at));
+  const backLine = at === 0 ? [] : [{ segments: [{ text: " " }, areDigitsOff(input) ? { text: back.text, ...DIM } : back] }];
+  const lines = [...done, ...chipLines(input, "\u2610", question.header, true), ...textLines(question.text, width, 1), ...shown2.lines, ...action, ...backLine];
+  return { lines, options: shown2.options };
 }
 function permissionAnswers(input, tool) {
   const { width } = input;
@@ -2287,14 +2426,17 @@ function permissionAnswers(input, tool) {
   }
   return { lines, options };
 }
-function openQuestionLines(input) {
-  const questions = input.session.transcript?.openQuestion?.questions ?? [];
-  const isMulti = questions.length > 1;
-  const isMultiSelect = questions.some((question) => question.multiSelect);
-  const parts = questions.map((question, index) => questionLines(input, question, index, !isMulti && !isMultiSelect));
-  const lines = parts.flatMap((part) => part.lines);
-  if (isMulti || isMultiSelect) lines.push(...message(input.isCmuxMissing ? MULTI_DIALOG_NO_CMUX : MULTI_DIALOG, input.width));
-  return { lines, options: parts.flatMap((part) => part.options) };
+function openQuestionLines(input, open) {
+  const { questions } = open;
+  const [only] = questions;
+  if (only !== void 0 && questions.length === 1 && !only.multiSelect && only.options.length > 0) {
+    const shown2 = optionLines(input, only, true);
+    const lines2 = [...chipLines(input, "\u2610", only.header, true), ...textLines(only.text, input.width, 1), ...shown2.lines, ...actionLines(input, answerAction(digitRange(only)))];
+    return { lines: lines2, options: shown2.options };
+  }
+  if (isSteppable(questions)) return stepLines(input, open);
+  const lines = questions.flatMap((question, index) => [...chipLines(input, "\u2610", question.header, index === 0), ...textLines(question.text, input.width, 1), ...optionLines(input, question, false).lines]);
+  return { lines: [...lines, ...message(input.isCmuxMissing ? MULTI_DIALOG_NO_CMUX : MULTI_DIALOG, input.width)], options: [] };
 }
 function nowContent(input) {
   const { session, width, now } = input;
@@ -2302,7 +2444,7 @@ function nowContent(input) {
   if (transcript === void 0) return { lines: message(NO_TRANSCRIPT, width), options: [] };
   const activity = transcript.activity;
   let top = { lines: [], options: [] };
-  if (transcript.openQuestion !== void 0 && transcript.openQuestion.questions.length > 0) top = openQuestionLines(input);
+  if (transcript.openQuestion !== void 0 && transcript.openQuestion.questions.length > 0) top = openQuestionLines(input, transcript.openQuestion);
   else if (session.level === "needs-you" && session.waitingFor === "permission prompt" && activity?.isOpen === true) {
     const request = [...wrapSegments([{ text: "\u2610 Permission", bold: true }, ...waitChip(input)], width), ...wrapSegments([{ text: flat(activity.text) }], width)];
     const toolInput = activity.input === void 0 ? labelLine(width, { text: "Input" }, "none") : [...labelLine(width, { text: "Input" }), ...keptLines(activity.input, width, TEXT_INDENT)];
@@ -2554,7 +2696,8 @@ function paneDetail(input) {
     ...screen?.isFailed === true ? { isScreenFailed: true } : {},
     ...input.outcome === void 0 ? {} : { outcome: input.outcome },
     ...input.recap === void 0 ? {} : { recap: input.recap },
-    ...input.isDraftOpen === true ? { isDraftOpen: true } : {}
+    ...input.isDraftOpen === true ? { isDraftOpen: true } : {},
+    ...input.picks === void 0 ? {} : { picks: input.picks }
   });
   return { kind: "session", sessionId: session.sessionId, view, scrollTo: scrollTargets2(view) };
 }
@@ -4700,7 +4843,7 @@ function field(label, text, width, indent2 = 0, end = "") {
   if (lines.length <= 1 && cellWidth(one) <= width) return [one];
   return [`${pad}${label}`, ...blockLines(text, width, indent2 + 2)];
 }
-function questionLines2(session, width) {
+function questionLines(session, width) {
   const questions = session.transcript?.openQuestion?.questions ?? [];
   if (questions.length === 0) return ["Open question: none"];
   return questions.flatMap((question, index) => [
@@ -4757,7 +4900,7 @@ function sessionLines(session, width, now) {
   if (transcript === void 0) return [...lines, "Transcript: none", ...agentsLines(session, width, now), ...flagLines(session, width)];
   return [
     ...lines,
-    ...questionLines2(session, width),
+    ...questionLines(session, width),
     ...field("Last prompt:", transcript.lastPrompt, width),
     ...field("Last reply:", transcript.lastReply, width),
     ...activityLines(session, width, now),
@@ -4893,7 +5036,7 @@ async function readScreenAndRaw(host, target, clean, clock) {
 var CHECK_REFRESHES = 2;
 var PROMPT_CLOCK_SLACK_MS = 1e3;
 function expectOf(intent, transcript, clean, sentAt) {
-  if (intent.kind === "answer") return { kind: "question", toolUseId: intent.toolUseId };
+  if (intent.kind === "answer" || intent.kind === "answers") return { kind: "question", toolUseId: intent.toolUseId };
   if (intent.kind === "prompt") return { kind: "prompt", text: clean(intent.text).trim(), after: sentAt - PROMPT_CLOCK_SLACK_MS };
   const activity = transcript?.activity;
   return activity?.isOpen === true ? { kind: "permission", toolUseId: activity.toolUseId } : { kind: "permission" };
@@ -4951,6 +5094,12 @@ function isDigitStep(steps, refs) {
   if (step === void 0 || more.length > 0 || step.length !== head.length + 1) return false;
   return head.every((arg, index) => step[index] === arg) && /^[1-9]$/.test(step[head.length] ?? "");
 }
+function isPinned(intent, steps, refs) {
+  if (intent.kind === "prompt") return true;
+  if (intent.kind !== "answers") return isDigitStep(steps, refs);
+  const digits = [...intent.answers.map((answer) => String(answer.option)), "1"];
+  return steps.length === digits.length && steps.every((step, k) => isDigitStep([step], refs) && step.at(-1) === digits[k]);
+}
 function isDeliverEnv(argv, options) {
   const env = options?.env ?? {};
   const keys = Object.keys(env);
@@ -4991,6 +5140,13 @@ async function nextStep(host, ports, row, refs, step) {
   const refusal = nextStepRefusal(intent, screen, facts, ports.clean(typed), await host.now());
   return { ...refusal === void 0 ? {} : { refusal }, screen };
 }
+async function answerStep(host, ports, row, refs, intent, step) {
+  const fresh = await readFresh(host, ports, row);
+  const screen = await readScreenOf(host, { sessionId: row.sessionId, ...refs }, ports.clean, () => host.now());
+  if (fresh.kind !== "read" || screen === void 0) return { refusal: "screen-changed", ...screen === void 0 ? {} : { screen } };
+  const refusal = nextAnswerRefusal(intent, step, screen, fresh.facts, await host.now());
+  return { ...refusal === void 0 ? {} : { refusal }, screen };
+}
 async function deliver(ports, request) {
   const { intent, session } = request;
   const host = deliverHost(ports.host, ports.home);
@@ -5016,21 +5172,23 @@ async function deliver(ports, request) {
   const now = await host.now().catch(() => Number.NaN);
   const plan = planDelivery(intent, screen, fresh.facts, now, { screen: screenRead.raw, calls: fresh.calls, clean: ports.clean });
   if (plan.kind === "refuse") return refused(plan.refusal, screen);
-  if (intent.kind !== "prompt" && !isDigitStep(plan.steps, refs)) return refused("screen-changed", screen);
+  if (!isPinned(intent, plan.steps, refs)) return refused("screen-changed", screen);
   let newest = screen;
   for (const [index, step] of plan.steps.entries()) {
+    const stop = (reason) => failed(intent.kind === "answers" && index > 0 ? "partial" : reason, newest);
     if (index > 0) {
       const next = { intent, typed: typedBy(plan.steps.slice(0, index)), marks: fresh.marks };
-      const between = await nextStep(host, ports, session, refs, next).catch(() => ({ refusal: "screen-changed" }));
+      const check2 = intent.kind === "answers" ? answerStep(host, ports, session, refs, intent, index) : nextStep(host, ports, session, refs, next);
+      const between = await check2.catch(() => ({ refusal: "screen-changed" }));
       if (between.screen !== void 0) newest = between.screen;
-      if (between.refusal !== void 0) return failed("stopped", newest);
+      if (between.refusal !== void 0) return stop("stopped");
     }
-    if (isCancelled()) return failed("cancelled", newest);
+    if (isCancelled()) return stop("cancelled");
     const exitCode = await host.run(step).then(
       (result) => result.exitCode,
       () => void 0
     );
-    if (exitCode !== 0) return failed("step-failed", newest);
+    if (exitCode !== 0) return stop("step-failed");
   }
   const sentAt = ports.clock();
   const check = { sessionId: session.sessionId, expect: expectOf(intent, fresh.transcript, ports.clean, sentAt), sentAt, misses: 0 };
@@ -5058,6 +5216,35 @@ function answerIntent(snapshot, selectedKey, digit) {
   if (option === void 0) return void 0;
   return { kind: "answer", target: targetOf(session), toolUseId: open.toolUseId, header: question.header, question: question.text, option: digit, label: option.label };
 }
+function steppedDialog(snapshot, selectedKey) {
+  const session = selectedSession(snapshot, selectedKey);
+  const open = session?.transcript?.openQuestion;
+  return session === void 0 || open === void 0 || !isSteppable(open.questions) ? void 0 : { target: targetOf(session), open };
+}
+function answersIntent({ target, open }, digits) {
+  const answers2 = open.questions.map((question, k) => {
+    const option = digits[k] ?? 0;
+    return { header: question.header, question: question.text, option, label: question.options[option - 1]?.label ?? "" };
+  });
+  return { kind: "answers", target, toolUseId: open.toolUseId, answers: answers2 };
+}
+function afterPick(state, dialog, digit) {
+  const { target, open } = dialog;
+  const before = picksOf(state.picks, target.sessionId, open.toolUseId);
+  const at = shownQuestion(before, open.questions.length);
+  const count2 = open.questions[at]?.options.length ?? 0;
+  if (state.draft !== void 0 || !Number.isInteger(digit) || digit < 1 || digit > Math.min(count2, 9)) return state;
+  const digits = [...before.slice(0, at), digit];
+  const picked = { scroll: 0, picks: { sessionId: target.sessionId, toolUseId: open.toolUseId, digits }, ...checkOf(state) };
+  return digits.length < open.questions.length ? picked : { ...picked, intent: answersIntent(dialog, digits) };
+}
+function pickedBack(state, dialog) {
+  const { target, open } = dialog;
+  const digits = picksOf(state.picks, target.sessionId, open.toolUseId);
+  const at = shownQuestion(digits, open.questions.length);
+  if (state.draft !== void 0 || at === 0) return state;
+  return { scroll: 0, picks: { sessionId: target.sessionId, toolUseId: open.toolUseId, digits: digits.slice(0, at - 1) }, ...checkOf(state) };
+}
 function permissionIntent(snapshot, selectedKey, choice) {
   const session = selectedSession(snapshot, selectedKey);
   const activity = session?.transcript?.activity;
@@ -5082,7 +5269,7 @@ function afterDraftLine(state, value) {
   return withIntent(rest, { kind: draft.kind, target: draft.target, text: draft.lines.join("\n") });
 }
 function cancelled(state) {
-  const { intent: _intent, draft: _draft, ...rest } = state;
+  const { intent: _intent, draft: _draft, picks: _picks, ...rest } = state;
   return { ...rest, scroll: 0 };
 }
 function cancelPressed(state, shown2) {
@@ -5104,10 +5291,13 @@ function afterDelivery(state, intent, result) {
   const isStale = outcome.status === "refused" && outcome.refusal === "stale-screen";
   const isOwnBar = sameIntent(state.intent, intent);
   const keeps = state.intent !== void 0 && (!isOwnBar || isStale);
+  const isOwnPicks = intent.kind === "answers" && picksOf(state.picks, intent.target.sessionId, intent.toolUseId).length > 0;
+  const picks = state.picks !== void 0 && (keeps || !isOwnPicks) ? { picks: state.picks } : {};
   return {
     scroll: keeps ? state.scroll : 0,
     ...keeps ? { intent: state.intent } : {},
     ...state.draft === void 0 ? {} : { draft: state.draft },
+    ...picks,
     outcome,
     ...check !== void 0 ? { check } : checkOf(state)
   };
@@ -5135,7 +5325,14 @@ async function openBar($, intent) {
 }
 async function openAnswer($, digit) {
   const { snapshot, selectedKey } = await selection($);
-  await openBar($, answerIntent(snapshot, selectedKey, digit));
+  const dialog = steppedDialog(snapshot, selectedKey);
+  if (dialog !== void 0) await update4($, DELIVER, (state) => afterPick(state, dialog, digit));
+  else await openBar($, answerIntent(snapshot, selectedKey, digit));
+}
+async function pickBack($) {
+  const { snapshot, selectedKey } = await selection($);
+  const dialog = steppedDialog(snapshot, selectedKey);
+  if (dialog !== void 0) await update4($, DELIVER, (state) => pickedBack(state, dialog));
 }
 async function openPermission($, choice) {
   const { snapshot, selectedKey } = await selection($);
@@ -5220,7 +5417,7 @@ function createScreenLoop(ports) {
   let idleTicks = 0;
   let reading;
   let last;
-  const isWanted = (read7) => target !== void 0 && keyOf(target) === keyOf(read7);
+  const isWanted2 = (read7) => target !== void 0 && keyOf(target) === keyOf(read7);
   function stop() {
     timer?.cancel();
     timer = void 0;
@@ -5236,7 +5433,7 @@ function createScreenLoop(ports) {
     if (reading === key) return;
     reading = key;
     void ports.read(of).then(async (read7) => {
-      if (!isWanted(of)) return;
+      if (!isWanted2(of)) return;
       last = stateAfter(of, read7);
       await ports.write(last);
     }).catch(() => void 0).finally(() => {
@@ -5393,7 +5590,11 @@ function detailRows(ui, detail, theme, actions) {
   const view = detail.view;
   if (view.kind === "too-short") return view.lines.map(text);
   const sessionId = detail.sessionId;
-  const bodyKeys = { ...scrollKeys(detail.scrollTo, actions), [RECAP_KEY]: () => actions.onRecap(sessionId) };
+  const bodyKeys = {
+    ...scrollKeys(detail.scrollTo, actions),
+    [RECAP_KEY]: () => actions.onRecap(sessionId),
+    ...actions.onBack === void 0 ? {} : { [PICK_BACK_KEY]: actions.onBack }
+  };
   const picks = new Map(view.options.map((option) => [option.key, option]));
   const onOption = (key) => {
     const pick = picks.get(key);
@@ -5578,7 +5779,8 @@ function paneView(input) {
   const outcome = input.deliver?.outcome === void 0 ? {} : { outcome: input.deliver.outcome };
   const recap = input.recap === void 0 || input.recap === null ? {} : { recap: input.recap };
   const draft = isDraftOpen ? { isDraftOpen } : {};
-  const detailOf = (width) => withoutScroll(paneDetail({ snapshot, ...selection2, width, rows: room, now, state: detailState, ...screen, ...outcome, ...recap, ...draft }), bar);
+  const picks = input.deliver?.picks === void 0 ? {} : { picks: input.deliver.picks };
+  const detailOf = (width) => withoutScroll(paneDetail({ snapshot, ...selection2, width, rows: room, now, state: detailState, ...screen, ...outcome, ...recap, ...draft, ...picks }), bar);
   if (isDetail) {
     const detail2 = detailOf(bodyColumns);
     const drawn2 = keysOf(snapshot, true, detail2);
@@ -5723,7 +5925,8 @@ function actionsOf($, runtime, layout) {
       onScroll: (scroll) => quiet2(changeDetail($, (state) => detailAfterScroll(state, scroll))),
       onOption: (digit) => quiet2(openAnswer($, digit)),
       onPermission: (choice) => quiet2(openPermission($, choice)),
-      onRecap: (sessionId) => quiet2(makeRecap($, runtime.recap, sessionId))
+      onRecap: (sessionId) => quiet2(makeRecap($, runtime.recap, sessionId)),
+      onBack: () => quiet2(pickBack($))
     },
     bar: {
       onSend: (shown2) => quiet2(sendConfirmed($, runtime.deliver, shown2)),
