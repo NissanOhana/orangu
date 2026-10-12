@@ -50,6 +50,43 @@ function decideAlerts(input) {
 var GOD_COMMAND_DESCRIPTION = "Show the live Claude Code sessions of this machine in one pane.";
 var GOD_ARGUMENT_HINT = "[all | repos <name>... | stats]";
 var PANE_TITLE = "orangu god";
+var KEYS_LABEL = "keys:";
+var KEYS_HOLDER = {
+  pane: { holder: "pane", handover: "Esc: prompt" },
+  prompt: { holder: "prompt", handover: "ctrl+x tab: pane" }
+};
+var HELP_TITLE = "What the pane shows. Press h or Esc to close this help.";
+var HELP_LEVELS = {
+  "needs-you": "The session waits for your answer to a question or a permission prompt.",
+  "your-turn": "The session finished its turn and waits for your next prompt.",
+  stuck: "The session is busy, but it wrote nothing for a long time, or it got an API error.",
+  working: "The session works on its task now.",
+  idle: "The session waits for a prompt, and you saw its last turn.",
+  stale: "The session is idle for a long time. Press Enter on the heading to show its group."
+};
+var HELP_SAME_FILE = "This session and another session wrote the same file in the last 2 h.";
+var HELP_KEYS = [
+  ["\u2191\u2193", "Select a session."],
+  ["Enter", "Open the selected session."],
+  ["b", "Go back to the board from the detail of a narrow pane."],
+  ["j", "Jump to the cmux tab of the session."],
+  ["n", "Select the next session that needs you."],
+  ["1-9", "Pick an option of the open question. Then press y to send it."],
+  ["y  c", "Send, or cancel, what the confirm bar shows."],
+  ["r", "Write a prompt. The session reads it as your prompt."],
+  ["m", "Write a peer note. The session reads it as a note from a peer, not as your prompt."],
+  ["t", "Show the next tab of the detail."],
+  ["s", "Turn all tones off, or on again."],
+  ["u", "Mute the selected session, or unmute it."],
+  ["f", "Show every session, or only the sessions of the selected repos."],
+  ["g", "Group the rows by level or by repo."],
+  ["h", "Show this help, or close it."],
+  ["Esc", "Give the keys to the prompt."],
+  ["ctrl+x tab", "Give the keys to the pane."]
+];
+function sharesFolderText(count2, names, left) {
+  return `Shares its folder with ${count2} working ${count2 === 1 ? "session" : "sessions"}: ${names.join(", ")}${left > 0 ? ` and ${left} more` : ""}`;
+}
 var GOD_OPENED = "The god pane is open.";
 var GOD_NOT_PLACED = "The god pane waits for more room. Make the terminal wider.";
 var GOD_SHOWS_ALL = "The god pane shows every live session.";
@@ -1609,8 +1646,17 @@ function fitSegments(parts, room) {
   return [mark2(hiddenFrom(0))];
 }
 
+// src/god/view/names.ts
+var STATUS_GLYPH = /^(?:[✳◐◑◒◓]️?|[⠀-⣿])\s*/u;
+function rowName(session) {
+  const tab = flat(session.tab?.surfaceTitle ?? "").replace(STATUS_GLYPH, "");
+  return tab || flat(session.transcript?.title ?? "") || flat(session.name);
+}
+
 // src/god/view/board.ts
 var BOARD_COLUMNS = 30;
+var BOARD_MAX_COLUMNS = 60;
+var BOARD_SHARE = 0.4;
 var isOnBoard = (snapshot, key) => key !== void 0 && snapshot.groups.some((group) => group.sessionIds.includes(key));
 var LEVEL_GLYPH = { "needs-you": "\u26A0", "your-turn": "\u25CF", stuck: "\u2715", working: "\u280B", idle: "\xB7", stale: "\u25CB" };
 var LEVEL_HEADING = {
@@ -1621,12 +1667,13 @@ var LEVEL_HEADING = {
   idle: "IDLE",
   stale: "STALE"
 };
-var FLAG_CHIP = { "same-tree": "TREE", "same-files": "FILES" };
+var FLAG_CHIP = { "same-files": "same file" };
 var NO_REPO = "No repo";
-var CHIP_KINDS = ["same-tree", "same-files"];
+var CHIP_KINDS = ["same-files"];
 var SESSION_UNIT = ["session", "sessions"];
 var NAME_MIN = 6;
-var NAME_MAX = 24;
+var NAME_MAX = 40;
+var NAME_SHARE = 0.6;
 var MIN_WINDOW_ROWS = 3;
 var MORE_KEYS = { up: "more-up", down: "more-down" };
 var PRESS_KEY = "Enter";
@@ -1657,9 +1704,9 @@ var chipKinds = (session) => CHIP_KINDS.filter((kind) => session.flags.some((fla
 function sessionLine(session, input, nameColumn) {
   const time = levelTime(session.levelSince, input.now);
   const middleRoom = input.width - 4 - cellWidth(time);
-  const name = flat2(session.name);
+  const name = rowName(session);
   const shownName = cutInline(name, nameColumn) ?? name;
-  const summary = flat2(session.summary);
+  const summary = flat2(session.summary) === name ? "" : flat2(session.summary);
   const pulse = session.level === "needs-you" && input.frame?.isPulseOn === true ? { ...LEVEL_PAINT[session.level], bold: true } : {};
   const glyph = session.level === "working" && input.frame !== void 0 ? spinnerGlyph(input.frame) : LEVEL_GLYPH[session.level];
   const parts = [{ segment: { text: shownName, ...pulse } }];
@@ -1714,8 +1761,8 @@ function boardWindow(input) {
     group,
     sessions: isOpen(group, input.openGroups) ? group.sessionIds.flatMap((id) => byId.get(id) ?? []) : []
   }));
-  const longest = Math.max(0, ...shown2.flatMap(({ sessions }) => sessions.map((session) => cellWidth(flat2(session.name)))));
-  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, Math.floor((width - 3) * 0.4)));
+  const longest = Math.max(0, ...shown2.flatMap(({ sessions }) => sessions.map((session) => cellWidth(rowName(session)))));
+  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, Math.floor((width - 3) * NAME_SHARE)));
   const items = shown2.flatMap(({ group, sessions }) => [headingItem(group, input), ...sessions.map((session) => ({ line: sessionLine(session, input, nameColumn), sessions: 1 }))]);
   const selected = items.findIndex((item) => item.line.key !== void 0 && item.line.key === input.selectedKey);
   return windowOf(items, input.rows, Math.max(0, selected));
@@ -1889,14 +1936,14 @@ function engineEffects($) {
 import { atom } from "claude-code";
 
 // src/god/view/keys.ts
-var KEY_ROW_PROMPT = "ctrl+x tab: keys to the pane";
-var KEY_ROW_NO_CMUX = "Jump, answer and reply are off: cmux is not on this machine.";
+var KEY_ROW_NO_CMUX = "The keys j, r and the digits are off: cmux is not on this machine.";
 var JUMP_NOTE = {
   "no-tab": "This session has no cmux tab, so j cannot jump to it.",
   failed: "The jump failed: cmux did not show the tab of this session. Press j to try again."
 };
 var MODE_KEY_LABEL = { all: "repos", repos: "all" };
 var GROUP_KEY_LABEL = "group";
+var HELP_KEY_LABEL = "help";
 var answerKeys = (digits) => {
   const first = digits?.[0];
   const last = digits?.at(-1);
@@ -1918,16 +1965,16 @@ function keyRow(input) {
     { keys: "j", label: "jump", hotkey: "j", isOff: off2 },
     { keys: "n", label: "next", hotkey: "n", isOff: false },
     { keys: answerKeys(input.answerDigits), label: "answer", isOff: off2 || input.isAnswerOff === true },
-    { keys: "r", label: "reply", hotkey: "r", isOff: off2 },
-    { keys: "m", label: "message", hotkey: "m", isOff: false },
+    { keys: "r", label: "prompt", hotkey: "r", isOff: off2 },
+    { keys: "m", label: "peer note", hotkey: "m", isOff: false },
     { keys: "t", label: "tab", hotkey: "t", isOff: false },
     { keys: "s", label: "sound", hotkey: "s", isOff: false },
     { keys: "u", label: "mute", hotkey: "u", isOff: false },
     { keys: "f", label: MODE_KEY_LABEL[input.mode], hotkey: "f", isOff: false },
-    { keys: "g", label: GROUP_KEY_LABEL, hotkey: "g", isOff: false }
+    { keys: "g", label: GROUP_KEY_LABEL, hotkey: "g", isOff: false },
+    { keys: "h", label: HELP_KEY_LABEL, hotkey: "h", isOff: false }
   ];
   const items = hints.map(hintItem);
-  if (input.promptHoldsKeys) items.push([{ text: KEY_ROW_PROMPT, ...DIM }]);
   const lines = flowItems(items, input.width);
   if (off2) lines.push(...wrapWords(KEY_ROW_NO_CMUX, input.width - 1).map((text) => ({ segments: [{ text: ` ${text}` }] })));
   if (input.notice !== void 0) lines.push(...wrapWords(input.notice, input.width - 1).map((text) => ({ segments: [{ text: " " }, { text, token: "--warn" }] })));
@@ -2331,6 +2378,19 @@ function tabContent(tab, input) {
   return { lines, options: [] };
 }
 
+// src/god/view/folder.ts
+var FOLDER_NAMES_MAX = 5;
+var folderOf = (session) => session.repo?.topLevel ?? session.cwd;
+var worksNow = (session) => session.level === "working" || session.level === "stuck";
+function folderLines(session, sessions, width) {
+  const folder = folderOf(session);
+  const working = sessions.filter((other) => folderOf(other) === folder && worksNow(other));
+  const others = working.filter((other) => other.sessionId !== session.sessionId);
+  if (working.length < 2 || others.length === 0) return [];
+  const names = others.slice(0, FOLDER_NAMES_MAX).map(rowName);
+  return wrapSegments([{ text: sharesFolderText(others.length, names, others.length - names.length), ...FLAG_PAINT["same-tree"] }], width, 1, 3);
+}
+
 // src/god/view/states.ts
 var STATE_TEXT = {
   reading: "Reading sessions.",
@@ -2369,10 +2429,11 @@ function tabTitle(session) {
   return tab === void 0 ? "" : [tab.workspaceTitle, tab.surfaceTitle ?? ""].map(flat).filter((title) => title !== "").join(" \u203A ");
 }
 function headLines(session, width) {
-  const second = tabTitle(session) || flat(session.transcript?.title ?? "");
-  const title = wrapSegments([{ text: flat(session.name), bold: true }, ...second === "" ? [] : [{ text: ` \xB7 ${second}` }]], width);
+  const name = rowName(session);
+  const title = wrapSegments([{ text: name, bold: true }], width);
   const repo = session.repo === void 0 ? NO_REPO : `${flat(session.repo.name)}${session.repo.isWorktree ? " (worktree)" : ""}`;
-  const facts = [repo, flat(session.transcript?.branch ?? ""), flat(session.transcript?.permissionMode ?? ""), session.muted ? "muted" : ""].filter((fact) => fact !== "");
+  const sessionName2 = flat(session.name) === name ? "" : flat(session.name);
+  const facts = [sessionName2, repo, flat(session.transcript?.branch ?? ""), flat(session.transcript?.permissionMode ?? ""), session.muted ? "muted" : ""].filter((fact) => fact !== "");
   return [...title, ...wrapSegments([{ text: facts.join(" \xB7 ") }], width)];
 }
 function tabRowsOf(open, width) {
@@ -2394,7 +2455,7 @@ function tabRowsOf(open, width) {
 }
 var tabGap = (index) => index === 0 ? " " : "  ";
 var tabLine = (row) => ({ segments: row.flatMap((cell, index) => [{ text: tabGap(index) }, ...cell.segments]) });
-function footLines(session, width) {
+function footLines(session, sessions, width) {
   const transcript = session.transcript;
   const parts = [];
   const percent = contextPercent(transcript?.context);
@@ -2407,16 +2468,20 @@ function footLines(session, width) {
   const pr = newestPr(transcript?.prLinks ?? []);
   if (pr !== void 0) parts.push([{ text: `PR #${pr}` }]);
   const context = parts.length === 0 ? [] : wrapSegments(parts.flatMap((part, index) => index === 0 ? part : [{ text: " \xB7 ", ...DIM }, ...part]), width);
+  const nameOf = (flag) => {
+    const other = sessions.find((candidate) => candidate.sessionId === flag.otherId);
+    return other === void 0 ? flat(flag.otherName) : rowName(other);
+  };
   const flags = session.flags.flatMap(
-    (flag) => wrapSegments([{ text: `${FLAG_LABEL[flag.kind]}:`, ...FLAG_PAINT[flag.kind], bold: true }, { text: ` ${flat(flag.otherName)}${flag.file === void 0 ? "" : ` (${flat(flag.file)})`}` }], width, 1, 3)
+    (flag) => flag.kind !== "same-files" ? [] : wrapSegments([{ text: `${FLAG_LABEL[flag.kind]}:`, ...FLAG_PAINT[flag.kind], bold: true }, { text: ` ${nameOf(flag)}${flag.file === void 0 ? "" : ` (${flat(flag.file)})`}` }], width, 1, 3)
   );
-  return [...context, ...flags];
+  return [...context, ...folderLines(session, sessions, width), ...flags];
 }
 function detailView(input) {
   const { session, width, rows } = input;
   const head = headLines(session, width);
   const tabRows = tabRowsOf(input.tab, width);
-  const foot = footLines(session, width);
+  const foot = footLines(session, input.sessions ?? [], width);
   const content = tabContent(input.tab, input);
   const room = rows - head.length - tabRows.length - foot.length;
   if (content.lines.length > room && room < MIN_WINDOW) return { kind: "too-short", lines: messageLines(CANNOT_DRAW["too-short"], width) };
@@ -2429,12 +2494,36 @@ function detailLines(view) {
   return [...view.head, ...view.tabRows.map(tabLine), ...view.body, ...view.foot];
 }
 
+// src/god/types.ts
+var LEVEL_ORDER = ["needs-you", "your-turn", "stuck", "working", "idle", "stale"];
+
+// src/god/view/help.ts
+var GAP = 2;
+var ENTRIES = [
+  ...LEVEL_ORDER.map((level) => ({ label: { text: `${LEVEL_GLYPH[level]} ${LEVEL_HEADING[level]}`, ...LEVEL_PAINT[level], bold: true }, text: HELP_LEVELS[level] })),
+  { label: { text: FLAG_CHIP["same-files"], ...FLAG_PAINT["same-files"] }, text: HELP_SAME_FILE },
+  ...HELP_KEYS.map(([keys, text]) => ({ label: { text: keys, bold: true }, text }))
+];
+function helpLines(width) {
+  const column = Math.max(...ENTRIES.map((entry) => cellWidth(entry.label.text))) + GAP;
+  const room = Math.max(1, width - 1 - column);
+  const entryLines = ENTRIES.flatMap(
+    (entry) => wrapWords(entry.text, room).map(
+      (text, index) => ({
+        segments: index === 0 ? [{ text: " " }, entry.label, { text: `${" ".repeat(column - cellWidth(entry.label.text))}${text}` }] : [{ text: `${" ".repeat(1 + column)}${text}` }]
+      })
+    )
+  );
+  return [...wrapSegments([{ text: HELP_TITLE }], width), ...entryLines];
+}
+
 // src/god/view/detail-pane.ts
 var DEFAULT_DETAIL = { tab: "now", scroll: 0, isOpen: false };
 var NO_DETAIL = "Select a session on the board to show its detail.";
 function scrollTargets2(view) {
-  if (view.kind !== "detail") return {};
-  const { window } = view;
+  return view.kind === "detail" ? windowTargets(view.window) : {};
+}
+function windowTargets(window) {
   return {
     ...window.first > 0 ? { [SCROLL_KEYS.up]: scrollBy(window, "up") } : {},
     ...window.first + window.shown < window.total ? { [SCROLL_KEYS.down]: scrollBy(window, "down") } : {}
@@ -2442,11 +2531,18 @@ function scrollTargets2(view) {
 }
 function paneDetail(input) {
   const { snapshot, width } = input;
+  if (input.state.isHelp === true) {
+    const help = helpLines(width);
+    if (help.length > input.rows && input.rows < MIN_WINDOW) return { kind: "none", lines: messageLines(CANNOT_DRAW["too-short"], width) };
+    const { lines, window } = windowOf2(help, input.rows, input.state.scroll);
+    return { kind: "help", lines, scrollTo: windowTargets(window) };
+  }
   const session = isOnBoard(snapshot, input.selectedKey) ? snapshot.sessions.find((candidate) => candidate.sessionId === input.selectedKey) : void 0;
   if (session === void 0) return { kind: "none", lines: messageLines(NO_DETAIL, width) };
   const screen = input.screen?.sessionId === session.sessionId ? input.screen : void 0;
   const view = detailView({
     session,
+    sessions: snapshot.sessions,
     width,
     rows: input.rows,
     now: input.now,
@@ -2463,7 +2559,7 @@ function paneDetail(input) {
   return { kind: "session", sessionId: session.sessionId, view, scrollTo: scrollTargets2(view) };
 }
 function paneDetailLines(detail) {
-  return detail.kind === "none" ? [...detail.lines] : detailLines(detail.view);
+  return detail.kind === "session" ? detailLines(detail.view) : [...detail.lines];
 }
 
 // src/god/state.tsx
@@ -2507,9 +2603,6 @@ async function toggleMute($, loop) {
   const choice = toggledMute(await storedChoices($), selected, loop.snapshot());
   if (choice !== void 0) await loop.choose(choice);
 }
-
-// src/god/types.ts
-var LEVEL_ORDER = ["needs-you", "your-turn", "stuck", "working", "idle", "stale"];
 
 // src/god/model/classify.ts
 var MINUTE_MS2 = 6e4;
@@ -4426,15 +4519,21 @@ function createCollector({ host, home, clock }) {
 }
 
 // src/god/detail-control.ts
-var detailAfterNextTab = (state) => ({ ...state, tab: nextTab(state.tab), scroll: 0 });
-var detailAfterTab = (state, tab) => tab === state.tab ? state : { ...state, tab, scroll: 0 };
+function withoutHelp(state) {
+  const { isHelp: _help, ...detail } = state;
+  return detail;
+}
+var detailAfterNextTab = (state) => ({ ...withoutHelp(state), tab: nextTab(state.tab), scroll: 0 });
+var detailAfterTab = (state, tab) => tab === state.tab && state.isHelp !== true ? state : { ...withoutHelp(state), tab, scroll: 0 };
+var detailAfterHelp = (state) => state.isHelp === true ? { ...withoutHelp(state), scroll: 0 } : { ...state, scroll: 0, isHelp: true };
+var detailWithoutHelp = (state) => state.isHelp === true ? { ...withoutHelp(state), scroll: 0 } : state;
 var detailAfterScroll = (state, scroll) => ({ ...state, scroll });
 var detailAfterSelect = (state, before, after) => before === after ? state : { ...state, scroll: 0 };
 function detailAfterRowPress(state, key, snapshot, layout) {
   const isSession = snapshot?.sessions.some((session) => session.sessionId === key) === true;
   return layout.kind === "narrow" && isSession ? { ...state, isOpen: true, scroll: 0 } : state;
 }
-var detailAfterBack = (state) => ({ ...state, isOpen: false });
+var detailAfterBack = (state) => ({ ...withoutHelp(state), isOpen: false, ...state.isHelp === true ? { scroll: 0 } : {} });
 
 // src/god/motion-keys.tsx
 import { read as read2, update as update2 } from "claude-code";
@@ -5274,9 +5373,9 @@ function drawLine(ui, line, theme, onKeyed, keys) {
 // src/god/ui/bar.tsx
 function barRows(ui, bar, theme, actions) {
   if (bar === void 0) return [];
-  const scrollKeys = Object.entries(bar.scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]]);
+  const scrollKeys2 = Object.entries(bar.scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]]);
   const canSend = bar.isOpen && bar.hints.some((hint) => hint.hotkey === "y");
-  const keys = { ...canSend ? { y: () => actions.onSend(bar.intent) } : {}, ...bar.isOpen ? { c: () => actions.onCancel(bar.intent) } : {}, ...Object.fromEntries(scrollKeys) };
+  const keys = { ...canSend ? { y: () => actions.onSend(bar.intent) } : {}, ...bar.isOpen ? { c: () => actions.onCancel(bar.intent) } : {}, ...Object.fromEntries(scrollKeys2) };
   const rows = bar.lines.map((line) => drawLine(ui, line, theme, () => void 0, keys));
   const { Input } = ui;
   const field2 = bar.field;
@@ -5285,17 +5384,16 @@ function barRows(ui, bar, theme, actions) {
 }
 
 // src/god/ui/detail.tsx
+var scrollKeys = (scrollTo, actions) => Object.fromEntries(Object.entries(scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]]));
 function detailRows(ui, detail, theme, actions) {
   const { Box, Text, Button } = ui;
   const text = (line) => drawLine(ui, line, theme, () => void 0, {});
   if (detail.kind === "none") return detail.lines.map(text);
+  if (detail.kind === "help") return detail.lines.map((line) => drawLine(ui, line, theme, () => void 0, scrollKeys(detail.scrollTo, actions)));
   const view = detail.view;
   if (view.kind === "too-short") return view.lines.map(text);
   const sessionId = detail.sessionId;
-  const bodyKeys = {
-    ...Object.fromEntries(Object.entries(detail.scrollTo).flatMap(([hotkey, scroll]) => scroll === void 0 ? [] : [[hotkey, () => actions.onScroll(scroll)]])),
-    [RECAP_KEY]: () => actions.onRecap(sessionId)
-  };
+  const bodyKeys = { ...scrollKeys(detail.scrollTo, actions), [RECAP_KEY]: () => actions.onRecap(sessionId) };
   const picks = new Map(view.options.map((option) => [option.key, option]));
   const onOption = (key) => {
     const pick = picks.get(key);
@@ -5352,6 +5450,13 @@ var SOURCES = ["agents", "registry", "cmux", "git"];
 var BRAND = [{ text: "\u25C9", ...ACCENT }, { text: " orangu god", bold: true }];
 var REPOS_KEY = "/god repos";
 var REPO_UNIT = ["repo", "repos"];
+function keysItems(keysAt, width) {
+  if (keysAt === void 0) return [];
+  const { holder, handover } = KEYS_HOLDER[keysAt];
+  const who = [{ text: `${KEYS_LABEL} ` }, { text: holder, bold: true }];
+  const whole = [...who, { text: ` \xB7 ${handover}`, ...DIM }];
+  return 1 + cellWidth(whole.map((segment) => segment.text).join("")) <= width ? [whole] : [who, [{ text: handover, ...DIM }]];
+}
 function age(ms) {
   const seconds = Math.floor(Math.max(0, ms) / 1e3);
   if (seconds < 60) return `${seconds}s`;
@@ -5379,13 +5484,14 @@ function modeItems(snapshot, width) {
 }
 function headerLines(input) {
   const { snapshot, width, now } = input;
-  if (snapshot === void 0 || !snapshot.firstRefreshDone) return flowItems([BRAND], width);
+  const keys = keysItems(input.keysAt, width);
+  if (snapshot === void 0 || !snapshot.firstRefreshDone) return flowItems([BRAND, ...keys], width);
   const items = [[...BRAND], [{ text: `${snapshot.sessions.length} live` }]];
   for (const level of HEADER_LEVELS) {
     const count2 = snapshot.sessions.filter((session) => session.level === level).length;
     if (count2 > 0) items.push([{ text: LEVEL_GLYPH[level], ...LEVEL_PAINT[level] }, { text: ` ${count2}` }]);
   }
-  items.push(...modeItems(snapshot, width));
+  items.push(...modeItems(snapshot, width), ...keys);
   const chips = [];
   for (const source of SOURCES) if (snapshot.sources[source].status === "off") chips.push([{ text: `${source} off`, ...DIM }]);
   if (input.isSoundOff === true) chips.push([{ text: "sound off", ...DIM }]);
@@ -5400,7 +5506,9 @@ function headerLines(input) {
 // src/god/view/pane.ts
 var WIDE_FROM_COLUMNS = 90;
 function layoutOf(bodyColumns) {
-  return bodyColumns >= WIDE_FROM_COLUMNS ? { kind: "wide", boardColumns: BOARD_COLUMNS, detailColumns: bodyColumns - BOARD_COLUMNS - 1 } : { kind: "narrow", boardColumns: bodyColumns };
+  if (bodyColumns < WIDE_FROM_COLUMNS) return { kind: "narrow", boardColumns: bodyColumns };
+  const boardColumns = Math.min(BOARD_MAX_COLUMNS, Math.max(BOARD_COLUMNS, Math.round(bodyColumns * BOARD_SHARE)));
+  return { kind: "wide", boardColumns, detailColumns: bodyColumns - boardColumns - 1 };
 }
 function ruleLine(width, layout, joint = "\u252C") {
   const text = layout?.kind === "wide" ? `${"\u2500".repeat(layout.boardColumns)}${joint}${"\u2500".repeat(layout.detailColumns)}` : "\u2500".repeat(width);
@@ -5416,13 +5524,14 @@ function drawnDigits(detail) {
 var barHeight = (bar) => bar === void 0 ? 0 : bar.lines.length + (bar.field === void 0 ? 0 : 1);
 var isNote = (bar) => bar.intent === void 0 && bar.field === void 0;
 function withoutScroll(detail, bar) {
-  return detail.kind === "session" && bar !== void 0 && Object.keys(bar.scrollTo).length > 0 ? { ...detail, scrollTo: {} } : detail;
+  return detail.kind !== "none" && bar !== void 0 && Object.keys(bar.scrollTo).length > 0 ? { ...detail, scrollTo: {} } : detail;
 }
 function paneView(input) {
   const { snapshot, bodyColumns, bodyRows, now } = input;
   if (bodyColumns < BOARD_COLUMNS) return cannotDrawView("too-narrow", bodyColumns);
   const { frame, spark } = input.motion ?? {};
-  const header = headerLines({ ...snapshot === void 0 ? {} : { snapshot }, width: bodyColumns, now, ...input.isSoundOff === true ? { isSoundOff: true } : {}, ...spark === void 0 ? {} : { spark } });
+  const keysAt = input.promptHoldsKeys ? "prompt" : "pane";
+  const header = headerLines({ ...snapshot === void 0 ? {} : { snapshot }, width: bodyColumns, now, keysAt, ...input.isSoundOff === true ? { isSoundOff: true } : {}, ...spark === void 0 ? {} : { spark } });
   const state = boardStateOf(snapshot);
   const note = input.jumpNote ?? void 0;
   const notice = note !== void 0 && note.sessionId === input.selectedKey && snapshot !== void 0 && isOnBoard(snapshot, note.sessionId) ? { notice: JUMP_NOTE[note.reason] } : {};
@@ -5432,7 +5541,6 @@ function paneView(input) {
     return keyRow({
       width: bodyColumns,
       isCmuxMissing: board2.sources.cmux.status === "missing",
-      promptHoldsKeys: input.promptHoldsKeys,
       answerDigits,
       isAnswerOff: answerDigits.length === 0,
       mode: board2.mode,
@@ -5448,8 +5556,9 @@ function paneView(input) {
     return keys2.length > 0 ? { ...message2, bottomRule: ruleLine(bodyColumns), keys: keys2 } : message2;
   }
   const layout = layoutOf(bodyColumns);
-  const detailState = input.detail ?? DEFAULT_DETAIL;
-  const isDetail = layout.kind === "narrow" && detailState.isOpen;
+  const asked = input.detail ?? DEFAULT_DETAIL;
+  const detailState = asked.isHelp === true && input.promptHoldsKeys ? { ...asked, isHelp: false } : asked;
+  const isDetail = layout.kind === "narrow" && (detailState.isOpen || detailState.isHelp === true);
   const keys = keysOf(snapshot, isDetail);
   const selection2 = input.selectedKey === void 0 ? {} : { selectedKey: input.selectedKey };
   const under = bodyRows - header.length - 2 - keys.lines.length;
@@ -5494,13 +5603,17 @@ function paneView(input) {
 }
 
 // src/god/register.tsx
-var PANE_COLUMNS = 110;
+var PANE_COLUMNS = 1e3;
 var PANE_ROWS = 20;
 async function readTheme($, runtime) {
   const next = themeOf((await $.config.list()).find((row) => row.key === "theme")?.value);
   if (next === runtime.theme) return;
   await update6($, THEME, () => next);
   runtime.theme = next;
+}
+async function closeHelpAway($, runtime) {
+  if (runtime.hasKeys !== false || (await read6($, DETAIL)).isHelp !== true) return;
+  await update6($, DETAIL, detailWithoutHelp);
 }
 async function startBoard($, runtime) {
   const home = await $.env.get("HOME") ?? "";
@@ -5539,6 +5652,7 @@ async function startBoard($, runtime) {
   const tick = () => {
     void loop.tick().then(() => checkSent($, loop.facts())).catch(() => void 0);
     void readTheme($, runtime).catch(() => void 0);
+    void closeHelpAway($, runtime).catch(() => void 0);
   };
   $.clock.every(TICK_MS, tick);
   tick();
@@ -5562,9 +5676,9 @@ function toolBoard(runtime) {
   const snapshot = runtime.board?.snapshot();
   return { isRunning: runtime.board !== void 0 || runtime.starting !== void 0, ...snapshot === void 0 ? {} : { snapshot } };
 }
-async function openPane($, runtime) {
+async function openPane($, runtime, isAsked) {
   await registerTools($, runtime).catch(() => void 0);
-  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS, rows: PANE_ROWS });
+  const opened = await $.ui.open({ id: PANE, title: PANE_TITLE, columns: PANE_COLUMNS, rows: PANE_ROWS, ...isAsked ? { focus: true } : {} });
   runtime.isPaneOpen = opened.isPlaced;
   const loop = await start($, runtime);
   loop.setPaneOpen(opened.isPlaced);
@@ -5600,6 +5714,7 @@ function actionsOf($, runtime, layout) {
       g: () => quiet2(choose($, runtime, toggledGroup)),
       t: () => quiet2(changeDetail($, detailAfterNextTab)),
       b: () => quiet2(backToBoard($)),
+      h: () => quiet2(changeDetail($, detailAfterHelp)),
       s: () => quiet2(soundKey($, runtime)),
       u: () => quiet2(muteKey($, runtime))
     },
@@ -5624,7 +5739,7 @@ function register(on, options) {
     await $.command.register({ name: "god", description: GOD_COMMAND_DESCRIPTION, argumentHint: GOD_ARGUMENT_HINT });
     if (await $.env.get("ORANGU_GOD") === "1") {
       await registerTools($, runtime).catch(() => void 0);
-      void openPane($, runtime).catch(() => void 0);
+      void openPane($, runtime, false).catch(() => void 0);
     }
     return next(e);
   }).catch(($, e, next) => next(e));
@@ -5636,13 +5751,14 @@ function register(on, options) {
       const repos = runtime.board?.store().repos ?? storeOf({ repos: await $.store.get("repos") }).repos;
       return { text: commandAnswer(command, { isPlaced: false, repos }) };
     }
-    const { loop, isPlaced } = await openPane($, runtime);
+    const { loop, isPlaced } = await openPane($, runtime, true);
     const choice = commandChoice(command);
     if (choice !== void 0) await choose($, runtime, () => choice);
     return { text: commandAnswer(command, { isPlaced, repos: loop.store().repos }) };
   }).catch(() => ({ text: GOD_FAILED }));
   on("ui.render", { component: "Pane", requestId: "god" }, async ($, e) => {
     markPaneShown(runtime);
+    runtime.hasKeys = e.props.isFocused;
     const [snapshot, selected, openGroups, colors, detail, screen, jumpNote, deliverState, recap, motion] = await Promise.all([
       read6($, BOARD),
       read6($, SELECTED),
