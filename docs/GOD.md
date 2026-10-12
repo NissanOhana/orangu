@@ -18,6 +18,10 @@ alias god='CLAUDE_CODE_NO_FLICKER=1 ORANGU_GOD=1 claude --plugin-dir <repo>/god'
 
 `ORANGU_GOD=1` opens the pane when the session starts. `CLAUDE_CODE_NO_FLICKER=1` starts the fullscreen layout of Claude Code. In that layout, `/god` docks the pane beside the transcript when the terminal has 110 columns or more. In a narrower terminal, and in the normal layout, the pane shows inline above the prompt. A pane that `ORANGU_GOD=1` opens waits for a terminal of 144 columns. After you open the pane once and do not close it, it waits for 110 columns.
 
+The docked pane asks for the full width, so Claude Code keeps only a narrow strip of the transcript. In a terminal of 190 columns, the pane got 163 columns.
+
+`/god` also gives the keys to the pane, so the keys of the pane work at once. Claude Code gives the keys only to a pane that you open, so a pane that `ORANGU_GOD=1` opens does not take them. Claude Code also keeps the keys at the prompt while the prompt holds text.
+
 An inline pane can be short. In a terminal of 35 rows, it got about 11 rows. That is too short for the detail of a question. The detail then shows `The pane is too short. Make it taller.`, and no digit answers the question.
 
 Without `/god` or `ORANGU_GOD=1`, the mod only registers the `/god` command. It runs no host command, reads no file, starts no timer and opens no pane.
@@ -40,6 +44,8 @@ The repos mode changes only the board. The alerts, the status line and the 2 too
 
 The board shows 1 row for each live session but the god session, and it refreshes every 2 s. A background session that `claude agents` lists with no PID gets no row. A row shows the glyph of the level, the name, a summary of 1 line and the time at that level. The rows sort by level, then by the longest time at that level.
 
+The name of a row is the title of the cmux tab of the session. Claude Code starts that title with a status glyph, for example `✳` or a spinner frame, and the row leaves the glyph out. A session with no tab title shows the title of its transcript. A session with neither shows its session name. The detail shows the session name and the repo on its second line.
+
 | Level | When |
 |---|---|
 | NEEDS YOU | The session waits for you: a question, a permission prompt or another dialog. |
@@ -55,17 +61,18 @@ A press on a session row or a jump marks the session as seen. A session that you
 
 Rules write each summary, and no model writes it. A waiting session shows its question or its permission request. A busy session shows its activity or the API error at the end of its transcript. Else the summary is the first sentence of the last reply.
 
-The detail of the selected session has 5 tabs: Now, History, Agents, Screen and Recap. It also names each overlap with another session:
+The detail of the selected session has 5 tabs: Now, History, Agents, Screen and Recap. Under the tab, it can show 2 kinds of overlap with other sessions:
 
-- `SAME TREE`: the 2 sessions work in the same worktree on the same branch.
+- The folder line: `Shares its folder with 2 working sessions: a, b`. It shows only when 2 or more sessions of the folder have the level WORKING or STUCK. The folder is the top folder of the worktree of the session, or its working folder when it has no repo. The line names 5 sessions at most, then the count of the rest.
 - `SAME FILES`: the 2 sessions wrote the same file in the last 2 h, in the part of each transcript that the mod read.
-- `SAME REPO`: the 2 sessions work in the same repo, in different worktrees.
 
-A board row shows `TREE` or `FILES` after the name. At 90 columns or more, the pane shows the board and the detail side by side. Below 90 columns, it shows the board alone, and Enter shows the detail in place of the board.
+Each line names a session by the name of its row. A board row shows `same file` after the name while the session has a `SAME FILES` line.
+
+At 90 columns or more, the pane shows the board and the detail side by side. The board takes about 40% of the width, from 30 to 60 columns. Below 90 columns, the pane shows the board alone, and Enter shows the detail in place of the board.
 
 ## Keys
 
-Press `ctrl+x tab`, or click the pane, to give the keys to the pane. Press Esc to give the keys back to the prompt. Claude Code does both, and the pane stays open after Esc.
+Press `ctrl+x tab`, or click the pane, to give the keys to the pane. Press Esc to give the keys back to the prompt. Claude Code does both, and the pane stays open after Esc. The header shows who holds the keys: `keys: pane · Esc: prompt` or `keys: prompt · ctrl+x tab: pane`.
 
 The key row at the bottom of the pane shows the keys of the board. With no cmux, `j`, `r` and the digits show dim. The digits also show dim when the detail shows no option that a digit answers. Else the key row names the digits of the options that the detail shows, for example `1-3`.
 
@@ -77,8 +84,8 @@ The key row at the bottom of the pane shows the keys of the board. With no cmux,
 | `j` | Jump to the cmux tab of the selected session. |
 | `n` | Select the next session that needs you. |
 | `1` to `9` | Answer the open question, or the Bash permission prompt (`1: Yes`, `2: No`). |
-| `r` | Write a prompt for the selected session. |
-| `m` | Write a peer message to the selected session. |
+| `r` | Write a prompt for the selected session. The key row calls it `prompt`. |
+| `m` | Write a peer note to the selected session. The key row calls it `peer note`. |
 | `t` | Show the next tab of the detail. |
 | `s` | Turn all tones off, or on again. |
 | `u` | Mute the selected session, or unmute it. |
@@ -87,8 +94,13 @@ The key row at the bottom of the pane shows the keys of the board. With no cmux,
 | `x` | Make a Recap. This key shows only on the Recap tab. |
 | `w`, `z` | Show the lines above (`w`) or below (`z`) a cut text. |
 | `y`, `c` | Send or cancel in the confirm bar. |
+| `h` | Show the help, or close it. |
 
 After `r` or `m`, type a line and press Enter. Each Enter adds the line to the draft. Press Enter on an empty line to open the confirm bar.
+
+## Help
+
+Press `h` to show the help in place of the detail. Below 90 columns, the help shows in place of the board. The help says what each heading of the board means, what the `same file` chip means, and what each key does. A long help scrolls with `w` and `z`. Press `h` again, or Esc, to close it. Claude Code takes no `?` as a key of a pane, so the help key is `h`.
 
 ## Safety of the key path
 
@@ -131,7 +143,7 @@ The text checks cover the first character, the exit words, the control character
 
 A prompt that starts with `/` can go out after the same checks. Its confirm bar says that the session runs it as a command.
 
-`m` sends a peer message through Claude Code, with no screen check. The session reads it as a message from a peer, not as your prompt. The confirm bar is the only guard of a peer message. The pane does not send a peer message with a control character or a character that does not show. The bar then shows the reason and offers only `c`.
+`m` sends a peer note through Claude Code, with no screen check. The session reads it as a note from a peer, not as your prompt. The confirm bar is the only guard of a peer note. The pane does not send a peer note with a control character or a character that does not show. The bar then shows the reason and offers only `c`.
 
 ## What it reads
 
