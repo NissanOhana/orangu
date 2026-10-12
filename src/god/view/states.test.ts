@@ -9,6 +9,7 @@ import { SECOND } from '../../../test/fixtures/god/sessions.js'
 import { NOW, boardSessions, boardSnapshot, degradedSnapshot, emptySnapshot, noRepoMatchSnapshot, readingSnapshot, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
 import { NO_REPO_SET } from '../copy.js'
 import type { BoardSnapshot } from '../types.js'
+import { boardLines } from './board.js'
 import { cellWidth } from './cells.js'
 import { cannotDrawView, paneLines, paneView, type PaneInput } from './pane.js'
 import { CANNOT_DRAW, STATE_TEXT } from './states.js'
@@ -95,14 +96,16 @@ describe('the states of the board pane', () => {
     expect(view.keys.map(text).at(-1)).toBe(' The keys j, r and the digits are off: cmux is not on this machine.')
   })
 
-  it('a session with no transcript: its row shows the registry facts and says so, cut with its count on the 30-column board', () => {
+  it('a session with no transcript: its row shows the registry facts and says so, cut with its count on a 30-column board', () => {
     const row = (bodyColumns: number): string => {
       const view = pane(boardSnapshot(), { bodyColumns })
       if (view.kind !== 'board') throw new Error(view.kind)
       return text(view.body.find((line) => line.key === 's-new')!)
     }
     expect(row(60)).toMatch(/^ ⠋ docs-1 {2}No transcript yet\. +2m$/)
-    expect(row(110)).toBe(' ⠋ docs-1  No transcript…+5 2m')
+    // the narrowest board, 30 cells, cuts the summary with its count
+    const board = boardLines({ snapshot: boardSnapshot(), width: 30, rows: 40, now: NOW, openGroups: [] })
+    expect(text(board.find((line) => line.key === 's-new')!)).toBe(' ⠋ docs-1  No transcript…+5 2m')
   })
 
   it('the pane cannot draw: 1 message with the reason and nothing else', () => {

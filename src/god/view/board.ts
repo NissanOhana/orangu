@@ -3,11 +3,14 @@
  * - 1 heading for each group of the snapshot, in board order. A group that starts closed (the stale group) shows
  *   its count and a `▸`, and opens when the person opens it (`openGroups`). Its heading is a row that the person
  *   can select, with the key groupKey(<group key>);
- * - 1 row for each session of an open group: the selection mark, the glyph of the level, the name, 1 chip for
- *   the same tree and 1 for the same files, the summary, and the time in the level at the right edge. The same
- *   repo gets no chip on the row: the detail shows it. The row key is the session id;
- * - every row is exactly `width` cells. The names share 1 column. A text that does not fit is cut with its count
- *   (src/god/view/cut.ts): the detail of the session shows it whole;
+ * - 1 row for each session of an open group: the selection mark, the glyph of the level, the name of the row
+ *   (src/god/view/names.ts: the cmux tab title, else the transcript title, else the session name), 1 chip for the
+ *   same tree and 1 for the same files, the summary, and the time in the level at the right edge. The same repo
+ *   gets no chip on the row: the detail shows it. A summary that only says the name again shows nothing. The row
+ *   key is the session id;
+ * - every row is exactly `width` cells. The names share 1 column of up to 60% of the row and NAME_MAX cells, so a
+ *   title shows whole in most cases. A text that does not fit is cut with its count (src/god/view/cut.ts): the
+ *   detail of the session shows it whole;
  * - only `rows` lines: the window keeps the selected row in view, and a line above and below counts the sessions
  *   that it leaves out. Each count line is a row that the person presses (key MORE_KEYS.up or MORE_KEYS.down), and
  *   it names the key that presses it: `+3 sessions (Enter)`. The arrows only walk the drawn Buttons, so a press is
@@ -23,10 +26,17 @@ import type { BoardGroup, BoardSnapshot, FlagKind, GodSession, Level } from '../
 import { cellWidth } from './cells.js'
 import { cutInline, fitSegments, moreText, type Part } from './cut.js'
 import { spinnerGlyph, type MotionFrame } from './motion.js'
+import { rowName } from './names.js'
 import type { Line, Segment } from './types.js'
 
-/** The board width in the wide layout, and the narrowest board that the row layout fits. */
+/** The narrowest board that the row layout fits, and the narrowest board of the wide layout. */
 export const BOARD_COLUMNS = 30
+
+/** The widest board of the wide layout: the detail takes the rest of the body. */
+export const BOARD_MAX_COLUMNS = 60
+
+/** The share of the body that the board takes in the wide layout, from BOARD_COLUMNS to BOARD_MAX_COLUMNS cells. */
+export const BOARD_SHARE = 0.4
 
 /** True when a group of the board holds the session `key`. The snapshot holds every session, also those that the repos mode hides. */
 export const isOnBoard = (snapshot: BoardSnapshot, key: string | undefined): boolean => key !== undefined && snapshot.groups.some((group) => group.sessionIds.includes(key))
@@ -55,9 +65,10 @@ export const NO_REPO = 'No repo'
 
 const CHIP_KINDS: readonly ChipKind[] = ['same-tree', 'same-files']
 const SESSION_UNIT = ['session', 'sessions'] as const
-/** the name column: at least this many cells when a name needs it, and never more than NAME_MAX */
+/** the name column: at least this many cells when a name needs it, NAME_SHARE of the row at most, and never more than NAME_MAX */
 const NAME_MIN = 6
-const NAME_MAX = 24
+const NAME_MAX = 40
+const NAME_SHARE = 0.6
 /** the fewest lines that a window needs: the count above, the selected row, the count below */
 export const MIN_WINDOW_ROWS = 3
 
@@ -130,9 +141,9 @@ const chipKinds = (session: GodSession): ChipKind[] => CHIP_KINDS.filter((kind) 
 function sessionLine(session: GodSession, input: BoardViewInput, nameColumn: number): Line {
   const time = levelTime(session.levelSince, input.now)
   const middleRoom = input.width - 4 - cellWidth(time)
-  const name = flat(session.name)
+  const name = rowName(session)
   const shownName = cutInline(name, nameColumn) ?? name
-  const summary = flat(session.summary)
+  const summary = flat(session.summary) === name ? '' : flat(session.summary)
   const pulse = session.level === 'needs-you' && input.frame?.isPulseOn === true ? { ...LEVEL_PAINT[session.level], bold: true } : {}
   const glyph = session.level === 'working' && input.frame !== undefined ? spinnerGlyph(input.frame) : LEVEL_GLYPH[session.level]
   const parts: Part[] = [{ segment: { text: shownName, ...pulse } }]
@@ -197,8 +208,8 @@ export function boardWindow(input: BoardViewInput): BoardWindow {
     group,
     sessions: isOpen(group, input.openGroups) ? group.sessionIds.flatMap((id) => byId.get(id) ?? []) : [],
   }))
-  const longest = Math.max(0, ...shown.flatMap(({ sessions }) => sessions.map((session) => cellWidth(flat(session.name)))))
-  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, Math.floor((width - 3) * 0.4)))
+  const longest = Math.max(0, ...shown.flatMap(({ sessions }) => sessions.map((session) => cellWidth(rowName(session)))))
+  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, Math.floor((width - 3) * NAME_SHARE)))
   const items: Item[] = shown.flatMap(({ group, sessions }) => [headingItem(group, input), ...sessions.map((session) => ({ line: sessionLine(session, input, nameColumn), sessions: 1 }))])
   const selected = items.findIndex((item) => item.line.key !== undefined && item.line.key === input.selectedKey)
   return windowOf(items, input.rows, Math.max(0, selected))

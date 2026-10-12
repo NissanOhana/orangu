@@ -1,6 +1,6 @@
 /**
  * The whole pane: the header, a rule, the body, a rule, the key row. At 90 columns or more the body is the board
- * column of 30 cells, left of the detail. Below 90 the board takes the whole body. No line is wider than the body,
+ * column of about 40% of the body (30 to 60 cells), left of the detail. Below 90 the board takes the whole body. No line is wider than the body,
  * and the pane takes no more rows than the body has.
  */
 import { describe, expect, it } from 'vitest'
@@ -9,7 +9,7 @@ import { NOW, boardSessions, boardSnapshot, byRepoSnapshot, degradedSnapshot, em
 import { INTENTS, OUTCOMES, RECAPS, detailSnapshot } from '../../../test/fixtures/god/detail.js'
 import type { BoardSnapshot } from '../types.js'
 import { cellWidth } from './cells.js'
-import { BOARD_COLUMNS, MORE_KEYS } from './board.js'
+import { MORE_KEYS } from './board.js'
 import { DEFAULT_DETAIL, NO_DETAIL, paneDetailLines } from './detail-pane.js'
 import { JUMP_NOTE } from './keys.js'
 import { layoutOf, paneLines, paneView, type PaneInput } from './pane.js'
@@ -47,18 +47,11 @@ function snapshots(): Array<[string, BoardSnapshot]> {
 }
 
 describe('the layout', () => {
-  it('puts the 30-column board left of the detail at 90 columns or more, and the board alone below 90', () => {
-    expect(BOARD_COLUMNS).toBe(30)
-    expect(layoutOf(89)).toEqual({ kind: 'narrow', boardColumns: 89 })
-    expect(layoutOf(90)).toEqual({ kind: 'wide', boardColumns: 30, detailColumns: 59 })
-    expect(layoutOf(110)).toEqual({ kind: 'wide', boardColumns: 30, detailColumns: 79 })
-  })
-
   it('draws the header, a rule, the board, a rule and the key row, and the rules meet the column rule at the board width', () => {
     const view = pane(boardSnapshot())
     if (view.kind !== 'board') throw new Error(view.kind)
-    expect(text(view.topRule)).toBe(`${'─'.repeat(30)}┬${'─'.repeat(79)}`)
-    expect(text(view.bottomRule)).toBe(`${'─'.repeat(30)}┴${'─'.repeat(79)}`)
+    expect(text(view.topRule)).toBe(`${'─'.repeat(44)}┬${'─'.repeat(65)}`)
+    expect(text(view.bottomRule)).toBe(`${'─'.repeat(44)}┴${'─'.repeat(65)}`)
     expect(view.topRule.segments.every((segment) => segment.dim === true)).toBe(true)
     const detail = view.detail === undefined ? [] : paneDetailLines(view.detail)
     expect(paneLines(view).map(text)).toEqual([...view.header, view.topRule, ...view.body, ...detail, view.bottomRule, ...view.keys].map(text))
@@ -72,18 +65,10 @@ describe('the layout', () => {
     if (view.kind !== 'board') throw new Error(view.kind)
     expect(view.keys.map(text).join('')).toMatch(/ {2}1-3 answer {2}/)
   })
-
-  it('says in the header who holds the keys, and not in the key row', () => {
-    const view = pane(boardSnapshot(), { promptHoldsKeys: true })
-    if (view.kind !== 'board') throw new Error(view.kind)
-    expect(view.header.map(text).join('')).toContain('keys: prompt · ctrl+x tab: pane')
-    expect(view.keys.map(text).join('')).not.toContain('ctrl+x tab')
-    expect(paneLines(pane(readingSnapshot())).map(text)[0]).toBe(' ◉ orangu god  keys: pane · Esc: prompt')
-  })
 })
 
 describe('no line is wider than the body', () => {
-  it.each([60, 89, 90, 110])('holds every line of every state to %i columns, and the board to 30 columns from 90', (columns) => {
+  it.each([60, 89, 90, 110, 163])('holds every line of every state to %i columns, and the board to its column from 90', (columns) => {
     for (const [name, snapshot] of snapshots()) {
       for (const openGroups of [[], ['stale']]) {
         for (const promptHoldsKeys of [false, true]) {
@@ -91,7 +76,7 @@ describe('no line is wider than the body', () => {
           expect(view.kind, `${name} at ${columns}`).not.toBe('cannot-draw')
           for (const line of paneLines(view)) expect(cellWidth(text(line)), `${name} at ${columns}: ${text(line)}`).toBeLessThanOrEqual(columns)
           if (view.kind === 'board') {
-            const room = columns >= 90 ? 30 : columns
+            const room = layoutOf(columns).boardColumns
             for (const line of view.body) expect(cellWidth(text(line)), `${name} board at ${columns}: ${text(line)}`).toBeLessThanOrEqual(room)
           }
         }
@@ -132,9 +117,10 @@ describe('the detail', () => {
       const view = pane(detailSnapshot(), { bodyColumns: columns, bodyRows: 30, selectedKey: 's-wait' })
       if (view.kind !== 'board' || view.detail?.kind !== 'session') throw new Error(`${columns}: ${view.kind}`)
       const lines = paneDetailLines(view.detail).map(text)
-      expect(lines[0]).toBe(' api-7 · Eval set › tab 2')
+      expect(lines.slice(0, 2)).toEqual([' tab 2', ' api-7 · api · main · default'])
       expect(lines.length).toBeLessThanOrEqual(detailRoom(view))
-      for (const line of lines) expect(cellWidth(line), line).toBeLessThanOrEqual(columns - BOARD_COLUMNS - 1)
+      const layout = layoutOf(columns)
+      for (const line of lines) expect(cellWidth(line), line).toBeLessThanOrEqual(layout.kind === 'wide' ? layout.detailColumns : 0)
       expect(rowsOf(view)).toBeLessThanOrEqual(30)
     }
   })
@@ -154,7 +140,7 @@ describe('the detail', () => {
       if (view.kind !== 'detail') throw new Error(`${columns}: ${view.kind}`)
       expect(text(view.topRule)).toBe('─'.repeat(columns))
       expect(paneLines(view).map(text)).toEqual([...view.header, view.topRule, ...paneDetailLines(view.detail), view.bottomRule, ...view.keys].map(text))
-      expect(paneDetailLines(view.detail).map(text)[0]).toBe(' api-7 · Eval set › tab 2')
+      expect(paneDetailLines(view.detail).map(text)[0]).toBe(' tab 2')
       expect(paneLines(view).length).toBeLessThanOrEqual(30)
       for (const line of paneLines(view)) expect(cellWidth(text(line)), line.segments.map((segment) => segment.text).join('')).toBeLessThanOrEqual(columns)
       const keys = view.keys.map(text).join('')

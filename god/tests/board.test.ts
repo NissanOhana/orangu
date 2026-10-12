@@ -29,6 +29,9 @@ function machineAt(t0: number): Machine {
   return { sessions, repos }
 }
 
+/** The name of the row of each session: no session has a cmux tab here, so each row shows its transcript title, the first prompt. */
+const ROW = { 'ask-a': 'Pick a color.', 'work-wt': 'Fix the parser.', 'stuck-b': 'Run the build.', 'idle-p': 'Fix the docs.' } as const
+
 type Setup = { machine: Machine; t0: number; clock: ReturnType<typeof mock.clock> }
 
 /** The fake machine, the clock, the store and the environment beneath the plugin, then the session start. */
@@ -70,10 +73,10 @@ for (const surface of SURFACES) {
     await clock.settle()
     const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(80, 30) })
     const lines = screenOf(await ui.drawn())
-    const order = ['NEEDS YOU', 'ask-a', 'STUCK', 'stuck-b', 'WORKING', 'work-wt', 'IDLE', 'idle-p'].map((word) => lines.findIndex((line) => line.includes(word)))
+    const order = ['NEEDS YOU', ROW['ask-a'], 'STUCK', ROW['stuck-b'], 'WORKING', ROW['work-wt'], 'IDLE', ROW['idle-p']].map((word) => lines.findIndex((line) => line.includes(word)))
     expect(order.every((index) => index >= 0), lines.join('\n')).toBe(true)
     expect([...order].sort((a, b) => a - b)).toEqual(order)
-    for (const name of ['ask-a', 'stuck-b', 'work-wt', 'idle-p']) expect(lines.filter((line) => line.includes(name))).toHaveLength(1)
+    for (const name of Object.values(ROW)) expect(lines.filter((line) => line.includes(name))).toHaveLength(1)
     const rows = (await ui.findAll({ type: 'Button' })).map((button) => button.key)
     expect(rows.filter((key) => key?.startsWith('ses-'))).toEqual(['ses-wait', 'ses-stuck', 'ses-work', 'ses-idle'])
     expect(rows).not.toContain('god-self-session')
@@ -88,13 +91,13 @@ for (const surface of SURFACES) {
     await clock.settle()
     const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(80, 30) })
     const before = screenOf(await ui.drawn())
-    expect(before.findIndex((line) => line.includes('work-wt'))).toBeGreaterThan(before.findIndex((line) => line.includes('WORKING')))
+    expect(before.findIndex((line) => line.includes('Pick a size.'))).toBeGreaterThan(before.findIndex((line) => line.includes('WORKING')))
     Object.assign(asking, { status: 'waiting', waitingFor: 'input needed', statusUpdatedAt: t0 + 500, fileMtimeMs: t0 + 500 })
     await clock.advance(2000)
     await ui.redraw()
     const after = screenOf(await ui.drawn())
     const heading = after.findIndex((line) => line.includes('NEEDS YOU'))
-    const row = after.findIndex((line) => line.includes('work-wt'))
+    const row = after.findIndex((line) => line.includes('Pick a size.'))
     expect(row, after.join('\n')).toBeGreaterThan(heading)
     expect(row).toBeLessThan(after.findIndex((line) => line.includes('STUCK')))
     expect(after[row]).toContain('Which size?')
@@ -110,7 +113,7 @@ for (const surface of SURFACES) {
     const shown = async (): Promise<string[]> => {
       await ui.redraw()
       const lines = screenOf(await ui.drawn())
-      return ['ask-a', 'work-wt', 'stuck-b', 'idle-p'].filter((name) => lines.some((line) => line.includes(name)))
+      return Object.entries(ROW).flatMap(([name, row]) => (lines.some((line) => line.includes(row)) ? [name] : []))
     }
     expect(await shown()).toEqual(['ask-a', 'work-wt'])
     expect((await $.command.run(god('repos'))).text).toBe('The repos mode shows these repos: repo-a.')
@@ -200,11 +203,11 @@ for (const surface of SURFACES) {
     }
     expect(await marked()).toEqual([])
     await $.ui.focus({ component: 'Pane', requestId: PANE, plugin: PLUGIN, element: 'ses-idle', origin: { kind: 'person' } })
-    expect((await marked()).join('')).toContain('idle-p')
+    expect((await marked()).join('')).toContain(ROW['idle-p'])
     await $.ui.focus({ component: 'Pane', requestId: PANE, plugin: PLUGIN, element: 'key:n', origin: { kind: 'person' } })
-    expect((await marked()).join('')).toContain('idle-p')
+    expect((await marked()).join('')).toContain(ROW['idle-p'])
     await ui.press({ key: 'key:n' })
-    expect((await marked()).join('')).toContain('ask-a')
+    expect((await marked()).join('')).toContain(ROW['ask-a'])
     await ui.press({ key: 'key:g' })
     const lines = screenOf(await ui.drawn())
     expect(lines.some((line) => line.trim() === 'repo-a')).toBe(true)
@@ -274,9 +277,9 @@ const levelOf = (lines: readonly string[], name: string): string | undefined => 
 }
 
 test('the stuck limit comes from the userConfig value: 1 min of silence is stuck under stuckAfterMin 1', { options: { stuckAfterMin: 1 } }, async ($, on) => {
-  expect(levelOf(await silentBoard($, on), 'work-wt')).toBe('STUCK')
+  expect(levelOf(await silentBoard($, on), ROW['work-wt'])).toBe('STUCK')
 })
 
 test('the stuck limit is 10 min when the userConfig value is not set', async ($, on) => {
-  expect(levelOf(await silentBoard($, on), 'work-wt')).toBe('WORKING')
+  expect(levelOf(await silentBoard($, on), ROW['work-wt'])).toBe('WORKING')
 })

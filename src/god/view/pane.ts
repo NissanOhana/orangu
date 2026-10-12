@@ -1,7 +1,8 @@
 /**
  * The whole god pane from 1 board snapshot, top to bottom: the header, a rule, the body, a rule, the key row.
- * - At WIDE_FROM_COLUMNS or more, the body is the board column (BOARD_COLUMNS cells) left of the detail of the
- *   selected session (src/god/view/detail-pane.ts), and each rule meets the column rule at the board width. The
+ * - At WIDE_FROM_COLUMNS or more, the body is the board column (BOARD_SHARE of the body, from BOARD_COLUMNS to
+ *   BOARD_MAX_COLUMNS cells) left of the detail of the selected session (src/god/view/detail-pane.ts), and each rule
+ *   meets the column rule at the board width. The
  *   detail takes no more rows than the board has. Below, the board takes the whole body, and once the person opens
  *   the detail, the detail takes it in place of the board, and the key row starts with b, which goes back.
  * - A board state (reading, no session, no session in the selected repos) shows its message under the header in
@@ -30,7 +31,7 @@ import type { JumpNote } from '../act/jump.js'
 import type { ScreenState } from '../source/screen.js'
 import { DIM } from '../ui/theme.js'
 import type { BoardSnapshot, RecapState } from '../types.js'
-import { BOARD_COLUMNS, MIN_WINDOW_ROWS, boardLines, boardWindow, isOnBoard } from './board.js'
+import { BOARD_COLUMNS, BOARD_MAX_COLUMNS, BOARD_SHARE, MIN_WINDOW_ROWS, boardLines, boardWindow, isOnBoard } from './board.js'
 import { barView, type BarView, type DeliverState } from './bar.js'
 import { DEFAULT_DETAIL, paneDetail, paneDetailLines, type DetailState, type PaneDetail } from './detail-pane.js'
 import { headerLines } from './header.js'
@@ -75,9 +76,9 @@ export type PaneInput = {
 
 /** Where the board goes at a body width. */
 export function layoutOf(bodyColumns: number): PaneLayout {
-  return bodyColumns >= WIDE_FROM_COLUMNS
-    ? { kind: 'wide', boardColumns: BOARD_COLUMNS, detailColumns: bodyColumns - BOARD_COLUMNS - 1 }
-    : { kind: 'narrow', boardColumns: bodyColumns }
+  if (bodyColumns < WIDE_FROM_COLUMNS) return { kind: 'narrow', boardColumns: bodyColumns }
+  const boardColumns = Math.min(BOARD_MAX_COLUMNS, Math.max(BOARD_COLUMNS, Math.round(bodyColumns * BOARD_SHARE)))
+  return { kind: 'wide', boardColumns, detailColumns: bodyColumns - boardColumns - 1 }
 }
 
 /** A rule across the body. In the wide layout, it meets the column rule with `joint` at the board width. */

@@ -51,7 +51,7 @@ async function begin($: Engine, on: On, surface: (typeof SURFACES)[number], over
   await $.session.start({ cwd: PLAIN, surface, isInteractive: true })
   await $.command.run(god())
   await clock.settle()
-  const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(110, 30) })
+  const ui = await $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(160, 30) })
   return { machine, calls, clock, ui, t0 }
 }
 
@@ -108,7 +108,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'key:u' })
     expect(calls.storeSets).toContainEqual(['muted', ['ses-a']])
     await clock.advance(2000)
-    expect((await lines(ui)).some((line) => line.endsWith('│ repo-a · muted'))).toBe(true)
+    expect((await lines(ui)).some((line) => line.endsWith('│ api-a · repo-a · muted'))).toBe(true)
     moveTo(machine, 0, 'waiting', t0 + 1000)
     await clock.advance(2000)
     expect([calls.tones, calls.notices, rings(calls)]).toEqual([[], [], []])

@@ -45,6 +45,8 @@ const keysOf = async (ui: Mounted<'terminal' | 'desktop', 'Pane'>): Promise<stri
 /** The open tab: the label that the tab row shows in brackets. */
 const openTab = (shown: readonly string[]): string | undefined => shown.map((line) => /\[(\w+)\]/.exec(line)?.[1]).find((tab) => tab !== undefined)
 const select = ($: Engine, element: string) => $.ui.focus({ component: 'Pane', requestId: PANE, plugin: PLUGIN, element, origin: { kind: 'person' } })
+/** The name of the row of each session: no session has a cmux tab here, so each row shows its transcript title, the first prompt. */
+const ROW = { 'ask-a': 'Pick a color.', 'long-p': 'Run step 1 of the plan.', 'idle-p': 'Fix the docs.' } as const
 
 for (const surface of SURFACES) {
   test(`${surface}: at 80 columns Enter on a row opens the detail in place of the board, and b goes back`, async ($, on) => {
@@ -52,14 +54,15 @@ for (const surface of SURFACES) {
     expect(await keysOf(ui)).not.toContain('key:b')
     await ui.press({ key: 'ses-wait' })
     const detail = await lines(ui)
-    expect(detail.some((line) => line.startsWith(' ask-a')), detail.join('\n')).toBe(true)
+    expect(detail.some((line) => line.startsWith(` ${ROW['ask-a']}`)), detail.join('\n')).toBe(true)
+    expect(detail).toContain(' ask-a · repo-a')
     expect(detail).toContain(' [Now]  History  Agents  Screen  Recap')
-    expect(detail.some((line) => line.includes('long-p'))).toBe(false)
+    expect(detail.some((line) => line.includes(ROW['long-p']))).toBe(false)
     expect(detail.join('\n')).not.toContain('↑↓ select')
     expect(detail.join('\n')).toContain('b: back')
     await ui.press({ key: 'key:b' })
     const board = await lines(ui)
-    for (const name of ['ask-a', 'long-p', 'idle-p']) expect(board.some((line) => line.includes(name)), board.join('\n')).toBe(true)
+    for (const name of Object.values(ROW)) expect(board.some((line) => line.includes(name)), board.join('\n')).toBe(true)
     expect(openTab(board)).toBeUndefined()
     expect(await keysOf(ui)).not.toContain('key:b')
     for (const line of [...detail, ...board]) expect([...line].length, line).toBeLessThanOrEqual(80)
@@ -177,7 +180,11 @@ function manyAt(t0: number): Machine {
   return { sessions, repos: {} }
 }
 
-const selectedRow = (shown: readonly string[]): string | undefined => shown.find((line) => line.startsWith('▌'))?.slice(1).trim().split(/\s+/)[1]
+/** The session of the selected row: each row shows its first prompt, `Run job 05.` for run-05. */
+const selectedRow = (shown: readonly string[]): string | undefined => {
+  const id = /Run job (\d+)\./.exec(shown.find((line) => line.startsWith('▌')) ?? '')?.[1]
+  return id === undefined ? undefined : `run-${id}`
+}
 
 for (const surface of SURFACES) {
   test(`${surface}: in a short pane the count lines are Buttons, and presses alone reach the last session and the first`, async ($, on) => {

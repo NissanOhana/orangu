@@ -72,7 +72,7 @@ for (const surface of SURFACES) {
     const bar = await lines(ui)
     expect(bar).toContain(' Send "Yes" to the Bash request of perm-p?  y: send  c: cancel')
     // the bar holds the new call, so the y below checks the screen against the long command
-    expect(detailText(bar), bar.join('\n')).toContain('word-probe/yes.txt')
+    expect(detailText(bar).replace(/\s+/g, ''), bar.join('\n')).toContain('word-probe/yes.txt')
     const atY = calls.runs.length
     await press(ui, 'key:y')
     expect(cmuxSince(calls, atY)).toEqual([readScreen(WS.perm, SF.perm), sendText(WS.perm, SF.perm, '1')])

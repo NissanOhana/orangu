@@ -35,22 +35,17 @@ const withoutTab = (session: GodSession): GodSession => {
 }
 
 describe('the head of the detail', () => {
-  it('shows the name, then · and the cmux tab title, and the name in bold', () => {
+  it('shows the name of the row in bold: the cmux tab title, else the transcript title, else the session name', () => {
     const view = detail('s-wait')
-    expect(text(view.head[0]!)).toBe(' api-7 · Eval set › tab 2')
-    expect(view.head[0]!.segments.find((segment) => segment.text.includes('api-7'))?.bold).toBe(true)
-    expect(text(detail('s-work').head[0]!)).toBe(' api-9 · Parser')
-  })
-
-  it('shows the transcript title when the session has no cmux tab, else the name alone', () => {
-    const view = detailView(input(withoutTab(detailSession('s-wait'))))
-    if (view.kind !== 'detail') throw new Error(view.kind)
-    expect(text(view.head[0]!)).toBe(' api-7 · Pick the eval set')
+    expect(view.head[0]!.segments).toEqual([{ text: ' ' }, { text: 'tab 2', bold: true }])
+    const untabbed = detailView(input(withoutTab(detailSession('s-wait'))))
+    if (untabbed.kind !== 'detail') throw new Error(untabbed.kind)
+    expect(text(untabbed.head[0]!)).toBe(' Pick the eval set')
     expect(text(detail('s-stuck').head[0]!)).toBe(' api-3')
   })
 
-  it('shows the repo, the branch and the permission mode on the facts line', () => {
-    expect(text(detail('s-wait').head[1]!)).toBe(' api · main · default')
+  it('shows the session name, the repo, the branch and the permission mode on the facts line, and no name that the title line shows', () => {
+    expect(text(detail('s-wait').head[1]!)).toBe(' api-7 · api · main · default')
     expect(text(detail('s-stuck').head[1]!)).toBe(' api (worktree) · fix')
     expect(text(detail('s-new').head[1]!)).toBe(' No repo')
   })
@@ -58,17 +53,17 @@ describe('the head of the detail', () => {
   it('ends the facts line with muted while u keeps the session from its alerts', () => {
     const muted = detailView(input({ ...detailSession('s-wait'), muted: true }))
     if (muted.kind !== 'detail') throw new Error(muted.kind)
-    expect(text(muted.head[1]!)).toBe(' api · main · default · muted')
+    expect(text(muted.head[1]!)).toBe(' api-7 · api · main · default · muted')
     expect(text(detail('s-wait').head[1]!)).not.toContain('muted')
   })
 
   it('wraps a long title line at whole words and cuts nothing', () => {
-    const long = { ...withoutTab(detailSession('s-wait')), name: 'name-'.repeat(12) }
+    const long = { ...withoutTab(detailSession('s-wait')), transcript: { ...detailSession('s-wait').transcript!, title: 'title '.repeat(12) } }
     const view = detailView(input(long, { width: 30 }))
     if (view.kind !== 'detail') throw new Error(view.kind)
     const head = view.head.map(text)
     expect(head.every((line) => cellWidth(line) <= 30)).toBe(true)
-    expect(head.join('').replace(/\s+/g, '')).toContain(`${'name-'.repeat(12)}·Pickthe`)
+    expect(head.join('').replace(/\s+/g, '')).toContain(`${'title'.repeat(12)}api-7·api`)
   })
 })
 

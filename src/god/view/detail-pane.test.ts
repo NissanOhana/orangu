@@ -30,7 +30,7 @@ describe('the detail of the selected session', () => {
     const detail = sessionDetail(detailOf(detailSnapshot()))
     expect(detail.sessionId).toBe('s-wait')
     const lines = paneDetailLines(detail).map(text)
-    expect(lines[0]).toBe(' api-7 · Eval set › tab 2')
+    expect(lines.slice(0, 2)).toEqual([' tab 2', ' api-7 · api · main · default'])
     expect(lines).toContain(' [Now]  History  Agents  Screen  Recap')
     expect(lines.some((line) => line.includes('Which eval set'))).toBe(true)
   })

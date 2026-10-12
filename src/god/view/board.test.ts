@@ -62,6 +62,33 @@ describe('groups and rows', () => {
   })
 })
 
+describe('the row name', () => {
+  const tab = (surfaceTitle: string) => ({ pid: 1, tty: 'ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: 'Space', surfaceTitle })
+
+  it('names each row by its cmux tab title with no status glyph, else by its transcript title, else by its session name', () => {
+    const snapshot = snapshotOf([
+      busy('s-tab', { name: 'api-2', tab: tab('✳ Read the notes'), transcript: transcript({ title: 'Plan the work', lastReply: 'Done.' }) }),
+      busy('s-title', { name: 'api-4', statusSince: NOW - 30 * MINUTE, transcript: transcript({ title: 'Plan the work', lastReply: 'Done.' }) }),
+      busy('s-plain', { name: 'api-6', statusSince: NOW - 40 * MINUTE, transcript: transcript({ lastReply: 'Done.' }) }),
+    ])
+    const lines = view(snapshot)
+    expect(text(rowOf(lines, 's-tab'))).toMatch(/^ ⠋ Read the notes {2}Done\. +20m$/)
+    expect(text(rowOf(lines, 's-title'))).toMatch(/^ ⠋ Plan the work {3}Done\. +30m$/)
+    expect(text(rowOf(lines, 's-plain'))).toMatch(/^ ⠋ api-6 {11}Done\. +40m$/)
+  })
+
+  it('shows no summary that only says the row name again: a session with no reply sums itself up by its title', () => {
+    const row = text(rowOf(view(snapshotOf([busy('s-title', { name: 'api-4', transcript: transcript({ title: 'Plan the work' }) })])), 's-title'))
+    expect(row).toMatch(/^ ⠋ Plan the work +20m$/)
+  })
+
+  it('gives a title of 34 cells the room to show whole on a board of 60 cells', () => {
+    const title = 'Fix the parser for the new records'
+    const row = text(rowOf(view(snapshotOf([busy('s-long', { name: 'api-2', tab: tab(`◐ ${title}`), transcript: transcript({ lastReply: 'Done.' }) })])), 's-long'))
+    expect(row).toContain(` ${title} `)
+  })
+})
+
 describe('the glyph carries the level with no color', () => {
   it('gives each level its own glyph, so the text alone tells the level', () => {
     expect(LEVEL_GLYPH).toEqual({ 'needs-you': '⚠', 'your-turn': '●', stuck: '✕', working: '⠋', idle: '·', stale: '○' })

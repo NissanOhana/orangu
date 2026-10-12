@@ -22,7 +22,7 @@ const GOD_FIXTURE = 'test/fixtures/god/snapshots.ts'
 /**
  * The god pane of each fixture snapshot through the real view builders (src/god/view/pane.ts), as the terminal
  * shows it: the header, the board, the key row and each board state, at 60 columns (the board alone) and 110 (the
- * 30-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then the
+ * 44-column board beside the detail), with the waiting session selected and the prompt holding the keys. Then the
  * pane with the detail open in each tab at 60 columns (the detail in place of the board) and 110, the wide pane
  * with no session selected, the pane with each jump note, the pane with the sound off and a muted session, and each
  * line of a pane that cannot draw. Then each answer of /god stats, with and without the alert counts, and the body of

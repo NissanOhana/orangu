@@ -60,7 +60,7 @@ async function begin($: Engine, on: On, surface: (typeof SURFACES)[number], over
   return { machine, calls, clock, t0 }
 }
 
-const mount = ($: Engine, surface: (typeof SURFACES)[number], columns = 110, rows = 30) => $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(columns, rows) })
+const mount = ($: Engine, surface: (typeof SURFACES)[number], columns = 160, rows = 30) => $.ui.mount({ plugin: PLUGIN, surface, component: 'Pane', requestId: PANE, props: paneProps(columns, rows) })
 const lines = async (ui: Mounted<'terminal' | 'desktop', 'Pane'>): Promise<string[]> => {
   await ui.redraw()
   return screenOf(await ui.drawn())
@@ -137,7 +137,8 @@ for (const surface of SURFACES) {
     }
     const expectCleared = async (): Promise<void> => {
       const shown = await lines(ui)
-      expect(shown.some((line) => line.includes('loose-p')), shown.join('\n')).toBe(false)
+      // loose-p has no cmux tab, so its row shows its first prompt
+      expect(shown.some((line) => line.includes('Run the build.')), shown.join('\n')).toBe(false)
       expect(shown.some((line) => line.endsWith('│ Select a session on the board to show its detail.')), shown.join('\n')).toBe(true)
       expect(shown.join('\n')).not.toContain('no cmux tab')
     }
@@ -171,7 +172,8 @@ for (const surface of SURFACES) {
   test(`${surface}: a jump and an open mark the session seen, so its YOUR TURN row goes to IDLE`, async ($, on) => {
     const { calls } = await begin($, on, surface)
     const ui = await mount($, surface, 80, 40)
-    expect(groupOf(await lines(ui), 'turn-p')).toBe('YOUR TURN')
+    // the row of turn-p shows the title of its cmux tab
+    expect(groupOf(await lines(ui), ' turn ')).toBe('YOUR TURN')
     const before = calls.storeSets.length
     await select($, 'ses-turn')
     expect(calls.storeSets).toHaveLength(before)
@@ -180,7 +182,7 @@ for (const surface of SURFACES) {
     const seen = calls.storeSets.slice(before).filter(([key]) => key === 'seenAt')
     expect(seen).toHaveLength(1)
     expect((seen[0]![1] as Record<string, number>)['ses-turn']).toBeGreaterThan(Date.now() - 60_000)
-    expect(groupOf(await lines(ui), 'turn-p')).toBe('IDLE')
+    expect(groupOf(await lines(ui), ' turn ')).toBe('IDLE')
     // an open: a press on a row (Enter) marks that session seen
     const opened = calls.storeSets.length
     await ui.press({ key: 'ses-wait' })

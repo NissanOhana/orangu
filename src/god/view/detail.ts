@@ -1,9 +1,10 @@
 /**
  * The detail of 1 session, as the pane draws it beside the board (90 columns or more) or in place of it, top to
  * bottom:
- * - the title line: the name, then `·` and the cmux tab title (the transcript title when the session has no tab);
- * - the facts line: the repo, the branch and the permission mode, then `muted` while u keeps the session from its
- *   alerts;
+ * - the title line: the name of the row in bold (src/god/view/names.ts: the cmux tab title, else the transcript
+ *   title, else the session name);
+ * - the facts line: the session name when the title line shows another name, the repo, the branch and the
+ *   permission mode, then `muted` while u keeps the session from its alerts;
  * - the tab row: Now, History, Agents, Screen, Recap. Each tab is 1 Button with the key tab:<tab>, and the open
  *   tab shows in brackets. `t` moves to the next tab;
  * - the content of the open tab (src/god/view/detail-tabs.ts);
@@ -20,6 +21,7 @@ import { ACCENT, DIM, FLAG_PAINT } from '../ui/theme.js'
 import { NO_REPO } from './board.js'
 import { cellWidth } from './cells.js'
 import { tabContent, type OptionKey } from './detail-tabs.js'
+import { rowName } from './names.js'
 import { CANNOT_DRAW, messageLines } from './states.js'
 import type { Line, Segment } from './types.js'
 import { MIN_WINDOW, windowOf, type ScrollWindow } from './window.js'
@@ -89,17 +91,18 @@ export function contextPercent(context: ContextFacts | undefined): string | unde
 /** The newest PR link that names a number. */
 export const newestPr = (links: readonly PrLink[]): number | undefined => [...links].reverse().find((link) => link.number !== undefined)?.number
 
-/** The cmux tab title: the workspace title, then `›` and the surface title. */
+/** The cmux tab title: the workspace title, then `›` and the surface title. The 2 tools show it. */
 export function tabTitle(session: GodSession): string {
   const tab = session.tab
   return tab === undefined ? '' : [tab.workspaceTitle, tab.surfaceTitle ?? ''].map(flat).filter((title) => title !== '').join(' › ')
 }
 
 function headLines(session: GodSession, width: number): Line[] {
-  const second = tabTitle(session) || flat(session.transcript?.title ?? '')
-  const title = wrapSegments([{ text: flat(session.name), bold: true }, ...(second === '' ? [] : [{ text: ` · ${second}` }])], width)
+  const name = rowName(session)
+  const title = wrapSegments([{ text: name, bold: true }], width)
   const repo = session.repo === undefined ? NO_REPO : `${flat(session.repo.name)}${session.repo.isWorktree ? ' (worktree)' : ''}`
-  const facts = [repo, flat(session.transcript?.branch ?? ''), flat(session.transcript?.permissionMode ?? ''), session.muted ? 'muted' : ''].filter((fact) => fact !== '')
+  const sessionName = flat(session.name) === name ? '' : flat(session.name)
+  const facts = [sessionName, repo, flat(session.transcript?.branch ?? ''), flat(session.transcript?.permissionMode ?? ''), session.muted ? 'muted' : ''].filter((fact) => fact !== '')
   return [...title, ...wrapSegments([{ text: facts.join(' · ') }], width)]
 }
 
