@@ -122,9 +122,9 @@ var RECAP_LABEL = {
   prompt: "Prompt",
   reply: "Reply"
 };
-var BOARD_TOOL_DESCRIPTION = "This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the name, the repo, the context percent, the summary and the title. The tool only reads, and it changes nothing.";
+var BOARD_TOOL_DESCRIPTION = "This tool shows 1 line for each live Claude Code session on this machine, in board order: the sessions that need the person come first. Each line gives the level and its time, the session name, the row name, the repo, the context percent, the summary and the title. The row name is the name that the pane shows for the session. The tool only reads, and it changes nothing.";
 var SESSION_TOOL_DESCRIPTION = "This tool shows the detail of the live session with the name that you give. The detail has the open question, the last prompt, the last reply, the activity, the agents and the overlap flags. Get the names from the board tool. The tool only reads, and it changes nothing.";
-var SESSION_TOOL_NAME_HINT = "The name of the session, as the board tool shows it.";
+var SESSION_TOOL_NAME_HINT = "The session name or the row name of the session, as the board tool shows them.";
 var TOOL_NOT_RUNNING = "The god pane does not run in this session now. Ask the person to run /god.";
 var TOOL_FAILED = "The orangu god tool failed. Call it again.";
 var TASK_RUNNING = "The session runs a background task or a subagent that can open a dialog, so the pane sent nothing.";
@@ -307,6 +307,13 @@ function appendItem(lines, item, width) {
   const itemWidth = item.reduce((sum, segment) => sum + cellWidth(segment.text), 0);
   if (last !== void 0 && used + 2 + itemWidth <= width) return [...lines.slice(0, -1), { segments: [...last.segments, { text: "  " }, ...item] }];
   return [...lines, ...wrapSegments(item, width)];
+}
+
+// src/god/view/names.ts
+var STATUS_GLYPH = /^(?:[✳◐◑◒◓]️?|[⠀-⣿])\s*/u;
+function rowName(session) {
+  const tab = flat(session.tab?.surfaceTitle ?? "").replace(STATUS_GLYPH, "");
+  return tab || flat(session.transcript?.title ?? "") || flat(session.name);
 }
 
 // src/god/model/screen-match.ts
@@ -1414,7 +1421,7 @@ var REFUSED_RING_ARGV = "The alert ring runs only cmux notify on 1 tab, with no 
 var CONTROL_OR_BREAK = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/;
 var isRingValue = (value) => value !== void 0 && value !== "" && !value.startsWith("-") && !CONTROL_OR_BREAK.test(value) && !HIDDEN_CHAR.test(value);
 function alertNotice(session, kind, clean) {
-  return { title: PANE_TITLE, body: alertBody(clean(flat(session.name)), kind) };
+  return { title: PANE_TITLE, body: alertBody(clean(flat(rowName(session))), kind) };
 }
 function isRingArgv(argv) {
   const [command, verb, titleFlag, title, bodyFlag, body, workspaceFlag, workspaceRef, surfaceFlag, surfaceRef] = argv;
@@ -1756,13 +1763,6 @@ function fitSegments(parts, room) {
     if (afterBlank && used + cellWidth(cutMark(hiddenFrom(index))) <= room) return [...parts.slice(0, index).map((whole) => whole.segment), mark2(hiddenFrom(index))];
   }
   return [mark2(hiddenFrom(0))];
-}
-
-// src/god/view/names.ts
-var STATUS_GLYPH = /^(?:[✳◐◑◒◓]️?|[⠀-⣿])\s*/u;
-function rowName(session) {
-  const tab = flat(session.tab?.surfaceTitle ?? "").replace(STATUS_GLYPH, "");
-  return tab || flat(session.transcript?.title ?? "") || flat(session.name);
 }
 
 // src/god/view/board.ts
@@ -2141,7 +2141,7 @@ var PROMPT_MODE_TEXT = {
   "/": "The first line starts with /, so the session runs it as a command."
 };
 var NOT_DELIVERED = "Not delivered. Check the Screen tab.";
-var PEER_NOT_DELIVERED = "The peer message did not arrive.";
+var PEER_NOT_DELIVERED = "The peer note did not arrive.";
 var SEND_FAILED = "A cmux command failed, so the keys after it did not go out. Check the Screen tab.";
 var FAILURE_TEXT = {
   "facts-unread": "The pane could not read the session again, so it sent nothing.",
@@ -2157,7 +2157,7 @@ function askText(intent) {
   if (intent.kind === "answer") return `Send "${intent.option} ${flat(intent.label)}" to ${name}?`;
   if (intent.kind === "answers") return answersAsk(name, intent.answers.map((answer) => `${flat(answer.header)}: ${answer.option} ${flat(answer.label)}`));
   if (intent.kind === "permission") return `Send "${intent.choice === "yes" ? "Yes" : "No"}" to the ${flat(intent.tool)} request of ${name}?`;
-  return intent.kind === "prompt" ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`;
+  return intent.kind === "prompt" ? `Send this prompt to ${name}?` : `Send this peer note to ${name}?`;
 }
 var CANCEL_HINTS = CONFIRM_HINTS.filter((hint) => hint.keys === "c");
 function partsOf(intent, width, isSending, refusal) {
@@ -2206,7 +2206,7 @@ var DRAFT_PLACEHOLDER = "Type 1 line and press Enter. Press Enter on an empty li
 var DRAFT_SUBMIT = "add line";
 function draftText(draft) {
   const count2 = draft.lines.length;
-  return `Write the ${draft.kind === "prompt" ? "prompt" : "peer message"} for ${flat(draft.target.name)}. It has ${count2} ${count2 === 1 ? "line" : "lines"}.`;
+  return `Write the ${draft.kind === "prompt" ? "prompt" : "peer note"} for ${flat(draft.target.name)}. It has ${count2} ${count2 === 1 ? "line" : "lines"}.`;
 }
 function scrollTargets(window) {
   return {
@@ -4811,6 +4811,7 @@ function boardLine(session, width, now) {
     [
       plain(levelText(session.level, session.levelSince, now)),
       quoted("name", session.name, false),
+      quoted("row name", rowName(session), false),
       quoted("repo", session.repo?.name, false),
       plain(`context ${contextPercent(session.transcript?.context) ?? "unknown"}`),
       quoted("summary", session.summary, true),
@@ -4887,6 +4888,7 @@ function sessionLines(session, width, now) {
   const lines = [
     ...field("orangu god session:", session.name, width, 0, "."),
     ...wrapWords(TOOL_QUOTE_RULE, width),
+    ...field("Row name:", rowName(session), width),
     ...wrapWords(`Level: ${levelText(session.level, session.levelSince, now)}`, width),
     ...session.level === "needs-you" && session.waitingFor !== void 0 ? field("Waits for:", session.waitingFor, width) : [],
     ...field("Title:", transcript?.title, width),
@@ -4911,7 +4913,8 @@ function sessionLines(session, width, now) {
 function sessionToolText(snapshot, name, width, now) {
   if (snapshot === void 0 || !snapshot.firstRefreshDone) return TOOL_READING;
   const wanted = flat(name);
-  const matches = snapshot.sessions.filter((session) => flat(session.name) === wanted);
+  const named = snapshot.sessions.filter((session) => flat(session.name) === wanted);
+  const matches = named.length > 0 ? named : snapshot.sessions.filter((session) => rowName(session) === wanted);
   if (matches.length === 0) {
     const one = `No live session has the name ${quote(wanted)}. Call the board tool for the names.`;
     if (cellWidth(one) <= width) return one;
@@ -5206,7 +5209,7 @@ function selectedSession(snapshot, selectedKey, needsCmux = true) {
   if (snapshot === void 0 || needsCmux && snapshot.sources.cmux.status === "missing") return void 0;
   return snapshot.sessions.find((session) => session.sessionId === selectedKey);
 }
-var targetOf = (session) => ({ sessionId: session.sessionId, name: session.name });
+var targetOf = (session) => ({ sessionId: session.sessionId, name: rowName(session) });
 function answerIntent(snapshot, selectedKey, digit) {
   const session = selectedSession(snapshot, selectedKey);
   const open = session?.transcript?.openQuestion;
