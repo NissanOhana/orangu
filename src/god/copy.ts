@@ -36,7 +36,7 @@ export const HELP_LEVELS = {
 /** What the same file chip of a board row means. */
 export const HELP_SAME_FILE = 'This session and another session wrote the same file in the last 2 h.'
 
-/** What each key does: the keys of the key row, the 2 keys of the confirm bar, and the 2 keys that move the keys. */
+/** What each key does: the keys of the key row, the keys of the detail and the confirm bar, and the 2 keys that move the keys. */
 export const HELP_KEYS: ReadonlyArray<readonly [string, string]> = [
   ['↑↓', 'Select a session.'],
   ['Enter', 'Open the selected session.'],
@@ -44,10 +44,13 @@ export const HELP_KEYS: ReadonlyArray<readonly [string, string]> = [
   ['j', 'Jump to the cmux tab of the session.'],
   ['n', 'Select the next session that needs you.'],
   ['1-9', 'Pick an option of the open question. Then press y to send it.'],
+  ['p', 'Go back 1 question in a dialog with 2 or more single-select questions.'],
   ['y  c', 'Send, or cancel, what the confirm bar shows.'],
   ['r', 'Write a prompt. The session reads it as your prompt.'],
   ['m', 'Write a peer note. The session reads it as a note from a peer, not as your prompt.'],
   ['t', 'Show the next tab of the detail.'],
+  ['w  z', 'Show the lines above or below a cut text.'],
+  ['x', 'Make a Recap of the session. This key shows only on the Recap tab.'],
   ['s', 'Turn all tones off, or on again.'],
   ['u', 'Mute the selected session, or unmute it.'],
   ['f', 'Show every session, or only the sessions of the selected repos.'],

@@ -29,6 +29,13 @@ describe('the row name', () => {
     expect(rowName(named({ transcript: undefined }))).toBe('api-7')
   })
 
+  it('takes the default tab title Claude Code as no tab title, so rows of new sessions do not all read the same', () => {
+    const titled = transcript({ title: 'Pick the eval set' })
+    expect(rowName(named({ tab: tab('◐ Claude Code'), transcript: titled }))).toBe('Pick the eval set')
+    expect(rowName(named({ tab: tab('Claude Code'), transcript: transcript() }))).toBe('api-7')
+    expect(rowName(named({ tab: tab('✳ Claude Code notes'), transcript: titled }))).toBe('Claude Code notes')
+  })
+
   it('shows the title on 1 line: each run of white space becomes 1 space', () => {
     expect(rowName(named({ tab: tab('✳  Fix\tthe\nparser ') }))).toBe('Fix the parser')
     expect(rowName(named({ transcript: transcript({ title: ' Pick\n the set ' }) }))).toBe('Pick the set')

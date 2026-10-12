@@ -9,7 +9,7 @@
  *   edge. The same tree and the same repo get no chip: the detail names the working sessions of the folder. A
  *   summary that only says the name again shows nothing. The row key is the session id;
  * - every row is exactly `width` cells. The names share 1 column of up to 60% of the row and NAME_MAX cells, so a
- *   title shows whole in most cases. A text that does not fit is cut with its count (src/god/view/cut.ts): the
+ *   title shows whole in most cases. While a shown row has a chip, the column leaves the room of the chip. A text that does not fit is cut with its count (src/god/view/cut.ts): the
  *   detail of the session shows it whole;
  * - only `rows` lines: the window keeps the selected row in view, and a line above and below counts the sessions
  *   that it leaves out. Each count line is a row that the person presses (key MORE_KEYS.up or MORE_KEYS.down), and
@@ -69,6 +69,14 @@ const SESSION_UNIT = ['session', 'sessions'] as const
 const NAME_MIN = 6
 const NAME_MAX = 40
 const NAME_SHARE = 0.6
+/**
+ * The cells of a row that the name column leaves while a shown row has a chip: the mark, the glyph and its space,
+ * the space and the time (4 cells at most), then the space and the chip, the 2 spaces and a cut mark of the summary
+ * for up to 999 cut characters (`…+999`). So a long name does not push the chip into the cut count. A name keeps
+ * CHIP_NAME_MIN cells, so on a board of fewer than about 37 cells the chip can still go into the count.
+ */
+const CHIP_ROW_ROOM = 3 + 1 + 4 + 1 + cellWidth(FLAG_CHIP['same-files']) + 2 + 5
+const CHIP_NAME_MIN = 12
 /** the fewest lines that a window needs: the count above, the selected row, the count below */
 export const MIN_WINDOW_ROWS = 3
 
@@ -208,8 +216,11 @@ export function boardWindow(input: BoardViewInput): BoardWindow {
     group,
     sessions: isOpen(group, input.openGroups) ? group.sessionIds.flatMap((id) => byId.get(id) ?? []) : [],
   }))
-  const longest = Math.max(0, ...shown.flatMap(({ sessions }) => sessions.map((session) => cellWidth(rowName(session)))))
-  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, Math.floor((width - 3) * NAME_SHARE)))
+  const rows = shown.flatMap(({ sessions }) => sessions)
+  const longest = Math.max(0, ...rows.map((session) => cellWidth(rowName(session))))
+  const share = Math.floor((width - 3) * NAME_SHARE)
+  const room = rows.some((session) => chipKinds(session).length > 0) ? Math.min(share, Math.max(CHIP_NAME_MIN, width - CHIP_ROW_ROOM)) : share
+  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, room))
   const items: Item[] = shown.flatMap(({ group, sessions }) => [headingItem(group, input), ...sessions.map((session) => ({ line: sessionLine(session, input, nameColumn), sessions: 1 }))])
   const selected = items.findIndex((item) => item.line.key !== undefined && item.line.key === input.selectedKey)
   return windowOf(items, input.rows, Math.max(0, selected))

@@ -31,14 +31,17 @@ describe('the help view', () => {
     expect(needs).toEqual({ text: `${LEVEL_GLYPH['needs-you']} ${LEVEL_HEADING['needs-you']}`, ...LEVEL_PAINT['needs-you'], bold: true })
   })
 
-  it('explains each key of the key row, the keys of the confirm bar, and the 2 keys that move the keys', () => {
+  it('explains each key of the pane: the key row, the keys of the detail and the confirm bar, and the 2 keys that move the keys', () => {
     const lines = helpLines(102).map(text)
     const labels = lines.slice(8).map((line) => line.slice(1, 14).trim())
-    expect(labels).toEqual(['↑↓', 'Enter', 'b', 'j', 'n', '1-9', 'y  c', 'r', 'm', 't', 's', 'u', 'f', 'g', 'h', 'Esc', 'ctrl+x tab'])
+    expect(labels).toEqual(['↑↓', 'Enter', 'b', 'j', 'n', '1-9', 'p', 'y  c', 'r', 'm', 't', 'w  z', 'x', 's', 'u', 'f', 'g', 'h', 'Esc', 'ctrl+x tab'])
     expect(HELP_KEYS.map(([key]) => key)).toEqual(labels)
     expect(lines).toContain(' r            Write a prompt. The session reads it as your prompt.')
     expect(lines).toContain(' m            Write a peer note. The session reads it as a note from a peer, not as your prompt.')
     expect(lines).toContain(' h            Show this help, or close it.')
+    expect(lines).toContain(' p            Go back 1 question in a dialog with 2 or more single-select questions.')
+    expect(lines).toContain(' w  z         Show the lines above or below a cut text.')
+    expect(lines).toContain(' x            Make a Recap of the session. This key shows only on the Recap tab.')
   })
 
   it('wraps each text in its column at whole words, and holds every line to the width', () => {

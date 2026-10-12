@@ -3,7 +3,8 @@
  * of the detail, and the board takes the whole body below 90 columns. The header says who holds the keys.
  */
 import { describe, expect, it } from 'vitest'
-import { NOW, boardSnapshot, readingSnapshot } from '../../../test/fixtures/god/snapshots.js'
+import { MINUTE, busy, repo, transcript } from '../../../test/fixtures/god/sessions.js'
+import { NOW, boardSnapshot, readingSnapshot, snapshotOf } from '../../../test/fixtures/god/snapshots.js'
 import type { BoardSnapshot } from '../types.js'
 import { BOARD_COLUMNS } from './board.js'
 import { layoutOf, paneLines, paneView, type PaneInput } from './pane.js'
@@ -30,5 +31,23 @@ describe('the layout', () => {
     expect(view.header.map(text).join('')).toContain('keys: prompt · ctrl+x tab: pane')
     expect(view.keys.map(text).join('')).not.toContain('ctrl+x tab')
     expect(paneLines(pane(readingSnapshot())).map(text)[0]).toBe(' ◉ orangu god  keys: pane · Esc: prompt')
+  })
+
+  it('keeps the room of the same file chip out of the name column, so 1 long tab title does not cut the chip, at 100 and 110 columns', () => {
+    const tab = (surfaceTitle: string) => ({ pid: 1, tty: 'ttys001', workspaceRef: 'workspace:1', surfaceRef: 'surface:1', workspaceTitle: 'Space', surfaceTitle })
+    const shared = [{ path: '/work/api/parse.ts', tool: 'Edit', at: NOW - MINUTE }]
+    const facts = (lastReply: string) => transcript({ filesTouched: shared, activity: { toolUseId: 'tu', tool: 'Edit', text: 'Edit parse.ts', isOpen: true, at: NOW - MINUTE }, lastReply })
+    const snapshot = snapshotOf([
+      busy('s-long', { name: 'api-1', repo: repo('api'), tab: tab('✳ Fix the parser for the new records'), transcript: facts('Done.') }),
+      busy('s-short', { name: 'api-2', repo: repo('api'), tab: tab('⠐ Lexer'), statusSince: NOW - 30 * MINUTE, transcript: facts('Done.') }),
+    ])
+    for (const bodyColumns of [100, 110]) {
+      const view = pane(snapshot, { bodyColumns })
+      if (view.kind !== 'board') throw new Error(view.kind)
+      for (const key of ['s-long', 's-short']) {
+        const row = text(view.body.find((line) => line.key === key)!)
+        expect(row, `${bodyColumns} columns`).toContain(' same file ')
+      }
+    }
   })
 })
