@@ -254,17 +254,25 @@ export async function deliver(ports: DeliverPorts, request: DeliverRequest): Pro
   const refs = request.cmux === 'ok' ? tabRefs(session.tab) : undefined
   if (refs === undefined) return refused('no-tab')
 
-  const ps = await readPs(host, [session.pid])
-  if (!ps.ok) return failed('facts-unread')
-  const fresh = await readFresh(host, ports, session).catch((): FreshFacts => ({ kind: 'unread' }))
-  if (fresh.kind === 'gone') return refused('screen-changed')
-  if (fresh.kind === 'unread') return failed('facts-unread')
-  if (!isSameProcess(ps.value.rows, session.pid, fresh.procStart, session.tab?.tty)) return refused('screen-changed')
-  const screenRead = await readScreenAndRaw(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now())
-  if (screenRead === undefined) return failed('screen-unread')
-  const screen = screenRead.read
-  const now = await host.now().catch(() => Number.NaN)
-  const plan = planDelivery(intent, screen, fresh.facts, now, { screen: screenRead.raw, calls: fresh.calls, clean: ports.clean })
+  // the reads and the plan, before any key: a read that came too late (a slow machine) is read again once
+  const readAndPlan = async () => {
+    const ps = await readPs(host, [session.pid])
+    if (!ps.ok) return failed('facts-unread')
+    const fresh = await readFresh(host, ports, session).catch((): FreshFacts => ({ kind: 'unread' }))
+    if (fresh.kind === 'gone') return refused('screen-changed')
+    if (fresh.kind === 'unread') return failed('facts-unread')
+    if (!isSameProcess(ps.value.rows, session.pid, fresh.procStart, session.tab?.tty)) return refused('screen-changed')
+    const screenRead = await readScreenAndRaw(host, { sessionId: session.sessionId, ...refs }, ports.clean, () => host.now())
+    if (screenRead === undefined) return failed('screen-unread')
+    const screen = screenRead.read
+    const now = await host.now().catch(() => Number.NaN)
+    const plan = planDelivery(intent, screen, fresh.facts, now, { screen: screenRead.raw, calls: fresh.calls, clean: ports.clean })
+    return { fresh, screen, plan }
+  }
+  let planned = await readAndPlan()
+  if ('plan' in planned && planned.plan.kind === 'refuse' && planned.plan.refusal === 'stale-screen' && !isCancelled()) planned = await readAndPlan()
+  if (!('plan' in planned)) return planned
+  const { fresh, screen, plan } = planned
   if (plan.kind === 'refuse') return refused(plan.refusal, screen)
   if (!isPinned(intent, plan.steps, refs)) return refused('screen-changed', screen)
 

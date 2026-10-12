@@ -69,6 +69,18 @@ describe('deliver: a prompt between its steps', () => {
     expect(keyRuns(slow.runs)).toEqual([sendText('Run the tests.')])
   })
 
+  it('reads and plans again once when the first read came too late, before any key, and refuses when the second is late too', async () => {
+    let reads = 0
+    const once = machine(asks(), { onRun: (argv, clock) => void (argv[1] === 'read-screen' && ++reads === 1 ? (clock.t += 1500) : undefined) })
+    expect((await deliver(once.ports, request(ANSWER))).outcome).toMatchObject({ status: 'sent' })
+    expect(reads).toBe(2)
+    let late = 0
+    const twice = machine(asks(), { onRun: (argv, clock) => void (argv[1] === 'read-screen' ? ((late += 1), (clock.t += 1500)) : undefined) })
+    expect((await deliver(twice.ports, request(ANSWER))).outcome).toMatchObject({ status: 'refused', refusal: 'stale-screen' })
+    expect(late).toBe(2)
+    expect(keyRuns(twice.runs)).toEqual([])
+  })
+
   it('refuses a prompt to an idle session whose background task runs, before any key', async () => {
     const fake = machine(idle({ lines: backgroundLines }))
     expect((await deliver(fake.ports, request(PROMPT))).outcome).toMatchObject({ status: 'refused', refusal: 'task-running' })
