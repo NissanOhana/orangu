@@ -20,7 +20,7 @@ alias god='CLAUDE_CODE_NO_FLICKER=1 ORANGU_GOD=1 claude --plugin-dir <repo>/god'
 
 The docked pane asks for the full width, so Claude Code keeps only a narrow strip of the transcript. In a terminal of 190 columns, the pane got 163 columns.
 
-`/god` also gives the keys to the pane, so the keys of the pane work at once. Claude Code gives the keys only to a pane that you open, so a pane that `ORANGU_GOD=1` opens does not take them. Claude Code also keeps the keys at the prompt while the prompt holds text.
+`/god` asks for the keys, so the keys of the pane work at once. The open of `ORANGU_GOD=1` does not ask for them. Claude Code keeps the keys at the prompt while the prompt holds text or a dialog shows.
 
 An inline pane can be short. In a terminal of 35 rows, it got about 11 rows. That is too short for the detail of a question. The detail then shows `The pane is too short. Make it taller.`, and no digit answers the question.
 
@@ -44,7 +44,7 @@ The repos mode changes only the board. The alerts, the status line and the 2 too
 
 The board shows 1 row for each live session but the god session, and it refreshes every 2 s. A background session that `claude agents` lists with no PID gets no row. A row shows the glyph of the level, the name, a summary of 1 line and the time at that level. The rows sort by level, then by the longest time at that level.
 
-The name of a row is the title of the cmux tab of the session. Claude Code starts that title with a status glyph, for example `✳` or a spinner frame, and the row leaves the glyph out. A session with no tab title shows the title of its transcript. A session with neither shows its session name. The detail shows the session name and the repo on its second line.
+The name of a row is the title of the cmux tab of the session. Claude Code starts that title with a status glyph, for example `✳` or a spinner frame, and the row leaves the glyph out. A session with no tab title shows the title of its transcript. A tab title of `Claude Code` alone counts as no tab title, because each new session starts with it. A session with neither title shows its session name. The second line of the detail shows the repo, and the session name when the row shows another name.
 
 | Level | When |
 |---|---|
@@ -83,8 +83,8 @@ The key row at the bottom of the pane shows the keys of the board. With no cmux,
 | `b` | Go back to the board from the detail of a narrow pane. |
 | `j` | Jump to the cmux tab of the selected session. |
 | `n` | Select the next session that needs you. |
-| `1` to `9` | Answer the open question, or the Bash permission prompt (`1: Yes`, `2: No`). In a dialog with 2 or more questions, pick for the question that the detail shows. |
-| `p` | Go back 1 question in a dialog with 2 or more questions. |
+| `1` to `9` | Answer the open question, or the Bash permission prompt (`1: Yes`, `2: No`). In a dialog with 2 or more single-select questions, pick for the question that the detail shows. |
+| `p` | Go back 1 question in a dialog with 2 or more single-select questions. |
 | `r` | Write a prompt for the selected session. The key row calls it `prompt`. |
 | `m` | Write a peer note to the selected session. The key row calls it `peer note`. |
 | `t` | Show the next tab of the detail. |
