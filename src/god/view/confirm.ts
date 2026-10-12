@@ -2,6 +2,8 @@
  * The confirm bar and the outcome lines of the key path. Nothing goes out until the person presses y in the bar,
  * so the bar names the session and what goes to it, in the accent color, then the y and c keys:
  * - an answer: the option digit and label, then the header chip and the question;
+ * - the answers of a dialog with 2 or more questions: each pick as `<header>: <digit> <label>`, then each header chip
+ *   and its question;
  * - a permission: Yes or No and the tool, then its whole input, with the spaces of the input as written;
  * - a prompt or a peer message: the whole text.
  * The keys show in the form that the engine paints a hotkey Button (`y: send  c: cancel`), each 1 segment that the
@@ -18,7 +20,7 @@
  * refusal in the bad color, and the not-delivered line in the warn color. No line is wider than `width`.
  */
 import { peerRefusal, textRefusal } from '../act/deliver-plan.js'
-import { CONTROL_CHAR, NOT_A_PROMPT, TASK_RUNNING } from '../copy.js'
+import { ANSWERS_PARTIAL, CONTROL_CHAR, NOT_A_PROMPT, TASK_RUNNING, answersAsk } from '../copy.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal } from '../types.js'
 import { ACCENT } from '../ui/theme.js'
 import { pressSegment } from './keys.js'
@@ -32,11 +34,14 @@ export const CONFIRM_HINTS: readonly KeyHint[] = [
   { keys: 'c', label: 'cancel', hotkey: 'c', isOff: false },
 ]
 
-/** The line of a dialog that the digits cannot answer: the detail shows it, and so does the multi-question refusal. */
-export const MULTI_DIALOG = 'This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.'
+/**
+ * The line of a dialog that the digits cannot answer: a question with more than 1 choice or with no option. The detail
+ * shows it, and so does the multi-question refusal.
+ */
+export const MULTI_DIALOG = 'This dialog has a question with more than 1 choice or with no option. Press j to answer it in its tab.'
 
 /** The same line when cmux is not on the machine, so j is off. */
-export const MULTI_DIALOG_NO_CMUX = 'This dialog has more than 1 question or more than 1 choice. Answer it in its tab.'
+export const MULTI_DIALOG_NO_CMUX = 'This dialog has a question with more than 1 choice or with no option. Answer it in its tab.'
 
 /**
  * Why the key path sent nothing: 1 line for each refusal code. 2 codes have 2 meanings each in the key guard
@@ -77,8 +82,8 @@ export const SEND_FAILED = 'A cmux command failed, so the keys after it did not 
 
 /**
  * Why a delivery failed, by the reason that the executor gives (src/god/act/deliver.ts): a read before the keys, a
- * cmux command of the plan, a change that the check between 2 steps of a prompt saw, or c. Any other reason shows the
- * line of a cmux command that failed.
+ * cmux command of the plan, a change that the check between 2 steps of a prompt saw, c, or any of these after 1 or more
+ * answers of a dialog with 2 or more questions. Any other reason shows the line of a cmux command that failed.
  */
 export const FAILURE_TEXT: Readonly<Record<string, string>> = {
   'facts-unread': 'The pane could not read the session again, so it sent nothing.',
@@ -86,6 +91,7 @@ export const FAILURE_TEXT: Readonly<Record<string, string>> = {
   'step-failed': SEND_FAILED,
   stopped: 'The screen or the session changed while the pane typed, so it sent no more keys. Check the Screen tab.',
   cancelled: 'You pressed c, so the pane sent no more keys.',
+  partial: ANSWERS_PARTIAL,
 }
 
 /** What the bar shows in place of its keys while y runs. */
@@ -111,6 +117,7 @@ export type ConfirmView = { lines: Line[]; hints: readonly KeyHint[]; window: Sc
 function askText(intent: DeliverIntent): string {
   const name = flat(intent.target.name)
   if (intent.kind === 'answer') return `Send "${intent.option} ${flat(intent.label)}" to ${name}?`
+  if (intent.kind === 'answers') return answersAsk(name, intent.answers.map((answer) => `${flat(answer.header)}: ${answer.option} ${flat(answer.label)}`))
   if (intent.kind === 'permission') return `Send "${intent.choice === 'yes' ? 'Yes' : 'No'}" to the ${flat(intent.tool)} request of ${name}?`
   return intent.kind === 'prompt' ? `Send this prompt to ${name}?` : `Send this peer message to ${name}?`
 }
@@ -124,6 +131,7 @@ function partsOf(intent: DeliverIntent, width: number, isSending: boolean, refus
   const keys: Segment[] = isSending ? [{ text: SENDING, dim: true }] : hints.flatMap((hint, index) => [...(index === 0 ? [] : [{ text: '  ' }]), pressSegment(hint.hotkey ?? hint.keys, hint.label)])
   const ask = appendItem(wrapSegments([{ text: askText(intent), ...ACCENT, bold: true }], width), keys, width)
   if (intent.kind === 'answer') return { fixed: [...ask, ...wrapSegments([{ text: `☐ ${flat(intent.header)}`, bold: true }, { text: `  ${flat(intent.question)}` }], width, 1, 3)], text: [] }
+  if (intent.kind === 'answers') return { fixed: ask, text: intent.answers.flatMap((answer) => wrapSegments([{ text: `☐ ${flat(answer.header)}`, bold: true }, { text: `  ${flat(answer.question)}` }], width, 1, 3)) }
   if (intent.kind === 'permission') {
     if (intent.input === undefined) return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }, { text: '  none' }], width)], text: [] }
     return { fixed: [...ask, ...wrapSegments([{ text: 'Input', bold: true }], width)], text: keptLines(intent.input, width, 3) }

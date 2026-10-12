@@ -163,3 +163,25 @@ export const NOT_A_PROMPT = 'The pane does not type a shell command, the help or
 
 /** Why the pane types no text with a control character or a character that draws nothing, as an emoji can hold. */
 export const CONTROL_CHAR = 'The text has a control character or a character that does not show, so the pane sent nothing. An emoji can hold such a character.'
+
+/** The line under the options of a question that the digits answer, with the digits of its options (`1-3`). */
+export const answerAction = (digits: string): string => `Press ${digits}, then y to send.`
+
+/**
+ * The line under the options of question `at` of `count` of a dialog that the pane answers 1 question at a time. The
+ * last question sends: the confirm bar then shows every pick.
+ */
+export const pickAction = (at: number, count: number, digits: string): string =>
+  at < count ? `Question ${at} of ${count}. Press ${digits} to pick, then go on to the next question.` : `Question ${at} of ${count}. Press ${digits} to pick, then y to send.`
+
+/** What the back key of a dialog with 2 or more questions does, as the engine paints its Button: `p: back to question 1`. */
+export const pickBackLabel = (at: number): string => `back to question ${at}`
+
+/** The line under the options when cmux is not on the machine, so no digit answers the question. */
+export const ANSWER_NO_CMUX = 'cmux is not on this machine, so answer the question in its tab.'
+
+/** Why the pane stopped after 1 or more answers of a dialog with 2 or more questions: the dialog keeps those picks. */
+export const ANSWERS_PARTIAL = 'The pane stopped after 1 or more answers, so the dialog stays open with some picks in it. Press j to answer the rest in its tab.'
+
+/** The question of the confirm bar of the answers of a dialog with 2 or more questions: the session, then each pick. */
+export const answersAsk = (name: string, picks: readonly string[]): string => `Send to ${name}? ${picks.join(' · ')}`

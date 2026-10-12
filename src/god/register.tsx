@@ -27,8 +27,8 @@
 //   board took. The tools only read.
 // - /god stats answers from the stats of the last refreshes of the board, and opens nothing.
 // - The key path (src/god/deliver-keys.tsx): a digit on an option, the Yes or No of a Bash request, r and m open the
-//   confirm bar or the draft, and only y in the bar sends. After each tick the check of the last send reads the
-//   newest facts.
+//   confirm bar or the draft, a digit and p pick in a dialog with 2 or more questions, and only y in the bar sends.
+//   After each tick the check of the last send reads the newest facts.
 // - The alerts (src/god/alert-keys.tsx): each tick of the board hands its turn to the alert loop, which plays the tone,
 //   sends the notification and rings the cmux tab of an alert. s turns the tones off and on, and u mutes the selected
 //   session. /god stats adds the counts of the alert loop.
@@ -54,7 +54,7 @@ import { engineClock, engineHost } from './engine.js'
 import { drawnMotion, motionLoopOf, recordSpark, type MotionLoop } from './motion-keys.js'
 import { makeRecap, type RecapRuntime } from './recap-keys.js'
 import { textCleaner } from './sanitize.js'
-import { PANE, addDraftLine, cancelBar, checkSent, openAnswer, openDraft, openPermission, scrollBar, sendConfirmed, type DeliverRuntime } from './deliver-keys.js'
+import { PANE, addDraftLine, cancelBar, checkSent, openAnswer, openDraft, openPermission, pickBack, scrollBar, sendConfirmed, type DeliverRuntime } from './deliver-keys.js'
 import { createScreenLoop, isScreenShown, screenWanted, type ScreenLoop } from './screen-loop.js'
 import { backToBoard, changeDetail, dropHiddenSelection, jumpSelected, pressRow, select, selectAndFocus, selectNext } from './select-keys.js'
 import { readScreenOf } from './source/screen.js'
@@ -238,6 +238,7 @@ function actionsOf($: EngineInterface, runtime: Runtime, layout: PaneLayout): Pa
       onOption: (digit) => quiet(openAnswer($, digit)),
       onPermission: (choice) => quiet(openPermission($, choice)),
       onRecap: (sessionId) => quiet(makeRecap($, runtime.recap, sessionId)),
+      onBack: () => quiet(pickBack($)),
     },
     bar: {
       onSend: (shown) => quiet(sendConfirmed($, runtime.deliver, shown)),

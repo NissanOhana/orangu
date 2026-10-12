@@ -35,7 +35,7 @@ const LINES: Readonly<Record<DeliverRefusal, string>> = {
   'stale-screen': 'The screen or the session facts are too old, so the pane sent nothing. Press y again.',
   'screen-changed': 'The screen or the session changed, so the pane sent nothing.',
   'label-not-found': 'The screen shows no option with the exact label Yes or No, so the pane sent nothing.',
-  'multi-question': 'This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.',
+  'multi-question': 'This dialog has a question with more than 1 choice or with no option. Press j to answer it in its tab.',
   empty: 'The text is empty, so the pane sent nothing.',
   'control-char': 'The text has a control character or a character that does not show, so the pane sent nothing. An emoji can hold such a character.',
   'backslash-escape': 'A line ends with a backslash, or holds \\n, \\r or \\t in any case, so the pane sent nothing.',
@@ -228,8 +228,9 @@ describe('the outcome lines', () => {
       'step-failed': SEND_FAILED,
       stopped: 'The screen or the session changed while the pane typed, so it sent no more keys. Check the Screen tab.',
       cancelled: 'You pressed c, so the pane sent no more keys.',
+      partial: 'The pane stopped after 1 or more answers, so the dialog stays open with some picks in it. Press j to answer the rest in its tab.',
     })
-    for (const [reason, line] of Object.entries(FAILURE_TEXT)) expect(outcomeLines({ ...OUTCOMES.failed, reason } as never, 110).map(text)).toEqual([` ${line}`])
+    for (const [reason, line] of Object.entries(FAILURE_TEXT)) expect(outcomeLines({ ...OUTCOMES.failed, reason } as never, 200).map(text)).toEqual([` ${line}`])
     expect(outcomeLines(OUTCOMES.failed, 110).map(text)).toEqual([` ${SEND_FAILED}`])
   })
 })

@@ -100,7 +100,7 @@ for (const surface of SURFACES) {
     const shown = await lines(ui)
     expect(openTab(shown)).toBe('Now')
     // this machine has no cmux, so the digits draw dim and answer nothing (god/tests/act.test.ts has the digits)
-    for (const part of ['☐ Pick', 'Which color?', '1 Red', '2 Green']) expect(shown.some((line) => line.includes(part)), `${part}\n${shown.join('\n')}`).toBe(true)
+    for (const part of ['☐ Pick', 'Which color?', '1: Red', '2: Green', 'cmux is not on this machine, so answer the question in its tab.']) expect(shown.some((line) => line.includes(part)), `${part}\n${shown.join('\n')}`).toBe(true)
     const options = (await ui.findAll({ type: 'Button' })).filter((button) => button.key?.startsWith('option:'))
     expect(options.map((button) => button.key)).toEqual(['option:1', 'option:2'])
     for (const option of options) expect(option.props['hotkey']).toBeUndefined()

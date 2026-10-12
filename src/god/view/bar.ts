@@ -26,15 +26,29 @@ import { appendItem, flat, wrapSegments } from './wrap.js'
 export type Draft = { kind: 'prompt' | 'peer'; target: DeliverTarget; lines: readonly string[] }
 
 /**
+ * The picks so far in a dialog with 2 or more single-select questions: its session, the tool use id of its open
+ * question, and the digit of each question that the person picked, in dialog order. The detail shows the next question.
+ */
+export type Picks = { sessionId: string; toolUseId: string; digits: readonly number[] }
+
+/** The digits of the picks when they are of this dialog, else none. */
+export const picksOf = (picks: Picks | undefined, sessionId: string, toolUseId: string): readonly number[] =>
+  picks !== undefined && picks.sessionId === sessionId && picks.toolUseId === toolUseId ? picks.digits : []
+
+/** The index of the question that the detail shows for these picks: the next one, or the last once each has a pick. */
+export const shownQuestion = (digits: readonly number[], count: number): number => Math.min(digits.length, count - 1)
+
+/**
  * What the key path holds, in the engine state:
  * - intent: what the open confirm bar asks about; absent while the bar is closed;
  * - scroll: the first line of the scrolled text of the bar;
  * - draft: the draft of r or m, while it is open;
+ * - picks: the picks so far in a dialog with 2 or more questions; the last pick opens the bar of all of them;
  * - outcome: what became of the last intent after y;
  * - check: what the refreshes after a send look for (src/god/act/deliver-check.ts);
  * - isSending: true while the keys of the intent go out, so the bar draws no y and no c.
  */
-export type DeliverState = { intent?: DeliverIntent; scroll: number; draft?: Draft; outcome?: DeliverOutcome; check?: DeliverCheck; isSending?: boolean }
+export type DeliverState = { intent?: DeliverIntent; scroll: number; draft?: Draft; picks?: Picks; outcome?: DeliverOutcome; check?: DeliverCheck; isSending?: boolean }
 
 /** The key path before any key: no bar, no draft, no outcome. */
 export const NO_DELIVERY: DeliverState = { scroll: 0 }

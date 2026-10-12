@@ -3,7 +3,8 @@
 // src/god/deliver-control.ts (the bar and the draft) and src/god/act/deliver.ts (the executor). Every function that
 // takes `$` is a function declaration at the top of the file, as the engine asks.
 // - A digit, Yes or No, r and m only open the confirm bar or the draft in the engine state. Nothing goes out until y.
-//   While a draft is open, a digit and Yes or No keep the draft.
+//   While a draft is open, a digit and Yes or No keep the draft. In a dialog with 2 or more questions a digit picks
+//   for the shown question, and p goes back 1 question: the last pick opens the bar of every pick.
 // - y takes the intent that the bar of its drawing shows, and delivers it only while the engine state still holds
 //   that intent: a peer message through the engine, any other intent through the executor over the host port, with
 //   the row of its target and the state of cmux from the last board snapshot. 1 y runs at a time: a y while one runs
@@ -23,6 +24,7 @@ import {
   afterDelivery,
   afterDraftLine,
   afterRefresh,
+  afterPick,
   answerIntent,
   cancelPressed,
   draftFor,
@@ -30,9 +32,11 @@ import {
   notSending,
   opensScreen,
   permissionIntent,
+  pickedBack,
   screenDetail,
   scrolled,
   sendPressed,
+  steppedDialog,
   stopsDelivery,
   withDraft,
   withPicked,
@@ -57,10 +61,22 @@ async function openBar($: EngineInterface, intent: DeliverIntent | undefined): P
   if (intent !== undefined) await update($, DELIVER, (state) => withPicked(state, intent))
 }
 
-/** A digit on an option of the open question of the selected session: the confirm bar of that answer. */
+/**
+ * A digit on an option of the open question of the selected session: the confirm bar of that answer, or in a dialog
+ * with 2 or more questions the pick of the shown question.
+ */
 export async function openAnswer($: EngineInterface, digit: number): Promise<void> {
   const { snapshot, selectedKey } = await selection($)
-  await openBar($, answerIntent(snapshot, selectedKey, digit))
+  const dialog = steppedDialog(snapshot, selectedKey)
+  if (dialog !== undefined) await update($, DELIVER, (state) => afterPick(state, dialog, digit))
+  else await openBar($, answerIntent(snapshot, selectedKey, digit))
+}
+
+/** p in a dialog with 2 or more questions of the selected session: back 1 question. */
+export async function pickBack($: EngineInterface): Promise<void> {
+  const { snapshot, selectedKey } = await selection($)
+  const dialog = steppedDialog(snapshot, selectedKey)
+  if (dialog !== undefined) await update($, DELIVER, (state) => pickedBack(state, dialog))
 }
 
 /** The Yes or the No of the Bash request of the selected session: the confirm bar of that choice. */

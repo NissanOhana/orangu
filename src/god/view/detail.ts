@@ -22,6 +22,7 @@ import type { DeliverOutcome, DetailTab, GodSession, PrLink, RecapState, ScreenR
 import { ACCENT, DIM, FLAG_PAINT } from '../ui/theme.js'
 import { NO_REPO } from './board.js'
 import { cellWidth } from './cells.js'
+import type { Picks } from './bar.js'
 import { tabContent, type OptionKey } from './detail-tabs.js'
 import { folderLines } from './folder.js'
 import { rowName } from './names.js'
@@ -72,6 +73,8 @@ export type DetailInput = {
   /** the last Recap: the Recap tab shows it when it is a Recap of this session, and no x key while any Recap runs */
   recap?: RecapState
   outcome?: DeliverOutcome
+  /** the picks so far in a dialog with 2 or more questions */
+  picks?: Picks
 }
 
 /**

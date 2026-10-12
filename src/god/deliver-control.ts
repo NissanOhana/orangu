@@ -4,6 +4,11 @@
  * the confirm bar, keeps the draft, or takes the outcome of a delivery and the check of the next refreshes.
  * - A digit opens the bar for the option with that digit of the open question of the selected session, only when the
  *   question is the only one of its dialog and takes 1 choice, and only with cmux on the machine.
+ * - In a dialog with 2 or more single-select questions (src/god/model/question-dialog.ts, isSteppable), a digit picks
+ *   for the question that the detail shows, and the detail shows the next one. The last pick opens the bar of all the
+ *   picks, and a digit then picks again for the last question. p goes back 1 question and drops the picks from there.
+ *   Picks of another question or another session count as none. c, a new bar or draft, and a delivery of those
+ *   answers end the picks, but after stale-screen the picks stay with their bar.
  * - The Yes or the No of a request opens the bar only for an open Bash request of a session that waits on a
  *   permission prompt: the screen check ties only a shell command to its dialog. Any other tool gets j only.
  * - While a draft is open, a digit and the Yes or No keep the draft and open no bar, so a digit typed for the draft
@@ -26,8 +31,9 @@
 import { checkDelivery } from './act/deliver-check.js'
 import type { DeliverResult } from './act/deliver.js'
 import type { KeyIntent } from './act/deliver-plan.js'
-import type { BoardSnapshot, DeliverIntent, DeliverOutcome, DeliverTarget, Facts, GodSession } from './types.js'
-import type { DeliverState, Draft } from './view/bar.js'
+import { isSteppable } from './model/question-dialog.js'
+import type { BoardSnapshot, DeliverIntent, DeliverOutcome, DeliverTarget, Facts, GodSession, OpenQuestion } from './types.js'
+import { picksOf, shownQuestion, type DeliverState, type Draft } from './view/bar.js'
 import type { DetailState } from './view/detail-pane.js'
 import { ANSWERED_TOOL } from './view/detail-tabs.js'
 import { LINE_BREAK } from './view/wrap.js'
@@ -49,6 +55,49 @@ export function answerIntent(snapshot: BoardSnapshot | undefined, selectedKey: s
   const option = Number.isInteger(digit) && digit >= 1 && digit <= 9 ? question.options[digit - 1] : undefined
   if (option === undefined) return undefined
   return { kind: 'answer', target: targetOf(session), toolUseId: open.toolUseId, header: question.header, question: question.text, option: digit, label: option.label }
+}
+
+/** A dialog with 2 or more single-select questions of the selected session: the target and its open question. */
+export type SteppedDialog = { target: DeliverTarget; open: OpenQuestion }
+
+/** The dialog that the digits answer 1 question at a time, of the selected session, when cmux allows the keys. */
+export function steppedDialog(snapshot: BoardSnapshot | undefined, selectedKey: string | undefined): SteppedDialog | undefined {
+  const session = selectedSession(snapshot, selectedKey)
+  const open = session?.transcript?.openQuestion
+  return session === undefined || open === undefined || !isSteppable(open.questions) ? undefined : { target: targetOf(session), open }
+}
+
+/** The answers intent of a pick for each question of the dialog. */
+function answersIntent({ target, open }: SteppedDialog, digits: readonly number[]): DeliverIntent {
+  const answers = open.questions.map((question, k) => {
+    const option = digits[k] ?? 0
+    return { header: question.header, question: question.text, option, label: question.options[option - 1]?.label ?? '' }
+  })
+  return { kind: 'answers', target, toolUseId: open.toolUseId, answers }
+}
+
+/**
+ * A digit in a dialog with 2 or more questions: the pick of the shown question, with no bar until the last question,
+ * then the bar of all the picks. A digit with no option, or a digit while a draft is open, changes nothing.
+ */
+export function afterPick(state: DeliverState, dialog: SteppedDialog, digit: number): DeliverState {
+  const { target, open } = dialog
+  const before = picksOf(state.picks, target.sessionId, open.toolUseId)
+  const at = shownQuestion(before, open.questions.length)
+  const count = open.questions[at]?.options.length ?? 0
+  if (state.draft !== undefined || !Number.isInteger(digit) || digit < 1 || digit > Math.min(count, 9)) return state
+  const digits = [...before.slice(0, at), digit]
+  const picked: DeliverState = { scroll: 0, picks: { sessionId: target.sessionId, toolUseId: open.toolUseId, digits }, ...checkOf(state) }
+  return digits.length < open.questions.length ? picked : { ...picked, intent: answersIntent(dialog, digits) }
+}
+
+/** p: back 1 question from the shown one. The picks from that question on go, and so does the bar. */
+export function pickedBack(state: DeliverState, dialog: SteppedDialog): DeliverState {
+  const { target, open } = dialog
+  const digits = picksOf(state.picks, target.sessionId, open.toolUseId)
+  const at = shownQuestion(digits, open.questions.length)
+  if (state.draft !== undefined || at === 0) return state
+  return { scroll: 0, picks: { sessionId: target.sessionId, toolUseId: open.toolUseId, digits: digits.slice(0, at - 1) }, ...checkOf(state) }
 }
 
 /** The Yes or the No for the open Bash request of the selected session. */
@@ -89,9 +138,9 @@ export function afterDraftLine(state: DeliverState, value: string): DeliverState
   return withIntent(rest, { kind: draft.kind, target: draft.target, text: draft.lines.join('\n') })
 }
 
-/** c: no bar and no draft. The outcome and the check stay. */
+/** c: no bar, no draft and no picks. The outcome and the check stay. */
 export function cancelled(state: DeliverState): DeliverState {
-  const { intent: _intent, draft: _draft, ...rest } = state
+  const { intent: _intent, draft: _draft, picks: _picks, ...rest } = state
   return { ...rest, scroll: 0 }
 }
 
@@ -128,16 +177,22 @@ export const sendPressed = (state: DeliverState, shown: DeliverIntent | undefine
 /** True when the state is marked as sending `intent`: the y that marked it sends that intent. */
 export const isSendingOf = (state: DeliverState, intent: DeliverIntent): boolean => state.isSending === true && sameIntent(state.intent, intent)
 
-/** The state after the delivery of `intent` gave `result`. The sending mark ends. */
+/**
+ * The state after the delivery of `intent` gave `result`. The sending mark ends. The picks stay with a bar that stays,
+ * and picks of another dialog stay too.
+ */
 export function afterDelivery(state: DeliverState, intent: DeliverIntent, result: DeliverResult): DeliverState {
   const { outcome, check } = result
   const isStale = outcome.status === 'refused' && outcome.refusal === 'stale-screen'
   const isOwnBar = sameIntent(state.intent, intent)
   const keeps = state.intent !== undefined && (!isOwnBar || isStale)
+  const isOwnPicks = intent.kind === 'answers' && picksOf(state.picks, intent.target.sessionId, intent.toolUseId).length > 0
+  const picks = state.picks !== undefined && (keeps || !isOwnPicks) ? { picks: state.picks } : {}
   return {
     scroll: keeps ? state.scroll : 0,
     ...(keeps ? { intent: state.intent } : {}),
     ...(state.draft === undefined ? {} : { draft: state.draft }),
+    ...picks,
     outcome,
     ...(check !== undefined ? { check } : checkOf(state)),
   }

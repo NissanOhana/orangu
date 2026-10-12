@@ -168,7 +168,8 @@ export function paneView(input: PaneInput): PaneView {
   const outcome = input.deliver?.outcome === undefined ? {} : { outcome: input.deliver.outcome }
   const recap = input.recap === undefined || input.recap === null ? {} : { recap: input.recap }
   const draft = isDraftOpen ? { isDraftOpen } : {}
-  const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome, ...recap, ...draft }), bar)
+  const picks = input.deliver?.picks === undefined ? {} : { picks: input.deliver.picks }
+  const detailOf = (width: number) => withoutScroll(paneDetail({ snapshot, ...selection, width, rows: room, now, state: detailState, ...screen, ...outcome, ...recap, ...draft, ...picks }), bar)
   if (isDetail) {
     const detail = detailOf(bodyColumns)
     const drawn = keysOf(snapshot, true, detail)

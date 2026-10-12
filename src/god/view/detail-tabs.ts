@@ -1,12 +1,16 @@
 /**
  * The content of each tab of the detail, as lines of the detail width. Each text shows whole: it wraps, and
  * src/god/view/detail.ts cuts only by rows, with a count line that names its key.
- * - Now: the open question (the header chip, the question, each option as `<n>: <label>`), or the open permission
- *   request and its whole input with its spaces as written, or the current tool call and the API error at the end; then the last reply.
- *   Each option that a digit answers is 1 Button whose hotkey is its digit, and the engine paints that digit as
- *   `1: ` before the label. A Bash request also gets `1: Yes` and `2: No`, the 2 answers that the pane can send to
- *   it; a request of any other tool gets 1 line that says to answer it in its tab. With no cmux, or while a draft of
- *   r or m is open (a digit then types into the draft), the digits draw dim and no Button has a hotkey.
+ * - Now: the open question (the header chip, the question, each option as `<n>: <label>`, then 1 line that says what
+ *   to do), or the open permission request and its whole input with its spaces as written, or the current tool call
+ *   and the API error at the end; then the last reply. Each option that a digit answers is 1 Button whose hotkey is its
+ *   digit, and the engine paints that digit as `1: ` before the label. A dialog with 2 or more single-select questions
+ *   shows 1 question at a time: a `☒` line for each question that has a pick, then the next question, and from question
+ *   2 on the p key that goes back 1 question. Any other dialog with more than 1 question, or a question with more than 1
+ *   choice or with no option, shows each question with its options numbered dim, and the line that says to answer it
+ *   in its tab. A Bash request also gets `1: Yes` and `2: No`, the 2 answers that the pane can send to it; a request
+ *   of any other tool gets 1 line that says to answer it in its tab. With no cmux, or while a draft of r or m is open
+ *   (a digit then types into the draft), the digits and p draw dim and no Button has a hotkey.
  * - History: the last turns, the newest first, each as your prompt and then the reply.
  * - Agents: the running subagents and background tasks first, then the ended ones, then the subagent files that
  *   no task of the read part names.
@@ -21,9 +25,12 @@
  * The session texts are sanitized and redacted before they come here. Outside text that the detail shows on 1 line
  * is flattened, so no line break gets into a line. The clock comes in as `now`.
  */
+import { ANSWER_NO_CMUX, answerAction, pickAction, pickBackLabel } from '../copy.js'
+import { isSteppable } from '../model/question-dialog.js'
 import { NO_REPLY, NO_TRANSCRIPT, WAITS } from '../model/summary.js'
-import type { AgentTask, DeliverOutcome, DetailTab, GodSession, Question, RecapFailure, RecapState, ScreenRead } from '../types.js'
+import type { AgentTask, DeliverOutcome, DetailTab, GodSession, OpenQuestion, Question, RecapFailure, RecapState, ScreenRead } from '../types.js'
 import { DIM } from '../ui/theme.js'
+import { picksOf, shownQuestion, type Picks } from './bar.js'
 import { levelTime } from './board.js'
 import { cellWidth } from './cells.js'
 import { MULTI_DIALOG, MULTI_DIALOG_NO_CMUX, outcomeLines } from './confirm.js'
@@ -68,6 +75,9 @@ export const PERMISSION_ANSWERS = [
 /** The only tool whose request the pane answers: its dialog shows the exact command that the screen check reads. */
 export const ANSWERED_TOOL = 'Bash'
 
+/** The key that goes back 1 question in a dialog with 2 or more questions. */
+export const PICK_BACK_KEY = 'p'
+
 /**
  * A line that a digit answers: its line key, its digit, true when the digits are off (no cmux), and for the Yes or
  * No of a Bash request, the choice.
@@ -95,6 +105,8 @@ export type TabInput = {
   recap?: RecapState
   /** the last outcome of the key path: the Screen tab shows a refusal of this session above its screen */
   outcome?: DeliverOutcome
+  /** the picks so far in a dialog with 2 or more questions: the Now tab shows the next question when they are of this dialog */
+  picks?: Picks
 }
 
 /** The text under a label starts at this column. */
@@ -158,29 +170,67 @@ function keyedLines(key: string, digit: number, segments: readonly Segment[], wi
   return [{ key, hotkey: String(digit), segments: [{ text: ' ' }, { text: painted, isPainted: true }, ...dropLead(first?.segments ?? [], lead)] }, ...rest]
 }
 
-function questionLines(input: TabInput, question: Question, index: number, hasDigits: boolean): TabContent {
+/** The chip line of a question: its mark and header in bold, and the wait of the session when `hasWait`. */
+const chipLines = (input: TabInput, mark: string, header: string, hasWait: boolean): Line[] =>
+  wrapSegments([{ text: `${mark} ${flat(header)}`, bold: true }, ...(hasWait ? waitChip(input) : [])], input.width)
+
+/**
+ * The option lines of 1 question, each as `<n>: <label>` and its description. When `isKeyed`, each option with a digit
+ * 1 to 9 is 1 Button whose hotkey is its digit, or a keyed line with the digit dim while the digits are off. Else each
+ * digit draws dim on a plain line.
+ */
+function optionLines(input: TabInput, question: Question, isKeyed: boolean): TabContent {
   const { width } = input
-  const lines = [...wrapSegments([{ text: `☐ ${flat(question.header)}`, bold: true }, ...(index === 0 ? waitChip(input) : [])], width), ...textLines(question.text, width, 1)]
+  const lines: Line[] = []
   const options: OptionKey[] = []
   question.options.forEach((option, at) => {
     const digit = at + 1
-    const keyed = hasDigits && digit <= 9
+    const keyed = isKeyed && digit <= 9
     const about = option.description === undefined || flat(option.description) === '' ? [] : [{ text: `  ${flat(option.description)}`, ...DIM }]
     if (keyed && !areDigitsOff(input)) {
       lines.push(...keyedLines(optionKey(digit), digit, [{ text: flat(option.label) }, ...about], width))
       options.push({ key: optionKey(digit), digit, isOff: false })
       return
     }
-    const mark: Segment = { text: hasDigits ? String(digit) : '•', ...DIM }
-    const [first, ...rest] = wrapSegments([mark, { text: ` ${flat(option.label)}` }, ...about], width, 1, TEXT_INDENT)
-    if (!keyed) {
-      lines.push(first!, ...rest)
-      return
-    }
-    lines.push({ ...first!, key: optionKey(digit) }, ...rest)
-    options.push({ key: optionKey(digit), digit, isOff: true })
+    const [first, ...rest] = wrapSegments([{ text: `${digit}:`, ...DIM }, { text: ` ${flat(option.label)}` }, ...about], width, 1, TEXT_INDENT)
+    lines.push(keyed ? { ...first!, key: optionKey(digit) } : first!, ...rest)
+    if (keyed) options.push({ key: optionKey(digit), digit, isOff: true })
   })
   return { lines, options }
+}
+
+/** The digits of a question, as the action line names them: `1`, or `1-3`. */
+const digitRange = (question: Question): string => {
+  const last = Math.min(question.options.length, 9)
+  return last === 1 ? '1' : `1-${last}`
+}
+
+/** The action line under the options: with no cmux, the line that says to answer in the tab; dim while a draft is open. */
+function actionLines(input: TabInput, action: string): Line[] {
+  if (input.isCmuxMissing) return message(ANSWER_NO_CMUX, input.width)
+  return message(action, input.width, input.isDraftOpen === true ? DIM : {})
+}
+
+/**
+ * A dialog with 2 or more single-select questions, 1 question at a time: a `☒` line with the pick of each question
+ * before the shown one, the shown question with its options, its action line, and from question 2 on the p key.
+ */
+function stepLines(input: TabInput, open: OpenQuestion): TabContent {
+  const { session, width } = input
+  const { questions } = open
+  const picks = picksOf(input.picks, session.sessionId, open.toolUseId)
+  const at = shownQuestion(picks, questions.length)
+  const question = questions[at]!
+  const done = questions.slice(0, at).flatMap((before, k) => {
+    const digit = picks[k] ?? 0
+    return wrapSegments([{ text: `☒ ${flat(before.header)}:`, bold: true }, { text: ` ${digit} ${flat(before.options[digit - 1]?.label ?? '')}` }], width, 1, TEXT_INDENT)
+  })
+  const shown = optionLines(input, question, true)
+  const action = actionLines(input, pickAction(at + 1, questions.length, digitRange(question)))
+  const back = pressSegment(PICK_BACK_KEY, pickBackLabel(at))
+  const backLine: Line[] = at === 0 ? [] : [{ segments: [{ text: ' ' }, areDigitsOff(input) ? { text: back.text, ...DIM } : back] }]
+  const lines = [...done, ...chipLines(input, '☐', question.header, true), ...textLines(question.text, width, 1), ...shown.lines, ...action, ...backLine]
+  return { lines, options: shown.options }
 }
 
 /** The answers of an open request: Yes and No of a Bash request, else the line that says to answer it in its tab. */
@@ -199,15 +249,22 @@ function permissionAnswers(input: TabInput, tool: string): TabContent {
   return { lines, options }
 }
 
-/** The open question: each question with its options, and the line of a dialog that the digits cannot answer. */
-function openQuestionLines(input: TabInput): TabContent {
-  const questions = input.session.transcript?.openQuestion?.questions ?? []
-  const isMulti = questions.length > 1
-  const isMultiSelect = questions.some((question) => question.multiSelect)
-  const parts = questions.map((question, index) => questionLines(input, question, index, !isMulti && !isMultiSelect))
-  const lines = parts.flatMap((part) => part.lines)
-  if (isMulti || isMultiSelect) lines.push(...message(input.isCmuxMissing ? MULTI_DIALOG_NO_CMUX : MULTI_DIALOG, input.width))
-  return { lines, options: parts.flatMap((part) => part.options) }
+/**
+ * The open question: 1 single-select question with its digit Buttons and its action line, a dialog of 2 or more
+ * single-select questions 1 question at a time, or each question of any other dialog with the line that says to answer
+ * it in its tab.
+ */
+function openQuestionLines(input: TabInput, open: OpenQuestion): TabContent {
+  const { questions } = open
+  const [only] = questions
+  if (only !== undefined && questions.length === 1 && !only.multiSelect && only.options.length > 0) {
+    const shown = optionLines(input, only, true)
+    const lines = [...chipLines(input, '☐', only.header, true), ...textLines(only.text, input.width, 1), ...shown.lines, ...actionLines(input, answerAction(digitRange(only)))]
+    return { lines, options: shown.options }
+  }
+  if (isSteppable(questions)) return stepLines(input, open)
+  const lines = questions.flatMap((question, index) => [...chipLines(input, '☐', question.header, index === 0), ...textLines(question.text, input.width, 1), ...optionLines(input, question, false).lines])
+  return { lines: [...lines, ...message(input.isCmuxMissing ? MULTI_DIALOG_NO_CMUX : MULTI_DIALOG, input.width)], options: [] }
 }
 
 /** The Now tab. */
@@ -217,7 +274,7 @@ function nowContent(input: TabInput): TabContent {
   if (transcript === undefined) return { lines: message(NO_TRANSCRIPT, width), options: [] }
   const activity = transcript.activity
   let top: TabContent = { lines: [], options: [] }
-  if (transcript.openQuestion !== undefined && transcript.openQuestion.questions.length > 0) top = openQuestionLines(input)
+  if (transcript.openQuestion !== undefined && transcript.openQuestion.questions.length > 0) top = openQuestionLines(input, transcript.openQuestion)
   else if (session.level === 'needs-you' && session.waitingFor === 'permission prompt' && activity?.isOpen === true) {
     const request = [...wrapSegments([{ text: '☐ Permission', bold: true }, ...waitChip(input)], width), ...wrapSegments([{ text: flat(activity.text) }], width)]
     const toolInput = activity.input === undefined ? labelLine(width, { text: 'Input' }, 'none') : [...labelLine(width, { text: 'Input' }), ...keptLines(activity.input, width, TEXT_INDENT)]

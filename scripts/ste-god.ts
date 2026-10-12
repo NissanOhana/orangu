@@ -127,6 +127,11 @@ export function godDetailViews(): RenderedView[] {
   const perm = snapshot.sessions.find((session) => session.sessionId === 's-perm')!
   const editRequest = { ...perm, transcript: { ...perm.transcript!, activity: { ...perm.transcript!.activity!, tool: 'Edit', text: 'Edit parse.ts', input: '{"file_path":"parse.ts"}' } } }
   const requests = [false, true].map((isCmuxMissing) => detail(`now.edit-request.${isCmuxMissing ? 'no-cmux' : 'cmux'}`, { session: editRequest, width: 79, tab: 'now', isCmuxMissing }))
+  // the dialog with 2 questions after its first pick, with and without cmux, and the line of a stop after a digit
+  const multi = snapshot.sessions.find((session) => session.sessionId === 's-multi')!
+  const picks = { sessionId: 's-multi', toolUseId: 'tu-multi', digits: [2] }
+  const picked = [false, true].map((isCmuxMissing) => detail(`now.picked.${isCmuxMissing ? 'no-cmux' : 'cmux'}`, { session: multi, width: 79, tab: 'now', isCmuxMissing, picks }))
+  const partial = { file: `${GOD_DETAIL_FIXTURE}#outcome.failed.partial`, lines: outcomeLines({ ...GOD_OUTCOMES.failed, intent: GOD_INTENTS.answers, reason: 'partial' } as DeliverOutcome, 110).map(text) }
   const modes = Object.keys(PROMPT_MODE_TEXT).map((mark) => ({
     file: `${GOD_DETAIL_FIXTURE}#confirm.mode.${mark}`,
     lines: confirmView({ intent: { ...GOD_INTENTS.prompt, text: `${mark}status` } as DeliverIntent, width: 110, rows: 12, scroll: 0 }).lines.map(text),
@@ -149,5 +154,5 @@ export function godDetailViews(): RenderedView[] {
     { file: `${GOD_DETAIL_FIXTURE}#tool.board.110`, lines: boardToolText(snapshot, 110, GOD_NOW).split('\n') },
     ...snapshot.sessions.map((session) => ({ file: `${GOD_DETAIL_FIXTURE}#tool.session.${session.sessionId}`, lines: sessionToolText(snapshot, session.name, 110, GOD_NOW).split('\n') })),
   ]
-  return [...tabs, ...states, ...confirm, ...windows, ...outcomes, ...requests, ...modes, ...bars, ...tools]
+  return [...tabs, ...states, ...confirm, ...windows, ...outcomes, ...requests, ...picked, partial, ...modes, ...bars, ...tools]
 }

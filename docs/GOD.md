@@ -83,7 +83,8 @@ The key row at the bottom of the pane shows the keys of the board. With no cmux,
 | `b` | Go back to the board from the detail of a narrow pane. |
 | `j` | Jump to the cmux tab of the selected session. |
 | `n` | Select the next session that needs you. |
-| `1` to `9` | Answer the open question, or the Bash permission prompt (`1: Yes`, `2: No`). |
+| `1` to `9` | Answer the open question, or the Bash permission prompt (`1: Yes`, `2: No`). In a dialog with 2 or more questions, pick for the question that the detail shows. |
+| `p` | Go back 1 question in a dialog with 2 or more questions. |
 | `r` | Write a prompt for the selected session. The key row calls it `prompt`. |
 | `m` | Write a peer note to the selected session. The key row calls it `peer note`. |
 | `t` | Show the next tab of the detail. |
@@ -97,6 +98,10 @@ The key row at the bottom of the pane shows the keys of the board. With no cmux,
 | `h` | Show the help, or close it. |
 
 After `r` or `m`, type a line and press Enter. Each Enter adds the line to the draft. Press Enter on an empty line to open the confirm bar.
+
+The detail numbers the options of an open question `1:`, `2:`. The line under them says what to do, for example `Press 1-3, then y to send`.
+
+A dialog with 2 or more single-select questions shows 1 question at a time, for example `Question 1 of 2`. A digit picks for that question, and the detail shows the next question. After the last pick, the confirm bar shows each pick, for example `Send to api-7? Colour: 2 Green · Size: 1 Small`. Press `p` to go back 1 question. In the confirm bar, `c` drops each pick, and the detail shows question 1 again.
 
 ## Help
 
@@ -113,16 +118,21 @@ The pane types into another session only through cmux. Each answer and each prom
 3. The pane checks that the process still runs with the start time of the registry file, on the terminal of the cmux tab.
 4. The pane checks that it read the screen 1 s ago or less, and the session facts 1 s or less before the screen.
 5. The pane checks that the session still takes the key, and that the screen still shows the same dialog or prompt line.
-6. The pane types the keys. An answer is the digit alone. A prompt is 1 `cmux send` for each line, with `shift+enter` between the lines and `enter` at the end.
+6. The pane types the keys. An answer is the digit alone. The answers of a dialog with 2 or more questions are 1 digit for each question, then `1` on its review screen. A prompt is 1 `cmux send` for each line, with `shift+enter` between the lines and `enter` at the end.
 7. The next refreshes check the result. The pane then shows `Delivered to <name>.` or `Not delivered. Check the Screen tab.`
 
 The check of step 5 depends on what goes out:
 
 - An answer needs a session that waits on the same question. The screen must show the same header, question and label at that digit.
+- The answers of a dialog with 2 or more questions need a session that waits on the same question. The screen must show question 1 with each of its options, under a chip row with the same headers in the same order.
 - A Bash answer needs a session that waits on a permission prompt. The screen must show the same command and an option labeled exactly `Yes` or `No`.
 - A prompt needs an idle session with no open question. The screen must show an empty prompt line and no dialog.
 
 Before each next line of a prompt, the pane reads the registry file and the screen again. If the session or the screen changed, the pane stops, and no later line goes out.
+
+Before each next digit of a dialog with 2 or more questions, the pane reads the registry file, the transcript and the screen again. The open question must have the same id. The screen must show the next question, with a `☒` chip for each question before it. Before the last `1`, the screen must show the review screen: each question in order with the label that you picked, and the option `1. Submit answers`. If a check fails, the pane stops, and no later key goes out.
+
+When the pane stops after 1 or more digits, the dialog stays open with those picks in it. The pane then opens the Screen tab and says so. Press `j` and answer the rest in the tab of the session.
 
 If a read or a check of steps 2 to 5 fails, the pane sends nothing and shows the reason. When the pane has a fresh screen, it also opens the Screen tab with that screen.
 
@@ -131,7 +141,7 @@ The pane does not send these. Press `j` and do them in the tab of the session:
 - An answer to a permission prompt of any tool but Bash. The screen check can tie only a shell command to its dialog.
 - Any option of a Bash prompt but the 2 options labeled exactly `Yes` and `No`.
 - A Bash answer to a session with 2 or more open tool calls, or with a running subagent. The dialog on the screen can then be for another command.
-- An answer to a dialog with more than 1 question or more than 1 choice.
+- An answer to a question with more than 1 choice, or to a question with no option.
 - A prompt whose first character after white space is `!` (a shell command) or `?` (the help).
 - A prompt whose first line is `exit`, `quit`, `:q`, `:q!`, `:wq` or `:wq!`, in any case.
 - A prompt whose first word is `/exit` or `/quit`, in any case. Claude Code reads the command up to the first space, so `/exit now` also ends the session.

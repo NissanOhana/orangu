@@ -18,6 +18,7 @@
  */
 import type { ScreenState } from '../source/screen.js'
 import type { BoardSnapshot, DeliverOutcome, DetailTab, RecapState } from '../types.js'
+import type { Picks } from './bar.js'
 import { isOnBoard } from './board.js'
 import { detailLines, detailView, scrollBy, SCROLL_KEYS, type DetailView } from './detail.js'
 import { helpLines } from './help.js'
@@ -72,6 +73,8 @@ export type PaneDetailInput = {
   recap?: RecapState
   /** true while a draft of r or m is open: the digits of the Now tab have no hotkey */
   isDraftOpen?: boolean
+  /** the picks so far in a dialog with 2 or more questions */
+  picks?: Picks
 }
 
 /** The scroll that each key goes to: w while lines hide above the window, z while lines hide below it. */
@@ -113,6 +116,7 @@ export function paneDetail(input: PaneDetailInput): PaneDetail {
     ...(input.outcome === undefined ? {} : { outcome: input.outcome }),
     ...(input.recap === undefined ? {} : { recap: input.recap }),
     ...(input.isDraftOpen === true ? { isDraftOpen: true } : {}),
+    ...(input.picks === undefined ? {} : { picks: input.picks }),
   })
   return { kind: 'session', sessionId: session.sessionId, view, scrollTo: scrollTargets(view) }
 }

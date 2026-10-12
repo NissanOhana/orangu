@@ -454,6 +454,7 @@ export type DeliverTarget = {
 /**
  * What the person asked the pane to send, before the confirm bar. Nothing goes out until the person presses y.
  * - answer: the digit of 1 option of a single-select question with 1 question;
+ * - answers: the digit of 1 option for each question of a dialog with 2 or more single-select questions, then Submit;
  * - permission: Yes or No on a permission dialog, never an option that starts with "Yes, and";
  * - prompt: a text for the prompt of the session, 1 or more lines;
  * - peer: a peer message through the engine, with no screen check.
@@ -471,6 +472,14 @@ export type DeliverIntent =
       option: number
       /** the label that the fresh screen must still show at that digit */
       label: string
+    }
+  | {
+      kind: 'answers'
+      target: DeliverTarget
+      /** the AskUserQuestion call that the answers close */
+      toolUseId: string
+      /** 1 answer for each question, in dialog order: the header, the question, the option digit 1 to 9 and its label */
+      answers: readonly { header: string; question: string; option: number; label: string }[]
     }
   | {
       kind: 'permission'

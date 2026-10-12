@@ -5,6 +5,7 @@
 // - Each option line of the open question is 1 plain Button keyed option:<n> whose hotkey is its digit, and the Yes and
 //   No of a Bash request are 2 such Buttons keyed permission:yes and permission:no. A press on one, or its digit,
 //   opens the confirm bar for it: nothing goes out until y. With no cmux they have no hotkey, and a press does nothing.
+//   In a dialog with 2 or more questions, the p key is the hotkey Button that goes back 1 question.
 // - Each count line of the window over the tab content is the hotkey Button of its key (w above, z below): a press
 //   goes to the scroll that the view gave for the key.
 // - The x key of the Recap tab is the hotkey Button that makes the Recap of the session of this detail. The view draws
@@ -16,7 +17,7 @@ import type { RenderElement } from 'claude-code'
 import type { DetailTab } from '../types.js'
 import { tabGap, type TabCell } from '../view/detail.js'
 import type { PaneDetail } from '../view/detail-pane.js'
-import { RECAP_KEY } from '../view/detail-tabs.js'
+import { PICK_BACK_KEY, RECAP_KEY } from '../view/detail-tabs.js'
 import type { Line } from '../view/types.js'
 import { drawLine, segmentText, type KeyActions, type PaneElements } from './line.js'
 import type { ThemeSet } from './theme.js'
@@ -33,6 +34,8 @@ export type DetailActions = {
   onPermission: (choice: 'yes' | 'no') => void
   /** x on the Recap tab: the Recap of the session of the detail */
   onRecap: (sessionId: string) => void
+  /** p in a dialog with 2 or more questions: back 1 question */
+  onBack?: () => void
 }
 
 /** The action of each scroll key that the view gave: w or z goes to the scroll of its key. */
@@ -49,7 +52,11 @@ export function detailRows(ui: PaneElements, detail: PaneDetail, theme: ThemeSet
   if (view.kind === 'too-short') return view.lines.map(text)
 
   const sessionId = detail.sessionId
-  const bodyKeys: KeyActions = { ...scrollKeys(detail.scrollTo, actions), [RECAP_KEY]: () => actions.onRecap(sessionId) }
+  const bodyKeys: KeyActions = {
+    ...scrollKeys(detail.scrollTo, actions),
+    [RECAP_KEY]: () => actions.onRecap(sessionId),
+    ...(actions.onBack === undefined ? {} : { [PICK_BACK_KEY]: actions.onBack }),
+  }
   const picks = new Map(view.options.map((option) => [option.key, option]))
   const onOption = (key: string): void => {
     const pick = picks.get(key)

@@ -46,6 +46,7 @@ describe('the Now tab', () => {
       ' 1: Small  Only the fast tests.',
       ' 2: All',
       ' 3: None  Skip the eval.',
+      ' Press 1-3, then y to send.',
       ' Last reply',
       '   The eval tests pass. I need 1 choice from you.',
       '',
@@ -66,8 +67,8 @@ describe('the Now tab', () => {
     const off = detail('s-wait', { isCmuxMissing: true })
     expect(off.options.every((option) => option.isOff)).toBe(true)
     expect(off.body.find((line) => line.key === 'option:1')!.hotkey).toBeUndefined()
-    expect(off.body.find((line) => line.key === 'option:1')!.segments[1]).toEqual({ text: '1', dim: true })
-    expect(off.body.map(text).slice(2, 5)).toEqual([' 1 Small  Only the fast tests.', ' 2 All', ' 3 None  Skip the eval.'])
+    expect(off.body.find((line) => line.key === 'option:1')!.segments[1]).toEqual({ text: '1:', dim: true })
+    expect(off.body.map(text).slice(2, 5)).toEqual([' 1: Small  Only the fast tests.', ' 2: All', ' 3: None  Skip the eval.'])
   })
 
   it('gives no digit a hotkey while a draft of r or m is open, so a digit types into the draft and arms no y', () => {
@@ -76,7 +77,7 @@ describe('the Now tab', () => {
       expect(view.body.every((line) => line.hotkey === undefined), sessionId).toBe(true)
       expect(view.options.every((option) => option.isOff)).toBe(true)
     }
-    expect(body('s-wait', { isDraftOpen: true }).slice(2, 5)).toEqual([' 1 Small  Only the fast tests.', ' 2 All', ' 3 None  Skip the eval.'])
+    expect(body('s-wait', { isDraftOpen: true }).slice(2, 5)).toEqual([' 1: Small  Only the fast tests.', ' 2: All', ' 3: None  Skip the eval.'])
   })
 
   it('wraps a long option label under its painted hotkey, with the rest of the label after the hang', () => {
@@ -92,23 +93,22 @@ describe('the Now tab', () => {
   /** the lines of the dialog line under the options, joined: it wraps at 79 columns */
   const dialogLine = (lines: readonly string[], from: number): string => lines.slice(from, lines.indexOf(' Last reply')).join(' ').replace(/\s+/g, ' ').trim()
 
-  it('shows every question of a dialog with 2 questions, with no digit key, and the line that says to answer it in its tab', () => {
-    expect(MULTI_DIALOG).toBe('This dialog has more than 1 question or more than 1 choice. Press j to answer it in its tab.')
+  it('shows a dialog with 2 questions 1 question at a time, with digit keys (the picks are in detail-question.test.ts)', () => {
     const view = detail('s-multi')
-    expect(view.options).toEqual([])
+    expect(view.options.map((option) => option.digit)).toEqual([1, 2])
     const lines = view.body.map(text)
-    expect(lines.slice(0, 8)).toEqual([' ☐ Port · waits 4m', ' Which port do you want?', ' • 3000', ' • 8080', ' ☐ Host', ' Which host do you want?', ' • Local', ' • Shared'])
-    expect(dialogLine(lines, 8)).toBe(MULTI_DIALOG)
+    expect(lines.slice(0, 4)).toEqual([' ☐ Port · waits 4m', ' Which port do you want?', ' 1: 3000', ' 2: 8080'])
     expect(lines.slice(-2)).toEqual([' Last reply', '   No reply yet.'])
-    expect(dialogLine(body('s-multi', { isCmuxMissing: true }), 8)).toBe(MULTI_DIALOG_NO_CMUX)
   })
 
-  it('shows a dialog with more than 1 choice with no digit key, and the same line', () => {
+  it('shows a dialog with more than 1 choice with dim digits and no digit key, and the line that says to answer it in its tab', () => {
+    expect(MULTI_DIALOG).toBe('This dialog has a question with more than 1 choice or with no option. Press j to answer it in its tab.')
     const view = detail('s-pick')
     expect(view.options).toEqual([])
     const lines = view.body.map(text)
-    expect(lines.slice(0, 5)).toEqual([' ☐ Checks · waits 2m', ' Which checks do you want?', ' • Lint', ' • Types', ' • Tests'])
+    expect(lines.slice(0, 5)).toEqual([' ☐ Checks · waits 2m', ' Which checks do you want?', ' 1: Lint', ' 2: Types', ' 3: Tests'])
     expect(dialogLine(lines, 5)).toBe(MULTI_DIALOG)
+    expect(dialogLine(body('s-pick', { isCmuxMissing: true }), 5)).toBe(MULTI_DIALOG_NO_CMUX)
   })
 
   it('shows the permission request, its whole input, then Yes and No of a Bash request as digit Buttons', () => {

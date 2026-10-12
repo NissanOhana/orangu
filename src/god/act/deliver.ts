@@ -17,13 +17,15 @@
  *    of the fresh transcript read with their raw input, and the text cleaner. So a permission answer binds to the only
  *    open call, and the match compares the raw rows of its command box with its raw command. The raw text stays in
  *    this call: no outcome, Screen tab or check holds it. A refusal keeps the fresh cleaned screen for the Screen tab. The plan of an answer or a permission must be exactly 1 send of 1 digit 1 to 9 to the mapped tab
- *    (isDigitStep), or it is refused.
+ *    (isDigitStep), and the plan of answers 1 such send for each question and then 1 of `1`, or it is refused.
  * 4. It runs the plan steps in order and stops at the first one that fails: an exit code that is not 0, or a reject.
  *    Before each next step of a prompt it reads the registry file, the size of the transcript and the screen again,
  *    because a dialog can open between 2 steps: a new status time or another transcript size stops it, and
  *    nextStepRefusal checks the rest. The box shows through the text cleaner, so the typed text goes through it too.
- *    A check that refuses or fails stops. Before each step it reads the cancel mark of c. A stop keeps the newest
- *    screen, and no later step goes out.
+ *    Before each next step of answers it reads the registry file, the transcript tail and the screen again, and
+ *    nextAnswerRefusal checks them (answerStep). A check that refuses or fails stops. Before each step it reads the
+ *    cancel mark of c. A stop keeps the newest screen, and no later step goes out. A stop of answers after 1 or more
+ *    digits gives partial, because the dialog keeps those picks.
  * 5. Its host runs only cmux send and send-key in the exact form of the plan (send for a text or a digit, send-key
  *    only for enter or shift+enter), cmux read-screen of 1 tab, ps of 1 PID in UTC, and the 3 reads of 1 transcript
  *    under the projects folder in their exact forms (stat, tail, head). Any other command, another cmux subcommand
@@ -42,7 +44,7 @@ import { readScreenAndRaw, readScreenOf } from '../source/screen.js'
 import { HEAD_BYTES, projectsDir, readTranscripts } from '../source/transcript.js'
 import type { DeliverIntent, DeliverOutcome, DeliverRefusal, ScreenRead, SessionFacts, SourceState, TranscriptFacts } from '../types.js'
 import { expectOf, type DeliverCheck } from './deliver-check.js'
-import { SURFACE_REF, WORKSPACE_REF, nextStepRefusal, peerRefusal, planDelivery, textRefusal, typedBy, type KeyIntent, type OpenCall, type TargetFacts } from './deliver-plan.js'
+import { SURFACE_REF, WORKSPACE_REF, nextAnswerRefusal, nextStepRefusal, peerRefusal, planDelivery, textRefusal, typedBy, type KeyIntent, type OpenCall, type TargetFacts } from './deliver-plan.js'
 import { tabRefs } from './jump.js'
 
 /** The reason when the host of the executor refuses a command. */
@@ -50,9 +52,11 @@ export const REFUSED_DELIVER_ARGV = 'The key path runs only cmux send, send-key 
 
 /**
  * Why a delivery failed: a read before the keys (facts-unread, screen-unread), a cmux command of the plan
- * (step-failed), a change that the check between 2 steps of a prompt saw (stopped), or c (cancelled).
+ * (step-failed), a change that the check between 2 steps of a prompt saw (stopped), or c (cancelled). An answers
+ * intent that stops in any of these ways after 1 or more digits went out gives partial: its dialog stays open with
+ * some picks in it.
  */
-export type FailureReason = 'facts-unread' | 'screen-unread' | 'step-failed' | 'stopped' | 'cancelled'
+export type FailureReason = 'facts-unread' | 'screen-unread' | 'step-failed' | 'stopped' | 'cancelled' | 'partial'
 
 /** The ps argv of the process check: the PID, the TTY and the start time of 1 PID. */
 const PS_HEAD: readonly string[] = ['ps', '-o', 'pid=,tty=,lstart=', '-p']
@@ -107,6 +111,16 @@ export function isDigitStep(steps: readonly (readonly string[])[], refs: { works
   const head = ['cmux', 'send', '--workspace', refs.workspaceRef, '--surface', refs.surfaceRef, '--']
   if (step === undefined || more.length > 0 || step.length !== head.length + 1) return false
   return head.every((arg, index) => step[index] === arg) && /^[1-9]$/.test(step[head.length] ?? '')
+}
+
+/**
+ * True when the steps of a key intent have the argv forms of its kind: a prompt any steps of its plan, an answer or a
+ * permission 1 digit step, and an answers intent 1 digit step for each question and then a send of `1`.
+ */
+function isPinned(intent: KeyIntent, steps: readonly (readonly string[])[], refs: { workspaceRef: string; surfaceRef: string }): boolean {
+  if (intent.kind === 'prompt') return true
+  if (intent.kind !== 'answers') return isDigitStep(steps, refs)
+  return steps.length === intent.answers.length + 1 && steps.every((step) => isDigitStep([step], refs)) && steps.at(-1)?.at(-1) === '1'
 }
 
 /** True when the run may set its environment so: ps only in UTC, every other command with no variable. */
@@ -210,6 +224,19 @@ async function nextStep(host: Host, ports: DeliverPorts, row: DeliverRow, refs: 
   return { ...(refusal === undefined ? {} : { refusal }), screen }
 }
 
+/**
+ * The check before step `step` of an answers intent: the registry file and the transcript tail of the target read again
+ * (readFresh), then the screen of its tab, each timed on the host clock. The plan reads the open question of that fresh
+ * read, so a question that closed or opened again gets no key. The screen is the newest read, for the Screen tab.
+ */
+async function answerStep(host: Host, ports: DeliverPorts, row: DeliverRow, refs: { workspaceRef: string; surfaceRef: string }, intent: KeyIntent, step: number): Promise<StepCheck> {
+  const fresh = await readFresh(host, ports, row)
+  const screen = await readScreenOf(host, { sessionId: row.sessionId, ...refs }, ports.clean, () => host.now())
+  if (fresh.kind !== 'read' || screen === undefined) return { refusal: 'screen-changed', ...(screen === undefined ? {} : { screen }) }
+  const refusal = nextAnswerRefusal(intent, step, screen, fresh.facts, await host.now())
+  return { ...(refusal === undefined ? {} : { refusal }), screen }
+}
+
 /** Delivers 1 confirmed intent that goes out as keys. It never rejects: a host call that fails gives an outcome. */
 export async function deliver(ports: DeliverPorts, request: DeliverRequest): Promise<DeliverResult> {
   const { intent, session } = request
@@ -238,22 +265,25 @@ export async function deliver(ports: DeliverPorts, request: DeliverRequest): Pro
   const now = await host.now().catch(() => Number.NaN)
   const plan = planDelivery(intent, screen, fresh.facts, now, { screen: screenRead.raw, calls: fresh.calls, clean: ports.clean })
   if (plan.kind === 'refuse') return refused(plan.refusal, screen)
-  if (intent.kind !== 'prompt' && !isDigitStep(plan.steps, refs)) return refused('screen-changed', screen)
+  if (!isPinned(intent, plan.steps, refs)) return refused('screen-changed', screen)
 
   let newest = screen
   for (const [index, step] of plan.steps.entries()) {
+    // an answers intent that stops after a digit leaves its dialog open with some picks in it
+    const stop = (reason: FailureReason): Promise<DeliverResult> => failed(intent.kind === 'answers' && index > 0 ? 'partial' : reason, newest)
     if (index > 0) {
       const next: NextStep = { intent, typed: typedBy(plan.steps.slice(0, index)), marks: fresh.marks }
-      const between = await nextStep(host, ports, session, refs, next).catch((): StepCheck => ({ refusal: 'screen-changed' }))
+      const check = intent.kind === 'answers' ? answerStep(host, ports, session, refs, intent, index) : nextStep(host, ports, session, refs, next)
+      const between = await check.catch((): StepCheck => ({ refusal: 'screen-changed' }))
       if (between.screen !== undefined) newest = between.screen
-      if (between.refusal !== undefined) return failed('stopped', newest)
+      if (between.refusal !== undefined) return stop('stopped')
     }
-    if (isCancelled()) return failed('cancelled', newest)
+    if (isCancelled()) return stop('cancelled')
     const exitCode = await host.run(step).then(
       (result) => result.exitCode,
       () => undefined,
     )
-    if (exitCode !== 0) return failed('step-failed', newest)
+    if (exitCode !== 0) return stop('step-failed')
   }
   const sentAt = ports.clock()
   const check: DeliverCheck = { sessionId: session.sessionId, expect: expectOf(intent, fresh.transcript, ports.clean, sentAt), sentAt, misses: 0 }

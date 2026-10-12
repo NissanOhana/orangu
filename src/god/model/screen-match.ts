@@ -300,7 +300,7 @@ export function readScreen(text: string): ScreenView {
  * The dialog at the bottom of the screen, when it is the only dialog and the last thing on the screen: no prompt
  * row and no numbered row below it.
  */
-function soleDialog(view: ScreenView): ScreenDialog | undefined {
+export function soleDialog(view: ScreenView): ScreenDialog | undefined {
   const dialog = view.dialogs[view.dialogs.length - 1]
   if (!dialog || view.dialogs.length !== 1) return undefined
   return view.promptLine > dialog.lastLine || view.lastMark > dialog.lastLine ? undefined : dialog
@@ -309,7 +309,7 @@ function soleDialog(view: ScreenView): ScreenDialog | undefined {
 const refuse = (refusal: DeliverRefusal): ScreenMatch => ({ isMatch: false, refusal })
 
 /** True when the option row shows exactly this option: the same label, whole, and the same description on 1 row, or none. */
-function showsOption(row: ScreenOption, expected: QuestionOption | undefined): boolean {
+export function showsOption(row: ScreenOption, expected: QuestionOption | undefined): boolean {
   if (!expected || row.label !== expected.label || !row.isWhole) return false
   return expected.description ? row.descriptionRows === 1 && row.description === expected.description : row.descriptionRows === 0
 }

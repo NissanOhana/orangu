@@ -18,6 +18,11 @@
  *   question and label at that digit, and each option of the open question with its description
  *   (src/god/model/screen-match.ts). The digit goes out as text, with `cmux send`: `cmux send-key` takes only a
  *   named key, such as enter, tab or escape, and exits 1 on a digit with "Unknown key";
+ * - the answers of a dialog with 2 or more single-select questions are 1 `cmux send` of the confirmed digit for each
+ *   question, then 1 of `1` on the review screen, each a step of its own. The session must wait on the same open
+ *   question, with the same headers, questions and labels. The plan checks the screen of step 0 (question 1), and
+ *   before each later step the executor reads the registry file, the transcript and the screen again, and
+ *   nextAnswerRefusal checks them: the same checks, then the screen of that step (src/god/model/question-dialog.ts);
  * - a permission answer is the digit of the option labeled exactly Yes or exactly No, on a dialog that shows the
  *   confirmed shell command, also with `cmux send`. The executor gives the raw text of the same screen read, the open
  *   calls of the fresh transcript read and the cleaner (RawFacts). The answer binds to the only open call, a Bash call
@@ -43,6 +48,7 @@
  * do not lag it, the session is still idle with no wait, no dialog is on the screen, and the input box holds the text
  * of the steps before (typedBy). The executor stops at the first refusal, and no later step goes out.
  */
+import { isSteppable, matchAnswersStep } from '../model/question-dialog.js'
 import { matchAnswer, matchPermission, matchPrompt, matchTyped, readScreen, type ScreenMatch } from '../model/screen-match.js'
 import { cleanValue } from '../sanitize.js'
 import type { DeliverIntent, DeliverPlan, DeliverRefusal, ScreenRead, SessionFacts, TranscriptFacts } from '../types.js'
@@ -129,6 +135,14 @@ function stateRefusal(intent: KeyIntent, facts: TargetFacts): DeliverRefusal | u
     return (facts.transcript?.agents ?? []).some((task) => task.isRunning && task.kind === 'subagent') ? 'task-running' : undefined
   }
   if (facts.status !== 'waiting' || facts.waitingFor !== 'input needed' || !open || open.toolUseId !== intent.toolUseId) return 'screen-changed'
+  if (intent.kind === 'answers') {
+    if (!isSteppable(open.questions)) return 'multi-question'
+    const isSame = open.questions.length === intent.answers.length && open.questions.every((question, k) => {
+      const answer = intent.answers[k]
+      return answer !== undefined && question.header === answer.header && question.text === answer.question && question.options[answer.option - 1]?.label === answer.label
+    })
+    return isSame ? undefined : 'screen-changed'
+  }
   const [question, ...more] = open.questions
   if (!question) return 'screen-changed'
   if (more.length > 0 || question.multiSelect) return 'multi-question'
@@ -181,6 +195,19 @@ function promptSteps(text: string, screen: ScreenRead): (readonly string[])[] {
 }
 
 /**
+ * Why a screen read and the facts read before it cannot plan a key, or undefined: a tab ref in a form that the key
+ * guard does not take (no-tab), a read of another session (screen-changed), a read older than SCREEN_MAX_AGE_MS at
+ * `now`, or facts read more than FACTS_MAX_LAG_MS before the read or after it (stale-screen).
+ */
+function readRefusal(intent: KeyIntent, screen: ScreenRead, facts: TargetFacts, now: number): DeliverRefusal | undefined {
+  if (!WORKSPACE_REF.test(screen.workspaceRef) || !SURFACE_REF.test(screen.surfaceRef)) return 'no-tab'
+  if (screen.sessionId !== intent.target.sessionId) return 'screen-changed'
+  const age = now - screen.readAt
+  const lag = screen.readAt - facts.factsAt
+  return !(age >= 0 && age <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS) ? 'stale-screen' : undefined
+}
+
+/**
  * The plan of 1 confirmed intent on 1 fresh screen read and the state of the target, made at `now` (engine time, in
  * ms). The text checks of a prompt come first, then the tab refs, the session of the read, the age of the read and
  * of the state, the state of the session, then the match of the screen. A permission answer needs `raw`, which the
@@ -191,17 +218,16 @@ export function planDelivery(intent: KeyIntent, screen: ScreenRead, facts: Targe
     const refusal = textRefusal(intent.text)
     if (refusal) return refuse(refusal)
   }
-  if (!WORKSPACE_REF.test(screen.workspaceRef) || !SURFACE_REF.test(screen.surfaceRef)) return refuse('no-tab')
-  if (screen.sessionId !== intent.target.sessionId) return refuse('screen-changed')
-  const age = now - screen.readAt
-  const lag = screen.readAt - facts.factsAt
-  if (!(age >= 0 && age <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS)) return refuse('stale-screen')
-  const stateRefused = stateRefusal(intent, facts)
-  if (stateRefused) return refuse(stateRefused)
+  const readRefused = readRefusal(intent, screen, facts, now) ?? stateRefusal(intent, facts)
+  if (readRefused) return refuse(readRefused)
   const view = readScreen(screen.text)
   switch (intent.kind) {
     case 'answer':
       return digitPlan(matchAnswer(view, { ...intent, options: facts.transcript?.openQuestion?.questions[0]?.options ?? [] }), screen)
+    case 'answers': {
+      const match = matchAnswersStep(screen.text, { questions: facts.transcript?.openQuestion?.questions ?? [], answers: intent.answers }, 0)
+      return match.isMatch ? { kind: 'send', steps: [...intent.answers.map((answer) => cmux('send', screen, String(answer.option))), cmux('send', screen, '1')] } : refuse(match.refusal)
+    }
     case 'permission': {
       const command = raw === undefined ? undefined : boundCommand(intent, raw)
       return raw === undefined || command === undefined ? refuse('screen-changed') : digitPlan(matchPermission(view, intent, { text: raw.screen, command, clean: raw.clean }), screen)
@@ -234,4 +260,18 @@ export function nextStepRefusal(intent: KeyIntent, screen: ScreenRead, facts: Ta
   if (!(age >= 0 && age <= SCREEN_MAX_AGE_MS) || !(lag >= 0 && lag <= FACTS_MAX_LAG_MS)) return 'stale-screen'
   if (facts.status !== 'idle' || facts.waitingFor !== undefined) return 'screen-changed'
   return matchTyped(screen.text, typed)
+}
+
+/**
+ * Why step `step` of an answers intent cannot go out, or undefined when it can: a fresh read of the screen at `now`
+ * (engine time, in ms), and the registry state and the open question of the transcript read just before it. The checks
+ * of planDelivery apply, then the screen of that step (src/god/model/question-dialog.ts): question `step` from 0 under
+ * the chips of the questions before it, or the review screen after the last question. Step 0 is the plan itself.
+ */
+export function nextAnswerRefusal(intent: KeyIntent, step: number, screen: ScreenRead, facts: TargetFacts, now: number): DeliverRefusal | undefined {
+  if (intent.kind !== 'answers') return 'screen-changed'
+  const refused = readRefusal(intent, screen, facts, now) ?? stateRefusal(intent, facts)
+  if (refused) return refused
+  const match = matchAnswersStep(screen.text, { questions: facts.transcript?.openQuestion?.questions ?? [], answers: intent.answers }, step)
+  return match.isMatch ? undefined : match.refusal
 }

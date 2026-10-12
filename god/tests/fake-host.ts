@@ -3,7 +3,8 @@
 // folder is /tmp/god-home and the repos live under /tmp/god-test. A machine with no cmux answers no cmux call, so ps
 // does not run; a machine with a cmux answers its tree, ps in UTC, the jump calls and the screen of each tab.
 // Its cmux keys work as the real cmux 0.64 keys do: send-key takes only a named key and exits 1 on a digit or a
-// letter, and a send of 1 digit answers the dialog that the screen of the surface shows.
+// letter, and a send of 1 digit answers the dialog that the screen of the surface shows. A screen can be a function of
+// those digits, so a dialog with 2 questions shows the next question and then the review screen.
 // A peer message goes to a session.send hook that records it and says it was delivered. A tone, a notification and a
 // model call go to hooks that record them: the notification says a channel sent it, and the model gives the reply of
 // the machine.
@@ -42,8 +43,11 @@ export type FakeSession = {
  */
 export type FakeCmux = {
   tabs: Record<number, { tty: string; workspaceRef: string; surfaceRef: string; title: string }>
-  /** the text that `read-screen` gives for each surface UUID, or a function of the text typed into its input box */
-  screens?: Record<string, string | ((typed: string) => string)>
+  /**
+   * the text that `read-screen` gives for each surface UUID, or a function of the text typed into its input box and of
+   * the digits that its open dialog took so far (a dialog with 2 questions shows the next one after each digit)
+   */
+  screens?: Record<string, string | ((typed: string, answered: readonly string[]) => string)>
   /** the text that send and send-key typed into the input box of each surface so far; enter empties it */
   typed?: Record<string, string>
   /** the digits that a send gave to the open dialog of each surface so far, in order */
@@ -271,7 +275,7 @@ function cmuxRun(cmux: FakeCmux, argv: readonly string[]) {
   const typed = (cmux.typed ??= {})
   const screenNow = (): string => {
     const screen = cmux.screens?.[surface] ?? ''
-    return typeof screen === 'string' ? screen : screen(typed[surface] ?? '')
+    return typeof screen === 'string' ? screen : screen(typed[surface] ?? '', cmux.answered?.[surface] ?? [])
   }
   if (verb === 'read-screen') return ran(screenNow())
   const value = argv.at(-1) ?? ''
@@ -310,6 +314,14 @@ export const question = (id: string, text: string, labels: readonly string[], ms
       model: 'claude-opus-5-5',
       content: [{ type: 'tool_use', id, name: 'AskUserQuestion', input: { questions: [{ question: text, header: 'Pick', multiSelect: false, options: labels.map((label) => ({ label, description: label })) }] } }],
     },
+  })
+
+/** An open AskUserQuestion call with 2 or more single-select questions, each with its header and its options. */
+export const questions = (id: string, asked: ReadonlyArray<{ header: string; text: string; options: ReadonlyArray<{ label: string; description?: string }> }>, ms: number): string =>
+  JSON.stringify({
+    type: 'assistant',
+    timestamp: at(ms),
+    message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id, name: 'AskUserQuestion', input: { questions: asked.map((one) => ({ question: one.text, header: one.header, multiSelect: false, options: one.options })) } }] },
   })
 
 /** An open Bash call, with the description that its permission dialog shows. */

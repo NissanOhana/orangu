@@ -148,9 +148,18 @@ export const RECAPS: Readonly<Record<RecapState['status'], RecapState>> = {
 
 const target = { sessionId: 's-wait', name: 'api-7' }
 
-/** 1 intent of each kind for the waiting session */
+/** 1 intent of each kind for the waiting session, and the answers of the dialog with 2 questions */
 export const INTENTS: Readonly<Record<DeliverIntent['kind'], DeliverIntent>> = {
   answer: { kind: 'answer', target, toolUseId: 'tu-ask', header: 'Eval set', question: QUESTION, option: 2, label: 'All' },
+  answers: {
+    kind: 'answers',
+    target: { sessionId: 's-multi', name: 'web-5' },
+    toolUseId: 'tu-multi',
+    answers: [
+      { header: 'Port', question: 'Which port do you want?', option: 2, label: '8080' },
+      { header: 'Host', question: 'Which host do you want?', option: 1, label: 'Local' },
+    ],
+  },
   permission: { kind: 'permission', target: { sessionId: 's-perm', name: 'ops-4' }, choice: 'yes', toolUseId: 'tu-bash', tool: 'Bash', input: PERMISSION_INPUT },
   prompt: { kind: 'prompt', target, text: 'Run the eval tests again.\nThen write the result in the notes.\nKeep the notes short.' },
   peer: { kind: 'peer', target, text: 'Stop the deploy now.\nI check the logs first.' },

@@ -2,7 +2,8 @@
  * The check after a send: whether the keys of a confirmed intent reached the session, read from the refreshes of the
  * board after the send. It reads no host and no clock, so the engine shell runs it after each tick.
  *
- * - An answer is in when the open question of the session is no longer the question that it answered.
+ * - An answer, or the answers of a dialog with 2 or more questions, is in when the open question of the session is no
+ *   longer the question that it answered.
  * - A Bash permission is in when its call has no open request: the session waits on no permission prompt, or the
  *   open call has another id, or no call is open. After Yes the command runs, so its call stays open while the
  *   session works: that reads as in. When the fresh read at y gave no open call, it is in when the session waits on
@@ -45,7 +46,7 @@ export type CheckResult = { status: 'delivered' } | { status: 'not-delivered' } 
 
 /** What a refresh must show for an intent that went out as keys, from the fresh read at y and the end of the send. */
 export function expectOf(intent: KeyIntent, transcript: TranscriptFacts | undefined, clean: (text: string) => string, sentAt: number): DeliverExpect {
-  if (intent.kind === 'answer') return { kind: 'question', toolUseId: intent.toolUseId }
+  if (intent.kind === 'answer' || intent.kind === 'answers') return { kind: 'question', toolUseId: intent.toolUseId }
   if (intent.kind === 'prompt') return { kind: 'prompt', text: clean(intent.text).trim(), after: sentAt - PROMPT_CLOCK_SLACK_MS }
   const activity = transcript?.activity
   return activity?.isOpen === true ? { kind: 'permission', toolUseId: activity.toolUseId } : { kind: 'permission' }
