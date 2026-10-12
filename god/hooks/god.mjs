@@ -72,10 +72,13 @@ var HELP_KEYS = [
   ["j", "Jump to the cmux tab of the session."],
   ["n", "Select the next session that needs you."],
   ["1-9", "Pick an option of the open question. Then press y to send it."],
+  ["p", "Go back 1 question in a dialog with 2 or more single-select questions."],
   ["y  c", "Send, or cancel, what the confirm bar shows."],
   ["r", "Write a prompt. The session reads it as your prompt."],
   ["m", "Write a peer note. The session reads it as a note from a peer, not as your prompt."],
   ["t", "Show the next tab of the detail."],
+  ["w  z", "Show the lines above or below a cut text."],
+  ["x", "Make a Recap of the session. This key shows only on the Recap tab."],
   ["s", "Turn all tones off, or on again."],
   ["u", "Mute the selected session, or unmute it."],
   ["f", "Show every session, or only the sessions of the selected repos."],
@@ -310,10 +313,11 @@ function appendItem(lines, item, width) {
 }
 
 // src/god/view/names.ts
-var STATUS_GLYPH = /^(?:[✳◐◑◒◓]️?|[⠀-⣿])\s*/u;
+var STATUS_GLYPH = /^(?:[✳◐◑◒◓]\u{FE0F}?|[\u{2800}-\u{28FF}])\s*/u;
+var DEFAULT_TAB_TITLE = "Claude Code";
 function rowName(session) {
   const tab = flat(session.tab?.surfaceTitle ?? "").replace(STATUS_GLYPH, "");
-  return tab || flat(session.transcript?.title ?? "") || flat(session.name);
+  return (tab === DEFAULT_TAB_TITLE ? "" : tab) || flat(session.transcript?.title ?? "") || flat(session.name);
 }
 
 // src/god/model/screen-match.ts
@@ -1786,6 +1790,8 @@ var SESSION_UNIT = ["session", "sessions"];
 var NAME_MIN = 6;
 var NAME_MAX = 40;
 var NAME_SHARE = 0.6;
+var CHIP_ROW_ROOM = 3 + 1 + 4 + 1 + cellWidth(FLAG_CHIP["same-files"]) + 2 + 5;
+var CHIP_NAME_MIN = 12;
 var MIN_WINDOW_ROWS = 3;
 var MORE_KEYS = { up: "more-up", down: "more-down" };
 var PRESS_KEY = "Enter";
@@ -1873,8 +1879,11 @@ function boardWindow(input) {
     group,
     sessions: isOpen(group, input.openGroups) ? group.sessionIds.flatMap((id) => byId.get(id) ?? []) : []
   }));
-  const longest = Math.max(0, ...shown2.flatMap(({ sessions }) => sessions.map((session) => cellWidth(rowName(session)))));
-  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, Math.floor((width - 3) * NAME_SHARE)));
+  const rows = shown2.flatMap(({ sessions }) => sessions);
+  const longest = Math.max(0, ...rows.map((session) => cellWidth(rowName(session))));
+  const share = Math.floor((width - 3) * NAME_SHARE);
+  const room = rows.some((session) => chipKinds(session).length > 0) ? Math.min(share, Math.max(CHIP_NAME_MIN, width - CHIP_ROW_ROOM)) : share;
+  const nameColumn = Math.min(longest, NAME_MAX, Math.max(NAME_MIN, room));
   const items = shown2.flatMap(({ group, sessions }) => [headingItem(group, input), ...sessions.map((session) => ({ line: sessionLine(session, input, nameColumn), sessions: 1 }))]);
   const selected = items.findIndex((item) => item.line.key !== void 0 && item.line.key === input.selectedKey);
   return windowOf(items, input.rows, Math.max(0, selected));
