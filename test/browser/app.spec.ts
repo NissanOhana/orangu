@@ -155,8 +155,11 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
     workspace: { cwd: '/workspace/project', device: '1', inode: '2' },
     sources: [{ kind: 'research', label: '<unsafe source>', url: 'https://example.test/?q=<x>', verifiedAt: '2026-08-26' }],
   }
+  // the proposed record stores more files than the list shows, and an evidence field past 600 characters
+  const files = Array.from({ length: 9 }, (_, i) => `docs/file-${i + 1}.md`)
+  const evidence = `Measured locally. ${'Each word stays on the page. '.repeat(30)}The evidence ends here.`
   const records = [
-    { id: proposedId, v: 2, createdAt: 1, source: 'skill', scope: 'session', sessionIds: [SESSION], ruleId: 'saved-proposal', title: 'Saved', evidence: { estimated: true }, proposal, status: 'proposed', statusAt: 2 },
+    { id: proposedId, v: 2, createdAt: 1, source: 'skill', scope: 'session', sessionIds: [SESSION], ruleId: 'saved-proposal', title: 'Saved', evidence: { estimated: true }, proposal: { ...proposal, files, evidence }, status: 'proposed', statusAt: 2 },
     {
       id: verifiedId, v: 2, createdAt: 1, source: 'skill', scope: 'session', sessionIds: [SESSION], ruleId: 'verified-proposal', title: 'Verified', evidence: { estimated: true },
       proposal: { ...proposal, title: 'Verified proposal', proposalPath: '/tmp/verified.md', verificationChecks: [{ metric: 'avgToolCalls', comparison: 'decreased' }] },
@@ -180,8 +183,35 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
   await expect(inbox).toContainText('Saved proposals · 2')
   await expect(inbox.locator('img')).toHaveCount(0)
   const proposed = inbox.locator(`#saved-${proposedId}`)
-  await proposed.locator('summary').click()
+  // the row's own summary: the disclosure of the file list inside the body has one too
+  await proposed.locator(':scope > summary').click()
   await expect(proposed).toContainText('<img src=x onerror=alert(1)>')
+
+  // No silent cut. 6 of the 9 files show, and a closed disclosure says so and opens from the keyboard to the other 3.
+  const more = proposed.getByRole('button', { name: '6 of 9 files show above. Show 3 more.', exact: true })
+  const file = (n: number) => proposed.getByText(`docs/file-${n}.md`, { exact: true })
+  await expect(more).toBeVisible()
+  await expect(more).toHaveAttribute('aria-expanded', 'false')
+  await expect(file(6)).toBeVisible()
+  await expect(file(7)).toBeHidden()
+  await more.focus()
+  await expect(more).toBeFocused()
+  await page.keyboard.press('Enter')
+  await expect(more).toHaveAttribute('aria-expanded', 'true')
+  for (const n of [7, 8, 9]) await expect(file(n)).toBeVisible()
+  // The evidence field shows whole. A test that reads text cannot see what CSS hides, so no box from the field up
+  // to the row may hold less than its content (2 px for rounding).
+  const field = proposed.locator('.sg-pfield', { hasText: 'The evidence ends here.' })
+  await expect(field).toBeVisible()
+  const clipped = await field.evaluate((el: HTMLElement) => {
+    const cut: string[] = []
+    for (let box: HTMLElement | null = el; box && !box.matches('.saved-proposal'); box = box.parentElement) {
+      if (box.scrollHeight > box.clientHeight + 2 || box.scrollWidth > box.clientWidth + 2) cut.push(`${box.className}: ${box.scrollHeight}x${box.scrollWidth} in ${box.clientHeight}x${box.clientWidth}`)
+    }
+    return cut
+  })
+  expect(clipped, 'boxes that clip the evidence field').toEqual([])
+
   const copyButtons = proposed.locator('.sg-hand .copy')
   await expect(copyButtons).toHaveCount(1)
   await expect(copyButtons).toHaveAttribute('data-copy', `claude "/orangu:apply ${proposedId}"`)
@@ -194,6 +224,15 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
   await expect(verified).toContainText('No repeat · zero')
   await expect(verified.locator('.sg-handoffs')).toHaveCount(0)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+
+  // A re-render builds the screen again from nothing (the audience switch does it). The open file list stays
+  // open, because its disclosure carries an id that the re-render seam keys.
+  await more.evaluate((el) => el.setAttribute('data-drawn-before', ''))
+  await page.evaluate(() => { location.hash += (location.hash.includes('?') ? '&' : '?') + 'audience=plain' })
+  await expect(page.getByRole('button', { name: 'Plain language' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(more, 'a new node').not.toHaveAttribute('data-drawn-before')
+  await expect(more).toHaveAttribute('aria-expanded', 'true')
+  await expect(file(9)).toBeVisible()
   expect(errors).toEqual([])
 })
 

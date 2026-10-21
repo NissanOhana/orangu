@@ -140,8 +140,10 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('Applied &lt;once&gt;')
     expect(markup).toContain('Reviewed comparisons')
     expect(markup).toContain('avgToolCalls · decreased')
-    expect(markup).toContain('+2 more')
-    expect(markup).not.toContain('<li>seven</li>')
+    // 8 files: 6 in the list, the other 2 behind a closed disclosure that says so, never dropped
+    expect(markup).toContain('6 of 8 files show above. Show 2 more.')
+    expect(markup).toContain('<li>seven</li>')
+    expect(markup).not.toContain('+2 more')
     expect(markup).not.toContain('<script>')
     expect(markup).toContain(`data-copy="claude &quot;/orangu:apply ${id}&quot;"`)
     expect(markup).not.toContain(`data-copy="$orangu-apply ${id}"`)

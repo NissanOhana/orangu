@@ -24,22 +24,37 @@ export function hasValidProposal(record: SuggestionRecord): record is Suggestion
     nonEmptyString(p['title']) && nonEmptyString(p['change']) && /^[SML]$/.test(String(p['effort'])) && nonEmptyString(p['proposalPath']) && (p['v'] ?? 1) === 1
 }
 
-function boundedText(value: unknown): string {
-  if (typeof value !== 'string') return ''
-  return value.trim().slice(0, 600)
+/** A stored field, whole: the manifest loader bounds each field (src/suggest/artifacts.ts), so the block cuts none. */
+function fieldText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function detail(label: string, value: unknown): string {
-  const text = boundedText(value)
+  const text = fieldText(value)
   return text ? `<div class="sg-pfield"><b>${label}.</b> ${esc(text)}</div>` : ''
 }
 
-function detailList(label: string, values: unknown, keys?: string[]): string {
+const itemList = (items: string[]): string => `<ul>${items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`
+
+/**
+ * The first PROPOSAL_LIST_LIMIT items show, and the rest wait in a closed disclosure that says how many: the
+ * "more" disclosure of screens/context.ts with the "N of M" line of the Timeline. Its id keys the app's re-render
+ * seam (details[id]), so an open list stays open after an SSE tick.
+ */
+function detailList(recordId: string, label: string, values: unknown, keys?: string[]): string {
   if (!Array.isArray(values)) return ''
-  const shown = values.slice(0, PROPOSAL_LIST_LIMIT).map((value) => keys && value && typeof value === 'object'
-    ? keys.map((key) => boundedText((value as Record<string, unknown>)[key])).filter(Boolean).join(' · ')
-    : boundedText(value)).filter(Boolean)
-  return shown.length ? `<div class="sg-pfield"><b>${label}.</b><ul>${shown.map((value) => `<li>${esc(value)}</li>`).join('')}${values.length > PROPOSAL_LIST_LIMIT ? `<li class="muted">+${values.length - PROPOSAL_LIST_LIMIT} more</li>` : ''}</ul></div>` : ''
+  const items = values.map((value) => keys && value && typeof value === 'object'
+    ? keys.map((key) => fieldText((value as Record<string, unknown>)[key])).filter(Boolean).join(' · ')
+    : fieldText(value)).filter(Boolean)
+  if (!items.length) return ''
+  const total = items.length
+  // after the splice, items holds the first PROPOSAL_LIST_LIMIT and rest holds the others: none is dropped
+  const rest = items.splice(PROPOSAL_LIST_LIMIT)
+  const name = label.toLowerCase()
+  const more = rest.length
+    ? `<details class="more-charts" id="more-${esc(recordId)}-${name.replace(/ /g, '-')}"><summary><span class="chev" aria-hidden="true">▸</span>${items.length} of ${total} ${name} show above. Show ${rest.length} more.</summary>${itemList(rest)}</details>`
+    : ''
+  return `<div class="sg-pfield"><b>${label}.</b>${itemList(items)}${more}</div>`
 }
 
 function applyHandoffs(record: SuggestionRecord): string {
@@ -48,8 +63,8 @@ function applyHandoffs(record: SuggestionRecord): string {
     record.scope === 'global' ||
     record.status !== 'proposed' ||
     proposal?.v !== 1 ||
-    !boundedText(proposal.manifestPath) ||
-    !boundedText(proposal.workspace?.cwd) ||
+    !fieldText(proposal.manifestPath) ||
+    !fieldText(proposal.workspace?.cwd) ||
     !Array.isArray(proposal.files) ||
     proposal.files.length === 0
   ) return ''
@@ -64,15 +79,15 @@ function proposalDetails(record: SuggestionViewRecord | undefined): string {
   const trusted = trustedVerification(record)
   // Trust is computed server-side for either receipt version; both carry a summary and graded checks.
   const lifecycle = trusted && verification
-    ? detail('Later evidence', verification.summary) + detailList('Computed comparisons', verification.checks, ['name', 'evidence'])
+    ? detail('Later evidence', verification.summary) + detailList(record.id, 'Computed comparisons', verification.checks, ['name', 'evidence'])
     : record.status === 'verified'
       ? detail('Legacy state', 'Not verified under the current deterministic contract.')
     : record.application?.v === 1 ? detail('Applied', record.application.summary) : ''
-  return `<div class="sg-proposal"><div class="sg-phead"><span class="eyebrow">Proposal</span>${proposal.changeClass ? `<span class="pill">${esc(proposal.changeClass)}</span>` : ''}<span class="pill">effort ${esc(proposal.effort)}</span></div><div class="sg-ptitle">${esc(boundedText(proposal.title))}</div>${detail('Change', proposal.change)}${detail('Evidence', proposal.evidence)}${detail('Expected effect', proposal.expectedEffect)}${detail('Risk', proposal.risk)}${detail('Verification', proposal.verification)}${detailList('Reviewed comparisons', proposal.verificationChecks, ['metric', 'comparison'])}${detailList('Files', proposal.files)}${detailList('Sources', proposal.sources, ['kind', 'label', 'url', 'verifiedAt'])}${lifecycle}${applyHandoffs(record)}</div>`
+  return `<div class="sg-proposal"><div class="sg-phead"><span class="eyebrow">Proposal</span>${proposal.changeClass ? `<span class="pill">${esc(proposal.changeClass)}</span>` : ''}<span class="pill">effort ${esc(proposal.effort)}</span></div><div class="sg-ptitle">${esc(fieldText(proposal.title))}</div>${detail('Change', proposal.change)}${detail('Evidence', proposal.evidence)}${detail('Expected effect', proposal.expectedEffect)}${detail('Risk', proposal.risk)}${detail('Verification', proposal.verification)}${detailList(record.id, 'Reviewed comparisons', proposal.verificationChecks, ['metric', 'comparison'])}${detailList(record.id, 'Files', proposal.files)}${detailList(record.id, 'Sources', proposal.sources, ['kind', 'label', 'url', 'verifiedAt'])}${lifecycle}${applyHandoffs(record)}</div>`
 }
 
 function savedProposalItem(record: SuggestionViewRecord): string {
-  return `<details class="saved-proposal" id="saved-${esc(record.id)}"><summary><span class="chev" aria-hidden="true">▸</span><b>${esc(boundedText(record.proposal?.title))}</b>${statusChip(chipState(record.status), '', trustedVerification(record))}</summary><div class="saved-proposal-body">${proposalDetails(record)}</div></details>`
+  return `<details class="saved-proposal" id="saved-${esc(record.id)}"><summary><span class="chev" aria-hidden="true">▸</span><b>${esc(fieldText(record.proposal?.title))}</b>${statusChip(chipState(record.status), '', trustedVerification(record))}</summary><div class="saved-proposal-body">${proposalDetails(record)}</div></details>`
 }
 
 function identityKeys(record: SuggestionRecord): string[] {
