@@ -12,8 +12,9 @@
  * - HTML files: the page text in file mode, plus the copy that is not page text: the content of the
  *   description, og:* and twitter:* meta tags, the title, aria-label, alt and placeholder values, the
  *   strings in inline scripts, and the JSON-LD descriptions.
- * - CLI help: `node plugin/bin/orangu.cli.mjs --help` with NO_COLOR=1, one block per line. The tracked
- *   bin prints the same bytes as dist/, and the gate runs before the build.
+ * - CLI help: `node plugin/bin/orangu.cli.mjs --help` (the short screen) and the same bin with `help all`
+ *   (the full reference), NO_COLOR=1, one block per line. The tracked bin prints the same bytes as dist/,
+ *   and the gate runs before the build.
  * - Copy in TS string and template literals: every literal outside a non-copy position (see notCopy),
  *   with 3 in place of each ${}. When a literal holds markup, the values of title=, aria-label= and
  *   placeholder= are lifted out and the markup is read as text. Each line is one block.
@@ -407,12 +408,15 @@ function fileSurface(path: string, owner: string, kind: 'markdown' | 'html' | 't
   }
 }
 
-/** The CLI help from the tracked bin, NO_COLOR=1, so the gate needs no dist/. */
-export function helpText(root = ROOT): string {
+/**
+ * The CLI help from the tracked bin, NO_COLOR=1, so the gate needs no dist/. `--help` is the short screen,
+ * and `help all` is the full reference. The bin always gets arguments: a bare run is bare `orangu`.
+ */
+export function helpText(root = ROOT, args: readonly ['--help'] | readonly ['help', 'all'] = ['--help']): string {
   const env: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'dumb' }
   delete env['FORCE_COLOR']
-  const result = spawnSync(process.execPath, [join(root, HELP_BIN), '--help'], { cwd: root, encoding: 'utf8', env })
-  if (result.status !== 0) throw new Error(`${HELP_BIN} --help exited ${result.status}: ${result.stderr}`)
+  const result = spawnSync(process.execPath, [join(root, HELP_BIN), ...args], { cwd: root, encoding: 'utf8', env })
+  if (result.status !== 0) throw new Error(`${HELP_BIN} ${args.join(' ')} exited ${result.status}: ${result.stderr}`)
   return result.stdout
 }
 
@@ -421,6 +425,13 @@ const helpSurface: Surface = {
   owner: 'K',
   source: `${HELP_BIN} --help, one block per line`,
   measure: (read) => withFile(checkBlocks(proseBlocks(helpText(read.root), { lines: true })), 'orangu --help'),
+}
+
+const helpAllSurface: Surface = {
+  id: 'orangu help all',
+  owner: 'K',
+  source: `${HELP_BIN} help all, one block per line`,
+  measure: (read) => withFile(checkBlocks(proseBlocks(helpText(read.root, ['help', 'all']), { lines: true })), 'orangu help all'),
 }
 
 function tsSurface(id: string, owner: string, paths: readonly string[], options: { exclude?: readonly string[]; for?: (file: string) => TsOptions; files?: (read: Reader) => string[] } = {}): Surface {
@@ -967,6 +978,7 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     ...pluginSurfaces(files, 'new'),
     // K: help, every CLI and engine folder under src/, the catalog notes
     helpSurface,
+    helpAllSurface,
     ...srcSurfaces(files),
     jsonSurface('src/suggest/catalog.json#note', 'K', one('src/suggest/catalog.json'), (json) => strings(list(json['entries']).map((entry) => entry['note']))),
     jsonSurface('src/suggest/features.json#note', 'K', one('src/suggest/features.json'), (json) => strings(list(json['entries']).map((entry) => entry['note']))),

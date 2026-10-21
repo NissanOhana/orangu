@@ -230,7 +230,7 @@ export function briefBlock(caps: Caps, a: Analysis, title: string, step: NextSte
   const lines = header(caps, title, `latest${sep}${a.session.id.slice(0, 8)}${sep}${s.turns} turns${sep}${fmtTokens(s.totalTokens)} tokens${sep}${fmtMs(s.activeMs)} active`)
   lines.push(...fit(caps, INDENT + outcomeHeadline(s)), '')
   lines.push(...nextStepLines(caps, step))
-  if (o.hint) lines.push('', ...fit(caps, `${INDENT}orangu report for the full picture${sep}orangu --help for every command`, 'dim', true))
+  if (o.hint) lines.push('', ...fit(caps, `${INDENT}orangu report for the full picture${sep}orangu help all for every command`, 'dim', true))
   return lines
 }
 

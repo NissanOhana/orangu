@@ -9253,7 +9253,7 @@ function briefBlock(caps, a, title, step, o) {
   const lines = header(caps, title, `latest${sep3}${a.session.id.slice(0, 8)}${sep3}${s.turns} turns${sep3}${fmtTokens(s.totalTokens)} tokens${sep3}${fmtMs(s.activeMs)} active`);
   lines.push(...fit(caps, INDENT + outcomeHeadline(s)), "");
   lines.push(...nextStepLines(caps, step));
-  if (o.hint) lines.push("", ...fit(caps, `${INDENT}orangu report for the full picture${sep3}orangu --help for every command`, "dim", true));
+  if (o.hint) lines.push("", ...fit(caps, `${INDENT}orangu report for the full picture${sep3}orangu help all for every command`, "dim", true));
   return lines;
 }
 function listRows(caps, refs, o) {
@@ -16845,6 +16845,8 @@ var EXTRA_COMMANDS = {
   ste: cmdSte,
   "show-me": cmdShowMe
 };
+var CORE_VERBS = ["report", "html", "analyze", "a", "list", "ls", "pick", "repo", "global", "all", "watch", "serve"];
+var CLI_VERBS = Object.freeze([...CORE_VERBS, ...Object.keys(EXTRA_COMMANDS)]);
 var EXTRA_HELP = [
   // Each entry may span lines (main.ts joins entries with '\n'); keep every line <= 80 columns.
   [
@@ -16877,7 +16879,8 @@ var EXTRA_HELP = [
     "                                  [--include-text] [--no-cache] [--quiet])"
   ].join("\n"),
   [
-    "  orangu suggest               suggestion records in ~/.orangu",
+    "  orangu suggest               the suggestion store that the skills call",
+    "                               (records in ~/.orangu)",
     "                                 ([<sg_id>] --finding <token>",
     "                                  | [<sg_id>] --rule <r> --scope <s>",
     "                                    --session <a,b> [--title <t>]",
@@ -17375,7 +17378,7 @@ var AGGREGATE_SIDE_EFFECT_FLAGS = ["html", "open"];
 function rejectUnusableFlags(command, flags) {
   for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== void 0) fail2(message);
   const unknown = unknownFlags(flags);
-  if (unknown.length) fail2(`unknown flag${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")}. Run: orangu --help`);
+  if (unknown.length) fail2(`unknown flag${unknown.length > 1 ? "s" : ""} ${unknown.join(", ")}. Run: orangu help all`);
   if (command !== void 0 && !SESSION_GATE_VERBS.has(command)) {
     for (const flag of SESSION_GATE_FLAGS) {
       if (flags[flag] !== void 0) fail2(`--${flag} gates one session: use it with orangu analyze or orangu report`);
@@ -17549,10 +17552,36 @@ async function cmdServe(flags) {
   await new Promise(() => {
   });
 }
+var helpTitle = () => `${paint(out2, "bold", "orangu")} v${VERSION2}: observe the session, then improve the next outcome.
+Deterministic observability for Claude Code sessions. No network calls.`;
+var helpPrivacy = () => paint(out2, "dim", "privacy: local only, no network requests. orangu redacts secrets by default.");
 function printHelp() {
   process.stdout.write(`${out2.tty ? "\n" + mascotLines(out2).join("\n") + "\n" : ""}
-${paint(out2, "bold", "orangu")} v${VERSION2}: observe the session, then improve the next outcome.
-Deterministic observability for Claude Code sessions. No network calls.
+${helpTitle()}
+
+${paint(out2, "bold", "start here")}
+  orangu                     choose a report, or see what to improve next
+                             (a latest-session brief when piped or in CI)
+  orangu serve               the local app: every session, live, with the
+                             queue, history and lessons of your changes
+  /orangu:improve            in Claude Code: the next change to make, and
+                             the check after you apply it
+
+${paint(out2, "bold", "also")}
+  orangu report [<session>]  one session as an HTML report (default: latest)
+  orangu repo                every session of this repository, in one report
+  orangu global              every session on this machine, in one report
+  orangu harness             what your config declares vs what you used
+
+  orangu help all            every command and flag
+
+plugin: /plugin marketplace add NissanOhana/orangu, then /plugin install orangu
+${helpPrivacy()}
+`);
+}
+function printHelpAll() {
+  process.stdout.write(`
+${helpTitle()}
 
 ${paint(out2, "bold", "usage")}
   orangu                       interactive report dashboard (terminal)
@@ -17602,8 +17631,15 @@ ${paint(out2, "bold", "flags")}
   --fail-on-hook-errors  exit non-zero on any hook error (CI: analyze/report)
   --version, --help
 
-${paint(out2, "dim", "privacy: local only, no network requests. orangu redacts secrets by default.")}
+${helpPrivacy()}
 `);
+}
+var unknownCommand = (name) => `unknown command "${name}". Run: orangu help all`;
+function dispatchHelp(command, positionals) {
+  const topic = command === "help" ? positionals[0] : command;
+  if (topic === void 0) return printHelp();
+  if (topic === "all" || CLI_VERBS.includes(topic)) return printHelpAll();
+  fail2(command === "help" ? `unknown help topic "${topic}". Run: orangu help all` : unknownCommand(topic));
 }
 async function main() {
   const { command, positionals, flags } = parseArgs(process.argv.slice(2));
@@ -17617,7 +17653,7 @@ async function main() {
     return;
   }
   if (flagBool(flags, "help") || flagBool(flags, "h") || command === "help") {
-    printHelp();
+    dispatchHelp(command, positionals);
     return;
   }
   rejectUnusableFlags(command, flags);
@@ -17665,9 +17701,9 @@ async function main() {
     case "serve":
       return cmdServe(flags);
     default: {
-      const extra = Object.prototype.hasOwnProperty.call(EXTRA_COMMANDS, command) ? EXTRA_COMMANDS[command] : void 0;
+      const extra = CLI_VERBS.includes(command) ? EXTRA_COMMANDS[command] : void 0;
       if (extra) return extra(positionals, flags);
-      fail2(`unknown command "${command}". Run: orangu --help`);
+      fail2(unknownCommand(command));
     }
   }
 }

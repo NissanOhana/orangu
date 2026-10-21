@@ -112,7 +112,12 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // K: help, every CLI and engine folder under src/, the catalog notes
   // Raised by the K STE rewrite (split semicolon pairs, simple tenses, the actor named, one word for one
   // thing). Each row: the measured score, then what still holds it down and why it stays.
-  'orangu --help': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (75 of 75): "don't" and 4 semicolons gone
+  // the short screen since the help has 2 levels: measured 100 (18 of 18). When the row was born, the
+  // single help text measured 100 (75 of 75): "don't" and 4 semicolons gone
+  'orangu --help': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // new surface, the full reference (the single help text moved here, with no mascot): born at
+  // max(80, measured - 2), measured 100 (91 of 91), 0 findings
+  'orangu help all': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // measured 90 (37 of 41). The 3 "changed while it was being read" errors stay: the retry regex in
   // parse.ts parses them. The duplicate_uuid warning (parse.ts:579) is cached Analysis payload copy.
   'src/adapters': { floor: 88, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 4 },

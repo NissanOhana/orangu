@@ -38,7 +38,7 @@ import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
 import { mascotLines } from './mascot-ascii.js'
 import type { Analysis } from '../model/analysis.js'
-import { EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
+import { CLI_VERBS, EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { cmdPick } from './commands/pick.js'
 import { cmdDashboard } from './commands/dashboard.js'
 import { plural } from '../harness/report.js'
@@ -283,7 +283,7 @@ const AGGREGATE_SIDE_EFFECT_FLAGS = ['html', 'open'] as const
 function rejectUnusableFlags(command: string | undefined, flags: Record<string, string | boolean>): void {
   for (const [flag, message] of Object.entries(RETIRED_FLAGS)) if (flags[flag] !== undefined) fail(message)
   const unknown = unknownFlags(flags)
-  if (unknown.length) fail(`unknown flag${unknown.length > 1 ? 's' : ''} ${unknown.join(', ')}. Run: orangu --help`)
+  if (unknown.length) fail(`unknown flag${unknown.length > 1 ? 's' : ''} ${unknown.join(', ')}. Run: orangu help all`)
   if (command !== undefined && !SESSION_GATE_VERBS.has(command)) {
     for (const flag of SESSION_GATE_FLAGS) {
       if (flags[flag] !== undefined) fail(`--${flag} gates one session: use it with orangu analyze or orangu report`)
@@ -482,10 +482,47 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
   await new Promise<void>(() => {})
 }
 
+/** The first 2 lines of both help levels: the name, the version, and what orangu is. */
+const helpTitle = (): string => `${paint(out, 'bold', 'orangu')} v${VERSION}: observe the session, then improve the next outcome.
+Deterministic observability for Claude Code sessions. No network calls.`
+const helpPrivacy = (): string => paint(out, 'dim', 'privacy: local only, no network requests. orangu redacts secrets by default.')
+
+/**
+ * The short screen of `orangu --help`, `-h`, `help` and a bare `--json`: the 3 front doors and the
+ * common verbs, with no flag. It reads no file and no store. On a terminal the mascot comes first.
+ */
 function printHelp(): void {
   process.stdout.write(`${out.tty ? '\n' + mascotLines(out).join('\n') + '\n' : ''}
-${paint(out, 'bold', 'orangu')} v${VERSION}: observe the session, then improve the next outcome.
-Deterministic observability for Claude Code sessions. No network calls.
+${helpTitle()}
+
+${paint(out, 'bold', 'start here')}
+  orangu                     choose a report, or see what to improve next
+                             (a latest-session brief when piped or in CI)
+  orangu serve               the local app: every session, live, with the
+                             queue, history and lessons of your changes
+  /orangu:improve            in Claude Code: the next change to make, and
+                             the check after you apply it
+
+${paint(out, 'bold', 'also')}
+  orangu report [<session>]  one session as an HTML report (default: latest)
+  orangu repo                every session of this repository, in one report
+  orangu global              every session on this machine, in one report
+  orangu harness             what your config declares vs what you used
+
+  orangu help all            every command and flag
+
+plugin: /plugin marketplace add NissanOhana/orangu, then /plugin install orangu
+${helpPrivacy()}
+`)
+}
+
+/**
+ * The full reference of `orangu help all`, `orangu help <verb>` and `orangu <verb> --help`: every
+ * command and flag. A lookup page, so it prints no mascot.
+ */
+function printHelpAll(): void {
+  process.stdout.write(`
+${helpTitle()}
 
 ${paint(out, 'bold', 'usage')}
   orangu                       interactive report dashboard (terminal)
@@ -535,8 +572,21 @@ ${paint(out, 'bold', 'flags')}
   --fail-on-hook-errors  exit non-zero on any hook error (CI: analyze/report)
   --version, --help
 
-${paint(out, 'dim', 'privacy: local only, no network requests. orangu redacts secrets by default.')}
+${helpPrivacy()}
 `)
+}
+
+const unknownCommand = (name: string): string => `unknown command "${name}". Run: orangu help all`
+
+/**
+ * `orangu help <topic>` and `orangu <name> --help`. No topic is the short screen. `all` or a name in
+ * CLI_VERBS is the full reference. Any other topic exits 1.
+ */
+function dispatchHelp(command: string | undefined, positionals: readonly string[]): void {
+  const topic = command === 'help' ? positionals[0] : command
+  if (topic === undefined) return printHelp()
+  if (topic === 'all' || CLI_VERBS.includes(topic)) return printHelpAll()
+  fail(command === 'help' ? `unknown help topic "${topic}". Run: orangu help all` : unknownCommand(topic))
 }
 
 // ---------- main ----------
@@ -553,12 +603,12 @@ async function main(): Promise<void> {
     return
   }
   if (flagBool(flags, 'help') || flagBool(flags, 'h') || command === 'help') {
-    printHelp()
+    dispatchHelp(command, positionals)
     return
   }
   rejectUnusableFlags(command, flags)
   // No verb: an interactive report dashboard on a terminal. Machine callers retain the compact
-  // latest-session answer; --json has no unambiguous scope, so it continues to print help.
+  // latest-session answer; --json has no unambiguous scope, so it prints the short help screen.
   if (!command) {
     if (flagBool(flags, 'json')) printHelp()
     else {
@@ -603,9 +653,10 @@ async function main(): Promise<void> {
     case 'serve':
       return cmdServe(flags)
     default: {
-      const extra = Object.prototype.hasOwnProperty.call(EXTRA_COMMANDS, command) ? EXTRA_COMMANDS[command] : undefined
+      // CLI_VERBS holds no prototype key, so `constructor` or `__proto__` is an unknown command here
+      const extra = CLI_VERBS.includes(command) ? EXTRA_COMMANDS[command] : undefined
       if (extra) return extra(positionals, flags)
-      fail(`unknown command "${command}". Run: orangu --help`)
+      fail(unknownCommand(command))
     }
   }
 }

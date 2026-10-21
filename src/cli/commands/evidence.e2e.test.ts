@@ -10,7 +10,7 @@ import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js
 const CLI = join(process.cwd(), 'dist', 'orangu.js')
 const helpHasEvidence = (): boolean => {
   try {
-    return execFileSync(process.execPath, [CLI, '--help'], { encoding: 'utf8' }).includes('orangu evidence')
+    return execFileSync(process.execPath, [CLI, 'help', 'all'], { encoding: 'utf8' }).includes('orangu evidence')
   } catch {
     return false
   }

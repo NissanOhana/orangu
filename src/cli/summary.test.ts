@@ -261,7 +261,7 @@ describe('summary renderers fit the layout', () => {
     const hint = brief.slice(brief.lastIndexOf('') + 1)
     for (const l of hint) expect(l).toMatch(/^ {2}\S/)
     // the line break takes the place of the separator
-    expect(hint.map((l) => l.trim()).join(' · ')).toBe('orangu report for the full picture · orangu --help for every command')
+    expect(hint.map((l) => l.trim()).join(' · ')).toBe('orangu report for the full picture · orangu help all for every command')
     const done = doneLine(caps, { sizeBytes: 999_900_000, elapsedMs: 3_599_000, redactions: 99_999 }).split('\n')
     expect(done.length).toBeGreaterThan(1)
     for (const l of done) expect(displayWidth(l)).toBeLessThanOrEqual(40)

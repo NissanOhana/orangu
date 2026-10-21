@@ -9,6 +9,7 @@ import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
 import { checkText } from '../ste/index.js'
 import { MASCOT_STACKED } from './mascot-ascii.js'
+import { CLI_VERBS } from './commands/index.js'
 import { displayWidth } from './tty.js'
 
 async function until(cond: () => boolean, ms: number, what: string): Promise<void> {
@@ -73,6 +74,14 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
     for (const row of MASCOT_STACKED) expect(shown, row).toContain(row)
     for (const line of shown.split('\n')) expect(displayWidth(line), line).toBeLessThanOrEqual(80)
   })
+  it('help all is a lookup page: no mascot row on a terminal, and no line over 80 columns', () => {
+    const { out, status } = runPty(['help', 'all'])
+    expect(status, out).toBe(0)
+    const shown = rendered(out)
+    expect(shown).toContain('usage')
+    for (const row of MASCOT_STACKED) expect(shown, row).not.toContain(row)
+    for (const line of shown.split('\n')) expect(displayWidth(line), line).toBeLessThanOrEqual(80)
+  })
   it('NO_COLOR=1 on a terminal: no colour, no spinner, no cursor or erase sequences', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-nocolor-')))
     const { out, status } = runPty(['report', home.endedId, '--root', home.configDir, '--no-open', '--no-cache'], { NO_COLOR: '1' })
@@ -90,8 +99,44 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
   it('--version prints the version', () => {
     expect(run(['--version']).trim()).toMatch(/^\d+\.\d+\.\d+/)
   })
-  it('--help lists commands incl. serve with its flags', () => {
-    const h = run(['--help'])
+  it('--help is the short screen: the 3 front doors and the common verbs, no flag, in 24 rows of 80 columns', () => {
+    const h = execFileSync('node', [CLI, '--help'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'] })
+    const lines = h.replace(/\n$/, '').split('\n')
+    expect(lines.length, h).toBeLessThanOrEqual(24)
+    for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(80)
+    const doors = h.slice(h.indexOf('\nstart here\n'), h.indexOf('\nalso\n'))
+    for (const door of ['\n  orangu  ', '\n  orangu serve  ', '\n  /orangu:improve  ']) expect(doors, door).toContain(door)
+    for (const line of ['\n  orangu report ', '\n  orangu repo ', '\n  orangu global ', '\n  orangu harness ', '\n  orangu help all ', '\nplugin: ', '\nprivacy: ']) expect(h, line).toContain(line)
+    expect(h).not.toContain('--')
+    for (const verb of ['suggest', 'evidence', 'estimate', 'ste', 'show-me', 'feedback', 'analyze', 'list', 'pick', 'watch']) expect(h).not.toContain(`orangu ${verb}`)
+    expect(h).not.toMatch(ESCAPES)
+  })
+
+  it('help all is the full reference: help <name> and <name> -h print the same bytes for each verb', () => {
+    const all = run(['help', 'all'])
+    for (const name of CLI_VERBS) for (const args of [['help', name], [name, '-h']]) expect(run(args), args.join(' ')).toBe(all)
+    for (const verb of ['report', 'analyze', 'list', 'pick', 'repo', 'global', 'watch', 'serve', 'feedback', 'evidence', 'estimate', 'harness', 'suggest', 'ste', 'show-me']) {
+      expect(all, verb).toMatch(new RegExp(`^ {2}orangu ${verb} `, 'm'))
+    }
+    expect(all).toContain('\n  orangu suggest               the suggestion store that the skills call\n')
+    expect(run(['--help'])).not.toBe(all)
+  })
+
+  it('an unknown help topic or command exits 1 and points at orangu help all', () => {
+    const topic = spawnSync('node', [CLI, 'help', 'nosuch'], { encoding: 'utf8' })
+    expect(topic.status).toBe(1)
+    expect(topic.stdout).toBe('')
+    expect(topic.stderr).toContain('unknown help topic "nosuch". Run: orangu help all')
+    for (const args of [['nosuch', '--help'], ['nosuch', '-h'], ['nosuch']]) {
+      const r = spawnSync('node', [CLI, ...args], { encoding: 'utf8' })
+      expect(r.status, args.join(' ')).toBe(1)
+      expect(r.stdout, args.join(' ')).toBe('')
+      expect(r.stderr, args.join(' ')).toContain('unknown command "nosuch". Run: orangu help all')
+    }
+  })
+
+  it('help all lists commands incl. serve with its flags', () => {
+    const h = run(['help', 'all'])
     expect(h).toContain('orangu report')
     expect(h).toContain('orangu serve')
     for (const f of ['--port', '--open', '--include-text', '--no-include-text', '--max-live']) expect(h).toContain(f)
@@ -802,7 +847,7 @@ syncBuiltinESMExports()
     expect(noneJson.stderr).toMatch(/^error: orangu found no sessions\. Is Claude Code installed\?/m)
   })
 
-  it('bare orangu analyzes the latest session and prints the sentence and the next command; --help is unchanged', async () => {
+  it('bare orangu analyzes the latest session and prints the sentence and the next command; the help screens do not', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-bare-')))
     const bare = spawnSync('node', [CLI, '--root', home.configDir, '--no-cache'], { encoding: 'utf8' })
     expect(bare.status, bare.stderr).toBe(0)
@@ -839,25 +884,29 @@ syncBuiltinESMExports()
     expect(bare.stdout + bare.stderr).not.toMatch(ESCAPES)
     for (const l of bare.stdout.split('\n')) expect(l.length, l).toBeLessThanOrEqual(80)
     expect(bare.stdout).not.toContain('usage')
-    expect(bare.stdout).toContain('orangu --help for every command')
+    expect(bare.stdout).toContain('orangu help all for every command')
     // the sentence is the report's outcome headline, never a canned line
     expect(bare.stdout).toMatch(/commit|test run|file|request|Stopped by you|nothing committed/)
     // the trailing hint is a diagnostic: --quiet silences it and keeps the answer itself
     const quiet = spawnSync('node', [CLI, '--root', home.configDir, '--no-cache', '--quiet'], { encoding: 'utf8' })
     expect(quiet.status, quiet.stderr).toBe(0)
-    expect(quiet.stderr).not.toContain('orangu --help for every command')
+    expect(quiet.stderr).not.toContain('orangu help all for every command')
     expect(quiet.stdout).toMatch(/^ {8}latest · /m)
     expect(quiet.stdout).toMatch(/^  finding {2}/m)
     expect(quiet.stderr).toBe('')
 
-    const help = run(['--help'])
+    const help = run(['help', 'all'])
     expect(help).toContain('usage')
     expect(help).toMatch(/usage\n  orangu {2,}interactive report dashboard \(terminal\)\n {31}latest-session brief when piped or in CI\n  orangu report/)
-    expect(help).not.toContain('top finding')
-    expect(help).not.toContain('        latest ·')
-    expect(run(['help'])).toBe(help)
-    // --json with no verb has nothing to serialise: it keeps printing help
-    expect(run(['--json'])).toBe(help)
+    const short = run(['--help'])
+    for (const text of [help, short]) {
+      expect(text).not.toContain('top finding')
+      expect(text).not.toContain('        latest ·')
+    }
+    expect(run(['help'])).toBe(short)
+    expect(run(['-h'])).toBe(short)
+    // --json with no verb has nothing to serialise: it prints the short screen
+    expect(run(['--json'])).toBe(short)
 
     const empty = await mkdtemp(join(tmpdir(), 'orangu-cli-bare-empty-'))
     const none = spawnSync('node', [CLI, '--root', empty, '--no-cache'], { encoding: 'utf8' })
@@ -921,7 +970,7 @@ syncBuiltinESMExports()
       const r = runExit(args(['--json', '--max-tokns', '1']))
       expect(r.code).toBe(1)
       expect(r.err).toContain('unknown flag --max-tokns')
-      expect(r.err).toContain('orangu --help')
+      expect(r.err).toContain('unknown flag --max-tokns. Run: orangu help all')
       expect(runExit(args(['--json', '-x'])).err).toContain('unknown flag -x')
     })
 
@@ -1360,24 +1409,27 @@ describe.skipIf(!existsSync(CLI))('orangu CLI regressions from the 0.7.0 QA pass
     expect(r.status, r.stderr).toBe(0)
   })
 
-  it('-h is --help', () => {
-    const h = run(['-h'])
+  it('-h is --help, and <verb> -h is help all', () => {
+    expect(run(['-h'])).toBe(run(['--help']))
+    const h = run(['report', '-h'])
     expect(h).toContain('usage')
     expect(h).toContain('orangu report')
   })
 
   it('help documents the real gate exit code and the suggest flags the skills use', () => {
-    const h = run(['--help'])
+    const h = run(['help', 'all'])
     expect(h).toContain('exit 2 above this token total')
     expect(h).not.toContain('exit 1 above')
     for (const f of ['--manifest', '--title']) expect(h).toContain(f)
     expect(h).toMatch(/^ {2}--quiet {2,}/m)
-    for (const line of h.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80)
     // the help is written in Simplified Technical English: no semicolon joins two clauses, no contraction,
-    // and one word for one thing (a transcript is a session, never a run)
-    expect(h).not.toContain(';')
-    expect(h).not.toMatch(/n't\b/)
-    expect(h).toContain('observe the session, then improve the next outcome')
+    // and one word for one thing (a transcript is a session, never a run). Both help levels.
+    for (const text of [h, run(['--help'])]) {
+      for (const line of text.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80)
+      expect(text).not.toContain(';')
+      expect(text).not.toMatch(/n't\b/)
+      expect(text).toContain('observe the session, then improve the next outcome')
+    }
     expect(h).toContain('or "current" (the Claude Code session that runs orangu)')
     // pick's own meaning of --json: it prints the list instead of opening the chooser
     expect(h).toMatch(/^ {31}\(--json prints the list · --plain · --limit <n>\)$/m)

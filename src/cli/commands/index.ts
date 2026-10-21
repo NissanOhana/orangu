@@ -1,6 +1,7 @@
 /**
  * Command registry. `src/cli/main.ts` dispatches unknown verbs through
- * EXTRA_COMMANDS and prints EXTRA_HELP under 'usage', so new verbs register here without touching main.
+ * EXTRA_COMMANDS and prints EXTRA_HELP under 'usage' in `orangu help all`, so new verbs register here
+ * without touching main. CLI_VERBS is the one list of every name that `orangu <name>` dispatches.
  */
 import { cmdEstimate } from './estimate.js'
 import { cmdEvidence } from './evidence.js'
@@ -21,6 +22,15 @@ export const EXTRA_COMMANDS: Record<string, CommandFn> = {
   ste: cmdSte,
   'show-me': cmdShowMe,
 }
+
+/** The verbs and aliases that the switch of main.ts dispatches itself, in its order. */
+const CORE_VERBS = ['report', 'html', 'analyze', 'a', 'list', 'ls', 'pick', 'repo', 'global', 'all', 'watch', 'serve']
+
+/**
+ * Every name that `orangu <name>` dispatches: the core verbs and aliases, then the keys of EXTRA_COMMANDS.
+ * The help topics (`orangu help <name>`), `orangu <name> --help` and the unknown-command error read it.
+ */
+export const CLI_VERBS: readonly string[] = Object.freeze([...CORE_VERBS, ...Object.keys(EXTRA_COMMANDS)])
 
 export const EXTRA_HELP: string[] = [
   // Each entry may span lines (main.ts joins entries with '\n'); keep every line <= 80 columns.
@@ -54,7 +64,8 @@ export const EXTRA_HELP: string[] = [
     '                                  [--include-text] [--no-cache] [--quiet])',
   ].join('\n'),
   [
-    '  orangu suggest               suggestion records in ~/.orangu',
+    '  orangu suggest               the suggestion store that the skills call',
+    '                               (records in ~/.orangu)',
     '                                 ([<sg_id>] --finding <token>',
     '                                  | [<sg_id>] --rule <r> --scope <s>',
     '                                    --session <a,b> [--title <t>]',

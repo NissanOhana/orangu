@@ -15,7 +15,7 @@ import { projectSlug } from '../../discover/discover.js'
 const CLI = join(process.cwd(), 'dist', 'orangu.js')
 const helpHasSuggest = (): boolean => {
   try {
-    return execFileSync('node', [CLI, '--help'], { encoding: 'utf8' }).includes('orangu suggest')
+    return execFileSync('node', [CLI, 'help', 'all'], { encoding: 'utf8' }).includes('orangu suggest')
   } catch {
     return false
   }
@@ -124,7 +124,7 @@ describe.skipIf(!existsSync(CLI) || !helpHasSuggest())('orangu suggest/estimate 
     }
     expect(failure).toMatch(/not verified: not-enough-sessions/)
     expect(JSON.parse(cli(['suggest', '--show', id, '--json'])).record.status).toBe('applied')
-    expect(execFileSync('node', [CLI, '--help'], { encoding: 'utf8' })).toContain('--effect <id>')
+    expect(execFileSync('node', [CLI, 'help', 'all'], { encoding: 'utf8' })).toContain('--effect <id>')
   })
 })
 
