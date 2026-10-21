@@ -9923,7 +9923,11 @@ var TRANSITIONS = {
   applied: ["verified", "rejected"],
   verified: ["rejected"],
   rejected: [],
-  failed: ["kicked-off", "rejected"]
+  failed: ["kicked-off", "rejected"],
+  // Known on read, but no move enters or leaves them until the store checks the fields that these moves write.
+  regressed: [],
+  unproven: [],
+  kept: []
 };
 var SUGGESTION_VERIFICATION_METRICS = [
   "avgTotalTokens",
@@ -10498,7 +10502,10 @@ var ALLOWED_PATCH_FIELDS = {
   applied: ["application"],
   verified: ["verificationReceipt", "effect"],
   rejected: [],
-  failed: ["kickoff"]
+  failed: ["kickoff"],
+  regressed: [],
+  unproven: [],
+  kept: []
 };
 function recordMatchesFinding(record3, finding, source) {
   return record3.source === source && record3.scope === finding.scope && record3.ruleId === finding.ruleId && (record3.insightId ?? "") === (finding.insightId ?? "") && (record3.cohortFingerprint ?? record3.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record3.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));

@@ -510,6 +510,9 @@ const ALLOWED_PATCH_FIELDS: Record<SuggestionStatus, PatchField[]> = {
   verified: ['verificationReceipt', 'effect'],
   rejected: [],
   failed: ['kickoff'],
+  regressed: [],
+  unproven: [],
+  kept: [],
 }
 
 function recordMatchesFinding(record: SuggestionRecord, finding: Finding, source: SuggestionSource): boolean {

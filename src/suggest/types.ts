@@ -4,10 +4,14 @@
  * No node imports here.
  */
 import type { ChangeClass } from './change-classes.js'
+// type only: erased from every bundle, so this file stays free of node modules at run time
+import type { CohortSkipReason } from './cohort.js'
+import type { CohortCheckVerdict, CohortVerdict } from './cohort-stats.js'
+import type { RejectReasonCode } from './reason-codes.js'
 
 export type SuggestionScope = 'session' | 'repo' | 'global'
 export type SuggestionSource = 'report' | 'skill'
-export type SuggestionStatus = 'new' | 'kicked-off' | 'proposed' | 'applied' | 'verified' | 'rejected' | 'failed'
+export type SuggestionStatus = 'new' | 'kicked-off' | 'proposed' | 'applied' | 'verified' | 'rejected' | 'failed' | 'regressed' | 'unproven' | 'kept'
 
 /** legal status moves; the store throws on anything else */
 export const TRANSITIONS: Record<SuggestionStatus, SuggestionStatus[]> = {
@@ -18,6 +22,10 @@ export const TRANSITIONS: Record<SuggestionStatus, SuggestionStatus[]> = {
   verified: ['rejected'],
   rejected: [],
   failed: ['kicked-off', 'rejected'],
+  // Known on read, but no move enters or leaves them until the store checks the fields that these moves write.
+  regressed: [],
+  unproven: [],
+  kept: [],
 }
 
 export interface SuggestionEvidence {
@@ -87,6 +95,14 @@ export interface SuggestionRecord {
    * noise-aware cohort comparison; `computed-v1` is the earlier later-session mean comparison, still readable.
    */
   verificationTrust?: 'computed-v1' | 'computed-v2'
+  /** The baseline cohort that the `applied` move measured, so a later read needs no baseline transcript. */
+  frozenBaseline?: SuggestionFrozenBaseline
+  /** The computed verdict of a `regressed` or `unproven` record. */
+  outcomeReceipt?: SuggestionOutcomeReceipt
+  /** The reason of a rejection: 1 of `REJECT_REASON_CODES`. */
+  reasonCode?: RejectReasonCode
+  /** The canonical workspace path that Orangu bound at a rejection, for a record with no proposal workspace. */
+  workspaceCwd?: string
   status: SuggestionStatus
   statusAt: number
   effect?: { before: Record<string, number>; after: Record<string, number>; measuredSessionIds: string[] }
@@ -213,6 +229,56 @@ export interface SuggestionVerificationReceiptV2 {
   checks: SuggestionCohortCheck[]
 }
 
+/**
+ * The baseline cohort that Orangu measured once, at the `applied` move. Later reads grade against it and read no
+ * baseline transcript. Numbers and ids only.
+ */
+export interface SuggestionFrozenBaseline {
+  v: 1
+  /** at most the stored `appliedAt` */
+  cutAt: number
+  /** 0 to 10 sessions, sorted by id; `metrics` holds a value for each verification metric */
+  sessions: Array<{ id: string; startedAt: number; endedAt: number; metrics: Record<SuggestionVerificationMetric, number> }>
+  /** a count for each cohort skip reason */
+  skipped: Record<CohortSkipReason, number>
+}
+
+/** One graded check of an outcome receipt: the numbers of a cohort check, with no rendered evidence line. */
+export interface SuggestionOutcomeCheck extends SuggestionVerificationIntent {
+  name: string
+  /** cohort means */
+  before: number
+  after: number
+  beforeMedian: number
+  afterMedian: number
+  /** exact one-sided rank-test p-values, 6-decimal */
+  pLower: number
+  pHigher: number
+  verdict: CohortCheckVerdict
+}
+
+/**
+ * The computed verdict of a `regressed` or `unproven` record. It holds numbers, ids and enum values only, with no
+ * summary and no evidence line, so it stores no rendered string and can be graded again from its own numbers.
+ */
+export interface SuggestionOutcomeReceipt {
+  v: 1
+  method: 'cohort-rank-v1'
+  alpha: 0.05
+  appliedAt: number
+  /** `first` only with a frozen baseline below the cohort minimum */
+  checkpoint: 'first' | 'complete'
+  /** never `verified`: a verified record carries a verification receipt */
+  verdict: Exclude<CohortVerdict, 'verified'>
+  laterComplete: boolean
+  /** sorted ids of other changes applied in the same workspace inside the measured window */
+  confoundedBy: string[]
+  /** 0 to 10 each, sorted, unique, and disjoint from each other */
+  baselineSessionIds: string[]
+  measuredSessionIds: string[]
+  checks: SuggestionOutcomeCheck[]
+}
+
 /** Later evidence, kept separate from the claim that a change was merely applied (legacy v1 shape). */
 export interface SuggestionVerificationReceipt {
   v: 1
@@ -276,6 +342,13 @@ export interface SuggestionStoreLike {
   transition(
     id: string,
     to: SuggestionStatus,
-    patch?: Partial<Pick<SuggestionRecord, 'proposal' | 'application' | 'verificationReceipt' | 'kickoff' | 'effect'>>,
+    patch?: Partial<
+      Pick<
+        SuggestionRecord,
+        'proposal' | 'application' | 'verificationReceipt' | 'kickoff' | 'effect' | 'frozenBaseline' | 'outcomeReceipt' | 'reasonCode' | 'workspaceCwd'
+      >
+    >,
   ): Promise<SuggestionRecord>
+  /** Every valid line in file order, with no "last line wins". An id also matches a record through `legacyIds`. */
+  lines?(id?: string): Promise<SuggestionRecord[]>
 }

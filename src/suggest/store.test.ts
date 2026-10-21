@@ -19,13 +19,18 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SuggestionStore } from './store.js'
 import { suggestionId, suggestionIdV2, suggestionKey } from './id.js'
-import type {
-  Finding,
-  SuggestionApplicationReceipt,
-  SuggestionCohortCheck,
-  SuggestionProposal,
-  SuggestionRecord,
-  SuggestionVerificationReceiptV2,
+import { COHORT_SKIP_REASONS, type CohortSkipReason } from './cohort.js'
+import {
+  TRANSITIONS,
+  type Finding,
+  type SuggestionApplicationReceipt,
+  type SuggestionCohortCheck,
+  type SuggestionFrozenBaseline,
+  type SuggestionOutcomeReceipt,
+  type SuggestionProposal,
+  type SuggestionRecord,
+  type SuggestionStoreLike,
+  type SuggestionVerificationReceiptV2,
 } from './types.js'
 
 interface StoreWorkerMessage {
@@ -806,6 +811,90 @@ describe('SuggestionStore', () => {
     }
     appendFileSync(join(home, 'suggestions.jsonl'), `${JSON.stringify(legacyVerified)}\n`)
     expect((await store.get(id))?.verificationTrust).toBeUndefined()
+  })
+
+  it('moves no record into regressed, unproven or kept yet', async () => {
+    const closed = ['regressed', 'unproven', 'kept'] as const
+    for (const status of closed) expect(TRANSITIONS[status]).toEqual([])
+    expect(TRANSITIONS.applied).toEqual(['verified', 'rejected'])
+    expect(Object.values(TRANSITIONS).flat().filter((to) => (closed as readonly string[]).includes(to))).toEqual([])
+
+    const { record } = await store.upsertNew(finding(), 'report')
+    const refusesEachNewStatus = async () => {
+      const from = (await store.get(record.id))!.status
+      const before = readFileSync(store.path)
+      for (const to of closed) await expect(store.transition(record.id, to)).rejects.toThrow(`illegal transition ${from} → ${to}`)
+      expect(readFileSync(store.path)).toEqual(before)
+    }
+    await refusesEachNewStatus()
+    await store.transition(record.id, 'kicked-off')
+    await refusesEachNewStatus()
+    await store.transition(record.id, 'failed', { kickoff: { mode: 'serve', command: 'x', exitCode: 1 } })
+    await refusesEachNewStatus()
+    await store.transition(record.id, 'kicked-off')
+    await store.transition(record.id, 'proposed', { proposal: structuredProposal(record.id) })
+    await refusesEachNewStatus()
+    const { appliedAt } = await store.transition(record.id, 'applied', { application: applicationReceipt(record.id) })
+    await refusesEachNewStatus()
+    await store.transition(record.id, 'verified', cohortPatch(appliedAt!))
+    await refusesEachNewStatus()
+    await store.transition(record.id, 'rejected')
+    await refusesEachNewStatus()
+  })
+
+  it('refuses the 4 new record fields on every move until the store checks them', async () => {
+    const like: SuggestionStoreLike = store
+    const { record } = await store.upsertNew(finding(), 'report')
+    await store.transition(record.id, 'kicked-off')
+    await store.transition(record.id, 'proposed', { proposal: structuredProposal(record.id) })
+    const skipped = Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0])) as Record<CohortSkipReason, number>
+    const frozenBaseline: SuggestionFrozenBaseline = { v: 1, cutAt: 1_000, sessions: [], skipped }
+    const outcomeReceipt: SuggestionOutcomeReceipt = {
+      v: 1,
+      method: 'cohort-rank-v1',
+      alpha: 0.05,
+      appliedAt: 1_000,
+      checkpoint: 'complete',
+      verdict: 'within-noise',
+      laterComplete: true,
+      confoundedBy: [],
+      baselineSessionIds: [],
+      measuredSessionIds: [],
+      checks: [],
+    }
+    const attempts = [
+      ['applied', { application: applicationReceipt(record.id), frozenBaseline }, 'frozenBaseline'],
+      ['rejected', { outcomeReceipt }, 'outcomeReceipt'],
+      ['rejected', { reasonCode: 'other' }, 'reasonCode'],
+      ['rejected', { workspaceCwd: '/workspace/project' }, 'workspaceCwd'],
+    ] as const
+    const before = readFileSync(store.path)
+    for (const [to, patch, field] of attempts) {
+      await expect(like.transition(record.id, to, patch)).rejects.toThrow(`field "${field}" is not a lifecycle artifact`)
+    }
+    expect(readFileSync(store.path)).toEqual(before)
+    await expect(store.get(record.id)).resolves.toMatchObject({ status: 'proposed' })
+  })
+
+  it('reads a stored line with a new status, moves it nowhere yet, and still skips an unknown status', async () => {
+    const { record } = await store.upsertNew(finding(), 'report')
+    await store.transition(record.id, 'kicked-off')
+    await store.transition(record.id, 'proposed', { proposal: structuredProposal(record.id) })
+    const applied = await store.transition(record.id, 'applied', { application: applicationReceipt(record.id) })
+    // A line that a later orangu wrote: this build knows its status, and no move leaves it yet.
+    let statusAt = applied.statusAt
+    for (const status of ['regressed', 'unproven', 'kept'] as const) {
+      appendFileSync(store.path, `${JSON.stringify({ ...applied, status, statusAt: ++statusAt })}\n`)
+      await expect(store.get(record.id)).resolves.toMatchObject({ status, statusAt })
+      const before = readFileSync(store.path)
+      for (const to of ['kept', 'rejected', 'verified'] as const) {
+        await expect(store.transition(record.id, to)).rejects.toThrow(`illegal transition ${status} → ${to} for ${record.id} (allowed: none)`)
+      }
+      expect(readFileSync(store.path)).toEqual(before)
+    }
+    // A status that no orangu knows stays refused on read, so the line before it still wins.
+    appendFileSync(store.path, `${JSON.stringify({ ...applied, status: 'paused', statusAt: ++statusAt })}\n`)
+    await expect(store.get(record.id)).resolves.toMatchObject({ status: 'kept' })
   })
 })
 
