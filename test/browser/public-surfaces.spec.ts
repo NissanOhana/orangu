@@ -65,6 +65,32 @@ async function contrastOnPage(page: Page, selector: string): Promise<number> {
 }
 
 /**
+ * The paint method of contrastOnPage, for each element that `selector` matches, against its own ground: the
+ * nearest ancestor (or the element itself) that paints an opaque background.
+ */
+async function contrastOnOwnGround(page: Page, selector: string): Promise<number[]> {
+  return page.evaluate((sel) => {
+    const rgb = (value: string) => (value.match(/\d+(?:\.\d+)?/g) ?? []).slice(0, 4).map(Number)
+    const luminance = ([r, g, b]: number[]) => {
+      const lin = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 }
+      return 0.2126 * lin(r!) + 0.7152 * lin(g!) + 0.0722 * lin(b!)
+    }
+    const groundOf = (element: Element): number[] => {
+      for (let at: Element | null = element; at; at = at.parentElement) {
+        const paint = rgb(getComputedStyle(at).backgroundColor)
+        if (paint.length === 3 || paint[3] === 1) return paint
+      }
+      return rgb(getComputedStyle(document.body).backgroundColor)
+    }
+    return Array.from(document.querySelectorAll(sel)).map((element) => {
+      const text = luminance(rgb(getComputedStyle(element).color))
+      const ground = luminance(groundOf(element))
+      return (Math.max(text, ground) + 0.05) / (Math.min(text, ground) + 0.05)
+    })
+  }, selector)
+}
+
+/**
  * The Improvements screen shows one card per cross finding the page embeds. Every card names its
  * improvement while it is closed: the "Improvement:" line, followed by that finding's `improvement` (its
  * whole `recommendation` only for an aggregate written before the rule text had parts). Each title is the
@@ -207,6 +233,20 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   expect(await paintedTheme(page)).toBe(projectTheme(info))
   await expect(page.locator('#themeLabel')).toHaveText(projectTheme(info))
   await expect(page.locator('#themeBtn')).toHaveAccessibleName(new RegExp(`^theme ${projectTheme(info)},`))
+  expect(errors).toEqual([])
+})
+
+test('landing copy buttons draw their text at 4.5:1 or more on the command ground', async ({ page }, info) => {
+  test.skip(info.project.name.startsWith('narrow'), 'a contrast depends on the theme, not on the width: wide-light and wide-dark check it')
+  const errors = runtimeErrors(page)
+  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
+  await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
+  await seedLandingTheme(page, info)
+  await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  const ratios = await contrastOnOwnGround(page, '#install .cmd-sm button')
+  expect(ratios.length, 'copy buttons in #install').toBeGreaterThan(0)
+  for (const [at, ratio] of ratios.entries()) expect(ratio, `copy button ${at + 1} in ${projectTheme(info)}`).toBeGreaterThanOrEqual(4.5)
   expect(errors).toEqual([])
 })
 

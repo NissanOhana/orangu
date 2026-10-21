@@ -43,15 +43,17 @@ details[open] > summary .chev { transform: rotate(90deg); display: inline-block;
 .picklist { position: absolute; left: -1px; right: -1px; top: calc(100% + 4px); z-index: 30; background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 4px; max-height: 260px; overflow-y: auto; }
 .picklist [role='option'] { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .picklist [role='option'] .proj { color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.picklist [role='option'][aria-selected='true'] { background: var(--accent-weak); color: var(--accent-ink); }
+.picklist [role='option'][aria-selected='true'] { background: var(--accent-weak); color: var(--ink1); }
+.picklist [role='option'][aria-selected='true'] .proj { color: var(--ink1); }
 .picklist [role='option']:hover, .picklist [role='option']:focus-visible { background: var(--bg2); }
 .navwrap { padding: 0 12px 8px; overflow-y: auto; flex: 1; }
 .navgroup-label { font-size: 10.5px; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 8px 4px; }
 .navgroup-label:first-child { padding-top: 6px; }
 nav a.navitem { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; margin-bottom: 2px; color: var(--ink2); }
 nav a.navitem:hover { background: color-mix(in srgb, var(--ink1) 5%, transparent); text-decoration: none; }
-nav a.navitem[aria-current="page"] { background: var(--accent-weak); color: var(--accent-ink); font-weight: 700; }
+nav a.navitem[aria-current="page"] { background: var(--accent-weak); color: var(--ink1); font-weight: 700; }
 nav a.navitem .hint { margin-left: auto; font-size: 11px; color: var(--ink3); font-weight: 400; }
+nav a.navitem[aria-current="page"] .hint { color: var(--ink1); }
 .ldot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
 .ldot.hollow { background: transparent; border: 1.5px solid var(--accent); }
 .ldot.done { background: var(--good); }
