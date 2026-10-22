@@ -9,7 +9,7 @@
  * whole on a row of its own, or no row when `next` is null.
  */
 import { plural } from '../../harness/report.js'
-import { COHORT_MAX } from '../../suggest/cohort-stats.js'
+import { COHORT_MAX, COHORT_MIN } from '../../suggest/cohort-stats.js'
 import { reasonCodeOf, type ChangeRow, type LessonRead } from '../../suggest/lessons.js'
 import { QUEUE_GROUPS, type QueueGroup, type QueueItem, type SuggestionQueue, type TodoRead } from '../../suggest/queue.js'
 import type { RejectReasonCode } from '../../suggest/reason-codes.js'
@@ -75,6 +75,9 @@ const GROUP_TITLES: Record<QueueGroup, string> = {
   wait: 'Waiting for later sessions',
 }
 
+/** The row under the `verdict` heading: when orangu grades, and the cost of a second look. */
+export const VERDICT_NOTE = `orangu grades a change at ${COHORT_MIN} later sessions and again at ${COHORT_MAX}. More looks raise the chance of a false win.`
+
 /** The row of an item whose queue check was past the byte budget of the read. It has no command. */
 export const DEFERRED_TEXT = 'orangu did not check this change in this read, because the read reached its byte budget. Run orangu again to check it.'
 
@@ -132,6 +135,7 @@ export function queueLines(queue: SuggestionQueue, width: number): string[] {
     const items = queue.groups[group]
     if (!items.length) continue
     lines.push('', `${INDENT}${GROUP_TITLES[group]} (${items.length})`)
+    if (group === 'verdict') lines.push(...wrapWords(VERDICT_NOTE, width - INDENT.length).map((line) => INDENT + line))
     for (const item of items) lines.push(...itemLines(item, queue.now, all, width))
   }
   lines.push('', INDENT + QUEUE_APP_ROW)
@@ -143,14 +147,24 @@ export function queueLines(queue: SuggestionQueue, width: number): string[] {
 const GROUP_COLUMN = Math.max(...QUEUE_GROUPS.map((group) => group.length))
 const STATUS_COLUMN = 'kicked-off'.length
 
-/** The todo read as text: the counts, then 1 row for each item (group, id, status and rule), then the omitted count. */
-export function todoLines(todo: TodoRead): string[] {
-  const lines = [`${INDENT}Workspace: ${terminal(todo.workspace)} · ${todo.counts.due} due · ${todo.counts.open} open`]
+/** The column of the id in a todo row: a rule that does not fit beside the status goes on the next row, at this column. */
+const TODO_ID_COLUMN = INDENT.length + GROUP_COLUMN + 2
+
+/**
+ * The todo read as text: the counts, then 1 row for each item (group, id, status and rule), then the omitted count. When
+ * the rule does not fit the measure beside the status, it goes whole on the next row, under the id.
+ */
+export function todoLines(todo: TodoRead, width: number): string[] {
+  const head = [`Workspace: ${terminal(todo.workspace)}`, `${todo.counts.due} due`, `${todo.counts.open} open`].join(' · ')
+  const lines = wrapValue(head, width - INDENT.length).map((line) => INDENT + line)
   if (!todo.items.length) lines.push(`${INDENT}orangu found no open item that needs a step.`)
   for (const item of todo.items) {
-    lines.push(`${INDENT}${padCell(item.group, GROUP_COLUMN)}  ${terminal(item.id)}  ${padCell(terminal(item.status), STATUS_COLUMN)}  ${terminal(item.ruleId ?? 'unknown-rule')}`)
+    const lead = `${INDENT}${padCell(item.group, GROUP_COLUMN)}  ${terminal(item.id)}  ${padCell(terminal(item.status), STATUS_COLUMN)}`
+    const rule = terminal(item.ruleId ?? 'unknown-rule')
+    if (displayWidth(lead) + 2 + displayWidth(rule) <= width) lines.push(`${lead}  ${rule}`)
+    else lines.push(lead.trimEnd(), ' '.repeat(TODO_ID_COLUMN) + rule)
   }
-  if (todo.omitted > 0) lines.push(`${INDENT}${todo.omitted} more items do not fit in ${fmtCount(todo.maxBytes)} B.`)
+  if (todo.omitted > 0) lines.push(`${INDENT}${plural(todo.omitted, 'more item')} ${todo.omitted === 1 ? 'does' : 'do'} not fit in ${fmtCount(todo.maxBytes)} B.`)
   return lines
 }
 
@@ -160,7 +174,8 @@ export function todoLines(todo: TodoRead): string[] {
 export function lessonLines(read: LessonRead, width: number): string[] {
   const lines = ['', `${INDENT}Lessons · ${plural(read.lessons.length, 'lesson')} shown`, scopeLine(read.scope)]
   if (read.omitted > 0) {
-    lines.push(`${INDENT}${read.omitted} older lessons do not fit in ${read.maxBytes === null ? 'this read' : `${fmtCount(read.maxBytes)} B`}.`)
+    const fit = read.omitted === 1 ? 'does not fit' : 'do not fit'
+    lines.push(`${INDENT}${plural(read.omitted, 'older lesson')} ${fit} in ${read.maxBytes === null ? 'this read' : `${fmtCount(read.maxBytes)} B`}.`)
   }
   if (!read.lessons.length) lines.push('', `${INDENT}orangu found no lesson in this scope.`)
   for (const lesson of read.lessons) {

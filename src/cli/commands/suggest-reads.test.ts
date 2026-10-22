@@ -9,8 +9,8 @@ import { ANALYZER_RULE_IDS } from '../../analyze/rule-ids.js'
 import { projectSlug } from '../../discover/discover.js'
 import type { CohortDeps, CohortLoad } from '../../suggest/cohort.js'
 import { CohortFactsCache } from '../../suggest/cohort-cache.js'
-import { LESSONS_MAX_BYTES, type ChangeRow } from '../../suggest/lessons.js'
-import { QUEUE_GROUPS, TODO_MAX_BYTES, type QueueItem, type SuggestionQueue } from '../../suggest/queue.js'
+import { LESSONS_MAX_BYTES, type ChangeRow, type LessonRead } from '../../suggest/lessons.js'
+import { QUEUE_GROUPS, TODO_MAX_BYTES, type QueueItem, type SuggestionQueue, type TodoRead } from '../../suggest/queue.js'
 import { createQueueReadDeps, type QueueReadDeps } from '../../suggest/queue-read.js'
 import { REJECT_REASON_CODES } from '../../suggest/reason-codes.js'
 import type { SuggestionRecord, SuggestionWorkspaceIdentity } from '../../suggest/types.js'
@@ -19,7 +19,7 @@ import { VERSION } from '../../version.js'
 import { layoutWidth } from '../summary.js'
 import { displayWidth } from '../tty.js'
 import { cmdSuggest } from './suggest.js'
-import { DEFERRED_TEXT, QUEUE_APP_ROW, historyLines, queueLines } from './suggest-reads.js'
+import { DEFERRED_TEXT, QUEUE_APP_ROW, historyLines, lessonLines, queueLines, todoLines } from './suggest-reads.js'
 
 let home: string
 let out: string[]
@@ -342,6 +342,20 @@ describe('the queue text', () => {
     ])
   })
 
+  it('says under the verdict heading, and only there, that orangu grades at 3 and 10 later sessions and that more looks raise the chance of a false win', () => {
+    for (const width of [60, 80]) {
+      const lines = queueLines(queueFixture(), width)
+      const heading = lines.indexOf('  Ready for a verdict (1)')
+      expect(heading, String(width)).toBeGreaterThan(0)
+      const first = lines.findIndex((line, index) => index > heading && line.startsWith(`  ${sg(1)}  [`))
+      const note = lines.slice(heading + 1, first)
+      for (const row of note) expect(row, String(width)).toMatch(/^ {2}\S/)
+      expect(note.map((row) => row.trim()).join(' '), String(width)).toBe('orangu grades a change at 3 later sessions and again at 10. More looks raise the chance of a false win.')
+      expect(lines.filter((line) => line.includes('false win')), String(width)).toHaveLength(1)
+    }
+    expect(queueLines(emptyQueueFixture(), 80).join('\n')).not.toContain('false win')
+  })
+
   it('has its own empty state, and the app row stays last', () => {
     expect(queueLines(emptyQueueFixture(), 80)).toEqual([
       '',
@@ -397,6 +411,55 @@ describe('the history text', () => {
     if (width === 80) expect(lines).toContain('    applied 2026-10-01 00:00 · open · no verdict · rule reread-files')
     else expect(lines).toContain('    applied 2026-10-01 00:00 · open · no verdict')
     expect(lines.join('\n')).toContain('reason wrong-cause')
+  })
+})
+
+describe('the todo and lesson text', () => {
+  const COUNTS = { verdict: 0, regressed: 1, apply: 1, review: 0, running: 1, wait: 0, due: 0, open: 3 }
+  /** A todo read with a long harness rule id (its row is 65 columns), a long analyzer rule id and an unknown one. */
+  const todoRead = (omitted: number): TodoRead => ({
+    v: 1,
+    workspace: WORKSPACE,
+    counts: COUNTS,
+    maxBytes: TODO_MAX_BYTES,
+    omitted,
+    items: [
+      { group: 'regressed', id: sg(3), status: 'regressed', scope: 'repo', ruleId: null },
+      { group: 'apply', id: sg(1), status: 'proposed', scope: 'repo', ruleId: 'harness:workflow-config', changeClass: 'workflow-config' },
+      { group: 'running', id: sg(2), status: 'kicked-off', scope: 'session', ruleId: 'cache-dominates-tokens' },
+    ],
+  })
+  const lessonRead = (omitted: number): LessonRead => ({
+    v: 1,
+    scope: WORKSPACE,
+    maxBytes: LESSONS_MAX_BYTES,
+    omitted,
+    lessons: [
+      {
+        id: sg(4), scope: 'repo', ruleId: 'harness:workflow-config', changeClass: 'workflow-config', status: 'regressed', verdict: 'no-directional-check', verdictTrusted: true,
+        laterComplete: true, confoundedBy: [sg(5), sg(6), sg(7)], baseline: 10, later: 10,
+        checks: [{ metric: 'avgBuildRunsFailed', comparison: 'not-decreased', verdict: 'within-noise' }], appliedAt: APPLIED_AT, decidedAt: APPLIED_AT + 1,
+      },
+      { id: sg(8), scope: 'repo', ruleId: null, status: 'rejected', reasonCode: 'too-much-effort', verdict: null, verdictTrusted: false, confoundedBy: [], baseline: 0, later: 0, checks: [], decidedAt: APPLIED_AT },
+    ],
+  })
+
+  it.each([60, 80, 120])('fits every row of the todo text and of the lesson text to the layout at %i columns', (columns) => {
+    const width = layoutWidth({ columns })
+    for (const [label, lines] of [['todo', todoLines(todoRead(2), width)], ['lessons', lessonLines(lessonRead(2), width)]] as const) {
+      for (const line of lines) expect(displayWidth(line), `${label} at ${columns}: ${JSON.stringify(line)}`).toBeLessThanOrEqual(width)
+    }
+    // Each todo item keeps its group, id, status and rule, in that order, on 1 row or on 2.
+    const todo = todoLines(todoRead(0), width).join('\n')
+    expect(todo).toMatch(/ {2}apply +sg_000000000001 +proposed\s+harness:workflow-config\n/)
+    expect(todo).toMatch(/ {2}regressed +sg_000000000003 +regressed\s+unknown-rule\n/)
+  })
+
+  it('names 1 omitted item or lesson in the singular', () => {
+    expect(todoLines(todoRead(1), 80).at(-1)).toBe('  1 more item does not fit in 8,192 B.')
+    expect(todoLines(todoRead(2), 80).at(-1)).toBe('  2 more items do not fit in 8,192 B.')
+    expect(lessonLines(lessonRead(1), 80)).toContain('  1 older lesson does not fit in 16,384 B.')
+    expect(lessonLines(lessonRead(2), 80)).toContain('  2 older lessons do not fit in 16,384 B.')
   })
 })
 

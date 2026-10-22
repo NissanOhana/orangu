@@ -357,7 +357,7 @@ An older `applied` record (one with no `frozenBaseline`) gets `cannotVerify: "ba
 
 `orangu suggest` has 4 reads of the store: `--queue`, `--todo`, `--lessons` and `--history`. No read writes a record or a proposal file. Only the queue check of `--queue` and `--todo` can write cohort facts cache entries. Each `--json` output goes through the default redaction, as every `orangu suggest` output does. A later orangu can add a key within v1, as AppData v1 allows, and it removes none.
 
-Each call runs 1 step. 2 step flags together (for example `--record <id>` and `--queue`) exit 1 before any read or write. A read also exits 1 on an option that it does not take.
+Each call runs 1 step. 2 step flags together exit 1 before any read or write when 1 of them is a step that 0.11.0 did not have: `--record`, `--queue`, `--todo`, `--lessons` or `--history`. 2 or more of the 0.11.0 steps (`--list`, `--show`, `--effect`, `--set`) run the first of them in that order, as 0.11.0 did. A read also exits 1 on an option that it does not take.
 
 The workspace of a read is `--cwd <dir>`, and the default is the current folder. A record is in the workspace when its proposal workspace or its bound `workspaceCwd` is the canonical path of `<dir>`, or when 1 of its `sessionIds` is a session that discovery lists for that path. A workspace read leaves out the global records. `--all` reads every workspace and the global records. `--cwd` with `--all` exits 1.
 

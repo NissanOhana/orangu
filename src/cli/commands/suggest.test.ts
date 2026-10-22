@@ -3,7 +3,7 @@ import { appendFileSync, mkdtempSync, writeFileSync, readFileSync, mkdirSync, re
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildCanonicalSession, SessionBuilder } from '../../../test/fixtures/session-builder.js'
-import { cmdSuggest, recordLines } from './suggest.js'
+import { cmdSuggest, recordLines, type SuggestDeps } from './suggest.js'
 import { displayWidth } from '../tty.js'
 import { encodeFinding, kickoffCommand, normalizeSessionIds, sessionCohortFingerprint, suggestionId, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import {
@@ -1222,11 +1222,63 @@ describe('orangu suggest: 1 step at a time, and the --effect output', () => {
     }
   })
 
-  it('the plain --effect line prints the graded later sessions and every later session so far', async () => {
+  it('the plain --effect text keeps its 0.11.0 head row and prints every later session so far on a row of its own', async () => {
     const id = await seedApplied('effect-text-count', [5, 6, 7])
     out = []
     await cmdSuggest([], { effect: id }, { cohort: fakeCohort(laterOf([6, 5, 7, 0, 0])) })
-    expect(stdout()).toContain(`  ${id}  later sessions vs baseline · 3 before, 3 after the change, of 5 later sessions so far\n`)
+    expect(stdout()).toContain(`  ${id}  later sessions vs baseline · 3 before, 3 after the change\n${' '.repeat(19)}of 5 later sessions so far\n`)
+  })
+
+  it.each([60, 80, 120])('fits the head rows of the plain --effect text to the layout at %i columns', async (columns) => {
+    const id = await seedApplied(`effect-fit-${columns}`, [5, 6, 7])
+    const saved = Object.getOwnPropertyDescriptor(process.stdout, 'columns')
+    Object.defineProperty(process.stdout, 'columns', { value: columns, configurable: true })
+    try {
+      out = []
+      await cmdSuggest([], { effect: id }, { cohort: fakeCohort(laterOf([6, 5, 7, 0, 0])) })
+    } finally {
+      if (saved) Object.defineProperty(process.stdout, 'columns', saved)
+      else delete (process.stdout as { columns?: number }).columns
+    }
+    const rows = stdout().split('\n')
+    const last = rows.findIndex((row) => /^ +of \d+ later sessions so far$/.test(row))
+    expect(last, 'the count so far has a row of its own').toBeGreaterThan(0)
+    const head = rows.slice(0, last + 1)
+    for (const row of head) expect(displayWidth(row), `${columns}: ${JSON.stringify(row)}`).toBeLessThanOrEqual(Math.min(columns, 80))
+    expect(head.join(' ')).toContain('later sessions vs baseline')
+    expect(head.join(' ')).toContain('3 before, 3 after the change')
+    // The 0.11.0 head row fits 80 columns, so at 80 and wider it prints as 0.11.0 printed it.
+    if (columns >= 80) expect(head[0]).toBe(`  ${id}  later sessions vs baseline · 3 before, 3 after the change`)
+  })
+
+  it('runs a 2-flag combination of the 0.11.0 steps as 0.11.0 did: the first of --list, --show, --effect and --set, with exit 0', async () => {
+    // 0.11.0 ran the first of these steps, in this order, and ignored the rest (cmdSuggest in src/cli/commands/suggest.ts
+    // at v0.11.0). A call with 1 of the new steps (--record, --queue, --todo, --lessons, --history) exits 1 instead.
+    // --status is new too: 0.11.0 had no such flag and exited 1 on it as an unknown flag, so it stays strict.
+    const ORDER_0_11 = ['list', 'show', 'effect', 'set'] as const
+    const id = await seedApplied('steps-0-11', [5, 6, 7])
+    const value: Record<(typeof ORDER_0_11)[number], string | boolean> = { list: true, show: id, effect: id, set: id }
+    const deps = (): SuggestDeps => ({ cohort: fakeCohort(laterOf([6, 5, 7])) })
+    const alone = async (step: (typeof ORDER_0_11)[number]): Promise<string> => {
+      out = []
+      await cmdSuggest([], { [step]: value[step], json: true }, deps())
+      return stdout()
+    }
+    let pairs = 0
+    for (const [index, first] of ORDER_0_11.entries()) {
+      for (const second of ORDER_0_11.slice(index + 1)) {
+        const before = readFileSync(storePath())
+        out = []
+        // The call resolves: exit 0, as on 0.11.0. A --set that 0.11.0 ignored writes nothing.
+        await cmdSuggest(second === 'set' ? ['rejected'] : [], { [first]: value[first], [second]: value[second], json: true }, deps())
+        const both = stdout()
+        expect(readFileSync(storePath()), `--${first} --${second}`).toEqual(before)
+        expect(both, `--${first} --${second} prints what --${first} alone prints`).toBe(await alone(first))
+        pairs++
+      }
+    }
+    expect(pairs).toBe(6)
+    expect(lastLine()).toMatchObject({ id, status: 'applied' })
   })
 
   it('refuses 2 step flags together with exit 1 and a usage line, before any read or write', async () => {

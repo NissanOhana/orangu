@@ -28,7 +28,9 @@
  *     (the 4 reads write no record and no proposal file. Only the queue check may write cohort facts cache entries.
  *      Their text output is in ./suggest-reads.ts)
  *
- * Each call runs 1 step: 2 step flags together exit 1 before any read or write.
+ * Each call runs 1 step. 2 step flags together exit 1 before any read or write when 1 of them is new after 0.11.0
+ * (--record, --queue, --todo, --lessons, --history). 2 or more of --list, --show, --effect and --set run the first of
+ * them in that order, as 0.11.0 did.
  */
 import { matchRule, type CatalogMatch } from '../../suggest/catalog.js'
 import { realpath } from 'node:fs/promises'
@@ -81,7 +83,7 @@ import {
 } from '../../suggest/queue-read.js'
 import { flagBool, flagStr } from '../args.js'
 import { layoutWidth } from '../summary.js'
-import { detectCaps, displayWidth, wrapWords } from '../tty.js'
+import { detectCaps, displayWidth, wrapValue, wrapWords } from '../tty.js'
 import { loadAnalysisBySelector } from './estimate.js'
 import { historyLines, lessonLines, queueLines, todoLines, transitionLines, transitionsOf } from './suggest-reads.js'
 import { VERSION } from '../../version.js'
@@ -174,6 +176,11 @@ const FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/
 const ALL_STATUSES: SuggestionStatus[] = [...STATUSES, ...RECORDED_STATUSES]
 /** The steps of `orangu suggest`. A call runs 1 of them, or none to create a record. */
 const STEP_FLAGS = ['list', 'show', 'effect', 'record', 'set', 'queue', 'todo', 'lessons', 'history'] as const
+/**
+ * The steps that 0.11.0 did not have. 0.11.0 ran the first of `--list`, `--show`, `--effect` and `--set` and ignored the
+ * rest, and a combination of those steps still runs that way. A combination with a new step exits 1.
+ */
+const NEW_STEP_FLAGS: readonly string[] = ['record', 'queue', 'todo', 'lessons', 'history']
 /** The 4 reads, the read options that each one takes, and its usage. A read refuses the option of another read. */
 const READS = {
   queue: { takes: ['cwd', 'all'], usage: '--queue [--cwd <dir> | --all] [--json]' },
@@ -557,6 +564,18 @@ function effectView(effect: CohortEffect) {
   }
 }
 
+/**
+ * The head of the plain `--effect` text. The 0.11.0 row (76 columns) breaks only between its 2 facts when the measure
+ * is narrower. `later.n` is the graded later sessions, and every later session so far (`later.count`) gets a row of
+ * its own under the facts.
+ */
+function effectHeadLines(view: { id: string; baseline: { n: number }; later: { n: number; count: number } }, width: number): string[] {
+  const head = `  ${terminal(view.id)}  `
+  const column = displayWidth(head)
+  const [first = '', ...rest] = wrapValue(`later sessions vs baseline · ${view.baseline.n} before, ${view.later.n} after the change`, width - column)
+  return [head + first, ...[...rest, `of ${view.later.count} later sessions so far`].map((line) => ' '.repeat(column) + line)]
+}
+
 async function cmdEffect(store: SuggestionStore, id: string, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
   const rec = await store.get(id)
   if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`)
@@ -564,8 +583,7 @@ async function cmdEffect(store: SuggestionStore, id: string, flags: Record<strin
   const view = visible(effectView(effect), flags)
   if (flagBool(flags, 'json')) return emit(view, flags) as unknown as void
   const w = (s: string) => process.stdout.write(s + '\n')
-  // later.n is the graded later sessions, and later.count is every later session so far.
-  w(`  ${terminal(view.id)}  later sessions vs baseline · ${view.baseline.n} before, ${view.later.n} after the change, of ${view.later.count} later sessions so far`)
+  for (const line of effectHeadLines(view, textWidth())) w(line)
   for (const check of view.checks) w(`    ${terminal(check.evidence)}`)
   if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal).join(', ')} (not attributable to this change alone)`)
   const skipped = Object.entries(view.skipped).filter(([, count]) => count > 0)
@@ -642,7 +660,8 @@ async function cmdQueue(store: SuggestionStore, flags: Record<string, string | b
 async function cmdTodo(store: SuggestionStore, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
   assertReadOptions('todo', flags)
   const cwd = workspaceDir(flags)
-  const output = (read: TodoRead): string => readOutput(read, flags, todoLines)
+  const width = textWidth()
+  const output = (read: TodoRead): string => readOutput(read, flags, (shown) => todoLines(shown, width))
   const todo = await readTodo(store, cwd, readDeps(flags, deps), { measure: (read) => outputBytes(output(read)) })
   process.stdout.write(output(todo))
 }
@@ -677,10 +696,11 @@ export async function cmdSuggest(positionals: string[], flags: Record<string, st
       throw new Error('--reason is valid only with --set <id> rejected, and with no other step. usage: orangu suggest --set <id> rejected --reason <code>')
     }
   }
-  // 1 step for each call, before any read or write: the dispatch below runs only the first step, so a second one would
-  // go unread. A status filter belongs to --list only, for the same reason.
+  // 1 step for each call that names a new step, before any read or write: the dispatch below runs only the first step,
+  // so a second one would go unread. A combination of the 0.11.0 steps keeps its 0.11.0 result: the first step in the
+  // order below. A status filter belongs to --list only, for the same reason, and 0.11.0 had no such flag.
   const steps = STEP_FLAGS.filter((name) => flags[name] !== undefined)
-  if (steps.length > 1) {
+  if (steps.length > 1 && steps.some((name) => NEW_STEP_FLAGS.includes(name))) {
     throw new Error(`orangu suggest runs 1 step at a time, and this call has ${steps.length}: ${steps.map((name) => `--${name}`).join(', ')}. usage: orangu suggest <step> [<options>] (orangu help all lists each step)`)
   }
   if (flags['status'] !== undefined && flags['list'] === undefined) {
