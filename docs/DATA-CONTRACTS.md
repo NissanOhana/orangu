@@ -361,6 +361,10 @@ Each call runs 1 step. 2 step flags together exit 1 before any read or write whe
 
 The workspace of a read is `--cwd <dir>`, and the default is the current folder. A record is in the workspace when its proposal workspace or its bound `workspaceCwd` is the canonical path of `<dir>`, or when 1 of its `sessionIds` is a session that discovery lists for that path. A workspace read leaves out the global records. `--all` reads every workspace and the global records. `--cwd` with `--all` exits 1.
 
+The queue check keeps a cohort facts cache in `<orangu home>/cache/<generation>/cohort-facts-v1/`, with 1 file of at most 16,384 B for each session. An entry has 1 of 2 shapes. A facts entry is `{ v: 1, key, sessionId, cwd, startedAt, endedAt, ranOrangu, bytesRead, metrics }`, the facts of a settled session. A skip entry is `{ v: 1, key, sessionId, skip: "over-budget", maxBytes, bytesRead }`: the trusted loader refused the session as over the cap of its load. In 1 read, the queue also keeps each skip of a miss in memory. So it loads a skipped session 1 time, and not 1 time for each record.
+
+The key holds the path, the inode, the size, the mtime and the ctime of the transcript. It also holds the session folder tree down to 4 folders, as `sidecarTree` walks it. The tree has each folder and each sidecar transcript with its `.meta.json`. A changed file moves the key, so the old entry is a miss. A stale or planted entry can change only what the queue shows. It never changes a stored verdict, because `--set`, `--record` and `--effect` measure with the trusted loaders and read no cache.
+
 ### SuggestionQueue v1 (`--queue [--cwd <dir> | --all] --json`)
 
 ```ts
