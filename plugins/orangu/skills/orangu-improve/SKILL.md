@@ -19,9 +19,9 @@ Accept one input, or none:
 - `<session-id|latest|path.jsonl|analysis.json>` for one session or current Analysis/SlimAnalysis JSON.
 - `<aggregate.json> --scope repo|global` for current Aggregate JSON.
 - `--verify <suggestion-id>` to compare an applied session or repo change with later sessions (ignore any later-input after the id).
-- Words that name one of these, such as "that last run".
+- Words that name a session, finding, id or path, such as "that last run".
 
-With no input, take the first item of `orangu suggest --todo --json --quiet`. For status `applied` or `regressed`, run step 6. For `proposed`, name `$orangu-apply <id>`. Else use its id as the input. With no item, ask for one.
+With no input, take the first item of `orangu suggest --todo --json --quiet`. For status `applied` or `regressed`, run step 6. For `proposed`, name `$orangu-apply <id>`. Else use its id as the input. With no item, ask for one. If the todo read exits 1 with `unknown flag`, follow [the loop rules](../shared/loop.md).
 
 Never open or parse a `.jsonl` transcript yourself. Pass it to `orangu evidence`. If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`. For an installed plugin, try `../../bin/orangu.cli.mjs` first. For a source checkout, try `../../../dist/orangu.js` next. Run the first file that exists with Node.js 20 or newer. Never fetch a package to continue. If neither works, report the blocker and stop.
 

@@ -659,12 +659,19 @@ describe('plugin packaging', () => {
       'If that form fails too, record nothing.',
     ]) expect(older, literal).toContain(literal)
   })
+  // The no-input rule runs the todo read before step 1, so its older-CLI pointer is the 1 loop link above step 1. The
+  // lesson link is the one that sits between the bounded read and the rank.
+  const OLDER_TODO = 'If the todo read exits 1 with `unknown flag`, follow [the loop rules](../shared/loop.md).'
   it('improve and harness read the loop rules before they rank or create a record', () => {
     for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md']) {
       const text = readText(path)
-      const link = text.indexOf('](../shared/loop.md)')
-      expect(link, `${path} links the loop rules after the bounded read`).toBeGreaterThan(text.indexOf('## 1. Bound the read'))
-      expect(link, `${path} links the loop rules before it ranks`).toBeLessThan(text.indexOf('Classify each useful option'))
+      const bound = text.indexOf('## 1. Bound the read')
+      const link = text.indexOf('Read the lessons of their rules before you rank, as [the loop rules](../shared/loop.md) direct.')
+      expect(link, `${path} links the lessons after the bounded read`).toBeGreaterThan(bound)
+      expect(link, `${path} links the lessons before it ranks`).toBeLessThan(text.indexOf('Classify each useful option'))
+      const above = text.slice(0, bound)
+      expect(above.split('](../shared/loop.md)').length - 1, `${path} has 1 loop link above step 1`).toBe(1)
+      expect(above, `${path} links the loop rules above step 1 only for the older CLI`).toContain(OLDER_TODO)
     }
     const harness = readText('plugin/skills/harness/SKILL.md')
     const link = harness.indexOf('](../shared/loop.md)')
@@ -683,12 +690,18 @@ describe('plugin packaging', () => {
     expect(readText('.agents/skills/orangu-improve/SKILL.md'), 'the Codex mirror names the Codex apply skill').toContain(NO_INPUT.split('/orangu:apply').join('$orangu-apply'))
     // The words of the user win over the default: a session, finding, id or path that the request names, in words too,
     // is an input, so only a request that names none of them takes the todo item.
-    const IN_WORDS = '- Words that name one of these, such as "that last run".'
-    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md']) {
+    const IN_WORDS = '- Words that name a session, finding, id or path, such as "that last run".'
+    for (const [path, noInput] of [
+      ['plugin/skills/improve/SKILL.md', NO_INPUT],
+      ['.agents/skills/orangu-improve/SKILL.md', NO_INPUT.split('/orangu:apply').join('$orangu-apply')],
+    ] as const) {
       const body = readText(path)
       const inputs = body.slice(body.indexOf('Accept one input, or none:'), body.indexOf('With no input, take the first item'))
       expect(inputs, `${path} names a session reference in words as an input`).toContain(IN_WORDS)
+      // an older orangu on PATH refuses --todo: the front door goes to the loop rules, whose older-CLI rule names the todo read
+      expect(body, `${path} sends an older CLI to the loop rules right after the todo read`).toContain(`${noInput} ${OLDER_TODO}`)
     }
+    expect(readText(LOOP_RULES)).toContain('Do the same for the todo read.')
   })
   // A guard-only set can never verify, so the store refuses it in a new manifest. A proposal that expects fewer tokens
   // keeps one quality guard, because fewer tokens with more failures is no gain.
@@ -1539,7 +1552,11 @@ describe('plugin packaging', () => {
     // run" (+12). It pays with the step 6 sentence "Global scope cannot be applied or verified.", which the scope rule
     // of the same paragraph says already (-7), and a shorter link to the loop rules (-5). Measured 1,101, so the
     // ceiling of 1,102 does not move.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1537, improve: 1102, analyze: 700, apply: 700, feedback: 350, 'show-me': 570 }
+    // 2026-10-22 review fix: improve 1102 -> 1118, measured 1,101 -> 1,117 (+16). The todo read runs before step 1, so
+    // an older orangu on PATH that refuses --todo stopped the front door: 1 sentence now sends that exit to the loop
+    // rules, whose older-CLI rule names the todo read (+13). The input line names all 4 kinds that words can name: a
+    // session, finding, id or path (+3). improve is now 1,044 -> 1,117 (+73) over the base of this run.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1537, improve: 1118, analyze: 700, apply: 700, feedback: 350, 'show-me': 570 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
