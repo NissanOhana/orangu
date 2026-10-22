@@ -14723,6 +14723,7 @@ import { basename as basename11, dirname as dirname6, isAbsolute as isAbsolute7,
 var COHORT_FACTS_DIR = "cohort-facts-v1";
 var COHORT_FACTS_MAX_ENTRY_BYTES = 16384;
 var ENTRY_KEYS = ["v", "key", "sessionId", "cwd", "startedAt", "endedAt", "ranOrangu", "bytesRead", "metrics"];
+var OVER_CAP_KEYS = ["v", "key", "sessionId", "skip", "maxBytes", "bytesRead"];
 var KEY_RE = /^[0-9a-f]{40}$/;
 var SESSION_ID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 var MAX_CWD_CHARS = 4096;
@@ -14736,6 +14737,13 @@ var finiteNonNegative3 = (value) => typeof value === "number" && Number.isFinite
 function validFacts(value) {
   const { sessionId, cwd, startedAt, endedAt, ranOrangu, bytesRead, metrics } = value;
   return typeof sessionId === "string" && SESSION_ID_RE2.test(sessionId) && typeof cwd === "string" && isAbsolute7(cwd) && cwd.length <= MAX_CWD_CHARS && resolve10(cwd) === cwd && finiteNonNegative3(startedAt) && startedAt > 0 && finiteNonNegative3(endedAt) && endedAt >= startedAt && typeof ranOrangu === "boolean" && Number.isSafeInteger(bytesRead) && bytesRead >= 0 && plainObject2(metrics) && hasExactKeys2(metrics, SUGGESTION_VERIFICATION_METRICS) && SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative3(metrics[metric]));
+}
+function validOverCap(value) {
+  const { sessionId, skip, maxBytes, bytesRead } = value;
+  return typeof sessionId === "string" && SESSION_ID_RE2.test(sessionId) && skip === "over-budget" && Number.isSafeInteger(maxBytes) && maxBytes >= 1 && maxBytes <= MAX_EVIDENCE_SESSION_BYTES && Number.isSafeInteger(bytesRead) && bytesRead >= 0 && bytesRead < maxBytes;
+}
+function pickOverCap(overCap) {
+  return { sessionId: overCap.sessionId, maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead };
 }
 function pick(facts) {
   return {
@@ -14833,42 +14841,63 @@ var CohortFactsCache = class {
       throw error;
     }
   }
-  /** The facts of this key and this session, or undefined. It never throws. */
-  async get(key, sessionId) {
-    if (!this.enabled) {
-      this.misses++;
-      return void 0;
-    }
+  /** The entry of this key and this session, or undefined: no stats. It never throws. */
+  async read(key, sessionId) {
+    if (!this.enabled) return void 0;
     try {
       const path = this.file(key);
-      if (!path) throw new Error("invalid cache key");
+      if (!path) return void 0;
       const directories = await this.directories();
       const manifest = await prevalidateAnalysisCacheEntry(path, COHORT_FACTS_MAX_ENTRY_BYTES);
       await assertPrivateDirectoriesStable(directories);
       const raw = await readAnalysisCacheEntry(manifest);
       await assertPrivateDirectoriesStable(directories);
       const value = JSON.parse(raw);
-      if (!plainObject2(value) || !hasExactKeys2(value, ENTRY_KEYS) || value["v"] !== 1 || value["key"] !== key || value["sessionId"] !== sessionId || !validFacts(value)) {
-        this.misses++;
-        return void 0;
-      }
-      this.hits++;
-      return pick(value);
+      if (!plainObject2(value) || value["v"] !== 1 || value["key"] !== key || value["sessionId"] !== sessionId) return void 0;
+      if (hasExactKeys2(value, ENTRY_KEYS) && validFacts(value)) return { facts: pick(value) };
+      if (hasExactKeys2(value, OVER_CAP_KEYS) && validOverCap(value)) return { overCap: pickOverCap(value) };
+      return void 0;
     } catch {
-      this.misses++;
       return void 0;
     }
   }
+  /** The entry of this key and this session (facts or a skip over the cap), or undefined. It never throws. */
+  async lookup(key, sessionId) {
+    const entry = await this.read(key, sessionId);
+    if (entry) this.hits++;
+    else this.misses++;
+    return entry;
+  }
+  /** The facts of this key and this session, or undefined. It never throws. */
+  async get(key, sessionId) {
+    const entry = await this.read(key, sessionId);
+    if (entry && "facts" in entry) {
+      this.hits++;
+      return entry.facts;
+    }
+    this.misses++;
+    return void 0;
+  }
   /** Write the facts of 1 settled session under its key: an exclusive temporary file, then a rename. It never throws. */
   async put(key, facts) {
+    const picked = pick(facts);
+    if (!validFacts(picked)) return;
+    await this.write(key, { v: 1, key, ...picked });
+  }
+  /** Write a session over the cap of its load under its key, as `put` writes facts. It never throws. */
+  async putOverCap(key, overCap) {
+    const picked = { sessionId: overCap.sessionId, skip: "over-budget", maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead };
+    if (!validOverCap(picked)) return;
+    await this.write(key, { v: 1, key, ...picked });
+  }
+  /** Write 1 checked entry: an exclusive temporary file, then a rename. It never throws. */
+  async write(key, entry) {
     if (!this.enabled) return;
     let tmp;
     try {
       const path = this.file(key);
       if (!path) return;
-      const picked = pick(facts);
-      if (!validFacts(picked)) return;
-      const bytes = Buffer.from(JSON.stringify({ v: 1, key, ...picked }), "utf8");
+      const bytes = Buffer.from(JSON.stringify(entry), "utf8");
       if (bytes.byteLength > COHORT_FACTS_MAX_ENTRY_BYTES) return;
       const directories = await this.directories();
       tmp = `${path}.tmp-${process.pid}-${randomBytes4(12).toString("hex")}`;
@@ -15083,11 +15112,28 @@ var CohortReadDeferred = class extends Error {
     this.name = "CohortReadDeferred";
   }
 };
+function overCapHolds(kept, maxBytes) {
+  return "skip" in kept.load && kept.load.skip === "over-budget" && kept.load.bytesRead < maxBytes && maxBytes <= kept.maxBytes;
+}
 function createCachedCohortDeps(options) {
   const base = options.base ?? createCohortDeps({ now: options.now });
   const list2 = options.listSessions ?? (async (cwd) => listSessions({ roots: await claudeRoots(), cwd, maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS }));
   const listings = /* @__PURE__ */ new Map();
   const refs = /* @__PURE__ */ new Map();
+  const skips = /* @__PURE__ */ new Map();
+  const keptSkip = (candidate, key, maxBytes) => {
+    const kept = skips.get(candidate.path);
+    if (!kept || kept.sessionId !== candidate.sessionId || kept.key !== key) return void 0;
+    return kept.maxBytes === maxBytes || overCapHolds(kept, maxBytes) ? { ...kept.load } : void 0;
+  };
+  const keepSkip = (candidate, key, maxBytes, load) => {
+    if (key === void 0 || !("skip" in load)) return load;
+    const kept = skips.get(candidate.path);
+    const keptOverCap = kept && "skip" in kept.load && kept.load.skip === "over-budget";
+    if (kept && keptOverCap && kept.sessionId === candidate.sessionId && kept.key === key && kept.maxBytes >= maxBytes) return load;
+    skips.set(candidate.path, { sessionId: candidate.sessionId, key, maxBytes, load: { ...load } });
+    return load;
+  };
   let loaderCalls = 0;
   let missBytes = 0;
   let cacheHits = 0;
@@ -15105,10 +15151,28 @@ function createCachedCohortDeps(options) {
     async loadCandidate(candidate, maxBytes) {
       const ref2 = refs.get(candidate.path);
       const identity = ref2 ? await cohortFactsKey(ref2) : void 0;
+      let storedCap = 0;
       if (identity) {
         const now = options.now();
         if (!Number.isFinite(now) || now < identity.changedAt || now - identity.changedAt < MIN_VERIFICATION_QUIET_MS) return settlingSkip(candidate.path, 0, maxBytes);
-        const facts = options.cache ? await options.cache.get(identity.key, candidate.sessionId) : void 0;
+        const skipped = keptSkip(candidate, identity.key, maxBytes);
+        if (skipped) return skipped;
+        const entry = options.cache ? await options.cache.lookup(identity.key, candidate.sessionId) : void 0;
+        if (entry && "overCap" in entry) {
+          const kept = {
+            sessionId: candidate.sessionId,
+            key: identity.key,
+            maxBytes: entry.overCap.maxBytes,
+            load: { skip: "over-budget", bytesRead: entry.overCap.bytesRead }
+          };
+          storedCap = kept.maxBytes;
+          if (overCapHolds(kept, maxBytes)) {
+            cacheHits++;
+            skips.set(candidate.path, kept);
+            return { ...kept.load };
+          }
+        }
+        const facts = entry && "facts" in entry ? entry.facts : void 0;
         if (facts) {
           cacheHits++;
           if (facts.bytesRead > maxBytes) return { skip: "over-budget", bytesRead: 0 };
@@ -15119,7 +15183,7 @@ function createCachedCohortDeps(options) {
         }
       }
       const tail = await sessionTail(candidate.path, maxBytes);
-      if (tail.partial) return settlingSkip(candidate.path, tail.bytesRead, maxBytes);
+      if (tail.partial) return keepSkip(candidate, identity?.key, maxBytes, await settlingSkip(candidate.path, tail.bytesRead, maxBytes));
       const remaining = options.budgetBytes - missBytes;
       if (!(remaining >= 1)) throw new CohortReadDeferred();
       const cap = Math.min(maxBytes, remaining);
@@ -15134,7 +15198,11 @@ function createCachedCohortDeps(options) {
           await options.cache.put(identity.key, { sessionId: id.toLowerCase(), cwd, startedAt, endedAt, ranOrangu, bytesRead: loaded.bytesRead, metrics });
         }
       }
-      return loaded;
+      if ("skip" in loaded && loaded.skip === "over-budget" && cap === maxBytes && storedCap < maxBytes && options.cache && ref2 && identity) {
+        const after = await cohortFactsKey(ref2);
+        if (after?.key === identity.key) await options.cache.putOverCap(identity.key, { sessionId: candidate.sessionId, maxBytes, bytesRead: loaded.bytesRead });
+      }
+      return cap === maxBytes ? keepSkip(candidate, identity?.key, maxBytes, loaded) : loaded;
     },
     canonicalWorkspace: (identity) => base.canonicalWorkspace(identity),
     stats: () => ({ loaderCalls, missBytes, cacheHits })
