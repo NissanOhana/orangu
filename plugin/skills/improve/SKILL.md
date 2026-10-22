@@ -20,6 +20,7 @@ Accept one input, or none:
 - `<session-id|latest|path.jsonl|analysis.json>` for one session or current Analysis/SlimAnalysis JSON.
 - `<aggregate.json> --scope repo|global` for current Aggregate JSON.
 - `--verify <suggestion-id>` to compare an applied session or repo change with later sessions (ignore any later-input after the id).
+- Words that name one of these, such as "that last run".
 
 With no input, take the first item of `orangu suggest --todo --json --quiet`. For status `applied` or `regressed`, run step 6. For `proposed`, name `/orangu:apply <id>`. Else use its id as the input. With no item, ask for one.
 
@@ -79,7 +80,7 @@ Before you send the summary, write it to a new file `~/.orangu/drafts/improve-<r
 
 ## 6. Verify only with later evidence
 
-For `--verify`, the record must be `applied` or `regressed`, with session or repo scope. Global scope cannot be applied or verified. Orangu picks the sessions. Never choose them. Follow [the loop rules](../shared/loop.md) for a `regressed` record and for the report.
+For `--verify`, the record must be `applied` or `regressed`, with session or repo scope. Orangu picks the sessions. Never choose them. Follow [the loop rules](../shared/loop.md) for each step.
 
 1. Run `orangu suggest --effect '<id>' --json --quiet`. Report its verdict, both session counts, each check's evidence line, and any `confoundedBy` ids. Those are changes measured together, so the effect is not attributable to this one alone.
 2. Only when the verdict is `verified`, run `orangu suggest --set '<id>' verified --json --quiet`. Report verified only when that returns status `verified`. Never call a proposal or an application verified by assertion alone.

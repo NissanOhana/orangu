@@ -681,6 +681,14 @@ describe('plugin packaging', () => {
     expect(text).toContain(NO_INPUT)
     expect(text.indexOf(NO_INPUT), 'the no-input rule follows the --verify input line').toBeGreaterThan(text.indexOf('- `--verify <suggestion-id>`'))
     expect(readText('.agents/skills/orangu-improve/SKILL.md'), 'the Codex mirror names the Codex apply skill').toContain(NO_INPUT.split('/orangu:apply').join('$orangu-apply'))
+    // The words of the user win over the default: a session, finding, id or path that the request names, in words too,
+    // is an input, so only a request that names none of them takes the todo item.
+    const IN_WORDS = '- Words that name one of these, such as "that last run".'
+    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md']) {
+      const body = readText(path)
+      const inputs = body.slice(body.indexOf('Accept one input, or none:'), body.indexOf('With no input, take the first item'))
+      expect(inputs, `${path} names a session reference in words as an input`).toContain(IN_WORDS)
+    }
   })
   // A guard-only set can never verify, so the store refuses it in a new manifest. A proposal that expects fewer tokens
   // keeps one quality guard, because fewer tokens with more failures is no gain.
@@ -1527,6 +1535,10 @@ describe('plugin packaging', () => {
     // harness: 1 sentence that reads the lessons for stage 4 (+12), and 1 sentence that skips the steps of an item
     // with no file target, which is now the first step of stage 5 (+6). apply (607 -> 631) grows under its ceiling of
     // 700, which does not move. No other ceiling moves.
+    // 2026-10-22 the words of the user win: improve gains 1 input line, words that name an input such as "that last
+    // run" (+12). It pays with the step 6 sentence "Global scope cannot be applied or verified.", which the scope rule
+    // of the same paragraph says already (-7), and a shorter link to the loop rules (-5). Measured 1,101, so the
+    // ceiling of 1,102 does not move.
     const SKILL_WORD_CEILING: Record<string, number> = { harness: 1537, improve: 1102, analyze: 700, apply: 700, feedback: 350, 'show-me': 570 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
     const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
