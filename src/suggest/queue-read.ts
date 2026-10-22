@@ -119,21 +119,28 @@ export async function readQueue(store: QueueReadStore, target: QueueTarget, deps
   return buildQueue({ now: deps.now, ...(workspace ? { workspace } : {}), records, lines, checks, discovered })
 }
 
-/** The todo read of 1 workspace, from the same queue. */
-export async function readTodo(store: QueueReadStore, cwd: string, deps: QueueReadDeps): Promise<TodoRead> {
-  return buildTodo(await readQueue(store, { cwd }, deps))
+/** The todo read of 1 workspace, from the same queue. `measure` gives the bytes of the exact output form (`buildTodo`). */
+export async function readTodo(store: QueueReadStore, cwd: string, deps: QueueReadDeps, options: { measure?: (read: TodoRead) => number } = {}): Promise<TodoRead> {
+  return buildTodo(await readQueue(store, { cwd }, deps), options.measure ? { measure: options.measure } : {})
 }
 
-/** The lesson read: `LESSONS_MAX_BYTES` by default, null on the app route. */
+/** The lesson read: `LESSONS_MAX_BYTES` by default, null on the app route. `measure` gives the bytes of the exact output form. */
 export async function readLessons(
   store: QueueReadStore,
   target: LessonTarget,
   deps: QueueReadDeps,
-  options: { rules?: readonly string[]; maxBytes?: number | null } = {},
+  options: { rules?: readonly string[]; maxBytes?: number | null; measure?: (read: LessonRead) => number } = {},
 ): Promise<LessonRead> {
   const scope = await readScope(target, deps)
   const [records, lines] = [await store.all(), await store.lines()]
-  return buildLessonRead({ records, lines, scope, ...(options.rules ? { rules: options.rules } : {}), maxBytes: options.maxBytes === undefined ? LESSONS_MAX_BYTES : options.maxBytes })
+  return buildLessonRead({
+    records,
+    lines,
+    scope,
+    ...(options.rules ? { rules: options.rules } : {}),
+    maxBytes: options.maxBytes === undefined ? LESSONS_MAX_BYTES : options.maxBytes,
+    ...(options.measure ? { measure: options.measure } : {}),
+  })
 }
 
 /** The history: 1 change row for each applied record of the scope, oldest first. */

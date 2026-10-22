@@ -353,6 +353,155 @@ Each queue item lists its earlier records in `earlier`: the closed and `regresse
 
 An older `applied` record (one with no `frozenBaseline`) gets `cannotVerify: "baseline-gone"` when fewer than 3 of its baseline sessions are on disk. It gets the same value when its queue check reaches the `complete` checkpoint with fewer than 3 baseline sessions after the take rules, for example when the files on disk are its own evidence sessions. No step can then record a verdict, so the item goes to `review`, and its `next` is the verify handoff, which offers a rejection.
 
+## The store reads
+
+`orangu suggest` has 4 reads of the store: `--queue`, `--todo`, `--lessons` and `--history`. No read writes a record or a proposal file. Only the queue check of `--queue` and `--todo` can write cohort facts cache entries. Each `--json` output goes through the default redaction, as every `orangu suggest` output does. A later orangu can add a key within v1, as AppData v1 allows, and it removes none.
+
+Each call runs 1 step. 2 step flags together (for example `--record <id>` and `--queue`) exit 1 before any read or write. A read also exits 1 on an option that it does not take.
+
+The workspace of a read is `--cwd <dir>`, and the default is the current folder. A record is in the workspace when its proposal workspace or its bound `workspaceCwd` is the canonical path of `<dir>`, or when 1 of its `sessionIds` is a session that discovery lists for that path. A workspace read leaves out the global records. `--all` reads every workspace and the global records. `--cwd` with `--all` exits 1.
+
+### SuggestionQueue v1 (`--queue [--cwd <dir> | --all] --json`)
+
+```ts
+SuggestionQueue = {
+  v: 1,
+  scope: string,                // the canonical workspace path, or "all"
+  now: number,                  // the clock of the read: the settle rule and the age of a running item
+  counts: QueueCounts,
+  groups: {                     // the 6 groups, in the order that a person works them
+    verdict: QueueItem[], regressed: QueueItem[], apply: QueueItem[],
+    review: QueueItem[], running: QueueItem[], wait: QueueItem[]
+  },
+  globalOpen: number            // the open global records that a workspace read leaves out. 0 with --all
+}
+
+QueueCounts = { verdict, regressed, apply, review, running, wait, due, open: number }  // due = verdict, open = every item
+
+QueueItem = {
+  group: "verdict" | "regressed" | "apply" | "review" | "running" | "wait",
+  id: string,                   // the newest record of the item
+  ids: string[],                // every folded record, newest move first. More than 1 only in review
+  status: SuggestionStatus,
+  scope: "session" | "repo" | "global",
+  ruleId: string | null,        // see "Stored text in the queue reads"
+  changeClass?: ChangeClass,
+  title: string,                // the stored title. It can be model text, so each surface escapes it
+  workspace: string | null,
+  lastMoveAt: number,           // the statusAt of the newest move of the item
+  appliedAt?: number,           // applied items only, with the next 7 keys
+  candidates?: { baseline: number, later: number },  // discovery counts for the row text, at most 10 each
+  check?: "ran" | "deferred",   // whether the queue check measured the item in this read
+  checkpoint?: "first" | "complete" | null,
+  verdict?: CohortVerdict,
+  final?: boolean,
+  leaning?: "worse",
+  cannotVerify?: "few-baseline-sessions" | "no-directional-check" | "baseline-gone" | "legacy-record",
+  earlier: Array<{ id: string, status: SuggestionStatus, verdict: CohortVerdict | null, reasonCode?: RejectReasonCode }>,
+  earlierCount: number,
+  next: string | null           // a whole claude "/orangu:..." command, or null when no step can run now
+}
+```
+
+1 group for each open record:
+
+| Record | Group | `next` |
+|---|---|---|
+| `applied`, due | `verdict` | `claude "/orangu:improve --verify <id>"` |
+| `regressed` | `regressed` | `claude "/orangu:improve --verify <id>"` |
+| `proposed`, session or repo scope | `apply` | `claude "/orangu:apply <id>"` |
+| `new` or `failed` | `review` | `claude "/orangu:improve <id>"` |
+| `proposed`, global scope (only with `--all`) | `review` | `null` |
+| `applied`, `cannotVerify` `baseline-gone` or `legacy-record` | `review` | `claude "/orangu:improve --verify <id>"` |
+| `kicked-off` | `running` | `claude "/orangu:improve <id>"` |
+| `applied`, not due | `wait` | `null` |
+
+An `applied` item is due when 1 step can close it now: its queue check gives `final: true`, or its frozen baseline has fewer than 3 sessions. The counts in `candidates` never decide it. 1 read parses at most 256 MiB of transcripts that miss the cohort facts cache, and it checks the items oldest application first. An item past that budget gets `check: "deferred"`, is not due and has `next: null`. A second read with no new session parses no transcript.
+
+The text output of `--queue` is for a person, so it names no `orangu suggest` command. Each item prints its `next` whole on a row of its own, or no command row when `next` is `null`.
+
+### TodoRead v1 (`--todo [--cwd <dir>] --json`)
+
+The open items of 1 workspace that need a step, for a skill. It has no title and no `now` at any depth.
+
+```ts
+TodoRead = {
+  v: 1,
+  workspace: string,            // the canonical workspace path
+  counts: QueueCounts,          // the counts of --queue --json --cwd <dir> for the same store, sessions and now
+  maxBytes: 8192,
+  omitted: number,              // the items that do not fit
+  items: TodoItem[]             // the groups verdict, regressed, apply, review and running, in that order
+}
+
+TodoItem = { group, id, status, scope, ruleId: string | null, changeClass?, cannotVerify? }
+```
+
+`--todo` takes no `--all`, and `--todo --all` exits 1. The CLI keeps the first items that fit in 8,192 B (`TODO_MAX_BYTES`) of the exact output with its trailing newline, in the form that it prints: `--json`, `--json --quiet` or the text. So each form keeps as many items as fit in its own bytes. The text form prints 1 row for each item: the group, the id, the status and the rule.
+
+### LessonRead v1 (`--lessons [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] --json`)
+
+What each decided record taught, as ids, codes, enum values, counts and times. It is the only read that a skill uses as memory.
+
+```ts
+LessonRead = {
+  v: 1,
+  scope: string,                // the canonical workspace path, "all" or "global"
+  maxBytes: number | null,      // 16384 from the CLI
+  omitted: number,              // the older lessons that do not fit
+  lessons: Lesson[]             // newest decidedAt first, ties by id. With --all, the global lessons come last
+}
+
+Lesson = {
+  id: string,
+  scope: "session" | "repo" | "global",
+  ruleId: string | null,
+  insightId?: string,
+  changeClass?: ChangeClass,
+  status: "verified" | "regressed" | "unproven" | "kept" | "rejected",
+  reasonCode?: RejectReasonCode,
+  verdict: CohortVerdict | null,   // only from a receipt that grades again on this read
+  verdictTrusted: boolean,
+  laterComplete?: boolean,
+  confoundedBy: string[],
+  baseline: number,                // the session counts of the receipt
+  later: number,
+  checks: Array<{ metric, comparison, verdict }>,
+  appliedAt?: number,
+  decidedAt: number                // the statusAt of the newest move
+}
+```
+
+A lesson has no title, no file, no proposal text, no metric value and no `leaning`. `--scope global` reads only the global records, which belong to no workspace, and it takes no `--cwd` and no `--all`. `--scope` takes no other value here. `--rule` keeps only those rule ids. The CLI keeps the newest lessons that fit in 16,384 B (`LESSONS_MAX_BYTES`) of the exact output with its trailing newline, in the form that it prints, as `--todo` does. The output has no `now`, so a second read of the same store and the same sessions gives the same bytes.
+
+### ChangeRow (`--history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] --json`)
+
+An array of `ChangeRow`: 1 row for each record with an application time, oldest application first, ties by id. It is for a person and the app, and it has no cap.
+
+```ts
+ChangeRow = {
+  // every Lesson key except checks and decidedAt, then:
+  checks: Array<{ metric, comparison, verdict, before: number, after: number, pLower: number | null, pHigher: number | null }>,
+  decidedAt?: number,           // absent on an open row: applied or regressed
+  title: string,
+  files: string[]               // the files that the apply step changed, else the files of the proposal
+}
+```
+
+`before` and `after` are the cohort means of each check. A check of the earlier v1 receipt has no rank test, so its `pLower` and `pHigher` are `null`. `verdict` is `null` until a receipt exists.
+
+### The moves of a record (`--show <id> --json`)
+
+`--show <id> --json` adds 1 key to its 0.11.0 output, `transitions`: every move of the record in file order.
+
+```ts
+transitions: Array<{ status: SuggestionStatus, statusAt: number, reasonCode?: RejectReasonCode }>
+```
+
+A move is a store line whose status differs from the line before it for the same record, and the first line of a record is its first move. Only a rejection carries a reason code.
+
+`--list --status <s>[,<s>]` keeps only those statuses. An unknown status exits 1 and names the 10 statuses. Without `--status`, `--list --json` prints the same array as 0.11.0.
+
 ## Proposal artifacts
 
 New proposals from `orangu-improve` and `orangu-harness` have two files under `~/.orangu/proposals/`:

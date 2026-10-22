@@ -122,6 +122,12 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     // The 2 store flags of the record step and the rejection, each on its own line of the suggest block.
     expect(all).toMatch(/^ {34}\| --record <id> {2}\(measure again, and store$/m)
     expect(all).toMatch(/^ {36}\[--reason <code>\] {2}\(with rejected\)$/m)
+    // The 4 store reads and the status filter of the list, each on its own line of the suggest block.
+    expect(all).toMatch(/^ {34}\| --list \[--status <s>\[,<s>\]\]$/m)
+    expect(all).toMatch(/^ {34}\| --queue \[--cwd <dir> \| --all\]$/m)
+    expect(all).toMatch(/^ {34}\| --todo \[--cwd <dir>\] {2}\(the open items$/m)
+    expect(all).toMatch(/^ {34}\| --lessons \[--cwd <dir> \| --all$/m)
+    expect(all).toMatch(/^ {34}\| --history \[--cwd <dir> \| --all$/m)
     expect(run(['--help'])).not.toBe(all)
   }, 60_000)
 

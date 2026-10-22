@@ -60,7 +60,9 @@ import { persistNextStep } from '../src/cli/next-step.js'
 import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines, valueBudget } from '../src/cli/summary.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi } from '../src/cli/tty.js'
 import { suggestionIdV2, suggestionKey } from '../src/suggest/id.js'
+import { queueLines } from '../src/cli/commands/suggest-reads.js'
 import { HIDDEN_ITERATIONS_FIXTURE, hiddenIterationsAggregate, hiddenIterationsAnalysis } from '../test/fixtures/hidden-iterations.js'
+import { emptyQueueFixture, queueFixture } from '../test/fixtures/suggestion-queue.js'
 import { godViews } from './ste-god.js'
 import type { SteRow } from '../test/ste-floors.js'
 
@@ -836,6 +838,16 @@ export async function sessionTerminalViews(source: string, a: Analysis): Promise
 /** `orangu repo` and `orangu global` text at MACHINE_CAPS, past the output boundary. */
 export const aggregateTerminalView = (source: string, aggregate: Aggregate): RenderedView => ({ file: `${source}#aggregate`, lines: aggregateBlock(MACHINE_CAPS, prepareAggregateForOutput(aggregate, {})) })
 
+/** The fixture store whose queue the gate reads: an item in each group, a deferred check, and the empty state. */
+const QUEUE_FIXTURE = 'test/fixtures/suggestion-queue.ts'
+
+/** `orangu suggest --queue` text at MACHINE_CAPS: 1 workspace, every workspace, and a workspace with nothing open. */
+export const queueTerminalViews = (): RenderedView[] => [
+  { file: `${QUEUE_FIXTURE}#queue`, lines: queueLines(queueFixture(), layoutWidth(MACHINE_CAPS)) },
+  { file: `${QUEUE_FIXTURE}#queue.all`, lines: queueLines(queueFixture('all'), layoutWidth(MACHINE_CAPS)) },
+  { file: `${QUEUE_FIXTURE}#queue.empty`, lines: queueLines(emptyQueueFixture(), layoutWidth(MACHINE_CAPS)) },
+]
+
 /**
  * The 3 words that Claude writes for a show-me run, fixed, so the row measures what orangu writes around them.
  * They are scored too, and they are clean.
@@ -881,10 +893,11 @@ const RENDERED_ROWS: ReadonlyArray<{ id: string; owner?: string; source: string;
   },
   {
     id: 'rendered#terminal',
-    source: 'briefBlock, analysisBlock, nextStepLines and aggregateBlock at MACHINE_CAPS, wraps joined',
+    source: 'briefBlock, analysisBlock, nextStepLines, aggregateBlock and the suggest queue of a fixture store at MACHINE_CAPS, wraps joined',
     views: async ({ sessions, aggregates }) => [
       ...(await Promise.all(sessions.map(({ source, analysis }) => sessionTerminalViews(source, analysis)))).flat(),
       ...aggregates.map(({ source, aggregate }) => aggregateTerminalView(source, aggregate)),
+      ...queueTerminalViews(),
     ],
   },
   {

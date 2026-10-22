@@ -20,7 +20,15 @@
  *   orangu suggest --record <id> [--json]      measures again and stores a final verdict that is not verified
  *   orangu suggest --set <id> kept [--json]     keeps a regressed change, and measures nothing
  *   orangu suggest --set <id> rejected [--reason <code>] [--json]
- *   orangu suggest --list [--scope <s>] [--json]
+ *   orangu suggest --list [--scope <s>] [--status <s>[,<s>]] [--json]
+ *   orangu suggest --queue [--cwd <dir> | --all] [--json]       the open records, in 6 groups
+ *   orangu suggest --todo [--cwd <dir>] [--json]                 the open items that need a step, 8,192 B at most
+ *   orangu suggest --lessons [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]   16,384 B at most
+ *   orangu suggest --history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]
+ *     (the 4 reads write no record and no proposal file. Only the queue check may write cohort facts cache entries.
+ *      Their text output is in ./suggest-reads.ts)
+ *
+ * Each call runs 1 step: 2 step flags together exit 1 before any read or write.
  */
 import { matchRule, type CatalogMatch } from '../../suggest/catalog.js'
 import { realpath } from 'node:fs/promises'
@@ -58,10 +66,24 @@ import {
   type SuggestionWorkspaceIdentity,
 } from '../../suggest/types.js'
 import { createDiscoveredClaudeAnalysisLoader } from '../../adapters/claude-code/discovered-analysis.js'
+import { CohortFactsCache } from '../../suggest/cohort-cache.js'
+import type { LessonRead } from '../../suggest/lessons.js'
+import type { TodoRead } from '../../suggest/queue.js'
+import {
+  createQueueReadDeps,
+  readHistory,
+  readLessons,
+  readQueue,
+  readTodo,
+  type LessonTarget,
+  type QueueReadDeps,
+  type QueueTarget,
+} from '../../suggest/queue-read.js'
 import { flagBool, flagStr } from '../args.js'
 import { layoutWidth } from '../summary.js'
 import { detectCaps, displayWidth, wrapWords } from '../tty.js'
 import { loadAnalysisBySelector } from './estimate.js'
+import { historyLines, lessonLines, queueLines, todoLines, transitionLines, transitionsOf } from './suggest-reads.js'
 import { VERSION } from '../../version.js'
 
 async function currentWorkspaceIdentity(): Promise<SuggestionWorkspaceIdentity> {
@@ -148,6 +170,19 @@ const RECORDED_STATUSES: SuggestionStatus[] = ['regressed', 'unproven']
 const ARTIFACT_FLAGS = ['proposal', 'manifest', 'application', 'verification'] as const
 /** The store refuses the frozen baseline of an apply move with this phrase (src/suggest/store.ts, validateTransitionPatch and transitionLocked). */
 const FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/
+/** Every status of a record: the ones that `--set` writes and the ones that only `--record` writes. */
+const ALL_STATUSES: SuggestionStatus[] = [...STATUSES, ...RECORDED_STATUSES]
+/** The steps of `orangu suggest`. A call runs 1 of them, or none to create a record. */
+const STEP_FLAGS = ['list', 'show', 'effect', 'record', 'set', 'queue', 'todo', 'lessons', 'history'] as const
+/** The 4 reads, the read options that each one takes, and its usage. A read refuses the option of another read. */
+const READS = {
+  queue: { takes: ['cwd', 'all'], usage: '--queue [--cwd <dir> | --all] [--json]' },
+  todo: { takes: ['cwd'], usage: '--todo [--cwd <dir>] [--json]' },
+  lessons: { takes: ['cwd', 'all', 'scope', 'rule'], usage: '--lessons [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]' },
+  history: { takes: ['cwd', 'all', 'scope', 'rule'], usage: '--history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]' },
+} as const
+type ReadStep = keyof typeof READS
+const READ_OPTIONS = ['cwd', 'all', 'scope', 'rule'] as const
 
 /** What the store steps read outside the store. The CLI uses the trusted loaders, and a test injects fakes. */
 export interface SuggestDeps {
@@ -155,6 +190,8 @@ export interface SuggestDeps {
   cohort?: FreezeDeps
   /** the discovery reads that bind the workspace of a rejection */
   rejectWorkspace?: RejectWorkspaceDeps
+  /** the clock, the queue check loaders and the discovery of the 4 reads. The CLI makes them for each read */
+  read?: QueueReadDeps
 }
 
 const emit = (v: unknown, flags: Record<string, string | boolean>) =>
@@ -163,6 +200,19 @@ const emit = (v: unknown, flags: Record<string, string | boolean>) =>
 function visible<T>(value: T, flags: Record<string, string | boolean>): T {
   return flagBool(flags, 'no-redact') ? value : redactValue(value, { scrub: true })
 }
+
+/**
+ * The exact stdout of a read, past the output boundary (`visible`): the JSON that `emit` writes (2-space, or 1 line
+ * with `--quiet`), or the text lines, each with its newline. A capped read measures this string, so the cap holds on
+ * the bytes that a person or a skill reads.
+ */
+function readOutput<T>(read: T, flags: Record<string, string | boolean>, text: (shown: T) => string[]): string {
+  const shown = visible(read, flags)
+  if (flagBool(flags, 'json')) return JSON.stringify(shown, null, flagBool(flags, 'quiet') ? 0 : 2) + '\n'
+  return text(shown).map((line) => line + '\n').join('')
+}
+
+const outputBytes = (output: string): number => Buffer.byteLength(output, 'utf8')
 
 function terminal(value: string): string {
   return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ')
@@ -200,11 +250,29 @@ function printCatalog(matches: CatalogMatch[]): void {
   }
 }
 
+/** The statuses of `--status <s>[,<s>]`: each one a status of a record, or exit 1 with the allowed list before any read. */
+function statusFilter(flags: Record<string, string | boolean>): Set<SuggestionStatus> | undefined {
+  const value = flags['status']
+  if (value === undefined) return undefined
+  const names = typeof value === 'string' ? value.split(',').map((name) => name.trim()).filter(Boolean) : []
+  const unknown = names.filter((name) => !ALL_STATUSES.includes(name as SuggestionStatus))
+  if (!names.length || unknown.length) {
+    throw new Error(`--status takes 1 or more of ${ALL_STATUSES.join(', ')}${unknown.length ? `, not ${unknown.map((name) => JSON.stringify(name)).join(', ')}` : ''}`)
+  }
+  return new Set(names as SuggestionStatus[])
+}
+
 async function cmdList(store: SuggestionStore, flags: Record<string, string | boolean>): Promise<void> {
   const scope = flagStr(flags, 'scope')
+  const statuses = statusFilter(flags)
   let all = await store.all()
   if (scope) all = all.filter((r) => r.scope === scope)
+  if (statuses) all = all.filter((r) => statuses.has(r.status))
   if (flagBool(flags, 'json')) return emit(visible(all, flags), flags) as unknown as void
+  if (!all.length && statuses) {
+    process.stdout.write(`no suggestion has the status ${[...statuses].join(' or ')}.\n`)
+    return
+  }
   if (!all.length) {
     process.stdout.write('no suggestions yet. Create one from a report finding, or run: orangu suggest --rule <r> --scope session --session <id>\n')
     return
@@ -232,6 +300,8 @@ async function cmdShow(store: SuggestionStore, id: string, flags: Record<string,
     sessions.push(slimAnalysis(body))
   }
   const catalog = matchRule(rec.ruleId, sessions)
+  // Every move of the record in file order, from its store lines: the 1 key that --show --json adds to 0.11.0.
+  const transitions = transitionsOf(await store.lines(rec.id))
   if (flagBool(flags, 'json')) {
     return emit(visible({
       record: rec,
@@ -241,9 +311,11 @@ async function cmdShow(store: SuggestionStore, id: string, flags: Record<string,
       ...(rec.status === 'verified' ? { verificationTrusted: isTrustedComputedVerification(rec) } : {}),
       ...(forApply ? { workspaceMatchesCurrent: true } : {}),
       ...(forProposal ? { proposalEligibility: rec.scope === 'global' ? 'global-proposal-only' : 'workspace-bound' } : {}),
+      transitions,
     }, flags), flags) as unknown as void
   }
   printRecord(visible(rec, flags))
+  for (const line of transitionLines(transitions)) process.stdout.write(line + '\n')
   printCatalog(catalog)
   process.stdout.write(`  evidence: ${sessions.length} session(s) loaded${missing.length ? `, ${missing.length} unresolvable` : ''}. Add --json for the slim data\n`)
 }
@@ -492,13 +564,108 @@ async function cmdEffect(store: SuggestionStore, id: string, flags: Record<strin
   const view = visible(effectView(effect), flags)
   if (flagBool(flags, 'json')) return emit(view, flags) as unknown as void
   const w = (s: string) => process.stdout.write(s + '\n')
-  w(`  ${terminal(view.id)}  later sessions vs baseline · ${view.baseline.n} before, ${view.later.n} after the change`)
+  // later.n is the graded later sessions, and later.count is every later session so far.
+  w(`  ${terminal(view.id)}  later sessions vs baseline · ${view.baseline.n} before, ${view.later.n} after the change, of ${view.later.count} later sessions so far`)
   for (const check of view.checks) w(`    ${terminal(check.evidence)}`)
   if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal).join(', ')} (not attributable to this change alone)`)
   const skipped = Object.entries(view.skipped).filter(([, count]) => count > 0)
   if (skipped.length) w(`    skipped: ${skipped.map(([reason, count]) => `${reason} ${count}`).join(', ')}`)
   w(`  verdict: ${view.verdict}`)
   w(`  next: ${terminal(view.next)}`)
+}
+
+/** The workspace folder of a read: `--cwd <dir>`, or the current folder. */
+function workspaceDir(flags: Record<string, string | boolean>): string {
+  const value = flags['cwd']
+  if (value === undefined) return process.cwd()
+  if (typeof value !== 'string' || !value) throw new Error('--cwd requires a folder')
+  return value
+}
+
+/** Refuse, before any read, a read option that this read does not take, so no option goes unread. */
+function assertReadOptions(step: ReadStep, flags: Record<string, string | boolean>): void {
+  if (step === 'todo' && flags['all'] !== undefined) {
+    throw new Error('--todo reads 1 workspace, so it takes no --all. Name the workspace with --cwd <dir>. The default is the current folder.')
+  }
+  const takes: readonly string[] = READS[step].takes
+  const other = READ_OPTIONS.find((name) => flags[name] !== undefined && !takes.includes(name))
+  if (other) throw new Error(`--${other} is not valid with --${step}. usage: orangu suggest ${READS[step].usage}`)
+}
+
+/** The scope of `--queue`: 1 workspace (`--cwd <dir>`, the default) or every workspace (`--all`). */
+function queueTarget(flags: Record<string, string | boolean>): QueueTarget {
+  if (flags['all'] === undefined) return { cwd: workspaceDir(flags) }
+  if (flags['cwd'] !== undefined) throw new Error('--cwd and --all name 2 different scopes. Give 1 of them.')
+  return 'all'
+}
+
+/** The scope of `--lessons` and `--history`: the scope of `--queue`, or only the global records (`--scope global`). */
+function lessonTarget(flags: Record<string, string | boolean>): LessonTarget {
+  const scope = flags['scope']
+  if (scope === undefined) return queueTarget(flags)
+  if (scope !== 'global') throw new Error('--scope takes only global here. It reads the global records, which belong to no workspace.')
+  if (flags['cwd'] !== undefined || flags['all'] !== undefined) throw new Error('--scope global reads only the global records, so it takes no --cwd and no --all.')
+  return 'global'
+}
+
+/** The rule ids of `--rule <id>[,<id>]`, or undefined for every rule. */
+function ruleFilter(flags: Record<string, string | boolean>): string[] | undefined {
+  const value = flags['rule']
+  if (value === undefined) return undefined
+  const rules = typeof value === 'string' ? value.split(',').map((rule) => rule.trim()).filter(Boolean) : []
+  if (!rules.length) throw new Error('--rule requires 1 or more rule ids')
+  return rules
+}
+
+/**
+ * The deps of 1 read: the clock of this read, the queue check loaders behind the cohort facts cache (none with
+ * `--no-cache` or `ORANGU_NO_CACHE=1`), and the discovery of every Claude root.
+ */
+function readDeps(flags: Record<string, string | boolean>, deps: SuggestDeps): QueueReadDeps {
+  if (deps.read) return deps.read
+  const cacheOn = !(flags['no-cache'] !== undefined || process.env['ORANGU_NO_CACHE'] === '1')
+  return createQueueReadDeps({ now: Date.now(), cache: cacheOn ? new CohortFactsCache({ version: VERSION }) : null })
+}
+
+const textWidth = (): number => layoutWidth(detectCaps(process.stdout, process.env))
+
+/** `--queue`: the open records of 1 workspace or of every workspace, in 6 groups. No cap: a person reads it. */
+async function cmdQueue(store: SuggestionStore, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
+  assertReadOptions('queue', flags)
+  const target = queueTarget(flags)
+  const queue = await readQueue(store, target, readDeps(flags, deps))
+  const width = textWidth()
+  process.stdout.write(readOutput(queue, flags, (shown) => queueLines(shown, width)))
+}
+
+/** `--todo`: the open items of 1 workspace that need a step, for a skill. `TODO_MAX_BYTES` of the exact output. */
+async function cmdTodo(store: SuggestionStore, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
+  assertReadOptions('todo', flags)
+  const cwd = workspaceDir(flags)
+  const output = (read: TodoRead): string => readOutput(read, flags, todoLines)
+  const todo = await readTodo(store, cwd, readDeps(flags, deps), { measure: (read) => outputBytes(output(read)) })
+  process.stdout.write(output(todo))
+}
+
+/** `--lessons`: the lesson read, the newest lessons that fit `LESSONS_MAX_BYTES` of the exact output. */
+async function cmdLessons(store: SuggestionStore, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
+  assertReadOptions('lessons', flags)
+  const target = lessonTarget(flags)
+  const rules = ruleFilter(flags)
+  const width = textWidth()
+  const output = (read: LessonRead): string => readOutput(read, flags, (shown) => lessonLines(shown, width))
+  const read = await readLessons(store, target, readDeps(flags, deps), { ...(rules ? { rules } : {}), measure: (lessons) => outputBytes(output(lessons)) })
+  process.stdout.write(output(read))
+}
+
+/** `--history`: 1 change row for each applied record of the scope, oldest first. */
+async function cmdHistory(store: SuggestionStore, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
+  assertReadOptions('history', flags)
+  const target = lessonTarget(flags)
+  const rules = ruleFilter(flags)
+  const rows = await readHistory(store, target, readDeps(flags, deps), rules ? { rules } : {})
+  const width = textWidth()
+  process.stdout.write(readOutput(rows, flags, (shown) => historyLines(shown, width)))
 }
 
 export async function cmdSuggest(positionals: string[], flags: Record<string, string | boolean>, deps: SuggestDeps = {}): Promise<void> {
@@ -510,7 +677,20 @@ export async function cmdSuggest(positionals: string[], flags: Record<string, st
       throw new Error('--reason is valid only with --set <id> rejected, and with no other step. usage: orangu suggest --set <id> rejected --reason <code>')
     }
   }
+  // 1 step for each call, before any read or write: the dispatch below runs only the first step, so a second one would
+  // go unread. A status filter belongs to --list only, for the same reason.
+  const steps = STEP_FLAGS.filter((name) => flags[name] !== undefined)
+  if (steps.length > 1) {
+    throw new Error(`orangu suggest runs 1 step at a time, and this call has ${steps.length}: ${steps.map((name) => `--${name}`).join(', ')}. usage: orangu suggest <step> [<options>] (orangu help all lists each step)`)
+  }
+  if (flags['status'] !== undefined && flags['list'] === undefined) {
+    throw new Error('--status is valid only with --list. usage: orangu suggest --list --status <s>[,<s>]')
+  }
   const store = new SuggestionStore()
+  if (flags['queue'] !== undefined) return cmdQueue(store, flags, deps)
+  if (flags['todo'] !== undefined) return cmdTodo(store, flags, deps)
+  if (flags['lessons'] !== undefined) return cmdLessons(store, flags, deps)
+  if (flags['history'] !== undefined) return cmdHistory(store, flags, deps)
   if (flagBool(flags, 'list')) return cmdList(store, flags)
   const show = flagStr(flags, 'show')
   if (show) return cmdShow(store, show, flags)

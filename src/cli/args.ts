@@ -37,6 +37,11 @@ const BOOL_FLAGS = new Set([
   'no-color',
   'plain',
   'lines',
+  // the 4 reads of orangu suggest: each takes no value, so `--queue <word>` leaves the word a positional
+  'queue',
+  'todo',
+  'lessons',
+  'history',
 ])
 
 /**
@@ -84,6 +89,7 @@ export const KNOWN_FLAGS = new Set([
   'render',
   'record',
   'reason',
+  'status',
 ])
 
 /** Flags the parser saw that no verb reads, formatted the way the user typed them. */

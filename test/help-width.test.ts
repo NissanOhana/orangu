@@ -9,6 +9,11 @@ describe('EXTRA_HELP', () => {
       for (const line of entry.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80)
     }
   })
+  it('names the 4 store reads and the status filter in the suggest block', () => {
+    const suggest = EXTRA_HELP.find((entry) => entry.startsWith('  orangu suggest '))
+    expect(suggest).toBeDefined()
+    for (const flag of ['| --queue [--cwd <dir> | --all]', '| --todo [--cwd <dir>]', '| --lessons [', '| --history [', '--status <s>[,<s>]']) expect(suggest, flag).toContain(flag)
+  })
   it('hides internal nouns from the user-facing help', () => {
     const text = EXTRA_HELP.join('\n')
     // `--slim` is a real flag on estimate/analyze and may be named; the bare noun may not.

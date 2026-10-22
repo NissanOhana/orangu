@@ -1197,3 +1197,58 @@ describe('orangu suggest: each new CLI move stores no free text', () => {
     expect(readFileSync(storePath(), 'utf8')).not.toContain('leaning')
   })
 })
+
+describe('orangu suggest: 1 step at a time, and the --effect output', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(T)
+  })
+
+  it('--effect --json keeps its full key list and the keys of its baseline and later objects, so no 0.11.0 key can go in silence', async () => {
+    const cases: Array<[string, number[], FakeSession[], boolean]> = [
+      ['first, verified', [20, 21, 22], laterOf([1, 2, 3]), false],
+      ['first, leans worse', [1, 2, 3], laterOf([20, 21, 22, 23]), true],
+    ]
+    for (const [label, frozen, later, leaning] of cases) {
+      const id = await seedApplied(`effect-keys-${leaning ? 'worse' : 'verified'}`, frozen)
+      out = []
+      await cmdSuggest([], { effect: id, json: true }, { cohort: fakeCohort(later) })
+      const view = JSON.parse(stdout())
+      expect(Object.keys(view), label).toEqual([
+        'id', 'scope', 'verdict', 'checkpoint', 'final', ...(leaning ? ['leaning'] : []), 'appliedAt', 'baseline', 'later', 'checks', 'confoundedBy', 'skipped', 'next',
+      ])
+      expect(Object.keys(view.baseline), label).toEqual(['n', 'ids'])
+      expect(Object.keys(view.later), label).toEqual(['n', 'ids', 'complete', 'count'])
+    }
+  })
+
+  it('the plain --effect line prints the graded later sessions and every later session so far', async () => {
+    const id = await seedApplied('effect-text-count', [5, 6, 7])
+    out = []
+    await cmdSuggest([], { effect: id }, { cohort: fakeCohort(laterOf([6, 5, 7, 0, 0])) })
+    expect(stdout()).toContain(`  ${id}  later sessions vs baseline · 3 before, 3 after the change, of 5 later sessions so far\n`)
+  })
+
+  it('refuses 2 step flags together with exit 1 and a usage line, before any read or write', async () => {
+    const id = await seedApplied('two-steps', [1, 2, 3])
+    const deps = fakeCohort(laterOf(range(20, 10)))
+    const calls: Array<[string[], Record<string, string | boolean>]> = [
+      [[], { record: id, list: true }],
+      [[], { record: id, show: id }],
+      [[], { record: id, effect: id }],
+      [[], { record: id, queue: true }],
+      [['rejected'], { set: id, queue: true }],
+      [[], { list: true, todo: true }],
+      [[], { show: id, lessons: true }],
+      [[], { effect: id, history: true, all: true }],
+    ]
+    for (const [positionals, flags] of calls) {
+      await refusedUnchanged(
+        () => cmdSuggest(positionals, { ...flags, json: true }, { cohort: deps }),
+        /^orangu suggest runs 1 step at a time, and this call has 2: --\S+, --\S+\. usage: orangu suggest <step> \[<options>\] \(orangu help all lists each step\)$/,
+      )
+    }
+    expect(deps.calls).toEqual(NO_CALLS)
+    expect(lastLine()).toMatchObject({ id, status: 'applied' })
+  })
+})
