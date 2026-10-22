@@ -446,10 +446,21 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
     session('eeeeeeee-0000-4000-8000-000000000021', '2026-08-17T10:00:00.000Z', 1)
     session('eeeeeeee-0000-4000-8000-000000000022', '2026-08-18T10:00:00.000Z', 0)
 
-    const expected: Array<[string, string, RegExp, RegExp]> = [
-      [regressed, 'regressed', /avgToolCalls: 7 → 0\.333333 \(median 7 → 0; exact rank test p=1; regressed\)/, /next: a check moved the wrong way beyond chance: review the change, or reject the proposal/],
-      [guardsOnly, 'no-directional-check', /avgToolCalls: 7 → 0\.333333 \(median 7 → 0; exact rank test p=1; held\)/, /next: no reviewed check names a direction to improve, so nothing can be verified/],
-      [withinNoise, 'within-noise', /avgTestRunsFailed: 0 → 0 \(median 0 → 0; exact rank test p=1; within-noise\)/, /next: 3 of 10 later sessions counted: later sessions can still join, or reject the proposal/],
+    // 3 later sessions reach the first checkpoint only, so no verdict short of verified is final yet.
+    const firstNotFinal = 'That is not final. Orangu grades again when the later cohort is complete (3 of 10 so far)'
+    const expected: Array<[string, string, RegExp, string]> = [
+      [
+        regressed, 'regressed', /avgToolCalls: 7 → 0\.333333 \(median 7 → 0; exact rank test p=1; regressed\)/,
+        `next: the first checkpoint (the first 3 later sessions) leans worse: a check moved the wrong way beyond chance. ${firstNotFinal}`,
+      ],
+      [
+        guardsOnly, 'no-directional-check', /avgToolCalls: 7 → 0\.333333 \(median 7 → 0; exact rank test p=1; held\)/,
+        `next: the first checkpoint (the first 3 later sessions) did not beat the baseline beyond chance. ${firstNotFinal}`,
+      ],
+      [
+        withinNoise, 'within-noise', /avgTestRunsFailed: 0 → 0 \(median 0 → 0; exact rank test p=1; within-noise\)/,
+        `next: the first checkpoint (the first 3 later sessions) did not beat the baseline beyond chance. ${firstNotFinal}`,
+      ],
     ]
     for (const [id, verdict, evidence, next] of expected) {
       out = []
@@ -458,7 +469,7 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
       expect(text, verdict).toContain('3 before, 3 after the change')
       expect(text, verdict).toMatch(evidence)
       expect(text, verdict).toContain(`verdict: ${verdict}`)
-      expect(text, verdict).toMatch(next)
+      expect(text, verdict).toContain(next)
       // The three changes were applied together, so each names the other two.
       expect(text, verdict).toMatch(/measured together with: sg_[0-9a-f]{12}, sg_[0-9a-f]{12} \(not attributable to this change alone\)/)
       await expect(cmdSuggest(['verified'], { set: id, json: true })).rejects.toThrow(new RegExp(`not verified: ${verdict};`))

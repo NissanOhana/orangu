@@ -265,10 +265,10 @@ export function frozenBindingViolation(
 /**
  * Every rule of an outcome receipt, graded again from its own numbers, with 0 to 10 sessions on each side. The store
  * applies it before a `regressed` or `unproven` move. `status` is that move, and `frozenBaseline` is the baseline that
- * the record stored at its `applied` move. The same rules as `cohortReceiptViolation`, with 4 more: the receipt grades
+ * the record stored at its `applied` move. The same rules as `cohortReceiptViolation`, with 5 more: the receipt grades
  * against the frozen sessions and their numbers, the verdict fits the move, the later cohort is complete unless a short
- * frozen baseline closes it, and a record with no frozen baseline closes only on 3 or more baseline sessions. Returns
- * the first violation.
+ * frozen baseline closes it, a record with no frozen baseline closes only on 3 or more baseline sessions, and the
+ * checkpoint is `complete` exactly when the later cohort is complete. Returns the first violation.
  */
 export function outcomeReceiptViolation(
   value: unknown,
@@ -329,6 +329,8 @@ export function outcomeReceiptViolation(
   // With no frozen baseline, a live baseline below the minimum is not a final verdict, so the record can only be rejected.
   if (frozen === undefined && nBefore < COHORT_MIN) return `a record with no frozen baseline needs ${COHORT_MIN} or more baseline sessions to close`
   if (receipt.checkpoint === 'first' && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`
+  // The checkpoint names how the later side stood when the receipt was graded, so it follows laterComplete.
+  if (receipt.checkpoint !== (receipt.laterComplete ? 'complete' : 'first')) return 'checkpoint must be complete when the later cohort is complete, and first before it'
   return undefined
 }
 

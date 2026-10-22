@@ -306,7 +306,7 @@ SuggestionOutcomeReceipt = {
   method: "cohort-rank-v1",
   alpha: 0.05,
   appliedAt: number,             // the recorded application time
-  checkpoint: "first" | "complete",  // "first" only with a frozen baseline below 3 sessions
+  checkpoint: "first" | "complete",  // "complete" exactly when laterComplete is true; "first" only with a frozen baseline below 3 sessions
   verdict: "within-noise" | "regressed" | "not-enough-sessions" | "no-directional-check",
   laterComplete: boolean,
   confoundedBy: string[],        // sorted unique suggestion ids
@@ -326,6 +326,7 @@ An outcome receipt has no `summary` key and no `evidence` key, so it stores no r
 3. `laterComplete` is `false`. The exception is the verdict `not-enough-sessions` with a frozen baseline below 3 sessions whose ids are the receipt's baseline ids.
 4. A `regressed` move carries a verdict other than `regressed`, or an `unproven` move carries `regressed`.
 5. A frozen baseline has more than 10 sessions, an unsorted or repeated id, or a value that is not a finite number of 0 or more.
+6. The `checkpoint` does not fit `laterComplete`: it is `complete` when the later cohort is complete, and `first` before it.
 
 The store also refuses an outcome receipt that does not grade against the frozen baseline of its record: the same session ids, and for each check the mean and the median of the frozen values. A record with no frozen baseline closes only on 3 or more baseline sessions. Below that, its verdict is not final, and the record can only be rejected.
 

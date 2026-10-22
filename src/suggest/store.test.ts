@@ -1084,6 +1084,21 @@ describe('SuggestionStore outcome moves', () => {
     await refusedUnchanged(() => store.transition(short.id, 'unproven', { outcomeReceipt: otherIds }), /baselineSessionIds must equal the frozen baseline/)
   })
 
+  it('refuses a checkpoint that does not fit laterComplete: complete only with a complete later cohort, first only before it', async () => {
+    const short = await appliedRecord({ ruleId: 'checkpoint-short', frozen: frozenBaseline(1_000, [5, 6]) })
+    const at = short.appliedAt!
+    // A short frozen baseline closes before the later cohort is complete, so its receipt names the first checkpoint.
+    const early = outcomeReceipt(at, [5, 6], [4], { checkpoint: 'complete', laterComplete: false })
+    await refusedUnchanged(() => store.transition(short.id, 'unproven', { outcomeReceipt: early }), /checkpoint must be complete when the later cohort is complete, and first before it/)
+    // At a complete later cohort, the receipt names the complete checkpoint, also for a short frozen baseline.
+    const late = outcomeReceipt(at, [5, 6], [4, 5, 6, 7, 4, 5, 6, 7, 4, 5], { checkpoint: 'first', laterComplete: true })
+    await refusedUnchanged(() => store.transition(short.id, 'unproven', { outcomeReceipt: late }), /checkpoint must be complete when the later cohort is complete, and first before it/)
+    // The 2 receipts with the fitting checkpoint pass.
+    await expect(store.transition(short.id, 'unproven', { outcomeReceipt: { ...late, checkpoint: 'complete' } })).resolves.toMatchObject({ status: 'unproven' })
+    const other = await appliedRecord({ ruleId: 'checkpoint-short-first', frozen: frozenBaseline(1_000, [5, 6]) })
+    await expect(store.transition(other.id, 'unproven', { outcomeReceipt: { ...early, appliedAt: other.appliedAt!, checkpoint: 'first' } })).resolves.toMatchObject({ status: 'unproven' })
+  })
+
   it('refuses a regressed move whose verdict is not regressed, and an unproven move whose verdict is', async () => {
     const applied = await appliedRecord()
     const withinNoise = outcomeReceipt(applied.appliedAt!, [5, 6, 7], [6, 5, 7])

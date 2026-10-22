@@ -1,10 +1,26 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { COHORT_SIDE_BYTES, measureCohortEffect, nextStep, ranOranguLifecycle, verificationPatch, type CohortCandidate, type CohortDeps, type CohortSession } from './cohort.js'
+import {
+  COHORT_SIDE_BYTES,
+  COHORT_SKIP_REASONS,
+  effectFinality,
+  freezeBaseline,
+  measureCohortEffect,
+  nextStep,
+  outcomePatch,
+  ranOranguLifecycle,
+  verificationPatch,
+  type CohortCandidate,
+  type CohortDeps,
+  type CohortEffect,
+  type CohortSession,
+  type CohortSkipReason,
+} from './cohort.js'
+import { evaluateCheck, overallVerdict } from './cohort-stats.js'
 import { SuggestionStore } from './store.js'
-import type { SuggestionRecord, SuggestionVerificationIntent } from './types.js'
+import type { SuggestionFrozenBaseline, SuggestionOutcomeReceipt, SuggestionRecord, SuggestionVerificationIntent, SuggestionVerificationMetric } from './types.js'
 
 const T = 100_000
 const WORKSPACE = '/w'
@@ -220,18 +236,29 @@ describe('nextStep', () => {
     const overlap = separated(10).map((s) => ({ ...s, toolCalls: s.startedAt < T ? 5 + (s.toolCalls % 3) : 5 + ((s.toolCalls + 1) % 3) }))
     const full = await measureCohortEffect(appliedRecord(), [], fakeDeps(overlap))
     expect(full.verdict).toBe('within-noise')
-    expect(nextStep(full)).toBe('the later cohort is complete (10 of 10) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal')
+    expect(nextStep(full)).toBe(
+      'the complete checkpoint (10 of 10 later sessions) did not beat the baseline beyond chance. Record it as unproven: orangu suggest --record sg_aaaaaaaaaaaa',
+    )
     const partial = await measureCohortEffect(appliedRecord(), [], fakeDeps(overlap.filter((s) => s.startedAt < T || s.startedAt < T + 5_000)))
     expect(partial.verdict).toBe('within-noise')
-    expect(nextStep(partial)).toBe(`${partial.later.length} of 10 later sessions counted: later sessions can still join, or reject the proposal`)
+    expect(partial.laterCount).toBe(4)
+    expect(nextStep(partial)).toBe(
+      'the first checkpoint (the first 3 later sessions) did not beat the baseline beyond chance. That is not final. Orangu grades again when the later cohort is complete (4 of 10 so far)',
+    )
     const done = await measureCohortEffect(appliedRecord({ status: 'verified' }), [], fakeDeps(separated(3)))
     expect(nextStep(done)).toBe('already recorded as verified')
+    // A verified record names no step at any later verdict: --record and --set verified take an applied record only.
+    const verifiedFull = await measureCohortEffect(appliedRecord({ status: 'verified' }), [], fakeDeps(overlap))
+    expect(verifiedFull.verdict).toBe('within-noise')
+    expect(nextStep(verifiedFull)).toBe('already recorded as verified')
     // A later side that spent its byte budget is final too: newer sessions are never read.
     const heavy = overlap.map((s) => (s.startedAt > T ? { ...s, bytes: 60 * MiB } : s))
     const budgetFull = await measureCohortEffect(appliedRecord(), [], fakeDeps(heavy))
     expect(budgetFull.later).toHaveLength(4)
     expect(budgetFull.laterComplete).toBe(true)
-    expect(nextStep(budgetFull)).toMatch(/^the later cohort is complete \(4 sessions, its byte budget is spent\) and did not beat the baseline beyond chance/)
+    expect(nextStep(budgetFull)).toBe(
+      'the complete checkpoint (4 later sessions, the byte budget is spent) did not beat the baseline beyond chance. Record it as unproven: orangu suggest --record sg_aaaaaaaaaaaa',
+    )
     const stranded = await measureCohortEffect(appliedRecord(), [], fakeDeps(heavy.map((s) => (s.startedAt > T ? { ...s, bytes: 100 * MiB } : s)).concat(
       separated(10).filter((s) => s.startedAt > T).slice(0, 2).map((s, i) => ({ ...s, id: uuid(700 + i), bytes: 120 * MiB })),
     )))
@@ -301,5 +328,494 @@ describe('verificationPatch', () => {
       expect(verified.verificationReceipt).toMatchObject({ v: 2, baselineSessionIds: [uuid(0), uuid(1), uuid(2)], measuredSessionIds: [uuid(100), uuid(101), uuid(102)] })
       expect(verified.effect).toEqual({ before: { avgToolCalls: 21 }, after: { avgToolCalls: 2 }, measuredSessionIds: [uuid(100), uuid(101), uuid(102)] })
     }
+  })
+})
+
+const DECREASED: SuggestionVerificationIntent = { metric: 'avgToolCalls', comparison: 'decreased' }
+const NOT_INCREASED: SuggestionVerificationIntent = { metric: 'avgToolCalls', comparison: 'not-increased' }
+const ID = 'sg_aaaaaaaaaaaa'
+const range = (from: number, count: number): number[] => Array.from({ length: count }, (_, index) => from + index)
+const zeroSkips = (): Record<CohortSkipReason, number> => Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0])) as Record<CohortSkipReason, number>
+
+/** The metrics that fakeDeps gives a session with this many tool calls. */
+function metricsOf(toolCalls: number): Record<SuggestionVerificationMetric, number> {
+  return { avgTotalTokens: 100, avgToolCalls: toolCalls, avgToolErrors: 0, avgActiveMs: 1_000, avgContextPeak: 10, avgTestRunsFailed: 0, avgBuildRunsFailed: 0, avgInterruptions: 0 }
+}
+
+/** Baseline sessions, 1 for each tool-call value, each ended before T. */
+function baselineOf(values: number[]): FakeSession[] {
+  return values.map((toolCalls, index) => ({ id: uuid(index), startedAt: T - 50_000 + index * 1_000, endedAt: T - 40_000 + index * 1_000, toolCalls }))
+}
+
+/** Later sessions in start order, 1 for each tool-call value. */
+function laterOf(values: number[]): FakeSession[] {
+  return values.map((toolCalls, index) => ({ id: uuid(100 + index), startedAt: T + 1_000 + index * 1_000, endedAt: T + 2_000 + index * 1_000, toolCalls }))
+}
+
+/** The frozen form of baselineOf(values): what freezeBaseline stores for those sessions at the cut T. */
+function frozenOf(values: number[]): SuggestionFrozenBaseline {
+  return {
+    v: 1,
+    cutAt: T,
+    sessions: baselineOf(values).map((s) => ({ id: s.id, startedAt: s.startedAt, endedAt: s.endedAt, metrics: metricsOf(s.toolCalls) })),
+    skipped: zeroSkips(),
+  }
+}
+
+describe('measureCohortEffect: the 2 checkpoints', () => {
+  it('keeps the first verdict between the checkpoints: 5 later sessions, the first 3 within noise and the next 2 much lower', async () => {
+    // All 5 would beat the baseline (p = 2/56). Orangu grades only the first 3 (p = 2/20) until the cohort is complete.
+    expect(overallVerdict([evaluateCheck(DECREASED, [10, 11, 12], [8, 9, 10.5, 0, 0])], 3, 5)).toBe('verified')
+    const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps([...baselineOf([10, 11, 12]), ...laterOf([8, 9, 10.5, 0, 0])]))
+    expect(effect.verdict).toBe('within-noise')
+    expect(effect.later.map((s) => s.id)).toEqual([uuid(100), uuid(101), uuid(102)])
+    expect(effect.laterCount).toBe(5)
+    expect(effect.laterComplete).toBe(false)
+    expect(effectFinality(effect)).toEqual({ checkpoint: 'first', final: false })
+    expect(() => verificationPatch(effect)).toThrow(/not verified: within-noise/)
+  })
+
+  it('records a first-checkpoint win with the first 3 later sessions only', async () => {
+    const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps([...baselineOf([20, 21, 22]), ...laterOf([1, 2, 3, 30, 31])]))
+    expect(effect.verdict).toBe('verified')
+    expect(effectFinality(effect)).toEqual({ checkpoint: 'first', final: true })
+    const { verificationReceipt } = verificationPatch(effect)
+    expect(verificationReceipt.measuredSessionIds).toEqual([uuid(100), uuid(101), uuid(102)])
+    expect(verificationReceipt.checks[0]).toMatchObject({ before: 21, after: 2 })
+  })
+
+  it('grades the complete cohort at 10 later sessions, also when the first verdict was verified', async () => {
+    const values = [1, 2, 3, 30, 31, 32, 33, 34, 35, 36]
+    const first = await measureCohortEffect(appliedRecord(), [], fakeDeps([...baselineOf([20, 21, 22]), ...laterOf(values.slice(0, 3))]))
+    expect(first.verdict).toBe('verified')
+    const complete = await measureCohortEffect(appliedRecord(), [], fakeDeps([...baselineOf([20, 21, 22]), ...laterOf(values)]))
+    expect(complete.later).toHaveLength(10)
+    expect(effectFinality(complete)).toEqual({ checkpoint: 'complete', final: true })
+    expect(complete.verdict).toBe(overallVerdict([evaluateCheck(DECREASED, [20, 21, 22], values)], 3, 10))
+    expect(complete.verdict).toBe('within-noise')
+  })
+
+  it('names the confounders of the graded sessions only', async () => {
+    // A change applied after the 3rd later session ended confounds sessions 4 and 5, which the first checkpoint does not grade.
+    const other = appliedRecord({ id: 'sg_bbbbbbbbbbbb', appliedAt: T + 4_500 })
+    const effect = await measureCohortEffect(appliedRecord(), [other], fakeDeps([...baselineOf([10, 11, 12]), ...laterOf([8, 9, 10.5, 0, 0])]))
+    expect(effect.confoundedBy).toEqual([])
+    const complete = await measureCohortEffect(appliedRecord(), [other], fakeDeps([...baselineOf([10, 11, 12]), ...laterOf(range(0, 10))]))
+    expect(complete.confoundedBy).toEqual(['sg_bbbbbbbbbbbb'])
+  })
+})
+
+describe('measureCohortEffect: the frozen baseline', () => {
+  it('grades against the frozen sessions and reads no baseline transcript', async () => {
+    // The transcripts before the change now hold other numbers: the frozen ones decide, and none of them is read.
+    const deps = fakeDeps([...baselineOf([1, 1, 1]), ...laterOf([1, 2, 3])])
+    const frozen = { ...frozenOf([20, 21, 22]), skipped: { ...zeroSkips(), 'still-settling': 2 } }
+    const effect = await measureCohortEffect(appliedRecord({ frozenBaseline: frozen }), [], deps)
+    expect(effect.baselineFrozen).toBe(true)
+    expect(effect.baseline).toEqual(frozen.sessions)
+    expect(deps.loaded).toEqual([uuid(100), uuid(101), uuid(102)])
+    expect(effect.checks[0]).toMatchObject({ before: 21, beforeMedian: 21, after: 2 })
+    expect(effect.verdict).toBe('verified')
+    expect(effect.skipped['still-settling']).toBe(2)
+    // The record is not changed by the read.
+    expect(frozen.sessions).toEqual(frozenOf([20, 21, 22]).sessions)
+  })
+
+  it('takes the confounder window from the stored times of the frozen sessions', async () => {
+    const frozen = frozenOf([20, 21, 22])
+    // The frozen sessions start at 5,000. A change applied at 6,000 falls inside their window and before any later session.
+    frozen.sessions = frozen.sessions.map((s) => ({ ...s, startedAt: s.startedAt - 45_000, endedAt: s.endedAt - 45_000 }))
+    const other = appliedRecord({ id: 'sg_bbbbbbbbbbbb', appliedAt: 6_000 })
+    const effect = await measureCohortEffect(appliedRecord({ frozenBaseline: frozen }), [other], fakeDeps(laterOf([1, 2, 3])))
+    expect(effect.confoundedBy).toEqual(['sg_bbbbbbbbbbbb'])
+  })
+
+  it('never counts a frozen session on the later side', async () => {
+    // A frozen session id among the later candidates (a transcript resumed after the change) is skipped.
+    const resumed = { ...laterOf([1])[0]!, id: uuid(0) }
+    const effect = await measureCohortEffect(appliedRecord({ frozenBaseline: frozenOf([20, 21, 22]) }), [], fakeDeps([resumed, ...laterOf([1, 2, 3])]))
+    expect(effect.later.map((s) => s.id)).toEqual([uuid(100), uuid(101), uuid(102)])
+  })
+
+  it('refuses a stored frozen baseline that fails its own check, before it reads a transcript', async () => {
+    const good = frozenOf([20, 21, 22])
+    const bad: Array<[string, unknown]> = [
+      ['a cut after the application time', { ...good, cutAt: T + 1 }],
+      ['a metric that is not a number', { ...good, sessions: [{ ...good.sessions[0]!, metrics: { ...good.sessions[0]!.metrics, avgToolCalls: 'many' } }, ...good.sessions.slice(1)] }],
+      ['an extra key', { ...good, note: 'text' }],
+      ['an uppercase id', { ...good, sessions: [{ ...good.sessions[0]!, id: good.sessions[0]!.id.toUpperCase() }, ...good.sessions.slice(1)] }],
+    ]
+    for (const [label, frozenBaseline] of bad) {
+      const deps = fakeDeps(laterOf([1, 2, 3]))
+      await expect(measureCohortEffect(appliedRecord({ frozenBaseline: frozenBaseline as SuggestionFrozenBaseline }), [], deps), label).rejects.toThrow(
+        /^suggestion sg_aaaaaaaaaaaa: its frozen baseline is not valid \(/,
+      )
+      expect(deps.loaded, label).toEqual([])
+    }
+  })
+})
+
+describe('freezeBaseline', () => {
+  const proposedRecord = (over: Partial<SuggestionRecord> = {}): SuggestionRecord => {
+    const { application, appliedAt, ...rest } = appliedRecord({ status: 'proposed', statusAt: T - 10, ...over })
+    void application
+    void appliedAt
+    return rest
+  }
+
+  it('freezes the 10 most recent settled baseline sessions before the cut with the take rules, sorted by id', async () => {
+    const sessions: FakeSession[] = [
+      ...separated(12),
+      { id: uuid(900), startedAt: T - 9_000, endedAt: T - 8_000, toolCalls: 99 },
+      { id: uuid(501), startedAt: T - 7_000, endedAt: T - 6_000, toolCalls: 0, skip: 'still-settling' },
+      { id: uuid(502), startedAt: T - 5_000, endedAt: T - 4_000, toolCalls: 0, cwd: '/w-other' },
+      { id: uuid(503), startedAt: T - 3_000, endedAt: T - 2_000, toolCalls: 0, ranOrangu: true },
+    ]
+    const deps = { ...fakeDeps(sessions), now: () => T }
+    const frozen = await freezeBaseline(proposedRecord(), [], deps)
+    expect(Object.keys(frozen)).toEqual(['v', 'cutAt', 'sessions', 'skipped'])
+    expect(frozen.v).toBe(1)
+    expect(frozen.cutAt).toBe(T)
+    // The 10 most recent of uuid(0) to uuid(11), stored sorted by id.
+    expect(frozen.sessions.map((s) => s.id)).toEqual(range(2, 10).map(uuid))
+    expect(frozen.sessions[0]).toEqual({ id: uuid(2), startedAt: T - 48_000, endedAt: T - 38_000, metrics: metricsOf(22) })
+    expect(frozen.skipped).toEqual({ ...zeroSkips(), 'evidence-session': 1, 'still-settling': 1, 'other-workspace': 1, 'orangu-session': 1 })
+    // Newest first, as the take rules read: no session after the cut, not the finding's own session, and nothing past the 10th.
+    expect(deps.loaded).toEqual([uuid(503), uuid(502), uuid(501), ...range(2, 10).reverse().map(uuid)])
+  })
+
+  it('stores exactly the 8 verification metrics of each session, whatever the loader adds', async () => {
+    const base = fakeDeps(baselineOf([5, 6, 7]))
+    const deps: CohortDeps & { now: () => number } = {
+      ...base,
+      now: () => T,
+      async loadCandidate(candidate, maxBytes) {
+        const loaded = await base.loadCandidate(candidate, maxBytes)
+        if ('skip' in loaded) return loaded
+        return { ...loaded, session: { ...loaded.session, metrics: { ...loaded.session.metrics, avgSecretTokens: 7 } as CohortSession['metrics'] } }
+      },
+    }
+    const frozen = await freezeBaseline(proposedRecord(), [], deps)
+    expect(frozen.sessions.map((s) => s.metrics)).toEqual([metricsOf(5), metricsOf(6), metricsOf(7)])
+  })
+
+  it('freezes 0 sessions as a valid baseline, and takes the cut from the clock by default', async () => {
+    const before = Date.now()
+    const frozen = await freezeBaseline(proposedRecord(), [], fakeDeps([]))
+    expect(frozen.sessions).toEqual([])
+    expect(frozen.cutAt).toBeGreaterThanOrEqual(before)
+    expect(frozen.cutAt).toBeLessThanOrEqual(Date.now())
+  })
+
+  it('refuses global scope, a record that is not proposed, a record with no reviewed checks, and a bad clock', async () => {
+    const deps = { ...fakeDeps(baselineOf([5, 6, 7])), now: () => T }
+    await expect(freezeBaseline(proposedRecord({ scope: 'global' }), [], deps)).rejects.toThrow(/global suggestions are review-only/)
+    await expect(freezeBaseline(appliedRecord(), [], deps)).rejects.toThrow(/^suggestion sg_aaaaaaaaaaaa is not proposed \(status applied\), so it has no baseline to freeze$/)
+    const noChecks = proposedRecord()
+    noChecks.proposal = { ...noChecks.proposal!, verificationChecks: [] }
+    await expect(freezeBaseline(noChecks, [], deps)).rejects.toThrow(/has no reviewed verification checks and workspace/)
+    for (const now of [Number.NaN, 0, -1]) {
+      await expect(freezeBaseline(proposedRecord(), [], { ...deps, now: () => now }), String(now)).rejects.toThrow(/the clock gave no valid cut time/)
+    }
+    expect(deps.loaded).toEqual([])
+  })
+
+  it('refuses a value that fails the frozen-baseline check, so the apply step writes no frozen baseline', async () => {
+    const deps = { ...fakeDeps([{ id: uuid(0), startedAt: T - 5_000, endedAt: T - 4_000, toolCalls: Number.NaN }]), now: () => T }
+    await expect(freezeBaseline(proposedRecord(), [], deps)).rejects.toThrow(/^suggestion sg_aaaaaaaaaaaa: the baseline cannot be frozen \(.*finite number of 0 or more\)$/)
+  })
+
+  it('rechecks the workspace identity after reading the transcripts', async () => {
+    const deps = { ...fakeDeps(baselineOf([5, 6, 7])), now: () => T }
+    let calls = 0
+    deps.canonicalWorkspace = async () => {
+      calls++
+      if (calls > 1) throw new Error('invalid suggestion artifact: reviewed proposal workspace identity no longer matches')
+      return WORKSPACE
+    }
+    await expect(freezeBaseline(proposedRecord(), [], deps)).rejects.toThrow(/workspace identity no longer matches/)
+    expect(calls).toBe(2)
+  })
+})
+
+/**
+ * The 9 rows of the verdict table: the checkpoint, the computed verdict, whether it is final, what `--set verified`
+ * gets (verificationPatch) and what `--record` gets (outcomePatch), with the pinned next step of each row.
+ */
+describe('effectFinality, nextStep, verificationPatch and outcomePatch: the 9 rows of the verdict table', () => {
+  interface Row {
+    row: string
+    frozen?: number[]
+    live?: number[]
+    later: FakeSession[]
+    intent?: SuggestionVerificationIntent
+    checkpoint: 'first' | 'complete' | null
+    verdict: CohortEffect['verdict']
+    final: boolean
+    leaning?: 'worse'
+    next: string
+    /** what verificationPatch gives: a receipt, or the refusal */
+    set: 'verified' | RegExp
+    /** what outcomePatch gives: the status it closes with, or the refusal */
+    record: 'regressed' | 'unproven' | RegExp
+  }
+  const notFinal = /^not final: /
+  const toVerified = /^record it as verified: orangu suggest --set sg_aaaaaaaaaaaa verified$/
+  const firstNotFinal = (count: number): string =>
+    `the first checkpoint (the first 3 later sessions) did not beat the baseline beyond chance. That is not final. Orangu grades again when the later cohort is complete (${count} of 10 so far)`
+  const completeUnproven = (label: string): string =>
+    `the complete checkpoint (${label}) did not beat the baseline beyond chance. Record it as unproven: orangu suggest --record sg_aaaaaaaaaaaa`
+  const shortFrozen = (count: number): string =>
+    `the frozen baseline has ${count} of the 3 sessions that a verdict needs, and it cannot change. Record it as unproven: orangu suggest --record sg_aaaaaaaaaaaa`
+  const olderShort = (before: number, after: number): string =>
+    `needs at least 3 settled sessions on each side (has ${before} before, ${after} after). This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set sg_aaaaaaaaaaaa rejected --reason other`
+  /** 2 sessions of 64 MiB fill half the later budget, 2 unreadable ones of 64 MiB spend the rest, and a fifth is never read. */
+  const budgetAtTwo: FakeSession[] = laterOf([4, 5, 0, 0, 4]).map((s, index) =>
+    index < 2 ? { ...s, bytes: 64 * MiB } : index < 4 ? { ...s, bytes: 64 * MiB, skip: 'unreadable' as const } : s,
+  )
+
+  const rows: Row[] = [
+    {
+      row: '1 none yet: fewer than 3 later sessions',
+      frozen: [20, 21, 22], later: laterOf([1, 2]),
+      checkpoint: null, verdict: 'not-enough-sessions', final: false,
+      next: 'needs at least 3 settled sessions on each side (has 3 before, 2 after). Orangu grades at 3 and at 10 later sessions',
+      set: /^not verified: not-enough-sessions/, record: notFinal,
+    },
+    {
+      row: '2 first, verified',
+      frozen: [20, 21, 22], later: laterOf([1, 2, 3]),
+      checkpoint: 'first', verdict: 'verified', final: true,
+      next: 'the first checkpoint (the first 3 later sessions) beat the baseline beyond chance. Record it: orangu suggest --set sg_aaaaaaaaaaaa verified',
+      set: 'verified', record: toVerified,
+    },
+    {
+      row: '3 first, regressed: not final, leaning worse',
+      frozen: [1, 2, 3], later: laterOf([20, 21, 22, 23]),
+      checkpoint: 'first', verdict: 'regressed', final: false, leaning: 'worse',
+      next: 'the first checkpoint (the first 3 later sessions) leans worse: a check moved the wrong way beyond chance. That is not final. Orangu grades again when the later cohort is complete (4 of 10 so far)',
+      set: /^not verified: regressed/, record: notFinal,
+    },
+    {
+      row: '4 first, within noise',
+      frozen: [5, 6, 7], later: laterOf([6, 5, 7]),
+      checkpoint: 'first', verdict: 'within-noise', final: false,
+      next: firstNotFinal(3), set: /^not verified: within-noise/, record: notFinal,
+    },
+    {
+      row: '4 first, no directional check',
+      frozen: [5, 6, 7], later: laterOf([6, 5, 7]), intent: NOT_INCREASED,
+      checkpoint: 'first', verdict: 'no-directional-check', final: false,
+      next: firstNotFinal(3), set: /^not verified: no-directional-check/, record: notFinal,
+    },
+    {
+      row: '5 complete, verified',
+      frozen: range(20, 10), later: laterOf(range(0, 10)),
+      checkpoint: 'complete', verdict: 'verified', final: true,
+      next: 'the complete checkpoint (10 of 10 later sessions) beat the baseline beyond chance. Record it: orangu suggest --set sg_aaaaaaaaaaaa verified',
+      set: 'verified', record: toVerified,
+    },
+    {
+      row: '6 complete, regressed',
+      frozen: [1, 2, 3], later: laterOf(range(20, 10)),
+      checkpoint: 'complete', verdict: 'regressed', final: true,
+      next: 'the complete checkpoint (10 of 10 later sessions) found a check that moved the wrong way beyond chance. Record it as regressed: orangu suggest --record sg_aaaaaaaaaaaa',
+      set: /^not verified: regressed/, record: 'regressed',
+    },
+    {
+      row: '7 complete, within noise',
+      frozen: [5, 6, 7], later: laterOf([6, 5, 7, 6, 5, 7, 6, 5, 7, 6]),
+      checkpoint: 'complete', verdict: 'within-noise', final: true,
+      next: completeUnproven('10 of 10 later sessions'), set: /^not verified: within-noise/, record: 'unproven',
+    },
+    {
+      row: '7 complete, no directional check',
+      frozen: [5, 6, 7], later: laterOf([6, 5, 7, 6, 5, 7, 6, 5, 7, 6]), intent: NOT_INCREASED,
+      checkpoint: 'complete', verdict: 'no-directional-check', final: true,
+      next: completeUnproven('10 of 10 later sessions'), set: /^not verified: no-directional-check/, record: 'unproven',
+    },
+    {
+      row: '7 complete, not enough sessions: the byte budget is spent at 2',
+      frozen: [5, 6, 7], later: budgetAtTwo,
+      checkpoint: 'complete', verdict: 'not-enough-sessions', final: true,
+      next: completeUnproven('2 later sessions, the byte budget is spent'), set: /^not verified: not-enough-sessions/, record: 'unproven',
+    },
+    ...[[], [4], [4, 5, 6, 7, 8], range(4, 10)].map((values): Row => ({
+      row: `8 a frozen baseline below 3, ${values.length} later sessions`,
+      frozen: [5, 6], later: laterOf(values),
+      checkpoint: values.length >= 10 ? 'complete' : values.length >= 3 ? 'first' : null, verdict: 'not-enough-sessions', final: true,
+      next: shortFrozen(2), set: /^not verified: not-enough-sessions/, record: 'unproven',
+    })),
+    {
+      row: '8 a frozen baseline of 0 sessions',
+      frozen: [], later: laterOf([4]),
+      checkpoint: null, verdict: 'not-enough-sessions', final: true,
+      next: shortFrozen(0), set: /^not verified: not-enough-sessions/, record: 'unproven',
+    },
+    ...[[4, 5, 6], range(4, 10)].map((values): Row => ({
+      row: `9 an older record with a live baseline below 3, ${values.length} later sessions`,
+      live: [5, 6], later: laterOf(values),
+      checkpoint: values.length >= 10 ? 'complete' : 'first', verdict: 'not-enough-sessions', final: false,
+      next: olderShort(2, values.length), set: /^not verified: not-enough-sessions/, record: notFinal,
+    })),
+  ]
+
+  it.each(rows)('row $row', async (row) => {
+    const record = appliedRecord(row.frozen ? { frozenBaseline: frozenOf(row.frozen) } : {}, [row.intent ?? DECREASED])
+    const effect = await measureCohortEffect(record, [], fakeDeps([...baselineOf(row.live ?? []), ...row.later]))
+    expect(effect.verdict).toBe(row.verdict)
+    expect(effect.baselineFrozen).toBe(row.frozen !== undefined)
+    expect(effectFinality(effect)).toEqual({ checkpoint: row.checkpoint, final: row.final, ...(row.leaning ? { leaning: row.leaning } : {}) })
+    expect(nextStep(effect)).toBe(row.next)
+    // The next step names the record step exactly on the rows where it writes.
+    expect(nextStep(effect).includes(`orangu suggest --record ${ID}`)).toBe(row.record === 'regressed' || row.record === 'unproven')
+    if (row.set === 'verified') expect(verificationPatch(effect).verificationReceipt.v).toBe(2)
+    else expect(() => verificationPatch(effect)).toThrow(row.set)
+    if (row.record instanceof RegExp) expect(() => outcomePatch(effect)).toThrow(row.record)
+    else {
+      const { outcomeReceipt } = outcomePatch(effect)
+      expect(outcomeReceipt.verdict === 'regressed' ? 'regressed' : 'unproven').toBe(row.record)
+      expect(outcomeReceipt.checkpoint).toBe(effect.laterComplete ? 'complete' : 'first')
+    }
+  })
+
+  it('names the not-final step in the refusal of outcomePatch', async () => {
+    const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps([...baselineOf([5, 6]), ...laterOf([4, 5, 6])]))
+    expect(() => outcomePatch(effect)).toThrow(`not final: not-enough-sessions. ${olderShort(2, 3)}`)
+  })
+})
+
+describe('outcomePatch', () => {
+  it('builds an outcome receipt of numbers, ids and enum values only, with exactly 10 keys on each check', async () => {
+    const effect = await measureCohortEffect(appliedRecord({ frozenBaseline: frozenOf([1, 2, 3]) }), [], fakeDeps(laterOf(range(20, 10))))
+    const patch = outcomePatch(effect)
+    expect(Object.keys(patch)).toEqual(['outcomeReceipt'])
+    const receipt = patch.outcomeReceipt
+    expect(Object.keys(receipt)).toEqual(['v', 'method', 'alpha', 'appliedAt', 'checkpoint', 'verdict', 'laterComplete', 'confoundedBy', 'baselineSessionIds', 'measuredSessionIds', 'checks'])
+    const graded = evaluateCheck(DECREASED, [1, 2, 3], range(20, 10))
+    expect(receipt).toEqual({
+      v: 1,
+      method: 'cohort-rank-v1',
+      alpha: 0.05,
+      appliedAt: T,
+      checkpoint: 'complete',
+      verdict: 'regressed',
+      laterComplete: true,
+      confoundedBy: [],
+      baselineSessionIds: [uuid(0), uuid(1), uuid(2)],
+      measuredSessionIds: range(100, 10).map(uuid),
+      checks: [
+        {
+          metric: 'avgToolCalls', comparison: 'decreased', name: 'avgToolCalls decreased', before: 2, after: 24.5, beforeMedian: 2, afterMedian: 24.5,
+          pLower: graded.pLower, pHigher: graded.pHigher, verdict: 'regressed',
+        },
+      ],
+    } satisfies SuggestionOutcomeReceipt)
+    expect(Object.keys(receipt.checks[0]!)).toHaveLength(10)
+    expect(JSON.stringify(receipt)).not.toMatch(/evidence|summary|leaning/)
+  })
+
+  it('refuses a record that is not applied', async () => {
+    const effect = await measureCohortEffect(appliedRecord({ status: 'verified', frozenBaseline: frozenOf([1, 2, 3]) }), [], fakeDeps(laterOf(range(20, 10))))
+    expect(() => outcomePatch(effect)).toThrow(/^suggestion sg_aaaaaaaaaaaa is not applied \(status verified\)$/)
+  })
+})
+
+describe('freezeBaseline and outcomePatch through the store', () => {
+  let home: string
+  let store: SuggestionStore
+  beforeEach(() => {
+    home = mkdtempSync(join(tmpdir(), 'orangu-cohort-store-'))
+    store = new SuggestionStore({ home, now: () => T })
+  })
+
+  /** A record moved to applied through the store, with the baseline that freezeBaseline froze from these sessions. */
+  async function appliedThroughStore(ruleId: string, baseline: number[], intent: SuggestionVerificationIntent = DECREASED): Promise<SuggestionRecord> {
+    const { record } = await store.upsertNew({ ruleId, title: 't', scope: 'session', sessionIds: [uuid(900)], evidence: { estimated: true } }, 'report')
+    await store.transition(record.id, 'kicked-off')
+    const proposed = await store.transition(record.id, 'proposed', { proposal: appliedRecord({}, [intent]).proposal! })
+    const frozenBaseline = await freezeBaseline(proposed, [], { ...fakeDeps(baselineOf(baseline)), now: () => T })
+    return store.transition(record.id, 'applied', { application: appliedRecord().application!, frozenBaseline })
+  }
+
+  async function refusedUnchanged(attempt: () => Promise<unknown>, message: RegExp, label: string): Promise<void> {
+    const before = readFileSync(store.path)
+    await expect(attempt(), label).rejects.toThrow(message)
+    expect(readFileSync(store.path), label).toEqual(before)
+  }
+
+  /** The receipt with 1 change to its only check. */
+  const withCheck = (receipt: SuggestionOutcomeReceipt, change: (check: Record<string, unknown>) => Record<string, unknown>): SuggestionOutcomeReceipt =>
+    ({ ...receipt, checks: [change({ ...receipt.checks[0]! }) as never] })
+
+  it('grades the same baseline numbers with every baseline transcript gone', async () => {
+    const applied = await appliedThroughStore('e2e-same-numbers', [20, 21, 25])
+    expect(applied.frozenBaseline?.sessions.map((s) => s.id)).toEqual([uuid(0), uuid(1), uuid(2)])
+    const live = await measureCohortEffect({ ...applied, frozenBaseline: undefined }, [], fakeDeps([...baselineOf([20, 21, 25]), ...laterOf([1, 2, 3])]))
+    const frozen = await measureCohortEffect(applied, [], fakeDeps(laterOf([1, 2, 3])))
+    expect(frozen.checks).toEqual(live.checks)
+    expect(frozen.baseline.map((s) => s.id).sort()).toEqual(live.baseline.map((s) => s.id).sort())
+    await expect(store.transition(applied.id, 'verified', verificationPatch(frozen))).resolves.toMatchObject({ status: 'verified', verificationTrust: 'computed-v2' })
+  })
+
+  it('writes a complete regressed outcome, and refuses a hostile edit of each store rule with no change to the file', async () => {
+    const applied = await appliedThroughStore('e2e-regressed', [1, 2, 3])
+    const { outcomeReceipt: good } = outcomePatch(await measureCohortEffect(applied, [], fakeDeps(laterOf(range(20, 10)))))
+    const hostile: Array<[string, SuggestionOutcomeReceipt, RegExp]> = [
+      // 1. Each check has exactly 10 keys and no evidence key.
+      ['an evidence line on a check', withCheck(good, (c) => ({ ...c, evidence: 'avgToolCalls: 2 → 24.5' })), /checks\[0\] must have exactly the keys of an outcome check/],
+      [
+        'a check with 9 keys',
+        withCheck(good, ({ pHigher, ...c }) => {
+          void pHigher
+          return c
+        }),
+        /checks\[0\] must have exactly the keys of an outcome check/,
+      ],
+      // 2. Session ids are lowercase UUIDs.
+      ['an uppercase later id', { ...good, measuredSessionIds: [...good.measuredSessionIds.slice(0, 9), good.measuredSessionIds[9]!.toUpperCase()] }, /measuredSessionIds must be 0 to 10 sorted unique session ids/],
+      ['an uppercase baseline id', { ...good, baselineSessionIds: good.baselineSessionIds.map((id) => id.toUpperCase()) }, /baselineSessionIds must be 0 to 10 sorted unique session ids/],
+      ['a later id that is not a UUID', { ...good, measuredSessionIds: [...good.measuredSessionIds.slice(0, 9), 'zzzzzzzz-0000-4000-8000-000000000000'] }, /measuredSessionIds must be 0 to 10 sorted unique session ids/],
+      // 3. The baseline is the frozen baseline: its ids, the mean and the median of its values.
+      ['other baseline ids', { ...good, baselineSessionIds: [uuid(0), uuid(1), uuid(7)] }, /baselineSessionIds must equal the frozen baseline session ids/],
+      ['another baseline mean', withCheck(good, (c) => ({ ...c, before: 3 })), /checks\[0\] before must be the mean of the frozen baseline, 2/],
+      ['another baseline median', withCheck(good, (c) => ({ ...c, beforeMedian: 3 })), /checks\[0\] beforeMedian must be the median of the frozen baseline, 2/],
+      // 4. The first checkpoint needs a frozen baseline below 3 sessions, and the checkpoint fits laterComplete.
+      ['the first checkpoint on a frozen baseline of 3', { ...good, checkpoint: 'first' }, /checkpoint first needs a frozen baseline below 3 sessions/],
+      ['an incomplete later cohort', { ...good, laterComplete: false }, /laterComplete must be true/],
+    ]
+    for (const [label, outcomeReceipt, message] of hostile) {
+      await refusedUnchanged(() => store.transition(applied.id, 'regressed', { outcomeReceipt }), message, label)
+    }
+    await expect(store.transition(applied.id, 'regressed', { outcomeReceipt: good })).resolves.toMatchObject({ status: 'regressed', outcomeReceipt: good })
+  })
+
+  it('writes a complete unproven outcome, and a short frozen baseline closes at the first checkpoint', async () => {
+    const noise = await appliedThroughStore('e2e-within-noise', [5, 6, 7])
+    const complete = outcomePatch(await measureCohortEffect(noise, [], fakeDeps(laterOf([6, 5, 7, 6, 5, 7, 6, 5, 7, 6]))))
+    expect(complete.outcomeReceipt).toMatchObject({ checkpoint: 'complete', verdict: 'within-noise', laterComplete: true })
+    await expect(store.transition(noise.id, 'unproven', complete)).resolves.toMatchObject({ status: 'unproven' })
+
+    const short = await appliedThroughStore('e2e-short', [5, 6])
+    expect(short.frozenBaseline?.sessions).toHaveLength(2)
+    const { outcomeReceipt: early } = outcomePatch(await measureCohortEffect(short, [], fakeDeps(laterOf([4]))))
+    expect(early).toMatchObject({ checkpoint: 'first', verdict: 'not-enough-sessions', laterComplete: false, measuredSessionIds: [uuid(100)] })
+    const hostile: Array<[string, SuggestionOutcomeReceipt, RegExp]> = [
+      ['the complete checkpoint before the cohort is complete', { ...early, checkpoint: 'complete' }, /checkpoint must be complete when the later cohort is complete, and first before it/],
+      ['the first checkpoint at a complete cohort', { ...early, laterComplete: true }, /checkpoint must be complete when the later cohort is complete, and first before it/],
+      ['other baseline ids', { ...early, baselineSessionIds: [uuid(0), uuid(7)] }, /baselineSessionIds must equal the frozen baseline session ids/],
+    ]
+    for (const [label, outcomeReceipt, message] of hostile) {
+      await refusedUnchanged(() => store.transition(short.id, 'unproven', { outcomeReceipt }), message, label)
+    }
+    await expect(store.transition(short.id, 'unproven', { outcomeReceipt: early })).resolves.toMatchObject({ status: 'unproven', outcomeReceipt: early })
+  })
+
+  it('verifies only against a frozen baseline of 3 or more sessions', async () => {
+    const full = await appliedThroughStore('e2e-verify-full', [20, 21, 22])
+    const patch = verificationPatch(await measureCohortEffect(full, [], fakeDeps(laterOf([1, 2, 3]))))
+    const short = await appliedThroughStore('e2e-verify-short', [20, 21])
+    await refusedUnchanged(() => store.transition(short.id, 'verified', patch), /Orangu cannot verify a record with a frozen baseline below 3 sessions/, 'a frozen baseline of 2')
+    await expect(store.transition(full.id, 'verified', patch)).resolves.toMatchObject({ status: 'verified', verificationTrust: 'computed-v2' })
   })
 })
