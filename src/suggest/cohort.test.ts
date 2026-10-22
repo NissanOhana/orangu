@@ -375,6 +375,26 @@ describe('measureCohortEffect: the 2 checkpoints', () => {
     expect(() => verificationPatch(effect)).toThrow(/not verified: within-noise/)
   })
 
+  it('keeps the graded set and the first verdict when a resume moves a later session to the newest file time', async () => {
+    // Claude Code appends a resumed session to its own file, so its mtime moves past the later sessions after it.
+    // Its start time does not move, so the first checkpoint still grades sessions 1 to 3.
+    const record = appliedRecord({ frozenBaseline: frozenOf([10, 11, 12]) })
+    const later = laterOf([10.5, 8, 9, 0, 0])
+    const look1 = await measureCohortEffect(record, [], fakeDeps(later))
+    expect(look1.later.map((s) => s.id)).toEqual([uuid(100), uuid(101), uuid(102)])
+    expect(look1.verdict).toBe('within-noise')
+    expect(effectFinality(look1)).toEqual({ checkpoint: 'first', final: false })
+    // Sessions 2 to 4 alone would beat the baseline, so a graded set by file time would give a final win.
+    expect(overallVerdict([evaluateCheck(DECREASED, [10, 11, 12], [8, 9, 0])], 3, 3)).toBe('verified')
+    const resumed = later.map((s, index) => (index === 0 ? { ...s, endedAt: T + 20_000 } : s))
+    const look2 = await measureCohortEffect(record, [], fakeDeps(resumed))
+    expect(look2.later.map((s) => s.id)).toEqual([uuid(100), uuid(101), uuid(102)])
+    expect(look2.checks).toEqual(look1.checks)
+    expect(look2.verdict).toBe('within-noise')
+    expect(effectFinality(look2)).toEqual({ checkpoint: 'first', final: false })
+    expect(() => verificationPatch(look2)).toThrow(/not verified: within-noise/)
+  })
+
   it('records a first-checkpoint win with the first 3 later sessions only', async () => {
     const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps([...baselineOf([20, 21, 22]), ...laterOf([1, 2, 3, 30, 31])]))
     expect(effect.verdict).toBe('verified')
@@ -567,6 +587,9 @@ describe('effectFinality, nextStep, verificationPatch and outcomePatch: the 9 ro
     `the complete checkpoint (${label}) did not beat the baseline beyond chance. Record it as unproven: orangu suggest --record sg_aaaaaaaaaaaa`
   const shortFrozen = (count: number): string =>
     `the frozen baseline has ${count} of the 3 sessions that a verdict needs, and it cannot change. Record it as unproven: orangu suggest --record sg_aaaaaaaaaaaa`
+  /** Before a checkpoint, the short frozen baseline keeps the phrase of every row that waits for sessions. */
+  const shortFrozenEarly = (before: number, after: number): string =>
+    `needs at least 3 settled sessions on each side (has ${before} before, ${after} after). The frozen baseline cannot change. Record it as unproven: orangu suggest --record sg_aaaaaaaaaaaa`
   const olderShort = (before: number, after: number): string =>
     `needs at least 3 settled sessions on each side (has ${before} before, ${after} after). This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set sg_aaaaaaaaaaaa rejected --reason other`
   /** 2 sessions of 64 MiB fill half the later budget, 2 unreadable ones of 64 MiB spend the rest, and a fifth is never read. */
@@ -644,13 +667,13 @@ describe('effectFinality, nextStep, verificationPatch and outcomePatch: the 9 ro
       row: `8 a frozen baseline below 3, ${values.length} later sessions`,
       frozen: [5, 6], later: laterOf(values),
       checkpoint: values.length >= 10 ? 'complete' : values.length >= 3 ? 'first' : null, verdict: 'not-enough-sessions', final: true,
-      next: shortFrozen(2), set: /^not verified: not-enough-sessions/, record: 'unproven',
+      next: values.length >= 3 ? shortFrozen(2) : shortFrozenEarly(2, values.length), set: /^not verified: not-enough-sessions/, record: 'unproven',
     })),
     {
       row: '8 a frozen baseline of 0 sessions',
       frozen: [], later: laterOf([4]),
       checkpoint: null, verdict: 'not-enough-sessions', final: true,
-      next: shortFrozen(0), set: /^not verified: not-enough-sessions/, record: 'unproven',
+      next: shortFrozenEarly(0, 1), set: /^not verified: not-enough-sessions/, record: 'unproven',
     },
     ...[[4, 5, 6], range(4, 10)].map((values): Row => ({
       row: `9 an older record with a live baseline below 3, ${values.length} later sessions`,

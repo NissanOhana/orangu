@@ -303,9 +303,15 @@ export async function measureCohortEffect(
     throw new Error(`suggestion ${record.id}: the reviewed workspace changed while its sessions were read`)
   }
   const laterComplete = laterSide.accepted.length >= COHORT_MAX || laterSide.budgetSpent
-  // The 2 checkpoints: until the later cohort is complete, only its first COHORT_MIN sessions are graded. Those
-  // sessions are fixed once they settle, so a look between the checkpoints gives the first verdict again.
-  const later = laterComplete ? laterSide.accepted : laterSide.accepted.slice(0, COHORT_MIN)
+  // The read follows file time (mtime): the budget and the settling rule need an order before any load. A resume
+  // appends to the session's own file and moves its mtime, but not its start time. So the graded order is the start
+  // time, which a session never changes, with the id for a tie.
+  const byStart = [...laterSide.accepted].sort((a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  // The 2 checkpoints: until the later cohort is complete, only the first COHORT_MIN sessions by start time are graded,
+  // so a look between the checkpoints grades the same sessions again, also after a resume. The graded set still changes
+  // when a graded session is deleted, when a resumed graded session is still settling at the look, or when a session
+  // with an earlier start time settles after the look before.
+  const later = laterComplete ? byStart : byStart.slice(0, COHORT_MIN)
 
   const checks = intents.map((intent) =>
     evaluateCheck(
@@ -436,13 +442,16 @@ export function nextStep(
   // Both recording steps take an applied record only, so a verified record has no step left.
   if (effect.status === 'verified') return 'already recorded as verified'
   const counts = `(has ${effect.baseline.length} before, ${effect.laterCount} after)`
+  const { checkpoint } = effectFinality(effect)
   if (effect.baseline.length < COHORT_MIN) {
     if (effect.baselineFrozen) {
-      return `the frozen baseline has ${effect.baseline.length} of the ${COHORT_MIN} sessions that a verdict needs, and it cannot change. Record it as unproven: orangu suggest --record ${effect.id}`
+      const record = `Record it as unproven: orangu suggest --record ${effect.id}`
+      // Before a checkpoint, the text starts with the phrase of every row that waits for sessions.
+      if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. The frozen baseline cannot change. ${record}`
+      return `the frozen baseline has ${effect.baseline.length} of the ${COHORT_MIN} sessions that a verdict needs, and it cannot change. ${record}`
     }
     return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set ${effect.id} rejected --reason other`
   }
-  const { checkpoint } = effectFinality(effect)
   if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. Orangu grades at ${COHORT_MIN} and at ${COHORT_MAX} later sessions`
   const at = checkpointLabel(effect, checkpoint)
   if (effect.verdict === 'verified') return `${at} beat the baseline beyond chance. Record it: orangu suggest --set ${effect.id} verified`
