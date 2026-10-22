@@ -214,6 +214,35 @@ describe('plugin eval suite', () => {
     expect(pkg.scripts['eval:plugin:holdout']).toBe('claude plugin eval ./plugin --no-publish --tag holdout')
   })
 
+  it('grades the loop steps of improve in 4 train cases, each asking for words that the skill text holds and the prompt does not', () => {
+    // A run grants no Bash, so it cannot reach `orangu suggest`, and the reply is what a run can show. So each case
+    // asks, in one regex, for the words of one loop step: the lesson read, the record step, the reason codes, or the
+    // quality guard of a token check. The improve skill, its artifact contract or the loop rules hold those words. The
+    // prompt of the case does not, so a reply cannot pass by an echo of the prompt.
+    const LOOP_CASES: Record<string, string> = {
+      'improve-checks-what-was-tried-before': 'names-the-lesson-read.md',
+      'improve-dismiss-keeps-a-reason': 'names-the-reason-codes.md',
+      'improve-token-proposal-names-a-target-check': 'names-a-quality-guard.md',
+      'improve-verify-records-the-result': 'names-the-record-step.md',
+    }
+    const skillText = ['plugin/skills/improve/SKILL.md', 'plugin/skills/improve/references/artifact-contract.md', 'plugin/skills/shared/loop.md']
+      .map(readText).join('\n')
+    const scalar = (value = ''): string => (/^'.*'$/.test(value) ? value.slice(1, -1).replace(/''/g, "'") : value)
+    for (const [name, file] of Object.entries(LOOP_CASES)) {
+      const dir = `${EVALS}/${name}`
+      expect(cases, `${dir} is a case`).toContain(dir)
+      const { fields, body } = frontmatter(`${dir}/prompt.md`)
+      expect(list(fields.tags), `${dir} is a train case`).toContain('train')
+      const gs = graders(dir)
+      expect(gs.map(firesSkill), `${dir} expects improve to fire`).toContain('improve')
+      const step = gs.find((g) => g.file === `${dir}/graders/${file}`)
+      expect(step?.fields.type, `${dir} grades its loop step with ${file}`).toBe('regex')
+      const re = new RegExp(scalar(step!.fields.pattern), step!.fields.flags ?? '')
+      expect(re.test(skillText), `${file} asks for words that the skill text holds`).toBe(true)
+      expect(re.test(body), `${file} asks for words that the prompt does not hold`).toBe(false)
+    }
+  })
+
   it('documents how to improve the skills against the suite without fooling yourself', () => {
     const readme = readText(`${EVALS}/README.md`)
     expect(readme).toContain('## Improving the skills against this suite')
