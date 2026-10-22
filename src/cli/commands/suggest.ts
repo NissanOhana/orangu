@@ -12,16 +12,31 @@
  *                                                record + bounded evidence, with an optional lifecycle preflight
  *   orangu suggest --set <id> proposed --proposal <id>.md [--manifest <id>.json] [--json]
  *   orangu suggest --set <id> applied --application <id>.applied.json [--json]
+ *     (freezes the baseline sessions first. A failed freeze writes the move without one, and says so on stderr)
  *   orangu suggest --effect <id> [--json]      read-only: later sessions vs baseline, beyond chance
  *   orangu suggest --set <id> verified [--verification <id>.verified.json] [--json]
  *     (Orangu picks both cohorts; an optional intent may only name sessions inside the later cohort)
+ *   orangu suggest --record <id> [--json]      measures again and stores a final verdict that is not verified
+ *   orangu suggest --set <id> kept [--json]     keeps a regressed change, and measures nothing
+ *   orangu suggest --set <id> rejected [--reason <code>] [--json]
  *   orangu suggest --list [--scope <s>] [--json]
  */
 import { matchRule, type CatalogMatch } from '../../suggest/catalog.js'
 import { realpath } from 'node:fs/promises'
 import { loadApplicationReceipt, loadProposalArtifacts, loadVerificationIntent } from '../../suggest/artifacts.js'
-import { measureCohortEffect, nextStep, verificationPatch, type CohortEffect } from '../../suggest/cohort.js'
+import {
+  effectFinality,
+  freezeBaseline,
+  measureCohortEffect,
+  nextStep,
+  outcomePatch,
+  verificationPatch,
+  type CohortEffect,
+  type FreezeDeps,
+} from '../../suggest/cohort.js'
 import { createCohortDeps } from '../../suggest/cohort-deps.js'
+import { REJECT_REASON_CODES, type RejectReasonCode } from '../../suggest/reason-codes.js'
+import { rejectWorkspaceCwd, type RejectWorkspaceDeps } from '../../suggest/reject-workspace.js'
 import { SESSION_ID_RE } from '../../discover/discover.js'
 import { decodeFinding, kickoffCommand, sessionCohortFingerprint, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import { redactAnalysis, redactValue } from '../../redact/redact.js'
@@ -33,6 +48,8 @@ import { MAX_EVIDENCE_LIMIT, projectEvidence } from '../../suggest/evidence.js'
 import {
   TRANSITIONS,
   type Finding,
+  type SuggestionApplicationReceipt,
+  type SuggestionFrozenBaseline,
   type SuggestionProposal,
   type SuggestionRecord,
   type SuggestionScope,
@@ -122,7 +139,22 @@ async function assertWorkspaceMatch(rec: SuggestionRecord): Promise<ApplyReadyPr
 }
 
 const SCOPES: SuggestionScope[] = ['session', 'repo', 'global']
-const STATUSES: SuggestionStatus[] = ['new', 'kicked-off', 'proposed', 'applied', 'verified', 'rejected', 'failed']
+/** The statuses that `--set` writes. */
+const STATUSES: SuggestionStatus[] = ['new', 'kicked-off', 'proposed', 'applied', 'verified', 'rejected', 'failed', 'kept']
+/** The statuses that only `--record` writes: orangu measures the verdict, so no caller names it. */
+const RECORDED_STATUSES: SuggestionStatus[] = ['regressed', 'unproven']
+/** The flags that name a skill-written file. */
+const ARTIFACT_FLAGS = ['proposal', 'manifest', 'application', 'verification'] as const
+/** The store refuses the frozen baseline of an apply move with this phrase (src/suggest/store.ts, validateTransitionPatch and transitionLocked). */
+const FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/
+
+/** What the store steps read outside the store. The CLI uses the trusted loaders, and a test injects fakes. */
+export interface SuggestDeps {
+  /** the cohort loaders of `--effect`, `--record`, `--set verified` and the freeze at `--set applied` */
+  cohort?: FreezeDeps
+  /** the discovery reads that bind the workspace of a rejection */
+  rejectWorkspace?: RejectWorkspaceDeps
+}
 
 const emit = (v: unknown, flags: Record<string, string | boolean>) =>
   process.stdout.write(JSON.stringify(v, null, flagBool(flags, 'quiet') ? 0 : 2) + '\n')
@@ -215,25 +247,39 @@ async function cmdShow(store: SuggestionStore, id: string, flags: Record<string,
   process.stdout.write(`  evidence: ${sessions.length} session(s) loaded${missing.length ? `, ${missing.length} unresolvable` : ''}. Add --json for the slim data\n`)
 }
 
-async function cmdSet(store: SuggestionStore, id: string, positionals: string[], flags: Record<string, string | boolean>): Promise<void> {
+/** The `--reason` code of a rejection: 1 of the 5 codes exactly, or none. No free text reaches the store. */
+function rejectReason(flags: Record<string, string | boolean>): RejectReasonCode | undefined {
+  const value = flags['reason']
+  if (value === undefined) return undefined
+  const code = REJECT_REASON_CODES.find((known) => known === value)
+  if (!code) throw new Error(`--reason must be 1 of ${REJECT_REASON_CODES.join(', ')}`)
+  return code
+}
+
+async function cmdSet(store: SuggestionStore, id: string, positionals: string[], flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
   const status = positionals[0] as SuggestionStatus | undefined
+  if (status && RECORDED_STATUSES.includes(status)) {
+    throw new Error(`--set cannot write ${status}, because orangu measures that verdict itself. Run: orangu suggest --record ${id}`)
+  }
   if (!status || !STATUSES.includes(status)) throw new Error(`usage: orangu suggest --set <id> <${STATUSES.join('|')}>`)
+  const reasonCode = rejectReason(flags)
   const proposalPath = flagStr(flags, 'proposal')
   const manifestPath = flagStr(flags, 'manifest')
   const applicationPath = flagStr(flags, 'application')
   const verificationPath = flagStr(flags, 'verification')
-  const artifactNames = ['proposal', 'manifest', 'application', 'verification'] as const
-  for (const name of artifactNames) {
+  for (const name of ARTIFACT_FLAGS) {
     if (flags[name] !== undefined && typeof flags[name] !== 'string') throw new Error(`--${name} requires a file path`)
   }
   const rec = await store.get(id)
   if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`)
-  if (!(TRANSITIONS[rec.status] ?? []).includes(status)) {
-    throw new Error(`illegal transition ${rec.status} → ${status} for ${id} (allowed: ${(TRANSITIONS[rec.status] ?? []).join(', ') || 'none'})`)
+  // Only the moves that --set writes: the 2 measured outcomes of an applied record are --record moves.
+  const settable = (TRANSITIONS[rec.status] ?? []).filter((next) => STATUSES.includes(next))
+  if (!settable.includes(status)) {
+    throw new Error(`illegal transition ${rec.status} → ${status} for ${id} (allowed: ${settable.join(', ') || 'none'})`)
   }
   const allowedArtifacts =
     status === 'proposed' ? new Set(['proposal', 'manifest']) : status === 'applied' ? new Set(['application']) : status === 'verified' ? new Set(['verification']) : new Set<string>()
-  const unexpectedArtifact = artifactNames.find((name) => flags[name] !== undefined && !allowedArtifacts.has(name))
+  const unexpectedArtifact = ARTIFACT_FLAGS.find((name) => flags[name] !== undefined && !allowedArtifacts.has(name))
   if (unexpectedArtifact) throw new Error(`--${unexpectedArtifact} is not valid when setting ${status}`)
   let patch: Parameters<SuggestionStore['transition']>[2]
   if (status === 'proposed') {
@@ -247,7 +293,10 @@ async function cmdSet(store: SuggestionStore, id: string, positionals: string[],
   } else if (status === 'applied') {
     if (!applicationPath) throw new Error('--application <id>.applied.json is required when setting applied')
     const proposal = await assertWorkspaceMatch(rec)
-    patch = { application: await loadApplicationReceipt(store.proposalsDir, rec.id, applicationPath, proposal.files) }
+    const application = await loadApplicationReceipt(store.proposalsDir, rec.id, applicationPath, proposal.files)
+    const next = await transitionApplied(store, rec, application, deps.cohort ?? createCohortDeps())
+    if (flagBool(flags, 'json')) return emit(visible(next, flags), flags) as unknown as void
+    return printRecord(visible(next, flags))
   } else if (status === 'verified') {
     if (rec.scope === 'global') throw new Error(`suggestion ${id}: global suggestions are review-only and cannot be verified`)
     if (!rec.application) throw new Error(`suggestion ${id} has no validated application receipt to verify`)
@@ -255,7 +304,7 @@ async function cmdSet(store: SuggestionStore, id: string, positionals: string[],
       throw new Error(`suggestion ${id} has no reviewed structured verification checks`)
     }
     if (!rec.proposal.workspace) throw new Error(`suggestion ${id} has no canonical proposal workspace`)
-    const effect = await measureCohortEffect(rec, await store.all(), createCohortDeps())
+    const effect = await measureCohortEffect(rec, await store.all(), deps.cohort ?? createCohortDeps())
     if (verificationPath) {
       const { selectors } = await loadVerificationIntent(store.proposalsDir, rec.id, verificationPath, rec.proposal.verificationChecks)
       for (const selector of selectors) {
@@ -265,8 +314,69 @@ async function cmdSet(store: SuggestionStore, id: string, positionals: string[],
       }
     }
     patch = verificationPatch(effect)
+  } else if (status === 'rejected') {
+    // A record with no proposal workspace keeps the folder of its evidence sessions, when they all agree on 1.
+    const workspaceCwd = await rejectWorkspaceCwd(rec, deps.rejectWorkspace)
+    patch = { ...(reasonCode ? { reasonCode } : {}), ...(workspaceCwd ? { workspaceCwd } : {}) }
   }
   const next = await store.transition(id, status, patch)
+  if (flagBool(flags, 'json')) return emit(visible(next, flags), flags) as unknown as void
+  printRecord(visible(next, flags))
+}
+
+/**
+ * The apply move, with the baseline frozen just before it. The freeze never fails the apply step. When the baseline
+ * read fails, or the store refuses the frozen baseline, the move goes ahead without one, and 1 stderr line says so.
+ * The record then reads its baseline sessions live at each check, as a record of an older orangu does. The line
+ * prints also under `--quiet`, because the skill passes `--quiet` and the line changes how the record is graded.
+ */
+async function transitionApplied(
+  store: SuggestionStore,
+  rec: SuggestionRecord,
+  application: SuggestionApplicationReceipt,
+  cohort: FreezeDeps,
+): Promise<SuggestionRecord> {
+  let frozenBaseline: SuggestionFrozenBaseline | undefined
+  let notFrozen: unknown
+  try {
+    frozenBaseline = await freezeBaseline(rec, await store.all(), cohort)
+  } catch (error) {
+    notFrozen = error
+  }
+  let next: SuggestionRecord
+  try {
+    next = await store.transition(rec.id, 'applied', { application, ...(frozenBaseline ? { frozenBaseline } : {}) })
+  } catch (error) {
+    // The store checks the frozen baseline again, and its cut against the application time that the store stamps. A
+    // wall clock that steps back between the 2 calls can fail that check. Any other refusal is not about the freeze.
+    if (!frozenBaseline || !(error instanceof Error) || !FROZEN_BASELINE_REFUSAL_RE.test(error.message)) throw error
+    notFrozen = error
+    next = await store.transition(rec.id, 'applied', { application })
+  }
+  if (notFrozen !== undefined) {
+    const reason = notFrozen instanceof Error ? notFrozen.message : String(notFrozen)
+    process.stderr.write(`  orangu did not freeze the baseline (${terminal(reason)}). The change is applied, and each check reads the baseline sessions again.\n`)
+  }
+  return next
+}
+
+/**
+ * `--record <id>`: the record step. Orangu measures both cohorts again with the trusted loaders and stores a final
+ * verdict that is not `verified`: `regressed` for a `regressed` verdict, else `unproven`. It takes no artifact, no
+ * verdict and no text. A verdict that is not final, or a win, exits 1 with the step to take instead.
+ */
+async function cmdRecord(store: SuggestionStore, id: string, positionals: string[], flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
+  if (positionals.length) throw new Error('--record takes no status. Orangu measures the verdict itself')
+  const artifact = ARTIFACT_FLAGS.find((name) => flags[name] !== undefined)
+  if (artifact) throw new Error(`--${artifact} is not valid with --record`)
+  const rec = await store.get(id)
+  if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`)
+  // Before any read, as --set verified refuses it: a global record is review-only.
+  if (rec.scope === 'global') throw new Error(`suggestion ${id}: global suggestions are review-only and cannot be verified`)
+  if (rec.status !== 'applied') throw new Error(`suggestion ${id} is not applied (status ${rec.status})`)
+  const effect = await measureCohortEffect(rec, await store.all(), deps.cohort ?? createCohortDeps())
+  const patch = outcomePatch(effect)
+  const next = await store.transition(id, effect.verdict === 'regressed' ? 'regressed' : 'unproven', patch)
   if (flagBool(flags, 'json')) return emit(visible(next, flags), flags) as unknown as void
   printRecord(visible(next, flags))
 }
@@ -346,13 +456,20 @@ async function inLaterCohort(selector: string, effect: CohortEffect): Promise<bo
 }
 
 function effectView(effect: CohortEffect) {
+  // The checkpoint of the verdict, whether a step can record it now, and a hint that orangu computes on each read and
+  // never stores.
+  const { checkpoint, final, leaning } = effectFinality(effect)
   return {
     id: effect.id,
     scope: effect.scope,
     verdict: effect.verdict,
+    checkpoint,
+    final,
+    ...(leaning ? { leaning } : {}),
     appliedAt: effect.appliedAt,
     baseline: { n: effect.baseline.length, ids: effect.baseline.map((session) => session.id) },
-    later: { n: effect.later.length, ids: effect.later.map((session) => session.id), complete: effect.laterComplete },
+    // n and ids are the graded later sessions, and count is every later session so far.
+    later: { n: effect.later.length, ids: effect.later.map((session) => session.id), complete: effect.laterComplete, count: effect.laterCount },
     checks: effect.checks,
     confoundedBy: effect.confoundedBy,
     skipped: effect.skipped,
@@ -360,10 +477,10 @@ function effectView(effect: CohortEffect) {
   }
 }
 
-async function cmdEffect(store: SuggestionStore, id: string, flags: Record<string, string | boolean>): Promise<void> {
+async function cmdEffect(store: SuggestionStore, id: string, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
   const rec = await store.get(id)
   if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`)
-  const effect = await measureCohortEffect(rec, await store.all(), createCohortDeps())
+  const effect = await measureCohortEffect(rec, await store.all(), deps.cohort ?? createCohortDeps())
   const view = visible(effectView(effect), flags)
   if (flagBool(flags, 'json')) return emit(view, flags) as unknown as void
   const w = (s: string) => process.stdout.write(s + '\n')
@@ -376,14 +493,23 @@ async function cmdEffect(store: SuggestionStore, id: string, flags: Record<strin
   w(`  next: ${terminal(view.next)}`)
 }
 
-export async function cmdSuggest(positionals: string[], flags: Record<string, string | boolean>): Promise<void> {
+export async function cmdSuggest(positionals: string[], flags: Record<string, string | boolean>, deps: SuggestDeps = {}): Promise<void> {
+  // A reason code belongs to a rejection only. Refuse it on every other step before any read, so no step ignores it.
+  if (flags['reason'] !== undefined && !(flagStr(flags, 'set') && positionals[0] === 'rejected')) {
+    throw new Error('--reason is valid only with --set <id> rejected')
+  }
   const store = new SuggestionStore()
   if (flagBool(flags, 'list')) return cmdList(store, flags)
   const show = flagStr(flags, 'show')
   if (show) return cmdShow(store, show, flags)
   const effect = flagStr(flags, 'effect')
-  if (effect) return cmdEffect(store, effect, flags)
+  if (effect) return cmdEffect(store, effect, flags, deps)
+  if (flags['record'] !== undefined) {
+    const record = flagStr(flags, 'record')
+    if (!record) throw new Error('--record requires a suggestion id')
+    return cmdRecord(store, record, positionals, flags, deps)
+  }
   const set = flagStr(flags, 'set')
-  if (set) return cmdSet(store, set, positionals, flags)
+  if (set) return cmdSet(store, set, positionals, flags, deps)
   return cmdCreate(store, positionals, flags)
 }

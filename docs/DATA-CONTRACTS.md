@@ -406,6 +406,38 @@ The receipt is a skill-authored attestation. The deterministic CLI validates its
 
 Verification takes no skill-written file. `orangu suggest --effect <id>` computes the result read-only; `orangu suggest --set <id> verified` recomputes it and records it only when the overall verdict is `verified`. An older `<id>.verified.json` intent (`v: 1`, `id`, `measuredSessionIds`, reviewed `checks`, and nothing self-attested) is still accepted, but it chooses nothing: every session it names must already be in the later cohort Orangu measured.
 
+`orangu suggest --effect <id> --json` prints 1 measure step. A later orangu can add a key, and it removes none:
+
+```ts
+SuggestionEffectView = {
+  id: string,
+  scope: "session" | "repo",
+  verdict: "verified" | "within-noise" | "regressed" | "not-enough-sessions" | "no-directional-check",
+  checkpoint: "first" | "complete" | null,  // the latest checkpoint that the later side reached, null before the first
+  final: boolean,                           // a step can record the verdict now
+  leaning?: "worse",                        // only when the first verdict is regressed. Computed on each read, never stored
+  appliedAt: number,
+  baseline: { n: number, ids: string[] },   // the frozen baseline, or the live baseline of an older record
+  later: {
+    n: number,                              // the graded later sessions: the first 3 until the cohort is complete
+    ids: string[],                          // their session ids
+    complete: boolean,                      // the later cohort holds 10 sessions, or its byte budget is spent
+    count: number                           // every later session so far, the graded ones included
+  },
+  checks: Array<CohortCheck>,               // 1 for each reviewed check, with its computed evidence line
+  confoundedBy: string[],
+  skipped: Record<CohortSkipReason, number>,
+  next: string                              // the next step
+}
+```
+
+Each new field has 1 CLI step that writes it:
+
+- `--set <id> applied` freezes the baseline into `frozenBaseline` just before the move. When the baseline read fails, or the store refuses the frozen baseline, the move goes ahead without one, and 1 line on stderr says so. That record reads its baseline sessions live, as an older record does.
+- `--record <id>` measures both cohorts again and stores `outcomeReceipt` with the status `regressed` (for a `regressed` verdict) or `unproven`. It takes no file, no status and no text. It refuses a global record before any read, a record that is not `applied`, a verdict that is not final, and a win, which `--set <id> verified` records.
+- `--set <id> kept` moves only a `regressed` record. It measures nothing and keeps the outcome receipt. `--set` refuses `regressed` and `unproven`, and names `--record`.
+- `--set <id> rejected [--reason <code>]` stores 1 of the 5 codes as `reasonCode`. `--reason` with any other step, or with a value that is not a code, exits 1. For a session or repo record with no proposal workspace, the step also binds `workspaceCwd`. It finds each evidence session through discovery, reads the cwd from the first 64,000 B of the transcript, and resolves it to a canonical directory. It binds the path only when every session that it finds gives the same path. Any other result binds nothing, and the rejection still goes ahead.
+
 Orangu resolves the proposal's canonical workspace (see the identity rule under Proposal artifacts) and lists its sessions from the configured supported roots. The baseline is up to ten settled sessions that ended before `appliedAt`, most recent first, leaving out the finding's own `sessionIds`; the later cohort is up to ten settled sessions that started after it, earliest first. Settled means an immutable, non-partial transcript snapshot whose complete main/sidecar/metadata manifest has been quiet for at least 30 minutes. A session that spans the application, has another cwd, is still settling, exceeds the 64 MiB per-session cap, or ran orangu itself (an orangu skill or an `orangu suggest`/`evidence`/`estimate`/`harness` call) is skipped and counted by reason. Each side reads at most 256 MiB and stops, in order, at the first session that no longer fits.
 
 Each reviewed check is graded with an exact permutation rank test (midranks for ties). `decreased`/`increased` checks must move that way at p ≤ 0.05 (`improved`); `not-increased`/`not-decreased`/`equal` must not move the wrong way at p ≤ 0.05 (`held`). The overall verdict is `not-enough-sessions` (fewer than three on a side), `regressed`, `no-directional-check`, `within-noise`, or `verified` (every directional check improved and every guard held). On `verified`, the append-only record receives:

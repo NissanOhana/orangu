@@ -119,8 +119,11 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
       expect(all, verb).toMatch(new RegExp(`^ {2}orangu ${verb} `, 'm'))
     }
     expect(all).toContain('\n  orangu suggest               the suggestion store that the skills call\n')
+    // The 2 store flags of the record step and the rejection, each on its own line of the suggest block.
+    expect(all).toMatch(/^ {34}\| --record <id> {2}\(measure again, and store$/m)
+    expect(all).toMatch(/^ {36}\[--reason <code>\] {2}\(with rejected\)$/m)
     expect(run(['--help'])).not.toBe(all)
-  })
+  }, 60_000)
 
   it('an unknown help topic or command exits 1 and points at orangu help all', () => {
     const topic = spawnSync('node', [CLI, 'help', 'nosuch'], { encoding: 'utf8' })

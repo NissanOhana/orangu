@@ -11,7 +11,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { KNOWN_FLAGS } from '../src/cli/args.js'
+import { KNOWN_FLAGS, parseArgs } from '../src/cli/args.js'
 import { CLI_VERBS, EXTRA_COMMANDS } from '../src/cli/commands/index.js'
 import { makeFixtureHome } from './fixtures/home.js'
 
@@ -32,6 +32,11 @@ const FLAGS_0_11 = [
   'show', 'effect', 'set', 'proposal', 'manifest', 'application', 'verification', 'cohort', 'render',
 ] as const
 
+/** the 29 long flags that 0.11.0 parses with no value: `--<name> <word>` leaves the word a positional */
+const BOOL_FLAGS_0_11: readonly string[] = FLAGS_0_11.slice(0, FLAGS_0_11.indexOf('lines') + 1)
+/** the 4 short flags that 0.11.0 parses with the next word as their value. Every other short flag takes no value */
+const SHORT_VALUE_FLAGS_0_11: readonly string[] = ['o', 'r', 'l', 's']
+
 const ROOT = process.cwd()
 const CLI = join(ROOT, 'dist', 'orangu.js')
 const HOME = mkdtempSync(join(tmpdir(), 'orangu-compat-home-'))
@@ -51,6 +56,27 @@ describe('the 0.11.0 names', () => {
     expect(new Set(FLAGS_0_11).size).toBe(67)
     expect(VERBS_0_11.filter((name) => !CLI_VERBS.includes(name)), 'a 0.11.0 verb left CLI_VERBS').toEqual([])
     expect(FLAGS_0_11.filter((name) => !KNOWN_FLAGS.has(name)), 'a 0.11.0 flag left KNOWN_FLAGS').toEqual([])
+  })
+
+  it('parses each 0.11.0 flag as 0.11.0 did: with no value, or with the next word as its value', () => {
+    expect(BOOL_FLAGS_0_11).toHaveLength(29)
+    expect(BOOL_FLAGS_0_11.at(-1)).toBe('lines')
+    for (const name of FLAGS_0_11) {
+      const flag = (name.length === 1 ? '-' : '--') + name
+      const parsed = parseArgs(['report', flag, 'word'])
+      expect(parsed.command, flag).toBe('report')
+      const takesNoValue = name.length === 1 ? !SHORT_VALUE_FLAGS_0_11.includes(name) : BOOL_FLAGS_0_11.includes(name)
+      if (takesNoValue) {
+        expect(parsed.flags[name], flag).toBe(true)
+        expect(parsed.positionals, flag).toEqual(['word'])
+      } else {
+        expect(parsed.flags[name], flag).toBe('word')
+        expect(parsed.positionals, flag).toEqual([])
+      }
+      // The = form gives every long flag its value, and a flag at the end of the line is true.
+      if (name.length > 1) expect(parseArgs(['report', `${flag}=word`]).flags[name], `${flag}=word`).toBe('word')
+      expect(parseArgs(['report', flag]).flags[name], `${flag} at the end`).toBe(true)
+    }
   })
 
   it('CLI_VERBS has each name once, and only the names that main.ts and EXTRA_COMMANDS dispatch', () => {
@@ -81,7 +107,7 @@ describe.skipIf(!existsSync(CLI))('the 0.11.0 names on the built CLI', () => {
     }
   })
 
-  it('the aliases print the same bytes as their verbs: ls is list, a is analyze', async () => {
+  it('the aliases print the same bytes as their verbs: ls is list, a is analyze, html is report, all is global', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-compat-')))
     const root = ['--root', home.configDir, '--no-cache', '--quiet']
     const list = cli(['list', '--json', ...root])
@@ -95,6 +121,18 @@ describe.skipIf(!existsSync(CLI))('the 0.11.0 names on the built CLI', () => {
     expect(JSON.parse(analyze.stdout).session.id).toBe(home.endedId)
     expect(unclocked(analyze.stdout)).not.toBe(analyze.stdout)
     expect(unclocked(cli(['a', home.endedId, '--json', ...root]).stdout)).toBe(unclocked(analyze.stdout))
+    // The report and the aggregate carry the same 2 clock fields in each place that they appear, and the report also
+    // carries the age of each session row at the time of the run.
+    const unclockedAll = (text: string) =>
+      text.replace(/"generatedAt":\d+/g, '"generatedAt":0').replace(/"parseMs":\d+/g, '"parseMs":0').replace(/"ageMs":\d+/g, '"ageMs":0')
+    const report = cli(['report', home.endedId, '--stdout', ...root])
+    expect(report.status, report.stderr).toBe(0)
+    expect(report.stdout).toContain('<html')
+    expect(unclockedAll(cli(['html', home.endedId, '--stdout', ...root]).stdout)).toBe(unclockedAll(report.stdout))
+    const global = cli(['global', '--json', ...root])
+    expect(global.status, global.stderr).toBe(0)
+    expect(JSON.parse(global.stdout).sessionCount).toBeGreaterThan(0)
+    expect(unclockedAll(cli(['all', '--json', ...root]).stdout)).toBe(unclockedAll(global.stdout))
   })
 })
 

@@ -72,10 +72,13 @@ export const EXTRA_HELP: string[] = [
     '                                  | --show <id> [--for-proposal|--for-apply]',
     '                                  | --effect <id>  (later sessions vs baseline,',
     '                                    beyond chance, read-only)',
+    '                                  | --record <id>  (measure again, and store',
+    '                                    a final verdict that is not verified)',
     '                                  | --set <id> <status> [--proposal <path>]',
     '                                    [--manifest <path>]',
     '                                    [--application <path>]',
     '                                    [--verification <path>]',
+    '                                    [--reason <code>]  (with rejected)',
     '                                  | --list)',
   ].join('\n'),
   [

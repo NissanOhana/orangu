@@ -110,21 +110,32 @@ describe.skipIf(!existsSync(CLI) || !helpHasSuggest())('orangu suggest/estimate 
     )
     cli(['suggest', '--set', id, 'proposed', '--proposal', join(proposals, `${id}.md`), '--manifest', join(proposals, `${id}.json`), '--json'])
     writeFileSync(join(proposals, `${id}.applied.json`), JSON.stringify({ v: 1, id, summary: 'Added the line.', files: ['CLAUDE.md'], checks: [{ name: 'diff check', ok: true }] }))
-    cli(['suggest', '--set', id, 'applied', '--application', join(proposals, `${id}.applied.json`), '--json'])
+    const applied = JSON.parse(cli(['suggest', '--set', id, 'applied', '--application', join(proposals, `${id}.applied.json`), '--json']))
+    // The apply step froze the baseline: no session, because the only one is the finding's own.
+    expect(applied.frozenBaseline).toMatchObject({ v: 1, sessions: [] })
+    expect(applied.frozenBaseline.skipped['evidence-session']).toBe(1)
+    expect(applied.frozenBaseline.cutAt).toBeLessThanOrEqual(applied.appliedAt)
 
     const effect = JSON.parse(cli(['suggest', '--effect', id, '--json']))
-    expect(effect).toMatchObject({ id, verdict: 'not-enough-sessions', baseline: { n: 0 }, later: { n: 0 } })
+    expect(effect).toMatchObject({ id, verdict: 'not-enough-sessions', checkpoint: null, final: true, baseline: { n: 0 }, later: { n: 0, count: 0 } })
     expect(effect.skipped['evidence-session']).toBe(1)
     expect(cli(['suggest', '--effect', id])).toMatch(/verdict: not-enough-sessions\n {2}next: needs at least 3 settled sessions on each side/)
-    let failure = ''
-    try {
-      cli(['suggest', '--set', id, 'verified', '--json'])
-    } catch (error) {
-      failure = String((error as { stderr?: string }).stderr)
+    const failure = (args: string[]): string => {
+      try {
+        cli(args)
+      } catch (error) {
+        return String((error as { stderr?: string }).stderr)
+      }
+      return ''
     }
-    expect(failure).toMatch(/not verified: not-enough-sessions/)
+    expect(failure(['suggest', '--set', id, 'verified', '--json'])).toMatch(/not verified: not-enough-sessions/)
     expect(JSON.parse(cli(['suggest', '--show', id, '--json'])).record.status).toBe('applied')
-    expect(execFileSync('node', [CLI, 'help', 'all'], { encoding: 'utf8' })).toContain('--effect <id>')
+    // A frozen baseline below 3 sessions cannot change, so the record step closes the record as unproven.
+    const recorded = JSON.parse(cli(['suggest', '--record', id, '--json']))
+    expect(recorded).toMatchObject({ id, status: 'unproven', outcomeReceipt: { verdict: 'not-enough-sessions', checkpoint: 'first', laterComplete: false } })
+    expect(failure(['suggest', '--record', id, '--json'])).toContain(`suggestion ${id} is not applied (status unproven)`)
+    const help = execFileSync('node', [CLI, 'help', 'all'], { encoding: 'utf8' })
+    for (const flag of ['--effect <id>', '--record <id>', '--reason <code>']) expect(help, flag).toContain(flag)
   })
 })
 
