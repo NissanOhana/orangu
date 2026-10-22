@@ -14416,7 +14416,8 @@ async function measureCohortEffect(record3, others, deps) {
     throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its sessions were read`);
   }
   const laterComplete = laterSide.accepted.length >= COHORT_MAX || laterSide.budgetSpent;
-  const later = laterComplete ? laterSide.accepted : laterSide.accepted.slice(0, COHORT_MIN);
+  const byStart = [...laterSide.accepted].sort((a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const later = laterComplete ? byStart : byStart.slice(0, COHORT_MIN);
   const checks2 = intents.map(
     (intent) => evaluateCheck(
       intent,
@@ -14466,13 +14467,15 @@ function checkpointLabel(effect, checkpoint) {
 function nextStep(effect) {
   if (effect.status === "verified") return "already recorded as verified";
   const counts = `(has ${effect.baseline.length} before, ${effect.laterCount} after)`;
+  const { checkpoint } = effectFinality(effect);
   if (effect.baseline.length < COHORT_MIN) {
     if (effect.baselineFrozen) {
-      return `the frozen baseline has ${effect.baseline.length} of the ${COHORT_MIN} sessions that a verdict needs, and it cannot change. Record it as unproven: orangu suggest --record ${effect.id}`;
+      const record3 = `Record it as unproven: orangu suggest --record ${effect.id}`;
+      if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. The frozen baseline cannot change. ${record3}`;
+      return `the frozen baseline has ${effect.baseline.length} of the ${COHORT_MIN} sessions that a verdict needs, and it cannot change. ${record3}`;
     }
     return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set ${effect.id} rejected --reason other`;
   }
-  const { checkpoint } = effectFinality(effect);
   if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. Orangu grades at ${COHORT_MIN} and at ${COHORT_MAX} later sessions`;
   const at = checkpointLabel(effect, checkpoint);
   if (effect.verdict === "verified") return `${at} beat the baseline beyond chance. Record it: orangu suggest --set ${effect.id} verified`;
