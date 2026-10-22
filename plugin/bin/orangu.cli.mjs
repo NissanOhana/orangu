@@ -6982,6 +6982,9 @@ var SIMPLE_SEGMENT = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
 var CACHE_GENERATION_SEGMENT = /^\d+-[A-Za-z0-9][A-Za-z0-9._-]*$/;
 var MAX_STALE_CACHE_ROOT_ENTRIES = 512;
 var MAX_STALE_CACHE_GENERATION_ENTRIES = 4096;
+function cacheGenerationSegment(version) {
+  return `${ANALYSIS_SCHEMA_VERSION}-${version}-p${ANALYSIS_PAYLOAD_GENERATION}`;
+}
 function sameInode(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
@@ -7018,24 +7021,24 @@ async function assertPrivateDirectoriesStable(directories) {
     }
   }
 }
-async function prevalidateAnalysisCacheEntry(path) {
+async function prevalidateAnalysisCacheEntry(path, maxBytes = MAX_ANALYSIS_CACHE_ENTRY_BYTES) {
   const requested = await lstat4(path, { bigint: true });
   if (requested.isSymbolicLink()) throw new Error("cache entry must not be a symbolic link");
   if (!requested.isFile()) throw new Error("cache entry must be a regular file");
-  if (requested.size > BigInt(MAX_ANALYSIS_CACHE_ENTRY_BYTES)) {
-    throw new Error(`cache entry exceeds ${MAX_ANALYSIS_CACHE_ENTRY_BYTES} bytes`);
+  if (requested.size > BigInt(maxBytes)) {
+    throw new Error(`cache entry exceeds ${maxBytes} bytes`);
   }
   const handle = await open6(path, constants6.O_RDONLY | (constants6.O_NOFOLLOW ?? 0));
   try {
     const opened = await handle.stat({ bigint: true });
-    if (!opened.isFile() || !sameInode(requested, opened) || opened.size > BigInt(MAX_ANALYSIS_CACHE_ENTRY_BYTES)) {
+    if (!opened.isFile() || !sameInode(requested, opened) || opened.size > BigInt(maxBytes)) {
       throw new Error("cache entry changed while opening");
     }
     if (modeBits(opened) !== PRIVATE_FILE_MODE) await handle.chmod(PRIVATE_FILE_MODE);
   } finally {
     await handle.close();
   }
-  return prevalidateStableTextFile(path, MAX_ANALYSIS_CACHE_ENTRY_BYTES, "cache entry");
+  return prevalidateStableTextFile(path, maxBytes, "cache entry");
 }
 async function readAnalysisCacheEntry(manifest) {
   return readStableTextManifest(manifest);
@@ -7086,7 +7089,7 @@ var AnalysisCache = class {
   constructor(opts) {
     const home = resolve4(oranguHome());
     const cacheRoot = resolve4(opts.dir ?? join5(home, "cache"));
-    const versionSegment = `${ANALYSIS_SCHEMA_VERSION}-${opts.version}-p${ANALYSIS_PAYLOAD_GENERATION}`;
+    const versionSegment = cacheGenerationSegment(opts.version);
     this.cacheRoot = cacheRoot;
     this.versionSegment = versionSegment;
     this.validVersion = SIMPLE_SEGMENT.test(versionSegment);
@@ -14333,6 +14336,7 @@ var noSkips = () => Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reas
 async function take(ctx, list2, side) {
   const { deps, cwd, cutAt, excluded, seen, skipped } = ctx;
   const accepted = [];
+  const settling = [];
   let sideBytes = 0;
   let budgetSpent = false;
   for (const candidate of list2) {
@@ -14351,6 +14355,12 @@ async function take(ctx, list2, side) {
     }
     const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining);
     const loaded = await deps.loadCandidate(candidate, maxBytes);
+    if ("skip" in loaded && loaded.skip === "still-settling") {
+      skipped["still-settling"]++;
+      const startedAt = typeof loaded.startedAt === "number" && Number.isFinite(loaded.startedAt) && loaded.startedAt > 0 ? loaded.startedAt : void 0;
+      settling.push(startedAt === void 0 ? { id } : { id, startedAt });
+      continue;
+    }
     sideBytes += loaded.bytesRead;
     if ("skip" in loaded) {
       if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
@@ -14381,8 +14391,9 @@ async function take(ctx, list2, side) {
     seen.add(id);
     accepted.push({ ...session, id });
   }
-  return { accepted, budgetSpent };
+  return { accepted, budgetSpent, settling };
 }
+var byStartThenId = (a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 async function measureCohortEffect(record3, others, deps) {
   if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
   if (record3.status !== "applied" && record3.status !== "verified") {
@@ -14418,8 +14429,12 @@ async function measureCohortEffect(record3, others, deps) {
     throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its sessions were read`);
   }
   const laterComplete = laterSide.accepted.length >= COHORT_MAX || laterSide.budgetSpent;
-  const byStart = [...laterSide.accepted].sort((a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const later = laterComplete ? byStart : byStart.slice(0, COHORT_MIN);
+  const byStart = [...laterSide.accepted].sort(byStartThenId);
+  const third = byStart[COHORT_MIN - 1];
+  const holds = laterComplete || third === void 0 ? [] : laterSide.settling.filter((s) => s.startedAt === void 0 || s.startedAt > appliedAt && byStartThenId({ id: s.id, startedAt: s.startedAt }, third) < 0);
+  const firstWaits = holds.length > 0;
+  const earliest = holds.reduce((min, s) => Math.min(min, s.startedAt ?? -Infinity), Infinity);
+  const later = laterComplete ? byStart : firstWaits ? byStart.filter((s) => s.startedAt < earliest).slice(0, COHORT_MIN) : byStart.slice(0, COHORT_MIN);
   const checks2 = intents.map(
     (intent) => evaluateCheck(
       intent,
@@ -14449,6 +14464,7 @@ async function measureCohortEffect(record3, others, deps) {
     later,
     laterCount: laterSide.accepted.length,
     laterComplete,
+    firstWaits,
     checks: checks2,
     confoundedBy,
     skipped
@@ -14484,7 +14500,7 @@ async function freezeBaseline(record3, _others, deps) {
   return frozen;
 }
 function effectFinality(effect) {
-  const checkpoint = effect.laterComplete ? "complete" : effect.laterCount >= COHORT_MIN ? "first" : null;
+  const checkpoint = effect.laterComplete ? "complete" : effect.laterCount >= COHORT_MIN && !effect.firstWaits ? "first" : null;
   if (effect.baseline.length < COHORT_MIN) return { checkpoint, final: effect.baselineFrozen };
   if (checkpoint === null) return { checkpoint, final: false };
   if (effect.verdict === "verified" || checkpoint === "complete") return { checkpoint, final: true };
@@ -14507,6 +14523,7 @@ function nextStep(effect) {
     }
     return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set ${effect.id} rejected --reason other`;
   }
+  if (checkpoint === null && effect.firstWaits) return `the first checkpoint waits until a later session that started before the third one settles ${counts}`;
   if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. Orangu grades at ${COHORT_MIN} and at ${COHORT_MAX} later sessions`;
   const at = checkpointLabel(effect, checkpoint);
   if (effect.verdict === "verified") return `${at} beat the baseline beyond chance. Record it: orangu suggest --set ${effect.id} verified`;
@@ -14591,7 +14608,8 @@ function outcomePatch(effect) {
 }
 
 // src/suggest/cohort-deps.ts
-import { realpath as realpath9 } from "node:fs/promises";
+import { constants as constants11 } from "node:fs";
+import { open as open11, realpath as realpath9 } from "node:fs/promises";
 import { isAbsolute as isAbsolute7 } from "node:path";
 
 // src/adapters/claude-code/discovered-analysis.ts
@@ -14686,6 +14704,55 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
 }
 
 // src/suggest/cohort-deps.ts
+function recordTime(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value > 1e12 ? value : value * 1e3 : void 0;
+  if (typeof value === "string") {
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? time : void 0;
+  }
+  return void 0;
+}
+async function settlingStartedAt(path) {
+  let handle;
+  try {
+    handle = await open11(path, constants11.O_RDONLY | constants11.O_NOFOLLOW);
+  } catch {
+    return void 0;
+  }
+  try {
+    const st = await handle.stat();
+    if (!st.isFile()) return void 0;
+    const size = Math.min(st.size, PEEK_HEAD_BYTES);
+    const buffer = Buffer.allocUnsafe(size);
+    let offset = 0;
+    while (offset < size) {
+      const read = await handle.read(buffer, offset, size - offset, offset);
+      if (read.bytesRead === 0) break;
+      offset += read.bytesRead;
+    }
+    let earliest;
+    for (const line of buffer.subarray(0, offset).toString("utf8").split("\n")) {
+      if (!line.startsWith("{")) continue;
+      let record3;
+      try {
+        record3 = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const time = record3 && typeof record3 === "object" ? recordTime(record3.timestamp) : void 0;
+      if (time !== void 0 && time > 0 && (earliest === void 0 || time < earliest)) earliest = time;
+    }
+    return earliest;
+  } catch {
+    return void 0;
+  } finally {
+    await handle.close();
+  }
+}
+async function settlingSkip(path, bytesRead, startedAt) {
+  const start = startedAt ?? await settlingStartedAt(path);
+  return start === void 0 ? { skip: "still-settling", bytesRead } : { skip: "still-settling", bytesRead, startedAt: start };
+}
 function createCohortDeps(options = {}) {
   return {
     async listCandidates(cwd) {
@@ -14697,10 +14764,10 @@ function createCohortDeps(options = {}) {
         requireQuiet: true,
         ...options.now ? { now: options.now } : {}
       });
-      if ("skip" in loaded) return loaded;
+      if ("skip" in loaded) return loaded.skip === "still-settling" ? settlingSkip(candidate.path, loaded.bytesRead) : loaded;
       const { analysis, session, bytesRead } = loaded;
       const { cwd, startedAt, endedAt, live } = analysis.session;
-      if (live !== false) return { skip: "still-settling", bytesRead };
+      if (live !== false) return settlingSkip(candidate.path, bytesRead, typeof startedAt === "number" ? startedAt : void 0);
       if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute7(cwd)) return { skip: "unreadable", bytesRead };
       let canonicalCwd = cwd;
       try {
@@ -16413,17 +16480,17 @@ var HTML_TAG = /^<html lang="en" data-scope="(?:session|repo|global)" data-live=
 var CSP2 = '<meta http-equiv="Content-Security-Policy" content="';
 var SCRIPT = /<script>([\s\S]*?)<\/script>/;
 function head(html, what) {
-  const open11 = html.indexOf("<html");
-  const tagEnd = html.indexOf(">", open11) + 1;
+  const open12 = html.indexOf("<html");
+  const tagEnd = html.indexOf(">", open12) + 1;
   const start = html.indexOf("<head>", tagEnd);
   const csp = html.indexOf(CSP2, start);
   const cspEnd = csp < 0 ? -1 : html.indexOf("/>", csp);
   const end = html.indexOf("</head>", start);
-  if (open11 < 0 || tagEnd <= 0 || start < 0 || csp < 0 || cspEnd < 0 || end < 0) throw new SelfCheckError(`${what} has no <html>, <head> or CSP meta in place`);
+  if (open12 < 0 || tagEnd <= 0 || start < 0 || csp < 0 || cspEnd < 0 || end < 0) throw new SelfCheckError(`${what} has no <html>, <head> or CSP meta in place`);
   const whole2 = html.slice(start, end + "</head>".length);
   return {
-    prefix: html.slice(0, open11),
-    tag: html.slice(open11, tagEnd),
+    prefix: html.slice(0, open12),
+    tag: html.slice(open12, tagEnd),
     between: html.slice(tagEnd, start),
     toCsp: html.slice(start, cspEnd + 2),
     masked: whole2.replace(/(<title data-slot="title">)[^<]*(<\/title>)/, (_match, before, after) => before + after)
@@ -16715,12 +16782,12 @@ function chartNumber(value, what) {
   return String(value);
 }
 function elementEnd(html, start) {
-  const open11 = /^<([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/.exec(html.slice(start));
-  if (!open11) throw new FillError(`no tag at ${start}`);
-  const tag = open11[1].toLowerCase();
-  if (open11[2] || VOID.has(tag)) return start + open11[0].length;
+  const open12 = /^<([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/.exec(html.slice(start));
+  if (!open12) throw new FillError(`no tag at ${start}`);
+  const tag = open12[1].toLowerCase();
+  if (open12[2] || VOID.has(tag)) return start + open12[0].length;
   const re = new RegExp(`<(/?)${tag}\\b[^>]*?(/?)>`, "gi");
-  re.lastIndex = start + open11[0].length;
+  re.lastIndex = start + open12[0].length;
   let depth = 1;
   for (let m = re.exec(html); m; m = re.exec(html)) {
     if (m[1]) depth -= 1;
@@ -16733,15 +16800,15 @@ var openTagOf = (el) => /^<[^>]*>/.exec(el)[0];
 var attr = (tag, name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
 function setAttr(el, name, value) {
   const checked = attributeValue(name, value);
-  const open11 = openTagOf(el);
-  const next = attr(open11, name) !== void 0 ? open11.replace(new RegExp(`(\\s${name}=)"[^"]*"`), (_match, before) => `${before}"${checked}"`) : open11.replace(/(\/?>)$/, (end) => ` ${name}="${checked}"${end}`);
-  return next + el.slice(open11.length);
+  const open12 = openTagOf(el);
+  const next = attr(open12, name) !== void 0 ? open12.replace(new RegExp(`(\\s${name}=)"[^"]*"`), (_match, before) => `${before}"${checked}"`) : open12.replace(/(\/?>)$/, (end) => ` ${name}="${checked}"${end}`);
+  return next + el.slice(open12.length);
 }
 function parts(el) {
-  const open11 = openTagOf(el);
-  if (open11.endsWith("/>") || el.length === open11.length) return [open11, "", ""];
+  const open12 = openTagOf(el);
+  if (open12.endsWith("/>") || el.length === open12.length) return [open12, "", ""];
   const close = /<\/[a-zA-Z][\w-]*>$/.exec(el)[0];
-  return [open11, el.slice(open11.length, el.length - close.length), close];
+  return [open12, el.slice(open12.length, el.length - close.length), close];
 }
 function children(html, scope) {
   let out3 = "";
@@ -16775,15 +16842,15 @@ function element(el, scope, repeated = false) {
       return element(copy, merge(scope, item), true);
     }).join("");
   }
-  const open11 = openTagOf(el);
-  const empty = attr(open11, "data-empty");
+  const open12 = openTagOf(el);
+  const empty = attr(open12, "data-empty");
   if (empty !== void 0 && (scope.lists[empty] ?? []).length > 0) return "";
-  const condition = attr(open11, "data-if");
+  const condition = attr(open12, "data-if");
   if (condition !== void 0 && !scope.conditions.includes(condition)) return "";
-  if (attr(open11, "data-end") !== void 0 && scope.end !== void 0) el = setAttr(el, "data-end", scope.end);
-  const chart = attr(open11, "data-chart");
+  if (attr(open12, "data-end") !== void 0 && scope.end !== void 0) el = setAttr(el, "data-end", scope.end);
+  const chart = attr(open12, "data-chart");
   if (chart !== void 0 && scope.charts[chart]) el = drawChart(el, scope.charts[chart]);
-  const slot = attr(open11, "data-slot");
+  const slot = attr(open12, "data-slot");
   if (slot !== void 0 && scope.slots[slot] !== void 0) return fillSlot(el, scope.slots[slot]);
   const [head2, inner, tail] = parts(el);
   return head2 + children(inner, scope) + tail;
@@ -17270,13 +17337,13 @@ async function render(positionals, flags) {
   if (typeof dir !== "string" || !dir.trim()) throw new Error(`--render needs the run directory that orangu show-me printed. ${USAGE2}`);
   if (positionals.length) throw new Error(`orangu show-me --render takes only the run directory. ${USAGE2}`);
   const result = await renderShowMe(dir);
-  const open11 = flagBool(flags, "open") && [openInBrowser(result.slides), openInBrowser(result.report)].every(Boolean);
+  const open12 = flagBool(flags, "open") && [openInBrowser(result.slides), openInBrowser(result.report)].every(Boolean);
   if (flagBool(flags, "json")) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}
 `);
     return;
   }
-  printRendered(result, open11, out3);
+  printRendered(result, open12, out3);
 }
 async function cmdShowMe(positionals, flags) {
   return flags["render"] !== void 0 ? render(positionals, flags) : prepare(positionals, flags);
@@ -17947,8 +18014,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
 }
 async function writeAggregateHtml(scope, a, flags) {
-  const open11 = flagBool(flags, "open") && !flagBool(flags, "no-open");
-  if (flags["html"] === void 0 && !open11) return false;
+  const open12 = flagBool(flags, "open") && !flagBool(flags, "no-open");
+  if (flags["html"] === void 0 && !open12) return false;
   const named = flagStr(flags, "html");
   const stamp = createHash5("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
@@ -17956,7 +18023,7 @@ ${a.generatedAt}`).digest("hex").slice(0, 8);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
-  const opened = open11 && openHtmlFile(path);
+  const opened = open12 && openHtmlFile(path);
   if (!flagBool(flags, "quiet")) {
     process.stderr.write(row(err2, "report", path, { raw: true }) + (opened ? paint(err2, "dim", "  (opened)") : "") + "\n");
   }
