@@ -284,8 +284,9 @@ export interface CachedCohortDeps extends CohortDeps {
  * what is left of `budgetBytes`, and the facts of a settled session go into the cache. A miss past the budget throws
  * `CohortReadDeferred`, so the item is deferred and is never graded on a part of its cohort.
  *
- * The cache holds the facts of settled sessions only. So a miss that ends in a skip (a session over the evidence cap, an
- * unreadable one, or one that still settles) is kept in memory for this instance, by path, with its key and its cap. A
+ * The cache holds the facts of settled sessions and 1 kind of skip: a session over the cap of its load. No other skip
+ * goes into the cache. So a miss that ends in a skip (a session over the evidence cap, an unreadable one, or one that
+ * still settles) is kept in memory for this instance, by path, with its key and its cap. A
  * later load of the same session with the same key and the same cap gets the same skip and the same bytes, and it reads
  * no file and calls no loader: the files, `now` and the cap are the same, so the trusted loader would give the same
  * skip. A changed file moves its key, so it loads again. Without this, each record of 1 read probes, walks and refuses

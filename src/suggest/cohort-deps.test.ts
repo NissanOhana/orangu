@@ -382,6 +382,34 @@ describe('createCachedCohortDeps over real transcripts', () => {
     expect(calls.filter(([session]) => session === id(101)).map(([, cap]) => cap)).toEqual([64 * MiB, 3 * MiB])
   })
 
+  it('keeps no skip of a load whose cap the read budget cut, because that skip need not hold at the cap of the side', async () => {
+    const { cwd } = workspaceWithSessions()
+    const trusted = createCohortDeps({ now: settled })
+    const calls: number[] = []
+    const base: CohortDeps = {
+      ...trusted,
+      loadCandidate: async (candidate, maxBytes) => {
+        if (candidate.sessionId !== id(100)) return trusted.loadCandidate(candidate, maxBytes)
+        calls.push(maxBytes)
+        return { skip: 'still-settling', bytesRead: 0 }
+      },
+    }
+    const MiB = 1024 * 1024
+    // A read budget of 1,000 B cuts the cap of each load to 1,000 B, so the settling skip is not kept.
+    const small = cached(null, base, settled, 1_000)
+    const cut = (await small.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
+    await small.loadCandidate(cut, 64 * MiB)
+    await small.loadCandidate(cut, 64 * MiB)
+    expect(calls).toEqual([1_000, 1_000])
+    // At the cap of the side, the skip is kept, and the second load calls no loader.
+    calls.length = 0
+    const whole = cached(null, base)
+    const same = (await whole.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
+    await whole.loadCandidate(same, 64 * MiB)
+    await whole.loadCandidate(same, 64 * MiB)
+    expect(calls).toEqual([64 * MiB])
+  })
+
   it('keeps a skip over the cap in the cache, so a second read loads no such session until its files change', async () => {
     const { cwd, identity } = workspaceWithSessions()
     const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
