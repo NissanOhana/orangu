@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash5 } from "node:crypto";
-import { basename as basename15, join as join12, resolve as resolve13 } from "node:path";
+import { basename as basename16, join as join13, resolve as resolve13 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -9580,8 +9580,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename16 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename16)) return { violation: "must not use a reserved Windows device name" };
+    const basename17 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename17)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -14612,8 +14612,8 @@ function outcomePatch(effect) {
 
 // src/suggest/cohort-deps.ts
 import { constants as constants11 } from "node:fs";
-import { open as open11, realpath as realpath9 } from "node:fs/promises";
-import { isAbsolute as isAbsolute7 } from "node:path";
+import { lstat as lstat9, open as open11, readdir as readdir3, realpath as realpath9 } from "node:fs/promises";
+import { basename as basename11, dirname as dirname6, isAbsolute as isAbsolute7, join as join9 } from "node:path";
 
 // src/adapters/claude-code/discovered-analysis.ts
 import { realpath as realpath8 } from "node:fs/promises";
@@ -14708,38 +14708,83 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
 
 // src/suggest/cohort-deps.ts
 var READ_PROBE_FLAGS = constants11.O_RDONLY | constants11.O_NOFOLLOW | constants11.O_NONBLOCK;
-async function partialTail(path) {
+var PROBE_BYTES = PEEK_HEAD_BYTES;
+async function readFully(handle, buffer, offset, length, position) {
+  let done = 0;
+  while (done < length) {
+    const read = await handle.read(buffer, offset + done, length - done, position + done);
+    if (read.bytesRead === 0) return false;
+    done += read.bytesRead;
+  }
+  return true;
+}
+async function readTail(path, cap) {
+  const limit = Math.min(PROBE_BYTES, Math.floor(cap));
+  if (!(limit >= 1)) return { bytesRead: 0 };
   let handle;
   try {
     handle = await open11(path, READ_PROBE_FLAGS);
   } catch {
-    return void 0;
+    return { bytesRead: 0 };
   }
+  let bytesRead = 0;
   try {
     const st = await handle.stat();
-    if (!st.isFile()) return void 0;
-    if (st.size === 0) return false;
-    const last = Buffer.alloc(1);
-    if ((await handle.read(last, 0, 1, st.size - 1)).bytesRead !== 1) return void 0;
-    if (last[0] === 10) return false;
-    const window = Math.min(st.size, PEEK_HEAD_BYTES);
+    if (!st.isFile()) return { bytesRead };
+    if (st.size === 0) return { partial: false, bytesRead };
+    const window = Math.min(st.size, limit);
     const buffer = Buffer.alloc(window);
-    let offset = 0;
-    while (offset < window) {
-      const read = await handle.read(buffer, offset, window - offset, st.size - window + offset);
-      if (read.bytesRead === 0) return void 0;
-      offset += read.bytesRead;
-    }
+    if (!await readFully(handle, buffer, window - 1, 1, st.size - 1)) return { bytesRead };
+    bytesRead = 1;
+    if (buffer[window - 1] === 10) return { partial: false, bytesRead };
+    if (window > 1 && !await readFully(handle, buffer, 0, window - 1, st.size - window)) return { bytesRead };
+    bytesRead = window;
     const newline = buffer.lastIndexOf(10);
-    if (newline === -1 && window < st.size) return true;
+    if (newline === -1 && window < st.size) return { partial: true, bytesRead };
     let line = buffer.subarray(newline + 1).toString("utf8");
     if (line.endsWith("\r")) line = line.slice(0, -1);
-    return line.length > 0 && tryParseObject(line) === null;
+    return { partial: line.length > 0 && tryParseObject(line) === null, bytesRead };
   } catch {
-    return void 0;
+    return { bytesRead };
   } finally {
     await handle.close();
   }
+}
+async function sidecarTranscripts(path) {
+  const files2 = [];
+  let entries = 0;
+  const walk2 = async (dir, depth) => {
+    const st = await lstat9(dir);
+    if (st.isSymbolicLink() || !st.isDirectory()) return;
+    for (const name of (await readdir3(dir)).sort()) {
+      if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error("sidecar limit");
+      const child = join9(dir, name);
+      const cst = await lstat9(child);
+      if (cst.isSymbolicLink()) continue;
+      if (cst.isDirectory()) {
+        if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk2(child, depth + 1);
+      } else if (cst.isFile() && name.startsWith("agent-") && name.endsWith(".jsonl")) files2.push(child);
+    }
+  };
+  const sessionDir = join9(dirname6(path), basename11(path, ".jsonl"));
+  try {
+    const st = await lstat9(sessionDir);
+    if (!st.isSymbolicLink() && st.isDirectory()) await walk2(join9(sessionDir, "subagents"), 0);
+  } catch {
+  }
+  return files2;
+}
+async function sessionTail(path, cap) {
+  const main2 = await readTail(path, cap);
+  let bytesRead = main2.bytesRead;
+  if (main2.partial) return { partial: true, bytesRead };
+  for (const file of await sidecarTranscripts(path)) {
+    if (cap - bytesRead < 1) break;
+    const tail = await readTail(file, cap - bytesRead);
+    bytesRead += tail.bytesRead;
+    if (tail.partial) return { partial: true, bytesRead };
+  }
+  return { partial: false, bytesRead };
 }
 function recordTime(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value > 1e12 ? value : value * 1e3 : void 0;
@@ -14749,17 +14794,19 @@ function recordTime(value) {
   }
   return void 0;
 }
-async function settlingStartedAt(path) {
+async function readHead(path, cap) {
+  const limit = Math.min(PROBE_BYTES, Math.floor(cap));
+  if (!(limit >= 1)) return { bytesRead: 0 };
   let handle;
   try {
     handle = await open11(path, READ_PROBE_FLAGS);
   } catch {
-    return void 0;
+    return { bytesRead: 0 };
   }
   try {
     const st = await handle.stat();
-    if (!st.isFile()) return void 0;
-    const size = Math.min(st.size, PEEK_HEAD_BYTES);
+    if (!st.isFile()) return { bytesRead: 0 };
+    const size = Math.min(st.size, limit);
     const buffer = Buffer.allocUnsafe(size);
     let offset = 0;
     while (offset < size) {
@@ -14779,16 +14826,18 @@ async function settlingStartedAt(path) {
       const time = record3 && typeof record3 === "object" ? recordTime(record3.timestamp) : void 0;
       if (time !== void 0 && time > 0 && (earliest === void 0 || time < earliest)) earliest = time;
     }
-    return earliest;
+    return earliest === void 0 ? { bytesRead: offset } : { startedAt: earliest, bytesRead: offset };
   } catch {
-    return void 0;
+    return { bytesRead: 0 };
   } finally {
     await handle.close();
   }
 }
-async function settlingSkip(path, bytesRead, startedAt) {
-  const start = startedAt ?? await settlingStartedAt(path);
-  return start === void 0 ? { skip: "still-settling", bytesRead } : { skip: "still-settling", bytesRead, startedAt: start };
+async function settlingSkip(path, bytesRead, cap, startedAt) {
+  if (startedAt !== void 0) return { skip: "still-settling", bytesRead, startedAt };
+  const head2 = await readHead(path, cap - bytesRead);
+  const total = bytesRead + head2.bytesRead;
+  return head2.startedAt === void 0 ? { skip: "still-settling", bytesRead: total } : { skip: "still-settling", bytesRead: total, startedAt: head2.startedAt };
 }
 function createCohortDeps(options = {}) {
   return {
@@ -14797,15 +14846,22 @@ function createCohortDeps(options = {}) {
       return refs.filter((ref2) => SESSION_ID_RE.test(ref2.sessionId)).map((ref2) => ({ sessionId: ref2.sessionId.toLowerCase(), path: ref2.path, mtimeMs: ref2.mtimeMs }));
     },
     async loadCandidate(candidate, maxBytes) {
-      if (await partialTail(candidate.path)) return settlingSkip(candidate.path, 0);
-      const loaded = await loadSettledAnalysis({ path: candidate.path, sessionId: candidate.sessionId }, maxBytes, {
+      const tail = await sessionTail(candidate.path, maxBytes);
+      if (tail.partial) return settlingSkip(candidate.path, tail.bytesRead, maxBytes);
+      const left = maxBytes - tail.bytesRead;
+      if (left < 1) return { skip: "over-budget", bytesRead: tail.bytesRead };
+      const loaded = await loadSettledAnalysis({ path: candidate.path, sessionId: candidate.sessionId }, left, {
         requireQuiet: true,
         ...options.now ? { now: options.now } : {}
       });
-      if ("skip" in loaded) return loaded.skip === "still-settling" ? settlingSkip(candidate.path, loaded.bytesRead) : loaded;
-      const { analysis, session, bytesRead } = loaded;
+      if ("skip" in loaded) {
+        if (loaded.skip === "still-settling") return settlingSkip(candidate.path, tail.bytesRead + loaded.bytesRead, maxBytes);
+        return { skip: loaded.skip, bytesRead: tail.bytesRead + loaded.bytesRead };
+      }
+      const { analysis, session } = loaded;
+      const bytesRead = tail.bytesRead + loaded.bytesRead;
       const { cwd, startedAt, endedAt, live } = analysis.session;
-      if (live !== false) return settlingSkip(candidate.path, bytesRead, typeof startedAt === "number" ? startedAt : void 0);
+      if (live !== false) return settlingSkip(candidate.path, bytesRead, maxBytes, typeof startedAt === "number" ? startedAt : void 0);
       if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute7(cwd)) return { skip: "unreadable", bytesRead };
       let canonicalCwd = cwd;
       try {
@@ -14828,7 +14884,7 @@ function createCohortDeps(options = {}) {
 }
 
 // src/suggest/reject-workspace.ts
-import { basename as basename11, isAbsolute as isAbsolute8 } from "node:path";
+import { basename as basename12, isAbsolute as isAbsolute8 } from "node:path";
 function createRejectWorkspaceDeps() {
   return {
     async findSessions(ids) {
@@ -14846,7 +14902,7 @@ function evidenceIds(selectors) {
   const ids = /* @__PURE__ */ new Set();
   for (const selector of selectors) {
     const trimmed = selector.trim();
-    for (const candidate of [trimmed, basename11(trimmed).replace(/\.jsonl$/i, "")]) {
+    for (const candidate of [trimmed, basename12(trimmed).replace(/\.jsonl$/i, "")]) {
       if (SESSION_ID_RE.test(candidate)) ids.add(candidate.toLowerCase());
     }
   }
@@ -15252,7 +15308,7 @@ async function cmdSuggest(positionals, flags, deps = {}) {
 }
 
 // src/cli/commands/feedback.ts
-import { join as join9 } from "node:path";
+import { join as join10 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/cli/open-browser.ts
@@ -15336,7 +15392,7 @@ function feedbackOptions(flags) {
 async function cmdFeedback(positionals, flags) {
   if (positionals.length) throw new Error("usage: orangu feedback --context session|repo|global|report|app [--port <n>] [--no-open]");
   const { context, port } = feedbackOptions(flags);
-  const emptyConfigDir = join9(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
+  const emptyConfigDir = join10(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
   const server = await startServe(
     {
       port,
@@ -15832,16 +15888,16 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
 }
 
 // src/cli/commands/show-me.ts
-import { basename as basename12, resolve as resolve11 } from "node:path";
+import { basename as basename13, resolve as resolve11 } from "node:path";
 
 // src/show-me/prepare.ts
 import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 
 // src/show-me/render.ts
 import { randomBytes as randomBytes4 } from "node:crypto";
-import { lstat as lstat9, realpath as realpath11, rename as rename2, rm } from "node:fs/promises";
-import { dirname as dirname6, join as join10 } from "node:path";
+import { lstat as lstat10, realpath as realpath11, rename as rename2, rm } from "node:fs/promises";
+import { dirname as dirname7, join as join11 } from "node:path";
 
 // src/show-me/check.ts
 import { createHash as createHash4 } from "node:crypto";
@@ -17112,7 +17168,7 @@ var TEMPLATES = Object.freeze([
   Object.freeze({ file: "slides.html", html: SLIDES_HTML }),
   Object.freeze({ file: "report.html", html: REPORT_HTML })
 ]);
-var showMeBase = () => join10(oranguHome(), "show-me");
+var showMeBase = () => join11(oranguHome(), "show-me");
 var ShowMeRenderError = class extends Error {
   name = "ShowMeRenderError";
 };
@@ -17130,10 +17186,10 @@ async function confinedRunDir(dir, base = showMeBase()) {
   } catch {
     throw new ShowMeRenderError("the --render directory does not exist.");
   }
-  if (dirname6(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
-  if (!(await lstat9(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
+  if (dirname7(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
+  if (!(await lstat10(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
   try {
-    const data = await lstat9(join10(real, "data.json"));
+    const data = await lstat10(join11(real, "data.json"));
     if (!data.isFile()) throw new ShowMeRenderError("data.json in the run directory must be a regular file.");
   } catch (error) {
     if (error instanceof ShowMeRenderError) throw error;
@@ -17144,7 +17200,7 @@ async function confinedRunDir(dir, base = showMeBase()) {
 async function readJson2(dir, name) {
   let text3;
   try {
-    text3 = await readStableTextFile(join10(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
+    text3 = await readStableTextFile(join11(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("not found")) throw new ShowMeInputError(`the run directory has no ${name}.${name === "words.json" ? " Write the 3 words first." : ""}`);
@@ -17162,9 +17218,9 @@ async function writeBoth(dir, files2) {
   const staged = [];
   try {
     for (const { file } of files2) {
-      const to = join10(dir, file);
+      const to = join11(dir, file);
       try {
-        const existing = await lstat9(to);
+        const existing = await lstat10(to);
         if (!existing.isFile()) throw new ShowMeRenderError(`${file} in the run directory is not a regular file.`);
       } catch (error) {
         if (error instanceof ShowMeRenderError) throw error;
@@ -17172,8 +17228,8 @@ async function writeBoth(dir, files2) {
       }
     }
     for (const { file, html } of files2) {
-      const from = join10(dir, `.${file}.${randomBytes4(6).toString("hex")}.tmp`);
-      staged.push({ from, to: join10(dir, file) });
+      const from = join11(dir, `.${file}.${randomBytes4(6).toString("hex")}.tmp`);
+      staged.push({ from, to: join11(dir, file) });
       await writePrivateOutput(from, html);
     }
     for (const { from, to } of staged) await rename2(from, to);
@@ -17194,7 +17250,7 @@ async function renderShowMe(dir, o = {}) {
     return { file, html };
   });
   await writeBoth(run, files2);
-  return { dir: run, slides: join10(run, "slides.html"), report: join10(run, "report.html"), findings: wordFindings(words2) };
+  return { dir: run, slides: join11(run, "slides.html"), report: join11(run, "report.html"), findings: wordFindings(words2) };
 }
 
 // src/show-me/prepare.ts
@@ -17207,8 +17263,8 @@ function runName(name) {
 async function prepareRun(scope, name, json2, o = {}) {
   const base = o.base ?? showMeBase();
   await mkdir3(base, { recursive: true, mode: 448 });
-  const dir = await realpath12(await mkdtemp(join11(base, `${scope}-${runName(name)}-`)));
-  const path = join11(dir, "data.json");
+  const dir = await realpath12(await mkdtemp(join12(base, `${scope}-${runName(name)}-`)));
+  const path = join12(dir, "data.json");
   await writePrivateOutput(path, json2);
   const bytes = Buffer.byteLength(json2);
   const approxTokens3 = Math.ceil(bytes / 4);
@@ -17317,13 +17373,13 @@ async function aggregateData2(scope, flags, err3) {
       }
     }
   }
-  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename12(cwd)}`, now);
+  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename13(cwd)}`, now);
   if (failed) agg.scope += ` (${failed} unreadable skipped)`;
   const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, flags))), { scope });
-  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename12(cwd) : redactValue(basename12(cwd), { scrub: true }) : void 0;
+  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename13(cwd) : redactValue(basename13(cwd), { scrub: true }) : void 0;
   const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION2 }, null, 2)}
 `;
-  return { name: scope === "global" ? "machine" : basename12(cwd), json: json2, skipped: failed };
+  return { name: scope === "global" ? "machine" : basename13(cwd), json: json2, skipped: failed };
 }
 function printPrepared(run, out3) {
   const lines = [
@@ -17467,7 +17523,7 @@ var EXTRA_HELP = [
 ];
 
 // src/cli/commands/pick.ts
-import { basename as basename13 } from "node:path";
+import { basename as basename14 } from "node:path";
 
 // src/cli/select.ts
 var FRAME_CHROME_LINES = 5;
@@ -17589,7 +17645,7 @@ async function gatherPickRows(flags, deps = {}) {
     ordered.slice(0, limit).map(async ({ r, running }) => {
       const head2 = await peekHead(r.path);
       const title = head2.title && redact ? redactValue(head2.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head2.title;
-      const project = head2.cwd ? basename13(head2.cwd) : basename13(r.projectSlug);
+      const project = head2.cwd ? basename14(head2.cwd) : basename14(r.projectSlug);
       return {
         sessionId: r.sessionId,
         path: r.path,
@@ -17631,7 +17687,7 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename14, resolve as resolve12 } from "node:path";
+import { basename as basename15, resolve as resolve12 } from "node:path";
 var INDENT3 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
@@ -17650,7 +17706,7 @@ async function gatherDashboardData(flags, deps = {}) {
     claudeRoots(configArg)
   ]);
   return {
-    repoName: basename14(cwd) || cwd,
+    repoName: basename15(cwd) || cwd,
     repoSessions: repoRefs.length,
     globalSessions: picked.counts.total,
     roots: roots.length,
@@ -17823,7 +17879,7 @@ async function selectSession2(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail2(`"${sel}" matches ${cands.length} sessions:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename15(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename16(c.projectSlug)).join("\n"));
   }
   fail2(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
@@ -17867,7 +17923,7 @@ async function analyzeWithProgress(ref2, flags) {
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
   if (out3) return resolve13(out3);
-  return join12(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  return join13(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref2 = await selectSession2(sel, flags);
@@ -17992,7 +18048,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename15(cwd)}`;
+    scopeLabel = `repo ${basename16(cwd)}`;
   }
   if (!refs.length) fail2(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
@@ -18057,7 +18113,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash5("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve13(named) : join12(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve13(named) : join13(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
