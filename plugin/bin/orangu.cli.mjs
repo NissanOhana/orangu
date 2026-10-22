@@ -13871,12 +13871,14 @@ var STORE_READS = {
   lessons: ["cwd", "all", "scope", "rule"]
 };
 var STORE_READ_OPTIONS = ["cwd", "all", "scope", "rule"];
+var UNKNOWN_WORKSPACE = "unknown workspace";
+var REJECT_RUNNING = "another rejection of this suggestion runs now";
 function storeReadQuery(read, query, serveCwd) {
   const takes = STORE_READS[read];
-  for (const name of STORE_READ_OPTIONS) {
-    const count4 = query.getAll(name).length;
-    if (count4 && !takes.includes(name)) return `${name} is not valid on /api/${read}`;
-    if (count4 > 1) return `${name} must be singular`;
+  for (const name of new Set(query.keys())) {
+    if (!STORE_READ_OPTIONS.includes(name)) return `the query has a name that /api/${read} does not take`;
+    if (!takes.includes(name)) return `${name} is not valid on /api/${read}`;
+    if (query.getAll(name).length > 1) return `${name} must be singular`;
   }
   const cwd = query.get("cwd");
   const all = query.get("all");
@@ -13894,34 +13896,40 @@ function storeReadQuery(read, query, serveCwd) {
     if (Buffer.byteLength(dir, "utf8") > MAX_REPO_CWD_BYTES) return "cwd is too long";
     target = { cwd: dir };
   }
+  const namedCwd = cwd !== null;
   const rule = query.get("rule");
-  if (rule === null) return { target };
+  if (rule === null) return { target, namedCwd };
   const rules = rule.split(",").map((id) => id.trim()).filter(Boolean);
   if (!rules.length) return "rule requires 1 or more rule ids";
-  return { target, rules };
+  return { target, namedCwd, rules };
 }
 function queueReadStore(store) {
   const lines = store.lines;
   if (typeof lines !== "function") return void 0;
   return { all: () => store.all(), lines: (id) => lines.call(store, id) };
 }
-async function storeRead(ctx, res, read, query) {
+async function storeRead(ctx, res, read, query, knownCwd) {
   const request = storeReadQuery(read, query, ctx.opts.cwd);
   if (typeof request === "string") return json(res, 400, { error: request });
+  let target = request.target;
+  if (typeof target === "object" && request.namedCwd) {
+    const known = await knownCwd(target.cwd);
+    if (!known) return json(res, 404, { error: UNKNOWN_WORKSPACE });
+    target = { cwd: known };
+  }
   const store = queueReadStore(ctx.store);
   if (!store) return json(res, 503, { error: "the store reads are not available in this mode" });
   const now = ctx.now();
   const deps = ctx.queueReadDeps ? ctx.queueReadDeps(now) : createQueueReadDeps({ now, cache: ctx.opts.noCache ? null : new CohortFactsCache({ version: ctx.opts.version }) });
-  const { target, rules } = request;
   if (typeof target === "object") {
     try {
       await deps.canonical(target.cwd);
     } catch {
-      return json(res, 404, { error: "unknown workspace folder" });
+      return json(res, 404, { error: UNKNOWN_WORKSPACE });
     }
   }
   try {
-    const filter = rules ? { rules } : {};
+    const filter = request.rules ? { rules: request.rules } : {};
     let value;
     if (read === "queue") {
       if (target === "global") return json(res, 400, { error: "scope is not valid on /api/queue" });
@@ -13999,6 +14007,7 @@ var AggregateRunner = class {
       });
     }
   }
+  /** The raw cwd of each workspace that the registry knows, by its raw, row and scrubbed forms. The store reads share it. */
   async aliasesForDiscoveredCwds() {
     const rows2 = this.ctx.registry.list();
     const fingerprint = this.fingerprint(rows2);
@@ -14126,6 +14135,12 @@ function coreRoutes(ctx, hub) {
   const aggs = new AggregateRunner(ctx);
   const harness = new HarnessRunner(ctx);
   const maxLive = ctx.opts.maxLive ?? DEFAULT_MAX_LIVE;
+  const rejecting = /* @__PURE__ */ new Set();
+  const knownCwd = async (requested) => {
+    const serveCwd = ctx.opts.cwd;
+    if (serveCwd && (requested === serveCwd || requested === redactValue(serveCwd, { scrub: true }))) return serveCwd;
+    return (await aggs.aliasesForDiscoveredCwds()).get(requested) ?? void 0;
+  };
   const appData = async (s) => {
     const rows2 = ctx.registry.list();
     const selectedId = s && rows2.some((r) => r.id === s) ? s : rows2[0]?.id;
@@ -14201,17 +14216,17 @@ function coreRoutes(ctx, hub) {
     {
       method: "GET",
       path: "/api/queue",
-      handler: async (m, _req, res) => storeRead(ctx, res, "queue", m.query)
+      handler: async (m, _req, res) => storeRead(ctx, res, "queue", m.query, knownCwd)
     },
     {
       method: "GET",
       path: "/api/history",
-      handler: async (m, _req, res) => storeRead(ctx, res, "history", m.query)
+      handler: async (m, _req, res) => storeRead(ctx, res, "history", m.query, knownCwd)
     },
     {
       method: "GET",
       path: "/api/lessons",
-      handler: async (m, _req, res) => storeRead(ctx, res, "lessons", m.query)
+      handler: async (m, _req, res) => storeRead(ctx, res, "lessons", m.query, knownCwd)
     },
     {
       method: "POST",
@@ -14224,10 +14239,18 @@ function coreRoutes(ctx, hub) {
         const reason = body.reason;
         const reasonCode = REJECT_REASON_CODES.find((code2) => code2 === reason);
         if (reason !== void 0 && !reasonCode) return json(res, 400, { error: `reason must be 1 of ${REJECT_REASON_CODES.join(", ")}` });
-        const existing = await ctx.store.get(id);
-        if (!existing) return json(res, 404, { error: "unknown suggestion" });
-        if (!(TRANSITIONS[existing.status] ?? []).includes("rejected")) return jsonError(res, 400, `illegal transition ${existing.status} \u2192 rejected for ${id}`);
+        if (rejecting.has(id)) return json(res, 409, { error: REJECT_RUNNING });
+        rejecting.add(id);
+        const held = [id];
         try {
+          const existing = await ctx.store.get(id);
+          if (!existing) return json(res, 404, { error: "unknown suggestion" });
+          if (existing.id !== id) {
+            if (rejecting.has(existing.id)) return json(res, 409, { error: REJECT_RUNNING });
+            rejecting.add(existing.id);
+            held.push(existing.id);
+          }
+          if (!(TRANSITIONS[existing.status] ?? []).includes("rejected")) return jsonError(res, 400, `illegal transition ${existing.status} \u2192 rejected for ${id}`);
           const workspaceCwd = await rejectWorkspaceCwd(existing, ctx.rejectWorkspace);
           const rec = await ctx.store.transition(id, "rejected", { ...reasonCode ? { reasonCode } : {}, ...workspaceCwd ? { workspaceCwd } : {} });
           if (ctx.noteSuggestion) ctx.noteSuggestion(rec);
@@ -14235,6 +14258,8 @@ function coreRoutes(ctx, hub) {
           json(res, 200, publicSuggestion(rec));
         } catch (e) {
           jsonError(res, 400, e);
+        } finally {
+          for (const key of held) rejecting.delete(key);
         }
       }
     },
@@ -14705,7 +14730,7 @@ async function startServe(opts, deps = {}) {
     } catch (e) {
       if (!res.headersSent) {
         res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ error: String(e instanceof Error ? e.message : e) }));
+        res.end(JSON.stringify(redactValue({ error: String(e instanceof Error ? e.message : e) }, { scrub: true })));
       } else res.end();
     }
   };
