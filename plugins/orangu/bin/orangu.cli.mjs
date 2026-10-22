@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash5 } from "node:crypto";
-import { basename as basename14, join as join12, resolve as resolve13 } from "node:path";
+import { basename as basename15, join as join12, resolve as resolve13 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -73,7 +73,9 @@ var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   "application",
   "verification",
   "cohort",
-  "render"
+  "render",
+  "record",
+  "reason"
 ]);
 function unknownFlags(flags) {
   return Object.keys(flags).filter((k) => !KNOWN_FLAGS.has(k)).map((k) => (k.length === 1 ? "-" : "--") + k);
@@ -9575,8 +9577,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename15 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename15)) return { violation: "must not use a reserved Windows device name" };
+    const basename16 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename16)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -14452,6 +14454,35 @@ async function measureCohortEffect(record3, others, deps) {
     skipped
   };
 }
+async function freezeBaseline(record3, _others, deps) {
+  if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
+  if (record3.status !== "proposed") throw new Error(`suggestion ${record3.id} is not proposed (status ${record3.status}), so it has no baseline to freeze`);
+  const proposal = record3.proposal;
+  if (proposal?.v !== 1 || !proposal.workspace || !proposal.verificationChecks?.length) {
+    throw new Error(`suggestion ${record3.id} has no reviewed verification checks and workspace`);
+  }
+  const cutAt = (deps.now ?? Date.now)();
+  if (!Number.isFinite(cutAt) || cutAt <= 0) throw new Error(`suggestion ${record3.id}: the clock gave no valid cut time, so the baseline cannot be frozen`);
+  const cwd = await deps.canonicalWorkspace(proposal.workspace);
+  const candidates = await deps.listCandidates(cwd);
+  const skipped = noSkips();
+  skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === cutAt).length;
+  const ctx = { deps, cwd, cutAt, excluded: evidenceSessionIds(record3.sessionIds), seen: /* @__PURE__ */ new Set(), skipped };
+  const { accepted } = await take(ctx, baselineCandidates(candidates, cutAt), "baseline");
+  if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
+    throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its baseline sessions were read`);
+  }
+  const sessions = accepted.map((session) => ({
+    id: session.id,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, session.metrics[metric]]))
+  })).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const frozen = { v: 1, cutAt, sessions, skipped };
+  const violation = frozenBaselineViolation(frozen, void 0);
+  if (violation) throw new Error(`suggestion ${record3.id}: the baseline cannot be frozen (${violation})`);
+  return frozen;
+}
 function effectFinality(effect) {
   const checkpoint = effect.laterComplete ? "complete" : effect.laterCount >= COHORT_MIN ? "first" : null;
   if (effect.baseline.length < COHORT_MIN) return { checkpoint, final: effect.baselineFrozen };
@@ -14521,6 +14552,40 @@ function verificationPatch(effect) {
       before: Object.fromEntries(checks2.map((check) => [check.metric, check.before])),
       after: Object.fromEntries(checks2.map((check) => [check.metric, check.after])),
       measuredSessionIds: receipt.measuredSessionIds
+    }
+  };
+}
+function outcomePatch(effect) {
+  if (effect.status !== "applied") throw new Error(`suggestion ${effect.id} is not applied (status ${effect.status})`);
+  const verdict = effect.verdict;
+  if (verdict === "verified") throw new Error(`record it as verified: orangu suggest --set ${effect.id} verified`);
+  if (!effectFinality(effect).final) throw new Error(`not final: ${verdict}. ${nextStep(effect)}`);
+  const checks2 = effect.checks.map((check) => ({
+    metric: check.metric,
+    comparison: check.comparison,
+    name: check.name,
+    before: check.before,
+    after: check.after,
+    beforeMedian: check.beforeMedian,
+    afterMedian: check.afterMedian,
+    pLower: check.pLower,
+    pHigher: check.pHigher,
+    verdict: check.verdict
+  }));
+  return {
+    outcomeReceipt: {
+      v: 1,
+      method: "cohort-rank-v1",
+      alpha: COHORT_ALPHA,
+      appliedAt: effect.appliedAt,
+      // The store accepts only this pairing: complete exactly when the later cohort is complete.
+      checkpoint: effect.laterComplete ? "complete" : "first",
+      verdict,
+      laterComplete: effect.laterComplete,
+      confoundedBy: [...effect.confoundedBy],
+      baselineSessionIds: effect.baseline.map((s) => s.id).sort(),
+      measuredSessionIds: effect.later.map((s) => s.id).sort(),
+      checks: checks2
     }
   };
 }
@@ -14657,6 +14722,52 @@ function createCohortDeps(options = {}) {
   };
 }
 
+// src/suggest/reject-workspace.ts
+import { basename as basename11, isAbsolute as isAbsolute8 } from "node:path";
+function createRejectWorkspaceDeps() {
+  return {
+    async findSessions(ids) {
+      const refs = await listSessions({ roots: await claudeRoots(), maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS });
+      return refs.filter((ref2) => SESSION_ID_RE.test(ref2.sessionId) && ids.has(ref2.sessionId.toLowerCase())).map((ref2) => ref2.path);
+    },
+    peekCwd,
+    // The same resolution as a reviewed proposal workspace: realpath, then a directory check.
+    async canonical(path) {
+      return (await liveWorkspaceIdentity(path)).cwd;
+    }
+  };
+}
+function evidenceIds(selectors) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const selector of selectors) {
+    const trimmed = selector.trim();
+    for (const candidate of [trimmed, basename11(trimmed).replace(/\.jsonl$/i, "")]) {
+      if (SESSION_ID_RE.test(candidate)) ids.add(candidate.toLowerCase());
+    }
+  }
+  return ids;
+}
+async function rejectWorkspaceCwd(record3, deps = createRejectWorkspaceDeps()) {
+  if (record3.scope === "global" || record3.proposal?.workspace !== void 0) return void 0;
+  const ids = evidenceIds(record3.sessionIds);
+  if (!ids.size) return void 0;
+  try {
+    const paths = await deps.findSessions(ids);
+    let bound;
+    for (const path of paths) {
+      const cwd = await deps.peekCwd(path);
+      if (typeof cwd !== "string" || !isAbsolute8(cwd)) return void 0;
+      const canonical = await deps.canonical(cwd);
+      if (!isCanonicalWorkspaceCwd(canonical)) return void 0;
+      if (bound !== void 0 && canonical !== bound) return void 0;
+      bound = canonical;
+    }
+    return bound;
+  } catch {
+    return void 0;
+  }
+}
+
 // src/version.ts
 var VERSION2 = true ? "0.11.0" : "0.0.0-dev";
 
@@ -14721,7 +14832,10 @@ async function assertWorkspaceMatch(rec) {
   return rec.proposal;
 }
 var SCOPES2 = ["session", "repo", "global"];
-var STATUSES = ["new", "kicked-off", "proposed", "applied", "verified", "rejected", "failed"];
+var STATUSES = ["new", "kicked-off", "proposed", "applied", "verified", "rejected", "failed", "kept"];
+var RECORDED_STATUSES = ["regressed", "unproven"];
+var ARTIFACT_FLAGS = ["proposal", "manifest", "application", "verification"];
+var FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/;
 var emit = (v, flags) => process.stdout.write(JSON.stringify(v, null, flagBool(flags, "quiet") ? 0 : 2) + "\n");
 function visible(value, flags) {
   return flagBool(flags, "no-redact") ? value : redactValue(value, { scrub: true });
@@ -14798,24 +14912,35 @@ async function cmdShow(store, id, flags) {
   process.stdout.write(`  evidence: ${sessions.length} session(s) loaded${missing.length ? `, ${missing.length} unresolvable` : ""}. Add --json for the slim data
 `);
 }
-async function cmdSet(store, id, positionals, flags) {
+function rejectReason(flags) {
+  const value = flags["reason"];
+  if (value === void 0) return void 0;
+  const code2 = REJECT_REASON_CODES.find((known) => known === value);
+  if (!code2) throw new Error(`--reason must be 1 of ${REJECT_REASON_CODES.join(", ")}`);
+  return code2;
+}
+async function cmdSet(store, id, positionals, flags, deps) {
   const status = positionals[0];
+  if (status && RECORDED_STATUSES.includes(status)) {
+    throw new Error(`--set cannot write ${status}, because orangu measures that verdict itself. Run: orangu suggest --record ${id}`);
+  }
   if (!status || !STATUSES.includes(status)) throw new Error(`usage: orangu suggest --set <id> <${STATUSES.join("|")}>`);
+  const reasonCode = rejectReason(flags);
   const proposalPath = flagStr(flags, "proposal");
   const manifestPath = flagStr(flags, "manifest");
   const applicationPath = flagStr(flags, "application");
   const verificationPath = flagStr(flags, "verification");
-  const artifactNames = ["proposal", "manifest", "application", "verification"];
-  for (const name of artifactNames) {
+  for (const name of ARTIFACT_FLAGS) {
     if (flags[name] !== void 0 && typeof flags[name] !== "string") throw new Error(`--${name} requires a file path`);
   }
   const rec = await store.get(id);
   if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`);
-  if (!(TRANSITIONS[rec.status] ?? []).includes(status)) {
-    throw new Error(`illegal transition ${rec.status} \u2192 ${status} for ${id} (allowed: ${(TRANSITIONS[rec.status] ?? []).join(", ") || "none"})`);
+  const settable = (TRANSITIONS[rec.status] ?? []).filter((next2) => STATUSES.includes(next2));
+  if (!settable.includes(status)) {
+    throw new Error(`illegal transition ${rec.status} \u2192 ${status} for ${id} (allowed: ${settable.join(", ") || "none"})`);
   }
   const allowedArtifacts = status === "proposed" ? /* @__PURE__ */ new Set(["proposal", "manifest"]) : status === "applied" ? /* @__PURE__ */ new Set(["application"]) : status === "verified" ? /* @__PURE__ */ new Set(["verification"]) : /* @__PURE__ */ new Set();
-  const unexpectedArtifact = artifactNames.find((name) => flags[name] !== void 0 && !allowedArtifacts.has(name));
+  const unexpectedArtifact = ARTIFACT_FLAGS.find((name) => flags[name] !== void 0 && !allowedArtifacts.has(name));
   if (unexpectedArtifact) throw new Error(`--${unexpectedArtifact} is not valid when setting ${status}`);
   let patch;
   if (status === "proposed") {
@@ -14829,7 +14954,10 @@ async function cmdSet(store, id, positionals, flags) {
   } else if (status === "applied") {
     if (!applicationPath) throw new Error("--application <id>.applied.json is required when setting applied");
     const proposal = await assertWorkspaceMatch(rec);
-    patch = { application: await loadApplicationReceipt(store.proposalsDir, rec.id, applicationPath, proposal.files) };
+    const application = await loadApplicationReceipt(store.proposalsDir, rec.id, applicationPath, proposal.files);
+    const next2 = await transitionApplied(store, rec, application, deps.cohort ?? createCohortDeps());
+    if (flagBool(flags, "json")) return emit(visible(next2, flags), flags);
+    return printRecord(visible(next2, flags));
   } else if (status === "verified") {
     if (rec.scope === "global") throw new Error(`suggestion ${id}: global suggestions are review-only and cannot be verified`);
     if (!rec.application) throw new Error(`suggestion ${id} has no validated application receipt to verify`);
@@ -14837,7 +14965,7 @@ async function cmdSet(store, id, positionals, flags) {
       throw new Error(`suggestion ${id} has no reviewed structured verification checks`);
     }
     if (!rec.proposal.workspace) throw new Error(`suggestion ${id} has no canonical proposal workspace`);
-    const effect = await measureCohortEffect(rec, await store.all(), createCohortDeps());
+    const effect = await measureCohortEffect(rec, await store.all(), deps.cohort ?? createCohortDeps());
     if (verificationPath) {
       const { selectors } = await loadVerificationIntent(store.proposalsDir, rec.id, verificationPath, rec.proposal.verificationChecks);
       for (const selector of selectors) {
@@ -14847,8 +14975,48 @@ async function cmdSet(store, id, positionals, flags) {
       }
     }
     patch = verificationPatch(effect);
+  } else if (status === "rejected") {
+    const workspaceCwd = await rejectWorkspaceCwd(rec, deps.rejectWorkspace);
+    patch = { ...reasonCode ? { reasonCode } : {}, ...workspaceCwd ? { workspaceCwd } : {} };
   }
   const next = await store.transition(id, status, patch);
+  if (flagBool(flags, "json")) return emit(visible(next, flags), flags);
+  printRecord(visible(next, flags));
+}
+async function transitionApplied(store, rec, application, cohort) {
+  let frozenBaseline;
+  let notFrozen;
+  try {
+    frozenBaseline = await freezeBaseline(rec, await store.all(), cohort);
+  } catch (error) {
+    notFrozen = error;
+  }
+  let next;
+  try {
+    next = await store.transition(rec.id, "applied", { application, ...frozenBaseline ? { frozenBaseline } : {} });
+  } catch (error) {
+    if (!frozenBaseline || !(error instanceof Error) || !FROZEN_BASELINE_REFUSAL_RE.test(error.message)) throw error;
+    notFrozen = error;
+    next = await store.transition(rec.id, "applied", { application });
+  }
+  if (notFrozen !== void 0) {
+    const reason = notFrozen instanceof Error ? notFrozen.message : String(notFrozen);
+    process.stderr.write(`  orangu did not freeze the baseline (${terminal(reason)}). The change is applied, and each check reads the baseline sessions again.
+`);
+  }
+  return next;
+}
+async function cmdRecord(store, id, positionals, flags, deps) {
+  if (positionals.length) throw new Error("--record takes no status. Orangu measures the verdict itself");
+  const artifact = ARTIFACT_FLAGS.find((name) => flags[name] !== void 0);
+  if (artifact) throw new Error(`--${artifact} is not valid with --record`);
+  const rec = await store.get(id);
+  if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`);
+  if (rec.scope === "global") throw new Error(`suggestion ${id}: global suggestions are review-only and cannot be verified`);
+  if (rec.status !== "applied") throw new Error(`suggestion ${id} is not applied (status ${rec.status})`);
+  const effect = await measureCohortEffect(rec, await store.all(), deps.cohort ?? createCohortDeps());
+  const patch = outcomePatch(effect);
+  const next = await store.transition(id, effect.verdict === "regressed" ? "regressed" : "unproven", patch);
   if (flagBool(flags, "json")) return emit(visible(next, flags), flags);
   printRecord(visible(next, flags));
 }
@@ -14921,23 +15089,28 @@ async function inLaterCohort(selector, effect) {
   return false;
 }
 function effectView(effect) {
+  const { checkpoint, final, leaning } = effectFinality(effect);
   return {
     id: effect.id,
     scope: effect.scope,
     verdict: effect.verdict,
+    checkpoint,
+    final,
+    ...leaning ? { leaning } : {},
     appliedAt: effect.appliedAt,
     baseline: { n: effect.baseline.length, ids: effect.baseline.map((session) => session.id) },
-    later: { n: effect.later.length, ids: effect.later.map((session) => session.id), complete: effect.laterComplete },
+    // n and ids are the graded later sessions, and count is every later session so far.
+    later: { n: effect.later.length, ids: effect.later.map((session) => session.id), complete: effect.laterComplete, count: effect.laterCount },
     checks: effect.checks,
     confoundedBy: effect.confoundedBy,
     skipped: effect.skipped,
     next: nextStep(effect)
   };
 }
-async function cmdEffect(store, id, flags) {
+async function cmdEffect(store, id, flags, deps) {
   const rec = await store.get(id);
   if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`);
-  const effect = await measureCohortEffect(rec, await store.all(), createCohortDeps());
+  const effect = await measureCohortEffect(rec, await store.all(), deps.cohort ?? createCohortDeps());
   const view = visible(effectView(effect), flags);
   if (flagBool(flags, "json")) return emit(view, flags);
   const w = (s) => process.stdout.write(s + "\n");
@@ -14949,15 +15122,23 @@ async function cmdEffect(store, id, flags) {
   w(`  verdict: ${view.verdict}`);
   w(`  next: ${terminal(view.next)}`);
 }
-async function cmdSuggest(positionals, flags) {
+async function cmdSuggest(positionals, flags, deps = {}) {
+  if (flags["reason"] !== void 0 && !(flagStr(flags, "set") && positionals[0] === "rejected")) {
+    throw new Error("--reason is valid only with --set <id> rejected");
+  }
   const store = new SuggestionStore();
   if (flagBool(flags, "list")) return cmdList(store, flags);
   const show = flagStr(flags, "show");
   if (show) return cmdShow(store, show, flags);
   const effect = flagStr(flags, "effect");
-  if (effect) return cmdEffect(store, effect, flags);
+  if (effect) return cmdEffect(store, effect, flags, deps);
+  if (flags["record"] !== void 0) {
+    const record3 = flagStr(flags, "record");
+    if (!record3) throw new Error("--record requires a suggestion id");
+    return cmdRecord(store, record3, positionals, flags, deps);
+  }
   const set = flagStr(flags, "set");
-  if (set) return cmdSet(store, set, positionals, flags);
+  if (set) return cmdSet(store, set, positionals, flags, deps);
   return cmdCreate(store, positionals, flags);
 }
 
@@ -15542,7 +15723,7 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
 }
 
 // src/cli/commands/show-me.ts
-import { basename as basename11, resolve as resolve11 } from "node:path";
+import { basename as basename12, resolve as resolve11 } from "node:path";
 
 // src/show-me/prepare.ts
 import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
@@ -17027,13 +17208,13 @@ async function aggregateData2(scope, flags, err3) {
       }
     }
   }
-  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename11(cwd)}`, now);
+  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename12(cwd)}`, now);
   if (failed) agg.scope += ` (${failed} unreadable skipped)`;
   const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, flags))), { scope });
-  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename11(cwd) : redactValue(basename11(cwd), { scrub: true }) : void 0;
+  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename12(cwd) : redactValue(basename12(cwd), { scrub: true }) : void 0;
   const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION2 }, null, 2)}
 `;
-  return { name: scope === "global" ? "machine" : basename11(cwd), json: json2, skipped: failed };
+  return { name: scope === "global" ? "machine" : basename12(cwd), json: json2, skipped: failed };
 }
 function printPrepared(run, out3) {
   const lines = [
@@ -17149,10 +17330,13 @@ var EXTRA_HELP = [
     "                                  | --show <id> [--for-proposal|--for-apply]",
     "                                  | --effect <id>  (later sessions vs baseline,",
     "                                    beyond chance, read-only)",
+    "                                  | --record <id>  (measure again, and store",
+    "                                    a final verdict that is not verified)",
     "                                  | --set <id> <status> [--proposal <path>]",
     "                                    [--manifest <path>]",
     "                                    [--application <path>]",
     "                                    [--verification <path>]",
+    "                                    [--reason <code>]  (with rejected)",
     "                                  | --list)"
   ].join("\n"),
   [
@@ -17174,7 +17358,7 @@ var EXTRA_HELP = [
 ];
 
 // src/cli/commands/pick.ts
-import { basename as basename12 } from "node:path";
+import { basename as basename13 } from "node:path";
 
 // src/cli/select.ts
 var FRAME_CHROME_LINES = 5;
@@ -17296,7 +17480,7 @@ async function gatherPickRows(flags, deps = {}) {
     ordered.slice(0, limit).map(async ({ r, running }) => {
       const head2 = await peekHead(r.path);
       const title = head2.title && redact ? redactValue(head2.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head2.title;
-      const project = head2.cwd ? basename12(head2.cwd) : basename12(r.projectSlug);
+      const project = head2.cwd ? basename13(head2.cwd) : basename13(r.projectSlug);
       return {
         sessionId: r.sessionId,
         path: r.path,
@@ -17338,7 +17522,7 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename13, resolve as resolve12 } from "node:path";
+import { basename as basename14, resolve as resolve12 } from "node:path";
 var INDENT3 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
@@ -17357,7 +17541,7 @@ async function gatherDashboardData(flags, deps = {}) {
     claudeRoots(configArg)
   ]);
   return {
-    repoName: basename13(cwd) || cwd,
+    repoName: basename14(cwd) || cwd,
     repoSessions: repoRefs.length,
     globalSessions: picked.counts.total,
     roots: roots.length,
@@ -17530,7 +17714,7 @@ async function selectSession2(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail2(`"${sel}" matches ${cands.length} sessions:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename14(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename15(c.projectSlug)).join("\n"));
   }
   fail2(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
@@ -17699,7 +17883,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename14(cwd)}`;
+    scopeLabel = `repo ${basename15(cwd)}`;
   }
   if (!refs.length) fail2(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
