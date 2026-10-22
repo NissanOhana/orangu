@@ -13,6 +13,7 @@ const facts = (over: Partial<CohortFacts> = {}): CohortFacts => ({
   startedAt: 1_000,
   endedAt: 2_000,
   ranOrangu: false,
+  bytesRead: 1_000,
   metrics: metricsOf(4),
   ...over,
 })
@@ -55,7 +56,7 @@ describe('CohortFactsCache: numbers and ids only', () => {
     await cache.put(KEY, { ...facts(), title: 'secret prompt text', metrics: { ...metricsOf(4), extra: 1 } } as unknown as CohortFacts)
     const file = join(dir, readdirSync(dir)[0]!, COHORT_FACTS_DIR, `${KEY}.json`)
     const stored = JSON.parse(readFileSync(file, 'utf8')) as Record<string, unknown>
-    expect(Object.keys(stored)).toEqual(['v', 'key', 'sessionId', 'cwd', 'startedAt', 'endedAt', 'ranOrangu', 'metrics'])
+    expect(Object.keys(stored)).toEqual(['v', 'key', 'sessionId', 'cwd', 'startedAt', 'endedAt', 'ranOrangu', 'bytesRead', 'metrics'])
     expect(Object.keys(stored['metrics'] as object)).toEqual(Object.keys(metricsOf(4)))
     expect(readFileSync(file, 'utf8')).not.toContain('secret')
   })
@@ -63,7 +64,13 @@ describe('CohortFactsCache: numbers and ids only', () => {
   it('refuses to store a value that is not a number, a session id or an absolute path', async () => {
     const dir = root()
     const cache = new CohortFactsCache({ version: '9.9.9', dir })
-    for (const bad of [facts({ sessionId: 'not an id' }), facts({ cwd: 'relative/path' }), facts({ startedAt: Number.NaN }), facts({ metrics: { ...metricsOf(1), avgToolCalls: -1 } })]) {
+    for (const bad of [
+      facts({ sessionId: 'not an id' }),
+      facts({ cwd: 'relative/path' }),
+      facts({ startedAt: Number.NaN }),
+      facts({ bytesRead: 1.5 }),
+      facts({ metrics: { ...metricsOf(1), avgToolCalls: -1 } }),
+    ]) {
       await cache.put(KEY, bad)
     }
     expect(cache.stats().writes).toBe(0)
@@ -96,6 +103,7 @@ describe('CohortFactsCache: a stale or hostile entry is a miss', () => {
       ['a string metric', { ...good(), metrics: { ...metricsOf(1), avgToolCalls: '1' } }],
       ['an extra metric', { ...good(), metrics: { ...metricsOf(1), more: 1 } }],
       ['a string boolean', { ...good(), ranOrangu: 'false' }],
+      ['a negative byte count', { ...good(), bytesRead: -1 }],
       ['an array', [good()]],
     ]
     for (const [label, value] of cases) {

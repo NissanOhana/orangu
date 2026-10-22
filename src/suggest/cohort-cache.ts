@@ -44,10 +44,12 @@ export interface CohortFacts {
   startedAt: number
   endedAt: number
   ranOrangu: boolean
+  /** the transcript bytes of the trusted read, so a hit spends the same side budget as that read */
+  bytesRead: number
   metrics: Record<SuggestionVerificationMetric, number>
 }
 
-const ENTRY_KEYS = ['v', 'key', 'sessionId', 'cwd', 'startedAt', 'endedAt', 'ranOrangu', 'metrics'] as const
+const ENTRY_KEYS = ['v', 'key', 'sessionId', 'cwd', 'startedAt', 'endedAt', 'ranOrangu', 'bytesRead', 'metrics'] as const
 const KEY_RE = /^[0-9a-f]{40}$/
 /** The lowercase form of `SESSION_ID_RE` (`src/discover/discover.ts`), as the trusted loader stores an id. */
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -66,7 +68,7 @@ const finiteNonNegative = (value: unknown): value is number => typeof value === 
 
 /** True when the facts keep every rule: the same rules hold for a write and for a read. */
 function validFacts(value: Record<string, unknown>): boolean {
-  const { sessionId, cwd, startedAt, endedAt, ranOrangu, metrics } = value
+  const { sessionId, cwd, startedAt, endedAt, ranOrangu, bytesRead, metrics } = value
   return (
     typeof sessionId === 'string' &&
     SESSION_ID_RE.test(sessionId) &&
@@ -79,6 +81,8 @@ function validFacts(value: Record<string, unknown>): boolean {
     finiteNonNegative(endedAt) &&
     endedAt >= startedAt &&
     typeof ranOrangu === 'boolean' &&
+    Number.isSafeInteger(bytesRead) &&
+    (bytesRead as number) >= 0 &&
     plainObject(metrics) &&
     hasExactKeys(metrics, SUGGESTION_VERIFICATION_METRICS) &&
     SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative(metrics[metric]))
@@ -93,6 +97,7 @@ function pick(facts: CohortFacts): CohortFacts {
     startedAt: facts.startedAt,
     endedAt: facts.endedAt,
     ranOrangu: facts.ranOrangu,
+    bytesRead: facts.bytesRead,
     metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, facts.metrics?.[metric]])) as Record<SuggestionVerificationMetric, number>,
   }
 }

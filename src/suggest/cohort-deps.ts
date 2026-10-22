@@ -148,7 +148,8 @@ export interface CachedCohortDeps extends CohortDeps {
  * the trusted loaders, so a cache entry never reaches a stored verdict.
  *
  * Per candidate: a transcript that changed within the quiet time at `now` still settles, and it is not read (its
- * start time comes from the head). Else a valid cache entry gives the facts. Else the trusted loader reads it inside
+ * start time comes from the head). Else a valid cache entry gives the facts and the bytes of the trusted read, which
+ * the side budget spends as before, so a hit never changes which sessions a side takes. Else the trusted loader reads it inside
  * what is left of `budgetBytes`, and the facts of a settled session go into the cache. A miss past the budget throws
  * `CohortReadDeferred`, so the item is deferred and is never graded on a part of its cohort.
  */
@@ -180,10 +181,13 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
         const facts = options.cache ? await options.cache.get(identity.key, candidate.sessionId) : undefined
         if (facts) {
           cacheHits++
+          // A hit spends the side budget that the trusted read spent, so a warm read takes the same sessions as a cold
+          // one. Past the cap of this load the trusted read refuses before it reads, so a hit does the same.
+          if (facts.bytesRead > maxBytes) return { skip: 'over-budget', bytesRead: 0 }
           // The key order of a trusted load, so a warm read gives the same bytes as a cold one.
           return {
             session: { id: facts.sessionId, path: candidate.path, cwd: facts.cwd, ranOrangu: facts.ranOrangu, startedAt: facts.startedAt, endedAt: facts.endedAt, metrics: facts.metrics },
-            bytesRead: 0,
+            bytesRead: facts.bytesRead,
           }
         }
       }
@@ -200,7 +204,7 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
         const after = await cohortFactsKey(ref)
         if (after?.key === identity.key) {
           const { id, cwd, startedAt, endedAt, ranOrangu, metrics } = loaded.session
-          await options.cache.put(identity.key, { sessionId: id.toLowerCase(), cwd, startedAt, endedAt, ranOrangu, metrics })
+          await options.cache.put(identity.key, { sessionId: id.toLowerCase(), cwd, startedAt, endedAt, ranOrangu, bytesRead: loaded.bytesRead, metrics })
         }
       }
       return loaded

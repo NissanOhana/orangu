@@ -166,8 +166,8 @@ describe('createCachedCohortDeps over real transcripts', () => {
       },
     }
   }
-  const cached = (dir: string | null, base: CohortDeps, now = settled) =>
-    createCachedCohortDeps({ now, budgetBytes: 256 * 1024 * 1024, cache: dir === null ? null : new CohortFactsCache({ version: 'test', dir }), base })
+  const cached = (dir: string | null, base: CohortDeps, now = settled, budgetBytes = 256 * 1024 * 1024) =>
+    createCachedCohortDeps({ now, budgetBytes, cache: dir === null ? null : new CohortFactsCache({ version: 'test', dir }), base })
 
   it('reads no transcript on a warm read and gives the same effect', async () => {
     const { identity } = workspaceWithSessions()
@@ -183,6 +183,33 @@ describe('createCachedCohortDeps over real transcripts', () => {
     expect(deps.stats()).toMatchObject({ loaderCalls: 0, missBytes: 0, cacheHits: 6 })
     expect(JSON.stringify(second)).toBe(JSON.stringify(first))
     expect(second.skipped['other-workspace']).toBe(1)
+  })
+
+  it('spends the same side budget on a hit as the trusted read, so a warm read takes the same sessions', async () => {
+    const { cwd, identity } = workspaceWithSessions()
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    writeSession(project, id(103), cwd, '2026-08-14T10:00:00.000Z', 4)
+    writeSession(project, id(104), cwd, '2026-08-15T10:00:00.000Z', 5)
+    const MiB = 1024 * 1024
+    // Each transcript counts as 64 MiB, so 4 later reads spend the later budget of 256 MiB.
+    const big = (deps: CohortDeps): CohortDeps => ({
+      ...deps,
+      loadCandidate: async (candidate, maxBytes) => {
+        const loaded = await deps.loadCandidate(candidate, maxBytes)
+        return 'session' in loaded ? { ...loaded, bytesRead: 64 * MiB } : loaded
+      },
+    })
+    const trusted = await measureCohortEffect(applied(identity), [], big(createCohortDeps({ now: settled })))
+    expect(trusted.laterComplete).toBe(true)
+    expect(trusted.later.map((s) => s.id)).toEqual([id(100), id(101), id(102)])
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    // The read budget holds both sides, so only the side budget can stop the read.
+    const cold = await measureCohortEffect(applied(identity), [], cached(dir, big(counting(settled).deps), settled, 1024 * MiB))
+    const warm = counting(settled)
+    const second = await measureCohortEffect(applied(identity), [], cached(dir, big(warm.deps), settled, 1024 * MiB))
+    expect(warm.calls).toEqual([])
+    expect(JSON.stringify(cold)).toBe(JSON.stringify(trusted))
+    expect(JSON.stringify(second)).toBe(JSON.stringify(trusted))
   })
 
   it('counts a cached session only after 30 minutes quiet at the injected now', async () => {
