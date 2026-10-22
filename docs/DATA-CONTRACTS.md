@@ -265,7 +265,7 @@ The store holds each record to this transition table (`TRANSITIONS` in `src/sugg
 | `kept` | `rejected` |
 | `rejected` | none |
 
-Session and repo verification require later same-workspace sessions that beat an Orangu-chosen baseline beyond chance. The store stamps `appliedAt` on the `applied` transition and carries it on every later line; it is where both cohorts are cut. Global has no apply or verify authority, and it cannot close as `regressed` or `unproven`. Applicable states may be rejected; `kicked-off` may fail, and `failed` may return to `kicked-off` or be rejected. No other transition is legal.
+Session and repo verification require later same-workspace sessions that beat an Orangu-chosen baseline beyond chance. The store stamps `appliedAt` on the `applied` transition and carries it on every later line; it is where both cohorts are cut. When the record has a frozen baseline, a `verified` receipt must grade against it: 3 or more frozen sessions, exactly their ids, and for each check the mean and the median of their values. The store applies this rule to the move, and the trust check applies it again on every read. Global has no apply or verify authority, and it cannot close as `regressed` or `unproven`. Applicable states may be rejected; `kicked-off` may fail, and `failed` may return to `kicked-off` or be rejected. No other transition is legal.
 
 The 3 closed states after `applied`:
 
@@ -327,7 +327,9 @@ An outcome receipt has no `summary` key and no `evidence` key, so it stores no r
 4. A `regressed` move carries a verdict other than `regressed`, or an `unproven` move carries `regressed`.
 5. A frozen baseline has more than 10 sessions, an unsorted or repeated id, or a value that is not a finite number of 0 or more.
 
-`reasonCode` is only on a `rejected` move, and it is 1 of the 5 codes: `not-wanted`, `already-handled`, `wrong-cause`, `too-much-effort`, `other`. A code is a stored contract: a later orangu may change the label of a code, and never the code itself. `workspaceCwd` is also only on a `rejected` move, for a record with no proposal workspace. It is an absolute path in normal form with no control characters, which the caller resolved with `realpath`. Both fields are optional, and a rejection with neither stays legal for every scope.
+The store also refuses an outcome receipt that does not grade against the frozen baseline of its record: the same session ids, and for each check the mean and the median of the frozen values. A record with no frozen baseline closes only on 3 or more baseline sessions. Below that, its verdict is not final, and the record can only be rejected.
+
+`reasonCode` is only on a `rejected` move, and it is 1 of the 5 codes: `not-wanted`, `already-handled`, `wrong-cause`, `too-much-effort`, `other`. A code is a stored contract: a later orangu may change the label of a code, and never the code itself. `workspaceCwd` is also only on a `rejected` move, for a record with no proposal workspace. It is an absolute path in normal form with no control character, no format character (such as U+202E) and no line separator, which the caller resolved with `realpath`. On Windows it is a drive path: the store refuses the device forms (`\\?\`, `\\.\`), a UNC share and an alternate data stream. A reader compares the path as a string, so 2 forms of 1 folder must not both pass. Both fields are optional, and a rejection with neither stays legal for every scope.
 
 Every refused move leaves `suggestions.jsonl` byte for byte as it was.
 

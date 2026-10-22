@@ -13,10 +13,11 @@
 import { randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
 import { lstat, mkdir, open, realpath, rmdir, unlink } from 'node:fs/promises'
-import { dirname, isAbsolute, join, resolve } from 'node:path'
+import { dirname, join, posix, win32 } from 'node:path'
 import { oranguHome } from '../util/home.js'
 import { redactValue } from '../redact/redact.js'
 import { isChangeClass } from './change-classes.js'
+import { COHORT_MIN } from './cohort-stats.js'
 import { isSuggestionId, normalizeSessionIds, suggestionId, suggestionIdV2, suggestionKey } from './id.js'
 import { REJECT_REASON_CODES } from './reason-codes.js'
 import { canonicalReviewedPath, reviewedPathKey, reviewedPathViolation } from './reviewed-path.js'
@@ -41,6 +42,7 @@ import {
   applicationTime,
   cohortReceiptViolation,
   frozenBaselineViolation,
+  frozenBindingViolation,
   outcomeReceiptViolation,
 } from './verification-policy.js'
 import { isStoredWorkspaceIdentity } from './workspace-identity.js'
@@ -535,21 +537,30 @@ const ALLOWED_PATCH_FIELDS: Record<SuggestionStatus, PatchField[]> = {
 
 /** The most characters of a bound workspace path. */
 const MAX_WORKSPACE_CWD_CHARS = 4_096
-const CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f]/
+/** A control character, a format character (category Cf, such as U+202E) or a line or paragraph separator. */
+const HIDDEN_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u
+/** 2 leading separators: a UNC share (`\\server\share`), the device paths `\\?\` and `\\.\`, or `//` on POSIX. */
+const DOUBLE_SEPARATOR_PREFIX_RE = /^[\\/]{2}/
 
 /**
  * A workspace path that the store accepts at a rejection: absolute, already in its normal form (no `.` or `..`
- * segment, no repeated or trailing separator), bounded, and free of control characters. The caller resolves it
- * with `realpath` first. The store checks the form only and reads no directory, as it does for a proposal workspace.
+ * segment, no repeated or trailing separator), bounded, and free of hidden characters. On Windows it is a drive path
+ * only: no device, UNC or stream form. A reader compares the value as a string, so 2 forms of 1 folder must not both
+ * pass. The caller resolves the path with `realpath` first. The store checks the form only and reads no directory, as
+ * it does for a proposal workspace. `platform` is a parameter so that a test can check the Windows rules on any host.
  */
-export function isCanonicalWorkspaceCwd(value: unknown): value is string {
+export function isCanonicalWorkspaceCwd(value: unknown, platform: NodeJS.Platform = process.platform): value is string {
+  const paths = platform === 'win32' ? win32 : posix
   return (
     typeof value === 'string' &&
     value.length > 0 &&
     value.length <= MAX_WORKSPACE_CWD_CHARS &&
-    !CONTROL_CHARACTER_RE.test(value) &&
-    isAbsolute(value) &&
-    resolve(value) === value
+    !HIDDEN_CHARACTER_RE.test(value) &&
+    !DOUBLE_SEPARATOR_PREFIX_RE.test(value) &&
+    // On Windows, a colon after the drive letter names an alternate data stream.
+    (platform !== 'win32' || value.indexOf(':', 2) === -1) &&
+    paths.isAbsolute(value) &&
+    paths.resolve(value) === value
   )
 }
 
@@ -813,6 +824,11 @@ function validateTransitionPatch(current: SuggestionRecord, to: SuggestionStatus
     }
     const violation = cohortReceiptViolation(receipt, current.proposal.verificationChecks, applicationTime(current))
     if (violation) throw lifecycleError(to, `invalid cohort receipt: ${violation}`)
+    // A record with a frozen baseline verifies only against 3 or more of those sessions and their numbers.
+    if (current.frozenBaseline !== undefined) {
+      const frozen = frozenBindingViolation(receipt, current.frozenBaseline, applicationTime(current), COHORT_MIN)
+      if (frozen) throw lifecycleError(to, `invalid cohort receipt: ${frozen}`)
+    }
     assertVerificationEffect(patch.effect, receipt, to)
   }
   return patch

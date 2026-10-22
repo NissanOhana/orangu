@@ -18,7 +18,8 @@ import {
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { SuggestionStore } from './store.js'
+import { isCanonicalWorkspaceCwd, SuggestionStore } from './store.js'
+import { isTrustedComputedVerification } from './verification-policy.js'
 import { suggestionId, suggestionIdV2, suggestionKey } from './id.js'
 import { COHORT_SKIP_REASONS, type CohortSkipReason } from './cohort.js'
 import { evaluateCheck, overallVerdict } from './cohort-stats.js'
@@ -1176,6 +1177,63 @@ describe('SuggestionStore outcome moves', () => {
     expect(receipt.verdict).toBe('no-directional-check')
     await expect(store.transition(applied.id, 'unproven', { outcomeReceipt: receipt })).resolves.toMatchObject({ status: 'unproven' })
   })
+
+  it('refuses a receipt whose baseline mean or median is not the one of the frozen baseline', async () => {
+    // The frozen ids with other numbers: a forged baseline of 1, 2 and 3 makes a regressed verdict that the frozen 10, 11 and 12 do not.
+    const applied = await appliedRecord({ frozen: frozenBaseline(1_000, [10, 11, 12]) })
+    const forged = outcomeReceipt(applied.appliedAt!, [1, 2, 3], [10, 11, 12])
+    expect(forged).toMatchObject({ verdict: 'regressed', baselineSessionIds: applied.frozenBaseline!.sessions.map((session) => session.id) })
+    await refusedUnchanged(
+      () => store.transition(applied.id, 'regressed', { outcomeReceipt: forged }),
+      /checks\[0\] before must be the mean of the frozen baseline, 11/,
+    )
+    // The same mean (3) and another median: the frozen 1, 2 and 6 have the median 2, the forged 2, 3 and 4 have 3.
+    const medianOnly = await appliedRecord({ ruleId: 'frozen-median', frozen: frozenBaseline(1_000, [1, 2, 6]) })
+    const sameMean = outcomeReceipt(medianOnly.appliedAt!, [2, 3, 4], [6, 5, 7])
+    expect(sameMean.checks[0]).toMatchObject({ before: 3, beforeMedian: 3 })
+    await refusedUnchanged(
+      () => store.transition(medianOnly.id, sameMean.verdict === 'regressed' ? 'regressed' : 'unproven', { outcomeReceipt: sameMean }),
+      /checks\[0\] beforeMedian must be the median of the frozen baseline, 2/,
+    )
+  })
+
+  it('refuses to close a record with no frozen baseline on fewer than 3 baseline sessions, which is not final', async () => {
+    const older = await appliedRecord({ ruleId: 'older-short-baseline' })
+    for (const before of [[], [5, 6]]) {
+      const receipt = outcomeReceipt(older.appliedAt!, before, [6, 5, 7])
+      expect(receipt).toMatchObject({ verdict: 'not-enough-sessions', laterComplete: true, checkpoint: 'complete' })
+      await refusedUnchanged(
+        () => store.transition(older.id, 'unproven', { outcomeReceipt: receipt }),
+        /a record with no frozen baseline needs 3 or more baseline sessions to close/,
+        `${before.length} baseline sessions`,
+      )
+    }
+    // 3 baseline sessions and a complete later cohort of 2, its byte budget spent, is final.
+    const fewLater = outcomeReceipt(older.appliedAt!, [5, 6, 7], [4, 5])
+    expect(fewLater.verdict).toBe('not-enough-sessions')
+    await expect(store.transition(older.id, 'unproven', { outcomeReceipt: fewLater })).resolves.toMatchObject({ status: 'unproven' })
+  })
+
+  it('verifies a record with a frozen baseline only against 3 or more of those sessions and their numbers', async () => {
+    const short = await appliedRecord({ ruleId: 'verify-short-freeze', frozen: frozenBaseline(1_000, [12, 12]) })
+    const shortIds = { baselineSessionIds: [sid(0), sid(1), sid(255)] }
+    for (const patch of [cohortPatch(short.appliedAt!), cohortPatch(short.appliedAt!, {}, shortIds)]) {
+      await refusedUnchanged(() => store.transition(short.id, 'verified', patch), /Orangu cannot verify a record with a frozen baseline below 3 sessions/)
+    }
+
+    const frozen = await appliedRecord({ ruleId: 'verify-freeze', frozen: frozenBaseline(1_000, [12, 12, 12]) })
+    const at = frozen.appliedAt!
+    const frozenIds = { baselineSessionIds: [sid(0), sid(1), sid(2)] }
+    await refusedUnchanged(() => store.transition(frozen.id, 'verified', cohortPatch(at)), /baselineSessionIds must equal the frozen baseline session ids/)
+    const otherMean = cohortPatch(at, { before: 14, evidence: 'avgToolCalls: 14 → 8 (median 12 → 8; exact rank test p=0.05; improved)' }, frozenIds)
+    await refusedUnchanged(() => store.transition(frozen.id, 'verified', otherMean), /checks\[0\] before must be the mean of the frozen baseline, 12/)
+    const otherMedian = cohortPatch(at, { beforeMedian: 13, evidence: 'avgToolCalls: 12 → 8 (median 13 → 8; exact rank test p=0.05; improved)' }, frozenIds)
+    await refusedUnchanged(() => store.transition(frozen.id, 'verified', otherMedian), /checks\[0\] beforeMedian must be the median of the frozen baseline, 12/)
+
+    const verified = await store.transition(frozen.id, 'verified', cohortPatch(at, {}, frozenIds))
+    expect(verified).toMatchObject({ status: 'verified', verificationTrust: 'computed-v2', frozenBaseline: frozen.frozenBaseline })
+    expect(isTrustedComputedVerification(verified)).toBe(true)
+  })
 })
 
 describe('SuggestionStore rejection fields', () => {
@@ -1206,11 +1264,30 @@ describe('SuggestionStore rejection fields', () => {
     for (const path of ['relative/dir', `${cwd}/`, `${cwd}/./x`, `${cwd}/../x`, `${cwd}//x`, `${cwd}\nx`, `${cwd}\u0000`, `/${'a'.repeat(4_096)}`, '', 42]) {
       await refusedUnchanged(() => store.transition(record.id, 'rejected', { workspaceCwd: path as never }), /workspaceCwd must be an absolute canonical path/)
     }
+    // A format character or a line separator hides a different path behind the same visible text.
+    for (const mark of ['‮', '​', '‏', '⁦', '﻿', '­', ' ', ' ']) {
+      const label = `U+${mark.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
+      await refusedUnchanged(() => store.transition(record.id, 'rejected', { workspaceCwd: `${cwd}/pro${mark}ject` }), /workspaceCwd must be an absolute canonical path/, label)
+    }
     const applied = await appliedRecord()
     await refusedUnchanged(
       () => store.transition(applied.id, 'rejected', { workspaceCwd: cwd }),
       /workspaceCwd is only for a record with no proposal workspace/,
     )
+  })
+
+  it('accepts only a drive path on Windows: no device, UNC or stream form, and no format character on any platform', () => {
+    expect(isCanonicalWorkspaceCwd('C:\\Users\\dev\\project', 'win32')).toBe(true)
+    expect(isCanonicalWorkspaceCwd('/Users/dev/my:project', 'darwin')).toBe(true)
+    // Each form passes the Windows normal-form test, and a reader that compares strings cannot see that it names another folder.
+    for (const path of ['\\\\?\\C:\\Users\\dev\\project', '\\\\.\\pipe\\orangu', '\\\\server\\share\\project', 'C:\\Users\\dev\\project:hidden']) {
+      expect(isCanonicalWorkspaceCwd(path, 'win32'), path).toBe(false)
+    }
+    for (const mark of ['\u202e', '\u200b', '\u2066', '\ufeff', '\u2028']) {
+      const label = `U+${mark.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`
+      expect(isCanonicalWorkspaceCwd(`C:\\Users\\dev\\pro${mark}ject`, 'win32'), label).toBe(false)
+      expect(isCanonicalWorkspaceCwd(`/Users/dev/pro${mark}ject`, 'darwin'), label).toBe(false)
+    }
   })
 })
 

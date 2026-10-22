@@ -1,5 +1,16 @@
 import { COHORT_SKIP_REASONS } from './cohort-skip-reasons.js'
-import { COHORT_ALPHA, COHORT_MAX, COHORT_MIN, checkEvidence, checkVerdict, isDirectional, overallVerdict, type CohortVerdict } from './cohort-stats.js'
+import {
+  COHORT_ALPHA,
+  COHORT_MAX,
+  COHORT_MIN,
+  checkEvidence,
+  checkVerdict,
+  isDirectional,
+  mean6,
+  median,
+  overallVerdict,
+  type CohortVerdict,
+} from './cohort-stats.js'
 import {
   SUGGESTION_VERIFICATION_COMPARISONS,
   SUGGESTION_VERIFICATION_METRICS,
@@ -8,6 +19,7 @@ import {
   type SuggestionOutcomeReceipt,
   type SuggestionRecord,
   type SuggestionVerificationIntent,
+  type SuggestionVerificationMetric,
   type SuggestionVerificationReceiptV2,
 } from './types.js'
 
@@ -219,11 +231,44 @@ export function frozenBaselineViolation(value: unknown, appliedAt: number | unde
 }
 
 /**
+ * The rules that bind a receipt to the frozen baseline of its record, for a `verified` receipt and for an outcome receipt
+ * alike. The stored baseline passes its own check and holds `minSessions` or more sessions (a caller other than
+ * verification passes 0). The receipt names exactly the frozen sessions, and the baseline mean and median of each check
+ * are those of the frozen values, as `evaluateCheck` computes them. Call it only after each check passed its own rules.
+ */
+export function frozenBindingViolation(
+  receipt: {
+    baselineSessionIds: readonly string[]
+    checks: ReadonlyArray<{ metric: SuggestionVerificationMetric; before: number; beforeMedian: number }>
+  },
+  frozenBaseline: unknown,
+  appliedAt: number | undefined,
+  minSessions: number,
+): string | undefined {
+  if (frozenBaselineViolation(frozenBaseline, appliedAt) !== undefined) return 'the stored frozenBaseline is not valid, so the store cannot grade a receipt against it'
+  const frozen = frozenBaseline as SuggestionFrozenBaseline
+  if (frozen.sessions.length < minSessions) return `Orangu cannot verify a record with a frozen baseline below ${minSessions} sessions`
+  if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
+    return 'baselineSessionIds must equal the frozen baseline session ids'
+  }
+  for (let index = 0; index < receipt.checks.length; index++) {
+    const check = receipt.checks[index]!
+    const values = frozen.sessions.map((session) => session.metrics[check.metric])
+    const mean = mean6(values)
+    if (check.before !== mean) return `checks[${index}] before must be the mean of the frozen baseline, ${mean}`
+    const middle = median(values)
+    if (check.beforeMedian !== middle) return `checks[${index}] beforeMedian must be the median of the frozen baseline, ${middle}`
+  }
+  return undefined
+}
+
+/**
  * Every rule of an outcome receipt, graded again from its own numbers, with 0 to 10 sessions on each side. The store
  * applies it before a `regressed` or `unproven` move. `status` is that move, and `frozenBaseline` is the baseline that
- * the record stored at its `applied` move. The same rules as `cohortReceiptViolation`, with 3 more: the verdict fits
- * the move, the later cohort is complete unless a short frozen baseline closes it, and the receipt names the frozen
- * sessions. Returns the first violation.
+ * the record stored at its `applied` move. The same rules as `cohortReceiptViolation`, with 4 more: the receipt grades
+ * against the frozen sessions and their numbers, the verdict fits the move, the later cohort is complete unless a short
+ * frozen baseline closes it, and a record with no frozen baseline closes only on 3 or more baseline sessions. Returns
+ * the first violation.
  */
 export function outcomeReceiptViolation(
   value: unknown,
@@ -244,15 +289,6 @@ export function outcomeReceiptViolation(
   const baseline = new Set(receipt.baselineSessionIds)
   if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return 'baseline and later cohorts must not share a session'
   if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return 'confoundedBy must be sorted unique suggestion ids'
-  let frozen: SuggestionFrozenBaseline | undefined
-  if (frozenBaseline !== undefined) {
-    if (frozenBaselineViolation(frozenBaseline, appliedAt) !== undefined) return 'the stored frozenBaseline is not valid, so the store cannot grade an outcome against it'
-    frozen = frozenBaseline as SuggestionFrozenBaseline
-    // A record with a frozen baseline grades against those sessions, and against no other baseline.
-    if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
-      return 'baselineSessionIds must equal the frozen baseline session ids'
-    }
-  }
   const checks = receipt.checks
   if (!Array.isArray(checks) || checks.length !== reviewed.length) return 'checks must match the reviewed verificationChecks'
   const nBefore = receipt.baselineSessionIds.length
@@ -276,6 +312,12 @@ export function outcomeReceiptViolation(
     const verdict = checkVerdict(intent.comparison, before, after, pLower, pHigher)
     if (check.verdict !== verdict) return `checks[${index}] verdict must be the computed verdict ${verdict}`
   }
+  // A record with a frozen baseline grades against those sessions and their numbers, and against no other baseline.
+  const frozen = frozenBaseline as SuggestionFrozenBaseline | undefined
+  if (frozenBaseline !== undefined) {
+    const violation = frozenBindingViolation({ baselineSessionIds: receipt.baselineSessionIds, checks: checks as SuggestionOutcomeCheck[] }, frozenBaseline, appliedAt, 0)
+    if (violation) return violation
+  }
   const overall = overallVerdict(checks as SuggestionOutcomeCheck[], nBefore, nAfter)
   if (receipt.verdict !== overall) return `the overall verdict must be the computed verdict ${overall}`
   if (status === 'regressed' && receipt.verdict !== 'regressed') return `a regressed record needs the regressed verdict, not ${receipt.verdict}`
@@ -284,6 +326,8 @@ export function outcomeReceiptViolation(
   if (!receipt.laterComplete && !(shortFrozen && receipt.verdict === 'not-enough-sessions')) {
     return `laterComplete must be true. Only a frozen baseline below ${COHORT_MIN} sessions with the verdict not-enough-sessions closes before the later cohort is complete`
   }
+  // With no frozen baseline, a live baseline below the minimum is not a final verdict, so the record can only be rejected.
+  if (frozen === undefined && nBefore < COHORT_MIN) return `a record with no frozen baseline needs ${COHORT_MIN} or more baseline sessions to close`
   if (receipt.checkpoint === 'first' && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`
   return undefined
 }
@@ -311,6 +355,8 @@ function isTrustedCohortVerification(record: SuggestionRecord): boolean {
     receipt?.v !== 2
   ) return false
   if (cohortReceiptViolation(receipt, proposal.verificationChecks, record.appliedAt) !== undefined) return false
+  // The store rule of the `verified` move, applied again on every read.
+  if (record.frozenBaseline !== undefined && frozenBindingViolation(receipt, record.frozenBaseline, record.appliedAt, COHORT_MIN) !== undefined) return false
   return effectMatchesChecks(record, receipt.checks, receipt.measuredSessionIds)
 }
 
