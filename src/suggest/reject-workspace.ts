@@ -2,9 +2,10 @@
  * The workspace of a rejection. A record with no proposal workspace names no folder, so a later workspace read
  * cannot find it once Claude Code deletes its evidence transcripts. At `--set <id> rejected` the CLI binds the
  * folder of its evidence sessions: it finds each evidence session through discovery, reads the cwd from the head of
- * the transcript (64,000 B at most) and resolves it to its canonical path. It binds the path only when every session
- * that discovery finds gives the same canonical path. Any other result binds nothing, and the rejection still goes
- * ahead. The value crosses a file boundary, so it must also pass the store's own form check.
+ * the transcript (64,000 B at most) and resolves it with `realpath`. A cwd binds only when it is its own canonical
+ * path, so a link that points to another folder now binds nothing. It binds the path only when every session that
+ * discovery finds gives the same path. Any other result binds nothing, and the rejection still goes ahead. The value
+ * crosses a file boundary, so it must also pass the store's own form check.
  */
 import { basename, isAbsolute } from 'node:path'
 import { MAX_VERIFICATION_DISCOVERED_SESSIONS } from '../adapters/claude-code/discovered-analysis.js'
@@ -63,8 +64,10 @@ export async function rejectWorkspaceCwd(record: SuggestionRecord, deps: RejectW
     for (const path of paths) {
       const cwd = await deps.peekCwd(path)
       if (typeof cwd !== 'string' || !isAbsolute(cwd)) return undefined
+      // A recorded cwd through a link names the folder that the link points to now, which can be another folder than
+      // the one where the session ran. So only a cwd that is its own canonical path binds.
       const canonical = await deps.canonical(cwd)
-      if (!isCanonicalWorkspaceCwd(canonical)) return undefined
+      if (canonical !== cwd || !isCanonicalWorkspaceCwd(canonical)) return undefined
       if (bound !== undefined && canonical !== bound) return undefined
       bound = canonical
     }

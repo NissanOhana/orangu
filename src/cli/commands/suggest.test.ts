@@ -960,6 +960,22 @@ describe('orangu suggest --set applied freezes the baseline', () => {
     expect(err.join('')).toContain('cutAt must not be later than the application time')
   })
 
+  it('scrubs the reason in the stderr line the same way as in the JSON value', async () => {
+    // A discovery limit error names the directory, and the directory can be under the home folder.
+    const err = captureStderr()
+    const homeDir = process.env['HOME']!
+    const failing = fakeCohort([], {
+      async listCandidates() {
+        throw new Error(`session discovery directory exceeds 25000 entries: ${homeDir}/.claude/projects/-w`)
+      },
+    })
+    await appliedThroughCli('freeze-scrubbed', failing)
+    const reason = JSON.parse(stdout()).baselineFreeze.reason as string
+    expect(reason).toBe('session discovery directory exceeds 25000 entries: ~/.claude/projects/-w')
+    expect(err.join('')).not.toContain(homeDir)
+    expect(err.join('')).toContain(`(${reason})`)
+  })
+
   it('--quiet silences the stderr line of each freeze failure, and the JSON still says why the baseline did not freeze', async () => {
     const err = captureStderr()
     const failing = fakeCohort([], {
@@ -1054,6 +1070,17 @@ describe('orangu suggest: the moves that --set refuses, kept, the input of --rec
     const id = JSON.parse(stdout()).record.id as string
     await refusedUnchanged(() => cmdSuggest(['kicked-off'], { set: id, reason: 'other', json: true }), '--reason is valid only with --set <id> rejected')
     await refusedUnchanged(() => cmdSuggest([], { rule: 'reason-code', scope: 'session', session: fixturePath, reason: 'other', json: true }), '--reason is valid only with --set <id> rejected')
+    // A step flag that runs before --set would ignore the reason: each one exits 1 with the usage line, and reads nothing.
+    const deps = fakeCohort([])
+    const steps: Array<Record<string, string | boolean>> = [{ list: true }, { show: id }, { effect: id }, { record: id }]
+    for (const step of steps) {
+      await refusedUnchanged(
+        () => cmdSuggest(['rejected'], { set: id, reason: 'other', json: true, ...step }, { cohort: deps }),
+        'usage: orangu suggest --set <id> rejected --reason <code>',
+      )
+    }
+    expect(deps.calls).toEqual(NO_CALLS)
+    expect(lastLine()).toMatchObject({ id, status: 'new' })
     for (const value of ['nope', 'Other', 'other ', '', true]) {
       await refusedUnchanged(() => cmdSuggest(['rejected'], { set: id, reason: value, json: true }), `--reason must be 1 of ${REJECT_REASON_CODES.join(', ')}`)
     }

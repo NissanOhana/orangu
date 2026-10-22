@@ -362,7 +362,8 @@ async function transitionApplied(
   if (notFrozen === undefined) return { next, baselineFreeze: { frozen: true } }
   const reason = terminal(notFrozen instanceof Error ? notFrozen.message : String(notFrozen))
   if (!flagBool(flags, 'quiet')) {
-    process.stderr.write(`  orangu did not freeze the baseline (${reason}). The change is applied, and each check reads the baseline sessions again.\n`)
+    // The same scrub as the JSON value: an error can name a directory under the home folder.
+    process.stderr.write(`  orangu did not freeze the baseline (${visible(reason, flags)}). The change is applied, and each check reads the baseline sessions again.\n`)
   }
   return { next, baselineFreeze: { frozen: false, reason } }
 }
@@ -501,9 +502,13 @@ async function cmdEffect(store: SuggestionStore, id: string, flags: Record<strin
 }
 
 export async function cmdSuggest(positionals: string[], flags: Record<string, string | boolean>, deps: SuggestDeps = {}): Promise<void> {
-  // A reason code belongs to a rejection only. Refuse it on every other step before any read, so no step ignores it.
-  if (flags['reason'] !== undefined && !(flagStr(flags, 'set') && positionals[0] === 'rejected')) {
-    throw new Error('--reason is valid only with --set <id> rejected')
+  // A reason code belongs to a rejection only. Refuse it, before any read or write, on every other step and with each
+  // step flag that the dispatch below runs before --set, so no step ignores it.
+  if (flags['reason'] !== undefined) {
+    const runsBeforeSet = flagBool(flags, 'list') || flagStr(flags, 'show') || flagStr(flags, 'effect') || flags['record'] !== undefined
+    if (runsBeforeSet || !(flagStr(flags, 'set') && positionals[0] === 'rejected')) {
+      throw new Error('--reason is valid only with --set <id> rejected, and with no other step. usage: orangu suggest --set <id> rejected --reason <code>')
+    }
   }
   const store = new SuggestionStore()
   if (flagBool(flags, 'list')) return cmdList(store, flags)

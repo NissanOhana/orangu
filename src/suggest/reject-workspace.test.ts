@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRejectWorkspaceDeps, rejectWorkspaceCwd, type RejectWorkspaceDeps } from './reject-workspace.js'
@@ -48,11 +48,19 @@ function fakeDeps(cwds: Record<string, string | undefined>, canonical: (path: st
 
 describe('rejectWorkspaceCwd', () => {
   it('binds the canonical path when every evidence session that discovery finds gives the same one', async () => {
-    const deps = fakeDeps({ [A]: '/Users/dev/project/', [B]: '/Users/dev/./project' }, () => '/Users/dev/project')
+    const deps = fakeDeps({ [A]: '/Users/dev/project', [B]: '/Users/dev/project' })
     expect(await rejectWorkspaceCwd(record({ scope: 'repo', sessionIds: [A, ` /some/where/${B.toUpperCase()}.jsonl `] }), deps)).toBe('/Users/dev/project')
     // A path selector names its session by the file name, and discovery decides which file is read.
     expect(deps.asked).toEqual([[A, B]])
     expect(deps.peeked).toEqual([`/projects/-w/${A}.jsonl`, `/projects/-w/${B}.jsonl`])
+  })
+
+  it('binds nothing when the recorded cwd is not its own canonical path, because the folder that it names now can differ', async () => {
+    // The recorded path is not in normal form, or it goes through a link: realpath gives another string.
+    for (const recorded of ['/Users/dev/project/', '/Users/dev/./project', '/Users/dev/w']) {
+      const deps = fakeDeps({ [A]: recorded }, () => '/Users/dev/project')
+      expect(await rejectWorkspaceCwd(record(), deps), recorded).toBeUndefined()
+    }
   })
 
   it('binds nothing when 2 sessions give 2 different paths', async () => {
@@ -98,18 +106,28 @@ describe('rejectWorkspaceCwd', () => {
     }
   })
 
-  it('resolves the cwd of a transcript on disk through a symlink to its canonical directory, and refuses a file', async () => {
-    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'orangu-reject-ws-')))
-    const link = join(mkdtempSync(join(tmpdir(), 'orangu-reject-link-')), 'project')
-    symlinkSync(dir, link)
+  it('on disk: binds a canonical cwd, and binds nothing for a cwd through a link that now points to another folder, or for a file', async () => {
+    const base = realpathSync(mkdtempSync(join(tmpdir(), 'orangu-reject-ws-')))
+    const ranIn = join(base, 'a')
+    const nowAt = join(base, 'b')
+    mkdirSync(ranIn)
+    mkdirSync(nowAt)
     const transcript = join(mkdtempSync(join(tmpdir(), 'orangu-reject-t-')), `${A}.jsonl`)
-    writeFileSync(transcript, `${JSON.stringify({ type: 'user', cwd: link, sessionId: A })}\n`)
-    const real = createRejectWorkspaceDeps()
-    const deps: RejectWorkspaceDeps = { ...real, findSessions: async () => [transcript] }
-    expect(await rejectWorkspaceCwd(record(), deps)).toBe(dir)
-    const file = join(dir, 'not-a-folder.txt')
+    const sessionIn = (cwd: string): void => writeFileSync(transcript, `${JSON.stringify({ type: 'user', cwd, sessionId: A })}\n`)
+    const deps: RejectWorkspaceDeps = { ...createRejectWorkspaceDeps(), findSessions: async () => [transcript] }
+
+    sessionIn(ranIn)
+    expect(await rejectWorkspaceCwd(record(), deps)).toBe(ranIn)
+    // The session ran in w while w linked to a. Now w links to b: the folder of the session is not w's folder now.
+    const w = join(base, 'w')
+    symlinkSync(ranIn, w)
+    sessionIn(w)
+    rmSync(w)
+    symlinkSync(nowAt, w)
+    expect(await rejectWorkspaceCwd(record(), deps)).toBeUndefined()
+    const file = join(ranIn, 'not-a-folder.txt')
     writeFileSync(file, 'x')
-    writeFileSync(transcript, `${JSON.stringify({ type: 'user', cwd: file, sessionId: A })}\n`)
+    sessionIn(file)
     expect(await rejectWorkspaceCwd(record(), deps)).toBeUndefined()
   })
 })
