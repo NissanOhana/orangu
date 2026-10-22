@@ -14758,7 +14758,7 @@ async function rejectWorkspaceCwd(record3, deps = createRejectWorkspaceDeps()) {
       const cwd = await deps.peekCwd(path);
       if (typeof cwd !== "string" || !isAbsolute8(cwd)) return void 0;
       const canonical = await deps.canonical(cwd);
-      if (!isCanonicalWorkspaceCwd(canonical)) return void 0;
+      if (canonical !== cwd || !isCanonicalWorkspaceCwd(canonical)) return void 0;
       if (bound !== void 0 && canonical !== bound) return void 0;
       bound = canonical;
     }
@@ -15002,7 +15002,7 @@ async function transitionApplied(store, rec, application, cohort, flags) {
   if (notFrozen === void 0) return { next, baselineFreeze: { frozen: true } };
   const reason = terminal(notFrozen instanceof Error ? notFrozen.message : String(notFrozen));
   if (!flagBool(flags, "quiet")) {
-    process.stderr.write(`  orangu did not freeze the baseline (${reason}). The change is applied, and each check reads the baseline sessions again.
+    process.stderr.write(`  orangu did not freeze the baseline (${visible(reason, flags)}). The change is applied, and each check reads the baseline sessions again.
 `);
   }
   return { next, baselineFreeze: { frozen: false, reason } };
@@ -15124,8 +15124,11 @@ async function cmdEffect(store, id, flags, deps) {
   w(`  next: ${terminal(view.next)}`);
 }
 async function cmdSuggest(positionals, flags, deps = {}) {
-  if (flags["reason"] !== void 0 && !(flagStr(flags, "set") && positionals[0] === "rejected")) {
-    throw new Error("--reason is valid only with --set <id> rejected");
+  if (flags["reason"] !== void 0) {
+    const runsBeforeSet = flagBool(flags, "list") || flagStr(flags, "show") || flagStr(flags, "effect") || flags["record"] !== void 0;
+    if (runsBeforeSet || !(flagStr(flags, "set") && positionals[0] === "rejected")) {
+      throw new Error("--reason is valid only with --set <id> rejected, and with no other step. usage: orangu suggest --set <id> rejected --reason <code>");
+    }
   }
   const store = new SuggestionStore();
   if (flagBool(flags, "list")) return cmdList(store, flags);
