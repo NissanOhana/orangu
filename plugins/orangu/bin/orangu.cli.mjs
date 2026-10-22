@@ -1,6 +1,6 @@
 // src/cli/main.ts
-import { createHash as createHash5 } from "node:crypto";
-import { basename as basename16, join as join13, resolve as resolve13 } from "node:path";
+import { createHash as createHash6 } from "node:crypto";
+import { basename as basename17, join as join14, resolve as resolve14 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -34,7 +34,12 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "verbose",
   "no-color",
   "plain",
-  "lines"
+  "lines",
+  // the 4 reads of orangu suggest: each takes no value, so `--queue <word>` leaves the word a positional
+  "queue",
+  "todo",
+  "lessons",
+  "history"
 ]);
 var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   ...BOOL_FLAGS,
@@ -75,7 +80,8 @@ var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   "cohort",
   "render",
   "record",
-  "reason"
+  "reason",
+  "status"
 ]);
 function unknownFlags(flags) {
   return Object.keys(flags).filter((k) => !KNOWN_FLAGS.has(k)).map((k) => (k.length === 1 ? "-" : "--") + k);
@@ -2980,7 +2986,7 @@ async function withStableSessionRead(path, options, read) {
       if (!isTransientInputChange(error)) throw error;
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
-      await new Promise((resolve14) => setTimeout(resolve14, pause));
+      await new Promise((resolve15) => setTimeout(resolve15, pause));
     }
   }
 }
@@ -6985,6 +6991,9 @@ var MAX_STALE_CACHE_GENERATION_ENTRIES = 4096;
 function cacheGenerationSegment(version) {
   return `${ANALYSIS_SCHEMA_VERSION}-${version}-p${ANALYSIS_PAYLOAD_GENERATION}`;
 }
+function isCacheSegment(value) {
+  return SIMPLE_SEGMENT.test(value);
+}
 function sameInode(a, b) {
   return a.dev === b.dev && a.ino === b.ino;
 }
@@ -8071,9 +8080,9 @@ function resolveSessionPath(p, sessionCwd, home) {
   if (!sessionCwd) return null;
   return norm(sessionCwd).replace(/\/+$/, "") + "/" + s;
 }
-function declared(inv, pick) {
+function declared(inv, pick2) {
   for (const s of byPrecedence(inv.settings)) {
-    const v = pick(s);
+    const v = pick2(s);
     if (v !== void 0 && v !== "") return v;
   }
   return void 0;
@@ -9267,12 +9276,12 @@ function listRows(caps, refs, o) {
   const w = layoutWidth(caps);
   const lines = ["", paint(caps, "bold", `${plural(o.total, "session")}${o.global ? " (all roots)" : ""}`), ""];
   for (const s of refs) {
-    const when = new Date(s.mtimeMs).toISOString().slice(0, 16).replace("T", " ");
+    const when2 = new Date(s.mtimeMs).toISOString().slice(0, 16).replace("T", " ");
     const size = padCell(fmtBytes(s.sizeBytes), 8, "r");
     const agents = padCell(s.hasSidecarDir ? `agents ${s.subagentFiles.length}` : "", 10);
-    const lead = `${INDENT}${s.sessionId.slice(0, 8)}  ${when}  ${size}  ${agents}  `;
+    const lead = `${INDENT}${s.sessionId.slice(0, 8)}  ${when2}  ${size}  ${agents}  `;
     const project = truncate(basename6(s.projectSlug), Math.max(8, w - displayWidth(lead)), caps);
-    lines.push(`${INDENT}${paint(caps, "accent", s.sessionId.slice(0, 8))}  ${paint(caps, "dim", when)}  ${size}  ${paint(caps, "dim", agents)}  ${project}`);
+    lines.push(`${INDENT}${paint(caps, "accent", s.sessionId.slice(0, 8))}  ${paint(caps, "dim", when2)}  ${size}  ${paint(caps, "dim", agents)}  ${project}`);
   }
   if (!o.total) lines.push(...fit(caps, `${INDENT}orangu found no sessions. Is Claude Code installed?`, "dim"), ...fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`, "dim"));
   else {
@@ -9580,8 +9589,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename17 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename17)) return { violation: "must not use a reserved Windows device name" };
+    const basename18 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename18)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -10847,13 +10856,13 @@ function validateTransitionPatch(current, to, rawPatch) {
   return patch;
 }
 function indexByLegacyIds(canonical) {
-  const byId = new Map(canonical);
+  const byId2 = new Map(canonical);
   for (const rec of canonical.values()) {
     for (const legacyId of rec.legacyIds ?? []) {
-      if (isSuggestionId(legacyId)) byId.set(legacyId, rec);
+      if (isSuggestionId(legacyId)) byId2.set(legacyId, rec);
     }
   }
-  return byId;
+  return byId2;
 }
 var SuggestionStore = class {
   path;
@@ -11036,13 +11045,13 @@ var SuggestionStore = class {
   async upsertNewLocked(f, source, explicitId, guard) {
     assertSafeFindingIdentity(f);
     const key = suggestionKey(f, source);
-    const canonicalId = suggestionIdV2(key);
+    const canonicalId2 = suggestionIdV2(key);
     const legacyId = suggestionId(source, f.ruleId, f.sessionIds);
     const acceptsLegacyId = source === "report" && !f.cohortFingerprint;
-    if (explicitId && explicitId !== canonicalId && !(acceptsLegacyId && explicitId === legacyId)) {
-      throw new Error(`suggestion id identity mismatch: expected ${canonicalId}${acceptsLegacyId ? ` or legacy ${legacyId}` : ""}, got ${explicitId}`);
+    if (explicitId && explicitId !== canonicalId2 && !(acceptsLegacyId && explicitId === legacyId)) {
+      throw new Error(`suggestion id identity mismatch: expected ${canonicalId2}${acceptsLegacyId ? ` or legacy ${legacyId}` : ""}, got ${explicitId}`);
     }
-    const id = explicitId ?? canonicalId;
+    const id = explicitId ?? canonicalId2;
     const records = await this.replay(guard.parent);
     const existing = records.get(id);
     const ts3 = this.now();
@@ -11056,13 +11065,13 @@ var SuggestionStore = class {
       await this.append(refreshed, guard);
       return { record: refreshed, created: false };
     }
-    if (id === canonicalId && !f.cohortFingerprint) {
+    if (id === canonicalId2 && !f.cohortFingerprint) {
       const legacy = records.get(legacyId);
       const sameLegacyFinding = legacy?.v === 1 && recordMatchesFinding(legacy, f, source);
       if (legacy && sameLegacyFinding) {
         const migrated = {
           ...legacy,
-          id: canonicalId,
+          id: canonicalId2,
           v: 2,
           key,
           legacyIds: [.../* @__PURE__ */ new Set([...legacy.legacyIds ?? [], legacy.id])].sort(),
@@ -11082,7 +11091,7 @@ var SuggestionStore = class {
         return { record: migrated, created: false };
       }
     }
-    const isCanonical = id === canonicalId;
+    const isCanonical = id === canonicalId2;
     const record3 = {
       id,
       v: isCanonical ? 2 : 1,
@@ -11328,9 +11337,9 @@ var asRecord = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null
 var asArray = (v) => Array.isArray(v) ? v : [];
 var asString = (v) => typeof v === "string" && v ? v : void 0;
 var asNumber = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
-var byKey = (pick) => (a, b) => {
-  const x = pick(a);
-  const y = pick(b);
+var byKey = (pick2) => (a, b) => {
+  const x = pick2(a);
+  const y = pick2(b);
   return x < y ? -1 : x > y ? 1 : 0;
 };
 function settingsEnv(raw) {
@@ -12799,9 +12808,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve14, reject) => {
+  await new Promise((resolve15, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve14);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve15);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -12818,7 +12827,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve14) => server.close(() => resolve14()));
+      await new Promise((resolve15) => server.close(() => resolve15()));
     }
   };
 }
@@ -14611,9 +14620,9 @@ function outcomePatch(effect) {
 }
 
 // src/suggest/cohort-deps.ts
-import { constants as constants11 } from "node:fs";
-import { lstat as lstat9, open as open11, readdir as readdir3, realpath as realpath9 } from "node:fs/promises";
-import { basename as basename11, dirname as dirname6, isAbsolute as isAbsolute7, join as join9 } from "node:path";
+import { constants as constants12 } from "node:fs";
+import { lstat as lstat10, open as open12, readdir as readdir3, realpath as realpath9 } from "node:fs/promises";
+import { basename as basename12, dirname as dirname7, isAbsolute as isAbsolute8, join as join10 } from "node:path";
 
 // src/adapters/claude-code/discovered-analysis.ts
 import { realpath as realpath8 } from "node:fs/promises";
@@ -14706,8 +14715,194 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
   };
 }
 
+// src/suggest/cohort-cache.ts
+import { createHash as createHash4, randomBytes as randomBytes4 } from "node:crypto";
+import { constants as constants11 } from "node:fs";
+import { lstat as lstat9, open as open11, rename as rename2, unlink as unlink3 } from "node:fs/promises";
+import { basename as basename11, dirname as dirname6, isAbsolute as isAbsolute7, join as join9, resolve as resolve10 } from "node:path";
+var COHORT_FACTS_DIR = "cohort-facts-v1";
+var COHORT_FACTS_MAX_ENTRY_BYTES = 16384;
+var ENTRY_KEYS = ["v", "key", "sessionId", "cwd", "startedAt", "endedAt", "ranOrangu", "bytesRead", "metrics"];
+var KEY_RE = /^[0-9a-f]{40}$/;
+var SESSION_ID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+var MAX_CWD_CHARS = 4096;
+function plainObject2(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function hasExactKeys2(value, keys) {
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+var finiteNonNegative3 = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+function validFacts(value) {
+  const { sessionId, cwd, startedAt, endedAt, ranOrangu, bytesRead, metrics } = value;
+  return typeof sessionId === "string" && SESSION_ID_RE2.test(sessionId) && typeof cwd === "string" && isAbsolute7(cwd) && cwd.length <= MAX_CWD_CHARS && resolve10(cwd) === cwd && finiteNonNegative3(startedAt) && startedAt > 0 && finiteNonNegative3(endedAt) && endedAt >= startedAt && typeof ranOrangu === "boolean" && Number.isSafeInteger(bytesRead) && bytesRead >= 0 && plainObject2(metrics) && hasExactKeys2(metrics, SUGGESTION_VERIFICATION_METRICS) && SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative3(metrics[metric]));
+}
+function pick(facts) {
+  return {
+    sessionId: facts.sessionId,
+    cwd: facts.cwd,
+    startedAt: facts.startedAt,
+    endedAt: facts.endedAt,
+    ranOrangu: facts.ranOrangu,
+    bytesRead: facts.bytesRead,
+    metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, facts.metrics?.[metric]]))
+  };
+}
+async function cohortFactsKey(ref2) {
+  try {
+    const main2 = await lstat9(ref2.path, { bigint: true });
+    if (main2.isSymbolicLink() || !main2.isFile()) return void 0;
+    let changedNs = 0n;
+    const changed = (st) => {
+      if (st.mtimeNs > changedNs) changedNs = st.mtimeNs;
+      if (st.ctimeNs > changedNs) changedNs = st.ctimeNs;
+    };
+    changed(main2);
+    const parts2 = [COHORT_FACTS_DIR, ref2.path, main2.dev, main2.ino, main2.size, main2.mtimeNs, main2.ctimeNs];
+    const sessionDir = join9(dirname6(ref2.path), basename11(ref2.path, ".jsonl"));
+    const folder = await lstatOrUndefined(sessionDir);
+    if (folder?.isDirectory()) {
+      changed(folder);
+      const subagents = await lstatOrUndefined(join9(sessionDir, "subagents"));
+      if (subagents?.isDirectory()) changed(subagents);
+    } else {
+      const project = await lstatOrUndefined(dirname6(ref2.path));
+      if (project) changed(project);
+    }
+    const files2 = [...ref2.subagentFiles].sort();
+    parts2.push(files2.length);
+    for (const dir of new Set(files2.map((file) => dirname6(file)))) {
+      const st = await lstatOrUndefined(dir);
+      if (st) changed(st);
+    }
+    for (const file of files2) {
+      for (const path of [file, file.replace(/\.jsonl$/, ".meta.json")]) {
+        const st = await lstatOrUndefined(path);
+        if (st) changed(st);
+        parts2.push(st ? `${st.size}:${st.mtimeNs}:${st.ctimeNs}` : "-");
+      }
+    }
+    const changedAt = Number((changedNs + 999999n) / 1000000n);
+    return { key: createHash4("sha1").update(parts2.join("|")).digest("hex"), changedAt };
+  } catch {
+    return void 0;
+  }
+}
+async function lstatOrUndefined(path) {
+  try {
+    return await lstat9(path, { bigint: true });
+  } catch {
+    return void 0;
+  }
+}
+var CohortFactsCache = class {
+  layoutDirectories;
+  folder;
+  enabled;
+  validVersion;
+  layout;
+  hits = 0;
+  misses = 0;
+  writes = 0;
+  constructor(opts) {
+    const home = resolve10(oranguHome());
+    const cacheRoot = resolve10(opts.dir ?? join9(home, "cache"));
+    const segment = cacheGenerationSegment(opts.version);
+    this.validVersion = isCacheSegment(segment);
+    const generation = join9(cacheRoot, segment);
+    this.folder = join9(generation, COHORT_FACTS_DIR);
+    this.layoutDirectories = opts.dir === void 0 ? [home, cacheRoot, generation, this.folder] : [cacheRoot, generation, this.folder];
+    this.enabled = opts.enabled !== false;
+  }
+  file(key) {
+    return this.validVersion && KEY_RE.test(key) ? join9(this.folder, `${key}.json`) : void 0;
+  }
+  /** Secure the layout once, and check it again before each use. A changed layout is secured again on the next use. */
+  async directories() {
+    this.layout ??= (async () => {
+      const identities = [];
+      for (const path of this.layoutDirectories) identities.push(await ensurePrivateDirectory(path));
+      return identities;
+    })();
+    try {
+      const identities = await this.layout;
+      await assertPrivateDirectoriesStable(identities);
+      return identities;
+    } catch (error) {
+      this.layout = void 0;
+      throw error;
+    }
+  }
+  /** The facts of this key and this session, or undefined. It never throws. */
+  async get(key, sessionId) {
+    if (!this.enabled) {
+      this.misses++;
+      return void 0;
+    }
+    try {
+      const path = this.file(key);
+      if (!path) throw new Error("invalid cache key");
+      const directories = await this.directories();
+      const manifest = await prevalidateAnalysisCacheEntry(path, COHORT_FACTS_MAX_ENTRY_BYTES);
+      await assertPrivateDirectoriesStable(directories);
+      const raw = await readAnalysisCacheEntry(manifest);
+      await assertPrivateDirectoriesStable(directories);
+      const value = JSON.parse(raw);
+      if (!plainObject2(value) || !hasExactKeys2(value, ENTRY_KEYS) || value["v"] !== 1 || value["key"] !== key || value["sessionId"] !== sessionId || !validFacts(value)) {
+        this.misses++;
+        return void 0;
+      }
+      this.hits++;
+      return pick(value);
+    } catch {
+      this.misses++;
+      return void 0;
+    }
+  }
+  /** Write the facts of 1 settled session under its key: an exclusive temporary file, then a rename. It never throws. */
+  async put(key, facts) {
+    if (!this.enabled) return;
+    let tmp;
+    try {
+      const path = this.file(key);
+      if (!path) return;
+      const picked = pick(facts);
+      if (!validFacts(picked)) return;
+      const bytes = Buffer.from(JSON.stringify({ v: 1, key, ...picked }), "utf8");
+      if (bytes.byteLength > COHORT_FACTS_MAX_ENTRY_BYTES) return;
+      const directories = await this.directories();
+      tmp = `${path}.tmp-${process.pid}-${randomBytes4(12).toString("hex")}`;
+      const handle = await open11(tmp, constants11.O_WRONLY | constants11.O_CREAT | constants11.O_EXCL | (constants11.O_NOFOLLOW ?? 0), PRIVATE_FILE_MODE);
+      try {
+        await handle.writeFile(bytes);
+        await handle.chmod(PRIVATE_FILE_MODE);
+      } finally {
+        await handle.close();
+      }
+      await assertPrivateDirectoriesStable(directories);
+      await rename2(tmp, path);
+      tmp = void 0;
+      await assertPrivateDirectoriesStable(directories);
+      const final = await lstat9(path, { bigint: true });
+      if (!final.isFile() || final.isSymbolicLink() || Number(final.mode & 0o777n) !== PRIVATE_FILE_MODE) throw new Error("cache entry changed after its atomic write");
+      this.writes++;
+    } catch {
+    } finally {
+      if (tmp) {
+        try {
+          await unlink3(tmp);
+        } catch {
+        }
+      }
+    }
+  }
+  stats() {
+    return { hits: this.hits, misses: this.misses, writes: this.writes };
+  }
+};
+
 // src/suggest/cohort-deps.ts
-var READ_PROBE_FLAGS = constants11.O_RDONLY | constants11.O_NOFOLLOW | constants11.O_NONBLOCK;
+var READ_PROBE_FLAGS = constants12.O_RDONLY | constants12.O_NOFOLLOW | constants12.O_NONBLOCK;
 var PROBE_BYTES = PEEK_HEAD_BYTES;
 async function readFully(handle, buffer, offset, length, position) {
   let done = 0;
@@ -14723,7 +14918,7 @@ async function readTail(path, cap) {
   if (!(limit >= 1)) return { bytesRead: 0 };
   let handle;
   try {
-    handle = await open11(path, READ_PROBE_FLAGS);
+    handle = await open12(path, READ_PROBE_FLAGS);
   } catch {
     return { bytesRead: 0 };
   }
@@ -14754,22 +14949,22 @@ async function sidecarTranscripts(path) {
   const files2 = [];
   let entries = 0;
   const walk2 = async (dir, depth) => {
-    const st = await lstat9(dir);
+    const st = await lstat10(dir);
     if (st.isSymbolicLink() || !st.isDirectory()) return;
     for (const name of (await readdir3(dir)).sort()) {
       if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error("sidecar limit");
-      const child = join9(dir, name);
-      const cst = await lstat9(child);
+      const child = join10(dir, name);
+      const cst = await lstat10(child);
       if (cst.isSymbolicLink()) continue;
       if (cst.isDirectory()) {
         if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk2(child, depth + 1);
       } else if (cst.isFile() && name.startsWith("agent-") && name.endsWith(".jsonl")) files2.push(child);
     }
   };
-  const sessionDir = join9(dirname6(path), basename11(path, ".jsonl"));
+  const sessionDir = join10(dirname7(path), basename12(path, ".jsonl"));
   try {
-    const st = await lstat9(sessionDir);
-    if (!st.isSymbolicLink() && st.isDirectory()) await walk2(join9(sessionDir, "subagents"), 0);
+    const st = await lstat10(sessionDir);
+    if (!st.isSymbolicLink() && st.isDirectory()) await walk2(join10(sessionDir, "subagents"), 0);
   } catch {
   }
   return files2;
@@ -14799,7 +14994,7 @@ async function readHead(path, cap) {
   if (!(limit >= 1)) return { bytesRead: 0 };
   let handle;
   try {
-    handle = await open11(path, READ_PROBE_FLAGS);
+    handle = await open12(path, READ_PROBE_FLAGS);
   } catch {
     return { bytesRead: 0 };
   }
@@ -14862,7 +15057,7 @@ function createCohortDeps(options = {}) {
       const bytesRead = tail.bytesRead + loaded.bytesRead;
       const { cwd, startedAt, endedAt, live } = analysis.session;
       if (live !== false) return settlingSkip(candidate.path, bytesRead, maxBytes, typeof startedAt === "number" ? startedAt : void 0);
-      if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute7(cwd)) return { skip: "unreadable", bytesRead };
+      if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute8(cwd)) return { skip: "unreadable", bytesRead };
       let canonicalCwd = cwd;
       try {
         canonicalCwd = await realpath9(cwd);
@@ -14882,9 +15077,72 @@ function createCohortDeps(options = {}) {
     canonicalWorkspace
   };
 }
+var CohortReadDeferred = class extends Error {
+  constructor() {
+    super("the queue check reached its byte budget");
+    this.name = "CohortReadDeferred";
+  }
+};
+function createCachedCohortDeps(options) {
+  const base = options.base ?? createCohortDeps({ now: options.now });
+  const list2 = options.listSessions ?? (async (cwd) => listSessions({ roots: await claudeRoots(), cwd, maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS }));
+  const listings = /* @__PURE__ */ new Map();
+  const refs = /* @__PURE__ */ new Map();
+  let loaderCalls = 0;
+  let missBytes = 0;
+  let cacheHits = 0;
+  return {
+    async listCandidates(cwd) {
+      let listing = listings.get(cwd);
+      if (!listing) {
+        listing = list2(cwd);
+        listings.set(cwd, listing);
+      }
+      const found = (await listing).filter((ref2) => SESSION_ID_RE.test(ref2.sessionId));
+      for (const ref2 of found) refs.set(ref2.path, ref2);
+      return found.map((ref2) => ({ sessionId: ref2.sessionId.toLowerCase(), path: ref2.path, mtimeMs: ref2.mtimeMs }));
+    },
+    async loadCandidate(candidate, maxBytes) {
+      const ref2 = refs.get(candidate.path);
+      const identity = ref2 ? await cohortFactsKey(ref2) : void 0;
+      if (identity) {
+        const now = options.now();
+        if (!Number.isFinite(now) || now < identity.changedAt || now - identity.changedAt < MIN_VERIFICATION_QUIET_MS) return settlingSkip(candidate.path, 0, maxBytes);
+        const facts = options.cache ? await options.cache.get(identity.key, candidate.sessionId) : void 0;
+        if (facts) {
+          cacheHits++;
+          if (facts.bytesRead > maxBytes) return { skip: "over-budget", bytesRead: 0 };
+          return {
+            session: { id: facts.sessionId, path: candidate.path, cwd: facts.cwd, ranOrangu: facts.ranOrangu, startedAt: facts.startedAt, endedAt: facts.endedAt, metrics: facts.metrics },
+            bytesRead: facts.bytesRead
+          };
+        }
+      }
+      const tail = await sessionTail(candidate.path, maxBytes);
+      if (tail.partial) return settlingSkip(candidate.path, tail.bytesRead, maxBytes);
+      const remaining = options.budgetBytes - missBytes;
+      if (!(remaining >= 1)) throw new CohortReadDeferred();
+      const cap = Math.min(maxBytes, remaining);
+      loaderCalls++;
+      const loaded = await base.loadCandidate(candidate, cap);
+      missBytes += loaded.bytesRead;
+      if ("skip" in loaded && loaded.skip === "over-budget" && cap < maxBytes) throw new CohortReadDeferred();
+      if ("session" in loaded && options.cache && ref2 && identity) {
+        const after = await cohortFactsKey(ref2);
+        if (after?.key === identity.key) {
+          const { id, cwd, startedAt, endedAt, ranOrangu, metrics } = loaded.session;
+          await options.cache.put(identity.key, { sessionId: id.toLowerCase(), cwd, startedAt, endedAt, ranOrangu, bytesRead: loaded.bytesRead, metrics });
+        }
+      }
+      return loaded;
+    },
+    canonicalWorkspace: (identity) => base.canonicalWorkspace(identity),
+    stats: () => ({ loaderCalls, missBytes, cacheHits })
+  };
+}
 
 // src/suggest/reject-workspace.ts
-import { basename as basename12, isAbsolute as isAbsolute8 } from "node:path";
+import { basename as basename13, isAbsolute as isAbsolute9 } from "node:path";
 function createRejectWorkspaceDeps() {
   return {
     async findSessions(ids) {
@@ -14902,7 +15160,7 @@ function evidenceIds(selectors) {
   const ids = /* @__PURE__ */ new Set();
   for (const selector of selectors) {
     const trimmed = selector.trim();
-    for (const candidate of [trimmed, basename12(trimmed).replace(/\.jsonl$/i, "")]) {
+    for (const candidate of [trimmed, basename13(trimmed).replace(/\.jsonl$/i, "")]) {
       if (SESSION_ID_RE.test(candidate)) ids.add(candidate.toLowerCase());
     }
   }
@@ -14917,7 +15175,7 @@ async function rejectWorkspaceCwd(record3, deps = createRejectWorkspaceDeps()) {
     let bound;
     for (const path of paths) {
       const cwd = await deps.peekCwd(path);
-      if (typeof cwd !== "string" || !isAbsolute8(cwd)) return void 0;
+      if (typeof cwd !== "string" || !isAbsolute9(cwd)) return void 0;
       const canonical = await deps.canonical(cwd);
       if (canonical !== cwd || !isCanonicalWorkspaceCwd(canonical)) return void 0;
       if (bound !== void 0 && canonical !== bound) return void 0;
@@ -14927,6 +15185,704 @@ async function rejectWorkspaceCwd(record3, deps = createRejectWorkspaceDeps()) {
   } catch {
     return void 0;
   }
+}
+
+// src/analyze/rule-ids.ts
+var ANALYZER_RULE_IDS = [
+  "agent-fanout",
+  "api-errors",
+  "binary-attachments",
+  "blocking-questions",
+  "cache-dominates-tokens",
+  "cache-invalidation",
+  "cache-ttl-churn",
+  "compactions",
+  "context-near-limit",
+  "deep-fanout",
+  "edit-churn",
+  "failed-agents",
+  "fanout-opportunity",
+  "hidden-iterations",
+  "hook-errors",
+  "hook-latency",
+  "human-wait-dominates",
+  "idle-agents",
+  "interruptions",
+  "large-writes",
+  "low-cache-hit",
+  "mcp-definition-weight",
+  "model-fallback",
+  "model-for-task",
+  "output-burst",
+  "oversized-tool-results",
+  "preamble-weight",
+  "queued-prompts",
+  "repeated-commands",
+  "reread-files",
+  "reverts",
+  "script-candidate",
+  "sequential-reads",
+  "skill-token-weight",
+  "slow-first-response",
+  "slow-tool",
+  "thinking-on-mechanical",
+  "time-budget",
+  "tool-errors",
+  "truncated-reads",
+  "unresolved-tool-calls",
+  "unverified-edits",
+  "user-corrections",
+  "write-not-edit"
+];
+
+// src/suggest/lessons.ts
+var LESSONS_MAX_BYTES = 16384;
+var EARLIER_MAX = 10;
+var ANALYZER_RULES = new Set(ANALYZER_RULE_IDS);
+var HARNESS_PREFIX = "harness:";
+var INSIGHT_SUFFIX_RE = /^[0-9]{1,9}$/;
+function ruleIdOf(record3) {
+  const value = record3.ruleId;
+  if (typeof value !== "string") return null;
+  if (ANALYZER_RULES.has(value)) return value;
+  return value.startsWith(HARNESS_PREFIX) && isChangeClass(value.slice(HARNESS_PREFIX.length)) ? value : null;
+}
+function insightIdOf(record3) {
+  const rule = ruleIdOf(record3);
+  const value = record3.insightId;
+  if (rule === null || typeof value !== "string" || !value.startsWith(`${rule}-`)) return void 0;
+  return INSIGHT_SUFFIX_RE.test(value.slice(rule.length + 1)) ? value : void 0;
+}
+function changeClassOf(record3) {
+  const value = record3.proposal?.changeClass;
+  return typeof value === "string" && isChangeClass(value) ? value : void 0;
+}
+function reasonCodeOf(record3) {
+  const value = record3.reasonCode;
+  return record3.status === "rejected" && typeof value === "string" && REJECT_REASON_CODES.includes(value) ? value : void 0;
+}
+function workspaceOf(record3) {
+  const proposal = record3.proposal?.workspace?.cwd;
+  if (typeof proposal === "string") return proposal;
+  const bound = record3.workspaceCwd;
+  return typeof bound === "string" ? bound : void 0;
+}
+function reviewedChecks(record3) {
+  const checks2 = record3.proposal?.verificationChecks;
+  if (!Array.isArray(checks2)) return void 0;
+  const valid = checks2.every(
+    (check) => !!check && typeof check === "object" && SUGGESTION_VERIFICATION_METRICS.includes(check.metric) && SUGGESTION_VERIFICATION_COMPARISONS.includes(check.comparison)
+  );
+  return valid ? checks2 : void 0;
+}
+var isStringList = (value) => Array.isArray(value) && value.every((item) => typeof item === "string");
+function stringList(value) {
+  return isStringList(value) ? [...value] : [];
+}
+function jsonBytes(value) {
+  return new TextEncoder().encode(JSON.stringify(value, null, 2) + "\n").length;
+}
+function fitFirst(all, build, measure, maxBytes) {
+  let low = 0;
+  let high = all.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    if (measure(build(all.slice(0, mid), all.length - mid)) <= maxBytes) low = mid;
+    else high = mid - 1;
+  }
+  return build(all.slice(0, low), all.length - low);
+}
+var LESSON_STATUSES = ["verified", "regressed", "unproven", "kept", "rejected"];
+var sessionSets = /* @__PURE__ */ new WeakMap();
+function selectorSessionId(selector) {
+  const trimmed = selector.trim();
+  const name = trimmed.slice(Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\")) + 1);
+  return name.replace(/\.jsonl$/i, "").toLowerCase();
+}
+function inWorkspace(record3, membership) {
+  if (record3.scope === "global") return false;
+  if (record3.proposal?.workspace?.cwd === membership.cwd || record3.workspaceCwd === membership.cwd) return true;
+  let sessions = sessionSets.get(membership.sessionIds);
+  if (!sessions) {
+    sessions = new Set(membership.sessionIds);
+    sessionSets.set(membership.sessionIds, sessions);
+  }
+  const found = sessions;
+  return record3.sessionIds.some((selector) => found.has(selectorSessionId(selector)));
+}
+function inScope(record3, scope) {
+  if (scope === "all") return true;
+  if (scope === "global") return record3.scope === "global";
+  return inWorkspace(record3, scope.workspace);
+}
+function scopeName(scope) {
+  return scope === "all" || scope === "global" ? scope : scope.workspace.cwd;
+}
+function lastMoveTimes(records, lines) {
+  const canonical = /* @__PURE__ */ new Map();
+  for (const record3 of records) {
+    canonical.set(record3.id, record3.id);
+    for (const legacy of record3.legacyIds ?? []) if (!canonical.has(legacy)) canonical.set(legacy, record3.id);
+  }
+  const last = /* @__PURE__ */ new Map();
+  for (const line of lines) {
+    const id = canonical.get(line.id) ?? line.id;
+    const before = last.get(id);
+    if (!before || before.status !== line.status) last.set(id, { status: line.status, at: line.statusAt });
+  }
+  return new Map(records.map((record3) => [record3.id, last.get(record3.id)?.at ?? record3.statusAt]));
+}
+var NO_VERDICT = () => ({ verdict: null, verdictTrusted: false, confoundedBy: [], baseline: 0, later: 0, checks: [] });
+function recordVerdict(record3) {
+  try {
+    return trustedVerdict(record3);
+  } catch {
+    return NO_VERDICT();
+  }
+}
+function trustedVerdict(record3) {
+  if (record3.status === "verified") {
+    const receipt2 = record3.verificationReceipt;
+    if (!receipt2 || !isTrustedComputedVerification(record3)) return NO_VERDICT();
+    if (receipt2.v === 2) {
+      return {
+        verdict: "verified",
+        verdictTrusted: true,
+        confoundedBy: [...receipt2.confoundedBy],
+        baseline: receipt2.baselineSessionIds.length,
+        later: receipt2.measuredSessionIds.length,
+        checks: receipt2.checks.map((check) => ({ metric: check.metric, comparison: check.comparison, verdict: check.verdict, before: check.before, after: check.after, pLower: check.pLower, pHigher: check.pHigher }))
+      };
+    }
+    return {
+      verdict: "verified",
+      verdictTrusted: true,
+      confoundedBy: [],
+      baseline: 0,
+      later: receipt2.measuredSessionIds.length,
+      checks: receipt2.checks.map((check) => ({
+        metric: check.metric,
+        comparison: check.comparison,
+        verdict: isDirectional(check.comparison) ? "improved" : "held",
+        before: check.before,
+        after: check.after,
+        pLower: null,
+        pHigher: null
+      }))
+    };
+  }
+  const receipt = record3.outcomeReceipt;
+  const reviewed = reviewedChecks(record3);
+  if (receipt === void 0 || reviewed === void 0 || !["regressed", "unproven", "kept", "rejected"].includes(record3.status)) return NO_VERDICT();
+  const move = record3.status === "regressed" || record3.status === "kept" ? "regressed" : record3.status === "unproven" ? "unproven" : receipt.verdict === "regressed" ? "regressed" : "unproven";
+  if (outcomeReceiptViolation(receipt, move, reviewed, applicationTime(record3), record3.frozenBaseline) !== void 0) return NO_VERDICT();
+  return {
+    verdict: receipt.verdict,
+    verdictTrusted: true,
+    laterComplete: receipt.laterComplete,
+    confoundedBy: [...receipt.confoundedBy],
+    baseline: receipt.baselineSessionIds.length,
+    later: receipt.measuredSessionIds.length,
+    checks: receipt.checks.map((check) => ({ metric: check.metric, comparison: check.comparison, verdict: check.verdict, before: check.before, after: check.after, pLower: check.pLower, pHigher: check.pHigher }))
+  };
+}
+function lessonHead(record3, verdict) {
+  const changeClass = changeClassOf(record3);
+  const insightId = insightIdOf(record3);
+  const reasonCode = reasonCodeOf(record3);
+  return {
+    id: record3.id,
+    scope: record3.scope,
+    ruleId: ruleIdOf(record3),
+    ...insightId !== void 0 ? { insightId } : {},
+    ...changeClass !== void 0 ? { changeClass } : {},
+    status: record3.status,
+    ...reasonCode !== void 0 ? { reasonCode } : {},
+    verdict: verdict.verdict,
+    verdictTrusted: verdict.verdictTrusted,
+    ...verdict.laterComplete !== void 0 ? { laterComplete: verdict.laterComplete } : {},
+    confoundedBy: verdict.confoundedBy,
+    baseline: verdict.baseline,
+    later: verdict.later
+  };
+}
+function lessonOf(record3, decidedAt) {
+  const verdict = recordVerdict(record3);
+  const appliedAt = applicationTime(record3);
+  return {
+    ...lessonHead(record3, verdict),
+    checks: verdict.checks.map(({ metric, comparison, verdict: checkVerdict2 }) => ({ metric, comparison, verdict: checkVerdict2 })),
+    ...appliedAt !== void 0 ? { appliedAt } : {},
+    decidedAt
+  };
+}
+var byId = (a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+function filtered(input) {
+  const rules = input.rules ? new Set(input.rules) : void 0;
+  return input.records.filter((record3) => inScope(record3, input.scope) && (!rules || rules.has(record3.ruleId)));
+}
+function buildLessonRead(input) {
+  const moves = lastMoveTimes(input.records, input.lines);
+  const lessons = [];
+  for (const record3 of filtered(input)) {
+    if (!LESSON_STATUSES.includes(record3.status)) continue;
+    try {
+      lessons.push(lessonOf(record3, moves.get(record3.id) ?? record3.statusAt));
+    } catch {
+    }
+  }
+  lessons.sort((a, b) => Number(a.scope === "global") - Number(b.scope === "global") || b.decidedAt - a.decidedAt || byId(a, b));
+  const build = (kept, omitted) => ({ v: 1, scope: scopeName(input.scope), maxBytes: input.maxBytes, omitted, lessons: kept });
+  return input.maxBytes === null ? build(lessons, 0) : fitFirst(lessons, build, input.measure ?? jsonBytes, input.maxBytes);
+}
+function buildHistory(input) {
+  const moves = lastMoveTimes(input.records, input.lines);
+  const rows2 = [];
+  for (const record3 of filtered(input)) {
+    const appliedAt = applicationTime(record3);
+    if (appliedAt === void 0) continue;
+    try {
+      const verdict = recordVerdict(record3);
+      const open13 = record3.status === "applied" || record3.status === "regressed";
+      const applied = record3.application?.files;
+      rows2.push({
+        ...lessonHead(record3, verdict),
+        checks: verdict.checks,
+        appliedAt,
+        ...open13 ? {} : { decidedAt: moves.get(record3.id) ?? record3.statusAt },
+        title: record3.title,
+        files: isStringList(applied) ? [...applied] : stringList(record3.proposal?.files)
+      });
+    } catch {
+    }
+  }
+  return rows2.sort((a, b) => a.appliedAt - b.appliedAt || byId(a, b));
+}
+
+// src/suggest/queue.ts
+var QUEUE_GROUPS = ["verdict", "regressed", "apply", "review", "running", "wait"];
+var CLOSED = ["verified", "unproven", "kept", "rejected"];
+function canonicalId(id) {
+  if (!isSuggestionId(id)) throw new Error(`${JSON.stringify(id)} is not a suggestion id`);
+  return id;
+}
+function verifyCommand(id) {
+  return `claude "/orangu:improve --verify ${canonicalId(id)}"`;
+}
+function applyCommand(id) {
+  return `claude "/orangu:apply ${canonicalId(id)}"`;
+}
+function trustedFrozen(record3) {
+  const frozen = record3.frozenBaseline;
+  return frozen !== void 0 && frozenBaselineViolation(frozen, applicationTime(record3)) === void 0 ? frozen : void 0;
+}
+function candidatesOf(record3, times, now) {
+  const appliedAt = applicationTime(record3);
+  if (times === void 0 || appliedAt === void 0) return void 0;
+  const frozen = trustedFrozen(record3);
+  const baseline = frozen ? frozen.sessions.length : times.filter((time) => time < appliedAt).length;
+  const later = times.filter((time) => time > appliedAt && now - time >= MIN_VERIFICATION_QUIET_MS).length;
+  return { baseline: Math.min(baseline, COHORT_MAX), later: Math.min(later, COHORT_MAX) };
+}
+function cannotVerifyOf(record3, candidates, check) {
+  if (record3.status !== "applied") return void 0;
+  const frozen = trustedFrozen(record3);
+  if (frozen && frozen.sessions.length < COHORT_MIN) return "few-baseline-sessions";
+  const checks2 = reviewedChecks(record3);
+  if (checks2?.length && !checks2.some((check2) => isDirectional(check2.comparison))) return "no-directional-check";
+  const structured = record3.proposal?.v === 1 && typeof record3.proposal.workspace?.cwd === "string" && !!checks2?.length;
+  const measuredShort = check?.check === "ran" && check.checkpoint === "complete" && check.baseline !== void 0 && check.baseline < COHORT_MIN;
+  if (structured && record3.frozenBaseline === void 0 && ((candidates?.baseline ?? 0) < COHORT_MIN || measuredShort)) return "baseline-gone";
+  if (!structured) return "legacy-record";
+  return void 0;
+}
+function groupOf(record3, cannotVerify, check) {
+  switch (record3.status) {
+    case "new":
+    case "failed":
+      return "review";
+    case "proposed":
+      return record3.scope === "global" ? "review" : "apply";
+    case "kicked-off":
+      return "running";
+    case "regressed":
+      return "regressed";
+    case "applied": {
+      if (cannotVerify === "baseline-gone" || cannotVerify === "legacy-record") return "review";
+      const due = cannotVerify === "few-baseline-sessions" || check?.check === "ran" && check.final;
+      return due ? "verdict" : "wait";
+    }
+    default:
+      return void 0;
+  }
+}
+function nextOf(record3, group) {
+  switch (group) {
+    case "verdict":
+    case "regressed":
+      return verifyCommand(record3.id);
+    case "apply":
+      return applyCommand(record3.id);
+    case "review":
+      if (record3.status === "applied") return verifyCommand(record3.id);
+      if (record3.status === "proposed") return null;
+      return kickoffCommands({ ...record3, id: canonicalId(record3.id) }, "serve").claude;
+    case "running":
+      return kickoffCommands({ ...record3, id: canonicalId(record3.id) }, "serve").claude;
+    case "wait":
+      return null;
+  }
+}
+var ownWorkspace = workspaceOf;
+function appliedKeys(record3, input) {
+  const appliedAt = applicationTime(record3);
+  const candidates = candidatesOf(record3, input.discovered?.[record3.id], input.now);
+  const check = input.checks?.[record3.id];
+  const cannotVerify = cannotVerifyOf(record3, candidates, check);
+  const measured = check?.check === "ran" ? { check: "ran", checkpoint: check.checkpoint, verdict: check.verdict, final: check.final, ...check.leaning ? { leaning: check.leaning } : {} } : check?.check === "deferred" ? { check: "deferred" } : {};
+  return {
+    ...appliedAt !== void 0 ? { appliedAt } : {},
+    ...candidates ? { candidates } : {},
+    ...measured,
+    ...cannotVerify ? { cannotVerify } : {}
+  };
+}
+var newestFirst = (moves) => (a, b) => (moves.get(b.id) ?? b.statusAt) - (moves.get(a.id) ?? a.statusAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+function buildQueue(input) {
+  const membership = input.workspace;
+  const records = input.records.filter((record3) => isSuggestionId(record3.id));
+  const moves = lastMoveTimes(records, input.lines);
+  const members = membership ? records.filter((record3) => inWorkspace(record3, membership)) : records;
+  const workspaceKey = (record3) => membership ? membership.cwd : ownWorkspace(record3);
+  const sorted = [...members].sort(newestFirst(moves));
+  const groups = { verdict: [], regressed: [], apply: [], review: [], running: [], wait: [] };
+  const folded = /* @__PURE__ */ new Map();
+  const placed = [];
+  const earlier = /* @__PURE__ */ new Map();
+  for (const record3 of sorted) {
+    try {
+      const key = workspaceKey(record3);
+      if (key !== void 0 && (CLOSED.includes(record3.status) || record3.status === "regressed")) {
+        const reasonCode = reasonCodeOf(record3);
+        const entry = { id: record3.id, status: record3.status, verdict: recordVerdict(record3).verdict, ...reasonCode !== void 0 ? { reasonCode } : {} };
+        const indexKey = JSON.stringify([key, record3.ruleId]);
+        const found = earlier.get(indexKey);
+        if (found) {
+          found.entries.push({ id: record3.id, entry });
+          found.ids.add(record3.id);
+        } else earlier.set(indexKey, { entries: [{ id: record3.id, entry }], ids: /* @__PURE__ */ new Set([record3.id]) });
+      }
+      if (CLOSED.includes(record3.status)) continue;
+      const candidates = record3.status === "applied" ? candidatesOf(record3, input.discovered?.[record3.id], input.now) : void 0;
+      const cannotVerify = cannotVerifyOf(record3, candidates, input.checks?.[record3.id]);
+      const group = groupOf(record3, cannotVerify, input.checks?.[record3.id]);
+      if (group === void 0) continue;
+      if ((record3.status === "new" || record3.status === "failed") && key !== void 0) {
+        const foldKey = JSON.stringify([key, record3.scope, record3.ruleId]);
+        const fold = folded.get(foldKey);
+        if (fold) {
+          fold.push(record3);
+          continue;
+        }
+        folded.set(foldKey, [record3]);
+        placed.push({ group, records: folded.get(foldKey) });
+        continue;
+      }
+      placed.push({ group, records: [record3] });
+    } catch {
+    }
+  }
+  const earlierOf = (item, ids) => {
+    const key = workspaceKey(item);
+    const found = key === void 0 ? void 0 : earlier.get(JSON.stringify([key, item.ruleId]));
+    if (!found) return { list: [], count: 0 };
+    let own = 0;
+    for (const id of ids) if (found.ids.has(id)) own++;
+    const list2 = [];
+    for (const { id, entry } of found.entries) {
+      if (list2.length >= EARLIER_MAX) break;
+      if (!ids.has(id)) list2.push(entry);
+    }
+    return { list: list2, count: found.entries.length - own };
+  };
+  for (const { group, records: itemRecords } of placed) {
+    try {
+      const record3 = itemRecords[0];
+      const ids = itemRecords.map((r) => r.id);
+      const changeClass = changeClassOf(record3);
+      const earlierRecords = earlierOf(record3, new Set(ids));
+      groups[group].push({
+        group,
+        id: record3.id,
+        ids,
+        status: record3.status,
+        scope: record3.scope,
+        ruleId: ruleIdOf(record3),
+        ...changeClass !== void 0 ? { changeClass } : {},
+        title: record3.title,
+        workspace: ownWorkspace(record3) ?? membership?.cwd ?? null,
+        lastMoveAt: Math.max(...itemRecords.map((r) => moves.get(r.id) ?? r.statusAt)),
+        ...record3.status === "applied" ? appliedKeys(record3, input) : {},
+        earlier: earlierRecords.list,
+        earlierCount: earlierRecords.count,
+        next: nextOf(record3, group)
+      });
+    } catch {
+    }
+  }
+  const counts = {
+    verdict: groups.verdict.length,
+    regressed: groups.regressed.length,
+    apply: groups.apply.length,
+    review: groups.review.length,
+    running: groups.running.length,
+    wait: groups.wait.length,
+    due: groups.verdict.length,
+    open: QUEUE_GROUPS.reduce((sum2, group) => sum2 + groups[group].length, 0)
+  };
+  const globalOpen = membership ? records.filter((record3) => record3.scope === "global" && !CLOSED.includes(record3.status)).length : 0;
+  return { v: 1, scope: membership ? membership.cwd : "all", now: input.now, counts, groups, globalOpen };
+}
+var TODO_MAX_BYTES = 8192;
+var TODO_GROUPS = ["verdict", "regressed", "apply", "review", "running"];
+function buildTodo(queue, options = {}) {
+  if (queue.scope === "all") throw new Error("the todo read takes the queue of 1 workspace");
+  const items = TODO_GROUPS.flatMap(
+    (group) => queue.groups[group].map((item) => ({
+      group: item.group,
+      id: item.id,
+      status: item.status,
+      scope: item.scope,
+      ruleId: item.ruleId,
+      ...item.changeClass !== void 0 ? { changeClass: item.changeClass } : {},
+      ...item.cannotVerify !== void 0 ? { cannotVerify: item.cannotVerify } : {}
+    }))
+  );
+  const build = (kept, omitted) => ({ v: 1, workspace: queue.scope, counts: { ...queue.counts }, maxBytes: TODO_MAX_BYTES, omitted, items: kept });
+  return fitFirst(items, build, options.measure ?? jsonBytes, TODO_MAX_BYTES);
+}
+
+// src/suggest/queue-read.ts
+var QUEUE_CHECK_BYTES = COHORT_SIDE_BYTES;
+function createQueueReadDeps(options) {
+  return {
+    now: options.now,
+    cohort: createCachedCohortDeps({ now: () => options.now, budgetBytes: options.budgetBytes ?? QUEUE_CHECK_BYTES, cache: options.cache }),
+    // The same resolution as a reviewed proposal workspace: realpath, then a folder check.
+    async canonical(dir) {
+      return (await liveWorkspaceIdentity(dir)).cwd;
+    },
+    async workspaceSessionIds(cwd) {
+      const refs = await listSessions({ roots: await claudeRoots(), cwd });
+      return refs.filter((ref2) => SESSION_ID_RE.test(ref2.sessionId)).map((ref2) => ref2.sessionId.toLowerCase());
+    }
+  };
+}
+async function workspaceMembership(dir, deps) {
+  const cwd = await deps.canonical(dir);
+  return { cwd, sessionIds: await deps.workspaceSessionIds(cwd) };
+}
+async function readScope(target, deps) {
+  return target === "all" || target === "global" ? target : { workspace: await workspaceMembership(target.cwd, deps) };
+}
+async function checkApplied(records, all, deps) {
+  const checks2 = {};
+  const discovered = {};
+  const applied = records.filter((record3) => record3.status === "applied").sort((a, b) => (applicationTime(a) ?? a.statusAt) - (applicationTime(b) ?? b.statusAt) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const record3 of applied) {
+    const identity = record3.proposal?.workspace;
+    if (identity) {
+      try {
+        const cwd = await deps.cohort.canonicalWorkspace(identity);
+        discovered[record3.id] = (await deps.cohort.listCandidates(cwd)).map((candidate) => candidate.mtimeMs);
+      } catch {
+      }
+    }
+    const cannotVerify = cannotVerifyOf(record3, candidatesOf(record3, discovered[record3.id], deps.now));
+    if (cannotVerify !== void 0 && cannotVerify !== "no-directional-check") continue;
+    try {
+      const effect = await measureCohortEffect(record3, all, deps.cohort);
+      const { checkpoint, final, leaning } = effectFinality(effect);
+      checks2[record3.id] = { check: "ran", checkpoint, verdict: effect.verdict, final, ...leaning ? { leaning } : {}, baseline: effect.baseline.length };
+    } catch (error) {
+      if (error instanceof CohortReadDeferred) checks2[record3.id] = { check: "deferred" };
+    }
+  }
+  return { checks: checks2, discovered };
+}
+async function readQueue(store, target, deps) {
+  const [records, lines] = [await store.all(), await store.lines()];
+  const workspace = target === "all" ? void 0 : await workspaceMembership(target.cwd, deps);
+  const inRead = workspace ? records.filter((record3) => inWorkspace(record3, workspace)) : records;
+  const { checks: checks2, discovered } = await checkApplied(inRead, records, deps);
+  return buildQueue({ now: deps.now, ...workspace ? { workspace } : {}, records, lines, checks: checks2, discovered });
+}
+async function readTodo(store, cwd, deps, options = {}) {
+  return buildTodo(await readQueue(store, { cwd }, deps), options.measure ? { measure: options.measure } : {});
+}
+async function readLessons(store, target, deps, options = {}) {
+  const scope = await readScope(target, deps);
+  const [records, lines] = [await store.all(), await store.lines()];
+  return buildLessonRead({
+    records,
+    lines,
+    scope,
+    ...options.rules ? { rules: options.rules } : {},
+    maxBytes: options.maxBytes === void 0 ? LESSONS_MAX_BYTES : options.maxBytes,
+    ...options.measure ? { measure: options.measure } : {}
+  });
+}
+async function readHistory(store, target, deps, options = {}) {
+  const scope = await readScope(target, deps);
+  const [records, lines] = [await store.all(), await store.lines()];
+  return buildHistory({ records, lines, scope, ...options.rules ? { rules: options.rules } : {} });
+}
+
+// src/cli/commands/suggest-reads.ts
+var INDENT3 = "  ";
+var UNDER = "    ";
+var MIN_TITLE_COLUMNS = 20;
+function terminal(value) {
+  return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ");
+}
+function when(ms2) {
+  return Number.isFinite(ms2) && Math.abs(ms2) <= 864e13 ? new Date(ms2).toISOString().slice(0, 16).replace("T", " ") : String(ms2);
+}
+var fmtCount = (n2) => n2.toLocaleString("en-US");
+function headLines(id, status, title, width) {
+  const head2 = `${INDENT3}${terminal(id)}  [${terminal(status)}]  `;
+  const column = displayWidth(head2);
+  const [first = "", ...rest] = wrapWords(title, Math.max(MIN_TITLE_COLUMNS, width - column));
+  return [(head2 + first).trimEnd(), ...rest.map((line) => " ".repeat(column) + line)];
+}
+function proseLines(text3, width) {
+  return wrapWords(text3, width - UNDER.length).map((line) => UNDER + line);
+}
+function factLines(facts, width) {
+  return facts.length ? wrapValue(facts.map(terminal).join(" \xB7 "), width - UNDER.length).map((line) => UNDER + line) : [];
+}
+var workspaceRow = (path) => `${UNDER}Workspace: ${terminal(path)}`;
+function scopeLine(scope) {
+  if (scope === "all") return `${INDENT3}Every workspace on this machine`;
+  if (scope === "global") return `${INDENT3}The global records, which belong to no workspace`;
+  return `${INDENT3}Workspace: ${terminal(scope)}`;
+}
+var GROUP_TITLES = {
+  verdict: "Ready for a verdict",
+  regressed: "Worse after the change: keep it or undo it",
+  apply: "Ready to apply",
+  review: "To review",
+  running: "Started in Claude Code",
+  wait: "Waiting for later sessions"
+};
+var DEFERRED_TEXT = "orangu did not check this change in this read, because the read reached its byte budget. Run orangu again to check it.";
+var QUEUE_APP_ROW = "See this queue in the app: orangu serve";
+function checkpointPhrase(checkpoint) {
+  if (checkpoint === "first") return "at the first checkpoint";
+  if (checkpoint === "complete") return "at the complete checkpoint";
+  return "before the first checkpoint";
+}
+function itemFacts(item, now) {
+  const facts = [];
+  if (item.ids.length > 1) facts.push(`${item.ids.length} records of this rule: ${item.ids.join(", ")}.`);
+  if (item.check === "ran" && item.verdict !== void 0) {
+    facts.push(`Checked: ${item.verdict} ${checkpointPhrase(item.checkpoint ?? null)}${item.leaning === "worse" ? ", and it leans worse" : ""}.`);
+  }
+  if (item.candidates) facts.push(`Sessions: ${item.candidates.baseline} before the change, ${item.candidates.later} of ${COHORT_MAX} after it.`);
+  if (item.cannotVerify) facts.push(`Cannot verify: ${item.cannotVerify}.`);
+  if (item.group === "running") {
+    const age = fmtAge(item.lastMoveAt, now);
+    facts.push(age === "now" ? "Started less than 1m ago." : `Started ${age} ago.`);
+  }
+  if (item.earlierCount > 0) facts.push(`Earlier records of this rule: ${item.earlierCount}.`);
+  return facts;
+}
+function itemLines(item, now, allWorkspaces, width) {
+  const lines = headLines(item.id, item.status, item.title, width);
+  if (allWorkspaces && item.workspace !== null) lines.push(workspaceRow(item.workspace));
+  for (const fact of itemFacts(item, now)) lines.push(...proseLines(terminal(fact), width));
+  if (item.check === "deferred") lines.push(...proseLines(DEFERRED_TEXT, width));
+  if (item.next !== null) lines.push(UNDER + terminal(item.next));
+  return lines;
+}
+function queueLines(queue, width) {
+  const all = queue.scope === "all";
+  const lines = ["", `${INDENT3}Improvements \xB7 ${queue.counts.due} due \xB7 ${queue.counts.open} open`, scopeLine(queue.scope)];
+  if (queue.globalOpen > 0) lines.push(`${INDENT3}Open global records that this queue leaves out: ${queue.globalOpen}.`);
+  if (queue.counts.open === 0) lines.push("", `${INDENT3}orangu found no open record ${all ? "on this machine" : "in this workspace"}.`);
+  for (const group of QUEUE_GROUPS) {
+    const items = queue.groups[group];
+    if (!items.length) continue;
+    lines.push("", `${INDENT3}${GROUP_TITLES[group]} (${items.length})`);
+    for (const item of items) lines.push(...itemLines(item, queue.now, all, width));
+  }
+  lines.push("", INDENT3 + QUEUE_APP_ROW);
+  return lines;
+}
+var GROUP_COLUMN = Math.max(...QUEUE_GROUPS.map((group) => group.length));
+var STATUS_COLUMN = "kicked-off".length;
+function todoLines(todo) {
+  const lines = [`${INDENT3}Workspace: ${terminal(todo.workspace)} \xB7 ${todo.counts.due} due \xB7 ${todo.counts.open} open`];
+  if (!todo.items.length) lines.push(`${INDENT3}orangu found no open item that needs a step.`);
+  for (const item of todo.items) {
+    lines.push(`${INDENT3}${padCell(item.group, GROUP_COLUMN)}  ${terminal(item.id)}  ${padCell(terminal(item.status), STATUS_COLUMN)}  ${terminal(item.ruleId ?? "unknown-rule")}`);
+  }
+  if (todo.omitted > 0) lines.push(`${INDENT3}${todo.omitted} more items do not fit in ${fmtCount(todo.maxBytes)} B.`);
+  return lines;
+}
+function lessonLines(read, width) {
+  const lines = ["", `${INDENT3}Lessons \xB7 ${plural(read.lessons.length, "lesson")} shown`, scopeLine(read.scope)];
+  if (read.omitted > 0) {
+    lines.push(`${INDENT3}${read.omitted} older lessons do not fit in ${read.maxBytes === null ? "this read" : `${fmtCount(read.maxBytes)} B`}.`);
+  }
+  if (!read.lessons.length) lines.push("", `${INDENT3}orangu found no lesson in this scope.`);
+  for (const lesson of read.lessons) {
+    lines.push("", `${INDENT3}${terminal(lesson.id)}  [${terminal(lesson.status)}]  decided ${when(lesson.decidedAt)}`);
+    const facts = [
+      `rule ${lesson.ruleId ?? "unknown-rule"}`,
+      lesson.verdict === null ? "no verdict" : `verdict ${lesson.verdict}`,
+      ...lesson.reasonCode ? [`reason ${lesson.reasonCode}`] : [],
+      `sessions: ${lesson.baseline} before the change, ${lesson.later} after it`
+    ];
+    lines.push(...factLines(facts, width));
+    if (lesson.confoundedBy.length) lines.push(...proseLines(terminal(`measured together with ${lesson.confoundedBy.join(", ")}`), width));
+    for (const check of lesson.checks) lines.push(...factLines([`${check.metric} ${check.comparison}: ${check.verdict}`], width));
+  }
+  return lines;
+}
+var rowStatus = (row2) => row2.status === "verified" && !row2.verdictTrusted ? "legacy-unverified" : row2.status;
+function historyLines(rows2, width) {
+  const lines = ["", `${INDENT3}History \xB7 ${plural(rows2.length, "applied change")}, oldest first`];
+  if (!rows2.length) lines.push("", `${INDENT3}orangu found no applied change in this scope.`);
+  for (const row2 of rows2) {
+    lines.push("", ...headLines(row2.id, rowStatus(row2), row2.title, width));
+    const facts = [
+      ...row2.appliedAt !== void 0 ? [`applied ${when(row2.appliedAt)}`] : [],
+      row2.decidedAt !== void 0 ? `decided ${when(row2.decidedAt)}` : "open",
+      row2.verdict === null ? "no verdict" : `verdict ${row2.verdict}`,
+      ...row2.reasonCode ? [`reason ${row2.reasonCode}`] : [],
+      `rule ${row2.ruleId ?? "unknown-rule"}`
+    ];
+    lines.push(...factLines(facts, width));
+    for (const check of row2.checks) lines.push(...proseLines(`${check.metric} ${check.comparison}: ${check.before} \u2192 ${check.after}, ${check.verdict}`, width));
+    if (row2.files.length) lines.push(...wrapValue(`files: ${row2.files.map(terminal).join(", ")}`, width - UNDER.length, ", ").map((line) => UNDER + line));
+  }
+  return lines;
+}
+function transitionsOf(lines) {
+  const moves = [];
+  let before;
+  for (const line of lines) {
+    if (line.status === before) continue;
+    before = line.status;
+    const reasonCode = reasonCodeOf(line);
+    moves.push({ status: line.status, statusAt: line.statusAt, ...reasonCode !== void 0 ? { reasonCode } : {} });
+  }
+  return moves;
+}
+function transitionLines(transitions) {
+  if (!transitions.length) return [];
+  return [`${UNDER}moves:`, ...transitions.map((move) => `${UNDER}  ${when(move.statusAt)}  ${terminal(move.status)}${move.reasonCode ? ` (${move.reasonCode})` : ""}`)];
 }
 
 // src/version.ts
@@ -14997,22 +15953,37 @@ var STATUSES = ["new", "kicked-off", "proposed", "applied", "verified", "rejecte
 var RECORDED_STATUSES = ["regressed", "unproven"];
 var ARTIFACT_FLAGS = ["proposal", "manifest", "application", "verification"];
 var FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/;
+var ALL_STATUSES = [...STATUSES, ...RECORDED_STATUSES];
+var STEP_FLAGS = ["list", "show", "effect", "record", "set", "queue", "todo", "lessons", "history"];
+var READS = {
+  queue: { takes: ["cwd", "all"], usage: "--queue [--cwd <dir> | --all] [--json]" },
+  todo: { takes: ["cwd"], usage: "--todo [--cwd <dir>] [--json]" },
+  lessons: { takes: ["cwd", "all", "scope", "rule"], usage: "--lessons [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]" },
+  history: { takes: ["cwd", "all", "scope", "rule"], usage: "--history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]" }
+};
+var READ_OPTIONS = ["cwd", "all", "scope", "rule"];
 var emit = (v, flags) => process.stdout.write(JSON.stringify(v, null, flagBool(flags, "quiet") ? 0 : 2) + "\n");
 function visible(value, flags) {
   return flagBool(flags, "no-redact") ? value : redactValue(value, { scrub: true });
 }
-function terminal(value) {
+function readOutput(read, flags, text3) {
+  const shown = visible(read, flags);
+  if (flagBool(flags, "json")) return JSON.stringify(shown, null, flagBool(flags, "quiet") ? 0 : 2) + "\n";
+  return text3(shown).map((line) => line + "\n").join("");
+}
+var outputBytes = (output) => Buffer.byteLength(output, "utf8");
+function terminal2(value) {
   return value.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ");
 }
-var MIN_TITLE_COLUMNS = 20;
+var MIN_TITLE_COLUMNS2 = 20;
 function recordLines(rec, width) {
   const status = rec.status === "verified" && !isTrustedComputedVerification(rec) ? "legacy-unverified" : rec.status;
-  const head2 = `  ${terminal(rec.id)}  [${terminal(status)}]  `;
+  const head2 = `  ${terminal2(rec.id)}  [${terminal2(status)}]  `;
   const column = displayWidth(head2);
-  const [first = "", ...rest] = wrapWords(rec.title, Math.max(MIN_TITLE_COLUMNS, width - column));
+  const [first = "", ...rest] = wrapWords(rec.title, Math.max(MIN_TITLE_COLUMNS2, width - column));
   const lines = [head2 + first, ...rest.map((t) => " ".repeat(column) + t)];
-  lines.push(`    rule ${terminal(rec.ruleId)} \xB7 scope ${terminal(rec.scope)} \xB7 sessions ${rec.sessionIds.map((s) => terminal(s.slice(0, 8))).join(", ")}`);
-  if (rec.proposal) lines.push(`    proposal: ${terminal(rec.proposal.proposalPath)}`);
+  lines.push(`    rule ${terminal2(rec.ruleId)} \xB7 scope ${terminal2(rec.scope)} \xB7 sessions ${rec.sessionIds.map((s) => terminal2(s.slice(0, 8))).join(", ")}`);
+  if (rec.proposal) lines.push(`    proposal: ${terminal2(rec.proposal.proposalPath)}`);
   return lines;
 }
 function printRecord(rec) {
@@ -15026,11 +15997,28 @@ function printCatalog(matches) {
     w(`    catalog ${m.entry.id}: ${what}${m.entry.url ? ` \xB7 ${m.entry.url}` : ""}${m.entry.verifiedAt ? ` \xB7 verified ${m.entry.verifiedAt}` : " \xB7 candidate (unverified)"}`);
   }
 }
+function statusFilter(flags) {
+  const value = flags["status"];
+  if (value === void 0) return void 0;
+  const names = typeof value === "string" ? value.split(",").map((name) => name.trim()).filter(Boolean) : [];
+  const unknown = names.filter((name) => !ALL_STATUSES.includes(name));
+  if (!names.length || unknown.length) {
+    throw new Error(`--status takes 1 or more of ${ALL_STATUSES.join(", ")}${unknown.length ? `, not ${unknown.map((name) => JSON.stringify(name)).join(", ")}` : ""}`);
+  }
+  return new Set(names);
+}
 async function cmdList(store, flags) {
   const scope = flagStr(flags, "scope");
+  const statuses = statusFilter(flags);
   let all = await store.all();
   if (scope) all = all.filter((r) => r.scope === scope);
+  if (statuses) all = all.filter((r) => statuses.has(r.status));
   if (flagBool(flags, "json")) return emit(visible(all, flags), flags);
+  if (!all.length && statuses) {
+    process.stdout.write(`no suggestion has the status ${[...statuses].join(" or ")}.
+`);
+    return;
+  }
   if (!all.length) {
     process.stdout.write("no suggestions yet. Create one from a report finding, or run: orangu suggest --rule <r> --scope session --session <id>\n");
     return;
@@ -15057,6 +16045,7 @@ async function cmdShow(store, id, flags) {
     sessions.push(slimAnalysis(body));
   }
   const catalog = matchRule(rec.ruleId, sessions);
+  const transitions = transitionsOf(await store.lines(rec.id));
   if (flagBool(flags, "json")) {
     return emit(visible({
       record: rec,
@@ -15065,10 +16054,12 @@ async function cmdShow(store, id, flags) {
       missingSessionIds: missing,
       ...rec.status === "verified" ? { verificationTrusted: isTrustedComputedVerification(rec) } : {},
       ...forApply ? { workspaceMatchesCurrent: true } : {},
-      ...forProposal ? { proposalEligibility: rec.scope === "global" ? "global-proposal-only" : "workspace-bound" } : {}
+      ...forProposal ? { proposalEligibility: rec.scope === "global" ? "global-proposal-only" : "workspace-bound" } : {},
+      transitions
     }, flags), flags);
   }
   printRecord(visible(rec, flags));
+  for (const line of transitionLines(transitions)) process.stdout.write(line + "\n");
   printCatalog(catalog);
   process.stdout.write(`  evidence: ${sessions.length} session(s) loaded${missing.length ? `, ${missing.length} unresolvable` : ""}. Add --json for the slim data
 `);
@@ -15161,7 +16152,7 @@ async function transitionApplied(store, rec, application, cohort, flags) {
     next = await store.transition(rec.id, "applied", { application });
   }
   if (notFrozen === void 0) return { next, baselineFreeze: { frozen: true } };
-  const reason = terminal(notFrozen instanceof Error ? notFrozen.message : String(notFrozen));
+  const reason = terminal2(notFrozen instanceof Error ? notFrozen.message : String(notFrozen));
   if (!flagBool(flags, "quiet")) {
     process.stderr.write(`  orangu did not freeze the baseline (${visible(reason, flags)}). The change is applied, and each check reads the baseline sessions again.
 `);
@@ -15194,9 +16185,9 @@ async function cmdCreate(store, positionals, flags) {
     const decoded = decodeFinding(token);
     finding = decoded.finding;
     source = decoded.source;
-    const canonicalId = suggestionIdV2(suggestionKey(finding, source));
-    if (explicitId && explicitId !== canonicalId) {
-      throw new Error(`suggestion id mismatch: encoded finding hashes to ${canonicalId}`);
+    const canonicalId2 = suggestionIdV2(suggestionKey(finding, source));
+    if (explicitId && explicitId !== canonicalId2) {
+      throw new Error(`suggestion id mismatch: encoded finding hashes to ${canonicalId2}`);
     }
   } else {
     const ruleId = flagStr(flags, "rule");
@@ -15276,13 +16267,83 @@ async function cmdEffect(store, id, flags, deps) {
   const view = visible(effectView(effect), flags);
   if (flagBool(flags, "json")) return emit(view, flags);
   const w = (s) => process.stdout.write(s + "\n");
-  w(`  ${terminal(view.id)}  later sessions vs baseline \xB7 ${view.baseline.n} before, ${view.later.n} after the change`);
-  for (const check of view.checks) w(`    ${terminal(check.evidence)}`);
-  if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal).join(", ")} (not attributable to this change alone)`);
+  w(`  ${terminal2(view.id)}  later sessions vs baseline \xB7 ${view.baseline.n} before, ${view.later.n} after the change, of ${view.later.count} later sessions so far`);
+  for (const check of view.checks) w(`    ${terminal2(check.evidence)}`);
+  if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal2).join(", ")} (not attributable to this change alone)`);
   const skipped = Object.entries(view.skipped).filter(([, count4]) => count4 > 0);
   if (skipped.length) w(`    skipped: ${skipped.map(([reason, count4]) => `${reason} ${count4}`).join(", ")}`);
   w(`  verdict: ${view.verdict}`);
-  w(`  next: ${terminal(view.next)}`);
+  w(`  next: ${terminal2(view.next)}`);
+}
+function workspaceDir(flags) {
+  const value = flags["cwd"];
+  if (value === void 0) return process.cwd();
+  if (typeof value !== "string" || !value) throw new Error("--cwd requires a folder");
+  return value;
+}
+function assertReadOptions(step, flags) {
+  if (step === "todo" && flags["all"] !== void 0) {
+    throw new Error("--todo reads 1 workspace, so it takes no --all. Name the workspace with --cwd <dir>. The default is the current folder.");
+  }
+  const takes = READS[step].takes;
+  const other = READ_OPTIONS.find((name) => flags[name] !== void 0 && !takes.includes(name));
+  if (other) throw new Error(`--${other} is not valid with --${step}. usage: orangu suggest ${READS[step].usage}`);
+}
+function queueTarget(flags) {
+  if (flags["all"] === void 0) return { cwd: workspaceDir(flags) };
+  if (flags["cwd"] !== void 0) throw new Error("--cwd and --all name 2 different scopes. Give 1 of them.");
+  return "all";
+}
+function lessonTarget(flags) {
+  const scope = flags["scope"];
+  if (scope === void 0) return queueTarget(flags);
+  if (scope !== "global") throw new Error("--scope takes only global here. It reads the global records, which belong to no workspace.");
+  if (flags["cwd"] !== void 0 || flags["all"] !== void 0) throw new Error("--scope global reads only the global records, so it takes no --cwd and no --all.");
+  return "global";
+}
+function ruleFilter(flags) {
+  const value = flags["rule"];
+  if (value === void 0) return void 0;
+  const rules = typeof value === "string" ? value.split(",").map((rule) => rule.trim()).filter(Boolean) : [];
+  if (!rules.length) throw new Error("--rule requires 1 or more rule ids");
+  return rules;
+}
+function readDeps(flags, deps) {
+  if (deps.read) return deps.read;
+  const cacheOn = !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1");
+  return createQueueReadDeps({ now: Date.now(), cache: cacheOn ? new CohortFactsCache({ version: VERSION2 }) : null });
+}
+var textWidth = () => layoutWidth(detectCaps(process.stdout, process.env));
+async function cmdQueue(store, flags, deps) {
+  assertReadOptions("queue", flags);
+  const target = queueTarget(flags);
+  const queue = await readQueue(store, target, readDeps(flags, deps));
+  const width = textWidth();
+  process.stdout.write(readOutput(queue, flags, (shown) => queueLines(shown, width)));
+}
+async function cmdTodo(store, flags, deps) {
+  assertReadOptions("todo", flags);
+  const cwd = workspaceDir(flags);
+  const output = (read) => readOutput(read, flags, todoLines);
+  const todo = await readTodo(store, cwd, readDeps(flags, deps), { measure: (read) => outputBytes(output(read)) });
+  process.stdout.write(output(todo));
+}
+async function cmdLessons(store, flags, deps) {
+  assertReadOptions("lessons", flags);
+  const target = lessonTarget(flags);
+  const rules = ruleFilter(flags);
+  const width = textWidth();
+  const output = (read2) => readOutput(read2, flags, (shown) => lessonLines(shown, width));
+  const read = await readLessons(store, target, readDeps(flags, deps), { ...rules ? { rules } : {}, measure: (lessons) => outputBytes(output(lessons)) });
+  process.stdout.write(output(read));
+}
+async function cmdHistory(store, flags, deps) {
+  assertReadOptions("history", flags);
+  const target = lessonTarget(flags);
+  const rules = ruleFilter(flags);
+  const rows2 = await readHistory(store, target, readDeps(flags, deps), rules ? { rules } : {});
+  const width = textWidth();
+  process.stdout.write(readOutput(rows2, flags, (shown) => historyLines(shown, width)));
 }
 async function cmdSuggest(positionals, flags, deps = {}) {
   if (flags["reason"] !== void 0) {
@@ -15291,7 +16352,18 @@ async function cmdSuggest(positionals, flags, deps = {}) {
       throw new Error("--reason is valid only with --set <id> rejected, and with no other step. usage: orangu suggest --set <id> rejected --reason <code>");
     }
   }
+  const steps = STEP_FLAGS.filter((name) => flags[name] !== void 0);
+  if (steps.length > 1) {
+    throw new Error(`orangu suggest runs 1 step at a time, and this call has ${steps.length}: ${steps.map((name) => `--${name}`).join(", ")}. usage: orangu suggest <step> [<options>] (orangu help all lists each step)`);
+  }
+  if (flags["status"] !== void 0 && flags["list"] === void 0) {
+    throw new Error("--status is valid only with --list. usage: orangu suggest --list --status <s>[,<s>]");
+  }
   const store = new SuggestionStore();
+  if (flags["queue"] !== void 0) return cmdQueue(store, flags, deps);
+  if (flags["todo"] !== void 0) return cmdTodo(store, flags, deps);
+  if (flags["lessons"] !== void 0) return cmdLessons(store, flags, deps);
+  if (flags["history"] !== void 0) return cmdHistory(store, flags, deps);
   if (flagBool(flags, "list")) return cmdList(store, flags);
   const show = flagStr(flags, "show");
   if (show) return cmdShow(store, show, flags);
@@ -15308,7 +16380,7 @@ async function cmdSuggest(positionals, flags, deps = {}) {
 }
 
 // src/cli/commands/feedback.ts
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/cli/open-browser.ts
@@ -15392,7 +16464,7 @@ function feedbackOptions(flags) {
 async function cmdFeedback(positionals, flags) {
   if (positionals.length) throw new Error("usage: orangu feedback --context session|repo|global|report|app [--port <n>] [--no-open]");
   const { context, port } = feedbackOptions(flags);
-  const emptyConfigDir = join10(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
+  const emptyConfigDir = join11(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
   const server = await startServe(
     {
       port,
@@ -15410,12 +16482,12 @@ async function cmdFeedback(positionals, flags) {
   loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
 `);
   if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve14) => {
+  await new Promise((resolve15) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve14);
+      void server.close().finally(resolve15);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
@@ -15426,7 +16498,7 @@ async function cmdFeedback(positionals, flags) {
 // src/cli/commands/ste.ts
 import { createReadStream as createReadStream2 } from "node:fs";
 import { stat as stat7 } from "node:fs/promises";
-import { resolve as resolve10 } from "node:path";
+import { resolve as resolve11 } from "node:path";
 
 // src/ste/words.ts
 var STE_WORDS = {
@@ -15851,7 +16923,7 @@ async function readBounded(chunks, name) {
   return Buffer.concat(parts2).toString("utf8");
 }
 async function readNamedFile(name) {
-  const path = resolve10(name);
+  const path = resolve11(name);
   try {
     const info = await stat7(path);
     if (info.isDirectory()) throw cannotRead(name, "it is a folder, not a file");
@@ -15888,19 +16960,19 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
 }
 
 // src/cli/commands/show-me.ts
-import { basename as basename13, resolve as resolve11 } from "node:path";
+import { basename as basename14, resolve as resolve12 } from "node:path";
 
 // src/show-me/prepare.ts
 import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
-import { join as join12 } from "node:path";
+import { join as join13 } from "node:path";
 
 // src/show-me/render.ts
-import { randomBytes as randomBytes4 } from "node:crypto";
-import { lstat as lstat10, realpath as realpath11, rename as rename2, rm } from "node:fs/promises";
-import { dirname as dirname7, join as join11 } from "node:path";
+import { randomBytes as randomBytes5 } from "node:crypto";
+import { lstat as lstat11, realpath as realpath11, rename as rename3, rm } from "node:fs/promises";
+import { dirname as dirname8, join as join12 } from "node:path";
 
 // src/show-me/check.ts
-import { createHash as createHash4 } from "node:crypto";
+import { createHash as createHash5 } from "node:crypto";
 
 // src/show-me/generated/templates.ts
 var SLIDES_HTML = `<!doctype html>
@@ -16574,17 +17646,17 @@ var HTML_TAG = /^<html lang="en" data-scope="(?:session|repo|global)" data-live=
 var CSP2 = '<meta http-equiv="Content-Security-Policy" content="';
 var SCRIPT = /<script>([\s\S]*?)<\/script>/;
 function head(html, what) {
-  const open12 = html.indexOf("<html");
-  const tagEnd = html.indexOf(">", open12) + 1;
+  const open13 = html.indexOf("<html");
+  const tagEnd = html.indexOf(">", open13) + 1;
   const start = html.indexOf("<head>", tagEnd);
   const csp = html.indexOf(CSP2, start);
   const cspEnd = csp < 0 ? -1 : html.indexOf("/>", csp);
   const end = html.indexOf("</head>", start);
-  if (open12 < 0 || tagEnd <= 0 || start < 0 || csp < 0 || cspEnd < 0 || end < 0) throw new SelfCheckError(`${what} has no <html>, <head> or CSP meta in place`);
+  if (open13 < 0 || tagEnd <= 0 || start < 0 || csp < 0 || cspEnd < 0 || end < 0) throw new SelfCheckError(`${what} has no <html>, <head> or CSP meta in place`);
   const whole2 = html.slice(start, end + "</head>".length);
   return {
-    prefix: html.slice(0, open12),
-    tag: html.slice(open12, tagEnd),
+    prefix: html.slice(0, open13),
+    tag: html.slice(open13, tagEnd),
     between: html.slice(tagEnd, start),
     toCsp: html.slice(start, cspEnd + 2),
     masked: whole2.replace(/(<title data-slot="title">)[^<]*(<\/title>)/, (_match, before, after) => before + after)
@@ -16610,7 +17682,7 @@ function selfCheck(out3, template, what = "the file") {
   if (count2(out3, /<script\b/gi) !== 1 || count2(out3, /<\/script/gi) !== 1) fail3("it must hold exactly one script");
   if (count2(out3, /<style\b/gi) !== count2(template, /<style\b/gi) || count2(out3, /<\/style/gi) !== count2(template, /<\/style/gi)) fail3("it must hold only the style of the template");
   const body = SCRIPT.exec(out3)?.[1];
-  if (body === void 0 || createHash4("sha256").update(body, "utf8").digest("base64") !== SCRIPT_HASH) fail3("the script is not the pinned runtime");
+  if (body === void 0 || createHash5("sha256").update(body, "utf8").digest("base64") !== SCRIPT_HASH) fail3("the script is not the pinned runtime");
   const own = tags(out3);
   const model = tags(template);
   const equivs = own.flatMap((tag) => tag.match(/\bhttp-equiv\s*=\s*["']?[^"'\s>]*/gi) ?? []);
@@ -16876,12 +17948,12 @@ function chartNumber(value, what) {
   return String(value);
 }
 function elementEnd(html, start) {
-  const open12 = /^<([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/.exec(html.slice(start));
-  if (!open12) throw new FillError(`no tag at ${start}`);
-  const tag = open12[1].toLowerCase();
-  if (open12[2] || VOID.has(tag)) return start + open12[0].length;
+  const open13 = /^<([a-zA-Z][\w-]*)\b[^>]*?(\/?)>/.exec(html.slice(start));
+  if (!open13) throw new FillError(`no tag at ${start}`);
+  const tag = open13[1].toLowerCase();
+  if (open13[2] || VOID.has(tag)) return start + open13[0].length;
   const re = new RegExp(`<(/?)${tag}\\b[^>]*?(/?)>`, "gi");
-  re.lastIndex = start + open12[0].length;
+  re.lastIndex = start + open13[0].length;
   let depth = 1;
   for (let m = re.exec(html); m; m = re.exec(html)) {
     if (m[1]) depth -= 1;
@@ -16894,15 +17966,15 @@ var openTagOf = (el) => /^<[^>]*>/.exec(el)[0];
 var attr = (tag, name) => new RegExp(`\\s${name}="([^"]*)"`).exec(tag)?.[1];
 function setAttr(el, name, value) {
   const checked = attributeValue(name, value);
-  const open12 = openTagOf(el);
-  const next = attr(open12, name) !== void 0 ? open12.replace(new RegExp(`(\\s${name}=)"[^"]*"`), (_match, before) => `${before}"${checked}"`) : open12.replace(/(\/?>)$/, (end) => ` ${name}="${checked}"${end}`);
-  return next + el.slice(open12.length);
+  const open13 = openTagOf(el);
+  const next = attr(open13, name) !== void 0 ? open13.replace(new RegExp(`(\\s${name}=)"[^"]*"`), (_match, before) => `${before}"${checked}"`) : open13.replace(/(\/?>)$/, (end) => ` ${name}="${checked}"${end}`);
+  return next + el.slice(open13.length);
 }
 function parts(el) {
-  const open12 = openTagOf(el);
-  if (open12.endsWith("/>") || el.length === open12.length) return [open12, "", ""];
+  const open13 = openTagOf(el);
+  if (open13.endsWith("/>") || el.length === open13.length) return [open13, "", ""];
   const close = /<\/[a-zA-Z][\w-]*>$/.exec(el)[0];
-  return [open12, el.slice(open12.length, el.length - close.length), close];
+  return [open13, el.slice(open13.length, el.length - close.length), close];
 }
 function children(html, scope) {
   let out3 = "";
@@ -16936,15 +18008,15 @@ function element(el, scope, repeated = false) {
       return element(copy, merge(scope, item), true);
     }).join("");
   }
-  const open12 = openTagOf(el);
-  const empty = attr(open12, "data-empty");
+  const open13 = openTagOf(el);
+  const empty = attr(open13, "data-empty");
   if (empty !== void 0 && (scope.lists[empty] ?? []).length > 0) return "";
-  const condition = attr(open12, "data-if");
+  const condition = attr(open13, "data-if");
   if (condition !== void 0 && !scope.conditions.includes(condition)) return "";
-  if (attr(open12, "data-end") !== void 0 && scope.end !== void 0) el = setAttr(el, "data-end", scope.end);
-  const chart = attr(open12, "data-chart");
+  if (attr(open13, "data-end") !== void 0 && scope.end !== void 0) el = setAttr(el, "data-end", scope.end);
+  const chart = attr(open13, "data-chart");
   if (chart !== void 0 && scope.charts[chart]) el = drawChart(el, scope.charts[chart]);
-  const slot = attr(open12, "data-slot");
+  const slot = attr(open13, "data-slot");
   if (slot !== void 0 && scope.slots[slot] !== void 0) return fillSlot(el, scope.slots[slot]);
   const [head2, inner, tail] = parts(el);
   return head2 + children(inner, scope) + tail;
@@ -17035,8 +18107,8 @@ function savingsOf(tokens, time) {
 var turnList = (turns) => turns.slice(0, TURNS_NAMED).map((t) => `#${t}`).join(", ");
 function sessionPage(a, words2) {
   const s = a.summary;
-  const byId = new Map(a.insights.map((insight) => [insight.id, insight]));
-  const top = s.topInsightIds.map((id) => byId.get(id)).filter((insight) => insight !== void 0).slice(0, FINDINGS_SHOWN);
+  const byId2 = new Map(a.insights.map((insight) => [insight.id, insight]));
+  const top = s.topInsightIds.map((id) => byId2.get(id)).filter((insight) => insight !== void 0).slice(0, FINDINGS_SHOWN);
   const rest = a.insights.filter((insight) => !top.includes(insight));
   const findings = top.map((insight, index) => {
     const saving = savingsOf(insight.savings?.tokens, insight.savings?.ms);
@@ -17168,7 +18240,7 @@ var TEMPLATES = Object.freeze([
   Object.freeze({ file: "slides.html", html: SLIDES_HTML }),
   Object.freeze({ file: "report.html", html: REPORT_HTML })
 ]);
-var showMeBase = () => join11(oranguHome(), "show-me");
+var showMeBase = () => join12(oranguHome(), "show-me");
 var ShowMeRenderError = class extends Error {
   name = "ShowMeRenderError";
 };
@@ -17186,10 +18258,10 @@ async function confinedRunDir(dir, base = showMeBase()) {
   } catch {
     throw new ShowMeRenderError("the --render directory does not exist.");
   }
-  if (dirname7(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
-  if (!(await lstat10(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
+  if (dirname8(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
+  if (!(await lstat11(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
   try {
-    const data = await lstat10(join11(real, "data.json"));
+    const data = await lstat11(join12(real, "data.json"));
     if (!data.isFile()) throw new ShowMeRenderError("data.json in the run directory must be a regular file.");
   } catch (error) {
     if (error instanceof ShowMeRenderError) throw error;
@@ -17200,7 +18272,7 @@ async function confinedRunDir(dir, base = showMeBase()) {
 async function readJson2(dir, name) {
   let text3;
   try {
-    text3 = await readStableTextFile(join11(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
+    text3 = await readStableTextFile(join12(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("not found")) throw new ShowMeInputError(`the run directory has no ${name}.${name === "words.json" ? " Write the 3 words first." : ""}`);
@@ -17218,9 +18290,9 @@ async function writeBoth(dir, files2) {
   const staged = [];
   try {
     for (const { file } of files2) {
-      const to = join11(dir, file);
+      const to = join12(dir, file);
       try {
-        const existing = await lstat10(to);
+        const existing = await lstat11(to);
         if (!existing.isFile()) throw new ShowMeRenderError(`${file} in the run directory is not a regular file.`);
       } catch (error) {
         if (error instanceof ShowMeRenderError) throw error;
@@ -17228,11 +18300,11 @@ async function writeBoth(dir, files2) {
       }
     }
     for (const { file, html } of files2) {
-      const from = join11(dir, `.${file}.${randomBytes4(6).toString("hex")}.tmp`);
-      staged.push({ from, to: join11(dir, file) });
+      const from = join12(dir, `.${file}.${randomBytes5(6).toString("hex")}.tmp`);
+      staged.push({ from, to: join12(dir, file) });
       await writePrivateOutput(from, html);
     }
-    for (const { from, to } of staged) await rename2(from, to);
+    for (const { from, to } of staged) await rename3(from, to);
   } catch (error) {
     await Promise.all(staged.map(({ from }) => rm(from, { force: true })));
     if (error instanceof ShowMeRenderError) throw error;
@@ -17250,7 +18322,7 @@ async function renderShowMe(dir, o = {}) {
     return { file, html };
   });
   await writeBoth(run, files2);
-  return { dir: run, slides: join11(run, "slides.html"), report: join11(run, "report.html"), findings: wordFindings(words2) };
+  return { dir: run, slides: join12(run, "slides.html"), report: join12(run, "report.html"), findings: wordFindings(words2) };
 }
 
 // src/show-me/prepare.ts
@@ -17263,8 +18335,8 @@ function runName(name) {
 async function prepareRun(scope, name, json2, o = {}) {
   const base = o.base ?? showMeBase();
   await mkdir3(base, { recursive: true, mode: 448 });
-  const dir = await realpath12(await mkdtemp(join12(base, `${scope}-${runName(name)}-`)));
-  const path = join12(dir, "data.json");
+  const dir = await realpath12(await mkdtemp(join13(base, `${scope}-${runName(name)}-`)));
+  const path = join13(dir, "data.json");
   await writePrivateOutput(path, json2);
   const bytes = Buffer.byteLength(json2);
   const approxTokens3 = Math.ceil(bytes / 4);
@@ -17343,7 +18415,7 @@ async function sessionData2(selector, flags, err3) {
 }
 async function aggregateData2(scope, flags, err3) {
   const rootArg = flagStr(flags, "root", "r");
-  const cwd = resolve11(flagStr(flags, "cwd") ?? process.cwd());
+  const cwd = resolve12(flagStr(flags, "cwd") ?? process.cwd());
   const refs = scope === "global" ? await listSessions({ roots: await claudeRoots(rootArg) }) : await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
   if (!refs.length) throw new Error(scope === "global" ? "orangu found no sessions on this machine." : "orangu found no sessions for this repository.");
   const limitRaw = flagStr(flags, "limit");
@@ -17373,13 +18445,13 @@ async function aggregateData2(scope, flags, err3) {
       }
     }
   }
-  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename13(cwd)}`, now);
+  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename14(cwd)}`, now);
   if (failed) agg.scope += ` (${failed} unreadable skipped)`;
   const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, flags))), { scope });
-  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename13(cwd) : redactValue(basename13(cwd), { scrub: true }) : void 0;
+  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename14(cwd) : redactValue(basename14(cwd), { scrub: true }) : void 0;
   const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION2 }, null, 2)}
 `;
-  return { name: scope === "global" ? "machine" : basename13(cwd), json: json2, skipped: failed };
+  return { name: scope === "global" ? "machine" : basename14(cwd), json: json2, skipped: failed };
 }
 function printPrepared(run, out3) {
   const lines = [
@@ -17431,13 +18503,13 @@ async function render(positionals, flags) {
   if (typeof dir !== "string" || !dir.trim()) throw new Error(`--render needs the run directory that orangu show-me printed. ${USAGE2}`);
   if (positionals.length) throw new Error(`orangu show-me --render takes only the run directory. ${USAGE2}`);
   const result = await renderShowMe(dir);
-  const open12 = flagBool(flags, "open") && [openInBrowser(result.slides), openInBrowser(result.report)].every(Boolean);
+  const open13 = flagBool(flags, "open") && [openInBrowser(result.slides), openInBrowser(result.report)].every(Boolean);
   if (flagBool(flags, "json")) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}
 `);
     return;
   }
-  printRendered(result, open12, out3);
+  printRendered(result, open13, out3);
 }
 async function cmdShowMe(positionals, flags) {
   return flags["render"] !== void 0 ? render(positionals, flags) : prepare(positionals, flags);
@@ -17502,7 +18574,17 @@ var EXTRA_HELP = [
     "                                    [--application <path>]",
     "                                    [--verification <path>]",
     "                                    [--reason <code>]  (with rejected)",
-    "                                  | --list)"
+    "                                  | --list [--status <s>[,<s>]]",
+    "                                  | --queue [--cwd <dir> | --all]",
+    "                                    (the open records, in 6 groups)",
+    "                                  | --todo [--cwd <dir>]  (the open items",
+    "                                    that need a step, for a skill)",
+    "                                  | --lessons [--cwd <dir> | --all",
+    "                                    | --scope global] [--rule <id>[,<id>]]",
+    "                                    (the lessons, 16,384 B at most)",
+    "                                  | --history [--cwd <dir> | --all",
+    "                                    | --scope global] [--rule <id>[,<id>]]",
+    "                                    (the applied changes, oldest first))"
   ].join("\n"),
   [
     "  orangu ste <file...|->       score prose (Markdown, a draft or an HTML page",
@@ -17523,7 +18605,7 @@ var EXTRA_HELP = [
 ];
 
 // src/cli/commands/pick.ts
-import { basename as basename14 } from "node:path";
+import { basename as basename15 } from "node:path";
 
 // src/cli/select.ts
 var FRAME_CHROME_LINES = 5;
@@ -17549,7 +18631,7 @@ function select(o) {
   const draw = () => {
     o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
   };
-  return new Promise((resolve14) => {
+  return new Promise((resolve15) => {
     let done = false;
     const restore = () => {
       if (done) return;
@@ -17567,7 +18649,7 @@ function select(o) {
     const finish = (r) => {
       restore();
       hook.dispose();
-      resolve14(r);
+      resolve15(r);
     };
     const move = (to) => {
       cursor = Math.max(0, Math.min(to, count4 - 1));
@@ -17645,7 +18727,7 @@ async function gatherPickRows(flags, deps = {}) {
     ordered.slice(0, limit).map(async ({ r, running }) => {
       const head2 = await peekHead(r.path);
       const title = head2.title && redact ? redactValue(head2.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head2.title;
-      const project = head2.cwd ? basename14(head2.cwd) : basename14(r.projectSlug);
+      const project = head2.cwd ? basename15(head2.cwd) : basename15(r.projectSlug);
       return {
         sessionId: r.sessionId,
         path: r.path,
@@ -17687,8 +18769,8 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename15, resolve as resolve12 } from "node:path";
-var INDENT3 = "  ";
+import { basename as basename16, resolve as resolve13 } from "node:path";
+var INDENT4 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
 var TARGETED_BARE_FLAGS = ["session", "s", "global", "cwd", "max-tokens", "fail-on-hook-errors"];
@@ -17697,7 +18779,7 @@ function dashboardPrecondition(stdin, stdout, env, flags) {
   return interactivePrecondition(stdin, stdout, env, flags);
 }
 async function gatherDashboardData(flags, deps = {}) {
-  const cwd = resolve12((deps.cwd ?? (() => process.cwd()))());
+  const cwd = resolve13((deps.cwd ?? (() => process.cwd()))());
   const configArg = flagStr(flags, "root", "config", "r");
   const pickFlags = { ...flags, global: true };
   const [picked, repoRefs, roots] = await Promise.all([
@@ -17706,7 +18788,7 @@ async function gatherDashboardData(flags, deps = {}) {
     claudeRoots(configArg)
   ]);
   return {
-    repoName: basename15(cwd) || cwd,
+    repoName: basename16(cwd) || cwd,
     repoSessions: repoRefs.length,
     globalSessions: picked.counts.total,
     roots: roots.length,
@@ -17749,8 +18831,8 @@ function dashboardFrame(caps, data, choices, view, now) {
   const lines = [
     ...mascotLines(caps),
     "",
-    paint(caps, "bold", INDENT3 + "Choose a report"),
-    paint(caps, "dim", truncate(`${INDENT3}${count3(data.runningSessions, "open Claude session")}${g.sep}local only${g.sep}no network calls`, width, caps)),
+    paint(caps, "bold", INDENT4 + "Choose a report"),
+    paint(caps, "dim", truncate(`${INDENT4}${count3(data.runningSessions, "open Claude session")}${g.sep}local only${g.sep}no network calls`, width, caps)),
     ""
   ];
   const end = Math.min(choices.length, view.start + view.size);
@@ -17758,7 +18840,7 @@ function dashboardFrame(caps, data, choices, view, now) {
     const choice = choices[i];
     const rendered = choiceText(choice, data, now, g.sep);
     const cursor = i === view.cursor;
-    const prefix = `${INDENT3}${cursor ? paint(caps, "accent", ">") : " "} `;
+    const prefix = `${INDENT4}${cursor ? paint(caps, "accent", ">") : " "} `;
     const liveMark = rendered.live ? paint(caps, "good", g.mark) : " ";
     const tag = paint(caps, rendered.live ? "good" : "accent", rendered.tag.padEnd(TAG_WIDTH));
     const budget = Math.max(1, width - displayWidth(prefix) - 2 - TAG_WIDTH - 1);
@@ -17766,9 +18848,9 @@ function dashboardFrame(caps, data, choices, view, now) {
     lines.push(prefix + liveMark + " " + tag + (cursor ? paint(caps, "bold", text3) : text3));
   }
   const hidden = choices.length - (end - view.start);
-  lines.push(hidden > 0 ? paint(caps, "dim", truncate(`${INDENT3}    ${g.up}${g.down} ${count3(hidden, "more choice")}`, width, caps)) : "");
+  lines.push(hidden > 0 ? paint(caps, "dim", truncate(`${INDENT4}    ${g.up}${g.down} ${count3(hidden, "more choice")}`, width, caps)) : "");
   const keys = caps.unicode ? "\u2191\u2193 or j k move \xB7 enter selects \xB7 q quits" : "up/down or j k move | enter selects | q quits";
-  lines.push(paint(caps, "dim", truncate(INDENT3 + keys, width, caps)));
+  lines.push(paint(caps, "dim", truncate(INDENT4 + keys, width, caps)));
   return lines;
 }
 async function runChoice(choice, deps) {
@@ -17879,7 +18961,7 @@ async function selectSession2(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail2(`"${sel}" matches ${cands.length} sessions:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename16(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename17(c.projectSlug)).join("\n"));
   }
   fail2(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
@@ -17922,8 +19004,8 @@ async function analyzeWithProgress(ref2, flags) {
 }
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
-  if (out3) return resolve13(out3);
-  return join13(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  if (out3) return resolve14(out3);
+  return join14(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref2 = await selectSession2(sel, flags);
@@ -18045,10 +19127,10 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${plural(roots.length, "root")})`;
   } else {
-    const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve14(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename16(cwd)}`;
+    scopeLabel = `repo ${basename17(cwd)}`;
   }
   if (!refs.length) fail2(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
@@ -18093,8 +19175,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve13(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve13(outFile), { raw: true }) + "\n");
+    await writePrivateOutput(resolve14(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    if (!quiet) process.stderr.write(row(err2, "written", resolve14(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -18108,16 +19190,16 @@ async function cmdAggregate(scope, selOrPath, flags) {
   if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
 }
 async function writeAggregateHtml(scope, a, flags) {
-  const open12 = flagBool(flags, "open") && !flagBool(flags, "no-open");
-  if (flags["html"] === void 0 && !open12) return false;
+  const open13 = flagBool(flags, "open") && !flagBool(flags, "no-open");
+  if (flags["html"] === void 0 && !open13) return false;
   const named = flagStr(flags, "html");
-  const stamp = createHash5("sha256").update(`${a.scope}
+  const stamp = createHash6("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve13(named) : join13(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve14(named) : join14(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
-  const opened = open12 && openHtmlFile(path);
+  const opened = open13 && openHtmlFile(path);
   if (!flagBool(flags, "quiet")) {
     process.stderr.write(row(err2, "report", path, { raw: true }) + (opened ? paint(err2, "dim", "  (opened)") : "") + "\n");
   }
