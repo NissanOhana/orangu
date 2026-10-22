@@ -11,7 +11,7 @@
  * read takes a nested field only in its own form, gives an id only in the form that orangu writes, and leaves out a
  * record that still fails. A read never stops on 1 bad record.
  */
-import { allEntries } from './catalog.js'
+import { ANALYZER_RULE_IDS } from '../analyze/rule-ids.js'
 import { isChangeClass, type ChangeClass } from './change-classes.js'
 import { isDirectional, type CohortCheckVerdict, type CohortVerdict } from './cohort-stats.js'
 import { REJECT_REASON_CODES, type RejectReasonCode } from './reason-codes.js'
@@ -33,20 +33,23 @@ export const LESSONS_MAX_BYTES = 16_384
 /** The most earlier records that 1 queue item lists, newest first. `earlierCount` counts them all. */
 export const EARLIER_MAX = 10
 
-/** The rule ids that the catalog knows (`allEntries` of `src/suggest/catalog.ts`, the ids that `matchRule` matches). */
-let knownRuleIds: ReadonlySet<string> | undefined
-function knownRules(): ReadonlySet<string> {
-  knownRuleIds ??= new Set(allEntries().map((entry) => entry.pattern.ruleId).filter((id): id is string => typeof id === 'string'))
-  return knownRuleIds
-}
+/** The rule ids of the analyzer (`src/analyze/rule-ids.ts`). */
+const ANALYZER_RULES: ReadonlySet<string> = new Set(ANALYZER_RULE_IDS)
+/** The prefix of a harness rule id: `harness:<change class>`, as the harness skill writes it. */
+const HARNESS_PREFIX = 'harness:'
 
 /** A number suffix of an insight id, as the analyzer writes it: `<ruleId>-<n>`. */
 const INSIGHT_SUFFIX_RE = /^[0-9]{1,9}$/
 
-/** The rule id of a record only when the catalog knows it, else null: a stored rule id can be any text. */
+/**
+ * The rule id of a record only when it is 1 of the analyzer rule ids or `harness:` and a change class, else null: a
+ * stored rule id can be any text.
+ */
 export function ruleIdOf(record: SuggestionRecord): string | null {
   const value: unknown = record.ruleId
-  return typeof value === 'string' && knownRules().has(value) ? value : null
+  if (typeof value !== 'string') return null
+  if (ANALYZER_RULES.has(value)) return value
+  return value.startsWith(HARNESS_PREFIX) && isChangeClass(value.slice(HARNESS_PREFIX.length)) ? value : null
 }
 
 /** The insight id of a record only when it is the record's own known rule id, a `-` and a number. */
@@ -283,7 +286,7 @@ function trustedVerdict(record: SuggestionRecord): RecordVerdict {
 export interface Lesson {
   id: string
   scope: SuggestionScope
-  /** null when the catalog does not know the stored rule id */
+  /** null when the stored rule id is not an analyzer rule id or `harness:` and a change class */
   ruleId: string | null
   insightId?: string
   changeClass?: ChangeClass

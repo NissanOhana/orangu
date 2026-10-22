@@ -56,11 +56,11 @@ describe('buildQueue: a pure function', () => {
     expect(second).toBe(first)
   })
 
-  it('is imported by no file of the report client, so the file bundles never carry it', () => {
+  it('is imported by no file of the report client, and neither is the lesson module, so the file bundles never carry them', () => {
     const client = new URL('../report/client/', import.meta.url)
     const files = readdirSync(client, { recursive: true, encoding: 'utf8' }).filter((file) => file.endsWith('.ts'))
     expect(files.length).toBeGreaterThan(10)
-    const importers = files.filter((file) => /suggest\/queue(?:\.js|\.ts)?['"]/.test(readFileSync(new URL(file, client), 'utf8')))
+    const importers = files.filter((file) => /suggest\/(?:queue|lessons|queue-read)(?:\.js|\.ts)?['"]/.test(readFileSync(new URL(file, client), 'utf8')))
     expect(importers).toEqual([])
   })
 

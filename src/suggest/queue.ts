@@ -64,7 +64,7 @@ export interface QueueItem {
   ids: string[]
   status: SuggestionStatus
   scope: SuggestionScope
-  /** null when the catalog does not know the stored rule id */
+  /** null when the stored rule id is not an analyzer rule id or `harness:` and a change class */
   ruleId: string | null
   changeClass?: ChangeClass
   /** the stored title: it can be model text, so every surface escapes it */
@@ -375,7 +375,7 @@ export interface TodoItem {
   id: string
   status: SuggestionStatus
   scope: SuggestionScope
-  /** null when the catalog does not know the stored rule id */
+  /** null when the stored rule id is not an analyzer rule id or `harness:` and a change class */
   ruleId: string | null
   changeClass?: ChangeClass
   cannotVerify?: CannotVerify

@@ -345,7 +345,7 @@ This is the backward-read rule. An older orangu skips a line with a status that 
 
 ### Stored text in the queue reads
 
-The store accepts any text as a `ruleId` or an `insightId`. So the queue, todo, lesson and history reads give a `ruleId` only when the catalog knows it, and `null` for any other value. They give an `insightId` only when it is that rule id, a `-` and a number, and leave it out for any other value. A `changeClass` and a `reasonCode` show only when each is a known value.
+The store accepts any text as a `ruleId` or an `insightId`. So the queue, todo, lesson and history reads give a `ruleId` only when it is 1 of the analyzer rule ids (`src/analyze/rule-ids.ts`) or `harness:` and a change class, and `null` for any other value. They give an `insightId` only when it is that rule id, a `-` and a number, and leave it out for any other value. A `changeClass` and a `reasonCode` show only when each is a known value.
 
 Each queue item lists its earlier records in `earlier`: the closed and `regressed` records of the same workspace and rule, newest first, 10 at most. `earlierCount` counts all of them, so a cut list hides no record.
 
