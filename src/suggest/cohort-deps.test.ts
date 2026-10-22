@@ -382,6 +382,39 @@ describe('createCachedCohortDeps over real transcripts', () => {
     expect(calls.filter(([session]) => session === id(101)).map(([, cap]) => cap)).toEqual([64 * MiB, 3 * MiB])
   })
 
+  it('keeps a skip over the cap in the cache, so a second read loads no such session until its files change', async () => {
+    const { cwd, identity } = workspaceWithSessions()
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    writeSession(project, id(103), cwd, '2026-08-14T10:00:00.000Z', 4)
+    const trusted = createCohortDeps({ now: settled })
+    const calls: string[] = []
+    const base: CohortDeps = {
+      ...trusted,
+      loadCandidate: async (candidate, maxBytes) => {
+        calls.push(candidate.sessionId)
+        return candidate.sessionId === id(103) ? { skip: 'over-budget', bytesRead: 7 } : trusted.loadCandidate(candidate, maxBytes)
+      },
+    }
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    const first = await measureCohortEffect(applied(identity), [], cached(dir, base))
+    expect(calls.filter((call) => call === id(103))).toHaveLength(1)
+    // A second read calls no loader: 6 facts and 1 skip from the cache, and the same effect.
+    calls.length = 0
+    const warm = cached(dir, base)
+    expect(JSON.stringify(await measureCohortEffect(applied(identity), [], warm))).toBe(JSON.stringify(first))
+    expect(calls).toEqual([])
+    expect(warm.stats()).toMatchObject({ loaderCalls: 0, missBytes: 0, cacheHits: 7 })
+    // A changed file moves its key, so the next read loads it again.
+    appendFileSync(join(project, `${id(103)}.jsonl`), '\n')
+    await measureCohortEffect(applied(identity), [], cached(dir, base))
+    expect(calls).toEqual([id(103)])
+    // With no cache, each read loads it.
+    calls.length = 0
+    await measureCohortEffect(applied(identity), [], cached(null, base))
+    await measureCohortEffect(applied(identity), [], cached(null, base))
+    expect(calls.filter((call) => call === id(103))).toHaveLength(2)
+  })
+
   it('keeps the trusted loaders off the cache: a planted entry changes no measure of the record steps', async () => {
     const { identity } = workspaceWithSessions()
     const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
@@ -393,5 +426,11 @@ describe('createCachedCohortDeps over real transcripts', () => {
     }
     const trusted = await measureCohortEffect(applied(identity), [], createCohortDeps({ now: settled }))
     expect(trusted.checks[0]).toMatchObject({ before: 8.5, after: 2 })
+    // A planted skip over the cap for each session changes no measure either.
+    for (const name of readdirSync(folder)) {
+      const entry = JSON.parse(readFileSync(join(folder, name), 'utf8')) as { key: string; sessionId: string }
+      writeFileSync(join(folder, name), JSON.stringify({ v: 1, key: entry.key, sessionId: entry.sessionId, skip: 'over-budget', maxBytes: 64 * 1024 * 1024, bytesRead: 0 }), { mode: 0o600 })
+    }
+    expect((await measureCohortEffect(applied(identity), [], createCohortDeps({ now: settled }))).checks[0]).toMatchObject({ before: 8.5, after: 2 })
   })
 })

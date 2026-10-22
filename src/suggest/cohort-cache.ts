@@ -8,6 +8,11 @@
  * file and a rename. An entry holds numbers, booleans, the lowercase session id, its own key and the canonical cwd
  * of the session (the workspace identity that the store keeps too). It holds no transcript text.
  *
+ * An entry can instead hold a skip: the trusted loader refused the session as over the cap of its load. That entry
+ * holds the session id, its own key, the cap and the probe bytes of that load, all numbers. A later read reuses it only
+ * at a cap where the same refusal holds, so a session over the 64 MiB evidence cap is not probed and walked again on
+ * each warm read.
+ *
  * A miss is never an error. An entry is bound to its key and to its session id, and any other shape is a miss, so a
  * stale or broken file can only cost a transcript read. Only the queue reads this cache. The record steps measure
  * with the trusted loaders of `createCohortDeps`, so no entry can change a stored verdict.
@@ -16,6 +21,7 @@ import { createHash, randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
 import { lstat, open, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
+import { MAX_EVIDENCE_SESSION_BYTES } from '../adapters/claude-code/evidence-input.js'
 import {
   assertPrivateDirectoriesStable,
   cacheGenerationSegment,
@@ -49,7 +55,24 @@ export interface CohortFacts {
   metrics: Record<SuggestionVerificationMetric, number>
 }
 
+/**
+ * A session that the trusted loader refused as over the cap of its load: the 64 MiB evidence cap, or what was left of
+ * its side. A queue read reuses it only at a cap where the same refusal holds (`overCapHolds` in `cohort-deps.ts`).
+ */
+export interface CohortOverCap {
+  /** lowercase */
+  sessionId: string
+  /** the cap of the refused load */
+  maxBytes: number
+  /** the probe bytes of the refused load, which a reuse spends again */
+  bytesRead: number
+}
+
+/** 1 cache entry: the facts of a settled session, or a session over the cap of its load. */
+export type CohortEntry = { facts: CohortFacts } | { overCap: CohortOverCap }
+
 const ENTRY_KEYS = ['v', 'key', 'sessionId', 'cwd', 'startedAt', 'endedAt', 'ranOrangu', 'bytesRead', 'metrics'] as const
+const OVER_CAP_KEYS = ['v', 'key', 'sessionId', 'skip', 'maxBytes', 'bytesRead'] as const
 const KEY_RE = /^[0-9a-f]{40}$/
 /** The lowercase form of `SESSION_ID_RE` (`src/discover/discover.ts`), as the trusted loader stores an id. */
 const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -87,6 +110,27 @@ function validFacts(value: Record<string, unknown>): boolean {
     hasExactKeys(metrics, SUGGESTION_VERIFICATION_METRICS) &&
     SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative(metrics[metric]))
   )
+}
+
+/** True when the skip keeps every rule: an id, a cap up to the evidence cap, and probe bytes below the cap. */
+function validOverCap(value: Record<string, unknown>): boolean {
+  const { sessionId, skip, maxBytes, bytesRead } = value
+  return (
+    typeof sessionId === 'string' &&
+    SESSION_ID_RE.test(sessionId) &&
+    skip === 'over-budget' &&
+    Number.isSafeInteger(maxBytes) &&
+    (maxBytes as number) >= 1 &&
+    (maxBytes as number) <= MAX_EVIDENCE_SESSION_BYTES &&
+    Number.isSafeInteger(bytesRead) &&
+    (bytesRead as number) >= 0 &&
+    (bytesRead as number) < (maxBytes as number)
+  )
+}
+
+/** The skip with its keys in a fixed order, and nothing that a caller adds. */
+function pickOverCap(overCap: CohortOverCap): CohortOverCap {
+  return { sessionId: overCap.sessionId, maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead }
 }
 
 /** The facts with their keys in a fixed order, and nothing that a caller adds. */
@@ -219,50 +263,68 @@ export class CohortFactsCache {
     }
   }
 
-  /** The facts of this key and this session, or undefined. It never throws. */
-  async get(key: string, sessionId: string): Promise<CohortFacts | undefined> {
-    if (!this.enabled) {
-      this.misses++
-      return undefined
-    }
+  /** The entry of this key and this session, or undefined: no stats. It never throws. */
+  private async read(key: string, sessionId: string): Promise<CohortEntry | undefined> {
+    if (!this.enabled) return undefined
     try {
       const path = this.file(key)
-      if (!path) throw new Error('invalid cache key')
+      if (!path) return undefined
       const directories = await this.directories()
       const manifest = await prevalidateAnalysisCacheEntry(path, COHORT_FACTS_MAX_ENTRY_BYTES)
       await assertPrivateDirectoriesStable(directories)
       const raw = await readAnalysisCacheEntry(manifest)
       await assertPrivateDirectoriesStable(directories)
       const value: unknown = JSON.parse(raw)
-      if (
-        !plainObject(value) ||
-        !hasExactKeys(value, ENTRY_KEYS) ||
-        value['v'] !== 1 ||
-        value['key'] !== key ||
-        value['sessionId'] !== sessionId ||
-        !validFacts(value)
-      ) {
-        this.misses++
-        return undefined
-      }
-      this.hits++
-      return pick(value as unknown as CohortFacts)
+      if (!plainObject(value) || value['v'] !== 1 || value['key'] !== key || value['sessionId'] !== sessionId) return undefined
+      if (hasExactKeys(value, ENTRY_KEYS) && validFacts(value)) return { facts: pick(value as unknown as CohortFacts) }
+      if (hasExactKeys(value, OVER_CAP_KEYS) && validOverCap(value)) return { overCap: pickOverCap(value as unknown as CohortOverCap) }
+      return undefined
     } catch {
-      this.misses++
       return undefined
     }
   }
 
+  /** The entry of this key and this session (facts or a skip over the cap), or undefined. It never throws. */
+  async lookup(key: string, sessionId: string): Promise<CohortEntry | undefined> {
+    const entry = await this.read(key, sessionId)
+    if (entry) this.hits++
+    else this.misses++
+    return entry
+  }
+
+  /** The facts of this key and this session, or undefined. It never throws. */
+  async get(key: string, sessionId: string): Promise<CohortFacts | undefined> {
+    const entry = await this.read(key, sessionId)
+    if (entry && 'facts' in entry) {
+      this.hits++
+      return entry.facts
+    }
+    this.misses++
+    return undefined
+  }
+
   /** Write the facts of 1 settled session under its key: an exclusive temporary file, then a rename. It never throws. */
   async put(key: string, facts: CohortFacts): Promise<void> {
+    const picked = pick(facts)
+    if (!validFacts(picked as unknown as Record<string, unknown>)) return
+    await this.write(key, { v: 1, key, ...picked })
+  }
+
+  /** Write a session over the cap of its load under its key, as `put` writes facts. It never throws. */
+  async putOverCap(key: string, overCap: CohortOverCap): Promise<void> {
+    const picked = { sessionId: overCap.sessionId, skip: 'over-budget', maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead }
+    if (!validOverCap(picked)) return
+    await this.write(key, { v: 1, key, ...picked })
+  }
+
+  /** Write 1 checked entry: an exclusive temporary file, then a rename. It never throws. */
+  private async write(key: string, entry: Record<string, unknown>): Promise<void> {
     if (!this.enabled) return
     let tmp: string | undefined
     try {
       const path = this.file(key)
       if (!path) return
-      const picked = pick(facts)
-      if (!validFacts(picked as unknown as Record<string, unknown>)) return
-      const bytes = Buffer.from(JSON.stringify({ v: 1, key, ...picked }), 'utf8')
+      const bytes = Buffer.from(JSON.stringify(entry), 'utf8')
       if (bytes.byteLength > COHORT_FACTS_MAX_ENTRY_BYTES) return
       const directories = await this.directories()
       tmp = `${path}.tmp-${process.pid}-${randomBytes(12).toString('hex')}`

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { metricsOf, uuid } from '../../test/fixtures/suggestion-records.js'
 import { ANALYSIS_PAYLOAD_GENERATION, ANALYSIS_SCHEMA_VERSION } from '../model/analysis.js'
-import { COHORT_FACTS_DIR, CohortFactsCache, cohortFactsKey, type CohortFacts } from './cohort-cache.js'
+import { COHORT_FACTS_DIR, CohortFactsCache, cohortFactsKey, type CohortFacts, type CohortOverCap } from './cohort-cache.js'
 
 const KEY = 'a'.repeat(40)
 const facts = (over: Partial<CohortFacts> = {}): CohortFacts => ({
@@ -75,6 +75,30 @@ describe('CohortFactsCache: numbers and ids only', () => {
     }
     expect(cache.stats().writes).toBe(0)
   })
+
+  it('stores a skip over the cap as an id, an enum value and 2 byte counts, and refuses any other value', async () => {
+    const MiB = 1024 * 1024
+    const dir = root()
+    const cache = new CohortFactsCache({ version: '9.9.9', dir })
+    await cache.putOverCap(KEY, { sessionId: uuid(1), maxBytes: 64 * MiB, bytesRead: 760, title: 'secret' } as unknown as CohortOverCap)
+    const file = join(dir, readdirSync(dir)[0]!, COHORT_FACTS_DIR, `${KEY}.json`)
+    expect(Object.keys(JSON.parse(readFileSync(file, 'utf8')) as object)).toEqual(['v', 'key', 'sessionId', 'skip', 'maxBytes', 'bytesRead'])
+    expect(readFileSync(file, 'utf8')).not.toContain('secret')
+    expect(await cache.lookup(KEY, uuid(1))).toEqual({ overCap: { sessionId: uuid(1), maxBytes: 64 * MiB, bytesRead: 760 } })
+    // The facts read gets no facts from a skip.
+    expect(await cache.get(KEY, uuid(1))).toBeUndefined()
+    const other = new CohortFactsCache({ version: '9.9.9', dir: root() })
+    for (const bad of [
+      { sessionId: 'not an id', maxBytes: 1_000, bytesRead: 0 },
+      { sessionId: uuid(1), maxBytes: 0, bytesRead: 0 },
+      { sessionId: uuid(1), maxBytes: 64 * MiB + 1, bytesRead: 0 },
+      { sessionId: uuid(1), maxBytes: 1_000, bytesRead: 1_000 },
+      { sessionId: uuid(1), maxBytes: 1_000, bytesRead: 1.5 },
+    ]) {
+      await other.putOverCap(KEY, bad)
+    }
+    expect(other.stats().writes).toBe(0)
+  })
 })
 
 describe('CohortFactsCache: a stale or hostile entry is a miss', () => {
@@ -112,6 +136,26 @@ describe('CohortFactsCache: a stale or hostile entry is a miss', () => {
     }
     expect(await (await planted('{"v":1,')).get(KEY, uuid(1))).toBeUndefined()
     expect(await (await planted(JSON.stringify({ ...good(), pad: 'x'.repeat(20_000) }))).get(KEY, uuid(1))).toBeUndefined()
+  })
+
+  it('misses on a skip with a changed shape, a wrong binding or a bad value', async () => {
+    const skip = (): Record<string, unknown> => ({ v: 1, key: KEY, sessionId: uuid(1), skip: 'over-budget', maxBytes: 1_000, bytesRead: 7 })
+    const cases: Array<[string, unknown]> = [
+      ['an extra key', { ...skip(), cwd: '/w/repo' }],
+      ['another skip', { ...skip(), skip: 'unreadable' }],
+      ['another version', { ...skip(), v: 2 }],
+      ['another key', { ...skip(), key: 'b'.repeat(40) }],
+      ['another session', { ...skip(), sessionId: uuid(2) }],
+      ['a cap over the evidence cap', { ...skip(), maxBytes: 64 * 1024 * 1024 + 1 }],
+      ['probe bytes at the cap', { ...skip(), bytesRead: 1_000 }],
+      ['a string cap', { ...skip(), maxBytes: '1000' }],
+      ['facts and a skip', { ...good(), skip: 'over-budget', maxBytes: 1_000 }],
+    ]
+    for (const [label, value] of cases) {
+      const cache = await planted(JSON.stringify(value))
+      expect(await cache.lookup(KEY, uuid(1)), label).toBeUndefined()
+    }
+    expect(await (await planted(JSON.stringify(skip()))).lookup(KEY, uuid(1))).toEqual({ overCap: { sessionId: uuid(1), maxBytes: 1_000, bytesRead: 7 } })
   })
 
   it('misses on an entry that is a link to a good entry, and never writes through a linked folder', async () => {

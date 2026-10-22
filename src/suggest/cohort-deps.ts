@@ -281,11 +281,12 @@ interface KeptSkip {
 }
 
 /**
- * True when a skip over the evidence cap at `kept.maxBytes` also holds at `maxBytes`: a cap that is not larger, and
- * that is larger than the probe bytes of the skip. With the same files and the same `now`, the trusted loader then
- * reads the same probe bytes (each probe window fits inside the cap) and leaves a smaller cap for the full read. That
- * read refuses again: the declared size check does not use the cap, and the check before each file uses what is left
- * of the cap, in file order. So it gives the same skip and the same bytes.
+ * True when a skip over the cap of its load (the evidence cap, or what was left of its side) at `kept.maxBytes` also
+ * holds at `maxBytes`: a cap that is not larger, and that is larger than the probe bytes of the skip. With the same
+ * files and the same `now`, the trusted loader then reads the same probe bytes (each probe window fits inside the cap)
+ * and leaves a smaller cap for the full read. That read refuses again: the declared size check does not use the cap,
+ * and the check before each file uses what is left of the cap, in file order. So it gives the same skip and the same
+ * bytes.
  */
 function overCapHolds(kept: KeptSkip, maxBytes: number): boolean {
   return 'skip' in kept.load && kept.load.skip === 'over-budget' && kept.load.bytesRead < maxBytes && maxBytes <= kept.maxBytes
@@ -313,7 +314,9 @@ export interface CachedCohortDeps extends CohortDeps {
  * skip. A changed file moves its key, so it loads again. Without this, each record of 1 read probes, walks and refuses
  * the same session again.
  *
- * A skip over the evidence cap also holds at a smaller cap above its probe bytes (`overCapHolds`).
+ * A skip over the cap of its load also holds at a smaller cap above its probe bytes (`overCapHolds`). That skip goes
+ * into the cache too, under the key of the files, so a later read with no changed file loads no such session. A
+ * session over the 64 MiB evidence cap has no facts to keep, so without this each warm read probes and walks it again.
  */
 export function createCachedCohortDeps(options: CachedCohortDepsOptions): CachedCohortDeps {
   const base = options.base ?? createCohortDeps({ now: options.now })
@@ -352,12 +355,30 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
     async loadCandidate(candidate, maxBytes) {
       const ref = refs.get(candidate.path)
       const identity = ref ? await cohortFactsKey(ref) : undefined
+      // The cap of a skip over the cap that the cache holds for these files, so a smaller cap never replaces it.
+      let storedCap = 0
       if (identity) {
         const now = options.now()
         if (!Number.isFinite(now) || now < identity.changedAt || now - identity.changedAt < MIN_VERIFICATION_QUIET_MS) return settlingSkip(candidate.path, 0, maxBytes)
         const skipped = keptSkip(candidate, identity.key, maxBytes)
         if (skipped) return skipped
-        const facts = options.cache ? await options.cache.get(identity.key, candidate.sessionId) : undefined
+        const entry = options.cache ? await options.cache.lookup(identity.key, candidate.sessionId) : undefined
+        if (entry && 'overCap' in entry) {
+          const kept: KeptSkip = {
+            sessionId: candidate.sessionId,
+            key: identity.key,
+            maxBytes: entry.overCap.maxBytes,
+            load: { skip: 'over-budget', bytesRead: entry.overCap.bytesRead },
+          }
+          storedCap = kept.maxBytes
+          if (overCapHolds(kept, maxBytes)) {
+            // The same files refuse again at this cap, and the hit spends the probe bytes of the refused load.
+            cacheHits++
+            skips.set(candidate.path, kept)
+            return { ...kept.load }
+          }
+        }
+        const facts = entry && 'facts' in entry ? entry.facts : undefined
         if (facts) {
           cacheHits++
           // A hit spends the side budget that the trusted read spent, so a warm read takes the same sessions as a cold
@@ -390,6 +411,11 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
           const { id, cwd, startedAt, endedAt, ranOrangu, metrics } = loaded.session
           await options.cache.put(identity.key, { sessionId: id.toLowerCase(), cwd, startedAt, endedAt, ranOrangu, bytesRead: loaded.bytesRead, metrics })
         }
+      }
+      if ('skip' in loaded && loaded.skip === 'over-budget' && cap === maxBytes && storedCap < maxBytes && options.cache && ref && identity) {
+        // Store the skip only when the files did not change during the load, as for the facts.
+        const after = await cohortFactsKey(ref)
+        if (after?.key === identity.key) await options.cache.putOverCap(identity.key, { sessionId: candidate.sessionId, maxBytes, bytesRead: loaded.bytesRead })
       }
       // A skip at a cap that the read budget cut is not the skip of `maxBytes`, so it is not kept.
       return cap === maxBytes ? keepSkip(candidate, identity?.key, maxBytes, loaded) : loaded
