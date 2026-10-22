@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, realpathSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
 import { MIN_VERIFICATION_QUIET_MS } from '../adapters/claude-code/discovered-analysis.js'
 import { projectSlug } from '../discover/discover.js'
-import { measureCohortEffect } from './cohort.js'
-import { createCohortDeps } from './cohort-deps.js'
+import { measureCohortEffect, type CohortDeps } from './cohort.js'
+import { COHORT_FACTS_DIR, CohortFactsCache } from './cohort-cache.js'
+import { createCachedCohortDeps, createCohortDeps, settlingStartedAt } from './cohort-deps.js'
 import type { SuggestionRecord } from './types.js'
 
 const ENV_KEYS = ['ORANGU_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR', 'HOME'] as const
@@ -126,5 +127,103 @@ describe('createCohortDeps over real transcripts', () => {
     const { identity } = workspaceWithSessions()
     const deps = createCohortDeps({ now: () => Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000 })
     await expect(measureCohortEffect(applied({ ...identity, inode: '1' }), [], deps)).rejects.toThrow(/workspace identity no longer matches/)
+  })
+})
+
+describe('createCohortDeps: a settling session', () => {
+  it('reports the start time from the head of the transcript', async () => {
+    const { cwd } = workspaceWithSessions()
+    const deps = createCohortDeps({ now: () => Date.now() })
+    const candidate = (await deps.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
+    expect(await deps.loadCandidate(candidate, 64 * 1024 * 1024)).toEqual({ skip: 'still-settling', bytesRead: 0, startedAt: Date.parse('2026-08-10T10:00:00.000Z') })
+  })
+
+  it('reads the earliest time of the head, and nothing from a missing file or a file with no time', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-settling-'))
+    const path = join(dir, 'a.jsonl')
+    writeFileSync(path, ['{"type":"summary"}', '{"timestamp":"2026-08-10T10:00:05.000Z"}', '{"timestamp":"2026-08-10T10:00:01.000Z"}', '{"timestamp":17'].join('\n'))
+    expect(await settlingStartedAt(path)).toBe(Date.parse('2026-08-10T10:00:01.000Z'))
+    writeFileSync(join(dir, 'none.jsonl'), '{"type":"summary"}\n')
+    expect(await settlingStartedAt(join(dir, 'none.jsonl'))).toBeUndefined()
+    expect(await settlingStartedAt(join(dir, 'missing.jsonl'))).toBeUndefined()
+  })
+})
+
+describe('createCachedCohortDeps over real transcripts', () => {
+  const settled = (): number => Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000
+  /** The trusted loaders, with each transcript load counted. */
+  function counting(now: () => number): { deps: CohortDeps; calls: string[] } {
+    const base = createCohortDeps({ now })
+    const calls: string[] = []
+    return {
+      calls,
+      deps: {
+        ...base,
+        loadCandidate: async (candidate, maxBytes) => {
+          calls.push(candidate.sessionId)
+          return base.loadCandidate(candidate, maxBytes)
+        },
+      },
+    }
+  }
+  const cached = (dir: string | null, base: CohortDeps, now = settled) =>
+    createCachedCohortDeps({ now, budgetBytes: 256 * 1024 * 1024, cache: dir === null ? null : new CohortFactsCache({ version: 'test', dir }), base })
+
+  it('reads no transcript on a warm read and gives the same effect', async () => {
+    const { identity } = workspaceWithSessions()
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    const cold = counting(settled)
+    const first = await measureCohortEffect(applied(identity), [], cached(dir, cold.deps))
+    // 2 baseline sessions (the evidence session is never read), the 3 later ones and the one of another cwd.
+    expect(cold.calls).toHaveLength(6)
+    const warm = counting(settled)
+    const deps = cached(dir, warm.deps)
+    const second = await measureCohortEffect(applied(identity), [], deps)
+    expect(warm.calls).toEqual([])
+    expect(deps.stats()).toMatchObject({ loaderCalls: 0, missBytes: 0, cacheHits: 6 })
+    expect(JSON.stringify(second)).toBe(JSON.stringify(first))
+    expect(second.skipped['other-workspace']).toBe(1)
+  })
+
+  it('counts a cached session only after 30 minutes quiet at the injected now', async () => {
+    const { identity } = workspaceWithSessions()
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    await measureCohortEffect(applied(identity), [], cached(dir, counting(settled).deps))
+    // The files changed a moment ago (their ctime), so at the real clock each one still settles, also from the cache.
+    const early = counting(() => Date.now())
+    const effect = await measureCohortEffect(applied(identity), [], cached(dir, early.deps, () => Date.now()))
+    expect(early.calls).toEqual([])
+    expect(effect.baseline).toHaveLength(0)
+    expect(effect.later).toHaveLength(0)
+    expect(effect.skipped['still-settling']).toBe(6)
+  })
+
+  it('misses on a changed transcript, and loads every time with no cache', async () => {
+    const { cwd, identity } = workspaceWithSessions()
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    await measureCohortEffect(applied(identity), [], cached(dir, counting(settled).deps))
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    writeSession(project, id(101), cwd, '2026-08-11T10:00:00.000Z', 5)
+    const again = counting(settled)
+    const effect = await measureCohortEffect(applied(identity), [], cached(dir, again.deps))
+    expect(again.calls).toEqual([id(101)])
+    expect(effect.checks[0]).toMatchObject({ after: 3 })
+    const off = counting(settled)
+    await measureCohortEffect(applied(identity), [], cached(null, off.deps))
+    await measureCohortEffect(applied(identity), [], cached(null, off.deps))
+    expect(off.calls).toHaveLength(12)
+  })
+
+  it('keeps the trusted loaders off the cache: a planted entry changes no measure of the record steps', async () => {
+    const { identity } = workspaceWithSessions()
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    await measureCohortEffect(applied(identity), [], cached(dir, counting(settled).deps))
+    const folder = join(dir, readdirSync(dir)[0]!, COHORT_FACTS_DIR)
+    for (const name of readdirSync(folder)) {
+      const entry = JSON.parse(readFileSync(join(folder, name), 'utf8')) as { metrics: Record<string, number> }
+      writeFileSync(join(folder, name), JSON.stringify({ ...entry, metrics: { ...entry.metrics, avgToolCalls: 99 } }), { mode: 0o600 })
+    }
+    const trusted = await measureCohortEffect(applied(identity), [], createCohortDeps({ now: settled }))
+    expect(trusted.checks[0]).toMatchObject({ before: 8.5, after: 2 })
   })
 })

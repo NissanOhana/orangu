@@ -35,6 +35,8 @@ interface FakeSession {
   skip?: 'still-settling' | 'unreadable' | 'over-budget'
   bytes?: number
   ranOrangu?: boolean
+  /** a settling skip with no start time: the loader could not read the head of the transcript */
+  startUnknown?: boolean
 }
 
 const uuid = (n: number): string => `aaaaaaaa-0000-4000-8000-${n.toString(16).padStart(12, '0')}`
@@ -51,6 +53,8 @@ function fakeDeps(sessions: FakeSession[]): CohortDeps & { loaded: string[] } {
       loaded.push(candidate.sessionId)
       const s = sessions.find((x) => x.id === candidate.sessionId)!
       const bytesRead = s.bytes ?? 1_000
+      // The loader reports the start time of a settling session from the head of its transcript.
+      if (s.skip === 'still-settling') return s.startUnknown ? { skip: s.skip, bytesRead } : { skip: s.skip, bytesRead, startedAt: s.startedAt }
       if (s.skip) return { skip: s.skip, bytesRead }
       if (bytesRead > maxBytes) return { skip: 'over-budget' as const, bytesRead: 0 }
       const session: CohortSession = {
@@ -160,7 +164,8 @@ describe('measureCohortEffect: selection', () => {
   it('counts settling and unreadable sessions and keeps going', async () => {
     const sessions = [
       ...separated(3),
-      { id: uuid(502), startedAt: T + 500, endedAt: T + 600, toolCalls: 0, skip: 'still-settling' as const },
+      // It starts after the 3 later sessions, so it does not hold the first checkpoint (see the settling tests below).
+      { id: uuid(502), startedAt: T + 9_000, endedAt: T + 9_100, toolCalls: 0, skip: 'still-settling' as const },
       { id: uuid(503), startedAt: T - 900, endedAt: T - 800, toolCalls: 0, skip: 'unreadable' as const },
     ]
     const effect = await measureCohortEffect(appliedRecord(), [], fakeDeps(sessions))
@@ -422,6 +427,107 @@ describe('measureCohortEffect: the 2 checkpoints', () => {
     expect(effect.confoundedBy).toEqual([])
     const complete = await measureCohortEffect(appliedRecord(), [other], fakeDeps([...baselineOf([10, 11, 12]), ...laterOf(range(0, 10))]))
     expect(complete.confoundedBy).toEqual(['sg_bbbbbbbbbbbb'])
+  })
+})
+
+describe('measureCohortEffect: a later session that still settles', () => {
+  // S0 starts first and settles last: its transcript is the newest, so the read takes it last.
+  const s0 = (toolCalls: number): FakeSession => ({ id: uuid(164), startedAt: T + 500, endedAt: T + 30_000, toolCalls })
+  /** sessions 65, 66 and 67, in start order, each settled */
+  const after = (values: number[]): FakeSession[] =>
+    values.map((toolCalls, index) => ({ id: uuid(165 + index), startedAt: T + 1_000 + index * 1_000, endedAt: T + 2_000 + index * 1_000, toolCalls }))
+  const settling = (s: FakeSession): FakeSession => ({ ...s, skip: 'still-settling' })
+  const record = (): SuggestionRecord => appliedRecord({ frozenBaseline: frozenOf([10, 11, 12]) })
+
+  it('holds the first checkpoint while a session that started before the third graded one settles', async () => {
+    // Look 1 grades 65, 66 and 67 while S0 settles. Look 2 grades 64, 65 and 66 after S0 settles, and that is a win.
+    expect(overallVerdict([evaluateCheck(DECREASED, [10, 11, 12], [8, 9, 10.5])], 3, 3)).toBe('within-noise')
+    const look1 = await measureCohortEffect(record(), [], fakeDeps([settling(s0(0)), ...after([8, 9, 10.5])]))
+    expect(look1.firstWaits).toBe(true)
+    expect(look1.laterCount).toBe(3)
+    // No later session starts before S0, so no later session is graded yet.
+    expect(look1.later).toEqual([])
+    expect(look1.verdict).toBe('not-enough-sessions')
+    expect(effectFinality(look1)).toEqual({ checkpoint: null, final: false })
+    expect(nextStep(look1)).toBe('the first checkpoint waits until a later session that started before the third one settles (has 3 before, 3 after)')
+    expect(() => verificationPatch(look1)).toThrow(/^not verified: not-enough-sessions/)
+    expect(() => outcomePatch(look1)).toThrow(/^not final: /)
+
+    const look2 = await measureCohortEffect(record(), [], fakeDeps([s0(0), ...after([8, 9, 10.5])]))
+    expect(look2.firstWaits).toBe(false)
+    expect(look2.later.map((s) => s.id)).toEqual([uuid(164), uuid(165), uuid(166)])
+    expect(look2.verdict).toBe('verified')
+    expect(effectFinality(look2)).toEqual({ checkpoint: 'first', final: true })
+  })
+
+  it('gives no early win that the settling session would take back', async () => {
+    // 65, 66 and 67 alone beat the baseline, and S0 with them does not.
+    expect(overallVerdict([evaluateCheck(DECREASED, [10, 11, 12], [0, 1, 2])], 3, 3)).toBe('verified')
+    expect(overallVerdict([evaluateCheck(DECREASED, [10, 11, 12], [30, 0, 1])], 3, 3)).toBe('within-noise')
+    const look1 = await measureCohortEffect(record(), [], fakeDeps([settling(s0(30)), ...after([0, 1, 2])]))
+    expect(effectFinality(look1)).toEqual({ checkpoint: null, final: false })
+    expect(() => verificationPatch(look1)).toThrow(/^not verified: /)
+    const look2 = await measureCohortEffect(record(), [], fakeDeps([s0(30), ...after([0, 1, 2])]))
+    expect(look2.verdict).toBe('within-noise')
+    expect(effectFinality(look2)).toEqual({ checkpoint: 'first', final: false })
+  })
+
+  it('grades the sessions that start before the settling one', async () => {
+    // S0 starts after 65 and before 66: only 65 is fixed, so the graded set is 65 alone.
+    const late = { ...s0(0), startedAt: T + 1_500 }
+    const effect = await measureCohortEffect(record(), [], fakeDeps([settling(late), ...after([8, 9, 10.5])]))
+    expect(effect.later.map((s) => s.id)).toEqual([uuid(165)])
+    expect(effectFinality(effect)).toEqual({ checkpoint: null, final: false })
+  })
+
+  it('does not wait for a session that started after the third graded one, or before the application', async () => {
+    const afterThird = { ...s0(0), startedAt: T + 3_500 }
+    const live = await measureCohortEffect(record(), [], fakeDeps([settling(afterThird), ...after([0, 1, 2])]))
+    expect(live.firstWaits).toBe(false)
+    expect(effectFinality(live)).toEqual({ checkpoint: 'first', final: true })
+    // A session that started before the change spans it, so it can never join the later side.
+    const spans = { ...s0(0), startedAt: T - 500 }
+    const old = await measureCohortEffect(record(), [], fakeDeps([settling(spans), ...after([0, 1, 2])]))
+    expect(old.firstWaits).toBe(false)
+    expect(effectFinality(old)).toEqual({ checkpoint: 'first', final: true })
+  })
+
+  it('waits for a settling session whose start time the loader could not read', async () => {
+    const unknown = { ...settling(s0(0)), startedAt: T + 9_000, startUnknown: true }
+    const effect = await measureCohortEffect(record(), [], fakeDeps([unknown, ...after([0, 1, 2])]))
+    expect(effect.firstWaits).toBe(true)
+    expect(effectFinality(effect)).toEqual({ checkpoint: null, final: false })
+  })
+
+  it('does not wait at the complete checkpoint', async () => {
+    // S0 was last written before the 5th later session, so the read reaches it before the cohort holds 10.
+    const early = { ...settling(s0(0)), endedAt: T + 5_500 }
+    const effect = await measureCohortEffect(record(), [], fakeDeps([early, ...after(range(0, 10))]))
+    expect(effect.skipped['still-settling']).toBe(1)
+    expect(effect.laterComplete).toBe(true)
+    expect(effect.firstWaits).toBe(false)
+    expect(effect.later).toHaveLength(10)
+    expect(effectFinality(effect).checkpoint).toBe('complete')
+  })
+
+  it('spends no later budget on a settling session, so its bytes cannot complete the cohort', async () => {
+    // 65 and 66 take 128 MiB. A crashed session with a partial last line (S) is read for 64 MiB and skipped as
+    // settling. 67 and 68 take the rest of the 256 MiB. S started after 67, so it does not hold the first checkpoint.
+    const mib64 = (s: FakeSession): FakeSession => ({ ...s, bytes: 64 * MiB })
+    const [a, b, c, fourth] = after([8, 9, 10.5, 0]).map(mib64)
+    // S was last written between 66 and 67, so the read reaches it before 67.
+    const s = mib64({ id: uuid(170), startedAt: T + 3_500, endedAt: T + 3_600, toolCalls: 0 })
+    const look1 = await measureCohortEffect(record(), [], fakeDeps([a!, b!, settling(s), c!, fourth!]))
+    expect(look1.skipped['still-settling']).toBe(1)
+    expect(look1.skipped['budget-spent']).toBe(0)
+    expect(look1.laterComplete).toBe(false)
+    expect(look1.later.map((x) => x.id)).toEqual([uuid(165), uuid(166), uuid(167)])
+    expect(effectFinality(look1)).toEqual({ checkpoint: 'first', final: false })
+    expect(() => outcomePatch(look1)).toThrow(/^not final: /)
+    // After S settles, the budget is spent before 68, and the complete cohort holds S.
+    const look2 = await measureCohortEffect(record(), [], fakeDeps([a!, b!, s, c!, fourth!]))
+    expect(look2.laterComplete).toBe(true)
+    expect(look2.later.map((x) => x.id)).toEqual([uuid(165), uuid(166), uuid(167), uuid(170)])
   })
 })
 

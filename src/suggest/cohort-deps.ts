@@ -2,15 +2,77 @@
  * Default cohort discovery and loading: every supported Claude root, filtered to the workspace's project
  * directories, each session read through its immutable evidence manifest with the 30-minute quiet gate.
  */
-import { realpath } from 'node:fs/promises'
+import { constants } from 'node:fs'
+import { open, realpath } from 'node:fs/promises'
 import { isAbsolute } from 'node:path'
 import {
   loadSettledAnalysis,
   MAX_VERIFICATION_DISCOVERED_SESSIONS,
+  MIN_VERIFICATION_QUIET_MS,
 } from '../adapters/claude-code/discovered-analysis.js'
-import { claudeRoots, listSessions, SESSION_ID_RE } from '../discover/discover.js'
+import { claudeRoots, listSessions, PEEK_HEAD_BYTES, SESSION_ID_RE, type SessionRef } from '../discover/discover.js'
 import { canonicalWorkspace } from './artifacts.js'
-import { metricValues, ranOranguLifecycle, type CohortDeps } from './cohort.js'
+import { cohortFactsKey, type CohortFactsCache } from './cohort-cache.js'
+import { metricValues, ranOranguLifecycle, type CohortCandidate, type CohortDeps, type CohortLoad } from './cohort.js'
+
+/** A record time as the parser reads it (`ts` in `src/adapters/claude-code/parse.ts`): ms, seconds, or an ISO string. */
+function recordTime(value: unknown): number | undefined {
+  if (typeof value === 'number') return Number.isFinite(value) ? (value > 1e12 ? value : value * 1000) : undefined
+  if (typeof value === 'string') {
+    const time = Date.parse(value)
+    return Number.isFinite(time) ? time : undefined
+  }
+  return undefined
+}
+
+/**
+ * The start time of a settling session: the earliest record time in the first 64,000 B of its transcript, which the
+ * parser takes as the start time when the head holds the first record. It reads through no link, parses only the
+ * complete lines of the head, and gives undefined when it finds no time.
+ */
+export async function settlingStartedAt(path: string): Promise<number | undefined> {
+  let handle: Awaited<ReturnType<typeof open>>
+  try {
+    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+  } catch {
+    return undefined
+  }
+  try {
+    const st = await handle.stat()
+    if (!st.isFile()) return undefined
+    const size = Math.min(st.size, PEEK_HEAD_BYTES)
+    const buffer = Buffer.allocUnsafe(size)
+    let offset = 0
+    while (offset < size) {
+      const read = await handle.read(buffer, offset, size - offset, offset)
+      if (read.bytesRead === 0) break
+      offset += read.bytesRead
+    }
+    let earliest: number | undefined
+    for (const line of buffer.subarray(0, offset).toString('utf8').split('\n')) {
+      if (!line.startsWith('{')) continue
+      let record: unknown
+      try {
+        record = JSON.parse(line)
+      } catch {
+        continue // a partial line
+      }
+      const time = record && typeof record === 'object' ? recordTime((record as { timestamp?: unknown }).timestamp) : undefined
+      if (time !== undefined && time > 0 && (earliest === undefined || time < earliest)) earliest = time
+    }
+    return earliest
+  } catch {
+    return undefined
+  } finally {
+    await handle.close()
+  }
+}
+
+/** A settling skip, with the start time from the head of the transcript when it can be read. */
+async function settlingSkip(path: string, bytesRead: number, startedAt?: number): Promise<CohortLoad> {
+  const start = startedAt ?? (await settlingStartedAt(path))
+  return start === undefined ? { skip: 'still-settling', bytesRead } : { skip: 'still-settling', bytesRead, startedAt: start }
+}
 
 export function createCohortDeps(options: { now?: () => number } = {}): CohortDeps {
   return {
@@ -25,10 +87,10 @@ export function createCohortDeps(options: { now?: () => number } = {}): CohortDe
         requireQuiet: true,
         ...(options.now ? { now: options.now } : {}),
       })
-      if ('skip' in loaded) return loaded
+      if ('skip' in loaded) return loaded.skip === 'still-settling' ? settlingSkip(candidate.path, loaded.bytesRead) : loaded
       const { analysis, session, bytesRead } = loaded
       const { cwd, startedAt, endedAt, live } = analysis.session
-      if (live !== false) return { skip: 'still-settling', bytesRead }
+      if (live !== false) return settlingSkip(candidate.path, bytesRead, typeof startedAt === 'number' ? startedAt : undefined)
       if (
         typeof startedAt !== 'number' || !Number.isFinite(startedAt) || startedAt <= 0 ||
         typeof endedAt !== 'number' || !Number.isFinite(endedAt) || endedAt < startedAt ||
@@ -52,5 +114,98 @@ export function createCohortDeps(options: { now?: () => number } = {}): CohortDe
       }
     },
     canonicalWorkspace,
+  }
+}
+
+/** The queue check of 1 item needs a transcript read past the byte budget of its read, so the item is deferred. */
+export class CohortReadDeferred extends Error {
+  constructor() {
+    super('the queue check reached its byte budget')
+    this.name = 'CohortReadDeferred'
+  }
+}
+
+export interface CachedCohortDepsOptions {
+  /** the clock of the settle rule, fixed for 1 read */
+  now: () => number
+  /** the most transcript bytes that this instance reads on a cache miss, over every item of 1 read */
+  budgetBytes: number
+  /** the cohort facts cache, or null with `--no-cache` */
+  cache: CohortFactsCache | null
+  /** the loaders of a miss: the trusted loaders of `createCohortDeps` by default */
+  base?: CohortDeps
+  /** the sessions of a canonical workspace: every Claude root by default */
+  listSessions?: (cwd: string) => Promise<SessionRef[]>
+}
+
+export interface CachedCohortDeps extends CohortDeps {
+  /** `loaderCalls` counts the calls to the loader of a miss, and `missBytes` the bytes that they read */
+  stats(): { loaderCalls: number; missBytes: number; cacheHits: number }
+}
+
+/**
+ * The trusted loaders of `createCohortDeps` behind the cohort facts cache, for the queue only. The record steps keep
+ * the trusted loaders, so a cache entry never reaches a stored verdict.
+ *
+ * Per candidate: a transcript that changed within the quiet time at `now` still settles, and it is not read (its
+ * start time comes from the head). Else a valid cache entry gives the facts. Else the trusted loader reads it inside
+ * what is left of `budgetBytes`, and the facts of a settled session go into the cache. A miss past the budget throws
+ * `CohortReadDeferred`, so the item is deferred and is never graded on a part of its cohort.
+ */
+export function createCachedCohortDeps(options: CachedCohortDepsOptions): CachedCohortDeps {
+  const base = options.base ?? createCohortDeps({ now: options.now })
+  const list = options.listSessions ?? (async (cwd: string) => listSessions({ roots: await claudeRoots(), cwd, maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS }))
+  const listings = new Map<string, Promise<SessionRef[]>>()
+  const refs = new Map<string, SessionRef>()
+  let loaderCalls = 0
+  let missBytes = 0
+  let cacheHits = 0
+  return {
+    async listCandidates(cwd: string): Promise<CohortCandidate[]> {
+      let listing = listings.get(cwd)
+      if (!listing) {
+        listing = list(cwd)
+        listings.set(cwd, listing)
+      }
+      const found = (await listing).filter((ref) => SESSION_ID_RE.test(ref.sessionId))
+      for (const ref of found) refs.set(ref.path, ref)
+      return found.map((ref) => ({ sessionId: ref.sessionId.toLowerCase(), path: ref.path, mtimeMs: ref.mtimeMs }))
+    },
+    async loadCandidate(candidate, maxBytes) {
+      const ref = refs.get(candidate.path)
+      const identity = ref ? await cohortFactsKey(ref) : undefined
+      if (identity) {
+        const now = options.now()
+        if (!Number.isFinite(now) || now < identity.changedAt || now - identity.changedAt < MIN_VERIFICATION_QUIET_MS) return settlingSkip(candidate.path, 0)
+        const facts = options.cache ? await options.cache.get(identity.key, candidate.sessionId) : undefined
+        if (facts) {
+          cacheHits++
+          // The key order of a trusted load, so a warm read gives the same bytes as a cold one.
+          return {
+            session: { id: facts.sessionId, path: candidate.path, cwd: facts.cwd, ranOrangu: facts.ranOrangu, startedAt: facts.startedAt, endedAt: facts.endedAt, metrics: facts.metrics },
+            bytesRead: 0,
+          }
+        }
+      }
+      const remaining = options.budgetBytes - missBytes
+      if (!(remaining >= 1)) throw new CohortReadDeferred()
+      const cap = Math.min(maxBytes, remaining)
+      loaderCalls++
+      const loaded = await base.loadCandidate(candidate, cap)
+      missBytes += loaded.bytesRead
+      // Past the budget of the read, not of the side: the cohort is not complete, so the item waits for a later read.
+      if ('skip' in loaded && loaded.skip === 'over-budget' && cap < maxBytes) throw new CohortReadDeferred()
+      if ('session' in loaded && options.cache && ref && identity) {
+        // Store the facts only when the transcript did not change during the read.
+        const after = await cohortFactsKey(ref)
+        if (after?.key === identity.key) {
+          const { id, cwd, startedAt, endedAt, ranOrangu, metrics } = loaded.session
+          await options.cache.put(identity.key, { sessionId: id.toLowerCase(), cwd, startedAt, endedAt, ranOrangu, metrics })
+        }
+      }
+      return loaded
+    },
+    canonicalWorkspace: (identity) => base.canonicalWorkspace(identity),
+    stats: () => ({ loaderCalls, missBytes, cacheHits }),
   }
 }

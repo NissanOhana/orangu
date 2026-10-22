@@ -34,13 +34,23 @@ import {
 export const MAX_ANALYSIS_CACHE_ENTRY_BYTES = 256 * 1024 * 1024
 
 const PRIVATE_DIRECTORY_MODE = 0o700
-const PRIVATE_FILE_MODE = 0o600
+export const PRIVATE_FILE_MODE = 0o600
 const SIMPLE_SEGMENT = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/
 const CACHE_GENERATION_SEGMENT = /^\d+-[A-Za-z0-9][A-Za-z0-9._-]*$/
 const MAX_STALE_CACHE_ROOT_ENTRIES = 512
 const MAX_STALE_CACHE_GENERATION_ENTRIES = 4096
 
-interface PrivateDirectoryIdentity {
+/** The generation directory name of a cache: a schema bump, an engine bump or a payload bump is a miss. */
+export function cacheGenerationSegment(version: string): string {
+  return `${ANALYSIS_SCHEMA_VERSION}-${version}-p${ANALYSIS_PAYLOAD_GENERATION}`
+}
+
+/** True for a name that is safe as 1 path segment under the cache root. */
+export function isCacheSegment(value: string): boolean {
+  return SIMPLE_SEGMENT.test(value)
+}
+
+export interface PrivateDirectoryIdentity {
   path: string
   canonicalPath: string
   dev: bigint
@@ -55,7 +65,7 @@ function modeBits(stat: BigIntStats): number {
   return Number(stat.mode & 0o777n)
 }
 
-async function ensurePrivateDirectory(path: string): Promise<PrivateDirectoryIdentity> {
+export async function ensurePrivateDirectory(path: string): Promise<PrivateDirectoryIdentity> {
   // Recursive creation is needed for a fresh custom ORANGU_HOME. We validate the
   // requested directory itself before using it as a cache parent.
   await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE })
@@ -89,7 +99,7 @@ async function ensurePrivateDirectory(path: string): Promise<PrivateDirectoryIde
   }
 }
 
-async function assertPrivateDirectoriesStable(directories: PrivateDirectoryIdentity[]): Promise<void> {
+export async function assertPrivateDirectoriesStable(directories: PrivateDirectoryIdentity[]): Promise<void> {
   for (const expected of directories) {
     const [current, canonicalPath] = await Promise.all([lstat(expected.path, { bigint: true }), realpath(expected.path)])
     if (
@@ -105,13 +115,16 @@ async function assertPrivateDirectoriesStable(directories: PrivateDirectoryIdent
   }
 }
 
-/** @internal Split from the read so replacement handling has a deterministic regression test. */
-export async function prevalidateAnalysisCacheEntry(path: string): Promise<StableTextManifest> {
+/**
+ * @internal Split from the read so replacement handling has a deterministic regression test. `maxBytes` lets a cache
+ * of small entries refuse a large file before it reads it.
+ */
+export async function prevalidateAnalysisCacheEntry(path: string, maxBytes = MAX_ANALYSIS_CACHE_ENTRY_BYTES): Promise<StableTextManifest> {
   const requested = await lstat(path, { bigint: true })
   if (requested.isSymbolicLink()) throw new Error('cache entry must not be a symbolic link')
   if (!requested.isFile()) throw new Error('cache entry must be a regular file')
-  if (requested.size > BigInt(MAX_ANALYSIS_CACHE_ENTRY_BYTES)) {
-    throw new Error(`cache entry exceeds ${MAX_ANALYSIS_CACHE_ENTRY_BYTES} bytes`)
+  if (requested.size > BigInt(maxBytes)) {
+    throw new Error(`cache entry exceeds ${maxBytes} bytes`)
   }
 
   // Tighten an entry created by an older release through its already-open inode;
@@ -119,7 +132,7 @@ export async function prevalidateAnalysisCacheEntry(path: string): Promise<Stabl
   const handle = await open(path, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0))
   try {
     const opened = await handle.stat({ bigint: true })
-    if (!opened.isFile() || !sameInode(requested, opened) || opened.size > BigInt(MAX_ANALYSIS_CACHE_ENTRY_BYTES)) {
+    if (!opened.isFile() || !sameInode(requested, opened) || opened.size > BigInt(maxBytes)) {
       throw new Error('cache entry changed while opening')
     }
     if (modeBits(opened) !== PRIVATE_FILE_MODE) await handle.chmod(PRIVATE_FILE_MODE)
@@ -127,7 +140,7 @@ export async function prevalidateAnalysisCacheEntry(path: string): Promise<Stabl
     await handle.close()
   }
 
-  return prevalidateStableTextFile(path, MAX_ANALYSIS_CACHE_ENTRY_BYTES, 'cache entry')
+  return prevalidateStableTextFile(path, maxBytes, 'cache entry')
 }
 
 /** @internal Read the exact regular inode accepted by prevalidateAnalysisCacheEntry. */
@@ -224,7 +237,7 @@ export class AnalysisCache {
   constructor(opts: CacheOptions) {
     const home = resolve(oranguHome())
     const cacheRoot = resolve(opts.dir ?? join(home, 'cache'))
-    const versionSegment = `${ANALYSIS_SCHEMA_VERSION}-${opts.version}-p${ANALYSIS_PAYLOAD_GENERATION}`
+    const versionSegment = cacheGenerationSegment(opts.version)
     this.cacheRoot = cacheRoot
     this.versionSegment = versionSegment
     this.validVersion = SIMPLE_SEGMENT.test(versionSegment)

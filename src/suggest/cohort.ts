@@ -71,7 +71,9 @@ export type CohortSessionFacts = Pick<CohortSession, 'id' | 'startedAt' | 'ended
 
 export type CohortLoad =
   | { session: CohortSession; bytesRead: number }
-  | { skip: 'still-settling' | 'over-budget' | 'unreadable'; bytesRead: number }
+  /** `startedAt` comes from the head of the transcript, and it is absent when the loader could not read it */
+  | { skip: 'still-settling'; bytesRead: number; startedAt?: number }
+  | { skip: 'over-budget' | 'unreadable'; bytesRead: number }
 
 export interface CohortDeps {
   listCandidates(workspaceCwd: string): Promise<CohortCandidate[]>
@@ -105,6 +107,11 @@ export interface CohortEffect {
   laterCount: number
   /** no newer session can join the later cohort: it holds ten, or its byte budget is spent */
   laterComplete: boolean
+  /**
+   * Before the complete checkpoint: a later session that started before the third graded one still settles, so the
+   * first checkpoint waits for it. `later` then holds only the sessions that started before it.
+   */
+  firstWaits: boolean
   checks: CohortCheckResult[]
   confoundedBy: string[]
   skipped: Record<CohortSkipReason, number>
@@ -200,10 +207,19 @@ interface TakeContext {
  * The take rules of 1 side, in list order: at most `COHORT_MAX` sessions, never the finding's own, each read inside
  * the side's byte budget, and each settled, in the workspace, wholly on its side of the cut, and not an orangu session.
  * The freeze and the measure step share them, so a frozen baseline holds the sessions that a live read takes.
+ *
+ * A settling session spends none of the side's budget: it joins the side when it settles, and its bytes count then.
+ * So its bytes cannot spend the budget and complete the side before it settles. `settling` gives the id and the start
+ * time of each one.
  */
-async function take(ctx: TakeContext, list: CohortCandidate[], side: 'baseline' | 'later'): Promise<{ accepted: CohortSession[]; budgetSpent: boolean }> {
+async function take(
+  ctx: TakeContext,
+  list: CohortCandidate[],
+  side: 'baseline' | 'later',
+): Promise<{ accepted: CohortSession[]; budgetSpent: boolean; settling: Array<{ id: string; startedAt?: number }> }> {
   const { deps, cwd, cutAt, excluded, seen, skipped } = ctx
   const accepted: CohortSession[] = []
+  const settling: Array<{ id: string; startedAt?: number }> = []
   let sideBytes = 0
   let budgetSpent = false
   for (const candidate of list) {
@@ -222,6 +238,13 @@ async function take(ctx: TakeContext, list: CohortCandidate[], side: 'baseline' 
     }
     const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining)
     const loaded = await deps.loadCandidate(candidate, maxBytes)
+    if ('skip' in loaded && loaded.skip === 'still-settling') {
+      skipped['still-settling']++
+      // A start time crosses the loader boundary: keep only a finite positive number.
+      const startedAt = typeof loaded.startedAt === 'number' && Number.isFinite(loaded.startedAt) && loaded.startedAt > 0 ? loaded.startedAt : undefined
+      settling.push(startedAt === undefined ? { id } : { id, startedAt })
+      continue
+    }
     sideBytes += loaded.bytesRead
     if ('skip' in loaded) {
       // Over the fixed per-session cap: skipped on either side alike. Over what is left of this side's
@@ -254,8 +277,12 @@ async function take(ctx: TakeContext, list: CohortCandidate[], side: 'baseline' 
     seen.add(id)
     accepted.push({ ...session, id })
   }
-  return { accepted, budgetSpent }
+  return { accepted, budgetSpent, settling }
 }
+
+/** The graded order of the later side: the start time, which a resume never changes, with the id for a tie. */
+const byStartThenId = (a: { id: string; startedAt: number }, b: { id: string; startedAt: number }): number =>
+  a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
 export async function measureCohortEffect(
   record: SuggestionRecord,
@@ -306,12 +333,25 @@ export async function measureCohortEffect(
   // The read follows file time (mtime): the budget and the settling rule need an order before any load. A resume
   // appends to the session's own file and moves its mtime, but not its start time. So the graded order is the start
   // time, which a session never changes, with the id for a tie.
-  const byStart = [...laterSide.accepted].sort((a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+  const byStart = [...laterSide.accepted].sort(byStartThenId)
   // The 2 checkpoints: until the later cohort is complete, only the first COHORT_MIN sessions by start time are graded,
   // so a look between the checkpoints grades the same sessions again, also after a resume. The graded set still changes
-  // when a graded session is deleted, when a resumed graded session is still settling at the look, or when a session
-  // with an earlier start time settles after the look before.
-  const later = laterComplete ? byStart : byStart.slice(0, COHORT_MIN)
+  // when a graded session is deleted, or when a resumed graded session is still settling at the look.
+  // A later session that started before the third graded one and still settles takes a place among the first
+  // COHORT_MIN when it settles. So the first checkpoint waits for it, and only the sessions that started before it are
+  // graded. A start time that the loader could not read counts as the earliest. A session that started at or before
+  // the cut spans the application, so it never joins this side and never holds the checkpoint.
+  const third = byStart[COHORT_MIN - 1]
+  const holds = laterComplete || third === undefined
+    ? []
+    : laterSide.settling.filter((s) => s.startedAt === undefined || (s.startedAt > appliedAt && byStartThenId({ id: s.id, startedAt: s.startedAt }, third) < 0))
+  const firstWaits = holds.length > 0
+  const earliest = holds.reduce<number>((min, s) => Math.min(min, s.startedAt ?? -Infinity), Infinity)
+  const later = laterComplete
+    ? byStart
+    : firstWaits
+      ? byStart.filter((s) => s.startedAt < earliest).slice(0, COHORT_MIN)
+      : byStart.slice(0, COHORT_MIN)
 
   const checks = intents.map((intent) =>
     evaluateCheck(
@@ -346,6 +386,7 @@ export async function measureCohortEffect(
     later,
     laterCount: laterSide.accepted.length,
     laterComplete,
+    firstWaits,
     checks,
     confoundedBy,
     skipped,
@@ -413,11 +454,12 @@ export interface CohortFinality {
 /**
  * The verdict table, 9 rows. A baseline below `COHORT_MIN` decides first: a frozen one cannot change, so its
  * `not-enough-sessions` is final at any later count, and the live baseline of an older record is never final. Else
- * nothing is final before the first checkpoint. A win is final at either checkpoint. Every other verdict waits for the
- * complete checkpoint, and a `regressed` first verdict shows only as `leaning: 'worse'`.
+ * nothing is final before the first checkpoint, and the first checkpoint is not reached while it waits for a settling
+ * session. A win is final at either checkpoint. Every other verdict waits for the complete checkpoint, and a
+ * `regressed` first verdict shows only as `leaning: 'worse'`.
  */
-export function effectFinality(effect: Pick<CohortEffect, 'verdict' | 'baseline' | 'baselineFrozen' | 'laterCount' | 'laterComplete'>): CohortFinality {
-  const checkpoint: CohortCheckpoint | null = effect.laterComplete ? 'complete' : effect.laterCount >= COHORT_MIN ? 'first' : null
+export function effectFinality(effect: Pick<CohortEffect, 'verdict' | 'baseline' | 'baselineFrozen' | 'laterCount' | 'laterComplete' | 'firstWaits'>): CohortFinality {
+  const checkpoint: CohortCheckpoint | null = effect.laterComplete ? 'complete' : effect.laterCount >= COHORT_MIN && !effect.firstWaits ? 'first' : null
   if (effect.baseline.length < COHORT_MIN) return { checkpoint, final: effect.baselineFrozen }
   if (checkpoint === null) return { checkpoint, final: false }
   if (effect.verdict === 'verified' || checkpoint === 'complete') return { checkpoint, final: true }
@@ -437,7 +479,7 @@ function checkpointLabel(effect: Pick<CohortEffect, 'later'>, checkpoint: Cohort
  * how many settled sessions each side needs.
  */
 export function nextStep(
-  effect: Pick<CohortEffect, 'id' | 'status' | 'verdict' | 'baseline' | 'baselineFrozen' | 'later' | 'laterCount' | 'laterComplete'>,
+  effect: Pick<CohortEffect, 'id' | 'status' | 'verdict' | 'baseline' | 'baselineFrozen' | 'later' | 'laterCount' | 'laterComplete' | 'firstWaits'>,
 ): string {
   // Both recording steps take an applied record only, so a verified record has no step left.
   if (effect.status === 'verified') return 'already recorded as verified'
@@ -452,6 +494,7 @@ export function nextStep(
     }
     return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set ${effect.id} rejected --reason other`
   }
+  if (checkpoint === null && effect.firstWaits) return `the first checkpoint waits until a later session that started before the third one settles ${counts}`
   if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. Orangu grades at ${COHORT_MIN} and at ${COHORT_MAX} later sessions`
   const at = checkpointLabel(effect, checkpoint)
   if (effect.verdict === 'verified') return `${at} beat the baseline beyond chance. Record it: orangu suggest --set ${effect.id} verified`
