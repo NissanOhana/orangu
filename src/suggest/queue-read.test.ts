@@ -138,6 +138,20 @@ describe('readQueue: due comes from the measured check', () => {
     ])
   })
 
+  it('sends an older record to review when its complete checkpoint has too few baseline sessions after the take rules', async () => {
+    // 3 baseline files are on disk, and 2 of them are the record's own evidence sessions, so the live baseline is 1.
+    const baseline: FakeSession[] = [0, 1, 2].map((i) => ({ id: uuid(i), cwd: WORKSPACE, startedAt: APPLIED_AT - 50_000 + i * 1_000, endedAt: APPLIED_AT - 40_000 + i * 1_000, toolCalls: 10 }))
+    const record = appliedOf(sg(1), { frozenBaseline: undefined, sessionIds: [uuid(0), uuid(1)] })
+    const item = await itemOf(record, [...baseline, ...laterOf([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])])
+    expect(item.candidates).toEqual({ baseline: 3, later: 10 })
+    expect(item).toMatchObject({ group: 'review', cannotVerify: 'baseline-gone', checkpoint: 'complete', verdict: 'not-enough-sessions', final: false })
+    expect(item.next).toBe(`claude "/orangu:improve --verify ${sg(1)}"`)
+    // Before the complete checkpoint the record still waits: more later sessions can come, and no step is open yet.
+    const early = await itemOf(record, [...baseline, ...laterOf([1, 2, 3, 4])])
+    expect(early).toMatchObject({ group: 'wait', checkpoint: 'first', next: null })
+    expect(Object.hasOwn(early, 'cannotVerify')).toBe(false)
+  })
+
   it('leaves an item with no check when the check cannot run, and the read goes on', async () => {
     const cohort = { ...fakeCohort(laterOf([1, 2, 3])), canonicalWorkspace: async () => { throw new Error('the workspace moved') } }
     const queue = await readQueue(storeOf([appliedOf(sg(1)), recordOf(sg(2))]), { cwd: WORKSPACE }, depsOf(cohort))

@@ -283,7 +283,9 @@ Orangu grades the later sessions at 2 fixed checkpoints, and never between them:
 The verdict of a record is the verdict at the latest checkpoint that it reached. The graded order is the start time. So
 a later session that started before the third graded one, and that still settles, takes a place among the first 3 when
 it settles. Until then the `first` checkpoint waits: `checkpoint` is `null`, the verdict is not final, and only the
-sessions that started before it are graded. A start time that the loader cannot read counts as the earliest.
+sessions that started before it are graded. A start time that the loader cannot read counts as the earliest. The one
+exception is a frozen baseline below 3 sessions: it cannot change, so its verdict is final at any later count, and
+`--record` closes the record as `unproven` also while the `first` checkpoint waits.
 
 ### The new fields
 
@@ -348,6 +350,8 @@ This is the backward-read rule. An older orangu skips a line with a status that 
 The store accepts any text as a `ruleId` or an `insightId`. So the queue, todo, lesson and history reads give a `ruleId` only when it is 1 of the analyzer rule ids (`src/analyze/rule-ids.ts`) or `harness:` and a change class, and `null` for any other value. They give an `insightId` only when it is that rule id, a `-` and a number, and leave it out for any other value. A `changeClass` and a `reasonCode` show only when each is a known value.
 
 Each queue item lists its earlier records in `earlier`: the closed and `regressed` records of the same workspace and rule, newest first, 10 at most. `earlierCount` counts all of them, so a cut list hides no record.
+
+An older `applied` record (one with no `frozenBaseline`) gets `cannotVerify: "baseline-gone"` when fewer than 3 of its baseline sessions are on disk. It gets the same value when its queue check reaches the `complete` checkpoint with fewer than 3 baseline sessions after the take rules, for example when the files on disk are its own evidence sessions. No step can then record a verdict, so the item goes to `review`, and its `next` is the verify handoff, which offers a rejection.
 
 ## Proposal artifacts
 

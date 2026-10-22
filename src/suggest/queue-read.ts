@@ -100,7 +100,8 @@ export async function checkApplied(
     try {
       const effect = await measureCohortEffect(record, all, deps.cohort)
       const { checkpoint, final, leaning } = effectFinality(effect)
-      checks[record.id] = { check: 'ran', checkpoint, verdict: effect.verdict, final, ...(leaning ? { leaning } : {}) }
+      // The graded baseline count lets the queue see a baseline that the take rules left short (`cannotVerifyOf`).
+      checks[record.id] = { check: 'ran', checkpoint, verdict: effect.verdict, final, ...(leaning ? { leaning } : {}), baseline: effect.baseline.length }
     } catch (error) {
       // Past the budget the item is deferred. Any other failure leaves it with no check, and the read goes on.
       if (error instanceof CohortReadDeferred) checks[record.id] = { check: 'deferred' }

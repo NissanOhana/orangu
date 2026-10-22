@@ -44,7 +44,8 @@ const CLOSED: readonly SuggestionStatus[] = ['verified', 'unproven', 'kept', 're
 
 /** The queue check of 1 applied record: the measured verdict at its latest checkpoint, or deferred past the byte bound of the read. */
 export type QueueCheck =
-  | { check: 'ran'; checkpoint: CohortCheckpoint | null; verdict: CohortVerdict; final: boolean; leaning?: 'worse' }
+  /** `baseline` is the count of baseline sessions that the check graded against, after the take rules */
+  | { check: 'ran'; checkpoint: CohortCheckpoint | null; verdict: CohortVerdict; final: boolean; leaning?: 'worse'; baseline?: number }
   | { check: 'deferred' }
 
 /** 1 earlier record of the same workspace and rule: a closed one or a regressed one. */
@@ -167,10 +168,12 @@ export function candidatesOf(record: SuggestionRecord, times: readonly number[] 
 /**
  * Why an applied record cannot verify: the first value that applies, in this order. A frozen baseline below
  * `COHORT_MIN` (it can close only as unproven). Reviewed checks with no direction (it waits for the complete
- * checkpoint). An older record with no frozen baseline and fewer than `COHORT_MIN` baseline sessions on disk. A record
- * with no structured proposal, workspace or checks.
+ * checkpoint). An older record with no frozen baseline whose baseline is gone: fewer than `COHORT_MIN` baseline sessions
+ * on disk, or a queue check at the complete checkpoint that took fewer than `COHORT_MIN` baseline sessions (for example
+ * when the files on disk are the record's own evidence sessions), so no step can ever close it. A record with no
+ * structured proposal, workspace or checks.
  */
-export function cannotVerifyOf(record: SuggestionRecord, candidates: { baseline: number } | undefined): CannotVerify | undefined {
+export function cannotVerifyOf(record: SuggestionRecord, candidates: { baseline: number } | undefined, check?: QueueCheck): CannotVerify | undefined {
   if (record.status !== 'applied') return undefined
   const frozen = trustedFrozen(record)
   if (frozen && frozen.sessions.length < COHORT_MIN) return 'few-baseline-sessions'
@@ -178,7 +181,8 @@ export function cannotVerifyOf(record: SuggestionRecord, candidates: { baseline:
   const checks = reviewedChecks(record)
   if (checks?.length && !checks.some((check) => isDirectional(check.comparison))) return 'no-directional-check'
   const structured = record.proposal?.v === 1 && typeof record.proposal.workspace?.cwd === 'string' && !!checks?.length
-  if (structured && record.frozenBaseline === undefined && (candidates?.baseline ?? 0) < COHORT_MIN) return 'baseline-gone'
+  const measuredShort = check?.check === 'ran' && check.checkpoint === 'complete' && check.baseline !== undefined && check.baseline < COHORT_MIN
+  if (structured && record.frozenBaseline === undefined && ((candidates?.baseline ?? 0) < COHORT_MIN || measuredShort)) return 'baseline-gone'
   if (!structured) return 'legacy-record'
   return undefined
 }
@@ -233,8 +237,8 @@ type AppliedKeys = Pick<QueueItem, 'appliedAt' | 'candidates' | 'check' | 'check
 function appliedKeys(record: SuggestionRecord, input: QueueInput): AppliedKeys {
   const appliedAt = applicationTime(record)
   const candidates = candidatesOf(record, input.discovered?.[record.id], input.now)
-  const cannotVerify = cannotVerifyOf(record, candidates)
   const check = input.checks?.[record.id]
+  const cannotVerify = cannotVerifyOf(record, candidates, check)
   const measured: AppliedKeys =
     check?.check === 'ran'
       ? { check: 'ran', checkpoint: check.checkpoint, verdict: check.verdict, final: check.final, ...(check.leaning ? { leaning: check.leaning } : {}) }
@@ -287,7 +291,7 @@ export function buildQueue(input: QueueInput): SuggestionQueue {
       }
       if (CLOSED.includes(record.status)) continue
       const candidates = record.status === 'applied' ? candidatesOf(record, input.discovered?.[record.id], input.now) : undefined
-      const cannotVerify = cannotVerifyOf(record, candidates)
+      const cannotVerify = cannotVerifyOf(record, candidates, input.checks?.[record.id])
       const group = groupOf(record, cannotVerify, input.checks?.[record.id])
       if (group === undefined) continue
       if ((record.status === 'new' || record.status === 'failed') && key !== undefined) {

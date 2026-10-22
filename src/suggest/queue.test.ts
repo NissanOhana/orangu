@@ -168,6 +168,18 @@ describe('buildQueue: candidates and cannotVerify of an applied record', () => {
     }
   })
 
+  it('gives baseline-gone when the complete checkpoint took too few baseline sessions, for an older record only', () => {
+    const older = appliedOf(sg(1), { frozenBaseline: undefined })
+    const short = ran({ checkpoint: 'complete', verdict: 'not-enough-sessions', baseline: 1 })
+    expect(only(buildQueue(input([older], { checks: { [sg(1)]: short } })))).toMatchObject({ group: 'review', cannotVerify: 'baseline-gone', next: verifyCommand(sg(1)) })
+    // At the first checkpoint the record waits, and a frozen baseline is never gone.
+    const first = only(buildQueue(input([older], { checks: { [sg(1)]: { ...short, checkpoint: 'first' } } })))
+    expect(first).toMatchObject({ group: 'wait', next: null })
+    expect(Object.hasOwn(first, 'cannotVerify')).toBe(false)
+    const frozen = only(buildQueue(input([appliedOf(sg(2))], { checks: { [sg(2)]: short } })))
+    expect(Object.hasOwn(frozen, 'cannotVerify')).toBe(false)
+  })
+
   it('moves a no-directional-check record to verdict when the check finds the complete checkpoint', () => {
     const record = appliedOf(sg(1), { proposal: proposalOf(WORKSPACE, [NOT_INCREASED]) })
     const check = ran({ checkpoint: 'complete', verdict: 'no-directional-check', final: true })
