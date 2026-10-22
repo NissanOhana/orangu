@@ -886,8 +886,9 @@ const laterOf = (values: number[]): FakeSession[] =>
   values.map((toolCalls, index) => ({ id: uuid(100 + index), cwd: WORKSPACE, startedAt: APPLIED_AT + 1_000 + index * 1_000, endedAt: APPLIED_AT + 2_000 + index * 1_000, toolCalls }))
 
 /**
- * The deps of 1 store read over a fixed session list, as the CLI read tests build them. A folder under /w/ is its own
- * canonical path, any other folder is gone, and WORKSPACE lists uuid(900). `calls` gets the clock of each read.
+ * The deps of 1 store read over a fixed session list, as the CLI read tests build them. A folder under /w/ or under the
+ * fixture home /Users/test/ is its own canonical path, any other folder is gone, and WORKSPACE lists uuid(900). `calls`
+ * gets the clock of each read.
  */
 function fakeReads(sessions: FakeSession[] = [], calls: number[] = []): (now: number) => QueueReadDeps {
   return (now) => {
@@ -908,7 +909,7 @@ function fakeReads(sessions: FakeSession[] = [], calls: number[] = []): (now: nu
       now,
       cohort,
       async canonical(dir) {
-        if (!dir.startsWith('/w/')) throw new Error(`ENOENT: no such file or directory, realpath '${dir}'`)
+        if (!dir.startsWith('/w/') && !dir.startsWith('/Users/test/')) throw new Error(`ENOENT: no such file or directory, realpath '${dir}'`)
         return dir
       },
       async workspaceSessionIds() {
@@ -987,7 +988,7 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
 
   it('GET /api/queue gives the bytes of orangu suggest --queue --json, with cwd=<dir> and with all=1', async () => {
     const reads = fakeReads(laterOf([1, 2, 3]))
-    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: reads })
     seed(storeHome, queueFixtureRecords())
     const store = new SuggestionStore({ home: storeHome })
     for (const [query, target, flags] of [
@@ -1016,7 +1017,7 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
 
   it('GET /api/history gives the bytes of orangu suggest --history --json, with cwd=<dir>, all=1, scope=global and rule', async () => {
     const reads = fakeReads(laterOf([1, 2, 3]))
-    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: reads })
     seed(storeHome, lessonFixtureRecords())
     const store = new SuggestionStore({ home: storeHome })
     for (const [query, flags] of [
@@ -1038,7 +1039,7 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
 
   it('GET /api/lessons gives the lessons of orangu suggest --lessons --json with no cap, with cwd=<dir>, all=1, scope=global and rule', async () => {
     const reads = fakeReads(laterOf([1, 2, 3]))
-    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: reads })
     seed(storeHome, lessonFixtureRecords())
     for (const [query, flags] of [
       [`cwd=${encodeURIComponent(WORKSPACE)}`, { cwd: WORKSPACE }],
@@ -1059,7 +1060,7 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
 
   it('GET /api/lessons returns all 1,000 lessons, while the CLI read of the same store still fits LESSONS_MAX_BYTES', async () => {
     const reads = fakeReads()
-    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: reads })
     seed(storeHome, thousandLessons())
     const store = new SuggestionStore({ home: storeHome })
     const route = await getText(url, `/api/lessons?cwd=${encodeURIComponent(WORKSPACE)}`)
@@ -1080,7 +1081,7 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
 
   it('refuses with 400, before any read, 2 values of 1 option, cwd with all=1, and an option that the CLI read does not take', async () => {
     const calls: number[] = []
-    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: fakeReads([], calls) })
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: fakeReads([], calls) })
     seed(storeHome, queueFixtureRecords())
     const cwd = `cwd=${encodeURIComponent(WORKSPACE)}`
     const other = `cwd=${encodeURIComponent(OTHER_WORKSPACE)}`
@@ -1089,12 +1090,15 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
       ...everyRead.flatMap((path): Array<[string, string]> => [
         [path, `${cwd}&${other}`],
         [path, `${cwd}&all=1`],
-        [path, ''],
         [path, 'cwd='],
         [path, 'all=0'],
         [path, 'all=true'],
         [path, 'all=1&all=1'],
         [path, `cwd=${'x'.repeat(MAX_REPO_CWD_BYTES + 1)}`],
+        // A name that no read takes goes unread, so it is refused too.
+        [path, 'all=1&s=1'],
+        [path, 'all=1&t='],
+        [path, `${cwd}&workspace=${encodeURIComponent(OTHER_WORKSPACE)}`],
       ]),
       ['/api/queue', 'all=1&rule=tool-errors'],
       ['/api/queue', 'scope=global'],
@@ -1118,19 +1122,79 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
     for (const path of everyRead) expect((await getText(url, `${path}?${cwd}`)).status, path).toBe(200)
   })
 
-  it('answers 404 for a cwd that is not a folder, and 500 with a scrubbed message when the read fails', async () => {
+  it('with no --cwd of serve, a read with no scope option gets 400 before any read', async () => {
+    const calls: number[] = []
+    const { url } = await bootWith({}, { now: () => NOW, queueReadDeps: fakeReads([], calls) })
+    for (const path of ['/api/queue', '/api/history', '/api/lessons']) {
+      const response = await getText(url, path)
+      expect(response.status, path).toBe(400)
+      expect(response.body, path).toBe('{"error":"cwd or all=1 is required"}')
+    }
+    expect(calls).toEqual([])
+  })
+
+  it('answers 404 with a fixed body, before any read, for a cwd that is neither the --cwd of serve nor a workspace of the registry', async () => {
+    const calls: number[] = []
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: fakeReads([], calls) })
+    seed(storeHome, queueFixtureRecords())
+    // /w/other is a folder to the fake reads, so only the route rule refuses it.
+    for (const path of ['/api/queue', '/api/history', '/api/lessons']) {
+      for (const cwd of [OTHER_WORKSPACE, '/w/repo/', '/etc', '..', '.', `${homedir()}/x`, '~/x']) {
+        const response = await getText(url, `${path}?cwd=${encodeURIComponent(cwd)}`)
+        expect(response.status, `${path} ${cwd}`).toBe(404)
+        expect(response.body, `${path} ${cwd}`).toBe('{"error":"unknown workspace"}')
+      }
+    }
+    expect(calls, 'no unknown cwd reaches a read').toEqual([])
+  })
+
+  it('accepts a cwd that names a workspace of the registry, raw or in its scrubbed form, as /api/repo does', async () => {
+    // The fixture sessions ran in /Users/test/Code/demo, so with this HOME the scrubbed form is ~/Code/demo.
+    process.env['HOME'] = '/Users/test'
+    const demo = '/Users/test/Code/demo'
+    const reads = fakeReads()
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    seed(storeHome, queueFixtureRecords())
+    const raw = await getText(url, `/api/queue?cwd=${encodeURIComponent(demo)}`)
+    expect(raw.status).toBe(200)
+    expect(raw.body + '\n').toBe(await cliRead(storeHome, { queue: true, cwd: demo }, reads(NOW)))
+    expect((JSON.parse(raw.body) as { scope: string }).scope).toBe('~/Code/demo')
+    const scrubbed = await getText(url, `/api/queue?cwd=${encodeURIComponent('~/Code/demo')}`)
+    expect(scrubbed.status).toBe(200)
+    expect(scrubbed.body).toBe(raw.body)
+  })
+
+  it('with the real reads, a cwd outside the registry gets 404 and names no path', async () => {
+    const { url } = await bootWith({}, { now: () => NOW, queueReadDeps: undefined })
+    for (const cwd of ['/etc', '..', '/tmp']) {
+      const response = await getText(url, `/api/queue?cwd=${encodeURIComponent(cwd)}`)
+      expect(response.status, cwd).toBe(404)
+      expect(response.body, cwd).toBe('{"error":"unknown workspace"}')
+    }
+  })
+
+  it('answers the same 404 when the --cwd of serve is no longer a folder', async () => {
+    const calls: number[] = []
+    const gone = `${homedir()}/gone`
+    const { url } = await bootWith({ cwd: gone }, { now: () => NOW, queueReadDeps: fakeReads([], calls) })
+    for (const path of ['/api/queue', `/api/history?cwd=${encodeURIComponent(gone)}`, '/api/lessons']) {
+      const response = await getText(url, path)
+      expect(response.status, path).toBe(404)
+      expect(response.body, path).toBe('{"error":"unknown workspace"}')
+    }
+    expect(calls.length, 'the folder check runs through the deps of the read').toBe(3)
+  })
+
+  it('answers 500 with a scrubbed message when the read fails', async () => {
     const failing: (now: number) => QueueReadDeps = (now) => ({
       ...fakeReads()(now),
       async workspaceSessionIds() {
         throw new Error(`listing failed under ${homedir()}/private with ${SECRET}`)
       },
     })
-    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: failing })
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: failing })
     seed(storeHome, queueFixtureRecords())
     for (const path of ['/api/queue', '/api/history', '/api/lessons']) {
-      const gone = await getText(url, `${path}?cwd=${encodeURIComponent(`${homedir()}/gone`)}`)
-      expect(gone.status, path).toBe(404)
-      expect(gone.body, path).not.toContain(homedir())
       const failed = await getText(url, `${path}?cwd=${encodeURIComponent(WORKSPACE)}`)
       expect(failed.status, path).toBe(500)
       expect(failed.body, path).toContain('listing failed')
@@ -1159,7 +1223,7 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
 
   it('with no injected reads, a route reads through the deps that the CLI makes for 1 read, at ctx.now', async () => {
     const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'orangu-serve-ws-')))
-    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: undefined })
+    const { url, storeHome } = await bootWith({ cwd: workspace }, { now: () => NOW, queueReadDeps: undefined })
     seed(storeHome, [recordOf(sg(60), { status: 'proposed', statusAt: APPLIED_AT, proposal: proposalOf(workspace) }), recordOf(sg(61))])
     const store = new SuggestionStore({ home: storeHome })
     const route = await getText(url, `/api/queue?cwd=${encodeURIComponent(workspace)}`)
@@ -1301,5 +1365,71 @@ describe('POST /api/suggestions/:id/status: a rejection with a reason code and i
     expect(String(again.body['error'])).toContain('illegal transition rejected → rejected')
     expect(readFileSync(file).equals(before)).toBe(true)
     expect(found).toEqual([])
+  })
+
+  it('answers 409 to a second rejection of 1 record while the first one runs, and runs no second discovery', async () => {
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const found: string[] = []
+    const rejectWorkspace: RejectWorkspaceDeps = {
+      async findSessions(ids) {
+        found.push(...ids)
+        // The first discovery waits, so the first rejection is still running when the second one comes.
+        if (found.length === 1) await gate
+        return []
+      },
+      peekCwd: async () => undefined,
+      canonical: async (path) => path,
+    }
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, rejectWorkspace })
+    const file = seed(storeHome, [recordOf(sg(47))])
+    const first = postStatus(url, sg(47), { status: 'rejected', reason: 'other' })
+    try {
+      await pollUntil(async () => (found.length === 1 ? true : undefined))
+      const second = await postStatus(url, sg(47), { status: 'rejected', reason: 'not-wanted' })
+      expect(second.status).toBe(409)
+      expect(second.body).toEqual({ error: 'another rejection of this suggestion runs now' })
+      expect(found, 'the second rejection runs no discovery').toHaveLength(1)
+    } finally {
+      release()
+    }
+    expect((await first).status).toBe(200)
+    expect(storedLines(file).slice(1).map((line) => [line.id, line.status, line.reasonCode])).toEqual([[sg(47), 'rejected', 'other']])
+    // The first rejection is done, so the id is free: a third one gets the 400 of an illegal move, not 409.
+    expect((await postStatus(url, sg(47), { status: 'rejected' })).status).toBe(400)
+  })
+
+  it('scrubs a store failure on the status route and on any route that throws, so no body names the home folder', async () => {
+    const failure = `suggestion store changed while reading: ${homedir()}/.orangu/suggestions.jsonl`
+    let reads = 0
+    const failing: SuggestionStoreLike = {
+      // The first read seeds the suggestion watcher at start. Every later call fails.
+      all: async () => {
+        if (reads++ === 0) return []
+        throw new Error(failure)
+      },
+      get: async () => {
+        throw new Error(failure)
+      },
+      upsertNew: async () => {
+        throw new Error(failure)
+      },
+      transition: async () => {
+        throw new Error(failure)
+      },
+    }
+    const { url } = await bootWith({}, { now: () => NOW, store: failing, suggestionPollMs: 0 })
+    const status = await fetch(url + `/api/suggestions/${sg(46)}/status`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"status":"rejected"}' })
+    const statusBody = await status.text()
+    expect(status.status).toBe(400)
+    expect(statusBody).toContain('suggestion store changed while reading')
+    expect(statusBody).not.toContain(homedir())
+    // /api/suggestions has no catch of its own, so this is the 500 of the server.
+    const list = await getText(url, '/api/suggestions')
+    expect(list.status).toBe(500)
+    expect(list.body).toContain('suggestion store changed while reading')
+    expect(list.body).not.toContain(homedir())
   })
 })

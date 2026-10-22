@@ -64,25 +64,32 @@ const STORE_READS = {
   lessons: ['cwd', 'all', 'scope', 'rule'],
 } as const
 type StoreRead = keyof typeof STORE_READS
-const STORE_READ_OPTIONS = ['cwd', 'all', 'scope', 'rule'] as const
+const STORE_READ_OPTIONS: readonly string[] = ['cwd', 'all', 'scope', 'rule']
+/** The body of a 404 for a cwd that is not a workspace of serve. It names no path. */
+const UNKNOWN_WORKSPACE = 'unknown workspace'
+/** The body of a 409 for a second rejection of 1 record while the first one runs. */
+const REJECT_RUNNING = 'another rejection of this suggestion runs now'
 
 interface StoreReadQuery {
   target: LessonTarget
+  /** true when the query named the cwd, false when the read takes the `--cwd` of serve */
+  namedCwd: boolean
   rules?: string[]
 }
 
 /**
  * The scope and the rule filter of 1 store read, from its query, as the CLI reads parse their flags. Each option is
- * singular, as `cwd` is on `/api/repo`, and a read refuses an option that its CLI read does not take, so no option goes
- * unread. `cwd=<dir>`, `all=1` and `scope=global` name different scopes, so 2 of them together are refused. With none
- * of them, the read takes the `--cwd` of serve, as `/api/repo` does. A string is the message of a 400.
+ * singular, as `cwd` is on `/api/repo`, and a read refuses a name that it does not take, so no option goes unread.
+ * `cwd=<dir>`, `all=1` and `scope=global` name different scopes, so 2 of them together are refused. With none of them,
+ * the read takes the `--cwd` of serve, as `/api/repo` does. A string is the message of a 400. The message names no
+ * value of the request.
  */
 function storeReadQuery(read: StoreRead, query: URLSearchParams, serveCwd: string | undefined): StoreReadQuery | string {
   const takes: readonly string[] = STORE_READS[read]
-  for (const name of STORE_READ_OPTIONS) {
-    const count = query.getAll(name).length
-    if (count && !takes.includes(name)) return `${name} is not valid on /api/${read}`
-    if (count > 1) return `${name} must be singular`
+  for (const name of new Set(query.keys())) {
+    if (!STORE_READ_OPTIONS.includes(name)) return `the query has a name that /api/${read} does not take`
+    if (!takes.includes(name)) return `${name} is not valid on /api/${read}`
+    if (query.getAll(name).length > 1) return `${name} must be singular`
   }
   const cwd = query.get('cwd')
   const all = query.get('all')
@@ -100,11 +107,12 @@ function storeReadQuery(read: StoreRead, query: URLSearchParams, serveCwd: strin
     if (Buffer.byteLength(dir, 'utf8') > MAX_REPO_CWD_BYTES) return 'cwd is too long'
     target = { cwd: dir }
   }
+  const namedCwd = cwd !== null
   const rule = query.get('rule')
-  if (rule === null) return { target }
+  if (rule === null) return { target, namedCwd }
   const rules = rule.split(',').map((id) => id.trim()).filter(Boolean)
   if (!rules.length) return 'rule requires 1 or more rule ids'
-  return { target, rules }
+  return { target, namedCwd, rules }
 }
 
 /** The line read of the serve store. The store of `orangu feedback` has none, so its store reads answer 503. */
@@ -119,10 +127,25 @@ function queueReadStore(store: SuggestionStoreLike): QueueReadStore | undefined 
  * of the CLI output (`visible`, src/cli/commands/suggest.ts). So the route JSON equals the `--json` output of the CLI
  * read for the same store, sessions and clock. `GET /api/lessons` has no cap (`maxBytes: null`), because the app is no
  * model context. A read writes no record. Only the queue check may write cohort facts cache entries.
+ *
+ * A named cwd must be a workspace of serve (`knownCwd`): the `--cwd` of serve, or a workspace that the registry knows,
+ * as `/api/repo` takes it. Any other cwd gets 404 before any read, so a request cannot make serve resolve a path.
  */
-async function storeRead(ctx: ServeContext, res: ServerResponse, read: StoreRead, query: URLSearchParams): Promise<void> {
+async function storeRead(
+  ctx: ServeContext,
+  res: ServerResponse,
+  read: StoreRead,
+  query: URLSearchParams,
+  knownCwd: (requested: string) => Promise<string | undefined>,
+): Promise<void> {
   const request = storeReadQuery(read, query, ctx.opts.cwd)
   if (typeof request === 'string') return json(res, 400, { error: request })
+  let target = request.target
+  if (typeof target === 'object' && request.namedCwd) {
+    const known = await knownCwd(target.cwd)
+    if (!known) return json(res, 404, { error: UNKNOWN_WORKSPACE })
+    target = { cwd: known }
+  }
   const store = queueReadStore(ctx.store)
   if (!store) return json(res, 503, { error: 'the store reads are not available in this mode' })
   const now = ctx.now()
@@ -130,16 +153,15 @@ async function storeRead(ctx: ServeContext, res: ServerResponse, read: StoreRead
   const deps: QueueReadDeps = ctx.queueReadDeps
     ? ctx.queueReadDeps(now)
     : createQueueReadDeps({ now, cache: ctx.opts.noCache ? null : new CohortFactsCache({ version: ctx.opts.version }) })
-  const { target, rules } = request
   if (typeof target === 'object') {
     try {
       await deps.canonical(target.cwd)
     } catch {
-      return json(res, 404, { error: 'unknown workspace folder' })
+      return json(res, 404, { error: UNKNOWN_WORKSPACE })
     }
   }
   try {
-    const filter = rules ? { rules } : {}
+    const filter = request.rules ? { rules: request.rules } : {}
     let value: unknown
     if (read === 'queue') {
       if (target === 'global') return json(res, 400, { error: 'scope is not valid on /api/queue' })
@@ -249,7 +271,8 @@ class AggregateRunner {
     }
   }
 
-  private async aliasesForDiscoveredCwds(): Promise<Map<string, string | null>> {
+  /** The raw cwd of each workspace that the registry knows, by its raw, row and scrubbed forms. The store reads share it. */
+  async aliasesForDiscoveredCwds(): Promise<Map<string, string | null>> {
     const rows = this.ctx.registry.list()
     const fingerprint = this.fingerprint(rows)
     if (this.cwdCache?.fingerprint === fingerprint) return this.cwdCache.aliases
@@ -397,6 +420,18 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
   const aggs = new AggregateRunner(ctx)
   const harness = new HarnessRunner(ctx)
   const maxLive = ctx.opts.maxLive ?? DEFAULT_MAX_LIVE
+  /** The ids of the rejections that run now, so a second rejection of 1 record waits for no discovery. */
+  const rejecting = new Set<string>()
+
+  /**
+   * The raw path of a cwd that a store read names: the `--cwd` of serve, raw or scrubbed, or a workspace that the
+   * registry knows, by the alias map of `/api/repo` (handleRepo). Else undefined.
+   */
+  const knownCwd = async (requested: string): Promise<string | undefined> => {
+    const serveCwd = ctx.opts.cwd
+    if (serveCwd && (requested === serveCwd || requested === redactValue(serveCwd, { scrub: true }))) return serveCwd
+    return (await aggs.aliasesForDiscoveredCwds()).get(requested) ?? undefined
+  }
 
   const appData = async (s: string | undefined): Promise<AppData> => {
     const rows = ctx.registry.list()
@@ -474,17 +509,17 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
     {
       method: 'GET',
       path: '/api/queue',
-      handler: async (m, _req, res) => storeRead(ctx, res, 'queue', m.query),
+      handler: async (m, _req, res) => storeRead(ctx, res, 'queue', m.query, knownCwd),
     },
     {
       method: 'GET',
       path: '/api/history',
-      handler: async (m, _req, res) => storeRead(ctx, res, 'history', m.query),
+      handler: async (m, _req, res) => storeRead(ctx, res, 'history', m.query, knownCwd),
     },
     {
       method: 'GET',
       path: '/api/lessons',
-      handler: async (m, _req, res) => storeRead(ctx, res, 'lessons', m.query),
+      handler: async (m, _req, res) => storeRead(ctx, res, 'lessons', m.query, knownCwd),
     },
     {
       method: 'POST',
@@ -502,11 +537,21 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
         const reason = body.reason
         const reasonCode = REJECT_REASON_CODES.find((code) => code === reason)
         if (reason !== undefined && !reasonCode) return json(res, 400, { error: `reason must be 1 of ${REJECT_REASON_CODES.join(', ')}` })
-        const existing = await ctx.store.get(id)
-        if (!existing) return json(res, 404, { error: 'unknown suggestion' })
-        // An illegal move is refused before the workspace discovery, as `--set` refuses it (cmdSet). The store checks it again.
-        if (!(TRANSITIONS[existing.status] ?? []).includes('rejected')) return jsonError(res, 400, `illegal transition ${existing.status} → rejected for ${id}`)
+        // 1 rejection of a record at a time: a second one while the first runs gets 409 and runs no discovery. The id of
+        // the request and the canonical id of the record both hold the record, so a legacy id cannot pass beside it.
+        if (rejecting.has(id)) return json(res, 409, { error: REJECT_RUNNING })
+        rejecting.add(id)
+        const held = [id]
         try {
+          const existing = await ctx.store.get(id)
+          if (!existing) return json(res, 404, { error: 'unknown suggestion' })
+          if (existing.id !== id) {
+            if (rejecting.has(existing.id)) return json(res, 409, { error: REJECT_RUNNING })
+            rejecting.add(existing.id)
+            held.push(existing.id)
+          }
+          // An illegal move is refused before the workspace discovery, as `--set` refuses it (cmdSet). The store checks it again.
+          if (!(TRANSITIONS[existing.status] ?? []).includes('rejected')) return jsonError(res, 400, `illegal transition ${existing.status} → rejected for ${id}`)
           // A record with no proposal workspace keeps the folder of its evidence sessions, when they all agree on 1. The
           // binding reads discovery and the transcript heads, as `--set <id> rejected` does. It never reads the cohort
           // facts cache, and it never throws: a failed read binds nothing, and the rejection goes ahead.
@@ -516,7 +561,10 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
           else ctx.emit({ type: 'suggestion-updated', id: rec.id, status: rec.status })
           json(res, 200, publicSuggestion(rec))
         } catch (e) {
+          // A store read or write can name the store path, so the message is scrubbed.
           jsonError(res, 400, e)
+        } finally {
+          for (const key of held) rejecting.delete(key)
         }
       },
     },

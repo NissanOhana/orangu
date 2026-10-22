@@ -7,6 +7,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { cpus } from 'node:os'
 import { AnalysisCache } from '../cache/index.js'
+import { redactValue } from '../redact/redact.js'
 import { renderReport } from '../report/render.js'
 import { SuggestionStore } from '../suggest/store.js'
 import type { SuggestionStoreLike } from '../suggest/types.js'
@@ -292,7 +293,8 @@ export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Prom
     } catch (e) {
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'application/json' })
-        res.end(JSON.stringify({ error: String(e instanceof Error ? e.message : e) }))
+        // An error can name a path or stored text, so it is scrubbed as every other serve output.
+        res.end(JSON.stringify(redactValue({ error: String(e instanceof Error ? e.message : e) }, { scrub: true })))
       } else res.end()
     }
   }
