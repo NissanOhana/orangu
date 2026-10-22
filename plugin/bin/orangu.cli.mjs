@@ -1476,7 +1476,7 @@ var CLIENT_CSS = `/* Canonical design tokens for the report, served app, and lan
    scripts/build.mjs inlines this file. Do not hand-duplicate these values anywhere else.
    Light is the only default: dark exists solely under :root[data-theme="dark"], never from the
    system colour scheme. \`--accent\` is decorative only on light backgrounds; text uses \`--accent-ink\`. */
-:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#8a877e;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#6b6860;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
 :root[data-theme="dark"]{--bg:#151412;--bg2:#1d1c18;--surface:#201f1b;--border:#2e2c25;--border2:#403d33;--ink1:#f5f3ec;--ink2:#c9c5ba;--ink3:#8f8c81;--accent-ink:#e79f84;--accent-weak:#38281f;--good:#9cc47f;--warn:#e6c374;--bad:#f0a08b;--cmd:#26241e;--cmd-ink:#f5f3ec;--cat-read:#7fa8d8;--cat-search:#9cc0e8;--cat-edit:#e79f84;--cat-write:#f0a08b;--cat-exec:#b39bd8;--cat-agent:#6fbdb8;--cat-skill:#e6c374;--cat-web:#9cc47f;--cat-other:#a8a498}
 /* Orangu app shell: layout and components on the design tokens (tokens.css is prepended by the build).
    No colour literals here: every colour is a var() from tokens.css. */
@@ -1523,15 +1523,17 @@ details[open] > summary .chev { transform: rotate(90deg); display: inline-block;
 .picklist { position: absolute; left: -1px; right: -1px; top: calc(100% + 4px); z-index: 30; background: var(--surface); border: 1px solid var(--border2); border-radius: 8px; padding: 4px; max-height: 260px; overflow-y: auto; }
 .picklist [role='option'] { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; }
 .picklist [role='option'] .proj { color: var(--ink3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.picklist [role='option'][aria-selected='true'] { background: var(--accent-weak); color: var(--accent-ink); }
+.picklist [role='option'][aria-selected='true'] { background: var(--accent-weak); color: var(--ink1); }
+.picklist [role='option'][aria-selected='true'] .proj { color: var(--ink1); }
 .picklist [role='option']:hover, .picklist [role='option']:focus-visible { background: var(--bg2); }
 .navwrap { padding: 0 12px 8px; overflow-y: auto; flex: 1; }
 .navgroup-label { font-size: 10.5px; color: var(--ink3); text-transform: uppercase; letter-spacing: 0.06em; padding: 12px 8px 4px; }
 .navgroup-label:first-child { padding-top: 6px; }
 nav a.navitem { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 8px; font-size: 13.5px; margin-bottom: 2px; color: var(--ink2); }
 nav a.navitem:hover { background: color-mix(in srgb, var(--ink1) 5%, transparent); text-decoration: none; }
-nav a.navitem[aria-current="page"] { background: var(--accent-weak); color: var(--accent-ink); font-weight: 700; }
+nav a.navitem[aria-current="page"] { background: var(--accent-weak); color: var(--ink1); font-weight: 700; }
 nav a.navitem .hint { margin-left: auto; font-size: 11px; color: var(--ink3); font-weight: 400; }
+nav a.navitem[aria-current="page"] .hint { color: var(--ink1); }
 .ldot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
 .ldot.hollow { background: transparent; border: 1.5px solid var(--accent); }
 .ldot.done { background: var(--good); }
@@ -15313,7 +15315,7 @@ var SLIDES_HTML = `<!doctype html>
    scripts/build.mjs inlines this file. Do not hand-duplicate these values anywhere else.
    Light is the only default: dark exists solely under :root[data-theme="dark"], never from the
    system colour scheme. \`--accent\` is decorative only on light backgrounds; text uses \`--accent-ink\`. */
-:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#8a877e;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#6b6860;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
 :root[data-theme="dark"]{--bg:#151412;--bg2:#1d1c18;--surface:#201f1b;--border:#2e2c25;--border2:#403d33;--ink1:#f5f3ec;--ink2:#c9c5ba;--ink3:#8f8c81;--accent-ink:#e79f84;--accent-weak:#38281f;--good:#9cc47f;--warn:#e6c374;--bad:#f0a08b;--cmd:#26241e;--cmd-ink:#f5f3ec;--cat-read:#7fa8d8;--cat-search:#9cc0e8;--cat-edit:#e79f84;--cat-write:#f0a08b;--cat-exec:#b39bd8;--cat-agent:#6fbdb8;--cat-skill:#e6c374;--cat-web:#9cc47f;--cat-other:#a8a498}
 *,*:before,*:after{box-sizing:border-box}html{scroll-snap-type:y mandatory;background:var(--bg2);-webkit-text-size-adjust:100%}@media(prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
 body{margin:0;background:var(--bg2);color:var(--ink1);font:400 16px/1.5 var(--sans);-webkit-font-smoothing:antialiased}h1,h2,h3,p,ol,ul,figure{margin:0}ol,ul{padding:0;list-style:none}code{font-family:var(--mono)}
@@ -15739,7 +15741,7 @@ var REPORT_HTML = `<!doctype html>
    scripts/build.mjs inlines this file. Do not hand-duplicate these values anywhere else.
    Light is the only default: dark exists solely under :root[data-theme="dark"], never from the
    system colour scheme. \`--accent\` is decorative only on light backgrounds; text uses \`--accent-ink\`. */
-:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#8a877e;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
+:root{--bg:#ffffff;--bg2:#f6f5f0;--surface:#ffffff;--border:#e8e6df;--border2:#d2cfc5;--ink1:#1a1a18;--ink2:#52504a;--ink3:#6b6860;--accent:#d97757;--accent-ink:#b4522f;--accent-weak:#f7e9e2;--good:#3d6330;--warn:#8a6410;--bad:#a03016;--cmd:#1a1a18;--cmd-ink:#faf9f5;--cat-read:#6a9bcc;--cat-search:#4a72a8;--cat-edit:#d97757;--cat-write:#b4522f;--cat-exec:#8a6bb0;--cat-agent:#3f8a86;--cat-skill:#b5852a;--cat-web:#4f7a3f;--cat-other:#949086;--title:'Bricolage Grotesque','Helvetica Neue',Helvetica,Arial,sans-serif;--sans:'Helvetica Neue',Helvetica,Arial,sans-serif;--mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace}
 :root[data-theme="dark"]{--bg:#151412;--bg2:#1d1c18;--surface:#201f1b;--border:#2e2c25;--border2:#403d33;--ink1:#f5f3ec;--ink2:#c9c5ba;--ink3:#8f8c81;--accent-ink:#e79f84;--accent-weak:#38281f;--good:#9cc47f;--warn:#e6c374;--bad:#f0a08b;--cmd:#26241e;--cmd-ink:#f5f3ec;--cat-read:#7fa8d8;--cat-search:#9cc0e8;--cat-edit:#e79f84;--cat-write:#f0a08b;--cat-exec:#b39bd8;--cat-agent:#6fbdb8;--cat-skill:#e6c374;--cat-web:#9cc47f;--cat-other:#a8a498}
 *,*:before,*:after{box-sizing:border-box}html{background:var(--bg);-webkit-text-size-adjust:100%}body{margin:0;background:var(--bg);color:var(--ink1);font:400 16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
 h1,h2,h3,p,ol,ul,dl,dd{margin:0}ol,ul{padding:0;list-style:none}code{font:400 13.5px/1.5 var(--mono)}a{color:var(--accent-ink)}:focus-visible{outline:2px solid var(--accent-ink);outline-offset:3px}html:not([data-scope=session])
