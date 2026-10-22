@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash5 } from "node:crypto";
-import { basename as basename14, join as join12, resolve as resolve14 } from "node:path";
+import { basename as basename14, join as join12, resolve as resolve13 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -2978,7 +2978,7 @@ async function withStableSessionRead(path, options, read) {
       if (!isTransientInputChange(error)) throw error;
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
-      await new Promise((resolve15) => setTimeout(resolve15, pause));
+      await new Promise((resolve14) => setTimeout(resolve14, pause));
     }
   }
 }
@@ -9427,7 +9427,7 @@ function pickList(caps, rows2, counts, now) {
 import { randomBytes as randomBytes2 } from "node:crypto";
 import { constants as constants9 } from "node:fs";
 import { lstat as lstat7, mkdir as mkdir2, open as open9, realpath as realpath6, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname5, isAbsolute as isAbsolute5, join as join6, resolve as resolve6 } from "node:path";
+import { dirname as dirname5, join as join6, posix, win32 } from "node:path";
 
 // src/suggest/change-classes.ts
 var CHANGE_CLASS_DEFINITIONS = [
@@ -9444,6 +9444,115 @@ var CHANGE_CLASS_DEFINITIONS = [
 var CHANGE_CLASSES = new Set(CHANGE_CLASS_DEFINITIONS.map((definition) => definition.id));
 function isChangeClass(value) {
   return CHANGE_CLASSES.has(value);
+}
+
+// src/suggest/cohort-stats.ts
+var COHORT_ALPHA = 0.05;
+var COHORT_MIN = 3;
+var COHORT_MAX = 10;
+var round6 = (value) => Number(value.toFixed(6));
+function assertFinite(values) {
+  if (!values.every((value) => Number.isFinite(value))) throw new RangeError("cohort values must be finite numbers");
+}
+function rankTest(before, after) {
+  assertFinite(before);
+  assertFinite(after);
+  if (!before.length || !after.length) return { pLower: 1, pHigher: 1 };
+  const pooled = [...before, ...after];
+  const order = pooled.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value || a.index - b.index);
+  const doubled = new Array(pooled.length).fill(0);
+  for (let start = 0; start < order.length; ) {
+    let end = start;
+    while (end + 1 < order.length && order[end + 1].value === order[start].value) end++;
+    for (let position = start; position <= end; position++) doubled[order[position].index] = start + end + 2;
+    start = end + 1;
+  }
+  const k = after.length;
+  const maxSum = doubled.reduce((sum2, rank) => sum2 + rank, 0);
+  const observed = doubled.slice(before.length).reduce((sum2, rank) => sum2 + rank, 0);
+  const ways = Array.from({ length: k + 1 }, () => new Array(maxSum + 1).fill(0));
+  ways[0][0] = 1;
+  for (const rank of doubled) {
+    for (let j = k; j >= 1; j--) {
+      const row2 = ways[j];
+      const previous = ways[j - 1];
+      for (let sum2 = maxSum; sum2 >= rank; sum2--) row2[sum2] += previous[sum2 - rank];
+    }
+  }
+  const distribution = ways[k];
+  let total = 0;
+  let lower = 0;
+  let higher = 0;
+  for (let sum2 = 0; sum2 <= maxSum; sum2++) {
+    const count4 = distribution[sum2];
+    total += count4;
+    if (sum2 <= observed) lower += count4;
+    if (sum2 >= observed) higher += count4;
+  }
+  return { pLower: round6(lower / total), pHigher: round6(higher / total) };
+}
+function mean6(values) {
+  if (!values.length) return 0;
+  return round6(values.reduce((sum2, value) => sum2 + value, 0) / values.length);
+}
+function median2(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : round6((sorted[middle - 1] + sorted[middle]) / 2);
+}
+function twoSided(pLower, pHigher) {
+  return round6(Math.min(1, 2 * Math.min(pLower, pHigher)));
+}
+function reportedP(comparison, pLower, pHigher) {
+  if (comparison === "decreased" || comparison === "not-decreased") return pLower;
+  if (comparison === "increased" || comparison === "not-increased") return pHigher;
+  return twoSided(pLower, pHigher);
+}
+function checkVerdict(comparison, before, after, pLower, pHigher) {
+  if (comparison === "decreased") {
+    if (pHigher <= COHORT_ALPHA) return "regressed";
+    return after < before && pLower <= COHORT_ALPHA ? "improved" : "within-noise";
+  }
+  if (comparison === "increased") {
+    if (pLower <= COHORT_ALPHA) return "regressed";
+    return after > before && pHigher <= COHORT_ALPHA ? "improved" : "within-noise";
+  }
+  if (comparison === "not-increased") return pHigher <= COHORT_ALPHA ? "regressed" : "held";
+  if (comparison === "not-decreased") return pLower <= COHORT_ALPHA ? "regressed" : "held";
+  return twoSided(pLower, pHigher) <= COHORT_ALPHA ? "changed" : "held";
+}
+function evaluateCheck(intent, before, after) {
+  const { pLower, pHigher } = rankTest(before, after);
+  const beforeMean = mean6(before);
+  const afterMean = mean6(after);
+  const beforeMedian = median2(before);
+  const afterMedian = median2(after);
+  const verdict = checkVerdict(intent.comparison, beforeMean, afterMean, pLower, pHigher);
+  const numbers = { before: beforeMean, after: afterMean, beforeMedian, afterMedian, pLower, pHigher };
+  return {
+    metric: intent.metric,
+    comparison: intent.comparison,
+    // Same rule as verificationCheckName; spelled here so the policy can import this module without a cycle.
+    name: `${intent.metric} ${intent.comparison}`,
+    ...numbers,
+    verdict,
+    evidence: checkEvidence(intent.metric, intent.comparison, numbers, verdict)
+  };
+}
+function checkEvidence(metric, comparison, n2, verdict) {
+  const p = reportedP(comparison, n2.pLower, n2.pHigher);
+  return `${metric}: ${n2.before} \u2192 ${n2.after} (median ${n2.beforeMedian} \u2192 ${n2.afterMedian}; exact rank test p=${p}; ${verdict})`;
+}
+function isDirectional(comparison) {
+  return comparison === "decreased" || comparison === "increased";
+}
+function overallVerdict(checks2, nBefore, nAfter) {
+  if (nBefore < COHORT_MIN || nAfter < COHORT_MIN) return "not-enough-sessions";
+  if (checks2.some((check) => check.verdict === "regressed" || check.verdict === "changed")) return "regressed";
+  const directional = checks2.filter((check) => isDirectional(check.comparison));
+  if (!directional.length) return "no-directional-check";
+  return directional.every((check) => check.verdict === "improved") ? "verified" : "within-noise";
 }
 
 // src/suggest/reason-codes.ts
@@ -9959,115 +10068,6 @@ var COHORT_SKIP_REASONS = [
   "unreadable"
 ];
 
-// src/suggest/cohort-stats.ts
-var COHORT_ALPHA = 0.05;
-var COHORT_MIN = 3;
-var COHORT_MAX = 10;
-var round6 = (value) => Number(value.toFixed(6));
-function assertFinite(values) {
-  if (!values.every((value) => Number.isFinite(value))) throw new RangeError("cohort values must be finite numbers");
-}
-function rankTest(before, after) {
-  assertFinite(before);
-  assertFinite(after);
-  if (!before.length || !after.length) return { pLower: 1, pHigher: 1 };
-  const pooled = [...before, ...after];
-  const order = pooled.map((value, index) => ({ value, index })).sort((a, b) => a.value - b.value || a.index - b.index);
-  const doubled = new Array(pooled.length).fill(0);
-  for (let start = 0; start < order.length; ) {
-    let end = start;
-    while (end + 1 < order.length && order[end + 1].value === order[start].value) end++;
-    for (let position = start; position <= end; position++) doubled[order[position].index] = start + end + 2;
-    start = end + 1;
-  }
-  const k = after.length;
-  const maxSum = doubled.reduce((sum2, rank) => sum2 + rank, 0);
-  const observed = doubled.slice(before.length).reduce((sum2, rank) => sum2 + rank, 0);
-  const ways = Array.from({ length: k + 1 }, () => new Array(maxSum + 1).fill(0));
-  ways[0][0] = 1;
-  for (const rank of doubled) {
-    for (let j = k; j >= 1; j--) {
-      const row2 = ways[j];
-      const previous = ways[j - 1];
-      for (let sum2 = maxSum; sum2 >= rank; sum2--) row2[sum2] += previous[sum2 - rank];
-    }
-  }
-  const distribution = ways[k];
-  let total = 0;
-  let lower = 0;
-  let higher = 0;
-  for (let sum2 = 0; sum2 <= maxSum; sum2++) {
-    const count4 = distribution[sum2];
-    total += count4;
-    if (sum2 <= observed) lower += count4;
-    if (sum2 >= observed) higher += count4;
-  }
-  return { pLower: round6(lower / total), pHigher: round6(higher / total) };
-}
-function mean6(values) {
-  if (!values.length) return 0;
-  return round6(values.reduce((sum2, value) => sum2 + value, 0) / values.length);
-}
-function median2(values) {
-  if (!values.length) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : round6((sorted[middle - 1] + sorted[middle]) / 2);
-}
-function twoSided(pLower, pHigher) {
-  return round6(Math.min(1, 2 * Math.min(pLower, pHigher)));
-}
-function reportedP(comparison, pLower, pHigher) {
-  if (comparison === "decreased" || comparison === "not-decreased") return pLower;
-  if (comparison === "increased" || comparison === "not-increased") return pHigher;
-  return twoSided(pLower, pHigher);
-}
-function checkVerdict(comparison, before, after, pLower, pHigher) {
-  if (comparison === "decreased") {
-    if (pHigher <= COHORT_ALPHA) return "regressed";
-    return after < before && pLower <= COHORT_ALPHA ? "improved" : "within-noise";
-  }
-  if (comparison === "increased") {
-    if (pLower <= COHORT_ALPHA) return "regressed";
-    return after > before && pHigher <= COHORT_ALPHA ? "improved" : "within-noise";
-  }
-  if (comparison === "not-increased") return pHigher <= COHORT_ALPHA ? "regressed" : "held";
-  if (comparison === "not-decreased") return pLower <= COHORT_ALPHA ? "regressed" : "held";
-  return twoSided(pLower, pHigher) <= COHORT_ALPHA ? "changed" : "held";
-}
-function evaluateCheck(intent, before, after) {
-  const { pLower, pHigher } = rankTest(before, after);
-  const beforeMean = mean6(before);
-  const afterMean = mean6(after);
-  const beforeMedian = median2(before);
-  const afterMedian = median2(after);
-  const verdict = checkVerdict(intent.comparison, beforeMean, afterMean, pLower, pHigher);
-  const numbers = { before: beforeMean, after: afterMean, beforeMedian, afterMedian, pLower, pHigher };
-  return {
-    metric: intent.metric,
-    comparison: intent.comparison,
-    // Same rule as verificationCheckName; spelled here so the policy can import this module without a cycle.
-    name: `${intent.metric} ${intent.comparison}`,
-    ...numbers,
-    verdict,
-    evidence: checkEvidence(intent.metric, intent.comparison, numbers, verdict)
-  };
-}
-function checkEvidence(metric, comparison, n2, verdict) {
-  const p = reportedP(comparison, n2.pLower, n2.pHigher);
-  return `${metric}: ${n2.before} \u2192 ${n2.after} (median ${n2.beforeMedian} \u2192 ${n2.afterMedian}; exact rank test p=${p}; ${verdict})`;
-}
-function isDirectional(comparison) {
-  return comparison === "decreased" || comparison === "increased";
-}
-function overallVerdict(checks2, nBefore, nAfter) {
-  if (nBefore < COHORT_MIN || nAfter < COHORT_MIN) return "not-enough-sessions";
-  if (checks2.some((check) => check.verdict === "regressed" || check.verdict === "changed")) return "regressed";
-  const directional = checks2.filter((check) => isDirectional(check.comparison));
-  if (!directional.length) return "no-directional-check";
-  return directional.every((check) => check.verdict === "improved") ? "verified" : "within-noise";
-}
-
 // src/suggest/verification-policy.ts
 function verificationIntentKey(intent) {
   return `${intent.metric}:${intent.comparison}`;
@@ -10225,6 +10225,23 @@ function frozenBaselineViolation(value, appliedAt) {
   }
   return void 0;
 }
+function frozenBindingViolation(receipt, frozenBaseline, appliedAt, minSessions) {
+  if (frozenBaselineViolation(frozenBaseline, appliedAt) !== void 0) return "the stored frozenBaseline is not valid, so the store cannot grade a receipt against it";
+  const frozen = frozenBaseline;
+  if (frozen.sessions.length < minSessions) return `Orangu cannot verify a record with a frozen baseline below ${minSessions} sessions`;
+  if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
+    return "baselineSessionIds must equal the frozen baseline session ids";
+  }
+  for (let index = 0; index < receipt.checks.length; index++) {
+    const check = receipt.checks[index];
+    const values = frozen.sessions.map((session) => session.metrics[check.metric]);
+    const mean = mean6(values);
+    if (check.before !== mean) return `checks[${index}] before must be the mean of the frozen baseline, ${mean}`;
+    const middle = median2(values);
+    if (check.beforeMedian !== middle) return `checks[${index}] beforeMedian must be the median of the frozen baseline, ${middle}`;
+  }
+  return void 0;
+}
 function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBaseline) {
   if (!plainObject(value) || !hasExactKeys(value, OUTCOME_RECEIPT_KEYS)) return "outcomeReceipt must have exactly the keys of an outcome receipt";
   const receipt = value;
@@ -10238,14 +10255,6 @@ function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBasel
   const baseline = new Set(receipt.baselineSessionIds);
   if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return "baseline and later cohorts must not share a session";
   if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return "confoundedBy must be sorted unique suggestion ids";
-  let frozen;
-  if (frozenBaseline !== void 0) {
-    if (frozenBaselineViolation(frozenBaseline, appliedAt) !== void 0) return "the stored frozenBaseline is not valid, so the store cannot grade an outcome against it";
-    frozen = frozenBaseline;
-    if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
-      return "baselineSessionIds must equal the frozen baseline session ids";
-    }
-  }
   const checks2 = receipt.checks;
   if (!Array.isArray(checks2) || checks2.length !== reviewed.length) return "checks must match the reviewed verificationChecks";
   const nBefore = receipt.baselineSessionIds.length;
@@ -10269,6 +10278,11 @@ function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBasel
     const verdict = checkVerdict(intent.comparison, before, after, pLower, pHigher);
     if (check.verdict !== verdict) return `checks[${index}] verdict must be the computed verdict ${verdict}`;
   }
+  const frozen = frozenBaseline;
+  if (frozenBaseline !== void 0) {
+    const violation = frozenBindingViolation({ baselineSessionIds: receipt.baselineSessionIds, checks: checks2 }, frozenBaseline, appliedAt, 0);
+    if (violation) return violation;
+  }
   const overall = overallVerdict(checks2, nBefore, nAfter);
   if (receipt.verdict !== overall) return `the overall verdict must be the computed verdict ${overall}`;
   if (status === "regressed" && receipt.verdict !== "regressed") return `a regressed record needs the regressed verdict, not ${receipt.verdict}`;
@@ -10277,6 +10291,7 @@ function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBasel
   if (!receipt.laterComplete && !(shortFrozen && receipt.verdict === "not-enough-sessions")) {
     return `laterComplete must be true. Only a frozen baseline below ${COHORT_MIN} sessions with the verdict not-enough-sessions closes before the later cohort is complete`;
   }
+  if (frozen === void 0 && nBefore < COHORT_MIN) return `a record with no frozen baseline needs ${COHORT_MIN} or more baseline sessions to close`;
   if (receipt.checkpoint === "first" && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`;
   return void 0;
 }
@@ -10293,6 +10308,7 @@ function isTrustedCohortVerification(record3) {
   const receipt = record3.verificationReceipt;
   if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || record3.application?.v !== 1 || receipt?.v !== 2) return false;
   if (cohortReceiptViolation(receipt, proposal.verificationChecks, record3.appliedAt) !== void 0) return false;
+  if (record3.frozenBaseline !== void 0 && frozenBindingViolation(receipt, record3.frozenBaseline, record3.appliedAt, COHORT_MIN) !== void 0) return false;
   return effectMatchesChecks(record3, receipt.checks, receipt.measuredSessionIds);
 }
 function isTrustedComputedVerification(record3) {
@@ -10656,9 +10672,12 @@ var ALLOWED_PATCH_FIELDS = {
   kept: []
 };
 var MAX_WORKSPACE_CWD_CHARS = 4096;
-var CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f]/;
-function isCanonicalWorkspaceCwd(value) {
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_WORKSPACE_CWD_CHARS && !CONTROL_CHARACTER_RE.test(value) && isAbsolute5(value) && resolve6(value) === value;
+var HIDDEN_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u;
+var DOUBLE_SEPARATOR_PREFIX_RE = /^[\\/]{2}/;
+function isCanonicalWorkspaceCwd(value, platform2 = process.platform) {
+  const paths = platform2 === "win32" ? win32 : posix;
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_WORKSPACE_CWD_CHARS && !HIDDEN_CHARACTER_RE.test(value) && !DOUBLE_SEPARATOR_PREFIX_RE.test(value) && // On Windows, a colon after the drive letter names an alternate data stream.
+  (platform2 !== "win32" || value.indexOf(":", 2) === -1) && paths.isAbsolute(value) && paths.resolve(value) === value;
 }
 function recordMatchesFinding(record3, finding, source) {
   return record3.source === source && record3.scope === finding.scope && record3.ruleId === finding.ruleId && (record3.insightId ?? "") === (finding.insightId ?? "") && (record3.cohortFingerprint ?? record3.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record3.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));
@@ -10813,6 +10832,10 @@ function validateTransitionPatch(current, to, rawPatch) {
     }
     const violation = cohortReceiptViolation(receipt, current.proposal.verificationChecks, applicationTime(current));
     if (violation) throw lifecycleError(to, `invalid cohort receipt: ${violation}`);
+    if (current.frozenBaseline !== void 0) {
+      const frozen = frozenBindingViolation(receipt, current.frozenBaseline, applicationTime(current), COHORT_MIN);
+      if (frozen) throw lifecycleError(to, `invalid cohort receipt: ${frozen}`);
+    }
     assertVerificationEffect(patch.effect, receipt, to);
   }
   return patch;
@@ -12770,9 +12793,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve15, reject) => {
+  await new Promise((resolve14, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve15);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve14);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -12789,7 +12812,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve15) => server.close(() => resolve15()));
+      await new Promise((resolve14) => server.close(() => resolve14()));
     }
   };
 }
@@ -13452,7 +13475,7 @@ function slimAnalysis(a) {
 
 // src/cli/commands/harness.ts
 import { homedir as homedir4 } from "node:os";
-import { basename as basename8, resolve as resolve7 } from "node:path";
+import { basename as basename8, resolve as resolve6 } from "node:path";
 var VERSION = true ? "0.11.0" : "0.0.0-dev";
 var out = MACHINE_CAPS;
 var err = MACHINE_CAPS;
@@ -13470,7 +13493,7 @@ async function runHarness(flags) {
   detectStreams(flags);
   const isGlobal = flagBool(flags, "global");
   const configArg = flagStr(flags, "root", "r");
-  const cwd = flags["cwd"] ? resolve7(String(flags["cwd"])) : process.cwd();
+  const cwd = flags["cwd"] ? resolve6(String(flags["cwd"])) : process.cwd();
   let refs;
   let roots;
   let scopeLabel;
@@ -13531,8 +13554,8 @@ async function cmdHarness(_positionals, flags) {
   const report2 = await runHarness(flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve7(outFile), JSON.stringify(report2, null, 2));
-    process.stderr.write(paint(err, "good", glyphs(err).ok) + ` harness written to ${resolve7(outFile)}
+    await writePrivateOutput(resolve6(outFile), JSON.stringify(report2, null, 2));
+    process.stderr.write(paint(err, "good", glyphs(err).ok) + ` harness written to ${resolve6(outFile)}
 `);
     if (!flagBool(flags, "json")) return;
   }
@@ -13907,7 +13930,7 @@ function printEstimate(est, label) {
 }
 
 // src/cli/commands/evidence.ts
-import { extname, resolve as resolve8 } from "node:path";
+import { extname, resolve as resolve7 } from "node:path";
 function aggregateScope(flags) {
   const raw = flags["scope"];
   if (raw === void 0) return void 0;
@@ -13946,7 +13969,7 @@ async function resolveEvidenceSession(selector, flags) {
   throw new Error(`No session matches "${selector}". Try: orangu list`);
 }
 async function bundleFromJsonFile(path, options) {
-  const absolute = resolve8(path);
+  const absolute = resolve7(path);
   const text3 = await readStableTextFile(absolute, MAX_EVIDENCE_ARTIFACT_BYTES, "evidence JSON");
   return parseEvidenceArtifact(text3, options);
 }
@@ -13978,7 +14001,7 @@ import { realpath as realpath10 } from "node:fs/promises";
 // src/suggest/artifacts.ts
 import { constants as constants10 } from "node:fs";
 import { chmod, lstat as lstat8, open as open10, realpath as realpath7 } from "node:fs/promises";
-import { basename as basename9, isAbsolute as isAbsolute6, relative as relative3, resolve as resolve9 } from "node:path";
+import { basename as basename9, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
 var MAX_FILES = 64;
@@ -14034,7 +14057,7 @@ function checks(value, parse) {
 }
 function inside(root, candidate) {
   const rel = relative3(root, candidate);
-  return rel === "" || !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && rel !== ".." && !isAbsolute6(rel);
+  return rel === "" || !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && rel !== ".." && !isAbsolute5(rel);
 }
 function artifactSnapshot(stat8) {
   return {
@@ -14051,8 +14074,8 @@ function sameArtifactSnapshot(a, b) {
   return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 }
 async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
-  const root = resolve9(proposalsDir);
-  const candidate = resolve9(path);
+  const root = resolve8(proposalsDir);
+  const candidate = resolve8(path);
   if (!inside(root, candidate) || basename9(candidate) !== expectedName) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
@@ -14466,11 +14489,11 @@ function verificationPatch(effect) {
 
 // src/suggest/cohort-deps.ts
 import { realpath as realpath9 } from "node:fs/promises";
-import { isAbsolute as isAbsolute8 } from "node:path";
+import { isAbsolute as isAbsolute7 } from "node:path";
 
 // src/adapters/claude-code/discovered-analysis.ts
 import { realpath as realpath8 } from "node:fs/promises";
-import { isAbsolute as isAbsolute7, resolve as resolve10 } from "node:path";
+import { isAbsolute as isAbsolute6, resolve as resolve9 } from "node:path";
 var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
 var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
 async function discoveredInventory() {
@@ -14484,7 +14507,7 @@ async function discoveredInventory() {
       const canonical = await realpath8(ref2.path);
       const prior = byCanonicalPath.get(canonical);
       if (prior === void 0) byCanonicalPath.set(canonical, ref2);
-      else if (prior !== null && resolve10(prior.path) !== resolve10(ref2.path)) byCanonicalPath.set(canonical, null);
+      else if (prior !== null && resolve9(prior.path) !== resolve9(ref2.path)) byCanonicalPath.set(canonical, null);
     } catch {
     }
   }
@@ -14499,7 +14522,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
     let canonical;
     try {
-      canonical = await realpath8(isAbsolute7(value) ? value : resolve10(process.cwd(), value));
+      canonical = await realpath8(isAbsolute6(value) ? value : resolve9(process.cwd(), value));
     } catch {
       return void 0;
     }
@@ -14508,7 +14531,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else {
     return void 0;
   }
-  const unique = new Map(matches.map((ref2) => [resolve10(ref2.path), ref2]));
+  const unique = new Map(matches.map((ref2) => [resolve9(ref2.path), ref2]));
   return unique.size === 1 ? [...unique.values()][0] : void 0;
 }
 var OVER_BUDGET_RE = /exceeds (?:\d+ bytes|the remaining \d+-byte read budget)/;
@@ -14575,7 +14598,7 @@ function createCohortDeps(options = {}) {
       const { analysis, session, bytesRead } = loaded;
       const { cwd, startedAt, endedAt, live } = analysis.session;
       if (live !== false) return { skip: "still-settling", bytesRead };
-      if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute8(cwd)) return { skip: "unreadable", bytesRead };
+      if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute7(cwd)) return { skip: "unreadable", bytesRead };
       let canonicalCwd = cwd;
       try {
         canonicalCwd = await realpath9(cwd);
@@ -15003,12 +15026,12 @@ async function cmdFeedback(positionals, flags) {
   loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
 `);
   if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve15) => {
+  await new Promise((resolve14) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve15);
+      void server.close().finally(resolve14);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
@@ -15019,7 +15042,7 @@ async function cmdFeedback(positionals, flags) {
 // src/cli/commands/ste.ts
 import { createReadStream as createReadStream2 } from "node:fs";
 import { stat as stat7 } from "node:fs/promises";
-import { resolve as resolve11 } from "node:path";
+import { resolve as resolve10 } from "node:path";
 
 // src/ste/words.ts
 var STE_WORDS = {
@@ -15444,7 +15467,7 @@ async function readBounded(chunks, name) {
   return Buffer.concat(parts2).toString("utf8");
 }
 async function readNamedFile(name) {
-  const path = resolve11(name);
+  const path = resolve10(name);
   try {
     const info = await stat7(path);
     if (info.isDirectory()) throw cannotRead(name, "it is a folder, not a file");
@@ -15481,7 +15504,7 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
 }
 
 // src/cli/commands/show-me.ts
-import { basename as basename11, resolve as resolve12 } from "node:path";
+import { basename as basename11, resolve as resolve11 } from "node:path";
 
 // src/show-me/prepare.ts
 import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
@@ -16936,7 +16959,7 @@ async function sessionData2(selector, flags, err3) {
 }
 async function aggregateData2(scope, flags, err3) {
   const rootArg = flagStr(flags, "root", "r");
-  const cwd = resolve12(flagStr(flags, "cwd") ?? process.cwd());
+  const cwd = resolve11(flagStr(flags, "cwd") ?? process.cwd());
   const refs = scope === "global" ? await listSessions({ roots: await claudeRoots(rootArg) }) : await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
   if (!refs.length) throw new Error(scope === "global" ? "orangu found no sessions on this machine." : "orangu found no sessions for this repository.");
   const limitRaw = flagStr(flags, "limit");
@@ -17139,7 +17162,7 @@ function select(o) {
   const draw = () => {
     o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
   };
-  return new Promise((resolve15) => {
+  return new Promise((resolve14) => {
     let done = false;
     const restore = () => {
       if (done) return;
@@ -17157,7 +17180,7 @@ function select(o) {
     const finish = (r) => {
       restore();
       hook.dispose();
-      resolve15(r);
+      resolve14(r);
     };
     const move = (to) => {
       cursor = Math.max(0, Math.min(to, count4 - 1));
@@ -17277,7 +17300,7 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename13, resolve as resolve13 } from "node:path";
+import { basename as basename13, resolve as resolve12 } from "node:path";
 var INDENT3 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
@@ -17287,7 +17310,7 @@ function dashboardPrecondition(stdin, stdout, env, flags) {
   return interactivePrecondition(stdin, stdout, env, flags);
 }
 async function gatherDashboardData(flags, deps = {}) {
-  const cwd = resolve13((deps.cwd ?? (() => process.cwd()))());
+  const cwd = resolve12((deps.cwd ?? (() => process.cwd()))());
   const configArg = flagStr(flags, "root", "config", "r");
   const pickFlags = { ...flags, global: true };
   const [picked, repoRefs, roots] = await Promise.all([
@@ -17512,7 +17535,7 @@ async function analyzeWithProgress(ref2, flags) {
 }
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
-  if (out3) return resolve14(out3);
+  if (out3) return resolve13(out3);
   return join12(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
@@ -17635,7 +17658,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${plural(roots.length, "root")})`;
   } else {
-    const cwd = selOrPath ? resolve14(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
     scopeLabel = `repo ${basename14(cwd)}`;
@@ -17683,8 +17706,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve14(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve14(outFile), { raw: true }) + "\n");
+    await writePrivateOutput(resolve13(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    if (!quiet) process.stderr.write(row(err2, "written", resolve13(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -17703,7 +17726,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash5("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve14(named) : join12(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve13(named) : join12(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
