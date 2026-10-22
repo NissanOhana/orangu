@@ -1122,15 +1122,21 @@ describe('the app store reads: the JSON of the CLI read for the same store, sess
     for (const path of everyRead) expect((await getText(url, `${path}?${cwd}`)).status, path).toBe(200)
   })
 
-  it('with no --cwd of serve, a read with no scope option gets 400 before any read', async () => {
-    const calls: number[] = []
-    const { url } = await bootWith({}, { now: () => NOW, queueReadDeps: fakeReads([], calls) })
-    for (const path of ['/api/queue', '/api/history', '/api/lessons']) {
-      const response = await getText(url, path)
-      expect(response.status, path).toBe(400)
-      expect(response.body, path).toBe('{"error":"cwd or all=1 is required"}')
+  it('with no --cwd of serve, a read with no scope option reads every workspace, as all=1 does, and its scope says so', async () => {
+    const reads = fakeReads(laterOf([1, 2, 3]))
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    seed(storeHome, lessonFixtureRecords())
+    for (const [path, flags] of [
+      ['/api/queue', { queue: true }],
+      ['/api/history', { history: true }],
+      ['/api/lessons', { lessons: true }],
+    ] as const) {
+      const bare = await getText(url, path)
+      expect(bare.status, path).toBe(200)
+      expect(bare.body, path).toBe((await getText(url, `${path}?all=1`)).body)
+      if (path === '/api/queue') expect(bare.body + '\n', path).toBe(await cliRead(storeHome, { ...flags, all: true }, reads(NOW)))
+      if (path !== '/api/history') expect((JSON.parse(bare.body) as { scope: string }).scope, path).toBe('all')
     }
-    expect(calls).toEqual([])
   })
 
   it('answers 404 with a fixed body, before any read, for a cwd that is neither the --cwd of serve nor a workspace of the registry', async () => {
@@ -1423,7 +1429,8 @@ describe('POST /api/suggestions/:id/status: a rejection with a reason code and i
     const { url } = await bootWith({}, { now: () => NOW, store: failing, suggestionPollMs: 0 })
     const status = await fetch(url + `/api/suggestions/${sg(46)}/status`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"status":"rejected"}' })
     const statusBody = await status.text()
-    expect(status.status).toBe(400)
+    // A failed store read is no client error.
+    expect(status.status).toBe(500)
     expect(statusBody).toContain('suggestion store changed while reading')
     expect(statusBody).not.toContain(homedir())
     // /api/suggestions has no catch of its own, so this is the 500 of the server.
@@ -1431,5 +1438,26 @@ describe('POST /api/suggestions/:id/status: a rejection with a reason code and i
     expect(list.status).toBe(500)
     expect(list.body).toContain('suggestion store changed while reading')
     expect(list.body).not.toContain(homedir())
+  })
+
+  it('gives 500 with a scrubbed body when the store write of a rejection fails', async () => {
+    const failure = `suggestion store lock timed out: ${homedir()}/.orangu/suggestions.jsonl.lock`
+    const record = recordOf(sg(48))
+    const failing: SuggestionStoreLike = {
+      all: async () => [record],
+      get: async (id) => (id === record.id ? record : undefined),
+      upsertNew: async () => {
+        throw new Error(failure)
+      },
+      transition: async () => {
+        throw new Error(failure)
+      },
+    }
+    const { url } = await bootWith({}, { now: () => NOW, store: failing, suggestionPollMs: 0 })
+    const response = await fetch(url + `/api/suggestions/${sg(48)}/status`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"status":"rejected","reason":"other"}' })
+    const body = await response.text()
+    expect(response.status).toBe(500)
+    expect(body).toContain('suggestion store lock timed out')
+    expect(body).not.toContain(homedir())
   })
 })

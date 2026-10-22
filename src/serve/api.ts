@@ -81,7 +81,8 @@ interface StoreReadQuery {
  * The scope and the rule filter of 1 store read, from its query, as the CLI reads parse their flags. Each option is
  * singular, as `cwd` is on `/api/repo`, and a read refuses a name that it does not take, so no option goes unread.
  * `cwd=<dir>`, `all=1` and `scope=global` name different scopes, so 2 of them together are refused. With none of them,
- * the read takes the `--cwd` of serve, as `/api/repo` does. A string is the message of a 400. The message names no
+ * the read takes the `--cwd` of serve, as `/api/repo` does, or every workspace when serve has no `--cwd`. A string is
+ * the message of a 400. The message names no
  * value of the request.
  */
 function storeReadQuery(read: StoreRead, query: URLSearchParams, serveCwd: string | undefined): StoreReadQuery | string {
@@ -103,9 +104,13 @@ function storeReadQuery(read: StoreRead, query: URLSearchParams, serveCwd: strin
   else if (all !== null) target = 'all'
   else {
     const dir = cwd ?? serveCwd
-    if (!dir) return 'cwd or all=1 is required'
-    if (Buffer.byteLength(dir, 'utf8') > MAX_REPO_CWD_BYTES) return 'cwd is too long'
-    target = { cwd: dir }
+    // A serve with no --cwd knows no workspace of its own, so a read with no scope option reads every workspace, as
+    // all=1 does. The `scope` key of the output says which read the app got.
+    if (!dir) target = 'all'
+    else {
+      if (Buffer.byteLength(dir, 'utf8') > MAX_REPO_CWD_BYTES) return 'cwd is too long'
+      target = { cwd: dir }
+    }
   }
   const namedCwd = cwd !== null
   const rule = query.get('rule')
@@ -561,8 +566,8 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
           else ctx.emit({ type: 'suggestion-updated', id: rec.id, status: rec.status })
           json(res, 200, publicSuggestion(rec))
         } catch (e) {
-          // A store read or write can name the store path, so the message is scrubbed.
-          jsonError(res, 400, e)
+          // A failed store read or write is no client error. Its message can name the store path, so it is scrubbed.
+          jsonError(res, 500, e)
         } finally {
           for (const key of held) rejecting.delete(key)
         }
