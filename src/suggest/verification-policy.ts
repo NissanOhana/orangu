@@ -1,7 +1,11 @@
-import { COHORT_ALPHA, COHORT_MAX, COHORT_MIN, checkEvidence, checkVerdict, isDirectional } from './cohort-stats.js'
+import { COHORT_SKIP_REASONS } from './cohort-skip-reasons.js'
+import { COHORT_ALPHA, COHORT_MAX, COHORT_MIN, checkEvidence, checkVerdict, isDirectional, overallVerdict, type CohortVerdict } from './cohort-stats.js'
 import {
   SUGGESTION_VERIFICATION_COMPARISONS,
   SUGGESTION_VERIFICATION_METRICS,
+  type SuggestionFrozenBaseline,
+  type SuggestionOutcomeCheck,
+  type SuggestionOutcomeReceipt,
   type SuggestionRecord,
   type SuggestionVerificationIntent,
   type SuggestionVerificationReceiptV2,
@@ -133,6 +137,154 @@ export function cohortReceiptViolation(
   }
   if (!checks.some((check) => isDirectional(check.comparison))) return 'at least one check must name a direction (decreased or increased)'
   if (receipt.summary !== cohortReceiptSummary(receipt as SuggestionVerificationReceiptV2)) return 'summary must be the computed summary'
+  return undefined
+}
+
+/** A cohort session id as the trusted loader stores it: the lowercase form of `SESSION_ID_RE` in `src/discover/discover.ts`. */
+const COHORT_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+const FROZEN_BASELINE_KEYS = ['v', 'cutAt', 'sessions', 'skipped'] as const satisfies ReadonlyArray<keyof SuggestionFrozenBaseline>
+const FROZEN_SESSION_KEYS = ['id', 'startedAt', 'endedAt', 'metrics'] as const satisfies ReadonlyArray<keyof SuggestionFrozenBaseline['sessions'][number]>
+const OUTCOME_RECEIPT_KEYS = [
+  'v',
+  'method',
+  'alpha',
+  'appliedAt',
+  'checkpoint',
+  'verdict',
+  'laterComplete',
+  'confoundedBy',
+  'baselineSessionIds',
+  'measuredSessionIds',
+  'checks',
+] as const satisfies ReadonlyArray<keyof SuggestionOutcomeReceipt>
+const OUTCOME_CHECK_KEYS = [
+  'metric',
+  'comparison',
+  'name',
+  'before',
+  'after',
+  'beforeMedian',
+  'afterMedian',
+  'pLower',
+  'pHigher',
+  'verdict',
+] as const satisfies ReadonlyArray<keyof SuggestionOutcomeCheck>
+const OUTCOME_VERDICTS: readonly CohortVerdict[] = ['within-noise', 'regressed', 'not-enough-sessions', 'no-directional-check']
+
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** The object has these own keys and no other key, so a stored field cannot carry an extra string. */
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key))
+}
+
+/**
+ * Every rule of a frozen baseline: numbers and lowercase session ids only, in the exact shape of the type. The store
+ * applies it on the `applied` move, and again before it grades an outcome against the stored baseline. With
+ * `appliedAt`, the cut must not be later than the application time. Returns the first violation.
+ */
+export function frozenBaselineViolation(value: unknown, appliedAt: number | undefined): string | undefined {
+  if (!plainObject(value) || !hasExactKeys(value, FROZEN_BASELINE_KEYS)) return 'frozenBaseline must have exactly the keys v, cutAt, sessions and skipped'
+  if (value['v'] !== 1) return 'frozenBaseline v must be 1'
+  const cutAt = value['cutAt']
+  if (!finiteNonNegative(cutAt)) return 'frozenBaseline cutAt must be a finite number of 0 or more'
+  if (appliedAt !== undefined && cutAt > appliedAt) return 'frozenBaseline cutAt must not be later than the application time'
+  const sessions = value['sessions']
+  if (!Array.isArray(sessions) || sessions.length > COHORT_MAX) return `frozenBaseline must hold 0 to ${COHORT_MAX} sessions`
+  let previousId = ''
+  for (let index = 0; index < sessions.length; index++) {
+    const session: unknown = sessions[index]
+    const label = `frozenBaseline sessions[${index}]`
+    if (!plainObject(session) || !hasExactKeys(session, FROZEN_SESSION_KEYS)) return `${label} must have exactly the keys id, startedAt, endedAt and metrics`
+    const { id, startedAt, endedAt, metrics } = session
+    if (typeof id !== 'string' || !COHORT_SESSION_ID_RE.test(id)) return `${label} id must be a lowercase session id`
+    if (index > 0 && !(previousId < id)) return 'frozenBaseline sessions must be sorted by id with no repeated id'
+    previousId = id
+    if (!finiteNonNegative(startedAt) || !finiteNonNegative(endedAt)) return `${label} times must each be a finite number of 0 or more`
+    if (startedAt > endedAt || endedAt > cutAt) return `${label} must start before it ends, and end at or before cutAt`
+    if (!plainObject(metrics) || !hasExactKeys(metrics, SUGGESTION_VERIFICATION_METRICS)) {
+      return `${label} metrics must have exactly the ${SUGGESTION_VERIFICATION_METRICS.length} verification metrics`
+    }
+    if (!SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative(metrics[metric]))) return `${label} metrics must each be a finite number of 0 or more`
+  }
+  const skipped = value['skipped']
+  if (!plainObject(skipped) || !hasExactKeys(skipped, COHORT_SKIP_REASONS)) return `frozenBaseline skipped must have exactly the ${COHORT_SKIP_REASONS.length} skip reasons`
+  if (!COHORT_SKIP_REASONS.every((reason) => Number.isSafeInteger(skipped[reason]) && (skipped[reason] as number) >= 0)) {
+    return 'frozenBaseline skipped counts must each be a whole number of 0 or more'
+  }
+  return undefined
+}
+
+/**
+ * Every rule of an outcome receipt, graded again from its own numbers, with 0 to 10 sessions on each side. The store
+ * applies it before a `regressed` or `unproven` move. `status` is that move, and `frozenBaseline` is the baseline that
+ * the record stored at its `applied` move. The same rules as `cohortReceiptViolation`, with 3 more: the verdict fits
+ * the move, the later cohort is complete unless a short frozen baseline closes it, and the receipt names the frozen
+ * sessions. Returns the first violation.
+ */
+export function outcomeReceiptViolation(
+  value: unknown,
+  status: 'regressed' | 'unproven',
+  reviewed: readonly SuggestionVerificationIntent[],
+  appliedAt: number | undefined,
+  frozenBaseline: unknown,
+): string | undefined {
+  if (!plainObject(value) || !hasExactKeys(value, OUTCOME_RECEIPT_KEYS)) return 'outcomeReceipt must have exactly the keys of an outcome receipt'
+  const receipt = value as Partial<SuggestionOutcomeReceipt>
+  if (receipt.v !== 1 || receipt.method !== 'cohort-rank-v1' || receipt.alpha !== COHORT_ALPHA) return 'outcomeReceipt must be a cohort-rank-v1 outcome receipt at alpha 0.05'
+  if (appliedAt === undefined || receipt.appliedAt !== appliedAt) return 'receipt appliedAt must equal the recorded application time'
+  if (receipt.checkpoint !== 'first' && receipt.checkpoint !== 'complete') return 'checkpoint must be first or complete'
+  if (!OUTCOME_VERDICTS.includes(receipt.verdict as CohortVerdict)) return 'verdict must be a verdict other than verified'
+  if (typeof receipt.laterComplete !== 'boolean') return 'laterComplete must be a boolean'
+  if (!sortedUniqueIds(receipt.baselineSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `baselineSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`
+  if (!sortedUniqueIds(receipt.measuredSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `measuredSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`
+  const baseline = new Set(receipt.baselineSessionIds)
+  if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return 'baseline and later cohorts must not share a session'
+  if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return 'confoundedBy must be sorted unique suggestion ids'
+  let frozen: SuggestionFrozenBaseline | undefined
+  if (frozenBaseline !== undefined) {
+    if (frozenBaselineViolation(frozenBaseline, appliedAt) !== undefined) return 'the stored frozenBaseline is not valid, so the store cannot grade an outcome against it'
+    frozen = frozenBaseline as SuggestionFrozenBaseline
+    // A record with a frozen baseline grades against those sessions, and against no other baseline.
+    if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
+      return 'baselineSessionIds must equal the frozen baseline session ids'
+    }
+  }
+  const checks = receipt.checks
+  if (!Array.isArray(checks) || checks.length !== reviewed.length) return 'checks must match the reviewed verificationChecks'
+  const nBefore = receipt.baselineSessionIds.length
+  const nAfter = receipt.measuredSessionIds.length
+  const minP = Number((1 / binomial(nBefore + nAfter, nAfter)).toFixed(6))
+  for (let index = 0; index < checks.length; index++) {
+    const raw: unknown = checks[index]
+    const intent = reviewed[index]!
+    if (!plainObject(raw) || !hasExactKeys(raw, OUTCOME_CHECK_KEYS)) return `checks[${index}] must have exactly the keys of an outcome check`
+    const check = raw as Partial<SuggestionOutcomeCheck>
+    if (check.metric !== intent.metric || check.comparison !== intent.comparison || check.name !== verificationCheckName(intent)) {
+      return `checks[${index}] must match the reviewed check ${verificationCheckName(intent)}`
+    }
+    const { before, after, beforeMedian, afterMedian, pLower, pHigher } = check
+    if (!finiteNonNegative(before) || !finiteNonNegative(after) || !finiteNonNegative(beforeMedian) || !finiteNonNegative(afterMedian)) {
+      return `checks[${index}] must carry finite metric values`
+    }
+    if (typeof pLower !== 'number' || typeof pHigher !== 'number' || ![pLower, pHigher].every((p) => p >= minP && p <= 1) || pLower + pHigher < 1) {
+      return `checks[${index}] p-values are not possible for ${nBefore} and ${nAfter} sessions`
+    }
+    const verdict = checkVerdict(intent.comparison, before, after, pLower, pHigher)
+    if (check.verdict !== verdict) return `checks[${index}] verdict must be the computed verdict ${verdict}`
+  }
+  const overall = overallVerdict(checks as SuggestionOutcomeCheck[], nBefore, nAfter)
+  if (receipt.verdict !== overall) return `the overall verdict must be the computed verdict ${overall}`
+  if (status === 'regressed' && receipt.verdict !== 'regressed') return `a regressed record needs the regressed verdict, not ${receipt.verdict}`
+  if (status === 'unproven' && receipt.verdict === 'regressed') return 'an unproven record cannot carry the regressed verdict'
+  const shortFrozen = frozen !== undefined && frozen.sessions.length < COHORT_MIN
+  if (!receipt.laterComplete && !(shortFrozen && receipt.verdict === 'not-enough-sessions')) {
+    return `laterComplete must be true. Only a frozen baseline below ${COHORT_MIN} sessions with the verdict not-enough-sessions closes before the later cohort is complete`
+  }
+  if (receipt.checkpoint === 'first' && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`
   return undefined
 }
 

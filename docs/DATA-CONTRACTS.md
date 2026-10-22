@@ -216,7 +216,12 @@ SuggestionRecord = {
   appliedAt?: number,
   verificationReceipt?: SuggestionVerificationReceiptV2 | SuggestionVerificationReceipt,
   verificationTrust?: "computed-v2" | "computed-v1",
-  status: "new" | "kicked-off" | "proposed" | "applied" | "verified" | "rejected" | "failed",
+  frozenBaseline?: SuggestionFrozenBaseline,
+  outcomeReceipt?: SuggestionOutcomeReceipt,
+  reasonCode?: "not-wanted" | "already-handled" | "wrong-cause" | "too-much-effort" | "other",
+  workspaceCwd?: string,
+  status: "new" | "kicked-off" | "proposed" | "applied" | "verified" | "rejected" | "failed"
+    | "regressed" | "unproven" | "kept",
   statusAt: number,
   effect?: {
     before: Record<string, number>,
@@ -240,12 +245,97 @@ The optional `kickoff.pid` and `kickoff.exitCode` fields are legacy compatibilit
 The underlying state union is shared, but legal forward authority is scope-specific:
 
 ```text
-session: new -> kicked-off -> proposed -> applied -> verified
-repo:    new -> kicked-off -> proposed -> applied -> verified
+session: new -> kicked-off -> proposed -> applied -> verified | regressed | unproven
+repo:    new -> kicked-off -> proposed -> applied -> verified | regressed | unproven
 global:  new -> kicked-off -> proposed
 ```
 
-Session and repo verification require later same-workspace sessions that beat an Orangu-chosen baseline beyond chance. The store stamps `appliedAt` on the `applied` transition and carries it on every later line; it is where both cohorts are cut. Global has no apply or verify authority. Applicable states may be rejected; `kicked-off` may fail, and `failed` may return to `kicked-off` or be rejected. No other transition is legal.
+The store holds each record to this transition table (`TRANSITIONS` in `src/suggest/types.ts`):
+
+| From | Legal moves |
+|---|---|
+| `new` | `kicked-off`, `rejected` |
+| `kicked-off` | `proposed`, `failed`, `rejected` |
+| `proposed` | `applied`, `rejected` |
+| `applied` | `verified`, `regressed`, `unproven`, `rejected` |
+| `verified` | `rejected` |
+| `failed` | `kicked-off`, `rejected` |
+| `regressed` | `kept`, `rejected` |
+| `unproven` | `rejected` |
+| `kept` | `rejected` |
+| `rejected` | none |
+
+Session and repo verification require later same-workspace sessions that beat an Orangu-chosen baseline beyond chance. The store stamps `appliedAt` on the `applied` transition and carries it on every later line; it is where both cohorts are cut. Global has no apply or verify authority, and it cannot close as `regressed` or `unproven`. Applicable states may be rejected; `kicked-off` may fail, and `failed` may return to `kicked-off` or be rejected. No other transition is legal.
+
+The 3 closed states after `applied`:
+
+- `regressed`: at the `complete` checkpoint, a check moved beyond chance in a direction that it should not. The record waits for a person to keep the change (`kept`) or to reject it.
+- `unproven`: at the `complete` checkpoint, the change did not beat the baseline beyond chance. A frozen baseline below 3 sessions also closes a record as `unproven`, at any later count. The change stays applied.
+- `kept`: a person keeps a `regressed` change. The move measures nothing and carries the outcome receipt.
+
+### The checkpoints
+
+Orangu grades the later sessions at 2 fixed checkpoints, and never between them:
+
+- `first`: the first 3 accepted later sessions, against the frozen baseline.
+- `complete`: the complete later cohort, 10 sessions, or fewer when the later byte budget is spent.
+
+The verdict of a record is the verdict at the latest checkpoint that it reached.
+
+### The new fields
+
+Each move copies every field of the line before it, so a later line keeps the frozen baseline, the outcome receipt and the application time. The 4 new fields hold no free text: only numbers, booleans, session and suggestion ids, enum values, epoch times and 1 canonical path. The store refuses a key that is not in the shape below.
+
+```ts
+// written only on the `applied` move, and only when the baseline read succeeds
+SuggestionFrozenBaseline = {
+  v: 1,
+  cutAt: number,                 // at most the `appliedAt` of the same move
+  sessions: Array<{              // 0 to 10, sorted by id, no repeated id
+    id: string,                  // a lowercase session UUID
+    startedAt: number,           // startedAt <= endedAt <= cutAt
+    endedAt: number,
+    metrics: Record<SuggestionVerificationMetric, number>  // each of the 8 metrics, finite and 0 or more
+  }>,
+  skipped: Record<CohortSkipReason, number>                // each of the 8 skip reasons, a whole number of 0 or more
+}
+
+// written only on a `regressed` or `unproven` move
+SuggestionOutcomeReceipt = {
+  v: 1,
+  method: "cohort-rank-v1",
+  alpha: 0.05,
+  appliedAt: number,             // the recorded application time
+  checkpoint: "first" | "complete",  // "first" only with a frozen baseline below 3 sessions
+  verdict: "within-noise" | "regressed" | "not-enough-sessions" | "no-directional-check",
+  laterComplete: boolean,
+  confoundedBy: string[],        // sorted unique suggestion ids
+  baselineSessionIds: string[],  // 0 to 10 sorted unique session UUIDs, the frozen sessions when the record has them
+  measuredSessionIds: string[],  // 0 to 10 sorted unique session UUIDs, none shared with the baseline
+  checks: Array<{                // 1 for each reviewed check, in the reviewed order
+    metric, comparison, name, before, after, beforeMedian, afterMedian, pLower, pHigher,
+    verdict: "improved" | "within-noise" | "regressed" | "held" | "changed"
+  }>
+}
+```
+
+An outcome receipt has no `summary` key and no `evidence` key, so it stores no rendered string. The store grades it again from its own numbers before it writes the move. It refuses the move when:
+
+1. A check has a stored `verdict` that differs from the verdict of its own numbers.
+2. The overall `verdict` differs from the verdict of its checks and of its session counts.
+3. `laterComplete` is `false`. The exception is the verdict `not-enough-sessions` with a frozen baseline below 3 sessions whose ids are the receipt's baseline ids.
+4. A `regressed` move carries a verdict other than `regressed`, or an `unproven` move carries `regressed`.
+5. A frozen baseline has more than 10 sessions, an unsorted or repeated id, or a value that is not a finite number of 0 or more.
+
+`reasonCode` is only on a `rejected` move, and it is 1 of the 5 codes: `not-wanted`, `already-handled`, `wrong-cause`, `too-much-effort`, `other`. A code is a stored contract: a later orangu may change the label of a code, and never the code itself. `workspaceCwd` is also only on a `rejected` move, for a record with no proposal workspace. It is an absolute path in normal form with no control characters, which the caller resolved with `realpath`. Both fields are optional, and a rejection with neither stays legal for every scope.
+
+Every refused move leaves `suggestions.jsonl` byte for byte as it was.
+
+### Reading an unknown status
+
+The store reads a line only when it knows the status of that line. A line with an unknown status, such as `paused`, is skipped, and the line before it for the same id stays the current state. The full history read (`lines`) skips it too.
+
+This is the backward-read rule. An older orangu skips a line with a status that it does not know, and it shows the line before it. So orangu 0.11.0 shows a `regressed`, `unproven` or `kept` record as `applied`. A later `--set verified` from 0.11.0 appends `verified`, and that last line wins. A downgrade is therefore not supported. The rule takes the place of a version bump: a store line carries only its identity version `v`.
 
 ## Proposal artifacts
 
@@ -285,7 +375,7 @@ SuggestionProposal = {
 }
 ```
 
-Project files are a nonempty set of relative paths and may not escape the target repository or include `.git`. `verificationChecks` contains 1-32 unique supported metric/comparison pairs. The skill supplies those reviewed pairs; later verification grades exactly those pairs, in that order. `workspace` is captured by Orangu when it accepts the structured proposal, not supplied by the manifest. Apply and verification later require the same canonical path and inode, and the same directory creation time when one was recorded (`birthtimeNs`, captured only where the filesystem reports a real one; earlier records carry none). The recorded device number may differ, because the operating system renumbers volumes across restarts and remounts. Two exceptions keep the device strict: a workspace that is itself the root of a mounted volume, where the inode is the same on every volume, and Windows, where the volume serial does not change. Catalog labels must name a real shipped entry exactly as `catalog: <id>`; Orangu derives its URL/date from the catalog and rejects conflicting supplied metadata. Research requires a direct HTTPS URL and a non-null checked `YYYY-MM-DD` date. Inference carries neither URL nor date. A candidate with `verifiedAt: null` is not valid persisted proposal provenance.
+Project files are a nonempty set of relative paths and may not escape the target repository or include `.git`. `verificationChecks` contains 1-32 unique supported metric/comparison pairs. At least 1 pair must be `decreased` or `increased`. Orangu refuses a new manifest that has only guards, because such a set can never verify. A record that an older orangu stored with only guards stays readable, and it can still close as `unproven`. The skill supplies those reviewed pairs; later verification grades exactly those pairs, in that order. `workspace` is captured by Orangu when it accepts the structured proposal, not supplied by the manifest. Apply and verification later require the same canonical path and inode, and the same directory creation time when one was recorded (`birthtimeNs`, captured only where the filesystem reports a real one; earlier records carry none). The recorded device number may differ, because the operating system renumbers volumes across restarts and remounts. Two exceptions keep the device strict: a workspace that is itself the root of a mounted volume, where the inode is the same on every volume, and Windows, where the volume serial does not change. Catalog labels must name a real shipped entry exactly as `catalog: <id>`; Orangu derives its URL/date from the catalog and rejects conflicting supplied metadata. Research requires a direct HTTPS URL and a non-null checked `YYYY-MM-DD` date. Inference carries neither URL nor date. A candidate with `verifiedAt: null` is not valid persisted proposal provenance.
 
 Every `orangu-harness` manifest includes its rank, at least one reviewed relative project file, and at least one honest catalog, research, or inference source. The harness skill passes both artifact paths with `--proposal` and `--manifest`; it never authors a repository edit of its own. It may apply the repo items you approve, and only by invoking `orangu-apply` for one id at a time under that skill's unchanged contract, after disclosing each item's files and command text and taking an explicit per-item approval by verbatim id; it stops at the first failure. A global harness proposal is review-only and is never applied.
 

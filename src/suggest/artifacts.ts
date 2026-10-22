@@ -10,6 +10,7 @@ import { constants, type BigIntStats } from 'node:fs'
 import { chmod, lstat, open, realpath } from 'node:fs/promises'
 import { basename, isAbsolute, relative, resolve } from 'node:path'
 import { isChangeClass } from './change-classes.js'
+import { isDirectional } from './cohort-stats.js'
 import { canonicalReviewedPath, reviewedPathKey, reviewedPathViolation } from './reviewed-path.js'
 import { normalizeProposalSources } from './source-provenance.js'
 import { isStoredWorkspaceIdentity, liveWorkspaceIdentity, sameWorkspace } from './workspace-identity.js'
@@ -240,6 +241,10 @@ export async function loadProposalArtifacts(
   if (effort !== 'S' && effort !== 'M' && effort !== 'L') throw artifactError('effort must be S, M, or L')
   const proposalFiles = files(value['files'], 'files', true)
   const verificationChecks = verificationPairs(value['verificationChecks'], 'verificationChecks')
+  // Only a new manifest gets this check. A stored record with guards only stays readable and can still close.
+  if (!verificationChecks.some((check) => isDirectional(check.comparison))) {
+    throw artifactError('verificationChecks must include a decreased or increased check. A set of guards only can never verify.')
+  }
   const rank = value['rank']
   if (rank !== undefined && (!Number.isInteger(rank) || (rank as number) < 1 || (rank as number) > 100)) {
     throw artifactError('rank must be an integer from 1-100')

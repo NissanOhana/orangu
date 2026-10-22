@@ -17,14 +17,14 @@ export const TRANSITIONS: Record<SuggestionStatus, SuggestionStatus[]> = {
   new: ['kicked-off', 'rejected'],
   'kicked-off': ['proposed', 'failed', 'rejected'],
   proposed: ['applied', 'rejected'],
-  applied: ['verified', 'rejected'],
+  // A move into regressed or unproven carries an outcome receipt, and the store grades it again before it writes the line.
+  applied: ['verified', 'regressed', 'unproven', 'rejected'],
   verified: ['rejected'],
   rejected: [],
   failed: ['kicked-off', 'rejected'],
-  // Known on read, but no move enters or leaves them until the store checks the fields that these moves write.
-  regressed: [],
-  unproven: [],
-  kept: [],
+  regressed: ['kept', 'rejected'],
+  unproven: ['rejected'],
+  kept: ['rejected'],
 }
 
 export interface SuggestionEvidence {

@@ -393,27 +393,41 @@ describe('orangu suggest (in-process, ORANGU_HOME=tmp)', () => {
     vi.setSystemTime(new Date('2026-08-15T00:00:00.000Z'))
     const proposals = join(home, 'proposals')
     const project = join(claudeHome, 'projects', '-fixture')
-    const appliedWith = async (ruleId: string, metric: string, comparison: string): Promise<string> => {
+    const appliedWith = async (ruleId: string, metric: string, comparison: string, storedByOlderOrangu = false): Promise<string> => {
       out = []
       await cmdSuggest([], { rule: ruleId, scope: 'session', session: fixturePath, json: true })
       const id = JSON.parse(stdout()).record.id as string
       await cmdSuggest(['kicked-off'], { set: id, json: true })
       writeFileSync(join(proposals, `${id}.md`), '# proposal\n')
-      writeFileSync(
+      const writeManifest = (checkComparison: string): void => writeFileSync(
         join(proposals, `${id}.json`),
         JSON.stringify({
           v: 1, id, title: 'Reviewed change', changeClass: 'instruction', change: 'One line in CLAUDE.md.', evidence: 'Repeated reads.',
           expectedEffect: 'Named outcome.', effort: 'S', risk: 'None known.', files: ['CLAUDE.md'], verification: 'Compare later sessions.',
-          verificationChecks: [{ metric, comparison }], sources: [{ kind: 'inference', label: 'Smallest change consistent with the evidence' }],
+          verificationChecks: [{ metric, comparison: checkComparison }], sources: [{ kind: 'inference', label: 'Smallest change consistent with the evidence' }],
         }),
       )
-      await cmdSuggest(['proposed'], { set: id, proposal: join(proposals, `${id}.md`), manifest: join(proposals, `${id}.json`), json: true })
+      const propose = () => cmdSuggest(['proposed'], { set: id, proposal: join(proposals, `${id}.md`), manifest: join(proposals, `${id}.json`), json: true })
+      writeManifest(comparison)
+      if (storedByOlderOrangu) {
+        // A new manifest needs a decreased or increased check, so only a record that an older orangu stored has a guard-only set.
+        const storePath = join(home, 'suggestions.jsonl')
+        const before = readFileSync(storePath)
+        await expect(propose()).rejects.toThrow(/verificationChecks must include a decreased or increased check/)
+        expect(readFileSync(storePath)).toEqual(before)
+        writeManifest('decreased')
+        await propose()
+        const proposed = JSON.parse(readFileSync(storePath, 'utf8').trimEnd().split('\n').at(-1)!) as SuggestionRecord
+        appendFileSync(storePath, `${JSON.stringify({ ...proposed, proposal: { ...proposed.proposal, verificationChecks: [{ metric, comparison }] } })}\n`)
+      } else {
+        await propose()
+      }
       writeFileSync(join(proposals, `${id}.applied.json`), JSON.stringify({ v: 1, id, summary: 'Added the line.', files: ['CLAUDE.md'], checks: [{ name: 'diff check', ok: true }] }))
       await cmdSuggest(['applied'], { set: id, application: join(proposals, `${id}.applied.json`), json: true })
       return id
     }
     const regressed = await appliedWith('verdict-regressed', 'avgToolCalls', 'increased')
-    const guardsOnly = await appliedWith('verdict-guards-only', 'avgToolCalls', 'not-increased')
+    const guardsOnly = await appliedWith('verdict-guards-only', 'avgToolCalls', 'not-increased', true)
     const withinNoise = await appliedWith('verdict-within-noise', 'avgTestRunsFailed', 'decreased')
 
     // Three sessions before the change (6, 7, 8 tool calls) and three after it (0, 1, 0), all settled.

@@ -13,11 +13,12 @@
 import { randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
 import { lstat, mkdir, open, realpath, rmdir, unlink } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { oranguHome } from '../util/home.js'
 import { redactValue } from '../redact/redact.js'
 import { isChangeClass } from './change-classes.js'
 import { isSuggestionId, normalizeSessionIds, suggestionId, suggestionIdV2, suggestionKey } from './id.js'
+import { REJECT_REASON_CODES } from './reason-codes.js'
 import { canonicalReviewedPath, reviewedPathKey, reviewedPathViolation } from './reviewed-path.js'
 import { proposalSourcesAreCanonical } from './source-provenance.js'
 import {
@@ -39,6 +40,8 @@ import {
   sameVerificationIntentSequence,
   applicationTime,
   cohortReceiptViolation,
+  frozenBaselineViolation,
+  outcomeReceiptViolation,
 } from './verification-policy.js'
 import { isStoredWorkspaceIdentity } from './workspace-identity.js'
 
@@ -498,21 +501,56 @@ async function appendPrivateSuggestionRecord(
   }
 }
 
-type TransitionPatch = Partial<Pick<SuggestionRecord, 'proposal' | 'application' | 'verificationReceipt' | 'kickoff' | 'effect'>>
+type TransitionPatch = Partial<
+  Pick<
+    SuggestionRecord,
+    'proposal' | 'application' | 'verificationReceipt' | 'kickoff' | 'effect' | 'frozenBaseline' | 'outcomeReceipt' | 'reasonCode' | 'workspaceCwd'
+  >
+>
 type PatchField = keyof TransitionPatch
 
-const PATCH_FIELDS: PatchField[] = ['proposal', 'application', 'verificationReceipt', 'kickoff', 'effect']
+const PATCH_FIELDS: PatchField[] = [
+  'proposal',
+  'application',
+  'verificationReceipt',
+  'kickoff',
+  'effect',
+  'frozenBaseline',
+  'outcomeReceipt',
+  'reasonCode',
+  'workspaceCwd',
+]
 const ALLOWED_PATCH_FIELDS: Record<SuggestionStatus, PatchField[]> = {
   new: [],
   'kicked-off': ['kickoff'],
   proposed: ['proposal'],
-  applied: ['application'],
+  applied: ['application', 'frozenBaseline'],
   verified: ['verificationReceipt', 'effect'],
-  rejected: [],
+  rejected: ['reasonCode', 'workspaceCwd'],
   failed: ['kickoff'],
-  regressed: [],
-  unproven: [],
+  regressed: ['outcomeReceipt'],
+  unproven: ['outcomeReceipt'],
   kept: [],
+}
+
+/** The most characters of a bound workspace path. */
+const MAX_WORKSPACE_CWD_CHARS = 4_096
+const CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f]/
+
+/**
+ * A workspace path that the store accepts at a rejection: absolute, already in its normal form (no `.` or `..`
+ * segment, no repeated or trailing separator), bounded, and free of control characters. The caller resolves it
+ * with `realpath` first. The store checks the form only and reads no directory, as it does for a proposal workspace.
+ */
+export function isCanonicalWorkspaceCwd(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    value.length > 0 &&
+    value.length <= MAX_WORKSPACE_CWD_CHARS &&
+    !CONTROL_CHARACTER_RE.test(value) &&
+    isAbsolute(value) &&
+    resolve(value) === value
+  )
 }
 
 function recordMatchesFinding(record: SuggestionRecord, finding: Finding, source: SuggestionSource): boolean {
@@ -735,6 +773,34 @@ function validateTransitionPatch(current: SuggestionRecord, to: SuggestionStatus
     if (JSON.stringify(reviewed) !== JSON.stringify(changed)) {
       throw lifecycleError(to, 'application files must exactly match the reviewed proposal files')
     }
+    // The freeze is optional: a failed baseline read still writes the move, with no frozen baseline.
+    if (patch.frozenBaseline !== undefined) {
+      const violation = frozenBaselineViolation(patch.frozenBaseline, undefined)
+      if (violation) throw lifecycleError(to, `invalid frozen baseline: ${violation}`)
+    }
+  } else if (to === 'regressed' || to === 'unproven') {
+    if (current.scope === 'global') throw lifecycleError(to, 'global suggestions are review-only. Orangu measures no outcome for them.')
+    assertStructuredProposal(current.proposal, to)
+    assertApplication(current.application, to)
+    if (patch.outcomeReceipt === undefined) throw lifecycleError(to, 'an outcome receipt is required')
+    const violation = outcomeReceiptViolation(
+      patch.outcomeReceipt,
+      to,
+      current.proposal.verificationChecks,
+      applicationTime(current),
+      current.frozenBaseline,
+    )
+    if (violation) throw lifecycleError(to, `invalid outcome receipt: ${violation}`)
+  } else if (to === 'rejected') {
+    if (patch.reasonCode !== undefined && !REJECT_REASON_CODES.includes(patch.reasonCode)) {
+      throw lifecycleError(to, `reasonCode must be 1 of ${REJECT_REASON_CODES.join(', ')}`)
+    }
+    if (patch.workspaceCwd !== undefined) {
+      if (!isCanonicalWorkspaceCwd(patch.workspaceCwd)) throw lifecycleError(to, 'workspaceCwd must be an absolute canonical path')
+      if (current.proposal?.workspace !== undefined) {
+        throw lifecycleError(to, 'workspaceCwd is only for a record with no proposal workspace. The proposal workspace already binds this record.')
+      }
+    }
   } else if (to === 'verified') {
     if (current.scope === 'global') throw lifecycleError(to, 'global suggestions cannot be verified. They are review-only.')
     assertStructuredProposal(current.proposal, to)
@@ -750,6 +816,17 @@ function validateTransitionPatch(current: SuggestionRecord, to: SuggestionStatus
     assertVerificationEffect(patch.effect, receipt, to)
   }
   return patch
+}
+
+/** The last line of each canonical id, also indexed by each legacy id of that record. */
+function indexByLegacyIds(canonical: Map<string, SuggestionRecord>): Map<string, SuggestionRecord> {
+  const byId = new Map(canonical)
+  for (const rec of canonical.values()) {
+    for (const legacyId of rec.legacyIds ?? []) {
+      if (isSuggestionId(legacyId)) byId.set(legacyId, rec)
+    }
+  }
+  return byId
 }
 
 export class SuggestionStore implements SuggestionStoreLike {
@@ -857,13 +934,38 @@ export class SuggestionStore implements SuggestionStoreLike {
    */
   private async replay(parent?: PrivateDirectoryIdentity): Promise<Map<string, SuggestionRecord>> {
     const canonical = new Map<string, SuggestionRecord>()
+    await this.readValidLines(parent, (rec) => canonical.set(rec.id, rec))
+    return indexByLegacyIds(canonical)
+  }
+
+  /**
+   * Every valid line of the log, in file order, with no "last line wins". With an id, only the lines of that record:
+   * its own lines and the lines of each legacy id, matched through `legacyIds` as `get` matches them. The caps of
+   * the replay apply: the file bytes, the bytes of a line and the line count.
+   */
+  async lines(id?: string): Promise<SuggestionRecord[]> {
+    const all: SuggestionRecord[] = []
+    const canonical = new Map<string, SuggestionRecord>()
+    await this.readValidLines(undefined, (rec) => {
+      all.push(rec)
+      canonical.set(rec.id, rec)
+    })
+    if (id === undefined) return all
+    const target = indexByLegacyIds(canonical).get(id)
+    if (!target) return []
+    const ids = new Set([target.id, ...(target.legacyIds ?? []).filter(isSuggestionId)])
+    return all.filter((rec) => ids.has(rec.id))
+  }
+
+  /** Read the log inside its caps and hand each valid record to `visit`, in file order; a corrupt line is skipped. */
+  private async readValidLines(parent: PrivateDirectoryIdentity | undefined, visit: (rec: SuggestionRecord) => void): Promise<void> {
     const root = parent ?? await secureExistingPrivateDirectory(dirname(this.path), 'suggestion store directory')
-    if (!root) return canonical
+    if (!root) return
     await assertPrivateDirectoriesStable([root])
     const proposals = await secureExistingPrivateDirectory(this.proposalsDir, 'suggestion proposals directory')
     const directories = proposals ? [root, proposals] : [root]
     const bytes = await readPrivateSuggestionStore(this.path, directories)
-    if (bytes === undefined) return canonical
+    if (bytes === undefined) return
     let offset = 0
     let lines = 0
     while (offset < bytes.length) {
@@ -881,7 +983,7 @@ export class SuggestionStore implements SuggestionStoreLike {
         if (trimmed) {
           try {
             const rec: unknown = JSON.parse(trimmed)
-            if (isPersistedSuggestionRecord(rec)) canonical.set(rec.id, rec)
+            if (isPersistedSuggestionRecord(rec)) visit(rec)
           } catch (error) {
             void error
             /* corrupt line: skip, keep going */
@@ -891,13 +993,6 @@ export class SuggestionStore implements SuggestionStoreLike {
       if (newline === -1) break
       offset = newline + 1
     }
-    const byId = new Map(canonical)
-    for (const rec of canonical.values()) {
-      for (const legacyId of rec.legacyIds ?? []) {
-        if (isSuggestionId(legacyId)) byId.set(legacyId, rec)
-      }
-    }
-    return byId
   }
 
   private async append(rec: SuggestionRecord, guard: SuggestionStoreLock): Promise<void> {
@@ -1034,6 +1129,10 @@ export class SuggestionStore implements SuggestionStoreLike {
     }
     const safePatch = validateTransitionPatch(current, to, patch)
     const statusAt = this.now()
+    // The freeze reads the baseline before this move, so its cut is never later than the application time stamped here.
+    if (to === 'applied' && safePatch.frozenBaseline && safePatch.frozenBaseline.cutAt > statusAt) {
+      throw lifecycleError(to, 'invalid frozen baseline: frozenBaseline cutAt must not be later than the application time')
+    }
     // Stamp the application time once, and keep it on every later line (a legacy applied record gets it on its next move).
     const appliedAt = to === 'applied' ? statusAt : applicationTime(current)
     const next: SuggestionRecord = {

@@ -163,7 +163,7 @@ export function isDirectional(comparison: SuggestionVerificationComparison): boo
   return comparison === 'decreased' || comparison === 'increased'
 }
 
-export function overallVerdict(checks: readonly CohortCheckResult[], nBefore: number, nAfter: number): CohortVerdict {
+export function overallVerdict(checks: ReadonlyArray<Pick<CohortCheckResult, 'comparison' | 'verdict'>>, nBefore: number, nAfter: number): CohortVerdict {
   if (nBefore < COHORT_MIN || nAfter < COHORT_MIN) return 'not-enough-sessions'
   if (checks.some((check) => check.verdict === 'regressed' || check.verdict === 'changed')) return 'regressed'
   const directional = checks.filter((check) => isDirectional(check.comparison))

@@ -1,6 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import type { SuggestionRecord, SuggestionVerificationReceiptV2 } from './types.js'
-import { applicationTime, cohortReceiptSummary, isTrustedComputedVerification } from './verification-policy.js'
+import { COHORT_SKIP_REASONS, type CohortSkipReason } from './cohort-skip-reasons.js'
+import { evaluateCheck, overallVerdict } from './cohort-stats.js'
+import {
+  SUGGESTION_VERIFICATION_METRICS,
+  type SuggestionFrozenBaseline,
+  type SuggestionOutcomeReceipt,
+  type SuggestionRecord,
+  type SuggestionVerificationIntent,
+  type SuggestionVerificationMetric,
+  type SuggestionVerificationReceiptV2,
+} from './types.js'
+import {
+  applicationTime,
+  cohortReceiptSummary,
+  frozenBaselineViolation,
+  isTrustedComputedVerification,
+  outcomeReceiptViolation,
+} from './verification-policy.js'
 
 const APPLIED_AT = 5_000
 
@@ -167,5 +183,83 @@ describe('isTrustedComputedVerification', () => {
       effect: { before: { avgToolCalls: 12 }, after: { avgToolCalls: 8 }, measuredSessionIds: ['later'] },
     }
     expect(isTrustedComputedVerification(legacy)).toBe(true)
+  })
+})
+
+const sid = (n: number): string => `aaaaaaaa-0000-4000-8000-${n.toString(16).padStart(12, '0')}`
+const DECREASED: SuggestionVerificationIntent = { metric: 'avgToolCalls', comparison: 'decreased' }
+
+function frozen(cutAt: number, count: number): SuggestionFrozenBaseline {
+  const metrics = Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, 1])) as Record<SuggestionVerificationMetric, number>
+  return {
+    v: 1,
+    cutAt,
+    sessions: Array.from({ length: count }, (_, index) => ({ id: sid(index), startedAt: 1 + index, endedAt: 2 + index, metrics })),
+    skipped: Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0])) as Record<CohortSkipReason, number>,
+  }
+}
+
+/** A receipt graded by the cohort statistics from the baseline values and the later values. */
+function graded(before: number[], after: number[], over: Partial<SuggestionOutcomeReceipt> = {}): SuggestionOutcomeReceipt {
+  const check = evaluateCheck(DECREASED, before, after)
+  const verdict = overallVerdict([check], before.length, after.length)
+  if (verdict === 'verified') throw new Error('these values verify')
+  const { evidence, ...numbers } = check
+  void evidence
+  return {
+    v: 1,
+    method: 'cohort-rank-v1',
+    alpha: 0.05,
+    appliedAt: APPLIED_AT,
+    checkpoint: 'complete',
+    verdict,
+    laterComplete: true,
+    confoundedBy: [],
+    baselineSessionIds: before.map((_, index) => sid(index)),
+    measuredSessionIds: after.map((_, index) => sid(100 + index)),
+    checks: [numbers],
+    ...over,
+  }
+}
+
+const statusOf = (receipt: SuggestionOutcomeReceipt): 'regressed' | 'unproven' => (receipt.verdict === 'regressed' ? 'regressed' : 'unproven')
+
+describe('outcomeReceiptViolation', () => {
+  it('accepts a receipt graded from 0 to 10 sessions on each side', () => {
+    const values = (count: number, start: number): number[] => Array.from({ length: count }, (_, index) => start + index)
+    for (const [nBefore, nAfter] of [[0, 0], [0, 10], [10, 0], [1, 2], [3, 3], [10, 10]] as const) {
+      const receipt = graded(values(nBefore, 1), values(nAfter, 11))
+      expect(outcomeReceiptViolation(receipt, statusOf(receipt), [DECREASED], APPLIED_AT, undefined), `${nBefore} and ${nAfter}`).toBeUndefined()
+    }
+    expect(graded(values(10, 1), values(10, 11)).verdict).toBe('regressed')
+    expect(graded(values(0, 1), values(10, 11)).verdict).toBe('not-enough-sessions')
+  })
+
+  it('refuses 11 sessions on either side', () => {
+    const eleven = Array.from({ length: 11 }, (_, index) => index)
+    for (const receipt of [graded(eleven, [1, 2, 3]), graded([1, 2, 3], eleven)]) {
+      expect(outcomeReceiptViolation(receipt, statusOf(receipt), [DECREASED], APPLIED_AT, undefined)).toMatch(/must be 0 to 10 sorted unique session ids/)
+    }
+  })
+
+  it('grades the short frozen baseline exception against the stored frozen baseline', () => {
+    const short = graded([1, 2], [3], { checkpoint: 'first', laterComplete: false })
+    expect(outcomeReceiptViolation(short, 'unproven', [DECREASED], APPLIED_AT, frozen(APPLIED_AT, 2))).toBeUndefined()
+    expect(outcomeReceiptViolation(short, 'unproven', [DECREASED], APPLIED_AT, undefined)).toMatch(/laterComplete must be true/)
+    expect(outcomeReceiptViolation(short, 'unproven', [DECREASED], APPLIED_AT, frozen(APPLIED_AT, 1))).toMatch(/baselineSessionIds must equal the frozen baseline/)
+    // A stored frozen baseline that fails its own check cannot open the exception.
+    expect(outcomeReceiptViolation(short, 'unproven', [DECREASED], APPLIED_AT, frozen(APPLIED_AT + 1, 2))).toMatch(/the stored frozenBaseline is not valid/)
+  })
+})
+
+describe('frozenBaselineViolation', () => {
+  it('accepts 0 to 10 sorted sessions with every metric and every skip reason', () => {
+    for (const count of [0, 1, 10]) expect(frozenBaselineViolation(frozen(100, count), undefined), String(count)).toBeUndefined()
+    expect(frozenBaselineViolation(frozen(100, 11), undefined)).toMatch(/0 to 10 sessions/)
+  })
+
+  it('refuses a cut later than the application time when the caller names one', () => {
+    expect(frozenBaselineViolation(frozen(100, 3), 100)).toBeUndefined()
+    expect(frozenBaselineViolation(frozen(101, 3), 100)).toMatch(/cutAt must not be later than the application time/)
   })
 })

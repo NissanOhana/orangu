@@ -196,6 +196,32 @@ describe('suggestion lifecycle artifact validation', () => {
     await expect(loadProposalArtifacts(proposals, id, join(proposals, `${id}.md`), duplicate, workspace)).rejects.toThrow(/duplicate metric\/comparison pairs/)
   })
 
+  it('refuses a new manifest whose verificationChecks has no decreased or increased check', async () => {
+    const markdown = join(proposals, `${id}.md`)
+    for (const verificationChecks of [
+      [{ metric: 'avgToolErrors', comparison: 'not-increased' }],
+      [
+        { metric: 'avgToolErrors', comparison: 'not-increased' },
+        { metric: 'avgActiveMs', comparison: 'not-decreased' },
+        { metric: 'avgContextPeak', comparison: 'equal' },
+      ],
+    ]) {
+      const path = json(`${id}.json`, manifest({ verificationChecks }))
+      await expect(loadProposalArtifacts(proposals, id, markdown, path, workspace)).rejects.toThrow(
+        /verificationChecks must include a decreased or increased check/,
+      )
+    }
+    // 1 directional check is enough, beside any number of guards.
+    for (const comparison of ['decreased', 'increased'] as const) {
+      const verificationChecks = [
+        { metric: 'avgToolErrors', comparison: 'not-increased' },
+        { metric: 'avgToolCalls', comparison },
+      ]
+      const path = json(`${id}.json`, manifest({ verificationChecks }))
+      await expect(loadProposalArtifacts(proposals, id, markdown, path, workspace)).resolves.toMatchObject({ verificationChecks })
+    }
+  })
+
   it('loads a successful application receipt and a well-formed verification intent', async () => {
     const applicationPath = json(`${id}.applied.json`, {
       v: 1,
