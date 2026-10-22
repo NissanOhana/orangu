@@ -319,6 +319,36 @@ describe('createCachedCohortDeps over real transcripts', () => {
     expect(off.calls).toHaveLength(12)
   })
 
+  it('loads a skipped session once in 1 read, and again only when its files change', async () => {
+    const { cwd, identity } = workspaceWithSessions()
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    writeSession(project, id(103), cwd, '2026-08-14T10:00:00.000Z', 4)
+    // The trusted loader refuses id(103) as over the evidence cap, as it refuses a session of more than 64 MiB.
+    const trusted = createCohortDeps({ now: settled })
+    const calls: string[] = []
+    const base: CohortDeps = {
+      ...trusted,
+      loadCandidate: async (candidate, maxBytes) => {
+        calls.push(candidate.sessionId)
+        return candidate.sessionId === id(103) ? { skip: 'over-budget', bytesRead: 7 } : trusted.loadCandidate(candidate, maxBytes)
+      },
+    }
+    const deps = cached(mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-')), base)
+    const records = ['sg_aaaaaaaaaaaa', 'sg_bbbbbbbbbbbb', 'sg_cccccccccccc'].map((recordId) => ({ ...applied(identity), id: recordId }))
+    const effects: string[] = []
+    for (const record of records) effects.push(JSON.stringify({ ...(await measureCohortEffect(record, [], deps)), id: '' }))
+    // 1 load for each of the 6 sessions of the first test, and 1 for id(103): not 1 for each record.
+    expect(calls.filter((call) => call === id(103))).toHaveLength(1)
+    expect(deps.stats().loaderCalls).toBe(7)
+    // Each record gets the same effect, with the skip counted once on its side.
+    expect(new Set(effects).size).toBe(1)
+    expect(JSON.parse(effects[0]!).skipped['over-budget']).toBe(1)
+    // A changed file moves its key, so the next record of the same read loads it again.
+    appendFileSync(join(project, `${id(103)}.jsonl`), '\n')
+    await measureCohortEffect({ ...applied(identity), id: 'sg_dddddddddddd' }, [], deps)
+    expect(calls.filter((call) => call === id(103))).toHaveLength(2)
+  })
+
   it('keeps the trusted loaders off the cache: a planted entry changes no measure of the record steps', async () => {
     const { identity } = workspaceWithSessions()
     const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))

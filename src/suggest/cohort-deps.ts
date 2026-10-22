@@ -272,6 +272,14 @@ export interface CachedCohortDepsOptions {
   listSessions?: (cwd: string) => Promise<SessionRef[]>
 }
 
+/** A skip of a miss, kept for 1 read: the session, the key of its files, the cap of the load and the load. */
+interface KeptSkip {
+  sessionId: string
+  key: string
+  maxBytes: number
+  load: CohortLoad
+}
+
 export interface CachedCohortDeps extends CohortDeps {
   /** `loaderCalls` counts the calls to the loader of a miss, and `missBytes` the bytes that they read */
   stats(): { loaderCalls: number; missBytes: number; cacheHits: number }
@@ -286,12 +294,30 @@ export interface CachedCohortDeps extends CohortDeps {
  * the side budget spends as before, so a hit never changes which sessions a side takes. Else the trusted loader reads it inside
  * what is left of `budgetBytes`, and the facts of a settled session go into the cache. A miss past the budget throws
  * `CohortReadDeferred`, so the item is deferred and is never graded on a part of its cohort.
+ *
+ * The cache holds the facts of settled sessions only. So a miss that ends in a skip (a session over the evidence cap, an
+ * unreadable one, or one that still settles) is kept in memory for this instance, by path, with its key and its cap. A
+ * later load of the same session with the same key and the same cap gets the same skip and the same bytes, and it reads
+ * no file and calls no loader: the files, `now` and the cap are the same, so the trusted loader would give the same
+ * skip. A changed file moves its key, so it loads again. Without this, each record of 1 read probes, walks and refuses
+ * the same session again.
  */
 export function createCachedCohortDeps(options: CachedCohortDepsOptions): CachedCohortDeps {
   const base = options.base ?? createCohortDeps({ now: options.now })
   const list = options.listSessions ?? (async (cwd: string) => listSessions({ roots: await claudeRoots(), cwd, maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS }))
   const listings = new Map<string, Promise<SessionRef[]>>()
   const refs = new Map<string, SessionRef>()
+  const skips = new Map<string, KeptSkip>()
+  const keptSkip = (candidate: CohortCandidate, key: string, maxBytes: number): CohortLoad | undefined => {
+    const kept = skips.get(candidate.path)
+    if (!kept || kept.sessionId !== candidate.sessionId || kept.key !== key) return undefined
+    return kept.maxBytes === maxBytes ? { ...kept.load } : undefined
+  }
+  const keepSkip = (candidate: CohortCandidate, key: string | undefined, maxBytes: number, load: CohortLoad): CohortLoad => {
+    if (key === undefined || !('skip' in load)) return load
+    skips.set(candidate.path, { sessionId: candidate.sessionId, key, maxBytes, load: { ...load } })
+    return load
+  }
   let loaderCalls = 0
   let missBytes = 0
   let cacheHits = 0
@@ -312,6 +338,8 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
       if (identity) {
         const now = options.now()
         if (!Number.isFinite(now) || now < identity.changedAt || now - identity.changedAt < MIN_VERIFICATION_QUIET_MS) return settlingSkip(candidate.path, 0, maxBytes)
+        const skipped = keptSkip(candidate, identity.key, maxBytes)
+        if (skipped) return skipped
         const facts = options.cache ? await options.cache.get(identity.key, candidate.sessionId) : undefined
         if (facts) {
           cacheHits++
@@ -329,7 +357,7 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
       // ends of its files, with no call to the loader. The probe bytes of a settling session count. For any other
       // session the trusted loader probes the same ends again and counts them, so a warm read spends what it spends.
       const tail = await sessionTail(candidate.path, maxBytes)
-      if (tail.partial) return settlingSkip(candidate.path, tail.bytesRead, maxBytes)
+      if (tail.partial) return keepSkip(candidate, identity?.key, maxBytes, await settlingSkip(candidate.path, tail.bytesRead, maxBytes))
       const remaining = options.budgetBytes - missBytes
       if (!(remaining >= 1)) throw new CohortReadDeferred()
       const cap = Math.min(maxBytes, remaining)
@@ -346,7 +374,8 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
           await options.cache.put(identity.key, { sessionId: id.toLowerCase(), cwd, startedAt, endedAt, ranOrangu, bytesRead: loaded.bytesRead, metrics })
         }
       }
-      return loaded
+      // A skip at a cap that the read budget cut is not the skip of `maxBytes`, so it is not kept.
+      return cap === maxBytes ? keepSkip(candidate, identity?.key, maxBytes, loaded) : loaded
     },
     canonicalWorkspace: (identity) => base.canonicalWorkspace(identity),
     stats: () => ({ loaderCalls, missBytes, cacheHits }),
