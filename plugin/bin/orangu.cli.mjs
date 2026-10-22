@@ -10293,6 +10293,7 @@ function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBasel
   }
   if (frozen === void 0 && nBefore < COHORT_MIN) return `a record with no frozen baseline needs ${COHORT_MIN} or more baseline sessions to close`;
   if (receipt.checkpoint === "first" && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`;
+  if (receipt.checkpoint !== (receipt.laterComplete ? "complete" : "first")) return "checkpoint must be complete when the later cohort is complete, and first before it";
   return void 0;
 }
 function effectMatchesChecks(record3, checks2, measured) {
@@ -14324,6 +14325,62 @@ function evidenceSessionIds(selectors) {
   return ids;
 }
 var byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+var baselineCandidates = (candidates, cutAt) => candidates.filter((c) => c.mtimeMs < cutAt).sort((a, b) => b.mtimeMs - a.mtimeMs || byPath(a, b));
+var laterCandidates = (candidates, cutAt) => candidates.filter((c) => c.mtimeMs > cutAt).sort((a, b) => a.mtimeMs - b.mtimeMs || byPath(a, b));
+var noSkips = () => Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0]));
+async function take(ctx, list2, side) {
+  const { deps, cwd, cutAt, excluded, seen, skipped } = ctx;
+  const accepted = [];
+  let sideBytes = 0;
+  let budgetSpent = false;
+  for (const candidate of list2) {
+    if (accepted.length >= COHORT_MAX) break;
+    const id = candidate.sessionId.toLowerCase();
+    if (seen.has(id)) continue;
+    if (excluded.has(id)) {
+      skipped["evidence-session"]++;
+      continue;
+    }
+    const remaining = COHORT_SIDE_BYTES - sideBytes;
+    if (remaining < 1) {
+      skipped["budget-spent"]++;
+      budgetSpent = true;
+      break;
+    }
+    const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining);
+    const loaded = await deps.loadCandidate(candidate, maxBytes);
+    sideBytes += loaded.bytesRead;
+    if ("skip" in loaded) {
+      if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
+        skipped["budget-spent"]++;
+        budgetSpent = true;
+        break;
+      }
+      skipped[loaded.skip]++;
+      continue;
+    }
+    const session = loaded.session;
+    if (session.id.toLowerCase() !== id) {
+      skipped.unreadable++;
+      continue;
+    }
+    if (session.cwd !== cwd) {
+      skipped["other-workspace"]++;
+      continue;
+    }
+    if (side === "baseline" ? session.endedAt > cutAt : session.startedAt <= cutAt) {
+      skipped["spans-application"]++;
+      continue;
+    }
+    if (session.ranOrangu) {
+      skipped["orangu-session"]++;
+      continue;
+    }
+    seen.add(id);
+    accepted.push({ ...session, id });
+  }
+  return { accepted, budgetSpent };
+}
 async function measureCohortEffect(record3, others, deps) {
   if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
   if (record3.status !== "applied" && record3.status !== "verified") {
@@ -14336,72 +14393,30 @@ async function measureCohortEffect(record3, others, deps) {
   }
   const appliedAt = applicationTime(record3);
   if (appliedAt === void 0) throw new Error(`suggestion ${record3.id}: its application time is unknown, so later sessions cannot be cut from it`);
+  const frozen = record3.frozenBaseline;
+  if (frozen !== void 0) {
+    const violation = frozenBaselineViolation(frozen, appliedAt);
+    if (violation) throw new Error(`suggestion ${record3.id}: its frozen baseline is not valid (${violation})`);
+  }
   const cwd = await deps.canonicalWorkspace(proposal.workspace);
   const candidates = await deps.listCandidates(cwd);
-  const skipped = Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0]));
-  const excluded = evidenceSessionIds(record3.sessionIds);
-  const baselineCandidates = candidates.filter((c) => c.mtimeMs < appliedAt).sort((a, b) => b.mtimeMs - a.mtimeMs || byPath(a, b));
-  const laterCandidates = candidates.filter((c) => c.mtimeMs > appliedAt).sort((a, b) => a.mtimeMs - b.mtimeMs || byPath(a, b));
+  const skipped = frozen ? { ...frozen.skipped } : noSkips();
   skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === appliedAt).length;
-  const seen = /* @__PURE__ */ new Set();
-  const take = async (list2, side) => {
-    const accepted = [];
-    let sideBytes = 0;
-    let budgetSpent = false;
-    for (const candidate of list2) {
-      if (accepted.length >= COHORT_MAX) break;
-      const id = candidate.sessionId.toLowerCase();
-      if (seen.has(id)) continue;
-      if (excluded.has(id)) {
-        skipped["evidence-session"]++;
-        continue;
-      }
-      const remaining = COHORT_SIDE_BYTES - sideBytes;
-      if (remaining < 1) {
-        skipped["budget-spent"]++;
-        budgetSpent = true;
-        break;
-      }
-      const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining);
-      const loaded = await deps.loadCandidate(candidate, maxBytes);
-      sideBytes += loaded.bytesRead;
-      if ("skip" in loaded) {
-        if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
-          skipped["budget-spent"]++;
-          budgetSpent = true;
-          break;
-        }
-        skipped[loaded.skip]++;
-        continue;
-      }
-      const session = loaded.session;
-      if (session.id.toLowerCase() !== id) {
-        skipped.unreadable++;
-        continue;
-      }
-      if (session.cwd !== cwd) {
-        skipped["other-workspace"]++;
-        continue;
-      }
-      if (side === "baseline" ? session.endedAt > appliedAt : session.startedAt <= appliedAt) {
-        skipped["spans-application"]++;
-        continue;
-      }
-      if (session.ranOrangu) {
-        skipped["orangu-session"]++;
-        continue;
-      }
-      seen.add(id);
-      accepted.push({ ...session, id });
-    }
-    return { accepted, budgetSpent };
+  const ctx = {
+    deps,
+    cwd,
+    cutAt: appliedAt,
+    excluded: evidenceSessionIds(record3.sessionIds),
+    seen: new Set(frozen ? frozen.sessions.map((s) => s.id) : []),
+    skipped
   };
-  const baseline = (await take(baselineCandidates, "baseline")).accepted;
-  const laterSide = await take(laterCandidates, "later");
-  const later = laterSide.accepted;
+  const baseline = frozen ? frozen.sessions.map(({ id, startedAt, endedAt, metrics }) => ({ id, startedAt, endedAt, metrics: { ...metrics } })) : (await take(ctx, baselineCandidates(candidates, appliedAt), "baseline")).accepted;
+  const laterSide = await take(ctx, laterCandidates(candidates, appliedAt), "later");
   if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
     throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its sessions were read`);
   }
+  const laterComplete = laterSide.accepted.length >= COHORT_MAX || laterSide.budgetSpent;
+  const later = laterComplete ? laterSide.accepted : laterSide.accepted.slice(0, COHORT_MIN);
   const checks2 = intents.map(
     (intent) => evaluateCheck(
       intent,
@@ -14427,27 +14442,47 @@ async function measureCohortEffect(record3, others, deps) {
     appliedAt,
     verdict: overallVerdict(checks2, baseline.length, later.length),
     baseline,
+    baselineFrozen: frozen !== void 0,
     later,
-    laterComplete: later.length >= COHORT_MAX || laterSide.budgetSpent,
+    laterCount: laterSide.accepted.length,
+    laterComplete,
     checks: checks2,
     confoundedBy,
     skipped
   };
 }
+function effectFinality(effect) {
+  const checkpoint = effect.laterComplete ? "complete" : effect.laterCount >= COHORT_MIN ? "first" : null;
+  if (effect.baseline.length < COHORT_MIN) return { checkpoint, final: effect.baselineFrozen };
+  if (checkpoint === null) return { checkpoint, final: false };
+  if (effect.verdict === "verified" || checkpoint === "complete") return { checkpoint, final: true };
+  return effect.verdict === "regressed" ? { checkpoint, final: false, leaning: "worse" } : { checkpoint, final: false };
+}
+function checkpointLabel(effect, checkpoint) {
+  if (checkpoint === "first") return `the first checkpoint (the first ${COHORT_MIN} later sessions)`;
+  const n2 = effect.later.length;
+  return `the complete checkpoint (${n2 >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX} later sessions` : `${n2} later sessions, the byte budget is spent`})`;
+}
 function nextStep(effect) {
-  switch (effect.verdict) {
-    case "verified":
-      return effect.status === "verified" ? "already recorded as verified" : `record it: orangu suggest --set ${effect.id} verified`;
-    case "within-noise":
-      if (!effect.laterComplete) return `${effect.later.length} of ${COHORT_MAX} later sessions counted: later sessions can still join, or reject the proposal`;
-      return `the later cohort is complete (${effect.later.length >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX}` : `${effect.later.length} sessions, its byte budget is spent`}) and did not beat the baseline beyond chance: keep the change without a verified claim, or reject the proposal`;
-    case "not-enough-sessions":
-      return `needs at least ${COHORT_MIN} settled sessions on each side (has ${effect.baseline.length} before, ${effect.later.length} after)${effect.laterComplete ? ". The later cohort is complete, so this record cannot be verified" : ""}`;
-    case "regressed":
-      return "a check moved the wrong way beyond chance: review the change, or reject the proposal";
-    case "no-directional-check":
-      return "no reviewed check names a direction to improve, so nothing can be verified";
+  if (effect.status === "verified") return "already recorded as verified";
+  const counts = `(has ${effect.baseline.length} before, ${effect.laterCount} after)`;
+  if (effect.baseline.length < COHORT_MIN) {
+    if (effect.baselineFrozen) {
+      return `the frozen baseline has ${effect.baseline.length} of the ${COHORT_MIN} sessions that a verdict needs, and it cannot change. Record it as unproven: orangu suggest --record ${effect.id}`;
+    }
+    return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set ${effect.id} rejected --reason other`;
   }
+  const { checkpoint } = effectFinality(effect);
+  if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. Orangu grades at ${COHORT_MIN} and at ${COHORT_MAX} later sessions`;
+  const at = checkpointLabel(effect, checkpoint);
+  if (effect.verdict === "verified") return `${at} beat the baseline beyond chance. Record it: orangu suggest --set ${effect.id} verified`;
+  if (checkpoint === "first") {
+    const wait = `That is not final. Orangu grades again when the later cohort is complete (${effect.laterCount} of ${COHORT_MAX} so far)`;
+    if (effect.verdict === "regressed") return `${at} leans worse: a check moved the wrong way beyond chance. ${wait}`;
+    return `${at} did not beat the baseline beyond chance. ${wait}`;
+  }
+  if (effect.verdict === "regressed") return `${at} found a check that moved the wrong way beyond chance. Record it as regressed: orangu suggest --record ${effect.id}`;
+  return `${at} did not beat the baseline beyond chance. Record it as unproven: orangu suggest --record ${effect.id}`;
 }
 function verificationPatch(effect) {
   if (effect.verdict !== "verified") throw new Error(`not verified: ${effect.verdict}; ${nextStep(effect)}`);
