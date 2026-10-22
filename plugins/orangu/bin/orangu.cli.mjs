@@ -15775,6 +15775,7 @@ var GROUP_TITLES = {
   running: "Started in Claude Code",
   wait: "Waiting for later sessions"
 };
+var VERDICT_NOTE = `orangu grades a change at ${COHORT_MIN} later sessions and again at ${COHORT_MAX}. More looks raise the chance of a false win.`;
 var DEFERRED_TEXT = "orangu did not check this change in this read, because the read reached its byte budget. Run orangu again to check it.";
 var QUEUE_APP_ROW = "See this queue in the app: orangu serve";
 function checkpointPhrase(checkpoint) {
@@ -15814,6 +15815,7 @@ function queueLines(queue, width) {
     const items = queue.groups[group];
     if (!items.length) continue;
     lines.push("", `${INDENT3}${GROUP_TITLES[group]} (${items.length})`);
+    if (group === "verdict") lines.push(...wrapWords(VERDICT_NOTE, width - INDENT3.length).map((line) => INDENT3 + line));
     for (const item of items) lines.push(...itemLines(item, queue.now, all, width));
   }
   lines.push("", INDENT3 + QUEUE_APP_ROW);
@@ -15821,19 +15823,25 @@ function queueLines(queue, width) {
 }
 var GROUP_COLUMN = Math.max(...QUEUE_GROUPS.map((group) => group.length));
 var STATUS_COLUMN = "kicked-off".length;
-function todoLines(todo) {
-  const lines = [`${INDENT3}Workspace: ${terminal(todo.workspace)} \xB7 ${todo.counts.due} due \xB7 ${todo.counts.open} open`];
+var TODO_ID_COLUMN = INDENT3.length + GROUP_COLUMN + 2;
+function todoLines(todo, width) {
+  const head2 = [`Workspace: ${terminal(todo.workspace)}`, `${todo.counts.due} due`, `${todo.counts.open} open`].join(" \xB7 ");
+  const lines = wrapValue(head2, width - INDENT3.length).map((line) => INDENT3 + line);
   if (!todo.items.length) lines.push(`${INDENT3}orangu found no open item that needs a step.`);
   for (const item of todo.items) {
-    lines.push(`${INDENT3}${padCell(item.group, GROUP_COLUMN)}  ${terminal(item.id)}  ${padCell(terminal(item.status), STATUS_COLUMN)}  ${terminal(item.ruleId ?? "unknown-rule")}`);
+    const lead = `${INDENT3}${padCell(item.group, GROUP_COLUMN)}  ${terminal(item.id)}  ${padCell(terminal(item.status), STATUS_COLUMN)}`;
+    const rule = terminal(item.ruleId ?? "unknown-rule");
+    if (displayWidth(lead) + 2 + displayWidth(rule) <= width) lines.push(`${lead}  ${rule}`);
+    else lines.push(lead.trimEnd(), " ".repeat(TODO_ID_COLUMN) + rule);
   }
-  if (todo.omitted > 0) lines.push(`${INDENT3}${todo.omitted} more items do not fit in ${fmtCount(todo.maxBytes)} B.`);
+  if (todo.omitted > 0) lines.push(`${INDENT3}${plural(todo.omitted, "more item")} ${todo.omitted === 1 ? "does" : "do"} not fit in ${fmtCount(todo.maxBytes)} B.`);
   return lines;
 }
 function lessonLines(read, width) {
   const lines = ["", `${INDENT3}Lessons \xB7 ${plural(read.lessons.length, "lesson")} shown`, scopeLine(read.scope)];
   if (read.omitted > 0) {
-    lines.push(`${INDENT3}${read.omitted} older lessons do not fit in ${read.maxBytes === null ? "this read" : `${fmtCount(read.maxBytes)} B`}.`);
+    const fit2 = read.omitted === 1 ? "does not fit" : "do not fit";
+    lines.push(`${INDENT3}${plural(read.omitted, "older lesson")} ${fit2} in ${read.maxBytes === null ? "this read" : `${fmtCount(read.maxBytes)} B`}.`);
   }
   if (!read.lessons.length) lines.push("", `${INDENT3}orangu found no lesson in this scope.`);
   for (const lesson of read.lessons) {
@@ -15955,6 +15963,7 @@ var ARTIFACT_FLAGS = ["proposal", "manifest", "application", "verification"];
 var FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/;
 var ALL_STATUSES = [...STATUSES, ...RECORDED_STATUSES];
 var STEP_FLAGS = ["list", "show", "effect", "record", "set", "queue", "todo", "lessons", "history"];
+var NEW_STEP_FLAGS = ["record", "queue", "todo", "lessons", "history"];
 var READS = {
   queue: { takes: ["cwd", "all"], usage: "--queue [--cwd <dir> | --all] [--json]" },
   todo: { takes: ["cwd"], usage: "--todo [--cwd <dir>] [--json]" },
@@ -16260,6 +16269,12 @@ function effectView(effect) {
     next: nextStep(effect)
   };
 }
+function effectHeadLines(view, width) {
+  const head2 = `  ${terminal2(view.id)}  `;
+  const column = displayWidth(head2);
+  const [first = "", ...rest] = wrapValue(`later sessions vs baseline \xB7 ${view.baseline.n} before, ${view.later.n} after the change`, width - column);
+  return [head2 + first, ...[...rest, `of ${view.later.count} later sessions so far`].map((line) => " ".repeat(column) + line)];
+}
 async function cmdEffect(store, id, flags, deps) {
   const rec = await store.get(id);
   if (!rec) throw new Error(`suggestion ${id} not found (see: orangu suggest --list)`);
@@ -16267,7 +16282,7 @@ async function cmdEffect(store, id, flags, deps) {
   const view = visible(effectView(effect), flags);
   if (flagBool(flags, "json")) return emit(view, flags);
   const w = (s) => process.stdout.write(s + "\n");
-  w(`  ${terminal2(view.id)}  later sessions vs baseline \xB7 ${view.baseline.n} before, ${view.later.n} after the change, of ${view.later.count} later sessions so far`);
+  for (const line of effectHeadLines(view, textWidth())) w(line);
   for (const check of view.checks) w(`    ${terminal2(check.evidence)}`);
   if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal2).join(", ")} (not attributable to this change alone)`);
   const skipped = Object.entries(view.skipped).filter(([, count4]) => count4 > 0);
@@ -16324,7 +16339,8 @@ async function cmdQueue(store, flags, deps) {
 async function cmdTodo(store, flags, deps) {
   assertReadOptions("todo", flags);
   const cwd = workspaceDir(flags);
-  const output = (read) => readOutput(read, flags, todoLines);
+  const width = textWidth();
+  const output = (read) => readOutput(read, flags, (shown) => todoLines(shown, width));
   const todo = await readTodo(store, cwd, readDeps(flags, deps), { measure: (read) => outputBytes(output(read)) });
   process.stdout.write(output(todo));
 }
@@ -16353,7 +16369,7 @@ async function cmdSuggest(positionals, flags, deps = {}) {
     }
   }
   const steps = STEP_FLAGS.filter((name) => flags[name] !== void 0);
-  if (steps.length > 1) {
+  if (steps.length > 1 && steps.some((name) => NEW_STEP_FLAGS.includes(name))) {
     throw new Error(`orangu suggest runs 1 step at a time, and this call has ${steps.length}: ${steps.map((name) => `--${name}`).join(", ")}. usage: orangu suggest <step> [<options>] (orangu help all lists each step)`);
   }
   if (flags["status"] !== void 0 && flags["list"] === void 0) {
