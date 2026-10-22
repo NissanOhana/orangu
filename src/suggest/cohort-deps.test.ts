@@ -349,6 +349,39 @@ describe('createCachedCohortDeps over real transcripts', () => {
     expect(calls.filter((call) => call === id(103))).toHaveLength(2)
   })
 
+  it('reuses a skip over the evidence cap at a smaller cap above its probe bytes, and no other skip', async () => {
+    const { cwd } = workspaceWithSessions()
+    const trusted = createCohortDeps({ now: settled })
+    const calls: Array<[string, number]> = []
+    const base: CohortDeps = {
+      ...trusted,
+      loadCandidate: async (candidate, maxBytes) => {
+        calls.push([candidate.sessionId, maxBytes])
+        if (candidate.sessionId === id(100)) return { skip: 'over-budget', bytesRead: 7 }
+        if (candidate.sessionId === id(101)) return { skip: 'unreadable', bytesRead: 7 }
+        return trusted.loadCandidate(candidate, maxBytes)
+      },
+    }
+    const deps = cached(null, base)
+    const candidates = await deps.listCandidates(cwd)
+    const over = candidates.find((c) => c.sessionId === id(100))!
+    const unreadable = candidates.find((c) => c.sessionId === id(101))!
+    const MiB = 1024 * 1024
+    // Over the cap at 64 MiB: over the cap at any smaller cap that its 7 probe bytes leave room for.
+    for (const cap of [64 * MiB, 3 * MiB, 8]) expect(await deps.loadCandidate(over, cap)).toEqual({ skip: 'over-budget', bytesRead: 7 })
+    // A larger cap, or a cap that its probe bytes fill, loads again.
+    await deps.loadCandidate(over, 64 * MiB + 1)
+    await deps.loadCandidate(over, 7)
+    // The skip of the largest cap stays.
+    await deps.loadCandidate(over, 3 * MiB)
+    expect(calls.filter(([session]) => session === id(100)).map(([, cap]) => cap)).toEqual([64 * MiB, 64 * MiB + 1, 7])
+    // Any other skip is kept for its own cap only.
+    await deps.loadCandidate(unreadable, 64 * MiB)
+    await deps.loadCandidate(unreadable, 64 * MiB)
+    await deps.loadCandidate(unreadable, 3 * MiB)
+    expect(calls.filter(([session]) => session === id(101)).map(([, cap]) => cap)).toEqual([64 * MiB, 3 * MiB])
+  })
+
   it('keeps the trusted loaders off the cache: a planted entry changes no measure of the record steps', async () => {
     const { identity } = workspaceWithSessions()
     const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))

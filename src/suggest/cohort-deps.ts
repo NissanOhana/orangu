@@ -280,6 +280,17 @@ interface KeptSkip {
   load: CohortLoad
 }
 
+/**
+ * True when a skip over the evidence cap at `kept.maxBytes` also holds at `maxBytes`: a cap that is not larger, and
+ * that is larger than the probe bytes of the skip. With the same files and the same `now`, the trusted loader then
+ * reads the same probe bytes (each probe window fits inside the cap) and leaves a smaller cap for the full read. That
+ * read refuses again: the declared size check does not use the cap, and the check before each file uses what is left
+ * of the cap, in file order. So it gives the same skip and the same bytes.
+ */
+function overCapHolds(kept: KeptSkip, maxBytes: number): boolean {
+  return 'skip' in kept.load && kept.load.skip === 'over-budget' && kept.load.bytesRead < maxBytes && maxBytes <= kept.maxBytes
+}
+
 export interface CachedCohortDeps extends CohortDeps {
   /** `loaderCalls` counts the calls to the loader of a miss, and `missBytes` the bytes that they read */
   stats(): { loaderCalls: number; missBytes: number; cacheHits: number }
@@ -301,6 +312,8 @@ export interface CachedCohortDeps extends CohortDeps {
  * no file and calls no loader: the files, `now` and the cap are the same, so the trusted loader would give the same
  * skip. A changed file moves its key, so it loads again. Without this, each record of 1 read probes, walks and refuses
  * the same session again.
+ *
+ * A skip over the evidence cap also holds at a smaller cap above its probe bytes (`overCapHolds`).
  */
 export function createCachedCohortDeps(options: CachedCohortDepsOptions): CachedCohortDeps {
   const base = options.base ?? createCohortDeps({ now: options.now })
@@ -311,10 +324,14 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
   const keptSkip = (candidate: CohortCandidate, key: string, maxBytes: number): CohortLoad | undefined => {
     const kept = skips.get(candidate.path)
     if (!kept || kept.sessionId !== candidate.sessionId || kept.key !== key) return undefined
-    return kept.maxBytes === maxBytes ? { ...kept.load } : undefined
+    return kept.maxBytes === maxBytes || overCapHolds(kept, maxBytes) ? { ...kept.load } : undefined
   }
   const keepSkip = (candidate: CohortCandidate, key: string | undefined, maxBytes: number, load: CohortLoad): CohortLoad => {
     if (key === undefined || !('skip' in load)) return load
+    // A skip over the cap at a cap that is not smaller stays: it holds for more caps.
+    const kept = skips.get(candidate.path)
+    const keptOverCap = kept && 'skip' in kept.load && kept.load.skip === 'over-budget'
+    if (kept && keptOverCap && kept.sessionId === candidate.sessionId && kept.key === key && kept.maxBytes >= maxBytes) return load
     skips.set(candidate.path, { sessionId: candidate.sessionId, key, maxBytes, load: { ...load } })
     return load
   }
