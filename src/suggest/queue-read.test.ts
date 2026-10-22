@@ -280,6 +280,30 @@ describe('readQueue over real transcripts', () => {
     expect(JSON.stringify(await readQueue(store, { cwd }, warm))).toBe(JSON.stringify(first))
     expect(warm.cohort.stats().loaderCalls).toBe(0)
   })
+
+  it('finds a crashed subagent sidecar of a whole transcript from its end too', async () => {
+    const { cwd, identity } = workspace()
+    // A whole main transcript after the 3 others, and a subagent sidecar of 2 MiB that ends in a partial line.
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    const b = new SessionBuilder({ sessionId: uuid(201), cwd, startAt: new Date(APPLIED_AT + 4 * 60 * 60_000).toISOString() })
+    b.userPrompt('Make the change')
+    b.assistant([{ type: 'text', text: 'Done.' }])
+    const main = join(project, `${uuid(201)}.jsonl`)
+    writeFileSync(main, b.toJsonl())
+    const subagents = join(project, uuid(201), 'subagents')
+    mkdirSync(subagents, { recursive: true })
+    writeFileSync(join(subagents, 'agent-a1.jsonl'), `{"type":"user","message":{"content":"${'z'.repeat(2 * 1024 * 1024)}`)
+    const end = new Date(APPLIED_AT + 5 * 60 * 60_000)
+    utimesSync(main, end, end)
+    const store = storeOf(Array.from({ length: 6 }, (_, i) => appliedOf(sg(1 + i), { proposal: { ...proposalOf(cwd), workspace: identity } })))
+    const now = Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000
+    const deps = () => createQueueReadDeps({ now, cache: new CohortFactsCache({ version: 'test' }), budgetBytes: 1024 * 1024 })
+    const first = await readQueue(store, { cwd }, deps())
+    expect(items(first).map((item) => [item.group, item.check])).toEqual(Array.from({ length: 6 }, () => ['verdict', 'ran']))
+    const warm = deps()
+    expect(JSON.stringify(await readQueue(store, { cwd }, warm))).toBe(JSON.stringify(first))
+    expect(warm.cohort.stats().loaderCalls).toBe(0)
+  })
 })
 
 describe('the reads around the queue', () => {

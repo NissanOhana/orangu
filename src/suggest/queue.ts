@@ -17,13 +17,14 @@ import { isSuggestionId, kickoffCommands } from './id.js'
 import {
   changeClassOf,
   fitFirst,
-  idOrNull,
+  EARLIER_MAX,
   inWorkspace,
   jsonBytes,
   lastMoveTimes,
   reasonCodeOf,
   recordVerdict,
   reviewedChecks,
+  ruleIdOf,
   workspaceOf,
   type WorkspaceMembership,
 } from './lessons.js'
@@ -63,7 +64,7 @@ export interface QueueItem {
   ids: string[]
   status: SuggestionStatus
   scope: SuggestionScope
-  /** null when the stored rule id is not in the form that orangu writes */
+  /** null when the catalog does not know the stored rule id */
   ruleId: string | null
   changeClass?: ChangeClass
   /** the stored title: it can be model text, so every surface escapes it */
@@ -81,7 +82,10 @@ export interface QueueItem {
   final?: boolean
   leaning?: 'worse'
   cannotVerify?: CannotVerify
+  /** the `EARLIER_MAX` newest earlier records of the same workspace and rule */
   earlier: QueueEarlier[]
+  /** the count of every earlier record, so a cut list hides none of them */
+  earlierCount: number
   /** a handoff command, or null when no step can run now */
   next: string | null
 }
@@ -267,7 +271,7 @@ export function buildQueue(input: QueueInput): SuggestionQueue {
   const folded = new Map<string, SuggestionRecord[]>()
   const placed: Array<{ group: QueueGroup; records: SuggestionRecord[] }> = []
   // The earlier records of each workspace and rule, closed or regressed, newest move first: 1 index for the read.
-  const earlier = new Map<string, Array<{ id: string; entry: QueueEarlier }>>()
+  const earlier = new Map<string, { entries: Array<{ id: string; entry: QueueEarlier }>; ids: Set<string> }>()
   for (const record of sorted) {
     try {
       const key = workspaceKey(record)
@@ -275,9 +279,11 @@ export function buildQueue(input: QueueInput): SuggestionQueue {
         const reasonCode = reasonCodeOf(record)
         const entry: QueueEarlier = { id: record.id, status: record.status, verdict: recordVerdict(record).verdict, ...(reasonCode !== undefined ? { reasonCode } : {}) }
         const indexKey = JSON.stringify([key, record.ruleId])
-        const list = earlier.get(indexKey)
-        if (list) list.push({ id: record.id, entry })
-        else earlier.set(indexKey, [{ id: record.id, entry }])
+        const found = earlier.get(indexKey)
+        if (found) {
+          found.entries.push({ id: record.id, entry })
+          found.ids.add(record.id)
+        } else earlier.set(indexKey, { entries: [{ id: record.id, entry }], ids: new Set([record.id]) })
       }
       if (CLOSED.includes(record.status)) continue
       const candidates = record.status === 'applied' ? candidatesOf(record, input.discovered?.[record.id], input.now) : undefined
@@ -301,10 +307,19 @@ export function buildQueue(input: QueueInput): SuggestionQueue {
     }
   }
 
-  const earlierOf = (item: SuggestionRecord, ids: ReadonlySet<string>): QueueEarlier[] => {
+  // The EARLIER_MAX newest earlier records of the item, and the count of all of them. The work is the cap, not the list.
+  const earlierOf = (item: SuggestionRecord, ids: ReadonlySet<string>): { list: QueueEarlier[]; count: number } => {
     const key = workspaceKey(item)
-    if (key === undefined) return []
-    return (earlier.get(JSON.stringify([key, item.ruleId])) ?? []).filter(({ id }) => !ids.has(id)).map(({ entry }) => entry)
+    const found = key === undefined ? undefined : earlier.get(JSON.stringify([key, item.ruleId]))
+    if (!found) return { list: [], count: 0 }
+    let own = 0
+    for (const id of ids) if (found.ids.has(id)) own++
+    const list: QueueEarlier[] = []
+    for (const { id, entry } of found.entries) {
+      if (list.length >= EARLIER_MAX) break
+      if (!ids.has(id)) list.push(entry)
+    }
+    return { list, count: found.entries.length - own }
   }
 
   for (const { group, records: itemRecords } of placed) {
@@ -312,19 +327,21 @@ export function buildQueue(input: QueueInput): SuggestionQueue {
       const record = itemRecords[0]!
       const ids = itemRecords.map((r) => r.id)
       const changeClass = changeClassOf(record)
+      const earlierRecords = earlierOf(record, new Set(ids))
       groups[group].push({
         group,
         id: record.id,
         ids,
         status: record.status,
         scope: record.scope,
-        ruleId: idOrNull(record.ruleId),
+        ruleId: ruleIdOf(record),
         ...(changeClass !== undefined ? { changeClass } : {}),
         title: record.title,
         workspace: ownWorkspace(record) ?? membership?.cwd ?? null,
         lastMoveAt: Math.max(...itemRecords.map((r) => moves.get(r.id) ?? r.statusAt)),
         ...(record.status === 'applied' ? appliedKeys(record, input) : {}),
-        earlier: earlierOf(record, new Set(ids)),
+        earlier: earlierRecords.list,
+        earlierCount: earlierRecords.count,
         next: nextOf(record, group),
       })
     } catch {
@@ -358,7 +375,7 @@ export interface TodoItem {
   id: string
   status: SuggestionStatus
   scope: SuggestionScope
-  /** null when the stored rule id is not in the form that orangu writes */
+  /** null when the catalog does not know the stored rule id */
   ruleId: string | null
   changeClass?: ChangeClass
   cannotVerify?: CannotVerify

@@ -11,6 +11,7 @@
  * read takes a nested field only in its own form, gives an id only in the form that orangu writes, and leaves out a
  * record that still fails. A read never stops on 1 bad record.
  */
+import { allEntries } from './catalog.js'
 import { isChangeClass, type ChangeClass } from './change-classes.js'
 import { isDirectional, type CohortCheckVerdict, type CohortVerdict } from './cohort-stats.js'
 import { REJECT_REASON_CODES, type RejectReasonCode } from './reason-codes.js'
@@ -29,12 +30,31 @@ import { applicationTime, isTrustedComputedVerification, outcomeReceiptViolation
 /** The hard cap of the lesson read on the CLI, in bytes of the exact output with its trailing newline. */
 export const LESSONS_MAX_BYTES = 16_384
 
-/** A rule id or an insight id as orangu writes them: lowercase letters, digits, `.`, `_`, `:` and `-`, 128 at most. */
-const ID_RE = /^[a-z0-9][a-z0-9._:-]{0,127}$/
+/** The most earlier records that 1 queue item lists, newest first. `earlierCount` counts them all. */
+export const EARLIER_MAX = 10
 
-/** The id in its own form, or null: a stored rule id can be any text, and a title-free read gives no text. */
-export function idOrNull(value: unknown): string | null {
-  return typeof value === 'string' && ID_RE.test(value) ? value : null
+/** The rule ids that the catalog knows (`allEntries` of `src/suggest/catalog.ts`, the ids that `matchRule` matches). */
+let knownRuleIds: ReadonlySet<string> | undefined
+function knownRules(): ReadonlySet<string> {
+  knownRuleIds ??= new Set(allEntries().map((entry) => entry.pattern.ruleId).filter((id): id is string => typeof id === 'string'))
+  return knownRuleIds
+}
+
+/** A number suffix of an insight id, as the analyzer writes it: `<ruleId>-<n>`. */
+const INSIGHT_SUFFIX_RE = /^[0-9]{1,9}$/
+
+/** The rule id of a record only when the catalog knows it, else null: a stored rule id can be any text. */
+export function ruleIdOf(record: SuggestionRecord): string | null {
+  const value: unknown = record.ruleId
+  return typeof value === 'string' && knownRules().has(value) ? value : null
+}
+
+/** The insight id of a record only when it is the record's own known rule id, a `-` and a number. */
+export function insightIdOf(record: SuggestionRecord): string | undefined {
+  const rule = ruleIdOf(record)
+  const value: unknown = record.insightId
+  if (rule === null || typeof value !== 'string' || !value.startsWith(`${rule}-`)) return undefined
+  return INSIGHT_SUFFIX_RE.test(value.slice(rule.length + 1)) ? value : undefined
 }
 
 /** The change class of the proposal, only when it is 1 of the change classes. */
@@ -263,7 +283,7 @@ function trustedVerdict(record: SuggestionRecord): RecordVerdict {
 export interface Lesson {
   id: string
   scope: SuggestionScope
-  /** null when the stored rule id is not in the form that orangu writes */
+  /** null when the catalog does not know the stored rule id */
   ruleId: string | null
   insightId?: string
   changeClass?: ChangeClass
@@ -315,13 +335,13 @@ export interface LessonInput {
 /** The keys of a lesson or a change row up to its checks, in the order of the lesson shape. */
 function lessonHead(record: SuggestionRecord, verdict: RecordVerdict): Omit<Lesson, 'checks' | 'appliedAt' | 'decidedAt'> {
   const changeClass = changeClassOf(record)
-  const insightId = idOrNull(record.insightId)
+  const insightId = insightIdOf(record)
   const reasonCode = reasonCodeOf(record)
   return {
     id: record.id,
     scope: record.scope,
-    ruleId: idOrNull(record.ruleId),
-    ...(insightId !== null ? { insightId } : {}),
+    ruleId: ruleIdOf(record),
+    ...(insightId !== undefined ? { insightId } : {}),
     ...(changeClass !== undefined ? { changeClass } : {}),
     status: record.status,
     ...(reasonCode !== undefined ? { reasonCode } : {}),

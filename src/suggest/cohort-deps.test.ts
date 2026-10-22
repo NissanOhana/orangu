@@ -8,7 +8,7 @@ import { MIN_VERIFICATION_QUIET_MS } from '../adapters/claude-code/discovered-an
 import { projectSlug } from '../discover/discover.js'
 import { measureCohortEffect, type CohortDeps } from './cohort.js'
 import { COHORT_FACTS_DIR, CohortFactsCache } from './cohort-cache.js'
-import { createCachedCohortDeps, createCohortDeps, partialTail, settlingStartedAt } from './cohort-deps.js'
+import { createCachedCohortDeps, createCohortDeps, partialTail, readTail, settlingStartedAt } from './cohort-deps.js'
 import type { SuggestionRecord } from './types.js'
 
 const ENV_KEYS = ['ORANGU_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR', 'HOME'] as const
@@ -136,7 +136,10 @@ describe('createCohortDeps: a settling session', () => {
     const { cwd } = workspaceWithSessions()
     const deps = createCohortDeps({ now: () => Date.now() })
     const candidate = (await deps.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
-    expect(await deps.loadCandidate(candidate, 64 * 1024 * 1024)).toEqual({ skip: 'still-settling', bytesRead: 0, startedAt: Date.parse('2026-08-10T10:00:00.000Z') })
+    // The bytes that the read took count: the last byte of the transcript, then its head (the whole small file).
+    const size = statSync(candidate.path).size
+    expect(size).toBeLessThan(64_000)
+    expect(await deps.loadCandidate(candidate, 64 * 1024 * 1024)).toEqual({ skip: 'still-settling', bytesRead: 1 + size, startedAt: Date.parse('2026-08-10T10:00:00.000Z') })
   })
 
   it('reads the earliest time of the head, and nothing from a missing file or a file with no time', async () => {
@@ -162,11 +165,29 @@ describe('createCohortDeps: a transcript that ends in a partial line', () => {
     return { cwd, path }
   }
 
-  it('finds the partial line from the end of a quiet transcript and reads none of it', async () => {
-    const { cwd } = endWith(`{"type":"user","message":{"content":"${'x'.repeat(5_000)}`)
+  it('finds the partial line from the end of a quiet transcript, reads only the probes and counts their bytes', async () => {
+    const { cwd, path } = endWith(`{"type":"user","message":{"content":"${'x'.repeat(200_000)}`)
     const deps = createCohortDeps({ now: settledNow })
     const candidate = (await deps.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
-    expect(await deps.loadCandidate(candidate, 64 * 1024 * 1024)).toEqual({ skip: 'still-settling', bytesRead: 0, startedAt: Date.parse('2026-08-10T10:00:00.000Z') })
+    // The tail probe reads 64,000 B (no newline in them) and the head read 64,000 B: not the 200 KB of the file.
+    expect(await deps.loadCandidate(candidate, 64 * 1024 * 1024)).toEqual({ skip: 'still-settling', bytesRead: 2 * 64_000, startedAt: Date.parse('2026-08-10T10:00:00.000Z') })
+    expect(statSync(path).size).toBeGreaterThan(200_000)
+  })
+
+  it('finds a partial line in a subagent sidecar of a whole main transcript, also in a nested folder', async () => {
+    for (const nested of [false, true]) {
+      const { cwd } = workspaceWithSessions()
+      const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+      const folder = nested ? join(project, id(100), 'subagents', 'team') : join(project, id(100), 'subagents')
+      mkdirSync(folder, { recursive: true })
+      writeFileSync(join(folder, 'agent-a1.jsonl'), `{"type":"user","message":{"content":"${'y'.repeat(300_000)}`)
+      const deps = createCohortDeps({ now: settledNow })
+      const candidate = (await deps.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
+      const loaded = await deps.loadCandidate(candidate, 64 * 1024 * 1024)
+      expect(loaded, `nested ${nested}`).toMatchObject({ skip: 'still-settling', startedAt: Date.parse('2026-08-10T10:00:00.000Z') })
+      // The main tail (1 B), the sidecar tail (64,000 B) and the head read: not the 300 KB of the sidecar.
+      expect(loaded.bytesRead, `nested ${nested}`).toBeLessThanOrEqual(1 + 64_000 + 64_000)
+    }
   })
 
   it('reads a last line with no newline that is a whole record, as the reader does', async () => {
@@ -181,6 +202,11 @@ describe('createCohortDeps: a transcript that ends in a partial line', () => {
     const path = join(dir, 'a.jsonl')
     writeFileSync(path, `{"a":1}\n{"b":"${'y'.repeat(100_000)}"}`)
     expect(await partialTail(path)).toBe(true)
+    // The tail read is 64,000 B at most for 1 file, the last byte included, and less when the caller has less.
+    expect(await readTail(path, 1_000_000)).toEqual({ partial: true, bytesRead: 64_000 })
+    expect(await readTail(path, 10)).toEqual({ partial: true, bytesRead: 10 })
+    writeFileSync(join(dir, 'b.jsonl'), '{"a":1}\n')
+    expect(await readTail(join(dir, 'b.jsonl'), 1_000_000)).toEqual({ partial: false, bytesRead: 1 })
     writeFileSync(path, '{"a":1}\n{"b":2}\n')
     expect(await partialTail(path)).toBe(false)
     writeFileSync(path, '{"a":1}\n   ')
