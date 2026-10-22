@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash6 } from "node:crypto";
-import { basename as basename17, join as join14, resolve as resolve14 } from "node:path";
+import { basename as basename16, join as join13, resolve as resolve14 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -9589,8 +9589,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename18 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename18)) return { violation: "must not use a reserved Windows device name" };
+    const basename17 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename17)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -14621,8 +14621,8 @@ function outcomePatch(effect) {
 
 // src/suggest/cohort-deps.ts
 import { constants as constants12 } from "node:fs";
-import { lstat as lstat10, open as open12, readdir as readdir3, realpath as realpath9 } from "node:fs/promises";
-import { basename as basename12, dirname as dirname7, isAbsolute as isAbsolute8, join as join10 } from "node:path";
+import { open as open12, realpath as realpath9 } from "node:fs/promises";
+import { isAbsolute as isAbsolute8 } from "node:path";
 
 // src/adapters/claude-code/discovered-analysis.ts
 import { realpath as realpath8 } from "node:fs/promises";
@@ -14718,7 +14718,7 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
 // src/suggest/cohort-cache.ts
 import { createHash as createHash4, randomBytes as randomBytes4 } from "node:crypto";
 import { constants as constants11 } from "node:fs";
-import { lstat as lstat9, open as open11, rename as rename2, unlink as unlink3 } from "node:fs/promises";
+import { lstat as lstat9, open as open11, readdir as readdir3, rename as rename2, unlink as unlink3 } from "node:fs/promises";
 import { basename as basename11, dirname as dirname6, isAbsolute as isAbsolute7, join as join9, resolve as resolve10 } from "node:path";
 var COHORT_FACTS_DIR = "cohort-facts-v1";
 var COHORT_FACTS_MAX_ENTRY_BYTES = 16384;
@@ -14756,6 +14756,46 @@ function pick(facts) {
     metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, facts.metrics?.[metric]]))
   };
 }
+var SIDECAR_STAT_BATCH = 16;
+async function sidecarTree(mainPath) {
+  const tree = { folders: [], transcripts: [], files: /* @__PURE__ */ new Map(), complete: true };
+  const sessionDir = join9(dirname6(mainPath), basename11(mainPath, ".jsonl"));
+  const folder = await lstatOrUndefined(sessionDir);
+  if (!folder || folder.isSymbolicLink() || !folder.isDirectory()) return tree;
+  tree.sessionDir = folder;
+  let entries = 0;
+  const walk2 = async (dir, st, depth) => {
+    tree.folders.push({ path: dir, st });
+    const names = (await readdir3(dir)).sort();
+    for (let start = 0; start < names.length; start += SIDECAR_STAT_BATCH) {
+      const batch = names.slice(start, start + SIDECAR_STAT_BATCH);
+      const stats = await Promise.allSettled(batch.map((name) => lstat9(join9(dir, name), { bigint: true })));
+      for (const [index, name] of batch.entries()) {
+        if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error("sidecar limit");
+        const result = stats[index];
+        if (result.status === "rejected") throw result.reason;
+        const child = join9(dir, name);
+        const cst = result.value;
+        if (cst.isSymbolicLink()) continue;
+        if (cst.isDirectory()) {
+          if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk2(child, cst, depth + 1);
+        } else if (cst.isFile()) {
+          if (name.startsWith("agent-") && name.endsWith(".jsonl")) tree.transcripts.push({ path: child, st: cst });
+          else tree.files.set(child, cst);
+        }
+      }
+    }
+  };
+  const subagents = join9(sessionDir, "subagents");
+  const root = await lstatOrUndefined(subagents);
+  if (!root || root.isSymbolicLink() || !root.isDirectory()) return tree;
+  try {
+    await walk2(subagents, root, 0);
+  } catch {
+    tree.complete = false;
+  }
+  return tree;
+}
 async function cohortFactsKey(ref2) {
   try {
     const main2 = await lstat9(ref2.path, { bigint: true });
@@ -14767,29 +14807,26 @@ async function cohortFactsKey(ref2) {
     };
     changed(main2);
     const parts2 = [COHORT_FACTS_DIR, ref2.path, main2.dev, main2.ino, main2.size, main2.mtimeNs, main2.ctimeNs];
-    const sessionDir = join9(dirname6(ref2.path), basename11(ref2.path, ".jsonl"));
-    const folder = await lstatOrUndefined(sessionDir);
-    if (folder?.isDirectory()) {
-      changed(folder);
-      const subagents = await lstatOrUndefined(join9(sessionDir, "subagents"));
-      if (subagents?.isDirectory()) changed(subagents);
+    const tree = await sidecarTree(ref2.path);
+    if (tree.sessionDir) {
+      changed(tree.sessionDir);
+      parts2.push(`session:${tree.sessionDir.mtimeNs}:${tree.sessionDir.ctimeNs}`);
     } else {
       const project = await lstatOrUndefined(dirname6(ref2.path));
       if (project) changed(project);
     }
-    const files2 = [...ref2.subagentFiles].sort();
-    parts2.push(files2.length);
-    for (const dir of new Set(files2.map((file) => dirname6(file)))) {
-      const st = await lstatOrUndefined(dir);
-      if (st) changed(st);
+    for (const { path, st } of tree.folders) {
+      changed(st);
+      parts2.push(`folder:${path}:${st.mtimeNs}:${st.ctimeNs}`);
     }
-    for (const file of files2) {
-      for (const path of [file, file.replace(/\.jsonl$/, ".meta.json")]) {
-        const st = await lstatOrUndefined(path);
-        if (st) changed(st);
-        parts2.push(st ? `${st.size}:${st.mtimeNs}:${st.ctimeNs}` : "-");
-      }
+    parts2.push(tree.transcripts.length);
+    for (const { path, st } of tree.transcripts) {
+      const meta = tree.files.get(path.replace(/\.jsonl$/, ".meta.json"));
+      changed(st);
+      if (meta) changed(meta);
+      parts2.push(`${path}:${st.size}:${st.mtimeNs}:${st.ctimeNs}`, meta ? `${meta.size}:${meta.mtimeNs}:${meta.ctimeNs}` : "-");
     }
+    if (!tree.complete) parts2.push("incomplete");
     const changedAt = Number((changedNs + 999999n) / 1000000n);
     return { key: createHash4("sha1").update(parts2.join("|")).digest("hex"), changedAt };
   } catch {
@@ -14975,28 +15012,7 @@ async function readTail(path, cap) {
   }
 }
 async function sidecarTranscripts(path) {
-  const files2 = [];
-  let entries = 0;
-  const walk2 = async (dir, depth) => {
-    const st = await lstat10(dir);
-    if (st.isSymbolicLink() || !st.isDirectory()) return;
-    for (const name of (await readdir3(dir)).sort()) {
-      if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error("sidecar limit");
-      const child = join10(dir, name);
-      const cst = await lstat10(child);
-      if (cst.isSymbolicLink()) continue;
-      if (cst.isDirectory()) {
-        if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk2(child, depth + 1);
-      } else if (cst.isFile() && name.startsWith("agent-") && name.endsWith(".jsonl")) files2.push(child);
-    }
-  };
-  const sessionDir = join10(dirname7(path), basename12(path, ".jsonl"));
-  try {
-    const st = await lstat10(sessionDir);
-    if (!st.isSymbolicLink() && st.isDirectory()) await walk2(join10(sessionDir, "subagents"), 0);
-  } catch {
-  }
-  return files2;
+  return (await sidecarTree(path)).transcripts.map((entry) => entry.path);
 }
 async function sessionTail(path, cap) {
   const main2 = await readTail(path, cap);
@@ -15210,7 +15226,7 @@ function createCachedCohortDeps(options) {
 }
 
 // src/suggest/reject-workspace.ts
-import { basename as basename13, isAbsolute as isAbsolute9 } from "node:path";
+import { basename as basename12, isAbsolute as isAbsolute9 } from "node:path";
 function createRejectWorkspaceDeps() {
   return {
     async findSessions(ids) {
@@ -15228,7 +15244,7 @@ function evidenceIds(selectors) {
   const ids = /* @__PURE__ */ new Set();
   for (const selector of selectors) {
     const trimmed = selector.trim();
-    for (const candidate of [trimmed, basename13(trimmed).replace(/\.jsonl$/i, "")]) {
+    for (const candidate of [trimmed, basename12(trimmed).replace(/\.jsonl$/i, "")]) {
       if (SESSION_ID_RE.test(candidate)) ids.add(candidate.toLowerCase());
     }
   }
@@ -16464,7 +16480,7 @@ async function cmdSuggest(positionals, flags, deps = {}) {
 }
 
 // src/cli/commands/feedback.ts
-import { join as join11 } from "node:path";
+import { join as join10 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/cli/open-browser.ts
@@ -16548,7 +16564,7 @@ function feedbackOptions(flags) {
 async function cmdFeedback(positionals, flags) {
   if (positionals.length) throw new Error("usage: orangu feedback --context session|repo|global|report|app [--port <n>] [--no-open]");
   const { context, port } = feedbackOptions(flags);
-  const emptyConfigDir = join11(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
+  const emptyConfigDir = join10(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
   const server = await startServe(
     {
       port,
@@ -17044,16 +17060,16 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
 }
 
 // src/cli/commands/show-me.ts
-import { basename as basename14, resolve as resolve12 } from "node:path";
+import { basename as basename13, resolve as resolve12 } from "node:path";
 
 // src/show-me/prepare.ts
 import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
-import { join as join13 } from "node:path";
+import { join as join12 } from "node:path";
 
 // src/show-me/render.ts
 import { randomBytes as randomBytes5 } from "node:crypto";
-import { lstat as lstat11, realpath as realpath11, rename as rename3, rm } from "node:fs/promises";
-import { dirname as dirname8, join as join12 } from "node:path";
+import { lstat as lstat10, realpath as realpath11, rename as rename3, rm } from "node:fs/promises";
+import { dirname as dirname7, join as join11 } from "node:path";
 
 // src/show-me/check.ts
 import { createHash as createHash5 } from "node:crypto";
@@ -18324,7 +18340,7 @@ var TEMPLATES = Object.freeze([
   Object.freeze({ file: "slides.html", html: SLIDES_HTML }),
   Object.freeze({ file: "report.html", html: REPORT_HTML })
 ]);
-var showMeBase = () => join12(oranguHome(), "show-me");
+var showMeBase = () => join11(oranguHome(), "show-me");
 var ShowMeRenderError = class extends Error {
   name = "ShowMeRenderError";
 };
@@ -18342,10 +18358,10 @@ async function confinedRunDir(dir, base = showMeBase()) {
   } catch {
     throw new ShowMeRenderError("the --render directory does not exist.");
   }
-  if (dirname8(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
-  if (!(await lstat11(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
+  if (dirname7(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
+  if (!(await lstat10(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
   try {
-    const data = await lstat11(join12(real, "data.json"));
+    const data = await lstat10(join11(real, "data.json"));
     if (!data.isFile()) throw new ShowMeRenderError("data.json in the run directory must be a regular file.");
   } catch (error) {
     if (error instanceof ShowMeRenderError) throw error;
@@ -18356,7 +18372,7 @@ async function confinedRunDir(dir, base = showMeBase()) {
 async function readJson2(dir, name) {
   let text3;
   try {
-    text3 = await readStableTextFile(join12(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
+    text3 = await readStableTextFile(join11(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("not found")) throw new ShowMeInputError(`the run directory has no ${name}.${name === "words.json" ? " Write the 3 words first." : ""}`);
@@ -18374,9 +18390,9 @@ async function writeBoth(dir, files2) {
   const staged = [];
   try {
     for (const { file } of files2) {
-      const to = join12(dir, file);
+      const to = join11(dir, file);
       try {
-        const existing = await lstat11(to);
+        const existing = await lstat10(to);
         if (!existing.isFile()) throw new ShowMeRenderError(`${file} in the run directory is not a regular file.`);
       } catch (error) {
         if (error instanceof ShowMeRenderError) throw error;
@@ -18384,8 +18400,8 @@ async function writeBoth(dir, files2) {
       }
     }
     for (const { file, html } of files2) {
-      const from = join12(dir, `.${file}.${randomBytes5(6).toString("hex")}.tmp`);
-      staged.push({ from, to: join12(dir, file) });
+      const from = join11(dir, `.${file}.${randomBytes5(6).toString("hex")}.tmp`);
+      staged.push({ from, to: join11(dir, file) });
       await writePrivateOutput(from, html);
     }
     for (const { from, to } of staged) await rename3(from, to);
@@ -18406,7 +18422,7 @@ async function renderShowMe(dir, o = {}) {
     return { file, html };
   });
   await writeBoth(run, files2);
-  return { dir: run, slides: join12(run, "slides.html"), report: join12(run, "report.html"), findings: wordFindings(words2) };
+  return { dir: run, slides: join11(run, "slides.html"), report: join11(run, "report.html"), findings: wordFindings(words2) };
 }
 
 // src/show-me/prepare.ts
@@ -18419,8 +18435,8 @@ function runName(name) {
 async function prepareRun(scope, name, json2, o = {}) {
   const base = o.base ?? showMeBase();
   await mkdir3(base, { recursive: true, mode: 448 });
-  const dir = await realpath12(await mkdtemp(join13(base, `${scope}-${runName(name)}-`)));
-  const path = join13(dir, "data.json");
+  const dir = await realpath12(await mkdtemp(join12(base, `${scope}-${runName(name)}-`)));
+  const path = join12(dir, "data.json");
   await writePrivateOutput(path, json2);
   const bytes = Buffer.byteLength(json2);
   const approxTokens3 = Math.ceil(bytes / 4);
@@ -18529,13 +18545,13 @@ async function aggregateData2(scope, flags, err3) {
       }
     }
   }
-  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename14(cwd)}`, now);
+  const agg = aggregate(analyses, scope === "global" ? "global" : `repo ${basename13(cwd)}`, now);
   if (failed) agg.scope += ` (${failed} unreadable skipped)`;
   const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, flags))), { scope });
-  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename14(cwd) : redactValue(basename14(cwd), { scrub: true }) : void 0;
+  const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename13(cwd) : redactValue(basename13(cwd), { scrub: true }) : void 0;
   const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION2 }, null, 2)}
 `;
-  return { name: scope === "global" ? "machine" : basename14(cwd), json: json2, skipped: failed };
+  return { name: scope === "global" ? "machine" : basename13(cwd), json: json2, skipped: failed };
 }
 function printPrepared(run, out3) {
   const lines = [
@@ -18689,7 +18705,7 @@ var EXTRA_HELP = [
 ];
 
 // src/cli/commands/pick.ts
-import { basename as basename15 } from "node:path";
+import { basename as basename14 } from "node:path";
 
 // src/cli/select.ts
 var FRAME_CHROME_LINES = 5;
@@ -18811,7 +18827,7 @@ async function gatherPickRows(flags, deps = {}) {
     ordered.slice(0, limit).map(async ({ r, running }) => {
       const head2 = await peekHead(r.path);
       const title = head2.title && redact ? redactValue(head2.title, { scrub: true, stripPaths: flagBool(flags, "strip-paths") }) : head2.title;
-      const project = head2.cwd ? basename15(head2.cwd) : basename15(r.projectSlug);
+      const project = head2.cwd ? basename14(head2.cwd) : basename14(r.projectSlug);
       return {
         sessionId: r.sessionId,
         path: r.path,
@@ -18853,7 +18869,7 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename16, resolve as resolve13 } from "node:path";
+import { basename as basename15, resolve as resolve13 } from "node:path";
 var INDENT4 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
@@ -18872,7 +18888,7 @@ async function gatherDashboardData(flags, deps = {}) {
     claudeRoots(configArg)
   ]);
   return {
-    repoName: basename16(cwd) || cwd,
+    repoName: basename15(cwd) || cwd,
     repoSessions: repoRefs.length,
     globalSessions: picked.counts.total,
     roots: roots.length,
@@ -19045,7 +19061,7 @@ async function selectSession2(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail2(`"${sel}" matches ${cands.length} sessions:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename17(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename16(c.projectSlug)).join("\n"));
   }
   fail2(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
@@ -19089,7 +19105,7 @@ async function analyzeWithProgress(ref2, flags) {
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
   if (out3) return resolve14(out3);
-  return join14(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  return join13(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref2 = await selectSession2(sel, flags);
@@ -19214,7 +19230,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     const cwd = selOrPath ? resolve14(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename17(cwd)}`;
+    scopeLabel = `repo ${basename16(cwd)}`;
   }
   if (!refs.length) fail2(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
@@ -19279,7 +19295,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash6("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve14(named) : join14(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve14(named) : join13(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
