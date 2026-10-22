@@ -14955,8 +14955,8 @@ async function cmdSet(store, id, positionals, flags, deps) {
     if (!applicationPath) throw new Error("--application <id>.applied.json is required when setting applied");
     const proposal = await assertWorkspaceMatch(rec);
     const application = await loadApplicationReceipt(store.proposalsDir, rec.id, applicationPath, proposal.files);
-    const next2 = await transitionApplied(store, rec, application, deps.cohort ?? createCohortDeps());
-    if (flagBool(flags, "json")) return emit(visible(next2, flags), flags);
+    const { next: next2, baselineFreeze } = await transitionApplied(store, rec, application, deps.cohort ?? createCohortDeps(), flags);
+    if (flagBool(flags, "json")) return emit(visible({ ...next2, baselineFreeze }, flags), flags);
     return printRecord(visible(next2, flags));
   } else if (status === "verified") {
     if (rec.scope === "global") throw new Error(`suggestion ${id}: global suggestions are review-only and cannot be verified`);
@@ -14983,7 +14983,7 @@ async function cmdSet(store, id, positionals, flags, deps) {
   if (flagBool(flags, "json")) return emit(visible(next, flags), flags);
   printRecord(visible(next, flags));
 }
-async function transitionApplied(store, rec, application, cohort) {
+async function transitionApplied(store, rec, application, cohort, flags) {
   let frozenBaseline;
   let notFrozen;
   try {
@@ -14999,12 +14999,13 @@ async function transitionApplied(store, rec, application, cohort) {
     notFrozen = error;
     next = await store.transition(rec.id, "applied", { application });
   }
-  if (notFrozen !== void 0) {
-    const reason = notFrozen instanceof Error ? notFrozen.message : String(notFrozen);
-    process.stderr.write(`  orangu did not freeze the baseline (${terminal(reason)}). The change is applied, and each check reads the baseline sessions again.
+  if (notFrozen === void 0) return { next, baselineFreeze: { frozen: true } };
+  const reason = terminal(notFrozen instanceof Error ? notFrozen.message : String(notFrozen));
+  if (!flagBool(flags, "quiet")) {
+    process.stderr.write(`  orangu did not freeze the baseline (${reason}). The change is applied, and each check reads the baseline sessions again.
 `);
   }
-  return next;
+  return { next, baselineFreeze: { frozen: false, reason } };
 }
 async function cmdRecord(store, id, positionals, flags, deps) {
   if (positionals.length) throw new Error("--record takes no status. Orangu measures the verdict itself");
