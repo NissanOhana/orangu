@@ -1,6 +1,6 @@
 # Orangu skills
 
-Six Claude Code skills. Each owns one job and routes the rest.
+Six Claude Code skills. Start with `/orangu:improve`. Each owns one job.
 
 | Skill | What it is | Use instead when |
 |---|---|---|

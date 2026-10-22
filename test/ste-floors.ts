@@ -80,6 +80,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/improve/SKILL.md': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 2 }, // measured 98 (89 of 91): the 30-word network-disclosure list and the 26-word routing sentence in the description. P1b moved the pinned "Orangu picks the sessions; never choose them." to two sentences
   'plugin/skills/improve/references/artifact-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (56 of 56) after the rewrite
   'plugin/skills/shared/interview.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (47 of 47) after the rewrite
+  'plugin/skills/shared/loop.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface 2026-10-22, born at max(80, measured - 2): measured 100 (118 of 118), 0 findings
   'plugin/skills/shared/ste.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (86 of 86, table cells included)
   'plugin/skills/shared/untrusted-input.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (37 of 37) after the rewrite
   'plugin/codex/*/openai.yaml': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (6 of 6), no change was needed

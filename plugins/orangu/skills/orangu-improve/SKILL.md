@@ -5,7 +5,7 @@ description: Turn one finding into one bounded, reviewable proposal with evidenc
 
 # orangu-improve
 
-Evidence: a supported Claude Code, Cowork, or Desktop session, or current Orangu Analysis, SlimAnalysis, or Aggregate JSON.
+Evidence: a supported Claude Code, Cowork, or Desktop session.
 
 Orangu measures. You interpret and write a reviewable proposal, never an automatic claim of improvement. Never edit the target repository. Use this skill for one session diagnosis and a command from a report. The work on recurring repo/global improvement belongs to `orangu harness`.
 
@@ -13,12 +13,14 @@ Read [the artifact contract](references/artifact-contract.md) before writing or 
 
 ## Inputs
 
-Accept exactly one input:
+Accept one input, or none:
 
 - `<suggestion-id> [handoff flags]` from the report or localhost app.
 - `<session-id|latest|path.jsonl|analysis.json>` for one session or current Analysis/SlimAnalysis JSON.
 - `<aggregate.json> --scope repo|global` for current Aggregate JSON.
 - `--verify <suggestion-id>` to compare an applied session or repo change with later sessions (ignore any later-input after the id).
+
+With no input, take the first item of `orangu suggest --todo --json --quiet`. For status `applied` or `regressed`, run step 6. For `proposed`, name `$orangu-apply <id>`. Else use its id as the input. With no item, ask for one.
 
 Never open or parse a `.jsonl` transcript yourself. Pass it to `orangu evidence`. If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`. For an installed plugin, try `../../bin/orangu.cli.mjs` first. For a source checkout, try `../../../dist/orangu.js` next. Run the first file that exists with Node.js 20 or newer. Never fetch a package to continue. If neither works, report the blocker and stop.
 
@@ -38,7 +40,7 @@ For a suggestion id, run `orangu estimate --suggestion '<id>' --json --quiet` fi
 
 ## 2. Diagnose and rank
 
-Start with `catalogMatches`, then the selected `findings`. Tie every number to deterministic evidence, mark estimates, and explain in the user's language without assuming they write code.
+Start with `catalogMatches`, then the selected `findings`. Read the lessons of their rules before you rank, as [the loop rules](../shared/loop.md) direct. Tie every number to deterministic evidence, mark estimates, and explain in the user's language without assuming they write code.
 
 Classify each useful option into exactly one change class: `instruction`, `script-cli`, `hook`, `skill-create`, `skill-discover`, `subagent-agent`, `mcp`, `plugin`, `workflow-config`. Prefer the smallest change that improves outcome quality or understanding. Less time or fewer tokens are secondary and must not push the same work to an unmeasured place.
 
@@ -60,13 +62,13 @@ Record provenance honestly:
 
 ## 4. Save one bounded proposal
 
+Write no proposal when evidence is missing, already addressed, or too weak. Say why. Use `rejected` only when the user's workflow calls for closing the record.
+
 For a direct evidence finding, create or reuse its canonical record with the emitted `suggestionId` and `findingToken`: `orangu suggest '<suggestionId>' --finding '<findingToken>' --json --quiet`. Move a `new` or `failed` record to `kicked-off` before proposing. Never overwrite or regress an existing `proposed`, `applied`, `verified`, or `rejected` record.
 
 Before writing either artifact, run `orangu suggest --show '<id>' --for-proposal --json --quiet`. Stop unless this eligibility and current-workspace check succeeds. Every evidence session must be discoverable from a configured root and match the current workspace. If it fails for archived, custom, or direct evidence, return the ranked chat suggestions and explain `ORANGU_CLAUDE_ROOTS` or `CLAUDE_CONFIG_DIR`. Do not claim saved or proposed state.
 
 Write both `~/.orangu/proposals/<id>.md` and `~/.orangu/proposals/<id>.json` exactly as the artifact contract specifies. Resolve both files to trusted absolute paths. Check the proposal with `orangu ste '<proposal-path>'`. Then run `orangu suggest --set '<id>' proposed --proposal '<proposal-path>' --manifest '<manifest-path>' --json --quiet`.
-
-Write no proposal when evidence is missing, already addressed, or too weak. Say why. Use `rejected` only when the user's workflow calls for closing the record.
 
 ## 5. Report in chat
 
@@ -76,7 +78,8 @@ Before you send the summary, write it to a new file `~/.orangu/drafts/improve-<r
 
 ## 6. Verify only with later evidence
 
-For `--verify`, the record must be `applied` with session or repo scope. Global scope cannot be applied or verified. Orangu picks the sessions. Never choose them.
+For `--verify`, the record must be `applied` or `regressed`, with session or repo scope. Global scope cannot be applied or verified. Orangu picks the sessions. Never choose them. Follow [the loop rules](../shared/loop.md) for a `regressed` record and for the report.
 
 1. Run `orangu suggest --effect '<id>' --json --quiet`. Report its verdict, both session counts, each check's evidence line, and any `confoundedBy` ids. Those are changes measured together, so the effect is not attributable to this one alone.
-2. Only when the verdict is `verified`, run `orangu suggest --set '<id>' verified --json --quiet`. Report verified only when that returns status `verified`. For `within-noise` or `not-enough-sessions`, say it is not verified, keep it `applied`, and name the next step. Never call a proposal or an application verified by assertion alone.
+2. Only when the verdict is `verified`, run `orangu suggest --set '<id>' verified --json --quiet`. Report verified only when that returns status `verified`. Never call a proposal or an application verified by assertion alone.
+3. When the verdict is not `verified`, run `orangu suggest --record '<id>' --json --quiet`.

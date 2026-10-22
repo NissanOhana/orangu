@@ -44,6 +44,8 @@ Obey `overThreshold` before reading `evidence.json`.
 
 `--limit <n>` caps how many sessions are scanned, not how big one is. Never open a `.jsonl` transcript.
 
+Then read the lessons for stage 4, as [the loop rules](../shared/loop.md) direct.
+
 ## 2. Analyze two lenses in parallel
 
 Dispatch both read-only plugin agents together with both evidence file paths, the scope, and any slim session paths:
@@ -86,10 +88,10 @@ Write the same structured artifacts as `/orangu:improve`, per [the artifact cont
 
 For every retained record:
 
-1. If its status is `new` or `failed`, run `orangu suggest --set '<id>' kicked-off --json`. If it is already `proposed`, `applied`, `verified`, or `rejected`, report that and skip the artifact steps. Never overwrite or regress it.
-2. Run `orangu suggest --show '<id>' --for-proposal --json --quiet`. Stop unless this eligibility check succeeds. For repo evidence that is archived, custom, or outside configured roots, return the ranked chat suggestion and explain `ORANGU_CLAUDE_ROOTS` or `CLAUDE_CONFIG_DIR`. Do not claim saved or proposed state. A successful global check means proposal-only, not apply eligibility.
-3. Write both `~/.orangu/proposals/<id>.md` and `~/.orangu/proposals/<id>.json` as the contract specifies. The manifest must include a nonempty `files` list of reviewed relative repository paths, `evidence`, `expectedEffect`, `risk`, `verification`, `verificationChecks`, and a nonempty `sources` list of catalog, research, or inference entries. A candidate with `verifiedAt: null` stays in chat and never enters the manifest.
-4. A recommendation with no concrete repository file target or no honest source stays in the ranked report without a `proposed` record.
+1. A recommendation with no concrete repository file target or no honest source stays in the ranked report without a `proposed` record. Skip the next steps for it.
+2. If its status is `new` or `failed`, run `orangu suggest --set '<id>' kicked-off --json`. If it is already `proposed`, `applied`, `verified`, or `rejected`, report that and skip the artifact steps. Never overwrite or regress it.
+3. Run `orangu suggest --show '<id>' --for-proposal --json --quiet`. Stop unless this eligibility check succeeds. For repo evidence that is archived, custom, or outside configured roots, return the ranked chat suggestion and explain `ORANGU_CLAUDE_ROOTS` or `CLAUDE_CONFIG_DIR`. Do not claim saved or proposed state. A successful global check means proposal-only, not apply eligibility.
+4. Write both `~/.orangu/proposals/<id>.md` and `~/.orangu/proposals/<id>.json` as the contract specifies. The manifest must include a nonempty `files` list of reviewed relative repository paths, `evidence`, `expectedEffect`, `risk`, `verification`, `verificationChecks`, and a nonempty `sources` list of catalog, research, or inference entries. A candidate with `verifiedAt: null` stays in chat and never enters the manifest.
 5. Resolve both artifacts to trusted absolute paths. Check the proposal with `orangu ste '<proposal-path>'`. Then run `orangu suggest --set '<id>' proposed --proposal '<proposal-path>' --manifest '<manifest-path>' --json --quiet`.
 
 Explain any record dropped by deduplication.
