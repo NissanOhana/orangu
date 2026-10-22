@@ -736,8 +736,13 @@ async function seedApplied(ruleId: string, frozen: number[] | undefined, intent:
   return record.id
 }
 
-/** A record that the CLI moves to applied from this workspace, with these cohort deps at the apply step. */
-async function appliedThroughCli(ruleId: string, deps: FreezeDeps, intent: SuggestionVerificationIntent = DECREASED): Promise<string> {
+/** A record that the CLI moves to applied from this workspace, with these cohort deps and flags at the apply step. */
+async function appliedThroughCli(
+  ruleId: string,
+  deps: FreezeDeps,
+  intent: SuggestionVerificationIntent = DECREASED,
+  applyFlags: Record<string, string | boolean> = {},
+): Promise<string> {
   const proposals = join(home, 'proposals')
   out = []
   await cmdSuggest([], { rule: ruleId, scope: 'session', session: fixturePath, json: true })
@@ -755,7 +760,7 @@ async function appliedThroughCli(ruleId: string, deps: FreezeDeps, intent: Sugge
   await cmdSuggest(['proposed'], { set: id, proposal: join(proposals, `${id}.md`), manifest: join(proposals, `${id}.json`), json: true })
   writeFileSync(join(proposals, `${id}.applied.json`), JSON.stringify({ v: 1, id, summary: 'Added the line.', files: ['CLAUDE.md'], checks: [{ name: 'diff check', ok: true }] }))
   out = []
-  await cmdSuggest(['applied'], { set: id, application: join(proposals, `${id}.applied.json`), json: true }, { cohort: deps })
+  await cmdSuggest(['applied'], { set: id, application: join(proposals, `${id}.applied.json`), json: true, ...applyFlags }, { cohort: deps })
   return id
 }
 
@@ -901,9 +906,13 @@ describe('orangu suggest --set applied freezes the baseline', () => {
     const baseline = baselineOf([20, 21, 22])
     const later = laterOf([1, 2, 3])
     const id = await appliedThroughCli('freeze-stored', fakeCohort([...baseline, ...later]))
+    // The JSON output says that the baseline froze. The key is output only, and the stored line does not have it.
+    expect(JSON.parse(stdout())).toMatchObject({ id, status: 'applied', baselineFreeze: { frozen: true } })
+    expect(JSON.parse(stdout()).baselineFreeze).toEqual({ frozen: true })
     const applied = lastLine() as unknown as SuggestionRecord
     expect(applied).toMatchObject({ id, status: 'applied', appliedAt: T })
     expect(applied.frozenBaseline).toEqual(frozenOf([20, 21, 22]))
+    expect('baselineFreeze' in applied).toBe(false)
 
     out = []
     await cmdSuggest([], { effect: id, json: true }, { cohort: fakeCohort([...baseline, ...later]) })
@@ -928,10 +937,11 @@ describe('orangu suggest --set applied freezes the baseline', () => {
       },
     })
     const id = await appliedThroughCli('freeze-failed', failing)
-    expect(JSON.parse(stdout())).toMatchObject({ id, status: 'applied' })
+    expect(JSON.parse(stdout())).toMatchObject({ id, status: 'applied', baselineFreeze: { frozen: false, reason: 'discovery failed' } })
     const applied = lastLine()
     expect(applied).toMatchObject({ id, status: 'applied' })
     expect('frozenBaseline' in applied).toBe(false)
+    expect('baselineFreeze' in applied).toBe(false)
     expect(err.join('').split('\n').filter(Boolean)).toHaveLength(1)
     expect(err.join('')).toMatch(/^ {2}orangu did not freeze the baseline \(discovery failed\)\. /)
   })
@@ -940,11 +950,32 @@ describe('orangu suggest --set applied freezes the baseline', () => {
     // A wall clock that steps back between the freeze and the move gives a cut after the application time.
     const err = captureStderr()
     const id = await appliedThroughCli('freeze-refused', fakeCohort(baselineOf([20, 21, 22]), { now: () => T + 60_000 }))
+    const output = JSON.parse(stdout())
+    expect(output).toMatchObject({ id, status: 'applied', baselineFreeze: { frozen: false } })
+    expect(output.baselineFreeze.reason).toContain('cutAt must not be later than the application time')
     const applied = lastLine()
     expect(applied).toMatchObject({ id, status: 'applied', appliedAt: T })
     expect('frozenBaseline' in applied).toBe(false)
     expect(err.join('').split('\n').filter(Boolean)).toHaveLength(1)
     expect(err.join('')).toContain('cutAt must not be later than the application time')
+  })
+
+  it('--quiet silences the stderr line of each freeze failure, and the JSON still says why the baseline did not freeze', async () => {
+    const err = captureStderr()
+    const failing = fakeCohort([], {
+      async listCandidates() {
+        throw new Error('discovery failed')
+      },
+    })
+    const failed = await appliedThroughCli('freeze-failed-quiet', failing, DECREASED, { quiet: true })
+    expect(JSON.parse(stdout())).toMatchObject({ id: failed, status: 'applied', baselineFreeze: { frozen: false, reason: 'discovery failed' } })
+    expect('frozenBaseline' in lastLine()).toBe(false)
+    const refused = await appliedThroughCli('freeze-refused-quiet', fakeCohort(baselineOf([20, 21, 22]), { now: () => T + 60_000 }), DECREASED, { quiet: true })
+    const output = JSON.parse(stdout())
+    expect(output).toMatchObject({ id: refused, status: 'applied', baselineFreeze: { frozen: false } })
+    expect(output.baselineFreeze.reason).toContain('cutAt must not be later than the application time')
+    expect('frozenBaseline' in lastLine()).toBe(false)
+    expect(err).toEqual([])
   })
 })
 

@@ -12,7 +12,8 @@
  *                                                record + bounded evidence, with an optional lifecycle preflight
  *   orangu suggest --set <id> proposed --proposal <id>.md [--manifest <id>.json] [--json]
  *   orangu suggest --set <id> applied --application <id>.applied.json [--json]
- *     (freezes the baseline sessions first. A failed freeze writes the move without one, and says so on stderr)
+ *     (freezes the baseline sessions first. A failed freeze writes the move without one. The --json output says
+ *      so in baselineFreeze, and 1 stderr line says so unless --quiet silences it)
  *   orangu suggest --effect <id> [--json]      read-only: later sessions vs baseline, beyond chance
  *   orangu suggest --set <id> verified [--verification <id>.verified.json] [--json]
  *     (Orangu picks both cohorts; an optional intent may only name sessions inside the later cohort)
@@ -294,8 +295,9 @@ async function cmdSet(store: SuggestionStore, id: string, positionals: string[],
     if (!applicationPath) throw new Error('--application <id>.applied.json is required when setting applied')
     const proposal = await assertWorkspaceMatch(rec)
     const application = await loadApplicationReceipt(store.proposalsDir, rec.id, applicationPath, proposal.files)
-    const next = await transitionApplied(store, rec, application, deps.cohort ?? createCohortDeps())
-    if (flagBool(flags, 'json')) return emit(visible(next, flags), flags) as unknown as void
+    const { next, baselineFreeze } = await transitionApplied(store, rec, application, deps.cohort ?? createCohortDeps(), flags)
+    // baselineFreeze is a key of this output only: the store line has no such field.
+    if (flagBool(flags, 'json')) return emit(visible({ ...next, baselineFreeze }, flags), flags) as unknown as void
     return printRecord(visible(next, flags))
   } else if (status === 'verified') {
     if (rec.scope === 'global') throw new Error(`suggestion ${id}: global suggestions are review-only and cannot be verified`)
@@ -324,18 +326,22 @@ async function cmdSet(store: SuggestionStore, id: string, positionals: string[],
   printRecord(visible(next, flags))
 }
 
+/** Whether the apply step froze the baseline, and why not when it did not. A key of the `--set applied --json` output. */
+type BaselineFreeze = { frozen: true } | { frozen: false; reason: string }
+
 /**
  * The apply move, with the baseline frozen just before it. The freeze never fails the apply step. When the baseline
- * read fails, or the store refuses the frozen baseline, the move goes ahead without one, and 1 stderr line says so.
- * The record then reads its baseline sessions live at each check, as a record of an older orangu does. The line
- * prints also under `--quiet`, because the skill passes `--quiet` and the line changes how the record is graded.
+ * read fails, or the store refuses the frozen baseline, the move goes ahead without one. The result says so, and 1
+ * stderr line says so unless `--quiet` silences it. The record then reads its baseline sessions live at each check,
+ * as a record of an older orangu does.
  */
 async function transitionApplied(
   store: SuggestionStore,
   rec: SuggestionRecord,
   application: SuggestionApplicationReceipt,
   cohort: FreezeDeps,
-): Promise<SuggestionRecord> {
+  flags: Record<string, string | boolean>,
+): Promise<{ next: SuggestionRecord; baselineFreeze: BaselineFreeze }> {
   let frozenBaseline: SuggestionFrozenBaseline | undefined
   let notFrozen: unknown
   try {
@@ -353,11 +359,12 @@ async function transitionApplied(
     notFrozen = error
     next = await store.transition(rec.id, 'applied', { application })
   }
-  if (notFrozen !== undefined) {
-    const reason = notFrozen instanceof Error ? notFrozen.message : String(notFrozen)
-    process.stderr.write(`  orangu did not freeze the baseline (${terminal(reason)}). The change is applied, and each check reads the baseline sessions again.\n`)
+  if (notFrozen === undefined) return { next, baselineFreeze: { frozen: true } }
+  const reason = terminal(notFrozen instanceof Error ? notFrozen.message : String(notFrozen))
+  if (!flagBool(flags, 'quiet')) {
+    process.stderr.write(`  orangu did not freeze the baseline (${reason}). The change is applied, and each check reads the baseline sessions again.\n`)
   }
-  return next
+  return { next, baselineFreeze: { frozen: false, reason } }
 }
 
 /**

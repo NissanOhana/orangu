@@ -433,7 +433,11 @@ SuggestionEffectView = {
 
 Each new field has 1 CLI step that writes it:
 
-- `--set <id> applied` freezes the baseline into `frozenBaseline` just before the move. When the baseline read fails, or the store refuses the frozen baseline, the move goes ahead without one, and 1 line on stderr says so. That record reads its baseline sessions live, as an older record does.
+- `--set <id> applied` freezes the baseline into `frozenBaseline` just before the move. When the baseline read fails, or the store refuses the frozen baseline, the move goes ahead without one, and 1 line on stderr says so. `--quiet` silences that line. That record reads its baseline sessions live, as an older record does. The `--json` output of this step is the record plus 1 key that the store does not keep:
+
+  ```ts
+  baselineFreeze: { frozen: true } | { frozen: false, reason: string }  // reason: why the baseline did not freeze
+  ```
 - `--record <id>` measures both cohorts again and stores `outcomeReceipt` with the status `regressed` (for a `regressed` verdict) or `unproven`. It takes no file, no status and no text. It refuses a global record before any read, a record that is not `applied`, a verdict that is not final, and a win, which `--set <id> verified` records.
 - `--set <id> kept` moves only a `regressed` record. It measures nothing and keeps the outcome receipt. `--set` refuses `regressed` and `unproven`, and names `--record`.
 - `--set <id> rejected [--reason <code>]` stores 1 of the 5 codes as `reasonCode`. `--reason` with any other step, or with a value that is not a code, exits 1. For a session or repo record with no proposal workspace, the step also binds `workspaceCwd`. It finds each evidence session through discovery, reads the cwd from the first 64,000 B of the transcript, and resolves it to a canonical directory. It binds the path only when every session that it finds gives the same path. Any other result binds nothing, and the rejection still goes ahead.

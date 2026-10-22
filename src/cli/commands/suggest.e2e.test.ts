@@ -113,6 +113,7 @@ describe.skipIf(!existsSync(CLI) || !helpHasSuggest())('orangu suggest/estimate 
     const applied = JSON.parse(cli(['suggest', '--set', id, 'applied', '--application', join(proposals, `${id}.applied.json`), '--json']))
     // The apply step froze the baseline: no session, because the only one is the finding's own.
     expect(applied.frozenBaseline).toMatchObject({ v: 1, sessions: [] })
+    expect(applied.baselineFreeze).toEqual({ frozen: true })
     expect(applied.frozenBaseline.skipped['evidence-session']).toBe(1)
     expect(applied.frozenBaseline.cutAt).toBeLessThanOrEqual(applied.appliedAt)
 
