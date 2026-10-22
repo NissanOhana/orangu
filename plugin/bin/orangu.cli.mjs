@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash5 } from "node:crypto";
-import { basename as basename14, join as join12, resolve as resolve13 } from "node:path";
+import { basename as basename14, join as join12, resolve as resolve14 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -2978,7 +2978,7 @@ async function withStableSessionRead(path, options, read) {
       if (!isTransientInputChange(error)) throw error;
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
-      await new Promise((resolve14) => setTimeout(resolve14, pause));
+      await new Promise((resolve15) => setTimeout(resolve15, pause));
     }
   }
 }
@@ -9427,7 +9427,7 @@ function pickList(caps, rows2, counts, now) {
 import { randomBytes as randomBytes2 } from "node:crypto";
 import { constants as constants9 } from "node:fs";
 import { lstat as lstat7, mkdir as mkdir2, open as open9, realpath as realpath6, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname5, join as join6 } from "node:path";
+import { dirname as dirname5, isAbsolute as isAbsolute5, join as join6, resolve as resolve6 } from "node:path";
 
 // src/suggest/change-classes.ts
 var CHANGE_CLASS_DEFINITIONS = [
@@ -9445,6 +9445,9 @@ var CHANGE_CLASSES = new Set(CHANGE_CLASS_DEFINITIONS.map((definition) => defini
 function isChangeClass(value) {
   return CHANGE_CLASSES.has(value);
 }
+
+// src/suggest/reason-codes.ts
+var REJECT_REASON_CODES = ["not-wanted", "already-handled", "wrong-cause", "too-much-effort", "other"];
 
 // src/suggest/reviewed-path.ts
 import { isAbsolute as isAbsolute3 } from "node:path";
@@ -9922,14 +9925,14 @@ var TRANSITIONS = {
   new: ["kicked-off", "rejected"],
   "kicked-off": ["proposed", "failed", "rejected"],
   proposed: ["applied", "rejected"],
-  applied: ["verified", "rejected"],
+  // A move into regressed or unproven carries an outcome receipt, and the store grades it again before it writes the line.
+  applied: ["verified", "regressed", "unproven", "rejected"],
   verified: ["rejected"],
   rejected: [],
   failed: ["kicked-off", "rejected"],
-  // Known on read, but no move enters or leaves them until the store checks the fields that these moves write.
-  regressed: [],
-  unproven: [],
-  kept: []
+  regressed: ["kept", "rejected"],
+  unproven: ["rejected"],
+  kept: ["rejected"]
 };
 var SUGGESTION_VERIFICATION_METRICS = [
   "avgTotalTokens",
@@ -9943,6 +9946,18 @@ var SUGGESTION_VERIFICATION_METRICS = [
 ];
 var SUGGESTION_VERIFICATION_COMPARISONS = ["decreased", "not-increased", "increased", "not-decreased", "equal"];
 var ESTIMATE_TOKEN_THRESHOLD = 5e3;
+
+// src/suggest/cohort-skip-reasons.ts
+var COHORT_SKIP_REASONS = [
+  "evidence-session",
+  "orangu-session",
+  "spans-application",
+  "still-settling",
+  "other-workspace",
+  "over-budget",
+  "budget-spent",
+  "unreadable"
+];
 
 // src/suggest/cohort-stats.ts
 var COHORT_ALPHA = 0.05;
@@ -10142,6 +10157,127 @@ function cohortReceiptViolation(value, reviewed, appliedAt) {
   }
   if (!checks2.some((check) => isDirectional(check.comparison))) return "at least one check must name a direction (decreased or increased)";
   if (receipt.summary !== cohortReceiptSummary(receipt)) return "summary must be the computed summary";
+  return void 0;
+}
+var COHORT_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+var FROZEN_BASELINE_KEYS = ["v", "cutAt", "sessions", "skipped"];
+var FROZEN_SESSION_KEYS = ["id", "startedAt", "endedAt", "metrics"];
+var OUTCOME_RECEIPT_KEYS = [
+  "v",
+  "method",
+  "alpha",
+  "appliedAt",
+  "checkpoint",
+  "verdict",
+  "laterComplete",
+  "confoundedBy",
+  "baselineSessionIds",
+  "measuredSessionIds",
+  "checks"
+];
+var OUTCOME_CHECK_KEYS = [
+  "metric",
+  "comparison",
+  "name",
+  "before",
+  "after",
+  "beforeMedian",
+  "afterMedian",
+  "pLower",
+  "pHigher",
+  "verdict"
+];
+var OUTCOME_VERDICTS = ["within-noise", "regressed", "not-enough-sessions", "no-directional-check"];
+function plainObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function hasExactKeys(value, keys) {
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+function frozenBaselineViolation(value, appliedAt) {
+  if (!plainObject(value) || !hasExactKeys(value, FROZEN_BASELINE_KEYS)) return "frozenBaseline must have exactly the keys v, cutAt, sessions and skipped";
+  if (value["v"] !== 1) return "frozenBaseline v must be 1";
+  const cutAt = value["cutAt"];
+  if (!finiteNonNegative(cutAt)) return "frozenBaseline cutAt must be a finite number of 0 or more";
+  if (appliedAt !== void 0 && cutAt > appliedAt) return "frozenBaseline cutAt must not be later than the application time";
+  const sessions = value["sessions"];
+  if (!Array.isArray(sessions) || sessions.length > COHORT_MAX) return `frozenBaseline must hold 0 to ${COHORT_MAX} sessions`;
+  let previousId = "";
+  for (let index = 0; index < sessions.length; index++) {
+    const session = sessions[index];
+    const label = `frozenBaseline sessions[${index}]`;
+    if (!plainObject(session) || !hasExactKeys(session, FROZEN_SESSION_KEYS)) return `${label} must have exactly the keys id, startedAt, endedAt and metrics`;
+    const { id, startedAt, endedAt, metrics } = session;
+    if (typeof id !== "string" || !COHORT_SESSION_ID_RE.test(id)) return `${label} id must be a lowercase session id`;
+    if (index > 0 && !(previousId < id)) return "frozenBaseline sessions must be sorted by id with no repeated id";
+    previousId = id;
+    if (!finiteNonNegative(startedAt) || !finiteNonNegative(endedAt)) return `${label} times must each be a finite number of 0 or more`;
+    if (startedAt > endedAt || endedAt > cutAt) return `${label} must start before it ends, and end at or before cutAt`;
+    if (!plainObject(metrics) || !hasExactKeys(metrics, SUGGESTION_VERIFICATION_METRICS)) {
+      return `${label} metrics must have exactly the ${SUGGESTION_VERIFICATION_METRICS.length} verification metrics`;
+    }
+    if (!SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative(metrics[metric]))) return `${label} metrics must each be a finite number of 0 or more`;
+  }
+  const skipped = value["skipped"];
+  if (!plainObject(skipped) || !hasExactKeys(skipped, COHORT_SKIP_REASONS)) return `frozenBaseline skipped must have exactly the ${COHORT_SKIP_REASONS.length} skip reasons`;
+  if (!COHORT_SKIP_REASONS.every((reason) => Number.isSafeInteger(skipped[reason]) && skipped[reason] >= 0)) {
+    return "frozenBaseline skipped counts must each be a whole number of 0 or more";
+  }
+  return void 0;
+}
+function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBaseline) {
+  if (!plainObject(value) || !hasExactKeys(value, OUTCOME_RECEIPT_KEYS)) return "outcomeReceipt must have exactly the keys of an outcome receipt";
+  const receipt = value;
+  if (receipt.v !== 1 || receipt.method !== "cohort-rank-v1" || receipt.alpha !== COHORT_ALPHA) return "outcomeReceipt must be a cohort-rank-v1 outcome receipt at alpha 0.05";
+  if (appliedAt === void 0 || receipt.appliedAt !== appliedAt) return "receipt appliedAt must equal the recorded application time";
+  if (receipt.checkpoint !== "first" && receipt.checkpoint !== "complete") return "checkpoint must be first or complete";
+  if (!OUTCOME_VERDICTS.includes(receipt.verdict)) return "verdict must be a verdict other than verified";
+  if (typeof receipt.laterComplete !== "boolean") return "laterComplete must be a boolean";
+  if (!sortedUniqueIds(receipt.baselineSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `baselineSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`;
+  if (!sortedUniqueIds(receipt.measuredSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `measuredSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`;
+  const baseline = new Set(receipt.baselineSessionIds);
+  if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return "baseline and later cohorts must not share a session";
+  if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return "confoundedBy must be sorted unique suggestion ids";
+  let frozen;
+  if (frozenBaseline !== void 0) {
+    if (frozenBaselineViolation(frozenBaseline, appliedAt) !== void 0) return "the stored frozenBaseline is not valid, so the store cannot grade an outcome against it";
+    frozen = frozenBaseline;
+    if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
+      return "baselineSessionIds must equal the frozen baseline session ids";
+    }
+  }
+  const checks2 = receipt.checks;
+  if (!Array.isArray(checks2) || checks2.length !== reviewed.length) return "checks must match the reviewed verificationChecks";
+  const nBefore = receipt.baselineSessionIds.length;
+  const nAfter = receipt.measuredSessionIds.length;
+  const minP = Number((1 / binomial(nBefore + nAfter, nAfter)).toFixed(6));
+  for (let index = 0; index < checks2.length; index++) {
+    const raw = checks2[index];
+    const intent = reviewed[index];
+    if (!plainObject(raw) || !hasExactKeys(raw, OUTCOME_CHECK_KEYS)) return `checks[${index}] must have exactly the keys of an outcome check`;
+    const check = raw;
+    if (check.metric !== intent.metric || check.comparison !== intent.comparison || check.name !== verificationCheckName(intent)) {
+      return `checks[${index}] must match the reviewed check ${verificationCheckName(intent)}`;
+    }
+    const { before, after, beforeMedian, afterMedian, pLower, pHigher } = check;
+    if (!finiteNonNegative(before) || !finiteNonNegative(after) || !finiteNonNegative(beforeMedian) || !finiteNonNegative(afterMedian)) {
+      return `checks[${index}] must carry finite metric values`;
+    }
+    if (typeof pLower !== "number" || typeof pHigher !== "number" || ![pLower, pHigher].every((p) => p >= minP && p <= 1) || pLower + pHigher < 1) {
+      return `checks[${index}] p-values are not possible for ${nBefore} and ${nAfter} sessions`;
+    }
+    const verdict = checkVerdict(intent.comparison, before, after, pLower, pHigher);
+    if (check.verdict !== verdict) return `checks[${index}] verdict must be the computed verdict ${verdict}`;
+  }
+  const overall = overallVerdict(checks2, nBefore, nAfter);
+  if (receipt.verdict !== overall) return `the overall verdict must be the computed verdict ${overall}`;
+  if (status === "regressed" && receipt.verdict !== "regressed") return `a regressed record needs the regressed verdict, not ${receipt.verdict}`;
+  if (status === "unproven" && receipt.verdict === "regressed") return "an unproven record cannot carry the regressed verdict";
+  const shortFrozen = frozen !== void 0 && frozen.sessions.length < COHORT_MIN;
+  if (!receipt.laterComplete && !(shortFrozen && receipt.verdict === "not-enough-sessions")) {
+    return `laterComplete must be true. Only a frozen baseline below ${COHORT_MIN} sessions with the verdict not-enough-sessions closes before the later cohort is complete`;
+  }
+  if (receipt.checkpoint === "first" && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`;
   return void 0;
 }
 function effectMatchesChecks(record3, checks2, measured) {
@@ -10496,19 +10632,34 @@ async function appendPrivateSuggestionRecord(path, record3, directories, assertO
     await handle.close();
   }
 }
-var PATCH_FIELDS = ["proposal", "application", "verificationReceipt", "kickoff", "effect"];
+var PATCH_FIELDS = [
+  "proposal",
+  "application",
+  "verificationReceipt",
+  "kickoff",
+  "effect",
+  "frozenBaseline",
+  "outcomeReceipt",
+  "reasonCode",
+  "workspaceCwd"
+];
 var ALLOWED_PATCH_FIELDS = {
   new: [],
   "kicked-off": ["kickoff"],
   proposed: ["proposal"],
-  applied: ["application"],
+  applied: ["application", "frozenBaseline"],
   verified: ["verificationReceipt", "effect"],
-  rejected: [],
+  rejected: ["reasonCode", "workspaceCwd"],
   failed: ["kickoff"],
-  regressed: [],
-  unproven: [],
+  regressed: ["outcomeReceipt"],
+  unproven: ["outcomeReceipt"],
   kept: []
 };
+var MAX_WORKSPACE_CWD_CHARS = 4096;
+var CONTROL_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f]/;
+function isCanonicalWorkspaceCwd(value) {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_WORKSPACE_CWD_CHARS && !CONTROL_CHARACTER_RE.test(value) && isAbsolute5(value) && resolve6(value) === value;
+}
 function recordMatchesFinding(record3, finding, source) {
   return record3.source === source && record3.scope === finding.scope && record3.ruleId === finding.ruleId && (record3.insightId ?? "") === (finding.insightId ?? "") && (record3.cohortFingerprint ?? record3.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record3.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));
 }
@@ -10623,6 +10774,33 @@ function validateTransitionPatch(current, to, rawPatch) {
     if (JSON.stringify(reviewed) !== JSON.stringify(changed)) {
       throw lifecycleError(to, "application files must exactly match the reviewed proposal files");
     }
+    if (patch.frozenBaseline !== void 0) {
+      const violation = frozenBaselineViolation(patch.frozenBaseline, void 0);
+      if (violation) throw lifecycleError(to, `invalid frozen baseline: ${violation}`);
+    }
+  } else if (to === "regressed" || to === "unproven") {
+    if (current.scope === "global") throw lifecycleError(to, "global suggestions are review-only. Orangu measures no outcome for them.");
+    assertStructuredProposal(current.proposal, to);
+    assertApplication(current.application, to);
+    if (patch.outcomeReceipt === void 0) throw lifecycleError(to, "an outcome receipt is required");
+    const violation = outcomeReceiptViolation(
+      patch.outcomeReceipt,
+      to,
+      current.proposal.verificationChecks,
+      applicationTime(current),
+      current.frozenBaseline
+    );
+    if (violation) throw lifecycleError(to, `invalid outcome receipt: ${violation}`);
+  } else if (to === "rejected") {
+    if (patch.reasonCode !== void 0 && !REJECT_REASON_CODES.includes(patch.reasonCode)) {
+      throw lifecycleError(to, `reasonCode must be 1 of ${REJECT_REASON_CODES.join(", ")}`);
+    }
+    if (patch.workspaceCwd !== void 0) {
+      if (!isCanonicalWorkspaceCwd(patch.workspaceCwd)) throw lifecycleError(to, "workspaceCwd must be an absolute canonical path");
+      if (current.proposal?.workspace !== void 0) {
+        throw lifecycleError(to, "workspaceCwd is only for a record with no proposal workspace. The proposal workspace already binds this record.");
+      }
+    }
   } else if (to === "verified") {
     if (current.scope === "global") throw lifecycleError(to, "global suggestions cannot be verified. They are review-only.");
     assertStructuredProposal(current.proposal, to);
@@ -10638,6 +10816,15 @@ function validateTransitionPatch(current, to, rawPatch) {
     assertVerificationEffect(patch.effect, receipt, to);
   }
   return patch;
+}
+function indexByLegacyIds(canonical) {
+  const byId = new Map(canonical);
+  for (const rec of canonical.values()) {
+    for (const legacyId of rec.legacyIds ?? []) {
+      if (isSuggestionId(legacyId)) byId.set(legacyId, rec);
+    }
+  }
+  return byId;
 }
 var SuggestionStore = class {
   path;
@@ -10737,13 +10924,36 @@ var SuggestionStore = class {
    */
   async replay(parent) {
     const canonical = /* @__PURE__ */ new Map();
+    await this.readValidLines(parent, (rec) => canonical.set(rec.id, rec));
+    return indexByLegacyIds(canonical);
+  }
+  /**
+   * Every valid line of the log, in file order, with no "last line wins". With an id, only the lines of that record:
+   * its own lines and the lines of each legacy id, matched through `legacyIds` as `get` matches them. The caps of
+   * the replay apply: the file bytes, the bytes of a line and the line count.
+   */
+  async lines(id) {
+    const all = [];
+    const canonical = /* @__PURE__ */ new Map();
+    await this.readValidLines(void 0, (rec) => {
+      all.push(rec);
+      canonical.set(rec.id, rec);
+    });
+    if (id === void 0) return all;
+    const target = indexByLegacyIds(canonical).get(id);
+    if (!target) return [];
+    const ids = /* @__PURE__ */ new Set([target.id, ...(target.legacyIds ?? []).filter(isSuggestionId)]);
+    return all.filter((rec) => ids.has(rec.id));
+  }
+  /** Read the log inside its caps and hand each valid record to `visit`, in file order; a corrupt line is skipped. */
+  async readValidLines(parent, visit) {
     const root = parent ?? await secureExistingPrivateDirectory(dirname5(this.path), "suggestion store directory");
-    if (!root) return canonical;
+    if (!root) return;
     await assertPrivateDirectoriesStable2([root]);
     const proposals = await secureExistingPrivateDirectory(this.proposalsDir, "suggestion proposals directory");
     const directories = proposals ? [root, proposals] : [root];
     const bytes = await readPrivateSuggestionStore(this.path, directories);
-    if (bytes === void 0) return canonical;
+    if (bytes === void 0) return;
     let offset = 0;
     let lines = 0;
     while (offset < bytes.length) {
@@ -10761,7 +10971,7 @@ var SuggestionStore = class {
         if (trimmed) {
           try {
             const rec = JSON.parse(trimmed);
-            if (isPersistedSuggestionRecord(rec)) canonical.set(rec.id, rec);
+            if (isPersistedSuggestionRecord(rec)) visit(rec);
           } catch (error) {
             void error;
           }
@@ -10770,13 +10980,6 @@ var SuggestionStore = class {
       if (newline === -1) break;
       offset = newline + 1;
     }
-    const byId = new Map(canonical);
-    for (const rec of canonical.values()) {
-      for (const legacyId of rec.legacyIds ?? []) {
-        if (isSuggestionId(legacyId)) byId.set(legacyId, rec);
-      }
-    }
-    return byId;
   }
   async append(rec, guard) {
     await assertLockOwned(guard);
@@ -10882,6 +11085,9 @@ var SuggestionStore = class {
     }
     const safePatch = validateTransitionPatch(current, to, patch);
     const statusAt = this.now();
+    if (to === "applied" && safePatch.frozenBaseline && safePatch.frozenBaseline.cutAt > statusAt) {
+      throw lifecycleError(to, "invalid frozen baseline: frozenBaseline cutAt must not be later than the application time");
+    }
     const appliedAt = to === "applied" ? statusAt : applicationTime(current);
     const next = {
       ...current,
@@ -12564,9 +12770,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve14, reject) => {
+  await new Promise((resolve15, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve14);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve15);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -12583,7 +12789,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve14) => server.close(() => resolve14()));
+      await new Promise((resolve15) => server.close(() => resolve15()));
     }
   };
 }
@@ -13246,7 +13452,7 @@ function slimAnalysis(a) {
 
 // src/cli/commands/harness.ts
 import { homedir as homedir4 } from "node:os";
-import { basename as basename8, resolve as resolve6 } from "node:path";
+import { basename as basename8, resolve as resolve7 } from "node:path";
 var VERSION = true ? "0.11.0" : "0.0.0-dev";
 var out = MACHINE_CAPS;
 var err = MACHINE_CAPS;
@@ -13264,7 +13470,7 @@ async function runHarness(flags) {
   detectStreams(flags);
   const isGlobal = flagBool(flags, "global");
   const configArg = flagStr(flags, "root", "r");
-  const cwd = flags["cwd"] ? resolve6(String(flags["cwd"])) : process.cwd();
+  const cwd = flags["cwd"] ? resolve7(String(flags["cwd"])) : process.cwd();
   let refs;
   let roots;
   let scopeLabel;
@@ -13325,8 +13531,8 @@ async function cmdHarness(_positionals, flags) {
   const report2 = await runHarness(flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve6(outFile), JSON.stringify(report2, null, 2));
-    process.stderr.write(paint(err, "good", glyphs(err).ok) + ` harness written to ${resolve6(outFile)}
+    await writePrivateOutput(resolve7(outFile), JSON.stringify(report2, null, 2));
+    process.stderr.write(paint(err, "good", glyphs(err).ok) + ` harness written to ${resolve7(outFile)}
 `);
     if (!flagBool(flags, "json")) return;
   }
@@ -13701,7 +13907,7 @@ function printEstimate(est, label) {
 }
 
 // src/cli/commands/evidence.ts
-import { extname, resolve as resolve7 } from "node:path";
+import { extname, resolve as resolve8 } from "node:path";
 function aggregateScope(flags) {
   const raw = flags["scope"];
   if (raw === void 0) return void 0;
@@ -13740,7 +13946,7 @@ async function resolveEvidenceSession(selector, flags) {
   throw new Error(`No session matches "${selector}". Try: orangu list`);
 }
 async function bundleFromJsonFile(path, options) {
-  const absolute = resolve7(path);
+  const absolute = resolve8(path);
   const text3 = await readStableTextFile(absolute, MAX_EVIDENCE_ARTIFACT_BYTES, "evidence JSON");
   return parseEvidenceArtifact(text3, options);
 }
@@ -13772,7 +13978,7 @@ import { realpath as realpath10 } from "node:fs/promises";
 // src/suggest/artifacts.ts
 import { constants as constants10 } from "node:fs";
 import { chmod, lstat as lstat8, open as open10, realpath as realpath7 } from "node:fs/promises";
-import { basename as basename9, isAbsolute as isAbsolute5, relative as relative3, resolve as resolve8 } from "node:path";
+import { basename as basename9, isAbsolute as isAbsolute6, relative as relative3, resolve as resolve9 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
 var MAX_FILES = 64;
@@ -13828,7 +14034,7 @@ function checks(value, parse) {
 }
 function inside(root, candidate) {
   const rel = relative3(root, candidate);
-  return rel === "" || !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && rel !== ".." && !isAbsolute5(rel);
+  return rel === "" || !rel.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`) && rel !== ".." && !isAbsolute6(rel);
 }
 function artifactSnapshot(stat8) {
   return {
@@ -13845,8 +14051,8 @@ function sameArtifactSnapshot(a, b) {
   return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
 }
 async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
-  const root = resolve8(proposalsDir);
-  const candidate = resolve8(path);
+  const root = resolve9(proposalsDir);
+  const candidate = resolve9(path);
   if (!inside(root, candidate) || basename9(candidate) !== expectedName) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
@@ -13936,6 +14142,9 @@ async function loadProposalArtifacts(proposalsDir, id, proposalPath, manifestPat
   if (effort !== "S" && effort !== "M" && effort !== "L") throw artifactError("effort must be S, M, or L");
   const proposalFiles = files(value["files"], "files", true);
   const verificationChecks = verificationPairs(value["verificationChecks"], "verificationChecks");
+  if (!verificationChecks.some((check) => isDirectional(check.comparison))) {
+    throw artifactError("verificationChecks must include a decreased or increased check. A set of guards only can never verify.");
+  }
   const rank = value["rank"];
   if (rank !== void 0 && (!Number.isInteger(rank) || rank < 1 || rank > 100)) {
     throw artifactError("rank must be an integer from 1-100");
@@ -14054,20 +14263,6 @@ async function canonicalWorkspace(value) {
 
 // src/suggest/cohort.ts
 import { basename as basename10 } from "node:path";
-
-// src/suggest/cohort-skip-reasons.ts
-var COHORT_SKIP_REASONS = [
-  "evidence-session",
-  "orangu-session",
-  "spans-application",
-  "still-settling",
-  "other-workspace",
-  "over-budget",
-  "budget-spent",
-  "unreadable"
-];
-
-// src/suggest/cohort.ts
 var COHORT_SIDE_BYTES = 256 * 1024 * 1024;
 function metricValues(analysis) {
   const values = {
@@ -14271,11 +14466,11 @@ function verificationPatch(effect) {
 
 // src/suggest/cohort-deps.ts
 import { realpath as realpath9 } from "node:fs/promises";
-import { isAbsolute as isAbsolute7 } from "node:path";
+import { isAbsolute as isAbsolute8 } from "node:path";
 
 // src/adapters/claude-code/discovered-analysis.ts
 import { realpath as realpath8 } from "node:fs/promises";
-import { isAbsolute as isAbsolute6, resolve as resolve9 } from "node:path";
+import { isAbsolute as isAbsolute7, resolve as resolve10 } from "node:path";
 var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
 var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
 async function discoveredInventory() {
@@ -14289,7 +14484,7 @@ async function discoveredInventory() {
       const canonical = await realpath8(ref2.path);
       const prior = byCanonicalPath.get(canonical);
       if (prior === void 0) byCanonicalPath.set(canonical, ref2);
-      else if (prior !== null && resolve9(prior.path) !== resolve9(ref2.path)) byCanonicalPath.set(canonical, null);
+      else if (prior !== null && resolve10(prior.path) !== resolve10(ref2.path)) byCanonicalPath.set(canonical, null);
     } catch {
     }
   }
@@ -14304,7 +14499,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
     let canonical;
     try {
-      canonical = await realpath8(isAbsolute6(value) ? value : resolve9(process.cwd(), value));
+      canonical = await realpath8(isAbsolute7(value) ? value : resolve10(process.cwd(), value));
     } catch {
       return void 0;
     }
@@ -14313,7 +14508,7 @@ async function exactDiscoveredRef(selector, inventory) {
   } else {
     return void 0;
   }
-  const unique = new Map(matches.map((ref2) => [resolve9(ref2.path), ref2]));
+  const unique = new Map(matches.map((ref2) => [resolve10(ref2.path), ref2]));
   return unique.size === 1 ? [...unique.values()][0] : void 0;
 }
 var OVER_BUDGET_RE = /exceeds (?:\d+ bytes|the remaining \d+-byte read budget)/;
@@ -14380,7 +14575,7 @@ function createCohortDeps(options = {}) {
       const { analysis, session, bytesRead } = loaded;
       const { cwd, startedAt, endedAt, live } = analysis.session;
       if (live !== false) return { skip: "still-settling", bytesRead };
-      if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute7(cwd)) return { skip: "unreadable", bytesRead };
+      if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute8(cwd)) return { skip: "unreadable", bytesRead };
       let canonicalCwd = cwd;
       try {
         canonicalCwd = await realpath9(cwd);
@@ -14808,12 +15003,12 @@ async function cmdFeedback(positionals, flags) {
   loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
 `);
   if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve14) => {
+  await new Promise((resolve15) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve14);
+      void server.close().finally(resolve15);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
@@ -14824,7 +15019,7 @@ async function cmdFeedback(positionals, flags) {
 // src/cli/commands/ste.ts
 import { createReadStream as createReadStream2 } from "node:fs";
 import { stat as stat7 } from "node:fs/promises";
-import { resolve as resolve10 } from "node:path";
+import { resolve as resolve11 } from "node:path";
 
 // src/ste/words.ts
 var STE_WORDS = {
@@ -15249,7 +15444,7 @@ async function readBounded(chunks, name) {
   return Buffer.concat(parts2).toString("utf8");
 }
 async function readNamedFile(name) {
-  const path = resolve10(name);
+  const path = resolve11(name);
   try {
     const info = await stat7(path);
     if (info.isDirectory()) throw cannotRead(name, "it is a folder, not a file");
@@ -15286,7 +15481,7 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
 }
 
 // src/cli/commands/show-me.ts
-import { basename as basename11, resolve as resolve11 } from "node:path";
+import { basename as basename11, resolve as resolve12 } from "node:path";
 
 // src/show-me/prepare.ts
 import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
@@ -16741,7 +16936,7 @@ async function sessionData2(selector, flags, err3) {
 }
 async function aggregateData2(scope, flags, err3) {
   const rootArg = flagStr(flags, "root", "r");
-  const cwd = resolve11(flagStr(flags, "cwd") ?? process.cwd());
+  const cwd = resolve12(flagStr(flags, "cwd") ?? process.cwd());
   const refs = scope === "global" ? await listSessions({ roots: await claudeRoots(rootArg) }) : await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
   if (!refs.length) throw new Error(scope === "global" ? "orangu found no sessions on this machine." : "orangu found no sessions for this repository.");
   const limitRaw = flagStr(flags, "limit");
@@ -16944,7 +17139,7 @@ function select(o) {
   const draw = () => {
     o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
   };
-  return new Promise((resolve14) => {
+  return new Promise((resolve15) => {
     let done = false;
     const restore = () => {
       if (done) return;
@@ -16962,7 +17157,7 @@ function select(o) {
     const finish = (r) => {
       restore();
       hook.dispose();
-      resolve14(r);
+      resolve15(r);
     };
     const move = (to) => {
       cursor = Math.max(0, Math.min(to, count4 - 1));
@@ -17082,7 +17277,7 @@ async function cmdPick(flags, deps) {
 }
 
 // src/cli/commands/dashboard.ts
-import { basename as basename13, resolve as resolve12 } from "node:path";
+import { basename as basename13, resolve as resolve13 } from "node:path";
 var INDENT3 = "  ";
 var TAG_WIDTH = 7;
 var CHROME_ROWS_AROUND_ART = 6;
@@ -17092,7 +17287,7 @@ function dashboardPrecondition(stdin, stdout, env, flags) {
   return interactivePrecondition(stdin, stdout, env, flags);
 }
 async function gatherDashboardData(flags, deps = {}) {
-  const cwd = resolve12((deps.cwd ?? (() => process.cwd()))());
+  const cwd = resolve13((deps.cwd ?? (() => process.cwd()))());
   const configArg = flagStr(flags, "root", "config", "r");
   const pickFlags = { ...flags, global: true };
   const [picked, repoRefs, roots] = await Promise.all([
@@ -17317,7 +17512,7 @@ async function analyzeWithProgress(ref2, flags) {
 }
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
-  if (out3) return resolve13(out3);
+  if (out3) return resolve14(out3);
   return join12(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
@@ -17440,7 +17635,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${plural(roots.length, "root")})`;
   } else {
-    const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve14(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
     scopeLabel = `repo ${basename14(cwd)}`;
@@ -17488,8 +17683,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve13(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve13(outFile), { raw: true }) + "\n");
+    await writePrivateOutput(resolve14(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    if (!quiet) process.stderr.write(row(err2, "written", resolve14(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -17508,7 +17703,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash5("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve13(named) : join12(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve14(named) : join12(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
