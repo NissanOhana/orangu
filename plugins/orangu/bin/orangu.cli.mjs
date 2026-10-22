@@ -14337,7 +14337,8 @@ async function take(ctx, list2, side) {
   const { deps, cwd, cutAt, excluded, seen, skipped } = ctx;
   const accepted = [];
   const settling = [];
-  let sideBytes = 0;
+  let spent = 0;
+  let read = 0;
   let budgetSpent = false;
   for (const candidate of list2) {
     if (accepted.length >= COHORT_MAX) break;
@@ -14347,25 +14348,27 @@ async function take(ctx, list2, side) {
       skipped["evidence-session"]++;
       continue;
     }
-    const remaining = COHORT_SIDE_BYTES - sideBytes;
-    if (remaining < 1) {
+    const free = COHORT_SIDE_BYTES - spent;
+    const left = COHORT_SIDE_BYTES - read;
+    if (free < 1 || left < 1) {
       skipped["budget-spent"]++;
-      budgetSpent = true;
+      budgetSpent = free < 1;
       break;
     }
-    const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining);
+    const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, left);
     const loaded = await deps.loadCandidate(candidate, maxBytes);
+    read += loaded.bytesRead;
     if ("skip" in loaded && loaded.skip === "still-settling") {
       skipped["still-settling"]++;
       const startedAt = typeof loaded.startedAt === "number" && Number.isFinite(loaded.startedAt) && loaded.startedAt > 0 ? loaded.startedAt : void 0;
       settling.push(startedAt === void 0 ? { id } : { id, startedAt });
       continue;
     }
-    sideBytes += loaded.bytesRead;
+    spent += loaded.bytesRead;
     if ("skip" in loaded) {
       if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
         skipped["budget-spent"]++;
-        budgetSpent = true;
+        budgetSpent = maxBytes === Math.min(MAX_EVIDENCE_SESSION_BYTES, free);
         break;
       }
       skipped[loaded.skip]++;
@@ -14704,6 +14707,40 @@ function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSI
 }
 
 // src/suggest/cohort-deps.ts
+var READ_PROBE_FLAGS = constants11.O_RDONLY | constants11.O_NOFOLLOW | constants11.O_NONBLOCK;
+async function partialTail(path) {
+  let handle;
+  try {
+    handle = await open11(path, READ_PROBE_FLAGS);
+  } catch {
+    return void 0;
+  }
+  try {
+    const st = await handle.stat();
+    if (!st.isFile()) return void 0;
+    if (st.size === 0) return false;
+    const last = Buffer.alloc(1);
+    if ((await handle.read(last, 0, 1, st.size - 1)).bytesRead !== 1) return void 0;
+    if (last[0] === 10) return false;
+    const window = Math.min(st.size, PEEK_HEAD_BYTES);
+    const buffer = Buffer.alloc(window);
+    let offset = 0;
+    while (offset < window) {
+      const read = await handle.read(buffer, offset, window - offset, st.size - window + offset);
+      if (read.bytesRead === 0) return void 0;
+      offset += read.bytesRead;
+    }
+    const newline = buffer.lastIndexOf(10);
+    if (newline === -1 && window < st.size) return true;
+    let line = buffer.subarray(newline + 1).toString("utf8");
+    if (line.endsWith("\r")) line = line.slice(0, -1);
+    return line.length > 0 && tryParseObject(line) === null;
+  } catch {
+    return void 0;
+  } finally {
+    await handle.close();
+  }
+}
 function recordTime(value) {
   if (typeof value === "number") return Number.isFinite(value) ? value > 1e12 ? value : value * 1e3 : void 0;
   if (typeof value === "string") {
@@ -14715,7 +14752,7 @@ function recordTime(value) {
 async function settlingStartedAt(path) {
   let handle;
   try {
-    handle = await open11(path, constants11.O_RDONLY | constants11.O_NOFOLLOW);
+    handle = await open11(path, READ_PROBE_FLAGS);
   } catch {
     return void 0;
   }
@@ -14760,6 +14797,7 @@ function createCohortDeps(options = {}) {
       return refs.filter((ref2) => SESSION_ID_RE.test(ref2.sessionId)).map((ref2) => ({ sessionId: ref2.sessionId.toLowerCase(), path: ref2.path, mtimeMs: ref2.mtimeMs }));
     },
     async loadCandidate(candidate, maxBytes) {
+      if (await partialTail(candidate.path)) return settlingSkip(candidate.path, 0);
       const loaded = await loadSettledAnalysis({ path: candidate.path, sessionId: candidate.sessionId }, maxBytes, {
         requireQuiet: true,
         ...options.now ? { now: options.now } : {}
