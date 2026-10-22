@@ -1,10 +1,10 @@
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { metricsOf, uuid } from '../../test/fixtures/suggestion-records.js'
 import { ANALYSIS_PAYLOAD_GENERATION, ANALYSIS_SCHEMA_VERSION } from '../model/analysis.js'
-import { COHORT_FACTS_DIR, CohortFactsCache, cohortFactsKey, type CohortFacts, type CohortOverCap } from './cohort-cache.js'
+import { COHORT_FACTS_DIR, CohortFactsCache, cohortFactsKey, sidecarTree, type CohortFacts, type CohortOverCap } from './cohort-cache.js'
 
 const KEY = 'a'.repeat(40)
 const facts = (over: Partial<CohortFacts> = {}): CohortFacts => ({
@@ -189,6 +189,33 @@ describe('CohortFactsCache: a stale or hostile entry is a miss', () => {
   })
 })
 
+describe('sidecarTree', () => {
+  it('keeps the name order and the entry limit of the manifest over more entries than 1 batch of lstat calls', async () => {
+    const project = root()
+    const path = join(project, `${uuid(1)}.jsonl`)
+    writeFileSync(path, '{}\n')
+    const subagents = join(project, uuid(1), 'subagents')
+    // 2,047 sidecars and 1 folder of 2 entries: 2,050 entries, 2 more than the limit of 2,048.
+    const files = Array.from({ length: 2_047 }, (_, i) => `agent-${String(i).padStart(4, '0')}.jsonl`)
+    mkdirSync(join(subagents, 'agent-0001-folder', 'deep'), { recursive: true })
+    writeFileSync(join(subagents, 'agent-0001-folder', 'deep', 'agent-x.jsonl'), '{}\n')
+    for (const name of files) writeFileSync(join(subagents, name), '{}\n')
+    const tree = await sidecarTree(path)
+    // In name order, each folder walked at its own name: the walk stops at the 2,049th entry, agent-2045.jsonl.
+    expect(tree.complete).toBe(false)
+    expect(tree.transcripts.map((entry) => relative(subagents, entry.path))).toEqual([
+      files[0],
+      join('agent-0001-folder', 'deep', 'agent-x.jsonl'),
+      ...files.slice(1, 2_045),
+    ])
+    unlinkSync(join(subagents, files[2_046]!))
+    unlinkSync(join(subagents, files[2_045]!))
+    const whole = await sidecarTree(path)
+    expect(whole.complete).toBe(true)
+    expect(whole.transcripts).toHaveLength(2_046)
+  })
+})
+
 describe('cohortFactsKey', () => {
   it('moves with the size, the time and the sidecars of a transcript, and is undefined for a link or a missing file', async () => {
     const dir = root()
@@ -202,10 +229,11 @@ describe('cohortFactsKey', () => {
     expect(await cohortFactsKey(ref)).toEqual(first)
     writeFileSync(path, '{}\n{}\n')
     expect((await cohortFactsKey(ref))?.key).not.toBe(first?.key)
-    const sidecar = join(dir, 'agent-1.jsonl')
-    writeFileSync(sidecar, '{}\n')
-    const withSidecar = await cohortFactsKey({ ...ref, subagentFiles: [sidecar] })
-    expect(withSidecar?.key).not.toBe((await cohortFactsKey(ref))?.key)
+    const beforeSidecar = await cohortFactsKey(ref)
+    mkdirSync(join(dir, uuid(1), 'subagents'), { recursive: true })
+    writeFileSync(join(dir, uuid(1), 'subagents', 'agent-1.jsonl'), '{}\n')
+    const withSidecar = await cohortFactsKey(ref)
+    expect(withSidecar?.key).not.toBe(beforeSidecar?.key)
     const link = join(dir, 'link.jsonl')
     symlinkSync(path, link)
     expect(await cohortFactsKey({ ...ref, path: link })).toBeUndefined()
@@ -240,5 +268,29 @@ describe('cohortFactsKey', () => {
     expect(after.key).not.toBe(before.key)
     expect(after.changedAt).toBeGreaterThanOrEqual(Math.floor(statSync(join(subagents, 'agent-a1.meta.json')).ctimeMs))
     expect(after.changedAt).toBeGreaterThanOrEqual(Math.floor(statSync(subagents).ctimeMs))
+  })
+
+  it('reads every sidecar that the manifest reads, 4 folders deep, and not only the list of discovery', async () => {
+    const project = root()
+    const path = join(project, `${uuid(1)}.jsonl`)
+    writeFileSync(path, '{}\n')
+    const nested = join(project, uuid(1), 'subagents', 'workflows', 'run1')
+    mkdirSync(nested, { recursive: true })
+    const big = join(nested, 'agent-big.jsonl')
+    writeFileSync(big, '{}\n')
+    // Discovery lists only the sidecars of the subagents folder itself: here none.
+    const ref = { path, subagentFiles: [] as string[] }
+    const first = (await cohortFactsKey(ref))!
+    await new Promise((done) => setTimeout(done, 20))
+    writeFileSync(join(nested, 'agent-big.meta.json'), '{"agentType":"x"}')
+    const withMeta = (await cohortFactsKey(ref))!
+    expect(withMeta.key).not.toBe(first.key)
+    expect(withMeta.changedAt).toBeGreaterThanOrEqual(Math.floor(statSync(join(nested, 'agent-big.meta.json')).ctimeMs))
+    // The nested sidecar goes: the key moves, and the change time reads its folder.
+    await new Promise((done) => setTimeout(done, 20))
+    unlinkSync(big)
+    const gone = (await cohortFactsKey(ref))!
+    expect(gone.key).not.toBe(withMeta.key)
+    expect(gone.changedAt).toBeGreaterThanOrEqual(Math.floor(statSync(nested).ctimeMs))
   })
 })

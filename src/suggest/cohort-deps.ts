@@ -3,18 +3,17 @@
  * directories, each session read through its immutable evidence manifest with the 30-minute quiet gate.
  */
 import { constants } from 'node:fs'
-import { lstat, open, readdir, realpath } from 'node:fs/promises'
-import { basename, dirname, isAbsolute, join } from 'node:path'
+import { open, realpath } from 'node:fs/promises'
+import { isAbsolute } from 'node:path'
 import {
   loadSettledAnalysis,
   MAX_VERIFICATION_DISCOVERED_SESSIONS,
   MIN_VERIFICATION_QUIET_MS,
 } from '../adapters/claude-code/discovered-analysis.js'
-import { MAX_EVIDENCE_SIDECAR_DEPTH, MAX_EVIDENCE_SIDECAR_ENTRIES } from '../adapters/claude-code/evidence-input.js'
 import { tryParseObject } from '../adapters/claude-code/jsonl.js'
 import { claudeRoots, listSessions, PEEK_HEAD_BYTES, SESSION_ID_RE, type SessionRef } from '../discover/discover.js'
 import { canonicalWorkspace } from './artifacts.js'
-import { cohortFactsKey, type CohortFactsCache } from './cohort-cache.js'
+import { cohortFactsKey, sidecarTree, type CohortFactsCache } from './cohort-cache.js'
 import { metricValues, ranOranguLifecycle, type CohortCandidate, type CohortDeps, type CohortLoad } from './cohort.js'
 
 /** The flags of a probe read: no link, and no wait for a writer on a FIFO. */
@@ -79,34 +78,12 @@ export async function partialTail(path: string): Promise<boolean | undefined> {
 }
 
 /**
- * The sidecar transcripts of a session as the evidence manifest finds them (`src/adapters/claude-code/evidence-input.ts`):
- * each `agent-*.jsonl` file under `<session>/subagents`, down to the depth and entry limits of the manifest. It follows
- * no link. A tree past a limit gives the files found so far, and the full read then decides.
+ * The sidecar transcripts of a session as the evidence manifest finds them: each `agent-*.jsonl` file of `sidecarTree`
+ * (`cohort-cache.ts`), which the cache key reads too. A tree past a limit gives the files found so far, and the full
+ * read then decides.
  */
 async function sidecarTranscripts(path: string): Promise<string[]> {
-  const files: string[] = []
-  let entries = 0
-  const walk = async (dir: string, depth: number): Promise<void> => {
-    const st = await lstat(dir)
-    if (st.isSymbolicLink() || !st.isDirectory()) return
-    for (const name of (await readdir(dir)).sort()) {
-      if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error('sidecar limit')
-      const child = join(dir, name)
-      const cst = await lstat(child)
-      if (cst.isSymbolicLink()) continue
-      if (cst.isDirectory()) {
-        if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk(child, depth + 1)
-      } else if (cst.isFile() && name.startsWith('agent-') && name.endsWith('.jsonl')) files.push(child)
-    }
-  }
-  const sessionDir = join(dirname(path), basename(path, '.jsonl'))
-  try {
-    const st = await lstat(sessionDir)
-    if (!st.isSymbolicLink() && st.isDirectory()) await walk(join(sessionDir, 'subagents'), 0)
-  } catch {
-    // A missing tree has no sidecar. A tree past a limit keeps the files found so far.
-  }
-  return files
+  return (await sidecarTree(path)).transcripts.map((entry) => entry.path)
 }
 
 /**

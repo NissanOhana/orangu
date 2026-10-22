@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { appendFileSync, closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, statSync, unlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
@@ -413,6 +413,49 @@ describe('createCachedCohortDeps over real transcripts', () => {
     await measureCohortEffect(applied(identity), [], cached(null, base))
     await measureCohortEffect(applied(identity), [], cached(null, base))
     expect(calls.filter((call) => call === id(103))).toHaveLength(2)
+  })
+
+  /**
+   * id(100), a later session, is over the cap only by a sidecar 4 folders deep, which discovery does not list. The
+   * trusted loader here refuses it while that sidecar is there, as it refuses a session of more than 64 MiB.
+   */
+  function overCapByNestedSidecar(cwd: string): { nested: string; sidecar: string; base: CohortDeps } {
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    const nested = join(project, id(100), 'subagents', 'workflows', 'run1')
+    mkdirSync(nested, { recursive: true })
+    const sidecar = join(nested, 'agent-big.jsonl')
+    writeFileSync(sidecar, '{"type":"user","isSidechain":true}\n')
+    const trusted = createCohortDeps({ now: settled })
+    return {
+      nested,
+      sidecar,
+      base: {
+        ...trusted,
+        loadCandidate: async (candidate, maxBytes) =>
+          candidate.sessionId === id(100) && existsSync(sidecar) ? { skip: 'over-budget', bytesRead: 7 } : trusted.loadCandidate(candidate, maxBytes),
+      },
+    }
+  }
+
+  it('moves the key when a nested sidecar goes, so a warm read takes the sessions that the trusted step takes', async () => {
+    const { cwd, identity } = workspaceWithSessions()
+    const { sidecar, base } = overCapByNestedSidecar(cwd)
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    expect((await measureCohortEffect(applied(identity), [], cached(dir, base))).skipped['over-budget']).toBe(1)
+    unlinkSync(sidecar)
+    const warm = await measureCohortEffect(applied(identity), [], cached(dir, base))
+    expect(warm.skipped['over-budget']).toBe(0)
+    expect(JSON.stringify(warm)).toBe(JSON.stringify(await measureCohortEffect(applied(identity), [], base)))
+  })
+
+  it('finds a partial line in a nested sidecar after a cached skip, so the session still settles', async () => {
+    const { cwd, identity } = workspaceWithSessions()
+    const { sidecar, base } = overCapByNestedSidecar(cwd)
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-cohort-facts-'))
+    expect((await measureCohortEffect(applied(identity), [], cached(dir, base))).skipped['over-budget']).toBe(1)
+    appendFileSync(sidecar, '{"type":"user","mess')
+    const warm = await measureCohortEffect(applied(identity), [], cached(dir, base))
+    expect(warm.skipped).toMatchObject({ 'over-budget': 0, 'still-settling': 1 })
   })
 
   it('keeps the trusted loaders off the cache: a planted entry changes no measure of the record steps', async () => {

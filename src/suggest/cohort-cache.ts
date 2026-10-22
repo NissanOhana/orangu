@@ -13,15 +13,17 @@
  * at a cap where the same refusal holds, so a session over the 64 MiB evidence cap is not probed and walked again on
  * each warm read.
  *
- * A miss is never an error. An entry is bound to its key and to its session id, and any other shape is a miss, so a
- * stale or broken file can only cost a transcript read. Only the queue reads this cache. The record steps measure
- * with the trusted loaders of `createCohortDeps`, so no entry can change a stored verdict.
+ * A miss is never an error. An entry is bound to its key and to its session id, and any other shape is a miss. The key
+ * reads each file and folder that the trusted read reads (`cohortFactsKey`), so an entry of files that changed since is
+ * a miss, and it costs only a transcript read. A planted entry can change what the queue shows. It can never change a
+ * stored verdict: only the queue reads this cache, and the record steps measure with the trusted loaders of
+ * `createCohortDeps`.
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { constants, type BigIntStats } from 'node:fs'
-import { lstat, open, rename, unlink } from 'node:fs/promises'
+import { lstat, open, readdir, rename, unlink } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
-import { MAX_EVIDENCE_SESSION_BYTES } from '../adapters/claude-code/evidence-input.js'
+import { MAX_EVIDENCE_SESSION_BYTES, MAX_EVIDENCE_SIDECAR_DEPTH, MAX_EVIDENCE_SIDECAR_ENTRIES } from '../adapters/claude-code/evidence-input.js'
 import {
   assertPrivateDirectoriesStable,
   cacheGenerationSegment,
@@ -149,19 +151,95 @@ function pick(facts: CohortFacts): CohortFacts {
 /** The cache key of a transcript, and the newest change time of its files for the settle rule. */
 export interface CohortFactsKey {
   key: string
-  /** the newest mtime or ctime of the transcript and its sidecar files, in ms */
+  /** the newest mtime or ctime of the transcript, its sidecar files and their folders, in ms */
   changedAt: number
 }
 
 /**
- * The key of a transcript, and its newest change time, from the entries that the quiet gate of the trusted loader
- * reads (`evidenceManifestLatestChangeMs`, `src/adapters/claude-code/evidence-input.ts`). The key holds the path, the
- * inode, the size, the mtime and the ctime of the transcript, and the size, mtime and ctime of each sidecar file and
- * its `.meta.json`. The change time is the newest mtime or ctime of those files and of the session folder and its
- * `subagents` folder, or of the project folder when the session has no folder. Undefined for a link, a missing file or
- * a file that is not regular, so such a transcript is never a cache hit.
+ * The lstat calls of 1 folder of a sidecar tree that run at once. The key walks the tree on each load, so the calls of
+ * a folder with hundreds of sidecars run in batches, as the picker reads a bounded list at once (`pick.ts`). An lstat
+ * holds no file descriptor, so a large folder cannot cause a descriptor spike.
  */
-export async function cohortFactsKey(ref: Pick<SessionRef, 'path' | 'subagentFiles'>): Promise<CohortFactsKey | undefined> {
+const SIDECAR_STAT_BATCH = 16
+
+/** A folder or a file of the sidecar tree of a session, with its lstat. */
+export interface SidecarTreeEntry {
+  path: string
+  st: BigIntStats
+}
+
+/**
+ * The sidecar tree of a session as the evidence manifest reads it (`discoverEvidenceSidecars`,
+ * `src/adapters/claude-code/evidence-input.ts`): the session folder, its `subagents` folder and each folder under it
+ * down to `MAX_EVIDENCE_SIDECAR_DEPTH`, with each `agent-*.jsonl` file and each other regular file of those folders
+ * (the `.meta.json` files among them). It follows no link. Past `MAX_EVIDENCE_SIDECAR_ENTRIES` entries, or when a
+ * folder goes during the walk, `complete` is false and the tree keeps what it found: the full read then decides.
+ */
+export interface SidecarTree {
+  /** the session folder, absent when the session has none */
+  sessionDir?: BigIntStats
+  /** each folder from `subagents` down, in walk order */
+  folders: SidecarTreeEntry[]
+  /** each `agent-*.jsonl` file, in walk order: the names of each folder sorted */
+  transcripts: SidecarTreeEntry[]
+  /** each other regular file of the folders, by path */
+  files: Map<string, BigIntStats>
+  complete: boolean
+}
+
+export async function sidecarTree(mainPath: string): Promise<SidecarTree> {
+  const tree: SidecarTree = { folders: [], transcripts: [], files: new Map(), complete: true }
+  const sessionDir = join(dirname(mainPath), basename(mainPath, '.jsonl'))
+  const folder = await lstatOrUndefined(sessionDir)
+  if (!folder || folder.isSymbolicLink() || !folder.isDirectory()) return tree
+  tree.sessionDir = folder
+  let entries = 0
+  const walk = async (dir: string, st: BigIntStats, depth: number): Promise<void> => {
+    tree.folders.push({ path: dir, st })
+    const names = (await readdir(dir)).sort()
+    for (let start = 0; start < names.length; start += SIDECAR_STAT_BATCH) {
+      // The lstat calls of this batch at once. Then each name in order, as 1 call at a time takes it: the entry limit,
+      // a failed call and each folder walk happen at the same name.
+      const batch = names.slice(start, start + SIDECAR_STAT_BATCH)
+      const stats = await Promise.allSettled(batch.map((name) => lstat(join(dir, name), { bigint: true })))
+      for (const [index, name] of batch.entries()) {
+        if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error('sidecar limit')
+        const result = stats[index]!
+        if (result.status === 'rejected') throw result.reason
+        const child = join(dir, name)
+        const cst = result.value
+        if (cst.isSymbolicLink()) continue
+        if (cst.isDirectory()) {
+          if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk(child, cst, depth + 1)
+        } else if (cst.isFile()) {
+          if (name.startsWith('agent-') && name.endsWith('.jsonl')) tree.transcripts.push({ path: child, st: cst })
+          else tree.files.set(child, cst)
+        }
+      }
+    }
+  }
+  const subagents = join(sessionDir, 'subagents')
+  const root = await lstatOrUndefined(subagents)
+  if (!root || root.isSymbolicLink() || !root.isDirectory()) return tree
+  try {
+    await walk(subagents, root, 0)
+  } catch {
+    tree.complete = false
+  }
+  return tree
+}
+
+/**
+ * The key of a transcript, and its newest change time, from the entries that the trusted loader reads: the files of
+ * its evidence manifest and the folders of its quiet gate (`evidenceManifestLatestChangeMs`,
+ * `src/adapters/claude-code/evidence-input.ts`). The key holds the path, the inode, the size, the mtime and the ctime of
+ * the transcript, the mtime and ctime of the session folder and of each folder of `sidecarTree`, and the path, size,
+ * mtime and ctime of each sidecar transcript and its `.meta.json`, 4 folders deep. So a sidecar that changes, comes or
+ * goes anywhere that the manifest reads moves the key. The change time is the newest mtime or ctime of all of those, or
+ * of the project folder when the session has no folder. Undefined for a link, a missing file or a file that is not
+ * regular, so such a transcript is never a cache hit.
+ */
+export async function cohortFactsKey(ref: Pick<SessionRef, 'path'>): Promise<CohortFactsKey | undefined> {
   try {
     const main = await lstat(ref.path, { bigint: true })
     if (main.isSymbolicLink() || !main.isFile()) return undefined
@@ -172,30 +250,28 @@ export async function cohortFactsKey(ref: Pick<SessionRef, 'path' | 'subagentFil
     }
     changed(main)
     const parts: Array<string | bigint | number> = [COHORT_FACTS_DIR, ref.path, main.dev, main.ino, main.size, main.mtimeNs, main.ctimeNs]
-    const sessionDir = join(dirname(ref.path), basename(ref.path, '.jsonl'))
-    const folder = await lstatOrUndefined(sessionDir)
-    if (folder?.isDirectory()) {
-      changed(folder)
-      const subagents = await lstatOrUndefined(join(sessionDir, 'subagents'))
-      if (subagents?.isDirectory()) changed(subagents)
+    const tree = await sidecarTree(ref.path)
+    if (tree.sessionDir) {
+      changed(tree.sessionDir)
+      parts.push(`session:${tree.sessionDir.mtimeNs}:${tree.sessionDir.ctimeNs}`)
     } else {
+      // The project folder moves with each session of the project, so it is in the change time and not in the key.
       const project = await lstatOrUndefined(dirname(ref.path))
       if (project) changed(project)
     }
-    const files = [...ref.subagentFiles].sort()
-    parts.push(files.length)
-    for (const dir of new Set(files.map((file) => dirname(file)))) {
-      const st = await lstatOrUndefined(dir)
-      if (st) changed(st)
+    for (const { path, st } of tree.folders) {
+      changed(st)
+      parts.push(`folder:${path}:${st.mtimeNs}:${st.ctimeNs}`)
     }
-    for (const file of files) {
-      // A vanished sidecar or meta file counts as absent. The main file moves when its session writes again.
-      for (const path of [file, file.replace(/\.jsonl$/, '.meta.json')]) {
-        const st = await lstatOrUndefined(path)
-        if (st) changed(st)
-        parts.push(st ? `${st.size}:${st.mtimeNs}:${st.ctimeNs}` : '-')
-      }
+    parts.push(tree.transcripts.length)
+    for (const { path, st } of tree.transcripts) {
+      // A missing meta file counts as absent, as the manifest reads it.
+      const meta = tree.files.get(path.replace(/\.jsonl$/, '.meta.json'))
+      changed(st)
+      if (meta) changed(meta)
+      parts.push(`${path}:${st.size}:${st.mtimeNs}:${st.ctimeNs}`, meta ? `${meta.size}:${meta.mtimeNs}:${meta.ctimeNs}` : '-')
     }
+    if (!tree.complete) parts.push('incomplete')
     // Round toward the future, as the quiet gate of the trusted loader does.
     const changedAt = Number((changedNs + 999_999n) / 1_000_000n)
     return { key: createHash('sha1').update(parts.join('|')).digest('hex'), changedAt }
