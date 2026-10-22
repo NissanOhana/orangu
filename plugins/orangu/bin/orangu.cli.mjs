@@ -13892,9 +13892,11 @@ function storeReadQuery(read, query, serveCwd) {
   else if (all !== null) target = "all";
   else {
     const dir = cwd ?? serveCwd;
-    if (!dir) return "cwd or all=1 is required";
-    if (Buffer.byteLength(dir, "utf8") > MAX_REPO_CWD_BYTES) return "cwd is too long";
-    target = { cwd: dir };
+    if (!dir) target = "all";
+    else {
+      if (Buffer.byteLength(dir, "utf8") > MAX_REPO_CWD_BYTES) return "cwd is too long";
+      target = { cwd: dir };
+    }
   }
   const namedCwd = cwd !== null;
   const rule = query.get("rule");
@@ -14257,7 +14259,7 @@ function coreRoutes(ctx, hub) {
           else ctx.emit({ type: "suggestion-updated", id: rec.id, status: rec.status });
           json(res, 200, publicSuggestion(rec));
         } catch (e) {
-          jsonError(res, 400, e);
+          jsonError(res, 500, e);
         } finally {
           for (const key of held) rejecting.delete(key);
         }
