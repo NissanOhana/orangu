@@ -4,8 +4,7 @@
  * No node imports here.
  */
 import type { ChangeClass } from './change-classes.js'
-// type only: erased from every bundle, so this file stays free of node modules at run time
-import type { CohortSkipReason } from './cohort.js'
+import type { CohortSkipReason } from './cohort-skip-reasons.js'
 import type { CohortCheckVerdict, CohortVerdict } from './cohort-stats.js'
 import type { RejectReasonCode } from './reason-codes.js'
 

@@ -17,6 +17,7 @@
 import { basename } from 'node:path'
 import { MAX_EVIDENCE_SESSION_BYTES } from '../adapters/claude-code/evidence-input.js'
 import { SESSION_ID_RE } from '../discover/discover.js'
+import { COHORT_SKIP_REASONS, type CohortSkipReason } from './cohort-skip-reasons.js'
 import {
   COHORT_ALPHA,
   COHORT_MAX,
@@ -39,17 +40,7 @@ import { applicationTime, cohortReceiptSummary } from './verification-policy.js'
 /** Transcript budget per side (baseline, later); each session is also capped at the 64 MiB evidence limit. */
 export const COHORT_SIDE_BYTES = 256 * 1024 * 1024
 
-export const COHORT_SKIP_REASONS = [
-  'evidence-session',
-  'orangu-session',
-  'spans-application',
-  'still-settling',
-  'other-workspace',
-  'over-budget',
-  'budget-spent',
-  'unreadable',
-] as const
-export type CohortSkipReason = (typeof COHORT_SKIP_REASONS)[number]
+export { COHORT_SKIP_REASONS, type CohortSkipReason }
 
 export interface CohortCandidate {
   sessionId: string

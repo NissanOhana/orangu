@@ -14052,7 +14052,8 @@ async function canonicalWorkspace(value) {
 
 // src/suggest/cohort.ts
 import { basename as basename10 } from "node:path";
-var COHORT_SIDE_BYTES = 256 * 1024 * 1024;
+
+// src/suggest/cohort-skip-reasons.ts
 var COHORT_SKIP_REASONS = [
   "evidence-session",
   "orangu-session",
@@ -14063,6 +14064,9 @@ var COHORT_SKIP_REASONS = [
   "budget-spent",
   "unreadable"
 ];
+
+// src/suggest/cohort.ts
+var COHORT_SIDE_BYTES = 256 * 1024 * 1024;
 function metricValues(analysis) {
   const values = {
     avgTotalTokens: analysis.summary.totalTokens,
