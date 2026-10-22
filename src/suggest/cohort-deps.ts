@@ -10,10 +10,54 @@ import {
   MAX_VERIFICATION_DISCOVERED_SESSIONS,
   MIN_VERIFICATION_QUIET_MS,
 } from '../adapters/claude-code/discovered-analysis.js'
+import { tryParseObject } from '../adapters/claude-code/jsonl.js'
 import { claudeRoots, listSessions, PEEK_HEAD_BYTES, SESSION_ID_RE, type SessionRef } from '../discover/discover.js'
 import { canonicalWorkspace } from './artifacts.js'
 import { cohortFactsKey, type CohortFactsCache } from './cohort-cache.js'
 import { metricValues, ranOranguLifecycle, type CohortCandidate, type CohortDeps, type CohortLoad } from './cohort.js'
+
+/** The flags of a probe read: no link, and no wait for a writer on a FIFO. */
+const READ_PROBE_FLAGS = constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK
+
+/**
+ * True when the transcript ends in a partial line, by the rule of the reader (`src/adapters/claude-code/jsonl.ts`): a
+ * last line with no newline that is not a JSON object. It reads the last byte, and at most the last 64,000 B when that
+ * byte is not a newline. An open last line longer than that counts as partial. Undefined when the file is not a
+ * regular file or cannot be read, so the full read decides.
+ */
+export async function partialTail(path: string): Promise<boolean | undefined> {
+  let handle: Awaited<ReturnType<typeof open>>
+  try {
+    handle = await open(path, READ_PROBE_FLAGS)
+  } catch {
+    return undefined
+  }
+  try {
+    const st = await handle.stat()
+    if (!st.isFile()) return undefined
+    if (st.size === 0) return false
+    const last = Buffer.alloc(1)
+    if ((await handle.read(last, 0, 1, st.size - 1)).bytesRead !== 1) return undefined
+    if (last[0] === 0x0a) return false
+    const window = Math.min(st.size, PEEK_HEAD_BYTES)
+    const buffer = Buffer.alloc(window)
+    let offset = 0
+    while (offset < window) {
+      const read = await handle.read(buffer, offset, window - offset, st.size - window + offset)
+      if (read.bytesRead === 0) return undefined // the file got shorter: the full read decides
+      offset += read.bytesRead
+    }
+    const newline = buffer.lastIndexOf(0x0a)
+    if (newline === -1 && window < st.size) return true
+    let line = buffer.subarray(newline + 1).toString('utf8')
+    if (line.endsWith('\r')) line = line.slice(0, -1)
+    return line.length > 0 && tryParseObject(line) === null
+  } catch {
+    return undefined
+  } finally {
+    await handle.close()
+  }
+}
 
 /** A record time as the parser reads it (`ts` in `src/adapters/claude-code/parse.ts`): ms, seconds, or an ISO string. */
 function recordTime(value: unknown): number | undefined {
@@ -33,7 +77,8 @@ function recordTime(value: unknown): number | undefined {
 export async function settlingStartedAt(path: string): Promise<number | undefined> {
   let handle: Awaited<ReturnType<typeof open>>
   try {
-    handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW)
+    // O_NONBLOCK: a FIFO in place of a transcript opens at once, and the regular-file check refuses it.
+    handle = await open(path, READ_PROBE_FLAGS)
   } catch {
     return undefined
   }
@@ -83,6 +128,8 @@ export function createCohortDeps(options: { now?: () => number } = {}): CohortDe
         .map((ref) => ({ sessionId: ref.sessionId.toLowerCase(), path: ref.path, mtimeMs: ref.mtimeMs }))
     },
     async loadCandidate(candidate, maxBytes) {
+      // A transcript that ends in a partial line still settles: find it from the end, and read none of the rest.
+      if (await partialTail(candidate.path)) return settlingSkip(candidate.path, 0)
       const loaded = await loadSettledAnalysis({ path: candidate.path, sessionId: candidate.sessionId }, maxBytes, {
         requireQuiet: true,
         ...(options.now ? { now: options.now } : {}),
@@ -191,6 +238,8 @@ export function createCachedCohortDeps(options: CachedCohortDepsOptions): Cached
           }
         }
       }
+      // A transcript that ends in a partial line is never cached: find it from the end, with no call to the loader.
+      if (await partialTail(candidate.path)) return settlingSkip(candidate.path, 0)
       const remaining = options.budgetBytes - missBytes
       if (!(remaining >= 1)) throw new CohortReadDeferred()
       const cap = Math.min(maxBytes, remaining)

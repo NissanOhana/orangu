@@ -208,9 +208,10 @@ interface TakeContext {
  * the side's byte budget, and each settled, in the workspace, wholly on its side of the cut, and not an orangu session.
  * The freeze and the measure step share them, so a frozen baseline holds the sessions that a live read takes.
  *
- * A settling session spends none of the side's budget: it joins the side when it settles, and its bytes count then.
- * So its bytes cannot spend the budget and complete the side before it settles. `settling` gives the id and the start
- * time of each one.
+ * A side reads at most `COHORT_SIDE_BYTES`, settling sessions included. But the bytes of a settling session never
+ * complete the side: the session joins it when it settles. So a stop is complete only when the bytes that decide the
+ * side (every load but a settling one) stop it at the same point. Else the side stops and waits for a later read.
+ * `settling` gives the id and the start time of each settling session.
  */
 async function take(
   ctx: TakeContext,
@@ -220,7 +221,9 @@ async function take(
   const { deps, cwd, cutAt, excluded, seen, skipped } = ctx
   const accepted: CohortSession[] = []
   const settling: Array<{ id: string; startedAt?: number }> = []
-  let sideBytes = 0
+  // `spent` decides the side: the bytes of each load but a settling one. `read` bounds the work: each byte read.
+  let spent = 0
+  let read = 0
   let budgetSpent = false
   for (const candidate of list) {
     if (accepted.length >= COHORT_MAX) break
@@ -230,14 +233,16 @@ async function take(
       skipped['evidence-session']++
       continue
     }
-    const remaining = COHORT_SIDE_BYTES - sideBytes
-    if (remaining < 1) {
+    const free = COHORT_SIDE_BYTES - spent
+    const left = COHORT_SIDE_BYTES - read
+    if (free < 1 || left < 1) {
       skipped['budget-spent']++
-      budgetSpent = true
+      budgetSpent = free < 1
       break
     }
-    const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, remaining)
+    const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, left)
     const loaded = await deps.loadCandidate(candidate, maxBytes)
+    read += loaded.bytesRead
     if ('skip' in loaded && loaded.skip === 'still-settling') {
       skipped['still-settling']++
       // A start time crosses the loader boundary: keep only a finite positive number.
@@ -245,13 +250,14 @@ async function take(
       settling.push(startedAt === undefined ? { id } : { id, startedAt })
       continue
     }
-    sideBytes += loaded.bytesRead
+    spent += loaded.bytesRead
     if ('skip' in loaded) {
       // Over the fixed per-session cap: skipped on either side alike. Over what is left of this side's
       // budget: the side stops here rather than reaching past it for smaller sessions.
       if (loaded.skip === 'over-budget' && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
         skipped['budget-spent']++
-        budgetSpent = true
+        // Complete only when the deciding bytes alone give the same cap, so settling bytes never complete the side.
+        budgetSpent = maxBytes === Math.min(MAX_EVIDENCE_SESSION_BYTES, free)
         break
       }
       skipped[loaded.skip]++

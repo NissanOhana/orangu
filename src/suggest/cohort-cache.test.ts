@@ -168,4 +168,33 @@ describe('cohortFactsKey', () => {
     expect(await cohortFactsKey({ ...ref, path: join(dir, 'missing.jsonl') })).toBeUndefined()
     expect(existsSync(path)).toBe(true)
   })
+
+  it('reads the change times that the quiet gate reads: the ctime, each sidecar meta file and the folders', async () => {
+    const project = root()
+    const path = join(project, `${uuid(1)}.jsonl`)
+    writeFileSync(path, '{}\n')
+    const ref = { path, subagentFiles: [] as string[] }
+    const first = (await cohortFactsKey(ref))!
+    // A mode change moves only the ctime, and the quiet gate reads the ctime.
+    chmodSync(path, 0o640)
+    const moved = (await cohortFactsKey(ref))!
+    expect(moved.key).not.toBe(first.key)
+    // With no session folder, the gate reads the project folder: a new file there moves its change time.
+    await new Promise((done) => setTimeout(done, 20))
+    writeFileSync(join(project, 'other.jsonl'), '{}\n')
+    expect((await cohortFactsKey(ref))!.changedAt).toBeGreaterThanOrEqual(Math.floor(statSync(project).ctimeMs))
+    // A sidecar meta file counts in the key and in the change time.
+    const subagents = join(project, uuid(1), 'subagents')
+    mkdirSync(subagents, { recursive: true })
+    const sidecar = join(subagents, 'agent-a1.jsonl')
+    writeFileSync(sidecar, '{}\n')
+    const withSidecar = { path, subagentFiles: [sidecar] }
+    const before = (await cohortFactsKey(withSidecar))!
+    await new Promise((done) => setTimeout(done, 20))
+    writeFileSync(join(subagents, 'agent-a1.meta.json'), '{"agentType":"x"}')
+    const after = (await cohortFactsKey(withSidecar))!
+    expect(after.key).not.toBe(before.key)
+    expect(after.changedAt).toBeGreaterThanOrEqual(Math.floor(statSync(join(subagents, 'agent-a1.meta.json')).ctimeMs))
+    expect(after.changedAt).toBeGreaterThanOrEqual(Math.floor(statSync(subagents).ctimeMs))
+  })
 })

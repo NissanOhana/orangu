@@ -14,7 +14,19 @@ import type { ChangeClass } from './change-classes.js'
 import type { CohortCheckpoint } from './cohort.js'
 import { COHORT_MAX, COHORT_MIN, isDirectional, type CohortVerdict } from './cohort-stats.js'
 import { isSuggestionId, kickoffCommands } from './id.js'
-import { inWorkspace, lastMoveTimes, recordVerdict, type WorkspaceMembership } from './lessons.js'
+import {
+  changeClassOf,
+  fitFirst,
+  idOrNull,
+  inWorkspace,
+  jsonBytes,
+  lastMoveTimes,
+  reasonCodeOf,
+  recordVerdict,
+  reviewedChecks,
+  workspaceOf,
+  type WorkspaceMembership,
+} from './lessons.js'
 import type { RejectReasonCode } from './reason-codes.js'
 import type { SuggestionRecord, SuggestionScope, SuggestionStatus } from './types.js'
 import { applicationTime, frozenBaselineViolation } from './verification-policy.js'
@@ -51,7 +63,8 @@ export interface QueueItem {
   ids: string[]
   status: SuggestionStatus
   scope: SuggestionScope
-  ruleId: string
+  /** null when the stored rule id is not in the form that orangu writes */
+  ruleId: string | null
   changeClass?: ChangeClass
   /** the stored title: it can be model text, so every surface escapes it */
   title: string
@@ -157,10 +170,10 @@ export function cannotVerifyOf(record: SuggestionRecord, candidates: { baseline:
   if (record.status !== 'applied') return undefined
   const frozen = trustedFrozen(record)
   if (frozen && frozen.sessions.length < COHORT_MIN) return 'few-baseline-sessions'
-  const proposal = record.proposal
-  const checks = proposal?.verificationChecks
+  // A list of checks that is not in its form counts as no checks: the record is then a legacy record.
+  const checks = reviewedChecks(record)
   if (checks?.length && !checks.some((check) => isDirectional(check.comparison))) return 'no-directional-check'
-  const structured = proposal?.v === 1 && proposal.workspace !== undefined && !!checks?.length
+  const structured = record.proposal?.v === 1 && typeof record.proposal.workspace?.cwd === 'string' && !!checks?.length
   if (structured && record.frozenBaseline === undefined && (candidates?.baseline ?? 0) < COHORT_MIN) return 'baseline-gone'
   if (!structured) return 'legacy-record'
   return undefined
@@ -208,7 +221,7 @@ function nextOf(record: SuggestionRecord, group: QueueGroup): string | null {
 }
 
 /** The canonical workspace path of a record, or undefined. */
-const ownWorkspace = (record: SuggestionRecord): string | undefined => record.proposal?.workspace?.cwd ?? record.workspaceCwd
+const ownWorkspace = workspaceOf
 
 /** The keys of an applied item, in the order of the item shape: the time, the counts, the queue check and the reason. */
 type AppliedKeys = Pick<QueueItem, 'appliedAt' | 'candidates' | 'check' | 'checkpoint' | 'verdict' | 'final' | 'leaning' | 'cannotVerify'>
@@ -253,61 +266,70 @@ export function buildQueue(input: QueueInput): SuggestionQueue {
   const groups: Record<QueueGroup, QueueItem[]> = { verdict: [], regressed: [], apply: [], review: [], running: [], wait: [] }
   const folded = new Map<string, SuggestionRecord[]>()
   const placed: Array<{ group: QueueGroup; records: SuggestionRecord[] }> = []
+  // The earlier records of each workspace and rule, closed or regressed, newest move first: 1 index for the read.
+  const earlier = new Map<string, Array<{ id: string; entry: QueueEarlier }>>()
   for (const record of sorted) {
-    if (CLOSED.includes(record.status)) continue
-    const candidates = record.status === 'applied' ? candidatesOf(record, input.discovered?.[record.id], input.now) : undefined
-    const cannotVerify = cannotVerifyOf(record, candidates)
-    const group = groupOf(record, cannotVerify, input.checks?.[record.id])
-    if (group === undefined) continue
-    const key = workspaceKey(record)
-    if ((record.status === 'new' || record.status === 'failed') && key !== undefined) {
-      const foldKey = JSON.stringify([key, record.scope, record.ruleId])
-      const fold = folded.get(foldKey)
-      if (fold) {
-        fold.push(record)
+    try {
+      const key = workspaceKey(record)
+      if (key !== undefined && (CLOSED.includes(record.status) || record.status === 'regressed')) {
+        const reasonCode = reasonCodeOf(record)
+        const entry: QueueEarlier = { id: record.id, status: record.status, verdict: recordVerdict(record).verdict, ...(reasonCode !== undefined ? { reasonCode } : {}) }
+        const indexKey = JSON.stringify([key, record.ruleId])
+        const list = earlier.get(indexKey)
+        if (list) list.push({ id: record.id, entry })
+        else earlier.set(indexKey, [{ id: record.id, entry }])
+      }
+      if (CLOSED.includes(record.status)) continue
+      const candidates = record.status === 'applied' ? candidatesOf(record, input.discovered?.[record.id], input.now) : undefined
+      const cannotVerify = cannotVerifyOf(record, candidates)
+      const group = groupOf(record, cannotVerify, input.checks?.[record.id])
+      if (group === undefined) continue
+      if ((record.status === 'new' || record.status === 'failed') && key !== undefined) {
+        const foldKey = JSON.stringify([key, record.scope, record.ruleId])
+        const fold = folded.get(foldKey)
+        if (fold) {
+          fold.push(record)
+          continue
+        }
+        folded.set(foldKey, [record])
+        placed.push({ group, records: folded.get(foldKey)! })
         continue
       }
-      folded.set(foldKey, [record])
-      placed.push({ group, records: folded.get(foldKey)! })
-      continue
+      placed.push({ group, records: [record] })
+    } catch {
+      // A record that still fails is left out, and the read goes on.
     }
-    placed.push({ group, records: [record] })
   }
 
-  // The earlier records of a workspace and rule: closed or regressed, newest move first.
   const earlierOf = (item: SuggestionRecord, ids: ReadonlySet<string>): QueueEarlier[] => {
     const key = workspaceKey(item)
     if (key === undefined) return []
-    return sorted
-      .filter((record) => !ids.has(record.id) && record.ruleId === item.ruleId && workspaceKey(record) === key)
-      .filter((record) => CLOSED.includes(record.status) || record.status === 'regressed')
-      .map((record) => ({
-        id: record.id,
-        status: record.status,
-        verdict: recordVerdict(record).verdict,
-        ...(record.status === 'rejected' && record.reasonCode !== undefined ? { reasonCode: record.reasonCode } : {}),
-      }))
+    return (earlier.get(JSON.stringify([key, item.ruleId])) ?? []).filter(({ id }) => !ids.has(id)).map(({ entry }) => entry)
   }
 
   for (const { group, records: itemRecords } of placed) {
-    const record = itemRecords[0]!
-    const ids = itemRecords.map((r) => r.id)
-    const changeClass = record.proposal?.changeClass
-    groups[group].push({
-      group,
-      id: record.id,
-      ids,
-      status: record.status,
-      scope: record.scope,
-      ruleId: record.ruleId,
-      ...(changeClass !== undefined ? { changeClass } : {}),
-      title: record.title,
-      workspace: ownWorkspace(record) ?? membership?.cwd ?? null,
-      lastMoveAt: Math.max(...itemRecords.map((r) => moves.get(r.id) ?? r.statusAt)),
-      ...(record.status === 'applied' ? appliedKeys(record, input) : {}),
-      earlier: earlierOf(record, new Set(ids)),
-      next: nextOf(record, group),
-    })
+    try {
+      const record = itemRecords[0]!
+      const ids = itemRecords.map((r) => r.id)
+      const changeClass = changeClassOf(record)
+      groups[group].push({
+        group,
+        id: record.id,
+        ids,
+        status: record.status,
+        scope: record.scope,
+        ruleId: idOrNull(record.ruleId),
+        ...(changeClass !== undefined ? { changeClass } : {}),
+        title: record.title,
+        workspace: ownWorkspace(record) ?? membership?.cwd ?? null,
+        lastMoveAt: Math.max(...itemRecords.map((r) => moves.get(r.id) ?? r.statusAt)),
+        ...(record.status === 'applied' ? appliedKeys(record, input) : {}),
+        earlier: earlierOf(record, new Set(ids)),
+        next: nextOf(record, group),
+      })
+    } catch {
+      // An item that still fails is left out, and the read goes on.
+    }
   }
 
   const counts: QueueCounts = {
@@ -336,7 +358,8 @@ export interface TodoItem {
   id: string
   status: SuggestionStatus
   scope: SuggestionScope
-  ruleId: string
+  /** null when the stored rule id is not in the form that orangu writes */
+  ruleId: string | null
   changeClass?: ChangeClass
   cannotVerify?: CannotVerify
 }
@@ -352,10 +375,11 @@ export interface TodoRead {
 }
 
 /**
- * The todo read of the queue of 1 workspace: its counts, and each item of the groups that have a step, in group order.
- * `omitted` is 0: the CLI writes the first items that fit `TODO_MAX_BYTES` and counts the rest.
+ * The todo read of the queue of 1 workspace: its counts, and the first items of the groups that have a step, in group
+ * order, that fit `TODO_MAX_BYTES` of the output. `omitted` counts the rest. `measure` gives the bytes of the exact
+ * output form, the `--json` form by default.
  */
-export function buildTodo(queue: SuggestionQueue): TodoRead {
+export function buildTodo(queue: SuggestionQueue, options: { measure?: (read: TodoRead) => number } = {}): TodoRead {
   if (queue.scope === 'all') throw new Error('the todo read takes the queue of 1 workspace')
   const items = TODO_GROUPS.flatMap((group) =>
     queue.groups[group].map((item): TodoItem => ({
@@ -368,5 +392,6 @@ export function buildTodo(queue: SuggestionQueue): TodoRead {
       ...(item.cannotVerify !== undefined ? { cannotVerify: item.cannotVerify } : {}),
     })),
   )
-  return { v: 1, workspace: queue.scope, counts: { ...queue.counts }, maxBytes: TODO_MAX_BYTES, omitted: 0, items }
+  const build = (kept: TodoItem[], omitted: number): TodoRead => ({ v: 1, workspace: queue.scope, counts: { ...queue.counts }, maxBytes: TODO_MAX_BYTES, omitted, items: kept })
+  return fitFirst(items, build, options.measure ?? jsonBytes, TODO_MAX_BYTES)
 }

@@ -13,9 +13,9 @@
  * with the trusted loaders of `createCohortDeps`, so no entry can change a stored verdict.
  */
 import { createHash, randomBytes } from 'node:crypto'
-import { constants } from 'node:fs'
+import { constants, type BigIntStats } from 'node:fs'
 import { lstat, open, rename, unlink } from 'node:fs/promises'
-import { isAbsolute, join, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path'
 import {
   assertPrivateDirectoriesStable,
   cacheGenerationSegment,
@@ -110,32 +110,59 @@ export interface CohortFactsKey {
 }
 
 /**
- * The key of a transcript: its path, inode, size and mtime, and the count, size and newest mtime of its sidecar files
- * (the inputs of `cacheKey` in `src/cache/index.ts`, plus the inode). Undefined for a link, a missing file or a file
- * that is not regular, so such a transcript is never a cache hit.
+ * The key of a transcript, and its newest change time, from the entries that the quiet gate of the trusted loader
+ * reads (`evidenceManifestLatestChangeMs`, `src/adapters/claude-code/evidence-input.ts`). The key holds the path, the
+ * inode, the size, the mtime and the ctime of the transcript, and the size, mtime and ctime of each sidecar file and
+ * its `.meta.json`. The change time is the newest mtime or ctime of those files and of the session folder and its
+ * `subagents` folder, or of the project folder when the session has no folder. Undefined for a link, a missing file or
+ * a file that is not regular, so such a transcript is never a cache hit.
  */
 export async function cohortFactsKey(ref: Pick<SessionRef, 'path' | 'subagentFiles'>): Promise<CohortFactsKey | undefined> {
   try {
     const main = await lstat(ref.path, { bigint: true })
     if (main.isSymbolicLink() || !main.isFile()) return undefined
-    let changedNs = main.mtimeNs > main.ctimeNs ? main.mtimeNs : main.ctimeNs
-    let sidecarBytes = 0n
-    let sidecarMaxMtimeNs = 0n
-    for (const file of ref.subagentFiles) {
-      try {
-        const st = await lstat(file, { bigint: true })
-        sidecarBytes += st.size
-        if (st.mtimeNs > sidecarMaxMtimeNs) sidecarMaxMtimeNs = st.mtimeNs
-        if (st.mtimeNs > changedNs) changedNs = st.mtimeNs
-        if (st.ctimeNs > changedNs) changedNs = st.ctimeNs
-      } catch {
-        // A vanished sidecar does not count. The main file moves when its session writes again.
+    let changedNs = 0n
+    const changed = (st: { mtimeNs: bigint; ctimeNs: bigint }): void => {
+      if (st.mtimeNs > changedNs) changedNs = st.mtimeNs
+      if (st.ctimeNs > changedNs) changedNs = st.ctimeNs
+    }
+    changed(main)
+    const parts: Array<string | bigint | number> = [COHORT_FACTS_DIR, ref.path, main.dev, main.ino, main.size, main.mtimeNs, main.ctimeNs]
+    const sessionDir = join(dirname(ref.path), basename(ref.path, '.jsonl'))
+    const folder = await lstatOrUndefined(sessionDir)
+    if (folder?.isDirectory()) {
+      changed(folder)
+      const subagents = await lstatOrUndefined(join(sessionDir, 'subagents'))
+      if (subagents?.isDirectory()) changed(subagents)
+    } else {
+      const project = await lstatOrUndefined(dirname(ref.path))
+      if (project) changed(project)
+    }
+    const files = [...ref.subagentFiles].sort()
+    parts.push(files.length)
+    for (const dir of new Set(files.map((file) => dirname(file)))) {
+      const st = await lstatOrUndefined(dir)
+      if (st) changed(st)
+    }
+    for (const file of files) {
+      // A vanished sidecar or meta file counts as absent. The main file moves when its session writes again.
+      for (const path of [file, file.replace(/\.jsonl$/, '.meta.json')]) {
+        const st = await lstatOrUndefined(path)
+        if (st) changed(st)
+        parts.push(st ? `${st.size}:${st.mtimeNs}:${st.ctimeNs}` : '-')
       }
     }
-    const raw = [COHORT_FACTS_DIR, ref.path, main.dev, main.ino, main.size, main.mtimeNs, ref.subagentFiles.length, sidecarBytes, sidecarMaxMtimeNs].join('|')
-    // Round toward the future, as the quiet gate of the trusted loader does (`evidenceManifestLatestChangeMs`).
+    // Round toward the future, as the quiet gate of the trusted loader does.
     const changedAt = Number((changedNs + 999_999n) / 1_000_000n)
-    return { key: createHash('sha1').update(raw).digest('hex'), changedAt }
+    return { key: createHash('sha1').update(parts.join('|')).digest('hex'), changedAt }
+  } catch {
+    return undefined
+  }
+}
+
+async function lstatOrUndefined(path: string): Promise<BigIntStats | undefined> {
+  try {
+    return await lstat(path, { bigint: true })
   } catch {
     return undefined
   }

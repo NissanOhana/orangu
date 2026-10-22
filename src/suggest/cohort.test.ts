@@ -519,7 +519,8 @@ describe('measureCohortEffect: a later session that still settles', () => {
     const s = mib64({ id: uuid(170), startedAt: T + 3_500, endedAt: T + 3_600, toolCalls: 0 })
     const look1 = await measureCohortEffect(record(), [], fakeDeps([a!, b!, settling(s), c!, fourth!]))
     expect(look1.skipped['still-settling']).toBe(1)
-    expect(look1.skipped['budget-spent']).toBe(0)
+    // The 64 MiB of S count toward the 256 MiB that the side reads, so 68 is not read. A stop on them is not complete.
+    expect(look1.skipped['budget-spent']).toBe(1)
     expect(look1.laterComplete).toBe(false)
     expect(look1.later.map((x) => x.id)).toEqual([uuid(165), uuid(166), uuid(167)])
     expect(effectFinality(look1)).toEqual({ checkpoint: 'first', final: false })
@@ -528,6 +529,30 @@ describe('measureCohortEffect: a later session that still settles', () => {
     const look2 = await measureCohortEffect(record(), [], fakeDeps([a!, b!, s, c!, fourth!]))
     expect(look2.laterComplete).toBe(true)
     expect(look2.later.map((x) => x.id)).toEqual([uuid(165), uuid(166), uuid(167), uuid(170)])
+  })
+
+  it('reads at most 256 MiB on each side, settling sessions included', async () => {
+    // 40 settling sessions on each side, each read for 64 MiB, then 3 settled ones on each side.
+    const heavy = (s: FakeSession): FakeSession => ({ ...s, bytes: 64 * MiB, skip: 'still-settling' })
+    const before = range(0, 40).map((i) => heavy({ id: uuid(300 + i), startedAt: T - 90_000 + i * 1_000, endedAt: T - 50_000 + i * 1_000, toolCalls: 0 }))
+    const laterHeavy = range(0, 40).map((i) => heavy({ id: uuid(400 + i), startedAt: T + 500 + i, endedAt: T + 1_000 + i * 10, toolCalls: 0 }))
+    const laterSessions = [...laterHeavy, ...laterOf([1, 2, 3])]
+    const laterIds = new Set(laterSessions.map((s) => s.id))
+    const deps = fakeDeps([...before, ...baselineOf([10, 11, 12]), ...laterSessions])
+    const read = { baseline: 0, later: 0 }
+    const load = deps.loadCandidate.bind(deps)
+    deps.loadCandidate = async (candidate, maxBytes) => {
+      const loaded = await load(candidate, maxBytes)
+      read[laterIds.has(candidate.sessionId) ? 'later' : 'baseline'] += loaded.bytesRead
+      return loaded
+    }
+    const effect = await measureCohortEffect(appliedRecord(), [], deps)
+    expect(read.baseline).toBeLessThanOrEqual(COHORT_SIDE_BYTES)
+    expect(read.later).toBeLessThanOrEqual(COHORT_SIDE_BYTES)
+    expect(read.later).toBeGreaterThan(0)
+    // The stops come from settling bytes, so neither side is complete and nothing is final.
+    expect(effect.laterComplete).toBe(false)
+    expect(effectFinality(effect).final).toBe(false)
   })
 })
 

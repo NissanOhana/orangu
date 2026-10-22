@@ -6,21 +6,97 @@
  * Pure: no node import and no clock. The store records, the store lines and the sessions of the workspace are inputs.
  * A verdict comes only from a receipt that the trust policy grades again on this read, so a changed line shows no
  * verdict.
+ *
+ * The store checks the top-level fields of a record and no nested field, and it accepts any text as a rule id. So each
+ * read takes a nested field only in its own form, gives an id only in the form that orangu writes, and leaves out a
+ * record that still fails. A read never stops on 1 bad record.
  */
-import type { ChangeClass } from './change-classes.js'
+import { isChangeClass, type ChangeClass } from './change-classes.js'
 import { isDirectional, type CohortCheckVerdict, type CohortVerdict } from './cohort-stats.js'
-import type { RejectReasonCode } from './reason-codes.js'
-import type {
-  SuggestionRecord,
-  SuggestionScope,
-  SuggestionStatus,
-  SuggestionVerificationComparison,
-  SuggestionVerificationMetric,
+import { REJECT_REASON_CODES, type RejectReasonCode } from './reason-codes.js'
+import {
+  SUGGESTION_VERIFICATION_COMPARISONS,
+  SUGGESTION_VERIFICATION_METRICS,
+  type SuggestionRecord,
+  type SuggestionScope,
+  type SuggestionStatus,
+  type SuggestionVerificationComparison,
+  type SuggestionVerificationIntent,
+  type SuggestionVerificationMetric,
 } from './types.js'
 import { applicationTime, isTrustedComputedVerification, outcomeReceiptViolation } from './verification-policy.js'
 
 /** The hard cap of the lesson read on the CLI, in bytes of the exact output with its trailing newline. */
 export const LESSONS_MAX_BYTES = 16_384
+
+/** A rule id or an insight id as orangu writes them: lowercase letters, digits, `.`, `_`, `:` and `-`, 128 at most. */
+const ID_RE = /^[a-z0-9][a-z0-9._:-]{0,127}$/
+
+/** The id in its own form, or null: a stored rule id can be any text, and a title-free read gives no text. */
+export function idOrNull(value: unknown): string | null {
+  return typeof value === 'string' && ID_RE.test(value) ? value : null
+}
+
+/** The change class of the proposal, only when it is 1 of the change classes. */
+export function changeClassOf(record: SuggestionRecord): ChangeClass | undefined {
+  const value: unknown = record.proposal?.changeClass
+  return typeof value === 'string' && isChangeClass(value) ? value : undefined
+}
+
+/** The reason code of a rejected record, only when it is 1 of the codes. */
+export function reasonCodeOf(record: SuggestionRecord): RejectReasonCode | undefined {
+  const value: unknown = record.reasonCode
+  return record.status === 'rejected' && typeof value === 'string' && (REJECT_REASON_CODES as readonly string[]).includes(value) ? (value as RejectReasonCode) : undefined
+}
+
+/** The canonical workspace path that the record names: its proposal workspace, else its bound workspace. */
+export function workspaceOf(record: SuggestionRecord): string | undefined {
+  const proposal: unknown = record.proposal?.workspace?.cwd
+  if (typeof proposal === 'string') return proposal
+  const bound: unknown = record.workspaceCwd
+  return typeof bound === 'string' ? bound : undefined
+}
+
+/** The reviewed checks, only when each is a metric and a comparison; else undefined. */
+export function reviewedChecks(record: SuggestionRecord): SuggestionVerificationIntent[] | undefined {
+  const checks: unknown = record.proposal?.verificationChecks
+  if (!Array.isArray(checks)) return undefined
+  const valid = checks.every(
+    (check: unknown) =>
+      !!check &&
+      typeof check === 'object' &&
+      (SUGGESTION_VERIFICATION_METRICS as readonly unknown[]).includes((check as { metric?: unknown }).metric) &&
+      (SUGGESTION_VERIFICATION_COMPARISONS as readonly unknown[]).includes((check as { comparison?: unknown }).comparison),
+  )
+  return valid ? (checks as SuggestionVerificationIntent[]) : undefined
+}
+
+const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === 'string')
+
+/** A list of strings, or an empty list for any other value. */
+function stringList(value: unknown): string[] {
+  return isStringList(value) ? [...value] : []
+}
+
+/** The bytes of the `--json` form of a read: 2-space JSON and a newline. */
+export function jsonBytes(value: unknown): number {
+  return new TextEncoder().encode(JSON.stringify(value, null, 2) + '\n').length
+}
+
+/**
+ * The read with the most first items whose measure fits `maxBytes`, and the rest counted as omitted. The measure grows
+ * with each item, so a binary search finds the count.
+ */
+export function fitFirst<T, R>(all: readonly T[], build: (kept: T[], omitted: number) => R, measure: (read: R) => number, maxBytes: number): R {
+  let low = 0
+  let high = all.length
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    if (measure(build(all.slice(0, mid), all.length - mid)) <= maxBytes) low = mid
+    else high = mid - 1
+  }
+  return build(all.slice(0, low), all.length - low)
+}
 
 /** The statuses of a lesson: a closed record, or a `regressed` one that waits for keep or reject. */
 export const LESSON_STATUSES: readonly SuggestionStatus[] = ['verified', 'regressed', 'unproven', 'kept', 'rejected']
@@ -124,9 +200,17 @@ const NO_VERDICT = (): RecordVerdict => ({ verdict: null, verdictTrusted: false,
  * The verdict of a record. `verified` only when the trust policy accepts the verification receipt of a verified
  * record. Else the verdict of an outcome receipt that grades again, as the move that wrote it: `regressed` for a
  * regressed or kept record, `unproven` for an unproven one, and the move that its verdict fits for a rejected one.
- * Else no verdict.
+ * Else no verdict, also when a field of the record is not in its form.
  */
 export function recordVerdict(record: SuggestionRecord): RecordVerdict {
+  try {
+    return trustedVerdict(record)
+  } catch {
+    return NO_VERDICT()
+  }
+}
+
+function trustedVerdict(record: SuggestionRecord): RecordVerdict {
   if (record.status === 'verified') {
     const receipt = record.verificationReceipt
     if (!receipt || !isTrustedComputedVerification(record)) return NO_VERDICT()
@@ -159,8 +243,8 @@ export function recordVerdict(record: SuggestionRecord): RecordVerdict {
     }
   }
   const receipt = record.outcomeReceipt
-  const reviewed = record.proposal?.verificationChecks
-  if (receipt === undefined || !Array.isArray(reviewed) || !['regressed', 'unproven', 'kept', 'rejected'].includes(record.status)) return NO_VERDICT()
+  const reviewed = reviewedChecks(record)
+  if (receipt === undefined || reviewed === undefined || !['regressed', 'unproven', 'kept', 'rejected'].includes(record.status)) return NO_VERDICT()
   const move: 'regressed' | 'unproven' =
     record.status === 'regressed' || record.status === 'kept' ? 'regressed' : record.status === 'unproven' ? 'unproven' : receipt.verdict === 'regressed' ? 'regressed' : 'unproven'
   if (outcomeReceiptViolation(receipt, move, reviewed, applicationTime(record), record.frozenBaseline) !== undefined) return NO_VERDICT()
@@ -179,7 +263,8 @@ export function recordVerdict(record: SuggestionRecord): RecordVerdict {
 export interface Lesson {
   id: string
   scope: SuggestionScope
-  ruleId: string
+  /** null when the stored rule id is not in the form that orangu writes */
+  ruleId: string | null
   insightId?: string
   changeClass?: ChangeClass
   status: SuggestionStatus
@@ -223,19 +308,23 @@ export interface LessonInput {
   rules?: readonly string[]
   /** `LESSONS_MAX_BYTES` on the CLI, null on the app route */
   maxBytes: number | null
+  /** the bytes of the exact output form; the `--json` form by default */
+  measure?: (read: LessonRead) => number
 }
 
 /** The keys of a lesson or a change row up to its checks, in the order of the lesson shape. */
 function lessonHead(record: SuggestionRecord, verdict: RecordVerdict): Omit<Lesson, 'checks' | 'appliedAt' | 'decidedAt'> {
-  const changeClass = record.proposal?.changeClass
+  const changeClass = changeClassOf(record)
+  const insightId = idOrNull(record.insightId)
+  const reasonCode = reasonCodeOf(record)
   return {
     id: record.id,
     scope: record.scope,
-    ruleId: record.ruleId,
-    ...(record.insightId !== undefined ? { insightId: record.insightId } : {}),
+    ruleId: idOrNull(record.ruleId),
+    ...(insightId !== null ? { insightId } : {}),
     ...(changeClass !== undefined ? { changeClass } : {}),
     status: record.status,
-    ...(record.status === 'rejected' && record.reasonCode !== undefined ? { reasonCode: record.reasonCode } : {}),
+    ...(reasonCode !== undefined ? { reasonCode } : {}),
     verdict: verdict.verdict,
     verdictTrusted: verdict.verdictTrusted,
     ...(verdict.laterComplete !== undefined ? { laterComplete: verdict.laterComplete } : {}),
@@ -265,34 +354,48 @@ function filtered(input: Pick<LessonInput, 'records' | 'scope' | 'rules'>): Sugg
 
 /**
  * The lesson read: each lesson of the scope, newest decision first, ties by id. A read of every workspace puts the
- * global lessons last. `omitted` is 0: the CLI writes the newest lessons that fit its cap and counts the rest.
+ * global lessons last. With `maxBytes`, it keeps the newest lessons whose output fits and counts the rest in
+ * `omitted`. With null it keeps every lesson.
  */
 export function buildLessonRead(input: LessonInput): LessonRead {
   const moves = lastMoveTimes(input.records, input.lines)
-  const lessons = filtered(input)
-    .filter((record) => LESSON_STATUSES.includes(record.status))
-    .map((record) => lessonOf(record, moves.get(record.id) ?? record.statusAt))
-    .sort((a, b) => Number(a.scope === 'global') - Number(b.scope === 'global') || b.decidedAt - a.decidedAt || byId(a, b))
-  return { v: 1, scope: scopeName(input.scope), maxBytes: input.maxBytes, omitted: 0, lessons }
+  const lessons: Lesson[] = []
+  for (const record of filtered(input)) {
+    if (!LESSON_STATUSES.includes(record.status)) continue
+    try {
+      lessons.push(lessonOf(record, moves.get(record.id) ?? record.statusAt))
+    } catch {
+      // A record that still fails is left out, and the read goes on.
+    }
+  }
+  lessons.sort((a, b) => Number(a.scope === 'global') - Number(b.scope === 'global') || b.decidedAt - a.decidedAt || byId(a, b))
+  const build = (kept: Lesson[], omitted: number): LessonRead => ({ v: 1, scope: scopeName(input.scope), maxBytes: input.maxBytes, omitted, lessons: kept })
+  return input.maxBytes === null ? build(lessons, 0) : fitFirst(lessons, build, input.measure ?? jsonBytes, input.maxBytes)
 }
 
 /** The history: 1 change row for each record with an application time, oldest first, ties by id. */
-export function buildHistory(input: Omit<LessonInput, 'maxBytes'>): ChangeRow[] {
+export function buildHistory(input: Omit<LessonInput, 'maxBytes' | 'measure'>): ChangeRow[] {
   const moves = lastMoveTimes(input.records, input.lines)
   const rows: Array<ChangeRow & { appliedAt: number }> = []
   for (const record of filtered(input)) {
     const appliedAt = applicationTime(record)
     if (appliedAt === undefined) continue
-    const verdict = recordVerdict(record)
-    const open = record.status === 'applied' || record.status === 'regressed'
-    rows.push({
-      ...lessonHead(record, verdict),
-      checks: verdict.checks,
-      appliedAt,
-      ...(open ? {} : { decidedAt: moves.get(record.id) ?? record.statusAt }),
-      title: record.title,
-      files: [...(record.application?.files ?? record.proposal?.files ?? [])],
-    })
+    try {
+      const verdict = recordVerdict(record)
+      const open = record.status === 'applied' || record.status === 'regressed'
+      // The files that the apply step changed, else the files of the proposal, each only as a list of strings.
+      const applied: unknown = record.application?.files
+      rows.push({
+        ...lessonHead(record, verdict),
+        checks: verdict.checks,
+        appliedAt,
+        ...(open ? {} : { decidedAt: moves.get(record.id) ?? record.statusAt }),
+        title: record.title,
+        files: isStringList(applied) ? [...applied] : stringList(record.proposal?.files),
+      })
+    } catch {
+      // A record that still fails is left out, and the read goes on.
+    }
   }
   return rows.sort((a, b) => a.appliedAt - b.appliedAt || byId(a, b))
 }

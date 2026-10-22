@@ -255,6 +255,31 @@ describe('readQueue over real transcripts', () => {
     const cold0 = createQueueReadDeps({ now, cache: null, budgetBytes: 0 })
     expect((await readQueue(store, { cwd }, cold0)).groups.wait.map((item) => item.check)).toEqual(['deferred'])
   })
+
+  it('finds a crashed transcript from its end, so it defers no record and costs a warm read nothing', async () => {
+    const { cwd, identity } = workspace()
+    // A crashed session after the 3 others: 2 MiB of whole lines, then a partial line. Its head holds whole records, so
+    // the read finds its start time, which is after the third graded session.
+    const project = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd))
+    const crashed = join(project, `${uuid(200)}.jsonl`)
+    const b = new SessionBuilder({ sessionId: uuid(200), cwd, startAt: new Date(APPLIED_AT + 4 * 60 * 60_000).toISOString() })
+    b.userPrompt('Make the change')
+    b.toolCall('Read', { file_path: `${cwd}/big.txt` }, 'x'.repeat(2 * 1024 * 1024))
+    writeFileSync(crashed, `${b.toJsonl()}{"type":"assistant","message":{"content":"`)
+    const end = new Date(APPLIED_AT + 5 * 60 * 60_000)
+    utimesSync(crashed, end, end)
+    const store = storeOf(Array.from({ length: 6 }, (_, i) => appliedOf(sg(1 + i), { proposal: { ...proposalOf(cwd), workspace: identity } })))
+    const now = Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000
+    // 1 MiB holds the 3 small sessions, and not 1 full read of the crashed one.
+    const deps = () => createQueueReadDeps({ now, cache: new CohortFactsCache({ version: 'test' }), budgetBytes: 1024 * 1024 })
+    const cold = deps()
+    const first = await readQueue(store, { cwd }, cold)
+    expect(items(first).map((item) => [item.group, item.check])).toEqual(Array.from({ length: 6 }, () => ['verdict', 'ran']))
+    expect(cold.cohort.stats().missBytes).toBeLessThan(1024 * 1024)
+    const warm = deps()
+    expect(JSON.stringify(await readQueue(store, { cwd }, warm))).toBe(JSON.stringify(first))
+    expect(warm.cohort.stats().loaderCalls).toBe(0)
+  })
 })
 
 describe('the reads around the queue', () => {

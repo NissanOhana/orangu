@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { appendFileSync, closeSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, realpathSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
@@ -7,7 +8,7 @@ import { MIN_VERIFICATION_QUIET_MS } from '../adapters/claude-code/discovered-an
 import { projectSlug } from '../discover/discover.js'
 import { measureCohortEffect, type CohortDeps } from './cohort.js'
 import { COHORT_FACTS_DIR, CohortFactsCache } from './cohort-cache.js'
-import { createCachedCohortDeps, createCohortDeps, settlingStartedAt } from './cohort-deps.js'
+import { createCachedCohortDeps, createCohortDeps, partialTail, settlingStartedAt } from './cohort-deps.js'
 import type { SuggestionRecord } from './types.js'
 
 const ENV_KEYS = ['ORANGU_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR', 'HOME'] as const
@@ -146,6 +147,57 @@ describe('createCohortDeps: a settling session', () => {
     writeFileSync(join(dir, 'none.jsonl'), '{"type":"summary"}\n')
     expect(await settlingStartedAt(join(dir, 'none.jsonl'))).toBeUndefined()
     expect(await settlingStartedAt(join(dir, 'missing.jsonl'))).toBeUndefined()
+  })
+})
+
+describe('createCohortDeps: a transcript that ends in a partial line', () => {
+  const settledNow = (): number => Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000
+  /** Append text with no newline to a later session, and keep its file time. */
+  function endWith(text: string): { cwd: string; path: string } {
+    const { cwd } = workspaceWithSessions()
+    const path = join(process.env['ORANGU_CLAUDE_ROOTS']!, 'projects', projectSlug(cwd), `${id(100)}.jsonl`)
+    const { mtime } = statSync(path)
+    appendFileSync(path, text)
+    utimesSync(path, mtime, mtime)
+    return { cwd, path }
+  }
+
+  it('finds the partial line from the end of a quiet transcript and reads none of it', async () => {
+    const { cwd } = endWith(`{"type":"user","message":{"content":"${'x'.repeat(5_000)}`)
+    const deps = createCohortDeps({ now: settledNow })
+    const candidate = (await deps.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
+    expect(await deps.loadCandidate(candidate, 64 * 1024 * 1024)).toEqual({ skip: 'still-settling', bytesRead: 0, startedAt: Date.parse('2026-08-10T10:00:00.000Z') })
+  })
+
+  it('reads a last line with no newline that is a whole record, as the reader does', async () => {
+    const { cwd } = endWith('{"type":"summary","summary":"done"}')
+    const deps = createCohortDeps({ now: settledNow })
+    const candidate = (await deps.listCandidates(cwd)).find((c) => c.sessionId === id(100))!
+    expect(await deps.loadCandidate(candidate, 64 * 1024 * 1024)).toMatchObject({ session: { id: id(100) } })
+  })
+
+  it('follows the rule of the reader, and counts an open last line longer than the tail window as partial', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'orangu-tail-'))
+    const path = join(dir, 'a.jsonl')
+    writeFileSync(path, `{"a":1}\n{"b":"${'y'.repeat(100_000)}"}`)
+    expect(await partialTail(path)).toBe(true)
+    writeFileSync(path, '{"a":1}\n{"b":2}\n')
+    expect(await partialTail(path)).toBe(false)
+    writeFileSync(path, '{"a":1}\n   ')
+    expect(await partialTail(path)).toBe(true)
+    writeFileSync(path, '')
+    expect(await partialTail(path)).toBe(false)
+  })
+
+  it('never waits on a FIFO in place of a transcript, for the head read and for the tail read', async () => {
+    const fifo = join(mkdtempSync(join(tmpdir(), 'orangu-fifo-')), 'agent.jsonl')
+    execFileSync('mkfifo', [fifo])
+    for (const read of [() => settlingStartedAt(fifo), () => partialTail(fifo)]) {
+      const outcome = await Promise.race([read().then((value) => ({ value })), new Promise<'blocked'>((done) => setTimeout(() => done('blocked'), 1_000))])
+      // A blocked read waits for a writer: open one, so the read ends and the test can report it.
+      if (outcome === 'blocked') closeSync(openSync(fifo, 'w'))
+      expect(outcome).toEqual({ value: undefined })
+    }
   })
 })
 
