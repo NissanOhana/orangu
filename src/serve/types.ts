@@ -5,6 +5,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Analysis } from '../model/analysis.js'
 import type { AppCapabilities, LiveBadge, SessionSummaryRow } from '../model/app-data.js'
+import type { QueueReadDeps } from '../suggest/queue-read.js'
+import type { RejectWorkspaceDeps } from '../suggest/reject-workspace.js'
 import type { SuggestionRecord, SuggestionStatus, SuggestionStoreLike } from '../suggest/types.js'
 
 /** policy: live = mtime age < 5 min; idle = 5–30 min; ended = ≥ 30 min */
@@ -55,6 +57,14 @@ export interface ServeContext {
   noteSuggestion?(record: SuggestionRecord): void
   now(): number
   renderReport: typeof import('../report/render.js').renderReport
+  /**
+   * The deps of 1 store read of the app (`/api/queue`, `/api/history`, `/api/lessons`) at the clock `now` of the
+   * request. Omitted: the deps that the CLI makes for 1 read (`createQueueReadDeps`), behind the cohort facts cache
+   * unless `opts.noCache`. A test injects fakes.
+   */
+  queueReadDeps?(now: number): QueueReadDeps
+  /** the discovery reads that bind the workspace of a rejection. Omitted: the CLI's (`createRejectWorkspaceDeps`) */
+  rejectWorkspace?: RejectWorkspaceDeps
 }
 
 export interface RouteMatch {

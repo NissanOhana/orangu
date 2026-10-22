@@ -39,6 +39,10 @@ export interface ServeDeps {
   suggestionPollMs?: number
   /** deterministic capability override for integration/browser tests; production callers omit it */
   capability?: string
+  /** the deps of 1 store read of the app routes (tests); production callers omit it (ServeContext.queueReadDeps) */
+  queueReadDeps?: ServeContext['queueReadDeps']
+  /** the discovery of a rejection's workspace (tests); production callers omit it (ServeContext.rejectWorkspace) */
+  rejectWorkspace?: ServeContext['rejectWorkspace']
 }
 
 export interface ServeHandle {
@@ -220,6 +224,8 @@ export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Prom
     noteSuggestion: (record) => suggestionWatcher.observe(record),
     now,
     renderReport,
+    ...(deps.queueReadDeps ? { queueReadDeps: deps.queueReadDeps } : {}),
+    ...(deps.rejectWorkspace ? { rejectWorkspace: deps.rejectWorkspace } : {}),
   }
   const routes: Route[] = [...coreRoutes(ctx, hub), ...extraRoutes.flatMap((f) => f(ctx))]
 

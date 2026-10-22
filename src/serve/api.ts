@@ -3,7 +3,9 @@
  * Never transcript text unless --include-text; everything leaving the process is redacted with the
  * same policy (scrub on, text stripped unless --include-text): Analyses here, session rows at their
  * construction point (registry.rowFor, which covers /api/sessions, /api/app and the SSE frames), and
- * Aggregates below before they are served. Kickoff and export routes live in routes-extra.ts.
+ * Aggregates below before they are served. Suggestion records and the 3 store reads (queue, history, lessons) are
+ * scrubbed and keep their stored titles, as the CLI prints them (`redactValue(…, { scrub: true })`).
+ * Kickoff and export routes live in routes-extra.ts.
  */
 import type { ServerResponse } from 'node:http'
 import { homedir } from 'node:os'
@@ -18,7 +20,11 @@ import { APP_DATA_VERSION, type AppCapabilities, type AppData, type SessionSumma
 import { redactAnalysis, redactValue } from '../redact/redact.js'
 import { renderShell } from '../report/render.js'
 import { feedbackBootstrap } from '../feedback/diagnostics.js'
-import type { SuggestionRecord } from '../suggest/types.js'
+import { CohortFactsCache } from '../suggest/cohort-cache.js'
+import { createQueueReadDeps, readHistory, readLessons, readQueue, type LessonTarget, type QueueReadDeps, type QueueReadStore } from '../suggest/queue-read.js'
+import { REJECT_REASON_CODES } from '../suggest/reason-codes.js'
+import { rejectWorkspaceCwd } from '../suggest/reject-workspace.js'
+import { TRANSITIONS, type SuggestionRecord, type SuggestionStoreLike } from '../suggest/types.js'
 import { isTrustedComputedVerification } from '../suggest/verification-policy.js'
 import { HTML_ANTI_FRAMING_HEADERS } from './http-security.js'
 import { DEFAULT_MAX_LIVE } from './registry.js'
@@ -44,6 +50,106 @@ function publicSuggestion(record: SuggestionRecord): SuggestionViewRecord {
 
 function publicSuggestions(records: SuggestionRecord[]): SuggestionViewRecord[] {
   return records.map(publicSuggestion)
+}
+
+/** An error that can name a path or stored text, scrubbed as every other serve output. */
+function jsonError(res: ServerResponse, status: number, error: unknown): void {
+  json(res, status, redactValue({ error: String(error instanceof Error ? error.message : error) }, { scrub: true }))
+}
+
+/** The 3 store reads of the app, and the query options of each: the options of its CLI read (`orangu suggest --queue`, `--history`, `--lessons`). */
+const STORE_READS = {
+  queue: ['cwd', 'all'],
+  history: ['cwd', 'all', 'scope', 'rule'],
+  lessons: ['cwd', 'all', 'scope', 'rule'],
+} as const
+type StoreRead = keyof typeof STORE_READS
+const STORE_READ_OPTIONS = ['cwd', 'all', 'scope', 'rule'] as const
+
+interface StoreReadQuery {
+  target: LessonTarget
+  rules?: string[]
+}
+
+/**
+ * The scope and the rule filter of 1 store read, from its query, as the CLI reads parse their flags. Each option is
+ * singular, as `cwd` is on `/api/repo`, and a read refuses an option that its CLI read does not take, so no option goes
+ * unread. `cwd=<dir>`, `all=1` and `scope=global` name different scopes, so 2 of them together are refused. With none
+ * of them, the read takes the `--cwd` of serve, as `/api/repo` does. A string is the message of a 400.
+ */
+function storeReadQuery(read: StoreRead, query: URLSearchParams, serveCwd: string | undefined): StoreReadQuery | string {
+  const takes: readonly string[] = STORE_READS[read]
+  for (const name of STORE_READ_OPTIONS) {
+    const count = query.getAll(name).length
+    if (count && !takes.includes(name)) return `${name} is not valid on /api/${read}`
+    if (count > 1) return `${name} must be singular`
+  }
+  const cwd = query.get('cwd')
+  const all = query.get('all')
+  const scope = query.get('scope')
+  if (cwd === '') return 'cwd requires a folder'
+  if (all !== null && all !== '1') return 'all takes only the value 1'
+  if (scope !== null && scope !== 'global') return 'scope takes only global. It reads the global records, which belong to no workspace'
+  if ([cwd, all, scope].filter((value) => value !== null).length > 1) return 'cwd, all=1 and scope=global name different scopes. Give 1 of them'
+  let target: LessonTarget
+  if (scope !== null) target = 'global'
+  else if (all !== null) target = 'all'
+  else {
+    const dir = cwd ?? serveCwd
+    if (!dir) return 'cwd or all=1 is required'
+    if (Buffer.byteLength(dir, 'utf8') > MAX_REPO_CWD_BYTES) return 'cwd is too long'
+    target = { cwd: dir }
+  }
+  const rule = query.get('rule')
+  if (rule === null) return { target }
+  const rules = rule.split(',').map((id) => id.trim()).filter(Boolean)
+  if (!rules.length) return 'rule requires 1 or more rule ids'
+  return { target, rules }
+}
+
+/** The line read of the serve store. The store of `orangu feedback` has none, so its store reads answer 503. */
+function queueReadStore(store: SuggestionStoreLike): QueueReadStore | undefined {
+  const lines = (store as Partial<QueueReadStore>).lines
+  if (typeof lines !== 'function') return undefined
+  return { all: () => store.all(), lines: (id) => lines.call(store, id) }
+}
+
+/**
+ * 1 store read of the app: the read core of the CLI over the serve store, at the clock of the request, past the scrub
+ * of the CLI output (`visible`, src/cli/commands/suggest.ts). So the route JSON equals the `--json` output of the CLI
+ * read for the same store, sessions and clock. `GET /api/lessons` has no cap (`maxBytes: null`), because the app is no
+ * model context. A read writes no record. Only the queue check may write cohort facts cache entries.
+ */
+async function storeRead(ctx: ServeContext, res: ServerResponse, read: StoreRead, query: URLSearchParams): Promise<void> {
+  const request = storeReadQuery(read, query, ctx.opts.cwd)
+  if (typeof request === 'string') return json(res, 400, { error: request })
+  const store = queueReadStore(ctx.store)
+  if (!store) return json(res, 503, { error: 'the store reads are not available in this mode' })
+  const now = ctx.now()
+  // The deps that the CLI makes for 1 read (src/cli/commands/suggest.ts, readDeps): 1 byte budget for this read.
+  const deps: QueueReadDeps = ctx.queueReadDeps
+    ? ctx.queueReadDeps(now)
+    : createQueueReadDeps({ now, cache: ctx.opts.noCache ? null : new CohortFactsCache({ version: ctx.opts.version }) })
+  const { target, rules } = request
+  if (typeof target === 'object') {
+    try {
+      await deps.canonical(target.cwd)
+    } catch {
+      return json(res, 404, { error: 'unknown workspace folder' })
+    }
+  }
+  try {
+    const filter = rules ? { rules } : {}
+    let value: unknown
+    if (read === 'queue') {
+      if (target === 'global') return json(res, 400, { error: 'scope is not valid on /api/queue' })
+      value = await readQueue(store, target, deps)
+    } else if (read === 'history') value = await readHistory(store, target, deps, filter)
+    else value = await readLessons(store, target, deps, { ...filter, maxBytes: null })
+    json(res, 200, redactValue(value, { scrub: true }))
+  } catch (error) {
+    jsonError(res, 500, error)
+  }
 }
 
 function capabilitiesOf(ctx: ServeContext): AppCapabilities {
@@ -366,25 +472,51 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
       handler: async (_m, _req, res) => json(res, 200, publicSuggestions(await ctx.store.all())),
     },
     {
+      method: 'GET',
+      path: '/api/queue',
+      handler: async (m, _req, res) => storeRead(ctx, res, 'queue', m.query),
+    },
+    {
+      method: 'GET',
+      path: '/api/history',
+      handler: async (m, _req, res) => storeRead(ctx, res, 'history', m.query),
+    },
+    {
+      method: 'GET',
+      path: '/api/lessons',
+      handler: async (m, _req, res) => storeRead(ctx, res, 'lessons', m.query),
+    },
+    {
       method: 'POST',
       path: '/api/suggestions/:id/status',
       handler: async (m, _req, res) => {
-        const body = (m.body ?? {}) as { status?: string }
+        const body = (m.body ?? {}) as { status?: string; reason?: unknown }
         const id = m.params['id']!
         if (!body.status) return json(res, 400, { error: 'status required' })
         // The browser may dismiss a suggestion, but it cannot claim that a skill
         // proposed, applied, or verified anything. Those transitions require the
         // validated local artifact receipts accepted only by `orangu suggest`.
         if (body.status !== 'rejected') return json(res, 400, { error: 'the browser may only set status to rejected' })
+        // A reason is 1 of the 5 codes exactly, or none, so no browser text reaches the store or a skill
+        // (the CLI rule of `--reason`, rejectReason in src/cli/commands/suggest.ts).
+        const reason = body.reason
+        const reasonCode = REJECT_REASON_CODES.find((code) => code === reason)
+        if (reason !== undefined && !reasonCode) return json(res, 400, { error: `reason must be 1 of ${REJECT_REASON_CODES.join(', ')}` })
         const existing = await ctx.store.get(id)
         if (!existing) return json(res, 404, { error: 'unknown suggestion' })
+        // An illegal move is refused before the workspace discovery, as `--set` refuses it (cmdSet). The store checks it again.
+        if (!(TRANSITIONS[existing.status] ?? []).includes('rejected')) return jsonError(res, 400, `illegal transition ${existing.status} → rejected for ${id}`)
         try {
-          const rec = await ctx.store.transition(id, body.status as never)
+          // A record with no proposal workspace keeps the folder of its evidence sessions, when they all agree on 1. The
+          // binding reads discovery and the transcript heads, as `--set <id> rejected` does. It never reads the cohort
+          // facts cache, and it never throws: a failed read binds nothing, and the rejection goes ahead.
+          const workspaceCwd = await rejectWorkspaceCwd(existing, ctx.rejectWorkspace)
+          const rec = await ctx.store.transition(id, 'rejected', { ...(reasonCode ? { reasonCode } : {}), ...(workspaceCwd ? { workspaceCwd } : {}) })
           if (ctx.noteSuggestion) ctx.noteSuggestion(rec)
           else ctx.emit({ type: 'suggestion-updated', id: rec.id, status: rec.status })
           json(res, 200, publicSuggestion(rec))
         } catch (e) {
-          json(res, 400, { error: String(e instanceof Error ? e.message : e) })
+          jsonError(res, 400, e)
         }
       },
     },

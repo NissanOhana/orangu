@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { execFile } from 'node:child_process'
+import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { get as httpGet } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
@@ -11,9 +12,19 @@ import type { Analysis } from '../model/analysis.js'
 import type { SessionSummaryRow } from '../model/app-data.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
+import { cmdSuggest } from '../cli/commands/suggest.js'
+import { redactValue } from '../redact/redact.js'
+import type { CohortDeps, CohortLoad } from '../suggest/cohort.js'
+import { LESSONS_MAX_BYTES, type LessonRead } from '../suggest/lessons.js'
+import { createQueueReadDeps, readHistory, readLessons, readQueue, type QueueReadDeps } from '../suggest/queue-read.js'
+import { REJECT_REASON_CODES } from '../suggest/reason-codes.js'
+import type { RejectWorkspaceDeps } from '../suggest/reject-workspace.js'
 import { SuggestionStore } from '../suggest/store.js'
+import { TRANSITIONS, type SuggestionRecord, type SuggestionStatus, type SuggestionStoreLike } from '../suggest/types.js'
 import { makeFixtureHome, appendTurn, type FixtureHome } from '../../test/fixtures/home.js'
 import { SessionBuilder } from '../../test/fixtures/session-builder.js'
+import { queueFixtureRecords } from '../../test/fixtures/suggestion-queue.js'
+import { APPLIED_AT, NOW, OTHER_WORKSPACE, WORKSPACE, appliedOf, metricsOf, proposalOf, recordOf, sg, uuid } from '../../test/fixtures/suggestion-records.js'
 
 /** the secret makeFixtureHome plants in the live session's first prompt (= its title) */
 const SECRET = 'sk-ant-api03-FAKEFAKEFAKEFAKE'
@@ -23,6 +34,19 @@ const GENERATED = 'rule-authored-copy-4412'
 const MARKER_SECRET = 'sk-ant-api03-PRIVATEPURPLEFERRET9073'
 
 const BADGES = new Set(['live', 'idle', 'ended'])
+
+/** The discovery of a rejection that finds no evidence session, so it binds no workspace. */
+const NO_REJECT_WORKSPACE: RejectWorkspaceDeps = {
+  async findSessions() {
+    return []
+  },
+  async peekCwd() {
+    return undefined
+  },
+  async canonical(path) {
+    return path
+  },
+}
 
 function opts(configDir: string, extra: Partial<ServeOptions> = {}): ServeOptions {
   return { open: false, includeText: false, configDir, noCache: true, version: 'test', ...extra }
@@ -43,7 +67,8 @@ async function bootWith(
   const home = await makeFixtureHome(dir)
   await prepare?.(home)
   const storeHome = await mkdtemp(join(tmpdir(), 'orangu-store-'))
-  srv = await startServe(opts(home.configDir, extra), { quiet: true, store: new SuggestionStore({ home: storeHome }), ...deps })
+  // A rejection binds no workspace by default, so no test scans the Claude roots of this machine.
+  srv = await startServe(opts(home.configDir, extra), { quiet: true, store: new SuggestionStore({ home: storeHome }), rejectWorkspace: NO_REJECT_WORKSPACE, ...deps })
   return { home, url: srv.url, storeHome }
 }
 
@@ -843,4 +868,438 @@ describe('registry timer path', () => {
       req.destroy()
     }
   }, 15_000)
+})
+
+// The store reads of the app and the reason code of a rejection. The CLI read tests (src/cli/commands/suggest-reads.test.ts)
+// own the read rules; these tests hold each route to the CLI read of the same store, sessions and clock.
+
+interface FakeSession {
+  id: string
+  cwd: string
+  startedAt: number
+  endedAt: number
+  toolCalls: number
+}
+
+/** Later sessions of WORKSPACE, 1 for each tool-call value, each quiet at NOW. */
+const laterOf = (values: number[]): FakeSession[] =>
+  values.map((toolCalls, index) => ({ id: uuid(100 + index), cwd: WORKSPACE, startedAt: APPLIED_AT + 1_000 + index * 1_000, endedAt: APPLIED_AT + 2_000 + index * 1_000, toolCalls }))
+
+/**
+ * The deps of 1 store read over a fixed session list, as the CLI read tests build them. A folder under /w/ is its own
+ * canonical path, any other folder is gone, and WORKSPACE lists uuid(900). `calls` gets the clock of each read.
+ */
+function fakeReads(sessions: FakeSession[] = [], calls: number[] = []): (now: number) => QueueReadDeps {
+  return (now) => {
+    calls.push(now)
+    const cohort: CohortDeps = {
+      async listCandidates(cwd) {
+        return sessions.filter((s) => s.cwd === cwd).map((s) => ({ sessionId: s.id, path: `/c/${s.id}.jsonl`, mtimeMs: s.endedAt }))
+      },
+      async loadCandidate(candidate): Promise<CohortLoad> {
+        const s = sessions.find((x) => x.id === candidate.sessionId)!
+        return { session: { id: s.id, path: candidate.path, cwd: s.cwd, ranOrangu: false, startedAt: s.startedAt, endedAt: s.endedAt, metrics: metricsOf(s.toolCalls) }, bytesRead: 1_000 }
+      },
+      async canonicalWorkspace(identity) {
+        return identity.cwd
+      },
+    }
+    return {
+      now,
+      cohort,
+      async canonical(dir) {
+        if (!dir.startsWith('/w/')) throw new Error(`ENOENT: no such file or directory, realpath '${dir}'`)
+        return dir
+      },
+      async workspaceSessionIds() {
+        return [uuid(900)]
+      },
+    }
+  }
+}
+
+/** The store file of these records, 1 line each, as the store writes it (0600). */
+function seed(storeHome: string, records: SuggestionRecord[]): string {
+  const file = join(storeHome, 'suggestions.jsonl')
+  writeFileSync(file, records.map((record) => `${JSON.stringify(record)}\n`).join(''), { mode: 0o600 })
+  return file
+}
+
+/** The stdout of 1 in-process `orangu suggest <read> --json --quiet` over the store of `storeHome`. */
+async function cliRead(storeHome: string, flags: Record<string, string | boolean>, read: QueueReadDeps): Promise<string> {
+  const chunks: string[] = []
+  const saved = process.env['ORANGU_HOME']
+  process.env['ORANGU_HOME'] = storeHome
+  const spy = vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+    chunks.push(String(chunk))
+    return true
+  })
+  try {
+    await cmdSuggest([], { json: true, quiet: true, ...flags }, { read })
+  } finally {
+    spy.mockRestore()
+    if (saved === undefined) delete process.env['ORANGU_HOME']
+    else process.env['ORANGU_HOME'] = saved
+  }
+  return chunks.join('')
+}
+
+async function getText(url: string, path: string): Promise<{ status: number; body: string }> {
+  const response = await fetch(url + path)
+  return { status: response.status, body: await response.text() }
+}
+
+/** The JSON of a value as a route sends it: no undefined key. */
+const wire = (value: unknown): unknown => JSON.parse(JSON.stringify(value))
+
+/** 1,000 rejected records of WORKSPACE, each a lesson with a reason code, each decided at its own time. */
+function thousandLessons(): SuggestionRecord[] {
+  return Array.from({ length: 1_000 }, (_, index) =>
+    recordOf(sg(index + 1), { status: 'rejected', statusAt: APPLIED_AT + index, reasonCode: REJECT_REASON_CODES[index % REJECT_REASON_CODES.length]! }),
+  )
+}
+
+/** The fixture queue records, a lesson of a second rule and a global lesson. */
+function lessonFixtureRecords(): SuggestionRecord[] {
+  return [
+    ...queueFixtureRecords(),
+    recordOf(sg(50), { ruleId: 'tool-errors', status: 'rejected', statusAt: APPLIED_AT + 9_000, reasonCode: 'other' }),
+    recordOf(sg(51), { scope: 'global', ruleId: 'tool-errors', status: 'rejected', statusAt: APPLIED_AT + 8_000, reasonCode: 'too-much-effort' }),
+  ]
+}
+
+describe('the app store reads: the JSON of the CLI read for the same store, sessions and now', () => {
+  const saved: Record<string, string | undefined> = {}
+  beforeEach(() => {
+    for (const key of ['HOME', 'ORANGU_HOME', 'CLAUDE_CONFIG_DIR', 'ORANGU_CLAUDE_ROOTS']) saved[key] = process.env[key]
+    // An empty HOME and an empty Claude root keep the sessions and the orangu home of this machine out of every read.
+    process.env['HOME'] = mkdtempSync(join(tmpdir(), 'orangu-serve-user-'))
+    process.env['CLAUDE_CONFIG_DIR'] = mkdtempSync(join(tmpdir(), 'orangu-serve-claude-'))
+    process.env['ORANGU_HOME'] = mkdtempSync(join(tmpdir(), 'orangu-serve-home-'))
+    delete process.env['ORANGU_CLAUDE_ROOTS']
+  })
+  afterEach(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key]
+      else process.env[key] = value
+    }
+  })
+
+  it('GET /api/queue gives the bytes of orangu suggest --queue --json, with cwd=<dir> and with all=1', async () => {
+    const reads = fakeReads(laterOf([1, 2, 3]))
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    seed(storeHome, queueFixtureRecords())
+    const store = new SuggestionStore({ home: storeHome })
+    for (const [query, target, flags] of [
+      [`cwd=${encodeURIComponent(WORKSPACE)}`, { cwd: WORKSPACE }, { cwd: WORKSPACE }],
+      ['all=1', 'all', { all: true }],
+    ] as const) {
+      const route = await getText(url, `/api/queue?${query}`)
+      expect(route.status, query).toBe(200)
+      expect(route.body + '\n', query).toBe(await cliRead(storeHome, { queue: true, ...flags }, reads(NOW)))
+      expect(JSON.parse(route.body), query).toEqual(wire(redactValue(await readQueue(store, target, reads(NOW)), { scrub: true })))
+      const queue = JSON.parse(route.body) as { now: number; counts: { open: number; due: number } }
+      expect(queue.now, query).toBe(NOW)
+      expect(queue.counts.open, query).toBeGreaterThan(0)
+      expect(queue.counts.due, query).toBeGreaterThan(0)
+    }
+  })
+
+  it('GET /api/queue with no cwd reads the --cwd of serve, as /api/repo does', async () => {
+    const reads = fakeReads(laterOf([1, 2, 3]))
+    const { url, storeHome } = await bootWith({ cwd: WORKSPACE }, { now: () => NOW, queueReadDeps: reads })
+    seed(storeHome, queueFixtureRecords())
+    const route = await getText(url, '/api/queue')
+    expect(route.status).toBe(200)
+    expect(route.body + '\n').toBe(await cliRead(storeHome, { queue: true, cwd: WORKSPACE }, reads(NOW)))
+  })
+
+  it('GET /api/history gives the bytes of orangu suggest --history --json, with cwd=<dir>, all=1, scope=global and rule', async () => {
+    const reads = fakeReads(laterOf([1, 2, 3]))
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    seed(storeHome, lessonFixtureRecords())
+    const store = new SuggestionStore({ home: storeHome })
+    for (const [query, flags] of [
+      [`cwd=${encodeURIComponent(WORKSPACE)}`, { cwd: WORKSPACE }],
+      ['all=1', { all: true }],
+      ['scope=global', { scope: 'global' }],
+      ['all=1&rule=tool-errors,repeated-commands', { all: true, rule: 'tool-errors,repeated-commands' }],
+    ] as const) {
+      const route = await getText(url, `/api/history?${query}`)
+      expect(route.status, query).toBe(200)
+      expect(route.body + '\n', query).toBe(await cliRead(storeHome, { history: true, ...flags }, reads(NOW)))
+    }
+    const rows = JSON.parse((await getText(url, '/api/history?all=1')).body) as Array<{ id: string }>
+    expect(rows.map((row) => row.id)).toEqual(
+      (wire(redactValue(await readHistory(store, 'all', reads(NOW)), { scrub: true })) as Array<{ id: string }>).map((row) => row.id),
+    )
+    expect(rows.length).toBeGreaterThan(0)
+  })
+
+  it('GET /api/lessons gives the lessons of orangu suggest --lessons --json with no cap, with cwd=<dir>, all=1, scope=global and rule', async () => {
+    const reads = fakeReads(laterOf([1, 2, 3]))
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    seed(storeHome, lessonFixtureRecords())
+    for (const [query, flags] of [
+      [`cwd=${encodeURIComponent(WORKSPACE)}`, { cwd: WORKSPACE }],
+      ['all=1', { all: true }],
+      ['scope=global', { scope: 'global' }],
+      [`cwd=${encodeURIComponent(WORKSPACE)}&rule=tool-errors`, { cwd: WORKSPACE, rule: 'tool-errors' }],
+    ] as const) {
+      const route = await getText(url, `/api/lessons?${query}`)
+      expect(route.status, query).toBe(200)
+      const read = JSON.parse(route.body) as LessonRead
+      const cli = JSON.parse(await cliRead(storeHome, { lessons: true, ...flags }, reads(NOW))) as LessonRead
+      expect(Object.keys(read), query).toEqual(['v', 'scope', 'maxBytes', 'omitted', 'lessons'])
+      expect(read, query).toEqual({ ...cli, maxBytes: null, omitted: 0 })
+      expect(cli.omitted, query).toBe(0)
+      expect(read.lessons.length, query).toBeGreaterThan(0)
+    }
+  })
+
+  it('GET /api/lessons returns all 1,000 lessons, while the CLI read of the same store still fits LESSONS_MAX_BYTES', async () => {
+    const reads = fakeReads()
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    seed(storeHome, thousandLessons())
+    const store = new SuggestionStore({ home: storeHome })
+    const route = await getText(url, `/api/lessons?cwd=${encodeURIComponent(WORKSPACE)}`)
+    expect(route.status).toBe(200)
+    const read = JSON.parse(route.body) as LessonRead
+    expect(read).toMatchObject({ v: 1, scope: WORKSPACE, maxBytes: null, omitted: 0 })
+    expect(read.lessons).toHaveLength(1_000)
+    expect(read).toEqual(wire(redactValue(await readLessons(store, { cwd: WORKSPACE }, reads(NOW), { maxBytes: null }), { scrub: true })))
+
+    const output = await cliRead(storeHome, { lessons: true, cwd: WORKSPACE }, reads(NOW))
+    expect(Buffer.byteLength(output, 'utf8')).toBeLessThanOrEqual(LESSONS_MAX_BYTES)
+    const cli = JSON.parse(output) as LessonRead
+    expect(cli.maxBytes).toBe(LESSONS_MAX_BYTES)
+    expect(cli.omitted).toBe(1_000 - cli.lessons.length)
+    expect(cli.omitted).toBeGreaterThan(0)
+    expect(cli.lessons).toEqual(read.lessons.slice(0, cli.lessons.length))
+  })
+
+  it('refuses with 400, before any read, 2 values of 1 option, cwd with all=1, and an option that the CLI read does not take', async () => {
+    const calls: number[] = []
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: fakeReads([], calls) })
+    seed(storeHome, queueFixtureRecords())
+    const cwd = `cwd=${encodeURIComponent(WORKSPACE)}`
+    const other = `cwd=${encodeURIComponent(OTHER_WORKSPACE)}`
+    const everyRead = ['/api/queue', '/api/history', '/api/lessons']
+    const refused: Array<[string, string]> = [
+      ...everyRead.flatMap((path): Array<[string, string]> => [
+        [path, `${cwd}&${other}`],
+        [path, `${cwd}&all=1`],
+        [path, ''],
+        [path, 'cwd='],
+        [path, 'all=0'],
+        [path, 'all=true'],
+        [path, 'all=1&all=1'],
+        [path, `cwd=${'x'.repeat(MAX_REPO_CWD_BYTES + 1)}`],
+      ]),
+      ['/api/queue', 'all=1&rule=tool-errors'],
+      ['/api/queue', 'scope=global'],
+      ...['/api/history', '/api/lessons'].flatMap((path): Array<[string, string]> => [
+        [path, 'scope=repo'],
+        [path, `scope=global&${cwd}`],
+        [path, 'scope=global&all=1'],
+        [path, 'scope=global&scope=global'],
+        [path, 'all=1&rule='],
+        [path, 'all=1&rule=,'],
+        [path, 'all=1&rule=tool-errors&rule=reread-files'],
+      ]),
+    ]
+    for (const [path, query] of refused) {
+      const response = await getText(url, `${path}?${query}`)
+      expect(response.status, `${path}?${query}`).toBe(400)
+      expect(response.body, `${path}?${query}`).toMatch(/^\{"error":"[^"]+"\}$/)
+    }
+    expect(calls, 'no refused query reaches a read').toEqual([])
+    // The same options in the CLI form are accepted.
+    for (const path of everyRead) expect((await getText(url, `${path}?${cwd}`)).status, path).toBe(200)
+  })
+
+  it('answers 404 for a cwd that is not a folder, and 500 with a scrubbed message when the read fails', async () => {
+    const failing: (now: number) => QueueReadDeps = (now) => ({
+      ...fakeReads()(now),
+      async workspaceSessionIds() {
+        throw new Error(`listing failed under ${homedir()}/private with ${SECRET}`)
+      },
+    })
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: failing })
+    seed(storeHome, queueFixtureRecords())
+    for (const path of ['/api/queue', '/api/history', '/api/lessons']) {
+      const gone = await getText(url, `${path}?cwd=${encodeURIComponent(`${homedir()}/gone`)}`)
+      expect(gone.status, path).toBe(404)
+      expect(gone.body, path).not.toContain(homedir())
+      const failed = await getText(url, `${path}?cwd=${encodeURIComponent(WORKSPACE)}`)
+      expect(failed.status, path).toBe(500)
+      expect(failed.body, path).toContain('listing failed')
+      expect(failed.body, path).not.toContain(homedir())
+      expect(failed.body, path).not.toContain(SECRET)
+    }
+  })
+
+  it('scrubs every read: a stored title with a secret and a home path leaves the process masked', async () => {
+    const reads = fakeReads(laterOf([1, 2, 3]))
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: reads })
+    const title = `Keep ${SECRET} out of ${homedir()}/notes`
+    seed(storeHome, [
+      appliedOf(sg(70), { title }),
+      recordOf(sg(71), { title, status: 'proposed', proposal: proposalOf() }),
+      recordOf(sg(72), { title, status: 'rejected', reasonCode: 'other' }),
+    ])
+    const bodies = await Promise.all(['/api/queue?all=1', '/api/history?all=1', '/api/lessons?all=1'].map(async (path) => (await getText(url, path)).body))
+    for (const body of bodies) {
+      expect(body).not.toContain(SECRET)
+      expect(body).not.toContain(homedir())
+    }
+    expect(bodies[0]).toContain('~/notes')
+    expect(bodies[1]).toContain('~/notes')
+  })
+
+  it('with no injected reads, a route reads through the deps that the CLI makes for 1 read, at ctx.now', async () => {
+    const workspace = realpathSync(mkdtempSync(join(tmpdir(), 'orangu-serve-ws-')))
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, queueReadDeps: undefined })
+    seed(storeHome, [recordOf(sg(60), { status: 'proposed', statusAt: APPLIED_AT, proposal: proposalOf(workspace) }), recordOf(sg(61))])
+    const store = new SuggestionStore({ home: storeHome })
+    const route = await getText(url, `/api/queue?cwd=${encodeURIComponent(workspace)}`)
+    expect(route.status).toBe(200)
+    expect(JSON.parse(route.body)).toEqual(wire(redactValue(await readQueue(store, { cwd: workspace }, createQueueReadDeps({ now: NOW, cache: null })), { scrub: true })))
+    expect((JSON.parse(route.body) as { groups: { apply: Array<{ id: string }> } }).groups.apply.map((item) => item.id)).toEqual([sg(60)])
+    expect((await getText(url, `/api/queue?cwd=${encodeURIComponent(join(workspace, 'gone'))}`)).status).toBe(404)
+  })
+
+  it('answers 503 when the store of serve has no line read, as the feedback store does', async () => {
+    const lineless: SuggestionStoreLike = {
+      all: async () => [],
+      get: async () => undefined,
+      upsertNew: async () => {
+        throw new Error('read only')
+      },
+      transition: async () => {
+        throw new Error('read only')
+      },
+    }
+    const calls: number[] = []
+    const { url } = await bootWith({}, { now: () => NOW, store: lineless, queueReadDeps: fakeReads([], calls) })
+    for (const path of ['/api/queue?all=1', '/api/history?all=1', '/api/lessons?all=1']) expect((await getText(url, path)).status, path).toBe(503)
+    expect(calls).toEqual([])
+  })
+})
+
+describe('POST /api/suggestions/:id/status: a rejection with a reason code and its workspace', () => {
+  async function postStatus(url: string, id: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
+    const response = await fetch(url + `/api/suggestions/${id}/status`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+    return { status: response.status, body: (await response.json()) as Record<string, unknown> }
+  }
+
+  /** The discovery of a rejection: each evidence session ran in `cwd`. `found` gets each id that it looks for. */
+  function bindingTo(cwd: string, found: string[]): RejectWorkspaceDeps {
+    return {
+      async findSessions(ids) {
+        found.push(...ids)
+        return ids.size ? ['/c/evidence.jsonl'] : []
+      },
+      async peekCwd() {
+        return cwd
+      },
+      async canonical(path) {
+        return path
+      },
+    }
+  }
+
+  const storedLines = (file: string): SuggestionRecord[] => readFileSync(file, 'utf8').trim().split('\n').map((line) => JSON.parse(line) as SuggestionRecord)
+
+  it('stores each of the 5 codes and the bound workspace, and refuses any other reason with 400, no discovery and no write', async () => {
+    const bound = realpathSync(mkdtempSync(join(tmpdir(), 'orangu-reject-ws-')))
+    const found: string[] = []
+    const calls: number[] = []
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, rejectWorkspace: bindingTo(bound, found), queueReadDeps: fakeReads([], calls) })
+    const records = REJECT_REASON_CODES.map((_, index) => recordOf(sg(30 + index)))
+    const file = seed(storeHome, records)
+    const before = readFileSync(file)
+    for (const reason of ['bogus', 'NOT-WANTED', ' other', 'other ', '', null, 1, true, ['other'], { code: 'other' }]) {
+      const refused = await postStatus(url, sg(30), { status: 'rejected', reason })
+      expect(refused.status, JSON.stringify(reason)).toBe(400)
+      expect(String(refused.body['error']), JSON.stringify(reason)).toContain(REJECT_REASON_CODES.join(', '))
+    }
+    expect(readFileSync(file).equals(before), 'a refused reason leaves the store byte-identical').toBe(true)
+    expect(found, 'a refused reason runs no discovery').toEqual([])
+
+    for (const [index, reason] of REJECT_REASON_CODES.entries()) {
+      const ok = await postStatus(url, sg(30 + index), { status: 'rejected', reason })
+      expect(ok.status, reason).toBe(200)
+      expect(ok.body, reason).toMatchObject({ id: sg(30 + index), status: 'rejected', reasonCode: reason, workspaceCwd: bound })
+    }
+    const moves = storedLines(file).slice(records.length)
+    expect(moves.map((line) => [line.id, line.status, line.reasonCode, line.workspaceCwd])).toEqual(REJECT_REASON_CODES.map((code, index) => [sg(30 + index), 'rejected', code, bound]))
+    expect(calls, 'the status route never reads through the cached queue deps').toEqual([])
+  })
+
+  it('stores no reason code without a reason, binds no workspace when discovery finds none, and keeps no other body field', async () => {
+    const { url, storeHome } = await bootWith({}, { now: () => NOW })
+    const file = seed(storeHome, [recordOf(sg(35)), recordOf(sg(36))])
+    expect((await postStatus(url, sg(35), { status: 'rejected' })).status).toBe(200)
+    const sent = { status: 'rejected', reason: 'other', workspaceCwd: '/etc', note: 'free text from the browser', title: 'Another title', reasonCode: 'not-wanted' }
+    expect((await postStatus(url, sg(36), sent)).status).toBe(200)
+    const [plain, coded] = storedLines(file).slice(2)
+    expect(plain).not.toHaveProperty('reasonCode')
+    expect(plain).not.toHaveProperty('workspaceCwd')
+    expect(coded).toMatchObject({ status: 'rejected', reasonCode: 'other', title: recordOf(sg(36)).title })
+    expect(coded).not.toHaveProperty('workspaceCwd')
+    expect(coded).not.toHaveProperty('note')
+  })
+
+  it('refuses each status but rejected with 400, with or without a reason, and leaves the store byte-identical', async () => {
+    const found: string[] = []
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, rejectWorkspace: bindingTo('/w/repo', found) })
+    const sources: SuggestionRecord[] = [
+      recordOf(sg(40)),
+      recordOf(sg(41), { status: 'kicked-off' }),
+      recordOf(sg(42), { status: 'proposed', proposal: proposalOf() }),
+      appliedOf(sg(43)),
+      appliedOf(sg(44), { status: 'regressed', statusAt: APPLIED_AT + 5_000 }),
+    ]
+    const file = seed(storeHome, sources)
+    const listed = (await (await fetch(url + '/api/suggestions')).json()) as Array<{ id: string; status: string }>
+    expect(listed.map((record) => [record.id, record.status]).sort()).toEqual(sources.map((record) => [record.id, record.status]).sort())
+    // Each move but `new` is legal in the store, so each 400 below is the rule of the route.
+    const moves: Array<[SuggestionStatus, string]> = [
+      ['new', sg(40)],
+      ['kicked-off', sg(40)],
+      ['proposed', sg(41)],
+      ['failed', sg(41)],
+      ['applied', sg(42)],
+      ['verified', sg(43)],
+      ['regressed', sg(43)],
+      ['unproven', sg(43)],
+      ['kept', sg(44)],
+    ]
+    expect(new Set(moves.map(([status]) => status))).toEqual(new Set(Object.keys(TRANSITIONS).filter((status) => status !== 'rejected')))
+    const before = readFileSync(file)
+    for (const [status, id] of moves) {
+      const source = sources.find((record) => record.id === id)!
+      if (status !== 'new') expect(TRANSITIONS[source.status], `${source.status} → ${status}`).toContain(status)
+      for (const body of [{ status }, { status, reason: 'other' }]) {
+        const refused = await postStatus(url, id, body)
+        expect(refused.status, JSON.stringify(body)).toBe(400)
+        expect(String(refused.body['error'])).toMatch(/browser may only/)
+      }
+    }
+    expect(readFileSync(file).equals(before)).toBe(true)
+    expect(found).toEqual([])
+  })
+
+  it('refuses a second rejection with 400 before any discovery, so a retry lands once', async () => {
+    const found: string[] = []
+    const { url, storeHome } = await bootWith({}, { now: () => NOW, rejectWorkspace: bindingTo('/w/repo', found) })
+    const file = seed(storeHome, [recordOf(sg(45), { status: 'rejected', reasonCode: 'other' })])
+    const before = readFileSync(file)
+    const again = await postStatus(url, sg(45), { status: 'rejected', reason: 'not-wanted' })
+    expect(again.status).toBe(400)
+    expect(String(again.body['error'])).toContain('illegal transition rejected → rejected')
+    expect(readFileSync(file).equals(before)).toBe(true)
+    expect(found).toEqual([])
+  })
 })

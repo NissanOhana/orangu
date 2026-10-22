@@ -506,6 +506,14 @@ A move is a store line whose status differs from the line before it for the same
 
 `--list --status <s>[,<s>]` keeps only those statuses. An unknown status exits 1 and names the 10 statuses. Without `--status`, `--list --json` prints the same array as 0.11.0.
 
+### The app reads (`orangu serve`)
+
+`orangu serve` gives 3 store reads to the app: `GET /api/queue`, `GET /api/history` and `GET /api/lessons`. Each route runs the read of the CLI at the clock of the request, and scrubs its output as the CLI scrubs `--json`. So for the same store, sessions and clock, a route gives the JSON of `--queue --json`, `--history --json` or `--lessons --json`. The 1 difference is `GET /api/lessons`: it has no cap, so `maxBytes` is `null` and `omitted` is 0.
+
+The query takes the options of the CLI read. Each route takes `cwd=<dir>` or `all=1`, and the history and the lessons also take `scope=global` and `rule=<id>[,<id>]`. `cwd` is a folder path, as `--cwd` takes it. With no scope option, a route reads the `--cwd` of serve. A route gives 400 for 2 values of 1 option, for 2 scope options together, for another value of `all` or `scope`, and for an option that its CLI read does not take. It gives 404 when `cwd` names no folder.
+
+The browser can only dismiss a record. `POST /api/suggestions/:id/status` takes `{ "status": "rejected", "reason"?: <code> }`, and any other status gives 400. A `reason` that is not 1 of the 5 codes gives 400, and the store stays byte for byte as it was. A record with no proposal workspace gets the `workspaceCwd` that `--set <id> rejected` binds.
+
 ## Proposal artifacts
 
 New proposals from `orangu-improve` and `orangu-harness` have two files under `~/.orangu/proposals/`:
