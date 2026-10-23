@@ -1,8 +1,6 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { Analysis } from '../../model/analysis.js'
-import type { AppData, SuggestionViewRecord } from '../../model/app-data.js'
+import { describe, expect, it } from 'vitest'
+import type { SuggestionViewRecord } from '../../model/app-data.js'
 import { SUGGESTION_VERIFICATION_METRICS, type SuggestionProposal } from '../../suggest/types.js'
-import type { Ctx } from './app.js'
 import { proposalsUi } from './proposals-ui.js'
 
 const ID = 'sg_0000000000d1'
@@ -37,17 +35,6 @@ function record(proposal: Partial<SuggestionProposal> = {}, over: Partial<Sugges
   }
 }
 
-/** The served app with one stored record: the inbox reads the store through Ctx.data.suggestions. */
-function serveContext(suggestions: SuggestionViewRecord[]): Ctx {
-  const a = { session: { id: SESSION, cwd: '~/Code/demo' }, summary: { totalTokens: 1 }, insights: [] } as unknown as Analysis
-  const data: AppData = {
-    v: '1', mode: 'serve', version: 'test', generatedAt: 0,
-    capabilities: { live: false, aggregates: true, kickoffRun: false, exportHtml: true, includeText: false },
-    selectedId: SESSION, session: a, sessions: [], aggregates: {}, suggestions,
-  }
-  return { data, a, ds: {} as Ctx['ds'], state: { screen: 'suggest', s: SESSION }, audience: 'dev', go: vi.fn() }
-}
-
 const nine = ['f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9']
 
 // A stored list longer than the visible part keeps every item on the page: the first 6 in the list, the rest
@@ -58,7 +45,7 @@ describe('proposal block lists: no item is cut in silence', () => {
     const html = proposalsUi.details(record({ files: nine }))
     expect(html).toContain(
       '<div class="sg-pfield"><b>Files.</b><ul><li>f1</li><li>f2</li><li>f3</li><li>f4</li><li>f5</li><li>f6</li></ul>' +
-      `<details class="more-charts" id="more-${ID}-files"><summary><span class="chev" aria-hidden="true">▸</span>6 of 9 files show above. Show 3 more.</summary>` +
+      `<details class="sg-more" id="more-${ID}-files"><summary><span class="chev" aria-hidden="true">▸</span>6 of 9 files show above. Show 3 more.</summary>` +
       '<ul><li>f7</li><li>f8</li><li>f9</li></ul></details></div>',
     )
     expect(html).not.toContain('more</li>')
@@ -101,7 +88,7 @@ describe('proposal block lists: no item is cut in silence', () => {
         },
       },
     ))
-    const ids = [...html.matchAll(/<details class="more-charts" id="([^"]+)">/g)].map((m) => m[1])
+    const ids = [...html.matchAll(/<details class="sg-more" id="([^"]+)">/g)].map((m) => m[1])
     expect(ids).toEqual([
       `more-${ID}-reviewed-comparisons`,
       `more-${ID}-files`,
@@ -142,9 +129,41 @@ describe('proposal block text: no field is cut in silence', () => {
     expect(html).toContain(`<b>Later evidence.</b> ${long('Later')}</div>`)
   })
 
-  it('shows the whole title in the closed row of the Saved proposals inbox', () => {
-    const stored = record({ title: long('Saved') })
-    const html = proposalsUi.inbox(serveContext([stored]), 'session', [], [])
-    expect(html).toContain(`<summary><span class="chev" aria-hidden="true">▸</span><b>${long('Saved')}</b>`)
+})
+
+// The home draws the same record in the Queue and on its Findings row: each copy keys its list disclosures apart, and
+// a Queue row shows its own next step, so its block carries no apply handoff.
+describe('proposal block keys and handoffs', () => {
+  it('keys the list disclosures by the key that the caller gives', () => {
+    const html = proposalsUi.details(record({ files: nine }), `q-${ID}`, false)
+    expect(html).toContain(`<details class="sg-more" id="more-q-${ID}-files">`)
+    expect(html).not.toContain(`id="more-${ID}-files"`)
+  })
+
+  it('leaves out the apply handoff when the caller asks, and keeps it by default', () => {
+    expect(proposalsUi.details(record())).toContain(`claude &quot;/orangu:apply ${ID}&quot;`)
+    expect(proposalsUi.details(record(), ID, false)).not.toContain('/orangu:apply')
+  })
+})
+
+// One word for one thing: the pill names a change class by the label that the home rows, the catalog and the
+// screen note use, never by its stored id.
+describe('proposal block labels', () => {
+  it('names the change class by its label', () => {
+    const html = proposalsUi.details(record({ changeClass: 'skill-create' }))
+    expect(html).toContain('<span class="pill">Skills to create</span>')
+    expect(html).not.toContain('>skill-create<')
+  })
+
+  it.each([
+    ['regressed', 'regressed'],
+    ['unproven', 'not shown beyond chance'],
+    ['kept', 'kept after a regression'],
+  ] as const)('shows the label of a %s record under the shared status chip', (status, label) => {
+    expect(proposalsUi.details(record({}, { status }))).toContain(`<div class="sg-pfield"><b>Status.</b> ${label}</div>`)
+  })
+
+  it('shows no status line for a status that the shared chip names', () => {
+    for (const status of ['proposed', 'applied', 'verified', 'rejected'] as const) expect(proposalsUi.details(record({}, { status }))).not.toContain('<b>Status.</b>')
   })
 })

@@ -3,7 +3,7 @@
  * a verdict word, the top finding as a card with its fix, evidence link and improve command), what next
  * (three text links). Detailed adds the context sparkline and the other top findings; Plain removes
  * panels instead of renaming nouns (A1, A3b) and keeps only the sentence, the "What happened here"
- * card, the one finding and the three links (the public sample opens in Plain; the links are its
+ * card, the one finding, in serve the queue card under it, and the three links (the public sample opens in Plain; the links are its
  * way into the other screens, see test/browser/public-surfaces.spec.ts). The card holds only what the
  * hero does not already say (goal, ending, tokens & time): the outcome headline and the narrative
  * sentence render once, in the hero. One code path renders the top-finding card for both.
@@ -111,6 +111,7 @@ function plainBody(ctx: Ctx, a: Analysis): string {
 </div>
 </div>
 ${topFinding(ctx, a, one)}
+${ctx.harnessCard?.() ?? ''}
 ${whereNext(ctx, a)}`
 }
 

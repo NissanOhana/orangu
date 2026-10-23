@@ -358,12 +358,12 @@ svg { display: block; max-width: 100%; }
 .kpis .card .anote { font-family: var(--sans); font-size: 12.5px; font-weight: 400; color: var(--ink3); }
 .ctx-lead { font-size: 16px; line-height: 1.5; color: var(--ink1); margin: 0 0 14px; max-width: 760px; }
 /* a secondary disclosure inside a card; .why holds a finding's reason and method, first in the card body */
-.more-charts > summary, .why > summary { cursor: pointer; font-size: 13px; color: var(--ink2); display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.more-charts > summary, .sg-more > summary, .why > summary { cursor: pointer; font-size: 13px; color: var(--ink2); display: flex; align-items: center; gap: 8px; padding: 6px 0; }
 .sg-hero { min-width: 220px; }
 .sg-sub { font-size: 13px; color: var(--ink2); margin-top: 2px; }
 .sg-foot { margin: 14px 0 0; }
 .sg-proposal { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg2); overflow-wrap: anywhere; }
-.sg-phead, .sg-inbox-head { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.sg-phead { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
 .sg-phead .eyebrow { margin-right: auto; }
 .sg-ptitle { margin: 5px 0 8px; font-weight: 700; }
 .sg-pfield { margin-top: 6px; color: var(--ink2); font-size: 12.5px; }
@@ -372,13 +372,10 @@ svg { display: block; max-width: 100%; }
 .sg-handoffs { min-width: 0; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--border); }
 .sg-hand { display: grid; grid-template-columns: 54px minmax(0, 1fr); align-items: center; gap: 8px; margin-top: 7px; font: 11.5px var(--mono); }
 .sg-hand .cmd { min-width: 0; }
-.sg-inbox { min-width: 0; }
-.sg-inbox-head { justify-content: space-between; margin-bottom: 9px; }
-.sg-inbox-head .card-title { margin: 1px 0 0; }
 .saved-proposal { min-width: 0; border-top: 1px solid var(--border); }
 .saved-proposal > summary { display: flex; align-items: center; gap: 9px; padding: 11px 2px; }
 .saved-proposal > summary b { min-width: 0; flex: 1; overflow-wrap: anywhere; }
-.saved-proposal-body { min-width: 0; padding: 0 2px 12px 21px; }
+.saved-proposal-body { min-width: 0; padding: 0 2px 12px 21px; overflow-wrap: anywhere; }
 .status-chip { font-family: var(--mono); font-size: 11.5px; border-radius: 999px; padding: 3px 10px; border: 1px solid var(--border); }
 .status-chip[data-status="new"] { color: var(--ink3); }
 .status-chip[data-status="running"] { color: var(--ink1); background: var(--accent-weak); }
@@ -402,6 +399,16 @@ svg { display: block; max-width: 100%; }
 .catbar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; margin-bottom: 10px; background: var(--bg2); }
 .herotitle { font-family: var(--title); font-weight: 700; font-size: 17px; }
 .dim { opacity: 0.55; }
+/* the improvement home (serve only): the Queue section, its groups and its rows */
+.sg-note > summary b { color: var(--ink1); font-size: 14.5px; }
+details.card:not([open]) > .card-head { border-bottom: 0; }
+.bdot.b { background: var(--bad); }
+.bdot.w { background: var(--warn); }
+.bdot.r { border: 2px solid var(--ink2); }
+.bdot.wr { border: 2px solid var(--warn); }
+.q-rows { padding: 0 18px 4px; }
+.q-rows > .saved-proposal:first-child { border-top: 0; }
+.q-meta { display: block; margin-top: 2px; font-weight: 400; }
 
 @media (max-width: 860px) {
   .app { flex-direction: column; height: auto; overflow: visible; }

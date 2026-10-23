@@ -69,7 +69,7 @@ describe('the aggregate report seam', () => {
     // the file the reader is holding carries no session at all, so the hint may not claim one
     expect(markup).toContain('This report carries one scope, not a session.')
     expect(markup).not.toContain('carries one session')
-    expect(aggUi.harnessCard({} as Parameters<typeof aggUi.harnessCard>[0], vi.fn(), '#harness')).toBe('')
+    expect(aggUi.harnessCard({} as Parameters<typeof aggUi.harnessCard>[0], vi.fn(), '#harness', { screen: 'overview' })).toBe('')
   })
 
   it('renders the whole-harness block through the same shared module the served app uses', () => {

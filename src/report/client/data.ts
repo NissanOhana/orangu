@@ -9,6 +9,7 @@ import type { HarnessReport } from '../../harness/types.js'
 import type { AppData, AppMode, SuggestionViewRecord } from '../../model/app-data.js'
 import type { KickoffRequest, KickoffResponse, SuggestionRecord, SuggestionStatus } from '../../suggest/types.js'
 import type { ServeEvent } from '../../serve/types.js'
+import type { QueueRead } from './queue-types.js'
 import { kickoffCommands, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 
 export type KickoffResult =
@@ -26,6 +27,8 @@ export interface DataSource {
   /** file: null (the screen needs orangu serve); serve: on demand, polled while it computes */
   harness(): Promise<HarnessReport | null>
   suggestions(): Promise<SuggestionViewRecord[]>
+  /** file: absent (a file carries no store read); serve: the queue of the serve workspace, or of every workspace with `all`; null when the read failed */
+  queue?(all?: boolean): Promise<QueueRead | null>
   /** file: local copy-text only; serve: POST kickoff */
   kickoff(req: KickoffRequest): Promise<KickoffResult>
   /** file: null; serve: status transition */

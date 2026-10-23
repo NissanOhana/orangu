@@ -70,11 +70,12 @@ describe('offline report', () => {
     expect(CLIENT_JS_AGG).not.toContain('github.com/NissanOhana/orangu/issues/new')
   })
 
-  it('the stored proposal and the Saved proposals inbox ship only in the serve bundle', () => {
-    // A file report always embeds `suggestions: []` (render.ts), so neither block can render from a
-    // file. serve-ui.ts injects proposals-ui.ts through the optional ServeUi.proposals seam, the way the
-    // whole-harness block reaches the screen through Ctx.megaReview. Each marker is that module's markup.
-    const markers = ['sg-inbox', 'saved-proposal', 'sg-proposal', 'sg-pfield', 'Copy only. Nothing runs here.', 'Computed comparisons', 'Localhost only']
+  it('the stored proposal and the improvement home ship only in the serve bundle', () => {
+    // A file report always embeds `suggestions: []` (render.ts) and has no store read, so neither can
+    // render from a file. serve-ui.ts injects proposals-ui.ts (and through it the home) by the optional
+    // ServeUi.proposals seam, and the queue card by ServeUi.harnessCard, the way the whole-harness block
+    // reaches the screen through Ctx.megaReview. Each marker is markup or copy of those modules.
+    const markers = ['saved-proposal', 'sg-proposal', 'sg-pfield', 'Copy only. Nothing runs here.', 'Computed comparisons', 'home-queue', 'Findings in this scope', 'data-q-count', 'Global proposals and lessons', 'not shown beyond chance', 'orangu counts the queue.']
     for (const marker of markers) {
       expect(CLIENT_JS, `CLIENT_JS carries ${marker}`).not.toContain(marker)
       expect(CLIENT_JS_AGG, `CLIENT_JS_AGG carries ${marker}`).not.toContain(marker)
@@ -185,7 +186,12 @@ describe('offline report', () => {
     // the title share one word), the summary of a raw call (Coverage) is +28 B, the error signature on Tools and on
     // Repo and Global are +26 B each, and the Live feed event is +24 B. The fleet card, the fleet feed and the session
     // picker get their titles too, but they are serve-only (serve-ui.ts) and ship in no file bundle.
-    expect(CLIENT_JS_AGG.length).toBe(82414)
+    // 2026-10-24 improvement home: -18 B (82,414 -> 82,396), re-measured after `npm run build`, cap unchanged. The home
+    // of serve (the Queue, the queue card, the status labels) is serve-only and reaches the screens through the
+    // ServeUi seams, so 3 shared edits are all that this bundle carries: the served sentence of step 3 left
+    // (screens/suggest.ts, about -45 B), the seam call moved above the scope chips (0 B), and the Plain Overview
+    // calls the card seam (screens/overview.ts) with the route state passed to it (app.ts), about +27 B together.
+    expect(CLIENT_JS_AGG.length).toBe(82396)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -324,6 +330,9 @@ describe('offline report', () => {
     // the title share one word), the summary of a raw call (Coverage) is +28 B, the error signature on Tools is +26 B,
     // and the Live feed event is +24 B. The fleet card, the fleet feed and the session picker get their titles too,
     // but they are serve-only (serve-ui.ts) and ship in no file bundle.
-    expect(CLIENT_JS.length).toBe(73033)
+    // 2026-10-24 improvement home: -18 B (73,033 -> 73,015), re-measured after `npm run build`, cap unchanged. The same
+    // 3 shared edits as the aggregate bundle: the served sentence of step 3 left (about -45 B), the seam call moved
+    // above the scope chips (0 B), and the Plain Overview calls the card seam with the route state (about +27 B).
+    expect(CLIENT_JS.length).toBe(73015)
   })
 })

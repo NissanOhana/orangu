@@ -36,9 +36,9 @@ export interface Ctx {
   aggLoading?: boolean
   /** serve-only whole-harness CTA; aggregate screens are unavailable in file mode */
   megaReview?: (scope: 'repo' | 'global') => string
-  /** serve-only stored proposal and Saved proposals inbox; a file report embeds no stored proposal */
+  /** serve-only stored proposal and improvement home; a file report embeds no stored proposal */
   proposals?: ProposalsUi
-  /** serve-only Overview card from the harness report ('' until it has loaded; kicks the fetch) */
+  /** serve-only Overview cards: the queue card and, in Detailed, the harness card (each kicks its read) */
   harnessCard?: () => string
   go(next: Partial<RouteState>, opts?: { push?: boolean }): void
 }
@@ -176,7 +176,7 @@ export function showLoader(lastBuildMs: number | undefined): boolean {
 export interface ServeUi {
   pickerHtml(d: AppData, row: import('../../model/app-data.js').SessionSummaryRow | undefined): string
   wirePicker(el: HTMLElement, go: (next: { s?: string }, opts?: { push?: boolean }) => void): void
-  /** kicks the repo/global fetch this screen needs; true while it is in flight (renders aggScreen) */
+  /** kicks the reads this screen needs (serve: the queue and the repo/global aggregate); true while the aggregate is in flight (renders aggScreen) */
   ensureAggregate(d: AppData, ds: DataSource, state: RouteState, onLoaded: () => void): boolean
   /** "Analysing sessions…" placeholder while an aggregate computes */
   aggScreen(): HTMLElement
@@ -188,17 +188,17 @@ export interface ServeUi {
   /** the registry moved (an SSE session frame): the next screen that needs the harness re-fetches it */
   invalidateHarness(): void
   harnessView(ctx: Ctx): HTMLElement
-  /** the Overview card; `href` is the #harness route carrying the current session key */
-  harnessCard(ds: DataSource, onLoaded: () => void, href: string): string
+  /** the Overview cards; `href` is the #harness route carrying the current session key, `state` gives the audience and the queue link */
+  harnessCard(ds: DataSource, onLoaded: () => void, href: string, state: RouteState): string
   /** only serve provides it: file reports embed `suggestions: []` (render.ts), so the file seams leave it out */
   proposals?: ProposalsUi
 }
 
 /** Serve-only proposal renderers (proposals-ui.ts), injected by serve-ui.ts so both file bundles stay without them. */
 export interface ProposalsUi {
-  /** the proposal block a stored record carries on its plan row; '' when there is none */
-  details(record: import('../../model/app-data.js').SuggestionViewRecord | undefined): string
-  /** the Saved proposals inbox for one scope: stored proposals for the active sessions that no plan row shows */
+  /** the proposal block a stored record carries; '' when there is none. `key` keys its list disclosures, `handoffs: false` leaves out the apply handoff */
+  details(record: import('../../model/app-data.js').SuggestionViewRecord | undefined, key?: string, handoffs?: boolean): string
+  /** the improvement home above the scope chips (home-ui.ts): its sections, then the heading of the findings */
   inbox(ctx: Ctx, scope: import('../../suggest/types.js').SuggestionScope, aggregateSessionIds: string[], mapped: import('../../model/app-data.js').SuggestionViewRecord[]): string
 }
 
@@ -314,7 +314,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     aggLoading: serveUi ? (state.screen === 'harness' ? serveUi.ensureHarness(ds, scheduleRender) : serveUi.ensureAggregate(d, ds, state, scheduleRender)) : false,
     megaReview: serveUi?.megaReview,
     proposals: serveUi?.proposals,
-    harnessCard: serveUi ? () => serveUi.harnessCard(ds, scheduleRender, cleanHash(state, { screen: 'harness' })) : undefined,
+    harnessCard: serveUi ? () => serveUi.harnessCard(ds, scheduleRender, cleanHash(state, { screen: 'harness' }), state) : undefined,
     go,
   })
 

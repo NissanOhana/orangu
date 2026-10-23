@@ -75,6 +75,13 @@ function serveContext(suggestions: SuggestionViewRecord[]): Ctx {
   return { ...context('serve', suggestions), proposals: proposalsUi }
 }
 
+/** A stored proposal bound to the first plan row, so the screen draws its block on that Findings card. */
+function rowProposal(over: Partial<SuggestionViewRecord> = {}): SuggestionViewRecord {
+  const row = planRows('session', analysis, undefined)[0]!
+  const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
+  return proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId, ...over })
+}
+
 describe('renderSuggest proposal UX', () => {
   it('renders a persisted localhost kickoff handoff after an SSE tree replacement', () => {
     const row = planRows('session', analysis, undefined)[0]!
@@ -152,7 +159,7 @@ describe('renderSuggest proposal UX', () => {
   })
 
   it('renders verified as a distinct terminal chip and later-evidence receipt', () => {
-    const base = proposalRecord('sg_0000000000ab')
+    const base = rowProposal()
     const record: SuggestionViewRecord = {
       ...base,
       status: 'verified',
@@ -179,7 +186,7 @@ describe('renderSuggest proposal UX', () => {
   })
 
   it('renders a noise-checked cohort receipt with its summary and graded comparisons', () => {
-    const base = proposalRecord('sg_0000000000ae')
+    const base = rowProposal()
     const record: SuggestionViewRecord = {
       ...base,
       status: 'verified',
@@ -213,7 +220,7 @@ describe('renderSuggest proposal UX', () => {
   })
 
   it('never promotes a legacy persisted verified line to the current trust claim', () => {
-    const record = proposalRecord('sg_0000000000bb', {
+    const record = rowProposal({
       status: 'verified',
       verificationReceipt: {
         v: 1,
@@ -247,26 +254,19 @@ describe('renderSuggest proposal UX', () => {
     }
   })
 
-  it('shows only selected-session, unmapped proposals in the localhost inbox', () => {
-    const saved = proposalRecord('sg_0000000000ac')
-    const other = proposalRecord('sg_0000000000ad', { sessionIds: ['another-session'], proposal: { title: 'Wrong session', change: 'x', effort: 'S', proposalPath: '/tmp/other.md' } })
-    renderSuggest(serveContext([saved, other]))
-
-    expect(markup).toContain('Saved proposals · 1')
-    expect(markup).toContain('Bounded proposal')
-    expect(markup).not.toContain('Wrong session')
-  })
-
-  it('never renders the persisted-store inbox in a file report', () => {
+  // A file report embeds no store read: it shows no home section and names the store in step 3.
+  it('never renders the improvement home in a file report', () => {
     renderSuggest(context('file', [proposalRecord('sg_0000000000ae')]))
-    expect(markup).not.toContain('Localhost only')
+    expect(markup).not.toContain('id="home-')
+    expect(markup).not.toContain('Findings in this scope')
     expect(markup).not.toContain('Saved proposals')
     expect(markup).not.toContain('$orangu-apply')
+    expect(markup).toContain('Run orangu serve to see it here.')
   })
 
-  // The file bundles carry no proposal renderer: the screen draws a stored proposal and the inbox only
+  // The file bundles carry no proposal renderer: the screen draws a stored proposal and the home only
   // through Ctx.proposals, which serve alone provides. Same records, with and without the seam.
-  it('draws the stored proposal and the inbox only through the serve seam', () => {
+  it('draws the stored proposal and the home only through the serve seam', () => {
     const row = planRows('session', analysis, undefined)[0]!
     const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
     const records = [
@@ -275,18 +275,33 @@ describe('renderSuggest proposal UX', () => {
     ]
     renderSuggest(context('serve', records))
     expect(markup).not.toContain('sg-proposal')
-    expect(markup).not.toContain('sg-inbox')
+    expect(markup).not.toContain('id="home-queue"')
     renderSuggest(serveContext(records))
     expect(markup).toContain('<div class="sg-proposal">')
-    expect(markup).toContain('Saved proposals · 1')
+    expect(markup).toContain('id="home-queue"')
   })
 
-  // A4: the screen explains its own handoff instead of ending at a bare button.
-  it('renders the empty inbox on localhost so the third step has somewhere to point', () => {
+  // The home sits between the hero and the scope chips, and the heading of the findings closes it: the chips
+  // filter only the findings, so they sit next to what they filter.
+  it('draws the Queue section and the findings heading after the hero and before the scope chips', () => {
     renderSuggest(serveContext([]))
-    expect(markup).toContain('Saved proposals · 0')
-    expect(markup).toContain('This scope has no proposal yet. When /orangu:improve writes one, it shows here.')
-    expect(markup).toContain('The proposal shows below, in Saved proposals.')
+    const hero = markup.indexOf('class="hero"')
+    const queue = markup.indexOf('id="home-queue"')
+    const heading = markup.indexOf('Findings in this scope')
+    const chips = markup.indexOf('class="chiprow"')
+    expect(hero).toBeGreaterThan(-1)
+    expect(hero).toBeLessThan(queue)
+    expect(queue).toBeLessThan(heading)
+    expect(heading).toBeLessThan(chips)
+    expect(queue).toBeLessThan(markup.indexOf('Get an AI proposal'))
+  })
+
+  // The Queue holds every open record, so the serve step 3 ends at the change and names no list.
+  it('ends step 3 at the change in serve, and names no Saved proposals list', () => {
+    renderSuggest(serveContext([]))
+    expect(markup).toContain('It changes no file in your repository.</span>')
+    expect(markup).not.toContain('The proposal shows below, in Saved proposals.')
+    expect(markup).not.toContain('Saved proposals')
   })
 
   // The copied text is `claude "/orangu:improve …"`, a shell command that starts Claude Code, so the
@@ -325,12 +340,13 @@ describe('renderSuggest proposal UX', () => {
     const row = planRows('session', analysis, undefined)[0]!
     const id = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
     renderSuggest(serveContext([proposalRecord(id, { source: 'report', ruleId: row.ruleId, insightId: row.insightId })]))
-    expect(markup).toContain('<span class="pill">instruction</span>')
+    expect(markup).toContain('<span class="pill">Instruction files</span>')
+    expect(markup).not.toContain('<span class="pill">instruction</span>')
     expect(markup).toContain('<span class="pill">effort S</span>')
   })
 
   it('does not offer apply for an unstructured legacy proposal', () => {
-    renderSuggest(serveContext([proposalRecord('sg_0000000000af', {
+    renderSuggest(serveContext([rowProposal({
       proposal: { title: 'Legacy proposal', change: 'Do it', effort: 'S', proposalPath: '/tmp/legacy.md' },
     })]))
     expect(markup).toContain('Legacy proposal')
@@ -459,9 +475,9 @@ describe('renderSuggest: each card leads with its improvement, one explainer say
     expect(markup).toContain('data-copy="/plugin install orangu" aria-label="copy the install command"')
   })
 
-  it('says the proposal shows below on localhost, where the Saved proposals list is', () => {
+  it('names no store and no list in the served step 3', () => {
     renderSuggest(serveContext([]))
-    expect(markup).toContain('The proposal shows below, in Saved proposals.')
+    expect(markup).not.toContain('The proposal shows below, in Saved proposals.')
     expect(markup).not.toContain('Run orangu serve to see it here.')
   })
 
@@ -722,7 +738,8 @@ describe('renderSuggest on a repo/global scope', () => {
     expect(at).toBeLessThan(first)
     const box = markup.slice(at, first)
     expect(box).toContain('Paste it in a terminal in ~/Code/demo. It starts Claude Code.')
-    expect(box).toContain('The proposal shows below, in Saved proposals.')
+    expect(box).toContain('It changes no file in your repository.</span>')
+    expect(box).not.toContain('Saved proposals')
   })
 
   it('counts the sessions that show the pattern against the sessions in the scope', () => {

@@ -54,13 +54,14 @@ function improveHandoffs(commands: { claude: string }): string {
 
 /**
  * How to get an AI proposal, said once above the cards: each card keeps only its button, its status
- * and its message. Step 3 names where the proposal lands: the list below (serve) or the store (file).
+ * and its message. In a file, step 3 names the store where the proposal lands. In serve, the Queue
+ * above shows it, so step 3 says nothing more.
  */
 function explainer(paste: string, mode: Ctx['data']['mode']): string {
   return `<div class="card pad mb16"><div class="eyebrow" id="ai-steps">Get an AI proposal</div><ol class="steps" aria-labelledby="ai-steps">
 <li><span>Open an improvement. Click <b>Copy the Claude Code command</b>.</span></li>
 <li><div><span>${esc(paste)}</span>${installLines()}</div></li>
-<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository. ${mode === 'serve' ? 'The proposal shows below, in Saved proposals.' : 'The proposal is in ~/.orangu/proposals. Run orangu serve to see it here.'}</span></div></li>
+<li><div><span>Claude writes one proposal. It has 4 parts:</span><ul><li>the change</li><li>its effect</li><li>its risk</li><li>how to check it</li></ul><span>It changes no file in your repository.${mode === 'serve' ? '' : ' The proposal is in ~/.orangu/proposals. Run orangu serve to see it here.'}</span></div></li>
 </ol></div>`
 }
 
@@ -150,10 +151,10 @@ function suggestView(ctx: Ctx) {
 ${mascotBox(48)}
 <div class="grow sg-hero herotitle">${esc(heroSub)}</div>
 </div>
+${ctx.proposals?.inbox(ctx, scope, activeSessionIds, mapped) ?? ''}
 <div class="chiprow">${scopeChips}</div>
 ${mega}
 ${scope !== 'session' && !agg ? emptyHero({ title: 'This scope needs orangu serve', command: 'orangu serve' }) : items + install}
-${ctx.proposals?.inbox(ctx, scope, activeSessionIds, mapped) ?? ''}
 <p class="small muted sg-foot">${foot}</p>
 </section>`
   return [html, bySid, paste] as const

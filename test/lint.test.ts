@@ -209,3 +209,72 @@ describe('ratchet: the proposal renderers reach the screen only through the serv
     expect(countIn(join(ROOT, rel), /proposals-ui/g), `${rel} names proposals-ui`).toBe(0)
   })
 })
+
+/**
+ * The improvement home of serve: the frame, the Queue section, the queue card, the status labels and the types of the
+ * queue read. Each reaches the screen only through the ServeUi seams (proposals, harnessCard, ensureAggregate), so
+ * the file bundles carry none of it. One import from the file side would bring its bytes into every saved report.
+ */
+const HOME_MODULES = ['home-ui', 'queue-ui', 'queue-card', 'status-labels', 'queue-types'] as const
+const homeSource = (name: string): string => join(ROOT, 'src/report/client', `${name}.ts`)
+
+describe('ratchet: the improvement home reaches the screen only through the serve seams', () => {
+  it.each([
+    ['serve-ui', 'home-ui'],
+    ['serve-ui', 'queue-card'],
+    ['proposals-ui', 'home-ui'],
+    ['home-ui', 'queue-ui'],
+    ['queue-ui', 'status-labels'],
+    ['queue-ui', 'queue-types'],
+  ])('%s.ts names %s, so the module this ratchet guards exists under that name', (from, name) => {
+    expect(countIn(homeSource(from), new RegExp(`'\\./${name}\\.js'`, 'g'))).toBeGreaterThan(0)
+  })
+
+  it.each(HOME_MODULES.flatMap((name) => ['screens/suggest.ts', 'agg-ui.ts', 'agg-entry.ts', 'main.ts'].map((rel) => [`src/report/client/${rel}`, name])))(
+    '%s does not name %s',
+    (rel, name) => {
+      expect(countIn(join(ROOT, rel), new RegExp(name, 'g')), `${rel} names ${name}`).toBe(0)
+    },
+  )
+})
+
+/**
+ * The client computes no group, no verdict and no "due": each comes from the queue read of the server. No file of the
+ * client imports the modules that compute them, and the home names no threshold of its own.
+ */
+describe('ratchet: the client computes no verdict', () => {
+  it('no client file imports the cohort, the cohort statistics or the queue builder', () => {
+    const hits: string[] = []
+    for (const f of walk(join(ROOT, 'src/report/client'))) {
+      if (!f.endsWith('.ts') || f.endsWith('.test.ts')) continue
+      if (countIn(f, /from '[./]*suggest\/(?:cohort|cohort-stats|queue)\.js'/g)) hits.push(relative(ROOT, f))
+    }
+    expect(hits).toEqual([])
+  })
+
+  it.each(HOME_MODULES)('%s.ts holds no 0.05 and no cohort size constant', (name) => {
+    expect(countIn(homeSource(name), /0\.05|COHORT_MIN|COHORT_MAX/g)).toBe(0)
+  })
+})
+
+/**
+ * The home shows each stored string whole, in plain words, with 1 handoff or none: no cut, no literal link that drops
+ * the theme, no relative date, no ranking word, no store command and no network call from a copy control.
+ */
+describe('ratchet: the improvement home cuts no text and names no store command', () => {
+  it.each(HOME_MODULES)('%s.ts has no clamp, no ellipsis, no slice(0, and no literal hash link', (name) => {
+    expect(countIn(homeSource(name), /line-clamp|text-overflow|slice\(0,|href="#/g)).toBe(0)
+  })
+
+  it.each(HOME_MODULES)('%s.ts names no score, rate, grade or rank, and no "ago"', (name) => {
+    expect(countIn(homeSource(name), /\b(?:score|rate|grade|rank|ago)\b/gi)).toBe(0)
+  })
+
+  it.each(HOME_MODULES)('%s.ts names no orangu suggest command and no effect read', (name) => {
+    expect(countIn(homeSource(name), /orangu suggest|--effect/g)).toBe(0)
+  })
+
+  it.each(HOME_MODULES)('%s.ts makes no network call and no kickoff: a copy control only copies', (name) => {
+    expect(countIn(homeSource(name), /\bfetch\b|EventSource|\.kickoff\(/g)).toBe(0)
+  })
+})

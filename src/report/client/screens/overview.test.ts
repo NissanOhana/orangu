@@ -357,3 +357,27 @@ describe('overviewScreenHtml', () => {
     expect(html).toContain('>Why</summary>')
   })
 })
+
+// Serve brings the queue to the screen where it lands. Detailed draws the serve cards under the 2 panels, and Plain
+// draws them between the top improvement and "Where to look next". A file report has no card seam.
+describe('overviewScreenHtml: the serve card seam', () => {
+  const CARD = '<a class="card pad harness-card" href="#suggest" id="card-seam"></a>'
+
+  it.each(['dev', 'plain'] as const)('draws the seam once in %s, after the top improvement and in its place', async (audience) => {
+    const ctx = await context({ audience, mode: 'serve' })
+    ctx.harnessCard = vi.fn(() => CARD)
+    const html = overviewScreenHtml(ctx)
+    expect(ctx.harnessCard).toHaveBeenCalledTimes(1)
+    const card = html.indexOf('id="card-seam"')
+    const top = html.indexOf('Top improvement')
+    const next = html.indexOf('aria-label="Where to look next"')
+    expect(top).toBeGreaterThan(-1)
+    expect(card).toBeGreaterThan(top)
+    if (audience === 'plain') expect(card).toBeLessThan(next)
+    else expect(card).toBeGreaterThan(next)
+  })
+
+  it('draws no card in a file report, where the seam is absent', async () => {
+    for (const audience of ['dev', 'plain'] as const) expect(overviewScreenHtml(await context({ audience }))).not.toContain('harness-card')
+  })
+})

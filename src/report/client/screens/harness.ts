@@ -52,9 +52,10 @@ function idleCard(title: string, idle: string[], count: number, total: number, n
 /**
  * The Overview card (serve): one line, linking to #harness. `href` carries the current route (the ?s= key).
  * `undefined` = the report is still computing (designed loading state, never a blank slot); `null` = it
- * could not be computed (the degraded state the #harness screen shows, one line).
+ * could not be computed (the degraded state the #harness screen shows, one line). `cls` is '' inside a
+ * row of cards, which owns the margin.
  */
-export function harnessCardHtml(r: HarnessReport | null | undefined, href: string): string {
+export function harnessCardHtml(r: HarnessReport | null | undefined, href: string, cls = 'mb16'): string {
   const lead =
     r === undefined
       ? { title: 'Comparing what your config declares with what these sessions used…', sub: 'a cold cache takes a moment' }
@@ -63,7 +64,7 @@ export function harnessCardHtml(r: HarnessReport | null | undefined, href: strin
         : nothingDeclared(r)
           ? { title: 'orangu found no harness config under the scanned roots', sub: 'settings.json · skills/ · agents/ · plugins/ · .mcp.json · CLAUDE.md' }
           : harnessLead(r)
-  return `<a class="card pad mb16 harness-card" href="${esc(href)}"${r === undefined ? ' aria-busy="true"' : ''}><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${esc(lead.title)}</div><div class="small muted">${esc(lead.sub)} · open the harness view →</div></a>`
+  return `<a class="card pad${cls ? ` ${cls}` : ''} harness-card" href="${esc(href)}"${r === undefined ? ' aria-busy="true"' : ''}><div class="eyebrow">Harness</div><div class="card-title" style="margin:2px 0">${esc(lead.title)}</div><div class="small muted">${esc(lead.sub)} · open the harness view →</div></a>`
 }
 
 export function renderHarness(ctx: Ctx, r: HarnessReport | null): HTMLElement {

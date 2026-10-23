@@ -144,10 +144,9 @@ test('localhost creates only a copy handoff and never offers automatic model lau
   expect(errors).toEqual([])
 })
 
-test('localhost saved proposals are escaped, status-distinct, responsive, and expose copy-only apply handoffs', async ({ page, context }, info) => {
+test('localhost queue rows are escaped, show the stored proposal whole, stay responsive, and copy only their next step', async ({ page, context }, info) => {
   const errors = runtimeErrors(page)
   const proposedId = 'sg_0000000000c1'
-  const verifiedId = 'sg_0000000000c2'
   const proposal = {
     v: 1, title: '<img src=x onerror=alert(1)>', change: 'Update one instruction', effort: 'S',
     proposalPath: '/tmp/proposal.md', manifestPath: '/tmp/proposal.json', files: ['CLAUDE.md'], changeClass: 'instruction', evidence: 'Measured locally',
@@ -160,15 +159,15 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
   const evidence = `Measured locally. ${'Each word stays on the page. '.repeat(30)}The evidence ends here.`
   const records = [
     { id: proposedId, v: 2, createdAt: 1, source: 'skill', scope: 'session', sessionIds: [SESSION], ruleId: 'saved-proposal', title: 'Saved', evidence: { estimated: true }, proposal: { ...proposal, files, evidence }, status: 'proposed', statusAt: 2 },
-    {
-      id: verifiedId, v: 2, createdAt: 1, source: 'skill', scope: 'session', sessionIds: [SESSION], ruleId: 'verified-proposal', title: 'Verified', evidence: { estimated: true },
-      proposal: { ...proposal, title: 'Verified proposal', proposalPath: '/tmp/verified.md', verificationChecks: [{ metric: 'avgToolCalls', comparison: 'decreased' }] },
-      application: { v: 1, summary: 'Applied.', files: ['CLAUDE.md'], checks: [{ name: 'tests', ok: true }], receiptPath: '/tmp/applied.json' },
-      verificationReceipt: { v: 1, summary: 'Later-session comparison passed: avgToolCalls decreased.', measuredSessionIds: ['later-session'], checks: [{ name: 'avgToolCalls decreased', metric: 'avgToolCalls', comparison: 'decreased', before: 8, after: 4, evidence: 'No repeat · zero', ok: true }], receiptPath: '/tmp/verified.json' },
-      effect: { before: { avgToolCalls: 8 }, after: { avgToolCalls: 4 }, measuredSessionIds: ['later-session'] },
-      verificationTrust: 'computed-v1', verificationTrusted: true, status: 'verified', statusAt: 1,
-    },
   ]
+  const next = `claude "/orangu:apply ${proposedId}"`
+  const row = { group: 'apply', id: proposedId, ids: [proposedId], status: 'proposed', scope: 'session', changeClass: 'instruction', title: '<img src=x onerror=alert(2)>', workspace: '/workspace/project', lastMoveAt: 2, earlier: [], earlierCount: 0, next }
+  const queue = {
+    v: 1, scope: '/workspace/project', now: 3, globalOpen: 0,
+    counts: { verdict: 0, regressed: 0, apply: 1, review: 0, running: 0, wait: 0, due: 0, open: 1 },
+    groups: { verdict: [], regressed: [], apply: [row], review: [], running: [], wait: [] },
+  }
+  await page.route('**/api/queue**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(queue) }))
   await page.route('**/api/suggestions', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(records) }))
   await page.route('**/api/app**', async (route) => {
     const response = await route.fetch()
@@ -179,13 +178,17 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
   await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
 
-  const inbox = page.locator('.sg-inbox')
-  await expect(inbox).toContainText('Saved proposals · 2')
-  await expect(inbox.locator('img')).toHaveCount(0)
-  const proposed = inbox.locator(`#saved-${proposedId}`)
-  // the row's own summary: the disclosure of the file list inside the body has one too
+  const home = page.locator('#home-queue')
+  await expect(home.locator(':scope > summary')).toContainText('Queue · 1 open')
+  await expect(home.locator('img')).toHaveCount(0)
+  const proposed = home.locator(`#q-${proposedId}`)
+  await expect(proposed.locator(':scope > summary .q-meta')).toHaveText(`${proposedId} · session · project · Instruction files · effort S · 1970-01-01`)
+  // the row's own summary: the Proposal disclosure and the disclosure of the file list inside the body have one too
   await proposed.locator(':scope > summary').click()
-  await expect(proposed).toContainText('<img src=x onerror=alert(1)>')
+  await expect(proposed).toContainText('<img src=x onerror=alert(2)>')
+  const block = proposed.locator(`#qp-${proposedId}`)
+  await block.locator(':scope > summary').click()
+  await expect(block).toContainText('<img src=x onerror=alert(1)>')
 
   // No silent cut. 6 of the 9 files show, and a closed disclosure says so and opens from the keyboard to the other 3.
   const more = proposed.getByRole('button', { name: '6 of 9 files show above. Show 3 more.', exact: true })
@@ -212,17 +215,14 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
   })
   expect(clipped, 'boxes that clip the evidence field').toEqual([])
 
-  const copyButtons = proposed.locator('.sg-hand .copy')
-  await expect(copyButtons).toHaveCount(1)
-  await expect(copyButtons).toHaveAttribute('data-copy', `claude "/orangu:apply ${proposedId}"`)
+  // The row copies its own next step. The stored block shows no second apply handoff.
+  const copy = proposed.locator('.btn-primary[data-copy]')
+  await expect(copy).toHaveCount(1)
+  await expect(copy).toHaveAttribute('data-copy', next)
+  await expect(proposed.locator('[aria-label="Apply handoff"]')).toHaveCount(0)
   await expect(proposed).not.toContainText('Codex')
-  await copyButtons.click()
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(`claude "/orangu:apply ${proposedId}"`)
-  const verified = inbox.locator(`#saved-${verifiedId}`)
-  await expect(verified.locator('.status-chip')).toHaveAttribute('data-status', 'verified')
-  await verified.locator('summary').click()
-  await expect(verified).toContainText('No repeat · zero')
-  await expect(verified.locator('.sg-handoffs')).toHaveCount(0)
+  await copy.click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(next)
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
 
   // A re-render builds the screen again from nothing (the audience switch does it). The open file list stays
@@ -233,6 +233,123 @@ test('localhost saved proposals are escaped, status-distinct, responsive, and ex
   await expect(more, 'a new node').not.toHaveAttribute('data-drawn-before')
   await expect(more).toHaveAttribute('aria-expanded', 'true')
   await expect(file(9)).toBeVisible()
+  expect(errors).toEqual([])
+})
+
+/** The ratio of each visible text of `root` against its own painted ground (the method of the landing checks). */
+async function textContrasts(page: Page, root: string): Promise<Array<{ text: string; ratio: number }>> {
+  return page.evaluate((sel) => {
+    const rgb = (value: string) => (value.match(/\d+(?:\.\d+)?/g) ?? []).slice(0, 4).map(Number)
+    const luminance = ([r, g, b]: number[]) => {
+      const lin = (c: number) => { const s = c / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4 }
+      return 0.2126 * lin(r!) + 0.7152 * lin(g!) + 0.0722 * lin(b!)
+    }
+    const groundOf = (element: Element): number[] => {
+      for (let at: Element | null = element; at; at = at.parentElement) {
+        const paint = rgb(getComputedStyle(at).backgroundColor)
+        if (paint.length === 3 || paint[3] === 1) return paint
+      }
+      return rgb(getComputedStyle(document.body).backgroundColor)
+    }
+    return Array.from(document.querySelectorAll(`${sel}, ${sel} *`))
+      .filter((element) => !element.closest('[aria-hidden="true"]') && (element as HTMLElement).getClientRects().length > 0)
+      .filter((element) => Array.from(element.childNodes).some((node) => node.nodeType === Node.TEXT_NODE && (node as Text).data.trim()))
+      .map((element) => {
+        const text = luminance(rgb(getComputedStyle(element).color))
+        const ground = luminance(groundOf(element))
+        return { text: (element.textContent ?? '').trim().slice(0, 60), ratio: (Math.max(text, ground) + 0.05) / (Math.min(text, ground) + 0.05) }
+      })
+  }, root)
+}
+
+// The improvement home on the served fixture store (app-server.ts): 1 open record in each group of the queue.
+test('the Queue section shows the 6 groups in order, opens each row from the keyboard, and paints each text at 4.5:1 or more', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  const queue = page.locator('#home-queue')
+  await expect(queue.locator(':scope > summary')).toContainText('Queue · 1 due · 6 open', { timeout: 20_000 })
+  await expect(queue).toHaveAttribute('open', '')
+  // the home sits after the hero and above the scope chips, and the heading of the findings closes it
+  const order = await page.evaluate(() => {
+    const all = Array.from(document.querySelectorAll('*'))
+    const at = (el: Element | null | undefined) => (el ? all.indexOf(el) : -1)
+    const heading = Array.from(document.querySelectorAll('h3')).find((h) => h.textContent === 'Findings in this scope')
+    return [at(document.querySelector('#screen-suggest .hero')), at(document.getElementById('home-queue')), at(heading), at(document.querySelector('#screen-suggest .chiprow'))]
+  })
+  expect(order.every((n, i) => n > (order[i - 1] ?? -1)), `hero, Queue, heading, chips: ${order.join(', ')}`).toBe(true)
+
+  const groups = queue.locator('details.card[id^="q-0-"]')
+  await expect(groups).toHaveCount(6)
+  expect(await groups.evaluateAll((els) => els.map((el) => el.id))).toEqual(['q-0-verdict', 'q-0-regressed', 'q-0-apply', 'q-0-review', 'q-0-running', 'q-0-wait'])
+  await expect(queue.locator('.tag')).toHaveCount(1)
+  await expect(queue.locator('#q-0-verdict .tag.good')).toHaveText('Due')
+
+  // each row opens from the keyboard, with its summary as the accessible name of the toggle
+  const rows = queue.locator('details.saved-proposal')
+  await expect(rows).toHaveCount(6)
+  for (let i = 0; i < 6; i++) {
+    const toggle = rows.nth(i).locator(':scope > summary')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    await toggle.focus()
+    await page.keyboard.press('Enter')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  }
+  // 5 rows have a next step to copy, and the row that waits has none
+  await expect(queue.locator('.btn-primary[data-copy]')).toHaveCount(5)
+  await expect(queue.locator('#q-0-wait .cmd')).toHaveCount(0)
+  await expect(queue.locator('#q-0-verdict .btn-primary')).toHaveAttribute('data-copy', 'claude "/orangu:improve --verify sg_0000000000b1"')
+
+  // the read of every workspace runs on the first open of its disclosure
+  const all = page.locator('#home-all-queue')
+  await all.locator(':scope > summary').click()
+  await expect(all.locator(':scope > summary')).toContainText('All workspaces · 6 open')
+  await expect(all).toContainText('No other workspace has an open item.')
+
+  // every row is open, so the check reads the summaries, the labels, the row copy, the commands and the controls
+  const contrasts = await textContrasts(page, '#home-queue')
+  expect(contrasts.length, 'visible texts measured').toBeGreaterThan(60)
+  const low = contrasts.filter((t) => t.ratio < 4.5)
+  expect(low, 'text under 4.5:1 in the Queue section').toEqual([])
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  expect(errors).toEqual([])
+})
+
+test('a closed Queue section stays closed after a re-render, and the Overview carries the queue card', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  const toggle = page.locator('#home-queue > summary')
+  await expect(toggle).toContainText('Queue · 1 due · 6 open', { timeout: 20_000 })
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+  await page.locator('#home-queue').evaluate((el) => el.setAttribute('data-drawn-before', ''))
+  await page.evaluate(() => { location.hash += (location.hash.includes('?') ? '&' : '?') + 'audience=plain' })
+  await expect(page.getByRole('button', { name: 'Plain language' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('#home-queue'), 'a new node').not.toHaveAttribute('data-drawn-before')
+  await expect(page.locator('#home-queue')).not.toHaveAttribute('open')
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+  // Plain: the queue card alone, between the top improvement and "Where to look next"
+  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}&audience=plain`, info), { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('a.harness-card[href^="#suggest"]')).toContainText('Improvements: 1 due, 1 regressed, 1 to apply')
+  await expect(page.locator('a.harness-card[href^="#harness"]')).toHaveCount(0)
+  // Detailed: the queue card first and the harness card second, in 1 row
+  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  const cards = page.locator('.two-up > a.harness-card')
+  await expect(cards.first()).toHaveAttribute('href', withTheme(`#suggest?s=${SESSION}`, info))
+  await expect(cards.nth(1)).toHaveAttribute('href', withTheme(`#harness?s=${SESSION}`, info))
+  await cards.first().click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Improvements' })).toBeVisible()
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(errors).toEqual([])
+})
+
+test('Review the whole harness moves focus to the copy control of the whole-harness card', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}&scope=repo`, info), { waitUntil: 'domcontentloaded' })
+  const jump = page.getByRole('button', { name: 'Review the whole harness ↓' })
+  await expect(jump).toBeVisible({ timeout: 20_000 })
+  await jump.press('Enter')
+  await expect(page.locator('#home-mega .btn-primary')).toBeFocused()
   expect(errors).toEqual([])
 })
 

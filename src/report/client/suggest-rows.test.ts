@@ -21,7 +21,7 @@ import {
   recordForRow,
   titleForRule,
 } from './suggest-rows.js'
-import { SAVED_PROPOSAL_LIMIT, hasValidProposal, savedProposalRecords } from './proposals-ui.js'
+import { hasValidProposal } from './proposals-ui.js'
 
 const analysis = {
   session: { id: 'sess-1' },
@@ -256,30 +256,13 @@ describe('saved proposal selection and handoffs', () => {
     expect(hasValidProposal(proposalRecord(4, { proposal: { v: 1, title: '', change: 'x', effort: 'S', proposalPath: '/tmp/x' } }))).toBe(false)
   })
 
-  it('filters the session inbox to the selected id and removes every record represented by a measured row', () => {
+  // The Saved proposals inbox left: the queue of the improvement home holds every open record. A plan row still binds its own record.
+  it('binds a measured row to its own record and to no other stored proposal', () => {
     const row = planRows('session', analysis, undefined)[0]!
     const sid = suggestionIdV2(suggestionKey(findingForRow(row, 'session'), 'report'))
     const mapped = proposalRecord(20, { id: sid, source: 'report', ruleId: row.ruleId, insightId: row.insightId })
     const saved = proposalRecord(21)
     const otherSession = proposalRecord(22, { sessionIds: ['sess-2'] })
     expect(recordForRow([mapped, saved, otherSession], row, 'session', sid)).toBe(mapped)
-    expect(savedProposalRecords([mapped, saved, otherSession], 'session', 'sess-1', [], [mapped])).toEqual([saved])
-  })
-
-  it('requires repo/global evidence overlap, deduplicates proposal paths, and caps the newest results', () => {
-    const duplicatePath = '/tmp/shared.md'
-    const records = Array.from({ length: SAVED_PROPOSAL_LIMIT + 4 }, (_, i) =>
-      proposalRecord(100 + i, {
-        scope: 'repo',
-        sessionIds: i === 0 ? ['outside'] : ['active'],
-        ...(i >= SAVED_PROPOSAL_LIMIT + 2 ? { proposal: { v: 1, title: `Duplicate ${i}`, change: 'x', effort: 'S', proposalPath: duplicatePath } } : {}),
-      }),
-    )
-    const saved = savedProposalRecords(records, 'repo', undefined, ['active'], [])
-    expect(saved).toHaveLength(SAVED_PROPOSAL_LIMIT)
-    expect(saved.every((record) => record.sessionIds.includes('active'))).toBe(true)
-    expect(saved.filter((record) => record.proposal?.proposalPath === duplicatePath)).toHaveLength(1)
-    expect(saved[0]!.statusAt).toBeGreaterThan(saved.at(-1)!.statusAt)
-    expect(savedProposalRecords(records, 'global', undefined, ['active'], [])).toEqual([])
   })
 })

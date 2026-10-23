@@ -12,10 +12,12 @@ import type { RouteState } from './nav.js'
 import { catColor, esc, ms, pct, timeOnly, tok } from './format.js'
 import { h } from './dom.js'
 import { mascotSvg } from './mascot.js'
-import { shortId } from './nav.js'
+import { cleanHash, shortId } from './nav.js'
 import { badgeCopy, fleetFeed } from './derive.js'
 import { megaReview } from './mega-review.js'
 import { proposalsUi } from './proposals-ui.js'
+import { ensureQueue, queueRead } from './home-ui.js'
+import { queueCardHtml } from './queue-card.js'
 import { renderRepo } from './screens/repo.js'
 import { renderGlobal } from './screens/global.js'
 import { harnessCardHtml, renderHarness } from './screens/harness.js'
@@ -157,6 +159,12 @@ function ensureAggregate(d: AppData, ds: DataSource, state: RouteState, onLoaded
   return aggInFlight.has(want)
 }
 
+/** the data seam of each non-harness screen: the queue read that #suggest and #overview show, then the aggregate */
+function ensureScreenData(d: AppData, ds: DataSource, state: RouteState, onLoaded: () => void): boolean {
+  ensureQueue(ds, state, onLoaded)
+  return ensureAggregate(d, ds, state, onLoaded)
+}
+
 function aggScreen(): HTMLElement {
   return h(
     `<section><div class="card"><div class="empty-hero">${mascotSvg(48)}<div class="t">Analysing sessions…</div><div class="s">A cold cache takes a moment. The numbers appear when they are ready.</div></div></div></section>`,
@@ -218,10 +226,21 @@ function harnessView(ctx: Ctx): HTMLElement {
   return renderHarness(ctx, harnessReport ?? null)
 }
 
-/** the Overview card: the loading state until the report is here (the fetch is kicked so a re-render fills it), the degraded state if it never is */
-function harnessCard(ds: DataSource, onLoaded: () => void, href: string): string {
+/**
+ * The Overview cards: the queue card, and in Detailed the harness card beside it in 1 row. Plain language shows the
+ * queue card only. Each card shows its loading state until its read is here (the read is kicked, so a re-render fills
+ * it), and its degraded state if the read failed.
+ */
+function harnessCard(ds: DataSource, onLoaded: () => void, href: string, state: RouteState): string {
+  ensureQueue(ds, state, onLoaded)
+  const plain = state.audience === 'plain'
+  const queue = queueCardHtml(queueRead(), cleanHash(state, { screen: 'suggest' }), plain ? 'mb16' : '')
+  if (plain) return queue
   ensureHarness(ds, onLoaded)
-  return harnessCardHtml(harnessReport, href)
+  return `<div class="two-up mb16">${queue}${harnessCardHtml(harnessReport, href, '')}</div>`
 }
 
-export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate, aggScreen, aggregateView, megaReview, ensureHarness, invalidateHarness, harnessView, harnessCard, proposals: proposalsUi }
+/** the whole-harness card, with the anchor that the Queue section scrolls to */
+const homeMega = (scope: 'repo' | 'global'): string => `<div id="home-mega">${megaReview(scope)}</div>`
+
+export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate: ensureScreenData, aggScreen, aggregateView, megaReview: homeMega, ensureHarness, invalidateHarness, harnessView, harnessCard, proposals: proposalsUi }

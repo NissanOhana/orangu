@@ -1,18 +1,19 @@
 /**
- * Serve only: the stored proposal on its plan row and the Saved proposals inbox. A file report always
- * embeds `suggestions: []` (render.ts), so neither can render from a file. serve-ui.ts injects this
- * module through the optional ServeUi.proposals seam, the way the whole-harness block reaches the
- * screen through Ctx.megaReview, so its bytes stay out of CLIENT_JS and CLIENT_JS_AGG. The screen, the
- * aggregate seam and both file entries never import it (test/lint.test.ts).
+ * Serve only: the stored proposal on its plan row and in the improvement home, and the inbox seam that draws the home
+ * (home-ui.ts). A file report always embeds `suggestions: []` (render.ts), so neither can render from a file.
+ * serve-ui.ts injects this module through the optional ServeUi.proposals seam, the way the whole-harness block reaches
+ * the screen through Ctx.megaReview, so its bytes stay out of CLIENT_JS and CLIENT_JS_AGG. The screen, the aggregate
+ * seam and both file entries never import it (test/lint.test.ts).
  */
-import type { Ctx, ProposalsUi } from './app.js'
+import type { ProposalsUi } from './app.js'
 import type { SuggestionViewRecord } from '../../model/app-data.js'
-import type { SuggestionProposal, SuggestionRecord, SuggestionScope } from '../../suggest/types.js'
+import type { SuggestionProposal, SuggestionRecord } from '../../suggest/types.js'
 import { esc } from './format.js'
 import { commandBlock } from './components/command.js'
-import { chipState, statusChip, trustedVerification } from './screens/suggest.js'
+import { trustedVerification } from './screens/suggest.js'
+import { homeSections } from './home-ui.js'
+import { STATUS_LABELS, changeClassLabel } from './status-labels.js'
 
-export const SAVED_PROPOSAL_LIMIT = 12
 export const PROPOSAL_LIST_LIMIT = 6
 
 const nonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0
@@ -41,7 +42,7 @@ const itemList = (items: string[]): string => `<ul>${items.map((item) => `<li>${
  * "more" disclosure of screens/context.ts with the "N of M" line of the Timeline. Its id keys the app's re-render
  * seam (details[id]), so an open list stays open after an SSE tick.
  */
-function detailList(recordId: string, label: string, values: unknown, keys?: string[]): string {
+function detailList(prefix: string, label: string, values: unknown, keys?: string[]): string {
   if (!Array.isArray(values)) return ''
   const items = values.map((value) => keys && value && typeof value === 'object'
     ? keys.map((key) => fieldText((value as Record<string, unknown>)[key])).filter(Boolean).join(' · ')
@@ -52,7 +53,7 @@ function detailList(recordId: string, label: string, values: unknown, keys?: str
   const rest = items.splice(PROPOSAL_LIST_LIMIT)
   const name = label.toLowerCase()
   const more = rest.length
-    ? `<details class="more-charts" id="more-${esc(recordId)}-${name.replace(/ /g, '-')}"><summary><span class="chev" aria-hidden="true">▸</span>${items.length} of ${total} ${name} show above. Show ${rest.length} more.</summary>${itemList(rest)}</details>`
+    ? `<details class="sg-more" id="more-${esc(prefix)}-${name.replace(/ /g, '-')}"><summary><span class="chev" aria-hidden="true">▸</span>${items.length} of ${total} ${name} show above. Show ${rest.length} more.</summary>${itemList(rest)}</details>`
     : ''
   return `<div class="sg-pfield"><b>${label}.</b>${itemList(items)}${more}</div>`
 }
@@ -71,70 +72,23 @@ function applyHandoffs(record: SuggestionRecord): string {
   return `<div class="sg-handoffs" aria-label="Apply handoff"><div class="small muted">Copy only. Nothing runs here.</div><div class="sg-hand"><span>Claude</span>${commandBlock(`claude "/orangu:apply ${record.id}"`)}</div></div>`
 }
 
-/** A change class is shown only where one exists: on the proposal that carries it. */
-function proposalDetails(record: SuggestionViewRecord | undefined): string {
+/**
+ * The stored proposal block. A change class is shown only where one exists: on the proposal that carries it, by its
+ * label. `key` keys the list disclosures, so the same record in the home and on a Findings row gets 2 sets of ids.
+ * `handoffs: false` leaves out the apply handoff, for a home row that shows its own next step.
+ */
+export function proposalDetails(record: SuggestionViewRecord | undefined, key = record?.id ?? '', handoffs = true): string {
   if (!record || !hasValidProposal(record)) return ''
   const proposal = record.proposal
   const verification = record.verificationReceipt
   const trusted = trustedVerification(record)
   // Trust is computed server-side for either receipt version; both carry a summary and graded checks.
   const lifecycle = trusted && verification
-    ? detail('Later evidence', verification.summary) + detailList(record.id, 'Computed comparisons', verification.checks, ['name', 'evidence'])
+    ? detail('Later evidence', verification.summary) + detailList(key, 'Computed comparisons', verification.checks, ['name', 'evidence'])
     : record.status === 'verified'
       ? detail('Legacy state', 'Not verified under the current deterministic contract.')
     : record.application?.v === 1 ? detail('Applied', record.application.summary) : ''
-  return `<div class="sg-proposal"><div class="sg-phead"><span class="eyebrow">Proposal</span>${proposal.changeClass ? `<span class="pill">${esc(proposal.changeClass)}</span>` : ''}<span class="pill">effort ${esc(proposal.effort)}</span></div><div class="sg-ptitle">${esc(fieldText(proposal.title))}</div>${detail('Change', proposal.change)}${detail('Evidence', proposal.evidence)}${detail('Expected effect', proposal.expectedEffect)}${detail('Risk', proposal.risk)}${detail('Verification', proposal.verification)}${detailList(record.id, 'Reviewed comparisons', proposal.verificationChecks, ['metric', 'comparison'])}${detailList(record.id, 'Files', proposal.files)}${detailList(record.id, 'Sources', proposal.sources, ['kind', 'label', 'url', 'verifiedAt'])}${lifecycle}${applyHandoffs(record)}</div>`
+  return `<div class="sg-proposal"><div class="sg-phead"><span class="eyebrow">Proposal</span>${proposal.changeClass ? `<span class="pill">${esc(changeClassLabel(proposal.changeClass))}</span>` : ''}<span class="pill">effort ${esc(proposal.effort)}</span></div><div class="sg-ptitle">${esc(fieldText(proposal.title))}</div>${detail('Status', STATUS_LABELS[record.status])}${detail('Change', proposal.change)}${detail('Evidence', proposal.evidence)}${detail('Expected effect', proposal.expectedEffect)}${detail('Risk', proposal.risk)}${detail('Verification', proposal.verification)}${detailList(key, 'Reviewed comparisons', proposal.verificationChecks, ['metric', 'comparison'])}${detailList(key, 'Files', proposal.files)}${detailList(key, 'Sources', proposal.sources, ['kind', 'label', 'url', 'verifiedAt'])}${lifecycle}${handoffs ? applyHandoffs(record) : ''}</div>`
 }
 
-function savedProposalItem(record: SuggestionViewRecord): string {
-  return `<details class="saved-proposal" id="saved-${esc(record.id)}"><summary><span class="chev" aria-hidden="true">▸</span><b>${esc(fieldText(record.proposal?.title))}</b>${statusChip(chipState(record.status), '', trustedVerification(record))}</summary><div class="saved-proposal-body">${proposalDetails(record)}</div></details>`
-}
-
-function identityKeys(record: SuggestionRecord): string[] {
-  return [record.id, ...(Array.isArray(record.legacyIds) ? record.legacyIds : []), record.proposal?.proposalPath].filter(nonEmptyString)
-}
-
-/**
- * Serve-only inbox selection. Session scope is exact; aggregate scopes require evidence overlap.
- * Mapped rows and migrated/path duplicates are removed before the hard display cap.
- */
-export function savedProposalRecords<T extends SuggestionRecord>(
-  records: T[],
-  scope: SuggestionScope,
-  selectedSessionId: string | undefined,
-  aggregateSessionIds: string[],
-  mappedRecords: T[],
-): T[] {
-  const activeIds = new Set(scope === 'session' ? (selectedSessionId ? [selectedSessionId] : []) : aggregateSessionIds)
-  if (!activeIds.size) return []
-  const seen = new Set(mappedRecords.flatMap(identityKeys))
-  const result: T[] = []
-  const newest = [...records].sort((a, b) => b.statusAt - a.statusAt)
-  for (const record of newest) {
-    if (record.scope !== scope || !hasValidProposal(record) || !record.sessionIds.some((id) => activeIds.has(id))) continue
-    const keys = identityKeys(record)
-    if (keys.some((key) => seen.has(key))) continue
-    keys.forEach((key) => seen.add(key))
-    result.push(record)
-    if (result.length === SAVED_PROPOSAL_LIMIT) break
-  }
-  return result
-}
-
-/** Serve only: the inbox is the persisted store, so a file report never renders it, not even empty. */
-function savedProposalInbox(records: SuggestionViewRecord[], mode: Ctx['data']['mode']): string {
-  if (mode !== 'serve') return ''
-  const body = records.length
-    ? records.map(savedProposalItem).join('')
-    : '<p class="small muted" style="margin:0">This scope has no proposal yet. When /orangu:improve writes one, it shows here.</p>'
-  return `<section class="sg-inbox card pad mb16" aria-label="Saved proposals"><div class="sg-inbox-head"><div class="card-title">Saved proposals · ${records.length}</div><span class="eyebrow">Localhost only</span></div>${body}</section>`
-}
-
-function inbox(ctx: Ctx, scope: SuggestionScope, aggregateSessionIds: string[], mapped: SuggestionViewRecord[]): string {
-  const saved = ctx.data.mode === 'serve'
-    ? savedProposalRecords(ctx.data.suggestions, scope, ctx.a?.session.id ?? ctx.state.s ?? ctx.data.selectedId, aggregateSessionIds, mapped)
-    : []
-  return savedProposalInbox(saved, ctx.data.mode)
-}
-
-export const proposalsUi: ProposalsUi = { details: proposalDetails, inbox }
+export const proposalsUi: ProposalsUi = { details: proposalDetails, inbox: homeSections }

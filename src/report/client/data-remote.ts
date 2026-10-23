@@ -10,6 +10,7 @@ import type { AppData, SuggestionViewRecord } from '../../model/app-data.js'
 import type { KickoffRequest, KickoffResponse, SuggestionStatus } from '../../suggest/types.js'
 import type { ServeEvent } from '../../serve/types.js'
 import type { DataSource } from './data.js'
+import type { QueueRead } from './queue-types.js'
 
 const SESSION_THROTTLE_MS = 2_000
 const AGG_POLL_MS = 800
@@ -96,6 +97,10 @@ export function remoteSource(base = ''): DataSource {
     async suggestions() {
       const { body } = await getJson<SuggestionViewRecord[]>(base + '/api/suggestions')
       return body ?? []
+    },
+    // no cwd: the route takes the --cwd of serve, so no path of the browser reaches it
+    async queue(all) {
+      return (await getJson<QueueRead>(base + '/api/queue' + (all ? '?all=1' : ''))).body
     },
     async kickoff(req) {
       let r: Response
