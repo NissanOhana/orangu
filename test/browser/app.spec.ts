@@ -299,11 +299,13 @@ test('the Queue section shows the 6 groups in order, opens each row from the key
   await expect(queue.locator('#q-0-wait .cmd')).toHaveCount(0)
   await expect(queue.locator('#q-0-verdict .btn-primary')).toHaveAttribute('data-copy', 'claude "/orangu:improve --verify sg_0000000000b1"')
 
-  // the read of every workspace runs on the first open of its disclosure
+  // The read of every workspace runs on the first open of its disclosure. An earlier test of the suite can add a
+  // record with no workspace (a kickoff), so the count is the read's own, and this workspace never shows again.
   const all = page.locator('#home-all-queue')
   await all.locator(':scope > summary').click()
-  await expect(all.locator(':scope > summary')).toContainText('All workspaces · 6 open')
-  await expect(all).toContainText('No other workspace has an open item.')
+  await expect(all.locator(':scope > summary')).toContainText(/All workspaces · \d+ open$/)
+  await expect(all.locator(':scope > div')).not.toHaveAttribute('aria-busy', 'true')
+  await expect(all.locator('details.saved-proposal[id^="q-sg_0000000000b"]')).toHaveCount(0)
 
   // every row is open, so the check reads the summaries, the labels, the row copy, the commands and the controls
   const contrasts = await textContrasts(page, '#home-queue')
