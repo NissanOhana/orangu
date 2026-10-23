@@ -1,6 +1,6 @@
 # Outside-research policy
 
-Read this only after you consult the deterministic catalog and the user explicitly approves outside research. Pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`.
+Read this only after you consult the deterministic catalog and the user explicitly approves outside research. From `/orangu:harness`, pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`. From `/orangu:interview`, pass the policy, the approved search terms and the change classes, with no evidence file.
 
 ## Nondisclosure boundary
 

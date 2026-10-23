@@ -244,7 +244,7 @@ h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px
 .verb{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--ink2)}
 .verb b{font-family:var(--mono);color:var(--ink1)}
 .skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px}
-@media (min-width:1000px){.skills{grid-template-columns:repeat(3,1fr)}}
+@media (min-width:1000px){.skills{grid-template-columns:repeat(4,1fr)}}
 .skill{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)}
 .skill b{display:block;font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--accent-ink);margin-bottom:4px}
 .skill div{font-size:13.5px;color:var(--ink2)}
@@ -496,6 +496,7 @@ Choose a report
       <p class="sub-lead">Measurement stays in the local CLI. The session and repo scopes can propose, apply, and verify. The global scope stays proposal-only.</p>
       <div class="skills">
         <div class="skill"><b>/orangu:improve</b><div>Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. It never edits the target repository.</div></div>
+        <div class="skill"><b>/orangu:interview</b><div>Research outside options for one suggestion first. Then answer a few questions, and get a proposal or a second opinion. It applies nothing.</div></div>
         <div class="skill"><b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository. It runs the repository's own checks and records a receipt. Global proposals are review-only.</div></div>
         <div class="skill"><b>/orangu:analyze</b><div>Explain what happened in one session, finished or still running, from local deterministic evidence. Keep a report refreshed while a session runs.</div></div>
         <div class="skill"><b>/orangu:harness</b><div>Review what your harness declares against what your sessions used, in one repository or in every session on the machine. Then propose ranked changes.</div></div>

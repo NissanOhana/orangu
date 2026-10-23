@@ -82,6 +82,7 @@ Whole-harness (global) changes stay review-only. A proposal is not an applicatio
 |---|---|
 | `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence. Open the report of the current session |
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
+| `/orangu:interview` | Research outside options for one suggestion, then interview you before its proposal or a second opinion (`/orangu:interview <sg_id>`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. A rule that did not hold gets a hook, not another note |
 | `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML. Claude writes only 3 text values, and `orangu show-me` writes both files from the data |
@@ -457,17 +458,20 @@ A proposal cannot verify itself, and an application receipt does not prove that 
 - `/orangu:show-me` turns the evidence of one session, one repository or all sessions into a slide deck and a written report. `orangu show-me` writes that evidence to `data.json` in a new run directory under `~/.orangu/show-me/`. Claude reads it behind the same size gate. Then Claude writes only 3 text values to `words.json`: `verdict`, `summary` and `improvementsTitle`. Claude copies each number from `data.json` and computes no figure.
 
   `orangu show-me --render` redacts the 3 values and checks them with `orangu ste`. It fills both offline HTML files with each value as text, and checks each file against its template before it writes it. Claude writes no HTML, no suggestion record and no repository file. The skill has no Codex mirror.
+- `/orangu:interview` researches before it asks, on one suggestion. It builds search terms only from product words: the rule id, the change classes, the host name and the catalog names. It asks once before any search. Only the read-only `harness-researcher` agent searches, and it receives no evidence. Then the skill asks only what decides the change: the approach that fits, who the change is for, and what would show that it worked.
+
+  For a new suggestion, it saves the same proposal pair as `/orangu:improve`. Outside sources stay labelled as not checked, and the manifest carries only catalog and interview sources. For a proposed record, it gives a second opinion (keep, change or drop) and changes no file of that record. It applies nothing, and the answers are user-stated context, never a measurement.
 - Live observation is a CLI concern. `orangu watch` refreshes one report, and `orangu serve` follows several sessions. Neither performs model reasoning of its own.
 
 ### Text checks and permissions
 
-`analyze`, `improve`, `harness` and `apply` check the text that they write for the user with `orangu ste`. `orangu ste` reads a proposal from its file, and chat text from a new draft file, `~/.orangu/drafts/<skill>-<random>.md`. No draft text goes through the shell. `orangu ste` has no pass mark, so Claude fixes only the findings that are real.
+`analyze`, `improve`, `harness`, `interview` and `apply` check the text that they write for the user with `orangu ste`. `orangu ste` reads a proposal from its file, and chat text from a new draft file, `~/.orangu/drafts/<skill>-<random>.md`. No draft text goes through the shell. `orangu ste` has no pass mark, so Claude fixes only the findings that are real.
 
 Each skill pre-approves by name each `orangu` verb that its steps run. No skill pre-approves all of `orangu`. `/orangu:apply` pre-approves only `orangu suggest`, `orangu ste` and `Read`. So each repository edit, each project check and each write of apply can ask you for permission. No skill pre-approves an `Edit` or a `Write` outside `~/.orangu/drafts/` and `~/.orangu/proposals/`, and `show-me` pre-approves none.
 
 ## Claude Code and Codex parity
 
-The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:apply`, `/orangu:harness`, `/orangu:show-me`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools`, so the pre-approvals above apply only in Claude Code. `npm run verify` fails when a mirror is stale.
+The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:interview`, `/orangu:apply`, `/orangu:harness`, `/orangu:show-me`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` contains byte-identical repo-discovered mirrors for contributors and source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools`, so the pre-approvals above apply only in Claude Code. `npm run verify` fails when a mirror is stale.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule.
 

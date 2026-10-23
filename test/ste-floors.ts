@@ -106,6 +106,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
   // P2: the show-me skill, its slot rules and its two template sources. New surfaces, born in STE at
   // max(80, measured - 2). The templates are measured as sources: the fixed sentences and the EXAMPLE sample text.
+  'plugin/skills/interview/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (153 of 153) at birth, 2026-10-23
   'plugin/skills/show-me/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (55 of 55) after the data-only rewrite (was 77 of 77)
   'plugin/skills/show-me/references/report.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (111 of 111)
   'plugin/skills/show-me/references/slides.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (113 of 113)

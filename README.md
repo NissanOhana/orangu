@@ -73,6 +73,7 @@ Whole-harness (global) changes stay review-only. A proposal is not an applicatio
 |---|---|
 | `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence. Open the report of the current session |
 | `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
+| `/orangu:interview` | Research outside options for one suggestion, then interview you before its proposal or a second opinion (`/orangu:interview <sg_id>`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. A rule that did not hold gets a hook, not another note |
 | `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML. Claude writes only 3 text values, and `orangu show-me` writes both files from the data |

@@ -1,11 +1,12 @@
 # Orangu skills
 
-Six Claude Code skills. Start with `/orangu:improve`. Each owns one job.
+Seven Claude Code skills. Start with `/orangu:improve`. Each owns one job.
 
 | Skill | What it is | Use instead when |
 |---|---|---|
 | `/orangu:analyze` | Explain one session (`current` included), finished or live: outcome, steps, errors, time, tokens. Open its report | you want a change proposed: `/orangu:improve`. Your setup reviewed: `/orangu:harness` |
 | `/orangu:improve` | Turn one finding into one bounded proposal with evidence, expected effect, risk, and a verification check. Never edits the repository | you want it applied: `/orangu:apply` |
+| `/orangu:interview` | Research outside options for one suggestion, then interview you. Write its proposal or a second opinion | you want a quick proposal: `/orangu:improve` |
 | `/orangu:apply` | Apply one reviewed proposal, run the repository's own checks, record a receipt | it still needs drafting: `/orangu:improve` |
 | `/orangu:harness` | Review declared vs used harness configuration repo-wide or machine-wide, interview you, propose changes, apply approved ones | it is about one session: `/orangu:analyze` |
 | `/orangu:show-me` | Write a slide deck and a written report from the evidence, as offline HTML | you want a diagnosis in chat: `/orangu:analyze` |

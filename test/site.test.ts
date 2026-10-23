@@ -699,10 +699,11 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(install).not.toContain('$orangu-')
   })
 
-  it('lists the six shipped skills', () => {
+  it('lists the seven shipped skills', () => {
     const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
     const listed = [...install.matchAll(/<div class="skill"><b>\/orangu:([a-z-]+)<\/b>/g)].map((m) => m[1])
-    expect(listed).toEqual(['improve', 'apply', 'analyze', 'harness', 'show-me', 'feedback'])
+    expect(listed).toEqual(['improve', 'interview', 'apply', 'analyze', 'harness', 'show-me', 'feedback'])
+    expect(install).toContain('<div class="skill"><b>/orangu:interview</b><div>Research outside options for one suggestion first. Then answer a few questions, and get a proposal or a second opinion. It applies nothing.</div></div>')
     expect(install).toContain('<div class="skill"><b>/orangu:show-me</b><div>Turn the evidence of one session, one repository or all sessions into a slide deck and a written report. Both are offline HTML files.</div></div>')
     expect(install).toContain('<code>/orangu:show-me</code> writes a slide deck and a written report.')
     // the other five cards in STE: one instruction to a sentence, no telegram, no "actually", no long noun
@@ -714,8 +715,8 @@ describe('site/index.src.html (authored landing source)', () => {
       '<b>/orangu:harness</b><div>Review what your harness declares against what your sessions used, in one repository or in every session on the machine. Then propose ranked changes.</div>',
       '<b>/orangu:feedback</b><div>Send candid beta feedback about Orangu itself through a private localhost form. The form shows you the exact GitHub issue to review before you open it.</div>',
     ]) expect(install).toContain(`<div class="skill">${card}</div>`)
-    // six cards fill two rows of three on a wide screen; five columns would leave one card alone
-    expect(src).toContain('@media (min-width:1000px){.skills{grid-template-columns:repeat(3,1fr)}}')
+    // seven cards fill a row of four and a row of three on a wide screen; three columns would leave one card alone
+    expect(src).toContain('@media (min-width:1000px){.skills{grid-template-columns:repeat(4,1fr)}}')
     for (const retired of ['/orangu:mega', '/orangu:watch', '/orangu:suggest']) expect(src).not.toContain(retired)
     const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => existsSync(join(root, 'plugin/skills', dir, 'SKILL.md'))).sort()
     expect(dirs).toEqual([...listed].sort())
@@ -861,9 +862,9 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     expect(llms).toContain('https://www.npmjs.com/package/orangu')
   })
 
-  it('names only the six shipped skills and every CLI verb from --help', () => {
+  it('names only the seven shipped skills and every CLI verb from --help', () => {
     const skills = [...llms.matchAll(/\/orangu:([a-z-]+)/g)].map((m) => m[1])
-    expect(new Set(skills)).toEqual(new Set(['analyze', 'improve', 'apply', 'harness', 'show-me', 'feedback']))
+    expect(new Set(skills)).toEqual(new Set(['analyze', 'improve', 'interview', 'apply', 'harness', 'show-me', 'feedback']))
     expect(llms).not.toContain('/orangu:mega')
     for (const verb of ['report', 'serve', 'repo', 'global', 'harness', 'analyze']) expect(llms).toContain(`npx orangu ${verb}`)
   })
@@ -898,7 +899,11 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // Named growth, measured 2026-10-09 (rules that hold): 39,856 B on 0f0fb4a -> 40,794 B (+938). Cause: the new
     // "Rules that did not hold" section of docs/USAGE.md (4 row kinds, the --include-text gate, the skill's hook
     // rule) and 2 README rows that name it, first cut from 1,109 B to 938 B. The cap moves 40,000 -> 40,800.
-    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(40_800)
+    // Named growth, measured 2026-10-23 (the interview skill): 40,794 B on 79ffee7 -> 41,800 B (+1,006). Cause: the
+    // seventh skill row of README.md and the /orangu:interview section of docs/DETERMINISM.md (consent before research,
+    // no evidence to the researcher, outside sources stay candidates, no file change in a second opinion). The cap moves
+    // 40,800 -> 41,801.
+    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(41_801)
   })
 
   it('never leaks a private working path', () => {

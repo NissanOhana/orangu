@@ -60,8 +60,8 @@ describe('plugin packaging', () => {
     const m = readJson('.claude-plugin/marketplace.json')
     expect(m.plugins.some((x: { name: string; source: string }) => x.name === 'orangu' && x.source === './plugin')).toBe(true)
   })
-  it('ships the six intended /orangu:* commands with valid frontmatter', () => {
-    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'show-me']
+  it('ships the seven intended /orangu:* commands with valid frontmatter', () => {
+    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'interview', 'show-me']
     const namespace = readJson('plugin/.claude-plugin/plugin.json').name
     expect(readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md'))).sort()).toEqual([...skills].sort())
     for (const s of skills) {
@@ -137,7 +137,8 @@ describe('plugin packaging', () => {
     // runs (suggest, ste), and each names the plugin CLI and the verb before its *.
     // 7 -> 27 when analyze, improve and harness lost their any-verb grants: one CLI fallback for each verb that a step
     // runs (analyze 11, improve 4, harness 8), plus apply 2, feedback 1 and show-me 1.
-    expect(nodeGrants, 'analyze 11, improve 4, harness 8, apply 2, feedback 1, show-me 1').toBe(27)
+    // 27 -> 30 when interview landed: one CLI fallback for each verb that it runs (estimate, suggest, ste).
+    expect(nodeGrants, 'analyze 11, improve 4, harness 8, apply 2, feedback 1, show-me 1, interview 3').toBe(30)
   })
 
   // apply edits a repository, so it pre-approves only what it must run with no prompt: the 2 orangu verbs that it
@@ -182,7 +183,7 @@ describe('plugin packaging', () => {
     (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
   it('no skill pre-approves every orangu verb: each orangu grant names one verb', () => {
     const skills = readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))
-    expect(skills.length, 'every skill is checked').toBe(6)
+    expect(skills.length, 'every skill is checked').toBe(7)
     for (const s of skills) {
       for (const grant of grantsOf(s).filter((g) => /^Bash\((?:orangu\b|node\b)/.test(g))) {
         expect(PATH_VERB.test(grant) || PLUGIN_CLI_VERB.test(grant), `${s}: ${grant} names one orangu verb`).toBe(true)
@@ -219,7 +220,7 @@ describe('plugin packaging', () => {
     return linked.sort()
   }
   it('each skill pre-approves exactly the orangu verbs that its text runs, in both the PATH form and the plugin CLI form', () => {
-    for (const s of ['analyze', 'improve', 'harness', 'apply', 'feedback', 'show-me']) {
+    for (const s of ['analyze', 'improve', 'harness', 'apply', 'feedback', 'show-me', 'interview']) {
       const refs = join(root, 'plugin/skills', s, 'references')
       const own = [`plugin/skills/${s}/SKILL.md`, ...(existsSync(refs) ? readdirSync(refs).filter((f) => f.endsWith('.md')).map((f) => `plugin/skills/${s}/references/${f}`) : [])]
       const runs = [...new Set(own.flatMap((path) => commandVerbs(readText(path))))].sort()
@@ -528,6 +529,35 @@ describe('plugin packaging', () => {
     expect(guide.split(/\s+/).filter(Boolean).length, 'interview guide words').toBeLessThan(620)
   })
 
+  // The interview skill (2026-10-23): outside research first, after one consent question, then an interview in the main
+  // conversation (a subagent cannot ask), then one proposal or a second opinion. The one networked agent gets the approved
+  // terms and no evidence. Researched pages stay candidates, so the manifest carries no source from them.
+  it('interview researches before it asks, in order, from the shared rules, with no web pre-approval', () => {
+    const md = readText('plugin/skills/interview/SKILL.md')
+    const fm = /^---\n([\s\S]*?)\n---/.exec(md)![1]!
+    const order = ['## 1. Bound the read and pick the mode', '## 2. Research before you ask', '## 3. Check each perspective through 5 lenses',
+      '## 4. Interview the user', '## 5. Draft mode: save one proposal', '## 6. Second-opinion mode: keep, change or drop', '## 7. Report']
+    const at = order.map((heading) => md.indexOf(heading))
+    expect(at.every((i) => i > 0), 'every stage heading exists').toBe(true)
+    expect([...at].sort((a, b) => a - b), 'the stages run in order').toEqual(at)
+    expect(md.indexOf('orangu suggest --set'), 'no store move before the interview').toBeGreaterThan(md.indexOf('## 4. Interview the user'))
+    for (const link of ['../shared/interview.md', '../shared/loop.md', '../shared/untrusted-input.md', '../shared/ste.md',
+      '../improve/references/artifact-contract.md', '../harness/references/research-sources.md']) expect(md, `links ${link}`).toContain(`](${link})`)
+    expect(fm, 'no web pre-approval: the researcher agent searches').not.toMatch(/WebSearch|WebFetch/)
+    expect(fm, 'the question tool is never pre-approved').not.toContain('AskUserQuestion')
+    expect(fm, 'runs in the main conversation').not.toMatch(/^context:/m)
+    expect(fm, 'improve and harness can hand off to it').not.toMatch(/disable-model-invocation/)
+    for (const literal of [
+      'a subagent cannot ask', 'This skill relies on the answers of the user', 'Build the search terms only from product words',
+      'Give it no evidence file and no evidence text', 'ask once, with no option marked as recommended', 'If no user can answer, start no research',
+      'In a run with no user, list the open questions and stop', 'You change no file of this record', 'Create no record and close no record',
+      'Put no outside source in the manifest', '"Not confirmed by you"', 'Keep my setup for now', 'A skip ends that question only',
+    ]) expect(md, `interview says: ${literal}`).toContain(literal)
+    const researcher = readText('plugin/agents/harness-researcher.md')
+    expect(/description:\s*(.+)/.exec(researcher)?.[1] ?? '', 'the researcher names both dispatchers').toMatch(/\/orangu:harness and \/orangu:interview/)
+    expect(researcher, 'form (b) carries no evidence').toContain('Form (b) has no evidence file')
+  })
+
   // The loop rules: what the earlier changes of a workspace taught, read before a proposal, and each new result given
   // back to the CLI. They live once in shared/loop.md, which improve and harness link, as the interview guide does. The
   // CLI measures and decides. The rules say which store step the skill runs and which words it reports.
@@ -768,6 +798,7 @@ describe('plugin packaging', () => {
       ['harness', readText('plugin/skills/harness/SKILL.md')],
       ['harness researcher', readText('plugin/agents/harness-researcher.md')],
       ['harness research policy', readText('plugin/skills/harness/references/research-sources.md')],
+      ['interview', readText('plugin/skills/interview/SKILL.md')],
     ] as const
     for (const [name, text] of surfaces) {
       expect(text, `${name} uses generic network terms`).toMatch(/generic feature(?: and|\/) change-class terms/i)
@@ -888,6 +919,7 @@ describe('plugin packaging', () => {
       ['PM analyst', 'plugin/agents/harness-pm-analyst.md'],
       ['DevEx analyst', 'plugin/agents/harness-devex-analyst.md'],
       ['researcher', 'plugin/agents/harness-researcher.md'],
+      ['interview', 'plugin/skills/interview/SKILL.md'],
     ] as const) {
       const text = withSharedRules(path)
       for (const item of ['session', 'evidence', 'tool', 'path', 'title', 'error', 'proposal text']) {
@@ -910,6 +942,7 @@ describe('plugin packaging', () => {
       ['plugin/agents/harness-pm-analyst.md', '../skills/shared/untrusted-input.md'],
       ['plugin/agents/harness-devex-analyst.md', '../skills/shared/untrusted-input.md'],
       ['plugin/agents/harness-researcher.md', '../skills/shared/untrusted-input.md'],
+      ['plugin/skills/interview/SKILL.md', '../shared/untrusted-input.md'],
     ] as const) {
       const text = readText(path)
       expect(text, `${path} links the shared rules`).toContain(`](${link})`)
@@ -923,7 +956,7 @@ describe('plugin packaging', () => {
   // build mirrors to Codex, so the file stays host-portable. The list grows until it names every shipped skill.
   const STE_RULES = 'plugin/skills/shared/ste.md'
   const STE_SENTENCE = 'Write all user-facing text in STE, as [the STE rules](../shared/ste.md) direct.'
-  const STE_SKILLS = ['improve', 'apply', 'feedback', 'analyze', 'harness', 'show-me']
+  const STE_SKILLS = ['improve', 'apply', 'feedback', 'analyze', 'harness', 'show-me', 'interview']
   it('the skills tell Claude to write user-facing text in STE, from one shared rules file', () => {
     expect(existsSync(join(root, STE_RULES)), `${STE_RULES} exists`).toBe(true)
     for (const s of STE_SKILLS) {
@@ -1020,7 +1053,7 @@ describe('plugin packaging', () => {
     const allowed = (s: string): string[] =>
       (/^allowed-tools:\s*(.+)$/m.exec(readText(`plugin/skills/${s}/SKILL.md`))?.[1] ?? '').split(',').map((grant) => grant.trim())
     const edits = (s: string): string[] => allowed(s).filter((grant) => /^Edit\b/.test(grant))
-    for (const s of ['analyze', 'improve', 'harness']) expect(edits(s), `${s} edits only its drafts`).toEqual([`Edit(~/.orangu/drafts/${s}-*.md)`])
+    for (const s of ['analyze', 'improve', 'harness', 'interview']) expect(edits(s), `${s} edits only its drafts`).toEqual([`Edit(~/.orangu/drafts/${s}-*.md)`])
     for (const s of ['apply', 'feedback', 'show-me']) expect(edits(s), `${s} has no edit grant`).toEqual([])
     expect(allowed('show-me').filter((grant) => /^Write\b/.test(grant)), 'show-me has no write grant').toEqual([])
     expect(allowed('show-me'), 'show-me has no bare orangu grant').not.toContain('Bash(orangu:*)')
@@ -1358,7 +1391,7 @@ describe('plugin packaging', () => {
   it('only the explicit research surfaces hold network tools; localhost never launches them', () => {
     const networked = AGENTS.filter((a) => fmList(agentBlock(a), 'tools').some((t) => t === 'WebSearch' || t === 'WebFetch'))
     expect(networked, 'exactly one agent may reach the network').toEqual(['harness-researcher'])
-    for (const s of ['analyze', 'apply', 'harness']) {
+    for (const s of ['analyze', 'apply', 'harness', 'interview']) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const allowed = /^allowed-tools:\s*(.+)$/m.exec(md)?.[1] ?? ''
       expect(allowed, `${s} grants no network tool`).not.toMatch(/WebSearch|WebFetch/)
@@ -1446,7 +1479,7 @@ describe('plugin packaging', () => {
   })
 
   it('every description routes away from a sibling and opens with its own job', () => {
-    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'show-me']
+    const skills = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'interview', 'show-me']
     const descriptions = new Map<string, string>()
     for (const s of skills) {
       const md = readText(`plugin/skills/${s}/SKILL.md`)
@@ -1467,9 +1500,10 @@ describe('plugin packaging', () => {
     const rows = [...readme.matchAll(/^\| `\/orangu:([a-z-]+)`/gm)].map((m) => m[1]).sort()
     expect(rows).toEqual(dirs)
     expect(readme, 'the harness row says the review interviews the user').toMatch(/interview/)
-    expect(readme.split('\n')[2], 'the catalog names the Claude Code door first').toBe('Six Claude Code skills. Start with `/orangu:improve`. Each owns one job.')
+    expect(readme.split('\n')[2], 'the catalog names the Claude Code door first').toBe('Seven Claude Code skills. Start with `/orangu:improve`. Each owns one job.')
     // 2026-10-06 200 -> 226: the show-me row, measured 26 words (199 -> 225); the ratchet below says why
-    expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 226 words').toBeLessThan(226)
+    // 2026-10-23 226 -> 253: the interview row, measured 27 words (224 -> 251)
+    expect(readme.split(/\s+/).filter(Boolean).length, 'catalog stays under 253 words').toBeLessThan(253)
   })
 
   // Ceilings, not targets: each is the value MEASURED on the day it landed. Lowering one needs nothing.
@@ -1556,9 +1590,13 @@ describe('plugin packaging', () => {
     // an older orangu on PATH that refuses --todo stopped the front door: 1 sentence now sends that exit to the loop
     // rules, whose older-CLI rule names the todo read (+13). The input line names all 4 kinds that words can name: a
     // session, finding, id or path (+3). improve is now 1,044 -> 1,117 (+73) over the base of this run.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1537, improve: 1118, analyze: 700, apply: 700, feedback: 350, 'show-me': 570 }
-    const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305 }
-    const TOTAL_DESC_CEILING = 2504 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5)
+    // 2026-10-23 interview, a seventh skill: outside research after one consent question, then the interview, then one
+    // proposal or a second opinion. Its body (1,543 words) and description (246 chars) are born at the measured value, strict,
+    // so zero headroom. The resident description total rises once, 2,504 -> 2,750, by exactly that description (measured
+    // 2,448 -> 2,694). The catalog cap rises once, 226 -> 253, by exactly its new row (27 words, 224 -> 251). No other ceiling moves.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1537, improve: 1118, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1544 }
+    const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305, interview: 247 }
+    const TOTAL_DESC_CEILING = 2750 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5); +246 for interview
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
     const split = (name: string): { desc: string; body: string } => {
       const md = readText(`plugin/skills/${name}/SKILL.md`)
@@ -1580,7 +1618,7 @@ describe('plugin packaging', () => {
       expect(total, 'always-resident description chars').toBeLessThan(TOTAL_DESC_CEILING)
     })
     it('the catalog ships next to the skills, so it is capped too', () => {
-      expect(words(readText('plugin/skills/README.md'))).toBeLessThan(226)
+      expect(words(readText('plugin/skills/README.md'))).toBeLessThan(253)
     })
   })
 
