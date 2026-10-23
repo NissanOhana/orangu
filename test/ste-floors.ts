@@ -156,6 +156,13 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // raised 96 -> 98 by the improvement screens rewrite (R2, 2026-10-06). Measured 329 sentences, 329 clean,
   // score 100 (was 310 sentences, 304 clean, score 98). The 6 findings (5 semicolons, 1 long sentence) are gone.
   'src/report/client': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // The improvement home of serve, born 2026-10-24 at measured - 2, 1 row for each module so that a finding names it.
+  // The folder row above leaves these 4 out (scripts/ste-surfaces.ts). Measured 3, 74, 6 and 2 sentences, each
+  // clean, score 100. queue-types.ts holds types only and has no row.
+  'src/report/client/home-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  'src/report/client/queue-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  'src/report/client/queue-card.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  'src/report/client/status-labels.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // B2: rule copy, and every other analyzer string
   // B2: floor 91 -> 98. Measured 46 sentences, 46 clean, score 100. The rule copy rewrite took out the 2
   // semicolons (script-candidate, fanout-opportunity) and the progressive "was waiting" (human-wait-dominates).

@@ -306,6 +306,15 @@ test('the Queue section shows the 6 groups in order, opens each row from the key
   await expect(all.locator(':scope > summary')).toContainText(/All workspaces · \d+ open$/)
   await expect(all.locator(':scope > div')).not.toHaveAttribute('aria-busy', 'true')
   await expect(all.locator('details.saved-proposal[id^="q-sg_0000000000b"]')).toHaveCount(0)
+  // The fixture store holds 1 proposal of a second workspace. The disclosure stays open when its read lands, and it
+  // draws that workspace by its folder and its path, with its row in the group of its read.
+  await expect(all).toHaveAttribute('open', '')
+  await expect(all.locator('.card-title').first()).toHaveText('other')
+  await expect(all.locator('.card-title').first().locator('xpath=following-sibling::div[1]')).toHaveText(/\/other$/)
+  const other = all.locator('#q-1-apply details.saved-proposal')
+  await expect(other).toHaveCount(1)
+  await expect(other).toHaveAttribute('id', 'q-sg_0000000000d1')
+  await expect(other.locator(':scope > summary')).toContainText('Keep one test command for the whole repository')
 
   // every row is open, so the check reads the summaries, the labels, the row copy, the commands and the controls
   const contrasts = await textContrasts(page, '#home-queue')

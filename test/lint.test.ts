@@ -190,7 +190,7 @@ describe('ratchet: the whole-harness block reaches the screen only through the s
 })
 
 /**
- * The ServeUi.proposals seam keeps the stored-proposal block and the Saved proposals inbox out of both
+ * The ServeUi.proposals seam keeps the stored-proposal block and the improvement home out of both
  * file bundles: a file report embeds `suggestions: []`, so that code never renders there. One import
  * from the file side (the screen, the aggregate seam, or either file entry) would bring its bytes back
  * into every saved report with no failing behaviour test.

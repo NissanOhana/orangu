@@ -65,3 +65,24 @@ describe('remote kickoff transport', () => {
     expect(await remoteSource().kickoff(request)).toEqual({ ok: false, kind: 'network', message: 'loopback connection closed' })
   })
 })
+
+// The app never sends a path: the read of this workspace names no cwd, so the route takes the --cwd of serve, and the
+// read of every workspace sends only all=1.
+describe('remote queue read', () => {
+  const queue = { v: 1, scope: '~/code/demo', now: 0, globalOpen: 0, counts: {}, groups: {} }
+
+  it('reads this workspace with no cwd, and every workspace with all=1 only', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => json(queue)))
+    const source = remoteSource('/local')
+    expect(await source.queue!()).toEqual(queue)
+    expect(await source.queue!(true)).toEqual(queue)
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
+    expect(urls).toEqual(['/local/api/queue', '/local/api/queue?all=1'])
+    for (const url of urls) expect(url).not.toContain('cwd')
+  })
+
+  it('gives null for a failed read, so the app keeps its last good list', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ error: 'the read failed' }, 500)))
+    expect(await remoteSource('/local').queue!()).toBeNull()
+  })
+})

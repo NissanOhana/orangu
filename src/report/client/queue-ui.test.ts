@@ -127,6 +127,28 @@ describe('the Queue section: a closed row', () => {
     }
   })
 
+  // A stored folder name or reason can hold markup. Each place draws it as text: 1 marker for each place, so a
+  // missing esc() names its place.
+  it('draws the workspace of the open row as text', () => {
+    const html = queueSection(view(readOf([item('wait', { workspace: '~/code/<img src=ws>' })])), context())
+    expect(html).toContain('<b>Workspace.</b> ~/code/&lt;img src=ws&gt;</div>')
+    expect(html).not.toContain('<img src=ws>')
+  })
+
+  it('draws an earlier record line as text, with an unknown reason as it is stored', () => {
+    const earlier = [{ id: OTHER, status: 'rejected' as const, verdict: null, reasonCode: '<img src=reason>' }]
+    const html = queueSection(view(readOf([item('wait', { earlier, earlierCount: 1 })])), context())
+    expect(html).toContain(`<li>${OTHER} · dismissed · &lt;img src=reason&gt;</li>`)
+    expect(html).not.toContain('<img src=reason>')
+  })
+
+  it('draws the folder and the path line of another workspace as text', () => {
+    const other = item('apply', { id: OTHER, ids: [OTHER], status: 'proposed', workspace: '~/code/<img src=other>', next: 'x' })
+    const html = queueSection(view(readOf([item('wait')]), { all: readOf([other], 'all') }), context())
+    expect(html).toContain('<div class="card-title" style="margin:2px 0">&lt;img src=other&gt;</div><div class="small muted mb16">~/code/&lt;img src=other&gt;</div>')
+    expect(html).not.toContain('<img src=other>')
+  })
+
   it('formats every date as YYYY-MM-DD in UTC', () => {
     expect(day(Date.parse('2026-10-02T23:59:00.000Z'))).toBe('2026-10-02')
   })

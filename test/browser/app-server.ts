@@ -34,6 +34,8 @@ const queueRecords: SuggestionRecord[] = [
   recordOf(sg(0xb4), { title: 'Read each file once, then keep it in context', statusAt: APPLIED_AT + 3_000 }),
   recordOf(sg(0xb5), { ruleId: 'cache-ttl-churn', status: 'kicked-off', statusAt: APPLIED_AT + 2_000, title: 'Keep the cache warm between turns' }),
   appliedOf(sg(0xb6), { proposal, ruleId: 'interruptions', title: 'Name the goal of the session in the first prompt' }),
+  // 1 proposal of a second workspace: only the read of every workspace holds it, and none of its sessions is of serve
+  recordOf(sg(0xd1), { status: 'proposed', statusAt: APPLIED_AT + 1_000, sessionIds: [uuid(901)], proposal: proposalOf(join(temp, 'other')), title: 'Keep one test command for the whole repository' }),
 ]
 await mkdir(appHome, { recursive: true })
 await writeFile(join(appHome, 'suggestions.jsonl'), queueRecords.map((record) => `${JSON.stringify(record)}\n`).join(''), { mode: 0o600 })

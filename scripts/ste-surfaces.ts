@@ -448,6 +448,9 @@ function tsSurface(id: string, owner: string, paths: readonly string[], options:
 
 const INSIGHTS = 'src/analyze/insights.ts'
 
+/** The modules of the improvement home (serve only) that hold copy: each is its own row. queue-types.ts holds types only. */
+const HOME_COPY_MODULES = ['src/report/client/home-ui.ts', 'src/report/client/queue-ui.ts', 'src/report/client/queue-card.ts', 'src/report/client/status-labels.ts']
+
 function ruleSurface(field: RuleField): Surface {
   return {
     id: `${INSIGHTS}#${field}`,
@@ -996,8 +999,10 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     ...srcSurfaces(files),
     jsonSurface('src/suggest/catalog.json#note', 'K', one('src/suggest/catalog.json'), (json) => strings(list(json['entries']).map((entry) => entry['note']))),
     jsonSurface('src/suggest/features.json#note', 'K', one('src/suggest/features.json'), (json) => strings(list(json['entries']).map((entry) => entry['note']))),
-    // R1, R2: the report client and the report renderer
-    tsSurface('src/report/client', 'R1, R2', ['src/report/client']),
+    // R1, R2: the report client and the report renderer. Each module of the improvement home has its own row, so a
+    // finding names the module, and the folder row leaves them out.
+    tsSurface('src/report/client', 'R1, R2', ['src/report/client'], { exclude: HOME_COPY_MODULES }),
+    ...HOME_COPY_MODULES.map((file) => tsSurface(file, 'R1, R2', [file])),
     tsSurface('src/report/*.ts', 'R1, R2', ['src/report'], { exclude: ['src/report/client'] }),
     // B2: rule copy, and every other analyzer string
     ruleSurface('title'),
