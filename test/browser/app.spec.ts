@@ -364,6 +364,170 @@ test('Review the whole harness moves focus to the copy control of the whole-harn
   expect(errors).toEqual([])
 })
 
+const REASON_LABELS = ['I do not want this change', 'It is already handled', 'The cause is somewhere else', 'It takes too much effort', 'Other reason']
+const CONFIRM_NAME = 'Dismiss this item? You cannot undo it. Dismiss does not undo a change in your files.'
+
+// The Dismiss confirm on the served fixture store. This test sends no write: a route that records each status call
+// stands between the page and the store, and the test ends with no call.
+test('the Dismiss confirm opens on its first reason, closes with Escape, and keeps its reason and its focus through a re-render', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  const posts: string[] = []
+  await page.route('**/api/suggestions/*/status', (route) => {
+    posts.push(route.request().url())
+    return route.abort()
+  })
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  const queue = page.locator('#home-queue')
+  await expect(queue.locator(':scope > summary')).toContainText('Queue · 1 due · 6 open', { timeout: 20_000 })
+  // Dismiss shows in the rows of 4 groups, and in no row that verifies or waits
+  for (const group of ['regressed', 'apply', 'review', 'running']) await expect(queue.locator(`#q-0-${group} [data-q-dismiss]`), group).toHaveCount(1)
+  for (const group of ['verdict', 'wait']) await expect(queue.locator(`#q-0-${group} [data-q-dismiss]`), group).toHaveCount(0)
+
+  const row = queue.locator('#q-0-apply details.saved-proposal')
+  await row.locator(':scope > summary').click()
+  const open = row.locator('[data-q-dismiss]')
+  await expect(open).toHaveAttribute('aria-expanded', 'false')
+  await open.click()
+  const box = row.getByRole('group', { name: CONFIRM_NAME })
+  const reasons = box.getByRole('radio')
+  const go = box.locator('[data-q-confirm]')
+  await expect(box).toBeVisible()
+  await expect(reasons.first()).toBeFocused()
+  await expect(open).toBeHidden()
+  await expect(open).toHaveAttribute('aria-expanded', 'true')
+  await expect(go).toHaveAttribute('aria-disabled', 'true')
+  expect(await reasons.evaluateAll((els) => els.map((el) => (el as HTMLInputElement).labels?.[0]?.textContent))).toEqual(REASON_LABELS)
+  await expect(box.locator('input:not([type="radio"]), textarea, [contenteditable]')).toHaveCount(0)
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+
+  // With no reason, Enter on the confirm's Dismiss sends nothing and puts focus on the first reason. The button is
+  // aria-disabled, so Playwright does not click it, and the keyboard path is the one to prove.
+  await go.focus()
+  await page.keyboard.press('Enter')
+  await expect(reasons.first()).toBeFocused()
+
+  // Escape closes the confirm, and the row's Dismiss shows again with focus
+  await page.keyboard.press('Escape')
+  await expect(box).toHaveCount(0)
+  await expect(open).toBeVisible()
+  await expect(open).toBeFocused()
+  await expect(open).toHaveAttribute('aria-expanded', 'false')
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+
+  // from the keyboard: Enter opens it, an arrow key checks the next reason, and Dismiss is on
+  await page.keyboard.press('Enter')
+  await expect(reasons.first()).toBeFocused()
+  await page.keyboard.press('ArrowDown')
+  const second = box.getByRole('radio', { name: REASON_LABELS[1] })
+  await expect(second).toBeChecked()
+  await expect(second).toBeFocused()
+  await expect(go).toHaveAttribute('aria-disabled', 'false')
+
+  // A re-render builds the screen again from nothing (the audience switch does it). The confirm is drawn again, open,
+  // with the same reason checked and focus on the same control.
+  await box.evaluate((el) => el.setAttribute('data-drawn-before', ''))
+  await page.evaluate(() => { location.hash += (location.hash.includes('?') ? '&' : '?') + 'audience=plain' })
+  await expect(page.getByRole('button', { name: 'Plain language' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(page.locator('[data-drawn-before]'), 'a new node').toHaveCount(0)
+  await expect(box).toBeVisible()
+  await expect(second).toBeChecked()
+  await expect(second).toBeFocused()
+
+  // each text of the open confirm is 4.5:1 or more against its painted ground
+  const contrasts = await textContrasts(page, '.dismiss')
+  expect(contrasts.length, 'visible texts measured').toBeGreaterThan(7)
+  expect(contrasts.filter((t) => t.ratio < 4.5), 'text under 4.5:1 in the confirm').toEqual([])
+
+  // Cancel closes it too
+  await box.getByRole('button', { name: 'Cancel' }).click()
+  await expect(box).toHaveCount(0)
+  await expect(open).toBeFocused()
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  await noHorizontalOverflow(page)
+  expect(posts).toEqual([])
+  expect(errors).toEqual([])
+})
+
+// The Dismiss writes, on a queue that the test serves, so no call reaches the shared fixture store. The status route of
+// the test refuses the middle record of a folded item with a 500.
+test('Dismiss sends 1 reason code for each folded record, newest first, says what changed, and moves focus when the row leaves', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  const single = 'sg_0000000000e9'
+  const folded = ['sg_0000000000e3', 'sg_0000000000e2', 'sg_0000000000e1']
+  const refused = folded[1]!
+  const open = new Set([single, ...folded])
+  const posted: Array<{ id: string; body: unknown }> = []
+  const rowOf = (group: 'apply' | 'review', ids: string[]) => ({
+    group, id: ids[0], ids, status: group === 'apply' ? 'proposed' : 'new', scope: 'repo', workspace: '/workspace/project', lastMoveAt: 2, earlier: [], earlierCount: 0,
+    title: group === 'apply' ? 'Keep one test command for the whole repository' : 'Read each file once, then keep it in context',
+    next: group === 'apply' ? `claude "/orangu:apply ${ids[0]}"` : `claude "/orangu:improve ${ids[0]}"`,
+  })
+  const read = () => {
+    const apply = open.has(single) ? [rowOf('apply', [single])] : []
+    const left = folded.filter((id) => open.has(id))
+    const review = left.length ? [rowOf('review', left)] : []
+    const counts = { verdict: 0, regressed: 0, apply: apply.length, review: review.length, running: 0, wait: 0, due: 0, open: apply.length + review.length }
+    return { v: 1, scope: '/workspace/project', now: 3, globalOpen: 0, counts, groups: { verdict: [], regressed: [], apply, review, running: [], wait: [] } }
+  }
+  await page.route('**/api/queue**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(read()) }))
+  await page.route('**/api/suggestions/*/status', (route) => {
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-2)!)
+    const body = route.request().postDataJSON() as { reason?: string }
+    posted.push({ id, body })
+    if (id === refused) return route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'the store refused the write' }) })
+    open.delete(id)
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id, status: 'rejected', reasonCode: body.reason }) })
+  })
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  const queue = page.locator('#home-queue')
+  const summary = queue.locator(':scope > summary')
+  await expect(summary).toContainText('Queue · 2 open', { timeout: 20_000 })
+  const status = page.locator('#home-status')
+
+  // 1 record: the row leaves the queue, the status region outside the app says so, and focus moves to the Queue
+  // summary, because the group had no other row
+  const one = queue.locator(`#q-${single}`)
+  await one.locator(':scope > summary').click()
+  await one.locator('[data-q-dismiss]').click()
+  await one.locator('.dismiss').getByText(REASON_LABELS[3]!).click()
+  await one.locator('[data-q-confirm]').click()
+  await expect(one).toHaveCount(0)
+  await expect(summary).toContainText('Queue · 1 open')
+  await expect(status).toHaveText('orangu dismissed the item.')
+  expect(await status.evaluate((el) => el.getAttribute('aria-live') === 'polite' && !el.closest('.app'))).toBe(true)
+  await expect(summary).toBeFocused()
+  expect(posted).toEqual([{ id: single, body: { status: 'rejected', reason: 'too-much-effort' } }])
+
+  // 3 folded records: the second call fails, so 1 record changed, the line says so, and no third call goes out
+  const many = queue.locator('#q-0-review details.saved-proposal')
+  await many.locator(':scope > summary').click()
+  await many.locator('[data-q-dismiss]').click()
+  const box = many.getByRole('group', { name: CONFIRM_NAME })
+  await expect(box).toContainText('This dismisses 3 records of this finding.')
+  await box.getByText(REASON_LABELS[2]!).click()
+  await box.locator('[data-q-confirm]').click()
+  const partial = 'orangu dismissed 1 of 3 records. Then it stopped. The rest did not change.'
+  await expect(box.locator('p.small')).toHaveText(partial)
+  await expect(status).toHaveText(partial)
+  expect(posted.slice(1)).toEqual(folded.slice(0, 2).map((id) => ({ id, body: { status: 'rejected', reason: 'wrong-cause' } })))
+  // the read again names the item by its next record, and the confirm stays open on the 2 records that did not change
+  await expect(many).toHaveAttribute('id', `q-${refused}`)
+  await expect(box).toContainText('This dismisses 2 records of this finding.')
+  await expect(box.getByRole('radio', { name: REASON_LABELS[2] })).toBeChecked()
+
+  // the first call fails now: nothing changed, and nothing reads as done
+  await box.locator('[data-q-confirm]').click()
+  const none = 'orangu could not dismiss the item. Nothing changed.'
+  await expect(box.locator('p.small')).toHaveText(none)
+  await expect(status).toHaveText(none)
+  await expect(box.locator('[data-q-confirm]')).toHaveAttribute('aria-disabled', 'false')
+  expect(posted.map((p) => p.id)).toEqual([single, folded[0], refused, refused])
+  await expect(many).toBeVisible()
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  // the browser logs each refused call of the test route, and nothing else
+  expect(errors.filter((e) => !e.includes('the server responded with a status of 500'))).toEqual([])
+})
+
 // A8: the harness reaches the app. The fixture repo declares one idle skill and one session carries a
 // skill_listing attachment (app-server.ts), so the populated view renders: the idle card, the injected-
 // listings table (which must scroll inside its own container at 390 px), and the copy-only command.

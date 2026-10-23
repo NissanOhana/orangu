@@ -15,13 +15,20 @@
  *
  * The controls of the home are wired once, by 1 delegated listener on the document keyed by data attributes, so a
  * re-render needs no new wiring. The status region lives on the body, outside the root that each render replaces.
+ *
+ * The Dismiss confirm (dismiss-ui.ts) lives in this module's memory: the open confirm, its checked reason and the id of
+ * its focused control. Each render draws it again and puts focus back on the same control. A step of the confirm draws
+ * only the Dismiss part of its row again, in place, so a click needs no render of the app. After a done dismiss, the
+ * queue is read again and the row leaves it, and focus moves to the next row of its group.
  */
 import type { Ctx } from './app.js'
 import type { DataSource } from './data.js'
 import type { RouteState } from './nav.js'
 import type { SuggestionScope } from '../../suggest/types.js'
-import type { QueueRead } from './queue-types.js'
+import { REJECT_REASON_CODES } from '../../suggest/reason-codes.js'
+import type { QueueRead, QueueRow } from './queue-types.js'
 import { queueSection } from './queue-ui.js'
+import { confirmOf, dismissIds, dismissLine, dismissPart, type DismissState } from './dismiss-ui.js'
 
 let queue: QueueRead | null | undefined
 let allQueue: QueueRead | null | undefined
@@ -38,6 +45,12 @@ let focusQueue = false
 let source: DataSource | undefined
 let screen = ''
 let rerender: () => void = () => {}
+/** the open Dismiss confirm: each render draws it again */
+let confirm: DismissState | undefined
+/** the id of the focused control of the confirm: a render puts focus back on it */
+let focusId: string | undefined
+/** after a done dismiss: the row that leaves, and the disclosure whose summary takes focus when it is gone */
+let leaving: { row: string; next: string } | undefined
 
 const shown = (): boolean => screen === 'suggest' || screen === 'overview'
 
@@ -73,6 +86,7 @@ async function readQueue(): Promise<void> {
     queue = read
     stale = false
     refreshFailed = false
+    pruneConfirm()
   } else if (queue) {
     refreshFailed = true
     focusQueue = false
@@ -97,6 +111,7 @@ async function readAll(): Promise<void> {
   }
   allInFlight = false
   allQueue = read ?? (allQueue || null)
+  if (read) pruneConfirm()
   if (shown()) rerender()
 }
 
@@ -106,8 +121,107 @@ function readAgain(): void {
   if (allQueue !== undefined) void readAll()
 }
 
-/** After each render of the app: move focus where a control asked for it. */
+/** Every row of the 2 reads. */
+function rows(): QueueRow[] {
+  return [queue, allQueue].flatMap((read) => (read ? Object.values(read.groups).flat() : []))
+}
+
+/** The row that holds the confirm `c`, in the last reads. */
+const rowOf = (c: DismissState | undefined): QueueRow | undefined => rows().find((row) => confirmOf(row, c))
+
+/** A confirm whose row left the reads goes, unless its calls still run. */
+function pruneConfirm(): void {
+  if (!confirm || confirm.busy || rowOf(confirm)) return
+  confirm = undefined
+  focusId = undefined
+}
+
+/** Draw the Dismiss part of `row` again in place, with no render of the app, then put focus on the control `focus`. */
+function redraw(row: QueueRow, key: string, focus?: string): void {
+  const part = document.getElementById(`qx-${key}`)
+  if (part) part.outerHTML = dismissPart(row, confirm)
+  if (!focus) return
+  focusId = focus
+  document.getElementById(focus)?.focus()
+}
+
+/** The row's Dismiss: open its confirm, hide the button, and put focus on the first reason. 1 confirm at a time. */
+function openConfirm(id: string): void {
+  const row = rows().find((r) => r.id === id)
+  if (!row || confirm?.busy) return
+  const before = confirm && rowOf(confirm)
+  const beforeKey = confirm?.key
+  confirm = { key: row.id, ids: [...row.ids], busy: false, done: false, line: '' }
+  // the person works on another row now, so a row that leaves later takes no focus from this one
+  leaving = undefined
+  if (before && beforeKey !== undefined && before !== row) redraw(before, beforeKey)
+  redraw(row, row.id, `qd-${row.id}-${REJECT_REASON_CODES[0]}`)
+}
+
+/** Cancel and Escape: close the confirm, show the row's Dismiss again, and put focus on it. */
+function cancelConfirm(): void {
+  const c = confirm
+  if (!c || c.busy || c.done) return
+  const row = rowOf(c)
+  confirm = undefined
+  if (row) redraw(row, c.key, `qd-${row.id}-open`)
+}
+
+/** A checked reason. Only a code of the fixed list is kept, whatever the value of the option says. */
+function pickReason(value: string): void {
+  const code = REJECT_REASON_CODES.find((known) => known === value)
+  if (!confirm || !code || confirm.done) return
+  confirm.reason = code
+  if (!confirm.busy) document.getElementById(`qd-${confirm.key}-go`)?.setAttribute('aria-disabled', 'false')
+}
+
+/**
+ * The confirm's Dismiss. With no reason, focus moves to the first reason and nothing is sent. Else 1 call for each
+ * folded id, newest first, which stops at the first failure. The line says how many records changed. After a stop,
+ * the confirm stays open and holds only the ids that did not change. When any record changed, the queue is read again.
+ */
+async function confirmDismiss(ds: DataSource): Promise<void> {
+  const c = confirm
+  const row = rowOf(c)
+  if (!c || !row || c.busy || c.done) return
+  if (!c.reason) {
+    document.getElementById(`qd-${c.key}-${REJECT_REASON_CODES[0]}`)?.focus()
+    return
+  }
+  const go = `qd-${c.key}-go`
+  const total = c.ids.length
+  // where focus goes when the row leaves: the next row of its group, else the row before it, else the Queue summary
+  const element = document.getElementById(`q-${row.id}`)
+  const next = (element?.nextElementSibling ?? element?.previousElementSibling)?.id || 'home-queue'
+  c.busy = true
+  c.line = 'orangu dismisses the item.'
+  redraw(row, c.key, go)
+  announce(c.line)
+  const done = await dismissIds(ds, c.ids, c.reason)
+  c.busy = false
+  c.done = done === total
+  c.line = dismissLine(done, total)
+  if (!c.done) c.ids = c.ids.slice(done)
+  announce(c.line)
+  // a read can land while the calls run: it can name the row by its next record, or hold it no more
+  const now = rowOf(c)
+  if (c.done) leaving = { row: `q-${(now ?? row).id}`, next }
+  if (now && confirm === c) redraw(now, c.key, go)
+  pruneConfirm()
+  if (!now) afterRender()
+  if (done) readAgain()
+}
+
+/** After each render of the app: move focus where a control asked for it, or back to the confirm control it was on. */
 function afterRender(): void {
+  if (leaving && !document.getElementById(leaving.row)) {
+    const next = document.getElementById(leaving.next)?.querySelector<HTMLElement>(':scope > summary') ?? document.querySelector<HTMLElement>('#home-queue > summary')
+    leaving = undefined
+    next?.focus()
+    return
+  }
+  const active = document.activeElement
+  if (focusId && (!active || active === document.body)) document.getElementById(focusId)?.focus({ preventScroll: true })
   if (!focusQueue || !queue) return
   const summary = document.querySelector<HTMLElement>('#home-queue > summary')
   if (!summary) return
@@ -124,14 +238,39 @@ function jumpToMega(): void {
   mega.querySelector<HTMLElement>('.btn-primary')?.focus({ preventScroll: true })
 }
 
-/** The listeners of the home: 1 delegated click, 1 toggle in the capture phase, the live frames and the render hook. */
+/**
+ * The listeners of the home: 1 delegated click, 1 toggle in the capture phase, the reason options, Escape in the
+ * confirm, the focus of the confirm controls, the live frames and the render hook.
+ */
 function wire(ds: DataSource): void {
   document.addEventListener('click', (event) => {
-    const control = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-q-count],[data-q-mega]') : null
+    const control = event.target instanceof Element ? event.target.closest<HTMLElement>('[data-q-count],[data-q-mega],[data-q-dismiss],[data-q-confirm],[data-q-cancel]') : null
     if (!control) return
     if (control.hasAttribute('data-q-mega')) return jumpToMega()
+    if (control.hasAttribute('data-q-dismiss')) return openConfirm(control.getAttribute('data-q-dismiss') ?? '')
+    if (control.hasAttribute('data-q-confirm')) return void confirmDismiss(ds)
+    if (control.hasAttribute('data-q-cancel')) return cancelConfirm()
     focusQueue = true
     readAgain()
+  })
+  document.addEventListener('change', (event) => {
+    const option = event.target
+    if (option instanceof Element && option.hasAttribute('data-q-reason')) pickReason((option as HTMLInputElement).value)
+  })
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && event.target instanceof Element && event.target.closest('.dismiss')) cancelConfirm()
+  })
+  document.addEventListener('focusin', (event) => {
+    const id = event.target instanceof Element ? event.target.id : ''
+    focusId = id.startsWith('qd-') ? id : undefined
+  })
+  document.addEventListener('focusout', (event) => {
+    const left = event.target
+    if (!(left instanceof Element) || left.id !== focusId) return
+    // A render removes the control, so its id stays. A click on the page leaves the control in place with no focus.
+    setTimeout(() => {
+      if (left.isConnected && focusId === left.id && document.activeElement !== left) focusId = undefined
+    })
   })
   // `toggle` does not bubble, so the document hears it in the capture phase
   document.addEventListener(
@@ -180,7 +319,7 @@ export function homeSections(ctx: Ctx, scope: SuggestionScope): string {
   if (ctx.data.mode !== 'serve') return ''
   const records = new Map(ctx.data.suggestions.map((record) => [record.id, record]))
   const section = queueSection(
-    { main: queue, all: allQueue, stale, refreshFailed, closed },
+    { main: queue, all: allQueue, stale, refreshFailed, closed, confirm },
     {
       records,
       storeEmpty: !ctx.data.suggestions.length,

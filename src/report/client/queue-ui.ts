@@ -21,6 +21,7 @@ import { commandBlock } from './components/command.js'
 import { emptyHero, emptyNote } from './components/empty.js'
 import { kickoffFailureMessage } from './suggest-rows.js'
 import { changeClassLabel, statusLabel } from './status-labels.js'
+import { confirmOf, dismissPart, type DismissState } from './dismiss-ui.js'
 import type { QueueGroupKey, QueueRead, QueueRow } from './queue-types.js'
 
 export interface QueueView {
@@ -34,6 +35,8 @@ export interface QueueView {
   refreshFailed: boolean
   /** the ids of the disclosures that start open and that the person closed once */
   closed: ReadonlySet<string>
+  /** the open Dismiss confirm: its row renders open, with the confirm in it */
+  confirm?: DismissState
 }
 
 export interface QueueContext {
@@ -152,7 +155,7 @@ function triedBefore(item: QueueRow): string {
 }
 
 /** 1 row: closed, the title and its line. Open, the parts of the row, in order. A part with no data does not show. */
-function rowHtml(item: QueueRow, dot: string, context: QueueContext): string {
+function rowHtml(item: QueueRow, dot: string, context: QueueContext, confirm: DismissState | undefined): string {
   const record = context.records.get(item.id)
   const id = esc(item.id)
   const sessions =
@@ -177,8 +180,9 @@ function rowHtml(item: QueueRow, dot: string, context: QueueContext): string {
     item.group === 'verdict'
       ? '<p class="small muted sg-foot">orangu grades at 3 and at 10 later sessions, and never between them. More looks raise the chance of a false win.</p>'
       : '',
+    dismissPart(item, confirm),
   ]
-  return `<details class="saved-proposal" id="q-${id}"><summary><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span><span class="grow"><b>${esc(item.title)}</b><span class="q-meta small muted">${esc(metaLine(item, record))}</span></span></summary><div class="saved-proposal-body">${body.join('')}</div></details>`
+  return `<details class="saved-proposal" id="q-${id}"${confirmOf(item, confirm) ? ' open' : ''}><summary><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span><span class="grow"><b>${esc(item.title)}</b><span class="q-meta small muted">${esc(metaLine(item, record))}</span></span></summary><div class="saved-proposal-body">${body.join('')}</div></details>`
 }
 
 /** The group cards of 1 workspace: 1 card for each group with rows, in order. `n` is the order of the workspace on the page. */
@@ -188,7 +192,7 @@ function groupCards(n: number, groups: Partial<Record<QueueGroupKey, QueueRow[]>
     if (!rows.length) return ''
     const id = `q-${n}-${key}`
     const open = rows.length <= OPEN_GROUP_MAX && !view.closed.has(id)
-    return `<details class="card mb16" id="${id}"${open ? ' open' : ''}><summary class="card-head"><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span>${label}<span class="pill">${num(counts[key] ?? rows.length)}</span>${key === 'verdict' ? '<span class="tag good">Due</span>' : ''}</summary><div class="q-rows">${rows.map((row) => rowHtml(row, dot, context)).join('')}</div></details>`
+    return `<details class="card mb16" id="${id}"${open ? ' open' : ''}><summary class="card-head"><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span>${label}<span class="pill">${num(counts[key] ?? rows.length)}</span>${key === 'verdict' ? '<span class="tag good">Due</span>' : ''}</summary><div class="q-rows">${rows.map((row) => rowHtml(row, dot, context, view.confirm)).join('')}</div></details>`
   }).join('')
 }
 

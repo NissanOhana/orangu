@@ -157,10 +157,12 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // score 100 (was 310 sentences, 304 clean, score 98). The 6 findings (5 semicolons, 1 long sentence) are gone.
   'src/report/client': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // The improvement home of serve, born 2026-10-24 at measured - 2, 1 row for each module so that a finding names it.
-  // The folder row above leaves these 4 out (scripts/ste-surfaces.ts). Measured 3, 74, 6 and 2 sentences, each
+  // The folder row above leaves each of them out (scripts/ste-surfaces.ts). Measured 3, 74, 6 and 2 sentences, each
   // clean, score 100. queue-types.ts holds types only and has no row.
   'src/report/client/home-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'src/report/client/queue-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // The Dismiss confirm of the Queue rows, born 2026-10-24 at measured - 2: 13 sentences, each clean, score 100.
+  'src/report/client/dismiss-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'src/report/client/queue-card.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'src/report/client/status-labels.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // B2: rule copy, and every other analyzer string

@@ -86,3 +86,33 @@ describe('remote queue read', () => {
     expect(await remoteSource('/local').queue!()).toBeNull()
   })
 })
+
+// The Dismiss write: the body holds the status and 1 reason code of the fixed list, or no reason. It holds no text of
+// the person and no path, and a failed write gives null, so the app never shows it as done.
+describe('remote status write', () => {
+  const rejected = { ...record, status: 'rejected', reasonCode: 'wrong-cause' }
+
+  it('posts the status and the reason code, and nothing else', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(rejected)))
+    expect(await remoteSource('/local').setStatus('sg_test', 'rejected', 'wrong-cause')).toEqual(rejected)
+    const [url, init] = vi.mocked(fetch).mock.calls[0]!
+    expect(url).toBe('/local/api/suggestions/sg_test/status')
+    expect(init).toMatchObject({ method: 'POST', headers: { 'content-type': 'application/json' } })
+    expect(JSON.parse(String(init?.body))).toEqual({ status: 'rejected', reason: 'wrong-cause' })
+  })
+
+  it('posts no reason key when no code is given', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json(rejected)))
+    await remoteSource('/local').setStatus('sg_test', 'rejected')
+    expect(JSON.parse(String(vi.mocked(fetch).mock.calls[0]![1]?.body))).toEqual({ status: 'rejected' })
+  })
+
+  it('gives null for a refused write, a broken body and a network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json({ error: 'reason must be 1 of the codes' }, 400)))
+    expect(await remoteSource('/local').setStatus('sg_test', 'rejected', 'other')).toBeNull()
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('not json', { status: 200 }))
+    expect(await remoteSource('/local').setStatus('sg_test', 'rejected', 'other')).toBeNull()
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('loopback connection closed'))
+    expect(await remoteSource('/local').setStatus('sg_test', 'rejected', 'other')).toBeNull()
+  })
+})

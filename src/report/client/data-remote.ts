@@ -8,6 +8,7 @@ import type { Aggregate } from '../../analyze/aggregate.js'
 import type { HarnessReport } from '../../harness/types.js'
 import type { AppData, SuggestionViewRecord } from '../../model/app-data.js'
 import type { KickoffRequest, KickoffResponse, SuggestionStatus } from '../../suggest/types.js'
+import type { RejectReasonCode } from '../../suggest/reason-codes.js'
 import type { ServeEvent } from '../../serve/types.js'
 import type { DataSource } from './data.js'
 import type { QueueRead } from './queue-types.js'
@@ -129,12 +130,13 @@ export function remoteSource(base = ''): DataSource {
         return { ok: false, kind: 'protocol', status: r.status, message: 'localhost returned an incomplete response.', ...(body ? { response: body } : {}) }
       return { ok: true, response: body as KickoffResponse }
     },
-    async setStatus(id, status: SuggestionStatus) {
+    // the body holds the status and 1 reason code or none: never a text of the person, and never a path
+    async setStatus(id, status: SuggestionStatus, reason?: RejectReasonCode) {
       try {
         const r = await fetch(base + '/api/suggestions/' + encodeURIComponent(id) + '/status', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ status }),
+          body: JSON.stringify(reason ? { status, reason } : { status }),
         })
         if (!r.ok) return null
         return (await r.json()) as SuggestionViewRecord

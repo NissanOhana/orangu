@@ -301,6 +301,26 @@ describe('the Queue section: the open row', () => {
   })
 })
 
+describe('the Queue section: Dismiss', () => {
+  it('offers Dismiss in the rows of Regressed, Ready to apply, To review and Running, and in no row of Ready to verify or Waiting', () => {
+    const html = queueSection(view(oneEach()), context())
+    const starts = GROUPS.map((g) => html.indexOf(`id="q-0-${g}"`))
+    GROUPS.forEach((group, i) => {
+      const card = html.slice(starts[i], starts[i + 1] ?? html.length)
+      expect(card.match(/data-q-dismiss=/g)?.length ?? 0, group).toBe(['regressed', 'apply', 'review', 'running'].includes(group) ? 1 : 0)
+    })
+  })
+
+  it('draws the open confirm in its row, after the next step, and the row renders open', () => {
+    const confirm = { key: ID, ids: [ID], busy: false, done: false, line: '' }
+    const html = queueSection(view(readOf([item('apply', { status: 'proposed', next: 'x' })]), { confirm }), context())
+    expect(html).toContain(`<details class="saved-proposal" id="q-${ID}" open><summary>`)
+    const body = rowBody(html)
+    expect(body.indexOf(`<div class="sg-proposal dismiss" id="qd-${ID}"`)).toBeGreaterThan(body.indexOf('<div class="sg-handoffs">'))
+    expect(queueSection(view(readOf([item('apply', { status: 'proposed', next: 'x' })])), context())).toContain(`<details class="saved-proposal" id="q-${ID}"><summary>`)
+  })
+})
+
 describe('the Queue section: the states', () => {
   it('loading: says what orangu counts, and the body is busy', () => {
     const html = queueSection(view(undefined), context())

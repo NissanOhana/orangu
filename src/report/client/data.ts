@@ -8,6 +8,7 @@ import type { Aggregate } from '../../analyze/aggregate.js'
 import type { HarnessReport } from '../../harness/types.js'
 import type { AppData, AppMode, SuggestionViewRecord } from '../../model/app-data.js'
 import type { KickoffRequest, KickoffResponse, SuggestionRecord, SuggestionStatus } from '../../suggest/types.js'
+import type { RejectReasonCode } from '../../suggest/reason-codes.js'
 import type { ServeEvent } from '../../serve/types.js'
 import type { QueueRead } from './queue-types.js'
 import { kickoffCommands, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
@@ -31,8 +32,8 @@ export interface DataSource {
   queue?(all?: boolean): Promise<QueueRead | null>
   /** file: local copy-text only; serve: POST kickoff */
   kickoff(req: KickoffRequest): Promise<KickoffResult>
-  /** file: null; serve: status transition */
-  setStatus(id: string, status: SuggestionStatus): Promise<SuggestionViewRecord | null>
+  /** file: null; serve: status transition, with 1 reason code of the fixed list or none; null when the write failed */
+  setStatus(id: string, status: SuggestionStatus, reason?: RejectReasonCode): Promise<SuggestionViewRecord | null>
   /** file: no-op; serve: server-sent events */
   subscribe(fn: (ev: ServeEvent) => void): () => void
   /** file: null (Blob download instead); serve: an export URL */
