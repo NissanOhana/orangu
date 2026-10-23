@@ -64,7 +64,7 @@ Record provenance honestly:
 
 ## 4. Save one bounded proposal
 
-Write no proposal when evidence is missing, already addressed, or too weak. Say why. Use `rejected` only when the user's workflow calls for closing the record.
+Write no proposal when evidence is missing, already addressed, or too weak. Say why. Close a record only when the user asks. Ask for 1 of the 5 reason codes of [the loop rules](../shared/loop.md). Pass it with `--reason '<code>'`.
 
 For a direct evidence finding, create or reuse its canonical record with the emitted `suggestionId` and `findingToken`: `orangu suggest '<suggestionId>' --finding '<findingToken>' --json --quiet`. Move a `new` or `failed` record to `kicked-off` before proposing. Never overwrite or regress an existing `proposed`, `applied`, `verified`, or `rejected` record.
 

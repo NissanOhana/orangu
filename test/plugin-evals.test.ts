@@ -32,6 +32,8 @@ function frontmatter(path: string): Frontmatter {
 }
 const list = (value: string | undefined): string[] =>
   (value ?? '').replace(/^\[|\]$/g, '').split(',').map((item) => item.trim()).filter(Boolean)
+// a YAML single-quoted scalar: drop the quotes and read each '' as '
+const scalar = (value = ''): string => (/^'.*'$/.test(value) ? value.slice(1, -1).replace(/''/g, "'") : value)
 
 // a case is a directory holding prompt.md or case.yaml; results/ and mocks/ are never cases
 function caseDirs(dir = EVALS): string[] {
@@ -218,29 +220,51 @@ describe('plugin eval suite', () => {
     // A run grants no Bash, so it cannot reach `orangu suggest`, and the reply is what a run can show. So each case
     // asks, in one regex, for the words of one loop step: the lesson read, the record step, the reason codes, or the
     // quality guard of a token check. The improve skill, its artifact contract or the loop rules hold those words. The
-    // prompt of the case does not, so a reply cannot pass by an echo of the prompt.
-    const LOOP_CASES: Record<string, string> = {
-      'improve-checks-what-was-tried-before': 'names-the-lesson-read.md',
-      'improve-dismiss-keeps-a-reason': 'names-the-reason-codes.md',
-      'improve-token-proposal-names-a-target-check': 'names-a-quality-guard.md',
-      'improve-verify-records-the-result': 'names-the-record-step.md',
+    // prompt of the case does not, so a reply cannot pass by an echo of the prompt. Each case also keeps the graders
+    // that it is built on, and its step grader counts in both arms: `match: not_contains` would pass a reply with no
+    // such words, and `arm: with-only` would leave the step out of the score.
+    const LOOP_CASES: Record<string, { step: string; built: string[] }> = {
+      'improve-checks-what-was-tried-before': {
+        step: 'names-the-lesson-read.md',
+        built: ['skill-fired.md', 'no-invented-history.md', 'names-the-lesson-read.md', 'no-transcript-read.md'],
+      },
+      'improve-dismiss-keeps-a-reason': { step: 'names-the-reason-codes.md', built: ['skill-fired.md', 'echoes-the-id.md', 'no-claimed-dismissal.md'] },
+      'improve-token-proposal-names-a-target-check': { step: 'names-a-quality-guard.md', built: ['skill-fired.md', 'target-and-guard.md', 'no-transcript-read.md'] },
+      'improve-verify-records-the-result': {
+        step: 'names-the-record-step.md',
+        built: ['skill-fired.md', 'echoes-the-id.md', 'names-the-verify-steps.md', 'no-claimed-verdict.md'],
+      },
     }
     const skillText = ['plugin/skills/improve/SKILL.md', 'plugin/skills/improve/references/artifact-contract.md', 'plugin/skills/shared/loop.md']
       .map(readText).join('\n')
-    const scalar = (value = ''): string => (/^'.*'$/.test(value) ? value.slice(1, -1).replace(/''/g, "'") : value)
-    for (const [name, file] of Object.entries(LOOP_CASES)) {
+    for (const [name, { step: file, built }] of Object.entries(LOOP_CASES)) {
       const dir = `${EVALS}/${name}`
       expect(cases, `${dir} is a case`).toContain(dir)
       const { fields, body } = frontmatter(`${dir}/prompt.md`)
       expect(list(fields.tags), `${dir} is a train case`).toContain('train')
       const gs = graders(dir)
       expect(gs.map(firesSkill), `${dir} expects improve to fire`).toContain('improve')
+      for (const grader of built) expect(existsSync(join(root, dir, 'graders', grader)), `${dir} keeps its grader ${grader}`).toBe(true)
       const step = gs.find((g) => g.file === `${dir}/graders/${file}`)
       expect(step?.fields.type, `${dir} grades its loop step with ${file}`).toBe('regex')
+      expect(step?.fields.match, `${file} asks for the words, so a reply without them fails`).toBeUndefined()
+      expect(step?.fields.arm, `${file} counts in both arms`).toBeUndefined()
       const re = new RegExp(scalar(step!.fields.pattern), step!.fields.flags ?? '')
       expect(re.test(skillText), `${file} asks for words that the skill text holds`).toBe(true)
       expect(re.test(body), `${file} asks for words that the prompt does not hold`).toBe(false)
     }
+  })
+
+  it('the dismiss case fails a reply that passes free text as a reason, in both flag forms that the CLI reads', () => {
+    // the CLI reads `--reason <value>` and `--reason=<value>` the same way (src/cli/args.ts, the `=` split)
+    const g = graders(`${EVALS}/improve-dismiss-keeps-a-reason`).find((x) => x.file.endsWith('/no-free-text-reason.md'))
+    expect(g?.fields.type).toBe('regex')
+    expect(g?.fields.match).toBe('not_contains')
+    const re = new RegExp(scalar(g!.fields.pattern), g!.fields.flags ?? '')
+    for (const reply of ["--reason 'not for us'", '--reason "not for us"', "--reason='not for us'", '--reason="not for us"'])
+      expect(re.test(reply), `the grader finds ${reply}`).toBe(true)
+    for (const reply of ["--reason 'not-wanted'", '--reason=not-wanted', "--reason='other'", "--reason '<code>' --json --quiet"])
+      expect(re.test(reply), `the grader lets ${reply} through`).toBe(false)
   })
 
   it('documents how to improve the skills against the suite without fooling yourself', () => {

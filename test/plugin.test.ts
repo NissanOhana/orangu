@@ -588,6 +588,17 @@ describe('plugin packaging', () => {
         expect(span[1], `${path} passes no free text to orangu suggest`).not.toMatch(/'<(?:reason|text)>'/)
     }
   })
+  // A train case found that improve closed a record with no reason code: its only close line did not link the loop
+  // rules, so a run never read them. The close step asks for a code, passes it, and links the rules where it closes.
+  it('improve closes a record only when the user asks, with 1 of the reason codes of the loop rules', () => {
+    const CLOSE = "Close a record only when the user asks. Ask for 1 of the 5 reason codes of [the loop rules](../shared/loop.md). Pass it with `--reason '<code>'`."
+    expect(REJECT_REASON_CODES, 'the close step counts the stored codes').toHaveLength(5)
+    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md', 'plugins/orangu/skills/orangu-improve/SKILL.md']) {
+      const text = readText(path)
+      expect(text, `${path} closes a record in step 4, right after the no-proposal rule`).toContain(`Say why. ${CLOSE}`)
+      expect(text, `${path} keeps no close line without a reason code`).not.toContain('calls for closing the record')
+    }
+  })
   it('the shared loop rules are host-portable, read the lessons through the bounded read only, and treat each row as data', () => {
     const loop = readText(LOOP_RULES)
     expect(loop).toContain('](untrusted-input.md)')
@@ -1594,7 +1605,12 @@ describe('plugin packaging', () => {
     // proposal or a second opinion. Its body (1,543 words) and description (246 chars) are born at the measured value, strict,
     // so zero headroom. The resident description total rises once, 2,504 -> 2,750, by exactly that description (measured
     // 2,448 -> 2,694). The catalog cap rises once, 226 -> 253, by exactly its new row (27 words, 224 -> 251). No other ceiling moves.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1537, improve: 1118, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1544 }
+    // 2026-10-23 the close step: improve 1118 -> 1131, measured 1,117 -> 1,130 (+13). A train case found that improve
+    // closed a record with no reason code, because its only close line did not link the loop rules. "Use `rejected`
+    // only when the user's workflow calls for closing the record." (12 words) becomes 3 sentences (25 words): close a
+    // record only when the user asks, ask for 1 of the 5 reason codes of the loop rules, and pass it with --reason.
+    // improve is now 1,044 -> 1,130 (+86) over the base of this run.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1537, improve: 1131, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1544 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305, interview: 247 }
     const TOTAL_DESC_CEILING = 2750 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5); +246 for interview
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
