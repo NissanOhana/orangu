@@ -11,7 +11,10 @@ import type { SessionRef } from '../discover/discover.js'
 import { SuggestionStore } from '../suggest/store.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi, type Caps } from './tty.js'
 import { aggregateBlock, aggregateOffer, analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, rows, valueBudget, type NextStep, type PickRow } from './summary.js'
-import { persistNextStep } from './next-step.js'
+import { footerDue, persistNextStep, queueCounts } from './next-step.js'
+import { QUEUE_CHECK_BYTES } from '../suggest/queue-read.js'
+import { countingQueueReads, memoryQueueStore } from '../../test/fixtures/suggestion-queue.js'
+import { NOW as QUEUE_NOW, WORKSPACE, appliedOf, sg } from '../../test/fixtures/suggestion-records.js'
 import { aggregate } from '../analyze/aggregate.js'
 import { outcomeHeadline } from '../report/client/derive.js'
 
@@ -357,6 +360,82 @@ describe('persistNextStep', () => {
     const step = await persistNextStep(a, false, { store: () => ((touched = true), new SuggestionStore({ home: '/nonexistent' })) })
     expect(step).toEqual({})
     expect(touched).toBe(false)
+    // the due count comes before the early return, so a clean session gets it too
+    expect(await persistNextStep(a, false, { due: async () => 2 })).toEqual({ due: 2 })
+  })
+
+  it('adds the due count to a finding, and leaves it out when the read gives 0 or fails', async () => {
+    const a = await analyzed(heavyBuilder())
+    const home = mkdtempSync(join(tmpdir(), 'orangu-next-step-'))
+    const store = () => new SuggestionStore({ home })
+    const counted = await persistNextStep(a, false, { store, due: async () => 3 })
+    expect(counted.due).toBe(3)
+    expect(counted.next).toMatch(/^claude "\/orangu:improve sg_[0-9a-f]{12}"$/)
+    expect(await persistNextStep(a, false, { store, due: async () => 0 })).not.toHaveProperty('due')
+    const failed = await persistNextStep(a, false, {
+      store,
+      due: async () => {
+        throw new Error('EACCES: permission denied, open')
+      },
+    })
+    expect(failed).not.toHaveProperty('due')
+    expect(failed.next).toBe(counted.next)
+  })
+})
+
+describe('footerDue', () => {
+  it('counts only cached checks and reads no transcript, so an item with no cache entry is not due yet', async () => {
+    const { loads, reads } = countingQueueReads(memoryQueueStore([appliedOf(sg(1))]))
+    expect(await footerDue(reads, { cwd: WORKSPACE, now: QUEUE_NOW })).toBe(0)
+    expect(loads).toEqual([])
+    // the full check of the same queue reads the sessions and finds the item due
+    expect((await queueCounts(WORKSPACE, QUEUE_NOW, QUEUE_CHECK_BYTES, reads)).due).toBe(1)
+    expect(loads.length).toBeGreaterThan(0)
+  })
+
+  it('counts 0 in a folder with no open record', async () => {
+    const { reads } = countingQueueReads(memoryQueueStore([appliedOf(sg(1))]))
+    expect(await footerDue(reads, { cwd: '/w/other', now: QUEUE_NOW })).toBe(0)
+  })
+})
+
+describe('the due row of the footer', () => {
+  const DUE = 'claude "/orangu:improve"'
+  const dueRow = (lines: string[]): string | undefined => lines.map(stripAnsi).find((l) => l.startsWith('  due '))
+
+  it('prints the improve handoff, and its note when the note fits: not at 60 columns', () => {
+    expect(dueRow(nextStepLines(capsAt(80), { ...STEP, due: 2 }))).toBe(`  due      ${DUE}    (2 ready for a verdict)`)
+    expect(dueRow(nextStepLines(capsAt(120), { ...STEP, due: 2 }))).toBe(`  due      ${DUE}    (2 ready for a verdict)`)
+    expect(dueRow(nextStepLines(capsAt(60), { ...STEP, due: 2 }))).toBe(`  due      ${DUE}`)
+    // the command is a paste target: whole at 40 columns too
+    expect(dueRow(nextStepLines(capsAt(40), { ...STEP, due: 2 }))).toBe(`  due      ${DUE}`)
+  })
+
+  it('follows the finding row on a clean session, and comes before the plugin row otherwise', () => {
+    expect(nextStepLines(capsAt(80), { due: 1 }).map(stripAnsi)).toEqual(['  finding  none: this session ran clean', `  due      ${DUE}    (1 ready for a verdict)`])
+    const lines = nextStepLines(capsAt(80), { ...STEP, due: 1 }).map(stripAnsi)
+    const due = lines.findIndex((l) => l.startsWith('  due '))
+    expect(lines[due - 1]).toBe('  next     claude "/orangu:improve sg_0f0f0f0f0f0f"')
+    expect(lines[due + 1]).toBe('  plugin   /plugin marketplace add NissanOhana/orangu')
+  })
+
+  it('prints no row when nothing is due', () => {
+    for (const step of [STEP, { ...STEP, due: 0 }, {}, { due: 0 }]) expect(dueRow(nextStepLines(capsAt(80), step)), JSON.stringify(step)).toBeUndefined()
+  })
+
+  it.each([60, 80, 120])('fits the report footer, the brief and the clean footer with a due row at %i columns', async (columns) => {
+    const caps = capsAt(columns)
+    const a = await analyzed(heavyBuilder())
+    const step: NextStep = { ...STEP, due: 2 }
+    const views = {
+      reportFooter: reportFooter(caps, { path: '/var/folders/1x/5tq6y5g95l5c2vxg2l7nzf9w0000gn/T/orangu-bbbbbbbb.html', opened: true, step }),
+      briefBlock: briefBlock(caps, a, 'Title', step, { hint: true }),
+      clean: nextStepLines(caps, { due: 2 }),
+    }
+    for (const [label, lines] of Object.entries(views)) {
+      expect(dueRow(lines), `${columns} ${label}`).toMatch(/^ {2}due {6}claude "\/orangu:improve"/)
+      assertFits(lines, caps, `${columns} ${label}`)
+    }
   })
 })
 

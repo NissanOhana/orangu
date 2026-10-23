@@ -823,10 +823,11 @@ const memoryStore = {
 /**
  * Bare `orangu`, `orangu analyze` and its next step, at MACHINE_CAPS (80 columns, no colour). The header title
  * is the session title, which the transcript wrote, not orangu: it is read as the id fallback that the CLI
- * prints for a session with no title (src/cli/main.ts displayTitle).
+ * prints for a session with no title (src/cli/main.ts displayTitle). The due row counts the queue of the fixture
+ * store, so the row and its note are scored too.
  */
 export async function sessionTerminalViews(source: string, a: Analysis): Promise<RenderedView[]> {
-  const step = await persistNextStep(a, CLI_REDACTION, { store: () => memoryStore as never })
+  const step = await persistNextStep(a, CLI_REDACTION, { store: () => memoryStore as never, due: async () => queueFixture().counts.due })
   const title = a.session.id.slice(0, 12)
   return [
     { file: `${source}#brief`, lines: briefBlock(MACHINE_CAPS, a, title, step, { hint: true }) },

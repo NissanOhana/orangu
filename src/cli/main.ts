@@ -32,7 +32,7 @@ import { redactValue, type RedactOptions } from '../redact/redact.js'
 import { watchSession } from './watch.js'
 import { MACHINE_CAPS, detectCaps, paint, spinner, type Caps, type Spinner } from './tty.js'
 import { aggregateBlock, aggregateOffer, analysisBlock, betaLine, briefBlock, doneLine, fmtBytes, listRows, nextStepLines, reportFooter, row, type NextStep } from './summary.js'
-import { persistNextStep } from './next-step.js'
+import { footerDue, machineQueueReads, persistNextStep } from './next-step.js'
 import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import type { ServeOptions } from '../serve/types.js'
@@ -41,6 +41,7 @@ import type { Analysis } from '../model/analysis.js'
 import { CLI_VERBS, EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { cmdPick } from './commands/pick.js'
 import { cmdDashboard } from './commands/dashboard.js'
+import { cmdSuggest } from './commands/suggest.js'
 import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson, type PreparedAggregate } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
@@ -70,11 +71,12 @@ function offerBetaFeedback(context: 'session' | 'repo' | 'global' | 'report'): v
 
 /**
  * The next step after a session was analyzed: the top finding persisted as a suggestion record and
- * the short improve command for it (src/cli/next-step.ts). Called only where the footer is printed,
- * so --json and --quiet reads stay side-effect free.
+ * the short improve command for it, with the due count of the current folder (src/cli/next-step.ts).
+ * Called only where the footer is printed, so --json and --quiet reads stay side-effect free.
  */
 function nextStep(a: Analysis, flags: Record<string, string | boolean>): Promise<NextStep> {
-  return persistNextStep(a, redactOptions(flags))
+  const cache = !(flags['no-cache'] !== undefined || process.env['ORANGU_NO_CACHE'] === '1')
+  return persistNextStep(a, redactOptions(flags), { due: () => footerDue(machineQueueReads({ cache })) })
 }
 
 function redactOptions(flags: Record<string, string | boolean>): RedactOptions | false {
@@ -617,6 +619,14 @@ async function main(): Promise<void> {
         showGlobal: (o) => cmdAggregate('global', undefined, { ...flags, ...o }),
         showSession: (id) => cmdReport(id, { ...flags, open: true }),
         browseSessions: () => pickSessions({ ...flags, global: true }),
+        // the run of `orangu suggest --queue --cwd <this folder>`: the full check, then the queue text
+        showQueue: () =>
+          cmdSuggest([], {
+            queue: true,
+            cwd: process.cwd(),
+            ...(flags['no-cache'] !== undefined ? { 'no-cache': true } : {}),
+            ...(flagBool(flags, 'no-redact') ? { 'no-redact': true } : {}),
+          }),
         stdin: process.stdin,
         stdout: process.stdout,
         stderr: process.stderr,

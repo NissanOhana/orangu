@@ -1,11 +1,20 @@
 import { EventEmitter } from 'node:events'
+import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it, vi } from 'vitest'
+import { fileURLToPath } from 'node:url'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeFixtureHome } from '../../../test/fixtures/home.js'
+import { countingQueueReads, memoryQueueStore } from '../../../test/fixtures/suggestion-queue.js'
+import { NOW as QUEUE_NOW, WORKSPACE, appliedOf, sg } from '../../../test/fixtures/suggestion-records.js'
+import { QUEUE_CHECK_BYTES } from '../../suggest/queue-read.js'
+import { SuggestionStore } from '../../suggest/store.js'
 import { MASCOT_MINI, MASCOT_STACKED, MASCOT_WIDE } from '../mascot-ascii.js'
+import type { PickRow } from '../summary.js'
 import { displayWidth, stripAnsi, type Caps, type ExitHookProcess } from '../tty.js'
+import { cmdSuggest } from './suggest.js'
+import { QUEUE_APP_ROW } from './suggest-reads.js'
 import {
   cmdDashboard,
   dashboardChoices,
@@ -58,6 +67,7 @@ function deps(cwd: string): DashboardDeps & {
   showGlobal: ReturnType<typeof vi.fn>
   showSession: ReturnType<typeof vi.fn>
   browseSessions: ReturnType<typeof vi.fn>
+  showQueue: ReturnType<typeof vi.fn>
 } {
   const stdin = new FakeInput()
   const stdout = new FakeOutput()
@@ -67,6 +77,9 @@ function deps(cwd: string): DashboardDeps & {
     showGlobal: vi.fn(async () => undefined),
     showSession: vi.fn(async () => undefined),
     browseSessions: vi.fn(async () => undefined),
+    showQueue: vi.fn(async () => undefined),
+    // no record is open, so the dashboard shows the choices of a new user
+    queue: countingQueueReads(memoryQueueStore()).reads,
     stdin,
     stdout,
     stderr,
@@ -104,8 +117,8 @@ describe('dashboardPrecondition', () => {
 describe('dashboard discovery and rendering', () => {
   it('shows repo/global counts and scrubbed open Claude sessions', async () => {
     const { root, cwd, home } = await fixture()
-    const data = await gatherDashboardData({ root }, { now: NOW, cwd: () => cwd, isAlive: () => false })
-    expect(data).toMatchObject({ repoName: 'demo', repoSessions: 3, globalSessions: 3, roots: 1, runningSessions: 2 })
+    const data = await gatherDashboardData({ root }, { now: NOW, cwd: () => cwd, isAlive: () => false, queue: countingQueueReads(memoryQueueStore()).reads })
+    expect(data).toMatchObject({ repoName: 'demo', repoSessions: 3, globalSessions: 3, roots: 1, runningSessions: 2, queue: { due: 0, open: 0 } })
     expect(data.live.map((row) => row.sessionId)).toEqual([home.liveId, home.idleId])
     expect(data.live[0]!.title).not.toContain('sk-ant-api03-FAKE')
   })
@@ -117,6 +130,7 @@ describe('dashboard discovery and rendering', () => {
       globalSessions: 300,
       roots: 4,
       runningSessions: 2,
+      queue: { due: 0, open: 0 },
       live: [
         {
           sessionId: '11111111-0000-4000-8000-00000000aaaa',
@@ -159,13 +173,120 @@ describe('dashboard discovery and rendering', () => {
     expect(dashboardChromeLines({ ...tty, columns: 42 }), 'STACKED').toBe(13)
     expect(dashboardChromeLines({ ...tty, columns: 40 }), 'MINI').toBe(15)
     // the budget is exactly what the frame spends outside the choice rows
-    const data: DashboardData = { repoName: 'demo', repoSessions: 1, globalSessions: 1, roots: 1, runningSessions: 0, live: [] }
+    const data: DashboardData = { repoName: 'demo', repoSessions: 1, globalSessions: 1, roots: 1, runningSessions: 0, live: [], queue: { due: 0, open: 0 } }
     const choices = dashboardChoices(data)
     for (const columns of [40, 60, 80]) {
       const caps = { ...tty, columns }
       const lines = dashboardFrame(caps, data, choices, { cursor: 0, start: 0, size: choices.length }, NOW)
       expect(lines.length - choices.length, `${columns}: frame rows minus choices`).toBe(dashboardChromeLines(caps))
     }
+  })
+})
+
+describe('dashboardChoices: the IMPROVE choice', () => {
+  const live: PickRow = {
+    sessionId: '11111111-0000-4000-8000-00000000aaaa',
+    path: '/p/a.jsonl',
+    projectSlug: '-Users-me-demo',
+    project: 'demo',
+    title: 'Fix the login test',
+    sizeBytes: 100,
+    mtimeMs: NOW - 10_000,
+    running: true,
+  }
+  const base: DashboardData = { repoName: 'demo', repoSessions: 2, globalSessions: 5, roots: 1, runningSessions: 1, live: [live], queue: { due: 0, open: 0 } }
+  /** the choices of a workspace with nothing open, in their order */
+  const others = [{ kind: 'repo' }, { kind: 'global' }, { kind: 'browse' }, { kind: 'session', row: live }]
+  const cases: Array<[string, DashboardData['queue'], unknown[]]> = [
+    ['1 or more open items', { due: 1, open: 2 }, [{ kind: 'improve' }, ...others]],
+    ['a store that cannot be read', 'store-error', [{ kind: 'improve' }, ...others]],
+    ['nothing open', { due: 0, open: 0 }, others],
+  ]
+
+  it.each(cases)('with %s', (_label, queue, expected) => {
+    expect(dashboardChoices({ ...base, queue })).toEqual(expected)
+  })
+
+  it('leaves a space after each of the 5 tags at 40, 60 and 80 columns, and prints the counts', () => {
+    const data: DashboardData = { ...base, queue: { due: 2, open: 3 } }
+    const choices = dashboardChoices(data)
+    const frame = (columns: number): string[] => dashboardFrame({ ...tty, columns }, data, choices, { cursor: 0, start: 0, size: choices.length }, NOW).map(stripAnsi)
+    for (const columns of [40, 60, 80]) {
+      const lines = frame(columns)
+      for (const tag of ['IMPROVE', 'REPO', 'GLOBAL', 'SESSION', 'LIVE']) {
+        // the tag starts after the indent, the cursor and the live mark
+        const row = lines.find((line) => line.slice(6).startsWith(tag))
+        expect(row, `${columns}: ${tag}`).toBeDefined()
+        expect(row![6 + tag.length], `${columns}: ${tag}`).toBe(' ')
+        expect(displayWidth(row!), `${columns}: ${tag}`).toBeLessThanOrEqual(Math.min(columns, 80))
+      }
+    }
+    expect(frame(80)).toContain('  >   IMPROVE Improvements · 2 due · 3 open')
+    const unreadable: DashboardData = { ...base, queue: 'store-error' }
+    const unreadableFrame = dashboardFrame(tty, unreadable, dashboardChoices(unreadable), { cursor: 0, start: 0, size: 5 }, NOW).map(stripAnsi)
+    expect(unreadableFrame).toContain('  >   IMPROVE Improvements · the store could not be read')
+  })
+
+  it('no source file holds the text of an IMPROVE row with nothing open', () => {
+    const root = fileURLToPath(new URL('../../../', import.meta.url))
+    const text = ['Improvements', 'nothing open'].join(' · ')
+    const hits = ['src', 'scripts'].flatMap((dir) =>
+      readdirSync(join(root, dir), { recursive: true, encoding: 'utf8' })
+        .filter((file) => /\.(ts|tsx|mjs|js|css|html)$/.test(file))
+        .filter((file) => readFileSync(join(root, dir, file), 'utf8').includes(text))
+        .map((file) => `${dir}/${file}`),
+    )
+    expect(hits).toEqual([])
+  })
+})
+
+describe('the IMPROVE count', () => {
+  const saved = process.env['ORANGU_HOME']
+  afterEach(() => {
+    if (saved === undefined) delete process.env['ORANGU_HOME']
+    else process.env['ORANGU_HOME'] = saved
+    vi.restoreAllMocks()
+  })
+
+  /** A private orangu home whose store holds 1 applied record of WORKSPACE, which the full check finds due. */
+  function storeHome(): string {
+    const home = mkdtempSync(join(tmpdir(), 'orangu-dashboard-store-'))
+    writeFileSync(join(home, 'suggestions.jsonl'), `${JSON.stringify(appliedOf(sg(1)))}\n`, { mode: 0o600 })
+    process.env['ORANGU_HOME'] = home
+    return home
+  }
+
+  it('reads no transcript, so an applied item with no cache entry is open and not due, and the printout calls the loader', async () => {
+    const { root } = await fixture()
+    const home = storeHome()
+    const { loads, reads } = countingQueueReads(new SuggestionStore({ home }))
+    const data = await gatherDashboardData({ root }, { now: QUEUE_NOW, cwd: () => WORKSPACE, isAlive: () => false, queue: reads })
+    expect(loads).toEqual([])
+    expect(data.queue).toEqual({ due: 0, open: 1 })
+    // The printout runs the full check on the same store: the read of `orangu suggest --queue --cwd <dir>`.
+    const out: string[] = []
+    vi.spyOn(process.stdout, 'write').mockImplementation((chunk: unknown) => {
+      out.push(String(chunk))
+      return true
+    })
+    await cmdSuggest([], { queue: true, cwd: WORKSPACE }, { read: reads.deps({ now: QUEUE_NOW, budgetBytes: QUEUE_CHECK_BYTES }) })
+    expect(loads.length).toBeGreaterThan(0)
+    expect(out.join('')).toContain(`claude "/orangu:improve --verify ${sg(1)}"`)
+    expect(out.join('')).toContain(QUEUE_APP_ROW)
+  })
+
+  it('puts IMPROVE first when the store cannot be read', async () => {
+    const { root } = await fixture()
+    const { loads, reads } = countingQueueReads({
+      all: async () => {
+        throw new Error('EACCES: permission denied, open')
+      },
+      lines: async () => [],
+    })
+    const data = await gatherDashboardData({ root }, { now: QUEUE_NOW, cwd: () => WORKSPACE, isAlive: () => false, queue: reads })
+    expect(data.queue).toBe('store-error')
+    expect(dashboardChoices(data)[0]).toEqual({ kind: 'improve' })
+    expect(loads).toEqual([])
   })
 })
 
@@ -225,6 +346,24 @@ describe('cmdDashboard', () => {
     await globalRun
     expect(global.showGlobal).toHaveBeenCalledWith({ open: true })
     expect(global.showRepo).not.toHaveBeenCalled()
+  })
+
+  it('draws IMPROVE first with no transcript read before the first frame, and Enter prints the queue', async () => {
+    const { root } = await fixture()
+    const home = mkdtempSync(join(tmpdir(), 'orangu-dashboard-store-'))
+    writeFileSync(join(home, 'suggestions.jsonl'), `${JSON.stringify(appliedOf(sg(1)))}\n`, { mode: 0o600 })
+    const { loads, reads } = countingQueueReads(new SuggestionStore({ home }))
+    const d = { ...deps(WORKSPACE), now: QUEUE_NOW, queue: reads }
+    const run = cmdDashboard({ root }, d)
+    await firstFrame(d.stdout)
+    expect(loads).toEqual([])
+    const frame = stripAnsi(d.stdout.text)
+    expect(frame).toContain('IMPROVE Improvements · 0 due · 1 open')
+    expect(frame.indexOf('IMPROVE')).toBeLessThan(frame.indexOf('REPO'))
+    d.stdin.emit('data', '\r')
+    await run
+    expect(d.showQueue).toHaveBeenCalledOnce()
+    expect(d.showRepo).not.toHaveBeenCalled()
   })
 
   it('returns false without reading or waiting when a dashboard is not safe', async () => {

@@ -2,23 +2,33 @@
  * Bare interactive `orangu`: a local report dashboard over the existing command paths.
  *
  * The dashboard owns no analysis or report logic. It discovers enough metadata to describe the
- * choices, then calls the injected repo/global/session commands. Non-interactive callers never
+ * choices, then calls the injected improve/repo/global/session commands. Non-interactive callers never
  * enter this module's discovery path; main.ts keeps the compact latest-session answer for them.
+ *
+ * The IMPROVE choice counts the queue of this folder from the store and the cohort facts cache only: its read may parse
+ * no transcript, so no transcript read comes before the first frame. The printout of the choice runs the full check.
  */
 import { basename, resolve } from 'node:path'
 import { claudeRoots, listSessions } from '../../discover/discover.js'
 import { flagStr } from '../args.js'
 import { mascotArt, mascotLines } from '../mascot-ascii.js'
+import { machineQueueReads, queueCounts, type QueueCountReads } from '../next-step.js'
 import { select, type InputLike, type OutputLike, type SelectView } from '../select.js'
 import { fmtAge, layoutWidth, type PickRow } from '../summary.js'
 import { displayWidth, glyphs, paint, truncate, type Caps, type ExitHookProcess, type WritableLike } from '../tty.js'
 import { gatherPickRows, interactivePrecondition } from './pick.js'
 
 const INDENT = '  '
-const TAG_WIDTH = 7
+/** the longest tag (IMPROVE, SESSION) and 1 space */
+const TAG_WIDTH = 8
 /** frame rows outside the art and the choices: blank, header, counts, blank, "N more", key hint */
 const CHROME_ROWS_AROUND_ART = 6
 const TARGETED_BARE_FLAGS = ['session', 's', 'global', 'cwd', 'max-tokens', 'fail-on-hook-errors'] as const
+/** The transcript bytes that the IMPROVE count may parse on a cache miss: none. An item with no cache entry is not due. */
+export const DASHBOARD_QUEUE_BYTES = 0
+
+/** The queue of this folder as the dashboard counts it, or the store that could not be read. */
+export type DashboardQueue = { due: number; open: number } | 'store-error'
 
 export interface DashboardData {
   repoName: string
@@ -27,9 +37,11 @@ export interface DashboardData {
   roots: number
   runningSessions: number
   live: PickRow[]
+  queue: DashboardQueue
 }
 
 type DashboardChoice =
+  | { kind: 'improve' }
   | { kind: 'repo' }
   | { kind: 'global' }
   | { kind: 'browse' }
@@ -49,6 +61,10 @@ export interface DashboardDeps {
   showGlobal: (request: ScopeReportRequest) => Promise<void>
   showSession: (sessionId: string) => Promise<void>
   browseSessions: () => Promise<void>
+  /** prints the queue of this folder with the full check: the run of `orangu suggest --queue` */
+  showQueue: () => Promise<void>
+  /** the reads of the IMPROVE count; the default is the store, the cache and the discovery of this machine */
+  queue?: QueueCountReads
   stdin: InputLike & { isTTY?: boolean }
   stdout: OutputLike & { isTTY?: boolean }
   stderr: WritableLike
@@ -72,18 +88,30 @@ export function dashboardPrecondition(
   return interactivePrecondition(stdin, stdout, env, flags)
 }
 
+/** The queue counts of this folder at a budget of 0 B, or the store error. Any failure of the read is that error. */
+async function countQueue(cwd: string, now: number, reads: QueueCountReads): Promise<DashboardQueue> {
+  try {
+    const { due, open } = await queueCounts(cwd, now, DASHBOARD_QUEUE_BYTES, reads)
+    return { due, open }
+  } catch {
+    return 'store-error'
+  }
+}
+
 /** Read counts in parallel; reuse the picker as the one source of truth for live-session status. */
 export async function gatherDashboardData(
   flags: Record<string, string | boolean>,
-  deps: { now?: number; cwd?: () => string; isAlive?: (pid: number) => boolean } = {},
+  deps: { now?: number; cwd?: () => string; isAlive?: (pid: number) => boolean; queue?: QueueCountReads } = {},
 ): Promise<DashboardData> {
   const cwd = resolve((deps.cwd ?? (() => process.cwd()))())
   const configArg = flagStr(flags, 'root', 'config', 'r')
   const pickFlags = { ...flags, global: true }
-  const [picked, repoRefs, roots] = await Promise.all([
+  const reads = deps.queue ?? machineQueueReads({ cache: !(flags['no-cache'] !== undefined || process.env['ORANGU_NO_CACHE'] === '1') })
+  const [picked, repoRefs, roots, queue] = await Promise.all([
     gatherPickRows(pickFlags, { ...(deps.now !== undefined ? { now: deps.now } : {}), ...(deps.isAlive ? { isAlive: deps.isAlive } : {}) }),
     listSessions(configArg ? { configDir: configArg, cwd } : { cwd }),
     claudeRoots(configArg),
+    countQueue(cwd, deps.now ?? Date.now(), reads),
   ])
   return {
     repoName: basename(cwd) || cwd,
@@ -92,11 +120,14 @@ export async function gatherDashboardData(
     roots: roots.length,
     runningSessions: picked.counts.running,
     live: picked.rows.filter((row) => row.running),
+    queue,
   }
 }
 
+/** IMPROVE comes first when this folder has an open item or the store cannot be read. It is absent when nothing is open. */
 export function dashboardChoices(data: DashboardData): DashboardChoice[] {
-  const choices: DashboardChoice[] = [{ kind: 'repo' }, { kind: 'global' }]
+  const choices: DashboardChoice[] = data.queue === 'store-error' || data.queue.open > 0 ? [{ kind: 'improve' }] : []
+  choices.push({ kind: 'repo' }, { kind: 'global' })
   if (data.globalSessions) choices.push({ kind: 'browse' })
   choices.push(...data.live.map((row) => ({ kind: 'session' as const, row })))
   return choices
@@ -112,6 +143,10 @@ function oneLine(value: string): string {
 
 function choiceText(choice: DashboardChoice, data: DashboardData, now: number, sep: string): { tag: string; text: string; live: boolean } {
   switch (choice.kind) {
+    case 'improve': {
+      const counts = data.queue === 'store-error' ? 'the store could not be read' : `${data.queue.due} due${sep}${data.queue.open} open`
+      return { tag: 'IMPROVE', text: `Improvements${sep}${counts}`, live: false }
+    }
     case 'repo':
       return { tag: 'REPO', text: `Repository report${sep}${data.repoName}${sep}${count(data.repoSessions, 'session')}`, live: false }
     case 'global':
@@ -172,6 +207,8 @@ export function dashboardFrame(
 
 async function runChoice(choice: DashboardChoice, deps: DashboardDeps): Promise<void> {
   switch (choice.kind) {
+    case 'improve':
+      return deps.showQueue()
     case 'repo':
       return deps.showRepo({ open: true })
     case 'global':
@@ -191,6 +228,7 @@ export async function cmdDashboard(flags: Record<string, string | boolean>, deps
     now,
     ...(deps.cwd ? { cwd: deps.cwd } : {}),
     ...(deps.isAlive ? { isAlive: deps.isAlive } : {}),
+    ...(deps.queue ? { queue: deps.queue } : {}),
   })
   const choices = dashboardChoices(data)
   const terminalRows = Number.isFinite(deps.stdout.rows) && (deps.stdout.rows ?? 0) > 0 ? (deps.stdout.rows as number) : 24

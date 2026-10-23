@@ -117,16 +117,29 @@ export interface NextStep {
   next?: string
   /** why the store could not be written (one line); the long form follows on the next row */
   storeNote?: string
+  /** the open items of the current folder that 1 step can close now; absent when none is due or the store cannot be read */
+  due?: number
+}
+
+/** The Claude Code door that takes the first open item of the folder: the value of the `due` row. */
+const DUE_COMMAND = 'claude "/orangu:improve"'
+
+/** The `due` row, or none: the command whole, and the dim count only when it fits the value column. */
+function dueLines(caps: Caps, due: number | undefined): string[] {
+  if (!due || due < 1) return []
+  const note = `(${due} ready for a verdict)`
+  const fits = DUE_COMMAND.length + 4 + note.length <= valueBudget(caps)
+  return [row(caps, 'due', DUE_COMMAND, { raw: true }) + (fits ? '    ' + paint(caps, 'dim', note) : '')]
 }
 
 /**
- * finding / store / next / plugin rows shared by report, analyze and bare orangu. The title and the
+ * finding / store / next / due / plugin rows shared by report, analyze and bare orangu. The title and the
  * improvement are prose: they wrap at whole words and are never cut. The improvement follows the title
  * as continuation lines, directly above `next`; only the store row, which explains the long command,
- * comes between them.
+ * comes between them. The due row follows the finding row of a clean session, and the next row otherwise.
  */
 export function nextStepLines(caps: Caps, step: NextStep): string[] {
-  if (!step.finding) return rows(caps, 'finding', 'none: this session ran clean', { style: 'good' })
+  if (!step.finding) return [...rows(caps, 'finding', 'none: this session ran clean', { style: 'good' }), ...dueLines(caps, step.due)]
   const lines = rows(caps, 'finding', step.finding, { style: 'bold' })
   if (step.improvement) lines.push(...continuation(caps, `Improvement: ${step.improvement}`))
   if (step.storeNote) {
@@ -138,6 +151,7 @@ export function nextStepLines(caps: Caps, step: NextStep): string[] {
   }
   // both are paste targets: a cut command is no command, so a narrow terminal wraps them instead
   if (step.next) lines.push(row(caps, 'next', step.next, { raw: true }))
+  lines.push(...dueLines(caps, step.due))
   const [add, install] = PLUGIN_INSTALL.split(' · ')
   lines.push(row(caps, 'plugin', add ?? PLUGIN_INSTALL, { raw: true }))
   if (install) {

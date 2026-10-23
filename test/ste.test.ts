@@ -166,6 +166,8 @@ describe('STE gate', () => {
     const views = await renderedRowViews()
     expect(Object.keys(views).sort()).toEqual(Object.keys(STE_FLOORS).filter((id) => id.startsWith('rendered#')).sort())
     for (const [id, list] of Object.entries(views)) expect(list.length, `${id} has views`).toBeGreaterThan(0)
+    // the terminal row scores the due row of the footer, with its note at 80 columns
+    expect(views['rendered#terminal']!.some((view) => view.lines?.some((line) => /^ {2}due {6}claude "\/orangu:improve" {4}\(\d+ ready for a verdict\)$/.test(line)))).toBe(true)
     const all = Object.values(views).flat()
     expect(all.flatMap((view) => viewPieces(view).flatMap(hiddenSplits))).toEqual([])
   })
