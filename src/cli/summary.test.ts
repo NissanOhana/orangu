@@ -1,20 +1,22 @@
-import { describe, expect, it } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, realpathSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { MIN_VERIFICATION_QUIET_MS } from '../adapters/claude-code/discovered-analysis.js'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { buildCanonicalSession, SessionBuilder } from '../../test/fixtures/session-builder.js'
 import type { Analysis } from '../model/analysis.js'
-import type { SessionRef } from '../discover/discover.js'
+import { projectSlug, type SessionRef } from '../discover/discover.js'
 import { SuggestionStore } from '../suggest/store.js'
+import { gatherDashboardData } from './commands/dashboard.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi, type Caps } from './tty.js'
 import { aggregateBlock, aggregateOffer, analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, rows, valueBudget, type NextStep, type PickRow } from './summary.js'
-import { footerDue, persistNextStep, queueCounts } from './next-step.js'
+import { footerDue, machineQueueReads, persistNextStep, queueCounts } from './next-step.js'
 import { QUEUE_CHECK_BYTES } from '../suggest/queue-read.js'
 import { countingQueueReads, memoryQueueStore } from '../../test/fixtures/suggestion-queue.js'
-import { NOW as QUEUE_NOW, WORKSPACE, appliedOf, sg } from '../../test/fixtures/suggestion-records.js'
+import { APPLIED_AT, NOW as QUEUE_NOW, WORKSPACE, appliedOf, proposalOf, sg, uuid } from '../../test/fixtures/suggestion-records.js'
 import { aggregate } from '../analyze/aggregate.js'
 import { outcomeHeadline } from '../report/client/derive.js'
 
@@ -396,6 +398,60 @@ describe('footerDue', () => {
   it('counts 0 in a folder with no open record', async () => {
     const { reads } = countingQueueReads(memoryQueueStore([appliedOf(sg(1))]))
     expect(await footerDue(reads, { cwd: '/w/other', now: QUEUE_NOW })).toBe(0)
+  })
+})
+
+describe('the queue counts of the footer and the dashboard on the reads of this machine', () => {
+  const ENV_KEYS = ['ORANGU_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR', 'HOME', 'ORANGU_HOME'] as const
+  let saved: Record<string, string | undefined> = {}
+  beforeEach(() => {
+    saved = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]))
+  })
+  afterEach(() => {
+    for (const key of ENV_KEYS) {
+      if (saved[key] === undefined) delete process.env[key]
+      else process.env[key] = saved[key]
+    }
+  })
+
+  it('reads no transcript before the cache holds a check, then counts the check that the full read put in the cache', async () => {
+    // A private Claude root: 3 sessions of a workspace folder after the change, with fewer tool calls than the
+    // frozen baseline of the applied record, so the full check finds the record due.
+    const root = mkdtempSync(join(tmpdir(), 'orangu-footer-root-'))
+    const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'orangu-footer-ws-')))
+    const project = join(root, 'projects', projectSlug(cwd))
+    mkdirSync(project, { recursive: true })
+    for (const [index, calls] of [1, 2, 3].entries()) {
+      const startAt = new Date(APPLIED_AT + (index + 1) * 60 * 60_000).toISOString()
+      const b = new SessionBuilder({ sessionId: uuid(100 + index), cwd, startAt })
+      b.userPrompt('Make the change')
+      for (let i = 0; i < calls; i++) b.toolCall('Read', { file_path: `${cwd}/src/f${i}.ts` }, 'ok')
+      b.assistant([{ type: 'text', text: 'Done.' }])
+      const path = join(project, `${uuid(100 + index)}.jsonl`)
+      writeFileSync(path, b.toJsonl())
+      const end = new Date(Date.parse(startAt) + 10 * 60_000)
+      utimesSync(path, end, end)
+    }
+    process.env['ORANGU_CLAUDE_ROOTS'] = root
+    process.env['CLAUDE_CONFIG_DIR'] = root
+    process.env['HOME'] = mkdtempSync(join(tmpdir(), 'orangu-footer-home-'))
+    const home = mkdtempSync(join(tmpdir(), 'orangu-footer-orangu-'))
+    process.env['ORANGU_HOME'] = home
+    const st = statSync(cwd, { bigint: true })
+    const record = appliedOf(sg(1), { proposal: { ...proposalOf(cwd), workspace: { cwd, device: String(st.dev), inode: String(st.ino) } } })
+    writeFileSync(join(home, 'suggestions.jsonl'), `${JSON.stringify(record)}\n`, { mode: 0o600 })
+    // The files changed a moment ago (their ctime), so each read looks 31 minutes later.
+    const now = Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000
+    const reads = () => machineQueueReads({ cache: true })
+    // Cold: the store, the cohort facts cache and the discovery of this orangu home, at 0 B. No transcript is read,
+    // so the applied record is open and not due, in the footer and in the dashboard.
+    expect(await footerDue(reads(), { cwd, now })).toBe(0)
+    expect((await gatherDashboardData({ root }, { now, cwd: () => cwd, isAlive: () => false })).queue).toEqual({ due: 0, open: 1 })
+    // The full check of the printout reads the 3 sessions, finds the record due and fills the cache.
+    expect((await queueCounts(cwd, now, QUEUE_CHECK_BYTES, reads())).due).toBe(1)
+    // Warm: both counts take the check from the cache.
+    expect(await footerDue(reads(), { cwd, now })).toBe(1)
+    expect((await gatherDashboardData({ root }, { now, cwd: () => cwd, isAlive: () => false })).queue).toEqual({ due: 1, open: 1 })
   })
 })
 
