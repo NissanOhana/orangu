@@ -9184,8 +9184,15 @@ function doneLine(caps, o) {
   const lead = INDENT + paint(caps, "good", g.ok) + " ";
   return wrapJoined(caps, s, layoutWidth(caps) - pad.length).map((p, i) => (i ? pad : lead) + p).join("\n");
 }
+var DUE_COMMAND = 'claude "/orangu:improve"';
+function dueLines(caps, due) {
+  if (!due || due < 1) return [];
+  const note = `(${due} ready for a verdict)`;
+  const fits = DUE_COMMAND.length + 4 + note.length <= valueBudget(caps);
+  return [row(caps, "due", DUE_COMMAND, { raw: true }) + (fits ? "    " + paint(caps, "dim", note) : "")];
+}
 function nextStepLines(caps, step) {
-  if (!step.finding) return rows(caps, "finding", "none: this session ran clean", { style: "good" });
+  if (!step.finding) return [...rows(caps, "finding", "none: this session ran clean", { style: "good" }), ...dueLines(caps, step.due)];
   const lines = rows(caps, "finding", step.finding, { style: "bold" });
   if (step.improvement) lines.push(...continuation(caps, `Improvement: ${step.improvement}`));
   if (step.storeNote) {
@@ -9195,6 +9202,7 @@ function nextStepLines(caps, step) {
     lines.push(row(caps, "store", head2 + reason + tail, { style: "warn", raw: true }));
   }
   if (step.next) lines.push(row(caps, "next", step.next, { raw: true }));
+  lines.push(...dueLines(caps, step.due));
   const [add, install] = PLUGIN_INSTALL.split(" \xB7 ");
   lines.push(row(caps, "plugin", add ?? PLUGIN_INSTALL, { raw: true }));
   if (install) {
@@ -9437,28 +9445,301 @@ function pickList(caps, rows2, counts, now) {
   return lines;
 }
 
-// src/suggest/store.ts
-import { randomBytes as randomBytes2 } from "node:crypto";
+// src/suggest/cohort-cache.ts
+import { createHash as createHash3, randomBytes as randomBytes2 } from "node:crypto";
 import { constants as constants9 } from "node:fs";
-import { lstat as lstat7, mkdir as mkdir2, open as open9, realpath as realpath6, rmdir, unlink as unlink2 } from "node:fs/promises";
-import { dirname as dirname5, join as join6, posix, win32 } from "node:path";
+import { lstat as lstat7, open as open9, readdir as readdir2, rename as rename2, unlink as unlink2 } from "node:fs/promises";
+import { basename as basename7, dirname as dirname4, isAbsolute as isAbsolute3, join as join6, resolve as resolve6 } from "node:path";
 
-// src/suggest/change-classes.ts
-var CHANGE_CLASS_DEFINITIONS = [
-  { id: "instruction", label: "Instruction files", description: "Persistent project guidance and conventions." },
-  { id: "script-cli", label: "Scripts and CLIs", description: "Repeatable actions with checkable output." },
-  { id: "hook", label: "Hooks", description: "Guaranteed actions at lifecycle boundaries." },
-  { id: "skill-create", label: "Skills to create", description: "Reusable knowledge and workflows specific to this setup." },
-  { id: "skill-discover", label: "Skills to discover", description: "Existing capabilities to evaluate before installing." },
-  { id: "subagent-agent", label: "Subagents and agents", description: "Isolated or specialized work with clear ownership." },
-  { id: "mcp", label: "MCP servers", description: "External tools and data that the work needs." },
-  { id: "plugin", label: "Plugins", description: "A reusable package of related extensions." },
-  { id: "workflow-config", label: "Workflow and configuration", description: "How work is sequenced, checked, and repeated." }
+// src/suggest/types.ts
+var TRANSITIONS = {
+  new: ["kicked-off", "rejected"],
+  "kicked-off": ["proposed", "failed", "rejected"],
+  proposed: ["applied", "rejected"],
+  // A move into regressed or unproven carries an outcome receipt, and the store grades it again before it writes the line.
+  applied: ["verified", "regressed", "unproven", "rejected"],
+  verified: ["rejected"],
+  rejected: [],
+  failed: ["kicked-off", "rejected"],
+  regressed: ["kept", "rejected"],
+  unproven: ["rejected"],
+  kept: ["rejected"]
+};
+var SUGGESTION_VERIFICATION_METRICS = [
+  "avgTotalTokens",
+  "avgToolCalls",
+  "avgToolErrors",
+  "avgActiveMs",
+  "avgContextPeak",
+  "avgTestRunsFailed",
+  "avgBuildRunsFailed",
+  "avgInterruptions"
 ];
-var CHANGE_CLASSES = new Set(CHANGE_CLASS_DEFINITIONS.map((definition) => definition.id));
-function isChangeClass(value) {
-  return CHANGE_CLASSES.has(value);
+var SUGGESTION_VERIFICATION_COMPARISONS = ["decreased", "not-increased", "increased", "not-decreased", "equal"];
+var ESTIMATE_TOKEN_THRESHOLD = 5e3;
+
+// src/suggest/cohort-cache.ts
+var COHORT_FACTS_DIR = "cohort-facts-v1";
+var COHORT_FACTS_MAX_ENTRY_BYTES = 16384;
+var ENTRY_KEYS = ["v", "key", "sessionId", "cwd", "startedAt", "endedAt", "ranOrangu", "bytesRead", "metrics"];
+var OVER_CAP_KEYS = ["v", "key", "sessionId", "skip", "maxBytes", "bytesRead"];
+var KEY_RE = /^[0-9a-f]{40}$/;
+var SESSION_ID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+var MAX_CWD_CHARS = 4096;
+function plainObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
 }
+function hasExactKeys(value, keys) {
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+var finiteNonNegative = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+function validFacts(value) {
+  const { sessionId, cwd, startedAt, endedAt, ranOrangu, bytesRead, metrics } = value;
+  return typeof sessionId === "string" && SESSION_ID_RE2.test(sessionId) && typeof cwd === "string" && isAbsolute3(cwd) && cwd.length <= MAX_CWD_CHARS && resolve6(cwd) === cwd && finiteNonNegative(startedAt) && startedAt > 0 && finiteNonNegative(endedAt) && endedAt >= startedAt && typeof ranOrangu === "boolean" && Number.isSafeInteger(bytesRead) && bytesRead >= 0 && plainObject(metrics) && hasExactKeys(metrics, SUGGESTION_VERIFICATION_METRICS) && SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative(metrics[metric]));
+}
+function validOverCap(value) {
+  const { sessionId, skip, maxBytes, bytesRead } = value;
+  return typeof sessionId === "string" && SESSION_ID_RE2.test(sessionId) && skip === "over-budget" && Number.isSafeInteger(maxBytes) && maxBytes >= 1 && maxBytes <= MAX_EVIDENCE_SESSION_BYTES && Number.isSafeInteger(bytesRead) && bytesRead >= 0 && bytesRead < maxBytes;
+}
+function pickOverCap(overCap) {
+  return { sessionId: overCap.sessionId, maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead };
+}
+function pick(facts) {
+  return {
+    sessionId: facts.sessionId,
+    cwd: facts.cwd,
+    startedAt: facts.startedAt,
+    endedAt: facts.endedAt,
+    ranOrangu: facts.ranOrangu,
+    bytesRead: facts.bytesRead,
+    metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, facts.metrics?.[metric]]))
+  };
+}
+var SIDECAR_STAT_BATCH = 16;
+async function sidecarTree(mainPath) {
+  const tree = { folders: [], transcripts: [], files: /* @__PURE__ */ new Map(), complete: true };
+  const sessionDir = join6(dirname4(mainPath), basename7(mainPath, ".jsonl"));
+  const folder = await lstatOrUndefined(sessionDir);
+  if (!folder || folder.isSymbolicLink() || !folder.isDirectory()) return tree;
+  tree.sessionDir = folder;
+  let entries = 0;
+  const walk2 = async (dir, st, depth) => {
+    tree.folders.push({ path: dir, st });
+    const names = (await readdir2(dir)).sort();
+    for (let start = 0; start < names.length; start += SIDECAR_STAT_BATCH) {
+      const batch = names.slice(start, start + SIDECAR_STAT_BATCH);
+      const stats = await Promise.allSettled(batch.map((name) => lstat7(join6(dir, name), { bigint: true })));
+      for (const [index, name] of batch.entries()) {
+        if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error("sidecar limit");
+        const result = stats[index];
+        if (result.status === "rejected") throw result.reason;
+        const child = join6(dir, name);
+        const cst = result.value;
+        if (cst.isSymbolicLink()) continue;
+        if (cst.isDirectory()) {
+          if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk2(child, cst, depth + 1);
+        } else if (cst.isFile()) {
+          if (name.startsWith("agent-") && name.endsWith(".jsonl")) tree.transcripts.push({ path: child, st: cst });
+          else tree.files.set(child, cst);
+        }
+      }
+    }
+  };
+  const subagents = join6(sessionDir, "subagents");
+  const root = await lstatOrUndefined(subagents);
+  if (!root || root.isSymbolicLink() || !root.isDirectory()) return tree;
+  try {
+    await walk2(subagents, root, 0);
+  } catch {
+    tree.complete = false;
+  }
+  return tree;
+}
+async function cohortFactsKey(ref2) {
+  try {
+    const main2 = await lstat7(ref2.path, { bigint: true });
+    if (main2.isSymbolicLink() || !main2.isFile()) return void 0;
+    let changedNs = 0n;
+    const changed = (st) => {
+      if (st.mtimeNs > changedNs) changedNs = st.mtimeNs;
+      if (st.ctimeNs > changedNs) changedNs = st.ctimeNs;
+    };
+    changed(main2);
+    const parts2 = [COHORT_FACTS_DIR, ref2.path, main2.dev, main2.ino, main2.size, main2.mtimeNs, main2.ctimeNs];
+    const tree = await sidecarTree(ref2.path);
+    if (tree.sessionDir) {
+      changed(tree.sessionDir);
+      parts2.push(`session:${tree.sessionDir.mtimeNs}:${tree.sessionDir.ctimeNs}`);
+    } else {
+      const project = await lstatOrUndefined(dirname4(ref2.path));
+      if (project) changed(project);
+    }
+    for (const { path, st } of tree.folders) {
+      changed(st);
+      parts2.push(`folder:${path}:${st.mtimeNs}:${st.ctimeNs}`);
+    }
+    parts2.push(tree.transcripts.length);
+    for (const { path, st } of tree.transcripts) {
+      const meta = tree.files.get(path.replace(/\.jsonl$/, ".meta.json"));
+      changed(st);
+      if (meta) changed(meta);
+      parts2.push(`${path}:${st.size}:${st.mtimeNs}:${st.ctimeNs}`, meta ? `${meta.size}:${meta.mtimeNs}:${meta.ctimeNs}` : "-");
+    }
+    if (!tree.complete) parts2.push("incomplete");
+    const changedAt = Number((changedNs + 999999n) / 1000000n);
+    return { key: createHash3("sha1").update(parts2.join("|")).digest("hex"), changedAt };
+  } catch {
+    return void 0;
+  }
+}
+async function lstatOrUndefined(path) {
+  try {
+    return await lstat7(path, { bigint: true });
+  } catch {
+    return void 0;
+  }
+}
+var CohortFactsCache = class {
+  layoutDirectories;
+  folder;
+  enabled;
+  validVersion;
+  layout;
+  hits = 0;
+  misses = 0;
+  writes = 0;
+  constructor(opts) {
+    const home = resolve6(oranguHome());
+    const cacheRoot = resolve6(opts.dir ?? join6(home, "cache"));
+    const segment = cacheGenerationSegment(opts.version);
+    this.validVersion = isCacheSegment(segment);
+    const generation = join6(cacheRoot, segment);
+    this.folder = join6(generation, COHORT_FACTS_DIR);
+    this.layoutDirectories = opts.dir === void 0 ? [home, cacheRoot, generation, this.folder] : [cacheRoot, generation, this.folder];
+    this.enabled = opts.enabled !== false;
+  }
+  file(key) {
+    return this.validVersion && KEY_RE.test(key) ? join6(this.folder, `${key}.json`) : void 0;
+  }
+  /** Secure the layout once, and check it again before each use. A changed layout is secured again on the next use. */
+  async directories() {
+    this.layout ??= (async () => {
+      const identities = [];
+      for (const path of this.layoutDirectories) identities.push(await ensurePrivateDirectory(path));
+      return identities;
+    })();
+    try {
+      const identities = await this.layout;
+      await assertPrivateDirectoriesStable(identities);
+      return identities;
+    } catch (error) {
+      this.layout = void 0;
+      throw error;
+    }
+  }
+  /** The entry of this key and this session, or undefined: no stats. It never throws. */
+  async read(key, sessionId) {
+    if (!this.enabled) return void 0;
+    try {
+      const path = this.file(key);
+      if (!path) return void 0;
+      const directories = await this.directories();
+      const manifest = await prevalidateAnalysisCacheEntry(path, COHORT_FACTS_MAX_ENTRY_BYTES);
+      await assertPrivateDirectoriesStable(directories);
+      const raw = await readAnalysisCacheEntry(manifest);
+      await assertPrivateDirectoriesStable(directories);
+      const value = JSON.parse(raw);
+      if (!plainObject(value) || value["v"] !== 1 || value["key"] !== key || value["sessionId"] !== sessionId) return void 0;
+      if (hasExactKeys(value, ENTRY_KEYS) && validFacts(value)) return { facts: pick(value) };
+      if (hasExactKeys(value, OVER_CAP_KEYS) && validOverCap(value)) return { overCap: pickOverCap(value) };
+      return void 0;
+    } catch {
+      return void 0;
+    }
+  }
+  /** The entry of this key and this session (facts or a skip over the cap), or undefined. It never throws. */
+  async lookup(key, sessionId) {
+    const entry = await this.read(key, sessionId);
+    if (entry) this.hits++;
+    else this.misses++;
+    return entry;
+  }
+  /** The facts of this key and this session, or undefined. It never throws. */
+  async get(key, sessionId) {
+    const entry = await this.read(key, sessionId);
+    if (entry && "facts" in entry) {
+      this.hits++;
+      return entry.facts;
+    }
+    this.misses++;
+    return void 0;
+  }
+  /** Write the facts of 1 settled session under its key: an exclusive temporary file, then a rename. It never throws. */
+  async put(key, facts) {
+    const picked = pick(facts);
+    if (!validFacts(picked)) return;
+    await this.write(key, { v: 1, key, ...picked });
+  }
+  /** Write a session over the cap of its load under its key, as `put` writes facts. It never throws. */
+  async putOverCap(key, overCap) {
+    const picked = { sessionId: overCap.sessionId, skip: "over-budget", maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead };
+    if (!validOverCap(picked)) return;
+    await this.write(key, { v: 1, key, ...picked });
+  }
+  /** Write 1 checked entry: an exclusive temporary file, then a rename. It never throws. */
+  async write(key, entry) {
+    if (!this.enabled) return;
+    let tmp;
+    try {
+      const path = this.file(key);
+      if (!path) return;
+      const bytes = Buffer.from(JSON.stringify(entry), "utf8");
+      if (bytes.byteLength > COHORT_FACTS_MAX_ENTRY_BYTES) return;
+      const directories = await this.directories();
+      tmp = `${path}.tmp-${process.pid}-${randomBytes2(12).toString("hex")}`;
+      const handle = await open9(tmp, constants9.O_WRONLY | constants9.O_CREAT | constants9.O_EXCL | (constants9.O_NOFOLLOW ?? 0), PRIVATE_FILE_MODE);
+      try {
+        await handle.writeFile(bytes);
+        await handle.chmod(PRIVATE_FILE_MODE);
+      } finally {
+        await handle.close();
+      }
+      await assertPrivateDirectoriesStable(directories);
+      await rename2(tmp, path);
+      tmp = void 0;
+      await assertPrivateDirectoriesStable(directories);
+      const final = await lstat7(path, { bigint: true });
+      if (!final.isFile() || final.isSymbolicLink() || Number(final.mode & 0o777n) !== PRIVATE_FILE_MODE) throw new Error("cache entry changed after its atomic write");
+      this.writes++;
+    } catch {
+    } finally {
+      if (tmp) {
+        try {
+          await unlink2(tmp);
+        } catch {
+        }
+      }
+    }
+  }
+  stats() {
+    return { hits: this.hits, misses: this.misses, writes: this.writes };
+  }
+};
+
+// src/suggest/cohort.ts
+import { basename as basename8 } from "node:path";
+
+// src/suggest/cohort-skip-reasons.ts
+var COHORT_SKIP_REASONS = [
+  "evidence-session",
+  "orangu-session",
+  "spans-application",
+  "still-settling",
+  "other-workspace",
+  "over-budget",
+  "budget-spent",
+  "unreadable"
+];
 
 // src/suggest/cohort-stats.ts
 var COHORT_ALPHA = 0.05;
@@ -9569,16 +9850,714 @@ function overallVerdict(checks2, nBefore, nAfter) {
   return directional.every((check) => check.verdict === "improved") ? "verified" : "within-noise";
 }
 
-// src/suggest/reason-codes.ts
-var REJECT_REASON_CODES = ["not-wanted", "already-handled", "wrong-cause", "too-much-effort", "other"];
+// src/suggest/verification-policy.ts
+function verificationIntentKey(intent) {
+  return `${intent.metric}:${intent.comparison}`;
+}
+function hasUniqueVerificationIntents(intents) {
+  return new Set(intents.map(verificationIntentKey)).size === intents.length;
+}
+function sameVerificationIntentSet(left, right) {
+  if (left.length !== right.length) return false;
+  const leftKeys = left.map(verificationIntentKey).sort();
+  const rightKeys = right.map(verificationIntentKey).sort();
+  return leftKeys.every((key, index) => key === rightKeys[index]);
+}
+function sameVerificationIntentSequence(left, right) {
+  return left.length === right.length && left.every((intent, index) => verificationIntentKey(intent) === verificationIntentKey(right[index]));
+}
+function verificationCheckName(intent) {
+  return `${intent.metric} ${intent.comparison}`;
+}
+function verificationReceiptSummary(intents) {
+  return `Later-session comparison passed: ${intents.map(verificationCheckName).join("; ")}.`;
+}
+function isIntent(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const intent = value;
+  return SUGGESTION_VERIFICATION_METRICS.includes(intent.metric) && SUGGESTION_VERIFICATION_COMPARISONS.includes(intent.comparison);
+}
+function numericMapMatches(value, expected) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const entries = Object.entries(value);
+  const wanted = Object.entries(expected);
+  return entries.length === wanted.length && wanted.every(([key, number]) => value[key] === number);
+}
+function applicationTime(record3) {
+  if (typeof record3.appliedAt === "number" && Number.isFinite(record3.appliedAt) && record3.appliedAt > 0) return record3.appliedAt;
+  return record3.status === "applied" && Number.isFinite(record3.statusAt) && record3.statusAt > 0 ? record3.statusAt : void 0;
+}
+function cohortReceiptSummary(receipt) {
+  const head2 = `Later sessions beat the baseline beyond chance (${receipt.baselineSessionIds.length} before, ${receipt.measuredSessionIds.length} after, p \u2264 ${COHORT_ALPHA}): ${receipt.checks.map(verificationCheckName).join("; ")}.`;
+  const others = receipt.confoundedBy.length;
+  return others ? `${head2} Measured together with ${others} other applied change${others === 1 ? "" : "s"}; not attributable to this change alone.` : head2;
+}
+var SUGGESTION_ID_RE = /^sg_[0-9a-f]{12}$/;
+var MAX_CONFOUNDERS = 64;
+function binomial(n2, k) {
+  let result = 1;
+  for (let i = 1; i <= k; i++) result = result * (n2 - k + i) / i;
+  return result;
+}
+function sortedUniqueIds(value, min, max, pattern) {
+  if (!Array.isArray(value) || value.length < min || value.length > max) return false;
+  if (!value.every((id) => typeof id === "string" && id.trim().length > 0 && id.length <= 500 && (!pattern || pattern.test(id)))) return false;
+  return value.every((id, index) => index === 0 || value[index - 1] < id);
+}
+var finiteNonNegative2 = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
+function cohortReceiptViolation(value, reviewed, appliedAt) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "receipt must be an object";
+  const receipt = value;
+  if (receipt.v !== 2 || receipt.method !== "cohort-rank-v1" || receipt.alpha !== COHORT_ALPHA) return "receipt must be a cohort-rank-v1 receipt at alpha 0.05";
+  if (appliedAt === void 0 || receipt.appliedAt !== appliedAt) return "receipt appliedAt must equal the recorded application time";
+  if (!sortedUniqueIds(receipt.baselineSessionIds, COHORT_MIN, COHORT_MAX)) return `baselineSessionIds must be ${COHORT_MIN}-${COHORT_MAX} sorted unique ids`;
+  if (!sortedUniqueIds(receipt.measuredSessionIds, COHORT_MIN, COHORT_MAX)) return `measuredSessionIds must be ${COHORT_MIN}-${COHORT_MAX} sorted unique ids`;
+  const baseline = new Set(receipt.baselineSessionIds);
+  if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return "baseline and later cohorts must not share a session";
+  if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return "confoundedBy must be sorted unique suggestion ids";
+  const checks2 = receipt.checks;
+  if (!Array.isArray(checks2) || checks2.length !== reviewed.length) return "checks must match the reviewed verificationChecks";
+  const nBefore = receipt.baselineSessionIds.length;
+  const nAfter = receipt.measuredSessionIds.length;
+  const minP = Number((1 / binomial(nBefore + nAfter, nAfter)).toFixed(6));
+  for (let index = 0; index < checks2.length; index++) {
+    const check = checks2[index];
+    const intent = reviewed[index];
+    if (!check || typeof check !== "object" || check.metric !== intent.metric || check.comparison !== intent.comparison) {
+      return `checks[${index}] must match the reviewed check ${verificationCheckName(intent)}`;
+    }
+    if (check.name !== verificationCheckName(intent) || check.ok !== true) return `checks[${index}] must be a passing, named check`;
+    const numbers = [check.before, check.after, check.beforeMedian, check.afterMedian];
+    if (!numbers.every(finiteNonNegative2)) return `checks[${index}] must carry finite metric values`;
+    const p = [check.pLower, check.pHigher];
+    if (!p.every((x) => typeof x === "number" && x >= minP && x <= 1) || check.pLower + check.pHigher < 1) {
+      return `checks[${index}] p-values are not possible for ${nBefore} and ${nAfter} sessions`;
+    }
+    const verdict = checkVerdict(check.comparison, check.before, check.after, check.pLower, check.pHigher);
+    if (verdict !== check.verdict || verdict !== "improved" && verdict !== "held") return `checks[${index}] did not pass: ${verdict}`;
+    if (check.evidence !== checkEvidence(check.metric, check.comparison, check, verdict)) return `checks[${index}] evidence must be the computed rendering`;
+  }
+  if (!checks2.some((check) => isDirectional(check.comparison))) return "at least one check must name a direction (decreased or increased)";
+  if (receipt.summary !== cohortReceiptSummary(receipt)) return "summary must be the computed summary";
+  return void 0;
+}
+var COHORT_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+var FROZEN_BASELINE_KEYS = ["v", "cutAt", "sessions", "skipped"];
+var FROZEN_SESSION_KEYS = ["id", "startedAt", "endedAt", "metrics"];
+var OUTCOME_RECEIPT_KEYS = [
+  "v",
+  "method",
+  "alpha",
+  "appliedAt",
+  "checkpoint",
+  "verdict",
+  "laterComplete",
+  "confoundedBy",
+  "baselineSessionIds",
+  "measuredSessionIds",
+  "checks"
+];
+var OUTCOME_CHECK_KEYS = [
+  "metric",
+  "comparison",
+  "name",
+  "before",
+  "after",
+  "beforeMedian",
+  "afterMedian",
+  "pLower",
+  "pHigher",
+  "verdict"
+];
+var OUTCOME_VERDICTS = ["within-noise", "regressed", "not-enough-sessions", "no-directional-check"];
+function plainObject2(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+function hasExactKeys2(value, keys) {
+  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
+}
+function frozenBaselineViolation(value, appliedAt) {
+  if (!plainObject2(value) || !hasExactKeys2(value, FROZEN_BASELINE_KEYS)) return "frozenBaseline must have exactly the keys v, cutAt, sessions and skipped";
+  if (value["v"] !== 1) return "frozenBaseline v must be 1";
+  const cutAt = value["cutAt"];
+  if (!finiteNonNegative2(cutAt)) return "frozenBaseline cutAt must be a finite number of 0 or more";
+  if (appliedAt !== void 0 && cutAt > appliedAt) return "frozenBaseline cutAt must not be later than the application time";
+  const sessions = value["sessions"];
+  if (!Array.isArray(sessions) || sessions.length > COHORT_MAX) return `frozenBaseline must hold 0 to ${COHORT_MAX} sessions`;
+  let previousId = "";
+  for (let index = 0; index < sessions.length; index++) {
+    const session = sessions[index];
+    const label = `frozenBaseline sessions[${index}]`;
+    if (!plainObject2(session) || !hasExactKeys2(session, FROZEN_SESSION_KEYS)) return `${label} must have exactly the keys id, startedAt, endedAt and metrics`;
+    const { id, startedAt, endedAt, metrics } = session;
+    if (typeof id !== "string" || !COHORT_SESSION_ID_RE.test(id)) return `${label} id must be a lowercase session id`;
+    if (index > 0 && !(previousId < id)) return "frozenBaseline sessions must be sorted by id with no repeated id";
+    previousId = id;
+    if (!finiteNonNegative2(startedAt) || !finiteNonNegative2(endedAt)) return `${label} times must each be a finite number of 0 or more`;
+    if (startedAt > endedAt || endedAt > cutAt) return `${label} must start before it ends, and end at or before cutAt`;
+    if (!plainObject2(metrics) || !hasExactKeys2(metrics, SUGGESTION_VERIFICATION_METRICS)) {
+      return `${label} metrics must have exactly the ${SUGGESTION_VERIFICATION_METRICS.length} verification metrics`;
+    }
+    if (!SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative2(metrics[metric]))) return `${label} metrics must each be a finite number of 0 or more`;
+  }
+  const skipped = value["skipped"];
+  if (!plainObject2(skipped) || !hasExactKeys2(skipped, COHORT_SKIP_REASONS)) return `frozenBaseline skipped must have exactly the ${COHORT_SKIP_REASONS.length} skip reasons`;
+  if (!COHORT_SKIP_REASONS.every((reason) => Number.isSafeInteger(skipped[reason]) && skipped[reason] >= 0)) {
+    return "frozenBaseline skipped counts must each be a whole number of 0 or more";
+  }
+  return void 0;
+}
+function frozenBindingViolation(receipt, frozenBaseline, appliedAt, minSessions) {
+  if (frozenBaselineViolation(frozenBaseline, appliedAt) !== void 0) return "the stored frozenBaseline is not valid, so the store cannot grade a receipt against it";
+  const frozen = frozenBaseline;
+  if (frozen.sessions.length < minSessions) return `Orangu cannot verify a record with a frozen baseline below ${minSessions} sessions`;
+  if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
+    return "baselineSessionIds must equal the frozen baseline session ids";
+  }
+  for (let index = 0; index < receipt.checks.length; index++) {
+    const check = receipt.checks[index];
+    const values = frozen.sessions.map((session) => session.metrics[check.metric]);
+    const mean = mean6(values);
+    if (check.before !== mean) return `checks[${index}] before must be the mean of the frozen baseline, ${mean}`;
+    const middle = median2(values);
+    if (check.beforeMedian !== middle) return `checks[${index}] beforeMedian must be the median of the frozen baseline, ${middle}`;
+  }
+  return void 0;
+}
+function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBaseline) {
+  if (!plainObject2(value) || !hasExactKeys2(value, OUTCOME_RECEIPT_KEYS)) return "outcomeReceipt must have exactly the keys of an outcome receipt";
+  const receipt = value;
+  if (receipt.v !== 1 || receipt.method !== "cohort-rank-v1" || receipt.alpha !== COHORT_ALPHA) return "outcomeReceipt must be a cohort-rank-v1 outcome receipt at alpha 0.05";
+  if (appliedAt === void 0 || receipt.appliedAt !== appliedAt) return "receipt appliedAt must equal the recorded application time";
+  if (receipt.checkpoint !== "first" && receipt.checkpoint !== "complete") return "checkpoint must be first or complete";
+  if (!OUTCOME_VERDICTS.includes(receipt.verdict)) return "verdict must be a verdict other than verified";
+  if (typeof receipt.laterComplete !== "boolean") return "laterComplete must be a boolean";
+  if (!sortedUniqueIds(receipt.baselineSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `baselineSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`;
+  if (!sortedUniqueIds(receipt.measuredSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `measuredSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`;
+  const baseline = new Set(receipt.baselineSessionIds);
+  if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return "baseline and later cohorts must not share a session";
+  if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return "confoundedBy must be sorted unique suggestion ids";
+  const checks2 = receipt.checks;
+  if (!Array.isArray(checks2) || checks2.length !== reviewed.length) return "checks must match the reviewed verificationChecks";
+  const nBefore = receipt.baselineSessionIds.length;
+  const nAfter = receipt.measuredSessionIds.length;
+  const minP = Number((1 / binomial(nBefore + nAfter, nAfter)).toFixed(6));
+  for (let index = 0; index < checks2.length; index++) {
+    const raw = checks2[index];
+    const intent = reviewed[index];
+    if (!plainObject2(raw) || !hasExactKeys2(raw, OUTCOME_CHECK_KEYS)) return `checks[${index}] must have exactly the keys of an outcome check`;
+    const check = raw;
+    if (check.metric !== intent.metric || check.comparison !== intent.comparison || check.name !== verificationCheckName(intent)) {
+      return `checks[${index}] must match the reviewed check ${verificationCheckName(intent)}`;
+    }
+    const { before, after, beforeMedian, afterMedian, pLower, pHigher } = check;
+    if (!finiteNonNegative2(before) || !finiteNonNegative2(after) || !finiteNonNegative2(beforeMedian) || !finiteNonNegative2(afterMedian)) {
+      return `checks[${index}] must carry finite metric values`;
+    }
+    if (typeof pLower !== "number" || typeof pHigher !== "number" || ![pLower, pHigher].every((p) => p >= minP && p <= 1) || pLower + pHigher < 1) {
+      return `checks[${index}] p-values are not possible for ${nBefore} and ${nAfter} sessions`;
+    }
+    const verdict = checkVerdict(intent.comparison, before, after, pLower, pHigher);
+    if (check.verdict !== verdict) return `checks[${index}] verdict must be the computed verdict ${verdict}`;
+  }
+  const frozen = frozenBaseline;
+  if (frozenBaseline !== void 0) {
+    const violation = frozenBindingViolation({ baselineSessionIds: receipt.baselineSessionIds, checks: checks2 }, frozenBaseline, appliedAt, 0);
+    if (violation) return violation;
+  }
+  const overall = overallVerdict(checks2, nBefore, nAfter);
+  if (receipt.verdict !== overall) return `the overall verdict must be the computed verdict ${overall}`;
+  if (status === "regressed" && receipt.verdict !== "regressed") return `a regressed record needs the regressed verdict, not ${receipt.verdict}`;
+  if (status === "unproven" && receipt.verdict === "regressed") return "an unproven record cannot carry the regressed verdict";
+  const shortFrozen = frozen !== void 0 && frozen.sessions.length < COHORT_MIN;
+  if (!receipt.laterComplete && !(shortFrozen && receipt.verdict === "not-enough-sessions")) {
+    return `laterComplete must be true. Only a frozen baseline below ${COHORT_MIN} sessions with the verdict not-enough-sessions closes before the later cohort is complete`;
+  }
+  if (frozen === void 0 && nBefore < COHORT_MIN) return `a record with no frozen baseline needs ${COHORT_MIN} or more baseline sessions to close`;
+  if (receipt.checkpoint === "first" && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`;
+  if (receipt.checkpoint !== (receipt.laterComplete ? "complete" : "first")) return "checkpoint must be complete when the later cohort is complete, and first before it";
+  return void 0;
+}
+function effectMatchesChecks(record3, checks2, measured) {
+  const effect = record3.effect;
+  if (!effect || !Array.isArray(effect.measuredSessionIds) || JSON.stringify(effect.measuredSessionIds) !== JSON.stringify(measured)) return false;
+  const before = Object.fromEntries(checks2.map((check) => [check.metric, check.before]));
+  const after = Object.fromEntries(checks2.map((check) => [check.metric, check.after]));
+  return numericMapMatches(effect.before, before) && numericMapMatches(effect.after, after);
+}
+function isTrustedCohortVerification(record3) {
+  if (record3.scope !== "session" && record3.scope !== "repo") return false;
+  const proposal = record3.proposal;
+  const receipt = record3.verificationReceipt;
+  if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || record3.application?.v !== 1 || receipt?.v !== 2) return false;
+  if (cohortReceiptViolation(receipt, proposal.verificationChecks, record3.appliedAt) !== void 0) return false;
+  if (record3.frozenBaseline !== void 0 && frozenBindingViolation(receipt, record3.frozenBaseline, record3.appliedAt, COHORT_MIN) !== void 0) return false;
+  return effectMatchesChecks(record3, receipt.checks, receipt.measuredSessionIds);
+}
+function isTrustedComputedVerification(record3) {
+  if (record3.status !== "verified") return false;
+  if (record3.verificationTrust === "computed-v2") return isTrustedCohortVerification(record3);
+  if (record3.verificationTrust !== "computed-v1" || record3.scope !== "session") return false;
+  const proposal = record3.proposal;
+  const application = record3.application;
+  const receipt = record3.verificationReceipt;
+  const effect = record3.effect;
+  if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || application?.v !== 1 || receipt?.v !== 1 || !effect || !Array.isArray(receipt.checks) || receipt.checks.length !== proposal.verificationChecks.length || !Array.isArray(receipt.measuredSessionIds) || receipt.measuredSessionIds.length === 0 || JSON.stringify(receipt.measuredSessionIds) !== JSON.stringify(effect.measuredSessionIds)) return false;
+  if (receipt.summary !== verificationReceiptSummary(proposal.verificationChecks)) return false;
+  for (let index = 0; index < proposal.verificationChecks.length; index++) {
+    const intent = proposal.verificationChecks[index];
+    const check = receipt.checks[index];
+    if (!check || check.ok !== true || check.metric !== intent.metric || check.comparison !== intent.comparison || check.name !== verificationCheckName(intent) || !Number.isFinite(check.before) || !Number.isFinite(check.after) || typeof check.evidence !== "string" || !check.evidence) return false;
+  }
+  const before = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.before]));
+  const after = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.after]));
+  return numericMapMatches(effect.before, before) && numericMapMatches(effect.after, after);
+}
+
+// src/suggest/cohort.ts
+var COHORT_SIDE_BYTES = 256 * 1024 * 1024;
+function metricValues(analysis) {
+  const values = {
+    avgTotalTokens: analysis.summary.totalTokens,
+    avgToolCalls: analysis.summary.toolCalls,
+    avgToolErrors: analysis.summary.toolErrors,
+    avgActiveMs: analysis.summary.activeMs,
+    avgContextPeak: analysis.summary.contextPeak,
+    avgTestRunsFailed: analysis.summary.outcomes.testRunsFailed,
+    avgBuildRunsFailed: analysis.summary.outcomes.buildRunsFailed,
+    avgInterruptions: analysis.turns.filter((turn) => turn.interrupted).length
+  };
+  for (const metric of SUGGESTION_VERIFICATION_METRICS) {
+    if (!Number.isFinite(values[metric]) || values[metric] < 0) throw new Error(`analysis has an invalid ${metric} value`);
+  }
+  return values;
+}
+var ORANGU_SKILL_RE = /^\/?orangu[:-][a-z-]+$/i;
+var ORANGU_CLI_RE = /\borangu(?:\.cli\.mjs|\.js)?["']?\s+(?:suggest|evidence|estimate|harness)\b/;
+function ranOranguLifecycle(session) {
+  if (session.skills.some((skill) => ORANGU_SKILL_RE.test(skill.name.trim()))) return true;
+  return session.toolCalls.some((call) => {
+    if (call.name !== "Bash" || !call.input || typeof call.input !== "object") return false;
+    const command = call.input.command;
+    return typeof command === "string" && ORANGU_CLI_RE.test(command);
+  });
+}
+function evidenceSessionIds(selectors) {
+  const ids = /* @__PURE__ */ new Set();
+  for (const selector of selectors) {
+    const trimmed = selector.trim();
+    for (const candidate of [trimmed, basename8(trimmed).replace(/\.jsonl$/i, "")]) {
+      if (SESSION_ID_RE.test(candidate)) ids.add(candidate.toLowerCase());
+    }
+  }
+  return ids;
+}
+var byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+var baselineCandidates = (candidates, cutAt) => candidates.filter((c) => c.mtimeMs < cutAt).sort((a, b) => b.mtimeMs - a.mtimeMs || byPath(a, b));
+var laterCandidates = (candidates, cutAt) => candidates.filter((c) => c.mtimeMs > cutAt).sort((a, b) => a.mtimeMs - b.mtimeMs || byPath(a, b));
+var noSkips = () => Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0]));
+async function take(ctx, list2, side) {
+  const { deps, cwd, cutAt, excluded, seen, skipped } = ctx;
+  const accepted = [];
+  const settling = [];
+  let spent = 0;
+  let read = 0;
+  let budgetSpent = false;
+  for (const candidate of list2) {
+    if (accepted.length >= COHORT_MAX) break;
+    const id = candidate.sessionId.toLowerCase();
+    if (seen.has(id)) continue;
+    if (excluded.has(id)) {
+      skipped["evidence-session"]++;
+      continue;
+    }
+    const free = COHORT_SIDE_BYTES - spent;
+    const left = COHORT_SIDE_BYTES - read;
+    if (free < 1 || left < 1) {
+      skipped["budget-spent"]++;
+      budgetSpent = free < 1;
+      break;
+    }
+    const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, left);
+    const loaded = await deps.loadCandidate(candidate, maxBytes);
+    read += loaded.bytesRead;
+    if ("skip" in loaded && loaded.skip === "still-settling") {
+      skipped["still-settling"]++;
+      const startedAt = typeof loaded.startedAt === "number" && Number.isFinite(loaded.startedAt) && loaded.startedAt > 0 ? loaded.startedAt : void 0;
+      settling.push(startedAt === void 0 ? { id } : { id, startedAt });
+      continue;
+    }
+    spent += loaded.bytesRead;
+    if ("skip" in loaded) {
+      if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
+        skipped["budget-spent"]++;
+        budgetSpent = maxBytes === Math.min(MAX_EVIDENCE_SESSION_BYTES, free);
+        break;
+      }
+      skipped[loaded.skip]++;
+      continue;
+    }
+    const session = loaded.session;
+    if (session.id.toLowerCase() !== id) {
+      skipped.unreadable++;
+      continue;
+    }
+    if (session.cwd !== cwd) {
+      skipped["other-workspace"]++;
+      continue;
+    }
+    if (side === "baseline" ? session.endedAt > cutAt : session.startedAt <= cutAt) {
+      skipped["spans-application"]++;
+      continue;
+    }
+    if (session.ranOrangu) {
+      skipped["orangu-session"]++;
+      continue;
+    }
+    seen.add(id);
+    accepted.push({ ...session, id });
+  }
+  return { accepted, budgetSpent, settling };
+}
+var byStartThenId = (a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+async function measureCohortEffect(record3, others, deps) {
+  if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
+  if (record3.status !== "applied" && record3.status !== "verified") {
+    throw new Error(`suggestion ${record3.id} is not applied (status ${record3.status})`);
+  }
+  const proposal = record3.proposal;
+  const intents = proposal?.verificationChecks;
+  if (proposal?.v !== 1 || !proposal.workspace || !intents?.length) {
+    throw new Error(`suggestion ${record3.id} has no reviewed verification checks and workspace`);
+  }
+  const appliedAt = applicationTime(record3);
+  if (appliedAt === void 0) throw new Error(`suggestion ${record3.id}: its application time is unknown, so later sessions cannot be cut from it`);
+  const frozen = record3.frozenBaseline;
+  if (frozen !== void 0) {
+    const violation = frozenBaselineViolation(frozen, appliedAt);
+    if (violation) throw new Error(`suggestion ${record3.id}: its frozen baseline is not valid (${violation})`);
+  }
+  const cwd = await deps.canonicalWorkspace(proposal.workspace);
+  const candidates = await deps.listCandidates(cwd);
+  const skipped = frozen ? { ...frozen.skipped } : noSkips();
+  skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === appliedAt).length;
+  const ctx = {
+    deps,
+    cwd,
+    cutAt: appliedAt,
+    excluded: evidenceSessionIds(record3.sessionIds),
+    seen: new Set(frozen ? frozen.sessions.map((s) => s.id) : []),
+    skipped
+  };
+  const baseline = frozen ? frozen.sessions.map(({ id, startedAt, endedAt, metrics }) => ({ id, startedAt, endedAt, metrics: { ...metrics } })) : (await take(ctx, baselineCandidates(candidates, appliedAt), "baseline")).accepted;
+  const laterSide = await take(ctx, laterCandidates(candidates, appliedAt), "later");
+  if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
+    throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its sessions were read`);
+  }
+  const laterComplete = laterSide.accepted.length >= COHORT_MAX || laterSide.budgetSpent;
+  const byStart = [...laterSide.accepted].sort(byStartThenId);
+  const third = byStart[COHORT_MIN - 1];
+  const holds = laterComplete || third === void 0 ? [] : laterSide.settling.filter((s) => s.startedAt === void 0 || s.startedAt > appliedAt && byStartThenId({ id: s.id, startedAt: s.startedAt }, third) < 0);
+  const firstWaits = holds.length > 0;
+  const earliest = holds.reduce((min, s) => Math.min(min, s.startedAt ?? -Infinity), Infinity);
+  const later = laterComplete ? byStart : firstWaits ? byStart.filter((s) => s.startedAt < earliest).slice(0, COHORT_MIN) : byStart.slice(0, COHORT_MIN);
+  const checks2 = intents.map(
+    (intent) => evaluateCheck(
+      intent,
+      baseline.map((s) => s.metrics[intent.metric]),
+      later.map((s) => s.metrics[intent.metric])
+    )
+  );
+  const measured = [...baseline, ...later];
+  const windowStart = measured.length ? Math.min(...measured.map((s) => s.startedAt)) : appliedAt;
+  const windowEnd = measured.length ? Math.max(...measured.map((s) => s.endedAt)) : appliedAt;
+  const confoundedBy = [
+    ...new Set(
+      others.filter((other) => other.id !== record3.id && other.proposal?.workspace?.cwd === proposal.workspace.cwd).filter((other) => {
+        const at = applicationTime(other);
+        return at !== void 0 && at >= windowStart && at <= windowEnd;
+      }).map((other) => other.id)
+    )
+  ].sort();
+  return {
+    id: record3.id,
+    status: record3.status,
+    scope: record3.scope,
+    appliedAt,
+    verdict: overallVerdict(checks2, baseline.length, later.length),
+    baseline,
+    baselineFrozen: frozen !== void 0,
+    later,
+    laterCount: laterSide.accepted.length,
+    laterComplete,
+    firstWaits,
+    checks: checks2,
+    confoundedBy,
+    skipped
+  };
+}
+async function freezeBaseline(record3, _others, deps) {
+  if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
+  if (record3.status !== "proposed") throw new Error(`suggestion ${record3.id} is not proposed (status ${record3.status}), so it has no baseline to freeze`);
+  const proposal = record3.proposal;
+  if (proposal?.v !== 1 || !proposal.workspace || !proposal.verificationChecks?.length) {
+    throw new Error(`suggestion ${record3.id} has no reviewed verification checks and workspace`);
+  }
+  const cutAt = (deps.now ?? Date.now)();
+  if (!Number.isFinite(cutAt) || cutAt <= 0) throw new Error(`suggestion ${record3.id}: the clock gave no valid cut time, so the baseline cannot be frozen`);
+  const cwd = await deps.canonicalWorkspace(proposal.workspace);
+  const candidates = await deps.listCandidates(cwd);
+  const skipped = noSkips();
+  skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === cutAt).length;
+  const ctx = { deps, cwd, cutAt, excluded: evidenceSessionIds(record3.sessionIds), seen: /* @__PURE__ */ new Set(), skipped };
+  const { accepted } = await take(ctx, baselineCandidates(candidates, cutAt), "baseline");
+  if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
+    throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its baseline sessions were read`);
+  }
+  const sessions = accepted.map((session) => ({
+    id: session.id,
+    startedAt: session.startedAt,
+    endedAt: session.endedAt,
+    metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, session.metrics[metric]]))
+  })).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  const frozen = { v: 1, cutAt, sessions, skipped };
+  const violation = frozenBaselineViolation(frozen, void 0);
+  if (violation) throw new Error(`suggestion ${record3.id}: the baseline cannot be frozen (${violation})`);
+  return frozen;
+}
+function effectFinality(effect) {
+  const checkpoint = effect.laterComplete ? "complete" : effect.laterCount >= COHORT_MIN && !effect.firstWaits ? "first" : null;
+  if (effect.baseline.length < COHORT_MIN) return { checkpoint, final: effect.baselineFrozen };
+  if (checkpoint === null) return { checkpoint, final: false };
+  if (effect.verdict === "verified" || checkpoint === "complete") return { checkpoint, final: true };
+  return effect.verdict === "regressed" ? { checkpoint, final: false, leaning: "worse" } : { checkpoint, final: false };
+}
+function checkpointLabel(effect, checkpoint) {
+  if (checkpoint === "first") return `the first checkpoint (the first ${COHORT_MIN} later sessions)`;
+  const n2 = effect.later.length;
+  return `the complete checkpoint (${n2 >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX} later sessions` : `${n2} later sessions, the byte budget is spent`})`;
+}
+function nextStep(effect) {
+  if (effect.status === "verified") return "already recorded as verified";
+  const counts = `(has ${effect.baseline.length} before, ${effect.laterCount} after)`;
+  const { checkpoint } = effectFinality(effect);
+  if (effect.baseline.length < COHORT_MIN) {
+    if (effect.baselineFrozen) {
+      const record3 = `Record it as unproven: orangu suggest --record ${effect.id}`;
+      if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. The frozen baseline cannot change. ${record3}`;
+      return `the frozen baseline has ${effect.baseline.length} of the ${COHORT_MIN} sessions that a verdict needs, and it cannot change. ${record3}`;
+    }
+    return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set ${effect.id} rejected --reason other`;
+  }
+  if (checkpoint === null && effect.firstWaits) return `the first checkpoint waits until a later session that started before the third one settles ${counts}`;
+  if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. Orangu grades at ${COHORT_MIN} and at ${COHORT_MAX} later sessions`;
+  const at = checkpointLabel(effect, checkpoint);
+  if (effect.verdict === "verified") return `${at} beat the baseline beyond chance. Record it: orangu suggest --set ${effect.id} verified`;
+  if (checkpoint === "first") {
+    const wait = `That is not final. Orangu grades again when the later cohort is complete (${effect.laterCount} of ${COHORT_MAX} so far)`;
+    if (effect.verdict === "regressed") return `${at} leans worse: a check moved the wrong way beyond chance. ${wait}`;
+    return `${at} did not beat the baseline beyond chance. ${wait}`;
+  }
+  if (effect.verdict === "regressed") return `${at} found a check that moved the wrong way beyond chance. Record it as regressed: orangu suggest --record ${effect.id}`;
+  return `${at} did not beat the baseline beyond chance. Record it as unproven: orangu suggest --record ${effect.id}`;
+}
+function verificationPatch(effect) {
+  if (effect.verdict !== "verified") throw new Error(`not verified: ${effect.verdict}; ${nextStep(effect)}`);
+  const checks2 = effect.checks.map((check) => ({
+    metric: check.metric,
+    comparison: check.comparison,
+    name: check.name,
+    before: check.before,
+    after: check.after,
+    beforeMedian: check.beforeMedian,
+    afterMedian: check.afterMedian,
+    pLower: check.pLower,
+    pHigher: check.pHigher,
+    verdict: check.verdict === "improved" ? "improved" : "held",
+    evidence: check.evidence,
+    ok: true
+  }));
+  const receipt = {
+    v: 2,
+    method: "cohort-rank-v1",
+    alpha: COHORT_ALPHA,
+    appliedAt: effect.appliedAt,
+    summary: "",
+    baselineSessionIds: effect.baseline.map((s) => s.id).sort(),
+    measuredSessionIds: effect.later.map((s) => s.id).sort(),
+    confoundedBy: [...effect.confoundedBy],
+    checks: checks2
+  };
+  receipt.summary = cohortReceiptSummary(receipt);
+  return {
+    verificationReceipt: receipt,
+    effect: {
+      before: Object.fromEntries(checks2.map((check) => [check.metric, check.before])),
+      after: Object.fromEntries(checks2.map((check) => [check.metric, check.after])),
+      measuredSessionIds: receipt.measuredSessionIds
+    }
+  };
+}
+function outcomePatch(effect) {
+  if (effect.status !== "applied") throw new Error(`suggestion ${effect.id} is not applied (status ${effect.status})`);
+  const verdict = effect.verdict;
+  if (verdict === "verified") throw new Error(`record it as verified: orangu suggest --set ${effect.id} verified`);
+  if (!effectFinality(effect).final) throw new Error(`not final: ${verdict}. ${nextStep(effect)}`);
+  const checks2 = effect.checks.map((check) => ({
+    metric: check.metric,
+    comparison: check.comparison,
+    name: check.name,
+    before: check.before,
+    after: check.after,
+    beforeMedian: check.beforeMedian,
+    afterMedian: check.afterMedian,
+    pLower: check.pLower,
+    pHigher: check.pHigher,
+    verdict: check.verdict
+  }));
+  return {
+    outcomeReceipt: {
+      v: 1,
+      method: "cohort-rank-v1",
+      alpha: COHORT_ALPHA,
+      appliedAt: effect.appliedAt,
+      // The store accepts only this pairing: complete exactly when the later cohort is complete.
+      checkpoint: effect.laterComplete ? "complete" : "first",
+      verdict,
+      laterComplete: effect.laterComplete,
+      confoundedBy: [...effect.confoundedBy],
+      baselineSessionIds: effect.baseline.map((s) => s.id).sort(),
+      measuredSessionIds: effect.later.map((s) => s.id).sort(),
+      checks: checks2
+    }
+  };
+}
+
+// src/suggest/cohort-deps.ts
+import { constants as constants11 } from "node:fs";
+import { open as open11, realpath as realpath8 } from "node:fs/promises";
+import { isAbsolute as isAbsolute8 } from "node:path";
+
+// src/adapters/claude-code/discovered-analysis.ts
+import { realpath as realpath5 } from "node:fs/promises";
+import { isAbsolute as isAbsolute4, resolve as resolve7 } from "node:path";
+var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
+var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
+async function discoveredInventory() {
+  const refs = (await listSessions({ roots: await claudeRoots(), maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS })).filter((ref2) => SESSION_ID_RE.test(ref2.sessionId));
+  if (refs.length > MAX_VERIFICATION_DISCOVERED_SESSIONS) {
+    throw new Error(`verification discovery exceeds ${MAX_VERIFICATION_DISCOVERED_SESSIONS} sessions`);
+  }
+  const byCanonicalPath = /* @__PURE__ */ new Map();
+  for (const ref2 of refs) {
+    try {
+      const canonical = await realpath5(ref2.path);
+      const prior = byCanonicalPath.get(canonical);
+      if (prior === void 0) byCanonicalPath.set(canonical, ref2);
+      else if (prior !== null && resolve7(prior.path) !== resolve7(ref2.path)) byCanonicalPath.set(canonical, null);
+    } catch {
+    }
+  }
+  return { refs, byCanonicalPath };
+}
+async function exactDiscoveredRef(selector, inventory) {
+  const value = selector.trim();
+  if (!value) return void 0;
+  let matches;
+  if (SESSION_ID_RE.test(value)) {
+    matches = inventory.refs.filter((ref2) => ref2.sessionId.toLowerCase() === value.toLowerCase());
+  } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
+    let canonical;
+    try {
+      canonical = await realpath5(isAbsolute4(value) ? value : resolve7(process.cwd(), value));
+    } catch {
+      return void 0;
+    }
+    const indexed = inventory.byCanonicalPath.get(canonical);
+    matches = indexed ? [indexed] : [];
+  } else {
+    return void 0;
+  }
+  const unique = new Map(matches.map((ref2) => [resolve7(ref2.path), ref2]));
+  return unique.size === 1 ? [...unique.values()][0] : void 0;
+}
+var OVER_BUDGET_RE = /exceeds (?:\d+ bytes|the remaining \d+-byte read budget)/;
+async function loadSettledAnalysis(ref2, maxBytes, options = {}) {
+  let settling = false;
+  try {
+    const loaded = await withStableSessionRead(ref2.path, void 0, async (manifest) => {
+      if (options.requireQuiet) {
+        const changedAt = evidenceManifestLatestChangeMs(manifest);
+        const observedAt = (options.now ?? Date.now)();
+        if (changedAt === void 0 || !Number.isFinite(observedAt) || observedAt < changedAt || observedAt - changedAt < MIN_VERIFICATION_QUIET_MS) {
+          settling = true;
+          return void 0;
+        }
+      }
+      return readEvidenceSessionManifest(manifest, maxBytes);
+    });
+    if (!loaded) return { skip: settling ? "still-settling" : "unreadable", bytesRead: 0 };
+    const bytesRead = loaded.bytesRead;
+    if (options.requireQuiet && (loaded.parseInput.trailingPartial || loaded.parseInput.subagents?.some((sidecar) => sidecar.trailingPartial))) return { skip: "still-settling", bytesRead };
+    const session = await parseClaudeCodeSession(loaded.parseInput);
+    const analysis = analyzeSession(session, { version: "verification", now: 0 });
+    if (analysis.session.source !== "claude-code" || analysis.session.id.toLowerCase() !== ref2.sessionId.toLowerCase()) {
+      return { skip: "unreadable", bytesRead };
+    }
+    return { analysis, session, bytesRead };
+  } catch (error) {
+    return { skip: error instanceof Error && OVER_BUDGET_RE.test(error.message) ? "over-budget" : "unreadable", bytesRead: 0 };
+  }
+}
+function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSION_BYTES, options = {}) {
+  if (!Number.isSafeInteger(maxTotalBytes) || maxTotalBytes < 1 || maxTotalBytes > MAX_EVIDENCE_SESSION_BYTES) {
+    throw new Error(`verification read budget must be an integer from 1-${MAX_EVIDENCE_SESSION_BYTES} bytes`);
+  }
+  let remainingBytes = maxTotalBytes;
+  const inventory = discoveredInventory();
+  return async (selector) => {
+    try {
+      if (remainingBytes < 1) return void 0;
+      const ref2 = await exactDiscoveredRef(selector, await inventory);
+      if (!ref2) return void 0;
+      const loaded = await loadSettledAnalysis(ref2, remainingBytes, options);
+      remainingBytes -= loaded.bytesRead;
+      return "analysis" in loaded ? loaded.analysis : void 0;
+    } catch {
+      return void 0;
+    }
+  };
+}
+
+// src/suggest/artifacts.ts
+import { constants as constants10 } from "node:fs";
+import { chmod, lstat as lstat8, open as open10, realpath as realpath7 } from "node:fs/promises";
+import { basename as basename9, isAbsolute as isAbsolute7, relative as relative3, resolve as resolve8 } from "node:path";
+
+// src/suggest/change-classes.ts
+var CHANGE_CLASS_DEFINITIONS = [
+  { id: "instruction", label: "Instruction files", description: "Persistent project guidance and conventions." },
+  { id: "script-cli", label: "Scripts and CLIs", description: "Repeatable actions with checkable output." },
+  { id: "hook", label: "Hooks", description: "Guaranteed actions at lifecycle boundaries." },
+  { id: "skill-create", label: "Skills to create", description: "Reusable knowledge and workflows specific to this setup." },
+  { id: "skill-discover", label: "Skills to discover", description: "Existing capabilities to evaluate before installing." },
+  { id: "subagent-agent", label: "Subagents and agents", description: "Isolated or specialized work with clear ownership." },
+  { id: "mcp", label: "MCP servers", description: "External tools and data that the work needs." },
+  { id: "plugin", label: "Plugins", description: "A reusable package of related extensions." },
+  { id: "workflow-config", label: "Workflow and configuration", description: "How work is sequenced, checked, and repeated." }
+];
+var CHANGE_CLASSES = new Set(CHANGE_CLASS_DEFINITIONS.map((definition) => definition.id));
+function isChangeClass(value) {
+  return CHANGE_CLASSES.has(value);
+}
 
 // src/suggest/reviewed-path.ts
-import { isAbsolute as isAbsolute3 } from "node:path";
+import { isAbsolute as isAbsolute5 } from "node:path";
 var WINDOWS_RESERVED_DEVICE = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 var CONTROL_CHARACTER = /[\x00-\x1f\x7f]/;
 function inspectReviewedPath(file) {
   if (CONTROL_CHARACTER.test(file)) return { violation: "must not contain control characters or newlines" };
-  if (isAbsolute3(file) || /^[\\/]/.test(file)) return { violation: "must be relative to the target repository" };
+  if (isAbsolute5(file) || /^[\\/]/.test(file)) return { violation: "must be relative to the target repository" };
   if (file.includes(":")) return { violation: "must not contain a colon or Windows alternate data stream" };
   const canonical = file.replace(/\\/g, "/");
   const parts2 = canonical.split("/");
@@ -10043,320 +11022,17 @@ function proposalSourcesAreCanonical(value) {
   });
 }
 
-// src/suggest/types.ts
-var TRANSITIONS = {
-  new: ["kicked-off", "rejected"],
-  "kicked-off": ["proposed", "failed", "rejected"],
-  proposed: ["applied", "rejected"],
-  // A move into regressed or unproven carries an outcome receipt, and the store grades it again before it writes the line.
-  applied: ["verified", "regressed", "unproven", "rejected"],
-  verified: ["rejected"],
-  rejected: [],
-  failed: ["kicked-off", "rejected"],
-  regressed: ["kept", "rejected"],
-  unproven: ["rejected"],
-  kept: ["rejected"]
-};
-var SUGGESTION_VERIFICATION_METRICS = [
-  "avgTotalTokens",
-  "avgToolCalls",
-  "avgToolErrors",
-  "avgActiveMs",
-  "avgContextPeak",
-  "avgTestRunsFailed",
-  "avgBuildRunsFailed",
-  "avgInterruptions"
-];
-var SUGGESTION_VERIFICATION_COMPARISONS = ["decreased", "not-increased", "increased", "not-decreased", "equal"];
-var ESTIMATE_TOKEN_THRESHOLD = 5e3;
-
-// src/suggest/cohort-skip-reasons.ts
-var COHORT_SKIP_REASONS = [
-  "evidence-session",
-  "orangu-session",
-  "spans-application",
-  "still-settling",
-  "other-workspace",
-  "over-budget",
-  "budget-spent",
-  "unreadable"
-];
-
-// src/suggest/verification-policy.ts
-function verificationIntentKey(intent) {
-  return `${intent.metric}:${intent.comparison}`;
-}
-function hasUniqueVerificationIntents(intents) {
-  return new Set(intents.map(verificationIntentKey)).size === intents.length;
-}
-function sameVerificationIntentSet(left, right) {
-  if (left.length !== right.length) return false;
-  const leftKeys = left.map(verificationIntentKey).sort();
-  const rightKeys = right.map(verificationIntentKey).sort();
-  return leftKeys.every((key, index) => key === rightKeys[index]);
-}
-function sameVerificationIntentSequence(left, right) {
-  return left.length === right.length && left.every((intent, index) => verificationIntentKey(intent) === verificationIntentKey(right[index]));
-}
-function verificationCheckName(intent) {
-  return `${intent.metric} ${intent.comparison}`;
-}
-function verificationReceiptSummary(intents) {
-  return `Later-session comparison passed: ${intents.map(verificationCheckName).join("; ")}.`;
-}
-function isIntent(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const intent = value;
-  return SUGGESTION_VERIFICATION_METRICS.includes(intent.metric) && SUGGESTION_VERIFICATION_COMPARISONS.includes(intent.comparison);
-}
-function numericMapMatches(value, expected) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const entries = Object.entries(value);
-  const wanted = Object.entries(expected);
-  return entries.length === wanted.length && wanted.every(([key, number]) => value[key] === number);
-}
-function applicationTime(record3) {
-  if (typeof record3.appliedAt === "number" && Number.isFinite(record3.appliedAt) && record3.appliedAt > 0) return record3.appliedAt;
-  return record3.status === "applied" && Number.isFinite(record3.statusAt) && record3.statusAt > 0 ? record3.statusAt : void 0;
-}
-function cohortReceiptSummary(receipt) {
-  const head2 = `Later sessions beat the baseline beyond chance (${receipt.baselineSessionIds.length} before, ${receipt.measuredSessionIds.length} after, p \u2264 ${COHORT_ALPHA}): ${receipt.checks.map(verificationCheckName).join("; ")}.`;
-  const others = receipt.confoundedBy.length;
-  return others ? `${head2} Measured together with ${others} other applied change${others === 1 ? "" : "s"}; not attributable to this change alone.` : head2;
-}
-var SUGGESTION_ID_RE = /^sg_[0-9a-f]{12}$/;
-var MAX_CONFOUNDERS = 64;
-function binomial(n2, k) {
-  let result = 1;
-  for (let i = 1; i <= k; i++) result = result * (n2 - k + i) / i;
-  return result;
-}
-function sortedUniqueIds(value, min, max, pattern) {
-  if (!Array.isArray(value) || value.length < min || value.length > max) return false;
-  if (!value.every((id) => typeof id === "string" && id.trim().length > 0 && id.length <= 500 && (!pattern || pattern.test(id)))) return false;
-  return value.every((id, index) => index === 0 || value[index - 1] < id);
-}
-var finiteNonNegative = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
-function cohortReceiptViolation(value, reviewed, appliedAt) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return "receipt must be an object";
-  const receipt = value;
-  if (receipt.v !== 2 || receipt.method !== "cohort-rank-v1" || receipt.alpha !== COHORT_ALPHA) return "receipt must be a cohort-rank-v1 receipt at alpha 0.05";
-  if (appliedAt === void 0 || receipt.appliedAt !== appliedAt) return "receipt appliedAt must equal the recorded application time";
-  if (!sortedUniqueIds(receipt.baselineSessionIds, COHORT_MIN, COHORT_MAX)) return `baselineSessionIds must be ${COHORT_MIN}-${COHORT_MAX} sorted unique ids`;
-  if (!sortedUniqueIds(receipt.measuredSessionIds, COHORT_MIN, COHORT_MAX)) return `measuredSessionIds must be ${COHORT_MIN}-${COHORT_MAX} sorted unique ids`;
-  const baseline = new Set(receipt.baselineSessionIds);
-  if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return "baseline and later cohorts must not share a session";
-  if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return "confoundedBy must be sorted unique suggestion ids";
-  const checks2 = receipt.checks;
-  if (!Array.isArray(checks2) || checks2.length !== reviewed.length) return "checks must match the reviewed verificationChecks";
-  const nBefore = receipt.baselineSessionIds.length;
-  const nAfter = receipt.measuredSessionIds.length;
-  const minP = Number((1 / binomial(nBefore + nAfter, nAfter)).toFixed(6));
-  for (let index = 0; index < checks2.length; index++) {
-    const check = checks2[index];
-    const intent = reviewed[index];
-    if (!check || typeof check !== "object" || check.metric !== intent.metric || check.comparison !== intent.comparison) {
-      return `checks[${index}] must match the reviewed check ${verificationCheckName(intent)}`;
-    }
-    if (check.name !== verificationCheckName(intent) || check.ok !== true) return `checks[${index}] must be a passing, named check`;
-    const numbers = [check.before, check.after, check.beforeMedian, check.afterMedian];
-    if (!numbers.every(finiteNonNegative)) return `checks[${index}] must carry finite metric values`;
-    const p = [check.pLower, check.pHigher];
-    if (!p.every((x) => typeof x === "number" && x >= minP && x <= 1) || check.pLower + check.pHigher < 1) {
-      return `checks[${index}] p-values are not possible for ${nBefore} and ${nAfter} sessions`;
-    }
-    const verdict = checkVerdict(check.comparison, check.before, check.after, check.pLower, check.pHigher);
-    if (verdict !== check.verdict || verdict !== "improved" && verdict !== "held") return `checks[${index}] did not pass: ${verdict}`;
-    if (check.evidence !== checkEvidence(check.metric, check.comparison, check, verdict)) return `checks[${index}] evidence must be the computed rendering`;
-  }
-  if (!checks2.some((check) => isDirectional(check.comparison))) return "at least one check must name a direction (decreased or increased)";
-  if (receipt.summary !== cohortReceiptSummary(receipt)) return "summary must be the computed summary";
-  return void 0;
-}
-var COHORT_SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-var FROZEN_BASELINE_KEYS = ["v", "cutAt", "sessions", "skipped"];
-var FROZEN_SESSION_KEYS = ["id", "startedAt", "endedAt", "metrics"];
-var OUTCOME_RECEIPT_KEYS = [
-  "v",
-  "method",
-  "alpha",
-  "appliedAt",
-  "checkpoint",
-  "verdict",
-  "laterComplete",
-  "confoundedBy",
-  "baselineSessionIds",
-  "measuredSessionIds",
-  "checks"
-];
-var OUTCOME_CHECK_KEYS = [
-  "metric",
-  "comparison",
-  "name",
-  "before",
-  "after",
-  "beforeMedian",
-  "afterMedian",
-  "pLower",
-  "pHigher",
-  "verdict"
-];
-var OUTCOME_VERDICTS = ["within-noise", "regressed", "not-enough-sessions", "no-directional-check"];
-function plainObject(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-function hasExactKeys(value, keys) {
-  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
-}
-function frozenBaselineViolation(value, appliedAt) {
-  if (!plainObject(value) || !hasExactKeys(value, FROZEN_BASELINE_KEYS)) return "frozenBaseline must have exactly the keys v, cutAt, sessions and skipped";
-  if (value["v"] !== 1) return "frozenBaseline v must be 1";
-  const cutAt = value["cutAt"];
-  if (!finiteNonNegative(cutAt)) return "frozenBaseline cutAt must be a finite number of 0 or more";
-  if (appliedAt !== void 0 && cutAt > appliedAt) return "frozenBaseline cutAt must not be later than the application time";
-  const sessions = value["sessions"];
-  if (!Array.isArray(sessions) || sessions.length > COHORT_MAX) return `frozenBaseline must hold 0 to ${COHORT_MAX} sessions`;
-  let previousId = "";
-  for (let index = 0; index < sessions.length; index++) {
-    const session = sessions[index];
-    const label = `frozenBaseline sessions[${index}]`;
-    if (!plainObject(session) || !hasExactKeys(session, FROZEN_SESSION_KEYS)) return `${label} must have exactly the keys id, startedAt, endedAt and metrics`;
-    const { id, startedAt, endedAt, metrics } = session;
-    if (typeof id !== "string" || !COHORT_SESSION_ID_RE.test(id)) return `${label} id must be a lowercase session id`;
-    if (index > 0 && !(previousId < id)) return "frozenBaseline sessions must be sorted by id with no repeated id";
-    previousId = id;
-    if (!finiteNonNegative(startedAt) || !finiteNonNegative(endedAt)) return `${label} times must each be a finite number of 0 or more`;
-    if (startedAt > endedAt || endedAt > cutAt) return `${label} must start before it ends, and end at or before cutAt`;
-    if (!plainObject(metrics) || !hasExactKeys(metrics, SUGGESTION_VERIFICATION_METRICS)) {
-      return `${label} metrics must have exactly the ${SUGGESTION_VERIFICATION_METRICS.length} verification metrics`;
-    }
-    if (!SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative(metrics[metric]))) return `${label} metrics must each be a finite number of 0 or more`;
-  }
-  const skipped = value["skipped"];
-  if (!plainObject(skipped) || !hasExactKeys(skipped, COHORT_SKIP_REASONS)) return `frozenBaseline skipped must have exactly the ${COHORT_SKIP_REASONS.length} skip reasons`;
-  if (!COHORT_SKIP_REASONS.every((reason) => Number.isSafeInteger(skipped[reason]) && skipped[reason] >= 0)) {
-    return "frozenBaseline skipped counts must each be a whole number of 0 or more";
-  }
-  return void 0;
-}
-function frozenBindingViolation(receipt, frozenBaseline, appliedAt, minSessions) {
-  if (frozenBaselineViolation(frozenBaseline, appliedAt) !== void 0) return "the stored frozenBaseline is not valid, so the store cannot grade a receipt against it";
-  const frozen = frozenBaseline;
-  if (frozen.sessions.length < minSessions) return `Orangu cannot verify a record with a frozen baseline below ${minSessions} sessions`;
-  if (JSON.stringify(frozen.sessions.map((session) => session.id)) !== JSON.stringify(receipt.baselineSessionIds)) {
-    return "baselineSessionIds must equal the frozen baseline session ids";
-  }
-  for (let index = 0; index < receipt.checks.length; index++) {
-    const check = receipt.checks[index];
-    const values = frozen.sessions.map((session) => session.metrics[check.metric]);
-    const mean = mean6(values);
-    if (check.before !== mean) return `checks[${index}] before must be the mean of the frozen baseline, ${mean}`;
-    const middle = median2(values);
-    if (check.beforeMedian !== middle) return `checks[${index}] beforeMedian must be the median of the frozen baseline, ${middle}`;
-  }
-  return void 0;
-}
-function outcomeReceiptViolation(value, status, reviewed, appliedAt, frozenBaseline) {
-  if (!plainObject(value) || !hasExactKeys(value, OUTCOME_RECEIPT_KEYS)) return "outcomeReceipt must have exactly the keys of an outcome receipt";
-  const receipt = value;
-  if (receipt.v !== 1 || receipt.method !== "cohort-rank-v1" || receipt.alpha !== COHORT_ALPHA) return "outcomeReceipt must be a cohort-rank-v1 outcome receipt at alpha 0.05";
-  if (appliedAt === void 0 || receipt.appliedAt !== appliedAt) return "receipt appliedAt must equal the recorded application time";
-  if (receipt.checkpoint !== "first" && receipt.checkpoint !== "complete") return "checkpoint must be first or complete";
-  if (!OUTCOME_VERDICTS.includes(receipt.verdict)) return "verdict must be a verdict other than verified";
-  if (typeof receipt.laterComplete !== "boolean") return "laterComplete must be a boolean";
-  if (!sortedUniqueIds(receipt.baselineSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `baselineSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`;
-  if (!sortedUniqueIds(receipt.measuredSessionIds, 0, COHORT_MAX, COHORT_SESSION_ID_RE)) return `measuredSessionIds must be 0 to ${COHORT_MAX} sorted unique session ids`;
-  const baseline = new Set(receipt.baselineSessionIds);
-  if (receipt.measuredSessionIds.some((id) => baseline.has(id))) return "baseline and later cohorts must not share a session";
-  if (!sortedUniqueIds(receipt.confoundedBy, 0, MAX_CONFOUNDERS, SUGGESTION_ID_RE)) return "confoundedBy must be sorted unique suggestion ids";
-  const checks2 = receipt.checks;
-  if (!Array.isArray(checks2) || checks2.length !== reviewed.length) return "checks must match the reviewed verificationChecks";
-  const nBefore = receipt.baselineSessionIds.length;
-  const nAfter = receipt.measuredSessionIds.length;
-  const minP = Number((1 / binomial(nBefore + nAfter, nAfter)).toFixed(6));
-  for (let index = 0; index < checks2.length; index++) {
-    const raw = checks2[index];
-    const intent = reviewed[index];
-    if (!plainObject(raw) || !hasExactKeys(raw, OUTCOME_CHECK_KEYS)) return `checks[${index}] must have exactly the keys of an outcome check`;
-    const check = raw;
-    if (check.metric !== intent.metric || check.comparison !== intent.comparison || check.name !== verificationCheckName(intent)) {
-      return `checks[${index}] must match the reviewed check ${verificationCheckName(intent)}`;
-    }
-    const { before, after, beforeMedian, afterMedian, pLower, pHigher } = check;
-    if (!finiteNonNegative(before) || !finiteNonNegative(after) || !finiteNonNegative(beforeMedian) || !finiteNonNegative(afterMedian)) {
-      return `checks[${index}] must carry finite metric values`;
-    }
-    if (typeof pLower !== "number" || typeof pHigher !== "number" || ![pLower, pHigher].every((p) => p >= minP && p <= 1) || pLower + pHigher < 1) {
-      return `checks[${index}] p-values are not possible for ${nBefore} and ${nAfter} sessions`;
-    }
-    const verdict = checkVerdict(intent.comparison, before, after, pLower, pHigher);
-    if (check.verdict !== verdict) return `checks[${index}] verdict must be the computed verdict ${verdict}`;
-  }
-  const frozen = frozenBaseline;
-  if (frozenBaseline !== void 0) {
-    const violation = frozenBindingViolation({ baselineSessionIds: receipt.baselineSessionIds, checks: checks2 }, frozenBaseline, appliedAt, 0);
-    if (violation) return violation;
-  }
-  const overall = overallVerdict(checks2, nBefore, nAfter);
-  if (receipt.verdict !== overall) return `the overall verdict must be the computed verdict ${overall}`;
-  if (status === "regressed" && receipt.verdict !== "regressed") return `a regressed record needs the regressed verdict, not ${receipt.verdict}`;
-  if (status === "unproven" && receipt.verdict === "regressed") return "an unproven record cannot carry the regressed verdict";
-  const shortFrozen = frozen !== void 0 && frozen.sessions.length < COHORT_MIN;
-  if (!receipt.laterComplete && !(shortFrozen && receipt.verdict === "not-enough-sessions")) {
-    return `laterComplete must be true. Only a frozen baseline below ${COHORT_MIN} sessions with the verdict not-enough-sessions closes before the later cohort is complete`;
-  }
-  if (frozen === void 0 && nBefore < COHORT_MIN) return `a record with no frozen baseline needs ${COHORT_MIN} or more baseline sessions to close`;
-  if (receipt.checkpoint === "first" && !shortFrozen) return `checkpoint first needs a frozen baseline below ${COHORT_MIN} sessions`;
-  if (receipt.checkpoint !== (receipt.laterComplete ? "complete" : "first")) return "checkpoint must be complete when the later cohort is complete, and first before it";
-  return void 0;
-}
-function effectMatchesChecks(record3, checks2, measured) {
-  const effect = record3.effect;
-  if (!effect || !Array.isArray(effect.measuredSessionIds) || JSON.stringify(effect.measuredSessionIds) !== JSON.stringify(measured)) return false;
-  const before = Object.fromEntries(checks2.map((check) => [check.metric, check.before]));
-  const after = Object.fromEntries(checks2.map((check) => [check.metric, check.after]));
-  return numericMapMatches(effect.before, before) && numericMapMatches(effect.after, after);
-}
-function isTrustedCohortVerification(record3) {
-  if (record3.scope !== "session" && record3.scope !== "repo") return false;
-  const proposal = record3.proposal;
-  const receipt = record3.verificationReceipt;
-  if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || record3.application?.v !== 1 || receipt?.v !== 2) return false;
-  if (cohortReceiptViolation(receipt, proposal.verificationChecks, record3.appliedAt) !== void 0) return false;
-  if (record3.frozenBaseline !== void 0 && frozenBindingViolation(receipt, record3.frozenBaseline, record3.appliedAt, COHORT_MIN) !== void 0) return false;
-  return effectMatchesChecks(record3, receipt.checks, receipt.measuredSessionIds);
-}
-function isTrustedComputedVerification(record3) {
-  if (record3.status !== "verified") return false;
-  if (record3.verificationTrust === "computed-v2") return isTrustedCohortVerification(record3);
-  if (record3.verificationTrust !== "computed-v1" || record3.scope !== "session") return false;
-  const proposal = record3.proposal;
-  const application = record3.application;
-  const receipt = record3.verificationReceipt;
-  const effect = record3.effect;
-  if (proposal?.v !== 1 || !proposal.workspace?.cwd || !Array.isArray(proposal.verificationChecks) || proposal.verificationChecks.length === 0 || !proposal.verificationChecks.every(isIntent) || !hasUniqueVerificationIntents(proposal.verificationChecks) || application?.v !== 1 || receipt?.v !== 1 || !effect || !Array.isArray(receipt.checks) || receipt.checks.length !== proposal.verificationChecks.length || !Array.isArray(receipt.measuredSessionIds) || receipt.measuredSessionIds.length === 0 || JSON.stringify(receipt.measuredSessionIds) !== JSON.stringify(effect.measuredSessionIds)) return false;
-  if (receipt.summary !== verificationReceiptSummary(proposal.verificationChecks)) return false;
-  for (let index = 0; index < proposal.verificationChecks.length; index++) {
-    const intent = proposal.verificationChecks[index];
-    const check = receipt.checks[index];
-    if (!check || check.ok !== true || check.metric !== intent.metric || check.comparison !== intent.comparison || check.name !== verificationCheckName(intent) || !Number.isFinite(check.before) || !Number.isFinite(check.after) || typeof check.evidence !== "string" || !check.evidence) return false;
-  }
-  const before = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.before]));
-  const after = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.after]));
-  return numericMapMatches(effect.before, before) && numericMapMatches(effect.after, after);
-}
-
 // src/suggest/workspace-identity.ts
-import { realpath as realpath5, stat as stat4 } from "node:fs/promises";
-import { dirname as dirname4, isAbsolute as isAbsolute4 } from "node:path";
+import { realpath as realpath6, stat as stat4 } from "node:fs/promises";
+import { dirname as dirname5, isAbsolute as isAbsolute6 } from "node:path";
 function reliableBirthtimeNs(birthtimeNs, ctimeNs) {
   return birthtimeNs > 0n && birthtimeNs !== ctimeNs ? String(birthtimeNs) : void 0;
 }
 async function liveWorkspaceIdentity(path) {
-  const cwd = await realpath5(path);
+  const cwd = await realpath6(path);
   const info = await stat4(cwd, { bigint: true });
   if (!info.isDirectory()) throw new Error(`workspace is not a directory: ${cwd}`);
-  const parent = dirname4(cwd);
+  const parent = dirname5(cwd);
   const mountRoot = parent === cwd || (await stat4(parent, { bigint: true })).dev !== info.dev;
   const birthtimeNs = reliableBirthtimeNs(info.birthtimeNs, info.ctimeNs);
   return { cwd, device: String(info.dev), inode: String(info.ino), ...birthtimeNs ? { birthtimeNs } : {}, mountRoot };
@@ -10369,7 +11045,7 @@ var DIGITS_RE = /^\d+$/;
 function isStoredWorkspaceIdentity(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const identity = value;
-  return typeof identity.cwd === "string" && isAbsolute4(identity.cwd) && typeof identity.device === "string" && DIGITS_RE.test(identity.device) && typeof identity.inode === "string" && DIGITS_RE.test(identity.inode) && (identity.birthtimeNs === void 0 || typeof identity.birthtimeNs === "string" && DIGITS_RE.test(identity.birthtimeNs));
+  return typeof identity.cwd === "string" && isAbsolute6(identity.cwd) && typeof identity.device === "string" && DIGITS_RE.test(identity.device) && typeof identity.inode === "string" && DIGITS_RE.test(identity.inode) && (identity.birthtimeNs === void 0 || typeof identity.birthtimeNs === "string" && DIGITS_RE.test(identity.birthtimeNs));
 }
 function sameWorkspace(stored, live, platform2 = process.platform) {
   if (live.cwd !== stored.cwd || live.inode !== stored.inode) return false;
@@ -10378,2032 +11054,7 @@ function sameWorkspace(stored, live, platform2 = process.platform) {
   return platform2 !== "win32" && !live.mountRoot;
 }
 
-// src/suggest/store.ts
-var LOCK_STALE_MS = 1e4;
-var LOCK_TIMEOUT_MS = 5e3;
-var MAX_SUGGESTION_STORE_BYTES = 64 * 1024 * 1024;
-var MAX_SUGGESTION_RECORD_BYTES = 4 * 1024 * 1024;
-var MAX_SUGGESTION_STORE_LINES = 1e5;
-var LOCK_OWNER_FILE = "owner.json";
-var MAX_LOCK_OWNER_BYTES = 1024;
-var PRIVATE_DIRECTORY_MODE2 = 448;
-var PRIVATE_FILE_MODE3 = 384;
-function errno(error) {
-  return error.code;
-}
-function sameInode3(a, b) {
-  return a.dev === b.dev && a.ino === b.ino;
-}
-function modeBits2(stat8) {
-  return Number(stat8.mode & 0o777n);
-}
-function fileSnapshot(stat8) {
-  return {
-    dev: stat8.dev,
-    ino: stat8.ino,
-    mode: stat8.mode,
-    nlink: stat8.nlink,
-    size: stat8.size,
-    mtimeNs: stat8.mtimeNs,
-    ctimeNs: stat8.ctimeNs
-  };
-}
-function sameFileSnapshot(a, b) {
-  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
-}
-async function securePrivateDirectory(path, label) {
-  const requested = await lstat7(path, { bigint: true });
-  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`${label} must be a real directory: ${path}`);
-  const handle = await open9(path, constants9.O_RDONLY | (constants9.O_DIRECTORY ?? 0) | (constants9.O_NOFOLLOW ?? 0));
-  try {
-    const before = await handle.stat({ bigint: true });
-    if (!before.isDirectory() || !sameInode3(requested, before)) throw new Error(`${label} changed while opening: ${path}`);
-    if (process.platform !== "win32" && modeBits2(before) !== PRIVATE_DIRECTORY_MODE2) await handle.chmod(PRIVATE_DIRECTORY_MODE2);
-    const [after, requestedAfter, canonicalPath] = await Promise.all([
-      handle.stat({ bigint: true }),
-      lstat7(path, { bigint: true }),
-      realpath6(path)
-    ]);
-    if (!after.isDirectory() || requestedAfter.isSymbolicLink() || !requestedAfter.isDirectory() || !sameInode3(after, requestedAfter) || process.platform !== "win32" && (modeBits2(after) !== PRIVATE_DIRECTORY_MODE2 || modeBits2(requestedAfter) !== PRIVATE_DIRECTORY_MODE2)) {
-      throw new Error(`${label} changed while securing: ${path}`);
-    }
-    return { path, canonicalPath, dev: after.dev, ino: after.ino };
-  } finally {
-    await handle.close();
-  }
-}
-async function ensurePrivateDirectory2(path, label) {
-  await mkdir2(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE2 });
-  return securePrivateDirectory(path, label);
-}
-async function secureExistingPrivateDirectory(path, label) {
-  try {
-    return await securePrivateDirectory(path, label);
-  } catch (error) {
-    if (errno(error) === "ENOENT") return void 0;
-    throw error;
-  }
-}
-async function assertPrivateDirectoriesStable2(directories) {
-  await Promise.all(directories.map(async (expected) => {
-    const [current, canonicalPath] = await Promise.all([lstat7(expected.path, { bigint: true }), realpath6(expected.path)]);
-    if (current.isSymbolicLink() || !current.isDirectory() || current.dev !== expected.dev || current.ino !== expected.ino || canonicalPath !== expected.canonicalPath || process.platform !== "win32" && modeBits2(current) !== PRIVATE_DIRECTORY_MODE2) {
-      throw new Error(`suggestion store directory changed during access: ${expected.path}`);
-    }
-  }));
-}
-function validLockOwner(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const owner = value;
-  return owner.v === 1 && typeof owner.pid === "number" && Number.isSafeInteger(owner.pid) && owner.pid > 0 && typeof owner.token === "string" && /^[0-9a-f]{64}$/.test(owner.token) && typeof owner.createdAt === "number" && Number.isFinite(owner.createdAt);
-}
-async function createLockOwner(lock, token) {
-  const path = join6(lock.path, LOCK_OWNER_FILE);
-  const bytes = Buffer.from(`${JSON.stringify({ v: 1, pid: process.pid, token, createdAt: Date.now() })}
-`, "utf8");
-  await assertPrivateDirectoriesStable2([lock]);
-  const handle = await open9(
-    path,
-    constants9.O_WRONLY | constants9.O_CREAT | constants9.O_EXCL | (constants9.O_NOFOLLOW ?? 0),
-    PRIVATE_FILE_MODE3
-  );
-  try {
-    await handle.writeFile(bytes);
-    if (process.platform !== "win32") await handle.chmod(PRIVATE_FILE_MODE3);
-    const [opened, requested] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
-    await assertPrivateDirectoriesStable2([lock]);
-    if (!opened.isFile() || opened.nlink !== 1n || requested.isSymbolicLink() || !requested.isFile() || requested.nlink !== 1n || opened.size !== BigInt(bytes.byteLength) || !sameFileSnapshot(fileSnapshot(opened), fileSnapshot(requested)) || process.platform !== "win32" && (modeBits2(opened) !== PRIVATE_FILE_MODE3 || modeBits2(requested) !== PRIVATE_FILE_MODE3)) {
-      throw new Error(`suggestion store lock owner changed while creating: ${path}`);
-    }
-    return { path, snapshot: fileSnapshot(opened) };
-  } finally {
-    await handle.close();
-  }
-}
-async function inspectLockOwner(lock) {
-  const path = join6(lock.path, LOCK_OWNER_FILE);
-  let requested;
-  try {
-    requested = await lstat7(path, { bigint: true });
-  } catch (error) {
-    if (errno(error) === "ENOENT") return void 0;
-    throw error;
-  }
-  if (requested.isSymbolicLink() || !requested.isFile()) throw new Error(`suggestion store lock owner must be a regular, non-symlink file: ${path}`);
-  if (requested.nlink !== 1n) throw new Error(`suggestion store lock owner must have exactly one hard link: ${path}`);
-  if (requested.size > BigInt(MAX_LOCK_OWNER_BYTES)) throw new Error(`suggestion store lock owner exceeds ${MAX_LOCK_OWNER_BYTES} bytes: ${path}`);
-  await assertPrivateDirectoriesStable2([lock]);
-  const handle = await open9(path, constants9.O_RDONLY | (constants9.O_NOFOLLOW ?? 0));
-  try {
-    const opened = await handle.stat({ bigint: true });
-    if (!opened.isFile() || opened.nlink !== 1n || opened.size > BigInt(MAX_LOCK_OWNER_BYTES) || !sameFileSnapshot(fileSnapshot(requested), fileSnapshot(opened))) {
-      throw new Error(`suggestion store lock owner changed while opening: ${path}`);
-    }
-    const expected = fileSnapshot(opened);
-    const bytes = Buffer.allocUnsafe(Number(opened.size));
-    let offset = 0;
-    while (offset < bytes.length) {
-      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
-      if (result.bytesRead === 0) break;
-      offset += result.bytesRead;
-    }
-    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
-    await assertPrivateDirectoriesStable2([lock]);
-    if (offset !== bytes.length || after.nlink !== 1n || pathAfter.isSymbolicLink() || !pathAfter.isFile() || pathAfter.nlink !== 1n || !sameFileSnapshot(expected, fileSnapshot(after)) || !sameFileSnapshot(expected, fileSnapshot(pathAfter))) {
-      throw new Error(`suggestion store lock owner changed while reading: ${path}`);
-    }
-    let value;
-    try {
-      value = JSON.parse(bytes.toString("utf8"));
-    } catch (error) {
-      void error;
-    }
-    return {
-      identity: { path, snapshot: expected },
-      ...validLockOwner(value) ? { owner: value } : {}
-    };
-  } finally {
-    await handle.close();
-  }
-}
-function processIsAlive(pid) {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return errno(error) === "EPERM";
-  }
-}
-async function assertLockOwned(guard) {
-  await assertPrivateDirectoriesStable2([guard.parent, guard.lock]);
-  const inspected = await inspectLockOwner(guard.lock);
-  if (!inspected?.owner || !sameFileSnapshot(guard.owner.snapshot, inspected.identity.snapshot) || inspected.owner.pid !== guard.pid || inspected.owner.token !== guard.token) {
-    throw new Error(`suggestion store lock ownership lost: ${guard.lock.path}`);
-  }
-}
-async function unlinkExactPrivateFile(identity, label) {
-  const current = await lstat7(identity.path, { bigint: true });
-  if (current.isSymbolicLink() || !current.isFile() || current.nlink !== 1n || !sameFileSnapshot(identity.snapshot, fileSnapshot(current))) {
-    throw new Error(`${label} changed before removal: ${identity.path}`);
-  }
-  await unlink2(identity.path);
-}
-async function breakStaleSuggestionLock(parent, lock, inspected) {
-  if (inspected?.owner && processIsAlive(inspected.owner.pid)) return false;
-  await assertPrivateDirectoriesStable2([parent, lock]);
-  if (inspected) await unlinkExactPrivateFile(inspected.identity, "suggestion store lock owner");
-  await assertPrivateDirectoriesStable2([parent, lock]);
-  await rmdir(lock.path);
-  await assertPrivateDirectoriesStable2([parent]);
-  return true;
-}
-async function readPrivateSuggestionStore(path, directories) {
-  let requested;
-  try {
-    requested = await lstat7(path, { bigint: true });
-  } catch (error) {
-    if (errno(error) === "ENOENT") return void 0;
-    throw error;
-  }
-  if (requested.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`);
-  if (!requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`);
-  if (requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`);
-  if (requested.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
-    throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`);
-  }
-  await assertPrivateDirectoriesStable2(directories);
-  const handle = await open9(path, constants9.O_RDONLY | (constants9.O_NOFOLLOW ?? 0));
-  try {
-    const opened = await handle.stat({ bigint: true });
-    if (!opened.isFile() || opened.nlink !== 1n || !sameInode3(requested, opened) || opened.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
-      throw new Error(`suggestion store changed while opening: ${path}`);
-    }
-    if (process.platform !== "win32" && modeBits2(opened) !== PRIVATE_FILE_MODE3) await handle.chmod(PRIVATE_FILE_MODE3);
-    const [secured, requestedAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
-    if (!secured.isFile() || requestedAfter.isSymbolicLink() || !requestedAfter.isFile() || secured.nlink !== 1n || requestedAfter.nlink !== 1n || !sameInode3(secured, requestedAfter) || secured.size > BigInt(MAX_SUGGESTION_STORE_BYTES) || process.platform !== "win32" && (modeBits2(secured) !== PRIVATE_FILE_MODE3 || modeBits2(requestedAfter) !== PRIVATE_FILE_MODE3)) {
-      throw new Error(`suggestion store changed while securing: ${path}`);
-    }
-    const expected = fileSnapshot(secured);
-    const buffer = Buffer.allocUnsafe(Number(secured.size));
-    let offset = 0;
-    while (offset < buffer.length) {
-      const result = await handle.read(buffer, offset, buffer.length - offset, offset);
-      if (result.bytesRead === 0) break;
-      offset += result.bytesRead;
-    }
-    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
-    await assertPrivateDirectoriesStable2(directories);
-    if (offset !== buffer.length || pathAfter.isSymbolicLink() || !pathAfter.isFile() || after.nlink !== 1n || pathAfter.nlink !== 1n || !sameFileSnapshot(expected, fileSnapshot(after)) || !sameFileSnapshot(expected, fileSnapshot(pathAfter))) {
-      throw new Error(`suggestion store changed while reading: ${path}`);
-    }
-    return buffer;
-  } finally {
-    await handle.close();
-  }
-}
-async function appendPrivateSuggestionRecord(path, record3, directories, assertOwnership) {
-  const recordBytes = Buffer.from(`${JSON.stringify(record3)}
-`, "utf8");
-  if (recordBytes.byteLength - 1 > MAX_SUGGESTION_RECORD_BYTES) {
-    throw new Error(`suggestion record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes`);
-  }
-  let requested;
-  try {
-    requested = await lstat7(path, { bigint: true });
-  } catch (error) {
-    if (errno(error) !== "ENOENT") throw error;
-  }
-  if (requested?.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`);
-  if (requested && !requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`);
-  if (requested && requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`);
-  await assertPrivateDirectoriesStable2(directories);
-  const createFlags = requested ? 0 : constants9.O_CREAT | constants9.O_EXCL;
-  const handle = await open9(
-    path,
-    constants9.O_RDWR | constants9.O_APPEND | createFlags | (constants9.O_NOFOLLOW ?? 0),
-    PRIVATE_FILE_MODE3
-  );
-  try {
-    const opened = await handle.stat({ bigint: true });
-    if (!opened.isFile() || opened.nlink !== 1n || requested && !sameInode3(requested, opened)) {
-      throw new Error(`suggestion store changed while opening: ${path}`);
-    }
-    if (process.platform !== "win32" && modeBits2(opened) !== PRIVATE_FILE_MODE3) await handle.chmod(PRIVATE_FILE_MODE3);
-    const [secured, pathBeforeWrite] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
-    if (!secured.isFile() || pathBeforeWrite.isSymbolicLink() || !pathBeforeWrite.isFile() || secured.nlink !== 1n || pathBeforeWrite.nlink !== 1n || !sameInode3(secured, pathBeforeWrite) || process.platform !== "win32" && (modeBits2(secured) !== PRIVATE_FILE_MODE3 || modeBits2(pathBeforeWrite) !== PRIVATE_FILE_MODE3)) {
-      throw new Error(`suggestion store changed before append: ${path}`);
-    }
-    let needsSeparator = false;
-    if (secured.size > 0n) {
-      const tail = Buffer.allocUnsafe(1);
-      const result = await handle.read(tail, 0, 1, Number(secured.size - 1n));
-      if (result.bytesRead !== 1) throw new Error(`suggestion store changed while inspecting its tail: ${path}`);
-      needsSeparator = tail[0] !== 10;
-    }
-    const bytes = needsSeparator ? Buffer.concat([Buffer.from("\n"), recordBytes]) : recordBytes;
-    if (secured.size + BigInt(bytes.byteLength) > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
-      throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`);
-    }
-    const beforeWrite = fileSnapshot(secured);
-    const [tailAfter, pathAfterTail] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
-    if (pathAfterTail.isSymbolicLink() || !pathAfterTail.isFile() || tailAfter.nlink !== 1n || pathAfterTail.nlink !== 1n || !sameFileSnapshot(beforeWrite, fileSnapshot(tailAfter)) || !sameFileSnapshot(beforeWrite, fileSnapshot(pathAfterTail))) {
-      throw new Error(`suggestion store changed while inspecting its tail: ${path}`);
-    }
-    const expectedSize = secured.size + BigInt(bytes.byteLength);
-    await assertPrivateDirectoriesStable2(directories);
-    await assertOwnership();
-    await handle.writeFile(bytes);
-    await assertOwnership();
-    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat7(path, { bigint: true })]);
-    await assertPrivateDirectoriesStable2(directories);
-    if (!after.isFile() || pathAfter.isSymbolicLink() || !pathAfter.isFile() || after.nlink !== 1n || pathAfter.nlink !== 1n || !sameInode3(after, pathAfter) || after.size !== expectedSize || pathAfter.size !== expectedSize || process.platform !== "win32" && (modeBits2(after) !== PRIVATE_FILE_MODE3 || modeBits2(pathAfter) !== PRIVATE_FILE_MODE3)) {
-      throw new Error(`suggestion store changed during append: ${path}`);
-    }
-  } finally {
-    await handle.close();
-  }
-}
-var PATCH_FIELDS = [
-  "proposal",
-  "application",
-  "verificationReceipt",
-  "kickoff",
-  "effect",
-  "frozenBaseline",
-  "outcomeReceipt",
-  "reasonCode",
-  "workspaceCwd"
-];
-var ALLOWED_PATCH_FIELDS = {
-  new: [],
-  "kicked-off": ["kickoff"],
-  proposed: ["proposal"],
-  applied: ["application", "frozenBaseline"],
-  verified: ["verificationReceipt", "effect"],
-  rejected: ["reasonCode", "workspaceCwd"],
-  failed: ["kickoff"],
-  regressed: ["outcomeReceipt"],
-  unproven: ["outcomeReceipt"],
-  kept: []
-};
-var MAX_WORKSPACE_CWD_CHARS = 4096;
-var HIDDEN_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u;
-var DOUBLE_SEPARATOR_PREFIX_RE = /^[\\/]{2}/;
-function isCanonicalWorkspaceCwd(value, platform2 = process.platform) {
-  const paths = platform2 === "win32" ? win32 : posix;
-  return typeof value === "string" && value.length > 0 && value.length <= MAX_WORKSPACE_CWD_CHARS && !HIDDEN_CHARACTER_RE.test(value) && !DOUBLE_SEPARATOR_PREFIX_RE.test(value) && // On Windows, a colon after the drive letter names an alternate data stream.
-  (platform2 !== "win32" || value.indexOf(":", 2) === -1) && paths.isAbsolute(value) && paths.resolve(value) === value;
-}
-function recordMatchesFinding(record3, finding, source) {
-  return record3.source === source && record3.scope === finding.scope && record3.ruleId === finding.ruleId && (record3.insightId ?? "") === (finding.insightId ?? "") && (record3.cohortFingerprint ?? record3.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record3.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));
-}
-function sameEvidence(a, b) {
-  const canonical = (v) => JSON.stringify(
-    v,
-    (_k, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([x], [y]) => x < y ? -1 : x > y ? 1 : 0)) : item
-  );
-  return canonical(a) === canonical(b);
-}
-function assertSafeFindingIdentity(finding) {
-  const values = [finding.ruleId, finding.insightId, ...finding.sessionIds].filter((value) => typeof value === "string");
-  if (values.some((value) => redactValue(value, { scrub: true }) !== value)) {
-    throw new Error("suggestion identity contains sensitive material. Redact the identifier before you create the suggestion.");
-  }
-}
-function lifecycleError(to, message) {
-  return new Error(`invalid transition patch for ${to}: ${message}`);
-}
-function nonEmptyString(value) {
-  return typeof value === "string" && value.trim().length > 0;
-}
-function safeReviewedFile(value) {
-  return nonEmptyString(value) && reviewedPathViolation(value) === void 0 && canonicalReviewedPath(value) === value;
-}
-function hasUniqueReviewedFiles(files2) {
-  const keys = files2.map((file) => reviewedPathKey(file));
-  return keys.every((key) => key !== void 0) && new Set(keys).size === keys.length;
-}
-function stringArray(value) {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-function isPersistedSuggestionRecord(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const record3 = value;
-  if (typeof record3.id !== "string" || !isSuggestionId(record3.id) || record3.v !== 1 && record3.v !== 2 || typeof record3.createdAt !== "number" || !Number.isFinite(record3.createdAt) || record3.source !== "report" && record3.source !== "skill" || record3.scope !== "session" && record3.scope !== "repo" && record3.scope !== "global" || !stringArray(record3.sessionIds) || !nonEmptyString(record3.ruleId) || typeof record3.title !== "string" || !record3.evidence || typeof record3.evidence !== "object" || Array.isArray(record3.evidence) || typeof record3.status !== "string" || !Object.hasOwn(TRANSITIONS, record3.status) || typeof record3.statusAt !== "number" || !Number.isFinite(record3.statusAt) || record3.legacyIds !== void 0 && (!stringArray(record3.legacyIds) || !record3.legacyIds.every(isSuggestionId)) || record3.insightId !== void 0 && typeof record3.insightId !== "string" || record3.cohortFingerprint !== void 0 && typeof record3.cohortFingerprint !== "string" || record3.appliedAt !== void 0 && (typeof record3.appliedAt !== "number" || !Number.isFinite(record3.appliedAt))) {
-    return false;
-  }
-  if (record3.v === 2) {
-    const key = record3.key;
-    if (!key || typeof key !== "object" || key.v !== 2 || key.source !== "report" && key.source !== "skill" || key.scope !== "session" && key.scope !== "repo" && key.scope !== "global" || !nonEmptyString(key.ruleId) || !stringArray(key.sessionIds) || key.insightId !== void 0 && typeof key.insightId !== "string" || key.cohortFingerprint !== void 0 && typeof key.cohortFingerprint !== "string") {
-      return false;
-    }
-  }
-  return true;
-}
-function assertProposal(value, to) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError(to, "proposal is required");
-  const proposal = value;
-  if (!nonEmptyString(proposal.title) || !nonEmptyString(proposal.change) || !nonEmptyString(proposal.proposalPath)) {
-    throw lifecycleError(to, "proposal must include title, change, and proposalPath");
-  }
-  if (proposal.effort !== "S" && proposal.effort !== "M" && proposal.effort !== "L") {
-    throw lifecycleError(to, "proposal effort must be S, M, or L");
-  }
-}
-function assertStructuredProposal(value, to) {
-  assertProposal(value, to);
-  if (value.v !== 1 || !nonEmptyString(value.manifestPath) || !value.changeClass || !isChangeClass(value.changeClass) || !nonEmptyString(value.evidence) || !nonEmptyString(value.expectedEffect) || !nonEmptyString(value.risk) || !nonEmptyString(value.verification) || !isStoredWorkspaceIdentity(value.workspace) || !Array.isArray(value.files) || value.files.length === 0 || value.files.length > 64 || !value.files.every(safeReviewedFile) || !hasUniqueReviewedFiles(value.files) || !proposalSourcesAreCanonical(value.sources) || !Array.isArray(value.verificationChecks) || value.verificationChecks.length === 0 || value.verificationChecks.length > 32 || !value.verificationChecks.every(
-    (check) => check && typeof check === "object" && SUGGESTION_VERIFICATION_METRICS.includes(check.metric) && SUGGESTION_VERIFICATION_COMPARISONS.includes(check.comparison)
-  ) || !hasUniqueVerificationIntents(value.verificationChecks)) {
-    throw lifecycleError(to, "a structured proposal with a manifest, reviewed files, and bounded unique verificationChecks is required");
-  }
-}
-function assertApplication(value, to) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError(to, "application receipt is required");
-  const application = value;
-  if (application.v !== 1 || !nonEmptyString(application.summary) || !nonEmptyString(application.receiptPath) || !Array.isArray(application.files) || application.files.length === 0 || application.files.length > 64 || !application.files.every(safeReviewedFile) || !hasUniqueReviewedFiles(application.files) || !Array.isArray(application.checks) || application.checks.length === 0 || application.checks.length > 32 || !application.checks.every(
-    (check) => check && typeof check === "object" && check.ok === true && nonEmptyString(check.name) && (check.command === void 0 || nonEmptyString(check.command))
-  )) {
-    throw lifecycleError(to, "application receipt must be structured, name changed files, and contain successful checks");
-  }
-}
-function assertVerificationEffect(value, receipt, to) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError(to, "computed verification effect is required");
-  const effect = value;
-  if (!effect.before || typeof effect.before !== "object" || Array.isArray(effect.before) || !effect.after || typeof effect.after !== "object" || Array.isArray(effect.after)) {
-    throw lifecycleError(to, "computed verification effect must contain before and after maps");
-  }
-  if (!Array.isArray(effect.measuredSessionIds) || JSON.stringify(effect.measuredSessionIds) !== JSON.stringify(receipt.measuredSessionIds)) {
-    throw lifecycleError(to, "verification effect session ids must exactly match the receipt");
-  }
-  const expectedBefore = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.before]));
-  const expectedAfter = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.after]));
-  const canonical = (record3) => JSON.stringify(Object.entries(record3).sort(([a], [b]) => a.localeCompare(b)));
-  if (canonical(effect.before) !== canonical(expectedBefore) || canonical(effect.after) !== canonical(expectedAfter)) {
-    throw lifecycleError(to, "verification effect values must exactly match the computed receipt checks");
-  }
-}
-function validateTransitionPatch(current, to, rawPatch) {
-  if (rawPatch !== void 0 && (!rawPatch || typeof rawPatch !== "object" || Array.isArray(rawPatch))) {
-    throw lifecycleError(to, "patch must be an object");
-  }
-  const patch = rawPatch ?? {};
-  const keys = Object.keys(patch);
-  const unknown = keys.find((key) => !PATCH_FIELDS.includes(key));
-  if (unknown) throw lifecycleError(to, `field "${unknown}" is not a lifecycle artifact`);
-  const allowed = ALLOWED_PATCH_FIELDS[to];
-  const unrelated = keys.find((key) => !allowed.includes(key));
-  if (unrelated) throw lifecycleError(to, `field "${unrelated}" is not valid for this transition`);
-  if (to === "proposed") {
-    assertProposal(patch.proposal, to);
-    if (patch.proposal.v === 1) assertStructuredProposal(patch.proposal, to);
-  } else if (to === "applied") {
-    if (current.scope === "global") {
-      throw lifecycleError(to, "global suggestions cannot be applied. For a concrete change, create a repo or session suggestion instead.");
-    }
-    assertStructuredProposal(current.proposal, to);
-    assertApplication(patch.application, to);
-    const reviewed = [...new Set(current.proposal.files)].sort();
-    const changed = [...new Set(patch.application.files)].sort();
-    if (JSON.stringify(reviewed) !== JSON.stringify(changed)) {
-      throw lifecycleError(to, "application files must exactly match the reviewed proposal files");
-    }
-    if (patch.frozenBaseline !== void 0) {
-      const violation = frozenBaselineViolation(patch.frozenBaseline, void 0);
-      if (violation) throw lifecycleError(to, `invalid frozen baseline: ${violation}`);
-    }
-  } else if (to === "regressed" || to === "unproven") {
-    if (current.scope === "global") throw lifecycleError(to, "global suggestions are review-only. Orangu measures no outcome for them.");
-    assertStructuredProposal(current.proposal, to);
-    assertApplication(current.application, to);
-    if (patch.outcomeReceipt === void 0) throw lifecycleError(to, "an outcome receipt is required");
-    const violation = outcomeReceiptViolation(
-      patch.outcomeReceipt,
-      to,
-      current.proposal.verificationChecks,
-      applicationTime(current),
-      current.frozenBaseline
-    );
-    if (violation) throw lifecycleError(to, `invalid outcome receipt: ${violation}`);
-  } else if (to === "rejected") {
-    if (patch.reasonCode !== void 0 && !REJECT_REASON_CODES.includes(patch.reasonCode)) {
-      throw lifecycleError(to, `reasonCode must be 1 of ${REJECT_REASON_CODES.join(", ")}`);
-    }
-    if (patch.workspaceCwd !== void 0) {
-      if (!isCanonicalWorkspaceCwd(patch.workspaceCwd)) throw lifecycleError(to, "workspaceCwd must be an absolute canonical path");
-      if (current.proposal?.workspace !== void 0) {
-        throw lifecycleError(to, "workspaceCwd is only for a record with no proposal workspace. The proposal workspace already binds this record.");
-      }
-    }
-  } else if (to === "verified") {
-    if (current.scope === "global") throw lifecycleError(to, "global suggestions cannot be verified. They are review-only.");
-    assertStructuredProposal(current.proposal, to);
-    assertApplication(current.application, to);
-    const receipt = patch.verificationReceipt;
-    if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) throw lifecycleError(to, "verification receipt is required");
-    if (receipt.v !== 2) throw lifecycleError(to, "verification receipt must be computed by orangu (v2 cohort receipt)");
-    if (!Array.isArray(receipt.checks) || !sameVerificationIntentSequence(current.proposal.verificationChecks, receipt.checks)) {
-      throw lifecycleError(to, "verification receipt checks must exactly match the reviewed proposal verificationChecks");
-    }
-    const violation = cohortReceiptViolation(receipt, current.proposal.verificationChecks, applicationTime(current));
-    if (violation) throw lifecycleError(to, `invalid cohort receipt: ${violation}`);
-    if (current.frozenBaseline !== void 0) {
-      const frozen = frozenBindingViolation(receipt, current.frozenBaseline, applicationTime(current), COHORT_MIN);
-      if (frozen) throw lifecycleError(to, `invalid cohort receipt: ${frozen}`);
-    }
-    assertVerificationEffect(patch.effect, receipt, to);
-  }
-  return patch;
-}
-function indexByLegacyIds(canonical) {
-  const byId2 = new Map(canonical);
-  for (const rec of canonical.values()) {
-    for (const legacyId of rec.legacyIds ?? []) {
-      if (isSuggestionId(legacyId)) byId2.set(legacyId, rec);
-    }
-  }
-  return byId2;
-}
-var SuggestionStore = class {
-  path;
-  proposalsDir;
-  now;
-  /** in-process write queue: mutations run strictly one after another */
-  chain = Promise.resolve();
-  constructor(o = {}) {
-    const home = o.home ?? oranguHome();
-    this.path = join6(home, "suggestions.jsonl");
-    this.proposalsDir = join6(home, "proposals");
-    this.now = o.now ?? Date.now;
-  }
-  get lockPath() {
-    return this.path + ".lock";
-  }
-  /** Atomic directory lock with token/PID ownership; only dead stale owners may be broken. */
-  async acquireLock() {
-    const parent = await ensurePrivateDirectory2(dirname5(this.path), "suggestion store directory");
-    const t0 = Date.now();
-    const token = randomBytes2(32).toString("hex");
-    for (; ; ) {
-      let created = false;
-      try {
-        await mkdir2(this.lockPath, { mode: PRIVATE_DIRECTORY_MODE2 });
-        created = true;
-      } catch (error) {
-        if (errno(error) !== "EEXIST") throw error;
-      }
-      if (created) {
-        let lock;
-        let guard;
-        try {
-          lock = await securePrivateDirectory(this.lockPath, "suggestion store lock");
-          const owner = await createLockOwner(lock, token);
-          guard = { parent, lock, owner, pid: process.pid, token };
-          await assertLockOwned(guard);
-          return guard;
-        } catch (error) {
-          if (guard) await this.releaseLock(guard);
-          throw error;
-        }
-      }
-      let held;
-      try {
-        held = await secureExistingPrivateDirectory(this.lockPath, "suggestion store lock");
-        if (!held) continue;
-        const st = await lstat7(this.lockPath);
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          await assertPrivateDirectoriesStable2([parent, held]);
-          const inspected = await inspectLockOwner(held);
-          if (await breakStaleSuggestionLock(parent, held, inspected)) continue;
-        }
-      } catch (error) {
-        if (errno(error) === "ENOENT") continue;
-        throw error;
-      }
-      if (Date.now() - t0 > LOCK_TIMEOUT_MS) throw new Error(`suggestion store lock timed out: ${this.lockPath}`);
-      await new Promise((r) => setTimeout(r, 15));
-    }
-  }
-  async releaseLock(guard) {
-    try {
-      await assertLockOwned(guard);
-      await unlinkExactPrivateFile(guard.owner, "suggestion store lock owner");
-      await assertPrivateDirectoriesStable2([guard.parent, guard.lock]);
-      await rmdir(this.lockPath);
-      await assertPrivateDirectoriesStable2([guard.parent]);
-    } catch (error) {
-      void error;
-    }
-  }
-  /** every mutation = in-process queue → cross-process lock → replay+validate+append inside */
-  serialized(fn) {
-    const run = async () => {
-      const guard = await this.acquireLock();
-      try {
-        await assertLockOwned(guard);
-        const result = await fn(guard);
-        await assertLockOwned(guard);
-        return result;
-      } finally {
-        await this.releaseLock(guard);
-      }
-    };
-    const p = this.chain.then(run, run);
-    this.chain = p.then(
-      () => void 0,
-      () => void 0
-    );
-    return p;
-  }
-  /**
-   * Replay the log; last line per canonical id wins; corrupt lines are skipped.
-   * A migrated v2 record is also indexed by each legacy id so old links and CLI
-   * commands keep resolving without duplicating it in `all()`.
-   */
-  async replay(parent) {
-    const canonical = /* @__PURE__ */ new Map();
-    await this.readValidLines(parent, (rec) => canonical.set(rec.id, rec));
-    return indexByLegacyIds(canonical);
-  }
-  /**
-   * Every valid line of the log, in file order, with no "last line wins". With an id, only the lines of that record:
-   * its own lines and the lines of each legacy id, matched through `legacyIds` as `get` matches them. The caps of
-   * the replay apply: the file bytes, the bytes of a line and the line count.
-   */
-  async lines(id) {
-    const all = [];
-    const canonical = /* @__PURE__ */ new Map();
-    await this.readValidLines(void 0, (rec) => {
-      all.push(rec);
-      canonical.set(rec.id, rec);
-    });
-    if (id === void 0) return all;
-    const target = indexByLegacyIds(canonical).get(id);
-    if (!target) return [];
-    const ids = /* @__PURE__ */ new Set([target.id, ...(target.legacyIds ?? []).filter(isSuggestionId)]);
-    return all.filter((rec) => ids.has(rec.id));
-  }
-  /** Read the log inside its caps and hand each valid record to `visit`, in file order; a corrupt line is skipped. */
-  async readValidLines(parent, visit) {
-    const root = parent ?? await secureExistingPrivateDirectory(dirname5(this.path), "suggestion store directory");
-    if (!root) return;
-    await assertPrivateDirectoriesStable2([root]);
-    const proposals = await secureExistingPrivateDirectory(this.proposalsDir, "suggestion proposals directory");
-    const directories = proposals ? [root, proposals] : [root];
-    const bytes = await readPrivateSuggestionStore(this.path, directories);
-    if (bytes === void 0) return;
-    let offset = 0;
-    let lines = 0;
-    while (offset < bytes.length) {
-      lines++;
-      if (lines > MAX_SUGGESTION_STORE_LINES) {
-        throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_LINES} lines: ${this.path}`);
-      }
-      const newline = bytes.indexOf(10, offset);
-      const end = newline === -1 ? bytes.length : newline;
-      if (end - offset > MAX_SUGGESTION_RECORD_BYTES) {
-        throw new Error(`suggestion store record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes: ${this.path}`);
-      }
-      if (end > offset) {
-        const trimmed = bytes.toString("utf8", offset, end).trim();
-        if (trimmed) {
-          try {
-            const rec = JSON.parse(trimmed);
-            if (isPersistedSuggestionRecord(rec)) visit(rec);
-          } catch (error) {
-            void error;
-          }
-        }
-      }
-      if (newline === -1) break;
-      offset = newline + 1;
-    }
-  }
-  async append(rec, guard) {
-    await assertLockOwned(guard);
-    const parent = guard.parent;
-    const proposals = await ensurePrivateDirectory2(this.proposalsDir, "suggestion proposals directory");
-    await appendPrivateSuggestionRecord(this.path, rec, [parent, proposals], () => assertLockOwned(guard));
-  }
-  async all() {
-    const unique = /* @__PURE__ */ new Map();
-    const records = await this.replay();
-    for (const rec of records.values()) unique.set(rec.id, rec);
-    return [...unique.values()].sort((a, b) => b.statusAt - a.statusAt);
-  }
-  async get(id) {
-    return (await this.replay()).get(id);
-  }
-  /**
-   * Create-or-get: a re-click refreshes a still-new record; once lifecycle work
-   * starts, statusAt remains the transition timestamp. An explicit file-handoff
-   * id must hash to the canonical identity or the exact legacy report identity.
-   */
-  async upsertNew(f, source, explicitId) {
-    return this.serialized((guard) => this.upsertNewLocked(f, source, explicitId, guard));
-  }
-  async upsertNewLocked(f, source, explicitId, guard) {
-    assertSafeFindingIdentity(f);
-    const key = suggestionKey(f, source);
-    const canonicalId2 = suggestionIdV2(key);
-    const legacyId = suggestionId(source, f.ruleId, f.sessionIds);
-    const acceptsLegacyId = source === "report" && !f.cohortFingerprint;
-    if (explicitId && explicitId !== canonicalId2 && !(acceptsLegacyId && explicitId === legacyId)) {
-      throw new Error(`suggestion id identity mismatch: expected ${canonicalId2}${acceptsLegacyId ? ` or legacy ${legacyId}` : ""}, got ${explicitId}`);
-    }
-    const id = explicitId ?? canonicalId2;
-    const records = await this.replay(guard.parent);
-    const existing = records.get(id);
-    const ts3 = this.now();
-    if (existing) {
-      if (!recordMatchesFinding(existing, f, source)) {
-        throw new Error(`suggestion id identity mismatch: ${id} belongs to a different finding`);
-      }
-      if (existing.status !== "new") return { record: existing, created: false };
-      if (existing.title === f.title && sameEvidence(existing.evidence, f.evidence)) return { record: existing, created: false };
-      const refreshed = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts3 };
-      await this.append(refreshed, guard);
-      return { record: refreshed, created: false };
-    }
-    if (id === canonicalId2 && !f.cohortFingerprint) {
-      const legacy = records.get(legacyId);
-      const sameLegacyFinding = legacy?.v === 1 && recordMatchesFinding(legacy, f, source);
-      if (legacy && sameLegacyFinding) {
-        const migrated = {
-          ...legacy,
-          id: canonicalId2,
-          v: 2,
-          key,
-          legacyIds: [.../* @__PURE__ */ new Set([...legacy.legacyIds ?? [], legacy.id])].sort(),
-          source,
-          scope: f.scope,
-          sessionIds: key.sessionIds,
-          ruleId: f.ruleId,
-          title: f.title,
-          ...f.insightId ? { insightId: f.insightId } : {},
-          ...f.cohortFingerprint ? { cohortFingerprint: f.cohortFingerprint } : {},
-          evidence: f.evidence,
-          // Migration changes identity, not lifecycle state. Preserve the
-          // applied timestamp because later verification is ordered against it.
-          statusAt: Number.isFinite(legacy.statusAt) && legacy.statusAt > 0 ? legacy.statusAt : ts3
-        };
-        await this.append(migrated, guard);
-        return { record: migrated, created: false };
-      }
-    }
-    const isCanonical = id === canonicalId2;
-    const record3 = {
-      id,
-      v: isCanonical ? 2 : 1,
-      ...isCanonical ? { key } : {},
-      createdAt: ts3,
-      source,
-      scope: f.scope,
-      sessionIds: isCanonical ? key.sessionIds : [...f.sessionIds].sort(),
-      ruleId: f.ruleId,
-      title: f.title,
-      ...f.insightId ? { insightId: f.insightId } : {},
-      ...f.cohortFingerprint ? { cohortFingerprint: f.cohortFingerprint } : {},
-      evidence: f.evidence,
-      status: "new",
-      statusAt: ts3
-    };
-    await this.append(record3, guard);
-    return { record: record3, created: true };
-  }
-  async transition(id, to, patch) {
-    return this.serialized((guard) => this.transitionLocked(id, to, guard, patch));
-  }
-  async transitionLocked(id, to, guard, patch) {
-    const current = (await this.replay(guard.parent)).get(id);
-    if (!current) throw new Error(`suggestion ${id} not found in ${this.path}`);
-    const allowed = TRANSITIONS[current.status] ?? [];
-    if (!allowed.includes(to)) {
-      throw new Error(`illegal transition ${current.status} \u2192 ${to} for ${id} (allowed: ${allowed.join(", ") || "none"})`);
-    }
-    const safePatch = validateTransitionPatch(current, to, patch);
-    const statusAt = this.now();
-    if (to === "applied" && safePatch.frozenBaseline && safePatch.frozenBaseline.cutAt > statusAt) {
-      throw lifecycleError(to, "invalid frozen baseline: frozenBaseline cutAt must not be later than the application time");
-    }
-    const appliedAt = to === "applied" ? statusAt : applicationTime(current);
-    const next = {
-      ...current,
-      ...safePatch,
-      ...appliedAt !== void 0 ? { appliedAt } : {},
-      ...to === "verified" ? { verificationTrust: "computed-v2" } : {},
-      status: to,
-      statusAt
-    };
-    await this.append(next, guard);
-    return next;
-  }
-};
-
-// src/cli/next-step.ts
-async function persistNextStep(a, redact, deps = {}) {
-  const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0];
-  if (!top) return {};
-  const row2 = planRowForInsight(top, a.session.id);
-  const title = redact ? redactValue(row2.title, { scrub: redact.scrub, stripPaths: redact.stripPaths }) : row2.title;
-  const finding = findingForRow({ ...row2, title }, "session");
-  const improvement = top.improvement;
-  try {
-    const store = deps.store ? deps.store() : new SuggestionStore();
-    const { record: record3 } = await store.upsertNew(finding, "report");
-    return { finding: title, improvement, next: kickoffCommands(record3, "serve").claude };
-  } catch (e) {
-    const key = suggestionKey(finding, "report");
-    const id = suggestionIdV2(key);
-    const reason = (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "unknown error";
-    return {
-      finding: title,
-      improvement,
-      storeNote: reason,
-      next: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: "report" }, "file").claude
-    };
-  }
-}
-
-// src/serve/server.ts
-import { randomBytes as randomBytes4, timingSafeEqual } from "node:crypto";
-import { createServer } from "node:http";
-import { cpus as cpus2 } from "node:os";
-
-// src/serve/api.ts
-import { homedir as homedir3 } from "node:os";
-
-// src/harness/collect.ts
-import { readdir as readdir2, readFile, stat as stat5 } from "node:fs/promises";
-import { basename as basename7, join as join7 } from "node:path";
-var MEMORY_INDEX_LINE_LIMIT = 200;
-var MEMORY_INDEX_CHAR_LIMIT = 25e3;
-function memoryIndexCut(raw) {
-  const text3 = raw.trim();
-  const lines = text3 === "" ? [] : text3.split("\n");
-  if (lines.length && lines[lines.length - 1] === "") lines.pop();
-  let chars = 0;
-  for (let i = 0; i < lines.length; i++) {
-    const next = chars + lines[i].length;
-    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_CHAR_LIMIT) return { lines: lines.length, chars: text3.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 };
-    chars = next + 1;
-  }
-  return { lines: lines.length, chars: text3.length, linesPastLimit: 0 };
-}
-var DEFAULT_MAX_FILE_BYTES = 1e6;
-var MAX_WALK_DEPTH = 6;
-var CLAUDE_JSON_KEYS = ["mcpServers", "projects", "skillUsage", "pluginUsage"];
-var CLAUDE_JSON_PROJECT_KEYS = ["mcpServers", "enabledMcpjsonServers", "disabledMcpjsonServers"];
-function reasonOf(e) {
-  const code2 = e?.code;
-  if (code2 === "ENOENT" || code2 === "ENOTDIR") return "enoent";
-  if (code2 === "EACCES" || code2 === "EPERM") return "eacces";
-  return "other";
-}
-function cleanPath(ctx, p) {
-  return redactValue(p, ctx.home ? { home: ctx.home } : {});
-}
-function cleanName(s) {
-  return scrubStr(s);
-}
-function mark(ctx, path, reason) {
-  const p = cleanPath(ctx, path);
-  const key = `${p}::${reason}`;
-  if (ctx.seen.has(key)) return;
-  ctx.seen.add(key);
-  ctx.unreadable.push({ path: p, reason });
-}
-async function readText(ctx, path) {
-  let size;
-  try {
-    const st = await stat5(path);
-    if (!st.isFile()) return null;
-    size = st.size;
-  } catch (e) {
-    const r = reasonOf(e);
-    if (r !== "enoent") mark(ctx, path, r);
-    return null;
-  }
-  if (size > ctx.maxFileBytes) {
-    mark(ctx, path, "too-large");
-    return null;
-  }
-  try {
-    const text3 = await readFile(path, "utf8");
-    ctx.filesRead++;
-    ctx.bytesRead += size;
-    return text3;
-  } catch (e) {
-    mark(ctx, path, reasonOf(e));
-    return null;
-  }
-}
-async function readJson(ctx, path) {
-  const text3 = await readText(ctx, path);
-  if (text3 === null) return null;
-  try {
-    const v = JSON.parse(text3);
-    if (!v || typeof v !== "object" || Array.isArray(v)) {
-      mark(ctx, path, "bad-json");
-      return null;
-    }
-    return v;
-  } catch {
-    mark(ctx, path, "bad-json");
-    return null;
-  }
-}
-async function listDir(ctx, path, required = false) {
-  try {
-    const entries = await readdir2(path, { withFileTypes: true });
-    return entries.map((e) => ({ name: e.name, dir: e.isDirectory() })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
-  } catch (e) {
-    const r = reasonOf(e);
-    if (r !== "enoent" || required) mark(ctx, path, r);
-    return [];
-  }
-}
-async function walkMarkdown(ctx, dir, depth = 0) {
-  if (depth > MAX_WALK_DEPTH) return [];
-  const out3 = [];
-  for (const e of await listDir(ctx, dir)) {
-    if (e.name.startsWith(".") || e.name === "node_modules") continue;
-    const p = join7(dir, e.name);
-    if (e.dir) out3.push(...await walkMarkdown(ctx, p, depth + 1));
-    else if (e.name.endsWith(".md")) out3.push(p);
-  }
-  return out3;
-}
-async function isDir(path) {
-  try {
-    return (await stat5(path)).isDirectory();
-  } catch {
-    return false;
-  }
-}
-var approxTokens2 = (bytes) => Math.ceil(bytes / 4);
-function lineCount(text3) {
-  if (text3 === "") return 0;
-  const parts2 = text3.split("\n");
-  if (parts2[parts2.length - 1] === "") parts2.pop();
-  return parts2.length;
-}
-function headingCount(text3) {
-  let n2 = 0;
-  for (const l of text3.split("\n")) if (/^#{1,6}\s/.test(l)) n2++;
-  return n2;
-}
-var FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/;
-function parseFrontmatter(text3) {
-  const m = FRONTMATTER.exec(text3);
-  if (!m) return { fm: {}, body: text3 };
-  const fm = {};
-  for (const raw of (m[1] ?? "").split(/\r?\n/)) {
-    if (/^\s/.test(raw)) continue;
-    const line = raw.trim();
-    if (!line || line.startsWith("#")) continue;
-    const i = line.indexOf(":");
-    if (i <= 0) continue;
-    const key = line.slice(0, i).trim();
-    let val = line.slice(i + 1).trim();
-    if (val.length > 1 && (val.startsWith('"') && val.endsWith('"') || val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
-    fm[key] = val;
-  }
-  return { fm, body: text3.slice(m[0].length) };
-}
-function splitList(value) {
-  if (value === void 0) return null;
-  let s = value.trim();
-  if (s.startsWith("[") && s.endsWith("]")) s = s.slice(1, -1);
-  const out3 = [];
-  let depth = 0;
-  let cur = "";
-  for (const ch2 of s) {
-    if (ch2 === "(" || ch2 === "[") depth++;
-    else if (ch2 === ")" || ch2 === "]") depth--;
-    if (ch2 === "," && depth <= 0) {
-      const t2 = cur.trim();
-      if (t2) out3.push(t2);
-      cur = "";
-      continue;
-    }
-    cur += ch2;
-  }
-  const t = cur.trim();
-  if (t) out3.push(t);
-  return out3.map((x) => x.replace(/^['"]|['"]$/g, ""));
-}
-var asRecord = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
-var asArray = (v) => Array.isArray(v) ? v : [];
-var asString = (v) => typeof v === "string" && v ? v : void 0;
-var asNumber = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
-var byKey = (pick2) => (a, b) => {
-  const x = pick2(a);
-  const y = pick2(b);
-  return x < y ? -1 : x > y ? 1 : 0;
-};
-function settingsEnv(raw) {
-  const env = asRecord(raw["env"]);
-  if (!env) return { count: 0, names: [] };
-  const names = Object.keys(env).map(cleanName).sort();
-  return { count: names.length, names };
-}
-function settingsHooks(raw) {
-  return hookConfigsFrom(asRecord(raw["hooks"]));
-}
-function hookConfigsFrom(hooks) {
-  if (!hooks) return [];
-  const out3 = [];
-  for (const event of Object.keys(hooks).sort()) {
-    const matchers = asArray(hooks[event]);
-    const names = /* @__PURE__ */ new Set();
-    let commands = 0;
-    for (const m of matchers) {
-      for (const h of asArray(asRecord(m)?.["hooks"])) {
-        const cmd = asString(asRecord(h)?.["command"]);
-        if (cmd === void 0) continue;
-        commands++;
-        const b = argv0Basename(cmd);
-        if (b) names.add(cleanName(b));
-      }
-    }
-    out3.push({ event: cleanName(event), matchers: matchers.length, commands, commandBasenames: [...names].sort() });
-  }
-  return out3;
-}
-function enabledPluginKeys(raw) {
-  const v = raw["enabledPlugins"];
-  if (Array.isArray(v)) return v.filter((x) => typeof x === "string").map(cleanName).sort();
-  const rec = asRecord(v);
-  if (!rec) return [];
-  return Object.keys(rec).filter((k) => rec[k] !== false).map(cleanName).sort();
-}
-function parseSettings(ctx, scope, file, raw) {
-  const perms = asRecord(raw["permissions"]);
-  return {
-    scope,
-    file: cleanPath(ctx, file),
-    keys: Object.keys(raw).map(cleanName).sort(),
-    ...asString(raw["model"]) ? { model: cleanName(asString(raw["model"])) } : {},
-    ...asString(raw["effortLevel"]) ? { effortLevel: cleanName(asString(raw["effortLevel"])) } : {},
-    permissions: {
-      allow: asArray(perms?.["allow"]).length,
-      deny: asArray(perms?.["deny"]).length,
-      ask: asArray(perms?.["ask"]).length,
-      ...asString(perms?.["defaultMode"]) ? { defaultMode: cleanName(asString(perms["defaultMode"])) } : {}
-    },
-    hooks: settingsHooks(raw),
-    env: settingsEnv(raw),
-    statusLine: raw["statusLine"] != null,
-    // both cleanup windows, kept raw: `src/harness/retention.ts` decides which values are usable, so a
-    // value this collector cannot vouch for is still visible in the inventory rather than silently dropped
-    ...typeof raw["cleanupPeriodDays"] === "number" ? { cleanupPeriodDays: raw["cleanupPeriodDays"] } : {},
-    ...typeof raw["desktopSessionCleanupPeriodDays"] === "number" ? { desktopSessionCleanupPeriodDays: raw["desktopSessionCleanupPeriodDays"] } : {},
-    ...typeof raw["allowManagedHooksOnly"] === "boolean" ? { allowManagedHooksOnly: raw["allowManagedHooksOnly"] } : {},
-    enabledPlugins: enabledPluginKeys(raw)
-  };
-}
-async function readSkillDir(ctx, dir, origin, plugin) {
-  const out3 = [];
-  for (const e of await listDir(ctx, dir)) {
-    if (!e.dir || e.name.startsWith(".")) continue;
-    const file = join7(dir, e.name, "SKILL.md");
-    const text3 = await readText(ctx, file);
-    if (text3 === null) continue;
-    const { fm, body } = parseFrontmatter(text3);
-    const bytes = Buffer.byteLength(text3, "utf8");
-    out3.push({
-      name: cleanName(fm["name"] ?? e.name),
-      origin,
-      ...plugin ? { plugin: cleanName(plugin) } : {},
-      file: cleanPath(ctx, file),
-      bytes,
-      approxTokens: approxTokens2(bytes),
-      descriptionChars: (fm["description"] ?? "").length,
-      allowedTools: splitList(fm["allowed-tools"] ?? fm["allowedTools"])?.map(cleanName) ?? null,
-      bodyLines: lineCount(body),
-      hasReferences: await isDir(join7(dir, e.name, "references"))
-    });
-  }
-  return out3;
-}
-async function readAgentDir(ctx, dir, origin, plugin) {
-  const out3 = [];
-  for (const file of await walkMarkdown(ctx, dir)) {
-    const text3 = await readText(ctx, file);
-    if (text3 === null) continue;
-    const { fm } = parseFrontmatter(text3);
-    const bytes = Buffer.byteLength(text3, "utf8");
-    out3.push({
-      name: cleanName(fm["name"] ?? basename7(file, ".md")),
-      origin,
-      ...plugin ? { plugin: cleanName(plugin) } : {},
-      file: cleanPath(ctx, file),
-      bytes,
-      approxTokens: approxTokens2(bytes),
-      descriptionChars: (fm["description"] ?? "").length,
-      ...fm["model"] ? { model: cleanName(fm["model"]) } : {},
-      ...fm["effort"] ? { effort: cleanName(fm["effort"]) } : {},
-      tools: splitList(fm["tools"])?.map(cleanName) ?? null,
-      disallowedTools: splitList(fm["disallowedTools"] ?? fm["disallowed-tools"])?.map(cleanName) ?? null
-    });
-  }
-  return out3;
-}
-async function readMemory(ctx, file, scope) {
-  const text3 = await readText(ctx, file);
-  if (text3 === null) return null;
-  if (ctx.words) for (const w of contentWords(text3, { cap: Infinity })) ctx.words.add(w);
-  const bytes = Buffer.byteLength(text3, "utf8");
-  return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: lineCount(text3), headings: headingCount(text3) };
-}
-function mcpFromRecord(rec, scope, enabled = true) {
-  if (!rec) return [];
-  const out3 = [];
-  for (const name of Object.keys(rec).sort()) {
-    const srv = asRecord(rec[name]);
-    const command = asString(srv?.["command"]);
-    const transport = asString(srv?.["type"]) ?? (asString(srv?.["url"]) ? "http" : command ? "stdio" : "unknown");
-    out3.push({
-      name: cleanName(name),
-      scope,
-      transport: cleanName(transport),
-      ...command ? { commandBasename: cleanName(argv0Basename(command)) } : {},
-      enabled
-    });
-  }
-  return out3;
-}
-async function walkPlugin(ctx, installPath, key) {
-  const skills = await readSkillDir(ctx, join7(installPath, "skills"), "plugin", key);
-  const agents = await readAgentDir(ctx, join7(installPath, "agents"), "plugin", key);
-  const commands = (await walkMarkdown(ctx, join7(installPath, "commands"))).length;
-  const hooksJson = await readJson(ctx, join7(installPath, "hooks", "hooks.json"));
-  const hookConfigs = hookConfigsFrom(hooksJson && "hooks" in hooksJson ? asRecord(hooksJson["hooks"]) : hooksJson);
-  const hooks = hookConfigs.reduce((n2, h) => n2 + h.commands, 0);
-  const mcpJson = await readJson(ctx, join7(installPath, ".mcp.json"));
-  const mcpServers = mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "plugin");
-  return { skills, agents, mcpServers, commands, hooks, hookConfigs };
-}
-async function collectInventory(opts) {
-  if (typeof opts.cwd !== "string" || typeof opts.home !== "string" || !Array.isArray(opts.roots)) {
-    throw new TypeError("collectInventory: cwd and home must be strings and roots an array");
-  }
-  const ctx = {
-    ...opts.instructionWords ? { words: opts.instructionWords } : {},
-    home: opts.home,
-    maxFileBytes: opts.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
-    unreadable: [],
-    seen: /* @__PURE__ */ new Set(),
-    filesRead: 0,
-    bytesRead: 0
-  };
-  const claudeMd = [];
-  const settings = [];
-  const skills = [];
-  const agents = [];
-  const plugins = [];
-  const mcpServers = [];
-  if (await isDir(opts.cwd)) {
-    for (const name of ["CLAUDE.md", "AGENTS.md"]) {
-      const m2 = await readMemory(ctx, join7(opts.cwd, name), "repo");
-      if (m2) claudeMd.push(m2);
-    }
-    const dotClaude = join7(opts.cwd, ".claude");
-    const m = await readMemory(ctx, join7(dotClaude, "CLAUDE.md"), "repo");
-    if (m) claudeMd.push(m);
-    for (const [file, scope] of [
-      [join7(dotClaude, "settings.json"), "repo"],
-      [join7(dotClaude, "settings.local.json"), "repo-local"]
-    ]) {
-      const raw = await readJson(ctx, file);
-      if (raw) settings.push(parseSettings(ctx, scope, file, raw));
-    }
-    skills.push(...await readSkillDir(ctx, join7(dotClaude, "skills"), "repo"));
-    agents.push(...await readAgentDir(ctx, join7(dotClaude, "agents"), "repo"));
-    const mcpJson = await readJson(ctx, join7(opts.cwd, ".mcp.json"));
-    mcpServers.push(...mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "repo-file"));
-  } else {
-    mark(ctx, opts.cwd, "enoent");
-  }
-  for (const dir of opts.managedDirs ?? []) {
-    if (!await isDir(dir)) continue;
-    const main2 = join7(dir, "managed-settings.json");
-    const rawMain = await readJson(ctx, main2);
-    if (rawMain) settings.push(parseSettings(ctx, "managed", main2, rawMain));
-    const dropIns = join7(dir, "managed-settings.d");
-    if (await isDir(dropIns)) {
-      let names = [];
-      try {
-        names = (await readdir2(dropIns)).filter((n2) => n2.endsWith(".json")).sort();
-      } catch (e) {
-        mark(ctx, dropIns, reasonOf(e));
-      }
-      for (const name of names) {
-        const file = join7(dropIns, name);
-        const raw = await readJson(ctx, file);
-        if (raw) settings.push(parseSettings(ctx, "managed", file, raw));
-      }
-    }
-    const mcp = await readJson(ctx, join7(dir, "managed-mcp.json"));
-    mcpServers.push(...mcpFromRecord(asRecord(mcp?.["mcpServers"]), "managed"));
-  }
-  const liveRoots = [];
-  for (const root of opts.roots) {
-    if (!await isDir(root)) {
-      try {
-        await stat5(root);
-        mark(ctx, root, "other");
-      } catch (e) {
-        mark(ctx, root, reasonOf(e));
-      }
-      continue;
-    }
-    liveRoots.push(root);
-    const m = await readMemory(ctx, join7(root, "CLAUDE.md"), "global");
-    if (m) claudeMd.push(m);
-    for (const [file, scope] of [
-      [join7(root, "settings.json"), "global"],
-      [join7(root, "settings.local.json"), "global-local"]
-    ]) {
-      const raw = await readJson(ctx, file);
-      if (raw) settings.push(parseSettings(ctx, scope, file, raw));
-    }
-    skills.push(...await readSkillDir(ctx, join7(root, "skills"), "global"));
-    agents.push(...await readAgentDir(ctx, join7(root, "agents"), "global"));
-  }
-  const enabled = new Set(settings.flatMap((s) => s.enabledPlugins));
-  for (const root of liveRoots) {
-    const installed = await readJson(ctx, join7(root, "plugins", "installed_plugins.json"));
-    const byName = asRecord(installed?.["plugins"]);
-    if (!byName) continue;
-    for (const key of Object.keys(byName).sort()) {
-      const entry = asArray(byName[key]).map(asRecord).find((e) => e && asString(e["installPath"]));
-      if (!entry) continue;
-      const installPath = asString(entry["installPath"]);
-      const at = key.lastIndexOf("@");
-      const walk2 = await walkPlugin(ctx, installPath, key);
-      skills.push(...walk2.skills);
-      agents.push(...walk2.agents);
-      mcpServers.push(...walk2.mcpServers);
-      plugins.push({
-        key: cleanName(key),
-        name: cleanName(at > 0 ? key.slice(0, at) : key),
-        marketplace: cleanName(at > 0 ? key.slice(at + 1) : ""),
-        scope: cleanName(asString(entry["scope"]) ?? "unknown"),
-        ...asString(entry["version"]) ? { version: cleanName(asString(entry["version"])) } : {},
-        enabled: enabled.has(key),
-        skills: walk2.skills.length,
-        agents: walk2.agents.length,
-        commands: walk2.commands,
-        hooks: walk2.hooks,
-        mcpServers: walk2.mcpServers.length,
-        ...walk2.hookConfigs.length ? { hookConfigs: walk2.hookConfigs } : {}
-      });
-    }
-  }
-  let usageCounters;
-  let projectEntries = 0;
-  const claudeJsonPath = join7(opts.home, ".claude.json");
-  const rawClaudeJson = await readJson(ctx, claudeJsonPath);
-  if (rawClaudeJson) {
-    const picked = {};
-    for (const k of CLAUDE_JSON_KEYS) if (k in rawClaudeJson) picked[k] = rawClaudeJson[k];
-    mcpServers.push(...mcpFromRecord(asRecord(picked["mcpServers"]), "global"));
-    const projects = asRecord(picked["projects"]) ?? {};
-    const projectKeys = opts.allProjects ? Object.keys(projects).sort() : [opts.cwd];
-    for (const key of projectKeys) {
-      const project = asRecord(projects[key]);
-      if (!project) continue;
-      projectEntries++;
-      const proj = {};
-      for (const k of CLAUDE_JSON_PROJECT_KEYS) if (k in project) proj[k] = project[k];
-      const ownRowsFrom = mcpServers.length;
-      mcpServers.push(...mcpFromRecord(asRecord(proj["mcpServers"]), "project"));
-      const ownsRepoFile = key === opts.cwd;
-      for (const [list2, on] of [
-        [asArray(proj["enabledMcpjsonServers"]), true],
-        [asArray(proj["disabledMcpjsonServers"]), false]
-      ]) {
-        for (const raw of list2) {
-          const name = asString(raw);
-          if (!name) continue;
-          const clean = cleanName(name);
-          const existing = mcpServers.filter((m, i) => m.name === clean && (i >= ownRowsFrom || ownsRepoFile && m.scope === "repo-file"));
-          if (existing.length) for (const row2 of existing) row2.enabled = row2.enabled && on;
-          else mcpServers.push({ name: clean, scope: ownsRepoFile ? "repo-file" : "project", transport: "unknown", enabled: on });
-        }
-      }
-    }
-    const skillUsage = asRecord(picked["skillUsage"]);
-    const pluginUsage = asRecord(picked["pluginUsage"]);
-    usageCounters = {
-      skills: Object.keys(skillUsage ?? {}).sort().map((name) => ({ name: cleanName(name), usageCount: asNumber(asRecord(skillUsage[name])?.["usageCount"]), lastUsedAt: asNumber(asRecord(skillUsage[name])?.["lastUsedAt"]) })),
-      plugins: Object.keys(pluginUsage ?? {}).sort().map((key) => ({ key: cleanName(key), usageCount: asNumber(asRecord(pluginUsage[key])?.["usageCount"]), lastUsedAt: asNumber(asRecord(pluginUsage[key])?.["lastUsedAt"]) }))
-    };
-  }
-  const memoryIndexes = [];
-  const underRoot = (p) => liveRoots.some((root) => p.startsWith(join7(root, "projects") + "/"));
-  const indexPaths = new Set((opts.memoryIndexPaths ?? []).filter((p) => MEMORY_INDEX_PATH_RE.test(p) && underRoot(p) && !p.split(/[\\/]/).includes("..")));
-  for (const root of liveRoots) {
-    const projects = join7(root, "projects");
-    if (opts.allProjects) {
-      for (const e of await listDir(ctx, projects)) if (e.dir) indexPaths.add(join7(projects, e.name, "memory", "MEMORY.md"));
-    } else indexPaths.add(join7(projects, projectSlug(opts.cwd), "memory", "MEMORY.md"));
-  }
-  for (const file of [...indexPaths].sort()) {
-    try {
-      if (!(await stat5(file)).isFile()) continue;
-    } catch {
-      continue;
-    }
-    const text3 = await readText(ctx, file);
-    if (text3 === null) continue;
-    const bytes = Buffer.byteLength(text3, "utf8");
-    const cut = memoryIndexCut(text3);
-    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, chars: cut.chars, approxTokens: approxTokens2(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...cut.firstLinePastLimit !== void 0 ? { firstLinePastLimit: cut.firstLinePastLimit } : {} });
-    if (ctx.words) {
-      for (const w of contentWords(text3, { cap: Infinity })) ctx.words.add(w);
-      const dir = join7(file, "..");
-      for (const e of await listDir(ctx, dir)) {
-        if (e.dir || !e.name.endsWith(".md") || e.name === "MEMORY.md") continue;
-        const note = await readText(ctx, join7(dir, e.name));
-        if (note !== null) for (const w of contentWords(note, { cap: Infinity })) ctx.words.add(w);
-      }
-    }
-  }
-  claudeMd.sort((a, b) => a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
-  settings.sort((a, b) => a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
-  skills.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
-  agents.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
-  plugins.sort(byKey((p) => p.key));
-  mcpServers.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : 0);
-  ctx.unreadable.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0);
-  return {
-    claudeMd,
-    memoryIndexes,
-    settings,
-    skills,
-    agents,
-    plugins,
-    mcpServers,
-    ...usageCounters ? { usageCounters } : {},
-    totals: {
-      filesRead: ctx.filesRead,
-      bytesRead: ctx.bytesRead,
-      claudeMdBytes: claudeMd.reduce((n2, m) => n2 + m.bytes, 0),
-      claudeMdApproxTokens: claudeMd.reduce((n2, m) => n2 + m.approxTokens, 0),
-      skills: skills.length,
-      agents: agents.length,
-      plugins: plugins.length,
-      // distinct NAMES: one server declared by `.mcp.json` and named again by a toggle list is one server
-      mcpServers: new Set(mcpServers.map((m) => m.name)).size,
-      // settings files plus the hooks of ENABLED plugins: the commands Claude Code will actually run
-      hookCommands: settings.reduce((n2, s) => n2 + s.hooks.reduce((k, h) => k + h.commands, 0), 0) + plugins.reduce((n2, p) => n2 + (p.enabled ? p.hooks : 0), 0),
-      projectEntries
-    },
-    unreadable: ctx.unreadable
-  };
-}
-
-// src/feedback/diagnostics.ts
-import { arch, platform } from "node:os";
-function osFamily(value) {
-  if (value === "darwin") return "macOS";
-  if (value === "win32") return "Windows";
-  if (value === "linux") return "Linux";
-  return "other";
-}
-function safeArch(value) {
-  return value === "arm64" || value === "x64" ? value : "other";
-}
-function feedbackDiagnostics(version, context) {
-  return {
-    version,
-    nodeMajor: process.versions.node.split(".")[0] ?? "unknown",
-    osFamily: osFamily(platform()),
-    arch: safeArch(arch()),
-    context,
-    surface: "localhost"
-  };
-}
-function feedbackBootstrap(version) {
-  const { context: _context, ...bootstrap } = feedbackDiagnostics(version, "app");
-  return bootstrap;
-}
-
-// src/suggest/cohort-cache.ts
-import { createHash as createHash3, randomBytes as randomBytes3 } from "node:crypto";
-import { constants as constants10 } from "node:fs";
-import { lstat as lstat8, open as open10, readdir as readdir3, rename as rename2, unlink as unlink3 } from "node:fs/promises";
-import { basename as basename8, dirname as dirname6, isAbsolute as isAbsolute5, join as join8, resolve as resolve6 } from "node:path";
-var COHORT_FACTS_DIR = "cohort-facts-v1";
-var COHORT_FACTS_MAX_ENTRY_BYTES = 16384;
-var ENTRY_KEYS = ["v", "key", "sessionId", "cwd", "startedAt", "endedAt", "ranOrangu", "bytesRead", "metrics"];
-var OVER_CAP_KEYS = ["v", "key", "sessionId", "skip", "maxBytes", "bytesRead"];
-var KEY_RE = /^[0-9a-f]{40}$/;
-var SESSION_ID_RE2 = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-var MAX_CWD_CHARS = 4096;
-function plainObject2(value) {
-  return !!value && typeof value === "object" && !Array.isArray(value);
-}
-function hasExactKeys2(value, keys) {
-  return Object.keys(value).length === keys.length && keys.every((key) => Object.hasOwn(value, key));
-}
-var finiteNonNegative2 = (value) => typeof value === "number" && Number.isFinite(value) && value >= 0;
-function validFacts(value) {
-  const { sessionId, cwd, startedAt, endedAt, ranOrangu, bytesRead, metrics } = value;
-  return typeof sessionId === "string" && SESSION_ID_RE2.test(sessionId) && typeof cwd === "string" && isAbsolute5(cwd) && cwd.length <= MAX_CWD_CHARS && resolve6(cwd) === cwd && finiteNonNegative2(startedAt) && startedAt > 0 && finiteNonNegative2(endedAt) && endedAt >= startedAt && typeof ranOrangu === "boolean" && Number.isSafeInteger(bytesRead) && bytesRead >= 0 && plainObject2(metrics) && hasExactKeys2(metrics, SUGGESTION_VERIFICATION_METRICS) && SUGGESTION_VERIFICATION_METRICS.every((metric) => finiteNonNegative2(metrics[metric]));
-}
-function validOverCap(value) {
-  const { sessionId, skip, maxBytes, bytesRead } = value;
-  return typeof sessionId === "string" && SESSION_ID_RE2.test(sessionId) && skip === "over-budget" && Number.isSafeInteger(maxBytes) && maxBytes >= 1 && maxBytes <= MAX_EVIDENCE_SESSION_BYTES && Number.isSafeInteger(bytesRead) && bytesRead >= 0 && bytesRead < maxBytes;
-}
-function pickOverCap(overCap) {
-  return { sessionId: overCap.sessionId, maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead };
-}
-function pick(facts) {
-  return {
-    sessionId: facts.sessionId,
-    cwd: facts.cwd,
-    startedAt: facts.startedAt,
-    endedAt: facts.endedAt,
-    ranOrangu: facts.ranOrangu,
-    bytesRead: facts.bytesRead,
-    metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, facts.metrics?.[metric]]))
-  };
-}
-var SIDECAR_STAT_BATCH = 16;
-async function sidecarTree(mainPath) {
-  const tree = { folders: [], transcripts: [], files: /* @__PURE__ */ new Map(), complete: true };
-  const sessionDir = join8(dirname6(mainPath), basename8(mainPath, ".jsonl"));
-  const folder = await lstatOrUndefined(sessionDir);
-  if (!folder || folder.isSymbolicLink() || !folder.isDirectory()) return tree;
-  tree.sessionDir = folder;
-  let entries = 0;
-  const walk2 = async (dir, st, depth) => {
-    tree.folders.push({ path: dir, st });
-    const names = (await readdir3(dir)).sort();
-    for (let start = 0; start < names.length; start += SIDECAR_STAT_BATCH) {
-      const batch = names.slice(start, start + SIDECAR_STAT_BATCH);
-      const stats = await Promise.allSettled(batch.map((name) => lstat8(join8(dir, name), { bigint: true })));
-      for (const [index, name] of batch.entries()) {
-        if (++entries > MAX_EVIDENCE_SIDECAR_ENTRIES) throw new Error("sidecar limit");
-        const result = stats[index];
-        if (result.status === "rejected") throw result.reason;
-        const child = join8(dir, name);
-        const cst = result.value;
-        if (cst.isSymbolicLink()) continue;
-        if (cst.isDirectory()) {
-          if (depth < MAX_EVIDENCE_SIDECAR_DEPTH) await walk2(child, cst, depth + 1);
-        } else if (cst.isFile()) {
-          if (name.startsWith("agent-") && name.endsWith(".jsonl")) tree.transcripts.push({ path: child, st: cst });
-          else tree.files.set(child, cst);
-        }
-      }
-    }
-  };
-  const subagents = join8(sessionDir, "subagents");
-  const root = await lstatOrUndefined(subagents);
-  if (!root || root.isSymbolicLink() || !root.isDirectory()) return tree;
-  try {
-    await walk2(subagents, root, 0);
-  } catch {
-    tree.complete = false;
-  }
-  return tree;
-}
-async function cohortFactsKey(ref2) {
-  try {
-    const main2 = await lstat8(ref2.path, { bigint: true });
-    if (main2.isSymbolicLink() || !main2.isFile()) return void 0;
-    let changedNs = 0n;
-    const changed = (st) => {
-      if (st.mtimeNs > changedNs) changedNs = st.mtimeNs;
-      if (st.ctimeNs > changedNs) changedNs = st.ctimeNs;
-    };
-    changed(main2);
-    const parts2 = [COHORT_FACTS_DIR, ref2.path, main2.dev, main2.ino, main2.size, main2.mtimeNs, main2.ctimeNs];
-    const tree = await sidecarTree(ref2.path);
-    if (tree.sessionDir) {
-      changed(tree.sessionDir);
-      parts2.push(`session:${tree.sessionDir.mtimeNs}:${tree.sessionDir.ctimeNs}`);
-    } else {
-      const project = await lstatOrUndefined(dirname6(ref2.path));
-      if (project) changed(project);
-    }
-    for (const { path, st } of tree.folders) {
-      changed(st);
-      parts2.push(`folder:${path}:${st.mtimeNs}:${st.ctimeNs}`);
-    }
-    parts2.push(tree.transcripts.length);
-    for (const { path, st } of tree.transcripts) {
-      const meta = tree.files.get(path.replace(/\.jsonl$/, ".meta.json"));
-      changed(st);
-      if (meta) changed(meta);
-      parts2.push(`${path}:${st.size}:${st.mtimeNs}:${st.ctimeNs}`, meta ? `${meta.size}:${meta.mtimeNs}:${meta.ctimeNs}` : "-");
-    }
-    if (!tree.complete) parts2.push("incomplete");
-    const changedAt = Number((changedNs + 999999n) / 1000000n);
-    return { key: createHash3("sha1").update(parts2.join("|")).digest("hex"), changedAt };
-  } catch {
-    return void 0;
-  }
-}
-async function lstatOrUndefined(path) {
-  try {
-    return await lstat8(path, { bigint: true });
-  } catch {
-    return void 0;
-  }
-}
-var CohortFactsCache = class {
-  layoutDirectories;
-  folder;
-  enabled;
-  validVersion;
-  layout;
-  hits = 0;
-  misses = 0;
-  writes = 0;
-  constructor(opts) {
-    const home = resolve6(oranguHome());
-    const cacheRoot = resolve6(opts.dir ?? join8(home, "cache"));
-    const segment = cacheGenerationSegment(opts.version);
-    this.validVersion = isCacheSegment(segment);
-    const generation = join8(cacheRoot, segment);
-    this.folder = join8(generation, COHORT_FACTS_DIR);
-    this.layoutDirectories = opts.dir === void 0 ? [home, cacheRoot, generation, this.folder] : [cacheRoot, generation, this.folder];
-    this.enabled = opts.enabled !== false;
-  }
-  file(key) {
-    return this.validVersion && KEY_RE.test(key) ? join8(this.folder, `${key}.json`) : void 0;
-  }
-  /** Secure the layout once, and check it again before each use. A changed layout is secured again on the next use. */
-  async directories() {
-    this.layout ??= (async () => {
-      const identities = [];
-      for (const path of this.layoutDirectories) identities.push(await ensurePrivateDirectory(path));
-      return identities;
-    })();
-    try {
-      const identities = await this.layout;
-      await assertPrivateDirectoriesStable(identities);
-      return identities;
-    } catch (error) {
-      this.layout = void 0;
-      throw error;
-    }
-  }
-  /** The entry of this key and this session, or undefined: no stats. It never throws. */
-  async read(key, sessionId) {
-    if (!this.enabled) return void 0;
-    try {
-      const path = this.file(key);
-      if (!path) return void 0;
-      const directories = await this.directories();
-      const manifest = await prevalidateAnalysisCacheEntry(path, COHORT_FACTS_MAX_ENTRY_BYTES);
-      await assertPrivateDirectoriesStable(directories);
-      const raw = await readAnalysisCacheEntry(manifest);
-      await assertPrivateDirectoriesStable(directories);
-      const value = JSON.parse(raw);
-      if (!plainObject2(value) || value["v"] !== 1 || value["key"] !== key || value["sessionId"] !== sessionId) return void 0;
-      if (hasExactKeys2(value, ENTRY_KEYS) && validFacts(value)) return { facts: pick(value) };
-      if (hasExactKeys2(value, OVER_CAP_KEYS) && validOverCap(value)) return { overCap: pickOverCap(value) };
-      return void 0;
-    } catch {
-      return void 0;
-    }
-  }
-  /** The entry of this key and this session (facts or a skip over the cap), or undefined. It never throws. */
-  async lookup(key, sessionId) {
-    const entry = await this.read(key, sessionId);
-    if (entry) this.hits++;
-    else this.misses++;
-    return entry;
-  }
-  /** The facts of this key and this session, or undefined. It never throws. */
-  async get(key, sessionId) {
-    const entry = await this.read(key, sessionId);
-    if (entry && "facts" in entry) {
-      this.hits++;
-      return entry.facts;
-    }
-    this.misses++;
-    return void 0;
-  }
-  /** Write the facts of 1 settled session under its key: an exclusive temporary file, then a rename. It never throws. */
-  async put(key, facts) {
-    const picked = pick(facts);
-    if (!validFacts(picked)) return;
-    await this.write(key, { v: 1, key, ...picked });
-  }
-  /** Write a session over the cap of its load under its key, as `put` writes facts. It never throws. */
-  async putOverCap(key, overCap) {
-    const picked = { sessionId: overCap.sessionId, skip: "over-budget", maxBytes: overCap.maxBytes, bytesRead: overCap.bytesRead };
-    if (!validOverCap(picked)) return;
-    await this.write(key, { v: 1, key, ...picked });
-  }
-  /** Write 1 checked entry: an exclusive temporary file, then a rename. It never throws. */
-  async write(key, entry) {
-    if (!this.enabled) return;
-    let tmp;
-    try {
-      const path = this.file(key);
-      if (!path) return;
-      const bytes = Buffer.from(JSON.stringify(entry), "utf8");
-      if (bytes.byteLength > COHORT_FACTS_MAX_ENTRY_BYTES) return;
-      const directories = await this.directories();
-      tmp = `${path}.tmp-${process.pid}-${randomBytes3(12).toString("hex")}`;
-      const handle = await open10(tmp, constants10.O_WRONLY | constants10.O_CREAT | constants10.O_EXCL | (constants10.O_NOFOLLOW ?? 0), PRIVATE_FILE_MODE);
-      try {
-        await handle.writeFile(bytes);
-        await handle.chmod(PRIVATE_FILE_MODE);
-      } finally {
-        await handle.close();
-      }
-      await assertPrivateDirectoriesStable(directories);
-      await rename2(tmp, path);
-      tmp = void 0;
-      await assertPrivateDirectoriesStable(directories);
-      const final = await lstat8(path, { bigint: true });
-      if (!final.isFile() || final.isSymbolicLink() || Number(final.mode & 0o777n) !== PRIVATE_FILE_MODE) throw new Error("cache entry changed after its atomic write");
-      this.writes++;
-    } catch {
-    } finally {
-      if (tmp) {
-        try {
-          await unlink3(tmp);
-        } catch {
-        }
-      }
-    }
-  }
-  stats() {
-    return { hits: this.hits, misses: this.misses, writes: this.writes };
-  }
-};
-
-// src/suggest/cohort.ts
-import { basename as basename9 } from "node:path";
-var COHORT_SIDE_BYTES = 256 * 1024 * 1024;
-function metricValues(analysis) {
-  const values = {
-    avgTotalTokens: analysis.summary.totalTokens,
-    avgToolCalls: analysis.summary.toolCalls,
-    avgToolErrors: analysis.summary.toolErrors,
-    avgActiveMs: analysis.summary.activeMs,
-    avgContextPeak: analysis.summary.contextPeak,
-    avgTestRunsFailed: analysis.summary.outcomes.testRunsFailed,
-    avgBuildRunsFailed: analysis.summary.outcomes.buildRunsFailed,
-    avgInterruptions: analysis.turns.filter((turn) => turn.interrupted).length
-  };
-  for (const metric of SUGGESTION_VERIFICATION_METRICS) {
-    if (!Number.isFinite(values[metric]) || values[metric] < 0) throw new Error(`analysis has an invalid ${metric} value`);
-  }
-  return values;
-}
-var ORANGU_SKILL_RE = /^\/?orangu[:-][a-z-]+$/i;
-var ORANGU_CLI_RE = /\borangu(?:\.cli\.mjs|\.js)?["']?\s+(?:suggest|evidence|estimate|harness)\b/;
-function ranOranguLifecycle(session) {
-  if (session.skills.some((skill) => ORANGU_SKILL_RE.test(skill.name.trim()))) return true;
-  return session.toolCalls.some((call) => {
-    if (call.name !== "Bash" || !call.input || typeof call.input !== "object") return false;
-    const command = call.input.command;
-    return typeof command === "string" && ORANGU_CLI_RE.test(command);
-  });
-}
-function evidenceSessionIds(selectors) {
-  const ids = /* @__PURE__ */ new Set();
-  for (const selector of selectors) {
-    const trimmed = selector.trim();
-    for (const candidate of [trimmed, basename9(trimmed).replace(/\.jsonl$/i, "")]) {
-      if (SESSION_ID_RE.test(candidate)) ids.add(candidate.toLowerCase());
-    }
-  }
-  return ids;
-}
-var byPath = (a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
-var baselineCandidates = (candidates, cutAt) => candidates.filter((c) => c.mtimeMs < cutAt).sort((a, b) => b.mtimeMs - a.mtimeMs || byPath(a, b));
-var laterCandidates = (candidates, cutAt) => candidates.filter((c) => c.mtimeMs > cutAt).sort((a, b) => a.mtimeMs - b.mtimeMs || byPath(a, b));
-var noSkips = () => Object.fromEntries(COHORT_SKIP_REASONS.map((reason) => [reason, 0]));
-async function take(ctx, list2, side) {
-  const { deps, cwd, cutAt, excluded, seen, skipped } = ctx;
-  const accepted = [];
-  const settling = [];
-  let spent = 0;
-  let read = 0;
-  let budgetSpent = false;
-  for (const candidate of list2) {
-    if (accepted.length >= COHORT_MAX) break;
-    const id = candidate.sessionId.toLowerCase();
-    if (seen.has(id)) continue;
-    if (excluded.has(id)) {
-      skipped["evidence-session"]++;
-      continue;
-    }
-    const free = COHORT_SIDE_BYTES - spent;
-    const left = COHORT_SIDE_BYTES - read;
-    if (free < 1 || left < 1) {
-      skipped["budget-spent"]++;
-      budgetSpent = free < 1;
-      break;
-    }
-    const maxBytes = Math.min(MAX_EVIDENCE_SESSION_BYTES, left);
-    const loaded = await deps.loadCandidate(candidate, maxBytes);
-    read += loaded.bytesRead;
-    if ("skip" in loaded && loaded.skip === "still-settling") {
-      skipped["still-settling"]++;
-      const startedAt = typeof loaded.startedAt === "number" && Number.isFinite(loaded.startedAt) && loaded.startedAt > 0 ? loaded.startedAt : void 0;
-      settling.push(startedAt === void 0 ? { id } : { id, startedAt });
-      continue;
-    }
-    spent += loaded.bytesRead;
-    if ("skip" in loaded) {
-      if (loaded.skip === "over-budget" && maxBytes < MAX_EVIDENCE_SESSION_BYTES) {
-        skipped["budget-spent"]++;
-        budgetSpent = maxBytes === Math.min(MAX_EVIDENCE_SESSION_BYTES, free);
-        break;
-      }
-      skipped[loaded.skip]++;
-      continue;
-    }
-    const session = loaded.session;
-    if (session.id.toLowerCase() !== id) {
-      skipped.unreadable++;
-      continue;
-    }
-    if (session.cwd !== cwd) {
-      skipped["other-workspace"]++;
-      continue;
-    }
-    if (side === "baseline" ? session.endedAt > cutAt : session.startedAt <= cutAt) {
-      skipped["spans-application"]++;
-      continue;
-    }
-    if (session.ranOrangu) {
-      skipped["orangu-session"]++;
-      continue;
-    }
-    seen.add(id);
-    accepted.push({ ...session, id });
-  }
-  return { accepted, budgetSpent, settling };
-}
-var byStartThenId = (a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-async function measureCohortEffect(record3, others, deps) {
-  if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
-  if (record3.status !== "applied" && record3.status !== "verified") {
-    throw new Error(`suggestion ${record3.id} is not applied (status ${record3.status})`);
-  }
-  const proposal = record3.proposal;
-  const intents = proposal?.verificationChecks;
-  if (proposal?.v !== 1 || !proposal.workspace || !intents?.length) {
-    throw new Error(`suggestion ${record3.id} has no reviewed verification checks and workspace`);
-  }
-  const appliedAt = applicationTime(record3);
-  if (appliedAt === void 0) throw new Error(`suggestion ${record3.id}: its application time is unknown, so later sessions cannot be cut from it`);
-  const frozen = record3.frozenBaseline;
-  if (frozen !== void 0) {
-    const violation = frozenBaselineViolation(frozen, appliedAt);
-    if (violation) throw new Error(`suggestion ${record3.id}: its frozen baseline is not valid (${violation})`);
-  }
-  const cwd = await deps.canonicalWorkspace(proposal.workspace);
-  const candidates = await deps.listCandidates(cwd);
-  const skipped = frozen ? { ...frozen.skipped } : noSkips();
-  skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === appliedAt).length;
-  const ctx = {
-    deps,
-    cwd,
-    cutAt: appliedAt,
-    excluded: evidenceSessionIds(record3.sessionIds),
-    seen: new Set(frozen ? frozen.sessions.map((s) => s.id) : []),
-    skipped
-  };
-  const baseline = frozen ? frozen.sessions.map(({ id, startedAt, endedAt, metrics }) => ({ id, startedAt, endedAt, metrics: { ...metrics } })) : (await take(ctx, baselineCandidates(candidates, appliedAt), "baseline")).accepted;
-  const laterSide = await take(ctx, laterCandidates(candidates, appliedAt), "later");
-  if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
-    throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its sessions were read`);
-  }
-  const laterComplete = laterSide.accepted.length >= COHORT_MAX || laterSide.budgetSpent;
-  const byStart = [...laterSide.accepted].sort(byStartThenId);
-  const third = byStart[COHORT_MIN - 1];
-  const holds = laterComplete || third === void 0 ? [] : laterSide.settling.filter((s) => s.startedAt === void 0 || s.startedAt > appliedAt && byStartThenId({ id: s.id, startedAt: s.startedAt }, third) < 0);
-  const firstWaits = holds.length > 0;
-  const earliest = holds.reduce((min, s) => Math.min(min, s.startedAt ?? -Infinity), Infinity);
-  const later = laterComplete ? byStart : firstWaits ? byStart.filter((s) => s.startedAt < earliest).slice(0, COHORT_MIN) : byStart.slice(0, COHORT_MIN);
-  const checks2 = intents.map(
-    (intent) => evaluateCheck(
-      intent,
-      baseline.map((s) => s.metrics[intent.metric]),
-      later.map((s) => s.metrics[intent.metric])
-    )
-  );
-  const measured = [...baseline, ...later];
-  const windowStart = measured.length ? Math.min(...measured.map((s) => s.startedAt)) : appliedAt;
-  const windowEnd = measured.length ? Math.max(...measured.map((s) => s.endedAt)) : appliedAt;
-  const confoundedBy = [
-    ...new Set(
-      others.filter((other) => other.id !== record3.id && other.proposal?.workspace?.cwd === proposal.workspace.cwd).filter((other) => {
-        const at = applicationTime(other);
-        return at !== void 0 && at >= windowStart && at <= windowEnd;
-      }).map((other) => other.id)
-    )
-  ].sort();
-  return {
-    id: record3.id,
-    status: record3.status,
-    scope: record3.scope,
-    appliedAt,
-    verdict: overallVerdict(checks2, baseline.length, later.length),
-    baseline,
-    baselineFrozen: frozen !== void 0,
-    later,
-    laterCount: laterSide.accepted.length,
-    laterComplete,
-    firstWaits,
-    checks: checks2,
-    confoundedBy,
-    skipped
-  };
-}
-async function freezeBaseline(record3, _others, deps) {
-  if (record3.scope === "global") throw new Error(`suggestion ${record3.id}: global suggestions are review-only and cannot be verified`);
-  if (record3.status !== "proposed") throw new Error(`suggestion ${record3.id} is not proposed (status ${record3.status}), so it has no baseline to freeze`);
-  const proposal = record3.proposal;
-  if (proposal?.v !== 1 || !proposal.workspace || !proposal.verificationChecks?.length) {
-    throw new Error(`suggestion ${record3.id} has no reviewed verification checks and workspace`);
-  }
-  const cutAt = (deps.now ?? Date.now)();
-  if (!Number.isFinite(cutAt) || cutAt <= 0) throw new Error(`suggestion ${record3.id}: the clock gave no valid cut time, so the baseline cannot be frozen`);
-  const cwd = await deps.canonicalWorkspace(proposal.workspace);
-  const candidates = await deps.listCandidates(cwd);
-  const skipped = noSkips();
-  skipped["spans-application"] += candidates.filter((c) => c.mtimeMs === cutAt).length;
-  const ctx = { deps, cwd, cutAt, excluded: evidenceSessionIds(record3.sessionIds), seen: /* @__PURE__ */ new Set(), skipped };
-  const { accepted } = await take(ctx, baselineCandidates(candidates, cutAt), "baseline");
-  if (await deps.canonicalWorkspace(proposal.workspace) !== cwd) {
-    throw new Error(`suggestion ${record3.id}: the reviewed workspace changed while its baseline sessions were read`);
-  }
-  const sessions = accepted.map((session) => ({
-    id: session.id,
-    startedAt: session.startedAt,
-    endedAt: session.endedAt,
-    metrics: Object.fromEntries(SUGGESTION_VERIFICATION_METRICS.map((metric) => [metric, session.metrics[metric]]))
-  })).sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  const frozen = { v: 1, cutAt, sessions, skipped };
-  const violation = frozenBaselineViolation(frozen, void 0);
-  if (violation) throw new Error(`suggestion ${record3.id}: the baseline cannot be frozen (${violation})`);
-  return frozen;
-}
-function effectFinality(effect) {
-  const checkpoint = effect.laterComplete ? "complete" : effect.laterCount >= COHORT_MIN && !effect.firstWaits ? "first" : null;
-  if (effect.baseline.length < COHORT_MIN) return { checkpoint, final: effect.baselineFrozen };
-  if (checkpoint === null) return { checkpoint, final: false };
-  if (effect.verdict === "verified" || checkpoint === "complete") return { checkpoint, final: true };
-  return effect.verdict === "regressed" ? { checkpoint, final: false, leaning: "worse" } : { checkpoint, final: false };
-}
-function checkpointLabel(effect, checkpoint) {
-  if (checkpoint === "first") return `the first checkpoint (the first ${COHORT_MIN} later sessions)`;
-  const n2 = effect.later.length;
-  return `the complete checkpoint (${n2 >= COHORT_MAX ? `${COHORT_MAX} of ${COHORT_MAX} later sessions` : `${n2} later sessions, the byte budget is spent`})`;
-}
-function nextStep(effect) {
-  if (effect.status === "verified") return "already recorded as verified";
-  const counts = `(has ${effect.baseline.length} before, ${effect.laterCount} after)`;
-  const { checkpoint } = effectFinality(effect);
-  if (effect.baseline.length < COHORT_MIN) {
-    if (effect.baselineFrozen) {
-      const record3 = `Record it as unproven: orangu suggest --record ${effect.id}`;
-      if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. The frozen baseline cannot change. ${record3}`;
-      return `the frozen baseline has ${effect.baseline.length} of the ${COHORT_MIN} sessions that a verdict needs, and it cannot change. ${record3}`;
-    }
-    return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. This older record has no frozen baseline, so orangu cannot record a verdict. Reject it: orangu suggest --set ${effect.id} rejected --reason other`;
-  }
-  if (checkpoint === null && effect.firstWaits) return `the first checkpoint waits until a later session that started before the third one settles ${counts}`;
-  if (checkpoint === null) return `needs at least ${COHORT_MIN} settled sessions on each side ${counts}. Orangu grades at ${COHORT_MIN} and at ${COHORT_MAX} later sessions`;
-  const at = checkpointLabel(effect, checkpoint);
-  if (effect.verdict === "verified") return `${at} beat the baseline beyond chance. Record it: orangu suggest --set ${effect.id} verified`;
-  if (checkpoint === "first") {
-    const wait = `That is not final. Orangu grades again when the later cohort is complete (${effect.laterCount} of ${COHORT_MAX} so far)`;
-    if (effect.verdict === "regressed") return `${at} leans worse: a check moved the wrong way beyond chance. ${wait}`;
-    return `${at} did not beat the baseline beyond chance. ${wait}`;
-  }
-  if (effect.verdict === "regressed") return `${at} found a check that moved the wrong way beyond chance. Record it as regressed: orangu suggest --record ${effect.id}`;
-  return `${at} did not beat the baseline beyond chance. Record it as unproven: orangu suggest --record ${effect.id}`;
-}
-function verificationPatch(effect) {
-  if (effect.verdict !== "verified") throw new Error(`not verified: ${effect.verdict}; ${nextStep(effect)}`);
-  const checks2 = effect.checks.map((check) => ({
-    metric: check.metric,
-    comparison: check.comparison,
-    name: check.name,
-    before: check.before,
-    after: check.after,
-    beforeMedian: check.beforeMedian,
-    afterMedian: check.afterMedian,
-    pLower: check.pLower,
-    pHigher: check.pHigher,
-    verdict: check.verdict === "improved" ? "improved" : "held",
-    evidence: check.evidence,
-    ok: true
-  }));
-  const receipt = {
-    v: 2,
-    method: "cohort-rank-v1",
-    alpha: COHORT_ALPHA,
-    appliedAt: effect.appliedAt,
-    summary: "",
-    baselineSessionIds: effect.baseline.map((s) => s.id).sort(),
-    measuredSessionIds: effect.later.map((s) => s.id).sort(),
-    confoundedBy: [...effect.confoundedBy],
-    checks: checks2
-  };
-  receipt.summary = cohortReceiptSummary(receipt);
-  return {
-    verificationReceipt: receipt,
-    effect: {
-      before: Object.fromEntries(checks2.map((check) => [check.metric, check.before])),
-      after: Object.fromEntries(checks2.map((check) => [check.metric, check.after])),
-      measuredSessionIds: receipt.measuredSessionIds
-    }
-  };
-}
-function outcomePatch(effect) {
-  if (effect.status !== "applied") throw new Error(`suggestion ${effect.id} is not applied (status ${effect.status})`);
-  const verdict = effect.verdict;
-  if (verdict === "verified") throw new Error(`record it as verified: orangu suggest --set ${effect.id} verified`);
-  if (!effectFinality(effect).final) throw new Error(`not final: ${verdict}. ${nextStep(effect)}`);
-  const checks2 = effect.checks.map((check) => ({
-    metric: check.metric,
-    comparison: check.comparison,
-    name: check.name,
-    before: check.before,
-    after: check.after,
-    beforeMedian: check.beforeMedian,
-    afterMedian: check.afterMedian,
-    pLower: check.pLower,
-    pHigher: check.pHigher,
-    verdict: check.verdict
-  }));
-  return {
-    outcomeReceipt: {
-      v: 1,
-      method: "cohort-rank-v1",
-      alpha: COHORT_ALPHA,
-      appliedAt: effect.appliedAt,
-      // The store accepts only this pairing: complete exactly when the later cohort is complete.
-      checkpoint: effect.laterComplete ? "complete" : "first",
-      verdict,
-      laterComplete: effect.laterComplete,
-      confoundedBy: [...effect.confoundedBy],
-      baselineSessionIds: effect.baseline.map((s) => s.id).sort(),
-      measuredSessionIds: effect.later.map((s) => s.id).sort(),
-      checks: checks2
-    }
-  };
-}
-
-// src/suggest/cohort-deps.ts
-import { constants as constants12 } from "node:fs";
-import { open as open12, realpath as realpath9 } from "node:fs/promises";
-import { isAbsolute as isAbsolute8 } from "node:path";
-
-// src/adapters/claude-code/discovered-analysis.ts
-import { realpath as realpath7 } from "node:fs/promises";
-import { isAbsolute as isAbsolute6, resolve as resolve7 } from "node:path";
-var MAX_VERIFICATION_DISCOVERED_SESSIONS = 1e4;
-var MIN_VERIFICATION_QUIET_MS = 30 * 6e4;
-async function discoveredInventory() {
-  const refs = (await listSessions({ roots: await claudeRoots(), maxSessions: MAX_VERIFICATION_DISCOVERED_SESSIONS })).filter((ref2) => SESSION_ID_RE.test(ref2.sessionId));
-  if (refs.length > MAX_VERIFICATION_DISCOVERED_SESSIONS) {
-    throw new Error(`verification discovery exceeds ${MAX_VERIFICATION_DISCOVERED_SESSIONS} sessions`);
-  }
-  const byCanonicalPath = /* @__PURE__ */ new Map();
-  for (const ref2 of refs) {
-    try {
-      const canonical = await realpath7(ref2.path);
-      const prior = byCanonicalPath.get(canonical);
-      if (prior === void 0) byCanonicalPath.set(canonical, ref2);
-      else if (prior !== null && resolve7(prior.path) !== resolve7(ref2.path)) byCanonicalPath.set(canonical, null);
-    } catch {
-    }
-  }
-  return { refs, byCanonicalPath };
-}
-async function exactDiscoveredRef(selector, inventory) {
-  const value = selector.trim();
-  if (!value) return void 0;
-  let matches;
-  if (SESSION_ID_RE.test(value)) {
-    matches = inventory.refs.filter((ref2) => ref2.sessionId.toLowerCase() === value.toLowerCase());
-  } else if (value.endsWith(".jsonl") || value.includes("/") || value.includes("\\")) {
-    let canonical;
-    try {
-      canonical = await realpath7(isAbsolute6(value) ? value : resolve7(process.cwd(), value));
-    } catch {
-      return void 0;
-    }
-    const indexed = inventory.byCanonicalPath.get(canonical);
-    matches = indexed ? [indexed] : [];
-  } else {
-    return void 0;
-  }
-  const unique = new Map(matches.map((ref2) => [resolve7(ref2.path), ref2]));
-  return unique.size === 1 ? [...unique.values()][0] : void 0;
-}
-var OVER_BUDGET_RE = /exceeds (?:\d+ bytes|the remaining \d+-byte read budget)/;
-async function loadSettledAnalysis(ref2, maxBytes, options = {}) {
-  let settling = false;
-  try {
-    const loaded = await withStableSessionRead(ref2.path, void 0, async (manifest) => {
-      if (options.requireQuiet) {
-        const changedAt = evidenceManifestLatestChangeMs(manifest);
-        const observedAt = (options.now ?? Date.now)();
-        if (changedAt === void 0 || !Number.isFinite(observedAt) || observedAt < changedAt || observedAt - changedAt < MIN_VERIFICATION_QUIET_MS) {
-          settling = true;
-          return void 0;
-        }
-      }
-      return readEvidenceSessionManifest(manifest, maxBytes);
-    });
-    if (!loaded) return { skip: settling ? "still-settling" : "unreadable", bytesRead: 0 };
-    const bytesRead = loaded.bytesRead;
-    if (options.requireQuiet && (loaded.parseInput.trailingPartial || loaded.parseInput.subagents?.some((sidecar) => sidecar.trailingPartial))) return { skip: "still-settling", bytesRead };
-    const session = await parseClaudeCodeSession(loaded.parseInput);
-    const analysis = analyzeSession(session, { version: "verification", now: 0 });
-    if (analysis.session.source !== "claude-code" || analysis.session.id.toLowerCase() !== ref2.sessionId.toLowerCase()) {
-      return { skip: "unreadable", bytesRead };
-    }
-    return { analysis, session, bytesRead };
-  } catch (error) {
-    return { skip: error instanceof Error && OVER_BUDGET_RE.test(error.message) ? "over-budget" : "unreadable", bytesRead: 0 };
-  }
-}
-function createDiscoveredClaudeAnalysisLoader(maxTotalBytes = MAX_EVIDENCE_SESSION_BYTES, options = {}) {
-  if (!Number.isSafeInteger(maxTotalBytes) || maxTotalBytes < 1 || maxTotalBytes > MAX_EVIDENCE_SESSION_BYTES) {
-    throw new Error(`verification read budget must be an integer from 1-${MAX_EVIDENCE_SESSION_BYTES} bytes`);
-  }
-  let remainingBytes = maxTotalBytes;
-  const inventory = discoveredInventory();
-  return async (selector) => {
-    try {
-      if (remainingBytes < 1) return void 0;
-      const ref2 = await exactDiscoveredRef(selector, await inventory);
-      if (!ref2) return void 0;
-      const loaded = await loadSettledAnalysis(ref2, remainingBytes, options);
-      remainingBytes -= loaded.bytesRead;
-      return "analysis" in loaded ? loaded.analysis : void 0;
-    } catch {
-      return void 0;
-    }
-  };
-}
-
 // src/suggest/artifacts.ts
-import { constants as constants11 } from "node:fs";
-import { chmod, lstat as lstat9, open as open11, realpath as realpath8 } from "node:fs/promises";
-import { basename as basename10, isAbsolute as isAbsolute7, relative as relative3, resolve as resolve8 } from "node:path";
 var MAX_JSON_BYTES = 64 * 1024;
 var MAX_MARKDOWN_BYTES = 256 * 1024;
 var MAX_FILES = 64;
@@ -12478,14 +11129,14 @@ function sameArtifactSnapshot(a, b) {
 async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   const root = resolve8(proposalsDir);
   const candidate = resolve8(path);
-  if (!inside(root, candidate) || basename10(candidate) !== expectedName) {
+  if (!inside(root, candidate) || basename9(candidate) !== expectedName) {
     throw artifactError(`${expectedName} must be inside ${root}`);
   }
   let rootStat;
   let stat8;
   try {
     ;
-    [rootStat, stat8] = await Promise.all([lstat9(root, { bigint: true }), lstat9(candidate, { bigint: true })]);
+    [rootStat, stat8] = await Promise.all([lstat8(root, { bigint: true }), lstat8(candidate, { bigint: true })]);
   } catch {
     throw artifactError(`${expectedName} does not exist`);
   }
@@ -12494,12 +11145,12 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
   if (stat8.nlink !== 1n) throw artifactError(`${expectedName} must have exactly one hard link`);
   if (stat8.size > BigInt(maxBytes)) throw artifactError(`${expectedName} exceeds ${maxBytes} bytes`);
   if (process.platform !== "win32") await chmod(root, 448);
-  const [realRoot, realCandidate] = await Promise.all([realpath8(root), realpath8(candidate)]);
+  const [realRoot, realCandidate] = await Promise.all([realpath7(root), realpath7(candidate)]);
   if (!inside(realRoot, realCandidate)) throw artifactError(`${expectedName} resolves outside ${realRoot}`);
   const initial = artifactSnapshot(stat8);
   let handle;
   try {
-    handle = await open11(realCandidate, constants11.O_RDONLY | (constants11.O_NOFOLLOW ?? 0));
+    handle = await open10(realCandidate, constants10.O_RDONLY | (constants10.O_NOFOLLOW ?? 0));
   } catch {
     throw artifactError(`${expectedName} changed before it was read`);
   }
@@ -12511,8 +11162,8 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     if (process.platform !== "win32") await handle.chmod(384);
     const [secured, securedPath, securedReal] = await Promise.all([
       handle.stat({ bigint: true }),
-      lstat9(candidate, { bigint: true }),
-      realpath8(candidate)
+      lstat8(candidate, { bigint: true }),
+      realpath7(candidate)
     ]);
     if (secured.nlink !== 1n || securedPath.nlink !== 1n || securedPath.isSymbolicLink() || securedReal !== realCandidate || !sameArtifactSnapshot(artifactSnapshot(secured), artifactSnapshot(securedPath))) {
       throw artifactError(`${expectedName} changed before it was read`);
@@ -12527,8 +11178,8 @@ async function readArtifact(proposalsDir, path, expectedName, maxBytes) {
     }
     const [after, pathAfter, realAfter] = await Promise.all([
       handle.stat({ bigint: true }),
-      lstat9(candidate, { bigint: true }),
-      realpath8(candidate)
+      lstat8(candidate, { bigint: true }),
+      realpath7(candidate)
     ]);
     if (offset !== buffer.length || after.nlink !== 1n || pathAfter.nlink !== 1n || pathAfter.isSymbolicLink() || realAfter !== realCandidate || !sameArtifactSnapshot(expected, artifactSnapshot(after)) || !sameArtifactSnapshot(expected, artifactSnapshot(pathAfter))) {
       throw artifactError(`${expectedName} changed while it was being read`);
@@ -12687,7 +11338,7 @@ async function canonicalWorkspace(value) {
 }
 
 // src/suggest/cohort-deps.ts
-var READ_PROBE_FLAGS = constants12.O_RDONLY | constants12.O_NOFOLLOW | constants12.O_NONBLOCK;
+var READ_PROBE_FLAGS = constants11.O_RDONLY | constants11.O_NOFOLLOW | constants11.O_NONBLOCK;
 var PROBE_BYTES = PEEK_HEAD_BYTES;
 async function readFully(handle, buffer, offset, length, position) {
   let done = 0;
@@ -12703,7 +11354,7 @@ async function readTail(path, cap) {
   if (!(limit >= 1)) return { bytesRead: 0 };
   let handle;
   try {
-    handle = await open12(path, READ_PROBE_FLAGS);
+    handle = await open11(path, READ_PROBE_FLAGS);
   } catch {
     return { bytesRead: 0 };
   }
@@ -12758,7 +11409,7 @@ async function readHead(path, cap) {
   if (!(limit >= 1)) return { bytesRead: 0 };
   let handle;
   try {
-    handle = await open12(path, READ_PROBE_FLAGS);
+    handle = await open11(path, READ_PROBE_FLAGS);
   } catch {
     return { bytesRead: 0 };
   }
@@ -12824,7 +11475,7 @@ function createCohortDeps(options = {}) {
       if (typeof startedAt !== "number" || !Number.isFinite(startedAt) || startedAt <= 0 || typeof endedAt !== "number" || !Number.isFinite(endedAt) || endedAt < startedAt || typeof cwd !== "string" || !isAbsolute8(cwd)) return { skip: "unreadable", bytesRead };
       let canonicalCwd = cwd;
       try {
-        canonicalCwd = await realpath9(cwd);
+        canonicalCwd = await realpath8(cwd);
       } catch {
       }
       let metrics;
@@ -12991,6 +11642,9 @@ var ANALYZER_RULE_IDS = [
   "user-corrections",
   "write-not-edit"
 ];
+
+// src/suggest/reason-codes.ts
+var REJECT_REASON_CODES = ["not-wanted", "already-handled", "wrong-cause", "too-much-effort", "other"];
 
 // src/suggest/lessons.ts
 var LESSONS_MAX_BYTES = 16384;
@@ -13493,6 +12147,1392 @@ async function readHistory(store, target, deps, options = {}) {
   const scope = await readScope(target, deps);
   const [records, lines] = [await store.all(), await store.lines()];
   return buildHistory({ records, lines, scope, ...options.rules ? { rules: options.rules } : {} });
+}
+
+// src/suggest/store.ts
+import { randomBytes as randomBytes3 } from "node:crypto";
+import { constants as constants12 } from "node:fs";
+import { lstat as lstat9, mkdir as mkdir2, open as open12, realpath as realpath9, rmdir, unlink as unlink3 } from "node:fs/promises";
+import { dirname as dirname6, join as join7, posix, win32 } from "node:path";
+var LOCK_STALE_MS = 1e4;
+var LOCK_TIMEOUT_MS = 5e3;
+var MAX_SUGGESTION_STORE_BYTES = 64 * 1024 * 1024;
+var MAX_SUGGESTION_RECORD_BYTES = 4 * 1024 * 1024;
+var MAX_SUGGESTION_STORE_LINES = 1e5;
+var LOCK_OWNER_FILE = "owner.json";
+var MAX_LOCK_OWNER_BYTES = 1024;
+var PRIVATE_DIRECTORY_MODE2 = 448;
+var PRIVATE_FILE_MODE3 = 384;
+function errno(error) {
+  return error.code;
+}
+function sameInode3(a, b) {
+  return a.dev === b.dev && a.ino === b.ino;
+}
+function modeBits2(stat8) {
+  return Number(stat8.mode & 0o777n);
+}
+function fileSnapshot(stat8) {
+  return {
+    dev: stat8.dev,
+    ino: stat8.ino,
+    mode: stat8.mode,
+    nlink: stat8.nlink,
+    size: stat8.size,
+    mtimeNs: stat8.mtimeNs,
+    ctimeNs: stat8.ctimeNs
+  };
+}
+function sameFileSnapshot(a, b) {
+  return a.dev === b.dev && a.ino === b.ino && a.mode === b.mode && a.nlink === b.nlink && a.size === b.size && a.mtimeNs === b.mtimeNs && a.ctimeNs === b.ctimeNs;
+}
+async function securePrivateDirectory(path, label) {
+  const requested = await lstat9(path, { bigint: true });
+  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`${label} must be a real directory: ${path}`);
+  const handle = await open12(path, constants12.O_RDONLY | (constants12.O_DIRECTORY ?? 0) | (constants12.O_NOFOLLOW ?? 0));
+  try {
+    const before = await handle.stat({ bigint: true });
+    if (!before.isDirectory() || !sameInode3(requested, before)) throw new Error(`${label} changed while opening: ${path}`);
+    if (process.platform !== "win32" && modeBits2(before) !== PRIVATE_DIRECTORY_MODE2) await handle.chmod(PRIVATE_DIRECTORY_MODE2);
+    const [after, requestedAfter, canonicalPath] = await Promise.all([
+      handle.stat({ bigint: true }),
+      lstat9(path, { bigint: true }),
+      realpath9(path)
+    ]);
+    if (!after.isDirectory() || requestedAfter.isSymbolicLink() || !requestedAfter.isDirectory() || !sameInode3(after, requestedAfter) || process.platform !== "win32" && (modeBits2(after) !== PRIVATE_DIRECTORY_MODE2 || modeBits2(requestedAfter) !== PRIVATE_DIRECTORY_MODE2)) {
+      throw new Error(`${label} changed while securing: ${path}`);
+    }
+    return { path, canonicalPath, dev: after.dev, ino: after.ino };
+  } finally {
+    await handle.close();
+  }
+}
+async function ensurePrivateDirectory2(path, label) {
+  await mkdir2(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE2 });
+  return securePrivateDirectory(path, label);
+}
+async function secureExistingPrivateDirectory(path, label) {
+  try {
+    return await securePrivateDirectory(path, label);
+  } catch (error) {
+    if (errno(error) === "ENOENT") return void 0;
+    throw error;
+  }
+}
+async function assertPrivateDirectoriesStable2(directories) {
+  await Promise.all(directories.map(async (expected) => {
+    const [current, canonicalPath] = await Promise.all([lstat9(expected.path, { bigint: true }), realpath9(expected.path)]);
+    if (current.isSymbolicLink() || !current.isDirectory() || current.dev !== expected.dev || current.ino !== expected.ino || canonicalPath !== expected.canonicalPath || process.platform !== "win32" && modeBits2(current) !== PRIVATE_DIRECTORY_MODE2) {
+      throw new Error(`suggestion store directory changed during access: ${expected.path}`);
+    }
+  }));
+}
+function validLockOwner(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const owner = value;
+  return owner.v === 1 && typeof owner.pid === "number" && Number.isSafeInteger(owner.pid) && owner.pid > 0 && typeof owner.token === "string" && /^[0-9a-f]{64}$/.test(owner.token) && typeof owner.createdAt === "number" && Number.isFinite(owner.createdAt);
+}
+async function createLockOwner(lock, token) {
+  const path = join7(lock.path, LOCK_OWNER_FILE);
+  const bytes = Buffer.from(`${JSON.stringify({ v: 1, pid: process.pid, token, createdAt: Date.now() })}
+`, "utf8");
+  await assertPrivateDirectoriesStable2([lock]);
+  const handle = await open12(
+    path,
+    constants12.O_WRONLY | constants12.O_CREAT | constants12.O_EXCL | (constants12.O_NOFOLLOW ?? 0),
+    PRIVATE_FILE_MODE3
+  );
+  try {
+    await handle.writeFile(bytes);
+    if (process.platform !== "win32") await handle.chmod(PRIVATE_FILE_MODE3);
+    const [opened, requested] = await Promise.all([handle.stat({ bigint: true }), lstat9(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2([lock]);
+    if (!opened.isFile() || opened.nlink !== 1n || requested.isSymbolicLink() || !requested.isFile() || requested.nlink !== 1n || opened.size !== BigInt(bytes.byteLength) || !sameFileSnapshot(fileSnapshot(opened), fileSnapshot(requested)) || process.platform !== "win32" && (modeBits2(opened) !== PRIVATE_FILE_MODE3 || modeBits2(requested) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store lock owner changed while creating: ${path}`);
+    }
+    return { path, snapshot: fileSnapshot(opened) };
+  } finally {
+    await handle.close();
+  }
+}
+async function inspectLockOwner(lock) {
+  const path = join7(lock.path, LOCK_OWNER_FILE);
+  let requested;
+  try {
+    requested = await lstat9(path, { bigint: true });
+  } catch (error) {
+    if (errno(error) === "ENOENT") return void 0;
+    throw error;
+  }
+  if (requested.isSymbolicLink() || !requested.isFile()) throw new Error(`suggestion store lock owner must be a regular, non-symlink file: ${path}`);
+  if (requested.nlink !== 1n) throw new Error(`suggestion store lock owner must have exactly one hard link: ${path}`);
+  if (requested.size > BigInt(MAX_LOCK_OWNER_BYTES)) throw new Error(`suggestion store lock owner exceeds ${MAX_LOCK_OWNER_BYTES} bytes: ${path}`);
+  await assertPrivateDirectoriesStable2([lock]);
+  const handle = await open12(path, constants12.O_RDONLY | (constants12.O_NOFOLLOW ?? 0));
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || opened.size > BigInt(MAX_LOCK_OWNER_BYTES) || !sameFileSnapshot(fileSnapshot(requested), fileSnapshot(opened))) {
+      throw new Error(`suggestion store lock owner changed while opening: ${path}`);
+    }
+    const expected = fileSnapshot(opened);
+    const bytes = Buffer.allocUnsafe(Number(opened.size));
+    let offset = 0;
+    while (offset < bytes.length) {
+      const result = await handle.read(bytes, offset, bytes.length - offset, offset);
+      if (result.bytesRead === 0) break;
+      offset += result.bytesRead;
+    }
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat9(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2([lock]);
+    if (offset !== bytes.length || after.nlink !== 1n || pathAfter.isSymbolicLink() || !pathAfter.isFile() || pathAfter.nlink !== 1n || !sameFileSnapshot(expected, fileSnapshot(after)) || !sameFileSnapshot(expected, fileSnapshot(pathAfter))) {
+      throw new Error(`suggestion store lock owner changed while reading: ${path}`);
+    }
+    let value;
+    try {
+      value = JSON.parse(bytes.toString("utf8"));
+    } catch (error) {
+      void error;
+    }
+    return {
+      identity: { path, snapshot: expected },
+      ...validLockOwner(value) ? { owner: value } : {}
+    };
+  } finally {
+    await handle.close();
+  }
+}
+function processIsAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return errno(error) === "EPERM";
+  }
+}
+async function assertLockOwned(guard) {
+  await assertPrivateDirectoriesStable2([guard.parent, guard.lock]);
+  const inspected = await inspectLockOwner(guard.lock);
+  if (!inspected?.owner || !sameFileSnapshot(guard.owner.snapshot, inspected.identity.snapshot) || inspected.owner.pid !== guard.pid || inspected.owner.token !== guard.token) {
+    throw new Error(`suggestion store lock ownership lost: ${guard.lock.path}`);
+  }
+}
+async function unlinkExactPrivateFile(identity, label) {
+  const current = await lstat9(identity.path, { bigint: true });
+  if (current.isSymbolicLink() || !current.isFile() || current.nlink !== 1n || !sameFileSnapshot(identity.snapshot, fileSnapshot(current))) {
+    throw new Error(`${label} changed before removal: ${identity.path}`);
+  }
+  await unlink3(identity.path);
+}
+async function breakStaleSuggestionLock(parent, lock, inspected) {
+  if (inspected?.owner && processIsAlive(inspected.owner.pid)) return false;
+  await assertPrivateDirectoriesStable2([parent, lock]);
+  if (inspected) await unlinkExactPrivateFile(inspected.identity, "suggestion store lock owner");
+  await assertPrivateDirectoriesStable2([parent, lock]);
+  await rmdir(lock.path);
+  await assertPrivateDirectoriesStable2([parent]);
+  return true;
+}
+async function readPrivateSuggestionStore(path, directories) {
+  let requested;
+  try {
+    requested = await lstat9(path, { bigint: true });
+  } catch (error) {
+    if (errno(error) === "ENOENT") return void 0;
+    throw error;
+  }
+  if (requested.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`);
+  if (!requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`);
+  if (requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`);
+  if (requested.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+    throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`);
+  }
+  await assertPrivateDirectoriesStable2(directories);
+  const handle = await open12(path, constants12.O_RDONLY | (constants12.O_NOFOLLOW ?? 0));
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || !sameInode3(requested, opened) || opened.size > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+      throw new Error(`suggestion store changed while opening: ${path}`);
+    }
+    if (process.platform !== "win32" && modeBits2(opened) !== PRIVATE_FILE_MODE3) await handle.chmod(PRIVATE_FILE_MODE3);
+    const [secured, requestedAfter] = await Promise.all([handle.stat({ bigint: true }), lstat9(path, { bigint: true })]);
+    if (!secured.isFile() || requestedAfter.isSymbolicLink() || !requestedAfter.isFile() || secured.nlink !== 1n || requestedAfter.nlink !== 1n || !sameInode3(secured, requestedAfter) || secured.size > BigInt(MAX_SUGGESTION_STORE_BYTES) || process.platform !== "win32" && (modeBits2(secured) !== PRIVATE_FILE_MODE3 || modeBits2(requestedAfter) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store changed while securing: ${path}`);
+    }
+    const expected = fileSnapshot(secured);
+    const buffer = Buffer.allocUnsafe(Number(secured.size));
+    let offset = 0;
+    while (offset < buffer.length) {
+      const result = await handle.read(buffer, offset, buffer.length - offset, offset);
+      if (result.bytesRead === 0) break;
+      offset += result.bytesRead;
+    }
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat9(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2(directories);
+    if (offset !== buffer.length || pathAfter.isSymbolicLink() || !pathAfter.isFile() || after.nlink !== 1n || pathAfter.nlink !== 1n || !sameFileSnapshot(expected, fileSnapshot(after)) || !sameFileSnapshot(expected, fileSnapshot(pathAfter))) {
+      throw new Error(`suggestion store changed while reading: ${path}`);
+    }
+    return buffer;
+  } finally {
+    await handle.close();
+  }
+}
+async function appendPrivateSuggestionRecord(path, record3, directories, assertOwnership) {
+  const recordBytes = Buffer.from(`${JSON.stringify(record3)}
+`, "utf8");
+  if (recordBytes.byteLength - 1 > MAX_SUGGESTION_RECORD_BYTES) {
+    throw new Error(`suggestion record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes`);
+  }
+  let requested;
+  try {
+    requested = await lstat9(path, { bigint: true });
+  } catch (error) {
+    if (errno(error) !== "ENOENT") throw error;
+  }
+  if (requested?.isSymbolicLink()) throw new Error(`suggestion store must not be a symbolic link: ${path}`);
+  if (requested && !requested.isFile()) throw new Error(`suggestion store must be a regular file: ${path}`);
+  if (requested && requested.nlink !== 1n) throw new Error(`suggestion store must have exactly one hard link: ${path}`);
+  await assertPrivateDirectoriesStable2(directories);
+  const createFlags = requested ? 0 : constants12.O_CREAT | constants12.O_EXCL;
+  const handle = await open12(
+    path,
+    constants12.O_RDWR | constants12.O_APPEND | createFlags | (constants12.O_NOFOLLOW ?? 0),
+    PRIVATE_FILE_MODE3
+  );
+  try {
+    const opened = await handle.stat({ bigint: true });
+    if (!opened.isFile() || opened.nlink !== 1n || requested && !sameInode3(requested, opened)) {
+      throw new Error(`suggestion store changed while opening: ${path}`);
+    }
+    if (process.platform !== "win32" && modeBits2(opened) !== PRIVATE_FILE_MODE3) await handle.chmod(PRIVATE_FILE_MODE3);
+    const [secured, pathBeforeWrite] = await Promise.all([handle.stat({ bigint: true }), lstat9(path, { bigint: true })]);
+    if (!secured.isFile() || pathBeforeWrite.isSymbolicLink() || !pathBeforeWrite.isFile() || secured.nlink !== 1n || pathBeforeWrite.nlink !== 1n || !sameInode3(secured, pathBeforeWrite) || process.platform !== "win32" && (modeBits2(secured) !== PRIVATE_FILE_MODE3 || modeBits2(pathBeforeWrite) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store changed before append: ${path}`);
+    }
+    let needsSeparator = false;
+    if (secured.size > 0n) {
+      const tail = Buffer.allocUnsafe(1);
+      const result = await handle.read(tail, 0, 1, Number(secured.size - 1n));
+      if (result.bytesRead !== 1) throw new Error(`suggestion store changed while inspecting its tail: ${path}`);
+      needsSeparator = tail[0] !== 10;
+    }
+    const bytes = needsSeparator ? Buffer.concat([Buffer.from("\n"), recordBytes]) : recordBytes;
+    if (secured.size + BigInt(bytes.byteLength) > BigInt(MAX_SUGGESTION_STORE_BYTES)) {
+      throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_BYTES} bytes: ${path}`);
+    }
+    const beforeWrite = fileSnapshot(secured);
+    const [tailAfter, pathAfterTail] = await Promise.all([handle.stat({ bigint: true }), lstat9(path, { bigint: true })]);
+    if (pathAfterTail.isSymbolicLink() || !pathAfterTail.isFile() || tailAfter.nlink !== 1n || pathAfterTail.nlink !== 1n || !sameFileSnapshot(beforeWrite, fileSnapshot(tailAfter)) || !sameFileSnapshot(beforeWrite, fileSnapshot(pathAfterTail))) {
+      throw new Error(`suggestion store changed while inspecting its tail: ${path}`);
+    }
+    const expectedSize = secured.size + BigInt(bytes.byteLength);
+    await assertPrivateDirectoriesStable2(directories);
+    await assertOwnership();
+    await handle.writeFile(bytes);
+    await assertOwnership();
+    const [after, pathAfter] = await Promise.all([handle.stat({ bigint: true }), lstat9(path, { bigint: true })]);
+    await assertPrivateDirectoriesStable2(directories);
+    if (!after.isFile() || pathAfter.isSymbolicLink() || !pathAfter.isFile() || after.nlink !== 1n || pathAfter.nlink !== 1n || !sameInode3(after, pathAfter) || after.size !== expectedSize || pathAfter.size !== expectedSize || process.platform !== "win32" && (modeBits2(after) !== PRIVATE_FILE_MODE3 || modeBits2(pathAfter) !== PRIVATE_FILE_MODE3)) {
+      throw new Error(`suggestion store changed during append: ${path}`);
+    }
+  } finally {
+    await handle.close();
+  }
+}
+var PATCH_FIELDS = [
+  "proposal",
+  "application",
+  "verificationReceipt",
+  "kickoff",
+  "effect",
+  "frozenBaseline",
+  "outcomeReceipt",
+  "reasonCode",
+  "workspaceCwd"
+];
+var ALLOWED_PATCH_FIELDS = {
+  new: [],
+  "kicked-off": ["kickoff"],
+  proposed: ["proposal"],
+  applied: ["application", "frozenBaseline"],
+  verified: ["verificationReceipt", "effect"],
+  rejected: ["reasonCode", "workspaceCwd"],
+  failed: ["kickoff"],
+  regressed: ["outcomeReceipt"],
+  unproven: ["outcomeReceipt"],
+  kept: []
+};
+var MAX_WORKSPACE_CWD_CHARS = 4096;
+var HIDDEN_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u;
+var DOUBLE_SEPARATOR_PREFIX_RE = /^[\\/]{2}/;
+function isCanonicalWorkspaceCwd(value, platform2 = process.platform) {
+  const paths = platform2 === "win32" ? win32 : posix;
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_WORKSPACE_CWD_CHARS && !HIDDEN_CHARACTER_RE.test(value) && !DOUBLE_SEPARATOR_PREFIX_RE.test(value) && // On Windows, a colon after the drive letter names an alternate data stream.
+  (platform2 !== "win32" || value.indexOf(":", 2) === -1) && paths.isAbsolute(value) && paths.resolve(value) === value;
+}
+function recordMatchesFinding(record3, finding, source) {
+  return record3.source === source && record3.scope === finding.scope && record3.ruleId === finding.ruleId && (record3.insightId ?? "") === (finding.insightId ?? "") && (record3.cohortFingerprint ?? record3.key?.cohortFingerprint ?? "") === (finding.cohortFingerprint ?? "") && JSON.stringify(normalizeSessionIds(record3.sessionIds)) === JSON.stringify(normalizeSessionIds(finding.sessionIds));
+}
+function sameEvidence(a, b) {
+  const canonical = (v) => JSON.stringify(
+    v,
+    (_k, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([x], [y]) => x < y ? -1 : x > y ? 1 : 0)) : item
+  );
+  return canonical(a) === canonical(b);
+}
+function assertSafeFindingIdentity(finding) {
+  const values = [finding.ruleId, finding.insightId, ...finding.sessionIds].filter((value) => typeof value === "string");
+  if (values.some((value) => redactValue(value, { scrub: true }) !== value)) {
+    throw new Error("suggestion identity contains sensitive material. Redact the identifier before you create the suggestion.");
+  }
+}
+function lifecycleError(to, message) {
+  return new Error(`invalid transition patch for ${to}: ${message}`);
+}
+function nonEmptyString(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+function safeReviewedFile(value) {
+  return nonEmptyString(value) && reviewedPathViolation(value) === void 0 && canonicalReviewedPath(value) === value;
+}
+function hasUniqueReviewedFiles(files2) {
+  const keys = files2.map((file) => reviewedPathKey(file));
+  return keys.every((key) => key !== void 0) && new Set(keys).size === keys.length;
+}
+function stringArray(value) {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+function isPersistedSuggestionRecord(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const record3 = value;
+  if (typeof record3.id !== "string" || !isSuggestionId(record3.id) || record3.v !== 1 && record3.v !== 2 || typeof record3.createdAt !== "number" || !Number.isFinite(record3.createdAt) || record3.source !== "report" && record3.source !== "skill" || record3.scope !== "session" && record3.scope !== "repo" && record3.scope !== "global" || !stringArray(record3.sessionIds) || !nonEmptyString(record3.ruleId) || typeof record3.title !== "string" || !record3.evidence || typeof record3.evidence !== "object" || Array.isArray(record3.evidence) || typeof record3.status !== "string" || !Object.hasOwn(TRANSITIONS, record3.status) || typeof record3.statusAt !== "number" || !Number.isFinite(record3.statusAt) || record3.legacyIds !== void 0 && (!stringArray(record3.legacyIds) || !record3.legacyIds.every(isSuggestionId)) || record3.insightId !== void 0 && typeof record3.insightId !== "string" || record3.cohortFingerprint !== void 0 && typeof record3.cohortFingerprint !== "string" || record3.appliedAt !== void 0 && (typeof record3.appliedAt !== "number" || !Number.isFinite(record3.appliedAt))) {
+    return false;
+  }
+  if (record3.v === 2) {
+    const key = record3.key;
+    if (!key || typeof key !== "object" || key.v !== 2 || key.source !== "report" && key.source !== "skill" || key.scope !== "session" && key.scope !== "repo" && key.scope !== "global" || !nonEmptyString(key.ruleId) || !stringArray(key.sessionIds) || key.insightId !== void 0 && typeof key.insightId !== "string" || key.cohortFingerprint !== void 0 && typeof key.cohortFingerprint !== "string") {
+      return false;
+    }
+  }
+  return true;
+}
+function assertProposal(value, to) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError(to, "proposal is required");
+  const proposal = value;
+  if (!nonEmptyString(proposal.title) || !nonEmptyString(proposal.change) || !nonEmptyString(proposal.proposalPath)) {
+    throw lifecycleError(to, "proposal must include title, change, and proposalPath");
+  }
+  if (proposal.effort !== "S" && proposal.effort !== "M" && proposal.effort !== "L") {
+    throw lifecycleError(to, "proposal effort must be S, M, or L");
+  }
+}
+function assertStructuredProposal(value, to) {
+  assertProposal(value, to);
+  if (value.v !== 1 || !nonEmptyString(value.manifestPath) || !value.changeClass || !isChangeClass(value.changeClass) || !nonEmptyString(value.evidence) || !nonEmptyString(value.expectedEffect) || !nonEmptyString(value.risk) || !nonEmptyString(value.verification) || !isStoredWorkspaceIdentity(value.workspace) || !Array.isArray(value.files) || value.files.length === 0 || value.files.length > 64 || !value.files.every(safeReviewedFile) || !hasUniqueReviewedFiles(value.files) || !proposalSourcesAreCanonical(value.sources) || !Array.isArray(value.verificationChecks) || value.verificationChecks.length === 0 || value.verificationChecks.length > 32 || !value.verificationChecks.every(
+    (check) => check && typeof check === "object" && SUGGESTION_VERIFICATION_METRICS.includes(check.metric) && SUGGESTION_VERIFICATION_COMPARISONS.includes(check.comparison)
+  ) || !hasUniqueVerificationIntents(value.verificationChecks)) {
+    throw lifecycleError(to, "a structured proposal with a manifest, reviewed files, and bounded unique verificationChecks is required");
+  }
+}
+function assertApplication(value, to) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError(to, "application receipt is required");
+  const application = value;
+  if (application.v !== 1 || !nonEmptyString(application.summary) || !nonEmptyString(application.receiptPath) || !Array.isArray(application.files) || application.files.length === 0 || application.files.length > 64 || !application.files.every(safeReviewedFile) || !hasUniqueReviewedFiles(application.files) || !Array.isArray(application.checks) || application.checks.length === 0 || application.checks.length > 32 || !application.checks.every(
+    (check) => check && typeof check === "object" && check.ok === true && nonEmptyString(check.name) && (check.command === void 0 || nonEmptyString(check.command))
+  )) {
+    throw lifecycleError(to, "application receipt must be structured, name changed files, and contain successful checks");
+  }
+}
+function assertVerificationEffect(value, receipt, to) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw lifecycleError(to, "computed verification effect is required");
+  const effect = value;
+  if (!effect.before || typeof effect.before !== "object" || Array.isArray(effect.before) || !effect.after || typeof effect.after !== "object" || Array.isArray(effect.after)) {
+    throw lifecycleError(to, "computed verification effect must contain before and after maps");
+  }
+  if (!Array.isArray(effect.measuredSessionIds) || JSON.stringify(effect.measuredSessionIds) !== JSON.stringify(receipt.measuredSessionIds)) {
+    throw lifecycleError(to, "verification effect session ids must exactly match the receipt");
+  }
+  const expectedBefore = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.before]));
+  const expectedAfter = Object.fromEntries(receipt.checks.map((check) => [check.metric, check.after]));
+  const canonical = (record3) => JSON.stringify(Object.entries(record3).sort(([a], [b]) => a.localeCompare(b)));
+  if (canonical(effect.before) !== canonical(expectedBefore) || canonical(effect.after) !== canonical(expectedAfter)) {
+    throw lifecycleError(to, "verification effect values must exactly match the computed receipt checks");
+  }
+}
+function validateTransitionPatch(current, to, rawPatch) {
+  if (rawPatch !== void 0 && (!rawPatch || typeof rawPatch !== "object" || Array.isArray(rawPatch))) {
+    throw lifecycleError(to, "patch must be an object");
+  }
+  const patch = rawPatch ?? {};
+  const keys = Object.keys(patch);
+  const unknown = keys.find((key) => !PATCH_FIELDS.includes(key));
+  if (unknown) throw lifecycleError(to, `field "${unknown}" is not a lifecycle artifact`);
+  const allowed = ALLOWED_PATCH_FIELDS[to];
+  const unrelated = keys.find((key) => !allowed.includes(key));
+  if (unrelated) throw lifecycleError(to, `field "${unrelated}" is not valid for this transition`);
+  if (to === "proposed") {
+    assertProposal(patch.proposal, to);
+    if (patch.proposal.v === 1) assertStructuredProposal(patch.proposal, to);
+  } else if (to === "applied") {
+    if (current.scope === "global") {
+      throw lifecycleError(to, "global suggestions cannot be applied. For a concrete change, create a repo or session suggestion instead.");
+    }
+    assertStructuredProposal(current.proposal, to);
+    assertApplication(patch.application, to);
+    const reviewed = [...new Set(current.proposal.files)].sort();
+    const changed = [...new Set(patch.application.files)].sort();
+    if (JSON.stringify(reviewed) !== JSON.stringify(changed)) {
+      throw lifecycleError(to, "application files must exactly match the reviewed proposal files");
+    }
+    if (patch.frozenBaseline !== void 0) {
+      const violation = frozenBaselineViolation(patch.frozenBaseline, void 0);
+      if (violation) throw lifecycleError(to, `invalid frozen baseline: ${violation}`);
+    }
+  } else if (to === "regressed" || to === "unproven") {
+    if (current.scope === "global") throw lifecycleError(to, "global suggestions are review-only. Orangu measures no outcome for them.");
+    assertStructuredProposal(current.proposal, to);
+    assertApplication(current.application, to);
+    if (patch.outcomeReceipt === void 0) throw lifecycleError(to, "an outcome receipt is required");
+    const violation = outcomeReceiptViolation(
+      patch.outcomeReceipt,
+      to,
+      current.proposal.verificationChecks,
+      applicationTime(current),
+      current.frozenBaseline
+    );
+    if (violation) throw lifecycleError(to, `invalid outcome receipt: ${violation}`);
+  } else if (to === "rejected") {
+    if (patch.reasonCode !== void 0 && !REJECT_REASON_CODES.includes(patch.reasonCode)) {
+      throw lifecycleError(to, `reasonCode must be 1 of ${REJECT_REASON_CODES.join(", ")}`);
+    }
+    if (patch.workspaceCwd !== void 0) {
+      if (!isCanonicalWorkspaceCwd(patch.workspaceCwd)) throw lifecycleError(to, "workspaceCwd must be an absolute canonical path");
+      if (current.proposal?.workspace !== void 0) {
+        throw lifecycleError(to, "workspaceCwd is only for a record with no proposal workspace. The proposal workspace already binds this record.");
+      }
+    }
+  } else if (to === "verified") {
+    if (current.scope === "global") throw lifecycleError(to, "global suggestions cannot be verified. They are review-only.");
+    assertStructuredProposal(current.proposal, to);
+    assertApplication(current.application, to);
+    const receipt = patch.verificationReceipt;
+    if (!receipt || typeof receipt !== "object" || Array.isArray(receipt)) throw lifecycleError(to, "verification receipt is required");
+    if (receipt.v !== 2) throw lifecycleError(to, "verification receipt must be computed by orangu (v2 cohort receipt)");
+    if (!Array.isArray(receipt.checks) || !sameVerificationIntentSequence(current.proposal.verificationChecks, receipt.checks)) {
+      throw lifecycleError(to, "verification receipt checks must exactly match the reviewed proposal verificationChecks");
+    }
+    const violation = cohortReceiptViolation(receipt, current.proposal.verificationChecks, applicationTime(current));
+    if (violation) throw lifecycleError(to, `invalid cohort receipt: ${violation}`);
+    if (current.frozenBaseline !== void 0) {
+      const frozen = frozenBindingViolation(receipt, current.frozenBaseline, applicationTime(current), COHORT_MIN);
+      if (frozen) throw lifecycleError(to, `invalid cohort receipt: ${frozen}`);
+    }
+    assertVerificationEffect(patch.effect, receipt, to);
+  }
+  return patch;
+}
+function indexByLegacyIds(canonical) {
+  const byId2 = new Map(canonical);
+  for (const rec of canonical.values()) {
+    for (const legacyId of rec.legacyIds ?? []) {
+      if (isSuggestionId(legacyId)) byId2.set(legacyId, rec);
+    }
+  }
+  return byId2;
+}
+var SuggestionStore = class {
+  path;
+  proposalsDir;
+  now;
+  /** in-process write queue: mutations run strictly one after another */
+  chain = Promise.resolve();
+  constructor(o = {}) {
+    const home = o.home ?? oranguHome();
+    this.path = join7(home, "suggestions.jsonl");
+    this.proposalsDir = join7(home, "proposals");
+    this.now = o.now ?? Date.now;
+  }
+  get lockPath() {
+    return this.path + ".lock";
+  }
+  /** Atomic directory lock with token/PID ownership; only dead stale owners may be broken. */
+  async acquireLock() {
+    const parent = await ensurePrivateDirectory2(dirname6(this.path), "suggestion store directory");
+    const t0 = Date.now();
+    const token = randomBytes3(32).toString("hex");
+    for (; ; ) {
+      let created = false;
+      try {
+        await mkdir2(this.lockPath, { mode: PRIVATE_DIRECTORY_MODE2 });
+        created = true;
+      } catch (error) {
+        if (errno(error) !== "EEXIST") throw error;
+      }
+      if (created) {
+        let lock;
+        let guard;
+        try {
+          lock = await securePrivateDirectory(this.lockPath, "suggestion store lock");
+          const owner = await createLockOwner(lock, token);
+          guard = { parent, lock, owner, pid: process.pid, token };
+          await assertLockOwned(guard);
+          return guard;
+        } catch (error) {
+          if (guard) await this.releaseLock(guard);
+          throw error;
+        }
+      }
+      let held;
+      try {
+        held = await secureExistingPrivateDirectory(this.lockPath, "suggestion store lock");
+        if (!held) continue;
+        const st = await lstat9(this.lockPath);
+        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
+          await assertPrivateDirectoriesStable2([parent, held]);
+          const inspected = await inspectLockOwner(held);
+          if (await breakStaleSuggestionLock(parent, held, inspected)) continue;
+        }
+      } catch (error) {
+        if (errno(error) === "ENOENT") continue;
+        throw error;
+      }
+      if (Date.now() - t0 > LOCK_TIMEOUT_MS) throw new Error(`suggestion store lock timed out: ${this.lockPath}`);
+      await new Promise((r) => setTimeout(r, 15));
+    }
+  }
+  async releaseLock(guard) {
+    try {
+      await assertLockOwned(guard);
+      await unlinkExactPrivateFile(guard.owner, "suggestion store lock owner");
+      await assertPrivateDirectoriesStable2([guard.parent, guard.lock]);
+      await rmdir(this.lockPath);
+      await assertPrivateDirectoriesStable2([guard.parent]);
+    } catch (error) {
+      void error;
+    }
+  }
+  /** every mutation = in-process queue → cross-process lock → replay+validate+append inside */
+  serialized(fn) {
+    const run = async () => {
+      const guard = await this.acquireLock();
+      try {
+        await assertLockOwned(guard);
+        const result = await fn(guard);
+        await assertLockOwned(guard);
+        return result;
+      } finally {
+        await this.releaseLock(guard);
+      }
+    };
+    const p = this.chain.then(run, run);
+    this.chain = p.then(
+      () => void 0,
+      () => void 0
+    );
+    return p;
+  }
+  /**
+   * Replay the log; last line per canonical id wins; corrupt lines are skipped.
+   * A migrated v2 record is also indexed by each legacy id so old links and CLI
+   * commands keep resolving without duplicating it in `all()`.
+   */
+  async replay(parent) {
+    const canonical = /* @__PURE__ */ new Map();
+    await this.readValidLines(parent, (rec) => canonical.set(rec.id, rec));
+    return indexByLegacyIds(canonical);
+  }
+  /**
+   * Every valid line of the log, in file order, with no "last line wins". With an id, only the lines of that record:
+   * its own lines and the lines of each legacy id, matched through `legacyIds` as `get` matches them. The caps of
+   * the replay apply: the file bytes, the bytes of a line and the line count.
+   */
+  async lines(id) {
+    const all = [];
+    const canonical = /* @__PURE__ */ new Map();
+    await this.readValidLines(void 0, (rec) => {
+      all.push(rec);
+      canonical.set(rec.id, rec);
+    });
+    if (id === void 0) return all;
+    const target = indexByLegacyIds(canonical).get(id);
+    if (!target) return [];
+    const ids = /* @__PURE__ */ new Set([target.id, ...(target.legacyIds ?? []).filter(isSuggestionId)]);
+    return all.filter((rec) => ids.has(rec.id));
+  }
+  /** Read the log inside its caps and hand each valid record to `visit`, in file order; a corrupt line is skipped. */
+  async readValidLines(parent, visit) {
+    const root = parent ?? await secureExistingPrivateDirectory(dirname6(this.path), "suggestion store directory");
+    if (!root) return;
+    await assertPrivateDirectoriesStable2([root]);
+    const proposals = await secureExistingPrivateDirectory(this.proposalsDir, "suggestion proposals directory");
+    const directories = proposals ? [root, proposals] : [root];
+    const bytes = await readPrivateSuggestionStore(this.path, directories);
+    if (bytes === void 0) return;
+    let offset = 0;
+    let lines = 0;
+    while (offset < bytes.length) {
+      lines++;
+      if (lines > MAX_SUGGESTION_STORE_LINES) {
+        throw new Error(`suggestion store exceeds ${MAX_SUGGESTION_STORE_LINES} lines: ${this.path}`);
+      }
+      const newline = bytes.indexOf(10, offset);
+      const end = newline === -1 ? bytes.length : newline;
+      if (end - offset > MAX_SUGGESTION_RECORD_BYTES) {
+        throw new Error(`suggestion store record exceeds ${MAX_SUGGESTION_RECORD_BYTES} bytes: ${this.path}`);
+      }
+      if (end > offset) {
+        const trimmed = bytes.toString("utf8", offset, end).trim();
+        if (trimmed) {
+          try {
+            const rec = JSON.parse(trimmed);
+            if (isPersistedSuggestionRecord(rec)) visit(rec);
+          } catch (error) {
+            void error;
+          }
+        }
+      }
+      if (newline === -1) break;
+      offset = newline + 1;
+    }
+  }
+  async append(rec, guard) {
+    await assertLockOwned(guard);
+    const parent = guard.parent;
+    const proposals = await ensurePrivateDirectory2(this.proposalsDir, "suggestion proposals directory");
+    await appendPrivateSuggestionRecord(this.path, rec, [parent, proposals], () => assertLockOwned(guard));
+  }
+  async all() {
+    const unique = /* @__PURE__ */ new Map();
+    const records = await this.replay();
+    for (const rec of records.values()) unique.set(rec.id, rec);
+    return [...unique.values()].sort((a, b) => b.statusAt - a.statusAt);
+  }
+  async get(id) {
+    return (await this.replay()).get(id);
+  }
+  /**
+   * Create-or-get: a re-click refreshes a still-new record; once lifecycle work
+   * starts, statusAt remains the transition timestamp. An explicit file-handoff
+   * id must hash to the canonical identity or the exact legacy report identity.
+   */
+  async upsertNew(f, source, explicitId) {
+    return this.serialized((guard) => this.upsertNewLocked(f, source, explicitId, guard));
+  }
+  async upsertNewLocked(f, source, explicitId, guard) {
+    assertSafeFindingIdentity(f);
+    const key = suggestionKey(f, source);
+    const canonicalId2 = suggestionIdV2(key);
+    const legacyId = suggestionId(source, f.ruleId, f.sessionIds);
+    const acceptsLegacyId = source === "report" && !f.cohortFingerprint;
+    if (explicitId && explicitId !== canonicalId2 && !(acceptsLegacyId && explicitId === legacyId)) {
+      throw new Error(`suggestion id identity mismatch: expected ${canonicalId2}${acceptsLegacyId ? ` or legacy ${legacyId}` : ""}, got ${explicitId}`);
+    }
+    const id = explicitId ?? canonicalId2;
+    const records = await this.replay(guard.parent);
+    const existing = records.get(id);
+    const ts3 = this.now();
+    if (existing) {
+      if (!recordMatchesFinding(existing, f, source)) {
+        throw new Error(`suggestion id identity mismatch: ${id} belongs to a different finding`);
+      }
+      if (existing.status !== "new") return { record: existing, created: false };
+      if (existing.title === f.title && sameEvidence(existing.evidence, f.evidence)) return { record: existing, created: false };
+      const refreshed = { ...existing, title: f.title, evidence: f.evidence, statusAt: ts3 };
+      await this.append(refreshed, guard);
+      return { record: refreshed, created: false };
+    }
+    if (id === canonicalId2 && !f.cohortFingerprint) {
+      const legacy = records.get(legacyId);
+      const sameLegacyFinding = legacy?.v === 1 && recordMatchesFinding(legacy, f, source);
+      if (legacy && sameLegacyFinding) {
+        const migrated = {
+          ...legacy,
+          id: canonicalId2,
+          v: 2,
+          key,
+          legacyIds: [.../* @__PURE__ */ new Set([...legacy.legacyIds ?? [], legacy.id])].sort(),
+          source,
+          scope: f.scope,
+          sessionIds: key.sessionIds,
+          ruleId: f.ruleId,
+          title: f.title,
+          ...f.insightId ? { insightId: f.insightId } : {},
+          ...f.cohortFingerprint ? { cohortFingerprint: f.cohortFingerprint } : {},
+          evidence: f.evidence,
+          // Migration changes identity, not lifecycle state. Preserve the
+          // applied timestamp because later verification is ordered against it.
+          statusAt: Number.isFinite(legacy.statusAt) && legacy.statusAt > 0 ? legacy.statusAt : ts3
+        };
+        await this.append(migrated, guard);
+        return { record: migrated, created: false };
+      }
+    }
+    const isCanonical = id === canonicalId2;
+    const record3 = {
+      id,
+      v: isCanonical ? 2 : 1,
+      ...isCanonical ? { key } : {},
+      createdAt: ts3,
+      source,
+      scope: f.scope,
+      sessionIds: isCanonical ? key.sessionIds : [...f.sessionIds].sort(),
+      ruleId: f.ruleId,
+      title: f.title,
+      ...f.insightId ? { insightId: f.insightId } : {},
+      ...f.cohortFingerprint ? { cohortFingerprint: f.cohortFingerprint } : {},
+      evidence: f.evidence,
+      status: "new",
+      statusAt: ts3
+    };
+    await this.append(record3, guard);
+    return { record: record3, created: true };
+  }
+  async transition(id, to, patch) {
+    return this.serialized((guard) => this.transitionLocked(id, to, guard, patch));
+  }
+  async transitionLocked(id, to, guard, patch) {
+    const current = (await this.replay(guard.parent)).get(id);
+    if (!current) throw new Error(`suggestion ${id} not found in ${this.path}`);
+    const allowed = TRANSITIONS[current.status] ?? [];
+    if (!allowed.includes(to)) {
+      throw new Error(`illegal transition ${current.status} \u2192 ${to} for ${id} (allowed: ${allowed.join(", ") || "none"})`);
+    }
+    const safePatch = validateTransitionPatch(current, to, patch);
+    const statusAt = this.now();
+    if (to === "applied" && safePatch.frozenBaseline && safePatch.frozenBaseline.cutAt > statusAt) {
+      throw lifecycleError(to, "invalid frozen baseline: frozenBaseline cutAt must not be later than the application time");
+    }
+    const appliedAt = to === "applied" ? statusAt : applicationTime(current);
+    const next = {
+      ...current,
+      ...safePatch,
+      ...appliedAt !== void 0 ? { appliedAt } : {},
+      ...to === "verified" ? { verificationTrust: "computed-v2" } : {},
+      status: to,
+      statusAt
+    };
+    await this.append(next, guard);
+    return next;
+  }
+};
+
+// src/version.ts
+var VERSION = true ? "0.12.0" : "0.0.0-dev";
+
+// src/cli/next-step.ts
+function machineQueueReads(options) {
+  return {
+    store: new SuggestionStore(),
+    deps: (read) => createQueueReadDeps({ ...read, cache: options.cache ? new CohortFactsCache({ version: VERSION }) : null })
+  };
+}
+async function queueCounts(cwd, now, budgetBytes, reads) {
+  return (await readQueue(reads.store, { cwd }, reads.deps({ now, budgetBytes }))).counts;
+}
+var FOOTER_QUEUE_BYTES = 0;
+async function footerDue(reads, options = {}) {
+  return (await queueCounts(options.cwd ?? process.cwd(), options.now ?? Date.now(), FOOTER_QUEUE_BYTES, reads)).due;
+}
+async function dueCount(deps) {
+  if (!deps.due) return void 0;
+  try {
+    const due = await deps.due();
+    return Number.isInteger(due) && due > 0 ? due : void 0;
+  } catch {
+    return void 0;
+  }
+}
+async function persistNextStep(a, redact, deps = {}) {
+  const due = await dueCount(deps);
+  const counted = due !== void 0 ? { due } : {};
+  const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0];
+  if (!top) return counted;
+  const row2 = planRowForInsight(top, a.session.id);
+  const title = redact ? redactValue(row2.title, { scrub: redact.scrub, stripPaths: redact.stripPaths }) : row2.title;
+  const finding = findingForRow({ ...row2, title }, "session");
+  const improvement = top.improvement;
+  try {
+    const store = deps.store ? deps.store() : new SuggestionStore();
+    const { record: record3 } = await store.upsertNew(finding, "report");
+    return { finding: title, improvement, next: kickoffCommands(record3, "serve").claude, ...counted };
+  } catch (e) {
+    const key = suggestionKey(finding, "report");
+    const id = suggestionIdV2(key);
+    const reason = (e instanceof Error ? e.message : String(e)).split("\n")[0] ?? "unknown error";
+    return {
+      finding: title,
+      improvement,
+      storeNote: reason,
+      next: kickoffCommands({ id, ...finding, sessionIds: key.sessionIds, source: "report" }, "file").claude,
+      ...counted
+    };
+  }
+}
+
+// src/serve/server.ts
+import { randomBytes as randomBytes4, timingSafeEqual } from "node:crypto";
+import { createServer } from "node:http";
+import { cpus as cpus2 } from "node:os";
+
+// src/serve/api.ts
+import { homedir as homedir3 } from "node:os";
+
+// src/harness/collect.ts
+import { readdir as readdir3, readFile, stat as stat5 } from "node:fs/promises";
+import { basename as basename10, join as join8 } from "node:path";
+var MEMORY_INDEX_LINE_LIMIT = 200;
+var MEMORY_INDEX_CHAR_LIMIT = 25e3;
+function memoryIndexCut(raw) {
+  const text3 = raw.trim();
+  const lines = text3 === "" ? [] : text3.split("\n");
+  if (lines.length && lines[lines.length - 1] === "") lines.pop();
+  let chars = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const next = chars + lines[i].length;
+    if (i >= MEMORY_INDEX_LINE_LIMIT || next > MEMORY_INDEX_CHAR_LIMIT) return { lines: lines.length, chars: text3.length, linesPastLimit: lines.length - i, firstLinePastLimit: i + 1 };
+    chars = next + 1;
+  }
+  return { lines: lines.length, chars: text3.length, linesPastLimit: 0 };
+}
+var DEFAULT_MAX_FILE_BYTES = 1e6;
+var MAX_WALK_DEPTH = 6;
+var CLAUDE_JSON_KEYS = ["mcpServers", "projects", "skillUsage", "pluginUsage"];
+var CLAUDE_JSON_PROJECT_KEYS = ["mcpServers", "enabledMcpjsonServers", "disabledMcpjsonServers"];
+function reasonOf(e) {
+  const code2 = e?.code;
+  if (code2 === "ENOENT" || code2 === "ENOTDIR") return "enoent";
+  if (code2 === "EACCES" || code2 === "EPERM") return "eacces";
+  return "other";
+}
+function cleanPath(ctx, p) {
+  return redactValue(p, ctx.home ? { home: ctx.home } : {});
+}
+function cleanName(s) {
+  return scrubStr(s);
+}
+function mark(ctx, path, reason) {
+  const p = cleanPath(ctx, path);
+  const key = `${p}::${reason}`;
+  if (ctx.seen.has(key)) return;
+  ctx.seen.add(key);
+  ctx.unreadable.push({ path: p, reason });
+}
+async function readText(ctx, path) {
+  let size;
+  try {
+    const st = await stat5(path);
+    if (!st.isFile()) return null;
+    size = st.size;
+  } catch (e) {
+    const r = reasonOf(e);
+    if (r !== "enoent") mark(ctx, path, r);
+    return null;
+  }
+  if (size > ctx.maxFileBytes) {
+    mark(ctx, path, "too-large");
+    return null;
+  }
+  try {
+    const text3 = await readFile(path, "utf8");
+    ctx.filesRead++;
+    ctx.bytesRead += size;
+    return text3;
+  } catch (e) {
+    mark(ctx, path, reasonOf(e));
+    return null;
+  }
+}
+async function readJson(ctx, path) {
+  const text3 = await readText(ctx, path);
+  if (text3 === null) return null;
+  try {
+    const v = JSON.parse(text3);
+    if (!v || typeof v !== "object" || Array.isArray(v)) {
+      mark(ctx, path, "bad-json");
+      return null;
+    }
+    return v;
+  } catch {
+    mark(ctx, path, "bad-json");
+    return null;
+  }
+}
+async function listDir(ctx, path, required = false) {
+  try {
+    const entries = await readdir3(path, { withFileTypes: true });
+    return entries.map((e) => ({ name: e.name, dir: e.isDirectory() })).sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+  } catch (e) {
+    const r = reasonOf(e);
+    if (r !== "enoent" || required) mark(ctx, path, r);
+    return [];
+  }
+}
+async function walkMarkdown(ctx, dir, depth = 0) {
+  if (depth > MAX_WALK_DEPTH) return [];
+  const out3 = [];
+  for (const e of await listDir(ctx, dir)) {
+    if (e.name.startsWith(".") || e.name === "node_modules") continue;
+    const p = join8(dir, e.name);
+    if (e.dir) out3.push(...await walkMarkdown(ctx, p, depth + 1));
+    else if (e.name.endsWith(".md")) out3.push(p);
+  }
+  return out3;
+}
+async function isDir(path) {
+  try {
+    return (await stat5(path)).isDirectory();
+  } catch {
+    return false;
+  }
+}
+var approxTokens2 = (bytes) => Math.ceil(bytes / 4);
+function lineCount(text3) {
+  if (text3 === "") return 0;
+  const parts2 = text3.split("\n");
+  if (parts2[parts2.length - 1] === "") parts2.pop();
+  return parts2.length;
+}
+function headingCount(text3) {
+  let n2 = 0;
+  for (const l of text3.split("\n")) if (/^#{1,6}\s/.test(l)) n2++;
+  return n2;
+}
+var FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---[ \t]*(\r?\n|$)/;
+function parseFrontmatter(text3) {
+  const m = FRONTMATTER.exec(text3);
+  if (!m) return { fm: {}, body: text3 };
+  const fm = {};
+  for (const raw of (m[1] ?? "").split(/\r?\n/)) {
+    if (/^\s/.test(raw)) continue;
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const i = line.indexOf(":");
+    if (i <= 0) continue;
+    const key = line.slice(0, i).trim();
+    let val = line.slice(i + 1).trim();
+    if (val.length > 1 && (val.startsWith('"') && val.endsWith('"') || val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
+    fm[key] = val;
+  }
+  return { fm, body: text3.slice(m[0].length) };
+}
+function splitList(value) {
+  if (value === void 0) return null;
+  let s = value.trim();
+  if (s.startsWith("[") && s.endsWith("]")) s = s.slice(1, -1);
+  const out3 = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch2 of s) {
+    if (ch2 === "(" || ch2 === "[") depth++;
+    else if (ch2 === ")" || ch2 === "]") depth--;
+    if (ch2 === "," && depth <= 0) {
+      const t2 = cur.trim();
+      if (t2) out3.push(t2);
+      cur = "";
+      continue;
+    }
+    cur += ch2;
+  }
+  const t = cur.trim();
+  if (t) out3.push(t);
+  return out3.map((x) => x.replace(/^['"]|['"]$/g, ""));
+}
+var asRecord = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : null;
+var asArray = (v) => Array.isArray(v) ? v : [];
+var asString = (v) => typeof v === "string" && v ? v : void 0;
+var asNumber = (v) => typeof v === "number" && Number.isFinite(v) ? v : 0;
+var byKey = (pick2) => (a, b) => {
+  const x = pick2(a);
+  const y = pick2(b);
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+function settingsEnv(raw) {
+  const env = asRecord(raw["env"]);
+  if (!env) return { count: 0, names: [] };
+  const names = Object.keys(env).map(cleanName).sort();
+  return { count: names.length, names };
+}
+function settingsHooks(raw) {
+  return hookConfigsFrom(asRecord(raw["hooks"]));
+}
+function hookConfigsFrom(hooks) {
+  if (!hooks) return [];
+  const out3 = [];
+  for (const event of Object.keys(hooks).sort()) {
+    const matchers = asArray(hooks[event]);
+    const names = /* @__PURE__ */ new Set();
+    let commands = 0;
+    for (const m of matchers) {
+      for (const h of asArray(asRecord(m)?.["hooks"])) {
+        const cmd = asString(asRecord(h)?.["command"]);
+        if (cmd === void 0) continue;
+        commands++;
+        const b = argv0Basename(cmd);
+        if (b) names.add(cleanName(b));
+      }
+    }
+    out3.push({ event: cleanName(event), matchers: matchers.length, commands, commandBasenames: [...names].sort() });
+  }
+  return out3;
+}
+function enabledPluginKeys(raw) {
+  const v = raw["enabledPlugins"];
+  if (Array.isArray(v)) return v.filter((x) => typeof x === "string").map(cleanName).sort();
+  const rec = asRecord(v);
+  if (!rec) return [];
+  return Object.keys(rec).filter((k) => rec[k] !== false).map(cleanName).sort();
+}
+function parseSettings(ctx, scope, file, raw) {
+  const perms = asRecord(raw["permissions"]);
+  return {
+    scope,
+    file: cleanPath(ctx, file),
+    keys: Object.keys(raw).map(cleanName).sort(),
+    ...asString(raw["model"]) ? { model: cleanName(asString(raw["model"])) } : {},
+    ...asString(raw["effortLevel"]) ? { effortLevel: cleanName(asString(raw["effortLevel"])) } : {},
+    permissions: {
+      allow: asArray(perms?.["allow"]).length,
+      deny: asArray(perms?.["deny"]).length,
+      ask: asArray(perms?.["ask"]).length,
+      ...asString(perms?.["defaultMode"]) ? { defaultMode: cleanName(asString(perms["defaultMode"])) } : {}
+    },
+    hooks: settingsHooks(raw),
+    env: settingsEnv(raw),
+    statusLine: raw["statusLine"] != null,
+    // both cleanup windows, kept raw: `src/harness/retention.ts` decides which values are usable, so a
+    // value this collector cannot vouch for is still visible in the inventory rather than silently dropped
+    ...typeof raw["cleanupPeriodDays"] === "number" ? { cleanupPeriodDays: raw["cleanupPeriodDays"] } : {},
+    ...typeof raw["desktopSessionCleanupPeriodDays"] === "number" ? { desktopSessionCleanupPeriodDays: raw["desktopSessionCleanupPeriodDays"] } : {},
+    ...typeof raw["allowManagedHooksOnly"] === "boolean" ? { allowManagedHooksOnly: raw["allowManagedHooksOnly"] } : {},
+    enabledPlugins: enabledPluginKeys(raw)
+  };
+}
+async function readSkillDir(ctx, dir, origin, plugin) {
+  const out3 = [];
+  for (const e of await listDir(ctx, dir)) {
+    if (!e.dir || e.name.startsWith(".")) continue;
+    const file = join8(dir, e.name, "SKILL.md");
+    const text3 = await readText(ctx, file);
+    if (text3 === null) continue;
+    const { fm, body } = parseFrontmatter(text3);
+    const bytes = Buffer.byteLength(text3, "utf8");
+    out3.push({
+      name: cleanName(fm["name"] ?? e.name),
+      origin,
+      ...plugin ? { plugin: cleanName(plugin) } : {},
+      file: cleanPath(ctx, file),
+      bytes,
+      approxTokens: approxTokens2(bytes),
+      descriptionChars: (fm["description"] ?? "").length,
+      allowedTools: splitList(fm["allowed-tools"] ?? fm["allowedTools"])?.map(cleanName) ?? null,
+      bodyLines: lineCount(body),
+      hasReferences: await isDir(join8(dir, e.name, "references"))
+    });
+  }
+  return out3;
+}
+async function readAgentDir(ctx, dir, origin, plugin) {
+  const out3 = [];
+  for (const file of await walkMarkdown(ctx, dir)) {
+    const text3 = await readText(ctx, file);
+    if (text3 === null) continue;
+    const { fm } = parseFrontmatter(text3);
+    const bytes = Buffer.byteLength(text3, "utf8");
+    out3.push({
+      name: cleanName(fm["name"] ?? basename10(file, ".md")),
+      origin,
+      ...plugin ? { plugin: cleanName(plugin) } : {},
+      file: cleanPath(ctx, file),
+      bytes,
+      approxTokens: approxTokens2(bytes),
+      descriptionChars: (fm["description"] ?? "").length,
+      ...fm["model"] ? { model: cleanName(fm["model"]) } : {},
+      ...fm["effort"] ? { effort: cleanName(fm["effort"]) } : {},
+      tools: splitList(fm["tools"])?.map(cleanName) ?? null,
+      disallowedTools: splitList(fm["disallowedTools"] ?? fm["disallowed-tools"])?.map(cleanName) ?? null
+    });
+  }
+  return out3;
+}
+async function readMemory(ctx, file, scope) {
+  const text3 = await readText(ctx, file);
+  if (text3 === null) return null;
+  if (ctx.words) for (const w of contentWords(text3, { cap: Infinity })) ctx.words.add(w);
+  const bytes = Buffer.byteLength(text3, "utf8");
+  return { scope, file: cleanPath(ctx, file), bytes, approxTokens: approxTokens2(bytes), lines: lineCount(text3), headings: headingCount(text3) };
+}
+function mcpFromRecord(rec, scope, enabled = true) {
+  if (!rec) return [];
+  const out3 = [];
+  for (const name of Object.keys(rec).sort()) {
+    const srv = asRecord(rec[name]);
+    const command = asString(srv?.["command"]);
+    const transport = asString(srv?.["type"]) ?? (asString(srv?.["url"]) ? "http" : command ? "stdio" : "unknown");
+    out3.push({
+      name: cleanName(name),
+      scope,
+      transport: cleanName(transport),
+      ...command ? { commandBasename: cleanName(argv0Basename(command)) } : {},
+      enabled
+    });
+  }
+  return out3;
+}
+async function walkPlugin(ctx, installPath, key) {
+  const skills = await readSkillDir(ctx, join8(installPath, "skills"), "plugin", key);
+  const agents = await readAgentDir(ctx, join8(installPath, "agents"), "plugin", key);
+  const commands = (await walkMarkdown(ctx, join8(installPath, "commands"))).length;
+  const hooksJson = await readJson(ctx, join8(installPath, "hooks", "hooks.json"));
+  const hookConfigs = hookConfigsFrom(hooksJson && "hooks" in hooksJson ? asRecord(hooksJson["hooks"]) : hooksJson);
+  const hooks = hookConfigs.reduce((n2, h) => n2 + h.commands, 0);
+  const mcpJson = await readJson(ctx, join8(installPath, ".mcp.json"));
+  const mcpServers = mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "plugin");
+  return { skills, agents, mcpServers, commands, hooks, hookConfigs };
+}
+async function collectInventory(opts) {
+  if (typeof opts.cwd !== "string" || typeof opts.home !== "string" || !Array.isArray(opts.roots)) {
+    throw new TypeError("collectInventory: cwd and home must be strings and roots an array");
+  }
+  const ctx = {
+    ...opts.instructionWords ? { words: opts.instructionWords } : {},
+    home: opts.home,
+    maxFileBytes: opts.maxFileBytes ?? DEFAULT_MAX_FILE_BYTES,
+    unreadable: [],
+    seen: /* @__PURE__ */ new Set(),
+    filesRead: 0,
+    bytesRead: 0
+  };
+  const claudeMd = [];
+  const settings = [];
+  const skills = [];
+  const agents = [];
+  const plugins = [];
+  const mcpServers = [];
+  if (await isDir(opts.cwd)) {
+    for (const name of ["CLAUDE.md", "AGENTS.md"]) {
+      const m2 = await readMemory(ctx, join8(opts.cwd, name), "repo");
+      if (m2) claudeMd.push(m2);
+    }
+    const dotClaude = join8(opts.cwd, ".claude");
+    const m = await readMemory(ctx, join8(dotClaude, "CLAUDE.md"), "repo");
+    if (m) claudeMd.push(m);
+    for (const [file, scope] of [
+      [join8(dotClaude, "settings.json"), "repo"],
+      [join8(dotClaude, "settings.local.json"), "repo-local"]
+    ]) {
+      const raw = await readJson(ctx, file);
+      if (raw) settings.push(parseSettings(ctx, scope, file, raw));
+    }
+    skills.push(...await readSkillDir(ctx, join8(dotClaude, "skills"), "repo"));
+    agents.push(...await readAgentDir(ctx, join8(dotClaude, "agents"), "repo"));
+    const mcpJson = await readJson(ctx, join8(opts.cwd, ".mcp.json"));
+    mcpServers.push(...mcpFromRecord(asRecord(mcpJson?.["mcpServers"]), "repo-file"));
+  } else {
+    mark(ctx, opts.cwd, "enoent");
+  }
+  for (const dir of opts.managedDirs ?? []) {
+    if (!await isDir(dir)) continue;
+    const main2 = join8(dir, "managed-settings.json");
+    const rawMain = await readJson(ctx, main2);
+    if (rawMain) settings.push(parseSettings(ctx, "managed", main2, rawMain));
+    const dropIns = join8(dir, "managed-settings.d");
+    if (await isDir(dropIns)) {
+      let names = [];
+      try {
+        names = (await readdir3(dropIns)).filter((n2) => n2.endsWith(".json")).sort();
+      } catch (e) {
+        mark(ctx, dropIns, reasonOf(e));
+      }
+      for (const name of names) {
+        const file = join8(dropIns, name);
+        const raw = await readJson(ctx, file);
+        if (raw) settings.push(parseSettings(ctx, "managed", file, raw));
+      }
+    }
+    const mcp = await readJson(ctx, join8(dir, "managed-mcp.json"));
+    mcpServers.push(...mcpFromRecord(asRecord(mcp?.["mcpServers"]), "managed"));
+  }
+  const liveRoots = [];
+  for (const root of opts.roots) {
+    if (!await isDir(root)) {
+      try {
+        await stat5(root);
+        mark(ctx, root, "other");
+      } catch (e) {
+        mark(ctx, root, reasonOf(e));
+      }
+      continue;
+    }
+    liveRoots.push(root);
+    const m = await readMemory(ctx, join8(root, "CLAUDE.md"), "global");
+    if (m) claudeMd.push(m);
+    for (const [file, scope] of [
+      [join8(root, "settings.json"), "global"],
+      [join8(root, "settings.local.json"), "global-local"]
+    ]) {
+      const raw = await readJson(ctx, file);
+      if (raw) settings.push(parseSettings(ctx, scope, file, raw));
+    }
+    skills.push(...await readSkillDir(ctx, join8(root, "skills"), "global"));
+    agents.push(...await readAgentDir(ctx, join8(root, "agents"), "global"));
+  }
+  const enabled = new Set(settings.flatMap((s) => s.enabledPlugins));
+  for (const root of liveRoots) {
+    const installed = await readJson(ctx, join8(root, "plugins", "installed_plugins.json"));
+    const byName = asRecord(installed?.["plugins"]);
+    if (!byName) continue;
+    for (const key of Object.keys(byName).sort()) {
+      const entry = asArray(byName[key]).map(asRecord).find((e) => e && asString(e["installPath"]));
+      if (!entry) continue;
+      const installPath = asString(entry["installPath"]);
+      const at = key.lastIndexOf("@");
+      const walk2 = await walkPlugin(ctx, installPath, key);
+      skills.push(...walk2.skills);
+      agents.push(...walk2.agents);
+      mcpServers.push(...walk2.mcpServers);
+      plugins.push({
+        key: cleanName(key),
+        name: cleanName(at > 0 ? key.slice(0, at) : key),
+        marketplace: cleanName(at > 0 ? key.slice(at + 1) : ""),
+        scope: cleanName(asString(entry["scope"]) ?? "unknown"),
+        ...asString(entry["version"]) ? { version: cleanName(asString(entry["version"])) } : {},
+        enabled: enabled.has(key),
+        skills: walk2.skills.length,
+        agents: walk2.agents.length,
+        commands: walk2.commands,
+        hooks: walk2.hooks,
+        mcpServers: walk2.mcpServers.length,
+        ...walk2.hookConfigs.length ? { hookConfigs: walk2.hookConfigs } : {}
+      });
+    }
+  }
+  let usageCounters;
+  let projectEntries = 0;
+  const claudeJsonPath = join8(opts.home, ".claude.json");
+  const rawClaudeJson = await readJson(ctx, claudeJsonPath);
+  if (rawClaudeJson) {
+    const picked = {};
+    for (const k of CLAUDE_JSON_KEYS) if (k in rawClaudeJson) picked[k] = rawClaudeJson[k];
+    mcpServers.push(...mcpFromRecord(asRecord(picked["mcpServers"]), "global"));
+    const projects = asRecord(picked["projects"]) ?? {};
+    const projectKeys = opts.allProjects ? Object.keys(projects).sort() : [opts.cwd];
+    for (const key of projectKeys) {
+      const project = asRecord(projects[key]);
+      if (!project) continue;
+      projectEntries++;
+      const proj = {};
+      for (const k of CLAUDE_JSON_PROJECT_KEYS) if (k in project) proj[k] = project[k];
+      const ownRowsFrom = mcpServers.length;
+      mcpServers.push(...mcpFromRecord(asRecord(proj["mcpServers"]), "project"));
+      const ownsRepoFile = key === opts.cwd;
+      for (const [list2, on] of [
+        [asArray(proj["enabledMcpjsonServers"]), true],
+        [asArray(proj["disabledMcpjsonServers"]), false]
+      ]) {
+        for (const raw of list2) {
+          const name = asString(raw);
+          if (!name) continue;
+          const clean = cleanName(name);
+          const existing = mcpServers.filter((m, i) => m.name === clean && (i >= ownRowsFrom || ownsRepoFile && m.scope === "repo-file"));
+          if (existing.length) for (const row2 of existing) row2.enabled = row2.enabled && on;
+          else mcpServers.push({ name: clean, scope: ownsRepoFile ? "repo-file" : "project", transport: "unknown", enabled: on });
+        }
+      }
+    }
+    const skillUsage = asRecord(picked["skillUsage"]);
+    const pluginUsage = asRecord(picked["pluginUsage"]);
+    usageCounters = {
+      skills: Object.keys(skillUsage ?? {}).sort().map((name) => ({ name: cleanName(name), usageCount: asNumber(asRecord(skillUsage[name])?.["usageCount"]), lastUsedAt: asNumber(asRecord(skillUsage[name])?.["lastUsedAt"]) })),
+      plugins: Object.keys(pluginUsage ?? {}).sort().map((key) => ({ key: cleanName(key), usageCount: asNumber(asRecord(pluginUsage[key])?.["usageCount"]), lastUsedAt: asNumber(asRecord(pluginUsage[key])?.["lastUsedAt"]) }))
+    };
+  }
+  const memoryIndexes = [];
+  const underRoot = (p) => liveRoots.some((root) => p.startsWith(join8(root, "projects") + "/"));
+  const indexPaths = new Set((opts.memoryIndexPaths ?? []).filter((p) => MEMORY_INDEX_PATH_RE.test(p) && underRoot(p) && !p.split(/[\\/]/).includes("..")));
+  for (const root of liveRoots) {
+    const projects = join8(root, "projects");
+    if (opts.allProjects) {
+      for (const e of await listDir(ctx, projects)) if (e.dir) indexPaths.add(join8(projects, e.name, "memory", "MEMORY.md"));
+    } else indexPaths.add(join8(projects, projectSlug(opts.cwd), "memory", "MEMORY.md"));
+  }
+  for (const file of [...indexPaths].sort()) {
+    try {
+      if (!(await stat5(file)).isFile()) continue;
+    } catch {
+      continue;
+    }
+    const text3 = await readText(ctx, file);
+    if (text3 === null) continue;
+    const bytes = Buffer.byteLength(text3, "utf8");
+    const cut = memoryIndexCut(text3);
+    memoryIndexes.push({ file: cleanPath(ctx, file), bytes, chars: cut.chars, approxTokens: approxTokens2(bytes), lines: cut.lines, linesPastLimit: cut.linesPastLimit, ...cut.firstLinePastLimit !== void 0 ? { firstLinePastLimit: cut.firstLinePastLimit } : {} });
+    if (ctx.words) {
+      for (const w of contentWords(text3, { cap: Infinity })) ctx.words.add(w);
+      const dir = join8(file, "..");
+      for (const e of await listDir(ctx, dir)) {
+        if (e.dir || !e.name.endsWith(".md") || e.name === "MEMORY.md") continue;
+        const note = await readText(ctx, join8(dir, e.name));
+        if (note !== null) for (const w of contentWords(note, { cap: Infinity })) ctx.words.add(w);
+      }
+    }
+  }
+  claudeMd.sort((a, b) => a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
+  settings.sort((a, b) => a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
+  skills.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
+  agents.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.file < b.file ? -1 : a.file > b.file ? 1 : 0);
+  plugins.sort(byKey((p) => p.key));
+  mcpServers.sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : a.scope < b.scope ? -1 : a.scope > b.scope ? 1 : 0);
+  ctx.unreadable.sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0);
+  return {
+    claudeMd,
+    memoryIndexes,
+    settings,
+    skills,
+    agents,
+    plugins,
+    mcpServers,
+    ...usageCounters ? { usageCounters } : {},
+    totals: {
+      filesRead: ctx.filesRead,
+      bytesRead: ctx.bytesRead,
+      claudeMdBytes: claudeMd.reduce((n2, m) => n2 + m.bytes, 0),
+      claudeMdApproxTokens: claudeMd.reduce((n2, m) => n2 + m.approxTokens, 0),
+      skills: skills.length,
+      agents: agents.length,
+      plugins: plugins.length,
+      // distinct NAMES: one server declared by `.mcp.json` and named again by a toggle list is one server
+      mcpServers: new Set(mcpServers.map((m) => m.name)).size,
+      // settings files plus the hooks of ENABLED plugins: the commands Claude Code will actually run
+      hookCommands: settings.reduce((n2, s) => n2 + s.hooks.reduce((k, h) => k + h.commands, 0), 0) + plugins.reduce((n2, p) => n2 + (p.enabled ? p.hooks : 0), 0),
+      projectEntries
+    },
+    unreadable: ctx.unreadable
+  };
+}
+
+// src/feedback/diagnostics.ts
+import { arch, platform } from "node:os";
+function osFamily(value) {
+  if (value === "darwin") return "macOS";
+  if (value === "win32") return "Windows";
+  if (value === "linux") return "Linux";
+  return "other";
+}
+function safeArch(value) {
+  return value === "arm64" || value === "x64" ? value : "other";
+}
+function feedbackDiagnostics(version, context) {
+  return {
+    version,
+    nodeMajor: process.versions.node.split(".")[0] ?? "unknown",
+    osFamily: osFamily(platform()),
+    arch: safeArch(arch()),
+    context,
+    surface: "localhost"
+  };
+}
+function feedbackBootstrap(version) {
+  const { context: _context, ...bootstrap } = feedbackDiagnostics(version, "app");
+  return bootstrap;
 }
 
 // src/suggest/reject-workspace.ts
@@ -15420,7 +15460,7 @@ function slimAnalysis(a) {
 // src/cli/commands/harness.ts
 import { homedir as homedir4 } from "node:os";
 import { basename as basename12, resolve as resolve9 } from "node:path";
-var VERSION = true ? "0.12.0" : "0.0.0-dev";
+var VERSION2 = true ? "0.12.0" : "0.0.0-dev";
 var out = MACHINE_CAPS;
 var err = MACHINE_CAPS;
 function detectStreams(flags) {
@@ -15463,14 +15503,14 @@ async function runHarness(flags) {
   const jobsN = jobsStr !== void 0 ? Math.max(1, Math.floor(Number(jobsStr)) || 1) : defaultJobs();
   const bundledEntry = /\.(m?js)$/.test(new URL(import.meta.url).pathname);
   if (jobsN > 1 && use.length > 1 && bundledEntry) {
-    const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION, now, cacheEnabled });
+    const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION2, now, cacheEnabled });
     analyses.push(...r.analyses);
     failed = r.failed;
   } else {
-    const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION }) : null;
+    const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION2 }) : null;
     for (const ref2 of use) {
       try {
-        analyses.push(await analyzeRefCached(ref2, { cache: cache2, version: VERSION, now }));
+        analyses.push(await analyzeRefCached(ref2, { cache: cache2, version: VERSION2, now }));
       } catch {
         failed++;
       }
@@ -15485,7 +15525,7 @@ async function runHarness(flags) {
     instructionWords,
     // a complaint example carries its prompt text only on request, the same gate as `analyze --include-text`
     ...flagBool(flags, "include-text") ? { includeText: true } : {},
-    version: VERSION,
+    version: VERSION2,
     now,
     scope: { cwd, roots, global: isGlobal, limit, sessionsUnreadable: failed, home },
     // every discovered session, not the `--limit` slice: the cleanup sweep reaches all of them
@@ -16097,9 +16137,6 @@ function transitionLines(transitions) {
   return [`${UNDER}moves:`, ...transitions.map((move) => `${UNDER}  ${when(move.statusAt)}  ${terminal(move.status)}${move.reasonCode ? ` (${move.reasonCode})` : ""}`)];
 }
 
-// src/version.ts
-var VERSION2 = true ? "0.12.0" : "0.0.0-dev";
-
 // src/cli/commands/suggest.ts
 async function currentWorkspaceIdentity() {
   return storedWorkspaceIdentity(await liveWorkspaceIdentity(process.cwd()));
@@ -16249,7 +16286,7 @@ async function cmdShow(store, id, flags) {
   const sessions = [];
   const missing = [];
   for (const sel of rec.sessionIds) {
-    const a = await loadAnalysisBySelector(sel, { version: VERSION2, now: Date.now() });
+    const a = await loadAnalysisBySelector(sel, { version: VERSION, now: Date.now() });
     if (!a) {
       missing.push(sel);
       continue;
@@ -16530,7 +16567,7 @@ function ruleFilter(flags) {
 function readDeps(flags, deps) {
   if (deps.read) return deps.read;
   const cacheOn = !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1");
-  return createQueueReadDeps({ now: Date.now(), cache: cacheOn ? new CohortFactsCache({ version: VERSION2 }) : null });
+  return createQueueReadDeps({ now: Date.now(), cache: cacheOn ? new CohortFactsCache({ version: VERSION }) : null });
 }
 var textWidth = () => layoutWidth(detectCaps(process.stdout, process.env));
 async function cmdQueue(store, flags, deps) {
@@ -16692,7 +16729,7 @@ async function cmdFeedback(positionals, flags) {
       includeText: false,
       configDir: emptyConfigDir,
       noCache: true,
-      version: VERSION2,
+      version: VERSION,
       maxLive: 1
     },
     { cache: null, quiet: true, store: new EmptySuggestionStore() }
@@ -18626,10 +18663,10 @@ async function selectSession(selector, flags, err3) {
   if (candidates.length > 1) throw new Error(`"${oneLine2(selector)}" matches ${candidates.length} sessions. Give more of the id.`);
   throw new Error(`No session matches "${oneLine2(selector)}". Try: orangu list`);
 }
-var cacheFor = (flags) => flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1" ? null : new AnalysisCache({ version: VERSION2 });
+var cacheFor = (flags) => flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1" ? null : new AnalysisCache({ version: VERSION });
 async function sessionData2(selector, flags, err3) {
   const ref2 = await selectSession(selector, flags, err3);
-  const analysis = await analyzeRefCached(ref2, { cache: cacheFor(flags), version: VERSION2, now: Date.now() });
+  const analysis = await analyzeRefCached(ref2, { cache: cacheFor(flags), version: VERSION, now: Date.now() });
   const json2 = renderAnalysisJson(analysis, { slim: true, "no-redact": flagBool(flags, "no-redact"), "include-text": flagBool(flags, "include-text"), "strip-paths": flagBool(flags, "strip-paths") });
   return { name: ref2.sessionId.slice(0, 8), json: json2, skipped: 0 };
 }
@@ -18652,14 +18689,14 @@ async function aggregateData2(scope, flags, err3) {
   const analyses = [];
   let failed = 0;
   if (jobs > 1 && use.length > 1 && bundled) {
-    const pooled = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs, version: VERSION2, now, cacheEnabled });
+    const pooled = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs, version: VERSION, now, cacheEnabled });
     analyses.push(...pooled.analyses);
     failed = pooled.failed;
   } else {
-    const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION2 }) : null;
+    const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION }) : null;
     for (const ref2 of use) {
       try {
-        analyses.push(await analyzeRefCached(ref2, { cache: cache2, version: VERSION2, now }));
+        analyses.push(await analyzeRefCached(ref2, { cache: cache2, version: VERSION, now }));
       } catch {
         failed++;
       }
@@ -18669,7 +18706,7 @@ async function aggregateData2(scope, flags, err3) {
   if (failed) agg.scope += ` (${failed} unreadable skipped)`;
   const bundle = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, flags))), { scope });
   const folder = scope === "repo" ? flagBool(flags, "no-redact") ? basename13(cwd) : redactValue(basename13(cwd), { scrub: true }) : void 0;
-  const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION2 }, null, 2)}
+  const json2 = `${JSON.stringify({ ...bundle, ...folder !== void 0 ? { folder } : {}, version: VERSION }, null, 2)}
 `;
   return { name: scope === "global" ? "machine" : basename13(cwd), json: json2, skipped: failed };
 }
@@ -18991,21 +19028,32 @@ async function cmdPick(flags, deps) {
 // src/cli/commands/dashboard.ts
 import { basename as basename15, resolve as resolve13 } from "node:path";
 var INDENT4 = "  ";
-var TAG_WIDTH = 7;
+var TAG_WIDTH = 8;
 var CHROME_ROWS_AROUND_ART = 6;
 var TARGETED_BARE_FLAGS = ["session", "s", "global", "cwd", "max-tokens", "fail-on-hook-errors"];
+var DASHBOARD_QUEUE_BYTES = 0;
 function dashboardPrecondition(stdin, stdout, env, flags) {
   if (TARGETED_BARE_FLAGS.some((flag) => flags[flag] !== void 0)) return false;
   return interactivePrecondition(stdin, stdout, env, flags);
+}
+async function countQueue(cwd, now, reads) {
+  try {
+    const { due, open: open13 } = await queueCounts(cwd, now, DASHBOARD_QUEUE_BYTES, reads);
+    return { due, open: open13 };
+  } catch {
+    return "store-error";
+  }
 }
 async function gatherDashboardData(flags, deps = {}) {
   const cwd = resolve13((deps.cwd ?? (() => process.cwd()))());
   const configArg = flagStr(flags, "root", "config", "r");
   const pickFlags = { ...flags, global: true };
-  const [picked, repoRefs, roots] = await Promise.all([
+  const reads = deps.queue ?? machineQueueReads({ cache: !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1") });
+  const [picked, repoRefs, roots, queue] = await Promise.all([
     gatherPickRows(pickFlags, { ...deps.now !== void 0 ? { now: deps.now } : {}, ...deps.isAlive ? { isAlive: deps.isAlive } : {} }),
     listSessions(configArg ? { configDir: configArg, cwd } : { cwd }),
-    claudeRoots(configArg)
+    claudeRoots(configArg),
+    countQueue(cwd, deps.now ?? Date.now(), reads)
   ]);
   return {
     repoName: basename15(cwd) || cwd,
@@ -19013,11 +19061,13 @@ async function gatherDashboardData(flags, deps = {}) {
     globalSessions: picked.counts.total,
     roots: roots.length,
     runningSessions: picked.counts.running,
-    live: picked.rows.filter((row2) => row2.running)
+    live: picked.rows.filter((row2) => row2.running),
+    queue
   };
 }
 function dashboardChoices(data) {
-  const choices = [{ kind: "repo" }, { kind: "global" }];
+  const choices = data.queue === "store-error" || data.queue.open > 0 ? [{ kind: "improve" }] : [];
+  choices.push({ kind: "repo" }, { kind: "global" });
   if (data.globalSessions) choices.push({ kind: "browse" });
   choices.push(...data.live.map((row2) => ({ kind: "session", row: row2 })));
   return choices;
@@ -19030,6 +19080,10 @@ function oneLine3(value) {
 }
 function choiceText(choice, data, now, sep3) {
   switch (choice.kind) {
+    case "improve": {
+      const counts = data.queue === "store-error" ? "the store could not be read" : `${data.queue.due} due${sep3}${data.queue.open} open`;
+      return { tag: "IMPROVE", text: `Improvements${sep3}${counts}`, live: false };
+    }
     case "repo":
       return { tag: "REPO", text: `Repository report${sep3}${data.repoName}${sep3}${count3(data.repoSessions, "session")}`, live: false };
     case "global":
@@ -19075,6 +19129,8 @@ function dashboardFrame(caps, data, choices, view, now) {
 }
 async function runChoice(choice, deps) {
   switch (choice.kind) {
+    case "improve":
+      return deps.showQueue();
     case "repo":
       return deps.showRepo({ open: true });
     case "global":
@@ -19091,7 +19147,8 @@ async function cmdDashboard(flags, deps) {
   const data = await gatherDashboardData(flags, {
     now,
     ...deps.cwd ? { cwd: deps.cwd } : {},
-    ...deps.isAlive ? { isAlive: deps.isAlive } : {}
+    ...deps.isAlive ? { isAlive: deps.isAlive } : {},
+    ...deps.queue ? { queue: deps.queue } : {}
   });
   const choices = dashboardChoices(data);
   const terminalRows = Number.isFinite(deps.stdout.rows) && (deps.stdout.rows ?? 0) > 0 ? deps.stdout.rows : 24;
@@ -19138,7 +19195,8 @@ function offerBetaFeedback(context) {
   process.stderr.write(betaLine(err2, context) + "\n");
 }
 function nextStep2(a, flags) {
-  return persistNextStep(a, redactOptions(flags));
+  const cache2 = !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1");
+  return persistNextStep(a, redactOptions(flags), { due: () => footerDue(machineQueueReads({ cache: cache2 })) });
 }
 function redactOptions(flags) {
   if (flagBool(flags, "no-redact")) return false;
@@ -19194,7 +19252,7 @@ function fail2(msg) {
 function makeCache(flags) {
   const disabled = flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1";
   if (disabled) return null;
-  return new AnalysisCache({ version: VERSION2 });
+  return new AnalysisCache({ version: VERSION });
 }
 function printCacheStats(cache2, flags) {
   if (!cache2 || !flagBool(flags, "verbose") || flagBool(flags, "quiet")) return;
@@ -19204,7 +19262,7 @@ function printCacheStats(cache2, flags) {
 }
 async function analyzeRef(ref2, flags, cache2) {
   const c = cache2 !== void 0 ? cache2 : makeCache(flags);
-  const analysis = await analyzeRefCached(ref2, { cache: c, version: VERSION2, now: Date.now() });
+  const analysis = await analyzeRefCached(ref2, { cache: c, version: VERSION, now: Date.now() });
   if (cache2 === void 0) printCacheStats(c, flags);
   return analysis;
 }
@@ -19367,7 +19425,7 @@ async function cmdAggregate(scope, selOrPath, flags) {
   let failed = 0;
   if (jobsN > 1 && use.length > 1 && bundledEntry) {
     const cacheEnabled = !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1");
-    const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION2, now: Date.now(), cacheEnabled });
+    const r = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs: jobsN, version: VERSION, now: Date.now(), cacheEnabled });
     analyses = r.analyses;
     failed = r.failed;
     sp.stop(quiet ? void 0 : doneLine(err2, { sizeBytes: use.reduce((n2, ref2) => n2 + ref2.sizeBytes, 0), elapsedMs: performance.now() - t0 }));
@@ -19445,7 +19503,7 @@ async function cmdServe(flags) {
     roots,
     cwd: flagStr(flags, "cwd"),
     noCache: flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1",
-    version: VERSION2,
+    version: VERSION,
     maxLive: maxLiveStr !== void 0 ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : void 0
   };
   if (requestedAutomaticLaunch) process.stderr.write("  --allow-claude is retired. The report only gives commands to copy, for Claude Code or Codex.\n");
@@ -19465,7 +19523,7 @@ async function cmdServe(flags) {
   await new Promise(() => {
   });
 }
-var helpTitle = () => `${paint(out2, "bold", "orangu")} v${VERSION2}: observe the session, then improve the next outcome.
+var helpTitle = () => `${paint(out2, "bold", "orangu")} v${VERSION}: observe the session, then improve the next outcome.
 Deterministic observability for Claude Code sessions. No network calls.`;
 var helpPrivacy = () => paint(out2, "dim", "privacy: local only, no network requests. orangu redacts secrets by default.");
 function printHelp() {
@@ -19562,7 +19620,7 @@ async function main() {
   }
   detectStreams2(flags);
   if (flagBool(flags, "version")) {
-    process.stdout.write(VERSION2 + "\n");
+    process.stdout.write(VERSION + "\n");
     return;
   }
   if (flagBool(flags, "help") || flagBool(flags, "h") || command === "help") {
@@ -19578,6 +19636,13 @@ async function main() {
         showGlobal: (o) => cmdAggregate("global", void 0, { ...flags, ...o }),
         showSession: (id) => cmdReport(id, { ...flags, open: true }),
         browseSessions: () => pickSessions({ ...flags, global: true }),
+        // the run of `orangu suggest --queue --cwd <this folder>`: the full check, then the queue text
+        showQueue: () => cmdSuggest([], {
+          queue: true,
+          cwd: process.cwd(),
+          ...flags["no-cache"] !== void 0 ? { "no-cache": true } : {},
+          ...flagBool(flags, "no-redact") ? { "no-redact": true } : {}
+        }),
         stdin: process.stdin,
         stdout: process.stdout,
         stderr: process.stderr,
@@ -19609,7 +19674,7 @@ async function main() {
       return cmdAggregate("global", sel, flags);
     case "watch": {
       const ref2 = await selectSession2(sel, flags);
-      return watchSession(ref2, flags, { version: VERSION2, openInBrowser: openHtmlFile, outPath: (id) => outPath(flags, id) });
+      return watchSession(ref2, flags, { version: VERSION, openInBrowser: openHtmlFile, outPath: (id) => outPath(flags, id) });
     }
     case "serve":
       return cmdServe(flags);
