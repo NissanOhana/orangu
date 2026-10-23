@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { SuggestionViewRecord } from '../../model/app-data.js'
 import { COHORT_MAX, COHORT_MIN } from '../../suggest/cohort-stats.js'
-import type { SuggestionQueue } from '../../suggest/queue.js'
 import { emptyQueueFixture, queueFixture } from '../../../test/fixtures/suggestion-queue.js'
 import { proposalOf, recordOf } from '../../../test/fixtures/suggestion-records.js'
 import { proposalsUi } from './proposals-ui.js'
@@ -11,8 +10,9 @@ import { STATUS_LABELS, changeClassLabel, statusLabel } from './status-labels.js
 
 const GROUPS = ['verdict', 'regressed', 'apply', 'review', 'running', 'wait'] as const
 
-// The client reads the server shape through its own types: the server queue must stay assignable to them.
-const asRead = (queue: SuggestionQueue): QueueRead => queue
+// The client reads the server shape through its own types: the server queue (the fixture is a buildQueue result) must
+// stay assignable to them. No client file names the queue module, this test included (src/suggest/queue.test.ts).
+const asRead = (queue: ReturnType<typeof queueFixture>): QueueRead => queue
 
 /** The fixture queue with the first item of each group only, and the counts of that queue. */
 function oneEach(): QueueRead {
