@@ -28,9 +28,13 @@ function runtimeErrors(page: Page): string[] {
   return errors
 }
 
+/**
+ * The page is no wider than the viewport of the project. A narrow project emulates a phone (`isMobile`), and there the
+ * layout viewport grows with the content, so `innerWidth` grows with an overflow and cannot show it.
+ */
 async function expectNoHorizontalOverflow(page: Page): Promise<void> {
-  const report = await page.evaluate(() => ({
-    viewport: window.innerWidth,
+  const report = await page.evaluate((viewport) => ({
+    viewport,
     document: document.documentElement.scrollWidth,
     offenders: Array.from(document.querySelectorAll<HTMLElement>('body *'))
       .map((element) => {
@@ -44,9 +48,9 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
           width: Math.round(rect.width),
         }
       })
-      .filter((item) => item.left < -1 || item.right > window.innerWidth + 1)
+      .filter((item) => item.left < -1 || item.right > viewport + 1)
       .slice(0, 12),
-  }))
+  }), page.viewportSize()!.width)
   expect(report.document, JSON.stringify(report)).toBeLessThanOrEqual(report.viewport + 1)
 }
 

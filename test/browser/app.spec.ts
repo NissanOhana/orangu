@@ -7,8 +7,13 @@ const APP_ORIGIN = new URL(APP).origin
 const SITE = 'http://127.0.0.1:4173'
 const SESSION = 'aaaaaaaa-0000-4000-8000-000000000001'
 
+/**
+ * The page is no wider than the viewport of the project. A narrow project emulates a phone (`isMobile`), and there the
+ * layout viewport grows with the content, so `innerWidth` grows with an overflow and cannot show it.
+ */
 async function noHorizontalOverflow(page: Page): Promise<void> {
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  const viewport = page.viewportSize()!.width
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(viewport + 1)
 }
 
 function runtimeErrors(page: Page): string[] {
@@ -89,7 +94,7 @@ test('localhost fixture is readable at the release viewport and theme', async ({
   await timeline.press('Enter')
   await expect(page.getByRole('heading', { level: 1, name: 'Timeline' })).toBeVisible()
   await expect(page.locator('details.turn')).not.toHaveCount(0)
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  await noHorizontalOverflow(page)
   // Light is the only default: the emulated system preference is live and the app ignores it, so the
   // dark projects have to ask for dark in the hash before anything paints dark.
   expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(projectTheme(info) === 'dark')
@@ -223,7 +228,7 @@ test('localhost queue rows are escaped, show the stored proposal whole, stay res
   await expect(proposed).not.toContainText('Codex')
   await copy.click()
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(next)
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  await noHorizontalOverflow(page)
 
   // A re-render builds the screen again from nothing (the audience switch does it). The open file list stays
   // open, because its disclosure carries an id that the re-render seam keys.
@@ -321,7 +326,7 @@ test('the Queue section shows the 6 groups in order, opens each row from the key
   expect(contrasts.length, 'visible texts measured').toBeGreaterThan(60)
   const low = contrasts.filter((t) => t.ratio < 4.5)
   expect(low, 'text under 4.5:1 in the Queue section').toEqual([])
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  await noHorizontalOverflow(page)
   expect(errors).toEqual([])
 })
 
@@ -640,12 +645,12 @@ test('localhost #harness renders the populated harness view and the Overview car
   await expect(page.locator('.scroll-x table.grid td.mono', { hasText: 'skill_listing' })).toBeVisible()
   await expect(page.locator('[data-copy=\'claude "/orangu:harness --scope repo"\']')).toBeVisible()
   await expect(page.getByText('found no harness config')).toHaveCount(0)
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  await noHorizontalOverflow(page)
   await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
   // the card links through cleanHash, so it carries whatever theme the current view is in
   await expect(page.locator(`a.harness-card[href="${withTheme(`#harness?s=${SESSION}`, info)}"]`)).toBeVisible({ timeout: 20_000 })
   await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'Harness' })).toBeVisible()
-  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true)
+  await noHorizontalOverflow(page)
   expect(errors).toEqual([])
 })
 

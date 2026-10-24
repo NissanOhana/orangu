@@ -1833,7 +1833,8 @@ svg { display: block; max-width: 100%; }
 .sg-body { padding-left: 56px; }
 .sg-save { font-weight: 700; }
 .sg-cmd { margin-top: 8px; }
-.steps { list-style: none; counter-reset: step; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--ink2); }
+/* a path has no break point: a step and a sub line wrap it anywhere */
+.steps { list-style: none; counter-reset: step; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; font-size: 13px; color: var(--ink2); overflow-wrap: anywhere; }
 .steps > li { display: flex; align-items: flex-start; gap: 10px; counter-increment: step; min-width: 0; }
 .steps > li > span, .steps > li > button { margin-top: 1px; }
 .steps > li > div { min-width: 0; flex: 1; }
@@ -1848,7 +1849,7 @@ svg { display: block; max-width: 100%; }
 /* a secondary disclosure inside a card; .why holds a finding's reason and method, first in the card body */
 .more-charts > summary, .sg-more > summary, .why > summary { cursor: pointer; font-size: 13px; color: var(--ink2); display: flex; align-items: center; gap: 8px; padding: 6px 0; }
 .sg-hero { min-width: 220px; }
-.sg-sub { font-size: 13px; color: var(--ink2); margin-top: 2px; }
+.sg-sub { font-size: 13px; color: var(--ink2); margin-top: 2px; overflow-wrap: anywhere; }
 .sg-foot { margin: 14px 0 0; }
 .sg-proposal { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--bg2); overflow-wrap: anywhere; }
 .sg-phead { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
