@@ -211,12 +211,12 @@ describe('ratchet: the proposal renderers reach the screen only through the serv
 })
 
 /**
- * The improvement home of serve: the frame, the Queue section, the Dismiss confirm, the queue card, the status labels
- * and the types of the queue read. Each reaches the screen only through the ServeUi seams (proposals, harnessCard,
- * ensureAggregate), so the file bundles carry none of it. One import from the file side would bring its bytes into
- * every saved report.
+ * The improvement home of serve: the frame, the Queue, History and Lessons sections, the Dismiss confirm, the queue
+ * card, the status labels and the types of the store reads. Each reaches the screen only through the ServeUi seams
+ * (proposals, harnessCard, ensureAggregate), so the file bundles carry none of it. One import from the file side would
+ * bring its bytes into every saved report.
  */
-const HOME_MODULES = ['home-ui', 'queue-ui', 'dismiss-ui', 'queue-card', 'status-labels', 'queue-types'] as const
+const HOME_MODULES = ['home-ui', 'queue-ui', 'history-ui', 'lessons-ui', 'dismiss-ui', 'queue-card', 'status-labels', 'queue-types', 'lesson-types'] as const
 const homeSource = (name: string): string => join(ROOT, 'src/report/client', `${name}.ts`)
 
 describe('ratchet: the improvement home reaches the screen only through the serve seams', () => {
@@ -225,6 +225,10 @@ describe('ratchet: the improvement home reaches the screen only through the serv
     ['serve-ui', 'queue-card'],
     ['proposals-ui', 'home-ui'],
     ['home-ui', 'queue-ui'],
+    ['home-ui', 'history-ui'],
+    ['home-ui', 'lessons-ui'],
+    ['history-ui', 'lesson-types'],
+    ['lessons-ui', 'lesson-types'],
     ['home-ui', 'dismiss-ui'],
     ['queue-ui', 'dismiss-ui'],
     ['queue-ui', 'status-labels'],

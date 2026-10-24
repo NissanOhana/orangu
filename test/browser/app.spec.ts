@@ -364,6 +364,107 @@ test('Review the whole harness moves focus to the copy control of the whole-harn
   expect(errors).toEqual([])
 })
 
+// History and Lessons on the served fixture store (app-server.ts): in this workspace, 3 open applied changes and 5
+// closed ones, 1 for each tag; in a second workspace, 1 change dismissed after apply.
+test('History and Lessons open from the keyboard, show each row and each table, and paint each text at 4.5:1 or more', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  const history = page.locator('#home-history')
+  const lessons = page.locator('#home-lessons')
+  await expect(history.locator(':scope > summary')).toContainText('History · 8 applied changes', { timeout: 20_000 })
+  await expect(lessons.locator(':scope > summary')).toContainText('Lessons · 6 for this workspace')
+  // the Queue, History and Lessons in order, then the heading of the findings; History and Lessons start closed
+  const order = await page.evaluate(() => {
+    const all = Array.from(document.querySelectorAll('*'))
+    const heading = Array.from(document.querySelectorAll('h3')).find((h) => h.textContent === 'Findings in this scope')
+    return ['home-queue', 'home-history', 'home-lessons'].map((id) => all.indexOf(document.getElementById(id)!)).concat(heading ? all.indexOf(heading) : -1)
+  })
+  expect(order.every((n, i) => n > (order[i - 1] ?? -1)), `Queue, History, Lessons, heading: ${order.join(', ')}`).toBe(true)
+  await expect(history).not.toHaveAttribute('open')
+  await expect(lessons).not.toHaveAttribute('open')
+  // In a narrow project the mobile layout viewport grows with its content, so innerWidth alone cannot show an overflow:
+  // the page width before the sections open is the bar
+  const pageWidth = () => page.evaluate(() => document.documentElement.scrollWidth)
+  const closedWidth = await pageWidth()
+
+  // History opens from the keyboard, and so does each row, with its summary as the accessible name of the toggle
+  const historyToggle = history.locator(':scope > summary')
+  await historyToggle.focus()
+  await page.keyboard.press('Enter')
+  await expect(historyToggle).toHaveAttribute('aria-expanded', 'true')
+  const rows = history.locator(':scope > div > .q-rows > details.saved-proposal')
+  await expect(rows).toHaveCount(8)
+  for (let i = 0; i < 8; i++) {
+    const toggle = rows.nth(i).locator(':scope > summary')
+    await toggle.focus()
+    await page.keyboard.press('Enter')
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true')
+  }
+  const verified = history.locator('#h-sg_0000000000c1')
+  await expect(verified.locator('.tag.good')).toHaveText('verified comparison')
+  await expect(history.locator('#h-sg_0000000000c3 .tag')).toHaveText('not shown beyond chance · within noise')
+  await expect(history.locator('#h-sg_0000000000b6 .tag')).toHaveText('waiting for sessions')
+  await expect(verified.locator('table.grid th')).toHaveText(['Check', 'Before', 'After', 'p lower', 'p higher', 'Verdict'])
+  await expect(verified.locator('code').first()).toBeVisible()
+  await expect(history.locator('[data-copy], .cmd')).toHaveCount(0)
+
+  // Lessons: each row label is a row header with no upper case, and a 0 reads as 0
+  const lessonsToggle = lessons.locator(':scope > summary')
+  await lessonsToggle.focus()
+  await page.keyboard.press('Enter')
+  await expect(lessonsToggle).toHaveAttribute('aria-expanded', 'true')
+  const rowHead = lessons.locator('table.grid tbody th[scope="row"]').first()
+  await expect(rowHead).toHaveText(/^Instruction files/)
+  expect(await rowHead.evaluate((el) => getComputedStyle(el).textTransform)).toBe('none')
+  await expect(lessons.locator('td.num .vh').first()).toHaveText('0')
+  expect(await lessons.textContent()).not.toContain('%')
+
+  // Each All workspaces disclosure reads every workspace on its first open, and shows the second workspace by its folder
+  const allHistory = history.locator('#home-all-history')
+  await allHistory.locator(':scope > summary').click()
+  await expect(allHistory.locator(':scope > div')).not.toHaveAttribute('aria-busy', 'true')
+  await expect(allHistory.locator('.card-title').first()).toHaveText('other')
+  await expect(allHistory.locator('#h-sg_0000000000d2 .tag')).toHaveText('dismissed after apply')
+  await expect(allHistory.locator('details.saved-proposal[id^="h-sg_0000000000c"]')).toHaveCount(0)
+  const allLessons = lessons.locator('#home-all-lessons')
+  await allLessons.locator(':scope > summary').click()
+  await expect(allLessons.locator(':scope > div')).not.toHaveAttribute('aria-busy', 'true')
+  await expect(allLessons.locator('.card-head').first()).toHaveText('other')
+
+  // every part is open, so the check reads the rows, the check tables, the stored lines and both lesson tables
+  for (const root of ['#home-history', '#home-lessons']) {
+    const contrasts = await textContrasts(page, root)
+    expect(contrasts.length, `${root}: visible texts measured`).toBeGreaterThan(40)
+    expect(contrasts.filter((t) => t.ratio < 4.5), `${root}: text under 4.5:1`).toEqual([])
+  }
+  // each table scrolls in its own box: a 0 cell is clipped there too, so the open sections do not widen the page
+  expect(await pageWidth(), 'the page width with every part open').toBeLessThanOrEqual(closedWidth)
+  await noHorizontalOverflow(page)
+
+  // Plain language: a re-render keeps both sections open, and each check reads as 1 sentence with no p-value
+  await page.evaluate(() => { location.hash += (location.hash.includes('?') ? '&' : '?') + 'audience=plain' })
+  await expect(page.getByRole('button', { name: 'Plain language' })).toHaveAttribute('aria-pressed', 'true')
+  await expect(history).toHaveAttribute('open', '')
+  await expect(lessons).toHaveAttribute('open', '')
+  await expect(verified.locator('li').filter({ hasText: 'beyond chance' })).toHaveText('Tool calls per session went down beyond chance.')
+  expect(await history.textContent()).not.toMatch(/p lower|Stored summary/)
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(errors).toEqual([])
+})
+
+test('each home section names the store when the 3 store reads fail, and the findings still show', async ({ page }, info) => {
+  const errors = runtimeErrors(page)
+  for (const route of ['queue', 'history', 'lessons'])
+    await page.route(`**/api/${route}**`, (r) => r.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ error: 'the store read failed' }) }))
+  await page.goto(withTheme(`${APP}/#suggest?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
+  for (const id of ['home-queue', 'home-history', 'home-lessons'])
+    await expect(page.locator(`#${id} > div .empty-hero .t`), id).toHaveText('orangu could not read the suggestion store.', { timeout: 20_000 })
+  await expect(page.locator('#home-queue .empty-hero .s')).toHaveText('Run orangu in a terminal and choose Improvements to see the reason.')
+  await expect(page.locator('details.finding').first()).toBeVisible()
+  expect(await paintedTheme(page)).toBe(projectTheme(info))
+  expect(errors.filter((e) => !e.includes('the server responded with a status of 500'))).toEqual([])
+})
+
 const REASON_LABELS = ['I do not want this change', 'It is already handled', 'The cause is somewhere else', 'It takes too much effort', 'Other reason']
 const CONFIRM_NAME = 'Dismiss this item? You cannot undo it. Dismiss does not undo a change in your files.'
 

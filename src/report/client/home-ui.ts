@@ -5,13 +5,16 @@
  *
  * The reads are fill-on-demand, as the aggregates and the harness report are: the first render of #suggest or
  * #overview starts the queue read (serve-ui.ts calls ensureQueue from the screen data seam), and the app renders
- * again when it lands. A `suggestion-updated` frame and the Count again control read it again. The last good read
+ * again when it lands. The first render of #suggest also starts the History and the Lessons reads, beside the queue
+ * read. A `suggestion-updated` frame and the Count again control read the 3 again. The last good read
  * stays on screen until the new one lands, as refreshSuggestions keeps the last good records (app.ts). A
  * `session-live` frame that ends a session after the read shows the stale strip: orangu never counts again by itself.
+ * When the first read of each of the 3 failed, each section says that orangu could not read the store.
  *
  * Every read goes through the data source with no `cwd`, so the route takes the `--cwd` of serve, and no raw path of
  * the browser reaches it. The `scope` of the read says which read the app got: 1 workspace, or `all` when serve has
- * no `--cwd`. The All workspaces disclosure reads `all=1` on its first open only.
+ * no `--cwd`. The history read has no `scope`, so History takes the scope of the queue read, else of the lesson read.
+ * Each All workspaces disclosure reads `all=1` on its first open only.
  *
  * The controls of the home are wired once, by 1 delegated listener on the document keyed by data attributes, so a
  * re-render needs no new wiring. The status region lives on the body, outside the root that each render replaces.
@@ -27,7 +30,10 @@ import type { RouteState } from './nav.js'
 import type { SuggestionScope } from '../../suggest/types.js'
 import { REJECT_REASON_CODES } from '../../suggest/reason-codes.js'
 import type { QueueRead, QueueRow } from './queue-types.js'
+import type { ChangeRow, LessonRead } from './lesson-types.js'
 import { queueSection } from './queue-ui.js'
+import { historySection } from './history-ui.js'
+import { lessonsSection } from './lessons-ui.js'
 import { confirmOf, dismissIds, dismissLine, dismissPart, type DismissState } from './dismiss-ui.js'
 
 let queue: QueueRead | null | undefined
@@ -51,6 +57,20 @@ let confirm: DismissState | undefined
 let focusId: string | undefined
 /** after a done dismiss: the row that leaves, and the disclosure whose summary takes focus when it is gone */
 let leaving: { row: string; next: string } | undefined
+
+/** 1 read of History or Lessons: undefined until it lands, null when its first read failed. */
+interface StoreRead<T> {
+  value: T | null | undefined
+  busy: boolean
+  again: boolean
+}
+const storeRead = <T>(): StoreRead<T> => ({ value: undefined, busy: false, again: false })
+const history = storeRead<ChangeRow[]>()
+const allHistory = storeRead<ChangeRow[]>()
+const lessons = storeRead<LessonRead>()
+const allLessons = storeRead<LessonRead>()
+/** the first render of #suggest started the History and the Lessons reads */
+let storeStarted = false
 
 const shown = (): boolean => screen === 'suggest' || screen === 'overview'
 
@@ -115,10 +135,44 @@ async function readAll(): Promise<void> {
   if (shown()) rerender()
 }
 
-/** Read again: the queue, and every workspace once the disclosure has read it. */
+/**
+ * 1 read of History or Lessons, as readAll reads every workspace: a failed read again keeps the last good one. A read
+ * that comes while one runs runs once more after it, so the last state of the store wins.
+ */
+async function fill<T>(slot: StoreRead<T>, get: () => Promise<T | null> | undefined): Promise<void> {
+  if (slot.busy) {
+    slot.again = true
+    return
+  }
+  slot.busy = true
+  let read: T | null = null
+  try {
+    read = (await get()) ?? null
+  } catch {
+    read = null
+  }
+  slot.busy = false
+  slot.value = read ?? (slot.value || null)
+  if (slot.again) {
+    slot.again = false
+    return fill(slot, get)
+  }
+  if (shown()) rerender()
+}
+
+/** Read History and Lessons, and the read of every workspace of each once its disclosure has read it. */
+function readStore(): void {
+  void fill(history, () => source?.history?.())
+  void fill(lessons, () => source?.lessons?.())
+  if (allHistory.value !== undefined) void fill(allHistory, () => source?.history?.(true))
+  if (allLessons.value !== undefined) void fill(allLessons, () => source?.lessons?.(true))
+}
+
+/** Read again: the queue, and every workspace once the disclosure has read it, then History and Lessons once started. */
 function readAgain(): void {
   void readQueue()
   if (allQueue !== undefined) void readAll()
+  if (storeStarted) readStore()
 }
 
 /** Every row of the 2 reads. */
@@ -289,6 +343,8 @@ function wire(ds: DataSource): void {
       if (!(details instanceof HTMLDetailsElement)) return
       if (!details.open && STARTS_OPEN.test(details.id)) closed.add(details.id)
       if (details.open && details.id === 'home-all-queue' && allQueue === undefined) void readAll()
+      if (details.open && details.id === 'home-all-history' && allHistory.value === undefined && !allHistory.busy) void fill(allHistory, () => source?.history?.(true))
+      if (details.open && details.id === 'home-all-lessons' && allLessons.value === undefined && !allLessons.busy) void fill(allLessons, () => source?.lessons?.(true))
     },
     true,
   )
@@ -304,8 +360,9 @@ function wire(ds: DataSource): void {
 }
 
 /**
- * Start the queue read that #suggest and #overview show, once. `loaded` renders the app again when a read lands. The
- * screen data seam of serve calls it on every render, so it also knows which screen is on the page.
+ * Start the queue read that #suggest and #overview show, once, and on #suggest the History and the Lessons reads, once.
+ * `loaded` renders the app again when a read lands. The screen data seam of serve calls it on every render, so it also
+ * knows which screen is on the page.
  */
 export function ensureQueue(ds: DataSource, state: RouteState, loaded: () => void): void {
   rerender = loaded
@@ -316,6 +373,10 @@ export function ensureQueue(ds: DataSource, state: RouteState, loaded: () => voi
     if (typeof document !== 'undefined') wire(ds)
   }
   if (queue === undefined && !queueInFlight) void readQueue()
+  if (screen === 'suggest' && !storeStarted) {
+    storeStarted = true
+    readStore()
+  }
 }
 
 /** The queue read as the Overview card shows it: undefined while the first read runs, null when it failed. */
@@ -323,12 +384,13 @@ export function queueRead(): QueueRead | null | undefined {
   return queue
 }
 
-/** The inbox seam of the Improvements screen: the home sections, then the heading of the findings under them. */
+/** The inbox seam of the Improvements screen: the Queue, History and Lessons sections, then the heading of the findings under them. */
 export function homeSections(ctx: Ctx, scope: SuggestionScope): string {
   if (ctx.data.mode !== 'serve') return ''
   const records = new Map(ctx.data.suggestions.map((record) => [record.id, record]))
+  const storeError = queue === null && history.value === null && lessons.value === null
   const section = queueSection(
-    { main: queue, all: allQueue, stale, refreshFailed, closed, confirm },
+    { main: queue, all: allQueue, stale, refreshFailed, closed, confirm, storeError },
     {
       records,
       storeEmpty: !ctx.data.suggestions.length,
@@ -336,5 +398,9 @@ export function homeSections(ctx: Ctx, scope: SuggestionScope): string {
       ...(ctx.proposals ? { details: ctx.proposals.details } : {}),
     },
   )
-  return `${section}<h3 class="mb16">Findings in this scope</h3>`
+  const plain = ctx.audience === 'plain'
+  const store = { records }
+  const changes = historySection({ main: history.value, all: allHistory.value, scope: queue?.scope ?? lessons.value?.scope, storeError, plain }, store)
+  const taught = lessonsSection({ main: lessons.value, all: allLessons.value, storeError, plain }, store)
+  return `${section}${changes}${taught}<h3 class="mb16">Findings in this scope</h3>`
 }

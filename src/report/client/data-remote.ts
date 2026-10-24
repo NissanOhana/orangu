@@ -12,6 +12,7 @@ import type { RejectReasonCode } from '../../suggest/reason-codes.js'
 import type { ServeEvent } from '../../serve/types.js'
 import type { DataSource } from './data.js'
 import type { QueueRead } from './queue-types.js'
+import type { ChangeRow, LessonRead } from './lesson-types.js'
 
 const SESSION_THROTTLE_MS = 2_000
 const AGG_POLL_MS = 800
@@ -102,6 +103,12 @@ export function remoteSource(base = ''): DataSource {
     // no cwd: the route takes the --cwd of serve, so no path of the browser reaches it
     async queue(all) {
       return (await getJson<QueueRead>(base + '/api/queue' + (all ? '?all=1' : ''))).body
+    },
+    async history(all) {
+      return (await getJson<ChangeRow[]>(base + '/api/history' + (all ? '?all=1' : ''))).body
+    },
+    async lessons(all) {
+      return (await getJson<LessonRead>(base + '/api/lessons' + (all ? '?all=1' : ''))).body
     },
     async kickoff(req) {
       let r: Response

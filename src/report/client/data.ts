@@ -11,6 +11,7 @@ import type { KickoffRequest, KickoffResponse, SuggestionRecord, SuggestionStatu
 import type { RejectReasonCode } from '../../suggest/reason-codes.js'
 import type { ServeEvent } from '../../serve/types.js'
 import type { QueueRead } from './queue-types.js'
+import type { ChangeRow, LessonRead } from './lesson-types.js'
 import { kickoffCommands, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 
 export type KickoffResult =
@@ -30,6 +31,10 @@ export interface DataSource {
   suggestions(): Promise<SuggestionViewRecord[]>
   /** file: absent (a file carries no store read); serve: the queue of the serve workspace, or of every workspace with `all`; null when the read failed */
   queue?(all?: boolean): Promise<QueueRead | null>
+  /** file: absent; serve: the applied changes of the serve workspace, or of every workspace with `all`; null when the read failed */
+  history?(all?: boolean): Promise<ChangeRow[] | null>
+  /** file: absent; serve: the lessons of the serve workspace, or of every workspace with `all`; null when the read failed */
+  lessons?(all?: boolean): Promise<LessonRead | null>
   /** file: local copy-text only; serve: POST kickoff */
   kickoff(req: KickoffRequest): Promise<KickoffResult>
   /** file: null; serve: status transition, with 1 reason code of the fixed list or none; null when the write failed */

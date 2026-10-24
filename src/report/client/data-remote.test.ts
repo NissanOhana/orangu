@@ -87,6 +87,30 @@ describe('remote queue read', () => {
   })
 })
 
+// The History and Lessons reads follow the same rule: no cwd for this workspace, and only all=1 for every workspace.
+describe('remote history and lesson reads', () => {
+  const history = [{ id: 'sg_0000000000c7', title: 'Read each file once' }]
+  const lessons = { v: 1, scope: '~/code/demo', maxBytes: null, omitted: 0, lessons: [] }
+
+  it('reads this workspace with no cwd, and every workspace with all=1 only', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => json(url.includes('/api/history') ? history : lessons)))
+    const source = remoteSource('/local')
+    expect(await source.history!()).toEqual(history)
+    expect(await source.history!(true)).toEqual(history)
+    expect(await source.lessons!()).toEqual(lessons)
+    expect(await source.lessons!(true)).toEqual(lessons)
+    const urls = vi.mocked(fetch).mock.calls.map(([url]) => String(url))
+    expect(urls).toEqual(['/local/api/history', '/local/api/history?all=1', '/local/api/lessons', '/local/api/lessons?all=1'])
+    for (const url of urls) expect(url).not.toContain('cwd')
+  })
+
+  it('gives null for a failed read, so the app keeps its last good read', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ error: 'the read failed' }, 500)))
+    expect(await remoteSource('/local').history!()).toBeNull()
+    expect(await remoteSource('/local').lessons!()).toBeNull()
+  })
+})
+
 // The Dismiss write: the body holds the status and 1 reason code of the fixed list, or no reason. It holds no text of
 // the person and no path, and a failed write gives null, so the app never shows it as done.
 describe('remote status write', () => {

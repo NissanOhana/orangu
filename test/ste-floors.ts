@@ -161,6 +161,10 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // clean, score 100. queue-types.ts holds types only and has no row.
   'src/report/client/home-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'src/report/client/queue-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // The History and Lessons sections, born 2026-10-24 at measured - 2: 32 and 18 sentences, each clean, score 100.
+  // lesson-types.ts holds types only and has no row.
+  'src/report/client/history-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  'src/report/client/lessons-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // The Dismiss confirm of the Queue rows, born 2026-10-24 at measured - 2: 13 sentences, each clean, score 100.
   'src/report/client/dismiss-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'src/report/client/queue-card.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },

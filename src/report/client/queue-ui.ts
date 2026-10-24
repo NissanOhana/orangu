@@ -37,6 +37,8 @@ export interface QueueView {
   closed: ReadonlySet<string>
   /** the open Dismiss confirm: its row renders open, with the confirm in it */
   confirm?: DismissState
+  /** each of the 3 store reads of the home failed, so the error names the store */
+  storeError?: boolean
 }
 
 export interface QueueContext {
@@ -80,7 +82,7 @@ export function day(at: number): string {
 }
 
 /** The last folder of a workspace path. */
-function folderOf(workspace: string): string {
+export function folderOf(workspace: string): string {
   return workspace.split('/').filter(Boolean).pop() ?? workspace
 }
 
@@ -235,7 +237,11 @@ function workspaceBlocks(read: QueueRead, from: number, view: Render, context: Q
 
 const LOADING = emptyNote('orangu counts the sessions of each applied change.')
 const ERROR_HINT = 'Run orangu in a terminal and choose Improvements to see the reason.'
-const queueError = (): string => emptyHero({ title: 'orangu could not compute the queue.', hint: ERROR_HINT, command: 'npx orangu' })
+/** The error state of a home section: its title, the hint and the front door to the reason. */
+export const readError = (title: string): string => emptyHero({ title, hint: ERROR_HINT, command: 'npx orangu' })
+/** The title of each section when all 3 store reads failed. */
+export const STORE_ERROR = 'orangu could not read the suggestion store.'
+const queueError = (store?: boolean): string => readError(store ? STORE_ERROR : 'orangu could not compute the queue.')
 
 /** The All workspaces disclosure: closed at first, and read on its first open only. */
 function allWorkspaces(main: QueueRead, view: Render, context: QueueContext): string {
@@ -275,6 +281,6 @@ function queueBody(q: QueueRead, view: Render, context: QueueContext): string {
 export function queueSection(view: QueueView, context: QueueContext): string {
   const q = view.main
   const counts = q ? (q.counts.open ? `${q.counts.due ? ` · ${num(q.counts.due)} due` : ''} · ${num(q.counts.open)} open` : ' · nothing open') : ''
-  const body = q === undefined ? LOADING : q === null ? queueError() : queueBody(q, { ...view, pending: { confirm: view.confirm } }, context)
+  const body = q === undefined ? LOADING : q === null ? queueError(view.storeError) : queueBody(q, { ...view, pending: { confirm: view.confirm } }, context)
   return `<details class="card pad mb16 sg-note" id="home-queue"${view.closed.has('home-queue') ? '' : ' open'}><summary><span class="chev" aria-hidden="true">▸</span><b>Queue</b>${counts}</summary><div class="mt8"${q === undefined ? ' aria-busy="true"' : ''}>${body}</div></details>`
 }

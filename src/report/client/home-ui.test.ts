@@ -5,6 +5,7 @@ import { queueFixture } from '../../../test/fixtures/suggestion-queue.js'
 import type { Ctx } from './app.js'
 import type { DataSource } from './data.js'
 import type { QueueRead } from './queue-types.js'
+import type { ChangeRow, LessonRead } from './lesson-types.js'
 
 /** The document parts that the frame touches, and what it did with them. */
 interface FakeDocument {
@@ -57,12 +58,20 @@ async function freshHome() {
   return import('./home-ui.js')
 }
 
-/** A data source whose queue read gives each value of `reads` in turn, and whose live frames the test sends. */
+/** The lesson read of a workspace with no lesson. */
+const NO_LESSONS: LessonRead = { v: 1, scope: '/w/repo', maxBytes: null, omitted: 0, lessons: [] }
+
+/**
+ * A data source whose queue read gives each value of `reads` in turn, and whose live frames the test sends. Its
+ * History and Lessons reads give an empty history and no lesson, unless a test sets them.
+ */
 function source(...reads: Array<QueueRead | null>) {
   const listeners: Array<(event: ServeEvent) => void> = []
   const queue = vi.fn(async () => (reads.length > 1 ? reads.shift()! : reads[0]!))
-  const ds = { queue, subscribe: (fn: (event: ServeEvent) => void) => (listeners.push(fn), () => {}) } as unknown as DataSource
-  return { ds, queue, send: (event: ServeEvent) => listeners.forEach((fn) => fn(event)) }
+  const history = vi.fn(async (_all?: boolean): Promise<ChangeRow[] | null> => [])
+  const lessons = vi.fn(async (_all?: boolean): Promise<LessonRead | null> => NO_LESSONS)
+  const ds = { queue, history, lessons, subscribe: (fn: (event: ServeEvent) => void) => (listeners.push(fn), () => {}) } as unknown as DataSource
+  return { ds, queue, history, lessons, send: (event: ServeEvent) => listeners.forEach((fn) => fn(event)) }
 }
 
 function ctx(suggestions: AppData['suggestions'] = []): Ctx {
@@ -86,7 +95,8 @@ describe('the home frame: the queue read', () => {
     expect(home.queueRead()).toBeUndefined()
     expect(home.homeSections(ctx(), 'session')).toContain('aria-busy="true"')
     await flush()
-    expect(rerender).toHaveBeenCalledTimes(1)
+    // the queue, History and Lessons reads each render the app once when they land
+    expect(rerender).toHaveBeenCalledTimes(3)
     expect(home.queueRead()?.counts.open).toBeGreaterThan(0)
     const html = home.homeSections(ctx(), 'session')
     expect(html).toContain('id="q-0-verdict"')
@@ -112,6 +122,143 @@ describe('the home frame: the queue read', () => {
   })
 })
 
+describe('the home frame: History and Lessons', () => {
+  /** A toggle of the disclosure `id`, as the capture listener of the document hears it. */
+  const toggle = (id: string, open = true) => {
+    const target = Object.assign(new (globalThis.HTMLDetailsElement as unknown as new () => object)(), { id, open })
+    for (const fn of page.on['toggle'] ?? []) fn({ target })
+  }
+  const ROW = { id: 'sg_0000000000c7', scope: 'repo', ruleId: null, status: 'applied', verdict: null, verdictTrusted: false, confoundedBy: [], baseline: 0, later: 0, checks: [], appliedAt: 1, title: 'Read each file once', files: [] } as ChangeRow
+
+  it('starts both reads on the Improvements screen only, once, beside the queue read', async () => {
+    const home = await freshHome()
+    const { ds, queue, history, lessons } = source(fixture())
+    home.ensureQueue(ds, { screen: 'overview' }, vi.fn())
+    expect(queue).toHaveBeenCalledTimes(1)
+    expect(history).not.toHaveBeenCalled()
+    expect(lessons).not.toHaveBeenCalled()
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    expect(history.mock.calls).toEqual([[]])
+    expect(lessons.mock.calls).toEqual([[]])
+    await flush()
+    expect(queue).toHaveBeenCalledTimes(1)
+  })
+
+  it('draws the Queue, History and Lessons sections in order, then the heading of the findings, with only the Queue open', async () => {
+    const home = await freshHome()
+    const { ds, history } = source(fixture())
+    history.mockResolvedValue([ROW])
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    const html = home.homeSections(ctx(), 'session')
+    const at = ['id="home-queue"', 'id="home-history"', 'id="home-lessons"', '<h3 class="mb16">Findings in this scope</h3>'].map((part) => html.indexOf(part))
+    expect(at.every((n, i) => n > (at[i - 1] ?? -1)), at.join(', ')).toBe(true)
+    expect(html).toContain('id="home-queue" open>')
+    expect(html).toContain('id="home-history"><summary>')
+    expect(html).toContain('id="home-lessons"><summary>')
+    expect(html).toContain('<b>History</b> · 1 applied change</summary>')
+    expect(html).toContain('<b>Lessons</b> · none for this workspace yet</summary>')
+  })
+
+  it('names the store in each section when the first read of each of the 3 failed', async () => {
+    const home = await freshHome()
+    const { ds, history, lessons } = source(null)
+    history.mockResolvedValue(null)
+    lessons.mockRejectedValue(new Error('the store is gone'))
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    const html = home.homeSections(ctx(), 'session')
+    expect(html.match(/orangu could not read the suggestion store\./g)).toHaveLength(3)
+    expect(html).not.toMatch(/could not compute the queue|could not read the history|could not read the lessons/)
+  })
+
+  it('keeps the error of each section when only some of the 3 reads failed', async () => {
+    const home = await freshHome()
+    const { ds, history } = source(null)
+    history.mockResolvedValue(null)
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    const html = home.homeSections(ctx(), 'session')
+    expect(html).toContain('orangu could not compute the queue.')
+    expect(html).toContain('orangu could not read the history.')
+    expect(html).not.toContain('could not read the suggestion store')
+  })
+
+  it('reads both again on a suggestion-updated frame, and a failed read again keeps the last good one', async () => {
+    const home = await freshHome()
+    const { ds, history, lessons, send } = source(fixture())
+    history.mockResolvedValueOnce([ROW]).mockResolvedValueOnce(null)
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    send({ type: 'suggestion-updated', id: 'sg_000000000001', status: 'rejected' })
+    await flush()
+    expect(history).toHaveBeenCalledTimes(2)
+    expect(lessons).toHaveBeenCalledTimes(2)
+    expect(home.homeSections(ctx(), 'session')).toContain('<b>History</b> · 1 applied change</summary>')
+  })
+
+  it('reads every workspace of History and of Lessons on the first open of its disclosure only', async () => {
+    const home = await freshHome()
+    const { ds, history, lessons } = source(fixture())
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    toggle('home-all-history', false)
+    expect(history.mock.calls).toEqual([[]])
+    toggle('home-all-history')
+    toggle('home-all-history')
+    expect(history.mock.calls).toEqual([[], [true]])
+    expect(lessons.mock.calls).toEqual([[]])
+    toggle('home-all-lessons')
+    await flush()
+    toggle('home-all-lessons')
+    expect(lessons.mock.calls).toEqual([[], [true]])
+    // once read, a read again reads every workspace too
+    toggle('home-all-history')
+    await flush()
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    const control = { hasAttribute: (name: string) => name === 'data-q-count' }
+    const target = Object.assign(new (globalThis.Element as unknown as new () => object)(), { closest: () => control })
+    for (const click of page.clicks) click({ target })
+    expect(history.mock.calls).toEqual([[], [true], [], [true]])
+    expect(lessons.mock.calls).toEqual([[], [true], [], [true]])
+  })
+
+  it('takes the scope of History from the queue read, else from the lesson read', async () => {
+    let home = await freshHome()
+    let reads = source({ ...fixture(), scope: 'all' })
+    reads.history.mockResolvedValue([ROW])
+    home.ensureQueue(reads.ds, SUGGEST, vi.fn())
+    await flush()
+    expect(home.homeSections(ctx(), 'session')).not.toContain('id="home-all-history"')
+    home = await freshHome()
+    reads = source(null)
+    reads.history.mockResolvedValue([ROW])
+    reads.lessons.mockResolvedValue({ ...NO_LESSONS, scope: 'all' })
+    home.ensureQueue(reads.ds, SUGGEST, vi.fn())
+    await flush()
+    expect(home.homeSections(ctx(), 'session')).not.toContain('id="home-all-history"')
+    home = await freshHome()
+    reads = source(fixture())
+    reads.history.mockResolvedValue([ROW])
+    home.ensureQueue(reads.ds, SUGGEST, vi.fn())
+    await flush()
+    expect(home.homeSections(ctx(), 'session')).toContain('id="home-all-history"')
+  })
+
+  it('draws History and Lessons in the audience of the page', async () => {
+    const home = await freshHome()
+    const { ds, history } = source(fixture())
+    const check = { metric: 'avgToolCalls', comparison: 'decreased', verdict: 'improved', before: 11, after: 2, pLower: 0.05, pHigher: 1 } as const
+    history.mockResolvedValue([{ ...ROW, status: 'verified', verdict: 'verified', verdictTrusted: true, checks: [check] }])
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    const plain = { ...ctx(), audience: 'plain' as const }
+    expect(home.homeSections(plain, 'session')).toContain('<li>Tool calls per session went down beyond chance.</li>')
+    expect(home.homeSections(ctx(), 'session')).toContain('p lower')
+  })
+})
+
 describe('the home frame: reads again', () => {
   it('reads again on a suggestion-updated frame, and a failed read keeps the last good list with a line that says so', async () => {
     const home = await freshHome()
@@ -122,7 +269,8 @@ describe('the home frame: reads again', () => {
     send({ type: 'suggestion-updated', id: 'sg_000000000001', status: 'rejected' })
     await flush()
     expect(queue).toHaveBeenCalledTimes(2)
-    expect(rerender).toHaveBeenCalledTimes(2)
+    // each of the 3 reads renders once on the first read and once on the read again
+    expect(rerender).toHaveBeenCalledTimes(6)
     const html = home.homeSections(ctx(), 'session')
     expect(html).toContain('id="q-0-verdict"')
     expect(html).toContain('orangu could not count the queue again. This list is from the last count.')

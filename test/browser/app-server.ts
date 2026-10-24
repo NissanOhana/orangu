@@ -7,6 +7,7 @@ import type { SuggestionRecord } from '../../src/suggest/types.js'
 import { makeFixtureHome } from '../fixtures/home.js'
 import { SessionBuilder } from '../fixtures/session-builder.js'
 import { APPLIED_AT, appliedOf, frozenOf, proposalOf, recordOf, sg, uuid } from '../fixtures/suggestion-records.js'
+import { historyRecords } from '../fixtures/suggestion-history.js'
 import { BROWSER_CAPABILITY } from './app-url.js'
 
 const temp = await mkdtemp(join(tmpdir(), 'orangu-browser-'))
@@ -36,6 +37,11 @@ const queueRecords: SuggestionRecord[] = [
   appliedOf(sg(0xb6), { proposal, ruleId: 'interruptions', title: 'Name the goal of the session in the first prompt' }),
   // 1 proposal of a second workspace: only the read of every workspace holds it, and none of its sessions is of serve
   recordOf(sg(0xd1), { status: 'proposed', statusAt: APPLIED_AT + 1_000, sessionIds: [uuid(901)], proposal: proposalOf(join(temp, 'other')), title: 'Keep one test command for the whole repository' }),
+  // The History and Lessons sections: the closed changes of the history fixture in this workspace, each verdict built
+  // by the store's own patch, so the queue keeps its 6 open records. The 3 applied records above are the open rows.
+  ...(await historyRecords(fixtureRepo)).filter((record) => record.status !== 'applied' && record.status !== 'regressed'),
+  // 1 dismissed change of the second workspace: only the reads of every workspace hold it
+  appliedOf(sg(0xd2), { proposal: proposalOf(join(temp, 'other')), sessionIds: [uuid(901)], ruleId: 'tool-errors', status: 'rejected', reasonCode: 'too-much-effort', statusAt: APPLIED_AT + 2_000, title: 'Keep the build output short' }),
 ]
 await mkdir(appHome, { recursive: true })
 await writeFile(join(appHome, 'suggestions.jsonl'), queueRecords.map((record) => `${JSON.stringify(record)}\n`).join(''), { mode: 0o600 })
