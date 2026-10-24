@@ -6,7 +6,8 @@ import { cpus, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
-import { SessionBuilder } from '../../test/fixtures/session-builder.js'
+import { SessionBuilder, buildCanonicalSession } from '../../test/fixtures/session-builder.js'
+import { projectSlug } from '../discover/discover.js'
 import { checkText } from '../ste/index.js'
 import { MASCOT_STACKED } from './mascot-ascii.js'
 import { CLI_VERBS } from './commands/index.js'
@@ -39,12 +40,16 @@ const stripEscapes = (s: string) => s.replace(/\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][
  * spinner frames, cursor codes and erase sequences only ever appear here.
  */
 const SCRIPT = process.platform === 'darwin' || process.platform === 'linux' ? '/usr/bin/script' : ''
-function runPty(args: string[], envDelta: Record<string, string> = {}): { out: string; status: number | null } {
+function ptyCommand(args: string[], envDelta: Record<string, string>): { spawnArgs: string[]; env: Record<string, string | undefined> } {
   const env = { ...process.env, TERM: 'xterm-256color', ...envDelta } as Record<string, string | undefined>
   // the suite may run under CI or inside Claude Code: both would switch the animation off
   for (const k of ['CI', 'NO_COLOR', 'FORCE_COLOR', 'FORCE_HYPERLINK', 'ORANGU_NO_ANIMATION', 'TERM_PROGRAM', 'CLAUDECODE', 'CLAUDE_CODE_SESSION_ID']) if (!(k in envDelta)) delete env[k]
   const cmd = ['node', CLI, ...args]
   const spawnArgs = process.platform === 'darwin' ? ['-q', '/dev/null', ...cmd] : ['-qec', cmd.map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' '), '/dev/null']
+  return { spawnArgs, env }
+}
+function runPty(args: string[], envDelta: Record<string, string> = {}): { out: string; status: number | null } {
+  const { spawnArgs, env } = ptyCommand(args, envDelta)
   const r = spawnSync(SCRIPT, spawnArgs, { encoding: 'utf8', env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 30_000 })
   return { out: r.stdout + r.stderr, status: r.status }
 }
@@ -93,6 +98,56 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
     expect(rendered(out)).toMatch(/^ {2}✓ analyzed /m)
     expect(rendered(out)).toMatch(/^ {2}next {5}claude "\/orangu:improve sg_[0-9a-f]{12}"$/m)
   })
+  it('bare orangu: Enter on IMPROVE prints the queue of this folder, with the app row last', async () => {
+    // Hermetic: the store, the user home and the only Claude root are temp folders, and the child runs in a temp
+    // workspace. The store holds 1 open record of that workspace, so IMPROVE is the first choice.
+    const claudeRoot = await mkdtemp(join(tmpdir(), 'orangu-cli-pty-claude-'))
+    const workspace = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-ws-')))
+    const project = join(claudeRoot, 'projects', projectSlug(workspace))
+    await mkdir(project, { recursive: true })
+    const evidence = join(project, 'aaaaaaaa-0000-4000-8000-000000000001.jsonl')
+    await writeFile(evidence, buildCanonicalSession({ cwd: workspace }).toJsonl())
+    const envDelta = {
+      ORANGU_HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-pty-store-')),
+      HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-pty-user-')),
+      ORANGU_CLAUDE_ROOTS: claudeRoot,
+      CLAUDE_CONFIG_DIR: claudeRoot,
+    }
+    const created = execFileSync('node', [CLI, 'suggest', '--rule', 'reread-files', '--scope', 'session', '--session', evidence, '--json'], {
+      encoding: 'utf8',
+      env: { ...process.env, ...envDelta },
+      cwd: workspace,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    })
+    const id = JSON.parse(created).record.id as string
+
+    const { spawnArgs, env } = ptyCommand(['--root', claudeRoot], envDelta)
+    // script(1) on macOS refuses a socket on its stdin, and a Node pipe is a socket pair: cat hands it a pipe
+    const child = spawn('/bin/sh', ['-c', 'cat | "$@"', 'sh', SCRIPT, ...spawnArgs], { env, cwd: workspace, stdio: ['pipe', 'pipe', 'pipe'] })
+    let out = ''
+    child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString('utf8')))
+    child.stderr.on('data', (chunk: Buffer) => (out += chunk.toString('utf8')))
+    const closed = new Promise<number | null>((resolve) => child.on('close', resolve))
+    try {
+      // the key goes in only after the first frame, which the dashboard draws after it turns raw mode on
+      await until(() => out.includes('enter selects'), 20_000, 'the first dashboard frame')
+      expect(rendered(out), 'the cursor is on IMPROVE').toMatch(/^ {2}> {3}IMPROVE Improvements · \d+ due/m)
+      child.stdin.end('\r')
+      const status = await closed
+      expect(status, out).toBe(0)
+    } finally {
+      // on a failure, q quits the dashboard and the end of stdin stops cat, so no child of sh outlives the test
+      if (!child.stdin.writableEnded) child.stdin.end('q')
+      child.kill()
+    }
+    const shown = rendered(out).replace(/\s+$/, '')
+    // the queue of the temp workspace, not of another folder: its header, its scope and the record
+    const queue = shown.slice(shown.indexOf('enter selects'))
+    expect(queue).toMatch(/^ {2}Improvements · \d+ due · 1 open$/m)
+    expect(queue).toContain(`\n  Workspace: ${workspace}\n`)
+    expect(queue).toContain(id)
+    expect(shown.split('\n').at(-1)).toBe('  See this queue in the app: orangu serve')
+  }, 60_000)
 })
 
 describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
