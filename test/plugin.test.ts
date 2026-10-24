@@ -1729,10 +1729,11 @@ describe('plugin packaging', () => {
     // 2026-10-24 the hand-offs: improve 1131 -> 1176, measured 1,130 -> 1,175 (+45). Step 2 names the interview for a user
     // who asks for outside research or a deeper interview, and says that a direct input gets its record first (+35). Step 5
     // names the interview as a second opinion before apply (+10). harness 1537 -> 1549, measured 1,536 -> 1,548 (+12): stage 6
-    // names the interview for a second opinion on 1 item before approval. interview 1429 -> 1484, measured 1,428 -> 1,483
-    // (+55): the research fallback names both hosts, as its own step. Claude Code uses the catalog only and never searches inline. A host
+    // names the interview for a second opinion on 1 item before approval. interview 1429 -> 1500, measured 1,428 -> 1,499
+    // (+71): the research fallback names both hosts, as its own step, and the consent question names the risk of a search
+    // in a host with no plugin agents before the user says yes. Claude Code uses the catalog only and never searches inline. A host
     // with no plugin agents (Codex) searches inline with the approved terms, and the user hears what that risks.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1176, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1484 }
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1176, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1500 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305, interview: 247 }
     const TOTAL_DESC_CEILING = 2750 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5); +246 for interview
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

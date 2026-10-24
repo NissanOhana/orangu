@@ -1,6 +1,6 @@
 # Outside-research policy
 
-Read this only after you consult the deterministic catalog and the user explicitly approves outside research. The harness review and the interview skill both need that explicit approval before any outside research. From the harness review, pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`. From the interview skill, pass the policy, the approved search terms and the change classes, with no evidence file.
+Read this only after you consult the deterministic catalog and the user explicitly approves outside research. The harness review and the interview skill both need that explicit approval before any outside research. From the harness review, pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`. From the interview skill, pass the policy, the approved search terms and the change classes, with no evidence file. A host with no plugin agents follows this policy in its own search, with the approved terms only.
 
 ## Nondisclosure boundary
 
