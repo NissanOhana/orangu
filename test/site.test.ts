@@ -1213,14 +1213,38 @@ describe('loop promises on the landing and the README', () => {
   const improveBody = improve.slice(improve.indexOf('\n---', 3) + 4)
   const loopRules = readFileSync(join(root, 'plugin/skills/shared/loop.md'), 'utf8')
   const claims = (pattern: RegExp): string[] => surfaces.filter(([, text]) => pattern.test(text)).map(([label]) => label)
+  /** The text of one `## ` section of a Markdown file, or '' when the file has no such heading. */
+  const section = (text: string, heading: string): string => {
+    const start = text.indexOf(`\n## ${heading}\n`)
+    if (start < 0) return ''
+    const end = text.indexOf('\n## ', start + 1)
+    return text.slice(start, end < 0 ? undefined : end)
+  }
 
   it('names the Remember step only while the improve skill reads the lessons', () => {
     const remember = claims(/\b6\. Remember\b|\*\*Remember\.\*\*/)
     expect(remember).toContain('site/index.src.html')
     for (const label of remember) {
-      expect(improveBody, `${label} names Remember, but improve does not link the loop rules`).toContain('](../shared/loop.md)')
-      expect(loopRules, `${label} names Remember, but the loop rules do not read the lessons`).toContain('orangu suggest --lessons')
+      // The improve body links the loop rules for other steps too, so only this sentence proves the lessons read.
+      expect(improveBody, `${label} names Remember, but improve does not read the lessons before it ranks`)
+        .toContain('Read the lessons of their rules before you rank, as [the loop rules](../shared/loop.md) direct.')
+      // The harness review reads lessons by folder or scope. The improve skill reads them by rule.
+      expect(section(loopRules, 'Read the lessons'), `${label} names Remember, but the loop rules do not read the lessons of a rule`)
+        .toContain("`orangu suggest --lessons --rule '<ruleId>' --json --quiet`")
     }
+  })
+
+  it('names the history and the lessons of the local app only while the app draws both sections', () => {
+    const app = claims(/the history of your changes and their lessons/)
+    expect(app).toContain('site/index.src.html')
+    // the client modules, not their tests: a test that names an id draws nothing
+    const clientDir = join(root, 'src/report/client')
+    const modules = (readdirSync(clientDir, { recursive: true }) as string[])
+      .filter((file) => file.endsWith('.ts') && !/\.(?:test|spec|d)\.ts$/.test(file))
+      .map((file) => readFileSync(join(clientDir, file), 'utf8'))
+    for (const label of app)
+      for (const id of ['id="home-history"', 'id="home-lessons"'])
+        expect(modules.some((text) => text.includes(id)), `${label} names the history and the lessons, but no client module draws ${id}`).toBe(true)
   })
 
   it('says start with the improve skill only while its body takes the first todo item', () => {
