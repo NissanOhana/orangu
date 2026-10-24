@@ -85,9 +85,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/shared/interview.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (47 of 47) after the rewrite, 100 (74 of 74) with the question rules, 2026-10-24
   'plugin/skills/shared/loop.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface 2026-10-22, born at max(80, measured - 2): measured 100 (118 of 118), 0 findings
   'plugin/skills/shared/ste.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (86 of 86, table cells included)
-  'plugin/skills/shared/untrusted-input.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (37 of 37) after the rewrite
-  'plugin/codex/*/openai.yaml': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (6 of 6), no change was needed
-  'plugins/orangu/.codex-plugin/plugin.json#interface': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (9 of 9): the 33-word long description became 3 sentences
+  'plugin/skills/shared/untrusted-input.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (37 of 37) after the rewrite, 100 (47 of 47) with the web text rules, 2026-10-24
+  'plugin/codex/*/openai.yaml': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (6 of 6), no change was needed, 100 (9 of 9) with the interview yaml, 2026-10-24
+  'plugins/orangu/.codex-plugin/plugin.json#interface': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (9 of 9): the 33-word long description became 3 sentences, 100 (10 of 10) with the fourth skill, 2026-10-24
   // Z: floor 65 -> 98. Measured 100 (6 of 6, was 2 of 3, score 67). The Codex CLI fallback was one 36-word
   // sentence. It is now 5 short sentences, with the same 2 paths in the same order.
   'scripts/build.mjs#codex': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
@@ -104,7 +104,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // score 68 (was 37 sentences, score 73). The cell at :25 holds "can't", and the cells carry 14 semicolons.
   'plugin/skills/analyze/references/reading-the-report.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (116 of 116): the table cells are sentences, and "can't" became "cannot"
   'plugin/skills/harness/SKILL.md': { floor: 94, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 6 }, // measured 96 (109 of 114): 5 long sentences hold pinned lists (the 9 change classes, the network-disclosure list, the manifest fields, the per-item disclosure, the "echoing ... just before each invocation" apply rule) under the 1,400-word body ceiling
-  'plugin/skills/shared/research-sources.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (34 of 34) after the rewrite, 100 (36 of 36) with the consent sentence, 2026-10-24
+  'plugin/skills/shared/research-sources.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (34 of 34) after the rewrite, 100 (37 of 37) with the consent sentence and the host rule, 2026-10-24
   'plugin/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2): the 28-word sentence became 2
   '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
   // P2: the show-me skill, its slot rules and its two template sources. New surfaces, born in STE at

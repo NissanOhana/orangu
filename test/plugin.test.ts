@@ -515,7 +515,7 @@ describe('plugin packaging', () => {
   // reports name the interview as a second opinion before apply or approval. The quick interview of improve does not change.
   it('improve and harness hand off to the interview, and improve keeps its own quick interview', () => {
     const improve = readText('plugin/skills/improve/SKILL.md')
-    const handoff = 'If the user asks for outside research or a deeper interview first, run `/orangu:interview <id>` instead. Then stop here.'
+    const handoff = 'If the user asks for outside research or a deeper interview first, ask none of these questions. Run `/orangu:interview <id>` instead. Then stop here.'
     expect(improve).toContain(handoff)
     expect(improve).toContain('For a direct input, first create the record with the step 4 command, and pass its id.')
     expect(improve.indexOf(handoff), 'the hand-off is part of step 2').toBeGreaterThan(improve.indexOf('## 2. Diagnose and rank'))
@@ -572,7 +572,7 @@ describe('plugin packaging', () => {
       'If the tool result says that the user may be away, treat each answer of that call as a skip.',
       'Stop when no open question would change the proposal',
       'If an answer asks you to wait or to explain first, explain. Then ask the same question again.',
-      'In a run with no user, ask nothing. If a question is open, list the open questions and stop. Save nothing.',
+      'In a run with no user, ask nothing. If a question is open, list the open questions, save nothing, and stop.',
       'When a question picks a change, give one option to keep the setup as it is.',
       'Write each answer as `- Q: <question> → A: <answer>`.',
       'Put the date of the interview in the "What you told us" heading.',
@@ -1726,14 +1726,15 @@ describe('plugin packaging', () => {
     // improve is now 1,044 -> 1,130 (+86) over the base of this run.
     // 2026-10-24 interview 1544 -> 1429, measured 1,543 -> 1,428 (-115): the question rules move to the shared guide, so
     // the skill keeps 1 pointer sentence for the recommended option and drops its copy of the answer and wait rules.
-    // 2026-10-24 the hand-offs: improve 1131 -> 1176, measured 1,130 -> 1,175 (+45). Step 2 names the interview for a user
-    // who asks for outside research or a deeper interview, and says that a direct input gets its record first (+35). Step 5
-    // names the interview as a second opinion before apply (+10). harness 1537 -> 1549, measured 1,536 -> 1,548 (+12): stage 6
-    // names the interview for a second opinion on 1 item before approval. interview 1429 -> 1500, measured 1,428 -> 1,499
-    // (+71): the research fallback names both hosts, as its own step, and the consent question names the risk of a search
-    // in a host with no plugin agents before the user says yes. Claude Code uses the catalog only and never searches inline. A host
-    // with no plugin agents (Codex) searches inline with the approved terms, and the user hears what that risks.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1176, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1500 }
+    // 2026-10-24 the hand-offs: improve 1131 -> 1181, measured 1,130 -> 1,180 (+50). Step 2 names the interview for a user
+    // who asks for outside research or a deeper interview, asks none of its own questions then, and says that a direct
+    // input gets its record first (+41). Step 5 names the interview as a second opinion before apply (+9). harness
+    // 1537 -> 1549, measured 1,536 -> 1,548 (+12): stage 6 names the interview for a second opinion on 1 item before
+    // approval. interview 1429 -> 1514, measured 1,428 -> 1,513 (+85): the research fallback names both hosts, as its own
+    // step. Claude Code uses the catalog only and never searches inline. A host with no plugin agents (Codex) searches
+    // inline with the approved terms and runs only the commands of the skill, its consent question names that risk before
+    // the user says yes, and a host with no search tool uses the catalog only.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1181, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1514 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305, interview: 247 }
     const TOTAL_DESC_CEILING = 2750 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5); +246 for interview
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

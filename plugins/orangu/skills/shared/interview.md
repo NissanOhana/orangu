@@ -18,7 +18,7 @@ The harness review interviews in depth, after both analysts return and before an
 10. A timed-out or empty answer is a skip, never consent. If the tool result says that the user may be away, treat each answer of that call as a skip.
 11. Stop when no open question would change the proposal, or when the answers turn short and the same.
 12. If an answer asks you to wait or to explain first, explain. Then ask the same question again.
-13. In a run with no user, ask nothing. If a question is open, list the open questions and stop. Save nothing.
+13. In a run with no user, ask nothing. If a question is open, list the open questions, save nothing, and stop.
 
 ## Topics
 

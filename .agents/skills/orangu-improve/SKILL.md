@@ -49,7 +49,7 @@ Fix the cause the evidence shows. As the change, never copy the session's own fa
 
 Before drafting, interview the user on what the evidence cannot show, as [the interview guide](../shared/interview.md) directs: AskUserQuestion when the choices are finite, free text otherwise. Answers are user-stated context, never a measurement.
 
-If the user asks for outside research or a deeper interview first, run `$orangu-interview <id>` instead. Then stop here. For a direct input, first create the record with the step 4 command, and pass its id.
+If the user asks for outside research or a deeper interview first, ask none of these questions. Run `$orangu-interview <id>` instead. Then stop here. For a direct input, first create the record with the step 4 command, and pass its id.
 
 ## 3. Research only where it adds value
 
