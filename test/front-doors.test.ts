@@ -5,6 +5,10 @@
  * `orangu help all`, the Commands row of docs/USAGE.md, docs/DETERMINISM.md, docs/DATA-CONTRACTS.md and the output of
  * `orangu suggest` itself name it.
  *
+ * site/llms.txt is not a person surface: it is the index for agents, and an agent can need the store API. So this
+ * sweep does not read it. site/llms-full.txt joins README.md, docs/USAGE.md and docs/DETERMINISM.md for agents. The
+ * sweep reads README.md itself.
+ *
  * The sweep has no allowlist. A hit names its surface and its line: fix the copy, never this test.
  */
 import { readFileSync, readdirSync } from 'node:fs'

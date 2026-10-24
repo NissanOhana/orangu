@@ -1394,6 +1394,16 @@ describe('docs/DETERMINISM.md later verification', () => {
     expect(later).toContain('`orangu suggest --record <id>`')
   })
 
+  it('runs the comparison only for an applied record, because the code refuses it for a regressed one', () => {
+    // measureCohortEffect (src/suggest/cohort.ts) throws for a status other than applied or verified, and the loop
+    // rules skip --effect for a regressed record (plugin/skills/shared/loop.md, "Give each result to orangu")
+    const verify = later.split('\n').find((line) => line.startsWith('`orangu-improve --verify <id>`')) ?? ''
+    const effect = verify.split(/(?<=\.)\s+/).filter((sentence) => sentence.includes('--effect'))
+    expect(effect).toHaveLength(1)
+    expect(effect[0]).toMatch(/^For an `applied` record, /)
+    expect(effect[0]).not.toContain('regressed')
+  })
+
   it('names the 2 checkpoints of the code and the cost of each look', () => {
     // src/suggest/cohort.ts grades the later side at COHORT_MIN sessions and at the complete cohort of COHORT_MAX
     expect(later).toContain(`Orangu grades the later sessions at 2 fixed checkpoints: the first ${COHORT_MIN}, then the complete cohort of up to ${COHORT_MAX}.`)

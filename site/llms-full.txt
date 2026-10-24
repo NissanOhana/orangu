@@ -402,7 +402,7 @@ The AI skill can make the reviewed edit. Its application receipt is skill-author
 
 ### Later verification
 
-`orangu-improve --verify <id>` is available for an `applied` or `regressed` session- or repo-scope record. Global records cannot be applied or verified. The skill writes no verification file and chooses no sessions. It runs the read-only `orangu suggest --effect <id>` and reports the verdict. Only on `verified` does it run `orangu suggest --set <id> verified`, which recomputes the same result before it records anything. For a `regressed` record, it asks you to keep or undo the change.
+`orangu-improve --verify <id>` is available for an `applied` or `regressed` session- or repo-scope record. Global records cannot be applied or verified. The skill writes no verification file and chooses no sessions. For an `applied` record, it runs the read-only `orangu suggest --effect <id>` and reports the verdict. Only on `verified` does it run `orangu suggest --set <id> verified`, which recomputes the same result before it records anything. For a `regressed` record, it asks you to keep or undo the change.
 
 Orangu picks both cohorts from the proposal's canonical workspace. It revalidates the workspace path, inode, and recorded creation time before and after it reads the transcripts. The cut is the application time that the store stamped as `appliedAt`:
 
