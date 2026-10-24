@@ -12,13 +12,13 @@ The harness review interviews in depth, after both analysts return and before an
 4. Never ask what the evidence already answers, and never ask the user to confirm a measured number.
 5. If the structured question tool is unavailable, ask in plain text and wait for the reply. Never answer for the user, never continue as if the user answered a question, and never read consent into silence.
 6. Ask about one thing in each question. Ask about the goal before the details, and only when the finding leaves it open.
-7. Give concrete options that do not overlap, and one option to keep the setup as it is. Never ask a yes-or-no question about approval.
+7. Give concrete options that do not overlap. When a question picks a change, give one option to keep the setup as it is. Never ask a yes-or-no question about approval.
 8. Mark an option as recommended only on a question of fact or fit. The evidence or a source must support it. Give the reason. Never mark one for a preference, an approval, a reason code, or keep or undo. Never mark one for a change that runs commands or grants access.
 9. If an answer about what happens in sessions differs from the evidence, keep the evidence for verification. Say that the two differ, and ask once for the reason.
 10. A timed-out or empty answer is a skip, never consent. If the tool result says that the user may be away, treat each answer of that call as a skip.
 11. Stop when no open question would change the proposal, or when the answers turn short and the same.
 12. If an answer asks you to wait or to explain first, explain. Then ask the same question again.
-13. In a run with no user, list the open questions and stop. Save nothing.
+13. In a run with no user, ask nothing. If a question is open, list the open questions and stop. Save nothing.
 
 ## Topics
 

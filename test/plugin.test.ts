@@ -526,10 +526,12 @@ describe('plugin packaging', () => {
     expect(guide).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
     // born 2026-09-16 at 619 measured words: a ceiling, not a target (PROJECT.md: ratchets only go down, and
     // one is raised only in the commit that measures the growth that needs it)
-    // 2026-10-24 620 -> 902, measured 614 -> 901 (+287): the question rules that the interview skill shipped with move
+    // 2026-10-24 620 -> 915, measured 614 -> 914 (+300): the question rules that the interview skill shipped with move
     // here, so improve and harness ask the same way. 1 intro sentence names the interview skill, rule 3 ends a skip for 1
     // question only, rules 6 to 13 are new, and 1 answer rule gives the Q and A line, the date and "Not confirmed by you".
-    expect(guide.split(/\s+/).filter(Boolean).length, 'interview guide words').toBeLessThan(902)
+    // Rule 7 asks for the keep option only on a question that picks a change, and rule 13 stops a run with no user only
+    // when a question is open, so a headless improve run with complete evidence still saves its proposal (+13 of the 300).
+    expect(guide.split(/\s+/).filter(Boolean).length, 'interview guide words').toBeLessThan(915)
   })
 
   // The question rules (2026-10-24) live once in the guide, so improve, harness and interview ask the same way: 1 thing
@@ -550,7 +552,8 @@ describe('plugin packaging', () => {
       'If the tool result says that the user may be away, treat each answer of that call as a skip.',
       'Stop when no open question would change the proposal',
       'If an answer asks you to wait or to explain first, explain. Then ask the same question again.',
-      'In a run with no user, list the open questions and stop. Save nothing.',
+      'In a run with no user, ask nothing. If a question is open, list the open questions and stop. Save nothing.',
+      'When a question picks a change, give one option to keep the setup as it is.',
       'Write each answer as `- Q: <question> → A: <answer>`.',
       'Put the date of the interview in the "What you told us" heading.',
       'List that part under "Not confirmed by you".',
@@ -612,7 +615,7 @@ describe('plugin packaging', () => {
   })
 
   // A proposal from an interview names what the user said, what the user left open, and what outside sources showed.
-  // Those sources were not checked by any step, so they stay out of the manifest (BRAINSTORM decision 11).
+  // Those sources were not checked by any step, so they stay out of the manifest.
   it('the artifact contract names the 3 interview sections and keeps outside perspectives out of the manifest', () => {
     for (const path of ['plugin/skills/shared/artifact-contract.md', '.agents/skills/shared/artifact-contract.md']) {
       const contract = readText(path)
@@ -637,7 +640,7 @@ describe('plugin packaging', () => {
   })
 
   // Both dispatchers need a yes from the user before any search: harness because the user asked for outside research,
-  // interview because a model-invocable skill can start with no act of the user (BRAINSTORM decision 12).
+  // interview because a model-invocable skill can start with no act of the user.
   it('the research policy and the researcher description need the explicit approval of the user for both skills', () => {
     const policy = readText('plugin/skills/shared/research-sources.md')
     const intro = policy.split('\n## ')[0]!
