@@ -12,6 +12,8 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
+import { ANALYZER_RULE_IDS } from '../src/analyze/rule-ids.js'
+import { COHORT_MAX, COHORT_MIN } from '../src/suggest/cohort-stats.js'
 import { PARAGRAPH, htmlToText } from '../src/ste/index.js'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
 
@@ -1011,6 +1013,14 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     for (const line of [commands[0]!, lead]) expect(line).toContain('In a pipe or in CI, it prints a short summary of the latest session.')
   })
 
+  it('names your improvements in both menu lines, and the improve skill as the start in Claude Code', () => {
+    const commands = llms.slice(llms.indexOf('Concretely, you can:')).split('\n').filter((line) => line.startsWith('- '))
+    expect(commands[0]).toContain('Choose your improvements, this repository, all sessions, or one session.')
+    const started = llms.slice(llms.indexOf('## Getting started'), llms.indexOf('## Optional'))
+    expect(started).toContain('`npx orangu` opens a menu: your improvements, this repository, all sessions, or one session.')
+    expect(started).toContain('Then start with `/orangu:improve`.')
+  })
+
   it('llms-full.txt concatenates README, USAGE, and DETERMINISM verbatim with absolute links, under the 40 KB ratchet', () => {
     expect(full.startsWith('# orangu llms-full.txt')).toBe(true)
     for (const source of ['README.md', 'docs/USAGE.md', 'docs/DETERMINISM.md']) expect(full).toContain(`\n# ${source}\n`)
@@ -1033,6 +1043,9 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // no evidence to the researcher, outside sources stay candidates, no file change in a second opinion). The cap moves
     // 40,800 -> 41,801.
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(41_801)
+    // llms.txt states a size for this file: the claim holds while the file is under it
+    const claimedKb = Number(/docs concatenated \(under (\d+) KB\)/.exec(llms)?.[1])
+    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(claimedKb * 1_000)
   })
 
   it('never leaks a private working path', () => {
@@ -1189,15 +1202,49 @@ describe('landing SEO surface', () => {
 
 describe('README entry points', () => {
   const readme = readFileSync(join(root, 'README.md'), 'utf8')
+  const lines = readme.split('\n')
+  /** The text of one `## ` section of the README, or '' when it has no such heading. */
+  const section = (heading: string): string => {
+    const start = readme.indexOf(`\n## ${heading}\n`)
+    if (start < 0) return ''
+    const end = readme.indexOf('\n## ', start + 1)
+    return readme.slice(start, end < 0 ? undefined : end)
+  }
 
-  it('shows the bare command in the header links and first in the quick start', () => {
-    const header = readme.split('\n').find((line) => line.includes('[sample report](')) ?? ''
+  it('shows the bare command in the header links, and the 3 front doors in Get started with no second option', () => {
+    const header = lines.find((line) => line.includes('[sample report](')) ?? ''
     expect(header).toContain('`npx orangu`')
     expect(header).not.toContain('`npx orangu report`')
-    const quick = readme.slice(readme.indexOf('## Quick start'))
-    const block = quick.match(/```bash\n([\s\S]*?)```/)?.[1] ?? ''
-    expect(block.split('\n')[0]).toMatch(/^npx orangu\s+#/)
-    expect(block).toContain('npx orangu report ')
+    const started = section('Get started')
+    const block = started.match(/```bash\n([\s\S]*?)```/)?.[1] ?? ''
+    // the terminal, the local app, then the latest session only: the order of the landing install cards
+    expect(block.trimEnd().split('\n').map((line) => line.split('#')[0]!.trim())).toEqual(['npx orangu', 'npx orangu serve', 'npx orangu report'])
+    expect(started).toContain('start with `/orangu:improve`')
+    expect(started).toContain('`orangu help all` lists every command and flag.')
+  })
+
+  it('leads with the harness tagline and says what the transcript records', () => {
+    expect(lines[6]).toBe('**Improve your agent harness, one checked change at a time.**')
+    expect(lines[14]).toContain('records what they did')
+    expect(readme).not.toContain('nobody reads')
+  })
+
+  it('shows the loop as 1 numbered list of 6 named steps, then the boundary', () => {
+    const loop = section('The improve loop')
+    const steps = loop.split('\n').filter((line) => /^\d+\. /.test(line))
+    expect(steps.map((line) => /^(\d+)\. \*\*(\w+)\.\*\*/.exec(line)?.slice(1).join(' '))).toEqual(['1 Observe', '2 See', '3 Propose', '4 Apply', '5 Verify', '6 Remember'])
+    // 1 list: no other line between the steps
+    expect(loop.slice(loop.indexOf(steps[0]!), loop.indexOf(steps[5]!)).split('\n').filter((line) => line.trim() !== '')).toHaveLength(5)
+    expect(loop).toContain('orangu never changes your harness by itself.')
+    expect(steps[4]).toContain('`/orangu:improve --verify <id>`')
+  })
+
+  it('names the rule count that the analyzer has, on the README and the landing', () => {
+    for (const [label, text] of [['README.md', readme], ['site/index.src.html', readFileSync(srcPath, 'utf8')]] as const) {
+      const counts = [...text.matchAll(/\b(\d+) deterministic rules\b/g)].map((match) => Number(match[1]))
+      expect(counts.length, label).toBeGreaterThan(0)
+      for (const count of counts) expect(count, label).toBe(ANALYZER_RULE_IDS.length)
+    }
   })
 })
 
@@ -1319,6 +1366,38 @@ describe('docs/USAGE.md entry point', () => {
   it('uses the help word for the catalog matches: known improvements', () => {
     expect(usage).toContain('- Improvements: matching known improvements,')
     expect(usage).not.toMatch(/known (fixes|changes)/)
+  })
+
+  it('names the queue, the history and the lessons of the app on the Improvements line', () => {
+    const improvements = usage.split('\n').find((line) => line.startsWith('- Improvements: ')) ?? ''
+    for (const section of ['queue', 'history', 'lessons']) expect(improvements, section).toContain(section)
+  })
+
+  it('names the store API only in its Commands row, and the two help levels', () => {
+    // a person runs a front door or a Claude Code skill: the store commands are for the skills and scripts
+    expect(usage.split('\n').filter((line) => /\borangu suggest\b/.test(line))).toEqual([
+      '| `orangu suggest` | The suggestion store that the skills call. `orangu help all` lists its flags |',
+    ])
+    expect(usage).toContain('`orangu --help` shows the common commands. `orangu help all` shows every command and flag.')
+    expect(usage).toContain('`/orangu:improve --verify <id>` shows the comparison and records a final verdict.')
+  })
+})
+
+describe('docs/DETERMINISM.md later verification', () => {
+  const doc = readFileSync(join(root, 'docs/DETERMINISM.md'), 'utf8')
+  const later = doc.slice(doc.indexOf('### Later verification'), doc.indexOf('### Supporting skills'))
+
+  it('takes an applied or a regressed record, and moves it only on a final verdict', () => {
+    expect(later).toContain('`orangu-improve --verify <id>` is available for an `applied` or `regressed` session- or repo-scope record.')
+    // a final verdict that is not a win moves the record too, through the record step
+    expect(later).not.toContain('Only `verified` moves the record')
+    expect(later).toContain('`orangu suggest --record <id>`')
+  })
+
+  it('names the 2 checkpoints of the code and the cost of each look', () => {
+    // src/suggest/cohort.ts grades the later side at COHORT_MIN sessions and at the complete cohort of COHORT_MAX
+    expect(later).toContain(`Orangu grades the later sessions at 2 fixed checkpoints: the first ${COHORT_MIN}, then the complete cohort of up to ${COHORT_MAX}.`)
+    expect(later).toContain('More looks raise the chance of a false win')
   })
 })
 

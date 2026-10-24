@@ -4,7 +4,7 @@
 
 # orangu
 
-**Observe the session. Improve the next outcome.**
+**Improve your agent harness, one checked change at a time.**
 
 Local, offline, deterministic observability for Claude Code, Cowork, and Desktop sessions. Optional Claude Code skills turn the evidence into reviewable changes.
 
@@ -12,7 +12,7 @@ Local, offline, deterministic observability for Claude Code, Cowork, and Desktop
 
 </div>
 
-You run coding agents for hours. The transcript on disk is the only record of what they did, and nobody reads it. orangu does, and shows you:
+You run coding agents for hours. The transcript on disk records what they did. orangu reads it and shows you:
 
 | What the session does not tell you | What orangu shows |
 |---|---|
@@ -25,42 +25,32 @@ One real number from one local session: 34.9M of the 37.0M tokens the model proc
 
 ccusage counts your token usage. orangu tells you what to change.
 
-## Quick start
+## Get started
 
 **Read-only.** orangu reads the session files already on your disk and writes one HTML file. It needs no SDK, proxy, account, instrumentation, upload, or telemetry. It can analyze your whole history from the minute you install it, not only new sessions.
 
 ```bash
-npx orangu                 # report dashboard -> repo, global, or one session
-npx orangu report          # latest session -> self-contained HTML report, opened in your browser
-npx orangu pick            # choose a session (running ones first), Enter opens its report
-npx orangu report current  # the session Claude Code is running you in; or -s <id> for any
-npx orangu serve           # live loopback viewer over every local session
-npx orangu repo            # recurring patterns across this repository's sessions
-npx orangu global          # ... across every session on the machine
-npx orangu harness         # what your config declares vs what your sessions did, and the rules they broke
-npx orangu ste <file>      # check a prose file against the STE writing rules
+npx orangu          # start here: choose a report, or see what to improve next
+npx orangu serve    # the local app: every session, live, and your improvements
+npx orangu report   # only the latest session, as one HTML report
 ```
 
-Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare `orangu` keeps the compact latest-session summary instead of waiting for input.
+In Claude Code, start with `/orangu:improve` after you install the [skills](#skills). It finds the next change to make, and it checks each change that you apply.
 
-The repo and global choices open the same self-contained HTML report for a whole scope. From the
-command line, `orangu repo --html <file>` writes it where you say. `--open` writes it to the temp
-directory and hands it to your browser. `--json` stays a side-effect-free machine read.
+Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare `orangu` keeps the compact latest-session summary instead of waiting for input. `orangu help all` lists every command and flag.
 
 orangu needs Node.js 20 or newer and no runtime dependency. The [usage guide](docs/USAGE.md) has more commands, inputs, and limits.
 
 ## The improve loop
 
-1. **Observe.** orangu parses, redacts, counts, reconciles, matches, and ranks locally against 44 deterministic rules. It uses no model.
-2. **See.** The report shows what happened: quality, time, and tokens as separate axes, with the evidence behind each finding.
-3. **Propose.** `/orangu:improve` explains one finding's bounded evidence and drafts a structured proposal. It never edits your project.
-4. **Apply, with a receipt.** `/orangu:apply` applies one explicitly reviewed proposal and records what changed and which checks ran.
+1. **Observe.** orangu parses, redacts, counts, and ranks each session against 44 deterministic rules. It uses no model.
+2. **See.** The report and `orangu serve` show quality, time, and tokens as separate axes, with the evidence behind each finding.
+3. **Propose.** `/orangu:improve` or `/orangu:harness` drafts one proposal for each change, in one of nine [change classes](docs/DATA-CONTRACTS.md). A proposal changes no file.
+4. **Apply.** You approve each change by its id. Then `/orangu:apply <id>` makes it and records which checks ran.
+5. **Verify.** orangu compares your later sessions in the same workspace with the sessions before the change. The change counts as verified only when they beat the earlier sessions beyond chance. No model is in the measurement. `/orangu:improve --verify <id>` shows the comparison and records a final verdict.
+6. **Remember.** orangu keeps each verdict and each reason that you pick. The next proposal reads them. `orangu serve` lists them under Improvements.
 
-Each proposal has one of nine change classes ([data contracts](docs/DATA-CONTRACTS.md)). They are instruction files, scripts and CLIs, hooks, skills to create, skills to discover, subagents and agents, MCP servers, plugins, and workflow and configuration.
-
-When you ask, `/orangu:apply` applies a session or repo-wide change. orangu then checks it on later sessions from the same workspace. The change counts as verified only when those sessions beat the sessions before it beyond chance. `orangu suggest --effect <id>` shows the comparison.
-
-Whole-harness (global) changes stay review-only. A proposal is not an application, and a later comparison is not causal proof. The full boundary is in [determinism and skill authority](docs/DETERMINISM.md).
+orangu never changes your harness by itself. Global (whole-machine) changes stay proposals. A later comparison is not causal proof. The full boundary is in [determinism and skill authority](docs/DETERMINISM.md).
 
 ## Skills
 
@@ -72,7 +62,7 @@ Whole-harness (global) changes stay review-only. A proposal is not an applicatio
 | Skill | What it does |
 |---|---|
 | `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence. Open the report of the current session |
-| `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
+| `/orangu:improve` | Start here. Find the next change, draft one reviewable proposal, and check each change that you apply |
 | `/orangu:interview` | Research outside options for one suggestion, then interview you before its proposal or a second opinion (`/orangu:interview <sg_id>`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. A rule that did not hold gets a hook, not another note |

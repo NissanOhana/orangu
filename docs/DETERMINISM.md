@@ -115,7 +115,7 @@ The AI skill can make the reviewed edit. Its application receipt is skill-author
 
 ### Later verification
 
-`orangu-improve --verify <id>` is available for an `applied` session- or repo-scope record. Global records cannot be applied or verified. The skill writes no verification file and chooses no sessions. It runs the read-only `orangu suggest --effect <id>` and reports the verdict. Only on `verified` does it run `orangu suggest --set <id> verified`, which recomputes the same result before it records anything.
+`orangu-improve --verify <id>` is available for an `applied` or `regressed` session- or repo-scope record. Global records cannot be applied or verified. The skill writes no verification file and chooses no sessions. It runs the read-only `orangu suggest --effect <id>` and reports the verdict. Only on `verified` does it run `orangu suggest --set <id> verified`, which recomputes the same result before it records anything. For a `regressed` record, it asks you to keep or undo the change.
 
 Orangu picks both cohorts from the proposal's canonical workspace. It revalidates the workspace path, inode, and recorded creation time before and after it reads the transcripts. The cut is the application time that the store stamped as `appliedAt`:
 
@@ -134,11 +134,11 @@ The overall verdict is the first of these that applies:
 4. `verified`: every directional check improved.
 5. `within-noise`: any other result.
 
-Only `verified` moves the record. Its receipt (`v: 2`) carries both session lists, the cohort means and medians, both p-values, and each verdict. The store and every display re-grade it from its own numbers and stamp `verificationTrust: "computed-v2"`.
+`--set <id> verified` moves the record to `verified`. Its receipt (`v: 2`) carries both session lists, the cohort means and medians, both p-values, and each verdict. The store and every display re-grade it from its own numbers and stamp `verificationTrust: "computed-v2"`. For any other verdict, the skill runs `orangu suggest --record <id>`. It moves the record to `regressed` or `unproven` only when the verdict is final.
 
 Orangu names other proposals applied in the same workspace inside the measured window in `confoundedBy`. The later sessions measured those changes too, so the effect is not attributable to this one alone. Verification does not block on them. To keep each effect attributable, apply one change at a time.
 
-The `verified` state is intentionally narrow: later sessions beat the baseline beyond chance on the reviewed metrics. Different sessions are different tasks. So it does not prove that the applied change caused the difference or that overall quality improved. Repeated checks as sessions arrive raise the chance of a false win. The cap of 10 sessions bounds it.
+The `verified` state is intentionally narrow: later sessions beat the baseline beyond chance on the reviewed metrics. Different sessions are different tasks. So it does not prove that the applied change caused the difference or that overall quality improved. Orangu grades the later sessions at 2 fixed checkpoints: the first 3, then the complete cohort of up to 10. More looks raise the chance of a false win.
 
 Supported metrics are `avgTotalTokens`, `avgToolCalls`, `avgToolErrors`, `avgActiveMs`, `avgContextPeak`, `avgTestRunsFailed`, `avgBuildRunsFailed`, and `avgInterruptions`. Supported comparisons are `decreased`, `not-increased`, `increased`, `not-decreased`, and `equal`.
 

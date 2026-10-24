@@ -9,7 +9,7 @@
 
 Concretely, you can:
 
-- `npx orangu` : opens a menu in the terminal. Choose this repository, all sessions, or one session. In a pipe or in CI, it prints a short summary of the latest session.
+- `npx orangu` : opens a menu in the terminal. Choose your improvements, this repository, all sessions, or one session. In a pipe or in CI, it prints a short summary of the latest session.
 - `npx orangu report` : builds and opens a self-contained HTML report for the latest session. `orangu report <id>` opens another session, and `orangu report current` opens the current Claude Code session.
 - `npx orangu serve` : opens a live viewer on loopback (127.0.0.1) over every local session.
 - `npx orangu repo` / `npx orangu global` : aggregates every session of one repository, or of the whole machine.
@@ -45,12 +45,12 @@ Facts an LLM should not get wrong:
 ## Getting started
 
 - orangu needs Node.js 20 or newer. It has zero runtime dependencies.
-- `npx orangu` opens a menu: this repository, all sessions, or one session. In a pipe or in CI, it prints a short summary of the latest session. `npx orangu report` opens the latest local session. `npx orangu serve` follows all of them live.
-- Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`.
+- `npx orangu` opens a menu: your improvements, this repository, all sessions, or one session. In a pipe or in CI, it prints a short summary of the latest session. `npx orangu report` opens the latest local session. `npx orangu serve` follows all of them live.
+- Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`. Then start with `/orangu:improve`.
 - [Sample report](https://nissanohana.github.io/orangu/sample.html): a synthetic, deterministic report you can open without installing anything.
 - [Repository sample](https://nissanohana.github.io/orangu/sample-repo.html): the same synthetic corpus aggregated across sessions, as `npx orangu repo --html` writes it.
 
 ## Optional
 
-- [llms-full.txt](https://nissanohana.github.io/orangu/llms-full.txt): README, usage and determinism docs concatenated (under 40 KB).
+- [llms-full.txt](https://nissanohana.github.io/orangu/llms-full.txt): README, usage and determinism docs concatenated (under 42 KB).
 - [npm package](https://www.npmjs.com/package/orangu) and [GitHub repository](https://github.com/NissanOhana/orangu) (MIT).

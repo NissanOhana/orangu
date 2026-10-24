@@ -7,7 +7,7 @@ Orangu reads supported local session files. It turns them into a self-contained 
 Orangu requires Node.js 20 or newer.
 
 ```bash
-npx orangu          # dashboard: repo, global, or a session
+npx orangu          # dashboard: improvements, repo, global, or a session
 npx orangu report   # latest session
 npm install --global orangu
 ```
@@ -26,7 +26,7 @@ node dist/orangu.js report
 
 | Command | Purpose |
 |---|---|
-| `orangu` (no verb) | Open the terminal dashboard for repo, global, and session reports |
+| `orangu` (no verb) | Open the terminal dashboard for your improvements and for repo, global, and session reports |
 | `orangu report [selector]` | Write and open one self-contained session report |
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |
@@ -39,7 +39,7 @@ node dist/orangu.js report
 | `orangu evidence <input>` | Emit the bounded, always-redacted evidence a skill reads |
 | `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
 | `orangu harness` | Compare declared harness configuration with observed use, and show the rules that did not hold |
-| `orangu suggest` | Inspect and transition validated suggestion records |
+| `orangu suggest` | The suggestion store that the skills call. `orangu help all` lists its flags |
 | `orangu ste <file...\|->` | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. Terminal output and the layout of a report can give false findings. For terminal output, add `--lines` |
 | `orangu show-me [selector]` | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
 
@@ -47,7 +47,7 @@ A session selector is `latest`, a session id or unique prefix, a supported `.jso
 
 `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
 
-On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. These keep bare `orangu` on the latest-session brief, which never waits for input:
+On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. When this workspace has open improvements, the first choice prints their queue. The next choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. These keep bare `orangu` on the latest-session brief, which never waits for input:
 
 - a pipe, `CI`, `TERM=dumb`, or `ORANGU_NO_ANIMATION=1`
 - `--plain` or `--quiet`
@@ -59,7 +59,7 @@ Orangu refuses `--html` and `--open` with `--json`, which is a machine read with
 
 `orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
 
-Use `orangu --help` for flags and output controls.
+`orangu --help` shows the common commands. `orangu help all` shows every command and flag.
 
 ### Rules that did not hold
 
@@ -97,7 +97,7 @@ The file report and localhost app render the same session evidence:
 - Context and tokens: context changes, compaction, cache behavior, and token composition.
 - Coverage: parsed and unknown records plus usage reconciliation.
 - Repo and Global: recurring patterns across supported sessions.
-- Improvements: matching known improvements, proposals, receipts, host commands, and scope-aware verification state.
+- Improvements: matching known improvements, with their commands. In `orangu serve`, also your queue, the history of applied changes with their verdicts, and the lessons for each workspace.
 
 ## Beta feedback
 
@@ -133,7 +133,7 @@ The optional skills use `orangu evidence` as their only transcript boundary:
 observe -> propose -> explicit apply -> later sessions vs baseline, beyond chance
 ```
 
-- Session and repo scope support proposal, explicit application, and later same-workspace verification. `orangu suggest --effect <id>` shows the comparison read-only.
+- Session and repo scope support proposal, explicit application, and later same-workspace verification. `/orangu:improve --verify <id>` shows the comparison and records a final verdict.
 - Global scope is proposal-only.
 
 See [determinism and AI skills](DETERMINISM.md) and [data contracts](DATA-CONTRACTS.md) for the complete rules.

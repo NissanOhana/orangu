@@ -13,7 +13,7 @@ orangu 0.12.0. This file concatenates README.md, docs/USAGE.md, docs/DETERMINISM
 
 # orangu
 
-**Observe the session. Improve the next outcome.**
+**Improve your agent harness, one checked change at a time.**
 
 Local, offline, deterministic observability for Claude Code, Cowork, and Desktop sessions. Optional Claude Code skills turn the evidence into reviewable changes.
 
@@ -21,7 +21,7 @@ Local, offline, deterministic observability for Claude Code, Cowork, and Desktop
 
 </div>
 
-You run coding agents for hours. The transcript on disk is the only record of what they did, and nobody reads it. orangu does, and shows you:
+You run coding agents for hours. The transcript on disk records what they did. orangu reads it and shows you:
 
 | What the session does not tell you | What orangu shows |
 |---|---|
@@ -34,42 +34,32 @@ One real number from one local session: 34.9M of the 37.0M tokens the model proc
 
 ccusage counts your token usage. orangu tells you what to change.
 
-## Quick start
+## Get started
 
 **Read-only.** orangu reads the session files already on your disk and writes one HTML file. It needs no SDK, proxy, account, instrumentation, upload, or telemetry. It can analyze your whole history from the minute you install it, not only new sessions.
 
 ```bash
-npx orangu                 # report dashboard -> repo, global, or one session
-npx orangu report          # latest session -> self-contained HTML report, opened in your browser
-npx orangu pick            # choose a session (running ones first), Enter opens its report
-npx orangu report current  # the session Claude Code is running you in; or -s <id> for any
-npx orangu serve           # live loopback viewer over every local session
-npx orangu repo            # recurring patterns across this repository's sessions
-npx orangu global          # ... across every session on the machine
-npx orangu harness         # what your config declares vs what your sessions did, and the rules they broke
-npx orangu ste <file>      # check a prose file against the STE writing rules
+npx orangu          # start here: choose a report, or see what to improve next
+npx orangu serve    # the local app: every session, live, and your improvements
+npx orangu report   # only the latest session, as one HTML report
 ```
 
-Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare `orangu` keeps the compact latest-session summary instead of waiting for input.
+In Claude Code, start with `/orangu:improve` after you install the [skills](#skills). It finds the next change to make, and it checks each change that you apply.
 
-The repo and global choices open the same self-contained HTML report for a whole scope. From the
-command line, `orangu repo --html <file>` writes it where you say. `--open` writes it to the temp
-directory and hands it to your browser. `--json` stays a side-effect-free machine read.
+Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare `orangu` keeps the compact latest-session summary instead of waiting for input. `orangu help all` lists every command and flag.
 
 orangu needs Node.js 20 or newer and no runtime dependency. The [usage guide](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md) has more commands, inputs, and limits.
 
 ## The improve loop
 
-1. **Observe.** orangu parses, redacts, counts, reconciles, matches, and ranks locally against 44 deterministic rules. It uses no model.
-2. **See.** The report shows what happened: quality, time, and tokens as separate axes, with the evidence behind each finding.
-3. **Propose.** `/orangu:improve` explains one finding's bounded evidence and drafts a structured proposal. It never edits your project.
-4. **Apply, with a receipt.** `/orangu:apply` applies one explicitly reviewed proposal and records what changed and which checks ran.
+1. **Observe.** orangu parses, redacts, counts, and ranks each session against 44 deterministic rules. It uses no model.
+2. **See.** The report and `orangu serve` show quality, time, and tokens as separate axes, with the evidence behind each finding.
+3. **Propose.** `/orangu:improve` or `/orangu:harness` drafts one proposal for each change, in one of nine [change classes](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md). A proposal changes no file.
+4. **Apply.** You approve each change by its id. Then `/orangu:apply <id>` makes it and records which checks ran.
+5. **Verify.** orangu compares your later sessions in the same workspace with the sessions before the change. The change counts as verified only when they beat the earlier sessions beyond chance. No model is in the measurement. `/orangu:improve --verify <id>` shows the comparison and records a final verdict.
+6. **Remember.** orangu keeps each verdict and each reason that you pick. The next proposal reads them. `orangu serve` lists them under Improvements.
 
-Each proposal has one of nine change classes ([data contracts](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md)). They are instruction files, scripts and CLIs, hooks, skills to create, skills to discover, subagents and agents, MCP servers, plugins, and workflow and configuration.
-
-When you ask, `/orangu:apply` applies a session or repo-wide change. orangu then checks it on later sessions from the same workspace. The change counts as verified only when those sessions beat the sessions before it beyond chance. `orangu suggest --effect <id>` shows the comparison.
-
-Whole-harness (global) changes stay review-only. A proposal is not an application, and a later comparison is not causal proof. The full boundary is in [determinism and skill authority](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md).
+orangu never changes your harness by itself. Global (whole-machine) changes stay proposals. A later comparison is not causal proof. The full boundary is in [determinism and skill authority](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md).
 
 ## Skills
 
@@ -81,7 +71,7 @@ Whole-harness (global) changes stay review-only. A proposal is not an applicatio
 | Skill | What it does |
 |---|---|
 | `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence. Open the report of the current session |
-| `/orangu:improve` | Draft one reviewable proposal from a finding (`/orangu:improve latest`) |
+| `/orangu:improve` | Start here. Find the next change, draft one reviewable proposal, and check each change that you apply |
 | `/orangu:interview` | Research outside options for one suggestion, then interview you before its proposal or a second opinion (`/orangu:interview <sg_id>`) |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
 | `/orangu:harness` | Review the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. A rule that did not hold gets a hook, not another note |
@@ -159,7 +149,7 @@ Orangu reads supported local session files. It turns them into a self-contained 
 Orangu requires Node.js 20 or newer.
 
 ```bash
-npx orangu          # dashboard: repo, global, or a session
+npx orangu          # dashboard: improvements, repo, global, or a session
 npx orangu report   # latest session
 npm install --global orangu
 ```
@@ -178,7 +168,7 @@ node dist/orangu.js report
 
 | Command | Purpose |
 |---|---|
-| `orangu` (no verb) | Open the terminal dashboard for repo, global, and session reports |
+| `orangu` (no verb) | Open the terminal dashboard for your improvements and for repo, global, and session reports |
 | `orangu report [selector]` | Write and open one self-contained session report |
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |
@@ -191,7 +181,7 @@ node dist/orangu.js report
 | `orangu evidence <input>` | Emit the bounded, always-redacted evidence a skill reads |
 | `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
 | `orangu harness` | Compare declared harness configuration with observed use, and show the rules that did not hold |
-| `orangu suggest` | Inspect and transition validated suggestion records |
+| `orangu suggest` | The suggestion store that the skills call. `orangu help all` lists its flags |
 | `orangu ste <file...\|->` | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. Terminal output and the layout of a report can give false findings. For terminal output, add `--lines` |
 | `orangu show-me [selector]` | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
 
@@ -199,7 +189,7 @@ A session selector is `latest`, a session id or unique prefix, a supported `.jso
 
 `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
 
-On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. The first choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. These keep bare `orangu` on the latest-session brief, which never waits for input:
+On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. When this workspace has open improvements, the first choice prints their queue. The next choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. These keep bare `orangu` on the latest-session brief, which never waits for input:
 
 - a pipe, `CI`, `TERM=dumb`, or `ORANGU_NO_ANIMATION=1`
 - `--plain` or `--quiet`
@@ -211,7 +201,7 @@ Orangu refuses `--html` and `--open` with `--json`, which is a machine read with
 
 `orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
 
-Use `orangu --help` for flags and output controls.
+`orangu --help` shows the common commands. `orangu help all` shows every command and flag.
 
 ### Rules that did not hold
 
@@ -249,7 +239,7 @@ The file report and localhost app render the same session evidence:
 - Context and tokens: context changes, compaction, cache behavior, and token composition.
 - Coverage: parsed and unknown records plus usage reconciliation.
 - Repo and Global: recurring patterns across supported sessions.
-- Improvements: matching known improvements, proposals, receipts, host commands, and scope-aware verification state.
+- Improvements: matching known improvements, with their commands. In `orangu serve`, also your queue, the history of applied changes with their verdicts, and the lessons for each workspace.
 
 ## Beta feedback
 
@@ -285,7 +275,7 @@ The optional skills use `orangu evidence` as their only transcript boundary:
 observe -> propose -> explicit apply -> later sessions vs baseline, beyond chance
 ```
 
-- Session and repo scope support proposal, explicit application, and later same-workspace verification. `orangu suggest --effect <id>` shows the comparison read-only.
+- Session and repo scope support proposal, explicit application, and later same-workspace verification. `/orangu:improve --verify <id>` shows the comparison and records a final verdict.
 - Global scope is proposal-only.
 
 See [determinism and AI skills](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md) and [data contracts](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md) for the complete rules.
@@ -412,7 +402,7 @@ The AI skill can make the reviewed edit. Its application receipt is skill-author
 
 ### Later verification
 
-`orangu-improve --verify <id>` is available for an `applied` session- or repo-scope record. Global records cannot be applied or verified. The skill writes no verification file and chooses no sessions. It runs the read-only `orangu suggest --effect <id>` and reports the verdict. Only on `verified` does it run `orangu suggest --set <id> verified`, which recomputes the same result before it records anything.
+`orangu-improve --verify <id>` is available for an `applied` or `regressed` session- or repo-scope record. Global records cannot be applied or verified. The skill writes no verification file and chooses no sessions. It runs the read-only `orangu suggest --effect <id>` and reports the verdict. Only on `verified` does it run `orangu suggest --set <id> verified`, which recomputes the same result before it records anything. For a `regressed` record, it asks you to keep or undo the change.
 
 Orangu picks both cohorts from the proposal's canonical workspace. It revalidates the workspace path, inode, and recorded creation time before and after it reads the transcripts. The cut is the application time that the store stamped as `appliedAt`:
 
@@ -431,11 +421,11 @@ The overall verdict is the first of these that applies:
 4. `verified`: every directional check improved.
 5. `within-noise`: any other result.
 
-Only `verified` moves the record. Its receipt (`v: 2`) carries both session lists, the cohort means and medians, both p-values, and each verdict. The store and every display re-grade it from its own numbers and stamp `verificationTrust: "computed-v2"`.
+`--set <id> verified` moves the record to `verified`. Its receipt (`v: 2`) carries both session lists, the cohort means and medians, both p-values, and each verdict. The store and every display re-grade it from its own numbers and stamp `verificationTrust: "computed-v2"`. For any other verdict, the skill runs `orangu suggest --record <id>`. It moves the record to `regressed` or `unproven` only when the verdict is final.
 
 Orangu names other proposals applied in the same workspace inside the measured window in `confoundedBy`. The later sessions measured those changes too, so the effect is not attributable to this one alone. Verification does not block on them. To keep each effect attributable, apply one change at a time.
 
-The `verified` state is intentionally narrow: later sessions beat the baseline beyond chance on the reviewed metrics. Different sessions are different tasks. So it does not prove that the applied change caused the difference or that overall quality improved. Repeated checks as sessions arrive raise the chance of a false win. The cap of 10 sessions bounds it.
+The `verified` state is intentionally narrow: later sessions beat the baseline beyond chance on the reviewed metrics. Different sessions are different tasks. So it does not prove that the applied change caused the difference or that overall quality improved. Orangu grades the later sessions at 2 fixed checkpoints: the first 3, then the complete cohort of up to 10. More looks raise the chance of a false win.
 
 Supported metrics are `avgTotalTokens`, `avgToolCalls`, `avgToolErrors`, `avgActiveMs`, `avgContextPeak`, `avgTestRunsFailed`, `avgBuildRunsFailed`, and `avgInterruptions`. Supported comparisons are `decreased`, `not-increased`, `increased`, `not-decreased`, and `equal`.
 

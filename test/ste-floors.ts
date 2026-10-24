@@ -55,7 +55,8 @@ export const BELOW_TARGET: Readonly<Record<string, string>> = {}
 // One group per owning chunk, one comment line between groups; a row never moves between groups.
 export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // S1: README, the landing, 404 and llms sources, the npm description, the sample page copy
-  'README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
+  // the front-door rewrite (Get started, the 6-step loop): measured 100 (113 of 113), 0 findings. 98 is max(80, measured - 2)
+  'README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Z: floor 97 -> 98, findings 2 -> 1. Measured 100 (242 of 243) after the skill cards in STE ("actually" gone).
   // The 1 finding is the plugin install card (:492): its sentences start with a code span, which the checker
   // blanks, so it reads two sentences as one of 28 words.
@@ -63,15 +64,15 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // last starts with a word now.
   'site/index.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
-  'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
+  'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (53 of 53) after the front-door lines
   'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   'scripts/build-sample.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   // S2: every user doc in docs/
-  'docs/DETERMINISM.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (205 sentences) after the STE rewrite, was 74 with 2 em dashes
+  'docs/DETERMINISM.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (219 of 219) after the checkpoint lines, was 74 with 2 em dashes before the STE rewrite
   // G12: the user doc of orangu god, born at max(80, measured - 2) with 0 banned tokens and findings at the measured count.
   'docs/GOD.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (205 sentences), 0 findings
   'docs/README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (18 sentences) after the STE rewrite, was 94
-  'docs/USAGE.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (109 sentences) after the STE rewrite, was 82
+  'docs/USAGE.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (136 of 136) after the front-door lines, was 82 before the STE rewrite
   'docs/feedback.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (23 sentences) after the STE rewrite, was 95
   // P1a: improve, apply, feedback, shared, and the Codex copy (yaml, manifest, mirror fallback)
   // Raised by the P1a STE rewrite of each file (one instruction per sentence, no semicolon lists, vertical
