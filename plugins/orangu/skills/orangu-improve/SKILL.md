@@ -9,7 +9,7 @@ Evidence: a supported Claude Code, Cowork, or Desktop session.
 
 Orangu measures. You interpret and write a reviewable proposal, never an automatic claim of improvement. Never edit the target repository. Use this skill for one session diagnosis and a command from a report. The work on recurring repo/global improvement belongs to `orangu harness`.
 
-Read [the artifact contract](references/artifact-contract.md) before writing or verifying any proposal. Write all user-facing text in STE, as [the STE rules](../shared/ste.md) direct.
+Read [the artifact contract](../shared/artifact-contract.md) before writing or verifying any proposal. Write all user-facing text in STE, as [the STE rules](../shared/ste.md) direct.
 
 ## Inputs
 

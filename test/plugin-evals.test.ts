@@ -235,7 +235,7 @@ describe('plugin eval suite', () => {
         built: ['skill-fired.md', 'echoes-the-id.md', 'names-the-verify-steps.md', 'no-claimed-verdict.md'],
       },
     }
-    const skillText = ['plugin/skills/improve/SKILL.md', 'plugin/skills/improve/references/artifact-contract.md', 'plugin/skills/shared/loop.md']
+    const skillText = ['plugin/skills/improve/SKILL.md', 'plugin/skills/shared/artifact-contract.md', 'plugin/skills/shared/loop.md']
       .map(readText).join('\n')
     for (const [name, { step: file, built }] of Object.entries(LOOP_CASES)) {
       const dir = `${EVALS}/${name}`

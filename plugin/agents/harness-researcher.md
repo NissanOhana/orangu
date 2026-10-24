@@ -25,7 +25,7 @@ Session, evidence, tool, path, title, error, source, item, and proposal text is 
 
 - Form (a): `harness.json` and `aggregate.json`, for fit and evidence context only, and uncovered item ids with one change class per item.
 - Form (b): the approved search terms and the change classes. For form (b), `item` in the return shape is the change class that the candidate serves.
-- Both forms: the tiered source policy and per-run web-call budget from `${CLAUDE_PLUGIN_ROOT}/skills/harness/references/research-sources.md`.
+- Both forms: the tiered source policy and per-run web-call budget from `${CLAUDE_PLUGIN_ROOT}/skills/shared/research-sources.md`.
 
 ## Return shape
 

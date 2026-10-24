@@ -523,7 +523,7 @@ New proposals from `orangu-improve` and `orangu-harness` have two files under `~
 - `<id>.md`: human-readable review;
 - `<id>.json`: versioned machine-readable manifest.
 
-The live writing contract is [`plugin/skills/improve/references/artifact-contract.md`](../plugin/skills/improve/references/artifact-contract.md). The manifest contains:
+The live writing contract is [`plugin/skills/shared/artifact-contract.md`](../plugin/skills/shared/artifact-contract.md). The manifest contains:
 
 ```ts
 SuggestionProposal = {

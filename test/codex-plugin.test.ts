@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 
 const root = process.cwd()
 const readJson = (path: string) => JSON.parse(readFileSync(join(root, path), 'utf8'))
@@ -102,9 +102,28 @@ describe('Codex plugin packaging', () => {
       expect(readText(`plugins/orangu/skills/orangu-${name}/agents/openai.yaml`)).toBe(readText(`plugin/codex/${name}/openai.yaml`))
     }
     // references and the shared rules ride along so relative links resolve in both hosts
-    for (const ref of ['orangu-improve/references/artifact-contract.md', 'orangu-apply/references/application-contract.md', 'shared/untrusted-input.md', 'shared/interview.md', 'shared/ste.md', 'shared/loop.md']) {
+    for (const ref of ['shared/artifact-contract.md', 'shared/research-sources.md', 'orangu-apply/references/application-contract.md', 'shared/untrusted-input.md', 'shared/interview.md', 'shared/ste.md', 'shared/loop.md']) {
       expect(existsSync(join(root, 'plugins/orangu/skills', ref)), ref).toBe(true)
       expect(readText(`plugins/orangu/skills/${ref}`)).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
+    }
+  })
+
+  // A mirror copies only each skill's own folder and shared/ (scripts/build.mjs). A link into another skill's folder,
+  // or to a file that the mirror does not carry, breaks only in Codex, so each relative link must resolve in each tree.
+  it('resolves every relative Markdown link inside each Codex mirror', () => {
+    for (const tree of ['.agents/skills', 'plugins/orangu/skills']) {
+      let links = 0
+      for (const path of filesUnder(tree).filter((p) => p.endsWith('.md'))) {
+        const text = readText(path).replace(/```[\s\S]*?```/g, '')
+        for (const match of text.matchAll(/\]\(([^)\s]+)\)/g)) {
+          const target = match[1]!.split('#')[0]!
+          if (!target || /^[a-z][a-z0-9+.-]*:/i.test(target)) continue
+          links++
+          expect(existsSync(join(root, dirname(path), target)), `${path} links ${target}`).toBe(true)
+          expect(join(dirname(path), target).startsWith(`${tree}/`), `${path} links ${target} inside ${tree}`).toBe(true)
+        }
+      }
+      expect(links, `${tree} has relative links to check`).toBeGreaterThan(10)
     }
   })
 

@@ -65,7 +65,7 @@ Cover instruction files and memory, hooks, skills and agents, MCP servers, and s
 
 ## 4. Classify, consult the catalog, then optional research
 
-Choose the smallest fitting class (definitions: [the artifact contract](../improve/references/artifact-contract.md)). Create one record per item the interview kept.
+Choose the smallest fitting class (definitions: [the artifact contract](../shared/artifact-contract.md)). Create one record per item the interview kept.
 
 A rule that did not hold is a mechanical miss: give it a check, not a note. This applies to each `enforcement.broken` row, each `enforcement.notes` row with matching complaints, and each cut `enforcement.memory` row. Choose `hook` (a PreToolUse hook that blocks the call and quotes the rule) or `workflow-config` (a `permissions.deny` rule). Do not propose another `instruction` line for the same rule.
 
@@ -76,7 +76,7 @@ Skip a row where `blocked` equals `calls`: a check already holds it. For a cut m
 
 `--session` is mandatory and carries the example sessions. The CLI derives the record's identity from them. Then run `orangu suggest --show '<id>' --json`, and consult its catalog before any outside research. Cite matches as `catalog: <id>`.
 
-External skill discovery is candidate work, never an install action. The runtime never runs `npx skills find` and never installs anything. A proposal may hand the user a search query. Only if the user explicitly asked for outside research may the read-only `orangu:harness-researcher` evaluate uncovered candidates under [the research policy](references/research-sources.md). Every discovered item keeps its source and `verifiedAt: null` until curated.
+External skill discovery is candidate work, never an install action. The runtime never runs `npx skills find` and never installs anything. A proposal may hand the user a search query. Only if the user explicitly asked for outside research may the read-only `orangu:harness-researcher` evaluate uncovered candidates under [the research policy](../shared/research-sources.md). Every discovered item keeps its source and `verifiedAt: null` until curated.
 
 Before you search online or open any URL, reduce the question to generic feature and change-class terms. Never send local prompts, paths, session or suggestion ids, project/repository/customer names, evidence content, proposal text, code, or local error text to a network service or place them in a URL. The researcher receives only uncovered item ids, change classes, evidence file paths, and the policy.
 
@@ -84,7 +84,7 @@ Before you search online or open any URL, reduce the question to generic feature
 
 Dedupe items that name the same change. Keep every evidence anchor. Prefer the smallest change. Rank by supported expected effect against effort, informed by the interview. Never invent a token or millisecond value for a quality-only change.
 
-Write the same structured artifacts as `/orangu:improve`, per [the artifact contract](../improve/references/artifact-contract.md). Markdown-only proposals are legacy input and must not be created here.
+Write the same structured artifacts as `/orangu:improve`, per [the artifact contract](../shared/artifact-contract.md). Markdown-only proposals are legacy input and must not be created here.
 
 For every retained record:
 
