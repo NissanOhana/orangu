@@ -296,4 +296,141 @@ describe('the home frame: Dismiss', () => {
     observe?.()
     expect(page.focused).toBe(0)
   })
+
+  /** A gate that holds each call to the store until the test opens it. */
+  function gated() {
+    let open: () => void = () => {}
+    const gate = new Promise<void>((resolve) => (open = resolve))
+    return { gate, open: () => open() }
+  }
+
+  /** The fixture item with `ids`, newest first, and the id of the item as the first of them. */
+  function itemOf(ids: string[]): QueueRead {
+    const read = folded()
+    return { ...read, groups: { ...read.groups, review: [{ ...read.groups.review[0]!, id: ids[0]!, ids }] } }
+  }
+
+  it('a second click on Dismiss while the calls run starts no second batch', async () => {
+    const home = await freshHome()
+    const { ds } = source(folded())
+    const { gate, open } = gated()
+    const setStatus = vi.fn(async (id: string) => {
+      await gate
+      return { id, status: 'rejected' }
+    })
+    Object.assign(ds, { setStatus })
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    click({ 'data-q-dismiss': NEWEST })
+    check('other')
+    click({ 'data-q-confirm': '' })
+    click({ 'data-q-confirm': '' })
+    open()
+    await flush()
+    expect(setStatus.mock.calls.map(([id]) => id)).toEqual([NEWEST, MIDDLE, OLDEST])
+  })
+
+  it('a retry after a stop sends only the records that did not change', async () => {
+    const home = await freshHome()
+    const { ds } = source(folded())
+    const setStatus = vi.fn(async (id: string) => ({ id, status: 'rejected' }))
+    setStatus.mockImplementationOnce(async (id: string) => ({ id, status: 'rejected' })).mockImplementationOnce(async () => null as never)
+    Object.assign(ds, { setStatus })
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    click({ 'data-q-dismiss': NEWEST })
+    check('other')
+    click({ 'data-q-confirm': '' })
+    await flush()
+    // the read again still holds the 3 records, so only the confirm knows which one changed
+    click({ 'data-q-confirm': '' })
+    await flush()
+    expect(setStatus.mock.calls.map(([id]) => id)).toEqual([NEWEST, MIDDLE, MIDDLE, OLDEST])
+    expect(page.regions.at(-1)?.textContent).toBe('orangu dismissed 2 records of this finding.')
+  })
+
+  it('a Dismiss click on another row while the calls run opens no confirm there', async () => {
+    const home = await freshHome()
+    const { ds } = source(folded())
+    const { gate, open } = gated()
+    const setStatus = vi.fn(async (id: string) => {
+      await gate
+      return { id, status: 'rejected' }
+    })
+    Object.assign(ds, { setStatus })
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    const other = fixture().groups.apply[0]!.id
+    click({ 'data-q-dismiss': NEWEST })
+    check('other')
+    click({ 'data-q-confirm': '' })
+    click({ 'data-q-dismiss': other })
+    open()
+    await flush()
+    expect(home.homeSections(ctx(), 'session')).not.toContain(`id="qd-${other}"`)
+    expect(setStatus.mock.calls.map(([id]) => id)).toEqual([NEWEST, MIDDLE, OLDEST])
+  })
+
+  it('sends only the records that the confirm counted, when a read folds a newer record in while it is open', async () => {
+    const home = await freshHome()
+    const NEWER = 'sg_00000000e004'
+    const { ds, send } = source(folded(), itemOf([NEWER, NEWEST, MIDDLE, OLDEST]))
+    const setStatus = vi.fn(async (id: string) => ({ id, status: 'rejected' }))
+    Object.assign(ds, { setStatus })
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    click({ 'data-q-dismiss': NEWEST })
+    check('other')
+    send({ type: 'suggestion-updated', id: NEWER, status: 'new' })
+    await flush()
+    click({ 'data-q-confirm': '' })
+    await flush()
+    expect(setStatus.mock.calls.map(([id]) => id)).toEqual([NEWEST, MIDDLE, OLDEST])
+  })
+
+  it('a read that shows a record of the confirm closed takes it out, so a retry does not send it again', async () => {
+    const home = await freshHome()
+    // another writer closed the middle record: the call to it fails, and the next read holds the oldest record only
+    const { ds } = source(folded(), itemOf([OLDEST]))
+    const setStatus = vi.fn(async (id: string) => (id === MIDDLE ? null : { id, status: 'rejected' }))
+    Object.assign(ds, { setStatus })
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    click({ 'data-q-dismiss': NEWEST })
+    check('other')
+    click({ 'data-q-confirm': '' })
+    await flush()
+    expect(home.homeSections(ctx(), 'session')).not.toContain('This dismisses')
+    click({ 'data-q-confirm': '' })
+    await flush()
+    expect(setStatus.mock.calls.map(([id]) => id)).toEqual([NEWEST, MIDDLE, OLDEST])
+  })
+
+  it('keeps the code of the calls that run: a reason picked while they run is not kept for the retry', async () => {
+    const home = await freshHome()
+    const { ds } = source(folded())
+    const { gate, open } = gated()
+    let refuse = true
+    // the 3 arguments of a status call: the id, the status and the code
+    const setStatus = vi.fn(async (id: string, _status: string, _code: string) => {
+      if (id === NEWEST) await gate
+      if (id === MIDDLE && refuse) {
+        refuse = false
+        return null
+      }
+      return { id, status: 'rejected' }
+    })
+    Object.assign(ds, { setStatus })
+    home.ensureQueue(ds, SUGGEST, vi.fn())
+    await flush()
+    click({ 'data-q-dismiss': NEWEST })
+    check('not-wanted')
+    click({ 'data-q-confirm': '' })
+    check('wrong-cause')
+    open()
+    await flush()
+    click({ 'data-q-confirm': '' })
+    await flush()
+    expect(setStatus.mock.calls.map(([id, , code]) => `${id} ${code}`)).toEqual([NEWEST, MIDDLE, MIDDLE, OLDEST].map((id) => `${id} not-wanted`))
+  })
 })

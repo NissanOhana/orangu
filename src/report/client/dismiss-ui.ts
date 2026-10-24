@@ -49,7 +49,8 @@ function confirmBox(key: string, c: DismissState): string {
     `<div class="sg-proposal dismiss" id="qd-${key}" role="group" aria-labelledby="qd-${key}-title">`,
     `<div id="qd-${key}-title">Dismiss this item? You cannot undo it. Dismiss does not undo a change in your files.</div>`,
     c.ids.length > 1 ? `<div class="mt8">This dismisses ${num(c.ids.length)} records of this finding.</div>` : '',
-    `<fieldset><legend>Pick the reason. The next proposal reads it.</legend>${options}</fieldset>`,
+    // while the calls run, the reason stays the one that they send
+    `<fieldset${c.busy ? ' disabled' : ''}><legend>Pick the reason. The next proposal reads it.</legend>${options}</fieldset>`,
     `<div class="pill-row"><button type="button" class="btn-sm" id="qd-${key}-go" data-q-confirm aria-disabled="${off}"${c.busy ? ' aria-busy="true"' : ''}>Dismiss</button>`,
     `<button type="button" class="btn-sm" id="qd-${key}-cancel" data-q-cancel${c.busy || c.done ? ' aria-disabled="true"' : ''}>Cancel</button></div>`,
     c.line ? `<p class="small mt8">${esc(c.line)}</p>` : '',

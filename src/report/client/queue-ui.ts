@@ -154,8 +154,14 @@ function triedBefore(item: QueueRow): string {
   return `<div class="sg-pfield"><b>Tried before.</b><ul>${items.join('')}</ul>${shown}</div>`
 }
 
+/** 1 render of the section: the view, and the open confirm until a row draws it. */
+type Render = QueueView & { pending: { confirm?: DismissState | undefined } }
+
 /** 1 row: closed, the title and its line. Open, the parts of the row, in order. A part with no data does not show. */
-function rowHtml(item: QueueRow, dot: string, context: QueueContext, confirm: DismissState | undefined): string {
+function rowHtml(item: QueueRow, dot: string, context: QueueContext, pending: Render['pending']): string {
+  // 1 confirm on the page: the first row that holds its ids draws it, and the render has no confirm after that
+  const confirm = confirmOf(item, pending.confirm)
+  if (confirm) pending.confirm = undefined
   const record = context.records.get(item.id)
   const id = esc(item.id)
   const sessions =
@@ -182,17 +188,17 @@ function rowHtml(item: QueueRow, dot: string, context: QueueContext, confirm: Di
       : '',
     dismissPart(item, confirm),
   ]
-  return `<details class="saved-proposal" id="q-${id}"${confirmOf(item, confirm) ? ' open' : ''}><summary><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span><span class="grow"><b>${esc(item.title)}</b><span class="q-meta small muted">${esc(metaLine(item, record))}</span></span></summary><div class="saved-proposal-body">${body.join('')}</div></details>`
+  return `<details class="saved-proposal" id="q-${id}"${confirm ? ' open' : ''}><summary><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span><span class="grow"><b>${esc(item.title)}</b><span class="q-meta small muted">${esc(metaLine(item, record))}</span></span></summary><div class="saved-proposal-body">${body.join('')}</div></details>`
 }
 
 /** The group cards of 1 workspace: 1 card for each group with rows, in order. `n` is the order of the workspace on the page. */
-function groupCards(n: number, groups: Partial<Record<QueueGroupKey, QueueRow[]>>, counts: Partial<Record<QueueGroupKey, number>>, view: QueueView, context: QueueContext): string {
+function groupCards(n: number, groups: Partial<Record<QueueGroupKey, QueueRow[]>>, counts: Partial<Record<QueueGroupKey, number>>, view: Render, context: QueueContext): string {
   return QUEUE_GROUP_VIEWS.map(({ key, label, dot }) => {
     const rows = groups[key] ?? []
     if (!rows.length) return ''
     const id = `q-${n}-${key}`
     const open = rows.length <= OPEN_GROUP_MAX && !view.closed.has(id)
-    return `<details class="card mb16" id="${id}"${open ? ' open' : ''}><summary class="card-head"><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span>${label}<span class="pill">${num(counts[key] ?? rows.length)}</span>${key === 'verdict' ? '<span class="tag good">Due</span>' : ''}</summary><div class="q-rows">${rows.map((row) => rowHtml(row, dot, context, view.confirm)).join('')}</div></details>`
+    return `<details class="card mb16" id="${id}"${open ? ' open' : ''}><summary class="card-head"><span class="chev" aria-hidden="true">▸</span><span class="bdot ${dot}" aria-hidden="true"></span>${label}<span class="pill">${num(counts[key] ?? rows.length)}</span>${key === 'verdict' ? '<span class="tag good">Due</span>' : ''}</summary><div class="q-rows">${rows.map((row) => rowHtml(row, dot, context, view.pending)).join('')}</div></details>`
   }).join('')
 }
 
@@ -201,12 +207,12 @@ function groupCards(n: number, groups: Partial<Record<QueueGroupKey, QueueRow[]>
  * leaves out the workspace and the ids that the section already shows. The group counts of a block are the lengths of
  * the lists that the read sent.
  */
-function workspaceBlocks(read: QueueRead, from: number, view: QueueView, context: QueueContext, skip?: { scope: string; ids: ReadonlySet<string> }): string {
+function workspaceBlocks(read: QueueRead, from: number, view: Render, context: QueueContext, skip?: { scope: string; ids: ReadonlySet<string> }): string {
   const blocks = new Map<string, Partial<Record<QueueGroupKey, QueueRow[]>>>()
   const global: Partial<Record<QueueGroupKey, QueueRow[]>> = {}
   for (const { key } of QUEUE_GROUP_VIEWS) {
     for (const item of read.groups[key] ?? []) {
-      if (skip?.ids.has(item.id)) continue
+      if (item.ids.some((id) => skip?.ids.has(id))) continue
       const workspace = item.workspace ?? ''
       if (item.scope !== 'global' && skip && workspace === skip.scope) continue
       const into = item.scope === 'global' ? global : blocks.get(workspace) ?? blocks.set(workspace, {}).get(workspace)!
@@ -232,9 +238,11 @@ const ERROR_HINT = 'Run orangu in a terminal and choose Improvements to see the 
 const queueError = (): string => emptyHero({ title: 'orangu could not compute the queue.', hint: ERROR_HINT, command: 'npx orangu' })
 
 /** The All workspaces disclosure: closed at first, and read on its first open only. */
-function allWorkspaces(main: QueueRead, view: QueueView, context: QueueContext): string {
+function allWorkspaces(main: QueueRead, view: Render, context: QueueContext): string {
   const all = view.all
-  const ids = new Set(Object.values(main.groups).flatMap((rows) => rows.map((row) => row.id)))
+  // every record that the section shows, folded ones too: a record with no workspace of its own is not folded in a
+  // read of every workspace, so it comes back there as its own row
+  const ids = new Set(Object.values(main.groups).flatMap((rows) => rows.flatMap((row) => row.ids)))
   const body =
     all === undefined
       ? LOADING
@@ -245,7 +253,7 @@ function allWorkspaces(main: QueueRead, view: QueueView, context: QueueContext):
 }
 
 /** The section body once a read landed. */
-function queueBody(q: QueueRead, view: QueueView, context: QueueContext): string {
+function queueBody(q: QueueRead, view: Render, context: QueueContext): string {
   const parts = [
     context.megaButton ? '<div class="right"><button type="button" class="btn-sm" data-q-mega>Review the whole harness ↓</button></div>' : '',
     view.stale ? banner('warn', `New sessions ended after this count. Count again to update the queue. ${COUNT_AGAIN}`) : '',
@@ -267,6 +275,6 @@ function queueBody(q: QueueRead, view: QueueView, context: QueueContext): string
 export function queueSection(view: QueueView, context: QueueContext): string {
   const q = view.main
   const counts = q ? (q.counts.open ? `${q.counts.due ? ` · ${num(q.counts.due)} due` : ''} · ${num(q.counts.open)} open` : ' · nothing open') : ''
-  const body = q === undefined ? LOADING : q === null ? queueError() : queueBody(q, view, context)
+  const body = q === undefined ? LOADING : q === null ? queueError() : queueBody(q, { ...view, pending: { confirm: view.confirm } }, context)
   return `<details class="card pad mb16 sg-note" id="home-queue"${view.closed.has('home-queue') ? '' : ' open'}><summary><span class="chev" aria-hidden="true">▸</span><b>Queue</b>${counts}</summary><div class="mt8"${q === undefined ? ' aria-busy="true"' : ''}>${body}</div></details>`
 }

@@ -53,6 +53,20 @@ export function queueFixture(scope: 'workspace' | 'all' = 'workspace'): Suggesti
   })
 }
 
+/**
+ * 1 finding of 1 rule with 3 `new` records, newest first, read for 1 workspace and for every workspace. A `new` record
+ * has no workspace of its own: the workspace read folds the 3 into 1 item, and the read of every workspace lists each
+ * record alone, with no workspace.
+ */
+export function foldedNewFixture(): { main: SuggestionQueue; all: SuggestionQueue; ids: string[] } {
+  const ids = [sg(0xe003), sg(0xe002), sg(0xe001)]
+  const records = ids.map((id, i) =>
+    recordOf(id, { ruleId: 'tool-errors', title: 'Fix the tool errors', sessionIds: [uuid(950 + i)], createdAt: 3_000 - i * 1_000, statusAt: 3_000 - i * 1_000 }),
+  )
+  const workspace = { cwd: WORKSPACE, sessionIds: [uuid(950), uuid(951), uuid(952)] }
+  return { main: buildQueue({ now: NOW, workspace, records, lines: records }), all: buildQueue({ now: NOW, records, lines: records }), ids }
+}
+
 /** The queue of a workspace with no open record. */
 export function emptyQueueFixture(): SuggestionQueue {
   return buildQueue({ now: NOW, workspace: { cwd: WORKSPACE, sessionIds: [uuid(900)] }, records: [], lines: [] })

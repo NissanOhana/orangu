@@ -129,11 +129,17 @@ function rows(): QueueRow[] {
 /** The row that holds the confirm `c`, in the last reads. */
 const rowOf = (c: DismissState | undefined): QueueRow | undefined => rows().find((row) => confirmOf(row, c))
 
-/** A confirm whose row left the reads goes, unless its calls still run. */
+/**
+ * After a read, unless the calls of the confirm run: a confirm whose row left the reads goes. Else it keeps only the
+ * ids that its row still holds, so a record that another writer closed is not sent again. The set only gets smaller.
+ */
 function pruneConfirm(): void {
-  if (!confirm || confirm.busy || rowOf(confirm)) return
-  confirm = undefined
-  focusId = undefined
+  if (!confirm || confirm.busy) return
+  const row = rowOf(confirm)
+  if (!row) {
+    confirm = undefined
+    focusId = undefined
+  } else if (!confirm.done) confirm.ids = confirm.ids.filter((id) => row.ids.includes(id))
 }
 
 /** Draw the Dismiss part of `row` again in place, with no render of the app, then put focus on the control `focus`. */
@@ -167,12 +173,15 @@ function cancelConfirm(): void {
   if (row) redraw(row, c.key, `qd-${row.id}-open`)
 }
 
-/** A checked reason. Only a code of the fixed list is kept, whatever the value of the option says. */
+/**
+ * A checked reason. Only a code of the fixed list is kept, whatever the value of the option says. While the calls run,
+ * the code stays the one that they send, so a retry after a stop sends the same code.
+ */
 function pickReason(value: string): void {
   const code = REJECT_REASON_CODES.find((known) => known === value)
-  if (!confirm || !code || confirm.done) return
+  if (!confirm || !code || confirm.busy || confirm.done) return
   confirm.reason = code
-  if (!confirm.busy) document.getElementById(`qd-${confirm.key}-go`)?.setAttribute('aria-disabled', 'false')
+  document.getElementById(`qd-${confirm.key}-go`)?.setAttribute('aria-disabled', 'false')
 }
 
 /**

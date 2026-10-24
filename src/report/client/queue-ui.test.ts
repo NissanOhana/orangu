@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { SuggestionViewRecord } from '../../model/app-data.js'
 import { COHORT_MAX, COHORT_MIN } from '../../suggest/cohort-stats.js'
-import { emptyQueueFixture, queueFixture } from '../../../test/fixtures/suggestion-queue.js'
+import { emptyQueueFixture, foldedNewFixture, queueFixture } from '../../../test/fixtures/suggestion-queue.js'
 import { proposalOf, recordOf } from '../../../test/fixtures/suggestion-records.js'
 import { proposalsUi } from './proposals-ui.js'
 import type { QueueGroupKey, QueueRead, QueueRow } from './queue-types.js'
@@ -318,6 +318,25 @@ describe('the Queue section: Dismiss', () => {
     const body = rowBody(html)
     expect(body.indexOf(`<div class="sg-proposal dismiss" id="qd-${ID}"`)).toBeGreaterThan(body.indexOf('<div class="sg-handoffs">'))
     expect(queueSection(view(readOf([item('apply', { status: 'proposed', next: 'x' })])), context())).toContain(`<details class="saved-proposal" id="q-${ID}"><summary>`)
+  })
+
+  // The read of 1 workspace folds 3 `new` records of 1 finding into 1 item. The read of every workspace lists each of
+  // them alone, with no workspace. All workspaces shows none of them again, and the page holds 1 confirm.
+  it('shows each record of a folded item once, with All workspaces open, and draws 1 confirm', () => {
+    const { main, all, ids } = foldedNewFixture()
+    const confirm = { key: ids[0]!, ids: [...ids], busy: false, done: false, line: '' }
+    const html = queueSection(view(asRead(main), { all: asRead(all), confirm }), context())
+    for (const id of ids) expect(html.match(new RegExp(`id="q-${id}"`, 'g'))?.length ?? 0, id).toBe(id === ids[0] ? 1 : 0)
+    expect(html.match(new RegExp(`id="qd-${ids[0]}"`, 'g'))).toHaveLength(1)
+    expect(html.match(/<details class="saved-proposal" id="q-[^"]+" open>/g)).toHaveLength(1)
+  })
+
+  it('draws the confirm in the first row that holds its ids, and in no other row', () => {
+    const rows = [item('review', { status: 'new', ids: [ID, OTHER], next: 'x' }), item('review', { id: OTHER, ids: [OTHER], status: 'new', next: 'x' })]
+    const html = queueSection(view(readOf(rows), { confirm: { key: ID, ids: [ID, OTHER], busy: false, done: false, line: '' } }), context())
+    expect(html.match(/class="sg-proposal dismiss"/g)).toHaveLength(1)
+    expect(html).toContain(`<details class="saved-proposal" id="q-${ID}" open>`)
+    expect(html).toContain(`<details class="saved-proposal" id="q-${OTHER}"><summary>`)
   })
 })
 

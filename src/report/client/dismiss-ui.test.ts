@@ -66,8 +66,10 @@ describe('the Dismiss confirm', () => {
     expect(html).toContain(`id="qd-${ID}-go" data-q-confirm aria-disabled="false">Dismiss</button>`)
   })
 
-  it('dismissing: Dismiss is busy and off, Cancel is off, and the line says what orangu does', () => {
+  it('dismissing: the reasons, Dismiss and Cancel are off, Dismiss is busy, and the line says what orangu does', () => {
     const html = dismissPart(row('apply'), state({ reason: 'other', busy: true, line: 'orangu dismisses the item.' }))
+    expect(html).toContain('<fieldset disabled><legend>')
+    expect(dismissPart(row('apply'), state({ reason: 'other' }))).toContain('<fieldset><legend>')
     expect(html).toContain(`id="qd-${ID}-go" data-q-confirm aria-disabled="true" aria-busy="true">Dismiss</button>`)
     expect(html).toContain(`id="qd-${ID}-cancel" data-q-cancel aria-disabled="true">Cancel</button>`)
     expect(html).toContain('</div><p class="small mt8">orangu dismisses the item.</p></div></div>')
