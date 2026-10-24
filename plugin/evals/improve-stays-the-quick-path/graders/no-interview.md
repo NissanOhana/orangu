@@ -4,5 +4,5 @@ tool: Skill
 input_match: '"skill"\s*:\s*"(?:[\w-]+:)?interview"'
 min: 0
 max: 0
-arm: with-only
+arm: both
 ---

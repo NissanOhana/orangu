@@ -90,12 +90,15 @@ describe('plugin eval suite', () => {
         const s = firesSkill(g) ?? (provesApply(dir, g) ? 'apply' : undefined)
         if (s) fired.set(s, [...(fired.get(s) ?? []), dir])
       }
-      for (const g of gs.filter(forbidsAnySkill)) {
+      // a negative case forbids every skill; a routing case may forbid 1 skill in both arms (improve-stays-the-quick-path)
+      const negative = list(frontmatter(`${dir}/prompt.md`).fields.tags).includes('negative')
+      if (negative) expect(gs.some(forbidsAnySkill), `${dir} is tagged negative, so a grader forbids every skill`).toBe(true)
+      for (const g of gs.filter((x) => negative && forbidsAnySkill(x))) {
         // either input form, every shipped skill: a negative that only knew one form could never fail
         expect(g.fields.input_match, `${g.file} accepts the plugin-qualified form`).toContain('(?:[\\w-]+:)?')
         for (const s of SKILLS) expect(g.fields.input_match, `${g.file} names ${s}`).toContain(s)
       }
-      if (gs.some(forbidsAnySkill)) negatives++
+      if (negative && gs.some(forbidsAnySkill)) negatives++
     }
     for (const s of SKILLS) expect(fired.get(s), `a case expects /orangu:${s} to fire`).toBeTruthy()
     expect(negatives, 'cases that forbid every orangu skill').toBeGreaterThanOrEqual(2)
@@ -272,6 +275,25 @@ describe('plugin eval suite', () => {
       expect(re.test(reply), `the grader finds ${reply}`).toBe(true)
     for (const reply of ["--reason 'not-wanted'", '--reason=not-wanted', "--reason='other'", "--reason '<code>' --json --quiet"])
       expect(re.test(reply), `the grader lets ${reply} through`).toBe(false)
+  })
+
+  // The 2 interview boundaries live in 1 grader each. A scored zero-call grader in both arms is the only thing that makes
+  // each case fail on its subject: improve fires the interview on a plain request, or the interview starts research
+  // with no readable record. The interview patterns reuse the real Skill input shape.
+  it('the interview boundary cases keep the scored grader that defines them', () => {
+    const zero = (dir: string, tool: string): Grader | undefined => graders(`${EVALS}/${dir}`)
+      .find((g) => g.fields.type === 'tool_used' && g.fields.tool === tool && g.fields.min === '0' && g.fields.max === '0' && g.fields.arm === 'both')
+    const quick = zero('improve-stays-the-quick-path', 'Skill')
+    expect(quick, 'improve-stays-the-quick-path forbids the interview in both arms').toBeTruthy()
+    const re = new RegExp(scalar(quick!.fields.input_match))
+    expect(re.test('{"skill":"orangu:interview"}')).toBe(true)
+    expect(re.test('{"skill":"interview","args":"sg_0123456789ab"}')).toBe(true)
+    expect(re.test('{"skill":"orangu:improve","args":"a deeper interview"}'), 'improve with interview words is not the interview').toBe(false)
+    expect(graders(`${EVALS}/improve-stays-the-quick-path`).some((g) => firesSkill(g) === 'improve'), 'improve still fires').toBe(true)
+    expect(zero('interview-starts-no-research-without-a-record', 'Agent'), 'no research agent in either arm').toBeTruthy()
+    // each interview case also grades the result, not only the path
+    for (const dir of ['interview-before-apply', 'interview-wants-outside-views', 'interview-starts-no-research-without-a-record', 'improve-stays-the-quick-path'])
+      expect(graders(`${EVALS}/${dir}`).some((g) => g.fields.type === 'llm' || g.fields.type === 'regex'), `${dir} grades the reply`).toBe(true)
   })
 
   it('documents how to improve the skills against the suite without fooling yourself', () => {

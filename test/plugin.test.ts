@@ -1277,6 +1277,8 @@ describe('plugin packaging', () => {
       'what your harness declares', 'every session on the machine', 'instruction files, hooks, skills, agents, MCP servers, plugins',
       'why the same problem keeps recurring', 'wants a repo or global harness review', 'what to change in their setup',
     ]) expect(desc('harness')).toContain(phrase)
+    // interview-before-apply says "grill me on it", and interview-wants-outside-views asks for questions first
+    expect(desc('interview')).toContain('interviewed or grilled about a suggestion or proposal')
   })
 
   // The build mirrors these four trees to Codex. A Claude-only skill named there becomes a dead command in
