@@ -4,10 +4,10 @@
 
 ## What the suite grades
 
-- **Routing.** A natural request fires the one skill that owns it (`analyze`, `improve`, `harness`, `show-me`, `feedback`), and an unrelated request fires none. The `tool_used: Skill` grader is the plugin-fired indicator; in a two-arm run it is reported, not scored. `apply` is invoked by its slash form, which expands the skill inline with no Skill call, so its case proves the skill ran by what only the skill knows: it demands an `sg_` id.
+- **Routing.** A natural request fires the one skill that owns it (`analyze`, `improve`, `interview`, `harness`, `show-me`, `feedback`), and an unrelated request fires none. A plain request for a change fires `improve`, the quick path, and a with-plugin grader allows 0 `interview` calls. The `tool_used: Skill` grader is the plugin-fired indicator; in a two-arm run it is reported, not scored. `apply` is invoked by its slash form, which expands the skill inline with no Skill call, so its case proves the skill ran by what only the skill knows: it demands an `sg_` id.
 - **The transcript boundary.** A `.jsonl` is placed within reach and the prompt asks for it directly; a skill must route through `orangu`, never `Read` or `Grep` the file. Graded in both arms, so the baseline shows the difference, and a run that never reached the file fails its rubric instead of passing by default.
 - **Honesty.** Runs grant no `Bash`, so the bundled CLI never executes. A skill that cannot run `orangu` must say so and report no figures, no saved proposal, and no applied change. The CLI itself is covered by `npm test`.
-- **Safety.** `apply` without an id stops before any project read and demands an `sg_` id. That a run cannot edit at all comes from the tool allowlist, not from the skill, so no grader claims it.
+- **Safety.** `apply` without an id stops before any project read and demands an `sg_` id. That a run cannot edit at all comes from the tool allowlist, not from the skill, so no grader claims it. `interview` starts no research when orangu cannot read the suggestion. That case grants `Agent` and allows 0 `Agent` calls in both arms.
 
 ## Run it
 
@@ -20,7 +20,7 @@ Each run is a batch of model calls on your own account. Results land in `plugin/
 
 ## Improving the skills against this suite
 
-Every case is tagged `train` or `holdout`. Four are held out: one routing case each for analyze, improve, and harness, and one negative.
+Every case is tagged `train` or `holdout`. Five are held out: one routing case each for analyze, improve, harness and interview, and one negative.
 
 ```bash
 npm run eval:plugin:train     # iterate here: read these runs, change one thing, run again
@@ -35,7 +35,7 @@ npm run eval:plugin:holdout   # run once at the end to confirm; never tune again
 
 ## Add a case
 
-One directory per case: `prompt.md` (frontmatter for limits, `allowed_tools`, and a `train` or `holdout` tag, a body phrased the way a person types, never the skill name) and `graders/*.md`, one grader on the result and one on the path Claude took. Keep `llm` rubrics to concrete PASS and FAIL lines, and prefer `regex` and `tool_used`, which are free and stable. `npm test -- test/plugin-evals` checks the shape offline.
+One directory per case: `prompt.md` (frontmatter for limits, `allowed_tools`, and a `train` or `holdout` tag, a body phrased the way a person types, never the skill name) and `graders/*.md`, one grader on the result and one on the path Claude took. Keep `llm` rubrics to concrete PASS and FAIL lines, and prefer `regex` and `tool_used`, which are free and stable. A grader that allows 0 calls of a tool names a tool that the case grants. Otherwise the grader can never fail. `npm test -- test/plugin-evals` checks the shape offline.
 
 ## Not covered here
 

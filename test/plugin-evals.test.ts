@@ -12,7 +12,7 @@ import { currencyHits, moneyHits } from './money-vocabulary.js'
 const root = process.cwd()
 const EVALS = 'plugin/evals'
 const readText = (p: string): string => readFileSync(join(root, p), 'utf8')
-const SKILLS = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'show-me'] as const
+const SKILLS = ['analyze', 'apply', 'feedback', 'harness', 'improve', 'interview', 'show-me'] as const
 const GRADER_TYPES = ['regex', 'tool_used', 'tool_order', 'file_exists', 'llm', 'baseline']
 // prompt.md frontmatter keys the runner accepts; an unknown key fails the case at load time
 const PROMPT_KEYS = ['schema_version', 'name', 'description', 'tags', 'plugins', 'runs', 'expected_outcome', 'model', 'max_turns', 'timeout_seconds', 'allowed_tools', 'append_system_prompt', 'env']
@@ -124,9 +124,12 @@ describe('plugin eval suite', () => {
   it('every grader has a known type, and every case grades both the result and the path Claude took', () => {
     for (const dir of cases) {
       const gs = graders(dir)
+      const granted = list(frontmatter(`${dir}/prompt.md`).fields.allowed_tools)
       expect(gs.length, `${dir} has at least two graders`).toBeGreaterThanOrEqual(2)
       for (const g of gs) {
         expect(GRADER_TYPES, `${g.file} type`).toContain(g.fields.type)
+        // a zero-call grader on a tool the case does not grant passes in every run, so it can never fail
+        if (g.fields.type === 'tool_used' && g.fields.max === '0') expect(granted, `${g.file} forbids a tool the case grants`).toContain(g.fields.tool)
         if (g.fields.type === 'regex') expect(g.fields.pattern, `${g.file} has a pattern`).toBeTruthy()
         if (g.fields.type === 'tool_used') expect(g.fields.tool, `${g.file} names a tool`).toBeTruthy()
         if (g.fields.type === 'llm') {
@@ -195,7 +198,11 @@ describe('plugin eval suite', () => {
   it('splits the cases into a train set to improve against and a held-out set that is never tuned on', () => {
     // Held out: one routing case per skill family that has more than one, plus one negative. Improving a skill against
     // the same cases that judge it rewards the suite's quirks; train up with holdout flat is the overfitting sign.
-    const HOLDOUT = ['analyze-live-session', 'harness-global-declared-vs-used', 'ignores-a-jsonl-coding-question', 'improve-from-suggestion-id']
+    // 4 of 18 became 5 of 23: interview came with 3 cases (2 routing, 1 research boundary), so 1 routing case is held out.
+    const HOLDOUT = [
+      'analyze-live-session', 'harness-global-declared-vs-used', 'ignores-a-jsonl-coding-question', 'improve-from-suggestion-id',
+      'interview-wants-outside-views',
+    ]
     const split = new Map<string, string[]>()
     for (const dir of cases) {
       const tags = list(frontmatter(`${dir}/prompt.md`).fields.tags)
