@@ -3,30 +3,30 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>orangu: turn your Claude Code history into actionable insights</title>
-<meta name="description" content="orangu is an open-source CLI. It turns local Claude Code sessions into an offline HTML report: tool calls, tokens, time, errors, subagents, and evidence for what to change next."/>
+<title>orangu: improve your Claude Code harness, one checked change at a time</title>
+<meta name="description" content="orangu is an open-source CLI. It reads your local Claude Code sessions, finds what to change in your harness, and checks each change on your later sessions."/>
 <meta name="robots" content="index,follow,max-image-preview:large"/>
 <meta name="author" content="Nissan Ohana"/>
 <link rel="canonical" href="https://nissanohana.github.io/orangu/"/>
 <meta property="og:type" content="website"/>
 <meta property="og:site_name" content="orangu"/>
 <meta property="og:locale" content="en_US"/>
-<meta property="og:title" content="orangu: turn your Claude Code history into actionable insights"/>
-<meta property="og:description" content="Inspect one Claude Code session step by step. Find the patterns that recur across a repository. Improve the next session with local, offline evidence."/>
+<meta property="og:title" content="orangu: improve your agent harness, one checked change at a time"/>
+<meta property="og:description" content="orangu reads your Claude Code sessions, finds what to change in your harness, and checks each change on your later sessions."/>
 <meta property="og:url" content="https://nissanohana.github.io/orangu/"/>
 <meta property="og:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
 <meta property="og:image:width" content="1200"/>
 <meta property="og:image:height" content="630"/>
-<meta property="og:image:alt" content="orangu: the three axes it measures, quality up, time down, tokens down"/>
+<meta property="og:image:alt" content="orangu: improve your agent harness, one checked change at a time"/>
 <meta name="twitter:card" content="summary_large_image"/>
-<meta name="twitter:title" content="orangu: turn your Claude Code history into actionable insights"/>
-<meta name="twitter:description" content="Inspect one Claude Code session. Find the patterns that recur across a repository. Improve the next session with local, offline evidence."/>
+<meta name="twitter:title" content="orangu: improve your agent harness, one checked change at a time"/>
+<meta name="twitter:description" content="orangu reads your Claude Code sessions, finds what to change in your harness, and checks each change on your later sessions."/>
 <meta name="twitter:image" content="https://nissanohana.github.io/orangu/assets/og.png"/>
-<meta name="twitter:image:alt" content="orangu: the three axes it measures, quality up, time down, tokens down"/>
+<meta name="twitter:image:alt" content="orangu: improve your agent harness, one checked change at a time"/>
 <script type="application/ld+json">
 {"@context":"https://schema.org","@graph":[
 {"@type":"SoftwareApplication","@id":"https://nissanohana.github.io/orangu/#software","name":"orangu","url":"https://nissanohana.github.io/orangu/","description":"orangu is deterministic, offline observability for Claude Code sessions. It gives one self-contained HTML report for each session, repository-wide aggregates, and reviewed proposals for the next session.","applicationCategory":"DeveloperApplication","applicationSubCategory":"Developer tools","operatingSystem":"macOS, Linux, Windows","softwareVersion":"{{version}}","isAccessibleForFree":true,"license":"https://github.com/NissanOhana/orangu/blob/main/LICENSE","downloadUrl":"https://www.npmjs.com/package/orangu","installUrl":"https://www.npmjs.com/package/orangu","screenshot":"https://nissanohana.github.io/orangu/assets/og.png","softwareHelp":{"@type":"CreativeWork","url":"https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md"},"author":{"@type":"Person","name":"Nissan Ohana","url":"https://github.com/NissanOhana"},"keywords":"Claude Code, session report, tokens, subagents, observability, CLI, offline","sameAs":["https://github.com/NissanOhana/orangu","https://www.npmjs.com/package/orangu"]},
-{"@type":"WebSite","@id":"https://nissanohana.github.io/orangu/#website","url":"https://nissanohana.github.io/orangu/","name":"orangu","description":"Turn your Claude Code history into actionable insights.","inLanguage":"en","publisher":{"@id":"https://nissanohana.github.io/orangu/#software"}}
+{"@type":"WebSite","@id":"https://nissanohana.github.io/orangu/#website","url":"https://nissanohana.github.io/orangu/","name":"orangu","description":"Improve your agent harness, one checked change at a time.","inLanguage":"en","publisher":{"@id":"https://nissanohana.github.io/orangu/#software"}}
 ]}
 </script>
 <link rel="icon" type="image/png" sizes="32x32" href="{{favicon:32}}">
@@ -71,7 +71,7 @@ code{font-family:var(--mono);font-size:.94em}
   .hero-copy{grid-area:copy}
   .hero-viz{grid-area:viz;align-self:center;margin-left:-40px}
   .hero .term-wrap{grid-area:term}
-  .hero h1{font-size:clamp(48px,4.4vw,64px)}
+  .hero h1{font-size:clamp(38px,3.6vw,52px)}
 }
 @media (min-width:1024px){.hero h1 span{display:block;white-space:nowrap}}
 @media (min-width:1200px){
@@ -112,6 +112,11 @@ h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,
 .term .p,.term .dot{color:var(--accent)}
 .term-wrap .fine{margin-top:10px;color:var(--ink2)}
 @media (max-width:640px){.term{font-size:12.5px;padding:14px 16px}}
+/* the proof strip: a 128 px label column holds "Beyond chance:", one column on a phone */
+.hero-proof .hero-step{grid-template-columns:128px minmax(0,1fr)}
+.hero-bound{margin:12px 0 0;color:var(--ink2)}
+@media (min-width:900px){.hero-lead{margin:18px 0 14px}.hero-journey{margin-bottom:20px}.hero-step{padding:5px 0}}
+@media (max-width:640px){.hero-proof .hero-step{grid-template-columns:1fr}}
 
 /* app demo: an interactive report window for the current observe-to-proposal flow */
 .appdemo{border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(26,26,24,.05),0 16px 44px rgba(26,26,24,.06);background:var(--surface);margin:0 0 22px}
@@ -259,7 +264,7 @@ h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px
 .mascot-box img{display:block;width:100%;height:100%;object-fit:contain;object-position:bottom}
 .who{max-width:560px;margin:26px auto 0;padding-top:20px;border-top:1px solid var(--border);font-size:14px;color:var(--ink2)}
 .job{position:relative;overflow:hidden}
-.job .scope{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);margin-bottom:10px}
+.job .scope,.install-card .scope{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);margin-bottom:10px}
 .job .result{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--ink2)}
 .demo-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--border);background:var(--bg2)}
 .demo-actions p{margin:0 auto 0 0;color:var(--ink3);font-size:13px}
@@ -277,6 +282,13 @@ h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px
 .scope-card code{color:var(--accent-ink);font-weight:700}
 .scope-card h3{margin:8px 0 4px;font-family:var(--title);font-size:18px}
 .scope-card p{margin:0;color:var(--ink2);font-size:14px}
+/* the loop: 2 lists of step cards with the approval gate between Propose and Apply */
+.loop-steps{list-style:none;margin:0;padding:0}
+.loop-gate{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin:12px 0;padding:14px 18px;border:1px solid var(--border2);border-radius:14px;background:var(--accent-weak);color:var(--ink1);font-size:15px}
+.loop-gate b{font-family:var(--mono)}
+.loop-global{margin:16px 0}
+.loop-verdict p{margin:8px 0 0}
+.loop-verdict .demo-line{margin:0}
 @media (max-width:800px){.change-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:560px){.change-grid{grid-template-columns:1fr}.compare-row{grid-template-columns:1fr;gap:4px}.demo-step{grid-template-columns:34px minmax(0,1fr)}}
 footer{border-top:1px solid var(--border);padding:32px 28px;text-align:center;color:var(--ink3);font-size:13px}
@@ -294,11 +306,11 @@ footer .legal{margin:0;font-size:12.5px}
     <img class="logo" src="{{mascot:logo}}" width="36" height="36" alt="">
     <span class="brand">orangu</span>
     <nav aria-label="Site">
-      <a href="#jobs">Two jobs</a>
-      <a href="#demo">See the loop</a>
+      <a href="#loop">The loop</a>
+      <a href="#demo">Sample</a>
       <a href="#improve">What can change</a>
       <a href="#trust">Why local</a>
-      <a href="#install">Install</a>
+      <a href="#install">Get started</a>
       <a href="https://github.com/NissanOhana/orangu">GitHub ↗</a>
       <button class="btn-theme" id="themeBtn" aria-label="theme light, switch to dark">◐ <span id="themeLabel">light</span></button>
     </nav>
@@ -310,17 +322,18 @@ footer .legal{margin:0;font-size:12.5px}
   <div class="wrap">
     <div class="hero-grid">
       <div class="hero-copy">
-        <h1><span>Turn your AI history</span> <span>into actionable insights.</span></h1>
-        <p class="hero-lead">Orangu reads your local AI sessions so you do not have to guess what went right (or wrong).</p>
-        <ol class="hero-journey" aria-label="From AI history to better workflows">
-          <li class="hero-step"><strong>Inspect:</strong> <span>Read the steps and tool calls of one session.</span></li>
-          <li class="hero-step"><strong>Discover:</strong> <span>Find the patterns that recur across your whole repository.</span></li>
-          <li class="hero-step"><strong>Improve:</strong> <span>Use real evidence to make your workflows better and faster.</span></li>
+        <h1><span>Improve your agent harness,</span> <span>one checked change at a time.</span></h1>
+        <p class="hero-lead">orangu reads the Claude Code sessions on your machine. It finds what to change in your harness: CLAUDE.md, skills, hooks, MCP servers, and settings. Then it checks each change on your later sessions.</p>
+        <ol class="hero-journey hero-proof" aria-label="How orangu checks a change">
+          <li class="hero-step"><strong>Checked:</strong> <span>orangu compares your later sessions with the sessions before each change.</span></li>
+          <li class="hero-step"><strong>Beyond chance:</strong> <span>An exact rank test grades each check on your later sessions. A result inside the noise reads "within noise".</span></li>
+          <li class="hero-step"><strong>No model:</strong> <span>Plain code counts and compares. The measurement spends no model tokens.</span></li>
         </ol>
         <div class="cta-row">
           <button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report</span><span class="sep">·</span>npx orangu</button>
-          <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See the observe-to-proposal sample (opens in a new tab)">See the observe-to-proposal sample ↗</a>
+          <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See a sample report (opens in a new tab)">See a sample report ↗</a>
         </div>
+        <p class="fine hero-bound">orangu never changes your harness by itself. You approve each change by its id.</p>
       </div>
       <div class="hero-viz">
         <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink" role="img" aria-label="The three axes that orangu measures: quality up, time down, tokens down. Orangu never combines them into one score."></qtc-triad>
@@ -328,6 +341,7 @@ footer .legal{margin:0;font-size:12.5px}
       <div class="term-wrap">
         <div class="term" aria-label="The menu that npx orangu opens"><pre><span class="p">$</span> npx orangu
 Choose a report
+  Improvements            2 due · 5 open
   Repository report       recurring patterns in this repository
   Global report           recurring patterns on this machine
   Browse session reports  steps, tool calls and errors of one session</pre></div>
@@ -337,21 +351,34 @@ Choose a report
   </div>
 </section>
 
-<section id="jobs" class="sec">
+<section id="loop" class="sec">
   <div class="wrap">
-    <div class="kicker">Two jobs, one evidence trail</div>
-    <h2>Diagnose one session. Improve repeated work.</h2>
-    <p class="sec-lead">A session explains what happened. Repo and global views show which patterns deserve a change to the way future work runs.</p>
-    <div class="grid g300">
-      <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a session.</div></div>
-      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result">You apply a <code>repo</code> change explicitly, and orangu checks it on later sessions. A <code>global</code> change stays a proposal.</div></div>
+    <div class="kicker">The loop</div>
+    <h2>Six steps. You approve between Propose and Apply.</h2>
+    <p class="sec-lead">Popular tips come with no measurement. orangu checks each change on your own later sessions. It also names other changes that landed in the same window.</p>
+    <ol class="scope-ladder loop-steps" aria-label="Steps 1 to 3">
+      <li class="scope-card"><code>orangu</code><h3>1. Observe</h3><p>orangu reads each session on disk and applies 44 deterministic rules. It uses no model.</p></li>
+      <li class="scope-card"><code>orangu</code><h3>2. See</h3><p>The report and the local app show quality, time, and tokens as separate axes. Each finding links to its evidence.</p></li>
+      <li class="scope-card"><code>a Claude skill</code><h3>3. Propose</h3><p>The improve or harness skill drafts one proposal for each change. A proposal changes no file.</p></li>
+    </ol>
+    <p class="loop-gate"><b>You</b> <span>You approve each change by its id. Nothing changes before that.</span></p>
+    <ol class="scope-ladder loop-steps" start="4" aria-label="Steps 4 to 6">
+      <li class="scope-card"><code>a Claude skill</code><h3>4. Apply</h3><p>The apply skill makes one approved change. It records a receipt of the checks that it ran.</p></li>
+      <li class="scope-card"><code>orangu</code><h3>5. Verify</h3><p>orangu compares your later sessions with the sessions before the change. It marks the change verified only when 2 things are true. The checks that the change should move beat chance on your later sessions. No guard check got worse beyond chance on your later sessions. No model is in the measurement.</p></li>
+      <li class="scope-card"><code>orangu</code><h3>6. Remember</h3><p>orangu keeps each verdict and each reason that you pick. The next proposal reads them.</p></li>
+    </ol>
+    <p class="sec-lead loop-global">Global changes stay proposals. orangu applies and verifies only session and repo changes.</p>
+    <div class="demo-card loop-verdict">
+      <p class="demo-line">Illustrative. Not a measured result.</p>
+      <p><span class="demo-status">verified</span> Move the test rules from CLAUDE.md to a skill. Applied 2026-10-02. 8 earlier and 6 later sessions. On your later sessions, tokens per session went down beyond chance, and failed test runs did not go up beyond chance. Verdict: verified.</p>
+      <p><span class="demo-status">within noise</span> Add a pointer line for the API folder. Applied 2026-10-05. 8 earlier and 10 later sessions. On your later sessions, tool calls per session did not go down beyond chance. Verdict: within noise. orangu does not call it verified.</p>
     </div>
   </div>
 </section>
 
 <section id="demo" class="sec">
   <div class="wrap">
-    <div class="kicker">The observe-to-proposal sample</div>
+    <div class="kicker">A sample report</div>
     <h2>Follow the evidence from one step to the next session.</h2>
     <p class="sec-lead">This illustrative flow shows what each layer owns. It is not a measured customer result.</p>
     <div class="appdemo" id="appdemo">
@@ -403,7 +430,7 @@ Choose a report
             <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed</b></div>
             <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
             <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if failed test runs dropped beyond chance and tool errors did not rise.</div><div class="demo-kick"><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report only copies this command.">Claude apply</button></div></div>
+              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if, on your later sessions, failed test runs dropped beyond chance and tool errors did not rise beyond chance.</div><div class="demo-kick"><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report only copies this command.">Claude apply</button></div></div>
             </div>
             <p class="demo-note">Local code measures and matches. An optional skill writes the proposal. The browser only copies a command. A verified session comparison means that its reviewed metrics passed on the selected later evidence. It is not a causal or overall-quality claim.</p>
           </div>
@@ -433,19 +460,6 @@ Choose a report
   </div>
 </section>
 
-<section id="scenarios" class="sec">
-  <div class="wrap">
-    <div class="kicker">Built around work, not job titles</div>
-    <h2>Use the same evidence at the level you need.</h2>
-    <p class="sec-lead">Detailed and plain-language views describe the same supported session. Choose the level of detail that fits the task.</p>
-    <div class="grid g300">
-      <div class="card"><h3>Review delegated work</h3><p>See the steps taken, the tools used, what completed, and which evidence supports the result.</p></div>
-      <div class="card"><h3>Diagnose a rough outcome</h3><p>Trace errors, retries, context pressure, and unfinished work back to the moment they appeared.</p></div>
-      <div class="card"><h3>Improve a repeated workflow</h3><p>Use recurring repo or global patterns to propose a script, skill, hook, instruction, tool, agent, plugin, or configuration change.</p></div>
-    </div>
-  </div>
-</section>
-
 <section id="trust" class="sec">
   <div class="wrap">
     <div class="panel">
@@ -455,14 +469,15 @@ Choose a report
       <div class="grid g300" style="margin-bottom:22px">
         <div class="card"><h3>Bounded local evidence</h3><p><code>orangu evidence</code> accepts a supported session or current Orangu Analysis, SlimAnalysis, or Aggregate output. It redacts, bounds, matches, and ranks without a model or network request.</p></div>
         <div class="card"><h3>Optional AI interpretation</h3><p><code>/orangu:improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
-        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for a session or repo proposal, after review. Its contract requires it to stay within the declared files and to record its local checks truthfully. Orangu validates the receipt's shape and file list. The verification claim comes from later sessions, which orangu compares beyond chance with the sessions before the change.</p></div>
+        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for a session or repo proposal, after review. Its contract requires it to stay within the declared files and to record its local checks truthfully. Orangu validates the receipt's shape and file list. The verification claim comes from your later sessions, which orangu compares beyond chance with the sessions before the change.</p></div>
         <div class="card"><h3>Evidence with an expiry date</h3><p>Claude Code deletes a session transcript after it passes the <code>cleanupPeriodDays</code> window, which is 30 days by default. The <code>orangu harness</code> command measures how much history is inside that window. It also shows what is within a week of the cutoff, and which Desktop or Cowork transcripts the window does not reach. The reported sizes count only the primary transcripts, but each deletion also removes the subagent and tool-result files of the session. A longer window leaves more history to read, and leaves plain-text transcripts on disk for longer. Orangu reports both and picks neither.</p></div>
       </div>
       <div class="compare" aria-label="How Orangu turns local evidence into improvement">
         <div class="compare-row"><b>Raw transcripts</b><span>Contain the record, but leave the reading and synthesis to you.</span></div>
         <div class="compare-row"><b>Local usage counters</b><span>Summarize usage across time and sources.</span></div>
         <div class="compare-row"><b>Instrumented trace platforms</b><span>Capture traces and evaluations from applications that you instrument.</span></div>
-        <div class="compare-row"><b>orangu</b><span>Connects supported local evidence to a reviewable draft, explicit session/repo application, and later verification beyond chance.</span></div>
+        <div class="compare-row"><b>Model-written session reviews</b><span>Read your sessions with a model, and spend tokens to do it.</span></div>
+        <div class="compare-row"><b>orangu</b><span>Connects local evidence to a reviewed change. Then it checks each applied change on your later sessions, with no model in the measurement.</span></div>
       </div>
     </div>
   </div>
@@ -473,6 +488,10 @@ Choose a report
     <div class="kicker">Choose the scope of the decision</div>
     <h2>One session for diagnosis. More sessions for larger changes.</h2>
     <p class="sec-lead">Scope controls the question, not the honesty of the evidence.</p>
+    <div class="grid g300" style="margin-bottom:22px">
+      <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a session.</div></div>
+      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result">You apply a <code>repo</code> change explicitly, and orangu checks it on later sessions. A <code>global</code> change stays a proposal.</div></div>
+    </div>
     <div class="scope-ladder">
       <div class="scope-card"><code>session</code><h3>What happened here?</h3><p>Inspect the session. Draft one bounded proposal from one finding.</p></div>
       <div class="scope-card"><code>repo</code><h3>What keeps happening here?</h3><p>Connect recurring project patterns to example sessions and a focused change.</p></div>
@@ -483,13 +502,13 @@ Choose a report
 
 <section id="install" class="sec">
   <div class="wrap">
-    <div class="kicker">Start with observation</div>
-    <h2>Inspect first. Add improvement when you want it.</h2>
-    <p class="sec-lead">The CLI creates the local evidence. Claude Code and Codex skills share the same scope-aware proposal, application, and session-verification contracts.</p>
+    <div class="kicker">Get started</div>
+    <h2>Three front doors. Each one opens the same loop.</h2>
+    <p class="sec-lead">Start in the terminal, in the local app, or in Claude Code. Claude Code and Codex skills share the same scope-aware proposal, application, and session-verification contracts.</p>
     <div class="grid g300">
-      <div class="card install-card"><h3>Choose a report</h3><p>You do not need a global install. The first command opens a menu in your terminal. Choose this repository, all sessions, or one session. The second command opens the latest session.</p><div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button data-cmd="npx orangu">copy</button></div><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
-      <div class="card install-card"><h3>Keep the local app open</h3><p>Use report, analyze, repo, global, serve, and watch without sending session data away.</p><div class="cmd-sm"><span class="p">$</span> npm i -g orangu <button data-cmd="npm i -g orangu">copy</button></div></div>
-      <div class="card install-card"><h3>Add the Claude Code plugin</h3><p>Install it after you see the evidence. <code>/orangu:improve</code> writes a proposal. <code>/orangu:apply</code> applies a session or repo proposal after you approve it. <code>/orangu:show-me</code> writes a slide deck and a written report.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div></div>
+      <div class="card install-card"><span class="scope">TERMINAL</span><h3>Choose a report</h3><p>You do not need a global install. The first command opens a menu in your terminal. Choose your improvements, this repository, all sessions, or one session. The second command opens the latest session.</p><div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button data-cmd="npx orangu">copy</button></div><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
+      <div class="card install-card"><span class="scope">APP</span><h3>Keep the local app open</h3><p>Run the local app on 127.0.0.1. It shows every session, live, and your Improvements: the queue, the history of your changes and their lessons.</p><div class="cmd-sm"><span class="p">$</span> npx orangu serve <button data-cmd="npx orangu serve">copy</button></div></div>
+      <div class="card install-card"><span class="scope">CLAUDE CODE</span><h3>Add the Claude Code plugin</h3><p>Install it after you see the evidence. Then start with the improve skill. It finds the next change to make, and it checks each change that you apply. The apply skill applies a session or repo proposal after you approve it. The <code>/orangu:harness</code> skill reviews your whole harness and proposes ranked changes. A rule that did not hold gets a check, not another note. <code>/orangu:show-me</code> writes a slide deck and a written report.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm cmd-stack">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div><div class="cmd-sm">/orangu:improve <button data-cmd="/orangu:improve">copy</button></div></div>
     </div>
     <div class="sub">
       <h3>One improvement workflow, explicit stages</h3>
@@ -512,7 +531,7 @@ Choose a report
     <div class="cta">
       <span class="mascot-box"><img src="{{mascot:main}}" width="160" height="160" alt="orangu, the orangutan mascot"></span>
       <h2>Start with the sessions you already have.</h2>
-      <p class="sub">Read the evidence on your machine. Then decide if the next session needs a proposal.</p>
+      <p class="sub">Read the evidence on your machine. Then check each change that you make.</p>
       <button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report</span><span class="sep">·</span>npx orangu</button>
       <p class="who">Supported today: Claude Code, Cowork, and Desktop sessions stored on your machine.</p>
     </div>

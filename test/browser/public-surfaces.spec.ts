@@ -164,20 +164,25 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
   await seedLandingTheme(page, info)
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Turn your AI history into actionable insights.')
-  await expect(page.locator('.hero .hero-lead')).toHaveText('Orangu reads your local AI sessions so you do not have to guess what went right (or wrong).')
-  await expect(page.locator('.hero-journey .hero-step')).toHaveText([
-    'Inspect: Read the steps and tool calls of one session.',
-    'Discover: Find the patterns that recur across your whole repository.',
-    'Improve: Use real evidence to make your workflows better and faster.',
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Improve your agent harness, one checked change at a time.')
+  await expect(page.locator('.hero .hero-lead')).toHaveText('orangu reads the Claude Code sessions on your machine. It finds what to change in your harness: CLAUDE.md, skills, hooks, MCP servers, and settings. Then it checks each change on your later sessions.')
+  await expect(page.locator('.hero-proof .hero-step')).toHaveText([
+    'Checked: orangu compares your later sessions with the sessions before each change.',
+    'Beyond chance: An exact rank test grades each check on your later sessions. A result inside the noise reads "within noise".',
+    'No model: Plain code counts and compares. The measurement spends no model tokens.',
   ])
+  await expect(page.locator('.hero-copy > .fine')).toHaveText('orangu never changes your harness by itself. You approve each change by its id.')
+  // The boundary line, the gate and the verdict card carry meaning, so each reaches AA on its own ground.
+  const meaningful = await contrastOnOwnGround(page, '.hero-bound, #loop .loop-gate, #loop .loop-verdict p')
+  expect(meaningful).toHaveLength(5)
+  for (const [at, ratio] of meaningful.entries()) expect(ratio, `loop text ${at + 1} in ${projectTheme(info)}`).toBeGreaterThanOrEqual(4.5)
   await expect(page.getByRole('button', { name: /Choose a report/ }).first()).toBeVisible()
   await expect(page.locator('.hero .term pre')).toContainText('$ npx orangu\nChoose a report')
   await expect(page.locator('.hero .term-wrap .fine')).toHaveText('To open only the latest session, run npx orangu report.')
   // The second line is the only place in the hero that names the latest-session command, so it is
   // meaningful text: 13 px must reach WCAG AA (4.5:1) against the page in the theme being painted.
   expect(await contrastOnPage(page, '.hero .term-wrap .fine')).toBeGreaterThanOrEqual(4.5)
-  await expect(page.getByRole('link', { name: /See the observe-to-proposal sample/ })).toBeVisible()
+  await expect(page.getByRole('link', { name: /See a sample report/ })).toBeVisible()
   const sampleLinks = page.locator('a[href="sample.html"]')
   await expect(sampleLinks).toHaveCount(2)
   for (const sampleLink of await sampleLinks.all()) {
@@ -185,11 +190,29 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
     await expect(sampleLink).toHaveAttribute('rel', /(?:^|\s)noopener(?:\s|$)/)
   }
 
-  const jobs = page.getByRole('link', { name: 'Two jobs' })
-  await jobs.focus()
-  await expect(jobs).toBeFocused()
+  const loopLink = page.getByRole('link', { name: 'The loop' })
+  await loopLink.focus()
+  await expect(loopLink).toBeFocused()
   await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(/#jobs$/)
+  await expect(page).toHaveURL(/#loop$/)
+
+  // The loop: 3 columns on a wide screen, 1 on a phone, and the approval gate always between step 3 and step 4.
+  const loop = await page.evaluate(() => {
+    const steps = Array.from(document.querySelectorAll('#loop ol.loop-steps > li')).map((li) => li.getBoundingClientRect())
+    const gate = document.querySelector('#loop .loop-gate')!.getBoundingClientRect()
+    return {
+      steps: steps.length,
+      columns: new Set(steps.map((rect) => Math.round(rect.left))).size,
+      step3Bottom: Math.max(...steps.slice(0, 3).map((rect) => rect.bottom)),
+      step4Top: Math.min(...steps.slice(3).map((rect) => rect.top)),
+      gateTop: gate.top,
+      gateBottom: gate.bottom,
+    }
+  })
+  expect(loop.steps, JSON.stringify(loop)).toBe(6)
+  expect(loop.columns, JSON.stringify(loop)).toBe(info.project.name.startsWith('narrow') ? 1 : 3)
+  expect(loop.gateTop, JSON.stringify(loop)).toBeGreaterThanOrEqual(loop.step3Bottom)
+  expect(loop.gateBottom, JSON.stringify(loop)).toBeLessThanOrEqual(loop.step4Top)
 
   await page.getByRole('button', { name: /Choose a report/ }).first().click()
   await expect(page.getByRole('button', { name: /Copied/ }).first()).toBeVisible()
@@ -285,6 +308,23 @@ test('wide landing keeps a two-line hero and the visual beside the copy above th
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
   await page.evaluate(() => document.fonts.ready)
 
+  // From 1,024 px each title span has 1 line, and it ends at or left of the copy column edge.
+  for (const width of [1024, 1200]) {
+    await page.setViewportSize({ width, height: 900 })
+    const title = await page.evaluate(() => {
+      const edge = document.querySelector<HTMLElement>('.hero-copy')!.getBoundingClientRect().right
+      return Array.from(document.querySelectorAll<HTMLSpanElement>('.hero h1 > span')).map((span) => {
+        const range = document.createRange()
+        range.selectNodeContents(span)
+        const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
+        return { lines: new Set(rects.map((rect) => Math.round(rect.top))).size, right: Math.max(...rects.map((rect) => rect.right)), edge }
+      })
+    })
+    expect(title.map(({ lines }) => lines), `${width}px: ${JSON.stringify(title)}`).toEqual([1, 1])
+    for (const span of title) expect(span.right, `${width}px: ${JSON.stringify(title)}`).toBeLessThanOrEqual(span.edge)
+  }
+  await page.setViewportSize({ width: 1440, height: 900 })
+
   const geometry = await page.evaluate(() => {
     const h1 = document.querySelector<HTMLHeadingElement>('.hero h1')!
     const spans = Array.from(h1.querySelectorAll<HTMLSpanElement>(':scope > span'))
@@ -312,29 +352,31 @@ test('wide landing keeps a two-line hero and the visual beside the copy above th
     const copy = document.querySelector<HTMLElement>('.hero-copy')!.getBoundingClientRect()
     const visual = document.querySelector<HTMLCanvasElement>('.hero-viz canvas')!.getBoundingClientRect()
     const hero = document.querySelector<HTMLElement>('.hero')!.getBoundingClientRect()
-    const jobs = document.querySelector<HTMLElement>('#jobs')!.getBoundingClientRect()
+    const loop = document.querySelector<HTMLElement>('#loop')!.getBoundingClientRect()
     const copyRight = Math.max(...contentRights)
     return {
       spans: spanLines,
+      copyEdge: copy.right,
       visualCenterOffset: visual.left + visual.width / 2 - copyRight,
       verticalOverlap: Math.min(copy.bottom, visual.bottom) - Math.max(copy.top, visual.top),
       heroHeight: hero.height,
-      jobsTop: jobs.top,
+      loopTop: loop.top,
       viewportWidth: window.innerWidth,
       viewportHeight: window.innerHeight,
     }
   })
 
-  expect(geometry.spans.map(({ text }) => text)).toEqual(['Turn your AI history', 'into actionable insights.'])
+  expect(geometry.spans.map(({ text }) => text)).toEqual(['Improve your agent harness,', 'one checked change at a time.'])
   expect(geometry.spans.map(({ lines }) => lines)).toEqual([1, 1])
   expect(geometry.spans[1]!.top).toBeGreaterThan(geometry.spans[0]!.top)
+  for (const span of geometry.spans) expect(span.right, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.copyEdge)
   // The canvas intentionally has transparent space around the drawing, so compare
   // its visual centre with the copy edge instead of treating the canvas box as ink.
   expect(geometry.visualCenterOffset, JSON.stringify(geometry)).toBeGreaterThan(0)
   expect(geometry.visualCenterOffset, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewportWidth * 0.2)
   expect(geometry.verticalOverlap, JSON.stringify(geometry)).toBeGreaterThan(0)
   expect(geometry.heroHeight, JSON.stringify(geometry)).toBeLessThan(geometry.viewportHeight * 0.9)
-  expect(geometry.jobsTop, JSON.stringify(geometry)).toBeLessThan(geometry.viewportHeight)
+  expect(geometry.loopTop, JSON.stringify(geometry)).toBeLessThan(geometry.viewportHeight)
 })
 
 test('landing contains the hero visual across desktop breakpoints', async ({ browser }, info) => {

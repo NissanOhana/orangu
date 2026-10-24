@@ -59,7 +59,9 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // Z: floor 97 -> 98, findings 2 -> 1. Measured 100 (242 of 243) after the skill cards in STE ("actually" gone).
   // The 1 finding is the plugin install card (:492): its sentences start with a code span, which the checker
   // blanks, so it reads two sentences as one of 28 words.
-  'site/index.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 1 },
+  // The loop and front-door rewrite: findings 1 -> 0. Measured 100 (285 of 285): each plugin card sentence but the
+  // last starts with a word now.
+  'site/index.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite

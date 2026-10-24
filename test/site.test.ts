@@ -12,6 +12,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
+import { PARAGRAPH, htmlToText } from '../src/ste/index.js'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -111,18 +112,28 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(src).not.toContain('data-adview')
   })
 
-  it('turns local AI history into a clear inspect, discover, improve journey in the first viewport', () => {
+  it('states the checked-change loop, its proof and its boundary in the first viewport', () => {
     const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(htmlText(hero)).toContain('Turn your AI history into actionable insights.')
+    expect(htmlText(hero)).toContain('Improve your agent harness, one checked change at a time.')
     // The lead carries no contraction: the public copy is plain, controlled English.
-    expect(hero).toContain('Orangu reads your local AI sessions so you do not have to guess what went right (or wrong).')
+    expect(hero).toContain('<p class="hero-lead">orangu reads the Claude Code sessions on your machine. It finds what to change in your harness: CLAUDE.md, skills, hooks, MCP servers, and settings. Then it checks each change on your later sessions.</p>')
     expect(htmlText(hero)).not.toMatch(/\b\w+n't\b/)
-    expect(hero).toContain('Inspect:</strong> <span>Read the steps and tool calls of one session.')
-    expect(hero).toContain('Discover:</strong> <span>Find the patterns that recur across your whole repository.')
-    expect(hero).toContain('Improve:</strong> <span>Use real evidence to make your workflows better and faster.')
+    expect(hero).toContain('<ol class="hero-journey hero-proof" aria-label="How orangu checks a change">')
+    const proof = [...hero.matchAll(/<li class="hero-step">([\s\S]*?)<\/li>/g)].map((match) => htmlText(match[1] ?? '').trim())
+    expect(proof).toEqual([
+      'Checked: orangu compares your later sessions with the sessions before each change.',
+      'Beyond chance: An exact rank test grades each check on your later sessions. A result inside the noise reads "within noise".',
+      'No model: Plain code counts and compares. The measurement spends no model tokens.',
+    ])
+    expect(src).toContain('.hero-proof .hero-step{grid-template-columns:128px minmax(0,1fr)}')
+    expect(src).toContain('@media (max-width:640px){.hero-proof .hero-step{grid-template-columns:1fr}}')
+    // The boundary line carries an instruction, so it uses --ink2, not the muted --ink3 of .fine.
+    const copy = hero.match(/<div class="hero-copy">([\s\S]*?)\n {6}<\/div>\n {6}<div class="hero-viz">/)?.[1] ?? ''
+    expect(copy).toContain('\n        <p class="fine hero-bound">orangu never changes your harness by itself. You approve each change by its id.</p>')
+    expect(src).toContain('.hero-bound{margin:12px 0 0;color:var(--ink2)}')
     expect(hero).toContain('Choose a report')
     expect(hero).toContain('href="sample.html"')
-    expect(hero).toContain('See the observe-to-proposal sample')
+    expect(hero).toContain('aria-label="See a sample report (opens in a new tab)">See a sample report ↗</a>')
   })
 
   it('leads with the bare command, which opens the report menu, and keeps the latest-session command second', () => {
@@ -133,11 +144,13 @@ describe('site/index.src.html (authored landing source)', () => {
     // The terminal shows the menu that the bare command prints, so the landing and the CLI use one
     // name for one thing. These literals live in the dashboard frame and in its choice rows.
     const dashboard = readFileSync(join(root, 'src/cli/commands/dashboard.ts'), 'utf8')
-    for (const label of ['Choose a report', 'Repository report', 'Global report', 'Browse session reports']) {
+    for (const label of ['Choose a report', 'Improvements', 'Repository report', 'Global report', 'Browse session reports']) {
       expect(dashboard, `dashboard no longer prints ${label}`).toContain(label)
       expect(lines.some((line) => line.trim().startsWith(label)), `terminal does not show ${label}`).toBe(true)
     }
     expect(lines[1]).toBe('Choose a report')
+    // The menu puts Improvements first when this folder has an open item (dashboardChoices).
+    expect(lines[2]).toBe('  Improvements            2 due · 5 open')
     const wrap = hero.match(/<div class="term-wrap">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? ''
     expect(wrap).toContain('<p class="fine">To open only the latest session, run <code>npx orangu report</code>.</p>')
     // This line carries meaning, so it uses --ink2 (AA in both themes), not the muted --ink3 of .fine.
@@ -145,13 +158,15 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(htmlText(src)).not.toContain('Inspect a session')
   })
 
-  it('authors the desktop insights title as two balanced lines and closes the hero gap', () => {
+  it('authors the desktop title as two balanced lines and closes the hero gap', () => {
     const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
     const heading = hero.match(/<h1>([\s\S]*?)<\/h1>/)?.[1] ?? ''
     expect([...heading.matchAll(/<span>([^<]+)<\/span>/g)].map((match) => match[1])).toEqual([
-      'Turn your AI history',
-      'into actionable insights.',
+      'Improve your agent harness,',
+      'one checked change at a time.',
     ])
+    // From 900 px the title scales so that each span stays on 1 line inside the copy column at 1,024 px.
+    expect(src).toContain('  .hero h1{font-size:clamp(38px,3.6vw,52px)}')
     expect(src).toContain('@media (min-width:1024px){.hero h1 span{display:block;white-space:nowrap}}')
     expect(src).toContain('grid-template-areas:"copy viz" "term viz"')
     expect(src).toContain('.hero-viz{grid-area:viz;align-self:center;margin-left:-40px}')
@@ -169,14 +184,86 @@ describe('site/index.src.html (authored landing source)', () => {
   })
 
   it('uses a live, outcome-led information hierarchy', () => {
-    for (const id of ['jobs', 'demo', 'improve', 'scenarios', 'trust', 'install'])
-      expect(src, `missing section #${id}`).toContain(`<section id="${id}"`)
+    const sections = [...src.matchAll(/<section id="([^"]+)"/g)].map((match) => match[1])
+    expect(sections).toEqual(['loop', 'demo', 'improve', 'trust', 'scope', 'install'])
     const nav = src.match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? ''
     for (const [, id] of nav.matchAll(/href="#([^"]+)"/g))
       expect(src, `dead nav anchor #${id}`).toContain(`id="${id}"`)
-    expect(src).toContain('Observe one session')
-    expect(src).toContain('Improve repeated work')
-    expect(src).toMatch(/<code>repo<\/code>[\s\S]*?<code>global<\/code>/)
+    expect([...nav.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)].map((match) => `${match[2]} ${match[1]}`)).toEqual([
+      'The loop #loop',
+      'Sample #demo',
+      'What can change #improve',
+      'Why local #trust',
+      'Get started #install',
+      'GitHub ↗ https://github.com/NissanOhana/orangu',
+    ])
+    // The two jobs live in the scope section now, above the 3 scope cards.
+    const scope = src.match(/<section id="scope"[\s\S]*?<\/section>/)?.[0] ?? ''
+    expect(scope).toContain('Observe one session')
+    expect(scope).toContain('Improve repeated work')
+    expect(scope.indexOf('Improve repeated work')).toBeLessThan(scope.indexOf('class="scope-ladder"'))
+    expect(scope).toMatch(/<code>repo<\/code>[\s\S]*?<code>global<\/code>/)
+    expect(src).toContain('.job .scope,.install-card .scope{display:inline-block;')
+  })
+
+  it('shows the loop in six steps with the approval gate between Propose and Apply', () => {
+    const loop = src.match(/<section id="loop"[\s\S]*?<\/section>/)?.[0] ?? ''
+    expect(loop).toContain('<div class="kicker">The loop</div>')
+    expect(loop).toContain('<h2>Six steps. You approve between Propose and Apply.</h2>')
+    const lists = [...loop.matchAll(/<ol class="scope-ladder loop-steps"([^>]*)>([\s\S]*?)<\/ol>/g)]
+    expect(lists.map((list) => list[1])).toEqual([' aria-label="Steps 1 to 3"', ' start="4" aria-label="Steps 4 to 6"'])
+    expect(lists.map((list) => (list[2]?.match(/<li class="scope-card">/g) ?? []).length)).toEqual([3, 3])
+    expect([...loop.matchAll(/<h3>([^<]+)<\/h3>/g)].map((match) => match[1])).toEqual([
+      '1. Observe', '2. See', '3. Propose', '4. Apply', '5. Verify', '6. Remember',
+    ])
+    expect([...loop.matchAll(/<li class="scope-card"><code>([^<]+)<\/code>/g)].map((match) => match[1])).toEqual([
+      'orangu', 'orangu', 'a Claude skill', 'a Claude skill', 'orangu', 'orangu',
+    ])
+    // exactly 1 gate, and it sits between step 3 and step 4
+    expect(loop.match(/class="loop-gate"/g) ?? []).toHaveLength(1)
+    const gate = loop.indexOf('class="loop-gate"')
+    expect(gate).toBeGreaterThan(loop.indexOf('3. Propose'))
+    expect(gate).toBeLessThan(loop.indexOf('4. Apply'))
+    expect(loop).toContain('<p class="loop-gate"><b>You</b> <span>You approve each change by its id. Nothing changes before that.</span></p>')
+    // the Verify step names both parts: the checks that the change should move, and the guard checks
+    const verify = loop.match(/<h3>5\. Verify<\/h3><p>([^<]+)<\/p>/)?.[1] ?? ''
+    expect(verify).toContain('The checks that the change should move beat chance on your later sessions.')
+    expect(verify).toContain('No guard check got worse beyond chance on your later sessions.')
+    expect(verify).toContain('No model is in the measurement.')
+    expect(loop).toContain('<p class="sec-lead loop-global">Global changes stay proposals. orangu applies and verifies only session and repo changes.</p>')
+    // the loop has no motion: no rule of its own animates, so reduced motion needs no rule either
+    const loopRules = src.match(/\.loop-[^{]*\{[^}]*\}/g) ?? []
+    expect(loopRules.length).toBeGreaterThan(0)
+    for (const rule of loopRules) expect(rule).not.toMatch(/animation|transition/)
+  })
+
+  it('labels the verdict card as illustrative and shows no measured figure', () => {
+    const loop = src.match(/<section id="loop"[\s\S]*?<\/section>/)?.[0] ?? ''
+    const card = loop.match(/<div class="demo-card loop-verdict">([\s\S]*?)\n {4}<\/div>/)?.[1] ?? ''
+    const rows = [...card.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/g)].map((match) => htmlText(match[1] ?? '').trim())
+    expect(rows[0]).toBe('Illustrative. Not a measured result.')
+    expect(card).toMatch(/^\s*<p class="demo-line">Illustrative\. Not a measured result\.<\/p>/)
+    expect(rows.slice(1).map((row) => row.split(' ').slice(0, 2).join(' '))).toEqual(['verified Move', 'within noise'])
+    expect(rows[1]).toMatch(/Verdict: verified\.$/)
+    expect(rows[2]).toMatch(/Verdict: within noise\. orangu does not call it verified\.$/)
+    // no money sign, no percentage and no token figure: the card shows how a verdict reads, not a result
+    expect(card).not.toMatch(/[$%]/)
+    expect(htmlText(card)).not.toMatch(/\d[\d,.]*\s*(?:k\s*)?tokens?\b/i)
+    expect(htmlText(card)).not.toMatch(/\bp\s*[<=]/i)
+  })
+
+  it('makes the same checked-change claim in each head tag', () => {
+    const tag = (pattern: RegExp): string => src.match(pattern)?.[1] ?? ''
+    expect(tag(/<meta property="og:title" content="([^"]+)"/)).toBe('orangu: improve your agent harness, one checked change at a time')
+    expect(tag(/<meta name="twitter:title" content="([^"]+)"/)).toBe('orangu: improve your agent harness, one checked change at a time')
+    // the title also names Claude Code, which the SEO surface below asks for
+    expect(tag(/<title>([^<]+)<\/title>/)).toBe('orangu: improve your Claude Code harness, one checked change at a time')
+    expect(tag(/<meta name="description" content="([^"]+)"/)).toBe('orangu is an open-source CLI. It reads your local Claude Code sessions, finds what to change in your harness, and checks each change on your later sessions.')
+    for (const name of [/<meta property="og:description" content="([^"]+)"/, /<meta name="twitter:description" content="([^"]+)"/])
+      expect(tag(name)).toBe('orangu reads your Claude Code sessions, finds what to change in your harness, and checks each change on your later sessions.')
+    for (const alt of [/<meta property="og:image:alt" content="([^"]+)"/, /<meta name="twitter:image:alt" content="([^"]+)"/])
+      expect(tag(alt)).toBe('orangu: improve your agent harness, one checked change at a time')
+    expect(src).toContain('"description":"Improve your agent harness, one checked change at a time.","inLanguage"')
   })
 
   it('shows the complete session observe-to-verified sequence in order', () => {
@@ -635,12 +722,11 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(legacy.attr()).toBeNull()
   })
 
-  it('uses work scenarios instead of profession cards', () => {
-    const scenarios = src.match(/<section id="scenarios"[\s\S]*?<\/section>/)?.[0] ?? ''
-    for (const title of ['Review delegated work', 'Diagnose a rough outcome', 'Improve a repeated workflow'])
-      expect(scenarios).toContain(title)
+  it('keeps one section for each job and no profession cards', () => {
+    // the two jobs merged into #scope, and the scenarios repeated them, so both sections are gone
+    for (const cut of ['jobs', 'scenarios']) expect(src, `#${cut} is back`).not.toContain(`id="${cut}"`)
     for (const profession of ['Developers', 'Engineers', 'Teachers', 'Product managers', 'Everyone else'])
-      expect(scenarios).not.toContain(`<h3>${profession}</h3>`)
+      expect(src).not.toContain(`<h3>${profession}</h3>`)
     expect(src).not.toContain('class="card role"')
   })
 
@@ -666,10 +752,34 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(text).toContain('You apply a repo change explicitly, and orangu checks it on later sessions. A global change stays a proposal.')
     expect(text).not.toMatch(/\borangu verifies it\b/)
     expect(text).toContain('The session and repo scopes can propose, apply, and verify. The global scope stays proposal-only.')
-    expect(text).toContain('later verification beyond chance')
+    expect(text).toContain('Then it checks each applied change on your later sessions, with no model in the measurement.')
+    // the compare panel names the model-written review, and orangu is the last row
+    const rows = [...src.matchAll(/<div class="compare-row"><b>([^<]+)<\/b>/g)].map((match) => match[1])
+    expect(rows.slice(-2)).toEqual(['Model-written session reviews', 'orangu'])
     expect(text, 'no claim that one later session verifies a change').not.toMatch(/\ba later session\b/i)
     expect(text).not.toMatch(/\bglobal\b[^.]{0,80}\b(?:can|may) be (?:applied|verified)\b/i)
     expect(text).not.toMatch(/\b(?:apply|verify) (?:a )?global (?:proposal|change)\b/i)
+  })
+
+  // A chance claim is about the later sessions of one reader, never a general result. Each block of visible text
+  // splits at each sentence end, also before a lower-case "orangu", so 2 sentences never pass as 1.
+  const landingSentences = htmlToText(src)
+    .split(PARAGRAPH)
+    .flatMap((block) => block.replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+/))
+    .filter((sentence) => /[A-Za-z]/.test(sentence))
+
+  it('names your later sessions in each sentence that says beyond chance or beat chance', () => {
+    const chance = landingSentences.filter((sentence) => /\b(?:beyond|beat) chance\b/i.test(sentence))
+    expect(chance.length).toBeGreaterThan(0)
+    expect(chance.filter((sentence) => !sentence.includes('your later sessions'))).toEqual([])
+  })
+
+  it('says beyond chance after each guard clause', () => {
+    // a guard holds when the check did not get worse beyond chance, so a bare "did not rise" claims too much
+    const guards = landingSentences.flatMap((sentence) =>
+      [...sentence.matchAll(/\b(?:got worse|did not (?:go up|rise|increase))\b(?: beyond chance)?/g)].map((match) => match[0]))
+    expect(guards.length).toBeGreaterThan(0)
+    expect(guards.filter((guard) => !guard.endsWith(' beyond chance'))).toEqual([])
   })
 
   it('states the bounded evidence inputs without vendor-command comparisons', () => {
@@ -684,11 +794,30 @@ describe('site/index.src.html (authored landing source)', () => {
   it('stages inspection and Claude plugin activation in the install section', () => {
     const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
     expect(install.match(/class="card install-card"/g) ?? []).toHaveLength(3)
+    expect(install).toContain('<div class="kicker">Get started</div>')
+    expect(install).toContain('<h2>Three front doors. Each one opens the same loop.</h2>')
     // The first card leads with the bare command; the latest-session command is its second bar.
     const first = install.split('<div class="card install-card">')[1] ?? ''
     expect(first).toContain('<h3>Choose a report</h3>')
     expect([...first.matchAll(/<button data-cmd="([^"]+)">copy<\/button>/g)].map((match) => match[1])).toEqual(['npx orangu', 'npx orangu report'])
     expect(first).toContain('<div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button')
+    // 3 front doors: the terminal, the local app, and Claude Code, each with its door label and its copy bars
+    const cards = install.split('<div class="card install-card">').slice(1)
+    expect(cards.map((card) => card.match(/^<span class="scope">([^<]+)<\/span><h3>([^<]+)<\/h3>/)?.slice(1).join(' / '))).toEqual([
+      'TERMINAL / Choose a report',
+      'APP / Keep the local app open',
+      'CLAUDE CODE / Add the Claude Code plugin',
+    ])
+    expect(cards.map((card) => [...card.matchAll(/<button data-cmd="([^"]+)">copy<\/button>/g)].map((match) => match[1]))).toEqual([
+      ['npx orangu', 'npx orangu report'],
+      ['npx orangu serve'],
+      ['/plugin marketplace add NissanOhana/orangu', '/plugin install orangu', '/orangu:improve'],
+    ])
+    expect(src).not.toContain('npm i -g orangu')
+    // No person surface names a store command: the page offers only the front doors.
+    expect(src).not.toContain('orangu suggest')
+    // The plugin card names the harness skill in a sentence that starts with a word, not with a code span.
+    expect(cards[2]).toContain('The <code>/orangu:harness</code> skill reviews your whole harness and proposes ranked changes.')
     expect(install).toContain('Add the Claude Code plugin')
     expect(install).toContain('/plugin marketplace add NissanOhana/orangu')
     expect(install).toContain('/plugin install orangu')
@@ -1069,6 +1198,36 @@ describe('README entry points', () => {
     const block = quick.match(/```bash\n([\s\S]*?)```/)?.[1] ?? ''
     expect(block.split('\n')[0]).toMatch(/^npx orangu\s+#/)
     expect(block).toContain('npx orangu report ')
+  })
+})
+
+// The landing and the README may promise a loop step only while the improve skill does it. The Remember step needs
+// the lessons read (the improve body links the loop rules, which run it). "Start with the improve skill" needs the
+// no-input todo read in the improve body.
+describe('loop promises on the landing and the README', () => {
+  const surfaces = [
+    ['site/index.src.html', htmlText(readFileSync(srcPath, 'utf8'))],
+    ['README.md', readFileSync(join(root, 'README.md'), 'utf8')],
+  ] as const
+  const improve = readFileSync(join(root, 'plugin/skills/improve/SKILL.md'), 'utf8')
+  const improveBody = improve.slice(improve.indexOf('\n---', 3) + 4)
+  const loopRules = readFileSync(join(root, 'plugin/skills/shared/loop.md'), 'utf8')
+  const claims = (pattern: RegExp): string[] => surfaces.filter(([, text]) => pattern.test(text)).map(([label]) => label)
+
+  it('names the Remember step only while the improve skill reads the lessons', () => {
+    const remember = claims(/\b6\. Remember\b|\*\*Remember\.\*\*/)
+    expect(remember).toContain('site/index.src.html')
+    for (const label of remember) {
+      expect(improveBody, `${label} names Remember, but improve does not link the loop rules`).toContain('](../shared/loop.md)')
+      expect(loopRules, `${label} names Remember, but the loop rules do not read the lessons`).toContain('orangu suggest --lessons')
+    }
+  })
+
+  it('says start with the improve skill only while its body takes the first todo item', () => {
+    const start = claims(/\bstart with (?:`?\/orangu:improve`?|the improve skill)/i)
+    expect(start).toContain('site/index.src.html')
+    for (const label of start)
+      expect(improveBody, `${label} says start with improve, but its body has no todo read`).toContain('orangu suggest --todo --json --quiet')
   })
 })
 
