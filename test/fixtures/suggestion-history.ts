@@ -7,8 +7,8 @@ import { measureCohortEffect, outcomePatch, verificationPatch, type CohortCandid
 import { buildHistory, buildLessonRead, type ChangeRow, type LessonRead } from '../../src/suggest/lessons.js'
 import type { SuggestionViewRecord } from '../../src/model/app-data.js'
 import type { SuggestionRecord } from '../../src/suggest/types.js'
-import { isTrustedComputedVerification } from '../../src/suggest/verification-policy.js'
-import { APPLIED_AT, WORKSPACE, appliedOf, metricsOf, proposalOf, sg, uuid } from './suggestion-records.js'
+import { isTrustedComputedVerification, verificationReceiptSummary } from '../../src/suggest/verification-policy.js'
+import { APPLIED_AT, DECREASED, WORKSPACE, appliedOf, metricsOf, proposalOf, sg, uuid } from './suggestion-records.js'
 
 /** Cohort loaders over later sessions in `cwd`, 1 for each tool-call value, each settled (as src/suggest/lessons.test.ts). */
 function laterDeps(values: number[], cwd: string): CohortDeps {
@@ -61,6 +61,38 @@ export async function historyRecords(cwd = WORKSPACE): Promise<SuggestionRecord[
     appliedOf(sg(0xc6), { proposal, ruleId: 'unverified-edits', status: 'rejected', reasonCode: 'wrong-cause', statusAt: APPLIED_AT + 30_000, title: 'Name the goal of the session in the first prompt' }),
     appliedOf(sg(0xc7), { proposal, ruleId: 'context-near-limit', title: 'Keep the context small with a short project file' }),
   ]
+}
+
+/**
+ * A verified record of the earlier receipt form that the trust policy still accepts: a session comparison over 3 later
+ * sessions. The form keeps no earlier sessions and no p-value.
+ */
+export function earlierVerifiedOf(id: string, cwd = WORKSPACE): SuggestionRecord {
+  const later = [uuid(100), uuid(101), uuid(102)]
+  return {
+    ...appliedOf(id, { scope: 'session', proposal: proposalOf(cwd, [DECREASED]), title: 'Read the test output before a retry' }),
+    status: 'verified',
+    statusAt: APPLIED_AT + 45_000,
+    verificationTrust: 'computed-v1',
+    verificationReceipt: {
+      v: 1,
+      summary: verificationReceiptSummary([DECREASED]),
+      measuredSessionIds: later,
+      checks: [{ name: 'avgToolCalls decreased', metric: 'avgToolCalls', comparison: 'decreased', before: 11, after: 2, evidence: 'avgToolCalls: 11 → 2 (decreased)', ok: true }],
+      receiptPath: '/p/a.verified.json',
+    },
+    effect: { before: { avgToolCalls: 11 }, after: { avgToolCalls: 2 }, measuredSessionIds: later },
+  }
+}
+
+/** The app record and the history row of `earlierVerifiedOf`, as the server builds the row and marks the record. */
+export function earlierFormFixture(): { record: SuggestionViewRecord; row: ChangeRow } {
+  const record = earlierVerifiedOf(sg(0xc8))
+  const scope = { workspace: { cwd: WORKSPACE, sessionIds: [uuid(900)] } }
+  return {
+    record: { ...record, verificationTrusted: isTrustedComputedVerification(record) ? true : undefined },
+    row: buildHistory({ records: [record], lines: [record], scope })[0]!,
+  }
 }
 
 /**

@@ -198,12 +198,14 @@ function rowHtml(row: ChangeRow, view: HistoryView, context: StoreContext): stri
   const workspace = workspaceOf(record)
   const scope = [row.scope, row.changeClass ? changeClassLabel(row.changeClass) : '', workspace].filter(Boolean).join(' · ')
   const reason = row.reasonCode ? REJECT_REASON_LABELS[row.reasonCode as RejectReasonCode] ?? row.reasonCode : ''
+  // The earlier receipt form keeps no earlier sessions and no p-value, so its row shows only the later count.
+  const earlier = row.checks.some((check) => check.pLower === null) ? '' : `${num(row.baseline)} earlier and `
   const body = [
     row.decidedAt !== undefined ? `<div class="sg-pfield"><b>Decided.</b> ${day(row.decidedAt)}</div>` : '',
     `<div class="sg-pfield"><b>Id.</b> <span class="mono">${id}</span></div>`,
     `<div class="sg-pfield"><b>Scope.</b> ${esc(scope)}</div>`,
     row.files.length ? `<div class="sg-pfield"><b>Files.</b> ${plural(row.files.length, 'file')} changed<ul>${row.files.map((file) => `<li class="mono">${esc(file)}</li>`).join('')}</ul></div>` : '',
-    row.verdict !== null ? `<div class="sg-pfield"><b>Sessions.</b> ${num(row.baseline)} earlier and ${plural(row.later, 'later session')}.</div>` : '',
+    row.verdict !== null ? `<div class="sg-pfield"><b>Sessions.</b> ${earlier}${plural(row.later, 'later session')}.</div>` : '',
     checksPart(row.checks, view.plain),
     view.plain ? '' : storedLines(record),
     othersPart(row.confoundedBy),

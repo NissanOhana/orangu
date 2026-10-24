@@ -75,6 +75,13 @@ describe('the Lessons section: the outcomes table', () => {
     expect(table).toContain('<table class="grid" aria-labelledby="l-0-outcomes">')
   })
 
+  it('puts each table in its own scroll box, so a wide table scrolls there and not the page', () => {
+    const html = draw(read)
+    expect(html).toContain('<div class="scroll-x"><table class="grid" aria-labelledby="l-0-outcomes">')
+    expect(html).toContain('<div class="scroll-x"><table class="grid" aria-labelledby="l-0-reasons">')
+    expect(html.match(/<table /g)).toHaveLength(html.match(/<div class="scroll-x"><table /g)!.length)
+  })
+
   it('counts by the stored status in Plain language, in 5 columns', () => {
     const html = draw(read, { plain: true })
     expect(html).toContain('<tr><th scope="col">Change class</th><th scope="col" class="num">Verified</th><th scope="col" class="num">Not shown beyond chance</th><th scope="col" class="num">Regressed</th><th scope="col" class="num">Kept after a regression</th><th scope="col" class="num">Dismissed</th></tr>')

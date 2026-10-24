@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { SuggestionViewRecord } from '../../model/app-data.js'
-import { historyFixture } from '../../../test/fixtures/suggestion-history.js'
+import { earlierFormFixture, historyFixture } from '../../../test/fixtures/suggestion-history.js'
 import { proposalDetails } from './proposals-ui.js'
 import type { ChangeRow } from './lesson-types.js'
 import { checkSentence, historySection, METRIC_NAMES, summaryLine, type HistoryView } from './history-ui.js'
@@ -199,6 +199,15 @@ describe('the History section: an open row', () => {
     expect(draw(rows)).not.toMatch(/up to/i)
   })
 
+  it('shows only the later count for a receipt of the earlier form, which holds no earlier count', () => {
+    const { record, row } = earlierFormFixture()
+    expect(row.verdictTrusted).toBe(true)
+    expect(row.checks.map((check) => check.pLower)).toEqual([null])
+    const html = rowHtml(draw([row], {}, new Map([[row.id, record]])), row.id)
+    expect(html).toContain('<b>Sessions.</b> 3 later sessions.</div>')
+    expect(html).not.toContain('earlier and')
+  })
+
   it('shows the check means of the read in Detailed: the check, both means, both p-values and the check verdict', () => {
     const html = rowHtml(draw(rows), VERIFIED)
     expect(html).toContain('<th scope="col">Check</th><th scope="col" class="num">Before</th><th scope="col" class="num">After</th><th scope="col" class="num">p lower</th><th scope="col" class="num">p higher</th><th scope="col">Verdict</th>')
@@ -289,6 +298,16 @@ describe('the History section: every workspace', () => {
     expect(html).toContain('<div class="card-title" style="margin:2px 0">repo</div><div class="small muted mb16">/w/repo</div>')
     expect(html).toContain('<div class="card-title" style="margin:2px 0">billing</div>')
     expect(html).toContain('<b>History</b> · 10 applied changes</summary>')
+  })
+
+  it('shows the newest application first inside each workspace of a read of every workspace', () => {
+    const older = { ...rowOf(WAITING), id: 'sg_0000000000a1', appliedAt: Date.parse('2026-09-01T00:00:00.000Z') }
+    const newer = { ...rowOf(WAITING), id: 'sg_0000000000a2', appliedAt: Date.parse('2026-10-20T00:00:00.000Z') }
+    const inRepo = new Map([older, newer].map((row) => [row.id, { ...records.get(WAITING)!, id: row.id }]))
+    const html = draw([older, newer], { scope: 'all' }, inRepo)
+    expect(html).toContain('<div class="card-title" style="margin:2px 0">repo</div>')
+    expect(html.indexOf('id="h-sg_0000000000a2"')).toBeGreaterThan(0)
+    expect(html.indexOf('id="h-sg_0000000000a2"')).toBeLessThan(html.indexOf('id="h-sg_0000000000a1"'))
   })
 })
 
