@@ -69,7 +69,7 @@ orangu never changes your harness by itself. Global (whole-machine) changes stay
 | `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML. Claude writes only 3 text values, and `orangu show-me` writes both files from the data |
 | `/orangu:feedback` | Send reviewed beta feedback from a localhost form |
 
-Skills read `orangu ... --json` and `orangu evidence`, never the raw `.jsonl`. Each skill shows a token estimate before a large read. The shipped instructions live in [`plugin/skills/`](plugin/skills/). Codex can also host the improvement skills: `codex plugin marketplace add NissanOhana/orangu` then `codex plugin add orangu@orangu` installs `$orangu-improve`, `$orangu-apply`, and `$orangu-feedback`. orangu does not ingest Codex transcripts.
+Skills read `orangu ... --json` and `orangu evidence`, never the raw `.jsonl`. Each skill shows a token estimate before a large read. The shipped instructions live in [`plugin/skills/`](plugin/skills/). Codex can also host the improvement skills: `codex plugin marketplace add NissanOhana/orangu` then `codex plugin add orangu@orangu` installs `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback`. orangu does not ingest Codex transcripts.
 
 ## Not a wrapper
 

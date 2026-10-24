@@ -241,8 +241,8 @@ copyFileSync(join(root, 'design/brand/mascot-main-transparent.png'), join(codexP
 // plugins/orangu/skills/ (installable) and .agents/skills/ (repo-discovered) are GENERATED from it.
 // The only hand-written Codex inputs are plugin/codex/<n>/openai.yaml. Every rule below is
 // deterministic and fails closed: a skill that cannot be transformed stops the build.
-const CODEX_SKILLS = ['improve', 'apply', 'feedback']
-const CLAUDE_SKILLS = ['analyze', 'improve', 'apply', 'harness', 'feedback']
+const CODEX_SKILLS = ['improve', 'apply', 'feedback', 'interview']
+const CLAUDE_SKILLS = ['analyze', 'improve', 'apply', 'harness', 'feedback', 'interview']
 const CLAUDE_FALLBACK = 'If `orangu` is not on PATH, run `node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs"` with the same arguments.'
 const CODEX_FALLBACK = 'If `orangu` is not on PATH, resolve paths relative to this `SKILL.md`. For an installed plugin, try `../../bin/orangu.cli.mjs` first. For a source checkout, try `../../../dist/orangu.js` next. Run the first file that exists with Node.js 20 or newer. Never fetch a package to continue.'
 const CODEX_TARGETS = [join(root, '.agents/skills'), join(codexPluginRoot, 'skills')]

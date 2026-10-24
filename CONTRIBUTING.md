@@ -21,7 +21,7 @@ Thanks for helping make agent sessions easier to inspect and improve.
 - `src/suggest/`: bounded evidence, catalog matching, lifecycle state, and artifact validation.
 - `src/cli/`: command routing and output.
 - `plugin/`: Claude Code plugin and bundled offline CLI.
-- `.agents/skills/`: Codex improvement and application skills.
+- `.agents/skills/`: Codex improvement, interview and application skills.
 - `site/`: authored landing source (`index.src.html`, `llms.src.txt`), the generated `index.html`, `llms.txt`, `llms-full.txt`, `sample.html`, and `assets/` (the report screenshot).
 - `docs/`: public user and technical documentation.
 

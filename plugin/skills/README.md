@@ -14,4 +14,4 @@ Seven Claude Code skills. Start with `/orangu:improve`. Each owns one job.
 
 Skills read `orangu` CLI output, never a `.jsonl` transcript, and size each read first. Units: tokens, milliseconds, effort.
 
-The build generates Codex mirrors of `improve`, `apply`, `feedback` (`$orangu-<name>` under `plugins/orangu/skills/` and `.agents/skills/`). `analyze`/`harness` pointers become CLI verbs. Edit only here.
+The build generates Codex mirrors of `improve`, `apply`, `feedback`, `interview` (`$orangu-<name>` under `plugins/orangu/skills/` and `.agents/skills/`). `analyze`/`harness` pointers become CLI verbs. Edit only here.

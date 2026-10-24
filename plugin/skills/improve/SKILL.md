@@ -50,6 +50,8 @@ Fix the cause the evidence shows. As the change, never copy the session's own fa
 
 Before drafting, interview the user on what the evidence cannot show, as [the interview guide](../shared/interview.md) directs: AskUserQuestion when the choices are finite, free text otherwise. Answers are user-stated context, never a measurement.
 
+If the user asks for outside research or a deeper interview first, run `/orangu:interview <id>` instead. Then stop here. For a direct input, first create the record with the step 4 command, and pass its id.
+
 ## 3. Research only where it adds value
 
 Consult deterministic catalog matches before going online. Research only missing or time-sensitive options. Prefer primary documentation. For skills, search reputable sources such as skills.sh, but never install a skill or plugin. Install counts show adoption, not quality.
@@ -74,7 +76,7 @@ Write both `~/.orangu/proposals/<id>.md` and `~/.orangu/proposals/<id>.json` exa
 
 ## 5. Report in chat
 
-Return a short ranked summary: the change, expected outcome, what happened, evidence, risks, later verification, sources, the saved proposal id and path. Name the next action: `/orangu:apply <id>` for session/repo proposals, review only for global. Say that you applied nothing.
+Return a short ranked summary: the change, expected outcome, what happened, evidence, risks, later verification, sources, the saved proposal id and path. Name the next action: `/orangu:apply <id>` for session/repo proposals, review only for global. For a second opinion before apply, name `/orangu:interview <id>`. Say that you applied nothing.
 
 Before you send the summary, write it to a new file `~/.orangu/drafts/improve-<random>.md`. Then run `orangu ste '<draft-path>'`. Then offer `/orangu:feedback` once. Never launch it unless the user accepts.
 

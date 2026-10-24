@@ -51,11 +51,11 @@ describe('Codex plugin packaging', () => {
     }
   })
 
-  it('bundles Orangu improve, apply, and feedback as its own Codex skills', () => {
+  it('bundles Orangu improve, interview, apply, and feedback as its own Codex skills', () => {
     const names = readdirSync(join(root, 'plugins/orangu/skills'))
       .filter((name) => existsSync(join(root, 'plugins/orangu/skills', name, 'SKILL.md')))
       .sort()
-    expect(names).toEqual(['orangu-apply', 'orangu-feedback', 'orangu-improve'])
+    expect(names).toEqual(['orangu-apply', 'orangu-feedback', 'orangu-improve', 'orangu-interview'])
 
     for (const name of names) {
       const skill = readText(`plugins/orangu/skills/${name}/SKILL.md`)
@@ -69,10 +69,10 @@ describe('Codex plugin packaging', () => {
       expect(skill, `${name} has no Claude slash command`).not.toMatch(/\/orangu:/)
       // routes to another mirrored skill keep the Codex name; feedback routes only to the CLI and carries none
       const self = name.replace('orangu-', '')
-      const others = ['improve', 'apply', 'feedback'].filter((other) => other !== self)
+      const others = ['improve', 'apply', 'feedback', 'interview'].filter((other) => other !== self)
       if (new RegExp(`/orangu:(${others.join('|')})\\b`).test(readText(`plugin/skills/${self}/SKILL.md`)))
         expect(skill, `${name} routes with Codex names`).toContain('$orangu-')
-      // Codex ships only these three skills: a pointer to an unmirrored skill must name the CLI verb,
+      // Codex ships only these four skills: a pointer to an unmirrored skill must name the CLI verb,
       // never a `$orangu-<n>` the host cannot resolve
       expect(skill, `${name} routes to no unmirrored Codex skill`).not.toMatch(/\$orangu-(analyze|harness)\b/)
       expect(skill).toMatch(new RegExp(`^# ${name}$`, 'm'))
@@ -80,6 +80,20 @@ describe('Codex plugin packaging', () => {
     expect(readText('plugins/orangu/skills/orangu-feedback/SKILL.md')).toContain('Not for anything about a session: the `orangu analyze` command.')
     expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('Not for a repo or global harness review: the `orangu harness` command.')
     expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('belongs to `orangu harness`.')
+    // improve hands off to the interview by its Codex name, and the interview names the CLI verb for the harness review
+    for (const tree of ['plugins/orangu/skills', '.agents/skills']) {
+      const improve = readText(`${tree}/orangu-improve/SKILL.md`)
+      expect(improve).toContain('run `$orangu-interview <id>` instead.')
+      expect(improve).toContain('For a second opinion before apply, name `$orangu-interview <id>`.')
+      const interview = readText(`${tree}/orangu-interview/SKILL.md`)
+      expect(interview).toContain('Not for a quick proposal: $orangu-improve.')
+      expect(interview).toContain('For a review of the whole setup, use `orangu harness`.')
+      // Codex runs no plugin agents, so the mirror searches inline under the same terms and says what that risks
+      expect(interview).toContain('In a host with no plugin agents, such as Codex, search yourself with the approved terms only, under the same policy.')
+      expect(interview).toContain('Tell the user that page text then reaches a thread that can run commands.')
+    }
+    // the skill stays model-invocable in both hosts, so improve and harness can hand off to it (BRAINSTORM decision 12)
+    expect(readText('plugin/codex/interview/openai.yaml')).toContain('allow_implicit_invocation: true')
     for (const path of filesUnder('plugins/orangu/skills').filter((p) => p.endsWith('.md'))) {
       expect(readText(path), `${path} routes to no unmirrored Codex skill`).not.toMatch(/\$orangu-(analyze|harness)\b/)
       // the CLI-verb rewrite must never nest one code span inside another (`the `orangu harness` command`)
@@ -90,7 +104,7 @@ describe('Codex plugin packaging', () => {
   it('generates the mirror from plugin/skills instead of hand-writing it', () => {
     // The invariant that matters: every non-frontmatter line of the Claude skill that carries no
     // host-specific token appears verbatim in the mirror, so prose edits are one-file edits.
-    for (const name of ['improve', 'apply', 'feedback']) {
+    for (const name of ['improve', 'apply', 'feedback', 'interview']) {
       const claude = readText(`plugin/skills/${name}/SKILL.md`)
       const codex = readText(`plugins/orangu/skills/orangu-${name}/SKILL.md`)
       const body = claude.split('\n---\n', 2)[1] ?? ''

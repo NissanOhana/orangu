@@ -1,0 +1,7 @@
+interface:
+  display_name: "Orangu Interview"
+  short_description: "Research one suggestion, then interview the user"
+  default_prompt: "Use $orangu-interview to research outside options for one Orangu suggestion. Then interview the user and write its proposal or a second opinion."
+
+policy:
+  allow_implicit_invocation: true
