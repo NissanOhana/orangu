@@ -10763,7 +10763,7 @@ var catalog_default2 = {
       feature: "a faster model for the search subagent",
       url: "https://cursor.com/docs/subagents",
       verifiedAt: "2026-11-01",
-      note: "Cursor runs its built-in Explore subagent on a faster model by default, so that it can run many searches in parallel. Its docs say to inherit the parent model only when a subagent needs the same reasoning power. Give a search or read agent of your own a small model, such as haiku in Claude Code."
+      note: "Cursor runs its built-in Explore subagent on a faster model by default, so that it can run many searches in parallel. Its docs say to choose inherit when a subagent needs the same reasoning power as the parent. Give a search or read agent of your own a small model, such as haiku in Claude Code."
     },
     {
       id: "effort-low-for-tool-calls",
@@ -10772,7 +10772,7 @@ var catalog_default2 = {
       feature: "reasoning effort for each request",
       url: "https://docs.x.ai/developers/model-capabilities/text/reasoning",
       verifiedAt: "2026-11-01",
-      note: "xAI lists low reasoning effort as the best fit for simple tool calling and for agent work where latency matters. Grok models cannot turn reasoning off, so the effort level is the control. The usage of a request reports its reasoning tokens in their own field. Set a low effort on an agent or a skill that only calls tools."
+      note: "xAI lists low reasoning effort as the best fit for simple tool calling and for agent work where latency matters. Its reasoning models cannot turn reasoning off, so the effort level is the control. The usage of a request reports its reasoning tokens in their own field. Set a low effort on an agent or a skill that only calls tools."
     },
     {
       id: "effort-level-sources",
@@ -10808,7 +10808,7 @@ var catalog_default2 = {
       tool: "code that the agent writes to loop over tool calls",
       url: "https://www.anthropic.com/engineering/code-execution-with-mcp",
       verifiedAt: "2026-11-01",
-      note: "Let the agent write code that calls the tools in a loop and filters the results. One run of that code replaces a chain of separate tool calls. The intermediate results stay in the execution environment and do not enter the context of the model. The post covers MCP tools, and a script that loops over a repeated shell command works the same way."
+      note: "Let the agent write code that calls the tools in a loop and filters the results. One run of that code replaces a chain of separate tool calls. By default, the intermediate results stay in the execution environment and do not enter the context of the model. The post covers MCP tools, and a script that loops over a repeated shell command works the same way."
     },
     {
       id: "skill-minimal-router",
@@ -10817,7 +10817,7 @@ var catalog_default2 = {
       feature: "a skill main file as a minimal router",
       url: "https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra",
       verifiedAt: "2026-11-01",
-      note: "For a skill with several workflows, make its main file a minimal router that points to supporting docs and scripts. Then a run does not read the parts that the task does not need. Keep each skill description as short as possible, but clear about when to use the skill. OpenAI gives this advice for GPT-6 Astra in Codex."
+      note: "For a skill with several workflows, make its main file a minimal router that points to supporting docs and scripts. Then the skill does not force a read of the parts that the task does not need. Keep each skill description as short as possible, but clear about when to use the skill. OpenAI gives this advice for GPT-6 Astra in Codex."
     }
   ]
 };
@@ -10925,7 +10925,7 @@ var features_default = {
       feature: "/skill-doctor (built-in command)",
       url: "https://code.claude.com/docs/en/skills.md",
       verifiedAt: "2026-11-01",
-      note: "Run /skill-doctor in Claude Code to see how much context each skill takes and how often it runs. It flags the skills in the listing that never ran, and it says where to turn them off. It needs Claude Code 2.1.252 or later. This finding counts the tokens of each run of a skill, which is a different measure."
+      note: "Run /skill-doctor in Claude Code to see how much context each skill takes and how often it runs. It flags the skills in the listing that never ran, and it says where to turn them off. It needs Claude Code 2.1.252 or later and feature-flag fetching. This finding counts the tokens of each run of a skill, which is a different measure."
     },
     {
       id: "feat-fewer-permission-prompts",

@@ -100,7 +100,7 @@
       "feature": "/skill-doctor (built-in command)",
       "url": "https://code.claude.com/docs/en/skills.md",
       "verifiedAt": "2026-11-01",
-      "note": "Run /skill-doctor in Claude Code to see how much context each skill takes and how often it runs. It flags the skills in the listing that never ran, and it says where to turn them off. It needs Claude Code 2.1.252 or later. This finding counts the tokens of each run of a skill, which is a different measure."
+      "note": "Run /skill-doctor in Claude Code to see how much context each skill takes and how often it runs. It flags the skills in the listing that never ran, and it says where to turn them off. It needs Claude Code 2.1.252 or later and feature-flag fetching. This finding counts the tokens of each run of a skill, which is a different measure."
     },
     {
       "id": "feat-fewer-permission-prompts",
