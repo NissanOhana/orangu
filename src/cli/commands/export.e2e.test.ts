@@ -34,6 +34,9 @@ const NPX_HOOKS = [
 ]
 /** a value in the code span of a "do not" rule, which the analyzer keeps as the command target */
 const RULE_TOKEN = 'zebraruletoken6623'
+/** a key glued after `_` in a model id, which the harness lists as a model it saw */
+const GLUED_KEY_BODY = 'EXPORTGLUEDMODEL7731'
+const GLUED_MODEL = `claude-opus-5_${['sk', 'ant', 'api03', GLUED_KEY_BODY].join('-')}`
 const SLUG = '-Users-test-Code-demo'
 const IDS = ['eeeeeeee-0000-4000-8000-000000000001', 'eeeeeeee-0000-4000-8000-000000000002']
 const SECTIONS = ['summary', 'index', 'profile', 'evidence', 'harness', 'lessons']
@@ -48,7 +51,7 @@ function transcript(id: string, startAt: string): string {
   b.attachment('instructions', { files: [{ path: '/Users/test/Code/demo/CLAUDE.md', type: 'Project', content: `# Rules\n- Never run \`deploy --token ${RULE_TOKEN}\` by hand.\n` }] })
   b.userPrompt(`My key is ${SECRET}. Fix the ${PROMPT_WORD} parser.`)
   b.tick(1_000)
-  b.toolCall('Bash', { command: `deploy --token ${RULE_TOKEN}` }, 'ok', { usage: { input_tokens: 5, output_tokens: 20 } })
+  b.toolCall('Bash', { command: `deploy --token ${RULE_TOKEN}` }, 'ok', { usage: { input_tokens: 5, output_tokens: 20 }, model: GLUED_MODEL })
   for (let i = 0; i < 4; i++) {
     b.toolCall('Bash', { command: `npm test -- ${PROMPT_WORD} --token ${SECRET}` }, `FAIL ${PROMPT_WORD}: token ${SECRET} was refused`, {
       isError: true,
@@ -167,8 +170,10 @@ describe.skipIf(!existsSync(CLI))('orangu export (built CLI)', () => {
 
   it('holds no planted secret and no prompt word, and the profile word only in the profile', () => {
     const text = readFileSync(exportJson().export.path, 'utf8')
-    for (const planted of [SECRET, PROMPT_WORD, PROFILE_SECRET, HOOK_VALUE, 'NTFY_TOPIC', BEARER, ...TOPICS, RULE_TOKEN]) expect(text, planted).not.toContain(planted)
+    for (const planted of [SECRET, PROMPT_WORD, PROFILE_SECRET, HOOK_VALUE, 'NTFY_TOPIC', BEARER, ...TOPICS, RULE_TOKEN, GLUED_KEY_BODY]) expect(text, planted).not.toContain(planted)
     const file = JSON.parse(text)
+    // the model that the harness saw stays, with its glued key masked
+    expect(JSON.stringify(file.harness.crosswalk.models)).toContain('claude-opus-5_‹anthropic-key›')
     expect(file.profile.repeats).toBe(`Run the tests first. ${PROFILE_WORD} uses ‹anthropic-key› in the demo.`)
     for (const section of SECTIONS.filter((s) => s !== 'profile')) expect(JSON.stringify(file[section]), section).not.toContain(PROFILE_WORD)
     // each hook keeps the name of its script, and the broken rule keeps only its program word
