@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { ANALYZER_RULE_IDS } from '../analyze/rule-ids.js'
 import { INNER_PAIR_FORMS, INNER_PAIR_RELATIVES, INNER_SECRET_PART, LINE_END_SHAPES, NEXT_LINES } from '../../test/fixtures/inner-pair-shapes.js'
-import { GLUED_HEADERS, GLUED_KEYS, KEEP_WORD_START, KEY_PREFIX_SHAPES } from '../../test/fixtures/key-prefix-shapes.js'
+import { GLUED_HEADERS, GLUED_KEYS, KEEP_WORD_START, KEY_PREFIX_SHAPES, KEY_SHAPES } from '../../test/fixtures/key-prefix-shapes.js'
 import { HASH_LINES, PLAIN_TEXT_LINES } from '../../test/fixtures/plain-text-lines.js'
 import { redactValue, scrubStr } from './redact.js'
 import { PATTERNS } from './rules.js'
@@ -252,9 +252,26 @@ describe('scrubStr masks a secret that only its key, its URL, its header or a qu
     for (const [text, out] of KEY_PREFIX_SHAPES) expect(scrubStr(text), text.slice(0, 30)).toBe(out)
   })
 
-  it('masks each key and a JWT right after `_`, a letter and a digit, and inside a model id', () => {
-    expect(GLUED_KEYS).toHaveLength(64)
+  it('masks each key in the real shape of its kind at a word start, an OpenAI service-account and admin key too', () => {
+    expect(KEY_SHAPES).toHaveLength(19)
+    for (const [key, marker] of KEY_SHAPES) expect(scrubStr(`key ${key} end`), key.slice(0, 40)).toBe(`key ${marker} end`)
+  })
+
+  it('masks each key in the real shape of its kind and a JWT right after `_`, a letter and a digit, inside a model id and after a JSON escape', () => {
+    expect(GLUED_KEYS).toHaveLength(95)
     for (const [text, out] of GLUED_KEYS) expect(scrubStr(text), text.slice(0, 40)).toBe(out)
+    // the kind and version of an Anthropic key are its shape: a cut preview can show a body with no uppercase letter
+    expect(scrubStr(`x_${['sk', 'ant', 'api03', 'abcdefghijklmnop'].join('-')}`)).toBe('x_‹anthropic-key›')
+    // a preview can cut a key: a GitHub or npm token cut after 30 characters goes too, as its last 6 are a checksum
+    const cut = KEY_SHAPES.filter(([key]) => /^(?:ghp|npm)_/.test(key))
+    expect(cut).toHaveLength(2)
+    for (const [key, marker] of cut) expect(scrubStr(`x_${key.slice(0, 34)}`), key.slice(0, 4)).toBe(`x_${marker}`)
+  })
+
+  it('masks a placeholder in the real shape of a key right after a word character, as at a word start', () => {
+    const ghp = ['ghp', 'X'.repeat(36)].join('_')
+    const aws = ['AKIA', 'X'.repeat(16)].join('')
+    for (const key of [ghp, aws]) expect(scrubStr(`GITHUB_TOKEN_${key}`), key).toBe(scrubStr(`GITHUB_TOKEN ${key}`).replace(' ', '_'))
   })
 
   it('masks an Authorization credential after a glued header name and a scheme word, and a URL password whose scheme a word character starts', () => {
@@ -282,10 +299,10 @@ describe('scrubStr masks a secret that only its key, its URL, its header or a qu
     expect(scrubStr(`risk-abcdefghijklmnopqrstsk-${v}${v}`)).toBe('risk-abcdefghijklmnopqrst‹api-key›')
   })
 
-  it('keeps the word-start key rules of main, byte for byte', () => {
+  it('keeps the word-start key rules of main, byte for byte, but the OpenAI row also takes service-account and admin keys', () => {
     expect(PATTERNS.slice(1, 15).map((rule) => (typeof rule === 'function' ? rule.name : rule[0].source))).toStrictEqual([
       String.raw`\bsk-ant-[A-Za-z0-9_-]{10,}`,
-      String.raw`\bsk-proj-[A-Za-z0-9_-]{20,}`,
+      String.raw`\bsk-(?:proj|svcacct|admin)-[A-Za-z0-9_-]{20,}`,
       String.raw`\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}`,
       String.raw`\bwhsec_[A-Za-z0-9]{16,}`,
       String.raw`\bsk-[A-Za-z0-9]{20,}`,

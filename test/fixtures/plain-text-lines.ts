@@ -41,8 +41,8 @@ const NEAR_MISSES = [
   'this.surveyJsConfiguration.questionsAndAnswers.items',
   'monkeyJumpingOverTheFence.somethingElseLong.value',
   'const keyJsonPathResolver = config.apiKeyJsonFilePath.trim()',
-  'GITHUB_TOKEN_ghp_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX',
-  'MAKIAXXXXXXXXXXXXXXXX',
+  'task-admin-dashboard-settings-page',
+  'use_hf_tokenizer_for_pretrained_models',
   'useBearer authenticationheader',
   'installation_authorization = await client.check',
 ]

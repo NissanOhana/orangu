@@ -41,32 +41,54 @@ export const KEY_PREFIX_SHAPES: ReadonlyArray<readonly [text: string, redacted: 
   [`token ${googleInPayload} end`, 'token ‹jwt› end'],
 ]
 
-/** Each key rule of the redaction, and a JWT, with the marker that each gets. Fake values only. */
-const KEYS: ReadonlyArray<readonly [key: string, marker: string]> = [
-  [`sk-ant-api03-${v}`, '‹anthropic-key›'],
-  [`sk-proj-${v}${v}`, '‹openai-project-key›'],
-  [['sk', 'live', `${v}${v}`].join('_'), '‹stripe-key›'],
-  [['whsec', `${v}${v}`].join('_'), '‹stripe-webhook-secret›'],
-  [`sk-${v}${v}`, '‹api-key›'],
-  [['ghp', `${v}${v}`].join('_'), '‹github-token›'],
-  [['github', 'pat', `${v}${v}`].join('_'), '‹github-token›'],
-  [`glpat-${v}${v}`, '‹gitlab-token›'],
-  [['npm', `${v}${v}`].join('_'), '‹npm-token›'],
-  [['hf', `${v}${v}`].join('_'), '‹huggingface-token›'],
-  [`SG.${v}${v}.${v}${v}`, '‹sendgrid-key›'],
-  [['dop', 'v1', `${v}${v}${v}${v}`].join('_'), '‹digitalocean-token›'],
-  [`xoxb-${v}`, '‹slack-token›'],
-  [['AKIA', 'IOSFODNN7EXAMPLE'].join(''), '‹aws-key›'],
-  [`AIza${v}${v}`, '‹google-key›'],
+/** A seeded fake key body in the alphabet and the length of a real key, so each run reads the same keys. */
+let fakeSeed = 20_261_102
+function fake(length: number, alphabet: string): string {
+  return Array.from({ length }, () => {
+    fakeSeed = (Math.imul(fakeSeed, 1_103_515_245) + 12_345) >>> 0
+    return alphabet[(fakeSeed >>> 8) % alphabet.length]
+  }).join('')
+}
+const UPPER = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const LETTERS = `${UPPER}${UPPER.toLowerCase()}`
+const DIGITS = '0123456789'
+const ALNUM = `${LETTERS}${DIGITS}`
+const B64URL = `${ALNUM}-_`
+const HEX = '0123456789abcdef'
+
+/**
+ * Each key rule of the redaction in the real shape of its kind, and a JWT, with the marker that each gets. Where the
+ * alphabet of a kind allows it, the body has no digit or no uppercase letter, as a real key of that kind can have:
+ * a Hugging Face token is letters only, a Slack user token ends in lowercase hex. Fake values only.
+ */
+export const KEY_SHAPES: ReadonlyArray<readonly [key: string, marker: string]> = [
+  [['sk', 'ant', 'api03', `${fake(93, B64URL)}AA`].join('-'), '‹anthropic-key›'],
+  [['sk', 'proj', `${fake(74, B64URL)}T3BlbkFJ${fake(74, B64URL)}`].join('-'), '‹openai-project-key›'],
+  [['sk', 'svcacct', `${fake(74, B64URL)}T3BlbkFJ${fake(74, B64URL)}`].join('-'), '‹openai-project-key›'],
+  [['sk', 'admin', `${fake(58, B64URL)}T3BlbkFJ${fake(58, B64URL)}`].join('-'), '‹openai-project-key›'],
+  [['sk', 'live', `51${fake(97, ALNUM)}`].join('_'), '‹stripe-key›'],
+  [['whsec', fake(32, LETTERS)].join('_'), '‹stripe-webhook-secret›'],
+  [['sk', `${fake(20, ALNUM)}T3BlbkFJ${fake(20, ALNUM)}`].join('-'), '‹api-key›'],
+  [['ghp', fake(36, LETTERS)].join('_'), '‹github-token›'],
+  [['github', 'pat', `11${fake(20, UPPER + DIGITS)}`, fake(59, ALNUM)].join('_'), '‹github-token›'],
+  [['glpat', fake(20, LETTERS)].join('-'), '‹gitlab-token›'],
+  [['npm', fake(36, LETTERS)].join('_'), '‹npm-token›'],
+  [['hf', fake(34, LETTERS)].join('_'), '‹huggingface-token›'],
+  [['SG', fake(22, LETTERS), fake(43, LETTERS)].join('.'), '‹sendgrid-key›'],
+  [['dop', 'v1', fake(64, HEX)].join('_'), '‹digitalocean-token›'],
+  [['xoxb', fake(12, DIGITS), fake(13, DIGITS), fake(24, ALNUM)].join('-'), '‹slack-token›'],
+  [['xoxp', fake(11, DIGITS), fake(10, DIGITS), fake(11, DIGITS), fake(32, HEX)].join('-'), '‹slack-token›'],
+  [['AKIA', fake(16, UPPER)].join(''), '‹aws-key›'],
+  [['AIza', fake(35, `${LETTERS}-_`)].join(''), '‹google-key›'],
   [[header, payload, v].join('.'), '‹jwt›'],
 ]
 
 /**
- * Each key and a JWT right after `_`, a letter and a digit, and inside a model id, as a variable name, a JSON escape
- * (`\nsk-…`), a URL escape (`%22sk-…`) or a model string leaves it, with the marker in its place. Fake values only.
+ * Each key and a JWT right after `_`, a letter and a digit, inside a model id and after a JSON escape, as a variable
+ * name, a URL escape (`%22sk-…`), a model string or JSON text (`\nsk-…`) leaves it, with the marker in its place.
  */
-export const GLUED_KEYS: ReadonlyArray<readonly [text: string, redacted: string]> = KEYS.flatMap(([key, marker]) =>
-  ['_', 'm', '7', 'claude-opus-5_'].map((glue) => [`${glue}${key}`, `${glue}${marker}`] as const),
+export const GLUED_KEYS: ReadonlyArray<readonly [text: string, redacted: string]> = KEY_SHAPES.flatMap(([key, marker]) =>
+  ['_', 'm', '7', 'claude-opus-5_', '\\n'].map((glue) => [`${glue}${key}`, `${glue}${marker}`] as const),
 )
 
 /**
