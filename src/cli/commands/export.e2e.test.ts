@@ -19,16 +19,26 @@ const SECRET = 'sk-ant-api03-EXPORTMARKER9073'
 const PROMPT_WORD = 'zebraexportprompt4417'
 const PROFILE_SECRET = 'sk-ant-api03-PRIVATEPURPLEFERRET9073'
 const PROFILE_WORD = 'quokkaexportprofile5531'
+/** a hook that the shell runs with an assignment in front: the value is no secret word, so the scrub cannot see it */
+const HOOK_VALUE = 'zebrahooktopic5512'
+const HOOK = `NTFY_TOPIC=${HOOK_VALUE} ~/.claude/hooks/ntfy.sh`
+/** a value in the code span of a "do not" rule, which the analyzer keeps as the command target */
+const RULE_TOKEN = 'zebraruletoken6623'
 const SLUG = '-Users-test-Code-demo'
 const IDS = ['eeeeeeee-0000-4000-8000-000000000001', 'eeeeeeee-0000-4000-8000-000000000002']
 const SECTIONS = ['summary', 'index', 'profile', 'evidence', 'harness', 'lessons']
 
-/** A session that puts the secret and the word in a prompt, a correction, 4 failing commands and an edit. */
+/**
+ * A session that puts the secret and the word in a prompt, a correction, 4 failing commands and an edit. It also loads a
+ * CLAUDE.md rule with a value in its code span, breaks that rule, and runs the hook that starts with an assignment.
+ */
 function transcript(id: string, startAt: string): string {
   resetIds()
   const b = new SessionBuilder({ sessionId: id, startAt })
+  b.attachment('instructions', { files: [{ path: '/Users/test/Code/demo/CLAUDE.md', type: 'Project', content: `# Rules\n- Never run \`deploy --token ${RULE_TOKEN}\` by hand.\n` }] })
   b.userPrompt(`My key is ${SECRET}. Fix the ${PROMPT_WORD} parser.`)
   b.tick(1_000)
+  b.toolCall('Bash', { command: `deploy --token ${RULE_TOKEN}` }, 'ok', { usage: { input_tokens: 5, output_tokens: 20 } })
   for (let i = 0; i < 4; i++) {
     b.toolCall('Bash', { command: `npm test -- ${PROMPT_WORD} --token ${SECRET}` }, `FAIL ${PROMPT_WORD}: token ${SECRET} was refused`, {
       isError: true,
@@ -38,6 +48,7 @@ function transcript(id: string, startAt: string): string {
   b.userPrompt(`No, that is wrong. The ${PROMPT_WORD} parser is still broken.`)
   b.tick(1_000)
   b.toolCall('Edit', { file_path: '/Users/test/Code/demo/src/parser.ts', old_string: 'a', new_string: `b // ${PROMPT_WORD}` }, 'ok', { usage: { input_tokens: 5, output_tokens: 20 } })
+  b.stopHookSummary([{ command: HOOK, durationMs: 40 }])
   b.turnDuration(9_000, 12)
   return b.toJsonl()
 }
@@ -63,6 +74,8 @@ beforeAll(async () => {
   await mkdir(projects, { recursive: true })
   await writeFile(join(projects, `${IDS[0]}.jsonl`), transcript(IDS[0]!, '2026-08-14T10:00:00.000Z'))
   await writeFile(join(projects, `${IDS[1]}.jsonl`), transcript(IDS[1]!, '2026-08-15T10:00:00.000Z'))
+  // the same hook, declared: a declared hook makes a row even with no run
+  await writeFile(join(home, '.claude', 'settings.json'), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: 'command', command: HOOK }] }] } }))
   oranguHome = join(home, '.orangu')
   await mkdir(oranguHome, { recursive: true, mode: 0o700 })
   await writeFile(join(oranguHome, 'profile.json'), JSON.stringify(PROFILE))
@@ -112,7 +125,7 @@ describe.skipIf(!existsSync(CLI))('orangu export (built CLI)', () => {
       expect(file.summary).toEqual({ v: 1, version: expect.any(String), scope: 'global', roots: 1, found: 2, sessions: 2, unreadable: 0, asOf: expect.stringMatching(/^2026-08-15T10:00:/), redacted: true, text: false })
       expect(file.evidence.source).toMatchObject({ kind: 'aggregate', scope: 'global', sessions: 2 })
       expect(file.evidence.findings.length).toBeGreaterThan(0)
-      expect(file.harness.schemaVersion).toBe('3')
+      expect(file.harness.schemaVersion).toBe('4')
       expect(file.lessons).toEqual({ v: 1, scope: 'all', maxBytes: 16_384, omitted: 0, lessons: [] })
     }
     // the text form prints the same 2 paths, each on its own row
@@ -143,10 +156,23 @@ describe.skipIf(!existsSync(CLI))('orangu export (built CLI)', () => {
 
   it('holds no planted secret and no prompt word, and the profile word only in the profile', () => {
     const text = readFileSync(exportJson().export.path, 'utf8')
-    for (const planted of [SECRET, PROMPT_WORD, PROFILE_SECRET]) expect(text, planted).not.toContain(planted)
+    for (const planted of [SECRET, PROMPT_WORD, PROFILE_SECRET, HOOK_VALUE, 'NTFY_TOPIC', RULE_TOKEN]) expect(text, planted).not.toContain(planted)
     const file = JSON.parse(text)
     expect(file.profile.repeats).toBe(`Run the tests first. ${PROFILE_WORD} uses ‹anthropic-key› in the demo.`)
     for (const section of SECTIONS.filter((s) => s !== 'profile')) expect(JSON.stringify(file[section]), section).not.toContain(PROFILE_WORD)
+    // the hook keeps the name of its script, and the broken rule keeps only its program word
+    expect(file.harness.crosswalk.hooks).toEqual([{ event: 'Stop', commandBasename: 'ntfy.sh', configured: true, runs: 2, errors: 0, totalMs: 80, meanMs: 40, status: 'used' }])
+    expect(file.harness.enforcement.broken.map((row: { target: unknown }) => row.target)).toEqual([{ kind: 'command', name: 'deploy' }])
+  })
+
+  it('takes --strip-paths: each path keeps only its last part', () => {
+    const plain = JSON.parse(readFileSync(exportJson().export.path, 'utf8'))
+    expect(plain.harness.enforcement.broken[0].file).toBe('/Users/test/Code/demo/CLAUDE.md')
+    const run = cli(['export', '--json', '--strip-paths'])
+    expect({ status: run.status, stderr: run.stderr }).toEqual({ status: 0, stderr: '' })
+    const stripped = JSON.parse(readFileSync((JSON.parse(run.stdout) as ExportRun).export.path, 'utf8'))
+    expect(stripped.harness.enforcement.broken[0].file).toBe('CLAUDE.md')
+    expect(stripped.summary).toEqual(plain.summary)
   })
 
   it('gives the same bytes on 2 runs, and no field holds the clock of the run', () => {

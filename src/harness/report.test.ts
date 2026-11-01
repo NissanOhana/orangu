@@ -79,7 +79,8 @@ describe('buildHarnessReport: shape', () => {
     const r = buildHarnessReport(inv, analyses, agg, opts())
     expect(Object.keys(r).sort()).toEqual(['crosswalk', 'enforcement', 'generator', 'inventory', 'notes', 'retention', 'schemaVersion', 'scope'])
     expect(r.schemaVersion).toBe(HARNESS_SCHEMA_VERSION)
-    expect(r.schemaVersion).toBe('3')
+    // 4: a hook that starts with NAME=value assignments takes the name of the program after them, so its row key moved
+    expect(r.schemaVersion).toBe('4')
     expect(r.generator).toEqual({ name: 'orangu', version: '0.2.0', generatedAt: 1_700_000_000_000 })
     expect(Object.keys(r.inventory).sort()).toEqual(['agents', 'claudeMd', 'mcpServers', 'memoryIndexes', 'plugins', 'settings', 'skills', 'totals', 'unreadable'])
     expect(Object.keys(r.enforcement).sort()).toEqual(['broken', 'complaints', 'counts', 'memory', 'notes'])

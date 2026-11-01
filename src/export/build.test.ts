@@ -301,6 +301,40 @@ describe('orangu-export.json v1', () => {
     for (const note of notes) expect(checkText(note).findings, note).toEqual([])
   })
 
+  it('drops a hook name that holds an assignment, and keeps only the program word and a plain subcommand of a command target', () => {
+    const h = harness(1)
+    const hook = { event: 'Stop', configured: true, runs: 2, errors: 0, totalMs: 10, meanMs: 5, status: 'used' as const }
+    h.crosswalk.hooks = [{ ...hook, commandBasename: 'NTFY_TOPIC=quokkahooktopic7' }, { ...hook, commandBasename: 'ntfy.sh' }]
+    const broken = h.enforcement.broken[0]!
+    const targets = [
+      { kind: 'command', name: 'deploy --token quokkaruletoken8' },
+      { kind: 'command', name: 'deploy quokkaRuleToken9' },
+      { kind: 'command', name: 'deploy abc123def456' },
+      { kind: 'command', name: 'git push --force' },
+      { kind: 'command', name: 'npm run build' },
+      { kind: 'command', name: 'db:push' },
+      { kind: 'flag', name: '--no-verify' },
+      { kind: 'tool', name: 'WebFetch' },
+      { kind: 'mcp-server', name: 'octocode' },
+    ] as const
+    h.enforcement.broken = targets.map((target) => ({ ...broken, target }))
+    const { text } = buildExport(input({ harness: h }))
+    for (const planted of ['quokkahooktopic7', 'quokkaruletoken8', 'quokkaRuleToken9', 'abc123def456', 'NTFY_TOPIC']) expect(text, planted).not.toContain(planted)
+    const out = JSON.parse(text).harness
+    expect(out.crosswalk.hooks).toEqual([hook, { ...hook, commandBasename: 'ntfy.sh' }])
+    expect(out.enforcement.broken.map((row: { target: unknown }) => row.target)).toEqual([
+      { kind: 'command', name: 'deploy' },
+      { kind: 'command', name: 'deploy' },
+      { kind: 'command', name: 'deploy' },
+      { kind: 'command', name: 'git push' },
+      { kind: 'command', name: 'npm run' },
+      { kind: 'command', name: 'db:push' },
+      { kind: 'flag', name: '--no-verify' },
+      { kind: 'tool', name: 'WebFetch' },
+      { kind: 'mcp-server', name: 'octocode' },
+    ])
+  })
+
   it('says when the suggestion store did not read, and keeps the other sections', () => {
     const { text, index } = buildExport(input({ lessons: null }))
     expect(JSON.parse(text).lessons).toBeNull()

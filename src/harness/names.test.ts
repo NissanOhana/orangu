@@ -57,4 +57,11 @@ describe('names: argv0Basename', () => {
     expect(argv0Basename('env DB_PASSWORD=hunter2.prod /opt/hooks/guard.sh')).toBe('guard.sh')
     expect(argv0Basename('bash FOO=bar.baz')).toBe('bash')
   })
+  it('skips the NAME=value assignments in front of argv0, as the shell does: the program names the hook, never a value', () => {
+    expect(argv0Basename('NTFY_TOPIC=FAKEhooktopic91 ~/.claude/hooks/ntfy.sh')).toBe('ntfy.sh')
+    expect(argv0Basename('DB_PASS=FAKEpass1 SIGNING_KEY=FAKEkey2 node hooks/sign.js --now')).toBe('sign.js')
+    expect(argv0Basename('"API_HOST=FAKEhost3" /usr/local/bin/afplay x.mp3')).toBe('afplay')
+    // only assignments: no program, so no name
+    expect(argv0Basename('FOO=FAKEbar4')).toBe('')
+  })
 })

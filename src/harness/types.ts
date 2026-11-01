@@ -20,8 +20,11 @@
  * 3 (2026-10-09): the `enforcement` section (rules in context against the calls that broke them, notes against the
  *   complaints after them, memory indexes against their load limit, recurring complaint words) and
  *   `inventory.memoryIndexes`
+ * 4 (2026-11-01): a hook command that starts with `NAME=value` assignments takes the name of the program after them
+ *   (`argv0Basename`, src/harness/names.ts), not the first assignment. So the key of its hook row moved, and a value
+ *   in front of a hook never names a row
  */
-export const HARNESS_SCHEMA_VERSION = '3'
+export const HARNESS_SCHEMA_VERSION = '4'
 
 /** every `crosswalk` array is bounded to this many rows, after an explicit sort */
 export const HARNESS_ROW_CAP = 50

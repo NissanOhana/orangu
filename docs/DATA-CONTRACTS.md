@@ -143,7 +143,9 @@ The estimate serializes the same canonical bundle; it is not a different depth o
 
 `orangu estimate <session> --json` sizes the same bundle and emits `Estimate` (`bytes`, `approxTokens`, `sessions`, `files`, `overThreshold`) plus `skipped: { selector, reason }[]`, the selectors that could not be projected; they add nothing to `bytes`. When nothing could be projected the command fails, as `orangu evidence --estimate` does on the same input, instead of reporting a clean 0. `estimate harness` sizes one report and omits `skipped`.
 
-## Harness report (`orangu harness --json`, `schemaVersion` `"3"`)
+## Harness report (`orangu harness --json`, `schemaVersion` `"4"`)
+
+Since version 4, a hook command that starts with `NAME=value` assignments takes the name of the program after them, as the shell reads it. So a value in front of a hook never names a row, and the key of such a row moved. A command of assignments only names no row.
 
 `HarnessReport` is its own contract, versioned by `HARNESS_SCHEMA_VERSION` (`src/harness/types.ts`) independently of `Analysis`. Eight top-level keys: `schemaVersion`, `generator`, `scope`, `inventory` (the declared side: `claudeMd`, `memoryIndexes`, `settings`, `skills`, `agents`, `plugins`, `mcpServers`, `totals`, `unreadable`), `crosswalk` (the declared side joined against the sessions), `retention`, `enforcement`, `notes`. Since version 3, `enforcement` holds `counts` and 4 row arrays: `broken` (a rule summed over the sessions that had it in context: `sessionsInContext`, `sessionsBroken`, `calls`, `agentCalls`, `blocked`), `notes` (feedback notes and the matching complaints after them), `memory` (each `MEMORY.md` against the load limit of 200 lines and 25,000 characters, now and in the sessions), and `complaints` (words in complaints of 2 or more sessions). Without `--include-text` the section has no text that a person or a model wrote: `broken[].text` is empty (read the line at `file:line`), `notes[].sharedWords` and `complaints` are empty, and no example has a `preview`. Every crosswalk row carries one classification, `status`: `used`, `idle`, or `undeclared` (observed in sessions but in no file that was read; never "rogue"). The row arrays are sorted and capped at 50; `crosswalk.counts` holds the `used` / `idle` / `undeclared` counts of every axis over its whole population, so a consumer counts from there and takes names from the rows. Since version 2: `injectedListings[]` rows are `{ type, main, subagent, approxTokensPerInjection, approxTokensPerMainSession }` where `main` is the primary transcript of each session and `subagent` the sidecar files beneath it, each `{ sessions, injections, bytes, approxTokens }`; `hooks[]` rows may carry no `commandBasename` when the transcript recorded a run by event only; `settings[].scope` and `mcpServers[].scope` include `managed` (the platform's managed settings directory, overridable with `ORANGU_CLAUDE_MANAGED_DIRS`, empty meaning none), consulted in the vendor's merge order; `totals.projectEntries` says how many `~/.claude.json` project entries were read (the cwd's, or every one under global scope). Tokens are bytes ÷ 4 and tokens are the only usage unit in this shape. `--out <file>` writes this JSON and never HTML.
 
@@ -699,7 +701,7 @@ The store and every display re-grade a v2 receipt from its own numbers (verdicts
 
 `orangu export` writes `orangu-export.json` in a new run directory, `<orangu home>/export/global-<random>/`, with mode 0700. The file has mode 0600. It holds the bounded, redacted evidence that the brain reads in a Claude chat outside Claude Code. orangu sends nothing. The file leaves the machine only when the user uploads it.
 
-The verb reads the 500 newest sessions of every root, as `orangu global` does. From the same analyses, it builds the evidence of the global aggregate and the harness of `orangu harness --global`. It adds the profile and the lessons of every workspace. It takes `--json`, `--quiet`, `--no-color`, `--root <dir>`, `--no-cache` and `--jobs <n>`, and no session. It refuses `--include-text` and `--no-redact` with exit 1, before it reads a session.
+The verb reads the 500 newest sessions of every root, as `orangu global` does. From the same analyses, it builds the evidence of the global aggregate and the harness of `orangu harness --global`. It adds the profile and the lessons of every workspace. It takes `--json`, `--quiet`, `--no-color`, `--root <dir>`, `--no-cache`, `--jobs <n>` and `--strip-paths`, and no session. With `--strip-paths`, each path keeps only its last part, as in `orangu harness --strip-paths`. It refuses `--include-text` and `--no-redact` with exit 1, before it reads a session.
 
 `--json` prints the run. The text form prints the same 2 paths on 2 rows. It adds 1 row when some sessions did not analyze.
 
@@ -745,11 +747,11 @@ ExportIndexEntry = {
 }
 
 ExportHarness = {
-  schemaVersion: "3",
-  crosswalk: HarnessCrosswalk,       // as orangu harness --json writes it
+  schemaVersion: "4",
+  crosswalk: HarnessCrosswalk,       // as orangu harness --json writes it, but a hook name with "=" goes
   enforcement: {
     counts: HarnessEnforcementCounts,
-    broken: HarnessRuleRow[],        // with no text and no examples
+    broken: HarnessRuleRow[],        // with no text, no examples and a short command target
     notes: HarnessNoteRow[],         // with no sharedWords, and a prompt reference with no preview
     memory: HarnessMemoryLoadRow[]
   }
@@ -760,7 +762,9 @@ ExportHarness = {
 - The evidence comes first. It keeps the top findings that fit in half of the rest, or in more when the harness needs less. A cut finding takes its catalog matches with it. Then the harness keeps the heaviest rows of each array that fit, by rank.
 - A profile that does not fit loses its `answers` first, then the whole profile. The lesson read keeps the newest lessons that fit, as `--lessons` does.
 - `asOf` comes from the newest session, never from the clock. No field holds the clock of the run. So 2 runs on the same sessions, store and profile give the same bytes.
-- No section holds prompt text. The evidence is the projection of `orangu evidence --scope global`. The harness holds no rule text, no command example, no shared note word, no complaint word and no preview.
+- No section holds prompt text. The evidence is the projection of `orangu evidence --scope global`. The harness holds no line of an instruction file, no command example, no shared note word, no complaint word and no preview.
+- A broken rule keeps a short target. A command target keeps only its program word and a subcommand of lowercase letters (`git push`). So a value from the code span of the rule never goes in. A flag, a tool and a server name keep their fixed form.
+- A hook row loses its `commandBasename` when the name holds `=`, because the value of an assignment can be a secret.
 - The harness also leaves out the inventory, the retention block, the generator time and the notes of `orangu harness --json`. Each path keeps the default redaction, so the home folder reads `~`.
 - The profile holds the answers in the user's own words, with each secret scrubbed. So the user reads the file before an upload.
 - When the suggestion store does not read, `lessons` is `null`, and its index entry says so. The other sections stay.

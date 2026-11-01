@@ -53,9 +53,14 @@ const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
  * of the first script-like token after it (flags skipped, chained interpreters walked). Arguments carry
  * secrets and never enter a report; the argument that IS the hook is the script, and it is a path, not a secret.
  * Nothing after the interpreter looks like a script (`bash -c "echo hi"`) → the interpreter's own name.
+ * The `NAME=value` assignments in front of argv0 are skipped, as the shell reads them (`TOPIC=x ~/hooks/ntfy.sh`
+ * runs `ntfy.sh`): a value never names a hook. A command of assignments only names nothing: ''.
  */
 export function argv0Basename(command: string): string {
-  const tokens = command.trim().split(/\s+/).map(unquote)
+  const words = command.trim().split(/\s+/).map(unquote)
+  const first = words.findIndex((t) => !ENV_ASSIGNMENT.test(t))
+  if (first === -1) return ''
+  const tokens = words.slice(first)
   const argv0 = basename(tokens[0] ?? '')
   if (!INTERPRETERS.has(argv0)) return argv0
   for (const t of tokens.slice(1)) {

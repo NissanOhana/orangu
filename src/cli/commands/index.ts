@@ -115,6 +115,6 @@ export const EXTRA_HELP: string[] = [
     '                               chat outside Claude Code: 1 file in a new',
     '                               folder under ~/.orangu/export',
     '                                 ([--json] [--root <dir>] [--no-cache]',
-    '                                  [--jobs <n>])',
+    '                                  [--jobs <n>] [--strip-paths])',
   ].join('\n'),
 ]

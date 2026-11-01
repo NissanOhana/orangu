@@ -2,13 +2,14 @@
  * `orangu export`: orangu-export.json, the bounded, redacted evidence that the brain reads in a Claude chat outside
  * Claude Code (docs/DATA-CONTRACTS.md, "Export v1"), in a new run directory under <orangu home>/export/.
  *
- *   orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>]
+ *   orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>] [--strip-paths]
  *
  * It reads the 500 newest sessions of every root, as `orangu global` does. From the same analyses it builds the
  * evidence of the global aggregate (the projection of `orangu evidence --scope global`) and the harness of
  * `orangu harness --global`. It adds the profile and the lessons of every workspace. src/export/build.ts gives the
  * text, and src/export/write.ts writes it. The file leaves the machine when the user uploads it, so the verb refuses
- * --include-text and --no-redact: it always redacts, and it never holds prompt text.
+ * --include-text and --no-redact: it always redacts, and it never holds prompt text. --strip-paths takes out more: each
+ * path keeps only its last part, as in `orangu harness --strip-paths`.
  *
  * Exit 0 when the file is written. Exit 1 (a thrown Error, through main.ts) on a usage error, when this machine has no
  * session, or when the write fails. A session that does not analyze is counted, not an error. A store that does not
@@ -37,9 +38,9 @@ import { prepareAggregateForOutput } from '../json-out.js'
 import { row } from '../summary.js'
 import { detectCaps, oneLine, paint } from '../tty.js'
 
-const USAGE = 'usage: orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>]'
-/** the flags of the verb, and the output switches that every verb accepts */
-const EXPORT_FLAGS = new Set(['json', 'quiet', 'no-color', 'root', 'r', 'no-cache', 'jobs', 'j'])
+const USAGE = 'usage: orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>] [--strip-paths]'
+/** the flags of the verb, and the output switches that every verb accepts. --strip-paths only takes more out. */
+const EXPORT_FLAGS = new Set(['json', 'quiet', 'no-color', 'root', 'r', 'no-cache', 'jobs', 'j', 'strip-paths'])
 /** the 2 flags that would put raw text in a file that leaves this machine */
 const RAW_FLAGS = new Set(['include-text', 'no-redact'])
 /** the newest sessions that the export reads, as `orangu global` and `orangu harness --global` read them */
@@ -126,8 +127,10 @@ export async function cmdExport(positionals: string[], flags: Record<string, str
   const now = Date.now()
   const { analyses, failed } = await analyze(use, flags, now)
   const agg = aggregate(analyses, 'global', now)
+  const stripPaths = flagBool(flags, 'strip-paths')
   // the default redaction of `orangu global --out`, read back as `orangu evidence --scope global` reads it
-  const evidence = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, {}))) as unknown, { scope: 'global', limit: MAX_EVIDENCE_LIMIT })
+  const prepared = prepareAggregateForOutput(agg, stripPaths ? { 'strip-paths': true } : {})
+  const evidence = projectEvidence(JSON.parse(JSON.stringify(prepared)) as unknown, { scope: 'global', limit: MAX_EVIDENCE_LIMIT })
   const home = homedir()
   const cwd = process.cwd()
   const instructionWords = new Set<string>()
@@ -142,7 +145,8 @@ export async function cmdExport(positionals: string[], flags: Record<string, str
     asOf: newestEnd(analyses),
     profile: await loadProfile(),
     evidence,
-    harness: redactValue(report, { scrub: true, home }),
+    // the redaction of `orangu harness` (src/cli/commands/harness.ts:131)
+    harness: redactValue(report, { scrub: true, stripPaths, home }),
     lessons: await readAllLessons(),
     home,
   })

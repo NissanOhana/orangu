@@ -8070,7 +8070,7 @@ async function watchSession(ref2, flags, deps) {
 import { basename as basename6 } from "node:path";
 
 // src/harness/types.ts
-var HARNESS_SCHEMA_VERSION = "3";
+var HARNESS_SCHEMA_VERSION = "4";
 var HARNESS_ROW_CAP = 50;
 
 // src/harness/names.ts
@@ -8094,7 +8094,10 @@ var SCRIPT_EXT = /\.(sh|bash|zsh|py|js|mjs|cjs|ts|mts|cts|rb|pl|ps1|cmd|bat)$/i;
 var pathLike = (t) => t.includes("/") || t.includes("\\") || SCRIPT_EXT.test(t);
 var ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 function argv0Basename(command) {
-  const tokens = command.trim().split(/\s+/).map(unquote);
+  const words2 = command.trim().split(/\s+/).map(unquote);
+  const first = words2.findIndex((t) => !ENV_ASSIGNMENT.test(t));
+  if (first === -1) return "";
+  const tokens = words2.slice(first);
   const argv0 = basename5(tokens[0] ?? "");
   if (!INTERPRETERS.has(argv0)) return argv0;
   for (const t of tokens.slice(1)) {
@@ -19132,14 +19135,25 @@ function evidencePart(bundle, budget) {
 function promptRef(ref2) {
   return { sessionId: ref2.sessionId, turnIndex: ref2.turnIndex, ...ref2.at !== void 0 ? { at: ref2.at } : {} };
 }
+var SUBCOMMAND = /^[a-z][a-z-]*$/;
+function exportTarget(target) {
+  if (target.kind !== "command") return target;
+  const [program = "", next] = target.name.split(" ");
+  return { kind: "command", name: next !== void 0 && SUBCOMMAND.test(next) ? `${program} ${next}` : program };
+}
+function exportHook(row2) {
+  if (!row2.commandBasename?.includes("=")) return row2;
+  const { commandBasename: _name, ...rest } = row2;
+  return rest;
+}
 function harnessOf(report2) {
   const e = report2.enforcement;
   return {
     schemaVersion: report2.schemaVersion,
-    crosswalk: report2.crosswalk,
+    crosswalk: { ...report2.crosswalk, hooks: report2.crosswalk.hooks.map(exportHook) },
     enforcement: {
       counts: e.counts,
-      broken: e.broken.map(({ text: _text, examples: _examples, ...row2 }) => row2),
+      broken: e.broken.map(({ text: _text, examples: _examples, ...row2 }) => ({ ...row2, target: exportTarget(row2.target) })),
       notes: e.notes.map(({ sharedWords: _words, trigger, examples, ...row2 }) => ({ ...row2, ...trigger ? { trigger: promptRef(trigger) } : {}, examples: examples.map(promptRef) })),
       memory: e.memory
     }
@@ -19217,8 +19231,8 @@ async function writeExportRun(text3, o = {}) {
 }
 
 // src/cli/commands/export.ts
-var USAGE3 = "usage: orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>]";
-var EXPORT_FLAGS = /* @__PURE__ */ new Set(["json", "quiet", "no-color", "root", "r", "no-cache", "jobs", "j"]);
+var USAGE3 = "usage: orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>] [--strip-paths]";
+var EXPORT_FLAGS = /* @__PURE__ */ new Set(["json", "quiet", "no-color", "root", "r", "no-cache", "jobs", "j", "strip-paths"]);
 var RAW_FLAGS = /* @__PURE__ */ new Set(["include-text", "no-redact"]);
 var SESSION_LIMIT = 500;
 var flagName3 = (name) => `${name.length === 1 ? "-" : "--"}${name}`;
@@ -19293,7 +19307,9 @@ async function cmdExport(positionals, flags) {
   const now = Date.now();
   const { analyses, failed } = await analyze(use, flags, now);
   const agg = aggregate(analyses, "global", now);
-  const evidence = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, {}))), { scope: "global", limit: MAX_EVIDENCE_LIMIT });
+  const stripPaths = flagBool(flags, "strip-paths");
+  const prepared = prepareAggregateForOutput(agg, stripPaths ? { "strip-paths": true } : {});
+  const evidence = projectEvidence(JSON.parse(JSON.stringify(prepared)), { scope: "global", limit: MAX_EVIDENCE_LIMIT });
   const home = homedir5();
   const cwd = process.cwd();
   const instructionWords = /* @__PURE__ */ new Set();
@@ -19308,7 +19324,8 @@ async function cmdExport(positionals, flags) {
     asOf: newestEnd(analyses),
     profile: await loadProfile(),
     evidence,
-    harness: redactValue(report2, { scrub: true, home }),
+    // the redaction of `orangu harness` (src/cli/commands/harness.ts:131)
+    harness: redactValue(report2, { scrub: true, stripPaths, home }),
     lessons: await readAllLessons(),
     home
   });
@@ -19415,7 +19432,7 @@ var EXTRA_HELP = [
     "                               chat outside Claude Code: 1 file in a new",
     "                               folder under ~/.orangu/export",
     "                                 ([--json] [--root <dir>] [--no-cache]",
-    "                                  [--jobs <n>])"
+    "                                  [--jobs <n>] [--strip-paths])"
   ].join("\n")
 ];
 

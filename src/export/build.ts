@@ -167,19 +167,41 @@ function promptRef(ref: HarnessPromptRef): PromptRef {
   return { sessionId: ref.sessionId, turnIndex: ref.turnIndex, ...(ref.at !== undefined ? { at: ref.at } : {}) }
 }
 
+/** A subcommand as a command target can name one (`git push`, `npm run`): lowercase letters and dashes, never a value. */
+const SUBCOMMAND = /^[a-z][a-z-]*$/
+
+/**
+ * The target of a broken rule, with no value from its code span. A command target is up to 6 words of the rule line
+ * (`deploy --token <t>`), so the export keeps only the program word and a subcommand. A flag, a tool and a server name
+ * have a fixed form, and they stay.
+ */
+function exportTarget(target: HarnessRuleRow['target']): HarnessRuleRow['target'] {
+  if (target.kind !== 'command') return target
+  const [program = '', next] = target.name.split(' ')
+  return { kind: 'command', name: next !== undefined && SUBCOMMAND.test(next) ? `${program} ${next}` : program }
+}
+
+/** A hook row with no name when its name holds an assignment (`NAME=value`): the value can be a secret. */
+function exportHook(row: HarnessCrosswalk['hooks'][number]): HarnessCrosswalk['hooks'][number] {
+  if (!row.commandBasename?.includes('=')) return row
+  const { commandBasename: _name, ...rest } = row
+  return rest
+}
+
 /**
  * The declared versus used rows and the rules that did not hold, with no text that a person or a model wrote: no rule
- * line, no command example, no shared note word, no complaint and no preview. The clock fields of the report (the
- * generator time and the retention ages) and the inventory paths stay out.
+ * line, no command example, no value of a rule target, no hook name with an assignment, no shared note word, no
+ * complaint and no preview. The clock fields of the report (the generator time and the retention ages) and the
+ * inventory paths stay out.
  */
 function harnessOf(report: HarnessReport): ExportHarness {
   const e = report.enforcement
   return {
     schemaVersion: report.schemaVersion,
-    crosswalk: report.crosswalk,
+    crosswalk: { ...report.crosswalk, hooks: report.crosswalk.hooks.map(exportHook) },
     enforcement: {
       counts: e.counts,
-      broken: e.broken.map(({ text: _text, examples: _examples, ...row }) => row),
+      broken: e.broken.map(({ text: _text, examples: _examples, ...row }) => ({ ...row, target: exportTarget(row.target) })),
       notes: e.notes.map(({ sharedWords: _words, trigger, examples, ...row }) => ({ ...row, ...(trigger ? { trigger: promptRef(trigger) } : {}), examples: examples.map(promptRef) })),
       memory: e.memory,
     },

@@ -48,7 +48,7 @@ The show-me skill reads `data.json`, redacted by default, and writes only 3 text
 The file holds these parts:
 
 - the counts of the 500 newest sessions on this machine, and the end time of the newest session
-- the top findings, with their rule text and the catalog matches
+- the top findings, with the advice text of each orangu rule and the catalog matches
 - the declared versus used rows of your setup, and the rules that did not hold
 - your lessons, as ids, codes and counts
 - your profile
@@ -57,6 +57,7 @@ The file has these limits:
 
 - The export is always redacted. `orangu export` refuses `--include-text` and `--no-redact`, so the file holds no prompt text and no tool output.
 - Paths under your home folder read `~`, but the names of your project folders and files stay.
+- A note name can sum up a correction that you gave, and a folder name names your repository. Add `--strip-paths` to keep only the last part of each path. Then the folder names go, and the file names stay.
 - The file holds your profile answers in your own words, with each secret scrubbed. So read the file before you upload it.
 
 ## Local storage
