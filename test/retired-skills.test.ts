@@ -87,6 +87,11 @@ describe('retired and hidden skill commands', () => {
     expect(named, 'name the skill that owns the job now: /orangu:improve').toEqual([])
   })
 
+  it('holds an empty baseline once the landing and the docs name the chain', () => {
+    // the landing entry went with the landing rewrite. The docs chunk removes the 5 entries of the docs.
+    expect(Object.keys(BASELINE)).toEqual([])
+  })
+
   it('each baseline entry still names a command that it may not name, or it goes', () => {
     for (const [file, owner] of Object.entries(BASELINE)) {
       expect(files, `${file} is in the scope of the sweep`).toContain(file)

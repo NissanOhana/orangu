@@ -831,3 +831,87 @@ describe('the landing triad: the 3 axes sit in the checks section', () => {
     expect(src).not.toMatch(/<qtc-triad[^>]*style=/)
   })
 })
+
+// The landing may promise a step of the chain only while the code does it (the rule of the loop promises in
+// test/site.test.ts). Each module is read by a dynamic import as a plain record, so a missing export fails its own
+// test here and never the type check or the other tests of this file.
+const moduleOf = async (path: string): Promise<Record<string, unknown>> => (await import(path)) as unknown as Record<string, unknown>
+
+describe('the landing promises: each claim needs the code that makes it true', () => {
+  it('names npx orangu export and the zip to upload only while export writes the zip of the portable skill, in the README words', async () => {
+    const upload = 'Upload the zip once as a custom skill.'
+    expect(htmlText(src)).toContain(`Run npx orangu export . ${upload}`)
+    expect(read('README.md'), 'the README says the same words').toContain(upload)
+    expect((await moduleOf('../src/cli/commands/index.js'))['CLI_VERBS'], 'CLI_VERBS').toContain('export')
+    expect((await moduleOf('../src/export/write.js'))['SKILL_ZIP_FILE'], 'export writes the zip').toBe('orangu-improve.zip')
+    expect(existsSync(join(root, 'plugin/portable/orangu-improve/SKILL.md')), 'plugin/portable/orangu-improve/SKILL.md').toBe(true)
+  })
+
+  it('says that improve asks about your role, and that you can skip it, only while the interview stage of the review asks the first-run question', () => {
+    expect(htmlText(src)).toContain('If orangu does not know your work yet, it asks about your role. You can skip it.')
+    // read the improve body and its review together: the first-run question sits in the Interview stage of the review
+    const improve = read('plugin/skills/improve/SKILL.md')
+    const skill = `${improve.slice(improve.indexOf('\n---', 3) + 4)}\n${read('plugin/skills/improve/references/review.md')}`
+    const stage = /^## \d+\. Interview\b[^\n]*\n([\s\S]*?)(?=^## )/m.exec(skill)?.[1] ?? ''
+    expect(stage, 'the review has an Interview stage').not.toBe('')
+    expect(stage).toContain('"orangu does not know your role and your work yet. Start the interview now?"')
+    expect(stage, 'the question gives the 2 options').toContain('2 options, "Interview me now" and "Skip the interview"')
+    expect(stage, 'the skip goes on to the next stage').toMatch(/For "Skip the interview", go to stage \d+\./)
+  })
+
+  it('says that 1 improve prompt runs measure, investigate, interview and suggest only while the improve skill names those stages in order', () => {
+    expect(htmlText(src)).toContain('With no input, 1 prompt runs the whole chain.')
+    // the stages as the skill names them: a heading, a numbered step or a list item of improve or of its review
+    const skill = `${read('plugin/skills/improve/SKILL.md')}\n${read('plugin/skills/improve/references/review.md')}`
+    const at = ['Measure', 'Investigate', 'Interview', 'Suggest'].map((stage) => {
+      const found = new RegExp(`^(?:#+ |\\d+\\. |[-*] )(?:\\*\\*)?(?:\\d+\\. )?${stage}`, 'mi').exec(skill)
+      return found ? found.index : -1
+    })
+    expect(at.every((index) => index >= 0), `the improve skill names each stage of the chain: ${JSON.stringify(at)}`).toBe(true)
+    expect([...at].sort((a, b) => a - b), 'the improve skill names the stages in this order').toEqual(at)
+  })
+
+  it('shows the 3 zooms of the app only while the app routes #start?zoom= to each of them', async () => {
+    const nav = await moduleOf('../src/report/client/nav.js')
+    expect(nav['SCREEN_IDS'], 'SCREEN_IDS').toContain('start')
+    const parse = nav['parseHash'] as (raw: string) => Record<string, unknown>
+    const write = nav['writeHash'] as (state: Record<string, unknown>) => string
+    const zooms = [...hero.matchAll(/<button class="ztab"[^>]*id="hz-t-([a-z]+)"/g)].map((m) => m[1]!)
+    expect(zooms).toEqual(['session', 'sessions', 'machine'])
+    expect(hero).toContain('127.0.0.1:53211/_orangu/…/#start?zoom=<span id="hz">machine</span>')
+    for (const zoom of zooms) {
+      expect(parse(`#start?zoom=${zoom}`), zoom).toMatchObject({ screen: 'start', zoom })
+      expect(write(parse(`#start?zoom=${zoom}`)), zoom).toBe(`#start?zoom=${zoom}`)
+    }
+  })
+
+  it('prints the app rows and the 2 closing lines of step 1 as bare orangu prints them on a terminal', async () => {
+    const appBlock = (await moduleOf('../src/cli/summary.js'))['appBlock'] as ((caps: typeof MACHINE_CAPS, o: { url: string; sessions: number; running: number }) => string[]) | undefined
+    expect(typeof appBlock, 'src/cli/summary.ts exports appBlock').toBe('function')
+    const a = sample.session
+    const top = a.insights.find((i) => i.id === a.summary.topInsightIds[0]) ?? a.insights[0]!
+    const brief = briefBlock(MACHINE_CAPS, a, a.session.title ?? '', { finding: top.title, improvement: top.improvement, next: 'claude "/orangu:improve sg_0123456789ab"' }, { hint: false })
+    const lines = preLines(element(chain, /<div class="panel p0"/))
+    // after the brief: the app rows of the sample machine, where no session runs, then the 2 closing lines
+    const app = appBlock!(MACHINE_CAPS, { url: 'http://127.0.0.1:53211/_orangu/…/', sessions: machine.sessionCount, running: 0 }).map(stripAnsi)
+    expect(lines.slice(1 + brief.length)).toEqual(app)
+    expect(app.slice(-2)).toEqual(['  The first run of /orangu:improve asks about your role and your work.', '  Press ctrl-c to stop the app.'])
+  })
+
+  it('asks the questions and shows the answers of the profile that the interview keeps', () => {
+    expect(existsSync(join(root, 'plugin/skills/shared/profile.md')), 'plugin/skills/shared/profile.md').toBe(true)
+    const profile = read('plugin/skills/shared/profile.md')
+    const chat = element(chain, /<div class="chat"/)
+    for (const [, line] of chat.matchAll(/<p class="q">([^<]+)<\/p>/g)) expect(profile, line).toContain(`| ${line} |`)
+    for (const [, option] of chat.matchAll(/<span class="chip(?: sel)?">([^<]+)<\/span>/g)) expect(profile, option).toContain(option)
+  })
+
+  it('names the 6 areas that the brain reads, each as the brain names it', () => {
+    expect(existsSync(join(root, 'plugin/skills/shared/brain.md')), 'plugin/skills/shared/brain.md').toBe(true)
+    const brain = read('plugin/skills/shared/brain.md')
+    const tiles = [...element(src, /<section class="sec" id="finds"/).matchAll(/<h3>([^<]+)<\/h3>/g)].map((m) => m[1]!)
+    expect(tiles).toEqual(['Skills', 'Agents', 'Effort and model', 'CLIs and scripts', 'Context and cache', 'Rules that hold'])
+    // each area opens a heading, a list item or a table row of the brain, not only a word in its prose
+    for (const area of tiles) expect(brain, `plugin/skills/shared/brain.md has no focus area "${area}"`).toMatch(new RegExp(`^(?:#+ |[-*] |\\| )(?:\\*\\*)?${area}\\b`, 'm'))
+  })
+})
