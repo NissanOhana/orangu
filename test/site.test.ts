@@ -149,7 +149,7 @@ describe('site/index.src.html (authored landing source)', () => {
       expect(lines.some((line) => line.trim().startsWith(label)), `terminal does not show ${label}`).toBe(true)
     }
     expect(lines[1]).toBe('Choose a report')
-    // The menu puts Improvements first when this folder has an open item (dashboardChoices).
+    // The menu put Improvements first when this folder had an open item.
     expect(lines[2]).toBe('  Improvements            2 due · 5 open')
     const wrap = hero.match(/<div class="term-wrap">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? ''
     expect(wrap).toContain('<p class="fine">To open only the latest session, run <code>npx orangu report</code>.</p>')

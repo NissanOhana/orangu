@@ -531,7 +531,7 @@ syncBuiltinESMExports()
     expect(JSON.parse(machine.stdout).sessionCount).toBe(home.sessions.length)
     expect(tempAggregateReports()).toEqual(before)
 
-    // --no-open beats the dashboard's --open, so nothing is built and nothing is handed to a browser
+    // --no-open beats --open, so nothing is built and nothing is handed to a browser
     const suppressed = spawnSync('node', [CLI, ...base, '--open', '--no-open'], { encoding: 'utf8' })
     expect(suppressed.status, suppressed.stderr).toBe(0)
     expect(tempAggregateReports()).toEqual(before)

@@ -1,6 +1,6 @@
 /**
  * The art IS the surface here, so the variants are pinned byte for byte: reviewing this file is
- * reviewing what the terminal draws. AC31-AC35, plus the tier rule the dashboard and --help share.
+ * reviewing what the terminal draws. AC31-AC35, plus the tier rule that bare orangu and --help share.
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -121,8 +121,8 @@ describe('mascotLines', () => {
     )
   })
 
-  // A reader budgets a frame from this comment (dashboard.ts derives its chrome lines from the tier),
-  // so a tier description that does not match the shipped rows mis-sizes the frame.
+  // A reader budgets a frame from this comment, so a tier description that does not match the shipped
+  // rows mis-sizes the frame.
   it('describes its own three tiers the way it draws them', () => {
     const doc = readFileSync(new URL('./mascot-ascii.ts', import.meta.url), 'utf8').split('*/')[0]!
     expect(doc).toContain(`WIDE face + wordmark + tagline (${MASCOT_WIDE.length} rows)`)
