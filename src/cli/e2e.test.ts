@@ -177,11 +177,12 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
       expect((await fetch(`${url}/api/sessions`)).status).toBe(200)
     })
     expect(existsSync(page), 'the redirect page is gone after ctrl-c').toBe(false)
-    // the brief of the latest session comes first, then the app rows, then how to stop the app
+    // the brief of the latest session comes first, then the app rows, then what the first run of improve asks and how
+    // to stop the app
     expect(shown).toMatch(/^ {8}latest · [0-9a-f]{8} · \d+ turns/m)
     expect(shown.indexOf('latest · ')).toBeLessThan(shown.indexOf(`  app ${url}`))
     expect(shown).toMatch(/^ {6}3 sessions on this machine · \d running now$/m)
-    expect(shown).toContain('\n  Press ctrl-c to stop the app.')
+    expect(shown).toContain('\n  The first run of /orangu:improve asks about your role and your work.\n  Press ctrl-c to stop the app.')
     expect(shown).toContain('The app stopped.')
     expect(shown, 'the request log is off').not.toMatch(/^(GET|POST) \//m)
     expect(shown).not.toContain('Choose a report')
@@ -234,7 +235,7 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     expect(lines.length, h).toBeLessThanOrEqual(24)
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(80)
     const chain = h.slice(h.indexOf('\nthe chain\n'), h.indexOf('\n  orangu help all '))
-    for (const door of ['\n  orangu  ', '\n  /orangu:improve  ']) expect(chain, door).toContain(door)
+    for (const door of ['\n  orangu  ', '\n  /orangu:improve  ', '\n  /orangu:interview  ']) expect(chain, door).toContain(door)
     for (const line of ['\n  orangu help all ', '\nplugin: ', '\nprivacy: ']) expect(h, line).toContain(line)
     expect(h).not.toContain('--')
     for (const verb of [...CLI_VERBS, 'help']) expect(h, verb).not.toMatch(new RegExp(`orangu ${verb}\\b(?! all)`))

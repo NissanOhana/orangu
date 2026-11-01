@@ -128,6 +128,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // thing). Each row: the measured score, then what still holds it down and why it stays.
   // the short screen since the help has 2 levels: measured 100 (18 of 18). When the row was born, the
   // single help text measured 100 (75 of 75): "don't" and 4 semicolons gone
+  // C-8b, 2026-11-01: the chain gains its third door, /orangu:interview, measured 100 (16 of 16), 0 findings
   'orangu --help': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // new surface, the full reference (the single help text moved here, with no mascot): born at
   // max(80, measured - 2), measured 100 (91 of 91), 0 findings
@@ -191,6 +192,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // The review fixes add the control of the machine read and the findings of the listed sessions: 69 sentences, each clean.
   // The reads move to start-reads.ts (2026-11-01), with their 1 sentence: 68 sentences here, each clean, score 100.
   // The pause of the machine read and the saving in the caption of the list (2026-11-01): 73 sentences, each clean.
+  // C-8b, 2026-11-01: the first-run line and the export part of the Next card: 78 sentences, each clean, score 100.
   'src/report/client/start-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // The reads of the start view, born 2026-11-01 at max(80, measured - 2) when they left start-ui.ts: 1 sentence (the
   // reason of a machine read that failed with no reason of its own), clean, score 100, 0 findings.
@@ -287,6 +289,8 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // "In one session: " marker (23 words) and the marker once, in the caption above the list.
   'rendered#report.aggregate': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Measured 96 sentences, 96 clean, score 100, with each wrapped title and improvement joined back whole.
+  // C-8b, 2026-11-01: the first-run line of the app rows (the door view of each session fixture): measured 128
+  // sentences, 128 clean, score 100, 0 findings.
   'rendered#terminal': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Measured 185 sentences, 185 clean, score 100: both files of a session run per session fixture and of a repo
   // and a global run per aggregate fixture, with 3 fixed sample words. The deck shows the "In one session" label

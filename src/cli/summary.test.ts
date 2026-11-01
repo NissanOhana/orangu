@@ -62,6 +62,8 @@ const FALLBACK: NextStep = {
 }
 /** the app that bare orangu starts on a terminal: a 5-digit port and a 43-character capability, as startServe makes them */
 const APP = { url: 'http://127.0.0.1:53211/_orangu/q2X8vB0Lw9kZ3mN1pR7sT5uV4xY6zA2bC8dE0fG1hI3', sessions: 8354, running: 3 }
+/** the first of the 2 closing lines of the app rows: it names no question count */
+const FIRST_RUN = 'The first run of /orangu:improve asks about your role and your work.'
 /** the value column of a labelled row: 2-space indent, 8-column label, 1 space */
 const GUTTER = ' '.repeat(11)
 const HOSTILE = 'Fix \x1b]52;c;SGVsbG8=\x07the \x1b[2Jtitle'
@@ -493,6 +495,11 @@ describe('the due row of the footer', () => {
       expect(dueRow(lines), `${columns} ${label}`).toMatch(/^ {2}due {6}claude "\/orangu:improve"/)
       assertFits(lines, caps, `${columns} ${label}`)
     }
+    // bare orangu on a terminal ends with the first run of improve, whole at whole words, then how to stop the app
+    const bare = views.bareTerminal.map(stripAnsi)
+    const closing = bare.slice(bare.lastIndexOf('') + 1)
+    expect(closing.at(-1), `${columns}`).toBe('  Press ctrl-c to stop the app.')
+    expect(closing.slice(0, -1).map((l) => l.trim()).join(' '), `${columns}`).toBe(FIRST_RUN)
   })
 })
 
@@ -506,13 +513,14 @@ describe('appBlock: the app rows of bare orangu on a terminal', () => {
     expect(displayWidth(`  app ${APP.url}`)).toBe(80)
   })
 
-  it('counts the sessions of every root and the running ones, says what the app shows, and ends with how to stop it', () => {
+  it('counts the sessions of every root and the running ones, says what the app shows, then what the first run of improve asks and how to stop it', () => {
     expect(appBlock(capsAt(80), APP).map(stripAnsi)).toEqual([
       '',
       `  app ${APP.url}`,
       '      8,354 sessions on this machine · 3 running now',
       '      See one session, your sessions and their agents, or the machine.',
       '',
+      `  ${FIRST_RUN}`,
       '  Press ctrl-c to stop the app.',
     ])
     const one = appBlock(capsAt(80, { unicode: false, color: 0 }), { ...APP, sessions: 1, running: 0 })
@@ -525,6 +533,11 @@ describe('appBlock: the app rows of bare orangu on a terminal', () => {
     for (const l of under) expect(displayWidth(l), l).toBeLessThanOrEqual(40)
     expect(under.slice(0, 2)).toEqual(['      8,354 sessions on this machine', '      3 running now'])
     expect(under.slice(2).map((l) => l.trim()).join(' ')).toBe('See one session, your sessions and their agents, or the machine.')
+    // the first-run line wraps at whole words at the house indent, and how to stop the app stays the last line
+    const closing = lines.slice(lines.lastIndexOf('') + 1, -1)
+    expect(closing.length, 'the first-run line wraps at 40 columns').toBeGreaterThan(1)
+    for (const l of closing) expect(l, l).toMatch(/^ {2}\S/)
+    expect(closing.map((l) => l.trim()).join(' ')).toBe(FIRST_RUN)
     expect(lines.at(-1)).toBe('  Press ctrl-c to stop the app.')
   })
 })

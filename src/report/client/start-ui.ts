@@ -1,8 +1,8 @@
 /**
  * Serve only: the start view (#start), the first screen of the local app. 3 zoom tabs show 1 session, the sessions and
  * their agents, or the whole machine, in 1 panel. Under the panel, "What to improve first" shows the first findings of
- * the zoom, and "Next: improve with Claude" names the improve command and the interview status. Only serve-ui.ts
- * imports this file, so the file bundles carry none of it (src/report/offline.test.ts holds them to it).
+ * the zoom, and "Next: improve with Claude" names the improve command, the interview status and the export. Only
+ * serve-ui.ts imports this file, so the file bundles carry none of it (src/report/offline.test.ts holds them to it).
  *
  * This file draws, and start-reads.ts reads. The view starts no read that analyzes every session (SPEC risk 13), and
  * Sessions and agents reads only the sessions that it lists. Its findings come from those reads, and its caption says so.
@@ -317,9 +317,13 @@ function interviewTag(p: ProfileRead | null | undefined): string {
   return `<p><span class="tag ${cls}">${esc(words)}</span></p>`
 }
 
-/** Next: improve with Claude. The improve command with a copy control, what it does, and the interview status. */
+/**
+ * Next: improve with Claude. The improve command with a copy control, what it does, what its first run asks, and the
+ * interview status. Under a rule, the export for a Claude outside Claude Code, with its own copy control.
+ */
 export function nextHtml(profile: ProfileRead | null | undefined): string {
-  return `<aside class="card pad start-next" aria-labelledby="next-h"><h2 class="h-sec" id="next-h">Next: improve with Claude</h2><p>In Claude Code, run <code>/orangu:improve</code>.</p>${commandBlock('/orangu:improve', '>', 'the command /orangu:improve')}<ul><li>It reads this evidence, finds patterns and proposes changes.</li><li>You approve each change by its id.</li><li>Run <code>/orangu:interview</code> to change your answers.</li></ul>${interviewTag(profile)}</aside>`
+  const outside = `<hr><p>Not in Claude Code? Run <code>npx orangu export</code>. Then upload the 2 files to claude.ai, Claude Desktop or the Claude API.</p>${commandBlock('npx orangu export', '$', 'the command npx orangu export')}`
+  return `<aside class="card pad start-next" aria-labelledby="next-h"><h2 class="h-sec" id="next-h">Next: improve with Claude</h2><p>In Claude Code, run <code>/orangu:improve</code>.</p>${commandBlock('/orangu:improve', '>', 'the command /orangu:improve')}<ul><li>It reads this evidence, finds patterns and proposes changes.</li><li>You approve each change by its id.</li><li>The first run asks about your role and your work.</li><li>Run <code>/orangu:interview</code> to change your answers.</li></ul>${interviewTag(profile)}${outside}</aside>`
 }
 
 /** No session at all: the folders that orangu read, as code, and how to make a first session. */

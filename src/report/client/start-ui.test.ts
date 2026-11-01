@@ -522,18 +522,40 @@ describe('the queue read on #start', () => {
 })
 
 describe('Next: improve with Claude', () => {
-  it('names the improve command with a copy control and the 3 list lines', () => {
+  /** The 4 list lines of the card, in the order of the design: what improve does, then the first run and the interview. */
+  const LIST = ['It reads this evidence, finds patterns and proposes changes.', 'You approve each change by its id.', 'The first run asks about your role and your work.', 'Run /orangu:interview to change your answers.']
+  const listOf = (html: string): string[] => [...html.matchAll(/<li>(.*?)<\/li>/g)].map((m) => text(m[1]!))
+  /** Each state of the interview status read: done, not yet, a file that does not read, a failed read, a read that runs. */
+  const PROFILES = [{ exists: true, updatedAt: '2026-11-01' }, { exists: false, updatedAt: null }, { exists: true, updatedAt: null }, null, undefined] as const
+
+  it('names the improve command with a copy control and the 4 list lines, the first run before the interview', () => {
     const html = nextHtml({ exists: true, updatedAt: '2026-11-01' })
     expect(html).toContain('<p>In Claude Code, run <code>/orangu:improve</code>.</p>')
     expect(html).toContain('data-copy="/orangu:improve"')
-    for (const line of ['It reads this evidence, finds patterns and proposes changes.', 'You approve each change by its id.', 'Run /orangu:interview to change your answers.']) expect(text(html)).toContain(line)
+    expect(listOf(html)).toEqual(LIST)
   })
 
-  it('shows the date of the interview, or "not yet" when no profile exists, with the 3 list lines in each state', () => {
+  it('shows the date of the interview, or "not yet" when no profile exists, with the 4 list lines in each state', () => {
     expect(nextHtml({ exists: true, updatedAt: '2026-11-01' })).toContain('<span class="tag good">Interview: done on 2026-11-01.</span>')
     const none = nextHtml({ exists: false, updatedAt: null })
     expect(none).toContain('<span class="tag neutral">Interview: not yet.</span>')
-    expect(text(none)).toContain('Run /orangu:interview to change your answers.')
+    for (const profile of PROFILES) expect(listOf(nextHtml(profile)), JSON.stringify(profile)).toEqual(LIST)
+  })
+
+  it('after a rule under the interview status, names the export for a Claude outside Claude Code, with a copy control, in each state', () => {
+    for (const profile of PROFILES) {
+      const html = nextHtml(profile)
+      const label = JSON.stringify(profile) ?? 'undefined'
+      // the rule comes after the list and the status, and the export part is the end of the card
+      const rule = html.indexOf('<hr>')
+      expect(rule, label).toBeGreaterThan(html.indexOf('</ul>'))
+      expect(rule, label).toBeGreaterThan(html.lastIndexOf('class="tag'))
+      const tail = html.slice(rule)
+      expect(tail, label).toContain('<p>Not in Claude Code? Run <code>npx orangu export</code>. Then upload the 2 files to claude.ai, Claude Desktop or the Claude API.</p>')
+      expect(tail, label).toContain('data-copy="npx orangu export"')
+      expect(tail, label).toContain('aria-label="copy the command npx orangu export"')
+      expect(tail.endsWith('</div></aside>'), label).toBe(true)
+    }
   })
 
   it('says that orangu cannot read the answers when a file exists that does not read as a profile, and names no date', () => {

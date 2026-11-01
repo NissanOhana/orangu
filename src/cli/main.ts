@@ -494,6 +494,8 @@ ${paint(out, 'bold', 'the chain')}
                      measured with no model, and the first findings.
   /orangu:improve    2. Improve: in Claude Code, the brain proposes changes.
                      orangu checks each one on your later sessions.
+  /orangu:interview  3. Tune: tell orangu your role and how you work.
+                     The first run of /orangu:improve asks for it.
 
   orangu help all    every command and flag
 

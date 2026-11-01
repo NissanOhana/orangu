@@ -14,10 +14,11 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { ROOT, helpText } from '../scripts/ste-surfaces.js'
+import { ROOT, helpText, sessionTerminalViews } from '../scripts/ste-surfaces.js'
 import { queueLines } from '../src/cli/commands/suggest-reads.js'
 import { appBlock, nextStepLines, type NextStep } from '../src/cli/summary.js'
 import { MACHINE_CAPS, stripAnsi } from '../src/cli/tty.js'
+import type { Analysis } from '../src/model/analysis.js'
 import { kickoffCommands } from '../src/suggest/id.js'
 import { QUEUE_GROUPS, buildQueue, type QueueCheck, type QueueItem } from '../src/suggest/queue.js'
 import type { SuggestionRecord } from '../src/suggest/types.js'
@@ -35,7 +36,10 @@ function storeApiLines(surface: string, text: string): string[] {
 
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8')
 
-/** The rows that bare `orangu` prints on a terminal after the brief: the app URL, the counts and how to stop it. */
+/** The 2 closing lines of bare `orangu` on a terminal: what the first run of the brain asks, then how to stop the app. */
+const CLOSING_LINES = ['  The first run of /orangu:improve asks about your role and your work.', '  Press ctrl-c to stop the app.'] as const
+
+/** The rows that bare `orangu` prints on a terminal after the brief: the app URL, the counts and the 2 closing lines. */
 function appRows(): string {
   return appBlock(MACHINE_CAPS, { url: `http://127.0.0.1:53211/_orangu/${'q'.repeat(43)}`, sessions: 5, running: 1 }).map(stripAnsi).join('\n')
 }
@@ -106,7 +110,7 @@ describe('the front doors: no person surface names the store API', () => {
 
   it('the short help names the chain in order, then the full reference, and no store command or machine verb', () => {
     const help = helpText()
-    const doors = ['\n  orangu  ', '\n  /orangu:improve  ', '\n  orangu help all  ']
+    const doors = ['\n  orangu  ', '\n  /orangu:improve  ', '\n  /orangu:interview  ', '\n  orangu help all  ']
     const at = doors.map((door) => help.indexOf(door))
     doors.forEach((door, index) => expect(at[index], door).toBeGreaterThan(-1))
     expect(at, 'in the order of the chain').toEqual([...at].sort((a, b) => a - b))
@@ -124,9 +128,16 @@ describe('the front doors: no person surface names the store API', () => {
     expect(storeApiLines('site/index.src.html', read('site/index.src.html'))).toEqual([])
   })
 
-  it('the app rows of bare orangu name no store command', () => {
-    expect(appRows()).toContain('Press ctrl-c to stop the app.')
+  it('the app rows of bare orangu end with the first run of /orangu:improve and how to stop the app, and name no store command', () => {
+    expect(appRows().split('\n').slice(-3)).toEqual(['', CLOSING_LINES[0], CLOSING_LINES[1]])
     expect(storeApiLines('app rows', appRows())).toEqual([])
+  })
+
+  it('the door view of the rendered#terminal row ends with the same 2 lines, so the STE gate scores them', async () => {
+    const source = 'test/golden/canonical.analysis.json'
+    const views = await sessionTerminalViews(source, JSON.parse(read(source)) as Analysis)
+    const door = views.find((view) => view.file === `${source}#door`)
+    expect(door?.lines?.slice(-3)).toEqual(['', ...CLOSING_LINES])
   })
 
   it('the footer with a due row names no store command', () => {

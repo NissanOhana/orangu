@@ -253,9 +253,9 @@ const APP_HEAD = INDENT + 'app '
 
 /**
  * stdout rows of bare `orangu` on a terminal, after the brief, once the app runs: its URL, the sessions of every root
- * and the running ones, what the app shows, and how to stop it. The URL is a paste target and is never cut or
- * wrapped. With a 43-character capability it is 74 columns wide, so the value column of 12 has no room for it. It
- * follows the label after 1 space, and the rows under it hang at its column.
+ * and the running ones, what the app shows, what the first run of the brain asks, and how to stop the app. The URL is
+ * a paste target and is never cut or wrapped. With a 43-character capability it is 74 columns wide, so the value
+ * column of 12 has no room for it. It follows the label after 1 space, and the rows under it hang at its column.
  */
 export function appBlock(caps: Caps, o: { url: string; sessions: number; running: number }): string[] {
   const pad = ' '.repeat(APP_HEAD.length)
@@ -263,7 +263,8 @@ export function appBlock(caps: Caps, o: { url: string; sessions: number; running
   const sessions = `${o.sessions.toLocaleString('en-US')} ${o.sessions === 1 ? 'session' : 'sessions'} on this machine`
   const counts = wrapJoined(caps, `${sessions}${glyphs(caps).sep}${o.running.toLocaleString('en-US')} running now`, width)
   const shows = wrapWords('See one session, your sessions and their agents, or the machine.', width)
-  return ['', APP_HEAD + paint(caps, 'accent', o.url), ...[...counts, ...shows].map((l) => pad + l), '', ...fit(caps, `${INDENT}Press ctrl-c to stop the app.`)]
+  const closing = [`${INDENT}The first run of /orangu:improve asks about your role and your work.`, `${INDENT}Press ctrl-c to stop the app.`]
+  return ['', APP_HEAD + paint(caps, 'accent', o.url), ...[...counts, ...shows].map((l) => pad + l), '', ...closing.flatMap((line) => fit(caps, line))]
 }
 
 /** `orangu list` rows: id, when, size, agents, project; every cell ASCII and width-aligned. */
