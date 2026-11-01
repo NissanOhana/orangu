@@ -152,8 +152,12 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // measured 83 (5 of 6). stable-file.ts:85 keeps the read-race phrase: one phrase for every read-race
   // error. The adapter retry regex does not parse it (parse-retry.test.ts "classifies exactly the two transient forms")
   'src/util': { floor: 81, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 1 },
-  'src/suggest/catalog.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (52 of 52): 11 notes rewritten, no claim, id, URL or verifiedAt moved
-  'src/suggest/features.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (22 of 22): 7 notes rewritten, no claim, id, URL or verifiedAt moved
+  // measured 100 (52 of 52): 11 notes rewritten, no claim, id, URL or verifiedAt moved. 2026-11-01: 8 vendor
+  // pattern notes added and the cache-messages-changed note fixed, measured 100 (85 of 85), 0 findings
+  'src/suggest/catalog.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // measured 100 (22 of 22): 7 notes rewritten, no claim, id, URL or verifiedAt moved. 2026-11-01: 6 native
+  // command notes added and the feat-effort-frontmatter note fixed, measured 100 (45 of 45), 0 findings
+  'src/suggest/features.json#note': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // R1, R2: the report
   // raised 89 -> 96 by the report copy rewrite (R1, 2026-10-06). Measured 310 sentences, 304 clean, score 98
   // (was 293 sentences, 268 clean, score 91). The 6 findings left are in the improvement screens (R2).

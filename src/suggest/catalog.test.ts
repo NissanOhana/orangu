@@ -249,3 +249,104 @@ describe('determinism', () => {
     expect(r1).toBe(r2)
   })
 })
+
+/** The hosts of each vendor that the 2026-11-01 pattern research read. A vendor entry cites one of them. */
+const VENDOR_HOSTS: Readonly<Record<string, readonly string[]>> = {
+  Anthropic: ['code.claude.com', 'www.anthropic.com', 'claude.com'],
+  OpenAI: ['developers.openai.com', 'learn.chatgpt.com', 'openai.com'],
+  Cursor: ['cursor.com'],
+  xAI: ['docs.x.ai'],
+}
+const vendorOf = (url: string | null): string | undefined =>
+  url === null ? undefined : Object.keys(VENDOR_HOSTS).find((vendor) => VENDOR_HOSTS[vendor]!.includes(new URL(url).host))
+
+/** The rule ids that the RULES registry ships, read off the registry as the orphan test above reads them. */
+function shippedRuleIds(): Set<string> {
+  const shipped = new Set<string>()
+  for (const rule of RULES) for (const m of rule.toString().matchAll(/ruleId:\s*['"]([a-z0-9-]+)['"]/g)) shipped.add(m[1]!)
+  return shipped
+}
+
+/** The signal kinds that catalog.ts documents in its header and detects in detectSignal. */
+const isDocumentedSignal = (signal: string): boolean => /^file-ext:\.[a-z0-9]+$/.test(signal) || /^cache-miss:[a-z_]+$/.test(signal) || signal === 'bash-search-loop'
+
+/** The token levers that the catalog must cover: agents, effort, model choice, scripts and skills. */
+const LEVER_RULES = ['model-for-task', 'thinking-on-mechanical', 'agent-fanout', 'failed-agents', 'skill-token-weight', 'script-candidate'] as const
+
+describe('vendor patterns: Anthropic, OpenAI, Cursor and xAI', () => {
+  it('catalog.json cites a page of each vendor, verified on a date, with a pattern that a finding can match', async () => {
+    const { readFile } = await import('node:fs/promises')
+    const recorded = new Set((JSON.parse(await readFile(new URL('./verified-urls.json', import.meta.url), 'utf8')) as { urls: string[] }).urls)
+    const shipped = shippedRuleIds()
+    for (const vendor of Object.keys(VENDOR_HOSTS)) {
+      const cited = catalogEntries().filter((e) => vendorOf(e.url) === vendor)
+      expect(cited.length, `catalog.json has an entry that cites a ${vendor} page`).toBeGreaterThanOrEqual(1)
+      for (const e of cited) {
+        expect(recorded.has(e.url!), `${e.id} url is in verified-urls.json`).toBe(true)
+        expect(e.verifiedAt, `${e.id} verifiedAt`).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+        const { ruleId, signal } = e.pattern
+        const matchable = ruleId !== undefined ? shipped.has(ruleId) || ruleId.startsWith('harness:') : signal !== undefined && isDocumentedSignal(signal)
+        expect(matchable, `${e.id} pattern ${JSON.stringify(e.pattern)} is a shipped rule or a documented signal`).toBe(true)
+      }
+    }
+  })
+
+  it('the catalog entries of the token levers match at least 4 of the 6 lever rules on the suggest path', () => {
+    const covered = LEVER_RULES.filter((ruleId) =>
+      matchRule(ruleId).some((m) => catalogEntries().includes(m.entry) && vendorOf(m.entry.url) !== undefined),
+    )
+    expect(covered.length, `lever rules with a vendor catalog entry: ${covered.join(', ')}`).toBeGreaterThanOrEqual(4)
+  })
+
+  it('both data files carry catalog version 2 and the date of the vendor research', async () => {
+    const { readFile } = await import('node:fs/promises')
+    for (const file of ['./catalog.json', './features.json']) {
+      const json = JSON.parse(await readFile(new URL(file, import.meta.url), 'utf8')) as { catalogVersion: number; updatedAt: string }
+      expect({ file, catalogVersion: json.catalogVersion, updatedAt: json.updatedAt }).toEqual({ file, catalogVersion: 2, updatedAt: '2026-11-01' })
+    }
+  })
+})
+
+/**
+ * The built-in Claude Code command that does the check in one step, named where it is the smaller fix.
+ * Each pair is the command and the finding that it answers. features.json holds each one, keyed to a shipped rule.
+ */
+const NATIVE_COMMANDS: ReadonlyArray<readonly [command: string, ruleId: string]> = [
+  ['/usage', 'agent-fanout'],
+  ['/usage', 'low-cache-hit'],
+  ['/doctor', 'mcp-definition-weight'],
+  ['/skill-doctor', 'skill-token-weight'],
+  ['/fewer-permission-prompts', 'human-wait-dominates'],
+  ['/context', 'preamble-weight'],
+]
+
+describe('native commands: features.json names the Claude Code command', () => {
+  it.each(NATIVE_COMMANDS)('%s reaches a %s finding through matchRule, from a Claude Code docs page', (command, ruleId) => {
+    const named = matchRule(ruleId).filter((m) => featureEntries().includes(m.entry) && m.entry.feature?.startsWith(`${command} `))
+    expect(named.map((m) => m.entry.id), `one ${command} entry for ${ruleId}`).toHaveLength(1)
+    const entry = named[0]!.entry
+    // "Run <command>" or, after a condition that comes first (STE rule 6), "If ..., run <command>"
+    expect(entry.note, `${entry.id} tells the user to run ${command}`).toMatch(new RegExp(`\\b[Rr]un ${command.replace('/', '\\/')} in Claude Code\\b`))
+    expect(vendorOf(entry.url), `${entry.id} cites a Claude Code docs page`).toBe('Anthropic')
+    expect(entry.verifiedAt).toBe('2026-11-01')
+  })
+})
+
+describe('cache facts: the notes match code.claude.com/docs/en/prompt-caching.md (opened 2026-11-01)', () => {
+  it('feat-effort-frontmatter: an effort change keeps the cache on the 5.5 models and Fable 5.1, and most other models keep a cache for each level', () => {
+    const entry = featureEntries().find((e) => e.id === 'feat-effort-frontmatter')
+    expect(entry?.note).not.toMatch(/Each effort level has its own cache for the same model\. So/)
+    expect(entry?.note).toMatch(/An effort change keeps the prompt cache by default on Opus 5\.5, Sonnet 5\.5, Haiku 5\.5 and Fable 5\.1\. This holds with an API key or a Claude subscription\./)
+    expect(entry?.note).toMatch(/On most other models, each effort level has its own cache/)
+    expect(entry?.verifiedAt).toBe('2026-11-01')
+  })
+
+  it('cache-messages-changed: a model switch starts a fresh cache, and an effort change keeps it on the 5.5 models and Fable 5.1', () => {
+    const entry = catalogEntries().find((e) => e.id === 'cache-messages-changed')
+    expect(entry?.note).not.toMatch(/Both are part of the cache key/)
+    expect(entry?.note).toMatch(/each model has its own cache/)
+    expect(entry?.note).toMatch(/On Opus 5\.5, Sonnet 5\.5, Haiku 5\.5 and Fable 5\.1, with an API key or a Claude subscription, the cache stays intact by default\./)
+    expect(entry?.url).toBe('https://code.claude.com/docs/en/prompt-caching.md')
+    expect(entry?.verifiedAt).toBe('2026-11-01')
+  })
+})

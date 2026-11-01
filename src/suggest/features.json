@@ -1,6 +1,6 @@
 {
-  "catalogVersion": 1,
-  "updatedAt": "2026-08-23",
+  "catalogVersion": 2,
+  "updatedAt": "2026-11-01",
   "note": "Claude Code feature → detectable signal → finding it addresses. Same entry shape as catalog.json; /orangu:improve may refresh from the changelog online, adding candidates with verifiedAt null. All URLs from the public docs",
   "entries": [
     {
@@ -27,8 +27,8 @@
       "pattern": { "ruleId": "thinking-on-mechanical" },
       "feature": "effort frontmatter (low|medium|high|xhigh|max)",
       "url": "https://code.claude.com/docs/en/skills.md",
-      "verifiedAt": "2026-08-23",
-      "note": "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. Each effort level has its own cache for the same model. So set it per agent or skill, and do not toggle it mid-session."
+      "verifiedAt": "2026-11-01",
+      "note": "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. An effort change keeps the prompt cache by default on Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1. This holds with an API key or a Claude subscription. On most other models, each effort level has its own cache, so keep one level for each agent or skill during a session."
     },
     {
       "id": "feat-background-agents",
@@ -65,6 +65,60 @@
       "url": "https://code.claude.com/docs/en/hooks.md",
       "verifiedAt": "2026-08-23",
       "note": "A PostToolUse hook can run the test or build gate of the project automatically after edits. Hooks run as code, not as context. This addresses sessions that end with edited files and no test or build run."
+    },
+    {
+      "id": "feat-usage-subagent-share",
+      "changeClass": "workflow-config",
+      "pattern": { "ruleId": "agent-fanout" },
+      "feature": "/usage (built-in command)",
+      "url": "https://code.claude.com/docs/en/best-practices.md",
+      "verifiedAt": "2026-11-01",
+      "note": "Run /usage in Claude Code before you change a subagent. On a Pro, Max, Ultra, Team or Enterprise plan, it breaks your usage down by skill, subagent, plugin and MCP server. So it shows the share of your usage that each subagent type takes. This built-in command is the first check, before a proposal."
+    },
+    {
+      "id": "feat-usage-cache-line",
+      "changeClass": "workflow-config",
+      "pattern": { "ruleId": "low-cache-hit" },
+      "feature": "/usage Prompt cache (main) line",
+      "url": "https://code.claude.com/docs/en/prompt-caching.md",
+      "verifiedAt": "2026-11-01",
+      "note": "Run /usage in Claude Code to see the Prompt cache (main) line of the session. It shows the hit ratio, the miss count and whether the cache is warm now. When Claude Code can find one, the line also names the likely cause of the last miss. The line needs Claude Code 2.1.251 or later, and the likely cause needs 2.1.260 or later. The line covers the main conversation, and this finding also counts subagent requests, so the two ratios can differ."
+    },
+    {
+      "id": "feat-doctor-extensions",
+      "changeClass": "mcp",
+      "pattern": { "ruleId": "mcp-definition-weight" },
+      "feature": "/doctor (bundled skill)",
+      "url": "https://code.claude.com/docs/en/skills.md",
+      "verifiedAt": "2026-11-01",
+      "note": "Run /doctor in Claude Code for a setup checkup. Its extension check compares unused skills, MCP servers and plugins with the context that they take, and it finds slow hooks. Claude reports its findings first and changes nothing before you confirm."
+    },
+    {
+      "id": "feat-skill-doctor",
+      "changeClass": "skill-create",
+      "pattern": { "ruleId": "skill-token-weight" },
+      "feature": "/skill-doctor (built-in command)",
+      "url": "https://code.claude.com/docs/en/skills.md",
+      "verifiedAt": "2026-11-01",
+      "note": "Run /skill-doctor in Claude Code to see how much context each skill takes and how often it runs. It flags the skills in the listing that never ran, and it says where to turn them off. It needs Claude Code 2.1.252 or later. This finding counts the tokens of each run of a skill, which is a different measure."
+    },
+    {
+      "id": "feat-fewer-permission-prompts",
+      "changeClass": "workflow-config",
+      "pattern": { "ruleId": "human-wait-dominates" },
+      "feature": "/fewer-permission-prompts (bundled skill)",
+      "url": "https://code.claude.com/docs/en/best-practices.md",
+      "verifiedAt": "2026-11-01",
+      "note": "If many of the waits are permission prompts in Manual mode, run /fewer-permission-prompts in Claude Code. It scans your recent transcripts for common read-only Bash and MCP calls, and it adds them to an allowlist in .claude/settings.json. New terminal sessions start in auto mode, where a classifier reviews a risky command before it runs."
+    },
+    {
+      "id": "feat-context-grid",
+      "changeClass": "instruction",
+      "pattern": { "ruleId": "preamble-weight" },
+      "feature": "/context (built-in command)",
+      "url": "https://code.claude.com/docs/en/commands.md",
+      "verifiedAt": "2026-11-01",
+      "note": "Run /context in Claude Code to see the context use of the session as a colored grid. It suggests changes for context-heavy tools and memory bloat, and it gives capacity warnings. Use it to find the largest part of the baseline before you trim CLAUDE.md or remove an MCP server."
     }
   ]
 }
