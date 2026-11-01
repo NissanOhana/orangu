@@ -282,15 +282,17 @@ describe('show-me filled from synthetic fixtures', () => {
     }
   })
 
-  it('a repository aggregate: recurring findings, the harness command, offline', () => {
+  // The review of a whole harness is a route of /orangu:improve (2026-11-01), so the scope page copies the improve command
+  // with its scope, and names no retired skill.
+  it('a repository aggregate: recurring findings, the review command, offline', () => {
     const evidence = projectEvidence(JSON.parse(read('test/golden/aggregate.json')), { scope: 'repo' })
     const page = aggregatePage(evidence, 'repo', { folder: 'demo', version: '0.0.0-test', words: WORDS })
     for (const [name, html] of Object.entries(fillBoth(page))) {
       expect(html).not.toContain('EXAMPLE')
       expect(html).toContain('Recurring patterns in demo')
       keepsTheScriptSurface(html, name)
-      expect(html).toContain('<code>claude "/orangu:harness --scope repo"</code>')
-      expect(html).not.toContain('/orangu:improve')
+      expect(html).toContain('<code>claude "/orangu:improve --scope repo"</code>')
+      expect(html).not.toMatch(/\/orangu:(?:analyze|harness)\b/)
       expect(offline(html, `${name}.html`).status).toBe(0)
     }
   })

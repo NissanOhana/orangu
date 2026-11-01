@@ -3,7 +3,7 @@
  * on this machine actually DID, from the HarnessReport the server computes (src/harness). Tokens
  * only, by rule. Lives in the SERVE bundle: imported from serve-ui.ts, never from app.ts, so its
  * bytes do not count against the file-mode ratchet. The report carries counts and a status per
- * row, never a recommendation; the recommendation is the `/orangu:harness` skill's job.
+ * row, never a recommendation; the recommendation is the job of the `/orangu:improve` review.
  */
 import type { Ctx } from '../app.js'
 import type { HarnessReport } from '../../../harness/types.js'

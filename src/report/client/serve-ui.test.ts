@@ -18,7 +18,7 @@ describe('the serve-only proposals seam', () => {
 describe('whole-harness review CTA', () => {
   it.each(['repo', 'global'] as const)('is an exact copy-only %s command with no row lifecycle', (scope) => {
     const html = megaReview(scope)
-    expect(html).toContain(`claude &quot;/orangu:harness --scope ${scope}&quot;`)
+    expect(html).toContain(`claude &quot;/orangu:improve --scope ${scope}&quot;`)
     expect(html).toContain('data-copy=')
     expect(html).not.toContain('data-kick')
     expect(html).not.toContain('status-chip')
@@ -47,7 +47,7 @@ describe('whole-harness review CTA', () => {
     expect((global.match(/Global scope is for review only\. Claude applies nothing\./g) ?? []).length).toBe(2)
   })
 
-  // the copied text is `claude "/orangu:harness …"`, a shell command that starts Claude Code
+  // the copied text is `claude "/orangu:improve --scope …"`, a shell command that starts Claude Code
   it.each([
     ['repo', 'Paste it in a terminal in this repository. It starts Claude Code.'],
     ['global', 'Paste it in a terminal. It starts Claude Code.'],

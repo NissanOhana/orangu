@@ -95,7 +95,7 @@ describe('renderHarness (A8, serve-only)', () => {
     // the listings table scrolls inside its own container at 390 px (tools/repo/agents do the same)
     expect(markup).toContain('<div class="scroll-x"><table class="grid">')
     expect(markup).toContain('</table></div>')
-    expect(markup).toContain('claude &quot;/orangu:harness --scope repo&quot;')
+    expect(markup).toContain('claude &quot;/orangu:improve --scope repo&quot;')
     expect(markup).toContain('usage counters are omitted')
     expect(markup).not.toMatch(/\$\d|USD|dollar|price|cost/i)
   })

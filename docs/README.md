@@ -15,7 +15,7 @@ Everything committed here is public product or contributor documentation. The re
 - [Architecture](ARCHITECTURE.md): pipeline, module ownership, build, and correctness gates.
 - [Data contracts](DATA-CONTRACTS.md): Analysis, EvidenceBundle, AppData, suggestion, proposal, application, and verification shapes.
 - [Design system](DESIGN.md): visual tokens, interaction rules, accessibility, and brand assets.
-- [Claude Code analysis shape](../plugin/skills/analyze/references/json-shape.md): field-level Analysis and Aggregate reference.
+- [Claude Code analysis shape](../plugin/skills/improve/references/json-shape.md): field-level Analysis and Aggregate reference.
 
 ## Contribute and report issues
 

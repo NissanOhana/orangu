@@ -51,7 +51,7 @@ Source rules:
 - An inference source has no URL and no date.
 - A discovery candidate whose `verifiedAt` is `null` stays in chat. Do not copy it into this manifest.
 
-`/orangu:harness` proposals are ranked structured reviews. Repo-scope proposals are apply-compatible. Global-scope proposals use the same manifest for review, but they are proposal-only. A harness proposal must include `rank`, a nonempty `files` list and a nonempty `sources` list. It must also include every required evidence, effect, risk and verification field above. A recommendation without a concrete relative repository file or an honest source stays a chat recommendation, not a `proposed` record.
+The proposals of a whole-harness review are ranked structured reviews. Repo-scope proposals are apply-compatible. Global-scope proposals use the same manifest for review, but they are proposal-only. A review proposal must include `rank`, a nonempty `files` list and a nonempty `sources` list. It must also include every required evidence, effect, risk and verification field above. A recommendation without a concrete relative repository file or an honest source stays a chat recommendation, not a `proposed` record.
 
 Lifecycle authority depends on the scope. Session and repo proposals may be applied and later verified. Global proposals are review-only, and they may not be applied or verified.
 

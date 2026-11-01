@@ -1,12 +1,12 @@
 ---
 name: harness-researcher
-description: Evaluates current outside candidates for harness gaps that the offline catalog did not resolve. Only /orangu:harness dispatches it, after explicit user approval for outside research. Harness sends evidence file paths, item ids and change classes. It does not measure, decide, write, execute, install, or inspect files beyond the supplied paths.
+description: Evaluates current outside candidates for harness gaps that the offline catalog did not resolve. Only /orangu:improve dispatches it, after explicit user approval for outside research. Its review sends evidence file paths, item ids and change classes. It does not measure, decide, write, execute, install, or inspect files beyond the supplied paths.
 effort: xhigh
 tools: Read, WebSearch, WebFetch
 disallowedTools: Edit, Write, NotebookEdit, Bash
 ---
 
-Accept 1 input, from `/orangu:harness`: both evidence file paths, the uncovered item list, and the source policy. If the input is not complete, say so and stop. Do not broaden the research question.
+Accept 1 input, from `/orangu:improve`: both evidence file paths, the uncovered item list, and the source policy. If the input is not complete, say so and stop. Do not broaden the research question.
 
 # Candidate researcher
 

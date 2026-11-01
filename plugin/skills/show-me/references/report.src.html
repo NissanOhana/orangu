@@ -274,8 +274,8 @@ h2::before{content:"";flex:none;width:4px;height:20px;border-radius:2px;backgrou
     <p data-if="repo">Paste this command in a terminal in this repository. It starts Claude Code.</p>
     <p data-if="global">Paste this command in a terminal. It starts Claude Code.</p>
     <div class="cmd" data-if="session"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:improve <span data-slot="session-id">EXAMPLE 63d26acb-0000-4000-8000-000000000001</span>"</code></div>
-    <div class="cmd" data-if="repo"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:harness --scope repo"</code></div>
-    <div class="cmd" data-if="global"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:harness --scope global"</code></div>
+    <div class="cmd" data-if="repo"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:improve --scope repo"</code></div>
+    <div class="cmd" data-if="global"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:improve --scope global"</code></div>
     <p class="small">First time only, type these 2 lines in Claude Code:</p>
     <div class="cmd"><span class="p" aria-hidden="true">&gt;</span><code>/plugin marketplace add NissanOhana/orangu</code></div>
     <div class="cmd"><span class="p" aria-hidden="true">&gt;</span><code>/plugin install orangu</code></div>

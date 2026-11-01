@@ -159,8 +159,9 @@ export function findingForRow(row: PlanRow, scope: SuggestionScope): Finding {
   }
 }
 
+/** The command of the whole-harness review, a route of /orangu:improve. */
 export function harnessCommand(scope: 'repo' | 'global'): string {
-  return `claude "/orangu:harness --scope ${scope}"`
+  return `claude "/orangu:improve --scope ${scope}"`
 }
 
 /** Persisted workflow failures survive SSE re-renders as actionable row copy. */

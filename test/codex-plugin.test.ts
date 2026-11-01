@@ -82,9 +82,17 @@ describe('Codex plugin packaging', () => {
       expect(skill, `${name} routes to no unmirrored Codex skill`).not.toMatch(/\$orangu-(analyze|harness)\b/)
       expect(skill).toMatch(new RegExp(`^# ${name}$`, 'm'))
     }
-    expect(readText('plugins/orangu/skills/orangu-feedback/SKILL.md')).toContain('Not for anything about a session: the `orangu analyze` command.')
-    expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('Not for a repo or global harness review: the `orangu harness` command.')
-    expect(readText('plugins/orangu/skills/orangu-improve/SKILL.md')).toContain('belongs to `orangu harness`.')
+    // C13 (2026-11-01): improve took in the review of a whole harness, so no mirror points at a CLI verb in place of a
+    // retired skill. feedback routes a session question to improve by its Codex name.
+    expect(readText('plugins/orangu/skills/orangu-feedback/SKILL.md')).toContain('Not for anything about a session: $orangu-improve.')
+    for (const path of filesUnder('plugins/orangu/skills').filter((p) => p.endsWith('.md')))
+      expect(readText(path), `${path} points at no CLI verb for a retired skill`).not.toMatch(/the `orangu (?:analyze|harness)` command|belongs to `orangu harness`/)
+    // the review of improve rides with improve, and the brain rules ride in shared/, in both trees
+    for (const tree of ['plugins/orangu/skills', '.agents/skills']) {
+      expect(readText(`${tree}/orangu-improve/references/review.md`), `${tree} mirrors the review`).toContain('# The review of a whole harness')
+      expect(readText(`${tree}/shared/brain.md`), `${tree} carries the brain rules as they are`).toBe(readText('plugin/skills/shared/brain.md'))
+      expect(readText(`${tree}/orangu-improve/references/review.md`), `${tree}: the review applies through the Codex apply skill`).toContain('$orangu-apply <id>')
+    }
     // The profile interview (2026-11-01): improve hands no id to it, it routes a change proposal to improve by its Codex
     // name, and it searches in no host. Its question and profile rules ride along in shared/.
     for (const tree of ['plugins/orangu/skills', '.agents/skills']) {
@@ -114,6 +122,9 @@ describe('Codex plugin packaging', () => {
   })
 
   it('generates the mirror from plugin/skills instead of hand-writing it', () => {
+    // C13 (2026-11-01): the build knows only the skills that plugin/skills ships, so no Claude-only skill name is left
+    // for the mirror to turn into a CLI verb
+    expect(readText('scripts/build.mjs')).toContain("const CLAUDE_SKILLS = ['improve', 'apply', 'feedback', 'interview']")
     // The invariant that matters: every non-frontmatter line of the Claude skill that carries no
     // host-specific token appears verbatim in the mirror, so prose edits are one-file edits.
     for (const name of ['improve', 'apply', 'feedback', 'interview']) {
@@ -128,7 +139,7 @@ describe('Codex plugin packaging', () => {
       expect(readText(`plugins/orangu/skills/orangu-${name}/agents/openai.yaml`)).toBe(readText(`plugin/codex/${name}/openai.yaml`))
     }
     // references and the shared rules ride along so relative links resolve in both hosts
-    for (const ref of ['shared/artifact-contract.md', 'shared/research-sources.md', 'orangu-apply/references/application-contract.md', 'shared/untrusted-input.md', 'shared/interview.md', 'shared/ste.md', 'shared/loop.md', 'shared/profile.md']) {
+    for (const ref of ['shared/artifact-contract.md', 'shared/research-sources.md', 'orangu-apply/references/application-contract.md', 'shared/untrusted-input.md', 'shared/interview.md', 'shared/ste.md', 'shared/loop.md', 'shared/profile.md', 'shared/brain.md', 'orangu-improve/references/review.md']) {
       expect(existsSync(join(root, 'plugins/orangu/skills', ref)), ref).toBe(true)
       expect(readText(`plugins/orangu/skills/${ref}`)).not.toMatch(/\/orangu:|CLAUDE_PLUGIN_ROOT/)
     }

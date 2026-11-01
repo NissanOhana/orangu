@@ -1,17 +1,15 @@
 # Orangu skills
 
-Seven Claude Code skills. Start with `/orangu:improve`. Each owns one job.
+Five Claude Code skills. Start with `/orangu:improve`. Run `/orangu:interview` to tell orangu your role and your work.
 
 | Skill | What it is | Use instead when |
 |---|---|---|
-| `/orangu:analyze` | Explain one session (`current` included), finished or live: outcome, steps, errors, time, tokens. Open its report | you want a change proposed: `/orangu:improve`. Your setup reviewed: `/orangu:harness` |
-| `/orangu:improve` | Turn one finding into one bounded proposal with evidence, expected effect, risk, and a verification check. Never edits the repository | you want it applied: `/orangu:apply` |
+| `/orangu:improve` | Find patterns in one session or the whole harness, propose ranked changes, and apply the ones you approve by id. It offers the interview on its first run | you want to change your answers: `/orangu:interview` |
 | `/orangu:interview` | Ask about your role and your work, and keep your answers as your profile | you want a change proposed: `/orangu:improve` |
 | `/orangu:apply` | Apply one reviewed proposal, run the repository's own checks, record a receipt | it still needs drafting: `/orangu:improve` |
-| `/orangu:harness` | Review declared vs used harness configuration repo-wide or machine-wide, interview you, propose changes, apply approved ones | it is about one session: `/orangu:analyze` |
-| `/orangu:show-me` | Write a slide deck and a written report from the evidence, as offline HTML | you want a diagnosis in chat: `/orangu:analyze` |
-| `/orangu:feedback` | Send beta feedback about Orangu itself from a private localhost form | it is about a session: `/orangu:analyze` |
+| `/orangu:show-me` | Write a slide deck and a written report from the evidence, as offline HTML | you want a diagnosis in chat: `/orangu:improve` |
+| `/orangu:feedback` | Send beta feedback about Orangu itself from a private localhost form | it is about a session: `/orangu:improve` |
 
 Skills read `orangu` CLI output, never a `.jsonl` transcript, and size each read first. Units: tokens, milliseconds, effort.
 
-The build generates Codex mirrors of `improve`, `apply`, `feedback`, `interview` (`$orangu-<name>` under `plugins/orangu/skills/` and `.agents/skills/`). `analyze`/`harness` pointers become CLI verbs. Edit only here.
+The build generates Codex mirrors of `improve`, `apply`, `feedback`, `interview` (`$orangu-<name>` under `plugins/orangu/skills/` and `.agents/skills/`). Edit only here.

@@ -70,7 +70,7 @@ A line in CLAUDE.md or in memory can be missed. A hook cannot. `orangu harness` 
 - **Memory index:** Claude Code loads the first 200 lines or 25,000 characters of `MEMORY.md`. The row shows the lines past it and the sessions that lost them.
 - **Recurring complaints:** words that come back in complaints across sessions.
 
-Without `--include-text`, a row has no text: no rule line, no shared word, no complaint. `/orangu:harness` turns each row into a hook or a deny rule, never another line.
+Without `--include-text`, a row has no text: no rule line, no shared word, no complaint. `/orangu:improve` turns each row into a hook or a deny rule, never another line.
 
 ### Terminal output
 

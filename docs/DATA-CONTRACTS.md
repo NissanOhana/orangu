@@ -2,7 +2,7 @@
 
 This reference describes Orangu's current JSON surfaces. Integrations must use fields that exist in these contracts. Breaking changes require the owning schema version to change.
 
-The complete current `Analysis` and `SlimAnalysis` reference lives at [`plugin/skills/analyze/references/json-shape.md`](../plugin/skills/analyze/references/json-shape.md). The TypeScript definitions remain the source of truth.
+The complete current `Analysis` and `SlimAnalysis` reference lives at [`plugin/skills/improve/references/json-shape.md`](../plugin/skills/improve/references/json-shape.md). The TypeScript definitions remain the source of truth.
 
 ## Analysis and Aggregate
 

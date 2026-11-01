@@ -87,8 +87,9 @@ Every skill and harness analyst treats session, evidence, tool, path, title, err
 
 ### `orangu-improve`
 
-This is the primary suggestion workflow for both one-session diagnosis and recurring repo/global improvement. It:
+This is the one improvement workflow. It diagnoses one session, reviews a whole repository or machine, approves a proposal, and checks it later. It:
 
+- reads the profile path first, and on a first run with no profile asks if the user wants the interview first
 - runs the exact `orangu evidence` estimate before reading the evidence
 - starts with `catalogMatches` and ties quantitative statements to emitted findings
 - asks the user the bounded interview questions the evidence cannot answer before saving, and records the answers as user-stated context, never as a measurement
@@ -96,7 +97,17 @@ This is the primary suggestion workflow for both one-session diagnosis and recur
 - writes one human-readable `<id>.md` proposal and one validated `<id>.json` manifest
 - runs the deterministic `--for-proposal` evidence/workspace check before writing either artifact
 - reports the evidence, expected effect, risk, files, verification condition, and sources in chat
-- never edits the target repository.
+- never edits the target repository itself.
+
+Its whole-harness review reads `orangu harness`, which uses no model and no network. That command reads the configured roots, every `~/.claude.json` project entry under global scope, and the platform's managed-policy directory. `ORANGU_CLAUDE_MANAGED_DIRS` overrides that directory, and an empty value reads none. Between the analysts and the proposals, the review asks the user what the evidence and the profile leave open. The answers are user-stated context. They shape the ranking and never become a measurement.
+
+When a run saves a session or repo proposal, it asks which ones you approve. Then it applies the ones you approved, under 4 standing limits:
+- **Per-item explicit approval.** Before the question, it discloses each item's id, the files its manifest declares, and the exact text of anything that would run or grant authority. Only a verbatim id approves, and only the answer to that question counts. Nothing else in the conversation is consent.
+- **Session or repo scope only.** Global proposals are review-only and are never applied, at any approval.
+- **Through `/orangu:apply`, unchanged.** For each approved item, improve invokes `/orangu:apply <id>`: one id, one record, one receipt per invocation. Each invocation keeps that skill's existing binding check, untrusted-input rules, and confinement contract. Improve forks nothing and has no repository edit authority of its own. It prints the `/orangu:apply <id>` list, so you can do the same work by hand.
+- **Stop at the first failure.** Improve applies the approved items in order and halts at the first one that fails. It leaves the working tree as it stands for review and does not continue down the list.
+
+None of this moves the deterministic boundary. No model measures anything, and the evidence is still the bounded deterministic projection. The CLI still validates artifact shape and does not inspect a diff.
 
 ### `orangu-apply`
 
@@ -146,18 +157,6 @@ A proposal cannot verify itself, and an application receipt does not prove that 
 
 ### Supporting skills
 
-- `/orangu:analyze` translates one supported session or aggregate without designing or applying a change.
-- `/orangu:harness` is a separately requested deep review for repo or global scope. Its evidence is `orangu harness`, which uses no model and no network. That command reads the configured roots, every `~/.claude.json` project entry under global scope, and the platform's managed-policy directory. `ORANGU_CLAUDE_MANAGED_DIRS` overrides that directory, and an empty value reads none.
-
-  Between the analysts and the proposals, it interviews the user in depth. It asks structured questions (AskUserQuestion) where the choices are finite, and for free text where they are open. The answers are user-stated context. They shape the ranking and never become a measurement.
-
-  It remains catalog-first and saves the same structured Markdown plus manifest pair as `/orangu:improve`. It ends by asking which of its ranked items you approve. Then it applies the ones you approved, under 4 standing limits:
-  - **Per-item explicit approval.** Before the question, it discloses each item's id, the files its manifest declares, and the exact text of anything that would run or grant authority. Only a verbatim id approves, and only the answer to that question counts. Nothing else in the conversation is consent.
-  - **Repo scope only.** Global proposals are review-only and are never applied, at any approval.
-  - **Through `/orangu:apply`, unchanged.** For each approved item, harness invokes `/orangu:apply <id>`: one id, one record, one receipt per invocation. Each invocation keeps that skill's existing binding check, untrusted-input rules, and confinement contract. Harness forks nothing and has no repository edit authority of its own. It prints the `/orangu:apply <id>` list, so you can do the same work by hand.
-  - **Stop at the first failure.** Harness applies the approved items in order and halts at the first one that fails. It leaves the working tree as it stands for review and does not continue down the list.
-
-  None of this moves the deterministic boundary. No model measures anything, and the evidence is still the bounded deterministic projection. The CLI still validates artifact shape and does not inspect a diff.
 - `/orangu:show-me` turns the evidence of one session, one repository or all sessions into a slide deck and a written report. `orangu show-me` writes that evidence to `data.json` in a new run directory under `~/.orangu/show-me/`. Claude reads it behind the same size gate. Then Claude writes only 3 text values to `words.json`: `verdict`, `summary` and `improvementsTitle`. Claude copies each number from `data.json` and computes no figure.
 
   `orangu show-me --render` redacts the 3 values and checks them with `orangu ste`. It fills both offline HTML files with each value as text, and checks each file against its template before it writes it. Claude writes no HTML, no suggestion record and no repository file. The skill has no Codex mirror.
@@ -168,13 +167,13 @@ A proposal cannot verify itself, and an application receipt does not prove that 
 
 ### Text checks and permissions
 
-`analyze`, `improve`, `harness`, `interview` and `apply` check the text that they write for the user with `orangu ste`. `orangu ste` reads a proposal from its file, and chat text from a new draft file, `~/.orangu/drafts/<skill>-<random>.md`. No draft text goes through the shell. `orangu ste` has no pass mark, so Claude fixes only the findings that are real.
+`improve`, `interview` and `apply` check the text that they write for the user with `orangu ste`. `orangu ste` reads a proposal from its file, and chat text from a new draft file, `~/.orangu/drafts/<skill>-<random>.md`. No draft text goes through the shell. `orangu ste` has no pass mark, so Claude fixes only the findings that are real.
 
 Each skill pre-approves by name each `orangu` verb that its steps run. No skill pre-approves all of `orangu`. `/orangu:apply` pre-approves only `orangu suggest`, `orangu ste` and `Read`. So each repository edit, each project check and each write of apply can ask you for permission. No skill pre-approves an `Edit` or a `Write` outside `~/.orangu/drafts/` and `~/.orangu/proposals/`, and `show-me` pre-approves none.
 
 ## Claude Code and Codex parity
 
-The Claude Code plugin exposes `/orangu:analyze`, `/orangu:improve`, `/orangu:interview`, `/orangu:apply`, `/orangu:harness`, `/orangu:show-me`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` holds byte-identical mirrors for source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools`, so the pre-approvals above apply only in Claude Code. `npm run verify` fails when a mirror is stale.
+The Claude Code plugin exposes `/orangu:improve`, `/orangu:interview`, `/orangu:apply`, `/orangu:show-me`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` holds byte-identical mirrors for source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools`, so the pre-approvals above apply only in Claude Code. `npm run verify` fails when a mirror is stale.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule.
 

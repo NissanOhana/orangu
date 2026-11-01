@@ -45,7 +45,7 @@ orangu needs Node.js 20 or newer and no runtime dependency. The [usage guide](do
 
 1. **Observe.** orangu parses, redacts, counts, and ranks each session against 44 deterministic rules. It uses no model.
 2. **See.** The report and `orangu serve` show quality, time, and tokens as separate axes, with the evidence behind each finding.
-3. **Propose.** `/orangu:improve` or `/orangu:harness` drafts one proposal for each change, in one of nine [change classes](docs/DATA-CONTRACTS.md). A proposal changes no file.
+3. **Propose.** `/orangu:improve` drafts one proposal for each change, in one of nine [change classes](docs/DATA-CONTRACTS.md). A proposal changes no file.
 4. **Apply.** You approve each change by its id. Then `/orangu:apply <id>` makes it and records which checks ran.
 5. **Verify.** orangu compares your later sessions in the same workspace with the sessions before the change. The change counts as verified only when they beat the earlier sessions beyond chance. No model is in the measurement. `/orangu:improve --verify <id>` shows the comparison and records a final verdict.
 6. **Remember.** orangu keeps each verdict and each reason that you pick. The next proposal reads them. `orangu serve` lists them under Improvements.
@@ -61,11 +61,9 @@ orangu never changes your harness by itself. Global (whole-machine) changes stay
 
 | Skill | What it does |
 |---|---|
-| `/orangu:analyze` | Explain what happened in one session, finished or still running, from local evidence. Open the report of the current session |
-| `/orangu:improve` | Start here. Find the next change, draft one reviewable proposal, and check each change that you apply |
-| `/orangu:interview` | Research outside options for one suggestion, then interview you before its proposal or a second opinion (`/orangu:interview <sg_id>`) |
+| `/orangu:improve` | Start here. Find patterns in one session or in the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. Apply the changes that you approve by id, and check each one later. A rule that did not hold gets a hook, not another note |
+| `/orangu:interview` | Ask about your role and your work, and keep your answers. The first run of `/orangu:improve` offers it |
 | `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
-| `/orangu:harness` | Review the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. A rule that did not hold gets a hook, not another note |
 | `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML. Claude writes only 3 text values, and `orangu show-me` writes both files from the data |
 | `/orangu:feedback` | Send reviewed beta feedback from a localhost form |
 

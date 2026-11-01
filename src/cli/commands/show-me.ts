@@ -1,5 +1,5 @@
 /**
- * `orangu show-me`: the slide deck and the written report of /orangu:show-me, in 2 steps. Claude writes only the
+ * `orangu show-me`: the slide deck and the written report of the show-me skill, in 2 steps. Claude writes only the
  * 3 strings of words.json between them. orangu writes every byte of HTML.
  *
  *   orangu show-me [<session>] | --scope repo [--cwd <dir>] | --scope global  [--json]

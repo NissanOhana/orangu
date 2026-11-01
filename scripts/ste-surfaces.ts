@@ -535,10 +535,10 @@ const codexMirrorSurface: Surface = {
 const pluginFiles = (files: readonly string[]): string[] =>
   files.filter((file) => (file.startsWith('plugin/skills/') || file.startsWith('plugin/agents/')) && (file.endsWith('.md') || file.endsWith('.src.html')))
 
-/** P1a owns the skills the build mirrors to Codex; P1b the Claude-only ones. A new directory has no owner yet. */
+/** P1a owns the skills the build mirrors to Codex; P1b the catalog and the agents. A new directory has no owner yet. */
 function pluginOwner(file: string): string {
   if (/^plugin\/skills\/(improve|apply|feedback|shared)\//.test(file)) return 'P1a'
-  if (/^plugin\/skills\/(analyze|harness)\//.test(file) || file === 'plugin/skills/README.md' || file.startsWith('plugin/agents/')) return 'P1b'
+  if (file === 'plugin/skills/README.md' || file.startsWith('plugin/agents/')) return 'P1b'
   if (file.startsWith('plugin/skills/show-me/')) return 'P2'
   return 'new'
 }
@@ -1002,7 +1002,7 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
       return strings([json['description'], ui['shortDescription'], ui['longDescription'], ...(Array.isArray(ui['defaultPrompt']) ? ui['defaultPrompt'] : [])])
     }),
     codexMirrorSurface,
-    // P1b: analyze, harness, the agents, the catalog, the plugin and marketplace descriptions
+    // P1b: the agents, the catalog, the plugin and marketplace descriptions (analyze and harness left on 2026-11-01)
     ...pluginSurfaces(files, 'P1b'),
     jsonSurface('plugin/.claude-plugin/plugin.json#description', 'P1b', one('plugin/.claude-plugin/plugin.json'), (json) => strings([json['description']])),
     jsonSurface('.claude-plugin/marketplace.json#description', 'P1b', one('.claude-plugin/marketplace.json'), (json) =>

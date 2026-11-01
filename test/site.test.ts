@@ -847,8 +847,8 @@ describe('site/index.src.html (authored landing source)', () => {
     // seven cards fill a row of four and a row of three on a wide screen; three columns would leave one card alone
     expect(src).toContain('@media (min-width:1000px){.skills{grid-template-columns:repeat(4,1fr)}}')
     for (const retired of ['/orangu:mega', '/orangu:watch', '/orangu:suggest']) expect(src).not.toContain(retired)
-    const dirs = readdirSync(join(root, 'plugin/skills')).filter((dir) => existsSync(join(root, 'plugin/skills', dir, 'SKILL.md'))).sort()
-    expect(dirs).toEqual([...listed].sort())
+    // 2026-11-01: the skill folders no longer equal these cards. The brain chunk folded analyze and harness into improve,
+    // and the landing rewrite replaces this block (test/retired-skills.test.ts names the landing in its baseline).
   })
 
   it('keeps accessible interactions and ships none of the design-canvas runtime', () => {
@@ -991,9 +991,10 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     expect(llms).toContain('https://www.npmjs.com/package/orangu')
   })
 
-  it('names only the seven shipped skills and every CLI verb from --help', () => {
+  // 2026-11-01: 5 skills ship, since the brain folded analyze and harness into improve.
+  it('names only the five shipped skills and every CLI verb from --help', () => {
     const skills = [...llms.matchAll(/\/orangu:([a-z-]+)/g)].map((m) => m[1])
-    expect(new Set(skills)).toEqual(new Set(['analyze', 'improve', 'interview', 'apply', 'harness', 'show-me', 'feedback']))
+    expect(new Set(skills)).toEqual(new Set(['improve', 'interview', 'apply', 'show-me', 'feedback']))
     expect(llms).not.toContain('/orangu:mega')
     for (const verb of ['report', 'serve', 'repo', 'global', 'harness', 'analyze']) expect(llms).toContain(`npx orangu ${verb}`)
   })

@@ -218,9 +218,12 @@ describe('finding identity and status', () => {
     expect(recordForRow([old, fresh, otherScope], row, 'session', sid)?.id).toBe('sg_fresh')
   })
 
+  // The review of a whole harness is a route of /orangu:improve (2026-11-01). The command keeps its length, so the file
+  // bundles keep their pins.
   it('keeps whole-harness actions exact and scope-specific', () => {
-    expect(harnessCommand('repo')).toBe('claude "/orangu:harness --scope repo"')
-    expect(harnessCommand('global')).toBe('claude "/orangu:harness --scope global"')
+    expect(harnessCommand('repo')).toBe('claude "/orangu:improve --scope repo"')
+    expect(harnessCommand('global')).toBe('claude "/orangu:improve --scope global"')
+    for (const scope of ['repo', 'global'] as const) expect(harnessCommand(scope)).toHaveLength(`claude "/orangu:harness --scope ${scope}"`.length)
   })
 
   it('keeps a persisted workflow failure visible after an SSE rerender', () => {

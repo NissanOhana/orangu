@@ -1,6 +1,6 @@
 ---
 name: show-me
-description: Turn the evidence of one session, one repository or all sessions into a slide deck and a written report, as offline HTML files. Use when the user asks for slides, a deck or a report to present or share with a team. Not for a diagnosis in chat: /orangu:analyze. Not for a change proposal: /orangu:improve.
+description: Turn the evidence of one session, one repository or all sessions into a slide deck and a written report, as offline HTML files. Use when the user asks for slides, a deck or a report to present or share with a team. Not for a diagnosis in chat or a change proposal: /orangu:improve.
 allowed-tools: Bash(orangu show-me:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *), Read
 ---
 
@@ -61,4 +61,4 @@ Run `orangu show-me --render '<dir>' --json`. It writes `slides.html` and `repor
 
 Fix each finding that is real in `words.json`. Do not chase a score. Then run `orangu show-me --render '<dir>' --open --json`. It writes both files again and opens them in the browser.
 
-Print both absolute paths. Offer `/orangu:improve` for one finding, or `/orangu:harness` for a repository or the machine.
+Print both absolute paths. Offer `/orangu:improve` for one finding, a repository or the machine.

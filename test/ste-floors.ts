@@ -80,7 +80,17 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/apply/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (55 of 55). P1b moved the pinned "applied locally, not yet verified; verify ..." to two sentences, quoted as one said text
   'plugin/skills/apply/references/application-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (16 of 16) after the rewrite
   'plugin/skills/feedback/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (31 of 31) after the rewrite
-  'plugin/skills/improve/SKILL.md': { floor: 96, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 2 }, // measured 98 (89 of 91): the 30-word network-disclosure list and the 26-word routing sentence in the description. P1b moved the pinned "Orangu picks the sessions; never choose them." to two sentences
+  // 2026-11-01 the brain: floor 96 -> 98, findings 2 -> 0. Measured 100 (109 of 109) as the router of the brain: the
+  // network-disclosure list moved to shared/brain.md as 3 sentences, and the routing sentence of the description split.
+  'plugin/skills/improve/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // new surfaces 2026-11-01, born at max(80, measured - 2): the review of a whole harness, measured 100 (147 of 147), and
+  // the brain rules that every host reads, measured 100 (144 of 144). 0 findings each.
+  'plugin/skills/improve/references/review.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  'plugin/skills/shared/brain.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // moved 2026-11-01 from plugin/skills/analyze/references/ with the same bytes: the field reference that the review
+  // reads beside `orangu analyze --json --slim`, and that docs/README.md and docs/DATA-CONTRACTS.md link. Measured 100
+  // (34 of 34) on 2026-11-01. Its old P1b row recorded 26 of 26 from an earlier measure.
+  'plugin/skills/improve/references/json-shape.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'plugin/skills/shared/artifact-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (56 of 56) after the rewrite, 100 (67 of 67) after the interview sections moved in, 2026-10-24
   'plugin/skills/shared/interview.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (47 of 47) after the rewrite, 100 (74 of 74) with the question rules, 2026-10-24
   'plugin/skills/shared/loop.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface 2026-10-22, born at max(80, measured - 2): measured 100 (118 of 118), 0 findings
@@ -92,19 +102,14 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // Z: floor 65 -> 98. Measured 100 (6 of 6, was 2 of 3, score 67). The Codex CLI fallback was one 36-word
   // sentence. It is now 5 short sentences, with the same 2 paths in the same order.
   'scripts/build.mjs#codex': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
-  // P1b: analyze, harness, the agents, the skills catalog, the plugin and marketplace descriptions
+  // P1b: the agents, the skills catalog, the plugin and marketplace descriptions. The rows of analyze (its SKILL.md and 2
+  // references) and harness left with their files on 2026-11-01, when improve took in their jobs.
   // Raised by the P1b STE rewrite of each file (no semicolon, split sentences, vertical lists, simple tenses, the
   // product nouns). Each row: the measured score, then what still holds it down.
   'plugin/agents/harness-devex-analyst.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (41 of 41) after the rewrite
   'plugin/agents/harness-pm-analyst.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (40 of 40) after the rewrite
   'plugin/agents/harness-researcher.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (43 of 43) after the rewrite
   'plugin/skills/README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (22 of 22) after the rewrite
-  'plugin/skills/analyze/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (68 of 68) after the rewrite
-  'plugin/skills/analyze/references/json-shape.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (26 of 26): "e.g." became "for example"
-  // re-born 71 -> 66 and contractions 0 -> 1: table cells are now scored. Measured 75 sentences, 51 clean,
-  // score 68 (was 37 sentences, score 73). The cell at :25 holds "can't", and the cells carry 14 semicolons.
-  'plugin/skills/analyze/references/reading-the-report.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (116 of 116): the table cells are sentences, and "can't" became "cannot"
-  'plugin/skills/harness/SKILL.md': { floor: 94, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 6 }, // measured 96 (109 of 114): 5 long sentences hold pinned lists (the 9 change classes, the network-disclosure list, the manifest fields, the per-item disclosure, the "echoing ... just before each invocation" apply rule) under the 1,400-word body ceiling
   'plugin/skills/shared/research-sources.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (34 of 34) after the rewrite, 100 (37 of 37) with the consent sentence and the host rule, 2026-10-24
   'plugin/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2): the 28-word sentence became 2
   '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
