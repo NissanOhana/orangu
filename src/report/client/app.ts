@@ -11,7 +11,6 @@ import { badgeCopy, mergeOpenIds } from './derive.js'
 import { esc, num } from './format.js'
 import { mascotSvg } from './mascot.js'
 import { h, wireExpandables, wireCopyButtons } from './dom.js'
-import { commandBlock, installLines, pasteLine } from './components/command.js'
 import { plainSentence, type Audience } from './strings.js'
 import { renderLive } from './screens/live.js'
 import { renderOverview } from './screens/overview.js'
@@ -74,36 +73,6 @@ export function screenTitle(id: string): string {
   return TITLES[id] ?? 'Overview'
 }
 
-/**
- * The argument of the page-head show-me command: the scope on Repo and Global and on a scoped
- * Improvements screen (the hash, else the file), else the session, else the scope a saved file is
- * about. Only the Improvements screen reads scope=: the sidebar carries it onto every screen. The
- * session id lands in a command that a reader pastes in a shell, so an id with any other character
- * gives no command. '' when the page has nothing to show (serve before its first analysis).
- */
-function showMeArg(d: AppData, state: RouteState, a?: Analysis): string {
-  const screen = state.screen
-  const scope =
-    screen === 'repo' || screen === 'global' ? screen : screen === 'suggest' && state.scope !== 'session' ? (state.scope ?? fileScope(d)) : a ? undefined : fileScope(d)
-  return scope ? `--scope ${scope}` : a && /^[\w:-]+$/.test(a.session.id) ? a.session.id : ''
-}
-
-/** The copy-only show-me command for what the page shows; '' renders no control. */
-export function showMeCommand(d: AppData, state: RouteState, a?: Analysis): string {
-  const arg = showMeArg(d, state, a)
-  return arg && `claude "/orangu:show-me ${arg}"`
-}
-
-/**
- * The "Show me" control in the page head: a <details> with an id, so the re-open seam keeps it open
- * across a live re-render. The command stays visible in its bar: that is the fallback when the
- * clipboard is not available. Nothing runs from the report.
- */
-export function showMe(d: AppData, state: RouteState, a?: Analysis): string {
-  const arg = showMeArg(d, state, a)
-  return arg && `<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary><div class="card pad"><p>Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.</p>${commandBlock(`claude "/orangu:show-me ${arg}"`, '$', 'the show me command')}<p>${esc(pasteLine(a?.session.cwd, arg === '--scope repo'))} The files open in your browser.</p>${installLines()}</div></details>`
-}
-
 /** Exported for the unit test: the header must never describe a scope the body did not render. */
 export function screenSub(ctx: Ctx): string {
   const a = ctx.a
@@ -144,6 +113,21 @@ export function screenSub(ctx: Ctx): string {
     default:
       return ''
   }
+}
+
+/** Exported for the unit test: the page head names the screen and holds the audience and export buttons, which mountApp wires by id. */
+export function pageHeadHtml(ctx: Ctx): string {
+  const aud = ctx.audience
+  return `<header class="page-head">
+<div><h1>${esc(screenTitle(ctx.state.screen))}</h1><div class="sub">${esc(screenSub(ctx))}</div></div>
+<div class="page-tools">
+<div class="aud" role="group" aria-label="Detail level">
+<button id="aud-dev" aria-pressed="${aud === 'dev'}">Detailed</button>
+<button id="aud-plain" aria-pressed="${aud === 'plain'}">Plain language</button>
+</div>
+<button class="btn" id="btn-export">↓ Export HTML</button>
+</div>
+</header>`
 }
 
 /** Live updates re-render at most ~1-2 Hz. A click is owed the next frame, never that window. */
@@ -371,18 +355,7 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
   }
 
   function pageHead(ctx: Ctx): HTMLElement {
-    const aud = ctx.audience
-    const el = h(`<header class="page-head">
-<div><h1>${esc(screenTitle(state.screen))}</h1><div class="sub">${esc(screenSub(ctx))}</div></div>
-<div class="page-tools">
-<div class="aud" role="group" aria-label="Detail level">
-<button id="aud-dev" aria-pressed="${aud === 'dev'}">Detailed</button>
-<button id="aud-plain" aria-pressed="${aud === 'plain'}">Plain language</button>
-</div>
-<button class="btn" id="btn-export">↓ Export HTML</button>
-${showMe(ctx.data, ctx.state, ctx.a)}
-</div>
-</header>`)
+    const el = h(pageHeadHtml(ctx))
     el.querySelector('#aud-dev')!.addEventListener('click', () => go({ audience: undefined }))
     el.querySelector('#aud-plain')!.addEventListener('click', () => go({ audience: 'plain' }))
     el.querySelector('#btn-export')!.addEventListener('click', () => {

@@ -83,6 +83,15 @@ describe('offline report', () => {
     }
   })
 
+  it('no bundle copies the show-me command, so no report and no app screen has a Show me control', () => {
+    // show-me is not a step of the chain, so no page copies its command. The page head (app.ts) is in all 3
+    // bundles, so none of them may carry the control or the command that it copied.
+    for (const [name, js] of [['CLIENT_JS', CLIENT_JS], ['CLIENT_JS_AGG', CLIENT_JS_AGG], ['CLIENT_JS_SERVE', CLIENT_JS_SERVE]] as const) {
+      expect(js, `${name} copies the show-me command`).not.toContain('/orangu:show-me')
+      expect(js, `${name} draws the Show me control`).not.toContain('id="show-me"')
+    }
+  })
+
   it('the aggregate bundle stays inside its own size ratchet', () => {
     // Ratchet born 2026-08-28 with the cta chunk at its MEASURED landing value, not a round number
     // and not a target: same rule as CLIENT_JS above, it may only go DOWN. A chunk that needs more
@@ -191,7 +200,13 @@ describe('offline report', () => {
     // ServeUi seams, so 3 shared edits are all that this bundle carries: the served sentence of step 3 left
     // (screens/suggest.ts, about -45 B), the seam call moved above the scope chips (0 B), and the Plain Overview
     // calls the card seam (screens/overview.ts) with the route state passed to it (app.ts), about +27 B together.
-    expect(CLIENT_JS_AGG.length).toBe(82396)
+    // 2026-11-01 Show me retired: -614 B (82,396 -> 81,782), re-measured after `npm run build`, cap unchanged, so a
+    // later change of the shared shell can use the freed room. The page head of each screen no longer copies the
+    // show-me command, because show-me is not a step of the chain. Measured by a build without each part: the control
+    // (showMeArg, showMeCommand, showMe and its call in the page head) is -652 B, and the page head markup in the
+    // exported pageHeadHtml, which lets a unit test read the page head of each mode, is +38 B. The serve bundle loses
+    // the same control (CLIENT_JS_SERVE 135,510 -> 134,893 B, no size test), and CLIENT_CSS its rules (39,968 -> 39,032 B).
+    expect(CLIENT_JS_AGG.length).toBe(81782)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -333,6 +348,9 @@ describe('offline report', () => {
     // 2026-10-24 improvement home: -18 B (73,033 -> 73,015), re-measured after `npm run build`, cap unchanged. The same
     // 3 shared edits as the aggregate bundle: the served sentence of step 3 left (about -45 B), the seam call moved
     // above the scope chips (0 B), and the Plain Overview calls the card seam with the route state (about +27 B).
-    expect(CLIENT_JS.length).toBe(73015)
+    // 2026-11-01 Show me retired: -615 B (73,015 -> 72,400), re-measured after `npm run build`, cap unchanged. The same
+    // 2 parts as the aggregate bundle, measured by a build without each part: the Show me control of the page head is
+    // -652 B, and the exported pageHeadHtml, which lets a unit test read the page head of each mode, is +37 B.
+    expect(CLIENT_JS.length).toBe(72400)
   })
 })

@@ -183,14 +183,6 @@ details.finding:not([open]) > summary > .sg-lead { padding-block: 0; border-bloc
 .steps ul { list-style: disc; margin: 4px 0 6px; padding-left: 18px; }
 .cmd + .cmd { margin-top: 6px; }
 .btn-primary[aria-busy="true"] { cursor: progress; opacity: 0.75; }
-/* the page-head Show me control and its popover */
-.show-me { position: relative; }
-.show-me > summary { display: inline-flex; align-items: center; }
-.btn-show { color: var(--accent-ink); border-color: var(--accent-ink); font-weight: 700; }
-.btn-show:hover, .show-me[open] > .btn-show { background: var(--accent-weak); }
-.show-me > .card { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; width: min(440px, calc(100vw - 32px)); box-shadow: 0 5px 20px color-mix(in srgb, var(--ink1) 14%, transparent); }
-.show-me > .card p { margin: 0 0 10px; font-size: 13px; color: var(--ink2); overflow-wrap: anywhere; }
-.show-me > .card .cmd { margin-bottom: 10px; }
 .axis .signals { margin-top: 8px; font-size: 12px; }
 .axis .signals > summary { cursor: pointer; color: var(--ink3); }
 .axis .signals .chiprow { margin: 8px 0 0; gap: 6px; }
@@ -430,9 +422,6 @@ table.grid tbody th { text-align: left; text-transform: none; letter-spacing: 0;
   .overview-hero { padding: 18px; }
   .overview-brand { width: 96px; height: 96px; }
   .overview-brand .logo { width: 82px; height: 82px; }
-  /* the static popover takes the row and never sizes .page-tools: its nowrap command bars would widen the page */
-  .show-me[open] { flex-basis: 100%; }
-  .show-me > .card { position: static; width: 100%; margin-top: 8px; box-shadow: none; contain: inline-size; }
 }
 
 @media (max-width: 560px) {

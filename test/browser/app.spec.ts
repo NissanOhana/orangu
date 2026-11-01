@@ -832,56 +832,6 @@ test('each closed card shows its whole improvement line in a narrow window, with
   expect(errors).toEqual([])
 })
 
-// The page head of every screen offers the show-me command for what the page shows. Copy only.
-test('Show me in the page head copies the session show-me command, opens and closes from the keyboard, and keeps the theme', async ({ page, context }, info) => {
-  const errors = runtimeErrors(page)
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
-  await page.goto(withTheme(`${APP}/#overview?s=${SESSION}`, info), { waitUntil: 'domcontentloaded' })
-  await expect(page.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible()
-  const control = page.locator('.page-head').getByRole('button', { name: 'Show me', exact: true })
-  await expect(control).toHaveAttribute('aria-expanded', 'false')
-  await control.click()
-  await expect(control).toHaveAttribute('aria-expanded', 'true')
-  const popover = page.locator('#show-me > .card')
-  await expect(popover).toBeVisible()
-  await expect(popover).toContainText('a slide deck and a written report')
-  const command = `claude "/orangu:show-me ${SESSION}"`
-  const bar = popover.locator('.cmd').first()
-  await expect(bar.locator('.txt')).toHaveText(command)
-  await popover.getByRole('button', { name: 'copy the show me command' }).click()
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(command)
-  await expect(popover.locator('.cmd')).toHaveCount(3)
-  await noHorizontalOverflow(page)
-  await control.focus()
-  await page.keyboard.press('Enter')
-  await expect(control).toHaveAttribute('aria-expanded', 'false')
-  await expect(popover).toBeHidden()
-  expect(await paintedTheme(page)).toBe(projectTheme(info))
-  expect(errors).toEqual([])
-})
-
-test('Show me copies the scope command on the Repo screen and on a saved repository report', async ({ page, context }, info) => {
-  const errors = runtimeErrors(page)
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: APP_ORIGIN })
-  await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: SITE })
-  const scoped = 'claude "/orangu:show-me --scope repo"'
-  for (const url of [`${APP}/#repo?s=${SESSION}`, `${SITE}/sample-repo.html#repo`]) {
-    await page.goto(withTheme(url, info), { waitUntil: 'domcontentloaded' })
-    await expect(page.getByRole('heading', { level: 1, name: 'Repo' })).toBeVisible()
-    await page.locator('.page-head').getByRole('button', { name: 'Show me', exact: true }).click()
-    const bar = page.locator('#show-me > .card .cmd').first()
-    await expect(bar.locator('.txt')).toHaveText(scoped)
-    await bar.locator('.copy').click()
-    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(scoped)
-    expect(await paintedTheme(page)).toBe(projectTheme(info))
-  }
-  // the session sample ships the same bundle and copies its session instead
-  await page.goto(withTheme(`${SITE}/sample.html#overview`, info), { waitUntil: 'domcontentloaded' })
-  await page.locator('.page-head').getByRole('button', { name: 'Show me', exact: true }).click()
-  await expect(page.locator('#show-me > .card .cmd .txt').first()).toHaveText(/^claude "\/orangu:show-me [0-9a-f-]+"$/)
-  expect(errors).toEqual([])
-})
-
 // The link sits below the fold on common laptop and phone viewports, so the click scrolls first. A new
 // screen opens at its top: the steps have to be on screen, not only in the DOM (toBeVisible cannot see that).
 test('the Overview top card leads to the 3 steps on screen and keeps the theme and the audience', async ({ page }, info) => {

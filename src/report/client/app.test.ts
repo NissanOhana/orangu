@@ -3,8 +3,8 @@ import type { Aggregate } from '../../analyze/aggregate.js'
 import type { Analysis } from '../../model/analysis.js'
 import type { AppData } from '../../model/app-data.js'
 import type { SuggestionRecord } from '../../suggest/types.js'
-import { cycleTheme, docTitle, refreshSuggestions, refreshSuggestionsOnConnection, renderWait, showLoader, screenSub, screenTitle, sesscardEyebrow, showMe, showMeCommand, themeName } from './app.js'
-import { navFor, type RouteState } from './nav.js'
+import { cycleTheme, docTitle, pageHeadHtml, refreshSuggestions, refreshSuggestionsOnConnection, renderWait, showLoader, screenSub, screenTitle, sesscardEyebrow, themeName } from './app.js'
+import { navFor } from './nav.js'
 
 const record = (id: string): SuggestionRecord => ({ id, v: 2, status: 'new' }) as SuggestionRecord
 
@@ -115,70 +115,27 @@ describe('a report about a scope, not a session', () => {
 })
 
 /**
- * The page head "Show me" control copies the show-me command for what the page shows: the scope on
- * Repo and Global and on a scoped Improvements screen, else the session, else the scope a saved file is
- * about. Copy only: nothing runs from the report.
+ * The page head of a session report, a saved repository report and the served app holds the screen
+ * title, the audience buttons and the export. It copies no show-me command, because show-me is not a
+ * step of the chain. mountApp wires the 3 buttons by id.
  */
-describe('the Show me command for each data shape', () => {
-  const show = (d: AppData, state: RouteState, a?: Analysis): string => showMeCommand(d, state, a)
-  const session = 'claude "/orangu:show-me abc12345-6789"'
-
-  it('copies the session on a session screen of a session report', () => {
-    for (const screen of ['overview', 'timeline', 'tools', 'context', 'coverage', 'harness']) expect(show(appData(), { screen }, analysis), screen).toBe(session)
-  })
-
-  it('copies the scope on Repo and Global, whatever the file carries', () => {
-    expect(show(appData(), { screen: 'repo' }, analysis)).toBe('claude "/orangu:show-me --scope repo"')
-    expect(show(appData(), { screen: 'global' }, analysis)).toBe('claude "/orangu:show-me --scope global"')
-    expect(show(aggReport('repo', 'repo orangu'), { screen: 'global' })).toBe('claude "/orangu:show-me --scope global"')
-  })
-
-  it('copies the scope of a scoped Improvements screen, from the hash, else from the file', () => {
-    expect(show(appData(), { screen: 'suggest', scope: 'repo' }, analysis)).toBe('claude "/orangu:show-me --scope repo"')
-    expect(show(appData(), { screen: 'suggest', scope: 'global' }, analysis)).toBe('claude "/orangu:show-me --scope global"')
-    expect(show(appData(), { screen: 'suggest', scope: 'session' }, analysis)).toBe(session)
-    expect(show(appData(), { screen: 'suggest' }, analysis)).toBe(session)
-    expect(show(aggReport('global', 'global'), { screen: 'suggest' })).toBe('claude "/orangu:show-me --scope global"')
-  })
-
-  // the sidebar links carry scope= onto every screen, so only the Improvements screen may read it
-  it('ignores a scope the sidebar carried onto a session screen', () => {
-    expect(show(appData(), { screen: 'overview', scope: 'repo' }, analysis)).toBe(session)
-  })
-
-  it('copies the scope a saved scope report is about on any other screen', () => {
-    expect(show(aggReport('repo', 'repo orangu'), { screen: 'overview' })).toBe('claude "/orangu:show-me --scope repo"')
-    expect(show(aggReport('global', 'global'), { screen: 'harness' })).toBe('claude "/orangu:show-me --scope global"')
-  })
-
-  it('has nothing to copy in a served app before its first analysis, so no control renders', () => {
-    const served = appData({ mode: 'serve', selectedId: undefined, session: undefined })
-    expect(show(served, { screen: 'overview' })).toBe('')
-    expect(showMe(served, { screen: 'overview' })).toBe('')
-  })
-
-  // the id lands inside a command a reader pastes in a shell
-  it('never copies a session id that carries shell characters', () => {
-    const odd = { session: { id: 'x"; touch bad; "' } } as unknown as Analysis
-    expect(show(appData(), { screen: 'overview' }, odd)).toBe('')
-    expect(showMe(appData(), { screen: 'overview' }, odd)).toBe('')
-  })
-
-  it('renders a popover that the re-open seam keeps: the command bar, the paste line and the 2 install lines', () => {
-    const withCwd = { session: { id: 'abc12345-6789', cwd: '~/Code/demo' } } as unknown as Analysis
-    const html = showMe(appData(), { screen: 'overview' }, withCwd)
-    expect(html).toContain('<details class="show-me" id="show-me"><summary class="btn btn-show">Show me</summary>')
-    expect(html).toContain('Claude Code turns this evidence into a slide deck and a written report, as 2 offline HTML files.')
-    expect(html).toContain('data-copy="claude &quot;/orangu:show-me abc12345-6789&quot;" aria-label="copy the show me command"')
-    expect(html).toContain('aria-label="copy the marketplace command"')
-    expect(html).toContain('aria-label="copy the install command"')
-    expect(html).toContain('Paste it in a terminal in ~/Code/demo. It starts Claude Code. The files open in your browser.')
-    expect(html).toContain('First time only, type these 2 lines in Claude Code:')
-    expect(html).toContain('data-copy="/plugin marketplace add NissanOhana/orangu"')
-    expect(html).toContain('data-copy="/plugin install orangu"')
-    expect(showMe(aggReport('repo', 'repo orangu'), { screen: 'repo' })).toContain('Paste it in a terminal in this repository. It starts Claude Code.')
-    expect(showMe(aggReport('global', 'global'), { screen: 'global' })).toContain('Paste it in a terminal. It starts Claude Code.')
-  })
+describe('the page head copies no show-me command', () => {
+  const read = { ...analysis, summary: { turns: 3, toolCalls: 4, toolErrors: 0 } } as unknown as Analysis
+  const shapes: Array<[string, AppData, Analysis | undefined]> = [
+    ['a session report', appData(), read],
+    ['a saved repository report', aggReport('repo', 'repo orangu'), undefined],
+    ['the served app', appData({ mode: 'serve' }), read],
+  ]
+  const screens = [['overview', 'Overview'], ['repo', 'Repo'], ['global', 'Global'], ['suggest', 'Improvements']] as const
+  for (const [shape, data, a] of shapes)
+    for (const [screen, title] of screens)
+      it(`on ${screen} of ${shape}`, () => {
+        const html = pageHeadHtml({ data, a, state: { screen }, audience: 'dev' } as Parameters<typeof pageHeadHtml>[0])
+        expect(html).toContain(`<h1>${title}</h1>`)
+        for (const id of ['aud-dev', 'aud-plain', 'btn-export']) expect(html, id).toContain(`id="${id}"`)
+        expect(html).not.toContain('id="show-me"')
+        expect(html).not.toContain('/orangu:show-me')
+      })
 })
 
 /** One noun names the screen: the sidebar item and the page title cannot drift apart. */
