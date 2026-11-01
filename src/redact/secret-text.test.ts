@@ -258,7 +258,7 @@ describe('scrubStr masks a secret that only its key, its URL, its header or a qu
   })
 
   it('masks each key in the real shape of its kind and a JWT right after `_`, a letter and a digit, inside a model id and after a JSON escape', () => {
-    expect(GLUED_KEYS).toHaveLength(95)
+    expect(GLUED_KEYS).toHaveLength(97)
     for (const [text, out] of GLUED_KEYS) expect(scrubStr(text), text.slice(0, 40)).toBe(out)
     // the kind and version of an Anthropic key are its shape: a cut preview can show a body with no uppercase letter
     expect(scrubStr(`x_${['sk', 'ant', 'api03', 'abcdefghijklmnop'].join('-')}`)).toBe('x_‹anthropic-key›')

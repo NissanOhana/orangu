@@ -83,13 +83,18 @@ export const KEY_SHAPES: ReadonlyArray<readonly [key: string, marker: string]> =
   [[header, payload, v].join('.'), '‹jwt›'],
 ]
 
+const GHP = KEY_SHAPES.find(([key]) => key.startsWith('ghp_'))![0]
+
 /**
  * Each key and a JWT right after `_`, a letter and a digit, inside a model id and after a JSON escape, as a variable
- * name, a URL escape (`%22sk-…`), a model string or JSON text (`\nsk-…`) leaves it, with the marker in its place.
+ * name, a URL escape (`%22sk-…`), a model string or JSON text (`\nsk-…`) leaves it, with the marker in its place. Then
+ * a GitHub token after a word that ends with a GitHub prefix: the search goes on past the word to the token.
  */
-export const GLUED_KEYS: ReadonlyArray<readonly [text: string, redacted: string]> = KEY_SHAPES.flatMap(([key, marker]) =>
-  ['_', 'm', '7', 'claude-opus-5_', '\\n'].map((glue) => [`${glue}${key}`, `${glue}${marker}`] as const),
-)
+export const GLUED_KEYS: ReadonlyArray<readonly [text: string, redacted: string]> = [
+  ...KEY_SHAPES.flatMap(([key, marker]) => ['_', 'm', '7', 'claude-opus-5_', '\\n'].map((glue) => [`${glue}${key}`, `${glue}${marker}`] as const)),
+  [`"\\n${GHP.slice(0, 4)}${GHP}"`, `"\\n${GHP.slice(0, 4)}‹github-token›"`],
+  [`weighs_and_measures_table_${GHP}`, 'weighs_and_measures_table_‹github-token›'],
+]
 
 /**
  * An Authorization credential after a header name that a word character starts (an environment dump, a JSON escape)

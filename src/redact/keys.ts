@@ -12,6 +12,12 @@ import { gluedJwts } from './scan.js'
 interface Key {
   prefix: string
   body: string
+  /**
+   * The body of the glued regex, when its shape must hold from the start: the regex then fails at a word that ends
+   * with the prefix and goes on to a key after it. A body test cannot do that, because the search goes on only after
+   * the word and its run (`weighs_and_measures_table_ghp_…`).
+   */
+  gluedBody?: string
   by: string
   /**
    * True when the body of a key right after a word character fits the alphabet of its kind. It never asks for more
@@ -40,7 +46,7 @@ export const KEYS: readonly Key[] = [
   // 20 alphanumerics, T3BlbkFJ and 20 more: risk-, task- and Task-<HEX> ids lack a class
   { prefix: 'sk-', body: '[A-Za-z0-9]{20,}', by: '‹api-key›', glued: random },
   // 20 base62 characters first (github_pat_11 and 20 more), as snake_case words after ghs_ hold a `_` (weighs_and_…)
-  { prefix: '(?:ghp|gho|ghu|ghs|ghr|github_pat)_', body: '[A-Za-z0-9_]{20,}', by: '‹github-token›', glued: (body) => /^[A-Za-z0-9]{20}/.test(body) },
+  { prefix: '(?:ghp|gho|ghu|ghs|ghr|github_pat)_', body: '[A-Za-z0-9_]{20,}', gluedBody: '[A-Za-z0-9]{20}[A-Za-z0-9_]*', by: '‹github-token›', glued: always },
   { prefix: 'glpat-', body: '[A-Za-z0-9_-]{20,}', by: '‹gitlab-token›', glued: always },
   // base62: a pnpm_ word is lowercase
   { prefix: 'npm_', body: '[A-Za-z0-9]{30,}', by: '‹npm-token›', glued: upper },
@@ -60,7 +66,7 @@ export const KEYS: readonly Key[] = [
 export const BLOB = /\b[A-Za-z0-9+/]{60,}={0,2}\b/g
 
 /** Each key rule at any place, with its body in group 1. */
-const GLUED = KEYS.map((key) => ({ re: new RegExp(`${key.prefix}(${key.body})`, 'g'), key }))
+const GLUED = KEYS.map((key) => ({ re: new RegExp(`${key.prefix}(${key.gluedBody ?? key.body})`, 'g'), key }))
 /** Each prefix and the start of a JWT in 1 regex: a text with none of them needs no other read. */
 const ANY_PREFIX = new RegExp([...KEYS.map((key) => key.prefix), 'eyJ'].join('|'))
 /** The longest prefix (`github_pat_`): a body that is no key can end with the start of the next prefix. */
