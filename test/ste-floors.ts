@@ -177,6 +177,8 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'src/report/client/dismiss-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'src/report/client/queue-card.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'src/report/client/status-labels.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
+  // The start view of serve, born 2026-11-01 at max(80, measured - 2): 61 sentences, each clean, score 100, 0 findings.
+  'src/report/client/start-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // B2: rule copy, and every other analyzer string
   // B2: floor 91 -> 98. Measured 46 sentences, 46 clean, score 100. The rule copy rewrite took out the 2
   // semicolons (script-candidate, fanout-opportunity) and the progressive "was waiting" (human-wait-dominates).

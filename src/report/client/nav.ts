@@ -1,6 +1,6 @@
 /**
  * Pure nav + route model for the app client. No DOM access; unit-tested in node.
- * The hash is the saved view: #<screen>?s=&scope=&tool=&cat=&agent=&turn=&err=1&filter=&audience=&theme=
+ * The hash is the saved view: #<screen>?s=&scope=&tool=&cat=&agent=&turn=&err=1&filter=&zoom=&audience=&theme=
  */
 import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 
@@ -19,21 +19,26 @@ export interface NavItem {
 }
 
 export interface NavGroup {
-  id: 'live' | 'session' | 'across' | 'improve'
+  /** `start` holds the Start item of serve only. Its label is empty, so the sidebar draws no heading above it. */
+  id: 'start' | 'session' | 'sessions' | 'machine' | 'improve'
   label: string
   items: NavItem[]
 }
 
+/** The labelled groups: the 3 zoom levels of the start view, then Improve. The CSS sets them in capitals. */
 export const NAV_GROUPS: ReadonlyArray<{ id: NavGroup['id']; label: string }> = [
-  { id: 'live', label: 'Live' },
-  { id: 'session', label: 'Observe this session' },
-  { id: 'across', label: 'Recurring patterns' },
-  { id: 'improve', label: 'Improve the next session' },
+  { id: 'session', label: 'One session' },
+  { id: 'sessions', label: 'Sessions and agents' },
+  { id: 'machine', label: 'This machine' },
+  { id: 'improve', label: 'Improve' },
 ]
 
-export const SCREEN_IDS = ['live', 'overview', 'timeline', 'tools', 'agents', 'context', 'coverage', 'repo', 'global', 'harness', 'suggest'] as const
+export const SCREEN_IDS = ['start', 'live', 'overview', 'timeline', 'tools', 'agents', 'context', 'coverage', 'repo', 'global', 'harness', 'suggest'] as const
 
 export type ScreenId = (typeof SCREEN_IDS)[number]
+
+/** The 3 zoom levels of the start view: one session, the sessions and their agents, the whole machine. */
+export type StartZoom = 'session' | 'sessions' | 'machine'
 
 export interface RouteState {
   screen: string
@@ -45,6 +50,8 @@ export interface RouteState {
   turn?: number
   errorsOnly?: boolean
   filter?: 'all' | 'errors' | 'agents' | 'human'
+  /** the zoom of the start view; absent, startZoom() gives the default */
+  zoom?: StartZoom
   theme?: string
   audience?: 'dev' | 'plain'
 }
@@ -73,15 +80,27 @@ export function fileScope(data: AppData): 'repo' | 'global' | undefined {
 }
 
 /**
- * Where an empty hash lands: the fleet when serve has more than one live session, the scope when the
- * file has no session to show, else this session's Overview.
+ * Where an empty hash lands: the start view in serve (its zoom shows the running sessions when more than one is
+ * live), the scope when the file has no session to show, else this session's Overview.
  */
 export function defaultScreen(data: AppData): ScreenId {
-  if (data.mode === 'serve') return liveRows(data).length > 1 ? 'live' : 'overview'
+  if (data.mode === 'serve') return 'start'
   return fileScope(data) ?? 'overview'
 }
 
-/** The sidebar model. Data-driven: groups always exist; empty Live group means "hide it". */
+/**
+ * The zoom of the start view: the one in the hash, else the sessions and their agents when more than one session is
+ * live, else one session. Only the serve modules call it, so the file bundles leave it out.
+ */
+export function startZoom(data: AppData, state: RouteState): StartZoom {
+  return state.zoom ?? (liveRows(data).length > 1 ? 'sessions' : 'session')
+}
+
+/**
+ * The sidebar model. Data-driven: groups always exist, and an empty group means "hide it". Start comes first, with no
+ * heading, then the 3 zoom levels and Improve: the screens of one session, the live sessions and Repo, then Global
+ * and Harness, then Improvements.
+ */
 export function navFor(data: AppData, state: RouteState): NavGroup[] {
   const audience = state.audience === 'plain' ? 'plain' : 'dev'
   const live = liveRows(data)
@@ -97,7 +116,7 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
     })
 
   // A file about a scope has no session group: app.ts drops an empty group, so an aggregate report
-  // hides the whole "Observe this session" block instead of offering five links that can only answer
+  // hides the whole "One session" block instead of offering five links that can only answer
   // "no session". The gate is fileScope, the same answer defaultScreen routes on, so the group and the
   // landing screen can never contradict each other. It is deliberately not "no session": serve can
   // bootstrap with none (an empty registry, or a first analysis that throws) and never write one back,
@@ -119,17 +138,22 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
   // under the reader mid-session, so serve never counts.
   const globalN = data.mode === 'file' ? data.aggregates.global?.sessionCount : undefined
   const needsServe = data.mode === 'file' ? 'needs orangu serve' : undefined
-  const acrossItems: NavItem[] = [
-    { id: 'repo', label: repoN !== undefined ? `Repo · ${repoN} sessions` : 'Repo', screen: 'repo', hint: repoN === undefined ? needsServe : undefined },
-    { id: 'global', label: globalN !== undefined ? `Global · ${globalN} sessions` : 'Global · all time', screen: 'global', hint: globalN === undefined ? needsServe : undefined },
-    { id: 'harness', label: 'Harness', screen: 'harness', hint: needsServe },
-  ]
+  liveItems.push({ id: 'repo', label: repoN !== undefined ? `Repo · ${repoN} sessions` : 'Repo', screen: 'repo', hint: repoN === undefined ? needsServe : undefined })
 
   return [
-    { id: 'live', label: 'Live', items: liveItems },
-    { id: 'session', label: 'Observe this session', items: sessionItems },
-    { id: 'across', label: 'Recurring patterns', items: acrossItems },
-    { id: 'improve', label: 'Improve the next session', items: [{ id: 'suggest', label: 'Improvements', screen: 'suggest' }] },
+    // the start view is serve only (serve-ui.ts), so a file report lists no Start item
+    { id: 'start', label: '', items: data.mode === 'serve' ? [{ id: 'start', label: 'Start', screen: 'start' }] : [] },
+    { id: 'session', label: 'One session', items: sessionItems },
+    { id: 'sessions', label: 'Sessions and agents', items: liveItems },
+    {
+      id: 'machine',
+      label: 'This machine',
+      items: [
+        { id: 'global', label: globalN !== undefined ? `Global · ${globalN} sessions` : 'Global · all time', screen: 'global', hint: globalN === undefined ? needsServe : undefined },
+        { id: 'harness', label: 'Harness', screen: 'harness', hint: needsServe },
+      ],
+    },
+    { id: 'improve', label: 'Improve', items: [{ id: 'suggest', label: 'Improvements', screen: 'suggest' }] },
   ]
 }
 
@@ -153,15 +177,16 @@ export function parseHash(raw: string): RouteState {
       else if (k === 'turn') st.turn = Number(v)
       else if (k === 'err') st.errorsOnly = v === '1'
       else if (k === 'filter' && (v === 'all' || v === 'errors' || v === 'agents' || v === 'human')) st.filter = v
+      else if (k === 'zoom' && (v === 'session' || v === 'sessions' || v === 'machine')) st.zoom = v
       else if (k === 'theme') st.theme = v
       else if (k === 'audience' && (v === 'dev' || v === 'plain')) st.audience = v
     }
   return st
 }
 
-/** A link into another screen with every aggregate/filter key cleared, so the target starts clean. */
+/** A link into another screen with every aggregate/filter key and the start zoom cleared, so the target starts clean. */
 export function cleanHash(st: RouteState, next: Partial<RouteState>): string {
-  return writeHash({ ...st, scope: undefined, tool: undefined, cat: undefined, agent: undefined, turn: undefined, errorsOnly: undefined, filter: undefined, ...next })
+  return writeHash({ ...st, scope: undefined, tool: undefined, cat: undefined, agent: undefined, turn: undefined, errorsOnly: undefined, filter: undefined, zoom: undefined, ...next })
 }
 
 /** Serialise a RouteState to a hash string. Never emits `density` (dead control, removed). */
@@ -175,6 +200,7 @@ export function writeHash(st: RouteState): string {
   if (st.turn !== undefined) q.push('turn=' + st.turn)
   if (st.errorsOnly) q.push('err=1')
   if (st.filter) q.push('filter=' + st.filter)
+  if (st.zoom) q.push('zoom=' + st.zoom)
   if (st.audience) q.push('audience=' + st.audience)
   if (st.theme) q.push('theme=' + st.theme)
   return '#' + st.screen + (q.length ? '?' + q.join('&') : '')

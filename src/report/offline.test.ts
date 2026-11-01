@@ -83,6 +83,18 @@ describe('offline report', () => {
     }
   })
 
+  it('the start view ships only in the serve bundle (B3)', () => {
+    // The start view (start-ui.ts) reads the live registry of serve, so no file can render it. serve-ui.ts injects it
+    // by the optional ServeUi.startView seam, and nav.ts lists its Start item in serve only. Each marker is markup or
+    // copy of start-ui.ts that no other module writes.
+    const markers = ['See what your agents do.', 'start-panel', 'ztabs', 'What to improve first', 'Next: improve with Claude', 'data-start-read']
+    for (const marker of markers) {
+      expect(CLIENT_JS, `CLIENT_JS carries ${marker}`).not.toContain(marker)
+      expect(CLIENT_JS_AGG, `CLIENT_JS_AGG carries ${marker}`).not.toContain(marker)
+      expect(CLIENT_JS_SERVE, `CLIENT_JS_SERVE lost ${marker}`).toContain(marker)
+    }
+  })
+
   it('no bundle copies the show-me command, so no report and no app screen has a Show me control', () => {
     // show-me is not a step of the chain, so no page copies its command. The page head (app.ts) is in all 3
     // bundles, so none of them may carry the control or the command that it copied.
@@ -206,7 +218,15 @@ describe('offline report', () => {
     // (showMeArg, showMeCommand, showMe and its call in the page head) is -652 B, and the page head markup in the
     // exported pageHeadHtml, which lets a unit test read the page head of each mode, is +38 B. The serve bundle loses
     // the same control (CLIENT_JS_SERVE 135,510 -> 134,893 B, no size test), and CLIENT_CSS its rules (39,968 -> 39,032 B).
-    expect(CLIENT_JS_AGG.length).toBe(81782)
+    // 2026-11-01 start view: +262 B (81,782 -> 82,044), re-measured after `npm run build`, cap unchanged: the room that
+    // the Show me retirement freed pays for it. The start view is serve only (start-ui.ts, the B3 test above), so this
+    // bundle carries only the shared route and label bytes. Measured by a build with each file as it is on main: the
+    // #start route of app.ts (a #start in a file goes to the default screen, the start renderer, no page head on #start)
+    // is +84 B, and nav.ts is +179 B. Of nav.ts, the zoom key of the hash (its parse, its write and its clear) is +111 B,
+    // and the 4 group labels, the new group ids, the Start item of serve and the shorter defaultScreen are +68 B. The
+    // serve bundle carries the view (CLIENT_JS_SERVE 134,893 -> 148,778 B, no size test), and CLIENT_CSS its rules
+    // (39,032 -> 44,809 B).
+    expect(CLIENT_JS_AGG.length).toBe(82044)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -351,6 +371,10 @@ describe('offline report', () => {
     // 2026-11-01 Show me retired: -615 B (73,015 -> 72,400), re-measured after `npm run build`, cap unchanged. The same
     // 2 parts as the aggregate bundle, measured by a build without each part: the Show me control of the page head is
     // -652 B, and the exported pageHeadHtml, which lets a unit test read the page head of each mode, is +37 B.
-    expect(CLIENT_JS.length).toBe(72400)
+    // 2026-11-01 start view: +264 B (72,400 -> 72,664), re-measured after `npm run build`, cap unchanged. The same parts
+    // as the aggregate bundle, measured by a build with each file as it is on main: the #start route of app.ts is +84 B,
+    // and nav.ts is +180 B (the zoom key of the hash +111 B, the labels, the group ids, the Start item and the shorter
+    // defaultScreen +69 B). The view itself ships only in the serve bundle (the B3 test above).
+    expect(CLIENT_JS.length).toBe(72664)
   })
 })

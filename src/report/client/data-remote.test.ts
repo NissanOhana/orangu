@@ -111,6 +111,62 @@ describe('remote history and lesson reads', () => {
   })
 })
 
+// The interview status of the start view: 1 GET with no query, and null when the read failed, so the app says so.
+describe('remote profile read', () => {
+  it('reads /api/profile with no query and gives its body', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ exists: true, updatedAt: '2026-11-01' })))
+    expect(await remoteSource('/local').profile!()).toEqual({ exists: true, updatedAt: '2026-11-01' })
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual(['/local/api/profile'])
+  })
+
+  it('gives null for a failed read and for a network failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json({ error: 'the read failed' }, 500)))
+    expect(await remoteSource('/local').profile!()).toBeNull()
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('loopback connection closed'))
+    expect(await remoteSource('/local').profile!()).toBeNull()
+  })
+})
+
+// The machine read of the start view: each 202 body reports how far the read is, and a read that stops says why.
+describe('remote aggregate read with a watch', () => {
+  it('reports the progress of each 202 body, then gives the 200 body', async () => {
+    vi.useFakeTimers()
+    try {
+      const agg = { scope: 'global', sessionCount: 11 }
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce(json({ progress: { done: 0, total: 11 } }, 202))
+        .mockResolvedValueOnce(json({ progress: { done: 4, total: 11 } }, 202))
+        .mockResolvedValueOnce(json(agg)))
+      const progress = vi.fn()
+      const failed = vi.fn()
+      const read = remoteSource('/local').aggregate('global', undefined, { progress, failed })
+      await vi.runAllTimersAsync()
+      expect(await read).toEqual(agg)
+      expect(progress.mock.calls).toEqual([[0, 11], [4, 11]])
+      expect(failed).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('says why a read stopped: the error of the server, its status, or a network failure', async () => {
+    const failed = vi.fn()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce(json({ error: 'aggregate capacity reached' }, 503)))
+    expect(await remoteSource('/local').aggregate('global', undefined, { failed })).toBeNull()
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('not json', { status: 500 }))
+    expect(await remoteSource('/local').aggregate('global', undefined, { failed })).toBeNull()
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('loopback connection closed'))
+    expect(await remoteSource('/local').aggregate('global', undefined, { failed })).toBeNull()
+    expect(failed.mock.calls).toEqual([['aggregate capacity reached'], ['The server answered 500.'], ['The request to localhost failed.']])
+  })
+
+  it('reads as before with no watch: null on a failure, and no call of any watch', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ error: 'aggregate capacity reached' }, 503)))
+    expect(await remoteSource('/local').aggregate('repo', '~/w')).toBeNull()
+    expect(vi.mocked(fetch).mock.calls.map(([url]) => String(url))).toEqual(['/local/api/repo?cwd=~%2Fw'])
+  })
+})
+
 // The Dismiss write: the body holds the status and 1 reason code of the fixed list, or no reason. It holds no text of
 // the person and no path, and a failed write gives null, so the app never shows it as done.
 describe('remote status write', () => {

@@ -107,9 +107,9 @@ test('localhost fixture is readable at the release viewport and theme', async ({
   expect(errors).toEqual([])
 })
 
-// A7: serve opens on the fleet when more than one session is live and the URL carries no hash;
-// the explicit #overview?s= deep link above is unchanged.
-test('localhost with no hash lands on the fleet when several sessions are live', async ({ page }) => {
+// B1: serve opens on the start view when the URL carries no hash. With more than one live session, the view opens at
+// the sessions and their agents, and the fleet is 1 click away; the explicit #overview?s= deep link above is unchanged.
+test('localhost with no hash lands on the start view, at the sessions and their agents when several are live', async ({ page }) => {
   const errors = runtimeErrors(page)
   await page.route('**/api/app**', async (route) => {
     const response = await route.fetch()
@@ -121,10 +121,17 @@ test('localhost with no hash lands on the fleet when several sessions are live',
     await route.fulfill({ response, json: body })
   })
   await page.goto(`${APP}/`, { waitUntil: 'domcontentloaded' })
+  await expect(page.getByRole('heading', { level: 1, name: 'See what your agents do.' })).toBeVisible()
+  await expect(page.locator('nav[aria-label="Report"] a[aria-current="page"]')).toHaveText('Start')
+  await expect(page.getByRole('tab', { name: 'Sessions and agents' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#start-panel .zp-k')).toHaveText('3 sessions. Running sessions come first, then the newest.')
+  await expect(page.locator('#start-panel a.srow')).toHaveCount(3)
+  await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'All live · 3' })).toBeVisible()
+  // All live sessions names no session, so #live shows every running session
+  await page.locator('#start-panel').getByRole('link', { name: 'All live sessions' }).click()
   await expect(page.getByRole('heading', { level: 1, name: 'Live' })).toBeVisible()
   await expect(page.locator('.fleetcard')).toHaveCount(3)
   await expect(page.locator('.page-head .sub')).toContainText('3 running sessions')
-  await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'All live · 3' })).toBeVisible()
   expect(errors).toEqual([])
 })
 

@@ -410,6 +410,81 @@ table.grid tbody th { text-align: left; text-transform: none; letter-spacing: 0;
 .dismiss label { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: 13px; }
 .dismiss input { margin: 0; accent-color: var(--accent-ink); }
 
+/* the start view (serve only, start-ui.ts): the head line, the zoom tabs and their panel, the session rows, the 2 wells,
+   and the grid of "What to improve first" and "Next" below the panel. The Start item of the sidebar has no group
+   heading (an empty label) and a house icon that the serve bundle draws. */
+.navgroup-label:empty { display: none; }
+nav a.navitem .navicon { width: 15px; height: 15px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.start-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-family: var(--mono); font-size: 12px; color: var(--ink3); }
+.start-line b { color: var(--ink1); }
+.start-h1 { margin-top: 14px; font-size: 28px; letter-spacing: -0.015em; }
+.start-sub { margin: 4px 0 0; font-size: 14px; color: var(--ink2); }
+.ztabs { display: inline-flex; flex-wrap: wrap; gap: 2px; margin-top: 20px; padding: 3px; border: 1px solid var(--border2); border-radius: 10px; background: var(--bg2); }
+.ztab { min-height: 36px; padding: 0 16px; border: 0; border-radius: 7px; background: transparent; color: var(--ink2); font-size: 13px; font-weight: 600; cursor: pointer; }
+.ztab[aria-selected="true"] { background: var(--surface); color: var(--ink1); box-shadow: inset 0 0 0 1px var(--border2); }
+.zpanel { margin-top: 14px; padding: 18px 20px 20px; }
+.zp-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.zp-k { font-weight: 700; font-size: 13.5px; }
+.zp-meta { font-family: var(--mono); font-size: 12px; color: var(--ink3); }
+.zp-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+.zp-live { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; }
+.zp-title { margin-top: 10px; font-size: 22px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.zp-out { margin: 4px 0 0; font-size: 13.5px; color: var(--ink2); }
+.zpanel .kpis { margin: 16px 0 0; }
+.zp-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.zp-why { margin: 12px 0 0; font-size: 13px; color: var(--ink2); overflow-wrap: anywhere; }
+.zp-bar { height: 6px; margin-top: 10px; border-radius: 999px; background: var(--bg2); overflow: hidden; }
+.zp-bar > i { display: block; width: 0; height: 100%; background: var(--accent); }
+.zpanel [role="alert"] .banner { margin: 0; }
+.srows { list-style: none; margin: 14px 0 0; padding: 0; border-top: 1px solid var(--border); }
+a.srow { display: grid; grid-template-columns: 14px minmax(0, 1fr) 128px 78px 96px minmax(0, 230px); gap: 4px 14px; align-items: center; min-height: 48px; padding: 8px 6px; border-bottom: 1px solid var(--border); color: var(--ink1); }
+a.srow:hover { background: var(--bg2); text-decoration: none; }
+/* wide: the project, the age and the agents are columns of the row; narrow: 1 line under the title */
+.srow .sm { display: contents; }
+.srow .st { min-width: 0; font-weight: 600; font-size: 13.5px; overflow-wrap: anywhere; }
+.srow .sp, .srow .sa { min-width: 0; font-family: var(--mono); font-size: 12px; color: var(--ink3); overflow-wrap: anywhere; }
+.srow .sk { order: 4; font-family: var(--mono); font-size: 12px; color: var(--ink2); text-align: right; }
+.srow .sp { order: 2; }
+.srow .sa { order: 3; }
+.srow .sg { order: 5; font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+.srow .run { color: var(--ink1); font-weight: 700; }
+.wells { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr)); gap: 12px; margin-top: 12px; }
+.well { border: 1px solid var(--border); border-radius: 10px; background: var(--bg2); padding: 12px 14px; }
+.well p { margin: 0; }
+.well p + p { margin-top: 4px; font-size: 14px; color: var(--ink1); }
+.start-below { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 24px; margin-top: 28px; align-items: start; }
+.h-sec { font-size: 17px; }
+.cap { margin: 4px 0 0; font-size: 13px; color: var(--ink2); }
+.frow { margin-top: 10px; padding: 12px 16px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.frow.top { border-color: var(--border2); }
+.frow-h { display: flex; align-items: flex-start; gap: 10px; }
+.frow-h .sev { margin-top: 6px; }
+.frow-t { flex: 1; min-width: 0; font-size: 14px; overflow-wrap: anywhere; }
+.fwhere { margin: 2px 0 0 18px; font-family: var(--mono); font-size: 11.5px; color: var(--ink3); overflow-wrap: anywhere; }
+.frow .sg-lead { display: block; margin: 8px 0 0 18px; font-size: 13.5px; line-height: 1.45; }
+.frow .cmd { margin: 10px 0 0 18px; }
+.fmore { margin: 10px 0 0; font-size: 13px; }
+.start-first .banner { margin: 12px 0 0; }
+.banner-link { margin-left: auto; font-weight: 600; }
+.start-next p { margin: 10px 0 0; font-size: 13.5px; color: var(--ink2); }
+.start-next .cmd { margin-top: 10px; }
+.start-next ul { margin: 10px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink2); }
+.start-next li + li { margin-top: 2px; }
+.start-empty { margin-top: 20px; }
+.roots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.roots code { font-size: 12.5px; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; overflow-wrap: anywhere; }
+@media (max-width: 900px) {
+  .start-below { grid-template-columns: minmax(0, 1fr); }
+  a.srow { grid-template-columns: 14px minmax(0, 1fr) auto; }
+  .srow .sk { order: 0; }
+  .srow .sm { display: flex; flex-wrap: wrap; gap: 2px 12px; grid-column: 2 / -1; order: 1; }
+}
+@media (max-width: 640px) {
+  .ztabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .ztab { min-height: 44px; padding: 4px 6px; line-height: 1.2; }
+  .zpanel { padding: 16px; }
+}
+
 @media (max-width: 860px) {
   .app { flex-direction: column; height: auto; overflow: visible; }
   .side { width: auto; border-right: 0; border-bottom: 1px solid var(--border); }

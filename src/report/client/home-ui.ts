@@ -3,8 +3,8 @@
  * chips and the heading "Findings in this scope" under them, and it owns the reads that the sections and the Overview
  * card show. Only serve-ui.ts and proposals-ui.ts import this file, so the file bundles carry none of it.
  *
- * The reads are fill-on-demand, as the aggregates and the harness report are: the first render of #suggest or
- * #overview starts the queue read (serve-ui.ts calls ensureQueue from the screen data seam), and the app renders
+ * The reads are fill-on-demand, as the aggregates and the harness report are: the first render of #suggest, #overview
+ * or #start starts the queue read (serve-ui.ts calls ensureQueue from the screen data seam), and the app renders
  * again when it lands. The first render of #suggest also starts the History and the Lessons reads, beside the queue
  * read. A `suggestion-updated` frame and the Count again control read the 3 again. The last good read
  * stays on screen until the new one lands, as refreshSuggestions keeps the last good records (app.ts). A
@@ -72,7 +72,8 @@ const allLessons = storeRead<LessonRead>()
 /** the first render of #suggest started the History and the Lessons reads */
 let storeStarted = false
 
-const shown = (): boolean => screen === 'suggest' || screen === 'overview'
+/** the screens that show a queue read: Improvements, the Overview card and the banner of the start view (start-ui.ts) */
+const shown = (): boolean => screen === 'suggest' || screen === 'overview' || screen === 'start'
 
 /** The text of the status region on the body: a screen reader hears each line once. */
 function announce(text: string): void {

@@ -1,5 +1,5 @@
 /**
- * App shell + router. One screen mounted per hash; the sidebar is the design's four groups;
+ * App shell + router. One screen mounted per hash; the sidebar is Start (serve only) and the design's four groups;
  * the hash is the saved view. mountApp(ds) is the only entry; no DOM access at module top level.
  */
 import type { Analysis } from '../../model/analysis.js'
@@ -176,6 +176,8 @@ export interface ServeUi {
   harnessCard(ds: DataSource, onLoaded: () => void, href: string, state: RouteState): string
   /** only serve provides it: file reports embed `suggestions: []` (render.ts), so the file seams leave it out */
   proposals?: ProposalsUi
+  /** the start view (start-ui.ts): only serve provides it, so a file report routes #start to its default screen */
+  startView?(ctx: Ctx): HTMLElement
 }
 
 /** Serve-only proposal renderers (proposals-ui.ts), injected by serve-ui.ts so both file bundles stay without them. */
@@ -249,11 +251,11 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
   }
   const d = data
 
-  // an empty hash lands on the fleet when several sessions are live (serve), else on Overview;
-  // parseHash itself is unchanged, so every explicit hash keeps its meaning
+  // an empty hash lands on the start view (serve), else on Overview or the scope of the file, and so does a
+  // #start in a file, which has no start view; parseHash itself is unchanged, so every other hash keeps its meaning
   const routeFor = (hash: string): RouteState => {
     const st = parseHash(hash)
-    if (!hash.replace(/^#/, '')) st.screen = defaultScreen(d)
+    if (!hash.replace(/^#/, '') || (st.screen === 'start' && !serveUi?.startView)) st.screen = defaultScreen(d)
     if (!st.s) st.s = d.selectedId
     return st
   }
@@ -407,18 +409,22 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
     document.title = docTitle(d, ctx.a, state.s)
     const renderer = SCREENS[state.screen] ?? renderOverview
     const aggregateScope = state.screen === 'repo' || state.screen === 'global' || state.screen === 'harness' ? state.screen : undefined
+    const start = state.screen === 'start' && serveUi?.startView
     const screenEl =
       ctx.aggLoading && serveUi
         ? serveUi.aggScreen()
         : aggregateScope
           ? (serveUi ? (aggregateScope === 'harness' ? serveUi.harnessView(ctx) : serveUi.aggregateView(ctx)) : h(`<section>${aggregateEmpty(aggregateScope, d)}</section>`))
-          : renderer(ctx)
+          : start
+            ? start(ctx)
+            : renderer(ctx)
     screenEl.classList.add('screen')
     screenEl.id = 'screen-' + state.screen
     const page = h('<div class="page"></div>')
     if (d.illustrative)
       page.appendChild(h('<div class="sample-note" role="note"><b>This sample is synthetic.</b> Its numbers come from made-up input, not a measured customer result.</div>'))
-    page.appendChild(pageHead(ctx))
+    // the start view draws its own head: its H1 names the whole app, and it has no audience or export control
+    if (!start) page.appendChild(pageHead(ctx))
     page.appendChild(screenEl)
     const main = h('<main class="main"></main>')
     main.appendChild(page)

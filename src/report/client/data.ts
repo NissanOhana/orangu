@@ -18,14 +18,26 @@ export type KickoffResult =
   | { ok: true; response: KickoffResponse }
   | { ok: false; kind: 'http' | 'network' | 'protocol'; message: string; status?: number; response?: Partial<KickoffResponse> }
 
+/** GET /api/profile (src/serve/profile.ts): whether the interview profile exists, and the date of a valid one, else null. */
+export interface ProfileRead {
+  exists: boolean
+  updatedAt: string | null
+}
+
+/** What a polled read tells while it runs: the progress of each 202 body, and why it stopped when it gives null. */
+export interface ReadWatch {
+  progress?(done: number, total: number): void
+  failed?(reason: string): void
+}
+
 export interface DataSource {
   readonly mode: AppMode
   /** file: parse #orangu-data once; serve: GET the app bootstrap */
   load(): Promise<AppData>
   /** file: the embedded session or null; serve: by id */
   session(id: string): Promise<Analysis | null>
-  /** file: null (designed empty state, policy); serve: on demand */
-  aggregate(scope: 'repo' | 'global', cwd?: string): Promise<Aggregate | null>
+  /** file: null (designed empty state, policy); serve: on demand, and `watch` hears the progress and the failure */
+  aggregate(scope: 'repo' | 'global', cwd?: string, watch?: ReadWatch): Promise<Aggregate | null>
   /** file: null (the screen needs orangu serve); serve: on demand, polled while it computes */
   harness(): Promise<HarnessReport | null>
   suggestions(): Promise<SuggestionViewRecord[]>
@@ -35,6 +47,8 @@ export interface DataSource {
   history?(all?: boolean): Promise<ChangeRow[] | null>
   /** file: absent; serve: the lessons of the serve workspace, or of every workspace with `all`; null when the read failed */
   lessons?(all?: boolean): Promise<LessonRead | null>
+  /** file: absent (a file reads no profile); serve: the interview status of the start view; null when the read failed */
+  profile?(): Promise<ProfileRead | null>
   /** file: local copy-text only; serve: POST kickoff */
   kickoff(req: KickoffRequest): Promise<KickoffResult>
   /** file: null; serve: status transition, with 1 reason code of the fixed list or none; null when the write failed */

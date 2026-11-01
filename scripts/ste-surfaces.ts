@@ -448,7 +448,10 @@ function tsSurface(id: string, owner: string, paths: readonly string[], options:
 
 const INSIGHTS = 'src/analyze/insights.ts'
 
-/** The modules of the improvement home (serve only) that hold copy: each is its own row. queue-types.ts holds types only. */
+/**
+ * The modules of the improvement home and the start view (serve only) that hold copy: each is its own row.
+ * queue-types.ts holds types only.
+ */
 const HOME_COPY_MODULES = [
   'src/report/client/home-ui.ts',
   'src/report/client/queue-ui.ts',
@@ -457,6 +460,7 @@ const HOME_COPY_MODULES = [
   'src/report/client/dismiss-ui.ts',
   'src/report/client/queue-card.ts',
   'src/report/client/status-labels.ts',
+  'src/report/client/start-ui.ts',
 ]
 
 function ruleSurface(field: RuleField): Surface {

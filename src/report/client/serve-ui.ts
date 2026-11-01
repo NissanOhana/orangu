@@ -12,12 +12,13 @@ import type { RouteState } from './nav.js'
 import { catColor, esc, ms, pct, timeOnly, tok } from './format.js'
 import { h } from './dom.js'
 import { mascotSvg } from './mascot.js'
-import { cleanHash, shortId } from './nav.js'
+import { cleanHash, shortId, startZoom } from './nav.js'
 import { badgeCopy, fleetFeed } from './derive.js'
 import { megaReview } from './mega-review.js'
 import { proposalsUi } from './proposals-ui.js'
 import { ensureQueue, queueRead } from './home-ui.js'
 import { queueCardHtml } from './queue-card.js'
+import { ensureStart, renderStart } from './start-ui.js'
 import { renderRepo } from './screens/repo.js'
 import { renderGlobal } from './screens/global.js'
 import { harnessCardHtml, renderHarness } from './screens/harness.js'
@@ -97,7 +98,12 @@ function pickerHtml(d: AppData, row: SessionSummaryRow | undefined): string {
 <div class="picklist" id="pick-list" role="listbox" aria-label="Sessions" hidden>${options}</div>`
 }
 
+/** The house of the Start item (the start view is serve only, so the file bundles carry no icon). */
+const HOME_ICON = '<svg class="navicon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 7.2L8 2.8l5.5 4.4v6H9.6V9.8H6.4v3.4H2.5z"></path></svg>'
+
+/** The sidebar seam of serve (app.ts calls it on each render): the house of the Start item, then the session picker. */
 function wirePicker(el: HTMLElement, go: (next: { s?: string }, opts?: { push?: boolean }) => void): void {
+  el.querySelector('nav a.navitem[href^="#start"]')?.insertAdjacentHTML('afterbegin', HOME_ICON)
   const btn = el.querySelector<HTMLButtonElement>('#btn-pick')
   const list = el.querySelector<HTMLElement>('#pick-list')
   if (!btn || !list) return
@@ -159,10 +165,17 @@ function ensureAggregate(d: AppData, ds: DataSource, state: RouteState, onLoaded
   return aggInFlight.has(want)
 }
 
-/** the data seam of each non-harness screen: the queue read that #suggest and #overview show, then the aggregate */
+/**
+ * the data seam of each non-harness screen: the queue read that #suggest, #overview and #start show, then the
+ * aggregate. #start keeps its own reads (start-ui.ts) and the harness read of This machine, and it draws their states
+ * in its panel, so it never asks for the whole-screen loading state.
+ */
 function ensureScreenData(d: AppData, ds: DataSource, state: RouteState, onLoaded: () => void): boolean {
   ensureQueue(ds, state, onLoaded)
-  return ensureAggregate(d, ds, state, onLoaded)
+  if (state.screen !== 'start') return ensureAggregate(d, ds, state, onLoaded)
+  ensureStart(d, ds, state, onLoaded)
+  if (startZoom(d, state) === 'machine') ensureHarness(ds, onLoaded)
+  return false
 }
 
 function aggScreen(): HTMLElement {
@@ -243,4 +256,17 @@ function harnessCard(ds: DataSource, onLoaded: () => void, href: string, state: 
 /** the whole-harness card, with the anchor that the Queue section scrolls to */
 const homeMega = (scope: 'repo' | 'global'): string => `<div id="home-mega">${megaReview(scope)}</div>`
 
-export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate: ensureScreenData, aggScreen, aggregateView, megaReview: homeMega, ensureHarness, invalidateHarness, harnessView, harnessCard, proposals: proposalsUi }
+export const serveUi: ServeUi = {
+  pickerHtml,
+  wirePicker,
+  ensureAggregate: ensureScreenData,
+  aggScreen,
+  aggregateView,
+  megaReview: homeMega,
+  ensureHarness,
+  invalidateHarness,
+  harnessView,
+  harnessCard,
+  proposals: proposalsUi,
+  startView: (ctx) => renderStart(ctx, harnessReport),
+}

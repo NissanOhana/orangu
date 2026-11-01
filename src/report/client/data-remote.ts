@@ -10,7 +10,7 @@ import type { AppData, SuggestionViewRecord } from '../../model/app-data.js'
 import type { KickoffRequest, KickoffResponse, SuggestionStatus } from '../../suggest/types.js'
 import type { RejectReasonCode } from '../../suggest/reason-codes.js'
 import type { ServeEvent } from '../../serve/types.js'
-import type { DataSource } from './data.js'
+import type { DataSource, ProfileRead, ReadWatch } from './data.js'
 import type { QueueRead } from './queue-types.js'
 import type { ChangeRow, LessonRead } from './lesson-types.js'
 
@@ -23,23 +23,39 @@ export function remoteBasePath(pathname: string): string {
   return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname
 }
 
-async function getJson<T>(url: string): Promise<{ status: number; body: T | null }> {
+/** 1 GET. A refused read gives a null body and the `error` text of its JSON body when it has one (the server scrubs it). */
+async function getJson<T>(url: string): Promise<{ status: number; body: T | null; error?: string }> {
   try {
     const r = await fetch(url, { headers: { accept: 'application/json' } })
-    if (!r.ok && r.status !== 202) return { status: r.status, body: null }
+    if (!r.ok && r.status !== 202) {
+      const error = await r.json().then((b: { error?: unknown }) => (typeof b?.error === 'string' ? b.error : undefined), () => undefined)
+      return { status: r.status, body: null, ...(error ? { error } : {}) }
+    }
     return { status: r.status, body: (await r.json()) as T }
   } catch {
     return { status: 0, body: null }
   }
 }
 
-/** 202 {progress} is polled until the 200 body arrives (aggregates and the harness report compute lazily). */
-async function pollJson<T>(url: string): Promise<T | null> {
+/**
+ * 202 {progress} is polled until the 200 body arrives (aggregates and the harness report compute lazily). `watch` hears
+ * the progress of each 202 body, and the reason when the read gives null.
+ */
+async function pollJson<T>(url: string, watch?: ReadWatch): Promise<T | null> {
   const t0 = Date.now()
   for (;;) {
-    const { status, body } = await getJson<T>(url)
+    const { status, body, error } = await getJson<T>(url)
     if (status === 200 && body) return body
-    if (status !== 202 || Date.now() - t0 > AGG_TIMEOUT_MS) return null
+    if (status !== 202) {
+      watch?.failed?.(status === 0 ? 'The request to localhost failed.' : error ?? `The server answered ${status}.`)
+      return null
+    }
+    const progress = (body as { progress?: { done?: unknown; total?: unknown } } | null)?.progress
+    if (typeof progress?.done === 'number' && typeof progress.total === 'number') watch?.progress?.(progress.done, progress.total)
+    if (Date.now() - t0 > AGG_TIMEOUT_MS) {
+      watch?.failed?.(`The read did not end in ${AGG_TIMEOUT_MS / 60_000} minutes.`)
+      return null
+    }
     await new Promise((r) => setTimeout(r, AGG_POLL_MS))
   }
 }
@@ -90,8 +106,8 @@ export function remoteSource(base = ''): DataSource {
       sessionCache.set(id, { at: now, analysis: c?.analysis ?? null, inflight: p })
       return p
     },
-    async aggregate(scope, cwd) {
-      return pollJson<Aggregate>(scope === 'repo' ? base + '/api/repo' + (cwd ? `?cwd=${encodeURIComponent(cwd)}` : '') : base + '/api/global')
+    async aggregate(scope, cwd, watch) {
+      return pollJson<Aggregate>(scope === 'repo' ? base + '/api/repo' + (cwd ? `?cwd=${encodeURIComponent(cwd)}` : '') : base + '/api/global', watch)
     },
     async harness() {
       return pollJson<HarnessReport>(base + '/api/harness')
@@ -109,6 +125,10 @@ export function remoteSource(base = ''): DataSource {
     },
     async lessons(all) {
       return (await getJson<LessonRead>(base + '/api/lessons' + (all ? '?all=1' : ''))).body
+    },
+    // the body is exactly { exists, updatedAt }: no path and no answer of the person
+    async profile() {
+      return (await getJson<ProfileRead>(base + '/api/profile')).body
     },
     async kickoff(req) {
       let r: Response
