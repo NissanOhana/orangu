@@ -2729,7 +2729,7 @@ import { join as join5, resolve as resolve4 } from "node:path";
 
 // src/model/analysis.ts
 var ANALYSIS_SCHEMA_VERSION = "2";
-var ANALYSIS_PAYLOAD_GENERATION = 6;
+var ANALYSIS_PAYLOAD_GENERATION = 7;
 
 // src/adapters/claude-code/parse.ts
 import { basename as basename4, dirname as dirname3 } from "node:path";
@@ -5520,8 +5520,8 @@ var cacheHealth = (ctx) => {
         axis: "tokens",
         title: `Prompt cache hit ratio is ${round(ratio * 100, 0)}%`,
         detail: `${fmtTokens(ctx.context.totalCacheRead)} read from cache vs ${fmtTokens(ctx.context.totalCacheWrite)} written and ${fmtTokens(ctx.context.totalFreshInput)} fresh input`,
-        improvement: "Do not edit the system prompt or CLAUDE.md during a session. Keep a steady pace during a task, so that requests stay inside the cache TTL.",
-        why: "The TTL is 5 min by default, or 1 h when enabled. A low ratio means that the prompt prefix changes, or that requests are farther apart than the cache TTL. Then the context is written again instead of read again.",
+        improvement: "Keep the model and the effort level the same until the task ends. Keep a steady pace during a task, so that requests stay inside the cache TTL.",
+        why: "On a Claude subscription, within plan usage, the main conversation keeps its cache for 1 h by default. The cache TTL is 5 min on an API key, usage credits or a cloud provider, and for subagents. A low ratio means that the prompt prefix changes, or that requests are farther apart than the cache TTL. Then the context is written again instead of read again.",
         method: "Expect low ratios in short sessions.",
         evidence: { cacheHitRatio: ratio, totalCacheRead: ctx.context.totalCacheRead, totalCacheWrite: ctx.context.totalCacheWrite, freshInput: ctx.context.totalFreshInput },
         turnIndexes: [],
@@ -10590,8 +10590,8 @@ function reviewedPathViolation(file) {
 
 // src/suggest/catalog.json
 var catalog_default2 = {
-  catalogVersion: 1,
-  updatedAt: "2026-08-23",
+  catalogVersion: 2,
+  updatedAt: "2026-11-01",
   note: "L2 curated catalog. Deterministic match, curated content. Every entry is offline-verifiable from this repo's research docs; URLs only from the public docs Research-found additions at suggest time are candidates: verifiedAt null.",
   entries: [
     {
@@ -10662,9 +10662,9 @@ var catalog_default2 = {
       changeClass: "workflow-config",
       pattern: { signal: "cache-miss:messages_changed" },
       feature: "prompt-prefix stability",
-      url: "https://platform.claude.com/docs/en/build-with-claude/prompt-caching",
-      verifiedAt: "2026-08-23",
-      note: "cache_miss_reason messages_changed: the API caches by exact prefix match, ordered tools \u2192 system \u2192 messages, so a rewritten or interleaved earlier message invalidates everything after it. Avoid resuming one session in two terminals (messages interleave into one transcript) and avoid mid-session model/effort switches. Both are part of the cache key."
+      url: "https://code.claude.com/docs/en/prompt-caching.md",
+      verifiedAt: "2026-11-01",
+      note: "cache_miss_reason messages_changed: the cache matches the start of each request exactly, so a change to an earlier message invalidates everything after it. Avoid resuming one session in two terminals (messages interleave into one transcript). Keep one model during a session, because each model has its own cache. On most models, an effort change in a session also starts a fresh cache. On Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1, with an API key or a Claude subscription, the cache stays intact by default."
     },
     {
       id: "fix-reread-files",
@@ -10746,14 +10746,86 @@ var catalog_default2 = {
       url: "https://code.claude.com/docs/en/plugins",
       verifiedAt: "2026-08-25",
       note: "When repo or global evidence shows several related skills, agents, hooks, or MCP definitions must travel together, a plugin can package that set. A heavy skill alone is not enough evidence: confirm the related surfaces in the harness inventory before proposing packaging."
+    },
+    {
+      id: "subagent-model-default",
+      changeClass: "subagent-agent",
+      pattern: { ruleId: "model-for-task" },
+      feature: "CLAUDE_CODE_SUBAGENT_MODEL (a default model for subagents)",
+      url: "https://code.claude.com/docs/en/sub-agents.md",
+      verifiedAt: "2026-11-01",
+      note: "To give every subagent a default model, set the CLAUDE_CODE_SUBAGENT_MODEL environment variable. The model field of an agent file and the model of an Agent call win over that default, from Claude Code 2.1.251. The variable alone does not change the built-in Explore and Plan agents. To put every subagent on that one model, also set CLAUDE_CODE_SUBAGENT_MODEL_FORCE to 1 (Claude Code 2.1.257 or later)."
+    },
+    {
+      id: "search-agent-faster-model",
+      changeClass: "subagent-agent",
+      pattern: { ruleId: "model-for-task" },
+      feature: "a faster model for the search subagent",
+      url: "https://cursor.com/docs/subagents",
+      verifiedAt: "2026-11-01",
+      note: "Cursor runs its built-in Explore subagent on a faster model by default, so that it can run many searches in parallel. Its docs say to inherit the parent model only when a subagent needs the same reasoning power. Give a search or read agent of your own a small model, such as haiku in Claude Code."
+    },
+    {
+      id: "effort-low-for-tool-calls",
+      changeClass: "workflow-config",
+      pattern: { ruleId: "thinking-on-mechanical" },
+      feature: "reasoning effort for each request",
+      url: "https://docs.x.ai/developers/model-capabilities/text/reasoning",
+      verifiedAt: "2026-11-01",
+      note: "xAI lists low reasoning effort as the best fit for simple tool calling and for agent work where latency matters. Grok models cannot turn reasoning off, so the effort level is the control. The usage of a request reports its reasoning tokens in their own field. Set a low effort on an agent or a skill that only calls tools."
+    },
+    {
+      id: "effort-level-sources",
+      changeClass: "workflow-config",
+      pattern: { ruleId: "thinking-on-mechanical" },
+      feature: "effort defaults and CLAUDE_CODE_EFFORT_LEVEL",
+      url: "https://code.claude.com/docs/en/model-config.md",
+      verifiedAt: "2026-11-01",
+      note: "Opus 5.5, Sonnet 5.5 and Haiku 5.5 default to medium effort, and you cannot turn thinking off on them. On these models, the model decides at each step how much to think from the effort level. Use low for quick work that you review step by step. Keep max for hard work that runs without you, because max can overthink. If you set CLAUDE_CODE_EFFORT_LEVEL, it wins over the effort of each skill and agent, so check it first."
+    },
+    {
+      id: "subagents-for-read-heavy-work",
+      changeClass: "subagent-agent",
+      pattern: { ruleId: "agent-fanout" },
+      feature: "subagents for read-heavy work",
+      url: "https://learn.chatgpt.com/docs/agent-configuration/subagents.md",
+      verifiedAt: "2026-11-01",
+      note: "OpenAI says that subagent workflows in Codex use more tokens than a comparable single-agent run. It advises subagents for read-heavy work, such as exploration, tests, triage and summaries, and more care with parallel edits. A subagent with no model or effort setting takes the model and effort of its parent."
+    },
+    {
+      id: "subagents-not-a-better-answer",
+      changeClass: "subagent-agent",
+      pattern: { ruleId: "agent-fanout" },
+      feature: "subagents for parallel work and a fresh review",
+      url: "https://code.claude.com/docs/en/best-practices.md",
+      verifiedAt: "2026-11-01",
+      note: "Each subagent sends its own requests. A fresh subagent first gathers the context that your conversation already had, so it can be slower than the main thread. A subagent gives you parallel work or a reviewer with fresh eyes, not a better answer. Ask each subagent for a short summary, so that its results do not fill your context."
+    },
+    {
+      id: "code-loops-over-tools",
+      changeClass: "script-cli",
+      pattern: { ruleId: "script-candidate" },
+      tool: "code that the agent writes to loop over tool calls",
+      url: "https://www.anthropic.com/engineering/code-execution-with-mcp",
+      verifiedAt: "2026-11-01",
+      note: "Let the agent write code that calls the tools in a loop and filters the results. One run of that code replaces a chain of separate tool calls. The intermediate results stay in the execution environment and do not enter the context of the model. The post covers MCP tools, and a script that loops over a repeated shell command works the same way."
+    },
+    {
+      id: "skill-minimal-router",
+      changeClass: "skill-create",
+      pattern: { ruleId: "skill-token-weight" },
+      feature: "a skill main file as a minimal router",
+      url: "https://developers.openai.com/blog/rethinking-skills-and-prompts-for-gpt-6-astra",
+      verifiedAt: "2026-11-01",
+      note: "For a skill with several workflows, make its main file a minimal router that points to supporting docs and scripts. Then a run does not read the parts that the task does not need. Keep each skill description as short as possible, but clear about when to use the skill. OpenAI gives this advice for GPT-6 Astra in Codex."
     }
   ]
 };
 
 // src/suggest/features.json
 var features_default = {
-  catalogVersion: 1,
-  updatedAt: "2026-08-23",
+  catalogVersion: 2,
+  updatedAt: "2026-11-01",
   note: "Claude Code feature \u2192 detectable signal \u2192 finding it addresses. Same entry shape as catalog.json; /orangu:improve may refresh from the changelog online, adding candidates with verifiedAt null. All URLs from the public docs",
   entries: [
     {
@@ -10780,8 +10852,8 @@ var features_default = {
       pattern: { ruleId: "thinking-on-mechanical" },
       feature: "effort frontmatter (low|medium|high|xhigh|max)",
       url: "https://code.claude.com/docs/en/skills.md",
-      verifiedAt: "2026-08-23",
-      note: "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. Each effort level has its own cache for the same model. So set it per agent or skill, and do not toggle it mid-session."
+      verifiedAt: "2026-11-01",
+      note: "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. An effort change keeps the prompt cache by default on Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1. This holds with an API key or a Claude subscription. On most other models, each effort level has its own cache, so keep one level for each agent or skill during a session."
     },
     {
       id: "feat-background-agents",
@@ -10818,6 +10890,60 @@ var features_default = {
       url: "https://code.claude.com/docs/en/hooks.md",
       verifiedAt: "2026-08-23",
       note: "A PostToolUse hook can run the test or build gate of the project automatically after edits. Hooks run as code, not as context. This addresses sessions that end with edited files and no test or build run."
+    },
+    {
+      id: "feat-usage-subagent-share",
+      changeClass: "workflow-config",
+      pattern: { ruleId: "agent-fanout" },
+      feature: "/usage (built-in command)",
+      url: "https://code.claude.com/docs/en/best-practices.md",
+      verifiedAt: "2026-11-01",
+      note: "Run /usage in Claude Code before you change a subagent. On a Pro, Max, Ultra, Team or Enterprise plan, it breaks your usage down by skill, subagent, plugin and MCP server. So it shows the share of your usage that each subagent type takes. This built-in command is the first check, before a proposal."
+    },
+    {
+      id: "feat-usage-cache-line",
+      changeClass: "workflow-config",
+      pattern: { ruleId: "low-cache-hit" },
+      feature: "/usage Prompt cache (main) line",
+      url: "https://code.claude.com/docs/en/prompt-caching.md",
+      verifiedAt: "2026-11-01",
+      note: "Run /usage in Claude Code to see the Prompt cache (main) line of the session. It shows the hit ratio, the miss count and whether the cache is warm now. When Claude Code can find one, the line also names the likely cause of the last miss. The line needs Claude Code 2.1.251 or later, and the likely cause needs 2.1.260 or later. The line covers the main conversation, and this finding also counts subagent requests, so the two ratios can differ."
+    },
+    {
+      id: "feat-doctor-extensions",
+      changeClass: "mcp",
+      pattern: { ruleId: "mcp-definition-weight" },
+      feature: "/doctor (bundled skill)",
+      url: "https://code.claude.com/docs/en/skills.md",
+      verifiedAt: "2026-11-01",
+      note: "Run /doctor in Claude Code for a setup checkup. Its extension check compares unused skills, MCP servers and plugins with the context that they take, and it finds slow hooks. Claude reports its findings first and changes nothing before you confirm."
+    },
+    {
+      id: "feat-skill-doctor",
+      changeClass: "skill-create",
+      pattern: { ruleId: "skill-token-weight" },
+      feature: "/skill-doctor (built-in command)",
+      url: "https://code.claude.com/docs/en/skills.md",
+      verifiedAt: "2026-11-01",
+      note: "Run /skill-doctor in Claude Code to see how much context each skill takes and how often it runs. It flags the skills in the listing that never ran, and it says where to turn them off. It needs Claude Code 2.1.252 or later. This finding counts the tokens of each run of a skill, which is a different measure."
+    },
+    {
+      id: "feat-fewer-permission-prompts",
+      changeClass: "workflow-config",
+      pattern: { ruleId: "human-wait-dominates" },
+      feature: "/fewer-permission-prompts (bundled skill)",
+      url: "https://code.claude.com/docs/en/best-practices.md",
+      verifiedAt: "2026-11-01",
+      note: "If many of the waits are permission prompts in Manual mode, run /fewer-permission-prompts in Claude Code. It scans your recent transcripts for common read-only Bash and MCP calls, and it adds them to an allowlist in .claude/settings.json. New terminal sessions start in auto mode, where a classifier reviews a risky command before it runs."
+    },
+    {
+      id: "feat-context-grid",
+      changeClass: "instruction",
+      pattern: { ruleId: "preamble-weight" },
+      feature: "/context (built-in command)",
+      url: "https://code.claude.com/docs/en/commands.md",
+      verifiedAt: "2026-11-01",
+      note: "Run /context in Claude Code to see the context use of the session as a colored grid. It suggests changes for context-heavy tools and memory bloat, and it gives capacity warnings. Use it to find the largest part of the baseline before you trim CLAUDE.md or remove an MCP server."
     }
   ]
 };
