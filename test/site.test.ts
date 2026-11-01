@@ -1361,6 +1361,8 @@ describe('docs/USAGE.md entry point', () => {
     // src/cli/commands/pick.ts interactivePrecondition and src/cli/door.ts TARGETED_BARE_FLAGS
     const bare = usage.slice(usage.indexOf('bare `orangu` prints the orange'), usage.indexOf('`orangu repo` and `orangu global` print'))
     expect(bare).toContain('Press Ctrl-C to stop the app.')
+    // the app shows the prompts and the tool results of each session (serve keeps text unless --no-include-text)
+    expect(bare).toContain('The app shows prompt and result text on this machine.')
     for (const input of ['a pipe', '`CI`', '`TERM=dumb`', '`ORANGU_NO_ANIMATION=1`', '`--plain`', '`--quiet`', '`--session`', '`--global`', '`--cwd`', '`--max-tokens`', '`--fail-on-hook-errors`']) {
       expect(bare, input).toContain(input)
     }

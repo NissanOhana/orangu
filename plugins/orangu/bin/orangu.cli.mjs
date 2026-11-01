@@ -7080,14 +7080,14 @@ function sameInode(a, b) {
 function modeBits(stat8) {
   return Number(stat8.mode & 0o777n);
 }
-async function ensurePrivateDirectory(path) {
+async function ensurePrivateDirectory(path, label = "cache directory") {
   await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE });
   const requested = await lstat4(path, { bigint: true });
-  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`cache directory must be a real directory: ${path}`);
+  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`${label} must be a real directory: ${path}`);
   const handle = await open6(path, constants6.O_RDONLY | (constants6.O_DIRECTORY ?? 0) | (constants6.O_NOFOLLOW ?? 0));
   try {
     const before = await handle.stat({ bigint: true });
-    if (!before.isDirectory() || !sameInode(requested, before)) throw new Error(`cache directory changed while opening: ${path}`);
+    if (!before.isDirectory() || !sameInode(requested, before)) throw new Error(`${label} changed while opening: ${path}`);
     if (modeBits(before) !== PRIVATE_DIRECTORY_MODE) await handle.chmod(PRIVATE_DIRECTORY_MODE);
     const [after, requestedAfter, canonicalPath] = await Promise.all([
       handle.stat({ bigint: true }),
@@ -7095,7 +7095,7 @@ async function ensurePrivateDirectory(path) {
       realpath4(path)
     ]);
     if (!after.isDirectory() || requestedAfter.isSymbolicLink() || !requestedAfter.isDirectory() || !sameInode(after, requestedAfter) || modeBits(after) !== PRIVATE_DIRECTORY_MODE || modeBits(requestedAfter) !== PRIVATE_DIRECTORY_MODE) {
-      throw new Error(`cache directory changed while securing: ${path}`);
+      throw new Error(`${label} changed while securing: ${path}`);
     }
     return { path, canonicalPath, dev: after.dev, ino: after.ino };
   } finally {
@@ -15052,6 +15052,10 @@ function rejectCrossSiteBrowserGet(req) {
   }
   return void 0;
 }
+function isAppPageNavigation(req, routePath) {
+  const header2 = (name) => typeof req.headers[name] === "string" ? req.headers[name].trim().toLowerCase() : "";
+  return routePath === "/" && header2("sec-fetch-mode") === "navigate" && header2("sec-fetch-dest") === "document";
+}
 async function startServe(opts, deps = {}) {
   const capability = makeCapability(deps.capability);
   const authenticatedBasePath = CAPABILITY_PATH_PREFIX + capability;
@@ -15106,7 +15110,7 @@ async function startServe(opts, deps = {}) {
       res.end('{"error":"malformed request path"}');
       return;
     }
-    if (req.method === "GET") {
+    if (req.method === "GET" && !isAppPageNavigation(req, routePath)) {
       const readRejection = rejectCrossSiteBrowserGet(req);
       if (readRejection) {
         res.writeHead(readRejection.status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
@@ -17091,7 +17095,7 @@ async function openApp(url, deps = {}) {
   };
   try {
     const html = redirectPage(url);
-    await ensurePrivateDirectory(folder);
+    await ensurePrivateDirectory(folder, "the redirect page folder");
     await writeFile(page, html, { mode: PRIVATE_FILE_MODE, flag: "wx" });
     written = true;
     (deps.onExit ?? ((fn) => process.once("exit", fn)))(remove);
@@ -19765,7 +19769,12 @@ async function cmdBare(flags, deps) {
   const roots = await claudeRoots(flagStr(flags, "root", "config", "r"));
   const opts = serveOptions(flags, { roots }, { tty: deps.out.tty, env: deps.env });
   deps.stdout.write("\n" + mascotLines(deps.out).join("\n") + "\n");
-  await deps.brief({ hint: false });
+  try {
+    await deps.brief({ hint: false });
+  } catch (e) {
+    deps.stderr.write(`  orangu printed no brief: ${oneLine2(e instanceof Error ? e.message : String(e)).replace(/\.$/, "")}.
+`);
+  }
   const start = deps.startServe ?? startServe;
   const [app, picked] = await Promise.all([
     start(opts, { quiet: !flagBool(flags, "verbose") }).catch((e) => {
@@ -19845,7 +19854,7 @@ async function selectSession2(sel, flags) {
   if (flags["cwd"]) opts.cwd = String(flags["cwd"]);
   if (!sel || sel === "latest") {
     const s = await findLatestSession(opts);
-    if (!s) fail2("orangu found no sessions. Is Claude Code installed? Try: orangu list");
+    if (!s) throw new Error("orangu found no sessions. Is Claude Code installed? Try: orangu list");
     return s;
   }
   if (sel === "current") {

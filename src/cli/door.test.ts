@@ -282,6 +282,20 @@ describe('bare orangu: the app that it starts', () => {
     expect(existsSync(join(t.home, 'open'))).toBe(false)
   })
 
+  it('starts the app when the brief fails, and says why on stderr', async () => {
+    // an input cap, a session that changes while orangu reads it, or a root list that the brief cannot read
+    const t = terminal({
+      brief: async () => {
+        throw new Error('session input exceeds 268435456 bytes')
+      },
+    })
+    await runApp({ root: await fixtureRoot() }, t)
+    expect(t.stderr.text).toContain('  orangu printed no brief: session input exceeds 268435456 bytes.\n')
+    expect(t.calls.serve).toHaveLength(1)
+    expect(t.stdout.text).toContain(`\n  app ${APP_URL}\n`)
+    expect(t.calls.exit).toEqual([0])
+  })
+
   it('stops the app on ctrl-c and exits 0', async () => {
     const t = await runApp({ root: await fixtureRoot() })
     expect(t.calls.closed).toBe(1)

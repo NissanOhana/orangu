@@ -65,17 +65,18 @@ function modeBits(stat: BigIntStats): number {
   return Number(stat.mode & 0o777n)
 }
 
-export async function ensurePrivateDirectory(path: string): Promise<PrivateDirectoryIdentity> {
+/** `label` names the folder in each error; another private folder of the orangu home gives its own words. */
+export async function ensurePrivateDirectory(path: string, label = 'cache directory'): Promise<PrivateDirectoryIdentity> {
   // Recursive creation is needed for a fresh custom ORANGU_HOME. We validate the
   // requested directory itself before using it as a cache parent.
   await mkdir(path, { recursive: true, mode: PRIVATE_DIRECTORY_MODE })
   const requested = await lstat(path, { bigint: true })
-  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`cache directory must be a real directory: ${path}`)
+  if (requested.isSymbolicLink() || !requested.isDirectory()) throw new Error(`${label} must be a real directory: ${path}`)
 
   const handle = await open(path, constants.O_RDONLY | (constants.O_DIRECTORY ?? 0) | (constants.O_NOFOLLOW ?? 0))
   try {
     const before = await handle.stat({ bigint: true })
-    if (!before.isDirectory() || !sameInode(requested, before)) throw new Error(`cache directory changed while opening: ${path}`)
+    if (!before.isDirectory() || !sameInode(requested, before)) throw new Error(`${label} changed while opening: ${path}`)
     if (modeBits(before) !== PRIVATE_DIRECTORY_MODE) await handle.chmod(PRIVATE_DIRECTORY_MODE)
 
     const [after, requestedAfter, canonicalPath] = await Promise.all([
@@ -91,7 +92,7 @@ export async function ensurePrivateDirectory(path: string): Promise<PrivateDirec
       modeBits(after) !== PRIVATE_DIRECTORY_MODE ||
       modeBits(requestedAfter) !== PRIVATE_DIRECTORY_MODE
     ) {
-      throw new Error(`cache directory changed while securing: ${path}`)
+      throw new Error(`${label} changed while securing: ${path}`)
     }
     return { path, canonicalPath, dev: after.dev, ino: after.ino }
   } finally {

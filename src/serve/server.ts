@@ -203,6 +203,16 @@ export function rejectCrossSiteBrowserGet(req: Pick<IncomingMessage, 'headers'>)
   return undefined
 }
 
+/**
+ * A top-level document navigation of the browser to the app page behind the capability. The browser handoff opens a
+ * file:// redirect page (src/cli/open-app.ts), so this navigation is cross-site. Only the app page passes, and only
+ * as a document navigation: each API route, each frame and each other mode keeps the cross-site check.
+ */
+export function isAppPageNavigation(req: Pick<IncomingMessage, 'headers'>, routePath: string): boolean {
+  const header = (name: string): string => (typeof req.headers[name] === 'string' ? (req.headers[name] as string).trim().toLowerCase() : '')
+  return routePath === '/' && header('sec-fetch-mode') === 'navigate' && header('sec-fetch-dest') === 'document'
+}
+
 export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Promise<ServeHandle> {
   const capability = makeCapability(deps.capability)
   const authenticatedBasePath = CAPABILITY_PATH_PREFIX + capability
@@ -259,7 +269,7 @@ export async function startServe(opts: ServeOptions, deps: ServeDeps = {}): Prom
       res.end('{"error":"malformed request path"}')
       return
     }
-    if (req.method === 'GET') {
+    if (req.method === 'GET' && !isAppPageNavigation(req, routePath)) {
       const readRejection = rejectCrossSiteBrowserGet(req)
       if (readRejection) {
         res.writeHead(readRejection.status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' })

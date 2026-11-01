@@ -17,7 +17,7 @@ import { mascotLines } from './mascot-ascii.js'
 import { openApp } from './open-app.js'
 import { serveOptions } from './serve-options.js'
 import { appBlock } from './summary.js'
-import type { Caps, WritableLike } from './tty.js'
+import { oneLine, type Caps, type WritableLike } from './tty.js'
 
 /** The flags that target 1 session or 1 scope: each keeps bare `orangu` on the brief of its target. */
 export const TARGETED_BARE_FLAGS = ['session', 's', 'global', 'cwd', 'max-tokens', 'fail-on-hook-errors'] as const
@@ -68,7 +68,13 @@ export async function cmdBare(flags: Record<string, string | boolean>, deps: Bar
   const roots = await claudeRoots(flagStr(flags, 'root', 'config', 'r'))
   const opts = serveOptions(flags, { roots }, { tty: deps.out.tty, env: deps.env })
   deps.stdout.write('\n' + mascotLines(deps.out).join('\n') + '\n')
-  await deps.brief({ hint: false })
+  // the app does not need the brief: an input cap, a session that changes while orangu reads it, or a root list that
+  // the brief cannot read gives 1 line on stderr, and the app starts
+  try {
+    await deps.brief({ hint: false })
+  } catch (e) {
+    deps.stderr.write(`  orangu printed no brief: ${oneLine(e instanceof Error ? e.message : String(e)).replace(/\.$/, '')}.\n`)
+  }
   const start = deps.startServe ?? startServe
   const [app, picked] = await Promise.all([
     start(opts, { quiet: !flagBool(flags, 'verbose') }).catch((e: unknown) => {

@@ -96,6 +96,9 @@ describe('openApp', () => {
     const result = await openApp(APP_URL, h.deps)
     expect(result.page).toBeUndefined()
     expect(result.note).toMatch(/^orangu opened no browser: .+\. Open the app URL by hand\.$/)
+    // the note names the folder of the pages in its own words, not the words of the cache
+    expect(result.note).toContain(`the redirect page folder must be a real directory: ${h.folder}`)
+    expect(result.note).not.toContain('cache')
     expect(h.opened).toEqual([])
     expect(readdirSync(elsewhere)).toEqual([])
     expect(lstatSync(h.folder).isSymbolicLink()).toBe(true)

@@ -62,7 +62,7 @@ export async function openApp(url: string, deps: AppHandoffDeps = {}): Promise<A
   }
   try {
     const html = redirectPage(url)
-    await ensurePrivateDirectory(folder)
+    await ensurePrivateDirectory(folder, 'the redirect page folder')
     // wx: a new file only, so the write never follows a link that another process put in its place
     await writeFile(page, html, { mode: PRIVATE_FILE_MODE, flag: 'wx' })
     written = true

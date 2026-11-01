@@ -29,6 +29,9 @@ process.env['ORANGU_HOME'] = mkdtempSync(join(tmpdir(), 'orangu-cli-home-'))
 // started from a Claude Code session behaves as one started from a terminal.
 delete process.env['CLAUDECODE']
 delete process.env['ORANGU_ALLOW_RAW']
+// A suite that runs over SSH would turn each browser handoff off (src/cli/open-app.ts): a test that wants an SSH session
+// sets SSH_CONNECTION in the env of its own child.
+delete process.env['SSH_CONNECTION']
 const run = (args: string[]) => execFileSync('node', [CLI, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 /** any CSI/OSC escape, carriage return (spinner frame) or BEL */
 const ESCAPES = /[\x1b\r\x07]/
@@ -190,6 +193,16 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
       expect(existsSync(join(envDelta.ORANGU_HOME!, 'open'))).toBe(false)
     })
     expect(opened()).toEqual([])
+  }, 60_000)
+
+  it('bare orangu: when the brief fails, the reason goes to stderr and the app still starts over every root', async () => {
+    const { root, envDelta } = await openerFixture()
+    const second = (await makeFixtureHome(realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-second-'))))).configDir
+    // the brief reads --root as 1 config dir, so a list of 2 roots gives it no session; the app reads both roots
+    const { shown } = await bareOnPty(`${root},${second}`, envDelta, async () => undefined)
+    expect(shown).toMatch(/^ {2}orangu printed no brief: orangu found no sessions\./m)
+    expect(shown).toMatch(/^ {6}6 sessions on this machine · \d running now$/m)
+    expect(shown).toContain('The app stopped.')
   }, 60_000)
 
   it('bare orangu: when the app does not start, the brief stays, the reason goes to stderr, and the exit is 1', async () => {

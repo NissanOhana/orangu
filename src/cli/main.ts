@@ -121,7 +121,8 @@ async function selectSession(sel: string | undefined, flags: Record<string, stri
   if (flags['cwd']) opts.cwd = String(flags['cwd'])
   if (!sel || sel === 'latest') {
     const s = await findLatestSession(opts)
-    if (!s) fail('orangu found no sessions. Is Claude Code installed? Try: orangu list')
+    // thrown, so bare orangu on a terminal can still start the app (src/cli/door.ts); main() prints it as fail() does
+    if (!s) throw new Error('orangu found no sessions. Is Claude Code installed? Try: orangu list')
     return s!
   }
   if (sel === 'current') {

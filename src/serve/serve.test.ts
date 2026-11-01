@@ -5,7 +5,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises'
 import { get as httpGet } from 'node:http'
 import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { startServe, matchRoute, rejectCrossSiteBrowserGet, rejectUntrustedMutation, type ServeDeps, type ServeHandle } from './server.js'
+import { startServe, matchRoute, isAppPageNavigation, rejectCrossSiteBrowserGet, rejectUntrustedMutation, type ServeDeps, type ServeHandle } from './server.js'
 import { aggregateRegistryFingerprint, MAX_AGGREGATE_CONCURRENCY, MAX_AGGREGATE_JOBS, MAX_REPO_CWD_BYTES } from './api.js'
 import type { Route, ServeOptions } from './types.js'
 import type { Analysis } from '../model/analysis.js'
@@ -525,6 +525,37 @@ describe('orangu serve (in-process e2e)', () => {
     expect([200, 202]).toContain((await fetch(target)).status)
   })
 
+  // The browser handoff opens a file:// redirect page (src/cli/open-app.ts), so its navigation to the app is cross-site.
+  it('lets a cross-site top-level document navigation reach the app page only, behind the capability', async () => {
+    const { url } = await boot()
+    const navigation = { 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' }
+    // the app page, with and without the slash of a deep link such as #feedback
+    for (const target of [url, url + '/']) {
+      const page = await getWithHeaders(target, navigation)
+      expect(page.status, target).toBe(200)
+      expect(page.body, target).toContain('__ORANGU_SERVE__')
+    }
+    // each other route, and each other mode or destination, keeps the cross-site check
+    const blocked: Array<[string, Record<string, string>]> = [
+      [url + '/api/sessions', navigation],
+      [url + '/api/global', navigation],
+      [url, { ...navigation, 'sec-fetch-mode': 'no-cors' }],
+      [url, { ...navigation, 'sec-fetch-mode': 'cors', 'sec-fetch-dest': 'empty' }],
+      [url, { ...navigation, 'sec-fetch-dest': 'iframe' }],
+      [url, { 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'document' }],
+      [url, { 'sec-fetch-site': 'cross-site' }],
+    ]
+    for (const [target, headers] of blocked) {
+      const response = await getWithHeaders(target, headers)
+      expect(response.status, `${target} ${JSON.stringify(headers)}`).toBe(403)
+      expect(response.body).toBe('{"error":"cross-site browser GET blocked"}')
+    }
+    // with no capability, a navigation gets no page
+    const noCapability = await getWithHeaders(new URL(url).origin + '/', navigation)
+    expect(noCapability.status).toBe(403)
+    expect(noCapability.body).toBe('{"error":"serve capability required"}')
+  })
+
   it('blocks DNS-rebinding Host headers on every read surface before routing', async () => {
     const { home, url } = await boot()
     const paths = [
@@ -636,6 +667,15 @@ describe('mutation request boundary', () => {
     expect(rejectCrossSiteBrowserGet({ headers: { host: '127.0.0.1:4174', 'sec-fetch-site': 'none' } })).toBeUndefined()
     expect(rejectCrossSiteBrowserGet({ headers: { host: '127.0.0.1:4174', origin: 'https://evil.example' } })).toMatchObject({ status: 403 })
     expect(rejectCrossSiteBrowserGet({ headers: { host: '127.0.0.1:4174', 'sec-fetch-site': 'cross-site' } })).toMatchObject({ status: 403 })
+  })
+
+  it('names a top-level document navigation to the app page, and no other request', () => {
+    const navigation = { host: '127.0.0.1:4174', 'sec-fetch-site': 'cross-site', 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' }
+    expect(isAppPageNavigation({ headers: navigation }, '/')).toBe(true)
+    expect(isAppPageNavigation({ headers: navigation }, '/api/sessions')).toBe(false)
+    expect(isAppPageNavigation({ headers: { ...navigation, 'sec-fetch-mode': 'no-cors' } }, '/')).toBe(false)
+    expect(isAppPageNavigation({ headers: { ...navigation, 'sec-fetch-dest': 'iframe' } }, '/')).toBe(false)
+    expect(isAppPageNavigation({ headers: { host: '127.0.0.1:4174', 'sec-fetch-site': 'cross-site' } }, '/')).toBe(false)
   })
 })
 

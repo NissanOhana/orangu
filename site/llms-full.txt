@@ -189,7 +189,7 @@ A session selector is `latest`, a session id or unique prefix, a supported `.jso
 
 `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
 
-On an interactive terminal, bare `orangu` prints the orange ASCII mascot and the latest-session brief. Then it runs the app on the sessions of every root and opens it in your browser. The app shows prompt text on this machine. `--no-include-text` hides it, and `--no-open` keeps the browser closed. Press Ctrl-C to stop the app. These keep bare `orangu` on the latest-session brief, which never waits for input:
+On an interactive terminal, bare `orangu` prints the orange ASCII mascot and the latest-session brief. Then it runs the app on the sessions of every root and opens it in your browser. The app shows prompt and result text on this machine. `--no-include-text` hides it, and `--no-open` keeps the browser closed. Press Ctrl-C to stop the app. These keep bare `orangu` on the latest-session brief, which never waits for input:
 
 - a pipe, `CI`, `TERM=dumb`, or `ORANGU_NO_ANIMATION=1`
 - `--plain` or `--quiet`
