@@ -20,11 +20,13 @@
  * 3 (2026-10-09): the `enforcement` section (rules in context against the calls that broke them, notes against the
  *   complaints after them, memory indexes against their load limit, recurring complaint words) and
  *   `inventory.memoryIndexes`
- * 4 (2026-11-01): `argv0Basename` (src/harness/names.ts) reads a command 1 time as shell words. It skips the
- *   `NAME=value` assignments in front of the program, it takes the word after a flag with no `=` as the script only
- *   with a script extension, and it names nothing for a quote that does not close, `$(`, a backtick or `$'`. So the key
- *   of such a hook row (`crosswalk.hooks`, `inventory.settings[].hooks`) and the `commandBasename` of such an MCP server
- *   (`inventory.mcpServers`) moved, and a value never names either
+ * 4 (2026-11-01): `argv0Basename` (src/harness/names.ts) reads a command 1 time as shell words, split only at a
+ *   space, a tab or a newline. It skips the assignments in front of the program (`NAME=`, `NAME+=`, `NAME[i]=`). After
+ *   an interpreter, it takes the word after a flag with no `=` as the script only with a script extension, and never a
+ *   word with a space. It names nothing for a quote that does not close, `$(`, a backtick or `$'`, and for a word up to
+ *   the program that holds `; & | < > ( )` or starts with `#`. So these names moved, and a value never names 1 of
+ *   them: the key of a hook row (`crosswalk.hooks`), `inventory.settings[].hooks[].commandBasenames`,
+ *   `inventory.plugins[].hookConfigs[].commandBasenames` and `inventory.mcpServers[].commandBasename`
  */
 export const HARNESS_SCHEMA_VERSION = '4'
 

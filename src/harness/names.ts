@@ -44,27 +44,35 @@ const INTERPRETERS: ReadonlySet<string> = new Set(['env', 'bash', 'sh', 'zsh', '
 /** extensions a hook script ships with; a bare token needs one of these, or a path separator, to count as the script */
 const SCRIPT_EXT = /\.(sh|bash|zsh|py|js|mjs|cjs|ts|mts|cts|rb|pl|ps1|cmd|bat)$/i
 const pathLike = (t: string): boolean => t.includes('/') || t.includes('\\') || SCRIPT_EXT.test(t)
-/** `NAME=value`, the way `env` reads one: the value is an argument, and arguments carry secrets */
-const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/
+/**
+ * `NAME=value`, `NAME+=value` and `NAME[i]=value`, the way the shell and `env` read an assignment: the value is an
+ * argument, and arguments carry secrets
+ */
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=/
 /** the characters that a backslash escapes inside double quotes, as the shell reads them: another pair keeps its backslash */
 const DOUBLE_QUOTE_ESCAPES = '"\\$`'
 /** a command substitution or an ANSI-C quote: the shell runs or decodes code there, so no word of the command is a safe name */
 const SUBSTITUTION = /\$\(|`|\$'/
+/** a shell operator (a list, a pipe, a redirect, a subshell or an array): a word up to the program that holds one is code */
+const OPERATOR = /[;&|<>()]/
+/** the 3 characters at which the shell ends a word: a space, a tab and a newline. A non-breaking space is not 1 of them */
+const isBlank = (c: string | undefined): boolean => c === ' ' || c === '\t' || c === '\n'
+const BLANK = /[ \t\n]/
 
 /**
- * The words of a command as the shell splits them, read 1 time: a word ends at whitespace outside quotes, `'…'` is
- * literal text, and `\"` (with `\\`, `\$` and `` \` ``) in `"…"` and `\x` outside quotes are 1 character each. Null
- * when a quote does not close, or when a word holds `$(`, a backtick or `$'`.
+ * The words of a command as the shell splits them, read 1 time: a word ends at a space, a tab or a newline outside
+ * quotes, `'…'` is literal text, and `\"` (with `\\`, `\$` and `` \` ``) in `"…"` and `\x` outside quotes are 1
+ * character each. Null when a quote does not close, or when a word holds `$(`, a backtick or `$'`.
  */
 function shellWords(command: string): string[] | null {
   const words: string[] = []
   let i = 0
   for (;;) {
-    while (i < command.length && /\s/.test(command[i]!)) i++
+    while (i < command.length && isBlank(command[i])) i++
     if (i >= command.length) return words
     const start = i
     let word = ''
-    while (i < command.length && !/\s/.test(command[i]!)) {
+    while (i < command.length && !isBlank(command[i])) {
       const c = command[i]!
       if (c === '\\') {
         word += command[i + 1] ?? ''
@@ -101,17 +109,19 @@ function shellWords(command: string): string[] | null {
  * Nothing after the interpreter looks like a script (`bash -c "echo hi"`) → the interpreter's own name.
  *
  * The command is read 1 time as shell words (`shellWords`), so a quoted value or an escaped space stays inside its
- * word. The `NAME=value` assignments in front of argv0 are skipped, as the shell reads them
+ * word. The assignments in front of argv0 (`NAME=`, `NAME+=`, `NAME[i]=`) are skipped, as the shell reads them
  * (`AUTH="Bearer x" ~/hooks/post.sh` runs `post.sh`), so a value never names a hook. After an interpreter, the word
- * that follows a flag with no `=` is the value of that flag (`node --key <v> x.js`), unless it has a script extension.
- * A command of assignments only names nothing: ''. So does a command with a quote that does not close, or with a word
- * that holds `$(`, a backtick or `$'`.
+ * that follows a flag with no `=` is the value of that flag (`node --key <v> x.js`), unless it has a script extension,
+ * and a word with a space in it is code or a value (`bash -c 'curl …'`), never the script.
+ * A command of assignments only names nothing: ''. So does a command with a quote that does not close, a word that
+ * holds `$(`, a backtick or `$'`, or a word up to the program that holds `; & | < > ( )` or starts a comment (`#`).
  */
 export function argv0Basename(command: string): string {
   const words = shellWords(command)
   if (!words) return ''
   const first = words.findIndex((word) => !ENV_ASSIGNMENT.test(word))
   if (first === -1) return ''
+  if (words.slice(0, first + 1).some((word) => OPERATOR.test(word) || word.startsWith('#'))) return ''
   const argv0 = basename(words[first]!)
   if (!INTERPRETERS.has(argv0)) return argv0
   let afterFlag = false
@@ -124,6 +134,7 @@ export function argv0Basename(command: string): string {
     afterFlag = false
     if (ENV_ASSIGNMENT.test(t)) continue
     if (INTERPRETERS.has(basename(t))) continue
+    if (BLANK.test(t)) continue
     if (flagValue && !SCRIPT_EXT.test(t)) continue
     return pathLike(t) ? basename(t) : argv0
   }

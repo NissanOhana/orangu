@@ -8091,18 +8091,21 @@ function canonicalName(observed, declared2) {
 var INTERPRETERS = /* @__PURE__ */ new Set(["env", "bash", "sh", "zsh", "dash", "fish", "python", "python3", "node", "npx", "bun", "deno", "tsx", "ts-node", "ruby", "perl", "pwsh", "powershell"]);
 var SCRIPT_EXT = /\.(sh|bash|zsh|py|js|mjs|cjs|ts|mts|cts|rb|pl|ps1|cmd|bat)$/i;
 var pathLike = (t) => t.includes("/") || t.includes("\\") || SCRIPT_EXT.test(t);
-var ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+var ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=/;
 var DOUBLE_QUOTE_ESCAPES = '"\\$`';
 var SUBSTITUTION = /\$\(|`|\$'/;
+var OPERATOR = /[;&|<>()]/;
+var isBlank = (c) => c === " " || c === "	" || c === "\n";
+var BLANK2 = /[ \t\n]/;
 function shellWords(command) {
   const words2 = [];
   let i = 0;
   for (; ; ) {
-    while (i < command.length && /\s/.test(command[i])) i++;
+    while (i < command.length && isBlank(command[i])) i++;
     if (i >= command.length) return words2;
     const start = i;
     let word = "";
-    while (i < command.length && !/\s/.test(command[i])) {
+    while (i < command.length && !isBlank(command[i])) {
       const c = command[i];
       if (c === "\\") {
         word += command[i + 1] ?? "";
@@ -8136,6 +8139,7 @@ function argv0Basename(command) {
   if (!words2) return "";
   const first = words2.findIndex((word) => !ENV_ASSIGNMENT.test(word));
   if (first === -1) return "";
+  if (words2.slice(0, first + 1).some((word) => OPERATOR.test(word) || word.startsWith("#"))) return "";
   const argv0 = basename5(words2[first]);
   if (!INTERPRETERS.has(argv0)) return argv0;
   let afterFlag = false;
@@ -8148,6 +8152,7 @@ function argv0Basename(command) {
     afterFlag = false;
     if (ENV_ASSIGNMENT.test(t)) continue;
     if (INTERPRETERS.has(basename5(t))) continue;
+    if (BLANK2.test(t)) continue;
     if (flagValue && !SCRIPT_EXT.test(t)) continue;
     return pathLike(t) ? basename5(t) : argv0;
   }

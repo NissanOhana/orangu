@@ -81,6 +81,26 @@ describe('names: argv0Basename', () => {
     expect(argv0Basename("NOTE='FAKEt12 /opt/hooks/note.sh")).toBe('')
     expect(argv0Basename('"/opt/hooks/hook.sh --x')).toBe('')
     expect(argv0Basename('node --key "FAKEv29 hook.js')).toBe('')
+    expect(argv0Basename("node --key 'x hook.js")).toBe('')
+  })
+  it('splits only at a space, a tab or a newline, as the shell does', () => {
+    expect(argv0Basename('A=1\tB=2\t/opt/hooks/tab.sh\t--x')).toBe('tab.sh')
+    expect(argv0Basename('A=1\n/opt/hooks/line.sh')).toBe('line.sh')
+    // a non-breaking space and a form feed are no word end: the value stays in its assignment
+    expect(argv0Basename('TOKEN=abc FAKEv33 ~/.claude/hooks/h.sh')).toBe('h.sh')
+    expect(argv0Basename('TOKEN=abc\fFAKEv34 ~/.claude/hooks/h.sh')).toBe('h.sh')
+  })
+  it('reads NAME+= and NAME[i]= as assignments', () => {
+    expect(argv0Basename('TOKEN+="a/FAKEv31" ~/.claude/hooks/h.sh')).toBe('h.sh')
+    expect(argv0Basename('TOKEN[0]=a/FAKEv32 ~/.claude/hooks/h.sh')).toBe('h.sh')
+  })
+  it('names nothing when a word up to the program holds ; & | < > ( ) or starts a comment', () => {
+    expect(argv0Basename('A=1 #FAKEv35 ~/.claude/hooks/h.sh')).toBe('')
+    expect(argv0Basename('TOKENS=(a FAKEv36) ~/.claude/hooks/h.sh')).toBe('')
+    expect(argv0Basename('>/tmp/FAKEv37 ~/.claude/hooks/h.sh')).toBe('')
+    expect(argv0Basename('A=1; FAKEv39 ~/.claude/hooks/h.sh')).toBe('')
+    // after the program, an operator is an argument, as before
+    expect(argv0Basename("'/usr/bin/afplay' ~/x.mp3 &")).toBe('afplay')
   })
   it('names nothing when a word holds a substitution: $(, a backtick or $\'', () => {
     expect(argv0Basename("TOKEN=$'a FAKEv23' ~/.claude/hooks/h.sh")).toBe('')
@@ -96,6 +116,8 @@ describe('names: argv0Basename', () => {
     expect(argv0Basename('env AUTH="Bearer Zm9v/FAKEv26" ~/h.sh')).toBe('h.sh')
     expect(argv0Basename('node --key Zm9v/FAKEv25 x.js')).toBe('x.js')
     expect(argv0Basename('node --key=Zm9v/FAKEv30 /opt/hooks/x.js')).toBe('x.js')
+    // a word with a space is code or a value, never the script
+    expect(argv0Basename("bash -c 'curl https://x/FAKEv38.sh'")).toBe('bash')
   })
   it('keeps the names of the env forms', () => {
     expect(argv0Basename('env FOO=1 cmd')).toBe('env')
