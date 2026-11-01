@@ -3,9 +3,9 @@
  * (`crosswalk.ts`). Every join in the crosswalk is only as good as the identity it joins on, so each rule
  * lives here once and each arm calls it instead of hand-rolling its own.
  *
- * Pure: no filesystem, no clock, no node import beyond `path.basename`.
+ * Pure: no filesystem, no clock, no node import beyond `path.basename` and `path.win32.basename`.
  */
-import { basename } from 'node:path'
+import { basename, win32 } from 'node:path'
 
 /** `superpowers@superpowers-marketplace` → `superpowers`: the name part of a marketplace-qualified plugin key */
 export function pluginName(key: string): string {
@@ -60,9 +60,15 @@ const isBlank = (c: string | undefined): boolean => c === ' ' || c === '\t' || c
 const BLANK = /[ \t\n]/
 /**
  * a Windows path (`C:\hooks\x.ps1`, `\\server\share\x.ps1`): its backslashes are separators, not escapes. Sticky, so
- * `shellWords` tests it at the start of a word in place: set `lastIndex` before each test
+ * it tests the text at 1 index in place: call it only through `startsAsWindowsPath`, which sets `lastIndex`
  */
 const WINDOWS_PATH = /[A-Za-z]:\\|\\\\[^\\ \t\n]+\\/y
+const startsAsWindowsPath = (text: string, at = 0): boolean => {
+  WINDOWS_PATH.lastIndex = at
+  return WINDOWS_PATH.test(text)
+}
+/** flags that take no value, so the word after them is the next word of the command (`npx -y @scope/pkg` is `pkg`) */
+const NO_VALUE_FLAGS: ReadonlySet<string> = new Set(['-y', '--yes', '-q', '--quiet'])
 
 /** A shell word: its text with the quotes and escapes read, and whether its raw form holds a substitution. */
 interface Word {
@@ -83,8 +89,7 @@ function shellWords(command: string): Word[] | null {
     if (i >= command.length) return words
     const start = i
     let word = ''
-    WINDOWS_PATH.lastIndex = i
-    if (WINDOWS_PATH.test(command)) {
+    if (startsAsWindowsPath(command, i)) {
       while (i < command.length && !isBlank(command[i])) i++
       word = command.slice(start, i)
     }
@@ -126,9 +131,10 @@ const isScriptValue = (t: string): boolean => isScriptFile(t) || (!BLANK.test(t)
 
 /**
  * The index of the word that names the command: argv0 at `first`, or, when argv0 is an interpreter, the script after it.
- * The word after a flag with no `=` is the value of that flag, unless it is a script value. After a skipped value, only
- * a script file names the script (`npx -y ntfy-notify https://ntfy.sh/<topic>` is `npx`). A word with a space and a URL
- * are never the script. Else the first word that looks like a path is the script, and any other word stops the search.
+ * The word after a flag with no `=` is the value of that flag, unless it is a script value or the flag takes no value
+ * (`NO_VALUE_FLAGS`). After a skipped value, only a script file names the script (`npx --key x https://ntfy.sh/<topic>`
+ * is `npx`). A word with a space and a URL are never the script. Else the first word that looks like a path is the
+ * script, and any other word stops the search (`npx -y ntfy-notify https://ntfy.sh/<topic>` is `npx`).
  */
 function nameIndex(words: readonly Word[], first: number): number {
   if (!INTERPRETERS.has(basename(words[first]!.text))) return first
@@ -137,7 +143,7 @@ function nameIndex(words: readonly Word[], first: number): number {
   for (let i = first + 1; i < words.length; i++) {
     const t = words[i]!.text
     if (t.startsWith('-')) {
-      afterFlag = !t.includes('=')
+      afterFlag = !t.includes('=') && !NO_VALUE_FLAGS.has(t)
       continue
     }
     const flagValue = afterFlag
@@ -167,6 +173,7 @@ function nameIndex(words: readonly Word[], first: number): number {
  * A command of assignments only names nothing: ''. So does a command with a quote that does not close, a word up to
  * the program that holds `; & | < > ( )` or starts a comment (`#`), and a word up to the name that holds `$(`, a
  * backtick or `$'`. A substitution after the name leaves the name (`notify.sh "$(pwd)"` is `notify.sh`).
+ * A Windows path names its last part on every platform, so a user folder (`C:\Users\<name>\…`) never names a row.
  */
 export function argv0Basename(command: string): string {
   const words = shellWords(command)
@@ -176,5 +183,6 @@ export function argv0Basename(command: string): string {
   if (words.slice(0, first + 1).some((word) => OPERATOR.test(word.text) || word.text.startsWith('#'))) return ''
   const index = nameIndex(words, first)
   if (words.slice(0, index + 1).some((word) => word.code)) return ''
-  return basename(words[index]!.text)
+  const name = words[index]!.text
+  return startsAsWindowsPath(name) ? win32.basename(name) : basename(name)
 }

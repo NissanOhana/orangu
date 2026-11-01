@@ -145,9 +145,9 @@ The estimate serializes the same canonical bundle; it is not a different depth o
 
 ## Harness report (`orangu harness --json`, `schemaVersion` `"4"`)
 
-Since version 4, orangu reads each hook command and each MCP server command 1 time as shell words. A word ends only at a space, a tab or a newline. A word that starts as a Windows path keeps its backslashes. orangu skips the assignments in front of the program: `NAME=value`, `NAME+=value` and `NAME[i]=value`.
+Since version 4, orangu reads each hook command and each MCP server command 1 time as shell words. A word ends only at a space, a tab or a newline. A word that starts as a Windows path keeps its backslashes, and its last part names it on every platform. So `C:\Users\<name>\hooks\x.ps1` is `x.ps1`. orangu skips the assignments in front of the program: `NAME=value`, `NAME+=value` and `NAME[i]=value`.
 
-After an interpreter, a flag with no `=` takes the next word as its value. That word names the script only when it is a script file or starts with `~/` or `./`. A script file has a script extension, no space and no URL. After a flag value, only a script file names the script. A word with a space and a URL never name the script.
+After an interpreter, a flag with no `=` takes the next word as its value. That word names the script only when it is a script file or starts with `~/` or `./`. A script file has a script extension, no space and no URL. After a flag value, only a script file names the script. `-y`, `--yes`, `-q` and `--quiet` take no value, so `npx -y @scope/pkg` is `pkg`. A word with a space and a URL never name the script.
 
 A command names nothing when a quote does not close, or when a word up to the program holds `; & | < > ( )` or starts with `#`. It also names nothing when a word up to the name holds `$(`, a backtick or `$'`. So a value never names a hook or an MCP server. These names moved: the key of a hook row in `crosswalk.hooks`, `inventory.settings[].hooks[].commandBasenames`, `inventory.plugins[].hookConfigs[].commandBasenames` and `inventory.mcpServers[].commandBasename`. A run whose command names nothing counts in the row of its event. Version 3 dropped such a run.
 

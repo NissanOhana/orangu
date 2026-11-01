@@ -8074,7 +8074,7 @@ var HARNESS_SCHEMA_VERSION = "4";
 var HARNESS_ROW_CAP = 50;
 
 // src/harness/names.ts
-import { basename as basename5 } from "node:path";
+import { basename as basename5, win32 } from "node:path";
 function pluginName(key) {
   return key.split("@")[0] ?? key;
 }
@@ -8098,6 +8098,11 @@ var OPERATOR = /[;&|<>()]/;
 var isBlank = (c) => c === " " || c === "	" || c === "\n";
 var BLANK2 = /[ \t\n]/;
 var WINDOWS_PATH = /[A-Za-z]:\\|\\\\[^\\ \t\n]+\\/y;
+var startsAsWindowsPath = (text3, at = 0) => {
+  WINDOWS_PATH.lastIndex = at;
+  return WINDOWS_PATH.test(text3);
+};
+var NO_VALUE_FLAGS = /* @__PURE__ */ new Set(["-y", "--yes", "-q", "--quiet"]);
 function shellWords(command) {
   const words2 = [];
   let i = 0;
@@ -8106,8 +8111,7 @@ function shellWords(command) {
     if (i >= command.length) return words2;
     const start = i;
     let word = "";
-    WINDOWS_PATH.lastIndex = i;
-    if (WINDOWS_PATH.test(command)) {
+    if (startsAsWindowsPath(command, i)) {
       while (i < command.length && !isBlank(command[i])) i++;
       word = command.slice(start, i);
     }
@@ -8149,7 +8153,7 @@ function nameIndex(words2, first) {
   for (let i = first + 1; i < words2.length; i++) {
     const t = words2[i].text;
     if (t.startsWith("-")) {
-      afterFlag = !t.includes("=");
+      afterFlag = !t.includes("=") && !NO_VALUE_FLAGS.has(t);
       continue;
     }
     const flagValue = afterFlag;
@@ -8174,7 +8178,8 @@ function argv0Basename(command) {
   if (words2.slice(0, first + 1).some((word) => OPERATOR.test(word.text) || word.text.startsWith("#"))) return "";
   const index = nameIndex(words2, first);
   if (words2.slice(0, index + 1).some((word) => word.code)) return "";
-  return basename5(words2[index].text);
+  const name = words2[index].text;
+  return startsAsWindowsPath(name) ? win32.basename(name) : basename5(name);
 }
 
 // src/harness/precedence.ts
@@ -12431,7 +12436,7 @@ async function readHistory(store, target, deps, options = {}) {
 import { randomBytes as randomBytes3 } from "node:crypto";
 import { constants as constants12 } from "node:fs";
 import { lstat as lstat9, mkdir as mkdir2, open as open12, realpath as realpath9, rmdir, unlink as unlink3 } from "node:fs/promises";
-import { dirname as dirname6, join as join7, posix, win32 } from "node:path";
+import { dirname as dirname6, join as join7, posix, win32 as win322 } from "node:path";
 var LOCK_STALE_MS = 1e4;
 var LOCK_TIMEOUT_MS = 5e3;
 var MAX_SUGGESTION_STORE_BYTES = 64 * 1024 * 1024;
@@ -12743,7 +12748,7 @@ var MAX_WORKSPACE_CWD_CHARS = 4096;
 var HIDDEN_CHARACTER_RE = /[\u0000-\u001f\u007f-\u009f\p{Cf}\p{Zl}\p{Zp}]/u;
 var DOUBLE_SEPARATOR_PREFIX_RE = /^[\\/]{2}/;
 function isCanonicalWorkspaceCwd(value, platform2 = process.platform) {
-  const paths = platform2 === "win32" ? win32 : posix;
+  const paths = platform2 === "win32" ? win322 : posix;
   return typeof value === "string" && value.length > 0 && value.length <= MAX_WORKSPACE_CWD_CHARS && !HIDDEN_CHARACTER_RE.test(value) && !DOUBLE_SEPARATOR_PREFIX_RE.test(value) && // On Windows, a colon after the drive letter names an alternate data stream.
   (platform2 !== "win32" || value.indexOf(":", 2) === -1) && paths.isAbsolute(value) && paths.resolve(value) === value;
 }

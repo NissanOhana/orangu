@@ -21,13 +21,15 @@
  *   complaints after them, memory indexes against their load limit, recurring complaint words) and
  *   `inventory.memoryIndexes`
  * 4 (2026-11-01): `argv0Basename` (src/harness/names.ts) reads a command 1 time as shell words, split only at a
- *   space, a tab or a newline, with a word that starts as a Windows path read as written. It skips the assignments in front of the program
- *   (`NAME=`, `NAME+=`, `NAME[i]=`). After an interpreter, the word after a flag with no `=` is the script only when it
- *   is a script file (a script extension, no space, no URL) or starts with `~/` or `./`. Else it is the value of that
- *   flag, and after it only a script file is the script. A word with a space and a URL are never the script. It names
- *   nothing for a quote that does not close, for a word up to the program that holds `; & | < > ( )` or starts with
- *   `#`, and for a word up to the name that holds `$(`, a backtick or `$'`. So these names moved, and a value never
- *   names 1 of them: the key of a hook row (`crosswalk.hooks`), `inventory.settings[].hooks[].commandBasenames`,
+ *   space, a tab or a newline, with a word that starts as a Windows path read as written. It skips the assignments in
+ *   front of the program (`NAME=`, `NAME+=`, `NAME[i]=`). After an interpreter, the word after a flag with no `=` is the
+ *   script only when it is a script file (a script extension, no space, no URL) or starts with `~/` or `./`. Else it is
+ *   the value of that flag, and after it only a script file is the script. `-y`, `--yes`, `-q` and `--quiet` take no
+ *   value (`npx -y @scope/pkg` is `pkg`). A word with a space and a URL are never the script. A Windows path names its
+ *   last part on every platform (`C:\Users\<name>\hooks\x.ps1` is `x.ps1`). It names nothing for a quote that does not
+ *   close, for a word up to the program that holds `; & | < > ( )` or starts with `#`, and for a word up to the name
+ *   that holds `$(`, a backtick or `$'`. So these names moved, and a value never names 1 of them: the key of a hook row
+ *   (`crosswalk.hooks`), `inventory.settings[].hooks[].commandBasenames`,
  *   `inventory.plugins[].hookConfigs[].commandBasenames` and `inventory.mcpServers[].commandBasename`. A run whose
  *   command names nothing counts in the row of its event (`crosswalk.ts`), where version 3 dropped it
  */

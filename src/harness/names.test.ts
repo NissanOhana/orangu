@@ -134,6 +134,13 @@ describe('names: argv0Basename', () => {
     // a URL is never the script, with no flag before it too
     expect(argv0Basename('bun https://ntfy.sh/FAKEtopic42')).toBe('bun')
   })
+  it('reads -y, --yes, -q and --quiet as flags with no value: the package after them names the row, a URL never does', () => {
+    expect(argv0Basename('npx -y @scope/pkg')).toBe('pkg')
+    expect(argv0Basename('npx -y @owner/notify https://ntfy.sh/FAKEtopic43')).toBe('notify')
+    expect(argv0Basename('npx --yes @owner/notify https://ntfy.sh/FAKEtopic44')).toBe('notify')
+    expect(argv0Basename('npx -q @owner/notify')).toBe('notify')
+    expect(argv0Basename('python3 --quiet hooks/guard')).toBe('guard')
+  })
   it('looks for a substitution only in the words up to the name: an argument with $( keeps the name', () => {
     expect(argv0Basename('notify.sh "$(pwd)"')).toBe('notify.sh')
     expect(argv0Basename('/opt/hooks/notify.sh --dir `pwd`')).toBe('notify.sh')
@@ -147,14 +154,17 @@ describe('names: argv0Basename', () => {
     // a flag value with a space is code, also when it starts with ~/
     expect(argv0Basename("bash -c '~/bin/run FAKEv46'")).toBe('bash')
   })
-  it('reads no escape in a Windows path, so the path keeps its old name', () => {
-    // the old reader took the basename of the whole word, which is the platform basename
-    const old = (path: string, last: string): string => (process.platform === 'win32' ? last : path)
-    expect(argv0Basename('powershell -File C:\\hooks\\x.ps1')).toBe(old('C:\\hooks\\x.ps1', 'x.ps1'))
-    expect(argv0Basename('powershell -File \\\\server\\share\\y.ps1')).toBe(old('\\\\server\\share\\y.ps1', 'y.ps1'))
+  it('reads no escape in a Windows path, and names its last part on every platform', () => {
+    expect(argv0Basename('powershell -File C:\\hooks\\x.ps1')).toBe('x.ps1')
+    expect(argv0Basename('powershell -File \\\\server\\share\\y.ps1')).toBe('y.ps1')
+    // a user folder in the path never reaches a row: only the last part names it, quoted or not
+    expect(argv0Basename('powershell -File C:\\Users\\FAKEuser55\\hooks\\x.ps1')).toBe('x.ps1')
+    expect(argv0Basename('C:\\Users\\FAKEuser56\\bin\\notify.exe --x')).toBe('notify.exe')
+    expect(argv0Basename('powershell -File "C:\\Users\\FAKEuser57\\hooks\\z.ps1"')).toBe('z.ps1')
+    expect(argv0Basename('"C:\\Program Files\\FAKEuser58\\y.exe" --flag')).toBe('y.exe')
     // after a flag, a Windows path with no script extension is a value, as any other path is
     expect(argv0Basename('powershell -File C:\\hooks\\FAKEv51')).toBe('powershell')
     // only a word that starts as a Windows path is read as written: an escaped space before it stays an escape
-    expect(argv0Basename('TOKEN=a\\ FAKEv52 C:\\hooks\\h.ps1')).toBe(old('C:\\hooks\\h.ps1', 'h.ps1'))
+    expect(argv0Basename('TOKEN=a\\ FAKEv52 C:\\hooks\\h.ps1')).toBe('h.ps1')
   })
 })
