@@ -113,9 +113,9 @@ Orangu shortens home paths to `~`, but other absolute paths may remain as useful
 
 `orangu evidence` is always redacted and does not accept `--no-redact`.
 
-Inside Claude Code, `--no-redact` or `--include-text` with `-o`, `--out` or `--html <file>` needs `ORANGU_ALLOW_RAW=1` before the command, so that Claude Code asks you first. Orangu reads the `CLAUDECODE` variable. The terminal of an IDE with Claude Code can also set it, so a command that you type there needs the same prefix.
+Inside Claude Code, `-o`, `--out` or `--html` needs `ORANGU_ALLOW_OUT=1` before the command for a path outside the temp folder and the orangu home. With `--no-redact` or `--include-text`, every named path needs `ORANGU_ALLOW_RAW=1`. Claude Code then asks you first. An IDE terminal with Claude Code can also set `CLAUDECODE`, so a command typed there needs the prefix too.
 
-If `-o`, `--out` or `--html` names an existing file, orangu replaces it only when the file starts with the orangu output marker. For any other file, a symlink, a hard link or an empty file, orangu changes nothing and exits with code 1.
+Orangu replaces a named file only when it starts with the orangu output marker. For any other file, a symlink, a hard link or an empty file, orangu changes nothing and exits with code 1.
 
 ## Supported inputs and limits
 

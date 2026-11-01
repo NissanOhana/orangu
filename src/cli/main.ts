@@ -47,6 +47,7 @@ import { openHtmlFile } from './open-browser.js'
 import { openApp, type AppHandoff } from './open-app.js'
 import { serveOptions } from './serve-options.js'
 import { rawOutputRefusal } from './raw-output.js'
+import { outputPathRefusal } from './output-path.js'
 import { VERSION } from '../version.js'
 
 /**
@@ -312,6 +313,9 @@ function rejectUnusableFlags(command: string | undefined, flags: Record<string, 
   // inside Claude Code, unredacted text to a named path needs ORANGU_ALLOW_RAW=1 (src/cli/raw-output.ts)
   const raw = rawOutputRefusal(flags, process.env)
   if (raw) fail(raw)
+  // inside Claude Code, a named path outside the temp folder and the orangu home needs ORANGU_ALLOW_OUT=1 (src/cli/output-path.ts)
+  const outside = outputPathRefusal(flags, process.env)
+  if (outside) fail(outside)
 }
 
 function thresholdExit(analysis: ReturnType<typeof analyzeSession>, flags: Record<string, string | boolean>): void {

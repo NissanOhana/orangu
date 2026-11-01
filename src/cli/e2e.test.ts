@@ -29,6 +29,7 @@ process.env['ORANGU_HOME'] = mkdtempSync(join(tmpdir(), 'orangu-cli-home-'))
 // started from a Claude Code session behaves as one started from a terminal.
 delete process.env['CLAUDECODE']
 delete process.env['ORANGU_ALLOW_RAW']
+delete process.env['ORANGU_ALLOW_OUT']
 // A suite that runs over SSH would turn each browser handoff off (src/cli/open-app.ts): a test that wants an SSH session
 // sets SSH_CONNECTION in the env of its own child.
 delete process.env['SSH_CONNECTION']
@@ -475,6 +476,91 @@ syncBuiltinESMExports()
     const temp = runIn(['report', home.endedId, '--no-open', '--no-redact', '--include-text'], { CLAUDECODE: '1' })
     expect(temp.status, temp.stderr).toBe(0)
     expect(temp.stdout.trim().startsWith(tmpdir()), temp.stdout).toBe(true)
+  })
+
+  // A planted line can make Claude run a pre-approved `orangu repo <repo> --out <repo>/CLAUDE.local.md`. The writer makes
+  // any new path, and later sessions load that file as instructions. Inside Claude Code a path that -o, --out or --html
+  // names goes only to the temp folder or the orangu home, at its real path, unless ORANGU_ALLOW_OUT=1 starts the
+  // command. A terminal run, the default temporary path and the paths that the skills pass do not change.
+  it('inside Claude Code, -o, --out or --html outside the temp folder and the orangu home needs ORANGU_ALLOW_OUT=1', async () => {
+    const dir = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-out-')))
+    // the child gets its own temp folder and orangu home, so the repository beside them is outside both
+    const temp = join(dir, 'temp')
+    const store = join(dir, 'store')
+    const repo = join(dir, 'repo')
+    for (const folder of [temp, store, repo]) await mkdir(folder)
+    const home = await makeFixtureHome(dir, { cwd: repo })
+    // each run sets CLAUDECODE on purpose: the delta below, or nothing for a terminal
+    const env = (delta: Record<string, string>): NodeJS.ProcessEnv => {
+      const e: NodeJS.ProcessEnv = { ...process.env, TMPDIR: temp, ORANGU_HOME: store, HOME: join(dir, 'user'), ORANGU_CLAUDE_MANAGED_DIRS: '' }
+      for (const k of ['CLAUDECODE', 'ORANGU_ALLOW_OUT', 'ORANGU_ALLOW_RAW']) delete e[k]
+      return { ...e, ...delta }
+    }
+    const runIn = (args: string[], delta: Record<string, string>) =>
+      spawnSync('node', [CLI, ...args, '--root', home.configDir, '--no-cache', '--quiet'], { encoding: 'utf8', env: env(delta) })
+    const inside = { CLAUDECODE: '1' }
+    const repoOut = (out: string, delta: Record<string, string>) => runIn(['repo', repo, '--jobs', '1', '--out', out], delta)
+
+    const planted = join(repo, 'CLAUDE.local.md')
+    const refused = repoOut(planted, inside)
+    expect(refused.status, refused.stderr).toBe(1)
+    expect(refused.stderr).toContain('error: --out: inside Claude Code, ')
+    expect(refused.stderr).toContain('ORANGU_ALLOW_OUT=1')
+    expect(refused.stdout).toBe('')
+    expect(existsSync(planted), 'nothing is written').toBe(false)
+    // every flag that names a file, on each verb that writes one
+    const writers: string[][] = [
+      ['report', home.endedId, '--no-open', '-o', join(repo, 'report.html')],
+      ['report', home.endedId, '--no-open', '--out', join(repo, 'report.html')],
+      ['watch', home.endedId, '-o', join(repo, 'watch.html')],
+      ['pick', '-o', join(repo, 'pick.html')],
+      ['repo', repo, '--jobs', '1', '--html', join(repo, 'repo.html')],
+      ['global', '--jobs', '1', '-o', join(repo, 'global.json')],
+      ['global', '--jobs', '1', '--html', join(repo, 'global.html')],
+      ['harness', '--cwd', repo, '--out', join(repo, 'harness.json')],
+    ]
+    for (const args of writers) {
+      const r = runIn(args, inside)
+      expect(r.status, `${args.join(' ')}\n${r.stderr}`).toBe(1)
+      expect(r.stderr, args.join(' ')).toContain('ORANGU_ALLOW_OUT=1')
+    }
+    // the real path counts: a link in the temp folder that points into the repository, and a .. that leaves the folder
+    if (process.platform !== 'win32') {
+      symlinkSync(repo, join(temp, 'link'))
+      symlinkSync(join(repo, 'CLAUDE.md'), join(temp, 'dangling.md'))
+      for (const out of [join(temp, 'link', 'CLAUDE.local.md'), join(temp, 'dangling.md'), `${temp}/../repo/CLAUDE.local.md`]) {
+        const r = repoOut(out, inside)
+        expect(r.status, `${out}\n${r.stderr}`).toBe(1)
+        expect(r.stderr, out).toContain('ORANGU_ALLOW_OUT=1')
+      }
+    }
+    expect(readdirSync(repo), 'the repository holds no new file').toEqual([])
+
+    // the paths of the skills: a folder from `mktemp -d` in the temp folder, and the orangu home
+    const run = join(temp, 'tmp.Xy12')
+    await mkdir(run)
+    for (const out of [join(run, 'aggregate.json'), join(store, 'aggregate.json')]) {
+      const r = repoOut(out, inside)
+      expect(r.status, `${out}\n${r.stderr}`).toBe(0)
+      expect(existsSync(out), out).toBe(true)
+    }
+    const harness = runIn(['harness', '--cwd', repo, '--out', join(run, 'harness.json')], inside)
+    expect(harness.status, harness.stderr).toBe(0)
+    expect(existsSync(join(run, 'harness.json'))).toBe(true)
+    // with no path, orangu writes into the temp folder, as before
+    const html = runIn(['repo', repo, '--jobs', '1', '--html'], inside)
+    expect(html.status, html.stderr).toBe(0)
+    expect(readdirSync(temp).filter((f) => /^orangu-repo-[0-9a-f]{8}\.html$/.test(f))).toHaveLength(1)
+
+    // ORANGU_ALLOW_OUT=1 starts the command, so Claude Code asks the user first, and the write goes ahead
+    const allowed = repoOut(planted, { ...inside, ORANGU_ALLOW_OUT: '1' })
+    expect(allowed.status, allowed.stderr).toBe(0)
+    expect(existsSync(planted)).toBe(true)
+    // a terminal does not change
+    const terminal = join(repo, 'terminal.json')
+    const plain = repoOut(terminal, {})
+    expect(plain.status, plain.stderr).toBe(0)
+    expect(existsSync(terminal)).toBe(true)
   })
 
   // -o and --html take any file name, and a steered model can choose it. The OS opener runs a file by its type, so
