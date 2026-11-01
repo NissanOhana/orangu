@@ -41,13 +41,13 @@ If a question has a current answer, name it in the question. A skip keeps the cu
 
 Build the profile as the profile rules direct. Store only what the user said, and never answer a question for the user. Never copy a secret, such as a password or an API key, into the profile. This rule covers the free-text answers too.
 
-Keep each answer inside its limit in the profile rules. If an answer is longer, ask the user for a shorter answer. Keep the whole profile at 16,384 bytes or less.
+Keep each answer inside its limit in the profile rules. If an answer is longer, name its limit and ask that question again. Keep the whole profile at 16,384 bytes or less.
 
 If the user answered no question in this run, write nothing. Say so, and stop.
 
 Write the profile to `path`, with today's date in `updatedAt`. The profile write asks for permission. This is expected. If the user refuses it, give the answers in chat, say that the profile did not change, and stop.
 
-After the write, run `orangu suggest --profile --json --quiet` again. If `valid` is not `true`, say in 1 sentence that orangu cannot read the new profile. Then give the answers in chat, and stop.
+After the write, run `orangu suggest --profile --json --quiet` again. If `valid` is not `true`, say in 1 sentence that orangu cannot read the new profile at `path`. Ask the user to move that file away and run the interview again. Then give the answers in chat, and stop.
 
 ## 4. Report
 

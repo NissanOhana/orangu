@@ -300,12 +300,15 @@ describe('plugin packaging', () => {
       const limits = write.indexOf('Keep each answer inside its limit in the profile rules.')
       expect(limits, `${path} keeps the limits`).toBeGreaterThan(0)
       expect(limits, `${path} keeps the limits before the write`).toBeLessThan(permission)
-      for (const literal of ['If an answer is longer, ask the user for a shorter answer.', 'Keep the whole profile at 16,384 bytes or less.'])
+      // an answer over its limit gets the same question again: the profile rules allow no other question
+      for (const literal of ['If an answer is longer, name its limit and ask that question again.', 'Keep the whole profile at 16,384 bytes or less.'])
         expect(write, `${path} says: ${literal}`).toContain(literal)
+      expect(write, `${path} asks no other question`).not.toContain('shorter answer')
       const recheck = write.indexOf('After the write, run `orangu suggest --profile --json --quiet` again.')
       expect(recheck, `${path} asks orangu after the write`).toBeGreaterThan(permission)
-      const failed = write.indexOf('If `valid` is not `true`, say in 1 sentence that orangu cannot read the new profile. Then give the answers in chat, and stop.')
-      expect(failed, `${path} says that the profile does not read, and gives the answers`).toBeGreaterThan(recheck)
+      // as in step 1, a profile that does not read is named by its path, and the user moves it away
+      const failed = write.indexOf('If `valid` is not `true`, say in 1 sentence that orangu cannot read the new profile at `path`. Ask the user to move that file away and run the interview again. Then give the answers in chat, and stop.')
+      expect(failed, `${path} names the path, asks the user to move the file, and gives the answers`).toBeGreaterThan(recheck)
       // a refused write also stops before the report, which names the answers as orangu stores them
       expect(write, `${path} stops after a refused write`).toContain('If the user refuses it, give the answers in chat, say that the profile did not change, and stop.')
     }
@@ -319,6 +322,9 @@ describe('plugin packaging', () => {
       const prefixes = [...text.matchAll(/(\S*)profile\.json/g)].map((m) => m[1])
       expect(prefixes.length, `${path} names the file`).toBeGreaterThan(0)
       for (const prefix of prefixes) expect(prefix, `${path} names profile.json only as a bare file name in code`).toBe('`')
+      // a write that names the bare file and no `path` ("write `profile.json` in the home") misses the read too
+      for (const sentence of text.split(/(?<=[.!?])\s+|\n+/).filter((s) => s.includes('profile.json')))
+        expect(sentence, `${path}: each sentence that names profile.json names \`path\` too`).toContain('`path`')
       for (const home of text.match(/~\/[^\s`'")]*/g) ?? [])
         expect(['~/.orangu/drafts/interview-<random>.md', '~/.orangu/drafts/interview-*.md'], `${path} names the home path ${home}`).toContain(home)
       expect(text, `${path} names no orangu home of its own`).not.toMatch(/<orangu home>|\$ORANGU_HOME|XDG_DATA_HOME|\.orangu\/profile/)
@@ -742,6 +748,8 @@ describe('plugin packaging', () => {
       expect(m[5], `question ${i + 1} stores ${key}`).toBe(values.length ? `\`${key}\`: ${values.map((v) => `\`${v}\``).join(', ')}` : `\`${key}\``)
     })
     for (const literal of [
+      // the interview asks only these questions, and asks one of them again when an answer is over its limit
+      'Ask the questions of this table, in its order, and no other question.',
       // rule 8 of the guide: each question asks for a preference
       'Each question asks for a preference, so mark no option as recommended.',
       'A skip ends that question only.',
@@ -1960,7 +1968,10 @@ describe('plugin packaging', () => {
     // limit and a file over 16,384 B, so step 3 keeps each answer inside its limit and asks the user for a shorter one
     // (+31). After the write it runs the profile read again, and a profile that does not read gets 1 sentence and the
     // answers in chat (+34). A refused write stops before the report (+1).
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1181, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 662 }
+    // 2026-11-01 review fix 2: interview 662 -> 678, measured 661 -> 677 (+16). An answer over its limit gets the same
+    // question again, because the profile rules allow no other question (+1). A profile that does not read after the
+    // write is named by its `path`, and the user moves the file away and runs the interview again, as in step 1 (+15).
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1181, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 678 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305, interview: 247 }
     const TOTAL_DESC_CEILING = 2750 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5); +246 for interview
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length
