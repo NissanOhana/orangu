@@ -1034,7 +1034,7 @@ var KEYS = [
   // 20 alphanumerics, T3BlbkFJ and 20 more: risk-, task- and Task-<HEX> ids lack a class
   { prefix: "sk-", body: "[A-Za-z0-9]{20,}", by: "\u2039api-key\u203A", glued: random },
   // 20 base62 characters first (github_pat_11 and 20 more), as snake_case words after ghs_ hold a `_` (weighs_and_…)
-  { prefix: "(?:ghp|gho|ghu|ghs|ghr|github_pat)_", body: "[A-Za-z0-9_]{20,}", by: "\u2039github-token\u203A", glued: (body) => /^[A-Za-z0-9]{20}/.test(body) },
+  { prefix: "(?:ghp|gho|ghu|ghs|ghr|github_pat)_", body: "[A-Za-z0-9_]{20,}", gluedBody: "[A-Za-z0-9]{20}[A-Za-z0-9_]*", by: "\u2039github-token\u203A", glued: always },
   { prefix: "glpat-", body: "[A-Za-z0-9_-]{20,}", by: "\u2039gitlab-token\u203A", glued: always },
   // base62: a pnpm_ word is lowercase
   { prefix: "npm_", body: "[A-Za-z0-9]{30,}", by: "\u2039npm-token\u203A", glued: upper },
@@ -1050,7 +1050,7 @@ var KEYS = [
   { prefix: "AIza", body: "[0-9A-Za-z_-]{30,}", by: "\u2039google-key\u203A", glued: always }
 ];
 var BLOB = /\b[A-Za-z0-9+/]{60,}={0,2}\b/g;
-var GLUED = KEYS.map((key) => ({ re: new RegExp(`${key.prefix}(${key.body})`, "g"), key }));
+var GLUED = KEYS.map((key) => ({ re: new RegExp(`${key.prefix}(${key.gluedBody ?? key.body})`, "g"), key }));
 var ANY_PREFIX = new RegExp([...KEYS.map((key) => key.prefix), "eyJ"].join("|"));
 var LONGEST_PREFIX = 11;
 function spansWithBlobs(text, found) {
