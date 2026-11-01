@@ -242,6 +242,18 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
     expect(h).not.toMatch(ESCAPES)
   })
 
+  // the default macOS Terminal is 80 x 24: on a terminal the mascot comes first, and the whole screen still fits
+  it.skipIf(!SCRIPT || !existsSync(SCRIPT))('--help on a terminal fits 24 rows of 80 columns with the mascot', () => {
+    const { out, status } = runPty(['--help'])
+    expect(status, out).toBe(0)
+    const shown = rendered(out)
+    for (const row of MASCOT_STACKED) expect(shown, row).toContain(row)
+    // each line of the help ends with a newline, so the piece after the last one is empty
+    const lines = shown.replace(/\n$/, '').split('\n')
+    expect(lines.length, shown).toBeLessThanOrEqual(24)
+    for (const line of lines) expect(displayWidth(line), line).toBeLessThanOrEqual(80)
+  })
+
   it('help all has a usage line for each verb of CLI_VERBS, its aliases left out', () => {
     const all = run(['help', 'all'])
     const usage = all.slice(all.indexOf('\nusage\n'), all.indexOf('\nsession '))

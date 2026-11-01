@@ -483,7 +483,8 @@ const helpPrivacy = (): string => paint(out, 'dim', 'privacy: local only, no net
 
 /**
  * The short screen of `orangu --help`, `-h`, `help` and a bare `--json`: the chain in its order, then the full
- * reference, with no flag and no machine verb. It reads no file and no store. On a terminal the mascot comes first.
+ * reference, with no flag and no machine verb. It reads no file and no store. On a terminal the mascot comes first,
+ * and the whole screen fits 24 rows of 80 columns: the reference line and the 2 footer lines share 1 block.
  */
 function printHelp(): void {
   process.stdout.write(`${out.tty ? '\n' + mascotLines(out).join('\n') + '\n' : ''}
@@ -498,7 +499,6 @@ ${paint(out, 'bold', 'the chain')}
                      The first run of /orangu:improve asks for it.
 
   orangu help all    every command and flag
-
 plugin: /plugin marketplace add NissanOhana/orangu, then /plugin install orangu
 ${helpPrivacy()}
 `)
