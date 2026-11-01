@@ -184,9 +184,11 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // with no word changed. They replace the src/analyze/insights.ts#recommendation row (179 sentences, 179
   // clean, score 100), because no rule site passes a recommendation now. The 3 rows hold 178 sentences: the
   // improvement "No change needed." is now a whole block in 2 rules, and a distinct block counts once.
-  // Born at measured - 2. Measured 98 sentences, 98 clean, score 100.
+  // Born at measured - 2. Measured 98 sentences, 98 clean, score 100. 2026-11-01, the low-cache-hit improvement
+  // fixed against the Claude Code docs: measured 99 sentences, 99 clean, score 100.
   'src/analyze/insights.ts#improvement': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
-  // Born at measured - 2. Measured 68 sentences, 68 clean, score 100.
+  // Born at measured - 2. Measured 68 sentences, 68 clean, score 100. 2026-11-01, the low-cache-hit why gives the
+  // TTL for each kind of account: measured 70 sentences, 70 clean, score 100.
   'src/analyze/insights.ts#why': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Born at measured - 2. Measured 12 sentences, 12 clean, score 100.
   'src/analyze/insights.ts#method': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },

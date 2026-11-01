@@ -44,8 +44,13 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *     only before its secret word. tools.errorGroups[].signature runs that
  *     redaction in the analyzer (src/analyze/tools.ts errorSignature), so a cached payload carries the old signature
  *     and grouping. 0.11.0 ships generation 5
+ *   7 (2026-11-01): the low-cache-hit text matches code.claude.com/docs/en/prompt-caching.md (opened 2026-11-01). The
+ *     improvement no longer says that a CLAUDE.md edit breaks the cache (the edit keeps the cache and loads on the
+ *     next /clear, /compact or restart), and the why gives the TTL for each kind of account (1 h for the main
+ *     conversation on a subscription, 5 min otherwise and for subagents). A cached payload carries the old text.
+ *     0.13.0 ships generation 6
  */
-export const ANALYSIS_PAYLOAD_GENERATION = 6
+export const ANALYSIS_PAYLOAD_GENERATION = 7
 
 export interface AnalysisSessionInfo {
   id: string

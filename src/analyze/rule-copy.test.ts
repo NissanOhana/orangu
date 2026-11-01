@@ -125,8 +125,12 @@ const INSTRUCTION_WORDS = 20
  * its own comment asked. Qualifier audit of the new text: no "may", "might", "can" or "should" in the improvement.
  * 2026-10-10, generation 6 with no copy change: the shared redaction changed the tool error signatures that a
  * cached payload carries (src/analyze/tools.ts errorSignature). 0.11.0 ships generation 5, so the generation moved.
+ * 2026-11-01, generation 7: the improvement and the why of low-cache-hit match code.claude.com/docs/en/prompt-caching.md
+ * (opened 2026-11-01): a CLAUDE.md edit keeps the cache, and the TTL depends on the kind of account. 0.13.0 ships
+ * generation 6, so the generation moved. Qualifier audit of the new text: "within plan usage" and "by default" kept
+ * from the docs, and "for subagents" names the second TTL bucket.
  */
-const COPY_FINGERPRINT = { generation: 6, sha256: '6aba92002b9d868143a0771a1e918c8e21b8f6330cb48c6b99af952619b6a7fb' }
+const COPY_FINGERPRINT = { generation: 7, sha256: '68ea1700b104cbc16219ff8104d6a02f136f33dfb96c5e55a9ac1accef9ac684' }
 /**
  * The texts whose parts do not join in their 0.9.0 sentence order: a conditional instruction came after the
  * reason, and it now moves into the improvement. Each entry gives the opening words of each sentence, in the
@@ -538,6 +542,26 @@ describe('rule copy: a copy change moves the payload generation', () => {
     }
     expect(events.some((entry) => entry.startsWith('note=model fallback 3 → 3')), 'the model-fallback note').toBe(true)
     expect(functionCopy(TOOLS_SOURCE, 'summarizeToolInput')).toContain('inline script')
+  })
+})
+
+describe('rule copy: the cache facts match the Claude Code docs', () => {
+  // code.claude.com/docs/en/prompt-caching.md, opened 2026-11-01: a CLAUDE.md edit keeps the cache (the edit loads on the
+  // next /clear, /compact or restart), a model switch starts a fresh cache, and the main conversation gets 1 h on a Claude
+  // subscription within plan usage, but 5 min on an API key, usage credits or a cloud provider. Subagents get 5 min.
+  const [site] = sites.filter((s) => s.ruleId === 'low-cache-hit')
+
+  it('low-cache-hit does not tell the user that a CLAUDE.md edit breaks the cache', () => {
+    const improvement = copyOf(site!, 'improvement')
+    expect(improvement).not.toMatch(/CLAUDE\.md/)
+    expect(improvement).toMatch(/^Keep the model and the effort level the same until the task ends\. /)
+  })
+
+  it('low-cache-hit gives the TTL of the main conversation for each kind of account', () => {
+    const why = copyOf(site!, 'why')
+    expect(why).not.toMatch(/5 min by default, or 1 h when enabled/)
+    expect(why).toMatch(/^On a Claude subscription, within plan usage, the main conversation keeps its cache for 1 h by default\. /)
+    expect(why).toMatch(/The cache TTL is 5 min on an API key, usage credits or a cloud provider, and for subagents\./)
   })
 })
 
