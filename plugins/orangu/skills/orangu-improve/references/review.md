@@ -74,7 +74,7 @@ Before you search online or open any URL, reduce the question to generic feature
 
 ## 5. Synthesize bounded proposals
 
-Dedupe items that name the same change. Keep every evidence anchor. Prefer the smallest change. Rank as the brain rules direct, with the profile and the answers. Never invent a token or millisecond value for a quality-only change.
+Dedupe items that name the same change. Keep every evidence anchor. Prefer the smallest change. Rank as the brain rules direct, with [the profile](../../shared/profile.md) and the answers. Never invent a token or millisecond value for a quality-only change.
 
 Write the same structured artifacts as step 4 of [the skill](../SKILL.md), per the artifact contract. Markdown-only proposals are legacy input and must not be created here.
 

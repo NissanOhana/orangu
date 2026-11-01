@@ -904,9 +904,11 @@ describe('plugin packaging', () => {
     const links = [...brain.matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1])
     expect(links, 'links the profile rules, and no other file').toEqual(['profile.md'])
     expect(existsSync(join(root, 'plugin/skills/shared/profile.md')), 'the link resolves').toBe(true)
-    // improve and its review link the brain, and the Codex mirror carries it as it is
+    // improve and its review link the brain and the profile rules, and the Codex mirror carries the brain as it is
     expect(readText(IMPROVE)).toContain('](../shared/brain.md)')
     expect(readText(REVIEW)).toContain('](../../shared/brain.md)')
+    expect(readText(IMPROVE)).toContain('](../shared/profile.md)')
+    expect(readText(REVIEW), 'the review ranks with the profile and links its rules').toContain('Rank as the brain rules direct, with [the profile](../../shared/profile.md) and the answers.')
     for (const mirror of ['.agents/skills/shared/brain.md', 'plugins/orangu/skills/shared/brain.md']) expect(readText(mirror), `${mirror} is the source`).toBe(brain)
   })
 
