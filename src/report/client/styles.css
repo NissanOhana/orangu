@@ -431,7 +431,7 @@ nav a.navitem .navicon { width: 15px; height: 15px; flex: none; fill: none; stro
 .zp-title { margin-top: 10px; font-size: 22px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .zp-out { margin: 4px 0 0; font-size: 13.5px; color: var(--ink2); }
 .zpanel .kpis { margin: 16px 0 0; }
-.zp-foot { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.zp-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 16px; }
 .zp-why { margin: 12px 0 0; font-size: 13px; color: var(--ink2); overflow-wrap: anywhere; }
 .zp-bar { height: 6px; margin-top: 10px; border-radius: 999px; background: var(--bg2); overflow: hidden; }
 .zp-bar > i { display: block; width: 0; height: 100%; background: var(--accent); }

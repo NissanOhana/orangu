@@ -66,7 +66,10 @@ test('each zoom tab by a click: the hash keeps the theme, the tab is selected, i
     await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', `zt-${zoom}`)
     expect(await paintedTheme(page)).toBe(projectTheme(info))
     if (zoom === 'machine') {
-      // the machine read of the fixture lands, then its 4 totals, the harness wells and the recurring findings show
+      // nothing reads the machine until the person asks: then its 4 totals, the harness wells and its findings show
+      await expect(page.locator('#start-panel .zp-k')).toHaveText('This machine has 3 sessions.')
+      await noHorizontalOverflow(page)
+      await page.getByRole('button', { name: 'Read this machine' }).click()
       await expect(page.locator('#start-panel .kpi:not(.skel)')).toHaveCount(4)
       await expect(page.locator('#start-panel .zp-k')).toContainText('sessions on this machine.')
       await expect(page.locator('#start-panel .wells')).not.toHaveAttribute('aria-busy', 'true')
@@ -77,7 +80,8 @@ test('each zoom tab by a click: the hash keeps the theme, the tab is selected, i
     if (zoom === 'sessions') {
       await expect(page.locator('#start-panel a.srow')).toHaveCount(3)
       await expect(page.locator('#start-panel a.srow').first()).toContainText('running')
-      await expect(page.locator('.start-first .fwhere').first()).toContainText('in this repository')
+      // the findings of the listed sessions, from their reads, with a count of the sessions read
+      await expect(page.locator('.start-first .fwhere').first()).toContainText('sessions on this list')
     }
     // the live session of the fixture has no finding
     if (zoom === 'session') await expect(page.locator('.start-first')).toContainText('orangu found nothing to improve in this session.')
@@ -124,7 +128,10 @@ test('a render keeps the focus on the same control: a tab while the machine read
   // a read that never ends: each 202 body draws the view again, about each 800 ms
   await page.route('**/api/global', (route) => route.fulfill({ status: 202, json: { progress: { done: 4, total: 11 } } }))
   await page.goto(`${APP}/#start?zoom=machine`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Read this machine' }).click()
   await expect(page.getByText('Reading 4 of 11 sessions.')).toBeVisible()
+  // the control left the page, so the focus went to the panel
+  await expect(page.locator('#start-panel')).toBeFocused()
   const tab = page.getByRole('tab', { name: 'This machine' })
   await tab.focus()
   await page.locator('#start-panel').evaluate((el) => el.setAttribute('data-drawn-before', ''))
@@ -136,11 +143,46 @@ test('a render keeps the focus on the same control: a tab while the machine read
   await page.route('**/api/global', (route) => route.fulfill({ status: 503, json: { error: 'aggregate capacity reached' } }))
   await page.goto('about:blank')
   await page.goto(`${APP}/#start?zoom=machine`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('button', { name: 'Read this machine' }).click()
   await page.getByRole('button', { name: 'Read again' }).click()
   await expect(page.getByRole('button', { name: 'Read again' })).toBeVisible()
   await expect(page.locator('#start-panel')).toBeFocused()
   // the browser logs each refused read: those 2 are the stub, and nothing else may log an error
   expect(errors.filter((error) => !error.includes('503'))).toEqual([])
+})
+
+test('the view starts no read of every session: the listed rows fill from their own reads, and only a control reads the machine', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'the reads do not depend on the theme or the width')
+  const errors = runtimeErrors(page)
+  // the 3 reads that analyze each session of serve before their first reply
+  const heavy: string[] = []
+  const sessionReads: string[] = []
+  page.on('request', (request) => {
+    const path = new URL(request.url()).pathname
+    if (/\/api\/(?:repo|global|harness)$/.test(path)) heavy.push(path.replace(/^.*\/api\//, '/api/'))
+    if (/\/api\/session\//.test(path)) sessionReads.push(path)
+  })
+  await page.goto(`${APP}/#start?zoom=sessions`, { waitUntil: 'domcontentloaded' })
+  const rows = page.locator('#start-panel a.srow')
+  await expect(rows).toHaveCount(3)
+  // serve did not analyze the ended session of the fixture, so its row fills from its own read
+  await expect(rows.nth(2)).toContainText('Fix foo test')
+  await expect(rows.nth(2)).toContainText('orchestrator')
+  await expect(rows.nth(2).locator('.sk')).toContainText('tokens')
+  await expect(page.locator('.start-first .cap').nth(1)).toHaveText('They come from the sessions on this list. Each title and each command use one example session.')
+  await page.getByRole('tab', { name: 'One session' }).click()
+  await expect(page.getByRole('tabpanel')).toContainText('Running now')
+  await page.getByRole('tab', { name: 'This machine' }).click()
+  await expect(page.getByRole('button', { name: 'Read this machine' })).toBeVisible()
+  expect(heavy).toEqual([])
+  expect(sessionReads.length).toBeGreaterThan(0)
+  await page.getByRole('button', { name: 'Read this machine' }).click()
+  await expect(page.locator('#start-panel .kpi:not(.skel)')).toHaveCount(4)
+  await expect(page.locator('#start-panel .wells')).not.toHaveAttribute('aria-busy', 'true')
+  expect(heavy).toContain('/api/global')
+  expect(heavy).toContain('/api/harness')
+  expect(heavy).not.toContain('/api/repo')
+  expect(errors).toEqual([])
 })
 
 test('a file report has no start view: #start lands on the default screen of the file, with no Start item', async ({ page }, info) => {

@@ -132,6 +132,12 @@ test('localhost with no hash lands on the start view, at the sessions and their 
   await expect(page.getByRole('heading', { level: 1, name: 'Live' })).toBeVisible()
   await expect(page.locator('.fleetcard')).toHaveCount(3)
   await expect(page.locator('.page-head .sub')).toContainText('3 running sessions')
+  // the sidebar item names no session either, from any screen, so it opens the same fleet
+  await page.locator('nav[aria-label="Report"] a', { hasText: 'Timeline' }).click()
+  await expect(page.getByRole('heading', { level: 1, name: 'Timeline' })).toBeVisible()
+  await page.locator('nav[aria-label="Report"] a', { hasText: 'All live · 3' }).click()
+  await expect(page).not.toHaveURL(/[?&]s=/)
+  await expect(page.locator('.fleetcard')).toHaveCount(3)
   expect(errors).toEqual([])
 })
 

@@ -8,7 +8,7 @@ import { parseClaudeCodeSession } from '../../adapters/claude-code/parse.js'
 import { aggregate, type Aggregate } from '../../analyze/aggregate.js'
 import { analyzeSession } from '../../analyze/analyze.js'
 import type { HarnessReport } from '../../harness/types.js'
-import type { Analysis } from '../../model/analysis.js'
+import type { Analysis, Insight } from '../../model/analysis.js'
 import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js'
 import type { Ctx } from './app.js'
@@ -17,7 +17,7 @@ import type { RouteState } from './nav.js'
 import type { QueueRead } from './queue-types.js'
 import { ms, pct, tok } from './format.js'
 import { handoffForInsight, planRows } from './suggest-rows.js'
-import { firstHtml, handoffFor, headLineHtml, loadTokens, nextHtml, panelHtml, startHtml, type StartReads } from './start-ui.js'
+import { firstHtml, handoffFor, headLineHtml, loadTokens, nextHtml, panelHtml, rowReadOf, startHtml, type RowRead, type StartReads } from './start-ui.js'
 
 const ID = 'aaaaaaaa-0000-4000-8000-000000000001'
 const OTHER = 'bbbbbbbb-0000-4000-8000-000000000002'
@@ -29,10 +29,12 @@ async function analysisOf(id = ID): Promise<Analysis> {
 }
 
 const A = await analysisOf()
-/** The repository and the machine of 2 sessions: the tool error of the fixture recurs in both, so each has 1 cross finding. */
-const BOTH = [A, await analysisOf(OTHER)]
-const REPO = aggregate(BOTH, 'repo /w/repo', 0)
-const MACHINE = aggregate(BOTH, 'global', 0)
+const B = await analysisOf(OTHER)
+/** The machine of 2 sessions: the tool error of the fixture recurs in both, so it has 1 cross finding. */
+const MACHINE = aggregate([A, B], 'global', 0)
+
+/** The reads of the listed sessions, by id: a read that landed, or null for a read that failed. */
+const listReads = (...entries: Array<[string, Analysis | null]>): Map<string, RowRead | null> => new Map(entries.map(([id, a]) => [id, a ? rowReadOf(a) : null]))
 
 function row(over: Partial<SessionSummaryRow> = {}): SessionSummaryRow {
   return { id: ID, projectSlug: 'demo', cwd: '/w/repo', title: 'Fix foo test', path: '/tmp/a.jsonl', source: 'claude-code', sizeBytes: 100, mtimeMs: 1_000, badge: 'ended', ageMs: 3 * 86_400_000, possiblyLive: false, tokens: 179_733, agentsTotal: 1, agentsRunning: 0, ...over }
@@ -80,7 +82,7 @@ const reads = (over: Partial<StartReads> = {}): StartReads => ({
   harness: harness(),
   profile: { exists: true, updatedAt: '2026-11-01' },
   machine: { busy: false },
-  repo: { busy: false },
+  rows: new Map(),
   queue: undefined,
   ...over,
 })
@@ -274,6 +276,67 @@ describe('Sessions and agents', () => {
     expect(text(html)).toContain(`This list shows ${shown} of ${all} sessions. They are the running sessions and the 20 newest.`)
     expect(panelHtml(ctxOf(data(), { zoom: 'sessions' }), reads())).not.toContain('This list shows')
   })
+
+  it('F2: fills a row that serve did not analyze from its read: the title, the tokens and the agents, with no digit before the read lands', () => {
+    // a bare row: serve did not analyze the session, so the row has no title, tokens or agent count
+    const bare = row({ id: ID, title: undefined, tokens: undefined, agentsTotal: undefined, agentsRunning: undefined })
+    const before = [...panelHtml(ctxOf(data({ sessions: [bare] }), { zoom: 'sessions' }), reads()).matchAll(/<a class="srow"[^>]*>(.*?)<\/a>/g)].map((m) => text(m[1]!))
+    expect(before).toEqual(['aaaaaaaa demo 3d ago'])
+    const html = panelHtml(ctxOf(data({ sessions: [bare] }), { zoom: 'sessions' }), reads({ rows: listReads([ID, A]) }))
+    const filled = [...html.matchAll(/<a class="srow"([^>]*)>(.*?)<\/a>/g)]
+    expect(text(filled[0]![2]!)).toBe('Fix foo test 180k tokens demo 3d ago orchestrator · 1 agent')
+    // the read names the agents, so the row opens them
+    expect(filled[0]![1]).toContain(`href="#agents?s=${ID}`)
+    // a read that failed fills nothing
+    const failed = panelHtml(ctxOf(data({ sessions: [bare] }), { zoom: 'sessions' }), reads({ rows: listReads([ID, null]) }))
+    expect(text(failed)).not.toMatch(/tokens|orchestrator|\dk/)
+  })
+})
+
+describe('the reads of the start view', () => {
+  /** A fresh module (its reads are module state) and a data source that records each read. */
+  async function fresh() {
+    vi.resetModules()
+    const mod = await import('./start-ui.js')
+    const session = vi.fn(async (id: string) => (id === ID ? A : B))
+    const aggregate = vi.fn(async () => MACHINE)
+    const harness = vi.fn(async () => null)
+    const ds = { mode: 'serve', session, aggregate, harness, profile: async () => ({ exists: false, updatedAt: null }), subscribe: () => () => {} } as unknown as DataSource
+    return { mod, ds, session, aggregate }
+  }
+  const flush = async () => {
+    for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+
+  it('F1: starts no repository read and no machine read on its own, at any zoom', async () => {
+    const { mod, ds, aggregate } = await fresh()
+    const d = data({ sessions: [row({ id: 'r1', badge: 'live' }), row({ id: 'r2', badge: 'live' }), row({ id: ID })] })
+    for (const zoom of [undefined, 'session', 'sessions', 'machine'] as const) mod.ensureStart(d, ds, { screen: 'start', ...(zoom ? { zoom } : {}) }, vi.fn())
+    await flush()
+    expect(aggregate).not.toHaveBeenCalled()
+    expect(mod.machineRead(d)).toBe(false)
+  })
+
+  it('F2: reads each listed session through the session read, the running ones and the 20 newest, and no other', async () => {
+    const { mod, ds, session } = await fresh()
+    const many = Array.from({ length: 30 }, (_, i) => row({ id: `s${String(i).padStart(7, '0')}`, mtimeMs: 1_000 - i }))
+    many.push(row({ id: 'live0001', badge: 'live', mtimeMs: 5_000 }))
+    mod.ensureStart(data({ sessions: many }), ds, { screen: 'start', zoom: 'sessions' }, vi.fn())
+    await flush()
+    const ids = session.mock.calls.map(([id]) => id)
+    expect(ids).toEqual(['live0001', ...many.slice(0, 20).map((r) => r.id)])
+    // a second render reads nothing again
+    mod.ensureStart(data({ sessions: many }), ds, { screen: 'start', zoom: 'sessions' }, vi.fn())
+    await flush()
+    expect(session.mock.calls).toHaveLength(ids.length)
+  })
+
+  it('F2: reads no listed session at the other zooms', async () => {
+    const { mod, ds, session } = await fresh()
+    for (const zoom of ['session', 'machine'] as const) mod.ensureStart(data({ sessions: [row({ id: 'r1' }), row({ id: 'r2' })] }), ds, { screen: 'start', zoom }, vi.fn())
+    await flush()
+    expect(session).not.toHaveBeenCalled()
+  })
 })
 
 describe('This machine', () => {
@@ -293,6 +356,18 @@ describe('This machine', () => {
   it('says how many sessions the read covered when it read fewer than the app lists', () => {
     const d = data({ sessions: [row(), row({ id: OTHER }), row({ id: 'c3' })], aggregates: { global: MACHINE } })
     expect(text(panelHtml(ctxOf(d, { zoom: 'machine' }), reads()))).toContain('orangu read 2 of 3 sessions on this machine.')
+  })
+
+  it('F1: reads nothing until the person asks: the session count of the list, a Read this machine control, and no total', () => {
+    const d = data({ sessions: [row(), row({ id: OTHER })] })
+    const html = panelHtml(ctxOf(d, { zoom: 'machine', theme: 'dark' }), reads())
+    expect(text(html)).toContain('This machine has 2 sessions. orangu reads them all only when you ask, and a first read can take some minutes.')
+    expect(html).toContain('<button class="btn-primary" type="button" data-start-read>Read this machine</button>')
+    expect(html).toContain('href="#global?s=' + ID + '&amp;theme=dark">Open the machine report</a>')
+    expect(html).not.toContain('aria-busy')
+    expect(html).not.toContain('role="progressbar"')
+    expect(tiles(html)).toBe('')
+    expect(wellsOf(html)).toBe('')
   })
 
   it('B5 a read in progress: says how far the read is from the 202 body, draws a bar and skeleton tiles, and no total', () => {
@@ -377,30 +452,55 @@ describe('What to improve first', () => {
     }
   })
 
-  it('shows the recurring findings of the repository at the sessions zoom, with the example caption', () => {
-    const html = firstHtml(ctxOf(data({ aggregates: { repo: REPO } }), { zoom: 'sessions' }), reads())
-    expect(text(html)).toContain('Each title shows the figures of one example session.')
-    expect(text(html)).toContain('In 2 sessions in this repository · tool-errors')
-    expect(html).toContain('claude &quot;/orangu:improve sg_')
+  it('F1: takes the findings of the sessions zoom from the reads of the listed sessions, says so, and names how many show each', () => {
+    const d = data({ sessions: [row({ id: ID }), row({ id: OTHER, mtimeMs: 500 })] })
+    const html = firstHtml(ctxOf(d, { zoom: 'sessions' }), reads({ rows: listReads([ID, A], [OTHER, B]) }))
+    expect(text(html)).toContain('They come from the sessions on this list. Each title and each command use one example session.')
+    expect(text(html)).toContain('In 2 of 2 sessions on this list · tool-errors')
+    // the command of the example session: the newest session on the list that shows the finding
+    const tool = A.insights.find((i) => i.ruleId === 'tool-errors')!
+    expect(html).toContain(`data-copy="${handoffForInsight(tool, ID).command.replace(/"/g, '&quot;')}"`)
   })
 
-  it('shows the recurring findings of the machine at the machine zoom', () => {
+  it('F1: ranks the findings of the list as the aggregate ranks its cross findings: severity, then tokens, then sessions', () => {
+    const insight = (ruleId: string, severity: string, tokens: number): Insight =>
+      ({ id: `${ruleId}-1`, ruleId, severity, axis: 'tokens', title: `The ${ruleId} finding`, detail: '', recommendation: 'Make the change.', improvement: 'Make the change.', evidence: {}, turnIndexes: [], personas: [], ...(tokens ? { savings: { tokens, estimated: true } } : {}) }) as Insight
+    const read = (...insights: Insight[]): RowRead => ({ tokens: 1, agents: 0, insights })
+    const d = data({ sessions: [row({ id: ID }), row({ id: OTHER, mtimeMs: 500 })] })
+    // severity first: a high finding with no saving outranks a low one with a large saving
+    const rows = new Map<string, RowRead | null>([
+      [ID, read(insight('big-saving', 'low', 900_000), insight('severe', 'high', 0), insight('few-tokens', 'medium', 10))],
+      [OTHER, read(insight('big-saving', 'low', 900_000), insight('more-tokens', 'medium', 5_000))],
+    ])
+    const html = firstHtml(ctxOf(d, { zoom: 'sessions' }), reads({ rows }))
+    const rules = [...html.matchAll(/<p class="fwhere">[^<]*· ([a-z-]+)<\/p>/g)].map((m) => m[1])
+    expect(rules).toEqual(['severe', 'more-tokens', 'few-tokens'])
+  })
+
+  it('F1: counts only the listed sessions whose read landed, and shows no number before the first read lands', () => {
+    const d = data({ sessions: [row({ id: ID }), row({ id: OTHER, mtimeMs: 500 })] })
+    const one = firstHtml(ctxOf(d, { zoom: 'sessions' }), reads({ rows: listReads([ID, A], [OTHER, null]) }))
+    expect(text(one)).toContain('In 1 of 1 session on this list · tool-errors')
+    const none = firstHtml(ctxOf(d, { zoom: 'sessions' }), reads())
+    expect(text(none)).toContain('orangu reads the sessions on this list.')
+    expect(text(none).replace('What to improve first', '')).not.toMatch(/\d/)
+    const failed = firstHtml(ctxOf(d, { zoom: 'sessions' }), reads({ rows: listReads([ID, null], [OTHER, null]) }))
+    expect(text(failed)).toContain('orangu could not read the sessions on this list.')
+  })
+
+  it('F1: shows the recurring findings of the machine only after its read, and says how to get them before it', () => {
     const html = firstHtml(ctxOf(data({ aggregates: { global: MACHINE } }), { zoom: 'machine' }), reads())
     expect(text(html)).toContain('In 2 sessions on this machine · tool-errors')
-  })
-
-  it('reads no repository aggregate of another folder: a repository read of another cwd counts as no read', () => {
-    const other = aggregate(BOTH, 'repo /w/other', 0)
-    const html = firstHtml(ctxOf(data({ aggregates: { repo: other } }), { zoom: 'sessions' }), reads())
-    expect(text(html)).not.toContain('in this repository ·')
-    expect(text(html)).toContain('orangu shows the findings when the read ends.')
+    const before = firstHtml(ctxOf(data(), { zoom: 'machine' }), reads())
+    expect(text(before)).toContain('Read this machine to see the findings of all its sessions.')
+    expect(before).not.toContain('/orangu:improve sg_')
   })
 
   it('B5 no finding: says that orangu found nothing to improve, for each zoom', () => {
     const clean = { ...A, insights: [] } as Analysis
     expect(text(firstHtml(ctxOf(data(), {}, clean), reads()))).toContain('orangu found nothing to improve in this session.')
+    expect(text(firstHtml(ctxOf(data(), { zoom: 'sessions' }), reads({ rows: listReads([ID, clean]) })))).toContain('orangu found nothing to improve in the sessions on this list.')
     const none = { ...MACHINE, crossFindings: [] } as Aggregate
-    expect(text(firstHtml(ctxOf(data({ aggregates: { repo: { ...none, scope: 'repo /w/repo' } } }), { zoom: 'sessions' }), reads()))).toContain('orangu found nothing to improve in this repository.')
     expect(text(firstHtml(ctxOf(data({ aggregates: { global: none } }), { zoom: 'machine' }), reads()))).toContain('orangu found nothing to improve on this machine.')
   })
 

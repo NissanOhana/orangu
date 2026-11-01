@@ -226,7 +226,11 @@ describe('offline report', () => {
     // and the 4 group labels, the new group ids, the Start item of serve and the shorter defaultScreen are +68 B. The
     // serve bundle carries the view (CLIENT_JS_SERVE 134,893 -> 148,778 B, no size test), and CLIENT_CSS its rules
     // (39,032 -> 44,809 B).
-    expect(CLIENT_JS_AGG.length).toBe(82044)
+    // 2026-11-01 start view review: +25 B (82,044 -> 82,069), re-measured after `npm run build`, cap unchanged. The
+    // "All live" item of the sidebar (app.ts) names no session in its link, so #live shows the fleet from any screen;
+    // before, it kept the session of the hash and showed that 1 session. The view reads only the listed sessions now
+    // and no repository read (serve only: CLIENT_JS_SERVE 148,778 -> 150,768 B, CLIENT_CSS 44,809 -> 44,830 B).
+    expect(CLIENT_JS_AGG.length).toBe(82069)
   })
 
   it('carries no terminal art: the ASCII mascot is a CLI-only module now', () => {
@@ -375,6 +379,8 @@ describe('offline report', () => {
     // as the aggregate bundle, measured by a build with each file as it is on main: the #start route of app.ts is +84 B,
     // and nav.ts is +180 B (the zoom key of the hash +111 B, the labels, the group ids, the Start item and the shorter
     // defaultScreen +69 B). The view itself ships only in the serve bundle (the B3 test above).
-    expect(CLIENT_JS.length).toBe(72664)
+    // 2026-11-01 start view review: +25 B (72,664 -> 72,689), re-measured after `npm run build`, cap unchanged. The same
+    // part as the aggregate bundle: the "All live" item of the sidebar names no session, so it opens the fleet.
+    expect(CLIENT_JS.length).toBe(72689)
   })
 })

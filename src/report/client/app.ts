@@ -329,7 +329,8 @@ export async function mountApp(ds: DataSource, serveUi?: ServeUi): Promise<void>
       .map(
         (g) => `<div class="navgroup"><div class="navgroup-label">${esc(g.label)}</div>${g.items
           .map((it) => {
-            const target = cleanHash(state, { screen: it.screen, s: it.s ?? state.s, scope: state.scope })
+            // "All live" names no session: #live shows the fleet only when the hash names none (screens/live.ts)
+            const target = cleanHash(state, { screen: it.screen, s: it.id === 'live-all' ? undefined : (it.s ?? state.s), scope: state.scope })
             const active = state.screen === it.screen && (it.s === undefined || it.s === state.s)
             const dot = it.dot ? `<span class="ldot${it.dot === 'hollow' ? ' hollow' : it.dot === 'ended' ? ' done' : ''}"${it.dot === 'pulse' ? ' data-pulse="1"' : ''} aria-hidden="true"></span><span class="vh">${it.dot === 'pulse' ? 'live' : it.dot === 'hollow' ? 'quiet' : 'ended'}</span>` : ''
             return `<a class="navitem" href="${esc(target)}"${active ? ' aria-current="page"' : ''}>${dot}${esc(it.label)}${it.hint ? `<span class="hint">${esc(it.hint)}</span>` : ''}</a>`
