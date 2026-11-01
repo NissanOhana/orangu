@@ -129,8 +129,12 @@ const INSTRUCTION_WORDS = 20
  * (opened 2026-11-01): a CLAUDE.md edit keeps the cache, and the TTL depends on the kind of account. 0.13.0 ships
  * generation 6, so the generation moved. Qualifier audit of the new text: "within plan usage" and "by default" kept
  * from the docs, and "for subagents" names the second TTL bucket.
+ * 2026-11-01, generation 7 again: the second TTL sentence of low-cache-hit keeps "By default" (promptCacheTtl gives
+ * 1 h on an API key too), and thinking-on-mechanical names /effort low and effort: low, because medium is the default
+ * of the 5.5 models (code.claude.com/docs/en/model-config.md, opened 2026-11-01). Re-recorded at 7, because generation
+ * 7 is not released and this branch moved it above main.
  */
-const COPY_FINGERPRINT = { generation: 7, sha256: '68ea1700b104cbc16219ff8104d6a02f136f33dfb96c5e55a9ac1accef9ac684' }
+const COPY_FINGERPRINT = { generation: 7, sha256: '441a87a50782c8da3fc0849d254b30e1d058377978ef45ed1c7391ff14ea255b' }
 /**
  * The texts whose parts do not join in their 0.9.0 sentence order: a conditional instruction came after the
  * reason, and it now moves into the improvement. Each entry gives the opening words of each sentence, in the
@@ -548,7 +552,8 @@ describe('rule copy: a copy change moves the payload generation', () => {
 describe('rule copy: the cache facts match the Claude Code docs', () => {
   // code.claude.com/docs/en/prompt-caching.md, opened 2026-11-01: a CLAUDE.md edit keeps the cache (the edit loads on the
   // next /clear, /compact or restart), a model switch starts a fresh cache, and the main conversation gets 1 h on a Claude
-  // subscription within plan usage, but 5 min on an API key, usage credits or a cloud provider. Subagents get 5 min.
+  // subscription within plan usage, but 5 min on an API key, usage credits or a cloud provider. Subagents get 5 min. These
+  // are defaults: promptCacheTtl gives the main conversation 1 h on an API key too.
   const [site] = sites.filter((s) => s.ruleId === 'low-cache-hit')
 
   it('low-cache-hit does not tell the user that a CLAUDE.md edit breaks the cache', () => {
@@ -561,7 +566,16 @@ describe('rule copy: the cache facts match the Claude Code docs', () => {
     const why = copyOf(site!, 'why')
     expect(why).not.toMatch(/5 min by default, or 1 h when enabled/)
     expect(why).toMatch(/^On a Claude subscription, within plan usage, the main conversation keeps its cache for 1 h by default\. /)
-    expect(why).toMatch(/The cache TTL is 5 min on an API key, usage credits or a cloud provider, and for subagents\./)
+    expect(why).toMatch(/By default, the cache TTL is 5 min on an API key, usage credits or a cloud provider, and for subagents\./)
+  })
+
+  it('thinking-on-mechanical names a low effort, because medium is already the default of the 5.5 models', () => {
+    // code.claude.com/docs/en/model-config.md, opened 2026-11-01: Opus 5.5, Sonnet 5.5 and Haiku 5.5 default to medium,
+    // so "/effort medium" changes nothing there. low is the level for quick work that you review.
+    const [mechanical] = sites.filter((s) => s.ruleId === 'thinking-on-mechanical')
+    const improvement = copyOf(mechanical!, 'improvement')
+    expect(improvement).not.toMatch(/\/effort medium/)
+    expect(improvement).toMatch(/^Lower the effort for mechanical steps: use \/effort low, or set effort: low in the frontmatter of the agent\. /)
   })
 })
 

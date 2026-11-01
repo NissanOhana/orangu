@@ -46,9 +46,10 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *     and grouping. 0.11.0 ships generation 5
  *   7 (2026-11-01): the low-cache-hit text matches code.claude.com/docs/en/prompt-caching.md (opened 2026-11-01). The
  *     improvement no longer says that a CLAUDE.md edit breaks the cache (the edit keeps the cache and loads on the
- *     next /clear, /compact or restart), and the why gives the TTL for each kind of account (1 h for the main
- *     conversation on a subscription, 5 min otherwise and for subagents). A cached payload carries the old text.
- *     0.13.0 ships generation 6
+ *     next /clear, /compact or restart), and the why gives the default TTL for each kind of account (1 h for the main
+ *     conversation on a subscription, 5 min otherwise and for subagents). The thinking-on-mechanical improvement names
+ *     /effort low and effort: low, because code.claude.com/docs/en/model-config.md (opened 2026-11-01) gives medium as
+ *     the default of the 5.5 models. A cached payload carries the old text. 0.13.0 ships generation 6
  */
 export const ANALYSIS_PAYLOAD_GENERATION = 7
 
