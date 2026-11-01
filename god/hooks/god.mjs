@@ -1020,39 +1020,39 @@ function maskJwts(text, mark2) {
 var gluedJwts = (text) => jwtSpans(text, true);
 
 // src/redact/keys.ts
+var random = (body) => /\d/.test(body) && /[A-Z]/.test(body) && /[a-z]/.test(body);
+var upper = (body) => /[A-Z]/.test(body);
+var always = () => true;
 var KEYS = [
-  { prefix: "sk-ant-", body: "[A-Za-z0-9_-]{10,}", by: "\u2039anthropic-key\u203A", glued: "DUL" },
-  { prefix: "sk-proj-", body: "[A-Za-z0-9_-]{20,}", by: "\u2039openai-project-key\u203A", glued: "DUL" },
-  { prefix: "(?:sk|rk|pk)_(?:live|test)_", body: "[A-Za-z0-9]{16,}", by: "\u2039stripe-key\u203A", glued: "DDUL" },
-  { prefix: "whsec_", body: "[A-Za-z0-9]{16,}", by: "\u2039stripe-webhook-secret\u203A", glued: "DUL" },
-  { prefix: "sk-", body: "[A-Za-z0-9]{20,}", by: "\u2039api-key\u203A", glued: "DUL" },
-  { prefix: "(?:ghp|gho|ghu|ghs|ghr|github_pat)_", body: "[A-Za-z0-9_]{20,}", by: "\u2039github-token\u203A", glued: "DUL" },
-  { prefix: "glpat-", body: "[A-Za-z0-9_-]{20,}", by: "\u2039gitlab-token\u203A", glued: "DUL" },
-  { prefix: "npm_", body: "[A-Za-z0-9]{30,}", by: "\u2039npm-token\u203A", glued: "DUL" },
-  { prefix: "hf_", body: "[A-Za-z0-9]{30,}", by: "\u2039huggingface-token\u203A", glued: "DUL" },
-  { prefix: String.raw`SG\.`, body: String.raw`[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}`, by: "\u2039sendgrid-key\u203A", glued: "DUL" },
-  // a lowercase hex body
-  { prefix: "dop_v1_", body: "[A-Za-z0-9]{60,}", by: "\u2039digitalocean-token\u203A", glued: "DL" },
-  { prefix: "xox[baprs]-", body: "[A-Za-z0-9-]{10,}", by: "\u2039slack-token\u203A", glued: "DUL" },
-  // an uppercase body
-  { prefix: "AKIA", body: String.raw`[0-9A-Z]{16}\b`, by: "\u2039aws-key\u203A", glued: "DU" },
-  { prefix: "AIza", body: "[0-9A-Za-z_-]{30,}", by: "\u2039google-key\u203A", glued: "DUL" }
+  // sk-ant-<kind><version>-<93 base64url>AA (api03, admin01, oat01): flask-ant-design-… has no version
+  { prefix: "sk-ant-", body: "[A-Za-z0-9_-]{10,}", by: "\u2039anthropic-key\u203A", glued: (body) => /^[a-z]+\d+-/.test(body) || random(body) },
+  // base64url on each side of T3BlbkFJ: task-proj-… and task-admin-… words are kebab-case
+  { prefix: "sk-(?:proj|svcacct|admin)-", body: "[A-Za-z0-9_-]{20,}", by: "\u2039openai-project-key\u203A", glued: upper },
+  // 24 or 99 alphanumerics: a test name such as network_test_ConnectionRefused1 holds 1 digit
+  { prefix: "(?:sk|rk|pk)_(?:live|test)_", body: "[A-Za-z0-9]{16,}", by: "\u2039stripe-key\u203A", glued: (body) => random(body) && /\d\D*\d/.test(body) },
+  { prefix: "whsec_", body: "[A-Za-z0-9]{16,}", by: "\u2039stripe-webhook-secret\u203A", glued: always },
+  // 20 alphanumerics, T3BlbkFJ and 20 more: risk-, task- and Task-<HEX> ids lack a class
+  { prefix: "sk-", body: "[A-Za-z0-9]{20,}", by: "\u2039api-key\u203A", glued: random },
+  // 20 base62 characters first (github_pat_11 and 20 more), as snake_case words after ghs_ hold a `_` (weighs_and_…)
+  { prefix: "(?:ghp|gho|ghu|ghs|ghr|github_pat)_", body: "[A-Za-z0-9_]{20,}", by: "\u2039github-token\u203A", glued: (body) => /^[A-Za-z0-9]{20}/.test(body) },
+  { prefix: "glpat-", body: "[A-Za-z0-9_-]{20,}", by: "\u2039gitlab-token\u203A", glued: always },
+  // base62: a pnpm_ word is lowercase
+  { prefix: "npm_", body: "[A-Za-z0-9]{30,}", by: "\u2039npm-token\u203A", glued: upper },
+  // 34 letters, with no digit
+  { prefix: "hf_", body: "[A-Za-z0-9]{30,}", by: "\u2039huggingface-token\u203A", glued: always },
+  // 22 base64url characters, a dot and 43: a field path after MSG. has another length
+  { prefix: String.raw`SG\.`, body: String.raw`[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}`, by: "\u2039sendgrid-key\u203A", glued: (body) => /^[A-Za-z0-9_-]{22}\./.test(body) },
+  { prefix: "dop_v1_", body: "[A-Za-z0-9]{60,}", by: "\u2039digitalocean-token\u203A", glued: always },
+  // a user token ends in lowercase hex
+  { prefix: "xox[baprs]-", body: "[A-Za-z0-9-]{10,}", by: "\u2039slack-token\u203A", glued: always },
+  // 16 base32 characters, a few with no digit
+  { prefix: "AKIA", body: String.raw`[0-9A-Z]{16}\b`, by: "\u2039aws-key\u203A", glued: always },
+  { prefix: "AIza", body: "[0-9A-Za-z_-]{30,}", by: "\u2039google-key\u203A", glued: always }
 ];
 var BLOB = /\b[A-Za-z0-9+/]{60,}={0,2}\b/g;
 var GLUED = KEYS.map((key) => ({ re: new RegExp(`${key.prefix}(${key.body})`, "g"), key }));
 var ANY_PREFIX = new RegExp([...KEYS.map((key) => key.prefix), "eyJ"].join("|"));
 var LONGEST_PREFIX = 11;
-function looksRandom(body, glued) {
-  let digits = 0;
-  let upper = false;
-  let lower = false;
-  for (const c of body) {
-    if (c >= "0" && c <= "9") digits++;
-    else if (c >= "A" && c <= "Z") upper = true;
-    else if (c >= "a" && c <= "z") lower = true;
-  }
-  return digits >= glued.split("D").length - 1 && (upper || !glued.includes("U")) && (lower || !glued.includes("L"));
-}
 function spansWithBlobs(text, found) {
   found.sort((a, b2) => a[0] - b2[0]);
   const blobs = Array.from(text.matchAll(BLOB), (m) => [m.index, m.index + m[0].length]);
@@ -1078,7 +1078,7 @@ function maskGluedKeys(text, mark2) {
     re.lastIndex = 0;
     for (let m = re.exec(text); m; m = re.exec(text)) {
       const end = m.index + m[0].length;
-      if (looksRandom(m[1], key.glued)) found.push([m.index, end, key.by]);
+      if (key.glued(m[1])) found.push([m.index, end, key.by]);
       else re.lastIndex = Math.max(m.index + 1, end - LONGEST_PREFIX);
     }
   }
