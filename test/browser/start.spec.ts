@@ -95,6 +95,24 @@ test('each zoom tab by a click: the hash keeps the theme, the tab is selected, i
   expect(errors).toEqual([])
 })
 
+test('on a phone, the export copy control at the end of the view takes a tap, under the fixed Beta feedback link', async ({ page }, info) => {
+  test.skip(!info.project.name.startsWith('narrow'), 'only the narrow layout scrolls the window and has a small page padding')
+  const errors = runtimeErrors(page)
+  await page.goto(withTheme(`${APP}/#start`, info), { waitUntil: 'domcontentloaded' })
+  const copy = page.locator('.start-next button[data-copy="npx orangu export"]')
+  await expect(copy).toBeVisible()
+  await expect(page.locator('#feedback-launch')).toBeVisible()
+  // the end of the page, where the last control of the view sits nearest to the fixed link
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight))
+  const hit = await copy.evaluate((el) => {
+    const r = el.getBoundingClientRect()
+    const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2)
+    return top === el ? 'the copy control' : (top?.id || top?.className || top?.tagName || 'nothing')
+  })
+  expect(hit).toBe('the copy control')
+  expect(errors).toEqual([])
+})
+
 test('the zoom tabs move by key: the arrows wrap, Home and End jump, and the focus stays on the selected tab', async ({ page }, info) => {
   test.skip(info.project.name !== 'wide-light', 'the keys do not depend on the theme or the width')
   const errors = runtimeErrors(page)
