@@ -17024,8 +17024,14 @@ async function cmdSuggest(positionals, flags, deps = {}) {
 }
 
 // src/cli/commands/feedback.ts
-import { join as join11 } from "node:path";
+import { join as join12 } from "node:path";
 import { tmpdir } from "node:os";
+
+// src/cli/open-app.ts
+import { randomBytes as randomBytes5 } from "node:crypto";
+import { unlinkSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
+import { join as join11 } from "node:path";
 
 // src/cli/open-browser.ts
 import { spawn as nodeSpawn } from "node:child_process";
@@ -17058,6 +17064,43 @@ function openHtmlFile(path, deps = {}) {
     return false;
   }
   return openInBrowser(path, deps);
+}
+
+// src/cli/open-app.ts
+var APP_URL = /^http:\/\/127\.0\.0\.1:\d{1,5}\/_orangu\/[A-Za-z0-9_-]{43}(?:\/#[A-Za-z0-9?=_-]+)?$/;
+var PAGE_FOLDER = "open";
+function redirectPage(url) {
+  if (!APP_URL.test(url)) throw new Error("orangu writes a redirect page only for the loopback URL of its app");
+  return `<!doctype html>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=${url}">
+`;
+}
+async function openApp(url, deps = {}) {
+  const env = deps.env ?? process.env;
+  if (env["SSH_CONNECTION"]) return { remove: () => void 0 };
+  const folder = join11(oranguHome(env), PAGE_FOLDER);
+  const page = join11(folder, `${randomBytes5(16).toString("hex")}.html`);
+  let written = false;
+  const remove = () => {
+    if (!written) return;
+    try {
+      unlinkSync(page);
+    } catch {
+    }
+  };
+  try {
+    const html = redirectPage(url);
+    await ensurePrivateDirectory(folder);
+    await writeFile(page, html, { mode: PRIVATE_FILE_MODE, flag: "wx" });
+    written = true;
+    (deps.onExit ?? ((fn) => process.once("exit", fn)))(remove);
+    (deps.open ?? openInBrowser)(page);
+    return { page, remove };
+  } catch (e) {
+    remove();
+    return { remove, note: `orangu opened no browser: ${oneLine2(e instanceof Error ? e.message : String(e)).replace(/\.$/, "")}. Open the app URL by hand.` };
+  }
 }
 
 // src/feedback/model.ts
@@ -17108,7 +17151,7 @@ function feedbackOptions(flags) {
 async function cmdFeedback(positionals, flags) {
   if (positionals.length) throw new Error("usage: orangu feedback --context session|repo|global|report|app [--port <n>] [--no-open]");
   const { context, port } = feedbackOptions(flags);
-  const emptyConfigDir = join11(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
+  const emptyConfigDir = join12(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
   const server = await startServe(
     {
       port,
@@ -17122,11 +17165,7 @@ async function cmdFeedback(positionals, flags) {
     { cache: null, quiet: true, store: new EmptySuggestionStore() }
   );
   const url = `${server.url}/#feedback?context=${encodeURIComponent(context)}`;
-  process.stderr.write(`orangu feedback (beta) \xB7 ${url}
-  loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
-`);
-  if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve14) => {
+  const stopped = new Promise((resolve14) => {
     let closing = false;
     const close = () => {
       if (closing) return;
@@ -17136,6 +17175,17 @@ async function cmdFeedback(positionals, flags) {
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
   });
+  const handoff = flagBool(flags, "no-open") ? void 0 : await openApp(url);
+  process.stderr.write(`orangu feedback (beta) \xB7 ${url}
+  loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
+`);
+  if (handoff?.note) process.stderr.write(`  ${handoff.note}
+`);
+  try {
+    await stopped;
+  } finally {
+    handoff?.remove();
+  }
   process.stderr.write("  stopped.\n");
 }
 
@@ -17608,12 +17658,12 @@ import { basename as basename13, resolve as resolve12 } from "node:path";
 
 // src/show-me/prepare.ts
 import { mkdir as mkdir4, mkdtemp, realpath as realpath12 } from "node:fs/promises";
-import { join as join13 } from "node:path";
+import { join as join14 } from "node:path";
 
 // src/show-me/render.ts
-import { randomBytes as randomBytes5 } from "node:crypto";
+import { randomBytes as randomBytes6 } from "node:crypto";
 import { lstat as lstat11, realpath as realpath11, rename as rename3, rm } from "node:fs/promises";
-import { dirname as dirname7, join as join12 } from "node:path";
+import { dirname as dirname7, join as join13 } from "node:path";
 
 // src/show-me/check.ts
 import { createHash as createHash5 } from "node:crypto";
@@ -18884,7 +18934,7 @@ var TEMPLATES = Object.freeze([
   Object.freeze({ file: "slides.html", html: SLIDES_HTML }),
   Object.freeze({ file: "report.html", html: REPORT_HTML })
 ]);
-var showMeBase = () => join12(oranguHome(), "show-me");
+var showMeBase = () => join13(oranguHome(), "show-me");
 var ShowMeRenderError = class extends Error {
   name = "ShowMeRenderError";
 };
@@ -18905,7 +18955,7 @@ async function confinedRunDir(dir, base = showMeBase()) {
   if (dirname7(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
   if (!(await lstat11(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
   try {
-    const data = await lstat11(join12(real, "data.json"));
+    const data = await lstat11(join13(real, "data.json"));
     if (!data.isFile()) throw new ShowMeRenderError("data.json in the run directory must be a regular file.");
   } catch (error) {
     if (error instanceof ShowMeRenderError) throw error;
@@ -18916,7 +18966,7 @@ async function confinedRunDir(dir, base = showMeBase()) {
 async function readJson2(dir, name) {
   let text3;
   try {
-    text3 = await readStableTextFile(join12(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
+    text3 = await readStableTextFile(join13(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("not found")) throw new ShowMeInputError(`the run directory has no ${name}.${name === "words.json" ? " Write the 3 words first." : ""}`);
@@ -18934,7 +18984,7 @@ async function writeBoth(dir, files2) {
   const staged = [];
   try {
     for (const { file } of files2) {
-      const to = join12(dir, file);
+      const to = join13(dir, file);
       try {
         const existing = await lstat11(to);
         if (!existing.isFile()) throw new ShowMeRenderError(`${file} in the run directory is not a regular file.`);
@@ -18944,8 +18994,8 @@ async function writeBoth(dir, files2) {
       }
     }
     for (const { file, html } of files2) {
-      const from = join12(dir, `.${file}.${randomBytes5(6).toString("hex")}.tmp`);
-      staged.push({ from, to: join12(dir, file) });
+      const from = join13(dir, `.${file}.${randomBytes6(6).toString("hex")}.tmp`);
+      staged.push({ from, to: join13(dir, file) });
       await writePrivateOutput(from, html);
     }
     for (const { from, to } of staged) await rename3(from, to);
@@ -18966,7 +19016,7 @@ async function renderShowMe(dir, o = {}) {
     return { file, html };
   });
   await writeBoth(run, files2);
-  return { dir: run, slides: join12(run, "slides.html"), report: join12(run, "report.html"), findings: wordFindings(words2) };
+  return { dir: run, slides: join13(run, "slides.html"), report: join13(run, "report.html"), findings: wordFindings(words2) };
 }
 
 // src/show-me/prepare.ts
@@ -18979,8 +19029,8 @@ function runName(name) {
 async function prepareRun(scope, name, json2, o = {}) {
   const base = o.base ?? showMeBase();
   await mkdir4(base, { recursive: true, mode: 448 });
-  const dir = await realpath12(await mkdtemp(join13(base, `${scope}-${runName(name)}-`)));
-  const path = join13(dir, "data.json");
+  const dir = await realpath12(await mkdtemp(join14(base, `${scope}-${runName(name)}-`)));
+  const path = join14(dir, "data.json");
   await writePrivateOutput(path, json2);
   const bytes = Buffer.byteLength(json2);
   const approxTokens3 = Math.ceil(bytes / 4);
@@ -19683,38 +19733,37 @@ async function cmdPick(flags, deps) {
   await deps.openReport(rows2[result.index].sessionId);
 }
 
+// src/cli/serve-options.ts
+function serveOptions(flags, sessions, o) {
+  const portStr = flagStr(flags, "port", "p");
+  const port = portStr !== void 0 ? Number(portStr) : void 0;
+  if (port !== void 0 && (!Number.isInteger(port) || port < 0 || port > 65535)) throw new Error(`--port must be an integer 0\u201365535, got "${portStr}"`);
+  const maxLiveStr = flagStr(flags, "max-live");
+  return {
+    port,
+    // policy: open by default when TTY; --no-open suppresses
+    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || o.tty),
+    // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
+    includeText: !flagBool(flags, "no-include-text"),
+    // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
+    exportIncludeText: flagBool(flags, "include-text"),
+    ...sessions,
+    noCache: flags["no-cache"] !== void 0 || o.env["ORANGU_NO_CACHE"] === "1",
+    version: VERSION,
+    maxLive: maxLiveStr !== void 0 ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : void 0
+  };
+}
+
 // src/cli/door.ts
 var TARGETED_BARE_FLAGS = ["session", "s", "global", "cwd", "max-tokens", "fail-on-hook-errors"];
 function appPrecondition(stdin, stdout, env, flags) {
   if (TARGETED_BARE_FLAGS.some((flag) => flags[flag] !== void 0)) return false;
   return interactivePrecondition(stdin, stdout, env, flags);
 }
-function appOptions(flags, roots, deps) {
-  const maxLiveStr = flagStr(flags, "max-live");
-  return {
-    port: appPort(flags),
-    // policy: open by default when TTY; --no-open suppresses
-    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || deps.out.tty),
-    // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
-    includeText: !flagBool(flags, "no-include-text"),
-    // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
-    exportIncludeText: flagBool(flags, "include-text"),
-    roots,
-    noCache: flags["no-cache"] !== void 0 || deps.env["ORANGU_NO_CACHE"] === "1",
-    version: VERSION,
-    maxLive: maxLiveStr !== void 0 ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : void 0
-  };
-}
-function appPort(flags) {
-  const portStr = flagStr(flags, "port", "p");
-  if (portStr === void 0) return void 0;
-  const port = Number(portStr);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--port must be an integer 0\u201365535, got "${portStr}"`);
-  return port;
-}
 async function cmdBare(flags, deps) {
   if (!appPrecondition(deps.stdin, deps.stdout, deps.env, flags)) return deps.brief({ hint: !flagBool(flags, "quiet") });
-  const opts = appOptions(flags, await claudeRoots(flagStr(flags, "root", "config", "r")), deps);
+  const roots = await claudeRoots(flagStr(flags, "root", "config", "r"));
+  const opts = serveOptions(flags, { roots }, { tty: deps.out.tty, env: deps.env });
   deps.stdout.write("\n" + mascotLines(deps.out).join("\n") + "\n");
   await deps.brief({ hint: false });
   const start = deps.startServe ?? startServe;
@@ -19726,10 +19775,16 @@ async function cmdBare(flags, deps) {
     gatherPickRows({ ...flags, global: true }, { ...deps.now !== void 0 ? { now: deps.now } : {}, ...deps.isAlive ? { isAlive: deps.isAlive } : {} })
   ]);
   const stopped = new Promise((resolve14) => (deps.onInterrupt ?? ((stop) => process.once("SIGINT", stop)))(resolve14));
+  const handoff = opts.open ? await openApp(app.url, { env: deps.env, ...deps.openInBrowser ? { open: deps.openInBrowser } : {}, ...deps.onExit ? { onExit: deps.onExit } : {} }) : void 0;
+  if (handoff?.note) deps.stderr.write(`  ${handoff.note}
+`);
   deps.stdout.write(appBlock(deps.out, { url: app.url, sessions: picked.counts.total, running: picked.counts.running }).join("\n") + "\n");
-  if (opts.open) (deps.openInBrowser ?? openInBrowser)(app.url);
-  await stopped;
-  await app.close();
+  try {
+    await stopped;
+    await app.close();
+  } finally {
+    handoff?.remove();
+  }
   deps.stderr.write("\n  The app stopped.\n");
   (deps.exit ?? ((code2) => process.exit(code2)))(0);
 }
@@ -20048,42 +20103,26 @@ ${a.generatedAt}`).digest("hex").slice(0, 8);
   return true;
 }
 async function cmdServe(flags) {
-  const portStr = flagStr(flags, "port", "p");
-  const port = portStr !== void 0 ? Number(portStr) : void 0;
-  if (portStr !== void 0 && (!Number.isInteger(port) || port < 0 || port > 65535)) fail2(`--port must be an integer 0\u201365535, got "${portStr}"`);
   const configArg = flagStr(flags, "root", "config", "r");
   const roots = flagBool(flags, "global") ? await claudeRoots(configArg) : void 0;
-  const maxLiveStr = flagStr(flags, "max-live");
-  const requestedAutomaticLaunch = flagBool(flags, "allow-claude");
-  const opts = {
-    port,
-    // policy: open by default when TTY; --no-open suppresses
-    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || out2.tty),
-    // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
-    includeText: !flagBool(flags, "no-include-text"),
-    // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
-    exportIncludeText: flagBool(flags, "include-text"),
-    configDir: roots ? void 0 : configArg,
-    roots,
-    cwd: flagStr(flags, "cwd"),
-    noCache: flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1",
-    version: VERSION,
-    maxLive: maxLiveStr !== void 0 ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : void 0
-  };
-  if (requestedAutomaticLaunch) process.stderr.write("  --allow-claude is retired. The report only gives commands to copy, for Claude Code or Codex.\n");
+  const opts = serveOptions(flags, { configDir: roots ? void 0 : configArg, roots, cwd: flagStr(flags, "cwd") }, { tty: out2.tty, env: process.env });
+  if (flagBool(flags, "allow-claude")) process.stderr.write("  --allow-claude is retired. The report only gives commands to copy, for Claude Code or Codex.\n");
   const srv = await startServe(opts);
+  let handoff;
+  process.on("SIGINT", () => {
+    void srv.close().then(() => {
+      handoff?.remove();
+      process.stderr.write("\n  stopped.\n");
+      process.exit(0);
+    });
+  });
+  if (opts.open) handoff = await openApp(srv.url);
   process.stderr.write(
     paint(err2, ["bold", "accent"], "orangu serve") + ` \xB7 ${srv.url}
 ` + paint(err2, "dim", `  loopback + private capability \xB7 model commands: copy only \xB7 watches up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions \xB7 ctrl-c stops
 `)
   );
-  if (opts.open) openInBrowser(srv.url);
-  process.on("SIGINT", () => {
-    void srv.close().then(() => {
-      process.stderr.write("\n  stopped.\n");
-      process.exit(0);
-    });
-  });
+  if (handoff?.note) process.stderr.write(paint(err2, "dim", `  ${handoff.note}`) + "\n");
   await new Promise(() => {
   });
 }

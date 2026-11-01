@@ -3,19 +3,19 @@
  * runs the local app over every root until ctrl-c. In a pipe, in CI, or with a flag that targets 1 session or 1
  * scope, it prints only the brief, as it always did: a machine read never waits and never starts a server.
  *
- * The app is `orangu serve` with its defaults (main.ts cmdServe): 127.0.0.1 only, every route behind the capability
- * path, and transcript text shown on this machine unless --no-include-text. The Export HTML download stays redacted
- * unless --include-text. Only the roots differ: serve reads 1 root unless --global, and this door reads every root.
+ * The app is `orangu serve` with its defaults (src/cli/serve-options.ts): 127.0.0.1 only, every route behind the
+ * capability path, and transcript text shown on this machine unless --no-include-text. The Export HTML download stays
+ * redacted unless --include-text. Only the roots differ: serve reads 1 root unless --global, and this door reads every
+ * root. The browser gets a private redirect page, never the capability URL (src/cli/open-app.ts).
  */
 import { claudeRoots } from '../discover/discover.js'
-import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
 import { startServe, type ServeDeps, type ServeHandle } from '../serve/server.js'
 import type { ServeOptions } from '../serve/types.js'
-import { VERSION } from '../version.js'
 import { flagBool, flagStr } from './args.js'
 import { gatherPickRows, interactivePrecondition } from './commands/pick.js'
 import { mascotLines } from './mascot-ascii.js'
-import { openInBrowser } from './open-browser.js'
+import { openApp } from './open-app.js'
+import { serveOptions } from './serve-options.js'
 import { appBlock } from './summary.js'
 import type { Caps, WritableLike } from './tty.js'
 
@@ -43,10 +43,12 @@ export interface BareDeps {
   out: Caps
   /** the app server; the default is startServe */
   startServe?: (opts: ServeOptions, deps: ServeDeps) => Promise<Pick<ServeHandle, 'url' | 'close'>>
-  /** the browser handoff; the default is the OS opener */
-  openInBrowser?: (url: string) => unknown
+  /** the OS opener of the redirect page; the default is openInBrowser */
+  openInBrowser?: (page: string) => unknown
   /** calls `stop` on ctrl-c; the default listens once for SIGINT */
   onInterrupt?: (stop: () => void) => void
+  /** runs `fn` once at the exit of the process, as the last removal of the redirect page; the default is process.once('exit') */
+  onExit?: (fn: () => void) => void
   /** the end of the process; the default is process.exit */
   exit?: (code: number) => void
   /** the clock and the pid check of the running count (tests) */
@@ -54,42 +56,17 @@ export interface BareDeps {
   isAlive?: (pid: number) => boolean
 }
 
-/** The options of `orangu serve` (main.ts cmdServe) for the given roots: the same flags and the same defaults. */
-function appOptions(flags: Record<string, string | boolean>, roots: string[], deps: Pick<BareDeps, 'env' | 'out'>): ServeOptions {
-  const maxLiveStr = flagStr(flags, 'max-live')
-  return {
-    port: appPort(flags),
-    // policy: open by default when TTY; --no-open suppresses
-    open: !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || deps.out.tty),
-    // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
-    includeText: !flagBool(flags, 'no-include-text'),
-    // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
-    exportIncludeText: flagBool(flags, 'include-text'),
-    roots,
-    noCache: flags['no-cache'] !== undefined || deps.env['ORANGU_NO_CACHE'] === '1',
-    version: VERSION,
-    maxLive: maxLiveStr !== undefined ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : undefined,
-  }
-}
-
-/** --port, or none for a random port. A bad value is an error before any output. */
-function appPort(flags: Record<string, string | boolean>): number | undefined {
-  const portStr = flagStr(flags, 'port', 'p')
-  if (portStr === undefined) return undefined
-  const port = Number(portStr)
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--port must be an integer 0–65535, got "${portStr}"`)
-  return port
-}
-
 /**
- * Bare `orangu`. The brief alone, or on a terminal: the mascot, the brief, then the app. The app prints its rows only
- * after it listens for ctrl-c, so a ctrl-c after the URL always stops it with exit 0. If the app does not start,
- * the brief stays on stdout and the error names the cause (main.ts prints it on stderr and exits 1).
+ * Bare `orangu`. The brief alone, or on a terminal: the mascot, the brief, then the app. The app listens for ctrl-c and
+ * hands the browser its redirect page before it prints its rows, so a ctrl-c after the URL always stops it with exit 0
+ * and removes the page. If the app does not start, the brief stays on stdout and the error names the cause (main.ts
+ * prints it on stderr and exits 1), and no page exists.
  */
 export async function cmdBare(flags: Record<string, string | boolean>, deps: BareDeps): Promise<void> {
   if (!appPrecondition(deps.stdin, deps.stdout, deps.env, flags)) return deps.brief({ hint: !flagBool(flags, 'quiet') })
   // the options first, so a bad --port is an error before any output
-  const opts = appOptions(flags, await claudeRoots(flagStr(flags, 'root', 'config', 'r')), deps)
+  const roots = await claudeRoots(flagStr(flags, 'root', 'config', 'r'))
+  const opts = serveOptions(flags, { roots }, { tty: deps.out.tty, env: deps.env })
   deps.stdout.write('\n' + mascotLines(deps.out).join('\n') + '\n')
   await deps.brief({ hint: false })
   const start = deps.startServe ?? startServe
@@ -101,10 +78,17 @@ export async function cmdBare(flags: Record<string, string | boolean>, deps: Bar
     gatherPickRows({ ...flags, global: true }, { ...(deps.now !== undefined ? { now: deps.now } : {}), ...(deps.isAlive ? { isAlive: deps.isAlive } : {}) }),
   ])
   const stopped = new Promise<void>((resolve) => (deps.onInterrupt ?? ((stop) => process.once('SIGINT', stop)))(resolve))
+  const handoff = opts.open
+    ? await openApp(app.url, { env: deps.env, ...(deps.openInBrowser ? { open: deps.openInBrowser } : {}), ...(deps.onExit ? { onExit: deps.onExit } : {}) })
+    : undefined
+  if (handoff?.note) deps.stderr.write(`  ${handoff.note}\n`)
   deps.stdout.write(appBlock(deps.out, { url: app.url, sessions: picked.counts.total, running: picked.counts.running }).join('\n') + '\n')
-  if (opts.open) (deps.openInBrowser ?? openInBrowser)(app.url)
-  await stopped
-  await app.close()
+  try {
+    await stopped
+    await app.close()
+  } finally {
+    handoff?.remove()
+  }
   deps.stderr.write('\n  The app stopped.\n')
   ;(deps.exit ?? ((code) => process.exit(code)))(0)
 }

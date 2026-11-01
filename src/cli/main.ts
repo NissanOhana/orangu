@@ -35,7 +35,6 @@ import { aggregateBlock, aggregateOffer, analysisBlock, betaLine, briefBlock, do
 import { footerDue, machineQueueReads, persistNextStep } from './next-step.js'
 import { startServe } from '../serve/server.js'
 import { DEFAULT_MAX_LIVE } from '../serve/registry.js'
-import type { ServeOptions } from '../serve/types.js'
 import { mascotLines } from './mascot-ascii.js'
 import type { Analysis } from '../model/analysis.js'
 import { CLI_VERBS, EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
@@ -44,7 +43,9 @@ import { cmdBare } from './door.js'
 import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson, type PreparedAggregate } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
-import { openHtmlFile, openInBrowser } from './open-browser.js'
+import { openHtmlFile } from './open-browser.js'
+import { openApp, type AppHandoff } from './open-app.js'
+import { serveOptions } from './serve-options.js'
 import { rawOutputRefusal } from './raw-output.js'
 import { VERSION } from '../version.js'
 
@@ -445,42 +446,28 @@ async function writeAggregateHtml(scope: 'repo' | 'global', a: PreparedAggregate
 }
 
 async function cmdServe(flags: Record<string, string | boolean>): Promise<void> {
-  const portStr = flagStr(flags, 'port', 'p')
-  const port = portStr !== undefined ? Number(portStr) : undefined
-  if (portStr !== undefined && (!Number.isInteger(port) || port! < 0 || port! > 65535)) fail(`--port must be an integer 0–65535, got "${portStr}"`)
   const configArg = flagStr(flags, 'root', 'config', 'r')
   const roots = flagBool(flags, 'global') ? await claudeRoots(configArg) : undefined
-  const maxLiveStr = flagStr(flags, 'max-live')
-  const requestedAutomaticLaunch = flagBool(flags, 'allow-claude')
-  const opts: ServeOptions = {
-    port,
-    // policy: open by default when TTY; --no-open suppresses
-    open: !flagBool(flags, 'no-open') && (flagBool(flags, 'open') || out.tty),
-    // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
-    includeText: !flagBool(flags, 'no-include-text'),
-    // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
-    exportIncludeText: flagBool(flags, 'include-text'),
-    configDir: roots ? undefined : configArg,
-    roots,
-    cwd: flagStr(flags, 'cwd'),
-    noCache: flags['no-cache'] !== undefined || process.env['ORANGU_NO_CACHE'] === '1',
-    version: VERSION,
-    maxLive: maxLiveStr !== undefined ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : undefined,
-  }
-  if (requestedAutomaticLaunch) process.stderr.write('  --allow-claude is retired. The report only gives commands to copy, for Claude Code or Codex.\n')
+  const opts = serveOptions(flags, { configDir: roots ? undefined : configArg, roots, cwd: flagStr(flags, 'cwd') }, { tty: out.tty, env: process.env })
+  if (flagBool(flags, 'allow-claude')) process.stderr.write('  --allow-claude is retired. The report only gives commands to copy, for Claude Code or Codex.\n')
   const srv = await startServe(opts)
+  // ctrl-c is heard before the browser handoff, so a stop never leaves the redirect page behind
+  let handoff: AppHandoff | undefined
+  process.on('SIGINT', () => {
+    void srv.close().then(() => {
+      handoff?.remove()
+      process.stderr.write('\n  stopped.\n')
+      process.exit(0)
+    })
+  })
+  // the browser gets a private redirect page, never the capability URL (src/cli/open-app.ts)
+  if (opts.open) handoff = await openApp(srv.url)
   process.stderr.write(
     paint(err, ['bold', 'accent'], 'orangu serve') +
       ` · ${srv.url}\n` +
       paint(err, 'dim', `  loopback + private capability · model commands: copy only · watches up to ${opts.maxLive ?? DEFAULT_MAX_LIVE} live sessions · ctrl-c stops\n`),
   )
-  if (opts.open) openInBrowser(srv.url)
-  process.on('SIGINT', () => {
-    void srv.close().then(() => {
-      process.stderr.write('\n  stopped.\n')
-      process.exit(0)
-    })
-  })
+  if (handoff?.note) process.stderr.write(paint(err, 'dim', `  ${handoff.note}`) + '\n')
   await new Promise<void>(() => {})
 }
 

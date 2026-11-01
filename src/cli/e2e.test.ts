@@ -3,7 +3,7 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { cpus, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createServer, type AddressInfo } from 'node:net'
 import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
@@ -56,6 +56,39 @@ function runPty(args: string[], envDelta: Record<string, string> = {}): { out: s
 /** what a terminal shows: escapes stripped, and of a `\r`-redrawn line only the last frame */
 const rendered = (s: string) => stripEscapes(s).split(/\r?\n/).map((l) => l.split('\r').at(-1) ?? '').join('\n')
 
+/** A fixture Claude root, a private orangu home and user home, and a stub `open` on PATH that logs each target it gets. */
+async function openerFixture(): Promise<{ root: string; envDelta: Record<string, string>; opened(): string[] }> {
+  const dir = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-opener-')))
+  const home = await makeFixtureHome(dir)
+  const bin = join(dir, 'bin')
+  await mkdir(bin)
+  const openLog = join(dir, 'opened.log')
+  for (const name of ['open', 'xdg-open']) await writeFile(join(bin, name), `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(openLog)}\n`, { mode: 0o755 })
+  const envDelta = {
+    ORANGU_HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-opener-store-')),
+    HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-opener-user-')),
+    ORANGU_CLAUDE_ROOTS: home.configDir,
+    CLAUDE_CONFIG_DIR: home.configDir,
+    ORANGU_NO_CACHE: '1',
+    PATH: `${bin}:${process.env['PATH'] ?? ''}`,
+  }
+  return { root: home.configDir, envDelta, opened: () => (existsSync(openLog) ? readFileSync(openLog, 'utf8').trim().split('\n') : []) }
+}
+
+/**
+ * The redirect page that the browser opener got in place of the app URL: a path with no capability in it, in the
+ * 0700 folder `open` of the orangu home, at 0600, with 1 meta refresh to the URL.
+ */
+function expectRedirectPage(page: string, oranguHome: string, url: string): void {
+  const capability = /\/_orangu\/([A-Za-z0-9_-]{43})/.exec(url)![1]!
+  expect(page).not.toContain(capability)
+  expect(dirname(page)).toBe(join(oranguHome, 'open'))
+  expect(basename(page)).toMatch(/^[0-9a-f]{32}\.html$/)
+  expect(readFileSync(page, 'utf8')).toContain(`<meta http-equiv="refresh" content="0;url=${url}">`)
+  expect(statSync(page).mode & 0o777).toBe(0o600)
+  expect(statSync(dirname(page)).mode & 0o777).toBe(0o700)
+}
+
 describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI on a pseudo-terminal', () => {
   it('--verbose keeps a standalone cache row: the spinner frame is erased before the row, not after it', async () => {
     const home = await makeFixtureHome(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-')))
@@ -98,27 +131,11 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
     expect(rendered(out)).toMatch(/^ {2}✓ analyzed /m)
     expect(rendered(out)).toMatch(/^ {2}next {5}claude "\/orangu:improve sg_[0-9a-f]{12}"$/m)
   })
-  /** A fixture Claude root, a private store and user home, and a stub `open` on PATH that logs each URL it gets. */
-  async function doorFixture(): Promise<{ root: string; envDelta: Record<string, string>; opened(): string[] }> {
-    const dir = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-door-')))
-    const home = await makeFixtureHome(dir)
-    const bin = join(dir, 'bin')
-    await mkdir(bin)
-    const openLog = join(dir, 'opened.log')
-    for (const name of ['open', 'xdg-open']) await writeFile(join(bin, name), `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(openLog)}\n`, { mode: 0o755 })
-    const envDelta = {
-      ORANGU_HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-pty-store-')),
-      HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-pty-user-')),
-      ORANGU_CLAUDE_ROOTS: home.configDir,
-      CLAUDE_CONFIG_DIR: home.configDir,
-      ORANGU_NO_CACHE: '1',
-      PATH: `${bin}:${process.env['PATH'] ?? ''}`,
-    }
-    return { root: home.configDir, envDelta, opened: () => (existsSync(openLog) ? readFileSync(openLog, 'utf8').trim().split('\n') : []) }
-  }
-
-  it('bare orangu: the brief, then the app over every root until ctrl-c, with the request log off', async () => {
-    const { root, envDelta, opened } = await doorFixture()
+  /**
+   * Bare orangu on a pseudo-terminal until its app row prints. `whileRunning` gets the app URL, then ctrl-c goes in
+   * through the terminal, where the line discipline sends SIGINT to the app.
+   */
+  async function bareOnPty(root: string, envDelta: Record<string, string>, whileRunning: (url: string) => Promise<void>): Promise<{ shown: string; url: string }> {
     const { spawnArgs, env } = ptyCommand(['--root', root], envDelta)
     // script(1) on macOS refuses a socket on its stdin, and a Node pipe is a socket pair: cat hands it a pipe
     const child = spawn('/bin/sh', ['-c', 'cat | "$@"', 'sh', SCRIPT, ...spawnArgs], { env, stdio: ['pipe', 'pipe', 'pipe'] })
@@ -129,14 +146,10 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
     const appRow = /^ {2}app (http:\/\/127\.0\.0\.1:\d+\/_orangu\/[A-Za-z0-9_-]{43})$/m
     let url = ''
     try {
-      // ctrl-c goes in only after the app row, which prints after the app listens for it
+      // ctrl-c goes in only after the app row, which prints after the app listens for it and hands off the browser
       await until(() => appRow.test(rendered(out)), 30_000, 'the app row')
       url = appRow.exec(rendered(out))![1]!
-      await until(() => opened().length > 0, 10_000, 'the stub opener')
-      expect(opened(), 'the browser handoff got the URL of the app row').toEqual([url])
-      // a request that the app answers: with the request log on, it would print a GET line
-      expect((await fetch(`${url}/api/sessions`)).status).toBe(200)
-      // ctrl-c on the terminal: the line discipline sends SIGINT to the app
+      await whileRunning(url)
       child.stdin.end('\x03')
       expect(await closed, out).toBe(0)
     } finally {
@@ -144,7 +157,22 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
       if (!child.stdin.writableEnded) child.stdin.end('\x03')
       child.kill()
     }
-    const shown = rendered(out)
+    return { shown: rendered(out), url }
+  }
+
+  it('bare orangu: the brief, then the app over every root until ctrl-c, with the request log off', async () => {
+    const { root, envDelta, opened } = await openerFixture()
+    let page = ''
+    const { shown, url } = await bareOnPty(root, envDelta, async (url) => {
+      await until(() => opened().length > 0, 10_000, 'the stub opener')
+      // the opener got a private redirect page, never the URL: `ps` shows its argv to every local account
+      expect(opened()).toHaveLength(1)
+      page = opened()[0]!
+      expectRedirectPage(page, envDelta.ORANGU_HOME!, url)
+      // a request that the app answers: with the request log on, it would print a GET line
+      expect((await fetch(`${url}/api/sessions`)).status).toBe(200)
+    })
+    expect(existsSync(page), 'the redirect page is gone after ctrl-c').toBe(false)
     // the brief of the latest session comes first, then the app rows, then how to stop the app
     expect(shown).toMatch(/^ {8}latest · [0-9a-f]{8} · \d+ turns/m)
     expect(shown.indexOf('latest · ')).toBeLessThan(shown.indexOf(`  app ${url}`))
@@ -155,8 +183,17 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
     expect(shown).not.toContain('Choose a report')
   }, 60_000)
 
+  it('bare orangu in an SSH session: the URL on the terminal, and no opener and no redirect page', async () => {
+    const { root, envDelta, opened } = await openerFixture()
+    await bareOnPty(root, { ...envDelta, SSH_CONNECTION: '10.0.0.1 51234 10.0.0.2 22' }, async () => {
+      // the handoff comes before the app row, so no page now means no page at all
+      expect(existsSync(join(envDelta.ORANGU_HOME!, 'open'))).toBe(false)
+    })
+    expect(opened()).toEqual([])
+  }, 60_000)
+
   it('bare orangu: when the app does not start, the brief stays, the reason goes to stderr, and the exit is 1', async () => {
-    const { root, envDelta } = await doorFixture()
+    const { root, envDelta } = await openerFixture()
     const busy = createServer()
     await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve))
     const port = (busy.address() as AddressInfo).port
@@ -1204,6 +1241,56 @@ syncBuiltinESMExports()
     }
     expect(err).toContain('no sessions attached')
     expect(err).toContain('stopped')
+  }, 30_000)
+
+  /**
+   * An app that opens the browser, spawned with a stub opener: the redirect page that the stub gets, while the app
+   * runs, then the stop signal and the exit status. In an SSH session there is no page and no opener call.
+   */
+  async function openedApp(args: string[], urlPattern: RegExp, signal: NodeJS.Signals, extraEnv: Record<string, string> = {}): Promise<void> {
+    const { envDelta, opened } = await openerFixture()
+    const ssh = extraEnv['SSH_CONNECTION'] !== undefined
+    const child = spawn('node', [CLI, ...args], { env: { ...process.env, ...envDelta, ...extraEnv }, stdio: ['ignore', 'ignore', 'pipe'] })
+    let err = ''
+    child.stderr.on('data', (c: Buffer) => (err += c.toString('utf8')))
+    const gone = new Promise<number | null>((resolve) => child.once('exit', resolve))
+    let page = ''
+    try {
+      // the browser handoff comes before the URL line, so the page exists, or never will, once the URL prints
+      await until(() => urlPattern.test(err), 15_000, `the URL of ${args[0]}\n${err}`)
+      const url = urlPattern.exec(err)![0]
+      if (ssh) expect(existsSync(join(envDelta.ORANGU_HOME!, 'open'))).toBe(false)
+      else {
+        await until(() => opened().length > 0, 10_000, 'the stub opener')
+        expect(opened()).toHaveLength(1)
+        page = opened()[0]!
+        expectRedirectPage(page, envDelta.ORANGU_HOME!, url)
+      }
+    } finally {
+      child.kill(signal)
+    }
+    expect(await gone, err).toBe(0)
+    if (ssh) expect(opened()).toEqual([])
+    else expect(existsSync(page), 'the redirect page is gone after the app stops').toBe(false)
+  }
+
+  const SERVE_URL = /http:\/\/127\.0\.0\.1:\d+\/_orangu\/[A-Za-z0-9_-]{43}/
+  const FEEDBACK_URL = /http:\/\/127\.0\.0\.1:\d+\/_orangu\/[A-Za-z0-9_-]{43}\/#feedback\?context=report/
+
+  it('serve --open hands the opener a private redirect page, never the URL, and removes the page on SIGINT', async () => {
+    await openedApp(['serve', '--port', '0', '--open', '--no-cache'], SERVE_URL, 'SIGINT')
+  }, 30_000)
+
+  it('serve --open in an SSH session opens nothing and writes no page', async () => {
+    await openedApp(['serve', '--port', '0', '--open', '--no-cache'], SERVE_URL, 'SIGINT', { SSH_CONNECTION: '10.0.0.1 51234 10.0.0.2 22' })
+  }, 30_000)
+
+  it('feedback hands the opener a private redirect page of its deep link, and removes the page when the form app stops', async () => {
+    await openedApp(['feedback', '--context', 'report', '--port', '0'], FEEDBACK_URL, 'SIGTERM')
+  }, 30_000)
+
+  it('feedback in an SSH session opens nothing and writes no page', async () => {
+    await openedApp(['feedback', '--context', 'report', '--port', '0'], FEEDBACK_URL, 'SIGTERM', { SSH_CONNECTION: '10.0.0.1 51234 10.0.0.2 22' })
   }, 30_000)
 
   it('feedback rejects text positionals and invalid contexts before starting a server', () => {

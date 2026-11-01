@@ -2,7 +2,7 @@
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { flagBool, flagStr } from '../args.js'
-import { openInBrowser } from '../open-browser.js'
+import { openApp } from '../open-app.js'
 import { startServe } from '../../serve/server.js'
 import type { Finding, SuggestionRecord, SuggestionSource, SuggestionStatus, SuggestionStoreLike } from '../../suggest/types.js'
 import { FEEDBACK_CONTEXTS, isFeedbackContext, type FeedbackContext } from '../../feedback/model.js'
@@ -69,10 +69,8 @@ export async function cmdFeedback(positionals: string[], flags: Record<string, s
     { cache: null, quiet: true, store: new EmptySuggestionStore() },
   )
   const url = `${server.url}/#feedback?context=${encodeURIComponent(context)}`
-  process.stderr.write(`orangu feedback (beta) · ${url}\n  loopback + private capability · no sessions attached · ctrl-c stops\n`)
-  if (!flagBool(flags, 'no-open')) openInBrowser(url)
-
-  await new Promise<void>((resolve) => {
+  // the stop signals are heard before the browser handoff, so a stop never leaves the redirect page behind
+  const stopped = new Promise<void>((resolve) => {
     let closing = false
     const close = (): void => {
       if (closing) return
@@ -82,5 +80,14 @@ export async function cmdFeedback(positionals: string[], flags: Record<string, s
     process.once('SIGINT', close)
     process.once('SIGTERM', close)
   })
+  // the browser gets a private redirect page, never the capability URL (src/cli/open-app.ts)
+  const handoff = flagBool(flags, 'no-open') ? undefined : await openApp(url)
+  process.stderr.write(`orangu feedback (beta) · ${url}\n  loopback + private capability · no sessions attached · ctrl-c stops\n`)
+  if (handoff?.note) process.stderr.write(`  ${handoff.note}\n`)
+  try {
+    await stopped
+  } finally {
+    handoff?.remove()
+  }
   process.stderr.write('  stopped.\n')
 }

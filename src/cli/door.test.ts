@@ -2,10 +2,10 @@
  * Door 1, bare `orangu`, with every seam faked except discovery: the brief, the app server, the browser handoff,
  * ctrl-c and the process exit. The counts row reads a fixture Claude root, never a real transcript.
  */
-import { existsSync, readdirSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { makeFixtureHome } from '../../test/fixtures/home.js'
@@ -35,17 +35,25 @@ class FakeOutput {
 interface Calls {
   brief: Array<{ hint: boolean }>
   serve: Array<{ opts: ServeOptions; deps: ServeDeps }>
+  /** what the browser opener got: the path of a redirect page, never the URL */
   opened: string[]
+  /** the redirect page and its content, as the opener saw them */
+  pages: Array<{ path: string; text: string; mode: number; folderMode: number }>
   closed: number
   exit: number[]
 }
 
-/** The deps of a terminal: every seam faked, ctrl-c through `interrupt()`. */
-function terminal(over: Partial<BareDeps> = {}): { deps: BareDeps; calls: Calls; stdout: FakeOutput; stderr: FakeOutput; interrupt(): void } {
+/**
+ * The deps of a terminal: every seam faked, ctrl-c through `interrupt()`. Each terminal has its own orangu home, so a
+ * redirect page never lands in the real one. `env` adds to that home, and never replaces it.
+ */
+function terminal(over: Partial<BareDeps> = {}): { deps: BareDeps; calls: Calls; stdout: FakeOutput; stderr: FakeOutput; home: string; interrupt(): void } {
   const stdout = new FakeOutput()
   const stderr = new FakeOutput()
-  const calls: Calls = { brief: [], serve: [], opened: [], closed: 0, exit: [] }
+  const calls: Calls = { brief: [], serve: [], opened: [], pages: [], closed: 0, exit: [] }
+  const home = mkdtempSync(join(tmpdir(), 'orangu-door-home-'))
   let stop: (() => void) | undefined
+  const { env, ...rest } = over
   const deps: BareDeps = {
     brief: async (o) => {
       calls.brief.push(o)
@@ -54,7 +62,7 @@ function terminal(over: Partial<BareDeps> = {}): { deps: BareDeps; calls: Calls;
     stdin: { isTTY: true, setRawMode: () => undefined },
     stdout,
     stderr,
-    env: {},
+    env: { ORANGU_HOME: home, ...env },
     out: TTY,
     startServe: async (opts, serveDeps) => {
       calls.serve.push({ opts, deps: serveDeps })
@@ -65,24 +73,28 @@ function terminal(over: Partial<BareDeps> = {}): { deps: BareDeps; calls: Calls;
         },
       }
     },
-    openInBrowser: (url) => {
-      calls.opened.push(url)
+    openInBrowser: (target) => {
+      calls.opened.push(target)
+      calls.pages.push({ path: target, text: readFileSync(target, 'utf8'), mode: statSync(target).mode & 0o777, folderMode: statSync(dirname(target)).mode & 0o777 })
     },
     onInterrupt: (fn) => {
       stop = fn
     },
+    // the process exit hook of the page: a test process runs many apps, so it keeps no listener
+    onExit: () => undefined,
     exit: (code) => {
       calls.exit.push(code)
     },
     now: NOW,
     isAlive: () => false,
-    ...over,
+    ...rest,
   }
   return {
     deps,
     calls,
     stdout,
     stderr,
+    home,
     interrupt: () => {
       if (!stop) throw new Error('bare orangu listens for no ctrl-c yet')
       stop()
@@ -196,11 +208,41 @@ describe('bare orangu: the app that it starts', () => {
     const root = await fixtureRoot()
     const opened = await runApp({ root })
     expect(opened.calls.serve[0]!.opts.open).toBe(true)
-    expect(opened.calls.opened).toEqual([APP_URL])
+    expect(opened.calls.opened).toHaveLength(1)
     const closed = await runApp({ root, 'no-open': true })
     expect(closed.calls.serve[0]!.opts.open).toBe(false)
     expect(closed.calls.opened).toEqual([])
     expect(closed.stdout.text).toContain(`\n  app ${APP_URL}\n`)
+  })
+
+  it('hands the browser opener a private redirect page, never the URL, and removes the page on ctrl-c', async () => {
+    const t = await runApp({ root: await fixtureRoot() })
+    const [page] = t.calls.pages
+    // `ps` shows the argv of the opener to every local account: it holds a path with no capability in it
+    expect(t.calls.opened).toEqual([page!.path])
+    expect(dirname(page!.path)).toBe(join(t.home, 'open'))
+    expect(basename(page!.path)).toMatch(/^[0-9a-f]{32}\.html$/)
+    expect(page!.text).toContain(`<meta http-equiv="refresh" content="0;url=${APP_URL}">`)
+    expect(page).toMatchObject({ mode: 0o600, folderMode: 0o700 })
+    expect(existsSync(page!.path), 'the page is gone after ctrl-c').toBe(false)
+  })
+
+  it('opens no browser and writes no page in an SSH session, and still prints the URL', async () => {
+    const t = await runApp({ root: await fixtureRoot() }, terminal({ env: { SSH_CONNECTION: '10.0.0.1 51234 10.0.0.2 22' } }))
+    expect(t.calls.opened).toEqual([])
+    expect(existsSync(join(t.home, 'open'))).toBe(false)
+    expect(t.stdout.text).toContain(`\n  app ${APP_URL}\n`)
+  })
+
+  it('runs the app and says why when orangu cannot write the page, with no browser', async () => {
+    const t = terminal()
+    // a file in the place of the folder of the pages
+    writeFileSync(join(t.home, 'open'), '')
+    await runApp({ root: await fixtureRoot() }, t)
+    expect(t.calls.opened).toEqual([])
+    expect(t.stderr.text).toMatch(/^ {2}orangu opened no browser: .+\. Open the app URL by hand\.$/m)
+    expect(t.stdout.text).toContain(`\n  app ${APP_URL}\n`)
+    expect(t.calls.exit).toEqual([0])
   })
 
   it('shows transcript text on this machine as serve does: --no-include-text hides it, and the export stays redacted', async () => {
@@ -235,6 +277,9 @@ describe('bare orangu: the app that it starts', () => {
     expect(t.stdout.text).toContain('  BRIEF\n')
     expect(t.stdout.text).not.toContain('  app ')
     expect(t.calls.exit).toEqual([])
+    // no app, so no page and no opener
+    expect(t.calls.opened).toEqual([])
+    expect(existsSync(join(t.home, 'open'))).toBe(false)
   })
 
   it('stops the app on ctrl-c and exits 0', async () => {
@@ -242,6 +287,22 @@ describe('bare orangu: the app that it starts', () => {
     expect(t.calls.closed).toBe(1)
     expect(t.calls.exit).toEqual([0])
     expect(t.stderr.text).toBe('\n  The app stopped.\n')
+  })
+
+  it('removes the page when the app does not close cleanly on ctrl-c', async () => {
+    const t = terminal({
+      startServe: async () => ({
+        url: APP_URL,
+        close: async () => {
+          throw new Error('close failed')
+        },
+      }),
+    })
+    const run = cmdBare({ root: await fixtureRoot() }, t.deps)
+    await vi.waitFor(() => expect(t.stdout.text).toContain('Press ctrl-c to stop the app.'), { timeout: 10_000 })
+    t.interrupt()
+    await expect(run).rejects.toThrow('close failed')
+    expect(existsSync(t.calls.pages[0]!.path)).toBe(false)
   })
 })
 
