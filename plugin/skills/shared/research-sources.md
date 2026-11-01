@@ -1,6 +1,6 @@
 # Outside-research policy
 
-Read this only after you consult the deterministic catalog and the user explicitly approves outside research. The whole-harness review of the improve skill needs that explicit approval before any outside research. From that review, pass the policy, uncovered item ids, change classes, and evidence file paths to `orangu:harness-researcher`.
+Read this only after you consult the deterministic catalog and the user explicitly approves outside research. The whole-harness review of the improve skill needs that explicit approval before any outside research. From that review, pass only the search terms that the user approves, their change classes and the text of this policy to `orangu:harness-researcher`. Pass no evidence file, path or id.
 
 ## Nondisclosure boundary
 

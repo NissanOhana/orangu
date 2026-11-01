@@ -93,7 +93,7 @@ This is the one improvement workflow. It diagnoses one session, reviews a whole 
 - runs the exact `orangu evidence` estimate before reading the evidence
 - starts with `catalogMatches` and ties quantitative statements to emitted findings
 - asks the user the bounded interview questions the evidence cannot answer before saving, and records the answers as user-stated context, never as a measurement
-- calls no web tool itself, and sends uncovered choices to its read-only researcher only after you approve outside research
+- calls no web tool itself, and sends its read-only researcher only the search terms that you approve, with their change classes
 - writes one human-readable `<id>.md` proposal and one validated `<id>.json` manifest
 - runs the deterministic `--for-proposal` evidence/workspace check before writing either artifact
 - reports the evidence, expected effect, risk, files, verification condition, and sources in chat
@@ -104,7 +104,7 @@ Its whole-harness review reads `orangu harness`, which uses no model and no netw
 When a run saves a session or repo proposal, it asks which ones you approve. Then it applies the ones you approved, under 4 standing limits:
 - **Per-item explicit approval.** Before the question, it discloses each item's id, the files its manifest declares, and the exact text of anything that would run or grant authority. Only a verbatim id approves, and only the answer to that question counts. Nothing else in the conversation is consent.
 - **Session or repo scope only.** Global proposals are review-only and are never applied, at any approval.
-- **Through `/orangu:apply`, unchanged.** For each approved item, improve invokes `/orangu:apply <id>`: one id, one record, one receipt per invocation. Each invocation keeps that skill's existing binding check, untrusted-input rules, and confinement contract. Improve forks nothing and has no repository edit authority of its own. It prints the `/orangu:apply <id>` list, so you can do the same work by hand.
+- **Through `/orangu:apply`, unchanged.** For each approved item, improve invokes `/orangu:apply <id>`: one id, one record, one receipt per invocation. Improve pre-approves no call of that skill, so each call goes through your permission rules. Each invocation keeps that skill's existing binding check, untrusted-input rules, and confinement contract. Improve forks nothing and has no repository edit authority of its own. It prints the `/orangu:apply <id>` list, so you can do the same work by hand.
 - **Stop at the first failure.** Improve applies the approved items in order and halts at the first one that fails. It leaves the working tree as it stands for review and does not continue down the list.
 
 None of this moves the deterministic boundary. No model measures anything, and the evidence is still the bounded deterministic projection. The CLI still validates artifact shape and does not inspect a diff.
