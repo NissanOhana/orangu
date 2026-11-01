@@ -70,7 +70,7 @@ Skip a row where `blocked` equals `calls`: a check already holds it. For a cut m
 
 External skill discovery is candidate work, never an install action. The runtime never runs `npx skills find` and never installs anything. A proposal may hand the user a search query. Only if the user explicitly asked for outside research may the read-only `orangu:harness-researcher` evaluate uncovered candidates under [the research policy](../../shared/research-sources.md). Every discovered item keeps its source and `verifiedAt: null` until curated.
 
-Before you search online or open any URL, reduce the question to generic feature and change-class terms. Never send local prompts, paths, session or suggestion ids, or project/repository/customer names to a network service. The same rule covers evidence content, proposal text, code, and local error text. For all of these values, never place them in a URL. The researcher receives only uncovered item ids, change classes, evidence file paths, and the policy.
+Before you dispatch the researcher, reduce the question to generic feature and change-class terms. Never send local prompts, paths, session or suggestion ids, or project/repository/customer names to a network service. The same rule covers evidence content, proposal text, code, and local error text. For all of these values, never place them in a URL. The researcher receives only uncovered item ids, change classes, the evidence file paths of this review, and the policy. For one finding of the skill, it receives no evidence file.
 
 ## 5. Synthesize bounded proposals
 

@@ -71,7 +71,7 @@ The suggestion layer has 3 collaborators:
 
 1. **Measured findings:** deterministic rules and aggregate rollups provide the only session-derived numbers.
 2. **Curated matches:** deterministic catalog entries narrow the known tools, features, and change classes that fit those findings.
-3. **AI interpretation:** `orangu-improve` explains the evidence, evaluates tradeoffs, and researches only gaps or time-sensitive choices.
+3. **AI interpretation:** `orangu-improve` explains the evidence and evaluates tradeoffs. Its read-only researcher looks only at gaps or time-sensitive choices.
 
 Proposal sources preserve that distinction:
 
@@ -93,7 +93,7 @@ This is the one improvement workflow. It diagnoses one session, reviews a whole 
 - runs the exact `orangu evidence` estimate before reading the evidence
 - starts with `catalogMatches` and ties quantitative statements to emitted findings
 - asks the user the bounded interview questions the evidence cannot answer before saving, and records the answers as user-stated context, never as a measurement
-- optionally researches uncovered choices
+- calls no web tool itself, and sends uncovered choices to its read-only researcher only after you approve outside research
 - writes one human-readable `<id>.md` proposal and one validated `<id>.json` manifest
 - runs the deterministic `--for-proposal` evidence/workspace check before writing either artifact
 - reports the evidence, expected effect, risk, files, verification condition, and sources in chat

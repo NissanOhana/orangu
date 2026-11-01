@@ -80,10 +80,10 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/apply/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (55 of 55). P1b moved the pinned "applied locally, not yet verified; verify ..." to two sentences, quoted as one said text
   'plugin/skills/apply/references/application-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (16 of 16) after the rewrite
   'plugin/skills/feedback/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (31 of 31) after the rewrite
-  // 2026-11-01 the brain: floor 96 -> 98, findings 2 -> 0. Measured 100 (109 of 109) as the router of the brain: the
+  // 2026-11-01 the brain: floor 96 -> 98, findings 2 -> 0. Measured 100 (108 of 108) as the router of the brain: the
   // network-disclosure list moved to shared/brain.md as 3 sentences, and the routing sentence of the description split.
   'plugin/skills/improve/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
-  // new surfaces 2026-11-01, born at max(80, measured - 2): the review of a whole harness, measured 100 (147 of 147), and
+  // new surfaces 2026-11-01, born at max(80, measured - 2): the review of a whole harness, measured 100 (148 of 148), and
   // the brain rules that every host reads, measured 100 (144 of 144). 0 findings each.
   'plugin/skills/improve/references/review.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   'plugin/skills/shared/brain.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },

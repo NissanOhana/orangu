@@ -17,9 +17,12 @@ const IMPROVE = 'plugin/skills/improve/SKILL.md'
 const REVIEW = 'plugin/skills/improve/references/review.md'
 const BRAIN = 'plugin/skills/shared/brain.md'
 // Measured on 2026-11-01 when the brain landed: each ceiling of the ratchet below is its measure + 1 (ratchets only go down).
-const REVIEW_WORDS_MEASURED = 1715
+// Decision 26 (2026-11-01, before the merge): the review 1,715 -> 1,727 (+12) and all of plugin/skills 14,744 -> 14,747
+// (+3). improve calls no web tool, so stage 4 says that the researcher gets the evidence files of the review only, and
+// none for one finding (+12). improve drops its own research list for 1 rule and 1 host sentence (-7 net in its body).
+const REVIEW_WORDS_MEASURED = 1727
 const BRAIN_WORDS_MEASURED = 1876
-const ALL_SKILL_WORDS_MEASURED = 14_744
+const ALL_SKILL_WORDS_MEASURED = 14_747
 const TOTAL_DESC_MEASURED = 1673
 // plugin/skills/README.md: 253 until the analyze and harness rows left (C12), then the measured 203 words + 1
 const README_CEILING = 204
@@ -180,10 +183,13 @@ describe('plugin packaging', () => {
   // C3 (2026-11-01): improve is the brain. It runs the 4 verbs of a single finding (evidence, estimate, suggest, ste) and
   // the 4 more of its review (analyze, global, harness, repo), each in both forms. It pre-approves the review pull's
   // `mktemp -d`, reads, the read-only plugin agents of the review (Agent), the 2 skills it invokes (apply after an
-  // approval by id, interview on the first run), its drafts and the web tools of its research. Claude Code never consults
-  // the proposals Write rule, so each proposal write asks. The question tool is never pre-approved.
+  // approval by id, interview on the first run) and its drafts. Claude Code never consults the proposals Write rule, so
+  // each proposal write asks. The question tool is never pre-approved.
+  // Decision 26 (2026-11-01, a commit security review): no web tool. improve loads whole-scope evidence, which comes from
+  // transcripts and is untrusted, and it can invoke apply. A web tool in that context lets an injected line send data out
+  // or push toward apply. So improve sends each outside search to the read-only researcher, as the old harness did.
   const IMPROVE_GRANTS =
-    'allowed-tools: Bash(orangu analyze:*), Bash(orangu estimate:*), Bash(orangu evidence:*), Bash(orangu global:*), Bash(orangu harness:*), Bash(orangu repo:*), Bash(orangu ste:*), Bash(orangu suggest:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" harness *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(mktemp -d), Read, Agent, Skill(orangu:apply), Skill(orangu:interview), Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/improve-*.md), WebSearch, WebFetch'
+    'allowed-tools: Bash(orangu analyze:*), Bash(orangu estimate:*), Bash(orangu evidence:*), Bash(orangu global:*), Bash(orangu harness:*), Bash(orangu repo:*), Bash(orangu ste:*), Bash(orangu suggest:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" harness *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(mktemp -d), Read, Agent, Skill(orangu:apply), Skill(orangu:interview), Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/improve-*.md)'
   it('improve pre-approves exactly its 8 orangu verbs, the 2 skills that it invokes, and only its own drafts', () => {
     expect(readText(IMPROVE).split('\n')[3]).toBe(IMPROVE_GRANTS)
     for (const s of readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))) {
@@ -390,17 +396,43 @@ describe('plugin packaging', () => {
     expect(md).toMatch(/this review did not edit the target repository/i)
   })
   // The search rules hold in every host, so they live in the brain rules, which the portable skill also carries. The
-  // provenance kinds belong to the manifest, which only the plugin writes, so they stay in improve.
+  // provenance kinds belong to the manifest, which only the plugin writes, so they stay in improve. Since decision 26 the
+  // researcher runs each outside search, and its results stay candidates out of the manifest, so improve records only
+  // catalog matches and its own inference.
   it('improve is catalog-first and preserves honest research provenance', () => {
     const md = readText(IMPROVE)
     expect(md).toMatch(/catalog matches before going online/i)
-    expect(md).toContain('Research the gaps only, as the brain rules direct.')
-    expect(md).toContain('catalog: <id>')
-    expect(md).toContain('kind: "research"')
-    expect(md).toContain('kind: "inference"')
+    expect(md).toContain('Record a catalog match as `catalog: <id>`, and your own synthesis as `kind: "inference"`.')
+    expect(md, 'improve opens no page, so it records no research source').not.toContain('kind: "research"')
     const brain = readText(BRAIN)
     expect(brain).toMatch(/never install a skill or plugin/i)
     expect(brain).toContain('Look for other options only where the catalog leaves a gap, or where an option changes fast.')
+  })
+  // Decision 26 (2026-11-01): improve calls no web tool. Each outside search goes to the read-only researcher, only after
+  // the user approves outside research, as stage 4 of the review directs. The rule is said once in the text of improve. A
+  // host with no plugin agents (the Codex mirror) does no outside research: it uses the catalog only. For one finding the
+  // researcher gets no evidence file, only the item and its class.
+  const NO_WEB = 'Never call a web tool yourself. If the user approves outside research, dispatch the read-only `orangu:harness-researcher` as stage 4 of the review directs.'
+  const CATALOG_ONLY_HOST = 'A host with no plugin agents uses the catalog only.'
+  it('improve calls no web tool itself, and sends outside research to the researcher after an approval', () => {
+    for (const [skill, review] of [
+      [IMPROVE, REVIEW],
+      ['.agents/skills/orangu-improve/SKILL.md', '.agents/skills/orangu-improve/references/review.md'],
+      ['plugins/orangu/skills/orangu-improve/SKILL.md', 'plugins/orangu/skills/orangu-improve/references/review.md'],
+    ] as const) {
+      const text = `${readText(skill)}\n${readText(review)}`
+      expect(text.split(NO_WEB).length - 1, `${skill} says the rule once`).toBe(1)
+      expect(text.split(CATALOG_ONLY_HOST).length - 1, `${skill} names the host with no plugin agents once`).toBe(1)
+      const research = between(readText(skill), '## 3. Research only where it adds value', '## 4. ')
+      expect(research, `${skill}: the rule is the research step`).toContain(NO_WEB)
+      expect(text, `${skill} tells Claude to search nowhere itself`).not.toMatch(/\b(?:WebSearch|WebFetch)\b|search (?:it )?yourself|open (?:the|a) page yourself/)
+    }
+    const stage4 = between(readText(REVIEW), '## 4. ', '## 5. ')
+    for (const literal of [
+      'Only if the user explicitly asked for outside research may the read-only `orangu:harness-researcher` evaluate uncovered candidates',
+      'Before you dispatch the researcher, reduce the question to generic feature and change-class terms.',
+      'The researcher receives only uncovered item ids, change classes, the evidence file paths of this review, and the policy. For one finding of the skill, it receives no evidence file.',
+    ]) expect(stage4, `stage 4 says: ${literal}`).toContain(literal)
   })
   // The review reads the evidence of a whole scope. Its pull keeps the default redaction, and its supporting sessions
   // are the slim projection (the analyze skill that documented both left on 2026-11-01).
@@ -965,7 +997,10 @@ describe('plugin packaging', () => {
     const desc = /description:\s*(.+)/.exec(researcher)?.[1] ?? ''
     expect(desc).toContain('Only /orangu:improve dispatches it, after explicit user approval for outside research.')
     expect(researcher, 'no dispatch from the interview, and no second input form').not.toMatch(/interview|[Ff]orm \([ab]\)|input forms|search terms/)
-    expect(researcher).toContain('Accept 1 input, from `/orangu:improve`: both evidence file paths, the uncovered item list, and the source policy.')
+    // decision 26: improve dispatches it for one finding too, and then it sends no evidence file
+    expect(researcher).toContain('Accept 1 input, from `/orangu:improve`: the uncovered item list and the source policy. Its review also sends both evidence file paths.')
+    expect(researcher).toContain('If the item list or the policy is missing, say so and stop.')
+    expect(researcher).toContain('For one finding, improve sends no evidence file.')
   })
   // C11: the 3 plugin agents keep their names (each is a row identity in the harness crosswalk), and each description
   // names /orangu:improve as its dispatcher, the skill that took in the review.
@@ -1574,15 +1609,18 @@ describe('plugin packaging', () => {
     expect(rules).toContain('If the skill that sent you here names a default audience, use it.')
     expect(rules, 'no audience default of its own').not.toMatch(/write for Plain language/i)
     expect(rules, 'the unit list covers read sizes').toMatch(/\bbytes\b/)
-    // improve researches online itself; the researcher-only rule is scoped to the harness review
+    // the researcher builds the network queries of the whole-harness review; since decision 26 improve searches nowhere
+    // itself, so the line holds for improve too
     expect(readText(SHARED_RULES)).toContain('In the harness review, only the researcher builds network queries.')
   })
 
   // A page counts as research only when this invocation opened it: "this session" would let a page from
   // earlier in a long conversation pass as checked today.
   it('research provenance covers only pages opened while the skill ran', () => {
-    for (const path of ['plugin/skills/improve/SKILL.md', '.agents/skills/orangu-improve/SKILL.md'])
-      expect(readText(path), path).toContain('- a page that you opened while this skill ran as `kind: "research"`')
+    // decision 26: improve opens no page. The researcher returns candidates, and each keeps `verifiedAt: null` until a
+    // person curates it, so it stays in chat and out of the manifest.
+    for (const path of [REVIEW, '.agents/skills/orangu-improve/references/review.md'])
+      expect(readText(path), path).toContain('Every discovered item keeps its source and `verifiedAt: null` until curated.')
     for (const path of ['plugin/skills/shared/artifact-contract.md', '.agents/skills/shared/artifact-contract.md'])
       expect(readText(path), path).toMatch(/research source requires the direct HTTPS page opened while the skill ran/)
   })
@@ -1855,13 +1893,15 @@ describe('plugin packaging', () => {
   it('only the explicit research surfaces hold network tools; localhost never launches them', () => {
     const networked = AGENTS.filter((a) => fmList(agentBlock(a), 'tools').some((t) => t === 'WebSearch' || t === 'WebFetch'))
     expect(networked, 'exactly one agent may reach the network').toEqual(['harness-researcher'])
-    for (const s of ['apply', 'feedback', 'interview', 'show-me']) {
+    // decision 26 (2026-11-01): improve grants no network tool either. The read-only researcher is the only network path.
+    const skills = readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))
+    expect(skills, 'each shipped skill is checked, improve included').toEqual(expect.arrayContaining(['improve', 'apply', 'feedback', 'interview', 'show-me']))
+    for (const s of skills) {
       const md = readFileSync(join(root, 'plugin/skills', s, 'SKILL.md'), 'utf8')
       const allowed = /^allowed-tools:\s*(.+)$/m.exec(md)?.[1] ?? ''
+      expect(allowed, `${s} has allowed-tools`).toBeTruthy()
       expect(allowed, `${s} grants no network tool`).not.toMatch(/WebSearch|WebFetch/)
     }
-    const improve = readFileSync(join(root, 'plugin/skills/improve/SKILL.md'), 'utf8')
-    expect(/^allowed-tools:.*WebSearch.*WebFetch$/m.test(improve)).toBe(true)
     expect(readText('src/serve/kickoff.ts')).not.toMatch(/child_process|--allowedTools|--tools/)
   })
 
@@ -2092,7 +2132,7 @@ describe('plugin packaging', () => {
     // question again, because the profile rules allow no other question (+1). A profile that does not read after the
     // write is named by its `path`, and the user moves the file away and runs the interview again, as in step 1 (+15).
     // 2026-11-01 the brain (C5): improve takes in the review of harness, the second opinion and the approval step, and
-    // analyze and harness leave both maps with their skills. improve keeps its ceiling of 1,181, measured 1,130 -> 1,175.
+    // analyze and harness leave both maps with their skills. improve keeps its ceiling of 1,181, measured 1,130 -> 1,168.
     // The routes, the profile read and the first-run question (+) are paid for by the search rules, which moved to
     // shared/brain.md, and by the approval step, which moved with the review to references/review.md (-).
     const SKILL_WORD_CEILING: Record<string, number> = { improve: 1181, apply: 700, feedback: 350, 'show-me': 570, interview: 678 }

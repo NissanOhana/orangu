@@ -48,7 +48,7 @@ Diagnose any accepted input in chat. Save only inside its scope's lifecycle:
 
 For a direct input, run `orangu evidence '<input>' [--scope repo|global] --estimate --quiet`, then the same command without `--estimate`. If the estimate says `overThreshold: true`, state the exact bytes and approximate tokens, and ask before loading it.
 
-For a suggestion id, run `orangu estimate --suggestion '<id>' --json --quiet` first. If it is over the threshold, state the exact estimate and ask before loading it. After the gate passes, load `orangu suggest --show '<id>' --json --quiet`. If either reports the id is not found, the id came without its evidence: a bare id creates no record. Ask for the report's copy-ready command, whose `--finding` token creates the record, or diagnose the session as a direct input.
+For a suggestion id, run `orangu estimate --suggestion '<id>' --json --quiet` first. If it is over the threshold, state the exact estimate and ask before loading it. After the gate passes, load `orangu suggest --show '<id>' --json --quiet`. If either reports the id is not found, ask for the copy-ready command of the report: its `--finding` token creates the record. Or diagnose the session as a direct input.
 
 ## 2. Diagnose and rank
 
@@ -58,11 +58,7 @@ Before drafting, interview the user on what the evidence cannot show, as [the in
 
 ## 3. Research only where it adds value
 
-Consult deterministic catalog matches before going online. Research the gaps only, as the brain rules direct. Record each source as the artifact contract directs:
-
-- a catalog match as `catalog: <id>`
-- a page that you opened while this skill ran as `kind: "research"`
-- your own synthesis as `kind: "inference"`
+Consult deterministic catalog matches before going online. Never call a web tool yourself. If the user approves outside research, dispatch the read-only `orangu:harness-researcher` as stage 4 of the review directs. A host with no plugin agents uses the catalog only. Record a catalog match as `catalog: <id>`, and your own synthesis as `kind: "inference"`.
 
 ## 4. Save one bounded proposal
 
