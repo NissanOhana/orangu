@@ -3,9 +3,12 @@
  * sibling form, read in 1 pass. Fake values only.
  */
 import { describe, expect, it } from 'vitest'
+import { ANALYZER_RULE_IDS } from '../analyze/rule-ids.js'
 import { INNER_PAIR_FORMS, INNER_PAIR_RELATIVES, INNER_SECRET_PART, LINE_END_SHAPES, NEXT_LINES } from '../../test/fixtures/inner-pair-shapes.js'
-import { AFTER_WORD_CHAR, KEY_PREFIX_SHAPES } from '../../test/fixtures/key-prefix-shapes.js'
+import { GLUED_HEADERS, GLUED_KEYS, KEEP_WORD_START, KEY_PREFIX_SHAPES } from '../../test/fixtures/key-prefix-shapes.js'
+import { HASH_LINES, PLAIN_TEXT_LINES } from '../../test/fixtures/plain-text-lines.js'
 import { redactValue, scrubStr } from './redact.js'
+import { PATTERNS } from './rules.js'
 
 describe('scrubStr masks a secret that only its key, its URL, its header or a quoted pair names', () => {
   const v = 'Zq9xW2pL7mN4vB8k'
@@ -245,8 +248,67 @@ describe('scrubStr masks a secret that only its key, its URL, its header or a qu
     expect(scrubStr('authorization: required when calling')).toBe('authorization=‹redacted› ‹token› calling')
   })
 
-  it('keeps the word start of main on each key rule, the JWT rule, Bearer and Authorization: a run with a key prefix goes whole, a key after a word character stays', () => {
+  it('keeps a run with a key prefix whole: the JWT, the e-mail, the key=value and the blob rule still mask the whole run', () => {
     for (const [text, out] of KEY_PREFIX_SHAPES) expect(scrubStr(text), text.slice(0, 30)).toBe(out)
-    for (const text of AFTER_WORD_CHAR) expect(scrubStr(text), text.slice(0, 30)).toBe(text)
+  })
+
+  it('masks each key and a JWT right after `_`, a letter and a digit, and inside a model id', () => {
+    expect(GLUED_KEYS).toHaveLength(64)
+    for (const [text, out] of GLUED_KEYS) expect(scrubStr(text), text.slice(0, 40)).toBe(out)
+  })
+
+  it('masks an Authorization credential after a glued header name and a scheme word, and a URL password whose scheme a word character starts', () => {
+    for (const [text, out] of GLUED_HEADERS) expect(scrubStr(text), text.slice(0, 40)).toBe(out)
+  })
+
+  it('keeps Bearer, a JWT shape whose second part is no JSON, and an authorization name with no scheme word as they are after a word character', () => {
+    for (const text of KEEP_WORD_START) expect(scrubStr(text), text.slice(0, 40)).toBe(text)
+  })
+
+  it('keeps each line of plain text and each rule id as it is, and masks a hash as before', () => {
+    const lines = [...PLAIN_TEXT_LINES, ...ANALYZER_RULE_IDS]
+    expect(lines.length).toBeGreaterThanOrEqual(300)
+    for (const line of lines) expect(scrubStr(line), line).toBe(line)
+    for (const [text, out] of HASH_LINES) expect(scrubStr(text), text).toBe(out)
+  })
+
+  it('masks a glued key with the run that the blob rule masks after it, and leaves a key inside that run to the blob rule', () => {
+    // the blob rule masks the 60 characters up to the `-`, so the key body after them stayed
+    expect(scrubStr(`${'Q'.repeat(57)}ask-${v}${v}`)).toBe('‹api-key›')
+    expect(scrubStr(`${'q'.repeat(40)}${['AKIA', 'IOSFODNN7EXAMPLE'].join('')}`)).toBe('‹blob›')
+  })
+
+  it('masks a glued key right after a word whose body ends with the start of the key prefix', () => {
+    expect(scrubStr(`risk-abcdefghijklmnopqrstsk-${v}${v}`)).toBe('risk-abcdefghijklmnopqrst‹api-key›')
+  })
+
+  it('keeps the word-start key rules of main, byte for byte', () => {
+    expect(PATTERNS.slice(1, 15).map((rule) => (typeof rule === 'function' ? rule.name : rule[0].source))).toStrictEqual([
+      String.raw`\bsk-ant-[A-Za-z0-9_-]{10,}`,
+      String.raw`\bsk-proj-[A-Za-z0-9_-]{20,}`,
+      String.raw`\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}`,
+      String.raw`\bwhsec_[A-Za-z0-9]{16,}`,
+      String.raw`\bsk-[A-Za-z0-9]{20,}`,
+      String.raw`\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}`,
+      String.raw`\bglpat-[A-Za-z0-9_-]{20,}`,
+      String.raw`\bnpm_[A-Za-z0-9]{30,}`,
+      String.raw`\bhf_[A-Za-z0-9]{30,}`,
+      String.raw`\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}`,
+      String.raw`\bdop_v1_[A-Za-z0-9]{60,}`,
+      String.raw`\bxox[baprs]-[A-Za-z0-9-]{10,}`,
+      String.raw`\bAKIA[0-9A-Z]{16}\b`,
+      String.raw`\bAIza[0-9A-Za-z_-]{30,}`,
+    ])
+  })
+
+  it('reads each hostile glued shape of 200 KB in a line', () => {
+    const shapes = ['xsk-ant-', 'sk-ant-', '_sk-a', 'aghp_', 'meyJ', 'eyJa.', 'meyJa.eyJb.', '_AIza', 'rk_test_', 'qAKIA', 'x_authorization: basic ', '_https://a:', 'aMSG.', 'pnpm_', `${'Q'.repeat(57)}ask-${v}${v} `]
+    for (const shape of shapes) {
+      const text = shape.repeat(Math.ceil(200_000 / shape.length))
+      const start = performance.now()
+      scrubStr(text)
+      // linear rules take about 10 ms here; the bound is wide for a loaded machine
+      expect(performance.now() - start, shape.slice(0, 20)).toBeLessThan(500)
+    }
   })
 })

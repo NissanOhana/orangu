@@ -279,9 +279,11 @@ export function maskQuotedPairs(text: string, mark: Mark): string {
  * padding. A name=value parameter (`Token token="…"`) is no credential: the key=value rule masks its value. An @ is
  * part of a credential, and a credential never ends right before an @ and a letter or a digit: it never leaves the
  * rest of an e-mail address that the e-mail rule would mask. The scheme and the credential stay on the line of the
- * header, so a command on the next line stays whole.
+ * header, so a command on the next line stays whole. The header name starts at a word start, or right after a word
+ * character (`HTTP_AUTHORIZATION=`, `proxy_authorization:`, a JSON escape `\nAuthorization:`) when a scheme word of
+ * HTTP follows it: glued with another word, it is code or prose (`x_authorization = await client.check`).
  */
-const AUTHORIZATION = /\b((?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?[a-z][a-z0-9_-]*)[ \t]+([A-Za-z0-9+/._~@-]{4,})(?![A-Za-z0-9+/._~-]|@[A-Za-z0-9]|[ \t]*:|[ \t]+=|=+[ \t]*["']?[A-Za-z0-9+/._~-])={0,2}/dgi
+const AUTHORIZATION = /(?:\b|(?<=\w)(?=(?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?(?:basic|bearer|digest|dpop|negotiate|ntlm|oauth|token|apikey|ssws)[ \t]))((?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?[a-z][a-z0-9_-]*)[ \t]+([A-Za-z0-9+/._~@-]{4,})(?![A-Za-z0-9+/._~-]|@[A-Za-z0-9]|[ \t]*:|[ \t]+=|=+[ \t]*["']?[A-Za-z0-9+/._~-])={0,2}/dgi
 const TRAILING_NAME = /[A-Za-z0-9_.\/-]*$/
 
 /**
@@ -363,27 +365,41 @@ const runEnd = (text: string, from: number): number => {
 }
 
 /**
- * Each JWT (`eyJ` at a word start, 10 or more token characters, `.`, 10 or more, `.`, 5 or more) becomes ‹jwt›. The
- * first part ends where its run ends, so every `eyJ` in 1 run shares that end and the next 2 parts: it reads them
- * once for the run.
+ * Each JWT (`eyJ`, 10 or more token characters, `.`, 10 or more, `.`, 5 or more) as [start, end): at a word start, or,
+ * when `glued`, right after a word character and with a second part that is a JSON object too (`eyJ`), because glued
+ * a dotted camelCase path is no JWT (`surveyJsConfiguration.questionsAndAnswers.items`). The first part ends where its
+ * run ends, so every `eyJ` in 1 run shares that end and the next 2 parts: it reads them once for the run.
  */
-export function maskJwts(text: string, mark: Mark): string {
-  let out = ''
-  let done = 0
+function jwtSpans(text: string, glued: boolean): Array<[number, number]> {
+  const spans: Array<[number, number]> = []
   let skipTo = 0
   for (let at = text.indexOf('eyJ'); at >= 0; at = text.indexOf('eyJ', at + 1)) {
-    if (at < skipTo || (at > 0 && WORD_CHAR.test(text[at - 1]!))) continue
+    if (at < skipTo || (at > 0 && WORD_CHAR.test(text[at - 1]!)) !== glued) continue
     const first = runEnd(text, at + 3)
     const second = text[first] === '.' ? runEnd(text, first + 1) : first
     const third = text[second] === '.' && second !== first ? runEnd(text, second + 1) : second
-    if (first - at < 13 || second - first - 1 < 10 || text[second] !== '.' || third - second - 1 < 5) {
+    if (first - at < 13 || second - first - 1 < 10 || text[second] !== '.' || third - second - 1 < 5 || (glued && !text.startsWith('eyJ', first + 1))) {
       skipTo = first
       continue
     }
-    out += text.slice(done, at) + '‹jwt›'
-    mark(at, third, '‹jwt›')
-    done = skipTo = third
+    spans.push([at, third])
+    skipTo = third
     at = third - 1
+  }
+  return spans
+}
+
+/** Each JWT at a word start (see jwtSpans) becomes ‹jwt›. */
+export function maskJwts(text: string, mark: Mark): string {
+  let out = ''
+  let done = 0
+  for (const [at, end] of jwtSpans(text, false)) {
+    out += text.slice(done, at) + '‹jwt›'
+    mark(at, end, '‹jwt›')
+    done = end
   }
   return out + text.slice(done)
 }
+
+/** Each JWT right after a word character (see jwtSpans), for the glued pass of ./keys.ts. */
+export const gluedJwts = (text: string): Array<[number, number]> => jwtSpans(text, true)

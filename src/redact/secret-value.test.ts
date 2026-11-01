@@ -122,6 +122,16 @@ describe('redactValue masks every scalar under a secret key, and scrubWithOrigin
     expect(signature).not.toMatch(/zq.*xw/)
   })
 
+  it('the error signature that a cached Analysis carries masks a key glued inside a model id too', async () => {
+    const b = new SessionBuilder()
+    b.userPrompt('deploy')
+    b.toolCall('Bash', { command: 'curl' }, `error: model claude-opus-5_sk-ant-api03-${v}${v} is not known`, { isError: true, durationMs: 50 })
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    const signature = analyzeSession(s, { version: 'test', now: 0 }).tools.errorGroups[0]!.signature
+    expect(signature).toBe('error: model claude-opus-<n>_‹anthropic-key› is not known')
+    expect(signature).not.toMatch(/zq.*xw/)
+  })
+
   it('redactAnalysis counts each masked value in its report', () => {
     const a = { session: { id: 'x' }, extra: { api_key: v } } as unknown as Analysis
     const { analysis, report } = redactAnalysis(a, { home: '' })

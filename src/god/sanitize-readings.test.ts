@@ -4,7 +4,7 @@
  * characters are built from their code points, so this file spells no escape sequence.
  */
 import { describe, expect, it } from 'vitest'
-import { AFTER_WORD_CHAR, KEY_PREFIX_SHAPES } from '../../test/fixtures/key-prefix-shapes.js'
+import { GLUED_HEADERS, GLUED_KEYS, KEEP_WORD_START, KEY_PREFIX_SHAPES } from '../../test/fixtures/key-prefix-shapes.js'
 import { cleanText } from './sanitize.js'
 
 const HOME = '/Users/test'
@@ -123,8 +123,8 @@ describe('cleanText readings', () => {
     }
   })
 
-  it('keeps the word start of main on each key rule, the JWT rule, Bearer and Authorization: a run with a key prefix goes whole, a key after a word character stays', () => {
-    for (const [text, out] of KEY_PREFIX_SHAPES) expect(cleanText(text, HOME), text.slice(0, 30)).toBe(out)
-    for (const text of AFTER_WORD_CHAR) expect(cleanText(text, HOME), text.slice(0, 30)).toBe(text)
+  it('masks a run with a key prefix whole, and each key, JWT and header credential glued after a word character, as the shared redaction does', () => {
+    for (const [text, out] of [...KEY_PREFIX_SHAPES, ...GLUED_KEYS, ...GLUED_HEADERS]) expect(cleanText(text, HOME), text.slice(0, 30)).toBe(out)
+    for (const text of KEEP_WORD_START) expect(cleanText(text, HOME), text.slice(0, 30)).toBe(text)
   })
 })

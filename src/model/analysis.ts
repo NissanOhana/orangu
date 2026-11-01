@@ -50,6 +50,11 @@ export const ANALYSIS_SCHEMA_VERSION = '2'
  *     conversation on a subscription, 5 min otherwise and for subagents). The thinking-on-mechanical improvement names
  *     /effort low and effort: low, because code.claude.com/docs/en/model-config.md (opened 2026-11-01) gives medium as
  *     the default of the 5.5 models. A cached payload carries the old text. 0.13.0 ships generation 6
+ *     7 also carries the shared redaction (2026-11-01): a key or a JWT right after a letter, a digit or `_` (as in a
+ *     model id, `claude-opus-5_sk-ant-…`), an Authorization credential after a glued header name and a scheme word, and
+ *     a URL password whose scheme starts inside a word are masked now. tools.errorGroups[].signature runs that
+ *     redaction in the analyzer (src/analyze/tools.ts errorSignature), so a cached payload carries the old signature
+ *     and grouping. 7 is not released, so the generation stays at 7
  */
 export const ANALYSIS_PAYLOAD_GENERATION = 7
 

@@ -381,6 +381,21 @@ describe('redactAnalysis', () => {
     expect(JSON.stringify(out)).not.toContain('sk-ant-api03-FAKEFAKEFAKEFAKEFAKE')
   })
 
+  it('masks a key glued inside a model id in the default analyze --json', async () => {
+    const key = ['sk', 'ant', 'api03', 'Zq9xW2pL7mN4vB8kZq9xW2pL7mN4vB8k'].join('-')
+    const b = new SessionBuilder({ model: `claude-opus-5_${key}` })
+    b.userPrompt('deploy')
+    b.tick(100)
+    b.assistant([{ type: 'text', text: 'done' }])
+    const s = await parseClaudeCodeSession({ records: b.toRecords(), noSidecar: true })
+    const a = analyzeSession(s, { version: 'test', now: 0 })
+    // the Analysis keeps the model id as the transcript wrote it, and the output masks it
+    expect(JSON.stringify(a)).toContain(key)
+    const json = renderAnalysisJson(a, {})
+    expect(json).not.toContain('Zq9xW2pL')
+    expect(json).toContain('claude-opus-5_‹anthropic-key›')
+  })
+
   it('rewrites the home-directory prefix to ~ by default', () => {
     const a = {
       session: { id: 'x', path: '/home/tester/proj/a.jsonl', cwd: '/home/tester/proj' },

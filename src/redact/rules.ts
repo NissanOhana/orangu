@@ -4,6 +4,7 @@
  * part that it masks and the text that it writes there: ./redact.ts counts the parts, and scrubWithOrigins keeps the
  * origin of each character (./origins.ts).
  */
+import { BLOB, KEYS, maskGluedKeys } from './keys.js'
 import { type Edit, type Mark, originsAfter } from './origins.js'
 import { maskAssignments, maskAuthorizations, maskEmails, maskJwts, maskQuotedPairs } from './scan.js'
 
@@ -15,29 +16,20 @@ export const PATTERNS: Rule[] = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, '‹private-key›'],
   // API keys / tokens (do these before generic ones). Each key rule, the JWT rule, Bearer and Authorization start at a
   // word start: a rule that starts inside a word splits a JWT, an address, a value or a blob (`helpdesk-…@…`,
-  // `password=Xy9sk-…`), and the rule that would mask it whole then sees only a part of it.
-  [/\bsk-ant-[A-Za-z0-9_-]{10,}/g, '‹anthropic-key›'],
-  [/\bsk-proj-[A-Za-z0-9_-]{20,}/g, '‹openai-project-key›'],
-  [/\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/g, '‹stripe-key›'],
-  [/\bwhsec_[A-Za-z0-9]{16,}/g, '‹stripe-webhook-secret›'],
-  [/\bsk-[A-Za-z0-9]{20,}/g, '‹api-key›'],
-  [/\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}/g, '‹github-token›'],
-  [/\bglpat-[A-Za-z0-9_-]{20,}/g, '‹gitlab-token›'],
-  [/\bnpm_[A-Za-z0-9]{30,}/g, '‹npm-token›'],
-  [/\bhf_[A-Za-z0-9]{30,}/g, '‹huggingface-token›'],
-  [/\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, '‹sendgrid-key›'],
-  [/\bdop_v1_[A-Za-z0-9]{60,}/g, '‹digitalocean-token›'],
-  [/\bxox[baprs]-[A-Za-z0-9-]{10,}/g, '‹slack-token›'],
-  [/\bAKIA[0-9A-Z]{16}\b/g, '‹aws-key›'],
-  [/\bAIza[0-9A-Za-z_-]{30,}/g, '‹google-key›'],
+  // `password=Xy9sk-…`), and the rule that would mask it whole then sees only a part of it. A key or a JWT right after
+  // a word character goes in the glued pass below the e-mail rule (./keys.ts).
+  ...KEYS.map(({ prefix, body, by }): Rule => [new RegExp(`\\b${prefix}${body}`, 'g'), by]),
   maskJwts,
   [/\b[A-Fa-f0-9]{40}\b/g, '‹hash40›'],
   // connection strings
   [/\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s'"]+/gi, '‹db-url›'],
   // the password of any other URL (scheme://user:<password>@host): the scheme, the user, the host and the path stay.
-  // The password runs to the last @ before the host, so a password that holds an @ goes whole.
-  [/\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/?#@'"]*):(?!‹)[^\s/?#'"]+@/gi, '$1:‹redacted›@'],
-  // bearer/authorization
+  // The password runs to the last @ before the host, so a password that holds an @ goes whole. The scheme starts at any
+  // place (`_https://`, `7postgres://`, a word of more than 32 characters before it), so the password of a connection
+  // string that a word character starts goes too. The scheme is a lookbehind: a match starts at `://`, which the regex
+  // finds fast, and the scheme stays out of the match.
+  [/(?<=[a-z][a-z0-9+.-]{0,31})(:\/\/[^\s:/?#@'"]*):(?!‹)[^\s/?#'"]+@/gi, '$1:‹redacted›@'],
+  // bearer/authorization. Bearer starts at a word start: glued, it is another word (useBearer, torchBearer).
   [/\bBearer\s+[A-Za-z0-9._-]{12,}/g, 'Bearer ‹token›'],
   // the credential after any other scheme word of an Authorization header (Basic, Token, Negotiate, …), as a scanner
   // so that a credential that names a secret takes its inner pair with it
@@ -49,8 +41,10 @@ export const PATTERNS: Rule[] = [
   maskAssignments,
   // email, as a scanner that reads each run once
   maskEmails,
+  // each key and JWT right after a letter, a digit or `_`, after the rules that mask a whole run (./keys.ts)
+  maskGluedKeys,
   // long hex/base64 blobs
-  [/\b[A-Za-z0-9+/]{60,}={0,2}\b/g, '‹blob›'],
+  [BLOB, '‹blob›'],
 ]
 
 /** A regex rule: each match is marked once, and its replacement gets the captured key name for `$1`. */

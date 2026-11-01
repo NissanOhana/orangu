@@ -41,29 +41,62 @@ export const KEY_PREFIX_SHAPES: ReadonlyArray<readonly [text: string, redacted: 
   [`token ${googleInPayload} end`, 'token ‹jwt› end'],
 ]
 
-const KEYS = [
-  `sk-ant-api03-${v}`,
-  `sk-proj-${v}${v}`,
-  ['sk', 'live', `${v}${v}`].join('_'),
-  ['whsec', `${v}${v}`].join('_'),
-  `sk-${v}${v}`,
-  ['ghp', `${v}${v}`].join('_'),
-  `glpat-${v}${v}`,
-  ['npm', `${v}${v}`].join('_'),
-  ['hf', `${v}${v}`].join('_'),
-  `SG.${v}${v}.${v}${v}`,
-  ['dop', 'v1', `${v}${v}${v}${v}`].join('_'),
-  `xoxb-${v}`,
-  ['AKIA', 'IOSFODNN7EXAMPLE'].join(''),
-  `AIza${v}${v}`,
-  `eyJ${v}aa.${v}bbbb.${v}`,
-  `Bearer ${v}${v}`,
-  `Authorization: Basic ${v}`,
+/** Each key rule of the redaction, and a JWT, with the marker that each gets. Fake values only. */
+const KEYS: ReadonlyArray<readonly [key: string, marker: string]> = [
+  [`sk-ant-api03-${v}`, '‹anthropic-key›'],
+  [`sk-proj-${v}${v}`, '‹openai-project-key›'],
+  [['sk', 'live', `${v}${v}`].join('_'), '‹stripe-key›'],
+  [['whsec', `${v}${v}`].join('_'), '‹stripe-webhook-secret›'],
+  [`sk-${v}${v}`, '‹api-key›'],
+  [['ghp', `${v}${v}`].join('_'), '‹github-token›'],
+  [['github', 'pat', `${v}${v}`].join('_'), '‹github-token›'],
+  [`glpat-${v}${v}`, '‹gitlab-token›'],
+  [['npm', `${v}${v}`].join('_'), '‹npm-token›'],
+  [['hf', `${v}${v}`].join('_'), '‹huggingface-token›'],
+  [`SG.${v}${v}.${v}${v}`, '‹sendgrid-key›'],
+  [['dop', 'v1', `${v}${v}${v}${v}`].join('_'), '‹digitalocean-token›'],
+  [`xoxb-${v}`, '‹slack-token›'],
+  [['AKIA', 'IOSFODNN7EXAMPLE'].join(''), '‹aws-key›'],
+  [`AIza${v}${v}`, '‹google-key›'],
+  [[header, payload, v].join('.'), '‹jwt›'],
 ]
 
 /**
- * Each key, a JWT, a Bearer token and an Authorization credential right after a word character, as the final byte
- * of a colour code leaves it. Main leaves each text as it is, because each of these rules starts at a word start:
- * known debt, so that the rules start where main starts them. Fake values only.
+ * Each key and a JWT right after `_`, a letter and a digit, and inside a model id, as a variable name, a JSON escape
+ * (`\nsk-…`), a URL escape (`%22sk-…`) or a model string leaves it, with the marker in its place. Fake values only.
  */
-export const AFTER_WORD_CHAR: readonly string[] = KEYS.flatMap((key) => [`m${key}`, `_${key}`])
+export const GLUED_KEYS: ReadonlyArray<readonly [text: string, redacted: string]> = KEYS.flatMap(([key, marker]) =>
+  ['_', 'm', '7', 'claude-opus-5_'].map((glue) => [`${glue}${key}`, `${glue}${marker}`] as const),
+)
+
+/**
+ * An Authorization credential after a header name that a word character starts (an environment dump, a JSON escape)
+ * and before a scheme word, and a URL password whose scheme a word character starts. Fake values only.
+ */
+export const GLUED_HEADERS: ReadonlyArray<readonly [text: string, redacted: string]> = [
+  [`HTTP_AUTHORIZATION=Basic ${v}`, 'HTTP_AUTHORIZATION=Basic ‹token›'],
+  // a scheme word of 6 or more characters is the value of the secret name, as at a word start
+  [`proxy_authorization: Negotiate ${v}`, 'proxy_authorization=‹redacted› ‹token›'],
+  [`mAuthorization: Basic ${v}`, 'mAuthorization: Basic ‹token›'],
+  [`_Authorization: Basic ${v}`, '_Authorization: Basic ‹token›'],
+  [`7Authorization: Token ${v}`, '7Authorization: Token ‹token›'],
+  [`{"raw": "GET / HTTP/1.1\\r\\nAuthorization: Basic ${v}\\r\\n"}`, '{"raw": "GET / HTTP/1.1\\r\\nAuthorization: Basic ‹token›\\r\\n"}'],
+  // a host with no dotted name: the e-mail rule does not take the password with it
+  [`_https://deploy:${v}@localhost:8080/r.git`, '_https://deploy:‹redacted›@localhost:8080/r.git'],
+  [`7postgres://app:${v}@db:5432/app`, '7postgres://app:‹redacted›@db:5432/app'],
+  [`${'a'.repeat(40)}https://deploy:${v}@host/x`, `${'a'.repeat(40)}https://deploy:‹redacted›@host/x`],
+]
+
+/**
+ * The glued shapes that stay, because glued they are another word: `Bearer` after a letter (useBearer), a JWT shape
+ * whose second part is no JSON object (a dotted camelCase path such as `surveyJs….items`), and an authorization name
+ * with no scheme word after it (code). Fake values only.
+ */
+export const KEEP_WORD_START: readonly string[] = [
+  `mBearer ${v}${v}`,
+  `_Bearer ${v}${v}`,
+  `meyJ${v}aa.${v}bbbb.${v}`,
+  `_eyJ${v}aa.${v}bbbb.${v}`,
+  'installation_authorization = await client.check',
+  'requireAuthorization: the reader',
+]
