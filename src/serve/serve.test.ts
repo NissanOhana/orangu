@@ -246,6 +246,7 @@ describe('orangu serve (in-process e2e)', () => {
       (base: string) => fetch(base + '/favicon.ico'),
       (base: string) => fetch(base + '/api/sessions'),
       (base: string) => fetch(base + '/api/harness'),
+      (base: string) => fetch(base + '/api/profile'),
       (base: string) => fetch(base + `/export/${home.liveId}.html`),
       (base: string) => fetch(base + '/events'),
       (base: string) => fetch(base + '/api/kickoff', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }),

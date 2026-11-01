@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { existsSync } from 'node:fs'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -24,15 +25,20 @@ afterEach(async () => {
   vi.unstubAllEnvs()
 })
 
-/** A server over an empty Claude folder, and an orangu home of its own for the profile. */
-async function boot(profile?: unknown): Promise<{ url: string; profileHome: string }> {
-  const profileHome = await mkdtemp(join(tmpdir(), 'orangu-serve-profile-'))
-  if (profile !== undefined) await writeFile(join(profileHome, 'profile.json'), JSON.stringify(profile))
+/** A server over an empty Claude folder, with `ORANGU_HOME` at `profileHome`. The store of the server has a home of its own. */
+async function startWithHome(profileHome: string): Promise<string> {
   vi.stubEnv('ORANGU_HOME', profileHome)
   const configDir = await mkdtemp(join(tmpdir(), 'orangu-serve-profile-claude-'))
   const storeHome = await mkdtemp(join(tmpdir(), 'orangu-serve-profile-store-'))
   srv = await startServe({ open: false, includeText: false, configDir, noCache: true, version: 'test' }, { quiet: true, store: new SuggestionStore({ home: storeHome }) })
-  return { url: srv.url, profileHome }
+  return srv.url
+}
+
+/** A server, and an orangu home of its own that holds `profile` when it is given. */
+async function boot(profile?: unknown): Promise<{ url: string; profileHome: string }> {
+  const profileHome = await mkdtemp(join(tmpdir(), 'orangu-serve-profile-'))
+  if (profile !== undefined) await writeFile(join(profileHome, 'profile.json'), JSON.stringify(profile))
+  return { url: await startWithHome(profileHome), profileHome }
 }
 
 async function getProfile(url: string): Promise<{ status: number; body: string }> {
@@ -66,5 +72,13 @@ describe('GET /api/profile', () => {
     const { status, body } = await getProfile(url)
     expect(status).toBe(200)
     expect(JSON.parse(body)).toEqual({ exists: false, updatedAt: null })
+  })
+
+  it('gives exists false for a missing orangu home, and makes no folder: only the CLI read makes the home', async () => {
+    const missing = join(await mkdtemp(join(tmpdir(), 'orangu-serve-profile-parent-')), 'orangu')
+    const { status, body } = await getProfile(await startWithHome(missing))
+    expect(status).toBe(200)
+    expect(JSON.parse(body)).toEqual({ exists: false, updatedAt: null })
+    expect(existsSync(missing)).toBe(false)
   })
 })
