@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash6 } from "node:crypto";
-import { basename as basename16, join as join13, resolve as resolve14 } from "node:path";
+import { basename as basename16, join as join14, resolve as resolve14 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -35,11 +35,12 @@ var BOOL_FLAGS = /* @__PURE__ */ new Set([
   "no-color",
   "plain",
   "lines",
-  // the 4 reads of orangu suggest: each takes no value, so `--queue <word>` leaves the word a positional
+  // the 5 reads of orangu suggest: each takes no value, so `--queue <word>` leaves the word a positional
   "queue",
   "todo",
   "lessons",
-  "history"
+  "history",
+  "profile"
 ]);
 var KNOWN_FLAGS = /* @__PURE__ */ new Set([
   ...BOOL_FLAGS,
@@ -14425,8 +14426,77 @@ var kickoffRoutes = (ctx) => [
   }
 ];
 
+// src/suggest/profile.ts
+import { lstat as lstat10, mkdir as mkdir3 } from "node:fs/promises";
+import { join as join10 } from "node:path";
+var PROFILE_MAX_BYTES = 16384;
+var PRIVATE_DIRECTORY_MODE3 = 448;
+var DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+var HOWS = ["option", "own", "skipped"];
+var isRecord = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isText = (value, max) => typeof value === "string" && Array.from(value).length <= max;
+var isOneOf = (value, values) => typeof value === "string" && values.includes(value);
+var isAnswer = (value) => isRecord(value) && Object.keys(value).length === 3 && typeof value["q"] === "string" && typeof value["a"] === "string" && isOneOf(value["how"], HOWS);
+var CHECKS = {
+  role: (value) => isText(value, 200),
+  work: (value) => Array.isArray(value) && value.length <= 6 && value.every((item) => isText(item, 120)),
+  process: (value) => isText(value, 200),
+  priority: (value) => isOneOf(value, ["quality", "time", "tokens"]),
+  models: (value) => isOneOf(value, ["yes", "ask", "no"]),
+  audience: (value) => isOneOf(value, ["local", "shared"]),
+  repeats: (value) => isText(value, 500),
+  never: (value) => isText(value, 500),
+  answers: (value) => Array.isArray(value) && value.length <= 12 && value.every(isAnswer)
+};
+var OPTIONAL_KEYS = Object.keys(CHECKS);
+var PROFILE_KEYS = ["v", "updatedAt", ...OPTIONAL_KEYS];
+function profileOf(value) {
+  if (!isRecord(value) || Object.keys(value).some((key) => !PROFILE_KEYS.includes(key))) return null;
+  const { v, updatedAt } = value;
+  if (v !== 1 || typeof updatedAt !== "string" || !DATE_RE.test(updatedAt)) return null;
+  if (!OPTIONAL_KEYS.every((key) => !Object.hasOwn(value, key) || CHECKS[key](value[key]))) return null;
+  const profile = { v: 1, updatedAt };
+  for (const key of OPTIONAL_KEYS) if (Object.hasOwn(value, key)) Object.assign(profile, { [key]: structuredClone(value[key]) });
+  return profile;
+}
+async function readProfile(env) {
+  const path = join10(oranguHome(env), "profile.json");
+  try {
+    await lstat10(path);
+  } catch (error) {
+    const code2 = error.code;
+    if (code2 === "ENOENT" || code2 === "ENOTDIR") return { path, exists: false, profile: null };
+    return { path, exists: true, profile: null };
+  }
+  try {
+    return { path, exists: true, profile: profileOf(JSON.parse(await readStableTextFile(path, PROFILE_MAX_BYTES, "profile"))) };
+  } catch {
+    return { path, exists: true, profile: null };
+  }
+}
+async function prepareProfileHome(env = process.env) {
+  await mkdir3(oranguHome(env), { recursive: true, mode: PRIVATE_DIRECTORY_MODE3 });
+}
+async function profileStatus(env = process.env) {
+  const { path, exists, profile } = await readProfile(env);
+  return { path, exists, valid: profile !== null, updatedAt: profile?.updatedAt ?? null };
+}
+
+// src/serve/profile.ts
+var profileRoutes = () => [
+  {
+    method: "GET",
+    path: "/api/profile",
+    handler: async (_m, _req, res) => {
+      const { exists, updatedAt } = await profileStatus();
+      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
+      res.end(JSON.stringify({ exists, updatedAt }));
+    }
+  }
+];
+
 // src/serve/routes-extra.ts
-var extraRoutes = [kickoffRoutes, exportRoutes];
+var extraRoutes = [kickoffRoutes, exportRoutes, profileRoutes];
 
 // src/serve/sse.ts
 var RING_SIZE = 200;
@@ -14886,7 +14956,7 @@ var MAX_EVIDENCE_VALUE_ITEMS = 500;
 var MAX_EVIDENCE_VALUE_NODES = 5e3;
 var MAX_EVIDENCE_VALUE_DEPTH = 8;
 var SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9:_-]*$/;
-function isRecord(value) {
+function isRecord2(value) {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 function boundedString(value, label, max, allowEmpty = false) {
@@ -14922,7 +14992,7 @@ function boundedArray(value, label, max) {
   return value;
 }
 function requireRecords(value, keys, label) {
-  for (const key of keys) if (!isRecord(value[key])) throw new Error(`${label}.${key} must be an object`);
+  for (const key of keys) if (!isRecord2(value[key])) throw new Error(`${label}.${key} must be an object`);
 }
 function requireArrays(value, keys, label) {
   for (const key of keys) if (!Array.isArray(value[key])) throw new Error(`${label}.${key} must be an array`);
@@ -14972,7 +15042,7 @@ function validateSessionIds(value, label) {
   return normalizeSessionIds(raw.map((id, index) => boundedId(id, `${label}[${index}]`, MAX_SESSION_ID_CHARS)));
 }
 function validateInsight(value, index) {
-  if (!isRecord(value)) throw new Error(`insights[${index}] must be an object`);
+  if (!isRecord2(value)) throw new Error(`insights[${index}] must be an object`);
   const id = boundedId(value["id"], `insights[${index}].id`, MAX_INSIGHT_ID_CHARS);
   const ruleId = boundedId(value["ruleId"], `insights[${index}].ruleId`, MAX_RULE_ID_CHARS);
   const title = boundedString(value["title"], `insights[${index}].title`, MAX_TITLE_CHARS, true);
@@ -14982,7 +15052,7 @@ function validateInsight(value, index) {
   const axis = insightAxis(value["axis"], `insights[${index}].axis`);
   const severity = insightSeverity(value["severity"], `insights[${index}].severity`);
   const evidence = value["evidence"];
-  if (!isRecord(evidence)) throw new Error(`insights[${index}].evidence must be an object`);
+  if (!isRecord2(evidence)) throw new Error(`insights[${index}].evidence must be an object`);
   validateBoundedValue(evidence, `insights[${index}].evidence`);
   const rawTurns = boundedArray(value["turnIndexes"], `insights[${index}].turnIndexes`, MAX_TURN_INDEXES);
   const turnIndexes = [];
@@ -14996,7 +15066,7 @@ function validateInsight(value, index) {
   let savings;
   const rawSavings = value["savings"];
   if (rawSavings !== void 0) {
-    if (!isRecord(rawSavings) || typeof rawSavings["estimated"] !== "boolean") {
+    if (!isRecord2(rawSavings) || typeof rawSavings["estimated"] !== "boolean") {
       throw new Error(`insights[${index}].savings must include estimated`);
     }
     savings = {
@@ -15024,11 +15094,11 @@ function validateInsight(value, index) {
 }
 function matchableFiles(value) {
   const files2 = value["files"];
-  if (!isRecord(files2)) throw new Error("Analysis.files must be an object");
+  if (!isRecord2(files2)) throw new Error("Analysis.files must be an object");
   const raw = boundedArray(files2["mostReRead"], "Analysis.files.mostReRead", MAX_EVIDENCE_VALUE_ITEMS);
   return {
     mostReRead: raw.map((item, index) => {
-      if (!isRecord(item)) throw new Error(`Analysis.files.mostReRead[${index}] must be an object`);
+      if (!isRecord2(item)) throw new Error(`Analysis.files.mostReRead[${index}] must be an object`);
       const path = item["path"];
       return path === void 0 ? {} : { path: boundedString(path, `Analysis.files.mostReRead[${index}].path`, MAX_INPUT_TEXT_CHARS) };
     })
@@ -15036,13 +15106,13 @@ function matchableFiles(value) {
 }
 function matchableContext(value) {
   const context = value["context"];
-  if (!isRecord(context)) throw new Error("Analysis.context must be an object");
+  if (!isRecord2(context)) throw new Error("Analysis.context must be an object");
   const misses = context["cacheMisses"];
   if (misses === void 0) return {};
   const raw = boundedArray(misses, "Analysis.context.cacheMisses", MAX_EVIDENCE_VALUE_ITEMS);
   return {
     cacheMisses: raw.map((item, index) => {
-      if (!isRecord(item)) throw new Error(`Analysis.context.cacheMisses[${index}] must be an object`);
+      if (!isRecord2(item)) throw new Error(`Analysis.context.cacheMisses[${index}] must be an object`);
       const type = item["type"];
       return type === void 0 ? {} : { type: boundedString(type, `Analysis.context.cacheMisses[${index}].type`, MAX_RULE_ID_CHARS) };
     })
@@ -15052,8 +15122,8 @@ function validateAnalysis(value) {
   if (value["schemaVersion"] !== ANALYSIS_SCHEMA_VERSION) {
     throw new Error(`Analysis schemaVersion must be current (${ANALYSIS_SCHEMA_VERSION})`);
   }
-  if (!isRecord(value["generator"]) || value["generator"]["name"] !== "orangu") throw new Error('Analysis.generator.name must be "orangu"');
-  if (!isRecord(value["session"])) throw new Error("Analysis.session must be an object");
+  if (!isRecord2(value["generator"]) || value["generator"]["name"] !== "orangu") throw new Error('Analysis.generator.name must be "orangu"');
+  if (!isRecord2(value["session"])) throw new Error("Analysis.session must be an object");
   const sessionId = boundedId(value["session"]["id"], "Analysis.session.id", MAX_SESSION_ID_CHARS);
   const insights = boundedArray(value["insights"], "Analysis.insights", MAX_EVIDENCE_INPUT_FINDINGS);
   const validatedInsights = insights.map(validateInsight);
@@ -15077,7 +15147,7 @@ function validateAnalysis(value) {
   };
 }
 function validateCrossFinding(value, index) {
-  if (!isRecord(value)) throw new Error(`Aggregate.crossFindings[${index}] must be an object`);
+  if (!isRecord2(value)) throw new Error(`Aggregate.crossFindings[${index}] must be an object`);
   const ruleId = boundedId(value["ruleId"], `Aggregate.crossFindings[${index}].ruleId`, MAX_RULE_ID_CHARS);
   const title = boundedString(value["title"], `Aggregate.crossFindings[${index}].title`, MAX_TITLE_CHARS, true);
   const recommendation = optionalString(value["recommendation"], `Aggregate.crossFindings[${index}].recommendation`, MAX_INPUT_TEXT_CHARS);
@@ -15124,7 +15194,7 @@ function validateAggregate(value) {
   if (sessions.length !== sessionCount) throw new Error("Aggregate.sessionCount must equal Aggregate.sessions.length");
   for (let i = 0; i < sessions.length; i++) {
     const session = sessions[i];
-    if (!isRecord(session)) throw new Error(`Aggregate.sessions[${i}] must be an object`);
+    if (!isRecord2(session)) throw new Error(`Aggregate.sessions[${i}] must be an object`);
     boundedId(session["id"], `Aggregate.sessions[${i}].id`, MAX_SESSION_ID_CHARS);
   }
   const sessionIds = normalizeSessionIds(sessions.map((session) => session["id"]));
@@ -15149,7 +15219,7 @@ function validateAggregate(value) {
   };
 }
 function validateInput(value) {
-  if (!isRecord(value)) throw new Error("evidence input must be a JSON object");
+  if (!isRecord2(value)) throw new Error("evidence input must be a JSON object");
   if (Array.isArray(value["crossFindings"])) return validateAggregate(value);
   if (Array.isArray(value["insights"])) return validateAnalysis(value);
   throw new Error("input is not a current Orangu Analysis, SlimAnalysis, or Aggregate");
@@ -16207,13 +16277,14 @@ var RECORDED_STATUSES = ["regressed", "unproven"];
 var ARTIFACT_FLAGS = ["proposal", "manifest", "application", "verification"];
 var FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/;
 var ALL_STATUSES = [...STATUSES, ...RECORDED_STATUSES];
-var STEP_FLAGS = ["list", "show", "effect", "record", "set", "queue", "todo", "lessons", "history"];
-var NEW_STEP_FLAGS = ["record", "queue", "todo", "lessons", "history"];
+var STEP_FLAGS = ["list", "show", "effect", "record", "set", "queue", "todo", "lessons", "history", "profile"];
+var NEW_STEP_FLAGS = ["record", "queue", "todo", "lessons", "history", "profile"];
 var READS = {
   queue: { takes: ["cwd", "all"], usage: "--queue [--cwd <dir> | --all] [--json]" },
   todo: { takes: ["cwd"], usage: "--todo [--cwd <dir>] [--json]" },
   lessons: { takes: ["cwd", "all", "scope", "rule"], usage: "--lessons [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]" },
-  history: { takes: ["cwd", "all", "scope", "rule"], usage: "--history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]" }
+  history: { takes: ["cwd", "all", "scope", "rule"], usage: "--history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]" },
+  profile: { takes: [], usage: "--profile [--json]" }
 };
 var READ_OPTIONS = ["cwd", "all", "scope", "rule"];
 var emit = (v, flags) => process.stdout.write(JSON.stringify(v, null, flagBool(flags, "quiet") ? 0 : 2) + "\n");
@@ -16589,6 +16660,23 @@ async function cmdTodo(store, flags, deps) {
   const todo = await readTodo(store, cwd, readDeps(flags, deps), { measure: (read) => outputBytes(output(read)) });
   process.stdout.write(output(todo));
 }
+function profileLine(status) {
+  const state = !status.exists ? "no file" : status.valid ? `valid, updated ${status.updatedAt}` : "not valid";
+  return `  profile  ${terminal2(status.path)}  (${state})`;
+}
+async function cmdProfile(flags) {
+  assertReadOptions("profile", flags);
+  try {
+    await prepareProfileHome();
+  } catch (error) {
+    const code2 = error.code ?? "unknown error";
+    if (!flagBool(flags, "quiet")) process.stderr.write(`  orangu could not make its home folder (${terminal2(code2)}), so the profile write can fail.
+`);
+  }
+  const status = await profileStatus();
+  if (flagBool(flags, "json")) return emit(status, flags);
+  process.stdout.write(profileLine(status) + "\n");
+}
 async function cmdLessons(store, flags, deps) {
   assertReadOptions("lessons", flags);
   const target = lessonTarget(flags);
@@ -16621,6 +16709,7 @@ async function cmdSuggest(positionals, flags, deps = {}) {
     throw new Error("--status is valid only with --list. usage: orangu suggest --list --status <s>[,<s>]");
   }
   const store = new SuggestionStore();
+  if (flags["profile"] !== void 0) return cmdProfile(flags);
   if (flags["queue"] !== void 0) return cmdQueue(store, flags, deps);
   if (flags["todo"] !== void 0) return cmdTodo(store, flags, deps);
   if (flags["lessons"] !== void 0) return cmdLessons(store, flags, deps);
@@ -16641,7 +16730,7 @@ async function cmdSuggest(positionals, flags, deps = {}) {
 }
 
 // src/cli/commands/feedback.ts
-import { join as join10 } from "node:path";
+import { join as join11 } from "node:path";
 import { tmpdir } from "node:os";
 
 // src/cli/open-browser.ts
@@ -16725,7 +16814,7 @@ function feedbackOptions(flags) {
 async function cmdFeedback(positionals, flags) {
   if (positionals.length) throw new Error("usage: orangu feedback --context session|repo|global|report|app [--port <n>] [--no-open]");
   const { context, port } = feedbackOptions(flags);
-  const emptyConfigDir = join10(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
+  const emptyConfigDir = join11(tmpdir(), `orangu-feedback-empty-${process.pid}-${Date.now()}`);
   const server = await startServe(
     {
       port,
@@ -17224,13 +17313,13 @@ async function cmdSte(positionals, flags, io = { stdin: process.stdin, stdout: p
 import { basename as basename13, resolve as resolve12 } from "node:path";
 
 // src/show-me/prepare.ts
-import { mkdir as mkdir3, mkdtemp, realpath as realpath12 } from "node:fs/promises";
-import { join as join12 } from "node:path";
+import { mkdir as mkdir4, mkdtemp, realpath as realpath12 } from "node:fs/promises";
+import { join as join13 } from "node:path";
 
 // src/show-me/render.ts
 import { randomBytes as randomBytes5 } from "node:crypto";
-import { lstat as lstat10, realpath as realpath11, rename as rename3, rm } from "node:fs/promises";
-import { dirname as dirname7, join as join11 } from "node:path";
+import { lstat as lstat11, realpath as realpath11, rename as rename3, rm } from "node:fs/promises";
+import { dirname as dirname7, join as join12 } from "node:path";
 
 // src/show-me/check.ts
 import { createHash as createHash5 } from "node:crypto";
@@ -17962,9 +18051,9 @@ var CONTROL2 = /[\u0000-\u001f\u007f-\u009f]/;
 var ShowMeInputError = class extends Error {
   name = "ShowMeInputError";
 };
-var isRecord2 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function validateWords(raw) {
-  if (!isRecord2(raw)) throw new ShowMeInputError("words.json must hold one JSON object with the keys verdict, summary and improvementsTitle.");
+  if (!isRecord3(raw)) throw new ShowMeInputError("words.json must hold one JSON object with the keys verdict, summary and improvementsTitle.");
   const keys = Object.keys(raw);
   if (keys.some((key) => !WORD_KEYS.includes(key))) {
     throw new ShowMeInputError("words.json may hold only the keys verdict, summary and improvementsTitle.");
@@ -17993,9 +18082,9 @@ var MAX_EPOCH_MS = 864e13;
 var fail = (label, rule) => {
   throw new ShowMeInputError(`data.json: ${label} ${rule}.`);
 };
-var isRecord3 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+var isRecord4 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 function record2(value, label) {
-  return isRecord3(value) ? value : fail(label, "must be an object");
+  return isRecord4(value) ? value : fail(label, "must be an object");
 }
 function list(value, label) {
   return Array.isArray(value) ? value : fail(label, "must be an array");
@@ -18155,7 +18244,7 @@ function aggregateData(raw) {
 function validateShowMeData(raw) {
   const value = record2(raw, "the file");
   if (value["slim"] === true) return { kind: "session", value: sessionData(value) };
-  if (isRecord3(value["source"]) && Array.isArray(value["findings"])) return aggregateData(value);
+  if (isRecord4(value["source"]) && Array.isArray(value["findings"])) return aggregateData(value);
   return fail("the file", "must be a slim analysis or an evidence bundle that orangu show-me wrote");
 }
 
@@ -18501,7 +18590,7 @@ var TEMPLATES = Object.freeze([
   Object.freeze({ file: "slides.html", html: SLIDES_HTML }),
   Object.freeze({ file: "report.html", html: REPORT_HTML })
 ]);
-var showMeBase = () => join11(oranguHome(), "show-me");
+var showMeBase = () => join12(oranguHome(), "show-me");
 var ShowMeRenderError = class extends Error {
   name = "ShowMeRenderError";
 };
@@ -18520,9 +18609,9 @@ async function confinedRunDir(dir, base = showMeBase()) {
     throw new ShowMeRenderError("the --render directory does not exist.");
   }
   if (dirname7(real) !== realBase) throw new ShowMeRenderError("the --render directory must be a run directory that orangu show-me made in the show-me folder of the orangu home.");
-  if (!(await lstat10(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
+  if (!(await lstat11(real)).isDirectory()) throw new ShowMeRenderError("the --render path must be a directory.");
   try {
-    const data = await lstat10(join11(real, "data.json"));
+    const data = await lstat11(join12(real, "data.json"));
     if (!data.isFile()) throw new ShowMeRenderError("data.json in the run directory must be a regular file.");
   } catch (error) {
     if (error instanceof ShowMeRenderError) throw error;
@@ -18533,7 +18622,7 @@ async function confinedRunDir(dir, base = showMeBase()) {
 async function readJson2(dir, name) {
   let text3;
   try {
-    text3 = await readStableTextFile(join11(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
+    text3 = await readStableTextFile(join12(dir, name), MAX_EVIDENCE_ARTIFACT_BYTES, name);
   } catch (error) {
     const message = error instanceof Error ? error.message : "";
     if (message.includes("not found")) throw new ShowMeInputError(`the run directory has no ${name}.${name === "words.json" ? " Write the 3 words first." : ""}`);
@@ -18551,9 +18640,9 @@ async function writeBoth(dir, files2) {
   const staged = [];
   try {
     for (const { file } of files2) {
-      const to = join11(dir, file);
+      const to = join12(dir, file);
       try {
-        const existing = await lstat10(to);
+        const existing = await lstat11(to);
         if (!existing.isFile()) throw new ShowMeRenderError(`${file} in the run directory is not a regular file.`);
       } catch (error) {
         if (error instanceof ShowMeRenderError) throw error;
@@ -18561,8 +18650,8 @@ async function writeBoth(dir, files2) {
       }
     }
     for (const { file, html } of files2) {
-      const from = join11(dir, `.${file}.${randomBytes5(6).toString("hex")}.tmp`);
-      staged.push({ from, to: join11(dir, file) });
+      const from = join12(dir, `.${file}.${randomBytes5(6).toString("hex")}.tmp`);
+      staged.push({ from, to: join12(dir, file) });
       await writePrivateOutput(from, html);
     }
     for (const { from, to } of staged) await rename3(from, to);
@@ -18583,7 +18672,7 @@ async function renderShowMe(dir, o = {}) {
     return { file, html };
   });
   await writeBoth(run, files2);
-  return { dir: run, slides: join11(run, "slides.html"), report: join11(run, "report.html"), findings: wordFindings(words2) };
+  return { dir: run, slides: join12(run, "slides.html"), report: join12(run, "report.html"), findings: wordFindings(words2) };
 }
 
 // src/show-me/prepare.ts
@@ -18595,9 +18684,9 @@ function runName(name) {
 }
 async function prepareRun(scope, name, json2, o = {}) {
   const base = o.base ?? showMeBase();
-  await mkdir3(base, { recursive: true, mode: 448 });
-  const dir = await realpath12(await mkdtemp(join12(base, `${scope}-${runName(name)}-`)));
-  const path = join12(dir, "data.json");
+  await mkdir4(base, { recursive: true, mode: 448 });
+  const dir = await realpath12(await mkdtemp(join13(base, `${scope}-${runName(name)}-`)));
+  const path = join13(dir, "data.json");
   await writePrivateOutput(path, json2);
   const bytes = Buffer.byteLength(json2);
   const approxTokens3 = Math.ceil(bytes / 4);
@@ -18836,6 +18925,7 @@ var EXTRA_HELP = [
     "                                    [--verification <path>]",
     "                                    [--reason <code>]  (with rejected)",
     "                                  | --list [--status <s>[,<s>]]",
+    "                                  | --profile  (the profile file and its state)",
     "                                  | --queue [--cwd <dir> | --all]",
     "                                    (the open records, in 6 groups)",
     "                                  | --todo [--cwd <dir>]  (the open items",
@@ -19287,7 +19377,7 @@ async function analyzeWithProgress(ref2, flags) {
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
   if (out3) return resolve14(out3);
-  return join13(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  return join14(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref2 = await selectSession2(sel, flags);
@@ -19477,7 +19567,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash6("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve14(named) : join13(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve14(named) : join14(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);

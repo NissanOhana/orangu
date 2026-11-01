@@ -516,6 +516,49 @@ The query takes the options of the CLI read. Each route takes `cwd=<dir>` or `al
 
 The browser can only dismiss a record. `POST /api/suggestions/:id/status` takes `{ "status": "rejected", "reason"?: <code> }`, and any other status gives 400. A `reason` that is not 1 of the 5 codes gives 400, and the store stays byte for byte as it was. A record with no proposal workspace gets the `workspaceCwd` that `--set <id> rejected` binds. A record whose status allows no rejection gives 400 before any discovery. A second rejection of 1 record while the first one runs gives 409, and it runs no discovery. A failed store read or write gives 500. An error body is scrubbed on each route, so it names no home path.
 
+## Profile v1
+
+`<orangu home>/profile.json` holds what the user said about their role and their work. The orangu home is `$ORANGU_HOME`, else `$XDG_DATA_HOME/orangu`, else `~/.orangu`. orangu reads this file and never writes it. The profile is not a measurement, and orangu reads it as untrusted data.
+
+```ts
+ProfileV1 = {
+  v: 1,
+  updatedAt: string,            // the date of the answers, YYYY-MM-DD
+  role?: string,                // write-code | lead | data | no-code, or own words: 200 characters at most
+  work?: string[],              // 6 items at most. features | fixes | refactors | research, or own words: 120 characters at most
+  process?: string,             // watch-one | parallel | orchestrator | unattended, or own words: 200 characters at most
+  priority?: "quality" | "time" | "tokens",
+  models?: "yes" | "ask" | "no",
+  audience?: "local" | "shared",
+  repeats?: string,             // own words, 500 characters at most, or ""
+  never?: string,               // own words, 500 characters at most, or ""
+  answers?: Array<{ q: string, a: string, how: "option" | "own" | "skipped" }>  // 12 entries at most
+}
+```
+
+- The file is valid when it is a regular file of 16,384 B or less and not a symlink, it holds JSON, `v` is the number 1, `updatedAt` matches `^\d{4}-\d{2}-\d{2}$`, and each other key has the type and the limit above. A character is 1 Unicode code point.
+- A skipped question leaves its key out. An unknown key, at the top or in an answer, makes the file not valid. So does a `null` value, and own words in `priority`, `models` or `audience`. Own words for those 3 questions go only in `answers`.
+- The orangu home is a folder with mode 0700. `orangu suggest --profile` makes it with that mode when it is missing, and it does not change the mode of a folder that exists. The profile file keeps the mode that its writer gives it. orangu does not check that mode.
+
+### The status (`orangu suggest --profile [--json]`)
+
+```ts
+ProfileStatus = {
+  path: string,                 // <orangu home>/profile.json
+  exists: boolean,              // false only when no entry is at the path
+  valid: boolean,
+  updatedAt: string | null      // the updatedAt of a valid profile, else null
+}
+```
+
+`--json` prints this object, on 1 line with `--quiet`. The text form prints 1 line: the path and the state, `no file`, `valid, updated <date>` or `not valid`. No form prints a profile value. The path is not scrubbed, because a writer of the file needs the exact path. A file that is not valid reads as `exists: true` and `valid: false`. So do a symlink, a folder, a file over 16,384 B and an entry that orangu cannot read.
+
+`--profile` is a step of `orangu suggest`. With another step flag, or with `--cwd`, `--all`, `--scope` or `--rule`, it exits 1 before it reads. When orangu cannot make its home folder, the status still prints, and 1 stderr line says why unless `--quiet` is given.
+
+### The app read (`GET /api/profile`)
+
+`orangu serve` gives `GET /api/profile`. Its body is exactly `{ exists, updatedAt }` from the same status, with no path and no profile value. `exists: true` with `updatedAt: null` means that an entry is at the path and it does not read as profile v1. The route does not make the orangu home.
+
 ## Proposal artifacts
 
 New proposals from `orangu-improve` and `orangu-harness` have two files under `~/.orangu/proposals/`:

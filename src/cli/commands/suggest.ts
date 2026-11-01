@@ -27,10 +27,12 @@
  *   orangu suggest --history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]
  *     (the 4 reads write no record and no proposal file. Only the queue check may write cohort facts cache entries.
  *      Their text output is in ./suggest-reads.ts)
+ *   orangu suggest --profile [--json]           where the profile is, and whether it reads as profile v1
+ *     (it prints no profile value: src/suggest/profile.ts)
  *
  * Each call runs 1 step. 2 step flags together exit 1 before any read or write when 1 of them is new after 0.11.0
- * (--record, --queue, --todo, --lessons, --history). 2 or more of --list, --show, --effect and --set run the first of
- * them in that order, as 0.11.0 did.
+ * (--record, --queue, --todo, --lessons, --history, --profile). 2 or more of --list, --show, --effect and --set run
+ * the first of them in that order, as 0.11.0 did.
  */
 import { matchRule, type CatalogMatch } from '../../suggest/catalog.js'
 import { realpath } from 'node:fs/promises'
@@ -70,6 +72,7 @@ import {
 import { createDiscoveredClaudeAnalysisLoader } from '../../adapters/claude-code/discovered-analysis.js'
 import { CohortFactsCache } from '../../suggest/cohort-cache.js'
 import type { LessonRead } from '../../suggest/lessons.js'
+import { prepareProfileHome, profileStatus, type ProfileStatus } from '../../suggest/profile.js'
 import type { TodoRead } from '../../suggest/queue.js'
 import {
   createQueueReadDeps,
@@ -175,18 +178,22 @@ const FROZEN_BASELINE_REFUSAL_RE = /invalid frozen baseline/
 /** Every status of a record: the ones that `--set` writes and the ones that only `--record` writes. */
 const ALL_STATUSES: SuggestionStatus[] = [...STATUSES, ...RECORDED_STATUSES]
 /** The steps of `orangu suggest`. A call runs 1 of them, or none to create a record. */
-const STEP_FLAGS = ['list', 'show', 'effect', 'record', 'set', 'queue', 'todo', 'lessons', 'history'] as const
+const STEP_FLAGS = ['list', 'show', 'effect', 'record', 'set', 'queue', 'todo', 'lessons', 'history', 'profile'] as const
 /**
  * The steps that 0.11.0 did not have. 0.11.0 ran the first of `--list`, `--show`, `--effect` and `--set` and ignored the
  * rest, and a combination of those steps still runs that way. A combination with a new step exits 1.
  */
-const NEW_STEP_FLAGS: readonly string[] = ['record', 'queue', 'todo', 'lessons', 'history']
-/** The 4 reads, the read options that each one takes, and its usage. A read refuses the option of another read. */
+const NEW_STEP_FLAGS: readonly string[] = ['record', 'queue', 'todo', 'lessons', 'history', 'profile']
+/**
+ * The 5 reads (the 4 reads of the store and the profile read), the read options that each one takes, and its usage. A
+ * read refuses the option of another read.
+ */
 const READS = {
   queue: { takes: ['cwd', 'all'], usage: '--queue [--cwd <dir> | --all] [--json]' },
   todo: { takes: ['cwd'], usage: '--todo [--cwd <dir>] [--json]' },
   lessons: { takes: ['cwd', 'all', 'scope', 'rule'], usage: '--lessons [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]' },
   history: { takes: ['cwd', 'all', 'scope', 'rule'], usage: '--history [--cwd <dir> | --all | --scope global] [--rule <id>[,<id>]] [--json]' },
+  profile: { takes: [], usage: '--profile [--json]' },
 } as const
 type ReadStep = keyof typeof READS
 const READ_OPTIONS = ['cwd', 'all', 'scope', 'rule'] as const
@@ -666,6 +673,30 @@ async function cmdTodo(store: SuggestionStore, flags: Record<string, string | bo
   process.stdout.write(output(todo))
 }
 
+/** The 1 text line of `--profile`: the path and the state. It holds no profile value. */
+function profileLine(status: ProfileStatus): string {
+  const state = !status.exists ? 'no file' : status.valid ? `valid, updated ${status.updatedAt}` : 'not valid'
+  return `  profile  ${terminal(status.path)}  (${state})`
+}
+
+/**
+ * `--profile`: where the profile is, and whether it reads as profile v1. The status holds no profile value. It skips
+ * the scrub of `visible`, because the interview writes the profile at this exact path, and a `~` path is no path for
+ * a write. First it makes a missing orangu home with mode 0700. If it cannot, the status still prints.
+ */
+async function cmdProfile(flags: Record<string, string | boolean>): Promise<void> {
+  assertReadOptions('profile', flags)
+  try {
+    await prepareProfileHome()
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? 'unknown error'
+    if (!flagBool(flags, 'quiet')) process.stderr.write(`  orangu could not make its home folder (${terminal(code)}), so the profile write can fail.\n`)
+  }
+  const status = await profileStatus()
+  if (flagBool(flags, 'json')) return emit(status, flags) as unknown as void
+  process.stdout.write(profileLine(status) + '\n')
+}
+
 /** `--lessons`: the lesson read, the newest lessons that fit `LESSONS_MAX_BYTES` of the exact output. */
 async function cmdLessons(store: SuggestionStore, flags: Record<string, string | boolean>, deps: SuggestDeps): Promise<void> {
   assertReadOptions('lessons', flags)
@@ -707,6 +738,7 @@ export async function cmdSuggest(positionals: string[], flags: Record<string, st
     throw new Error('--status is valid only with --list. usage: orangu suggest --list --status <s>[,<s>]')
   }
   const store = new SuggestionStore()
+  if (flags['profile'] !== undefined) return cmdProfile(flags)
   if (flags['queue'] !== undefined) return cmdQueue(store, flags, deps)
   if (flags['todo'] !== undefined) return cmdTodo(store, flags, deps)
   if (flags['lessons'] !== undefined) return cmdLessons(store, flags, deps)

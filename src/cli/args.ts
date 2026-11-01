@@ -37,11 +37,12 @@ const BOOL_FLAGS = new Set([
   'no-color',
   'plain',
   'lines',
-  // the 4 reads of orangu suggest: each takes no value, so `--queue <word>` leaves the word a positional
+  // the 5 reads of orangu suggest: each takes no value, so `--queue <word>` leaves the word a positional
   'queue',
   'todo',
   'lessons',
   'history',
+  'profile',
 ])
 
 /**

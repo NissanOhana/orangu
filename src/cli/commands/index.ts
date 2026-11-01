@@ -80,6 +80,7 @@ export const EXTRA_HELP: string[] = [
     '                                    [--verification <path>]',
     '                                    [--reason <code>]  (with rejected)',
     '                                  | --list [--status <s>[,<s>]]',
+    '                                  | --profile  (the profile file and its state)',
     '                                  | --queue [--cwd <dir> | --all]',
     '                                    (the open records, in 6 groups)',
     '                                  | --todo [--cwd <dir>]  (the open items',
