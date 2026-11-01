@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync, statSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
 import { CHANGE_CLASS_DEFINITIONS } from '../src/suggest/change-classes.js'
 import { allEntries } from '../src/suggest/catalog.js'
 import { REJECT_REASON_CODES } from '../src/suggest/reason-codes.js'
 import { CLI_VERBS } from '../src/cli/commands/index.js'
+import { profileStatus } from '../src/suggest/profile.js'
 
 const root = process.cwd()
 const readJson = (p: string) => JSON.parse(readFileSync(join(root, p), 'utf8'))
@@ -704,6 +706,8 @@ describe('plugin packaging', () => {
   // links no file but shared/brain.md. Rule 3 of the guide (12 questions at most) and rule 8 (no recommended mark on a
   // preference) hold for its questions. The keys and limits are the ones that `orangu suggest --profile` reads as valid.
   const PROFILE = 'plugin/skills/shared/profile.md'
+  // 1 row of the question table: number, question, form, options joined by " / ", key and stored values
+  const PROFILE_ROWS = /^\| (\d+) \| ([^|]+?) \| (choice|multi-choice|free text, can skip) \| ([^|]*?) \| ([^|]+?) \|$/gm
   // born 2026-11-01 at 687 measured words + 1: a ceiling, not a target (PROJECT.md: ratchets only go down, and one is
   // raised only in the commit that measures the growth that needs it)
   const PROFILE_CEILING = 688
@@ -714,7 +718,7 @@ describe('plugin packaging', () => {
     expect(profile, 'no orangu command in prose').not.toMatch(new RegExp(`\\borangu (?:${CLI_VERBS.join('|')})\\b|npx orangu|orangu\\.cli\\.mjs|\\bbin/`))
     expect(profile, 'portable: no slash command, no Codex name, no plugin root variable').not.toMatch(/\/orangu:|\$orangu-|CLAUDE_PLUGIN_ROOT/)
     for (const m of profile.matchAll(/\]\(([^)\s]+)\)/g)) expect(m[1], 'links no file but shared/brain.md').toBe('brain.md')
-    const rows = [...profile.matchAll(/^\| (\d+) \| ([^|]+?) \| (choice|multi-choice|free text, can skip) \| ([^|]*?) \| ([^|]+?) \|$/gm)]
+    const rows = [...profile.matchAll(PROFILE_ROWS)]
     expect(rows.map((m) => Number(m[1])), 'the questions in order').toEqual([1, 2, 3, 4, 5, 6, 7, 8])
     expect(rows.length, 'rule 3 of the guide: 12 questions at most').toBeLessThanOrEqual(12)
     expect(rows.map((m) => m[2]), 'the question texts').toEqual([
@@ -753,6 +757,69 @@ describe('plugin packaging', () => {
     for (const key of Object.keys(example))
       expect(['v', 'updatedAt', 'role', 'work', 'process', 'priority', 'models', 'audience', 'repeats', 'never', 'answers'], `the example key ${key}`).toContain(key)
     expect(profile.split(/\s+/).filter(Boolean).length, 'profile rules words').toBeLessThan(PROFILE_CEILING)
+  })
+
+  // The profile rules are the writer side of the profile reader (src/suggest/profile.ts), so each limit that they state
+  // must hold in that reader. The example reads as valid. A value at a stated limit reads, and a value 1 over a limit that
+  // the reader holds does not. The reader sets no limit on `a`, so the stated 500 only has to read. A stated limit that
+  // the reader refuses (a role of 300 characters) would ship a profile that the next run cannot read.
+  it('the example and each limit of shared/profile.md read as the profile reader reads them', async () => {
+    const rules = readText(PROFILE)
+    const stated = (re: RegExp, what: string): number[] => {
+      const m = re.exec(rules)
+      expect(m, `the profile rules state ${what}`).toBeTruthy()
+      return m!.slice(1).map((n) => Number(n.replace(/,/g, '')))
+    }
+    const [textMax] = stated(/Own words go into `role` or `process`, (\d+) characters at most\./, 'the role and process limit')
+    const [itemMax, itemsMax] = stated(/own words are 1 more item of (\d+) characters at most\. `work` holds (\d+) items at most\./, 'the work limits')
+    const [wordsMax] = stated(/`repeats` and `never` hold the words of the user, (\d+) characters at most\./, 'the repeats and never limit')
+    const [answersMax] = stated(/`answers` holds 1 entry for each question, (\d+) at most\./, 'the answers limit')
+    const [answerMax] = stated(/the answer of the user in (\d+) characters at most/, 'the answer limit')
+    const [bytesMax] = stated(/1 JSON object of ([\d,]+) bytes or less/, 'the file limit')
+    const status = async (raw: string): Promise<{ valid: boolean; updatedAt: string | null }> => {
+      const home = mkdtempSync(join(tmpdir(), 'orangu-profile-rules-'))
+      try {
+        writeFileSync(join(home, 'profile.json'), raw)
+        return await profileStatus({ ORANGU_HOME: home })
+      } finally {
+        rmSync(home, { recursive: true, force: true })
+      }
+    }
+    const base = { v: 1, updatedAt: '2026-11-01' }
+    const reads = async (keys: object): Promise<boolean> => (await status(JSON.stringify({ ...base, ...keys }))).valid
+    // the example of the rules reads, with its date
+    const example = await status(/```json\n([\s\S]*?)\n```/.exec(rules)![1]!)
+    expect(example.valid, 'the example reads').toBe(true)
+    expect(example.updatedAt, 'the example keeps its date').toBe('2026-11-01')
+    const x = (n: number): string => 'x'.repeat(n)
+    const answer = { q: 'Which role fits your work best?', a: '', how: 'skipped' }
+    const limits: Array<[string, object, object]> = [
+      ['role', { role: x(textMax!) }, { role: x(textMax! + 1) }],
+      ['process', { process: x(textMax!) }, { process: x(textMax! + 1) }],
+      ['a work item', { work: [x(itemMax!)] }, { work: [x(itemMax! + 1)] }],
+      ['work', { work: Array<string>(itemsMax!).fill('features') }, { work: Array<string>(itemsMax! + 1).fill('features') }],
+      ['repeats', { repeats: x(wordsMax!) }, { repeats: x(wordsMax! + 1) }],
+      ['never', { never: x(wordsMax!) }, { never: x(wordsMax! + 1) }],
+      ['answers', { answers: Array(answersMax!).fill(answer) }, { answers: Array(answersMax! + 1).fill(answer) }],
+    ]
+    for (const [key, at, over] of limits) {
+      expect(await reads(at), `${key} at the stated limit reads`).toBe(true)
+      expect(await reads(over), `${key} 1 over the stated limit does not read`).toBe(false)
+    }
+    expect(await reads({ answers: [{ ...answer, a: x(answerMax!), how: 'own' }] }), 'an answer at the stated limit reads').toBe(true)
+    // the file: exactly the stated bytes read, and 1 byte more does not
+    const sized = (bytes: number): string => {
+      const shell = JSON.stringify({ ...base, answers: [{ ...answer, how: 'own' }] })
+      return JSON.stringify({ ...base, answers: [{ ...answer, a: 'y'.repeat(bytes - Buffer.byteLength(shell)), how: 'own' }] })
+    }
+    expect(Buffer.byteLength(sized(bytesMax!)), 'the probe has the stated size').toBe(bytesMax)
+    expect((await status(sized(bytesMax!))).valid, 'a file of the stated bytes reads').toBe(true)
+    expect((await status(sized(bytesMax! + 1))).valid, 'a file 1 byte over does not read').toBe(false)
+    // each stored value of the table reads in its key
+    for (const m of readText(PROFILE).matchAll(PROFILE_ROWS)) {
+      const [key, ...values] = [...m[5]!.matchAll(/`([^`]+)`/g)].map((v) => v[1]!)
+      for (const value of values) expect(await reads({ [key!]: key === 'work' ? [value] : value }), `${key} reads the stored value ${value}`).toBe(true)
+    }
   })
 
   // The artifact contract and the research policy serve 3 skills and the researcher, so they live in shared/ (2026-10-24).
