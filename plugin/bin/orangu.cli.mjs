@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash6 } from "node:crypto";
-import { basename as basename15, join as join15, resolve as resolve13 } from "node:path";
+import { basename as basename15, join as join16, resolve as resolve13 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -19354,14 +19354,14 @@ function buildExport(input) {
 
 // src/export/write.ts
 import { mkdir as mkdir5, mkdtemp as mkdtemp2, realpath as realpath13 } from "node:fs/promises";
-import { join as join14 } from "node:path";
+import { join as join15 } from "node:path";
 var EXPORT_FILE = "orangu-export.json";
-var exportBase = () => join14(oranguHome(), "export");
+var exportBase = () => join15(oranguHome(), "export");
 async function writeExportRun(text3, o = {}) {
   const base = o.base ?? exportBase();
   await mkdir5(base, { recursive: true, mode: 448 });
-  const dir = await realpath13(await mkdtemp2(join14(base, "global-")));
-  const path = join14(dir, EXPORT_FILE);
+  const dir = await realpath13(await mkdtemp2(join15(base, "global-")));
+  const path = join15(dir, EXPORT_FILE);
   await writePrivateOutput(path, text3);
   const bytes = Buffer.byteLength(text3);
   return { dir, export: { path, bytes, approxTokens: Math.ceil(bytes / 4) } };
@@ -19911,7 +19911,7 @@ async function analyzeWithProgress(ref2, flags) {
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
   if (out3) return resolve13(out3);
-  return join15(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  return join16(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref2 = await selectSession2(sel, flags);
@@ -20101,7 +20101,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash6("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve13(named) : join15(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve13(named) : join16(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
