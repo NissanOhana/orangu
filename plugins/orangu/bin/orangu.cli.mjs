@@ -13910,6 +13910,9 @@ function publicSuggestions(records) {
 function jsonError(res, status, error) {
   json(res, status, redactValue({ error: String(error instanceof Error ? error.message : error) }, { scrub: true }));
 }
+function registryRoots(opts) {
+  return opts.roots?.length ? opts.roots : [opts.configDir ?? defaultConfigDir()];
+}
 var STORE_READS = {
   queue: ["cwd", "all"],
   history: ["cwd", "all", "scope", "rule"],
@@ -14202,6 +14205,7 @@ function coreRoutes(ctx, hub) {
       selectedId,
       session: red?.analysis,
       sessions: rows2,
+      roots: registryRoots(ctx.opts).map((root) => redactValue(root, { scrub: true })),
       aggregates: {},
       suggestions: publicSuggestions(await ctx.store.all()),
       redaction: red ? { applied: red.applied, strippedText: red.strippedText, strippedPaths: red.strippedPaths } : void 0

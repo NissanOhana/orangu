@@ -57,6 +57,14 @@ function jsonError(res: ServerResponse, status: number, error: unknown): void {
   json(res, status, redactValue({ error: String(error instanceof Error ? error.message : error) }, { scrub: true }))
 }
 
+/**
+ * The folders that the registry reads, as `Registry.discoverOpts` (src/serve/registry.ts) gives them to discovery:
+ * the roots of serve, else its config folder, else the default config folder of discovery.
+ */
+function registryRoots(opts: ServeContext['opts']): string[] {
+  return opts.roots?.length ? opts.roots : [opts.configDir ?? defaultConfigDir()]
+}
+
 /** The 3 store reads of the app, and the query options of each: the options of its CLI read (`orangu suggest --queue`, `--history`, `--lessons`). */
 const STORE_READS = {
   queue: ['cwd', 'all'],
@@ -452,6 +460,7 @@ export function coreRoutes(ctx: ServeContext, hub: SseHub): Route[] {
       selectedId,
       session: red?.analysis,
       sessions: rows,
+      roots: registryRoots(ctx.opts).map((root) => redactValue(root, { scrub: true })),
       aggregates: {},
       suggestions: publicSuggestions(await ctx.store.all()),
       redaction: red ? { applied: red.applied, strippedText: red.strippedText, strippedPaths: red.strippedPaths } : undefined,

@@ -168,6 +168,7 @@ AppData = {
   selectedId?: string,
   session?: Analysis,
   sessions: SessionSummaryRow[],
+  roots?: string[],             // serve only: the folders that serve reads, each with the home as ~
   aggregates: { repo?: Aggregate, global?: Aggregate },
   suggestions: SuggestionRecord[],
   redaction?: { applied: number, strippedText: boolean, strippedPaths: boolean }

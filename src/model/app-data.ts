@@ -85,6 +85,8 @@ export interface AppData {
   session?: Analysis
   /** file: [the one]; serve: all discovered */
   sessions: SessionSummaryRow[]
+  /** serve only: the folders that the registry reads, each scrubbed, so the home reads `~`. A file report leaves it out. */
+  roots?: string[]
   /** file: {} (policy serve-only); serve: filled on demand */
   aggregates: { repo?: Aggregate; global?: Aggregate }
   /** file: []; serve: current state per id */
