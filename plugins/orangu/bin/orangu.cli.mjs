@@ -2276,7 +2276,7 @@ function maskQuotedPairs(text3, mark2) {
   }
   return out3 + text3.slice(done);
 }
-var AUTHORIZATION = /\b((?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?[a-z][a-z0-9_-]*)[ \t]+([A-Za-z0-9+/._~@-]{4,})(?![A-Za-z0-9+/._~-]|@[A-Za-z0-9]|[ \t]*:|[ \t]+=|=+[ \t]*["']?[A-Za-z0-9+/._~-])={0,2}/dgi;
+var AUTHORIZATION = /(?:\b|(?<=\w)(?=(?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?(?:basic|bearer|digest|dpop|negotiate|ntlm|oauth|token|apikey|ssws)[ \t]))((?:proxy-)?authorization\\{0,7}["']?[ \t]*[:=][ \t]*\\{0,7}["']?[a-z][a-z0-9_-]*)[ \t]+([A-Za-z0-9+/._~@-]{4,})(?![A-Za-z0-9+/._~-]|@[A-Za-z0-9]|[ \t]*:|[ \t]+=|=+[ \t]*["']?[A-Za-z0-9+/._~-])={0,2}/dgi;
 var TRAILING_NAME = /[A-Za-z0-9_.\/-]*$/;
 function maskAuthorizations(text3, mark2) {
   let out3 = "";
@@ -2338,23 +2338,106 @@ var runEnd = (text3, from) => {
   while (at < text3.length && TOKEN_CHAR.test(text3[at])) at++;
   return at;
 };
-function maskJwts(text3, mark2) {
-  let out3 = "";
-  let done = 0;
+function jwtSpans(text3, glued) {
+  const spans = [];
   let skipTo = 0;
   for (let at = text3.indexOf("eyJ"); at >= 0; at = text3.indexOf("eyJ", at + 1)) {
-    if (at < skipTo || at > 0 && WORD_CHAR.test(text3[at - 1])) continue;
+    if (at < skipTo || (at > 0 && WORD_CHAR.test(text3[at - 1])) !== glued) continue;
     const first = runEnd(text3, at + 3);
     const second = text3[first] === "." ? runEnd(text3, first + 1) : first;
     const third = text3[second] === "." && second !== first ? runEnd(text3, second + 1) : second;
-    if (first - at < 13 || second - first - 1 < 10 || text3[second] !== "." || third - second - 1 < 5) {
+    if (first - at < 13 || second - first - 1 < 10 || text3[second] !== "." || third - second - 1 < 5 || glued && !text3.startsWith("eyJ", first + 1)) {
       skipTo = first;
       continue;
     }
-    out3 += text3.slice(done, at) + "\u2039jwt\u203A";
-    mark2(at, third, "\u2039jwt\u203A");
-    done = skipTo = third;
+    spans.push([at, third]);
+    skipTo = third;
     at = third - 1;
+  }
+  return spans;
+}
+function maskJwts(text3, mark2) {
+  let out3 = "";
+  let done = 0;
+  for (const [at, end] of jwtSpans(text3, false)) {
+    out3 += text3.slice(done, at) + "\u2039jwt\u203A";
+    mark2(at, end, "\u2039jwt\u203A");
+    done = end;
+  }
+  return out3 + text3.slice(done);
+}
+var gluedJwts = (text3) => jwtSpans(text3, true);
+
+// src/redact/keys.ts
+var KEYS = [
+  { prefix: "sk-ant-", body: "[A-Za-z0-9_-]{10,}", by: "\u2039anthropic-key\u203A", glued: "DUL" },
+  { prefix: "sk-proj-", body: "[A-Za-z0-9_-]{20,}", by: "\u2039openai-project-key\u203A", glued: "DUL" },
+  { prefix: "(?:sk|rk|pk)_(?:live|test)_", body: "[A-Za-z0-9]{16,}", by: "\u2039stripe-key\u203A", glued: "DDUL" },
+  { prefix: "whsec_", body: "[A-Za-z0-9]{16,}", by: "\u2039stripe-webhook-secret\u203A", glued: "DUL" },
+  { prefix: "sk-", body: "[A-Za-z0-9]{20,}", by: "\u2039api-key\u203A", glued: "DUL" },
+  { prefix: "(?:ghp|gho|ghu|ghs|ghr|github_pat)_", body: "[A-Za-z0-9_]{20,}", by: "\u2039github-token\u203A", glued: "DUL" },
+  { prefix: "glpat-", body: "[A-Za-z0-9_-]{20,}", by: "\u2039gitlab-token\u203A", glued: "DUL" },
+  { prefix: "npm_", body: "[A-Za-z0-9]{30,}", by: "\u2039npm-token\u203A", glued: "DUL" },
+  { prefix: "hf_", body: "[A-Za-z0-9]{30,}", by: "\u2039huggingface-token\u203A", glued: "DUL" },
+  { prefix: String.raw`SG\.`, body: String.raw`[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}`, by: "\u2039sendgrid-key\u203A", glued: "DUL" },
+  // a lowercase hex body
+  { prefix: "dop_v1_", body: "[A-Za-z0-9]{60,}", by: "\u2039digitalocean-token\u203A", glued: "DL" },
+  { prefix: "xox[baprs]-", body: "[A-Za-z0-9-]{10,}", by: "\u2039slack-token\u203A", glued: "DUL" },
+  // an uppercase body
+  { prefix: "AKIA", body: String.raw`[0-9A-Z]{16}\b`, by: "\u2039aws-key\u203A", glued: "DU" },
+  { prefix: "AIza", body: "[0-9A-Za-z_-]{30,}", by: "\u2039google-key\u203A", glued: "DUL" }
+];
+var BLOB = /\b[A-Za-z0-9+/]{60,}={0,2}\b/g;
+var GLUED = KEYS.map((key) => ({ re: new RegExp(`${key.prefix}(${key.body})`, "g"), key }));
+var ANY_PREFIX = new RegExp([...KEYS.map((key) => key.prefix), "eyJ"].join("|"));
+var LONGEST_PREFIX = 11;
+function looksRandom(body, glued) {
+  let digits = 0;
+  let upper = false;
+  let lower = false;
+  for (const c of body) {
+    if (c >= "0" && c <= "9") digits++;
+    else if (c >= "A" && c <= "Z") upper = true;
+    else if (c >= "a" && c <= "z") lower = true;
+  }
+  return digits >= glued.split("D").length - 1 && (upper || !glued.includes("U")) && (lower || !glued.includes("L"));
+}
+function spansWithBlobs(text3, found) {
+  found.sort((a, b2) => a[0] - b2[0]);
+  const blobs = Array.from(text3.matchAll(BLOB), (m) => [m.index, m.index + m[0].length]);
+  const spans = [];
+  let b = 0;
+  for (const [start, end, by] of found) {
+    while (b < blobs.length && blobs[b][1] <= start) b++;
+    let k = b;
+    while (k < blobs.length && blobs[k][0] < end) k++;
+    if (k - b === 1 && blobs[b][0] <= start && end <= blobs[b][1]) continue;
+    const from = k > b ? Math.min(start, blobs[b][0]) : start;
+    const to = k > b ? Math.max(end, blobs[k - 1][1]) : end;
+    const last = spans.at(-1);
+    if (last && from < last[1]) last[1] = Math.max(last[1], to);
+    else spans.push([from, to, by]);
+  }
+  return spans;
+}
+function maskGluedKeys(text3, mark2) {
+  if (!ANY_PREFIX.test(text3)) return text3;
+  const found = gluedJwts(text3).map(([from, to]) => [from, to, "\u2039jwt\u203A"]);
+  for (const { re, key } of GLUED) {
+    re.lastIndex = 0;
+    for (let m = re.exec(text3); m; m = re.exec(text3)) {
+      const end = m.index + m[0].length;
+      if (looksRandom(m[1], key.glued)) found.push([m.index, end, key.by]);
+      else re.lastIndex = Math.max(m.index + 1, end - LONGEST_PREFIX);
+    }
+  }
+  if (!found.length) return text3;
+  let out3 = "";
+  let done = 0;
+  for (const [from, to, by] of spansWithBlobs(text3, found)) {
+    out3 += text3.slice(done, from) + by;
+    mark2(from, to, by);
+    done = to;
   }
   return out3 + text3.slice(done);
 }
@@ -2365,29 +2448,20 @@ var PATTERNS = [
   [/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)/g, "\u2039private-key\u203A"],
   // API keys / tokens (do these before generic ones). Each key rule, the JWT rule, Bearer and Authorization start at a
   // word start: a rule that starts inside a word splits a JWT, an address, a value or a blob (`helpdesk-…@…`,
-  // `password=Xy9sk-…`), and the rule that would mask it whole then sees only a part of it.
-  [/\bsk-ant-[A-Za-z0-9_-]{10,}/g, "\u2039anthropic-key\u203A"],
-  [/\bsk-proj-[A-Za-z0-9_-]{20,}/g, "\u2039openai-project-key\u203A"],
-  [/\b(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}/g, "\u2039stripe-key\u203A"],
-  [/\bwhsec_[A-Za-z0-9]{16,}/g, "\u2039stripe-webhook-secret\u203A"],
-  [/\bsk-[A-Za-z0-9]{20,}/g, "\u2039api-key\u203A"],
-  [/\b(?:ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}/g, "\u2039github-token\u203A"],
-  [/\bglpat-[A-Za-z0-9_-]{20,}/g, "\u2039gitlab-token\u203A"],
-  [/\bnpm_[A-Za-z0-9]{30,}/g, "\u2039npm-token\u203A"],
-  [/\bhf_[A-Za-z0-9]{30,}/g, "\u2039huggingface-token\u203A"],
-  [/\bSG\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}/g, "\u2039sendgrid-key\u203A"],
-  [/\bdop_v1_[A-Za-z0-9]{60,}/g, "\u2039digitalocean-token\u203A"],
-  [/\bxox[baprs]-[A-Za-z0-9-]{10,}/g, "\u2039slack-token\u203A"],
-  [/\bAKIA[0-9A-Z]{16}\b/g, "\u2039aws-key\u203A"],
-  [/\bAIza[0-9A-Za-z_-]{30,}/g, "\u2039google-key\u203A"],
+  // `password=Xy9sk-…`), and the rule that would mask it whole then sees only a part of it. A key or a JWT right after
+  // a word character goes in the glued pass below the e-mail rule (./keys.ts).
+  ...KEYS.map(({ prefix, body, by }) => [new RegExp(`\\b${prefix}${body}`, "g"), by]),
   maskJwts,
   [/\b[A-Fa-f0-9]{40}\b/g, "\u2039hash40\u203A"],
   // connection strings
   [/\b(?:postgres|postgresql|mysql|mongodb(?:\+srv)?|redis|amqp):\/\/[^\s'"]+/gi, "\u2039db-url\u203A"],
   // the password of any other URL (scheme://user:<password>@host): the scheme, the user, the host and the path stay.
-  // The password runs to the last @ before the host, so a password that holds an @ goes whole.
-  [/\b([a-z][a-z0-9+.-]{0,31}:\/\/[^\s:/?#@'"]*):(?!‹)[^\s/?#'"]+@/gi, "$1:\u2039redacted\u203A@"],
-  // bearer/authorization
+  // The password runs to the last @ before the host, so a password that holds an @ goes whole. The scheme starts at any
+  // place (`_https://`, `7postgres://`, a word of more than 32 characters before it), so the password of a connection
+  // string that a word character starts goes too. The scheme is a lookbehind: a match starts at `://`, which the regex
+  // finds fast, and the scheme stays out of the match.
+  [/(?<=[a-z][a-z0-9+.-]{0,31})(:\/\/[^\s:/?#@'"]*):(?!‹)[^\s/?#'"]+@/gi, "$1:\u2039redacted\u203A@"],
+  // bearer/authorization. Bearer starts at a word start: glued, it is another word (useBearer, torchBearer).
   [/\bBearer\s+[A-Za-z0-9._-]{12,}/g, "Bearer \u2039token\u203A"],
   // the credential after any other scheme word of an Authorization header (Basic, Token, Negotiate, …), as a scanner
   // so that a credential that names a secret takes its inner pair with it
@@ -2399,8 +2473,10 @@ var PATTERNS = [
   maskAssignments,
   // email, as a scanner that reads each run once
   maskEmails,
+  // each key and JWT right after a letter, a digit or `_`, after the rules that mask a whole run (./keys.ts)
+  maskGluedKeys,
   // long hex/base64 blobs
-  [/\b[A-Za-z0-9+/]{60,}={0,2}\b/g, "\u2039blob\u203A"]
+  [BLOB, "\u2039blob\u203A"]
 ];
 function replaceRule(text3, [re, rep], mark2) {
   return text3.replace(re, (...m) => {
