@@ -2,7 +2,7 @@
 
 Orangu measures what happened. Only the user knows why it happened, what they tried to do, and which change they will keep. Interview after you read the evidence and before you draft any proposal. Then the proposals fit this person and this repository, not an average one.
 
-The harness review interviews in depth, after both analysts return and before any suggestion record exists. The single-finding proposal asks its bounded questions once, after diagnosis and before saving. The interview skill researches first, then interviews on one suggestion, before its proposal or before apply. Never interview before the estimate gates, and never instead of reading the evidence.
+The harness review interviews in depth, after both analysts return and before any suggestion record exists. The single-finding proposal asks its bounded questions once, after diagnosis and before saving. Never ask about a finding before the estimate gates, or instead of reading the evidence. The interview skill asks only about the user.
 
 ## How to ask
 

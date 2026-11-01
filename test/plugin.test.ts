@@ -5,6 +5,7 @@ import { currencyHits, moneyHits } from './money-vocabulary.js'
 import { CHANGE_CLASS_DEFINITIONS } from '../src/suggest/change-classes.js'
 import { allEntries } from '../src/suggest/catalog.js'
 import { REJECT_REASON_CODES } from '../src/suggest/reason-codes.js'
+import { CLI_VERBS } from '../src/cli/commands/index.js'
 
 const root = process.cwd()
 const readJson = (p: string) => JSON.parse(readFileSync(join(root, p), 'utf8'))
@@ -138,7 +139,8 @@ describe('plugin packaging', () => {
     // 7 -> 27 when analyze, improve and harness lost their any-verb grants: one CLI fallback for each verb that a step
     // runs (analyze 11, improve 4, harness 8), plus apply 2, feedback 1 and show-me 1.
     // 27 -> 30 when interview landed: one CLI fallback for each verb that it runs (estimate, suggest, ste).
-    expect(nodeGrants, 'analyze 11, improve 4, harness 8, apply 2, feedback 1, show-me 1, interview 3').toBe(30)
+    // 30 -> 29 when the interview became the profile interview (2026-11-01): it runs suggest and ste, and no estimate.
+    expect(nodeGrants, 'analyze 11, improve 4, harness 8, apply 2, feedback 1, show-me 1, interview 2').toBe(29)
   })
 
   // apply edits a repository, so it pre-approves only what it must run with no prompt: the 2 orangu verbs that it
@@ -174,6 +176,29 @@ describe('plugin packaging', () => {
     expect(readText('plugin/skills/harness/SKILL.md').split('\n')[3]).toBe(HARNESS_GRANTS)
     for (const s of readdirSync(join(root, 'plugin/skills')).filter((entry) => existsSync(join(root, 'plugin/skills', entry, 'SKILL.md')))) {
       expect(grantsOf(s), `${s} pre-approves no mktemp with a chosen path`).not.toContain('Bash(mktemp:*)')
+    }
+  })
+
+  // The profile interview (2026-11-01) runs 2 orangu verbs: `suggest`, which prints the profile path, and `ste`, which
+  // checks its summary draft. It pre-approves those 2 in both forms, reads, and its own drafts. It pre-approves no write
+  // of the profile, so that write asks. A path rule uses gitignore semantics: `*` stays inside 1 folder, `**` crosses
+  // folders, and a rule that matches a folder also matches each file under it.
+  const INTERVIEW_GRANTS =
+    'allowed-tools: Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Read, Edit(~/.orangu/drafts/interview-*.md)'
+  const pathRule = (pattern: string): RegExp =>
+    new RegExp(`^${pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\0').replace(/\*/g, '[^/]*').replace(/\0/g, '.*').replace(/\?/g, '[^/]')}(?:/.*)?$`)
+  it('interview pre-approves only suggest, ste, reads and its own drafts, and no grant matches the profile file', () => {
+    expect(readText('plugin/skills/interview/SKILL.md').split('\n')[3]).toBe(INTERVIEW_GRANTS)
+    // the matcher is not vacuous: a grant on the orangu home matches the profile, and the drafts grant matches a draft
+    expect(pathRule('~/.orangu/**').test('~/.orangu/profile.json')).toBe(true)
+    expect(pathRule('~/.orangu/*').test('~/.orangu/profile.json')).toBe(true)
+    expect(pathRule('~/.orangu/drafts/interview-*.md').test('~/.orangu/drafts/interview-0a1b2c3d.md')).toBe(true)
+    // the profile sits in the orangu home: ~/.orangu, $XDG_DATA_HOME/orangu or $ORANGU_HOME
+    const profiles = ['~/.orangu/profile.json', '~/.local/share/orangu/profile.json', '/srv/orangu-home/profile.json']
+    for (const grant of grantsOf('interview')) {
+      const path = /^(?:Edit|Write)\((.*)\)$/.exec(grant)?.[1]
+      if (path === undefined) continue
+      for (const profile of profiles) expect(pathRule(path).test(profile), `${grant} matches ${profile}`).toBe(false)
     }
   })
 
@@ -249,6 +274,17 @@ describe('plugin packaging', () => {
       const text = readText(path)
       expect(text.split(PERMISSION).length - 1, `${path} says it once`).toBe(1)
       expect(text.indexOf(PERMISSION), `${path} says it before the first edit`).toBeLessThan(text.indexOf('Inspect only the named files'))
+    }
+  })
+  // No grant reaches the profile file, so its write asks. The body says so once, at the write step, so that Claude reads
+  // the prompt as the expected step and not as a failure. The Codex mirrors drop allowed-tools but carry the same body.
+  it('interview says once, in both hosts, that the profile write asks for permission', () => {
+    const PERMISSION = 'The profile write asks for permission. This is expected.'
+    for (const path of ['plugin/skills/interview/SKILL.md', '.agents/skills/orangu-interview/SKILL.md', 'plugins/orangu/skills/orangu-interview/SKILL.md']) {
+      const text = readText(path)
+      expect(text.split(PERMISSION).length - 1, `${path} says it once`).toBe(1)
+      expect(text.indexOf(PERMISSION), `${path} says it at the write step`).toBeGreaterThan(text.indexOf('## 3. Write the profile'))
+      expect(text.indexOf(PERMISSION), `${path} says it before the report`).toBeLessThan(text.indexOf('## 4. Report'))
     }
   })
   it('the localhost handoff is copy-only and cannot spawn a model process', () => {
@@ -510,24 +546,19 @@ describe('plugin packaging', () => {
     }
   })
 
-  // improve stays the quick path, and the interview is the deep one (2026-10-24). improve hands off only when the user
-  // asks for outside research or a deeper interview, and only with an id: a direct input gets its record first. Both
-  // reports name the interview as a second opinion before apply or approval. The quick interview of improve does not change.
-  it('improve and harness hand off to the interview, and improve keeps its own quick interview', () => {
+  // The interview asks about the user, never about a suggestion (2026-11-01). So no skill and no doc hands it an id:
+  // the hand-offs of improve step 2 and step 5 and of harness stage 6 are gone, and the old research job with them.
+  // improve keeps its own quick interview. The README, the llms index and the landing still name the old job until
+  // their own chunks rewrite them, so this sweep reads the plugin trees and DETERMINISM only.
+  it('no skill hands the interview a suggestion id, and improve keeps its own quick interview', () => {
+    for (const path of [...filesWith(['.md', '.yaml', '.json'], 'plugin/skills', 'plugin/agents', 'plugin/codex', '.agents/skills', 'plugins/orangu'), 'docs/DETERMINISM.md']) {
+      const text = readText(path)
+      expect(text, `${path} hands no id to the interview`).not.toMatch(/(?:\/orangu:|\$orangu-)interview <(?:id|sg_id)>/)
+      expect(text, `${path} names no deeper interview on a suggestion`).not.toMatch(/a deeper interview|a second opinion before apply|second opinion on 1 item/)
+    }
     const improve = readText('plugin/skills/improve/SKILL.md')
-    const handoff = 'If the user asks for outside research or a deeper interview first, ask none of these questions. Run `/orangu:interview <id>` instead. Then stop here.'
-    expect(improve).toContain(handoff)
-    expect(improve).toContain('For a direct input, first create the record with the step 4 command, and pass its id.')
-    expect(improve.indexOf(handoff), 'the hand-off is part of step 2').toBeGreaterThan(improve.indexOf('## 2. Diagnose and rank'))
-    expect(improve.indexOf(handoff), 'the hand-off comes before any research').toBeLessThan(improve.indexOf('## 3. Research only where it adds value'))
     expect(improve, 'the quick interview sentence is unchanged').toContain(
       'Before drafting, interview the user on what the evidence cannot show, as [the interview guide](../shared/interview.md) directs: AskUserQuestion when the choices are finite, free text otherwise. Answers are user-stated context, never a measurement.')
-    const report = improve.slice(improve.indexOf('## 5. Report in chat'), improve.indexOf('## 6.'))
-    expect(report).toContain('For a second opinion before apply, name `/orangu:interview <id>`.')
-    const harness = readText('plugin/skills/harness/SKILL.md')
-    const stage6 = harness.slice(harness.indexOf('## 6. Report, approve, and apply'))
-    expect(stage6).toContain('For a second opinion on 1 item before approval, name `/orangu:interview <id>`.')
-    expect(stage6.indexOf('/orangu:interview <id>'), 'named before the approval question').toBeLessThan(stage6.indexOf('CAUTION: apply nothing without explicit approval.'))
   })
 
   it('the shared interview guide is deep, bounded, host-portable, and turns answers into context, never measurements', () => {
@@ -560,7 +591,8 @@ describe('plugin packaging', () => {
   it('the shared interview guide holds the question rules that every interview follows', () => {
     const guide = readText('plugin/skills/shared/interview.md')
     for (const literal of [
-      'The interview skill researches first, then interviews on one suggestion, before its proposal or before apply.',
+      // 2026-11-01: the interview skill asks about the user, so the evidence rules of the guide are scoped to a finding
+      'Never ask about a finding before the estimate gates, or instead of reading the evidence. The interview skill asks only about the user.',
       'Stop after twelve questions, or when the user says it is enough. A skip ends that question only.',
       'Ask about one thing in each question.',
       'one option to keep the setup as it is. Never ask a yes-or-no question about approval.',
@@ -580,42 +612,111 @@ describe('plugin packaging', () => {
     ]) expect(guide, `the guide says: ${literal}`).toContain(literal)
     // the old rule stopped the whole interview at the first skip, against harness ("the user may skip any topic or stop")
     expect(guide).not.toContain('at the first skip')
+    expect(guide, 'the guide names no research job of the interview skill').not.toMatch(/interview skill researches|interviews on one suggestion/)
     const rules = [...guide.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]))
     expect(rules, 'How to ask has 13 numbered rules in order').toEqual(Array.from({ length: 13 }, (_, i) => i + 1))
     // the interview skill links the guide for these rules and does not keep a second copy that could drift
     const skill = readText('plugin/skills/interview/SKILL.md')
     for (const copy of ['ask the same question again', '→ A: <answer>', 'the user may be away'])
       expect(skill, `the skill leaves "${copy}" to the guide`).not.toContain(copy)
-    expect(skill).toContain('Mark an option as recommended only where the guide allows it, and never on the audience question.')
+    expect(skill).toContain('](../shared/interview.md)')
   })
 
-  // The interview skill (2026-10-23): outside research first, after one consent question, then an interview in the main
-  // conversation (a subagent cannot ask), then one proposal or a second opinion. The one networked agent gets the approved
-  // terms and no evidence. Researched pages stay candidates, so the manifest carries no source from them.
-  it('interview researches before it asks, in order, from the shared rules, with no web pre-approval', () => {
+  // The profile interview (2026-11-01): it reads the profile path from orangu first, asks the questions of
+  // shared/profile.md under the rules of shared/interview.md in the main conversation (a subagent cannot ask), writes the
+  // profile at that path, and checks its summary draft. It reads no evidence, does no research, starts no agent and
+  // moves no record. So it links neither the loop rules nor the artifact contract nor the research policy.
+  it('interview reads the profile path, asks, writes the profile, and reports, with no research and no agent', () => {
     const md = readText('plugin/skills/interview/SKILL.md')
     const fm = /^---\n([\s\S]*?)\n---/.exec(md)![1]!
-    const order = ['## 1. Bound the read and pick the mode', '## 2. Research before you ask', '## 3. Check each perspective through 5 lenses',
-      '## 4. Interview the user', '## 5. Draft mode: save one proposal', '## 6. Second-opinion mode: keep, change or drop', '## 7. Report']
+    const order = ['## 1. Read the profile path', '## 2. Ask the questions', '## 3. Write the profile', '## 4. Report']
     const at = order.map((heading) => md.indexOf(heading))
-    expect(at.every((i) => i > 0), 'every stage heading exists').toBe(true)
-    expect([...at].sort((a, b) => a - b), 'the stages run in order').toEqual(at)
-    expect(md.indexOf('orangu suggest --set'), 'no store move before the interview').toBeGreaterThan(md.indexOf('## 4. Interview the user'))
-    for (const link of ['../shared/interview.md', '../shared/loop.md', '../shared/untrusted-input.md', '../shared/ste.md',
-      '../shared/artifact-contract.md', '../shared/research-sources.md']) expect(md, `links ${link}`).toContain(`](${link})`)
-    expect(fm, 'no web pre-approval: the researcher agent searches').not.toMatch(/WebSearch|WebFetch/)
+    expect(at.every((i) => i > 0), 'every step heading exists').toBe(true)
+    expect([...at].sort((a, b) => a - b), 'the steps run in order').toEqual(at)
+    // the read makes a missing orangu home private, so it runs before any question and any write
+    const read = md.indexOf('`orangu suggest --profile --json --quiet`')
+    expect(read, 'the path read is step 1').toBeGreaterThan(at[0]!)
+    expect(read, 'the path read comes before the questions').toBeLessThan(at[1]!)
+    for (const link of ['../shared/profile.md', '../shared/interview.md', '../shared/untrusted-input.md', '../shared/ste.md'])
+      expect(md, `links ${link}`).toContain(`](${link})`)
+    for (const link of ['../shared/loop.md', '../shared/artifact-contract.md', '../shared/research-sources.md'])
+      expect(md, `links no ${link}`).not.toContain(link)
+    expect(fm, 'no web tool, no agent, no proposal write and no estimate').not.toMatch(/WebSearch|WebFetch|\bAgent\b|Write\(|estimate/)
     expect(fm, 'the question tool is never pre-approved').not.toContain('AskUserQuestion')
     expect(fm, 'runs in the main conversation').not.toMatch(/^context:/m)
-    expect(fm, 'improve and harness can hand off to it').not.toMatch(/disable-model-invocation/)
+    expect(fm, 'improve can invoke it, and the user can type it').not.toMatch(/disable-model-invocation|user-invocable/)
+    expect(md, 'no researcher, no record move, no other orangu verb').not.toMatch(/harness-researcher|orangu suggest --set|orangu estimate|orangu evidence/)
     for (const literal of [
-      'a subagent cannot ask', 'This skill relies on the answers of the user', 'Build the search terms only from product words',
-      'Give it no evidence file and no evidence text', 'ask once, with no option marked as recommended', 'If no user can answer, start no research',
-      'In a run with no user, list the open questions and stop', 'You change no file of this record', 'Create no record and close no record',
-      'Put no outside source in the manifest', '"Not confirmed by you"', 'Keep my setup for now', 'A skip ends that question only',
+      'a subagent cannot ask', 'This skill relies on the answers of the user', 'Do no research, and start no agent.',
+      'Read no session and no evidence.', 'Write no file but the profile and your draft.',
+      'Use `path` only if it is an absolute path that ends with `profile.json`.', 'Never write the profile to another path.',
+      'Ask the user to move that file away and run the interview again. Then stop, and write nothing.',
+      'Ask questions 1 to 4 in 1 AskUserQuestion call.', 'Ask questions 5 and 6 in a second call.',
+      'Ask question 7, then question 8, as plain questions.', 'A skip keeps the current answer.',
+      'Store only what the user said, and never answer a question for the user.',
+      'Never copy a secret, such as a password or an API key, into the profile. This rule covers the free-text answers too.',
+      'If the user answered no question in this run, write nothing.',
+      'If another skill invoked this one, return to that skill now.',
     ]) expect(md, `interview says: ${literal}`).toContain(literal)
-    const researcher = readText('plugin/agents/harness-researcher.md')
-    expect(/description:\s*(.+)/.exec(researcher)?.[1] ?? '', 'the researcher names both dispatchers').toMatch(/\/orangu:harness and \/orangu:interview/)
-    expect(researcher, 'form (b) carries no evidence').toContain('Form (b) has no evidence file')
+    // the next step is improve, unless another skill invoked this one
+    expect(md.indexOf('\n## ', at[3]! + 1), 'step 4 is the last step').toBe(-1)
+    expect(md.slice(at[3]!)).toContain('Otherwise name `/orangu:improve` as the next step')
+  })
+
+  // The questions and the stored shape live once in shared/profile.md (D4). The interview asks them, and the review and
+  // the portable skill read them later, so the file names no orangu command, no slash command and no plugin root, and it
+  // links no file but shared/brain.md. Rule 3 of the guide (12 questions at most) and rule 8 (no recommended mark on a
+  // preference) hold for its questions. The keys and limits are the ones that `orangu suggest --profile` reads as valid.
+  const PROFILE = 'plugin/skills/shared/profile.md'
+  // born 2026-11-01 at 687 measured words + 1: a ceiling, not a target (PROJECT.md: ratchets only go down, and one is
+  // raised only in the commit that measures the growth that needs it)
+  const PROFILE_CEILING = 688
+  it('shared/profile.md holds the questions and the stored shape, names no orangu command, and links no file but brain.md', () => {
+    expect(existsSync(join(root, PROFILE)), `${PROFILE} exists`).toBe(true)
+    const profile = readText(PROFILE)
+    expect(commandVerbs(profile), 'no orangu command in code').toEqual([])
+    expect(profile, 'no orangu command in prose').not.toMatch(new RegExp(`\\borangu (?:${CLI_VERBS.join('|')})\\b|npx orangu|orangu\\.cli\\.mjs|\\bbin/`))
+    expect(profile, 'portable: no slash command, no Codex name, no plugin root variable').not.toMatch(/\/orangu:|\$orangu-|CLAUDE_PLUGIN_ROOT/)
+    for (const m of profile.matchAll(/\]\(([^)\s]+)\)/g)) expect(m[1], 'links no file but shared/brain.md').toBe('brain.md')
+    const rows = [...profile.matchAll(/^\| (\d+) \| ([^|]+?) \| (choice|multi-choice|free text, can skip) \| ([^|]*?) \| ([^|]+?) \|$/gm)]
+    expect(rows.map((m) => Number(m[1])), 'the questions in order').toEqual([1, 2, 3, 4, 5, 6, 7, 8])
+    expect(rows.length, 'rule 3 of the guide: 12 questions at most').toBeLessThanOrEqual(12)
+    expect(rows.map((m) => m[2]), 'the question texts').toEqual([
+      'Which role fits your work best?', 'Which work do you give to agents most?', 'How do you run agents most of the time?',
+      'What must get better first in your next sessions?', 'Can orangu propose a smaller model or a lower effort for some work?',
+      'Who gets a change in a repository?', 'What do you tell the agent again and again?', 'What must orangu never propose?',
+    ])
+    expect(rows.map((m) => m[3]), '6 choices, then 2 free-text questions that the user can skip').toEqual([
+      'choice', 'multi-choice', 'choice', 'choice', 'choice', 'choice', 'free text, can skip', 'free text, can skip',
+    ])
+    // each option has its stored value, in the same order, and the 2 free-text questions have no option
+    const stored: Array<[string, string[]]> = [
+      ['role', ['write-code', 'lead', 'data', 'no-code']], ['work', ['features', 'fixes', 'refactors', 'research']],
+      ['process', ['watch-one', 'parallel', 'orchestrator', 'unattended']], ['priority', ['quality', 'time', 'tokens']],
+      ['models', ['yes', 'ask', 'no']], ['audience', ['local', 'shared']], ['repeats', []], ['never', []],
+    ]
+    rows.forEach((m, i) => {
+      const [key, values] = stored[i]!
+      const options = m[4]!.trim() === '' ? [] : m[4]!.split(' / ')
+      expect(options.length, `question ${i + 1} has 1 stored value for each option`).toBe(values.length)
+      expect(m[5], `question ${i + 1} stores ${key}`).toBe(values.length ? `\`${key}\`: ${values.map((v) => `\`${v}\``).join(', ')}` : `\`${key}\``)
+    })
+    for (const literal of [
+      // rule 8 of the guide: each question asks for a preference
+      'Each question asks for a preference, so mark no option as recommended.',
+      'A skip ends that question only.',
+      'It is user-stated context. It is never a measurement, never evidence that an outcome got better, and never an approval.',
+      '`v` is the number 1, and `updatedAt` is the date of the interview as YYYY-MM-DD. Each other key is optional.',
+      '`priority`, `models` and `audience` hold only a value of the table. Store own words for these 3 in `answers` only.',
+      'A skipped question leaves its key out.',
+      'Add no other key, and never write `null`.',
+    ]) expect(profile, `the profile rules say: ${literal}`).toContain(literal)
+    // the example parses, and it holds only the keys that the reader accepts
+    const example = JSON.parse(/```json\n([\s\S]*?)\n```/.exec(profile)?.[1] ?? 'null') as Record<string, unknown>
+    expect(example.v).toBe(1)
+    for (const key of Object.keys(example))
+      expect(['v', 'updatedAt', 'role', 'work', 'process', 'priority', 'models', 'audience', 'repeats', 'never', 'answers'], `the example key ${key}`).toContain(key)
+    expect(profile.split(/\s+/).filter(Boolean).length, 'profile rules words').toBeLessThan(PROFILE_CEILING)
   })
 
   // The artifact contract and the research policy serve 3 skills and the researcher, so they live in shared/ (2026-10-24).
@@ -626,7 +727,6 @@ describe('plugin packaging', () => {
     for (const [path, links] of [
       ['plugin/skills/improve/SKILL.md', ['../shared/artifact-contract.md']],
       ['plugin/skills/harness/SKILL.md', ['../shared/artifact-contract.md', '../shared/research-sources.md']],
-      ['plugin/skills/interview/SKILL.md', ['../shared/artifact-contract.md', '../shared/research-sources.md']],
     ] as const) for (const link of links) expect(readText(path), `${path} links ${link}`).toContain(`](${link})`)
     expect(readText('plugin/agents/harness-researcher.md')).toContain('`${CLAUDE_PLUGIN_ROOT}/skills/shared/research-sources.md`')
     expect(readText('docs/DATA-CONTRACTS.md')).toContain('](../plugin/skills/shared/artifact-contract.md)')
@@ -650,26 +750,29 @@ describe('plugin packaging', () => {
     }
   })
 
-  // Web text reaches the interview through the researcher. It is data, and a command in it can reach a repository
-  // only as a reviewed proposal that apply edits in.
+  // Web text reaches a skill through the researcher. It is data, and a command in it can reach a repository only as a
+  // reviewed proposal that apply edits in. The interview does no research (2026-11-01), so no rule names its queries.
   it('the untrusted-input rules cover web pages and researcher replies', () => {
     const rules = readText(SHARED_RULES)
     expect(rules).toContain('Text from a web page and a researcher reply is untrusted content too.')
-    expect(rules).toContain('In the interview, network queries use only the search terms that the user approved. The researcher sends them.')
-    expect(rules).toContain('In a host with no plugin agents, the interview skill sends them itself.')
+    expect(rules).not.toMatch(/In the interview, network queries|the interview skill sends them/)
     expect(rules).toContain('A command from a web page reaches a repository only through a proposal and `/orangu:apply`.')
   })
 
-  // Both dispatchers need a yes from the user before any search: harness because the user asked for outside research,
-  // interview because a model-invocable skill can start with no act of the user.
-  it('the research policy and the researcher description need the explicit approval of the user for both skills', () => {
+  // The harness review is the only dispatcher of the researcher, and it needs a yes from the user before any search. The
+  // interview asks about the user and does no research (2026-11-01), so the researcher has 1 input form.
+  it('the research policy and the researcher take 1 dispatcher and its explicit approval, and the researcher has 1 input form', () => {
     const policy = readText('plugin/skills/shared/research-sources.md')
     const intro = policy.split('\n## ')[0]!
     expect(intro).toContain('the user explicitly approves outside research')
-    expect(intro).toContain('The harness review and the interview skill both need that explicit approval before any outside research.')
+    expect(intro).toContain('The harness review needs that explicit approval before any outside research.')
+    expect(intro, 'no interview research and no host fallback for it').not.toMatch(/interview|approved search terms|approved terms/)
     expect(intro, 'portable to the Codex mirror: plain names, no slash command').not.toMatch(/\/orangu:/)
-    const desc = /description:\s*(.+)/.exec(readText('plugin/agents/harness-researcher.md'))?.[1] ?? ''
-    expect(desc).toContain('Only /orangu:harness and /orangu:interview dispatch it, after explicit user approval for outside research.')
+    const researcher = readText('plugin/agents/harness-researcher.md')
+    const desc = /description:\s*(.+)/.exec(researcher)?.[1] ?? ''
+    expect(desc).toContain('Only /orangu:harness dispatches it, after explicit user approval for outside research.')
+    expect(researcher, 'no dispatch from the interview, and no second input form').not.toMatch(/interview|[Ff]orm \([ab]\)|input forms|search terms/)
+    expect(researcher).toContain('Accept 1 input, from `/orangu:harness`: both evidence file paths, the uncovered item list, and the source policy.')
   })
 
   // The loop rules: what the earlier changes of a workspace taught, read before a proposal, and each new result given
@@ -923,7 +1026,6 @@ describe('plugin packaging', () => {
       ['harness', readText('plugin/skills/harness/SKILL.md')],
       ['harness researcher', readText('plugin/agents/harness-researcher.md')],
       ['harness research policy', readText('plugin/skills/shared/research-sources.md')],
-      ['interview', readText('plugin/skills/interview/SKILL.md')],
     ] as const
     for (const [name, text] of surfaces) {
       expect(text, `${name} uses generic network terms`).toMatch(/generic feature(?: and|\/) change-class terms/i)
@@ -1218,6 +1320,13 @@ describe('plugin packaging', () => {
       const record = text.slice(text.indexOf('## 4. Record application'))
       expect(record.indexOf(draftStep('apply', 'Before you send this reply')), `${path} checks the result`).toBeGreaterThan(record.indexOf('Return the changed files'))
     }
+    // the interview checks its summary after the profile write, in both hosts
+    for (const path of ['plugin/skills/interview/SKILL.md', '.agents/skills/orangu-interview/SKILL.md', 'plugins/orangu/skills/orangu-interview/SKILL.md']) {
+      const text = readText(path)
+      const check = text.indexOf(draftStep('interview', 'Before you send the summary'))
+      expect(check, `${path} checks the summary in the report`).toBeGreaterThan(text.indexOf('## 4. Report'))
+      expect(check, `${path} checks the summary after the write`).toBeGreaterThan(text.indexOf('The profile write asks for permission.'))
+    }
   })
 
   // The STE rules shape prose only. Values that Orangu validates, text that a proposal writes into a
@@ -1277,8 +1386,12 @@ describe('plugin packaging', () => {
       'what your harness declares', 'every session on the machine', 'instruction files, hooks, skills, agents, MCP servers, plugins',
       'why the same problem keeps recurring', 'wants a repo or global harness review', 'what to change in their setup',
     ]) expect(desc('harness')).toContain(phrase)
-    // interview-before-apply says "grill me on it", and interview-wants-outside-views asks for questions first
-    expect(desc('interview')).toContain('interviewed or grilled about a suggestion or proposal')
+    // interview-asks-about-my-work asks orangu to fit its proposals to the user, and interview-claims-no-unwritten-profile
+    // asks it to change the answers
+    expect(desc('interview')).toContain('their role, their work and how they run agents')
+    expect(desc('interview')).toContain('wants orangu proposals to fit them, or wants to change those answers')
+    // a request about a suggestion or a proposal is not a request about the user (improve-grills-a-proposal-before-apply)
+    expect(desc('interview')).not.toMatch(/suggestion|grill|second opinion|research/)
   })
 
   // The build mirrors these four trees to Codex. A Claude-only skill named there becomes a dead command in
@@ -1736,7 +1849,11 @@ describe('plugin packaging', () => {
     // step. Claude Code uses the catalog only and never searches inline. A host with no plugin agents (Codex) searches
     // inline with the approved terms and runs only the commands of the skill, its consent question names that risk before
     // the user says yes, and a host with no search tool uses the catalog only.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1181, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 1514 }
+    // 2026-11-01 the profile interview: interview 1514 -> 596, measured 1,513 -> 595 (-918). The skill asks about the user
+    // and keeps the answers. Its research, its 5 lenses, its proposal and its second opinion go, and the questions and the
+    // stored shape live in shared/profile.md under a ceiling of their own. improve (1,130) and harness (1,536) lose their
+    // hand-offs to the interview. Their ceilings do not move: the next chunk moves the review into improve.
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1181, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 596 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305, interview: 247 }
     const TOTAL_DESC_CEILING = 2750 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5); +246 for interview
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

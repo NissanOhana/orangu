@@ -84,6 +84,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/shared/artifact-contract.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (56 of 56) after the rewrite, 100 (67 of 67) after the interview sections moved in, 2026-10-24
   'plugin/skills/shared/interview.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (47 of 47) after the rewrite, 100 (74 of 74) with the question rules, 2026-10-24
   'plugin/skills/shared/loop.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface 2026-10-22, born at max(80, measured - 2): measured 100 (118 of 118), 0 findings
+  'plugin/skills/shared/profile.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface 2026-11-01, born at max(80, measured - 2): measured 100 (47 of 47, table cells included), 0 findings
   'plugin/skills/shared/ste.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (86 of 86, table cells included)
   'plugin/skills/shared/untrusted-input.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (37 of 37) after the rewrite, 100 (47 of 47) with the web text rules, 2026-10-24
   'plugin/codex/*/openai.yaml': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (6 of 6), no change was needed, 100 (9 of 9) with the interview yaml, 2026-10-24
@@ -109,7 +110,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
   // P2: the show-me skill, its slot rules and its two template sources. New surfaces, born in STE at
   // max(80, measured - 2). The templates are measured as sources: the fixed sentences and the EXAMPLE sample text.
-  'plugin/skills/interview/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (153 of 153) at birth, 2026-10-23
+  'plugin/skills/interview/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (153 of 153) at birth, 2026-10-23, 100 (61 of 61) as the profile interview, 2026-11-01
   'plugin/skills/show-me/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (55 of 55) after the data-only rewrite (was 77 of 77)
   'plugin/skills/show-me/references/report.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (111 of 111)
   'plugin/skills/show-me/references/slides.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (113 of 113)
