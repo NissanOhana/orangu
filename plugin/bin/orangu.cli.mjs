@@ -5521,7 +5521,7 @@ var cacheHealth = (ctx) => {
         title: `Prompt cache hit ratio is ${round(ratio * 100, 0)}%`,
         detail: `${fmtTokens(ctx.context.totalCacheRead)} read from cache vs ${fmtTokens(ctx.context.totalCacheWrite)} written and ${fmtTokens(ctx.context.totalFreshInput)} fresh input`,
         improvement: "Keep the model and the effort level the same until the task ends. Keep a steady pace during a task, so that requests stay inside the cache TTL.",
-        why: "On a Claude subscription, within plan usage, the main conversation keeps its cache for 1 h by default. The cache TTL is 5 min on an API key, usage credits or a cloud provider, and for subagents. A low ratio means that the prompt prefix changes, or that requests are farther apart than the cache TTL. Then the context is written again instead of read again.",
+        why: "On a Claude subscription, within plan usage, the main conversation keeps its cache for 1 h by default. By default, the cache TTL is 5 min on an API key, usage credits or a cloud provider, and for subagents. A low ratio means that the prompt prefix changes, or that requests are farther apart than the cache TTL. Then the context is written again instead of read again.",
         method: "Expect low ratios in short sessions.",
         evidence: { cacheHitRatio: ratio, totalCacheRead: ctx.context.totalCacheRead, totalCacheWrite: ctx.context.totalCacheWrite, freshInput: ctx.context.totalFreshInput },
         turnIndexes: [],
@@ -6321,7 +6321,7 @@ var thinkingOnMechanical = (ctx) => {
       axis: "tokens",
       title: `${hits.length} mechanical single-tool call${hits.length === 1 ? "" : "s"} spent over 2k thinking tokens each (${fmtTokens(wasted)} total)`,
       detail: hits.slice(0, 5).map((h) => `turn ${h.turnIndex}: ${h.tool} with ${fmtTokens(h.thinkingTokens)} thinking tokens`).join(" \xB7 "),
-      improvement: "Lower the effort for mechanical steps: use /effort medium, or set effort in the frontmatter of the agent. Keep high effort for the hard steps, where thinking is the point.",
+      improvement: "Lower the effort for mechanical steps: use /effort low, or set effort: low in the frontmatter of the agent. Keep high effort for the hard steps, where thinking is the point.",
       why: "Thinking tokens are output tokens. The model generates them one at a time, so they add latency as well as tokens. A routine Read or status check rarely needs them.",
       evidence: { calls: hits.slice(0, 10), wastedThinkingTokens: wasted, sessionThinkingTokens: totalThinking },
       turnIndexes: [...new Set(hits.map((h) => h.turnIndex))].slice(0, 30),
@@ -10664,7 +10664,7 @@ var catalog_default2 = {
       feature: "prompt-prefix stability",
       url: "https://code.claude.com/docs/en/prompt-caching.md",
       verifiedAt: "2026-11-01",
-      note: "cache_miss_reason messages_changed: the cache matches the start of each request exactly, so a change to an earlier message invalidates everything after it. Avoid resuming one session in two terminals (messages interleave into one transcript). Keep one model during a session, because each model has its own cache. On most models, an effort change in a session also starts a fresh cache. On Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1, with an API key or a Claude subscription, the cache stays intact by default."
+      note: "cache_miss_reason messages_changed: the cache matches the start of each request exactly, so a change to an earlier message invalidates everything after it. Avoid resuming one session in two terminals (messages interleave into one transcript). Keep one model during a session, because each model has its own cache. On most models, an effort change in a session also starts a fresh cache. On Opus 5.5, Sonnet 5.5, Haiku 5.5, and on Fable 5.1 from Claude Code 2.1.260, the cache stays intact by default. This holds with an API key or a Claude subscription."
     },
     {
       id: "fix-reread-files",
@@ -10763,7 +10763,7 @@ var catalog_default2 = {
       feature: "a faster model for the search subagent",
       url: "https://cursor.com/docs/subagents",
       verifiedAt: "2026-11-01",
-      note: "Cursor runs its built-in Explore subagent on a faster model by default, so that it can run many searches in parallel. Its docs say to choose inherit when a subagent needs the same reasoning power as the parent. Give a search or read agent of your own a small model, such as haiku in Claude Code."
+      note: "Cursor runs its built-in Explore subagent on a faster model by default, so that it can run many searches in parallel. Its docs say to choose inherit when a subagent needs the same reasoning power as the parent. They also say to name a specific model when a subagent needs the capabilities of that model."
     },
     {
       id: "effort-low-for-tool-calls",
@@ -10851,9 +10851,9 @@ var features_default = {
       changeClass: "workflow-config",
       pattern: { ruleId: "thinking-on-mechanical" },
       feature: "effort frontmatter (low|medium|high|xhigh|max)",
-      url: "https://code.claude.com/docs/en/skills.md",
+      url: "https://code.claude.com/docs/en/prompt-caching.md",
       verifiedAt: "2026-11-01",
-      note: "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. An effort change keeps the prompt cache by default on Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1. This holds with an API key or a Claude subscription. On most other models, each effort level has its own cache, so keep one level for each agent or skill during a session."
+      note: "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. An effort change keeps the prompt cache by default on Opus 5.5, Sonnet 5.5, Haiku 5.5, and on Fable 5.1 from Claude Code 2.1.260. This holds with an API key or a Claude subscription. On most other models, each effort level has its own cache, so keep one level for each agent or skill during a session."
     },
     {
       id: "feat-background-agents",
