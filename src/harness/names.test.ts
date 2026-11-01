@@ -64,4 +64,42 @@ describe('names: argv0Basename', () => {
     // only assignments: no program, so no name
     expect(argv0Basename('FOO=FAKEbar4')).toBe('')
   })
+  it('reads each leading assignment as 1 shell word: a quoted value or an escaped space never becomes the program', () => {
+    expect(argv0Basename('AUTH="Bearer FAKEtoken6" ~/.claude/hooks/post.sh')).toBe('post.sh')
+    expect(argv0Basename('CURL_OPTS="-u admin:FAKEpw7" ~/.claude/hooks/curl-hook.sh --quiet')).toBe('curl-hook.sh')
+    expect(argv0Basename('TOPIC=a\\ FAKEt8 ~/.claude/hooks/ntfy.sh')).toBe('ntfy.sh')
+    expect(argv0Basename("NOTE='a FAKEt9 b' /opt/hooks/note.sh")).toBe('note.sh')
+    expect(argv0Basename('MSG="say \\"hi FAKEt10\\" now" X=1 /opt/hooks/say.sh')).toBe('say.sh')
+    // the shapes of the security re-check: a double quote, a single quote, an escaped space, an escaped double quote
+    expect(argv0Basename('TOKEN="abc FAKEv20" ~/.claude/hooks/h.sh')).toBe('h.sh')
+    expect(argv0Basename("TOKEN='abc FAKEv21' ~/.claude/hooks/h.sh")).toBe('h.sh')
+    expect(argv0Basename('TOKEN=abc\\ FAKEv22 ~/.claude/hooks/h.sh')).toBe('h.sh')
+    expect(argv0Basename('TOKEN="a\\" FAKEv24" ~/.claude/hooks/h.sh')).toBe('h.sh')
+  })
+  it('names nothing when a quote does not close, in any word', () => {
+    expect(argv0Basename('AUTH="Bearer FAKEt11 ~/.claude/hooks/post.sh')).toBe('')
+    expect(argv0Basename("NOTE='FAKEt12 /opt/hooks/note.sh")).toBe('')
+    expect(argv0Basename('"/opt/hooks/hook.sh --x')).toBe('')
+    expect(argv0Basename('node --key "FAKEv29 hook.js')).toBe('')
+  })
+  it('names nothing when a word holds a substitution: $(, a backtick or $\'', () => {
+    expect(argv0Basename("TOKEN=$'a FAKEv23' ~/.claude/hooks/h.sh")).toBe('')
+    expect(argv0Basename('TOKEN=$(cat FAKEv27) ~/.claude/hooks/h.sh')).toBe('')
+    expect(argv0Basename('TOKEN=`cat FAKEv28` ~/.claude/hooks/h.sh')).toBe('')
+  })
+  it('keeps a first word with = that is no assignment: a path names its script, never the argument after it', () => {
+    expect(argv0Basename('/opt/run=1/hook.sh FAKEarg13')).toBe('hook.sh')
+    expect(argv0Basename('/opt/run=1/hook.sh x')).toBe('hook.sh')
+  })
+  it('reads the words after an interpreter as shell words too, and takes the word after a flag with no = as the script only with a script extension', () => {
+    expect(argv0Basename('env A="x y" d.sh')).toBe('d.sh')
+    expect(argv0Basename('env AUTH="Bearer Zm9v/FAKEv26" ~/h.sh')).toBe('h.sh')
+    expect(argv0Basename('node --key Zm9v/FAKEv25 x.js')).toBe('x.js')
+    expect(argv0Basename('node --key=Zm9v/FAKEv30 /opt/hooks/x.js')).toBe('x.js')
+  })
+  it('keeps the names of the env forms', () => {
+    expect(argv0Basename('env FOO=1 cmd')).toBe('env')
+    expect(argv0Basename('FOO=1 BAR=2 cmd')).toBe('cmd')
+    expect(argv0Basename('cmd=1')).toBe('')
+  })
 })

@@ -8089,21 +8089,66 @@ function canonicalName(observed, declared2) {
   return observed;
 }
 var INTERPRETERS = /* @__PURE__ */ new Set(["env", "bash", "sh", "zsh", "dash", "fish", "python", "python3", "node", "npx", "bun", "deno", "tsx", "ts-node", "ruby", "perl", "pwsh", "powershell"]);
-var unquote = (t) => t.replace(/^['"]|['"]$/g, "");
 var SCRIPT_EXT = /\.(sh|bash|zsh|py|js|mjs|cjs|ts|mts|cts|rb|pl|ps1|cmd|bat)$/i;
 var pathLike = (t) => t.includes("/") || t.includes("\\") || SCRIPT_EXT.test(t);
 var ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+var DOUBLE_QUOTE_ESCAPES = '"\\$`';
+var SUBSTITUTION = /\$\(|`|\$'/;
+function shellWords(command) {
+  const words2 = [];
+  let i = 0;
+  for (; ; ) {
+    while (i < command.length && /\s/.test(command[i])) i++;
+    if (i >= command.length) return words2;
+    const start = i;
+    let word = "";
+    while (i < command.length && !/\s/.test(command[i])) {
+      const c = command[i];
+      if (c === "\\") {
+        word += command[i + 1] ?? "";
+        i += 2;
+      } else if (c === "'") {
+        const close = command.indexOf("'", i + 1);
+        if (close === -1) return null;
+        word += command.slice(i + 1, close);
+        i = close + 1;
+      } else if (c === '"') {
+        let j = i + 1;
+        while (j < command.length && command[j] !== '"') {
+          const next = command[j + 1];
+          const escaped = command[j] === "\\" && next !== void 0 && DOUBLE_QUOTE_ESCAPES.includes(next);
+          word += escaped ? next : command[j];
+          j += escaped ? 2 : 1;
+        }
+        if (j >= command.length) return null;
+        i = j + 1;
+      } else {
+        word += c;
+        i++;
+      }
+    }
+    if (SUBSTITUTION.test(command.slice(start, i))) return null;
+    words2.push(word);
+  }
+}
 function argv0Basename(command) {
-  const words2 = command.trim().split(/\s+/).map(unquote);
-  const first = words2.findIndex((t) => !ENV_ASSIGNMENT.test(t));
+  const words2 = shellWords(command);
+  if (!words2) return "";
+  const first = words2.findIndex((word) => !ENV_ASSIGNMENT.test(word));
   if (first === -1) return "";
-  const tokens = words2.slice(first);
-  const argv0 = basename5(tokens[0] ?? "");
+  const argv0 = basename5(words2[first]);
   if (!INTERPRETERS.has(argv0)) return argv0;
-  for (const t of tokens.slice(1)) {
-    if (t.startsWith("-")) continue;
+  let afterFlag = false;
+  for (const t of words2.slice(first + 1)) {
+    if (t.startsWith("-")) {
+      afterFlag = !t.includes("=");
+      continue;
+    }
+    const flagValue = afterFlag;
+    afterFlag = false;
     if (ENV_ASSIGNMENT.test(t)) continue;
     if (INTERPRETERS.has(basename5(t))) continue;
+    if (flagValue && !SCRIPT_EXT.test(t)) continue;
     return pathLike(t) ? basename5(t) : argv0;
   }
   return argv0;
