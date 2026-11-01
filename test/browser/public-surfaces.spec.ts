@@ -7,17 +7,6 @@ const SITE = 'http://127.0.0.1:4173'
 const APP = APP_URL
 const SESSION = 'aaaaaaaa-0000-4000-8000-000000000001'
 const EXPECTED_BRAND_SOURCE = `data:image/png;base64,${readFileSync(new URL('../../design/brand/mascot-96.png', import.meta.url)).toString('base64')}`
-const CHANGE_CLASSES = [
-  'Instruction files',
-  'Scripts and CLIs',
-  'Hooks',
-  'Skills to create',
-  'Skills to discover',
-  'Subagents and agents',
-  'MCP servers',
-  'Plugins',
-  'Workflow and configuration',
-]
 
 function runtimeErrors(page: Page): string[] {
   const errors: string[] = []
@@ -159,101 +148,124 @@ async function rasterBrandSource(page: Page): Promise<string> {
   return source!
 }
 
-test('landing communicates the observe-to-improve loop and remains keyboard operable', async ({ page, context }, info) => {
-  const errors = runtimeErrors(page)
-  // Keep visual QA deterministic and independent of the optional hosted font.
+/** The fonts of the landing come from Google Fonts: the tests answer them empty, so a run reads no network. */
+async function routeFonts(page: Page): Promise<void> {
   await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
   await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
+}
+
+/**
+ * The boxes of the visible zoom level of the hero that end outside the window: the window clips them, so a reader
+ * cannot see their text. The window holds no scroll box, so each box of the level must fit inside it.
+ */
+async function cutInWindow(page: Page): Promise<string[]> {
+  // a level zooms in from scale(2.2) or scale(.96) in 0.6 s: measure it at rest
+  await page.waitForFunction(() => {
+    const level = document.getElementById(document.querySelector('.ztab[aria-selected="true"]')!.getAttribute('aria-controls')!)!
+    return getComputedStyle(level).transform === 'none'
+  })
+  return page.evaluate(() => {
+    const port = document.querySelector('.zoomport')!.getBoundingClientRect()
+    // the level of the selected tab: a level that zooms out stays visible while it fades, scaled past the window
+    const level = document.getElementById(document.querySelector('.ztab[aria-selected="true"]')!.getAttribute('aria-controls')!)!
+    return Array.from(level.querySelectorAll<HTMLElement>('*'))
+      .filter((el) => {
+        const box = el.getBoundingClientRect()
+        return box.width > 0 && (box.left < port.left - 1 || box.right > port.right + 1 || box.bottom > port.bottom + 1)
+      })
+      .map((el) => `${el.tagName.toLowerCase()}.${el.className} "${(el.textContent ?? '').trim().slice(0, 40)}"`)
+  })
+}
+
+test('landing tells the chain in 6 sections and stays keyboard operable', async ({ page, context }, info) => {
+  const errors = runtimeErrors(page)
+  const narrow = info.project.name.startsWith('narrow')
+  await routeFonts(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: SITE })
   await seedLandingTheme(page, info)
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
 
-  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Improve your agent harness, one checked change at a time.')
-  await expect(page.locator('.hero .hero-lead')).toHaveText('orangu reads the Claude Code sessions on your machine. It finds what to change in your harness: CLAUDE.md, skills, hooks, MCP servers, and settings. Then it checks each change on your later sessions.')
-  await expect(page.locator('.hero-proof .hero-step')).toHaveText([
-    'Checked: orangu compares your later sessions with the sessions before each change.',
-    'Beyond chance: An exact rank test grades each check on your later sessions. A result inside the noise reads "within noise".',
-    'No model: Plain code counts and compares. The measurement spends no model tokens.',
-  ])
-  await expect(page.locator('.hero-copy > .fine')).toHaveText('orangu never changes your harness by itself. You approve each change by its id.')
-  // The boundary line, the gate and the verdict card carry meaning, so each reaches AA on its own ground.
-  const meaningful = await contrastOnOwnGround(page, '.hero-bound, #loop .loop-gate, #loop .loop-verdict p')
-  expect(meaningful).toHaveLength(5)
-  for (const [at, ratio] of meaningful.entries()) expect(ratio, `loop text ${at + 1} in ${projectTheme(info)}`).toBeGreaterThanOrEqual(4.5)
-  await expect(page.getByRole('button', { name: /Choose a report/ }).first()).toBeVisible()
-  await expect(page.locator('.hero .term pre')).toContainText('$ npx orangu\nChoose a report')
-  await expect(page.locator('.hero .term-wrap .fine')).toHaveText('To open only the latest session, run npx orangu report.')
-  // The second line is the only place in the hero that names the latest-session command, so it is
-  // meaningful text: 13 px must reach WCAG AA (4.5:1) against the page in the theme being painted.
-  expect(await contrastOnPage(page, '.hero .term-wrap .fine')).toBeGreaterThanOrEqual(4.5)
-  await expect(page.getByRole('link', { name: /See a sample report/ })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Improve your agent harness and your setup.')
+  await expect(page.locator('.hero .lead')).toHaveText('Better results with fewer tokens. orangu measures every agent session, proposes changes that fit how you work, and keeps the ones that work.')
+  await expect(page.locator('main > section')).toHaveCount(6)
   const sampleLinks = page.locator('a[href="sample.html"]')
   await expect(sampleLinks).toHaveCount(2)
-  for (const sampleLink of await sampleLinks.all()) {
-    await expect(sampleLink).toHaveAttribute('target', '_blank')
-    await expect(sampleLink).toHaveAttribute('rel', /(?:^|\s)noopener(?:\s|$)/)
+  for (const link of await sampleLinks.all()) {
+    await expect(link).toHaveAttribute('target', '_blank')
+    await expect(link).toHaveAttribute('rel', /(?:^|\s)noopener(?:\s|$)/)
+  }
+  // on a phone the header keeps only GitHub and the theme button; on a wide screen a section link moves by the keyboard
+  const howItWorks = page.getByRole('link', { name: 'How it works' })
+  await expect(page.getByRole('link', { name: /GitHub/ })).toBeVisible()
+  if (narrow) await expect(howItWorks).toBeHidden()
+  else {
+    await howItWorks.focus()
+    await page.keyboard.press('Enter')
+    await expect(page).toHaveURL(/#chain$/)
   }
 
-  const loopLink = page.getByRole('link', { name: 'The loop' })
-  await loopLink.focus()
-  await expect(loopLink).toBeFocused()
-  await page.keyboard.press('Enter')
-  await expect(page).toHaveURL(/#loop$/)
-
-  // The loop: 3 columns on a wide screen, 1 on a phone, and the approval gate always between step 3 and step 4.
-  const loop = await page.evaluate(() => {
-    const steps = Array.from(document.querySelectorAll('#loop ol.loop-steps > li')).map((li) => li.getBoundingClientRect())
-    const gate = document.querySelector('#loop .loop-gate')!.getBoundingClientRect()
-    return {
-      steps: steps.length,
-      columns: new Set(steps.map((rect) => Math.round(rect.left))).size,
-      step3Bottom: Math.max(...steps.slice(0, 3).map((rect) => rect.bottom)),
-      step4Top: Math.min(...steps.slice(3).map((rect) => rect.top)),
-      gateTop: gate.top,
-      gateBottom: gate.bottom,
-    }
-  })
-  expect(loop.steps, JSON.stringify(loop)).toBe(6)
-  expect(loop.columns, JSON.stringify(loop)).toBe(info.project.name.startsWith('narrow') ? 1 : 3)
-  expect(loop.gateTop, JSON.stringify(loop)).toBeGreaterThanOrEqual(loop.step3Bottom)
-  expect(loop.gateBottom, JSON.stringify(loop)).toBeLessThanOrEqual(loop.step4Top)
-
-  await page.getByRole('button', { name: /Choose a report/ }).first().click()
-  await expect(page.getByRole('button', { name: /Copied/ }).first()).toBeVisible()
+  // the hero command copies itself and tells a screen reader
+  await page.locator('.hero .cmd-btn').click()
+  await expect(page.locator('.hero .cmd-btn [data-lbl]')).toHaveText('Copied')
+  await expect(page.locator('#copyNote')).toHaveText('Copied to the clipboard.')
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npx orangu')
 
-  const demo = page.locator('#appdemo')
-  const motion = demo.locator('#demoMotion')
-  await expect(motion).toHaveAccessibleName('Pause automatic preview')
-  await motion.click()
-  await expect(motion).toHaveAccessibleName('Play automatic preview')
-  const suggestions = demo.locator('.demo-view[data-demo-view="suggest"]')
-  await expect(demo.locator('.demo-view.on')).toHaveCount(1)
-  await expect(suggestions).toHaveClass(/\bon\b/)
-  await expect(demo.getByRole('tab', { name: 'Improvements' })).toHaveAttribute('aria-selected', 'true')
-  await expect(suggestions.locator('.demo-proposal')).toContainText('Proposal.')
-  await expect(suggestions.locator('.demo-proposal')).toContainText('deterministic check with explicit pass and fail output')
-  await expect(suggestions.locator('.demo-verify')).toContainText('Next-session verification.')
-  await expect(suggestions.locator('.demo-verify')).toContainText('failed test runs dropped beyond chance')
-  await expect(suggestions.locator('.demo-verify')).toContainText('and tool errors did not rise')
-  expect(await suggestions.locator('.demo-types span').allTextContents()).toEqual(CHANGE_CLASSES)
-
-  await demo.getByRole('tab', { name: 'Overview' }).click()
-  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'overview')
-  await expect(demo.getByText('Understand the session. Improve what happens next.')).toBeVisible()
-  await demo.getByRole('tab', { name: 'Timeline' }).click()
-  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'timeline')
-  await expect(demo.getByText('error result stays on this call')).toBeVisible()
-  await demo.getByRole('tab', { name: 'Tools & calls' }).click()
-  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'tools')
-  await expect(demo.getByText('Usage · errors · latency')).toBeVisible()
-  await demo.getByRole('tab', { name: 'Tools & calls' }).focus()
+  // the zoom tabs: a click and the keys pick a level, and the address in the window follows
+  const zoom = page.getByRole('tablist', { name: 'Zoom' })
+  await zoom.getByRole('tab', { name: 'Sessions and agents' }).click()
+  await expect(page.locator('#hz-p-sessions')).toBeVisible()
+  await expect(page.locator('#hz-p-machine')).toBeHidden()
+  await expect(page.locator('#hz')).toHaveText('sessions')
+  await expect(page.locator('#heroPause')).toHaveText('Replay')
+  expect(await cutInWindow(page), 'Sessions and agents').toEqual([])
+  await page.keyboard.press('ArrowLeft')
+  await expect(zoom.getByRole('tab', { name: 'One session' })).toBeFocused()
+  await expect(zoom.getByRole('tab', { name: 'One session' })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('#hz-p-session')).toBeVisible()
+  expect(await cutInWindow(page), 'One session').toEqual([])
   await page.keyboard.press('End')
-  await expect(demo.locator('.demo-view.on')).toHaveAttribute('data-demo-view', 'suggest')
-  await expect(demo.getByRole('tab', { name: 'Improvements' })).toBeFocused()
-  await expect(demo.getByRole('tab', { name: 'Improvements' })).toHaveAttribute('aria-selected', 'true')
+  await expect(zoom.getByRole('tab', { name: 'This machine' })).toBeFocused()
+  await expect(page.locator('#hz')).toHaveText('machine')
+  expect(await cutInWindow(page), 'This machine').toEqual([])
+  // the field: 6 columns on a wide screen and 4 on a phone, 1 cell for each of the 11 sample sessions
+  const columns = await page.locator('.field .cell').evaluateAll((cells) => new Set(cells.map((cell) => Math.round(cell.getBoundingClientRect().left))).size)
+  expect(columns).toBe(narrow ? 4 : 6)
+  await expect(page.locator('.field .cell')).toHaveCount(11)
+
+  // the stepper: a click picks a step, the keys move the focus and the step, and only the selected panel shows
+  const chain = page.getByRole('tablist', { name: 'The orangu chain' })
+  await chain.getByRole('tab', { name: /Improve/ }).click()
+  await expect(page.locator('#panel-improve')).toBeVisible()
+  await expect(page.locator('#panel-see')).toBeHidden()
+  await expect(page.locator('#panel-tune')).toBeHidden()
+  await expect(page.locator('#chainPause')).toHaveText('Replay')
+  await expect(page.locator('.stepof')).toHaveText('Step 2 of 3')
+  await page.keyboard.press('ArrowRight')
+  await expect(chain.getByRole('tab', { name: /Tune/ })).toBeFocused()
+  await expect(page.locator('#panel-tune')).toBeVisible()
+  await expect(page.locator('#panel-improve')).toBeHidden()
+  await page.keyboard.press('Home')
+  await expect(chain.getByRole('tab', { name: /See/ })).toBeFocused()
+  await expect(page.locator('#panel-see')).toBeVisible()
+  // a step of the stepper moves nothing below it: the 3 panels share 1 box
+  const finds = async () => page.locator('#finds').evaluate((el) => Math.round(el.getBoundingClientRect().top + window.scrollY))
+  const below = await finds()
+  for (const step of [/Improve/, /Tune/]) {
+    await chain.getByRole('tab', { name: step }).click()
+    expect(await finds(), `${step}`).toBe(below)
+  }
+
+  // a copy button of a host copies its own command
+  await page.getByRole('button', { name: 'Copy the command npx orangu export' }).click()
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('npx orangu export')
+
   await expectNoHorizontalOverflow(page)
-  await expect(page.locator('qtc-triad canvas')).toHaveCount(1)
+  // the step 1 terminal keeps its 80 columns: a narrow screen scrolls the terminal, never the page
+  if (narrow) expect(await page.locator('#panel-see pre').evaluate((pre) => pre.scrollWidth > pre.clientWidth)).toBe(true)
+  // each Sample tag, the fine print and the labels of the steps reach AA on their own ground
+  const meaningful = await contrastOnOwnGround(page, '.smp, .hero .fine, .who, .kicker, .stepof, .prop-e')
+  expect(meaningful.length).toBeGreaterThanOrEqual(12)
+  for (const [at, ratio] of meaningful.entries()) expect(ratio, `text ${at + 1} in ${projectTheme(info)}`).toBeGreaterThanOrEqual(4.5)
   // The landing follows its stored preference, never the system one: the emulated preference is live
   // and only the seeded value decides what paints, and the visible label names the state it is in.
   expect(await page.evaluate(() => matchMedia('(prefers-color-scheme: dark)').matches)).toBe(projectTheme(info) === 'dark')
@@ -266,134 +278,126 @@ test('landing communicates the observe-to-improve loop and remains keyboard oper
 test('landing copy buttons draw their text at 4.5:1 or more on the command ground', async ({ page }, info) => {
   test.skip(info.project.name.startsWith('narrow'), 'a contrast depends on the theme, not on the width: wide-light and wide-dark check it')
   const errors = runtimeErrors(page)
-  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
-  await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
+  await routeFonts(page)
   await seedLandingTheme(page, info)
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
   expect(await paintedTheme(page)).toBe(projectTheme(info))
-  const ratios = await contrastOnOwnGround(page, '#install .cmd-sm button')
-  expect(ratios.length, 'copy buttons in #install').toBeGreaterThan(0)
+  const ratios = await contrastOnOwnGround(page, '#hosts .cp2')
+  expect(ratios, 'copy buttons in #hosts').toHaveLength(5)
   for (const [at, ratio] of ratios.entries()) expect(ratio, `copy button ${at + 1} in ${projectTheme(info)}`).toBeGreaterThanOrEqual(4.5)
   expect(errors).toEqual([])
 })
 
-test('landing preview cycles while visible and becomes static for reduced motion', async ({ browser }, info) => {
-  test.skip(info.project.name !== 'wide-light', 'one deterministic animation lifecycle is sufficient')
+test('landing plays the hero and the stepper once with a working Pause, and stays still under reduced motion', async ({ browser }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'one deterministic motion lifecycle is enough')
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'no-preference' })
   const page = await context.newPage()
   const errors = runtimeErrors(page)
-  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
-  await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
-  await page.goto(`${SITE}/#demo`, { waitUntil: 'domcontentloaded' })
-  const demo = page.locator('#appdemo')
-  await demo.scrollIntoViewIfNeeded()
-  await expect(demo.getByRole('tab', { name: 'Improvements' })).toHaveAttribute('aria-selected', 'true')
-  const focusedBefore = await page.evaluate(() => document.activeElement?.tagName)
-  await expect.poll(() => demo.locator('[role="tab"][aria-selected="true"]').textContent(), { timeout: 5_500 }).toBe('Overview')
-  expect(await page.evaluate(() => document.activeElement?.tagName)).toBe(focusedBefore)
+  await routeFonts(page)
+  await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
+  const win = page.locator('#heroWin')
+  const pause = page.locator('#heroPause')
+  await expect(pause).toHaveText('Pause')
+  await expect(pause).toHaveAttribute('aria-pressed', 'false')
+  // the run reads the field, rings the tool errors, then zooms in
+  await expect(win).toHaveClass(/\bp-read\b/, { timeout: 3_000 })
+  await expect(win).toHaveClass(/\bp-hit\b/, { timeout: 4_000 })
+  // Pause holds the run where it is, and Play goes on
+  await pause.click()
+  await expect(pause).toHaveText('Play')
+  await expect(pause).toHaveAttribute('aria-pressed', 'true')
+  await expect(win).toHaveClass(/\bpaused\b/)
+  const held = await win.getAttribute('class')
+  await page.waitForTimeout(3_000)
+  expect(await win.getAttribute('class')).toBe(held)
+  await pause.click()
+  await expect(pause).toHaveText('Pause')
+  await expect(win).toHaveClass(/\bz-sessions\b/, { timeout: 5_000 })
+  await expect(page.locator('#hz')).toHaveText('sessions')
 
-  const motion = demo.locator('#demoMotion')
-  await expect(motion).toHaveAccessibleName('Pause automatic preview')
-  await motion.click()
-  const pausedView = await demo.locator('[role="tab"][aria-selected="true"]').textContent()
-  await page.waitForTimeout(3_900)
-  await expect(demo.locator('[role="tab"][aria-selected="true"]')).toHaveText(pausedView ?? '')
-
-  await page.emulateMedia({ reducedMotion: 'reduce' })
-  await expect(demo.getByRole('button', { name: /The automatic preview is off because you prefer reduced motion/ })).toBeDisabled()
+  // the stepper plays its lap when the chain is in view: 7 s for each step, then Pause holds it
+  const chainPause = page.locator('#chainPause')
+  await expect(chainPause).toHaveText('Play')
+  await page.locator('#chain').scrollIntoViewIfNeeded()
+  await expect(chainPause).toHaveText('Pause', { timeout: 3_000 })
+  await expect(page.locator('.chain')).toHaveClass(/\bauto\b/)
+  await expect(page.locator('#panel-see')).toBeVisible()
+  await expect(page.locator('#panel-improve')).toBeVisible({ timeout: 9_000 })
+  await chainPause.click()
+  await expect(chainPause).toHaveText('Play')
+  await page.waitForTimeout(1_500)
+  await expect(page.locator('#panel-improve')).toBeVisible()
+  await expect(page.locator('.stepof')).toHaveText('Step 2 of 3')
   expect(errors).toEqual([])
   await context.close()
-})
 
-test('wide landing keeps a two-line hero and the visual beside the copy above the fold', async ({ page }, info) => {
-  test.skip(info.project.name !== 'wide-light', 'the 1440px geometry contract only needs one deterministic theme')
-  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
-  await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
-  await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
-  await page.evaluate(() => document.fonts.ready)
-
-  // From 1,024 px each title span has 1 line, and it ends at or left of the copy column edge.
-  for (const width of [1024, 1200]) {
-    await page.setViewportSize({ width, height: 900 })
-    const title = await page.evaluate(() => {
-      const edge = document.querySelector<HTMLElement>('.hero-copy')!.getBoundingClientRect().right
-      return Array.from(document.querySelectorAll<HTMLSpanElement>('.hero h1 > span')).map((span) => {
-        const range = document.createRange()
-        range.selectNodeContents(span)
-        const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
-        return { lines: new Set(rects.map((rect) => Math.round(rect.top))).size, right: Math.max(...rects.map((rect) => rect.right)), edge }
-      })
-    })
-    expect(title.map(({ lines }) => lines), `${width}px: ${JSON.stringify(title)}`).toEqual([1, 1])
-    for (const span of title) expect(span.right, `${width}px: ${JSON.stringify(title)}`).toBeLessThanOrEqual(span.edge)
+  // reduced motion: no run and no Pause. The steps stay stacked as plain blocks, and the zoom tabs still work.
+  const still = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light', reducedMotion: 'reduce' })
+  const quiet = await still.newPage()
+  const quietErrors = runtimeErrors(quiet)
+  await routeFonts(quiet)
+  await quiet.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
+  await expect(quiet.locator('#heroWin')).toHaveClass('win z-machine hp p-end')
+  await expect(quiet.locator('#heroPause')).toBeHidden()
+  await expect(quiet.getByRole('tablist', { name: 'The orangu chain' })).toHaveCount(0)
+  for (const id of ['#panel-see', '#panel-improve', '#panel-tune']) {
+    await expect(quiet.locator(id)).toBeVisible()
+    await expect(quiet.locator(id)).not.toHaveAttribute('role', /./)
   }
-  await page.setViewportSize({ width: 1440, height: 900 })
-
-  const geometry = await page.evaluate(() => {
-    const h1 = document.querySelector<HTMLHeadingElement>('.hero h1')!
-    const spans = Array.from(h1.querySelectorAll<HTMLSpanElement>(':scope > span'))
-    const lineRects = (element: Element) => {
-      const range = document.createRange()
-      range.selectNodeContents(element)
-      return Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
-    }
-    const spanLines = spans.map((span) => {
-      const rects = lineRects(span)
-      const tops = [...new Set(rects.map((rect) => Math.round(rect.top)))]
-      return { text: span.textContent?.trim(), lines: tops.length, top: Math.min(...tops), right: Math.max(...rects.map((rect) => rect.right)) }
-    })
-    const textSelectors = ['.eyebrow', '.hero-lead', '.hero-journey li', '.hero-copy > .fine']
-    const contentRights = textSelectors.flatMap((selector) => {
-      const element = document.querySelector(selector)
-      return element ? lineRects(element).map((rect) => rect.right) : []
-    })
-    contentRights.push(...spanLines.map((line) => line.right))
-    contentRights.push(
-      ...Array.from(document.querySelectorAll<HTMLElement>('.hero-copy .cta-row > *')).map(
-        (element) => element.getBoundingClientRect().right,
-      ),
-    )
-    const copy = document.querySelector<HTMLElement>('.hero-copy')!.getBoundingClientRect()
-    const visual = document.querySelector<HTMLCanvasElement>('.hero-viz canvas')!.getBoundingClientRect()
-    const hero = document.querySelector<HTMLElement>('.hero')!.getBoundingClientRect()
-    const loop = document.querySelector<HTMLElement>('#loop')!.getBoundingClientRect()
-    const copyRight = Math.max(...contentRights)
+  expect(await quiet.evaluate(() => document.getAnimations().length)).toBe(0)
+  // the field paints its final state: 224 read dots, and 12 of them in the color of the tool-error swatch of the legend
+  const paint = await quiet.evaluate(() => {
+    const color = (el: Element): string => getComputedStyle(el).backgroundColor
     return {
-      spans: spanLines,
-      copyEdge: copy.right,
-      visualCenterOffset: visual.left + visual.width / 2 - copyRight,
-      verticalOverlap: Math.min(copy.bottom, visual.bottom) - Math.max(copy.top, visual.top),
-      heroHeight: hero.height,
-      loopTop: loop.top,
-      viewportWidth: window.innerWidth,
-      viewportHeight: window.innerHeight,
+      dots: Array.from(document.querySelectorAll('.field i')).map(color),
+      error: color(document.querySelector('.legend .sw.err')!),
+      call: color(document.querySelector('.legend .sw:not(.err):not(.box)')!),
     }
   })
-
-  expect(geometry.spans.map(({ text }) => text)).toEqual(['Improve your agent harness,', 'one checked change at a time.'])
-  expect(geometry.spans.map(({ lines }) => lines)).toEqual([1, 1])
-  expect(geometry.spans[1]!.top).toBeGreaterThan(geometry.spans[0]!.top)
-  for (const span of geometry.spans) expect(span.right, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.copyEdge)
-  // The canvas intentionally has transparent space around the drawing, so compare
-  // its visual centre with the copy edge instead of treating the canvas box as ink.
-  expect(geometry.visualCenterOffset, JSON.stringify(geometry)).toBeGreaterThan(0)
-  expect(geometry.visualCenterOffset, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.viewportWidth * 0.2)
-  expect(geometry.verticalOverlap, JSON.stringify(geometry)).toBeGreaterThan(0)
-  expect(geometry.heroHeight, JSON.stringify(geometry)).toBeLessThan(geometry.viewportHeight * 0.9)
-  expect(geometry.loopTop, JSON.stringify(geometry)).toBeLessThan(geometry.viewportHeight)
+  expect(paint.dots).toHaveLength(224)
+  expect(paint.error).not.toBe(paint.call)
+  expect(paint.dots.filter((color) => color === paint.error)).toHaveLength(12)
+  expect(paint.dots.filter((color) => color === paint.call)).toHaveLength(212)
+  await quiet.getByRole('tab', { name: 'One session' }).click()
+  await expect(quiet.locator('#hz-p-session')).toBeVisible()
+  expect(await quiet.evaluate(() => document.getAnimations().length)).toBe(0)
+  expect(quietErrors).toEqual([])
+  await still.close()
 })
 
-test('landing contains the hero visual across desktop breakpoints', async ({ browser }, info) => {
+test('wide landing keeps the copy beside the app window, and the steps begin above the fold', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'the 1440px geometry contract only needs one deterministic theme')
+  await routeFonts(page)
+  await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
+  await page.evaluate(() => document.fonts.ready)
+  const geometry = await page.evaluate(() => {
+    const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect()
+    return { copy: box('.hero-copy'), title: box('.hero h1'), actions: box('.hero .actions'), win: box('#heroWin'), chain: box('#chain'), height: window.innerHeight }
+  })
+  // the copy at the left and the window at the right, side by side
+  expect(geometry.win.left, JSON.stringify(geometry)).toBeGreaterThan(geometry.copy.right)
+  expect(geometry.title.right, JSON.stringify(geometry)).toBeLessThanOrEqual(geometry.copy.right + 1)
+  expect(Math.min(geometry.copy.bottom, geometry.win.bottom) - Math.max(geometry.copy.top, geometry.win.top), JSON.stringify(geometry)).toBeGreaterThan(0)
+  // the command and the whole window in the first screen, and the steps start in it
+  expect(geometry.actions.bottom, JSON.stringify(geometry)).toBeLessThan(geometry.height)
+  expect(geometry.win.bottom, JSON.stringify(geometry)).toBeLessThan(geometry.height)
+  expect(geometry.chain.top, JSON.stringify(geometry)).toBeLessThan(geometry.height)
+})
+
+test('landing fits the hero across desktop breakpoints, with no cut in the app window', async ({ browser }, info) => {
   test.skip(info.project.name !== 'wide-light', 'one deterministic desktop breakpoint matrix is sufficient')
-  const context = await browser.newContext({ viewport: { width: 900, height: 900 }, colorScheme: 'light', isMobile: false })
+  const context = await browser.newContext({ viewport: { width: 900, height: 900 }, colorScheme: 'light', isMobile: false, reducedMotion: 'reduce' })
   const page = await context.newPage()
   const errors = runtimeErrors(page)
-  await page.route('https://fonts.googleapis.com/**', (route) => route.fulfill({ contentType: 'text/css', body: '' }))
-  await page.route('https://fonts.gstatic.com/**', (route) => route.fulfill({ status: 204, body: '' }))
+  await routeFonts(page)
   await page.goto(`${SITE}/`, { waitUntil: 'domcontentloaded' })
   for (const width of [900, 1024, 1100, 1200]) {
     await page.setViewportSize({ width, height: 900 })
     await expectNoHorizontalOverflow(page)
+    for (const level of ['This machine', 'Sessions and agents', 'One session']) {
+      await page.getByRole('tab', { name: level }).click()
+      expect(await cutInWindow(page), `${width}px ${level}`).toEqual([])
+    }
   }
   expect(errors).toEqual([])
   await context.close()

@@ -34,652 +34,729 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<script>
+(function (root) {
+  // A stored dark preference paints before the first frame. js turns on the zoom tabs of the hero. mo turns on the motion.
+  try { if (localStorage.getItem('orangu-theme') === 'dark') root.setAttribute('data-theme', 'dark') } catch (e) {}
+  /* motion */root.classList.add('js');if(!matchMedia('(prefers-reduced-motion: reduce)').matches)root.classList.add('mo')/* /motion */
+})(document.documentElement)
+</script>
 <style>
 <!-- @tokens -->
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
-body{margin:0;background:var(--bg);color:var(--ink1);font-family:var(--sans);line-height:1.6;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{margin:0;background:var(--bg);color:var(--ink1);font-family:var(--sans);font-size:17px;line-height:1.6;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
 a{color:var(--accent-ink);text-decoration:none}
 a:hover{color:var(--ink1)}
 :focus-visible{outline:2px solid var(--accent-ink);outline-offset:2px}
+h1,h2,h3{margin:0;font-family:var(--title);color:var(--ink1)}
+p,figure,pre{margin:0}
+code,pre{font-family:var(--mono)}
 button{font-family:var(--sans)}
-code{font-family:var(--mono);font-size:.94em}
-.wrap{max-width:1200px;margin:0 auto;padding:0 28px}
-.ann{background:var(--ink1);color:var(--bg);text-align:center;font-size:13px;padding:8px 16px}
-.hdr{position:sticky;top:0;z-index:20;backdrop-filter:blur(12px);background:color-mix(in srgb,var(--bg) 84%,transparent);border-bottom:1px solid var(--border)}
-.hdr .wrap{padding-top:14px;padding-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.brand{font-family:var(--title);font-weight:700;font-size:19px}
-.logo{width:36px;height:36px;display:block;object-fit:contain;flex:none}
-.hdr nav{margin-left:auto;display:flex;gap:24px;align-items:center;font-size:14px;flex-wrap:wrap}
-.hdr nav a{color:var(--ink2)}
-.hdr nav a:hover{color:var(--ink1)}
-.btn-theme{background:transparent;border:1px solid var(--border2);color:var(--ink2);border-radius:8px;padding:6px 12px;cursor:pointer;font-size:12.5px}
+svg{display:block;flex:none}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.wrap{max-width:1264px;margin:0 auto;padding:0 32px}
+/* the 96 px mascot: 1 rule holds its data, and each small mascot of the page uses this class */
+.ms{display:inline-block;flex:none;background:url({{mascot:logo}}) center/contain no-repeat}
+/* header: the brand and the version, 4 links and the theme button */
+.hdr{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--border)}
+.hdr-in{display:flex;align-items:center;gap:12px;min-height:64px}
+.brand{display:inline-flex;align-items:center;gap:9px;color:var(--ink1)}
+.brand:hover{color:var(--ink1)}
+.logo{width:32px;height:32px}
+.word{font:700 19px var(--title);letter-spacing:-.01em}
+.ver{padding:1px 8px;border:1px solid var(--border2);border-radius:999px;font:11.5px var(--mono);color:var(--ink3)}
+.nav{display:flex;align-items:center;gap:26px;margin-left:auto;font-size:14.5px}
+.nav a{color:var(--ink2)}
+.nav a:hover{color:var(--ink1)}
+.theme{display:inline-flex;align-items:center;gap:6px;min-height:36px;padding:0 12px;border:1px solid var(--border2);border-radius:8px;background:transparent;color:var(--ink2);font-size:13px;cursor:pointer}
+/* hero: the copy, then the app window that npx orangu opens */
+.hero{padding:72px 0 88px}
+.hero-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:48px;align-items:center}
+.eyebrow{display:flex;align-items:flex-start;gap:10px;margin-bottom:22px;font-size:14.5px;font-weight:600;color:var(--accent-ink)}
+.eyebrow::before{content:"";flex:none;width:8px;height:8px;margin-top:.55em;border-radius:50%;background:var(--accent)}
+h1{font-size:clamp(40px,4.4vw,62px);font-weight:800;line-height:1.02;letter-spacing:-.03em;text-wrap:balance}
+.lead{max-width:33em;margin-top:22px;font-size:clamp(17px,1.45vw,20px);line-height:1.55;color:var(--ink2);text-wrap:pretty}
+.actions{display:flex;flex-wrap:wrap;gap:12px;margin-top:32px}
+.cmd-btn{display:inline-flex;align-items:center;gap:10px;min-height:52px;padding:0 8px 0 18px;border:1px solid var(--cmd);border-radius:10px;background:var(--cmd);color:var(--cmd-ink);font:500 16px var(--mono);cursor:pointer}
+.cmd-btn:hover{border-color:var(--accent)}
+.p{color:var(--accent)}
+.typed{display:inline-block;white-space:nowrap;vertical-align:bottom;font:inherit}
+.caret{display:inline-block;width:8px;height:18px;margin-left:-6px;background:var(--cmd-ink);opacity:0}
+.cp{display:inline-flex;align-items:center;gap:6px;min-height:36px;margin-left:4px;padding:0 10px;border:1px solid color-mix(in srgb,var(--cmd-ink) 28%,transparent);border-radius:7px;font:600 12.5px var(--sans)}
+.cp svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.4}
+[data-lbl]{display:inline-block;min-width:3.4em;text-align:left}
+.ghost{display:inline-flex;align-items:center;gap:6px;min-height:52px;padding:0 18px;border:1px solid var(--border2);border-radius:10px;font-size:15px;font-weight:600;color:var(--ink1)}
+.ghost:hover{background:var(--bg2);color:var(--ink1)}
+.fine{margin-top:18px;font-size:14px;color:var(--ink3)}
+.stage{min-width:0}
+.win{overflow:hidden;border:1px solid var(--border2);border-radius:14px;background:var(--surface)}
+.win-bar{display:flex;align-items:center;gap:12px;min-height:40px;padding:0 12px;border-bottom:1px solid var(--border);background:var(--bg2)}
+.wdots{display:flex;gap:6px}
+.wdots i{width:10px;height:10px;border:1px solid var(--border2);border-radius:50%;background:var(--surface)}
+.url{display:flex;flex:1;justify-content:center;min-width:0}
+.url code{padding:2px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);font-size:12px;color:var(--ink2);white-space:nowrap}
+.smp{display:inline-block;padding:2px 8px;border-radius:999px;background:var(--accent-weak);font:700 10.5px/1.4 var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink1);vertical-align:1px}
+.app-top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.app-brand{display:inline-flex;align-items:center;gap:7px;font:700 15px var(--title)}
+.app-brand .ms{width:22px;height:22px}
+.ztabs{display:flex;gap:2px;margin-left:auto;padding:3px;border:1px solid var(--border2);border-radius:9px;background:var(--bg2);visibility:hidden}
+.js .ztabs{visibility:visible}
+.ztab{min-height:34px;padding:0 12px;border:0;border-radius:6px;background:transparent;color:var(--ink2);font-size:12.5px;font-weight:600;white-space:nowrap;cursor:pointer}
+.ztab[aria-selected="true"]{background:var(--surface);color:var(--ink1);box-shadow:inset 0 0 0 1px var(--border2)}
+.zoomport{display:grid;min-height:396px;padding:18px 20px 20px;overflow:hidden}
+.zoomport>.layer{grid-area:1/1;min-width:0;opacity:0;visibility:hidden}
+.z-machine .l-machine,.z-sessions .l-sessions,.z-session .l-session{opacity:1;visibility:visible}
+.lhead{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-bottom:14px}
+.lt{font:700 15px var(--title)}
+.stat{font:12.5px var(--mono);color:var(--ink2)}
+.stat b{color:var(--ink1)}
+.count{--n:var(--to);counter-reset:n var(--n)}
+.count::after{content:counter(n)}
+/* the session field: 1 cell for each sample session, 1 dot for each tool call, newest first */
+.field{display:grid;grid-template-columns:repeat(auto-fill,84px);gap:10px;max-width:554px}
+.cell{--d:6px;--g:2px;position:relative;display:flex;flex-wrap:wrap-reverse;align-content:flex-start;gap:var(--g);width:calc(var(--d)*9 + var(--g)*8 + 14px);height:calc(var(--d)*9 + var(--g)*8 + 14px);padding:6px;border:1px solid var(--border);border-radius:8px;background:var(--surface)}
+.cell i{width:var(--d);height:var(--d);border-radius:1.5px;background:var(--ink3)}
+.cell i.e{background:var(--accent)}
+.has-e::after{content:"";position:absolute;inset:-1px;border:2px solid var(--accent);border-radius:9px;opacity:0;pointer-events:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:14px;font-size:12.5px;color:var(--ink2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:9px;height:9px;border-radius:2px;background:var(--ink3)}
+.sw.box{width:12px;height:12px;border:1px solid var(--border2);border-radius:3px;background:var(--surface)}
+.sw.err{background:var(--accent)}
+.srows{margin:0;padding:0;border-top:1px solid var(--border);list-style:none}
+.srow{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:2px 10px;align-items:baseline;padding:9px 2px;border-bottom:1px solid var(--border)}
+.sdot{align-self:center;width:8px;height:8px;border:1.5px solid var(--ink3);border-radius:50%}
+.st{min-width:0;font-size:14px;font-weight:600}
+.stok{font:12.5px var(--mono);color:var(--ink2);text-align:right;white-space:nowrap}
+.sm{grid-column:2/-1;font:12px var(--mono);color:var(--ink3)}
+.sag{color:var(--accent-ink)}
+.tree{position:relative;grid-column:2/-1;margin:6px 0 0;padding:0 0 0 16px;list-style:none}
+.tree::before{content:"";position:absolute;top:0;bottom:13px;left:4px;width:1px;background:var(--border2);transform-origin:top}
+.ag{position:relative;display:flex;flex-wrap:wrap;align-items:baseline;gap:0 10px;padding:3px 0;font:12px var(--mono);color:var(--ink2)}
+.ag::before{content:"";position:absolute;top:12px;left:-12px;width:9px;height:1px;background:var(--border2)}
+.ag b{font-weight:600;color:var(--ink1)}
+.at{margin-left:auto;white-space:nowrap}
+.more{padding-top:10px;font-size:12.5px;color:var(--ink3)}
+.sess-t{font:700 20px/1.25 var(--title)}
+.sess-m{margin-top:4px;font:12px var(--mono);color:var(--ink3)}
+.sess-o{margin-top:6px;font-size:13.5px;color:var(--ink2)}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:14px 0}
+.kpi{min-width:0;padding:9px 12px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.kl{display:block;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink3)}
+.kv{display:block;margin-top:2px;font:700 18px var(--mono);font-variant-numeric:tabular-nums}
+.fx{padding:12px 14px;border:1px solid var(--border2);border-radius:10px}
+.fx-h{display:flex;align-items:flex-start;gap:10px}
+.sev{flex:none;width:8px;height:8px;margin-top:6px;border-radius:50%;background:var(--bad)}
+.fx-t{flex:1;min-width:0;font-size:13.5px;font-weight:700;line-height:1.45}
+.fsave{font:12.5px var(--mono);color:var(--accent-ink);white-space:nowrap}
+.fx-i{margin:6px 0 0 18px;font-size:13px;line-height:1.5;color:var(--ink2)}
+.cmdline{display:flex;align-items:baseline;gap:10px;margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--cmd);color:var(--cmd-ink);font:12.5px var(--mono)}
+.cmdline code{min-width:0;overflow-wrap:anywhere}
+.figcap{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:12px;font-size:13px;color:var(--ink3)}
+.fign{font:600 12px var(--mono);color:var(--ink2)}
+.pp{display:inline-flex;align-items:center;gap:7px;min-height:36px;margin-left:auto;padding:0 12px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--ink1);font-size:12.5px;font-weight:600;cursor:pointer}
+.pp[hidden]{display:none}
+.pp svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+/* sections */
+.sec{padding:112px 0;border-top:1px solid var(--border)}
+.alt{background:var(--bg2)}
+.sec-head{max-width:780px;margin-bottom:48px}
+.kicker{margin-bottom:14px;font:600 13px var(--mono);color:var(--accent-ink)}
+h2{font-size:clamp(30px,3.3vw,46px);font-weight:800;line-height:1.06;letter-spacing:-.025em;text-wrap:balance}
+/* the chain: a stepper with a script and with motion, else 3 stacked panels */
+.tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-bottom:1px solid var(--border2)}
+.tab{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);column-gap:14px;row-gap:2px;align-items:baseline;padding:18px 20px 20px 0;border:0;background:transparent;color:var(--ink3);text-align:left;font:inherit;cursor:pointer}
+.tn{grid-row:1/3;font:600 13px var(--mono);color:var(--ink3)}
+.tname{font:700 22px/1.2 var(--title);color:var(--ink2)}
+.tcmd{font-size:13.5px;color:var(--ink3)}
+.tab[aria-selected="true"] .tname{color:var(--ink1)}
+.tab[aria-selected="true"] .tn,.tab[aria-selected="true"] .tcmd{color:var(--accent-ink)}
+.bar{position:absolute;right:20px;bottom:-1px;left:0;height:2px;background:var(--accent);transform:scaleX(0);transform-origin:left}
+.tab[aria-selected="true"] .bar{transform:none}
+.panel{display:grid;grid-template-columns:minmax(0,4fr) minmax(0,8fr);gap:48px;align-items:start;padding-top:40px}
+.panel[hidden]{display:none}
+.p-n{font:600 13px var(--mono);color:var(--accent-ink)}
+.p-copy h3{margin-top:8px;font-size:30px;font-weight:800;letter-spacing:-.02em}
+.ptx{margin-top:16px;color:var(--ink2)}
+.chipcmd{display:inline-flex;align-items:center;gap:8px;margin-top:16px;padding:8px 12px;border-radius:8px;background:var(--cmd);color:var(--cmd-ink);font:14px var(--mono)}
+.chain-ctl{display:flex;align-items:center;gap:12px;margin-top:28px}
+.chain-ctl .pp{margin-left:0}
+.stepof{font:12.5px var(--mono);color:var(--ink3)}
+.chain:not(.on) .tabs,.chain:not(.on) .chain-ctl{display:none}
+.chain:not(.on) .panel+.panel{margin-top:40px;border-top:1px solid var(--border2)}
+/* the stepper keeps the 3 panels in 1 cell, so a change of step moves nothing below it */
+.chain.on{display:grid;grid-template-columns:minmax(0,1fr)}
+.chain.on .panel{grid-area:2/1}
+.chain.on .panel[hidden]{display:grid;visibility:hidden}
+.term{overflow:hidden;border:1px solid var(--border2);border-radius:12px;background:var(--cmd);color:var(--cmd-ink)}
+.term-bar{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid color-mix(in srgb,var(--cmd-ink) 14%,transparent);font:12px var(--mono);color:color-mix(in srgb,var(--cmd-ink) 72%,transparent)}
+.tl{font-weight:600;color:var(--cmd-ink)}
+.tp{margin-left:auto}
+.tout{padding:16px 18px 20px;overflow-x:auto;font:12.5px/1.65 var(--mono);white-space:normal}
+.ln{display:block;min-height:1.65em;white-space:pre}
+.ac{font-weight:700;color:var(--accent)}
+.bd{font-weight:700}
+.dm{color:color-mix(in srgb,var(--cmd-ink) 64%,transparent)}
+.tm{width:34px;height:34px;margin:4px 0}
+.typed2{display:inline-block;vertical-align:bottom}
+.working{font-weight:700}
+/* step 2: the proposal card over the dimmed transcript */
+.imp .tout{padding-bottom:112px;opacity:.55}
+.prop{position:relative;margin:-100px 22px 0;padding:16px 18px;border:1px solid var(--border2);border-radius:12px;background:var(--surface)}
+.prop-h{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;font:12px var(--mono);color:var(--ink3)}
+.prop-k{font:700 10.5px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--accent-ink)}
+.prop-t{display:flex;align-items:baseline;gap:12px;margin-top:8px}
+.prop-t b{flex:1;min-width:0;font-size:15px;line-height:1.4}
+.prop-e{margin-top:4px;font-size:13px;color:var(--ink3)}
+.prop-i{margin-top:10px;font-size:14px;line-height:1.5;color:var(--ink2)}
+.prop-a{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{display:inline-flex;align-items:center;gap:.4em;min-height:30px;padding:0 12px;border:1px solid var(--border2);border-radius:999px;background:var(--surface);font-size:12.5px;line-height:1.3;color:var(--ink2)}
+.chip.sel{border-color:var(--accent-ink);background:var(--accent-weak);font-weight:700;color:var(--ink1)}
+.chip code{font-size:12px}
+/* step 3: the interview as a chat, then the profile */
+.chat{padding:20px;border:1px solid var(--border2);border-radius:12px;background:var(--surface)}
+.msg{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;align-items:start}
+.msg+.msg{margin-top:16px}
+.av{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--border);border-radius:50%;background:var(--bg2)}
+.av .ms{width:22px;height:22px}
+.q{padding-top:4px;font-size:14.5px;font-weight:700;line-height:1.4}
+.opts{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.prof{margin:18px 0 0 42px;padding:14px 16px;border:1px solid var(--border);border-radius:10px;background:var(--bg2)}
+.prof-h{display:flex;align-items:center;gap:10px;font:700 10.5px var(--sans);letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
+.prof dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 16px;margin:10px 0 0;font-size:13.5px}
+.prof dt{color:var(--ink3)}
+.prof dd{margin:0;color:var(--ink1)}
+.prof-x{margin-top:10px;font-size:13.5px;color:var(--ink2)}
+/* what the brain finds */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(330px,100%),1fr));gap:16px;margin:0;padding:0;list-style:none}
+.tile{padding:26px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.tile:hover{border-color:var(--border2)}
+.ico{width:30px;height:30px;fill:none;stroke:var(--ink1);stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+.ico .a{stroke:var(--accent)}
+.tile h3{margin-top:18px;font-size:20px;font-weight:700}
+.tile p{margin-top:8px;font-size:16px;color:var(--ink2)}
+/* checked, not claimed */
+.proof-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:48px;align-items:center}
+.points{margin:40px 0 0;padding:0;list-style:none}
+.points li{display:grid;grid-template-columns:48px minmax(0,1fr);gap:16px;padding:22px 0;border-top:1px solid var(--border2)}
+.pn{padding-top:5px;font:600 13px var(--mono);color:var(--accent-ink)}
+.points h3{font-size:20px;font-weight:700}
+.points p{margin-top:6px;color:var(--ink2)}
+.triad-card{padding:12px;border:1px solid var(--border);border-radius:16px;background:var(--surface)}
+#proof qtc-triad{display:block;width:100%;max-width:440px;aspect-ratio:1/1;margin:0 auto}
+.triad figcaption{margin-top:14px;font-size:14px;color:var(--ink3);text-align:center}
+/* where you work */
+.hosts{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+.host{display:flex;flex-direction:column;gap:14px;padding:24px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}
+.host h3{font-size:20px;font-weight:700}
+.host p{font-size:16px;color:var(--ink2)}
+.stack{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+.cmdrow{display:flex;align-items:center;gap:10px;min-height:44px;padding:5px 5px 5px 12px;border-radius:8px;background:var(--cmd);color:var(--cmd-ink);font:12.5px var(--mono)}
+.cmdrow code{flex:1;min-width:0;overflow-wrap:anywhere}
+.cp2{flex:none;min-height:34px;padding:0 11px;border:1px solid color-mix(in srgb,var(--cmd-ink) 28%,transparent);border-radius:6px;background:transparent;color:var(--cmd-ink);font-size:12px;font-weight:600;cursor:pointer}
+.cp2 [data-lbl]{text-align:center}
+/* final action and footer */
+.final-in{display:flex;flex-direction:column;align-items:center;gap:22px;text-align:center}
+.mascot-lg{display:block;width:144px;height:144px}
+.who{font-size:14.5px;color:var(--ink3)}
+footer{padding:40px 0 56px;border-top:1px solid var(--border);font-size:13.5px;color:var(--ink3)}
+footer p+p{margin-top:8px}
+footer a{text-decoration:underline;text-underline-offset:2px;color:var(--ink2)}
+@media (min-width:1024px){
+  .hero-grid{grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:56px}
+  .proof-grid{grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:64px}
+  .hosts{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr)}
+}
+@media (max-width:860px){.panel{grid-template-columns:minmax(0,1fr);gap:24px;padding-top:28px}}
+/* phone: the section links and the version hide, and every target is 44 px high */
 @media (max-width:640px){
-  .wrap{padding-left:20px;padding-right:20px}
-  .ann{font-size:12px;line-height:1.35}
-  .hdr .wrap{align-items:flex-start}
-  .hdr nav{width:100%;min-width:0;margin-left:0;gap:12px 18px}
+  .wrap{padding:0 20px}
+  .nl,.ver{display:none}
+  .nav{gap:12px}
+  .hero{padding:40px 0 64px}
+  .actions{flex-direction:column;align-items:stretch}
+  .cmd-btn,.ghost{justify-content:center}
+  .wdots{display:none}
+  .url code{padding:2px 8px;font-size:11px;white-space:normal;overflow-wrap:anywhere;text-align:center}
+  .ztabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;margin-left:0}
+  .ztab{min-height:44px;padding:4px 6px;line-height:1.2;white-space:normal}
+  .zoomport{padding:16px 14px 18px}
+  .field{grid-template-columns:repeat(auto-fill,69px);gap:8px;max-width:300px}
+  .cell{--d:5px;--g:1.5px;width:calc(var(--d)*9 + var(--g)*8 + 12px);height:calc(var(--d)*9 + var(--g)*8 + 12px);padding:5px}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fx-h,.prop-t{flex-wrap:wrap}
+  .fsave{flex-basis:100%}
+  .fx-h .fsave{padding-left:18px}
+  .pp,.cp2{min-height:44px}
+  .pp{margin-left:0}
+  .sec{padding:72px 0}
+  .sec-head{margin-bottom:32px}
+  .tab{grid-template-columns:minmax(0,1fr);padding:14px 8px 14px 0}
+  .tn{grid-row:auto}
+  .tcmd{display:none}
+  .tname{font-size:18px}
+  .p-copy h3{font-size:26px}
+  .tout{padding:14px;font-size:11px}
+  .imp .tout{padding-bottom:132px}
+  .prop{margin:-120px 10px 0;padding:14px}
+  .prof{margin-left:0}
+  .points li{grid-template-columns:36px minmax(0,1fr)}
 }
-.hero{padding:clamp(48px,7vw,92px) 0 clamp(28px,4vw,48px)}
-.hero-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:36px;align-items:center}
-.hero-copy{min-width:0}
-@media (min-width:900px){
-  .hero{padding:clamp(32px,3.4vw,48px) 0 clamp(16px,1.75vw,24px)}
-  .hero .wrap{max-width:1320px}
-  .hero-grid{grid-template-columns:minmax(0,1.12fr) minmax(360px,.88fr);grid-template-areas:"copy viz" "term viz";column-gap:12px;row-gap:0;align-items:start}
-  .hero-copy{grid-area:copy}
-  .hero-viz{grid-area:viz;align-self:center;margin-left:-40px}
-  .hero .term-wrap{grid-area:term}
-  .hero h1{font-size:clamp(38px,3.6vw,52px)}
+/* motion */
+@property --n{syntax:'<integer>';inherits:false;initial-value:0}
+@keyframes type{from{max-width:0}}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+@keyframes rd{from{background:var(--border)}to{background:var(--ink3)}}
+@keyframes er{from{background:var(--ink3)}}
+@keyframes ping{from{opacity:.9}to{opacity:0;transform:scale(1.3)}}
+@keyframes cnt{from{--n:0}}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
+@keyframes show{from{opacity:0}}
+@keyframes grow{from{transform:scaleY(0)}}
+@keyframes dwell{from{transform:scaleX(0)}}
+@keyframes shimmer{from{background-position:100% 0}}
+@keyframes dimt{from{opacity:1}}
+@keyframes pick{from{border-color:var(--border2);background:var(--surface);color:var(--ink2)}}
+@media (prefers-reduced-motion:no-preference){
+html{scroll-behavior:smooth}
+.typein .typed{overflow:hidden;max-width:10ch;animation:type .7s steps(10) .35s both}
+.typein .caret{animation:blink 1.06s step-end 1.05s 3}
+.mo .win:not(.hp) .cell i{background:var(--border)}
+.mo .win:not(.hp) .count{--n:0}
+.p-read .cell i{animation:rd .3s calc(var(--c)*110ms + var(--j,0)*5ms) both}
+.p-read .l-machine .count{animation:cnt 1.6s cubic-bezier(.2,.7,.2,1) both}
+.p-hit .cell i.e{animation:er .3s calc(var(--c)*40ms) both}
+.p-hit .has-e::after{animation:ping 1s calc(.3s + var(--c)*40ms) ease-out}
+.zoomport>.layer{transform:scale(.96);transition:opacity .4s,transform .6s cubic-bezier(.2,.7,.2,1),visibility 0s linear .6s}
+.z-machine .l-machine,.z-sessions .l-sessions,.z-session .l-session{transform:none;transition-delay:.15s,.15s,0s}
+.z-sessions .l-machine,.z-session .l-machine{transform:scale(2.2);transform-origin:10% 42%}
+.z-session .l-sessions{transform:scale(1.4);transform-origin:8% 22%}
+.p-run.z-sessions .srow{animation:rise .35s calc(.2s + var(--r)*.07s) both}
+.p-run.z-sessions .tree::before{animation:grow .5s .6s both}
+.p-run.z-sessions .ag{animation:rise .35s calc(.8s + var(--k)*.16s) both}
+.p-run.z-session .kpi{animation:rise .35s calc(.25s + var(--k)*.07s) both}
+.p-run.z-session .count{animation:cnt .9s .3s cubic-bezier(.2,.7,.2,1) both}
+.p-run.z-session .fx{animation:rise .4s .7s both}
+.p-run.z-session .cmdline{animation:rise .4s 1s both}
+.paused *,.paused ::before,.paused ::after{animation-play-state:paused}
+.auto [aria-selected="true"] .bar{animation:dwell 7s linear both}
+.p0.run .typed2{overflow:hidden;max-width:10ch;animation:type .7s steps(10) .2s both}
+.p0.run .ln[style]{animation:show .2s calc(1.05s + var(--i)*.1s) both}
+.p1.run .ln[style]{animation:show .25s calc(.3s + var(--i)*.42s) both}
+.p1.run .working{background:linear-gradient(90deg,var(--cmd-ink) 40%,var(--accent) 50%,var(--cmd-ink) 60%) 0 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:show .25s 2.8s both,shimmer 1.4s 2.9s linear 2}
+.p1.run .tout{animation:dimt .4s 4.4s both}
+.p1.run .prop{animation:rise .5s 4.4s cubic-bezier(.2,.7,.2,1) both}
+.p1.run .prop .sel{animation:pick .3s 5.6s both}
+.p2.run .msg{animation:rise .4s calc(.2s + var(--m)*1.3s) both}
+.p2.run .msg .sel{animation:pick .3s calc(1s + var(--m)*1.3s) both}
+.p2.run .prof{animation:rise .45s 4.4s both}
+.tile,.host{transition:border-color .2s}
+@supports (animation-timeline:view()){.reveal{animation:rise linear both;animation-timeline:view();animation-range:entry 0% entry 35%}}
 }
-@media (min-width:1024px){.hero h1 span{display:block;white-space:nowrap}}
-@media (min-width:1200px){
-  .hero-grid{grid-template-columns:minmax(0,1.14fr) minmax(0,.86fr);column-gap:0}
-  .hero-viz{margin-left:-72px}
-}
-.hero-viz{min-width:0}
-.hero qtc-triad{display:block;height:clamp(440px,44vw,620px)}
-@media (max-width:640px){.hero qtc-triad{height:min(96vw,440px)}}
-.eyebrow{font-size:15px;color:var(--ink3);margin-bottom:18px}
-h1{margin:0;font-family:var(--title);font-weight:800;font-size:clamp(46px,5.4vw,76px);line-height:1.0;letter-spacing:-0.03em;text-wrap:balance}
-.hero-lead{font-size:clamp(17px,1.6vw,19px);line-height:1.55;color:var(--ink2);max-width:620px;margin:24px 0 20px}
-.hero-journey{position:relative;display:grid;gap:0;max-width:660px;margin:0 0 28px;padding:0 0 0 24px;list-style:none}
-.hero-journey::before{content:"";position:absolute;left:6px;top:17px;bottom:17px;width:2px;border-radius:2px;background:linear-gradient(var(--border2),var(--accent),var(--border2))}
-.hero-step{position:relative;display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;align-items:baseline;padding:8px 0;color:var(--ink2);font-size:14.5px;line-height:1.45}
-.hero-step::before{content:"";position:absolute;left:-23px;top:14px;width:10px;height:10px;border:2px solid var(--accent);border-radius:50%;background:var(--bg);box-shadow:0 0 0 4px var(--bg)}
-.hero-step:last-child::before{background:var(--accent)}
-.hero-step strong{font-family:var(--title);font-size:15px;color:var(--ink1)}
-@media (max-width:640px){.hero{padding-top:32px}.hero h1{font-size:clamp(40px,11vw,46px);line-height:1.02}.hero-lead{margin:18px 0 14px}.hero-journey{margin-bottom:22px}.hero-step{grid-template-columns:1fr;gap:1px;padding:7px 0}.hero-step::before{top:13px}}
-.cta-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-.cmd{display:inline-flex;align-items:center;gap:10px;background:var(--cmd);color:var(--cmd-ink);font-family:var(--mono);font-size:15px;padding:13px 18px;border-radius:10px;border:1px solid var(--border2)}
-.cmd .p{color:var(--accent)}
-/* primary CTA: the command itself is the button (click = copy) */
-.cmd-btn{cursor:pointer;gap:8px;line-height:1.25;transition:border-color .15s,transform .15s}
-.cmd-btn:hover{border-color:var(--accent);transform:translateY(-1px)}
-.cmd-btn:active{transform:none}
-.cmd-btn .lbl{font-family:var(--sans);font-weight:600;font-size:14px}
-.cmd-btn .sep{color:var(--accent)}
-.cmd-sm{display:flex;align-items:center;gap:8px;background:var(--cmd);color:var(--cmd-ink);font-family:var(--mono);font-size:13.5px;padding:11px 14px;border-radius:9px;border:1px solid var(--border2)}
-.cmd-sm .p{color:var(--accent)}
-.cmd-sm button{margin-left:auto;background:transparent;border:0;color:var(--cmd-ink);cursor:pointer;font-size:11.5px;min-height:28px}
-.ghost{display:inline-flex;align-items:center;padding:13px 18px;border:1px solid var(--border2);border-radius:10px;font-size:14px;font-weight:600;color:var(--ink1)}
-.fine{font-size:13px;color:var(--ink3);margin:16px 0 0}
-/* illustrative terminal output, styled like the command boxes */
-.term-wrap{min-width:0;max-width:780px;margin-top:clamp(22px,2.5vw,32px)}
-.term{background:var(--cmd);color:var(--cmd-ink);border:1px solid var(--border2);border-radius:12px;padding:18px 22px;font-family:var(--mono);font-size:14px;line-height:1.75;overflow-x:auto}
-.term pre{margin:0;font:inherit;white-space:pre}
-.term .p,.term .dot{color:var(--accent)}
-.term-wrap .fine{margin-top:10px;color:var(--ink2)}
-@media (max-width:640px){.term{font-size:12.5px;padding:14px 16px}}
-/* the proof strip: a 128 px label column holds "Beyond chance:", one column on a phone */
-.hero-proof .hero-step{grid-template-columns:128px minmax(0,1fr)}
-.hero-bound{margin:12px 0 0;color:var(--ink2)}
-@media (min-width:900px){.hero-lead{margin:18px 0 14px}.hero-journey{margin-bottom:20px}.hero-step{padding:5px 0}}
-@media (max-width:640px){.hero-proof .hero-step{grid-template-columns:1fr}}
-
-/* app demo: an interactive report window for the current observe-to-proposal flow */
-.appdemo{border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 1px 3px rgba(26,26,24,.05),0 16px 44px rgba(26,26,24,.06);background:var(--surface);margin:0 0 22px}
-.demo-bar{display:flex;gap:6px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}
-.demo-bar i{width:10px;height:10px;border-radius:50%}
-.demo-bar .d1{background:var(--bad)}.demo-bar .d2{background:var(--warn)}.demo-bar .d3{background:var(--good)}
-.demo-bar>span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px;color:var(--ink2);margin-left:8px;font-family:var(--mono)}
-.demo-motion{margin-left:auto;min-height:32px;padding:5px 10px;border:1px solid var(--border2);border-radius:8px;background:var(--surface);color:var(--ink2);font:600 11px var(--sans);cursor:pointer;white-space:nowrap}
-.demo-motion:disabled{cursor:default;color:var(--ink3);opacity:.75}
-.demo-body{display:grid;grid-template-columns:minmax(140px,178px) 1fr;min-height:382px}
-.demo-rail{border-right:1px solid var(--border);padding:14px 10px;display:flex;flex-direction:column;gap:2px}
-.demo-tabs{display:contents}
-.demo-rail button{appearance:none;min-height:40px;border:0;background:transparent;text-align:left;font:inherit;font-size:13px;color:var(--ink2);padding:7px 10px;border-radius:8px;cursor:pointer}
-.demo-rail button.on{color:var(--ink1);font-weight:700;background:var(--accent-weak)}
-.demo-rail button:focus-visible{outline:2px solid var(--accent-ink);outline-offset:1px}
-.demo-rail .rail-link{font-size:13px;color:var(--ink2);padding:7px 10px;text-decoration:underline;text-underline-offset:2px}
-.demo-rail .rail-link:hover{color:var(--accent-ink)}
-.demo-main{padding:18px 20px;position:relative;min-width:0;min-height:382px}
-.demo-view{min-width:0}
-.demo-view[hidden]{display:none}
-.demo-view.on{animation:demo-in .35s ease}
-@keyframes demo-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){.demo-view.on{animation:none}}
-.demo-overview-hero{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;padding:16px;border:1px solid var(--border);border-radius:12px;background:linear-gradient(135deg,var(--accent-weak),var(--surface));margin-bottom:12px}
-.demo-pulse{width:48px;height:48px;border-radius:50%;display:grid;place-items:center;background:var(--surface);border:1px solid var(--border2);box-shadow:0 0 0 7px color-mix(in srgb,var(--accent) 12%,transparent);font:700 22px var(--title);color:var(--accent-ink)}
-.demo-overview-hero em{display:block;font:700 10.5px var(--mono);font-style:normal;letter-spacing:.07em;text-transform:uppercase;color:var(--accent-ink)}
-.demo-overview-hero strong{display:block;margin-top:2px;font:700 clamp(18px,2vw,22px) var(--title);line-height:1.15}
-.demo-overview-hero p{margin:4px 0 0;font-size:12.5px;color:var(--ink2)}
-.demo-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:12px}
-.demo-kpi{border:1px solid var(--border);border-radius:10px;padding:12px 14px}
-.demo-kpi em{display:block;font-style:normal;font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3)}
-.demo-kpi b{display:block;font-family:var(--title);font-size:18px;line-height:1.2;font-weight:700;margin-top:3px;overflow-wrap:anywhere}
-.demo-kpi b.accent{color:var(--accent-ink)}
-.demo-kpi span{font-size:12px;color:var(--ink3)}
-.demo-line{font-size:13px;color:var(--ink2)}
-.demo-view-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:12px}
-.demo-view-head>div{min-width:0;flex:1}
-.demo-view-head em{display:block;font:700 10.5px var(--mono);font-style:normal;text-transform:uppercase;letter-spacing:.06em;color:var(--accent-ink)}
-.demo-view-head b{display:block;font:700 17px var(--title);line-height:1.2;margin-top:2px}
-.demo-timeline{display:grid;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--bg2)}
-.demo-event{display:grid;grid-template-columns:48px 64px 10px minmax(0,1fr) max-content;gap:8px;align-items:center;padding:9px 11px;border-bottom:1px solid var(--border);font-size:12px;min-width:0}
-.demo-event:last-child{border-bottom:0}
-.demo-time,.demo-actor,.demo-latency{font-family:var(--mono);color:var(--ink3);white-space:nowrap}
-.demo-actor{border:1px solid var(--border);border-radius:999px;text-align:center;padding:2px 6px;color:var(--ink2);overflow:hidden;text-overflow:ellipsis}
-.demo-event-mark{width:8px;height:8px;border-radius:50%;background:var(--accent)}
-.demo-event-mark.good{background:var(--good)}
-.demo-event-mark.bad{background:var(--bad)}
-.demo-event-copy{min-width:0}
-.demo-event-copy b{display:block;font-family:var(--mono);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.demo-event-copy small{display:block;color:var(--ink3);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.demo-tools{display:grid;gap:7px}
-.demo-tool-row{display:grid;grid-template-columns:minmax(76px,100px) minmax(100px,1fr) max-content minmax(108px,max-content);gap:10px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg2);min-width:0}
-.demo-tool-name b{display:block;font:700 12.5px var(--mono)}
-.demo-tool-name small{display:block;color:var(--ink3);font-size:10.5px}
-.demo-tool-use{display:flex;align-items:center;gap:8px;min-width:0}
-.demo-tool-use .trk{height:8px;min-width:36px;flex:1;border-radius:999px;background:var(--surface);overflow:hidden}
-.demo-tool-use .trk i{display:block;height:100%;background:var(--accent);border-radius:999px}
-.demo-tool-use span,.demo-tool-error{font:11px var(--mono);color:var(--ink3);white-space:nowrap}
-.demo-tool-error.bad{color:var(--bad);font-weight:700}
-.demo-tool-latency{font:11px var(--mono);color:var(--ink2);white-space:nowrap}
-.demo-tool-latency small{color:var(--ink3)}
-.demo-error-line{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px;padding:8px 10px;border-radius:8px;background:var(--accent-weak);font-size:11.5px;color:var(--ink2)}
-.demo-error-line b{color:var(--bad)}
-.demo-error-line code{overflow-wrap:anywhere}
-.demo-sug{display:grid;gap:10px}
-.demo-card{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:10px;padding:11px 14px;background:var(--bg2)}
-.demo-card .h{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
-.demo-card .rid{font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);font-weight:700}
-.demo-card .sev{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3)}
-.demo-card .state{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--accent-ink);white-space:nowrap}
-.demo-card p{margin:4px 0 0;font-size:13px;color:var(--ink2)}
-.demo-card .demo-cat{margin-top:6px;font-size:12px;color:var(--ink3)}
-.demo-card .demo-cat b{color:var(--accent-ink)}
-.demo-scope{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:10px}
-.demo-scope span{border:1px solid var(--border);border-radius:999px;padding:4px 9px;font-size:11.5px;color:var(--ink2)}
-.demo-scope span.on{background:var(--accent-weak);border-color:var(--border2);color:var(--accent-ink);font-weight:700}
-.demo-types{display:flex;gap:5px;flex-wrap:wrap;margin:8px 0 10px}
-.demo-types span{border:1px solid var(--border);border-radius:999px;padding:3px 7px;font-size:10.5px;color:var(--ink2);background:var(--surface)}
-.demo-evidence,.demo-proposal,.demo-verify{margin-top:7px;font-size:12.5px;color:var(--ink2)}
-.demo-proposal{padding:8px 10px;border-radius:7px;background:var(--accent-weak)}
-.demo-kick{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--border)}
-.demo-status{font-family:var(--mono);font-size:10.5px;color:var(--accent-ink);border:1px solid var(--border2);border-radius:999px;padding:2px 7px}
-.demo-grow{flex:1}
-.demo-btn{appearance:none;border:1px solid var(--border2);background:var(--surface);color:var(--ink2);border-radius:7px;padding:5px 8px;font:600 11px var(--sans)}
-.demo-btn:disabled{opacity:.72}
-.demo-note{font-size:12.5px;color:var(--ink3);margin:10px 0 0}
-@media (max-width:700px){
-  .demo-tool-row{grid-template-columns:72px minmax(0,1fr) max-content}
-  .demo-tool-latency{grid-column:2/4;white-space:normal}
-}
-@media (max-width:560px){
-  .demo-body{grid-template-columns:1fr}
-  .demo-rail{flex-direction:row;flex-wrap:wrap;border-right:0;border-bottom:1px solid var(--border)}
-  .demo-rail button{min-height:44px;padding:7px 9px}
-  .demo-motion{min-height:44px}
-  .demo-main{min-height:570px;padding:14px}
-  .demo-overview-hero{grid-template-columns:1fr}
-  .demo-pulse{width:40px;height:40px}
-  .demo-event{grid-template-columns:42px 52px 8px minmax(0,1fr)}
-  .demo-latency{grid-column:4}
-}
-.sec{padding:clamp(24px,4vw,48px) 0}
-.panel{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:clamp(28px,4vw,48px)}
-.kicker{color:var(--accent-ink);font-weight:700;font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
-h2{margin:0 0 12px;font-family:var(--title);font-weight:700;font-size:clamp(28px,3.6vw,40px);letter-spacing:-0.02em;line-height:1.1}
-.sec-lead{color:var(--ink2);font-size:17px;max-width:760px;margin:0 0 28px}
-.grid{display:grid;gap:16px}
-.g280{grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr))}
-.g300{grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr))}
-.g260{grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))}
-.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px}
-.card h3{margin:0 0 6px;font-family:var(--title);font-weight:700;font-size:19px}
-.card p{color:var(--ink2);font-size:14.5px;margin:0}
-.card.role{display:flex;flex-direction:column}
-.role-art{display:block;height:104px;width:auto;max-width:120px;object-fit:contain;object-position:left bottom;margin:-4px 0 12px;filter:drop-shadow(0 1px 2px rgba(0,0,0,.18))}
-.icon-tile{width:38px;height:38px;border-radius:10px;display:grid;place-items:center;background:var(--accent-weak);color:var(--accent-ink);margin-bottom:12px}
-.icon-tile svg{width:22px;height:22px;display:block}
-.sub{margin-top:28px;padding-top:24px;border-top:1px solid var(--border)}
-.sub h3{margin:0 0 4px;font-family:var(--title);font-weight:700;font-size:19px}
-.sub-lead{color:var(--ink2);font-size:14.5px;margin:0 0 18px}
-.story{display:flex;flex-direction:column;gap:8px}
-.story .tag{font-family:var(--mono);font-size:11px;letter-spacing:.08em;color:var(--ink3)}
-.story h3{margin:0;font-size:20px}
-.story p{flex:1}
-.story .foot{border-top:1px solid var(--border);padding-top:10px;font-family:var(--mono);font-size:13px;color:var(--accent-ink)}
-.why h3{font-size:18px}
-.why p{font-size:14px}
-.postnote{color:var(--ink3);font-size:14px;margin:18px 0 0}
-.verbs{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px}
-.verb{border:1px solid var(--border);background:var(--surface);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--ink2)}
-.verb b{font-family:var(--mono);color:var(--ink1)}
-.skills{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:12px}
-@media (min-width:1000px){.skills{grid-template-columns:repeat(4,1fr)}}
-.skill{border:1px solid var(--border);border-radius:12px;padding:16px;background:var(--surface)}
-.skill b{display:block;font-family:var(--mono);font-size:13.5px;font-weight:700;color:var(--accent-ink);margin-bottom:4px}
-.skill div{font-size:13.5px;color:var(--ink2)}
-.install-card p{margin:0 0 14px;font-size:14px}
-.install-card h3{margin:0 0 4px;font-size:18px}
-.install-card .m{font-family:var(--mono);font-size:13px}
-.cmd-stack{margin-bottom:8px}
-.cta{text-align:center;background:linear-gradient(135deg,var(--accent-weak),var(--surface));border:1px solid var(--border);border-radius:20px;padding:clamp(36px,5vw,56px) 24px}
-.cta h2{margin:10px 0 8px;font-size:clamp(28px,3.6vw,38px)}
-.cta .sub{margin:0 auto 22px;padding:0;border:0;color:var(--ink2);font-size:17px;max-width:520px}
-.mascot-box{display:flex;align-items:flex-end;justify-content:center;width:160px;height:160px;margin:0 auto}
-.mascot-box img{display:block;width:100%;height:100%;object-fit:contain;object-position:bottom}
-.who{max-width:560px;margin:26px auto 0;padding-top:20px;border-top:1px solid var(--border);font-size:14px;color:var(--ink2)}
-.job{position:relative;overflow:hidden}
-.job .scope,.install-card .scope{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--accent-ink);margin-bottom:10px}
-.job .result{margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--ink2)}
-.demo-actions{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:14px 20px;border-top:1px solid var(--border);background:var(--bg2)}
-.demo-actions p{margin:0 auto 0 0;color:var(--ink3);font-size:13px}
-.change-card{padding:18px}
-.change-card h3{font-size:16px;margin:0 0 4px}
-.change-card p{font-size:13.5px}
-.change-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
-.compare{display:grid;gap:0;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--surface)}
-.compare-row{display:grid;grid-template-columns:minmax(150px,220px) 1fr;gap:18px;padding:14px 18px;border-bottom:1px solid var(--border)}
-.compare-row:last-child{border-bottom:0}
-.compare-row b{font-family:var(--title)}
-.compare-row span{color:var(--ink2);font-size:14px}
-.scope-ladder{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:12px}
-.scope-card{border:1px solid var(--border);border-radius:12px;padding:18px;background:var(--surface)}
-.scope-card code{color:var(--accent-ink);font-weight:700}
-.scope-card h3{margin:8px 0 4px;font-family:var(--title);font-size:18px}
-.scope-card p{margin:0;color:var(--ink2);font-size:14px}
-/* the loop: 2 lists of step cards with the approval gate between Propose and Apply */
-.loop-steps{list-style:none;margin:0;padding:0}
-.loop-gate{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin:12px 0;padding:14px 18px;border:1px solid var(--border2);border-radius:14px;background:var(--accent-weak);color:var(--ink1);font-size:15px}
-.loop-gate b{font-family:var(--mono)}
-.loop-global{margin:16px 0}
-.loop-verdict p{margin:8px 0 0}
-.loop-verdict .demo-line{margin:0}
-@media (max-width:800px){.change-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (max-width:560px){.change-grid{grid-template-columns:1fr}.compare-row{grid-template-columns:1fr;gap:4px}.demo-step{grid-template-columns:34px minmax(0,1fr)}}
-footer{border-top:1px solid var(--border);padding:32px 28px;text-align:center;color:var(--ink3);font-size:13px}
-footer p{margin:0 0 6px}
-footer a{text-decoration:underline;text-underline-offset:2px}
-footer .legal{margin:0;font-size:12.5px}
+@media (prefers-reduced-motion:reduce){*,::before,::after{animation:none!important;transition:none!important}}
+/* /motion */
 </style>
 </head>
 <body>
 
-<div class="ann">v{{version}} · open source, MIT · built for supported Claude sessions</div>
-
 <header class="hdr">
-  <div class="wrap">
-    <img class="logo" src="{{mascot:logo}}" width="36" height="36" alt="">
-    <span class="brand">orangu</span>
-    <nav aria-label="Site">
-      <a href="#loop">The loop</a>
-      <a href="#demo">Sample</a>
-      <a href="#improve">What can change</a>
-      <a href="#trust">Why local</a>
-      <a href="#install">Get started</a>
-      <a href="https://github.com/NissanOhana/orangu">GitHub ↗</a>
-      <button class="btn-theme" id="themeBtn" aria-label="theme light, switch to dark">◐ <span id="themeLabel">light</span></button>
+  <div class="wrap hdr-in">
+    <a class="brand" href="#top"><span class="ms logo" aria-hidden="true"></span><span class="word">orangu</span></a>
+    <span class="ver">v{{version}}</span>
+    <nav class="nav" aria-label="Site">
+      <a class="nl" href="#chain">How it works</a>
+      <a class="nl" href="#finds">What it finds</a>
+      <a class="nl" href="sample.html" target="_blank" rel="noopener" aria-label="Sample report (opens in a new tab)">Sample report</a>
+      <a href="https://github.com/NissanOhana/orangu">GitHub <span aria-hidden="true">↗</span></a>
+      <button class="theme" id="themeBtn" type="button" aria-label="theme light, switch to dark"><span aria-hidden="true">◐</span> <span id="themeLabel">light</span></button>
     </nav>
   </div>
 </header>
 
 <main>
-<section class="hero">
-  <div class="wrap">
-    <div class="hero-grid">
-      <div class="hero-copy">
-        <h1><span>Improve your agent harness,</span> <span>one checked change at a time.</span></h1>
-        <p class="hero-lead">orangu reads the Claude Code sessions on your machine. It finds what to change in your harness: CLAUDE.md, skills, hooks, MCP servers, and settings. Then it checks each change on your later sessions.</p>
-        <ol class="hero-journey hero-proof" aria-label="How orangu checks a change">
-          <li class="hero-step"><strong>Checked:</strong> <span>orangu compares your later sessions with the sessions before each change.</span></li>
-          <li class="hero-step"><strong>Beyond chance:</strong> <span>An exact rank test grades each check on your later sessions. A result inside the noise reads "within noise".</span></li>
-          <li class="hero-step"><strong>No model:</strong> <span>Plain code counts and compares. The measurement spends no model tokens.</span></li>
-        </ol>
-        <div class="cta-row">
-          <button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report</span><span class="sep">·</span>npx orangu</button>
-          <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See a sample report (opens in a new tab)">See a sample report ↗</a>
+<section class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div class="hero-copy">
+      <p class="eyebrow">Measure every agent session. Keep the changes that work.</p>
+      <h1>Improve your agent harness and your setup.</h1>
+      <p class="lead">Better results with fewer tokens. orangu measures every agent session, proposes changes that fit how you work, and keeps the ones that work.</p>
+      <div class="actions">
+        <button class="cmd-btn typein" type="button" data-cmd="npx orangu" data-copied="Copied" aria-label="Copy the command npx orangu"><span class="p" aria-hidden="true">$</span><code class="typed">npx orangu</code><span class="caret" aria-hidden="true"></span><span class="cp" aria-hidden="true"><svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect><path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"></path></svg><span data-lbl="Copy">Copy</span></span></button>
+        <a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="See a sample report (opens in a new tab)">See a sample report <span aria-hidden="true">↗</span></a>
+      </div>
+      <p class="fine">Local only. No model in the measurement. No network calls.</p>
+    </div>
+
+    <figure class="stage">
+      <div class="win z-machine" id="heroWin">
+        <div class="win-bar">
+          <span class="wdots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="url"><code>127.0.0.1:53211/_orangu/…/#start?zoom=<span id="hz">machine</span></code></span>
+          <span class="smp">Sample</span>
         </div>
-        <p class="fine hero-bound">orangu never changes your harness by itself. You approve each change by its id.</p>
-      </div>
-      <div class="hero-viz">
-        <qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink" role="img" aria-label="The three axes that orangu measures: quality up, time down, tokens down. Orangu never combines them into one score."></qtc-triad>
-      </div>
-      <div class="term-wrap">
-        <div class="term" aria-label="The menu that npx orangu opens"><pre><span class="p">$</span> npx orangu
-Choose a report
-  Improvements            2 due · 5 open
-  Repository report       recurring patterns in this repository
-  Global report           recurring patterns on this machine
-  Browse session reports  steps, tool calls and errors of one session</pre></div>
-        <p class="fine">To open only the latest session, run <code>npx orangu report</code>.</p>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="loop" class="sec">
-  <div class="wrap">
-    <div class="kicker">The loop</div>
-    <h2>Six steps. You approve between Propose and Apply.</h2>
-    <p class="sec-lead">Popular tips come with no measurement. orangu checks each change on your own later sessions. It also names other changes that landed in the same window.</p>
-    <ol class="scope-ladder loop-steps" aria-label="Steps 1 to 3">
-      <li class="scope-card"><code>orangu</code><h3>1. Observe</h3><p>orangu reads each session on disk and applies 44 deterministic rules. It uses no model.</p></li>
-      <li class="scope-card"><code>orangu</code><h3>2. See</h3><p>The report and the local app show quality, time, and tokens as separate axes. Each finding links to its evidence.</p></li>
-      <li class="scope-card"><code>a Claude skill</code><h3>3. Propose</h3><p>The improve or harness skill drafts one proposal for each change. A proposal changes no file.</p></li>
-    </ol>
-    <p class="loop-gate"><b>You</b> <span>You approve each change by its id. Nothing changes before that.</span></p>
-    <ol class="scope-ladder loop-steps" start="4" aria-label="Steps 4 to 6">
-      <li class="scope-card"><code>a Claude skill</code><h3>4. Apply</h3><p>The apply skill makes one approved change. It records a receipt of the checks that it ran.</p></li>
-      <li class="scope-card"><code>orangu</code><h3>5. Verify</h3><p>orangu compares your later sessions with the sessions before the change. It marks the change verified only when 2 things are true. The checks that the change should move beat chance on your later sessions. No guard check got worse beyond chance on your later sessions. No model is in the measurement.</p></li>
-      <li class="scope-card"><code>orangu</code><h3>6. Remember</h3><p>orangu keeps each verdict and each reason that you pick. The next proposal reads them.</p></li>
-    </ol>
-    <p class="sec-lead loop-global">Global changes stay proposals. orangu applies and verifies only session and repo changes.</p>
-    <div class="demo-card loop-verdict">
-      <p class="demo-line">Illustrative. Not a measured result.</p>
-      <p><span class="demo-status">verified</span> Move the test rules from CLAUDE.md to a skill. Applied 2026-10-02. 8 earlier and 6 later sessions. On your later sessions, tokens per session went down beyond chance, and failed test runs did not go up beyond chance. Verdict: verified.</p>
-      <p><span class="demo-status">within noise</span> Add a pointer line for the API folder. Applied 2026-10-05. 8 earlier and 10 later sessions. On your later sessions, tool calls per session did not go down beyond chance. Verdict: within noise. orangu does not call it verified.</p>
-    </div>
-  </div>
-</section>
-
-<section id="demo" class="sec">
-  <div class="wrap">
-    <div class="kicker">A sample report</div>
-    <h2>Follow the evidence from one step to the next session.</h2>
-    <p class="sec-lead">This illustrative flow shows what each layer owns. It is not a measured customer result.</p>
-    <div class="appdemo" id="appdemo">
-      <div class="demo-bar"><i class="d1"></i><i class="d2"></i><i class="d3"></i><span>orangu report · illustrative supported session</span><button class="demo-motion" id="demoMotion" type="button" aria-pressed="true" aria-label="Automatic preview is static" disabled>Static</button></div>
-      <div class="demo-body">
-        <nav class="demo-rail" aria-label="Report sections in the example"><div class="demo-tabs" role="tablist">
-          <button id="demo-tab-overview" type="button" role="tab" aria-controls="demo-panel-overview" aria-selected="false" tabindex="-1" data-demo-view="overview">Overview</button>
-          <button id="demo-tab-timeline" type="button" role="tab" aria-controls="demo-panel-timeline" aria-selected="false" tabindex="-1" data-demo-view="timeline">Timeline</button>
-          <button id="demo-tab-tools" type="button" role="tab" aria-controls="demo-panel-tools" aria-selected="false" tabindex="-1" data-demo-view="tools">Tools &amp; calls</button>
-          <button id="demo-tab-suggest" type="button" role="tab" aria-controls="demo-panel-suggest" aria-selected="true" tabindex="0" data-demo-view="suggest" aria-current="page" class="on">Improvements</button>
-          </div><a class="rail-link" href="sample-repo.html" target="_blank" rel="noopener" aria-label="Repo / Global: open the repository-level sample (opens in a new tab)">Repo / Global ↗</a>
-        </nav>
-        <div class="demo-main">
-          <div class="demo-view" id="demo-panel-overview" data-demo-view="overview" role="tabpanel" aria-labelledby="demo-tab-overview" hidden>
-            <div class="demo-overview-hero">
-              <div class="demo-pulse" aria-hidden="true">↗</div>
-              <div><em>One local evidence trail</em><strong>Understand the session. Improve what happens next.</strong><p>Outcome evidence stays connected to steps, parent and subagent work, time, tokens, context, and tool results.</p></div>
-            </div>
-            <div class="demo-kpis">
-              <div class="demo-kpi"><em>Observe</em><b class="accent">Every tool call</b><span>input, result, error, and duration</span></div>
-              <div class="demo-kpi"><em>Connect</em><b>Parent + subagents</b><span>one ordered session timeline</span></div>
-              <div class="demo-kpi"><em>Improve</em><b>Review proposals</b><span>verify changes on later sessions</span></div>
-            </div>
-            <div class="demo-line">The session scope diagnoses one session. The repo and global scopes find recurring patterns worth a larger change to the harness.</div>
-          </div>
-          <div class="demo-view" id="demo-panel-timeline" data-demo-view="timeline" role="tabpanel" aria-labelledby="demo-tab-timeline" hidden>
-            <div class="demo-view-head"><div><em>Tool calls in order</em><b>Follow the parent and delegated work step by step.</b></div><span class="demo-status">local</span></div>
-            <div class="demo-timeline" aria-label="Illustrative session timeline">
-              <div class="demo-event"><span class="demo-time">00:14</span><span class="demo-actor">main</span><span class="demo-event-mark good"></span><span class="demo-event-copy"><b>Read · checkout.ts</b><small>result attached · 18 KB</small></span><span class="demo-latency">42 ms</span></div>
-              <div class="demo-event"><span class="demo-time">00:18</span><span class="demo-actor">agent-1</span><span class="demo-event-mark"></span><span class="demo-event-copy"><b>Grep · rate limit</b><small>delegated search · 7 matches</small></span><span class="demo-latency">86 ms</span></div>
-              <div class="demo-event"><span class="demo-time">00:24</span><span class="demo-actor">agent-1</span><span class="demo-event-mark bad"></span><span class="demo-event-copy"><b>Bash · npm test</b><small>error result stays on this call</small></span><span class="demo-latency">3.2 s</span></div>
-              <div class="demo-event"><span class="demo-time">00:31</span><span class="demo-actor">main</span><span class="demo-event-mark good"></span><span class="demo-event-copy"><b>Edit · checkout.ts</b><small>next action keeps its own result</small></span><span class="demo-latency">21 ms</span></div>
-            </div>
-            <p class="demo-note">Tool call input, output, error state, duration, and actor identity stay attached to the action that produced them.</p>
-          </div>
-          <div class="demo-view" id="demo-panel-tools" data-demo-view="tools" role="tabpanel" aria-labelledby="demo-tab-tools" hidden>
-            <div class="demo-view-head"><div><em>Usage · errors · latency</em><b>See where tool time went and what failed.</b></div><span class="demo-status">23 calls</span></div>
-            <div class="demo-tools" aria-label="Illustrative tool usage">
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Bash</b><small>execution</small></span><span class="demo-tool-use"><span class="trk"><i style="width:100%"></i></span><span>9 calls</span></span><span class="demo-tool-error bad">1 error</span><span class="demo-tool-latency"><small>avg / p95</small> 680 ms / 3.2 s</span></div>
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Read</b><small>files</small></span><span class="demo-tool-use"><span class="trk"><i style="width:78%"></i></span><span>7 calls</span></span><span class="demo-tool-error">0 errors</span><span class="demo-tool-latency"><small>avg / p95</small> 34 ms / 61 ms</span></div>
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Grep</b><small>search</small></span><span class="demo-tool-use"><span class="trk"><i style="width:44%"></i></span><span>4 calls</span></span><span class="demo-tool-error">0 errors</span><span class="demo-tool-latency"><small>avg / p95</small> 57 ms / 86 ms</span></div>
-              <div class="demo-tool-row"><span class="demo-tool-name"><b>Edit</b><small>changes</small></span><span class="demo-tool-use"><span class="trk"><i style="width:33%"></i></span><span>3 calls</span></span><span class="demo-tool-error">0 errors</span><span class="demo-tool-latency"><small>avg / p95</small> 18 ms / 21 ms</span></div>
-            </div>
-            <div class="demo-error-line"><b>Recurring error</b><code>test command exited 1</code><span>1 occurrence in this illustrative session</span></div>
-            <p class="demo-note"><b>Local evidence.</b> Counts, errors, and latency come from parsed tool calls. <b>Recurring pattern.</b> Repo and global scopes compare the same evidence shape across sessions.</p>
-          </div>
-          <div class="demo-view on" id="demo-panel-suggest" data-demo-view="suggest" role="tabpanel" aria-labelledby="demo-tab-suggest">
-            <div class="demo-scope"><span class="on">This session</span><span>Repo</span><span>Global</span></div>
-            <div class="demo-line" style="margin-bottom:10px"><b>Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed</b></div>
-            <div class="demo-types" aria-label="Proposal change classes"><span>Instruction files</span><span>Scripts and CLIs</span><span>Hooks</span><span>Skills to create</span><span>Skills to discover</span><span>Subagents and agents</span><span>MCP servers</span><span>Plugins</span><span>Workflow and configuration</span></div>
-            <div class="demo-sug">
-              <div class="demo-card"><div class="h"><span class="rid">Draft proposal</span><span class="sev">script or hook</span><span class="state">proposed</span></div><div class="demo-evidence"><b>Evidence.</b> The same local setup failure precedes retries in the selected evidence.</div><div class="demo-proposal"><b>Proposal.</b> Add one deterministic check with explicit pass and fail output. <code>/orangu:improve</code> drafts the smallest reviewable change.</div><div class="demo-verify"><b>Explicit apply.</b> The apply skill in Claude Code or Codex must stay within the reviewed files and write a receipt of the checks that it ran. Orangu validates the receipt's shape and its file list, not the diff. <b>Next-session verification.</b> Orangu compares later sessions from the same workspace with the sessions before the change. It marks the change verified only if, on your later sessions, failed test runs dropped beyond chance and tool errors did not rise beyond chance.</div><div class="demo-kick"><span class="demo-status">proposed</span><span class="demo-grow"></span><button class="demo-btn" type="button" disabled title="The full report only copies this command.">Claude apply</button></div></div>
-            </div>
-            <p class="demo-note">Local code measures and matches. An optional skill writes the proposal. The browser only copies a command. A verified session comparison means that its reviewed metrics passed on the selected later evidence. It is not a causal or overall-quality claim.</p>
+        <div class="app-top">
+          <span class="app-brand"><span class="ms" aria-hidden="true"></span>orangu</span>
+          <div class="ztabs" role="tablist" aria-label="Zoom">
+            <button class="ztab" type="button" role="tab" id="hz-t-session" aria-controls="hz-p-session" aria-selected="false" tabindex="-1">One session</button>
+            <button class="ztab" type="button" role="tab" id="hz-t-sessions" aria-controls="hz-p-sessions" aria-selected="false" tabindex="-1">Sessions and agents</button>
+            <button class="ztab" type="button" role="tab" id="hz-t-machine" aria-controls="hz-p-machine" aria-selected="true" tabindex="0">This machine</button>
           </div>
         </div>
+        <div class="zoomport">
+
+          <div class="layer l-machine" role="tabpanel" id="hz-p-machine" aria-labelledby="hz-t-machine">
+            <div class="lhead">
+              <span class="lt">This machine</span>
+              <span class="smp">Sample</span>
+              <span class="stat"><b><span class="count" style="--to:11" aria-hidden="true"></span><span class="vh">11</span></b> sessions · <b><span class="count" style="--to:224" aria-hidden="true"></span><span class="vh">224</span></b> tool calls · <b><span class="count" style="--to:12" aria-hidden="true"></span><span class="vh">12</span></b> tool errors</span>
+            </div>
+            <div class="field" role="img" aria-label="The 11 sample sessions have 224 tool calls. Each cell is 1 session, and each dot is 1 tool call. 12 dots are tool errors.">
+              <span class="cell has-e" style="--c:0"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell" style="--c:1"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell has-e" style="--c:2"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell" style="--c:3"><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell has-e" style="--c:4"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell has-e" style="--c:5"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell has-e" style="--c:6"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell" style="--c:7"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell has-e" style="--c:8"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell" style="--c:9"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+              <span class="cell has-e" style="--c:10"><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i><i></i><i class="e"></i><i></i><i></i></span>
+            </div>
+            <p class="legend"><span><i class="sw box"></i>1 cell is 1 session</span><span><i class="sw"></i>1 dot is 1 tool call</span><span><i class="sw err"></i>An orange dot is a tool error</span></p>
+          </div>
+
+          <div class="layer l-sessions" role="tabpanel" id="hz-p-sessions" aria-labelledby="hz-t-sessions">
+            <div class="lhead"><span class="lt">Sessions and agents</span><span class="smp">Sample</span><span class="stat">11 sessions, newest first</span></div>
+            <ol class="srows">
+              <li class="srow" style="--r:0">
+                <span class="sdot"></span><span class="st">Add rate limiting to the checkout API</span><span class="stok">5.83M tokens</span>
+                <span class="sm">checkout-api · ended 40m ago · <span class="sag">orchestrator · 3 agents</span></span>
+                <ul class="tree">
+                  <li class="ag" style="--k:0"><b>general-purpose</b><span>survey svc-orders</span><span class="at">316k tokens</span></li>
+                  <li class="ag" style="--k:1"><b>general-purpose</b><span>survey svc-catalog</span><span class="at">98.2k tokens</span></li>
+                  <li class="ag" style="--k:2"><b>general-purpose</b><span>survey svc-payments</span><span class="at">120k tokens</span></li>
+                </ul>
+              </li>
+              <li class="srow" style="--r:1"><span class="sdot"></span><span class="st">Rotate the staging database credentials</span><span class="stok">667k tokens</span><span class="sm">platform-infra · 3d ago</span></li>
+              <li class="srow" style="--r:2"><span class="sdot"></span><span class="st">Add retries to the payment webhook handler</span><span class="stok">495k tokens</span><span class="sm">checkout-api · 3d ago</span></li>
+              <li class="srow" style="--r:3"><span class="sdot"></span><span class="st">Write the ADR for idempotency keys</span><span class="stok">190k tokens</span><span class="sm">checkout-api · 5d ago</span></li>
+            </ol>
+            <p class="more">7 more sessions</p>
+          </div>
+
+          <div class="layer l-session" role="tabpanel" id="hz-p-session" aria-labelledby="hz-t-session">
+            <div class="lhead"><span class="lt">One session</span><span class="smp">Sample</span><span class="stat">latest · ended 40m ago</span></div>
+            <p class="sess-t">Add rate limiting to the checkout API</p>
+            <p class="sess-m">checkout-api · 5a91c73e</p>
+            <p class="sess-o">1 PR · 1 commit · 8 files changed · 3 of 9 test runs failed</p>
+            <div class="kpis">
+              <div class="kpi" style="--k:0"><span class="kl">Turns</span><span class="kv"><span class="count" style="--to:6" aria-hidden="true"></span><span class="vh">6</span></span></div>
+              <div class="kpi" style="--k:1"><span class="kl">Tokens</span><span class="kv">5.83M</span></div>
+              <div class="kpi" style="--k:2"><span class="kl">Active</span><span class="kv">26m 5s</span></div>
+              <div class="kpi" style="--k:3"><span class="kl">Agents</span><span class="kv"><span class="count" style="--to:3" aria-hidden="true"></span><span class="vh">3</span></span></div>
+            </div>
+            <div class="fx">
+              <div class="fx-h"><span class="sev" aria-hidden="true"></span><span class="fx-t">4 files re-read within one context (10 redundant reads, 362.8k tokens)</span><span class="fsave">save ~363k tokens</span></div>
+              <p class="fx-i"><b>Improvement:</b> Read each file once in a context. Keep notes on what it holds.</p>
+            </div>
+            <div class="cmdline"><span class="p" aria-hidden="true">$</span><code>claude "/orangu:improve sg_0123456789ab"</code></div>
+          </div>
+
+        </div>
       </div>
-      <div class="demo-actions"><p>Observe locally. Draft from evidence. Use only the lifecycle the scope supports.</p><a class="ghost" href="sample.html" target="_blank" rel="noopener" aria-label="Open the full sample report (opens in a new tab)">Open the full sample report ↗</a><a class="ghost" href="sample-repo.html" target="_blank" rel="noopener" aria-label="Open the repository-level sample (opens in a new tab)">Open the repository-level sample ↗</a></div>
-    </div>
+      <figcaption class="figcap">
+        <span class="fign">fig. 1</span>
+        <span>The app that <code>npx orangu</code> opens, on the sample sessions.</span>
+        <button class="pp" id="heroPause" type="button" aria-pressed="false" hidden><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5v9M10.5 3.5v9"></path></svg>Pause</button>
+      </figcaption>
+    </figure>
   </div>
 </section>
 
-<section id="improve" class="sec">
+<section class="sec alt" id="chain">
   <div class="wrap">
-    <div class="kicker">Change the right layer</div>
-    <h2>An improvement must name what to change.</h2>
-    <p class="sec-lead">Deterministic matches narrow the options. The <code>/orangu:improve</code> skill drafts the smallest useful change for review. The <code>/orangu:apply</code> skill makes a reviewed session or repo change, and only when you run it.</p>
-    <div class="change-grid">
-      <div class="card change-card"><h3>Instruction files</h3><p>Persistent project guidance and conventions.</p></div>
-      <div class="card change-card"><h3>Scripts and CLIs</h3><p>Repeatable actions with checkable output.</p></div>
-      <div class="card change-card"><h3>Hooks</h3><p>Guaranteed actions at lifecycle boundaries.</p></div>
-      <div class="card change-card"><h3>Skills to create</h3><p>Reusable knowledge and workflows for your setup.</p></div>
-      <div class="card change-card"><h3>Skills to discover</h3><p>Existing capabilities to evaluate before installing.</p></div>
-      <div class="card change-card"><h3>Subagents and agents</h3><p>Isolated or specialized work with clear ownership.</p></div>
-      <div class="card change-card"><h3>MCP servers</h3><p>External tools and data that the work needs.</p></div>
-      <div class="card change-card"><h3>Plugins</h3><p>A reusable package of related extensions.</p></div>
-      <div class="card change-card"><h3>Workflow and configuration</h3><p>How work is sequenced, checked, and repeated.</p></div>
+    <div class="sec-head reveal">
+      <p class="kicker">How it works</p>
+      <h2>Three steps. One command each.</h2>
     </div>
-  </div>
-</section>
-
-<section id="trust" class="sec">
-  <div class="wrap">
-    <div class="panel">
-      <div class="kicker">One system, clear ownership</div>
-      <h2>Local evidence first. Optional interpretation on top.</h2>
-      <p class="sec-lead">To inspect supported sessions already on disk, you need no instrumentation, no account, no upload, and no telemetry.</p>
-      <div class="grid g300" style="margin-bottom:22px">
-        <div class="card"><h3>Bounded local evidence</h3><p><code>orangu evidence</code> accepts a supported session or current Orangu Analysis, SlimAnalysis, or Aggregate output. It redacts, bounds, matches, and ranks without a model or network request.</p></div>
-        <div class="card"><h3>Optional AI interpretation</h3><p><code>/orangu:improve</code> explains bounded evidence, starts with catalog matches, researches missing options when useful, and writes a structured draft. It does not edit the project.</p></div>
-        <div class="card"><h3>Explicit reviewed changes</h3><p><code>/orangu:apply</code> runs only for a session or repo proposal, after review. Its contract requires it to stay within the declared files and to record its local checks truthfully. Orangu validates the receipt's shape and file list. The verification claim comes from your later sessions, which orangu compares beyond chance with the sessions before the change.</p></div>
-        <div class="card"><h3>Evidence with an expiry date</h3><p>Claude Code deletes a session transcript after it passes the <code>cleanupPeriodDays</code> window, which is 30 days by default. The <code>orangu harness</code> command measures how much history is inside that window. It also shows what is within a week of the cutoff, and which Desktop or Cowork transcripts the window does not reach. The reported sizes count only the primary transcripts, but each deletion also removes the subagent and tool-result files of the session. A longer window leaves more history to read, and leaves plain-text transcripts on disk for longer. Orangu reports both and picks neither.</p></div>
+    <div class="chain">
+      <div class="tabs" role="tablist" aria-label="The orangu chain">
+        <button class="tab" type="button" role="tab" id="tab-see" aria-controls="panel-see" aria-selected="true" tabindex="0"><span class="tn">01</span><span class="tname">See</span><code class="tcmd">npx orangu</code><span class="bar" aria-hidden="true"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-improve" aria-controls="panel-improve" aria-selected="false" tabindex="-1"><span class="tn">02</span><span class="tname">Improve</span><code class="tcmd">/orangu:improve</code><span class="bar" aria-hidden="true"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-tune" aria-controls="panel-tune" aria-selected="false" tabindex="-1"><span class="tn">03</span><span class="tname">Tune</span><code class="tcmd">/orangu:interview</code><span class="bar" aria-hidden="true"></span></button>
       </div>
-      <div class="compare" aria-label="How Orangu turns local evidence into improvement">
-        <div class="compare-row"><b>Raw transcripts</b><span>Contain the record, but leave the reading and synthesis to you.</span></div>
-        <div class="compare-row"><b>Local usage counters</b><span>Summarize usage across time and sources.</span></div>
-        <div class="compare-row"><b>Instrumented trace platforms</b><span>Capture traces and evaluations from applications that you instrument.</span></div>
-        <div class="compare-row"><b>Model-written session reviews</b><span>Read your sessions with a model, and spend tokens to do it.</span></div>
-        <div class="compare-row"><b>orangu</b><span>Connects local evidence to a reviewed change. Then it checks each applied change on your later sessions, with no model in the measurement.</span></div>
+
+      <div class="panel p0" role="tabpanel" id="panel-see" aria-labelledby="tab-see">
+        <div class="p-copy">
+          <p class="p-n">Step 1</p>
+          <h3>See</h3>
+          <p class="ptx">Run <code>npx orangu</code>. It reads every session on your disk, each agent tree included, and it measures with no model. It shows one session, your sessions and their agents, and the whole machine, with the first findings.</p>
+          <div class="chipcmd"><span class="p" aria-hidden="true">$</span><code>npx orangu</code></div>
+        </div>
+        <figure class="stage">
+          <div class="term">
+            <div class="term-bar"><span class="tl">Sample run</span><span class="tp">~/workspace/checkout-api</span></div>
+            <pre class="tout"><span class="ln"><span class="ac">$</span> <span class="typed2">npx orangu</span></span>
+<span class="ln" style="--i:1"><span class="ms tm" aria-hidden="true"></span></span>
+<span class="ln" style="--i:2"><span class="ac">orangu</span>  <span class="bd">Add rate limiting to the checkout API</span></span>
+<span class="ln dm" style="--i:3">        latest · 5a91c73e · 6 turns · 5.83M tokens · 26m 5s active</span>
+<span class="ln" style="--i:4"> </span>
+<span class="ln" style="--i:5">  1 PR · 1 commit · 8 files changed · 3 of 9 test runs failed</span>
+<span class="ln" style="--i:6"> </span>
+<span class="ln" style="--i:7">  <span class="dm">finding</span>  <span class="bd">4 files re-read within one context (10 redundant reads, 362.8k</span></span>
+<span class="ln" style="--i:8">           <span class="bd">tokens)</span></span>
+<span class="ln" style="--i:9">           Improvement: Read each file once in a context. Keep notes on what it</span>
+<span class="ln" style="--i:10">           holds. To find a part of it again, use Grep with line ranges. For a</span>
+<span class="ln" style="--i:11">           large file, read only the lines that you need (offset and limit).</span>
+<span class="ln" style="--i:12">  <span class="dm">next</span>     claude "/orangu:improve sg_0123456789ab"</span>
+<span class="ln" style="--i:13">  <span class="dm">plugin</span>   /plugin marketplace add NissanOhana/orangu</span>
+<span class="ln" style="--i:14">           /plugin install orangu    <span class="dm">(once, inside Claude Code)</span></span>
+<span class="ln" style="--i:15"> </span>
+<span class="ln" style="--i:16">  <span class="dm">app</span> <span class="p">http:&#47;&#47;127.0.0.1:53211/_orangu/…/</span></span>
+<span class="ln" style="--i:17">      11 sessions on this machine · 0 running now</span>
+<span class="ln" style="--i:18">      See one session, your sessions and their agents, or the machine.</span>
+<span class="ln" style="--i:19"> </span>
+<span class="ln dm" style="--i:20">  The first run of /orangu:improve asks about your role and your work.</span>
+<span class="ln dm" style="--i:21">  Press ctrl-c to stop the app.</span></pre>
+          </div>
+        </figure>
+      </div>
+
+      <div class="panel p1" role="tabpanel" id="panel-improve" aria-labelledby="tab-improve">
+        <div class="p-copy">
+          <p class="p-n">Step 2</p>
+          <h3>Improve</h3>
+          <p class="ptx">In Claude Code, run <code>/orangu:improve</code>. The brain finds patterns and proposes changes: skills, agents, effort, model choice, CLIs and scripts. You approve each change by its id. Then orangu checks it on your later sessions, beyond chance.</p>
+          <div class="chipcmd"><span class="p" aria-hidden="true">&gt;</span><code>/orangu:improve</code></div>
+        </div>
+        <figure class="stage imp">
+          <div class="term">
+            <div class="term-bar"><span class="tl">Claude Code</span><span class="tp">Sample</span></div>
+            <pre class="tout"><span class="ln" style="--i:0"><span class="ac">&gt;</span> /orangu:improve</span>
+<span class="ln" style="--i:1"><span class="dm">●</span> Bash(orangu harness --out harness.json)</span>
+<span class="ln" style="--i:2"><span class="dm">●</span> Bash(orangu repo . --out aggregate.json)</span>
+<span class="ln" style="--i:3"><span class="dm">●</span> Bash(orangu evidence aggregate.json --scope repo)</span>
+<span class="ln" style="--i:4"><span class="dm">●</span> Agent(harness-pm-analyst)      <span class="dm">6 focus areas</span></span>
+<span class="ln" style="--i:5"><span class="dm">●</span> Agent(harness-devex-analyst)   <span class="dm">6 focus areas</span></span>
+<span class="ln"><span class="working">  Working</span></span></pre>
+          </div>
+          <div class="prop">
+            <div class="prop-h"><span class="prop-k">Proposal</span><code>sg_0123456789ab</code><span>Context and cache</span><span class="smp">Sample</span></div>
+            <div class="prop-t"><b>Every request starts from a 28.4k-token baseline (system prompt, tools, CLAUDE.md, skills)</b><span class="fsave">save ~1.41M tokens</span></div>
+            <p class="prop-e">This pattern shows in all 11 sessions.</p>
+            <p class="prop-i"><b>Improvement:</b> Trim CLAUDE.md to the rules that bind. Move long docs into files that the agent reads only when it needs them.</p>
+            <div class="prop-a"><span class="chip sel">Approve <code>sg_0123456789ab</code></span><span class="chip">Not now</span></div>
+          </div>
+        </figure>
+      </div>
+
+      <div class="panel p2" role="tabpanel" id="panel-tune" aria-labelledby="tab-tune">
+        <div class="p-copy">
+          <p class="p-n">Step 3</p>
+          <h3>Tune</h3>
+          <p class="ptx">The first time, or when you ask, the interview asks about your role and how you work. orangu keeps your answers. The brain ranks each later proposal with them.</p>
+          <div class="chipcmd"><span class="p" aria-hidden="true">&gt;</span><code>/orangu:interview</code></div>
+        </div>
+        <figure class="stage">
+          <div class="chat">
+            <div class="msg" style="--m:0">
+              <span class="av" aria-hidden="true"><span class="ms"></span></span>
+              <div><p class="q">Which role fits your work best?</p>
+                <div class="opts"><span class="chip sel">I write and ship code.</span><span class="chip">I lead a team or design the system.</span><span class="chip">I work with data or models.</span><span class="chip">I do not write code.</span></div></div>
+            </div>
+            <div class="msg" style="--m:1">
+              <span class="av" aria-hidden="true"><span class="ms"></span></span>
+              <div><p class="q">How do you run agents most of the time?</p>
+                <div class="opts"><span class="chip">One session, and I watch it.</span><span class="chip">Some sessions at the same time.</span><span class="chip sel">One orchestrator session with subagents.</span><span class="chip">Long runs with no person present.</span></div></div>
+            </div>
+            <div class="msg" style="--m:2">
+              <span class="av" aria-hidden="true"><span class="ms"></span></span>
+              <div><p class="q">What must get better first in your next sessions?</p>
+                <div class="opts"><span class="chip">Better results.</span><span class="chip">Less of my time.</span><span class="chip sel">Fewer tokens.</span></div></div>
+            </div>
+            <div class="prof">
+              <p class="prof-h">Your profile <span class="smp">Sample</span></p>
+              <dl><dt>Role</dt><dd>I write and ship code.</dd><dt>Process</dt><dd>One orchestrator session with subagents.</dd><dt>Priority</dt><dd>Fewer tokens.</dd></dl>
+              <p class="prof-x">The brain ranks the rules that save tokens first. It checks agent fan-out, failed agents and the model of each agent first.</p>
+            </div>
+          </div>
+        </figure>
+      </div>
+
+      <div class="chain-ctl">
+        <button class="pp" id="chainPause" type="button" aria-pressed="true"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2l8 4.8-8 4.8z"></path></svg>Play</button>
+        <span class="stepof">Step 1 of 3</span>
       </div>
     </div>
   </div>
 </section>
 
-<section id="scope" class="sec">
+<section class="sec" id="finds">
   <div class="wrap">
-    <div class="kicker">Choose the scope of the decision</div>
-    <h2>One session for diagnosis. More sessions for larger changes.</h2>
-    <p class="sec-lead">Scope controls the question, not the honesty of the evidence.</p>
-    <div class="grid g300" style="margin-bottom:22px">
-      <div class="card job"><span class="scope">SESSION</span><h3>Observe one session</h3><p>Follow the work step by step. See tool actions, results, errors, context, subagents, time, tokens, and the evidence connected to the outcome.</p><div class="result">Use this scope to review, explain, or diagnose a session.</div></div>
-      <div class="card job"><span class="scope">REPO / GLOBAL</span><h3>Improve repeated work</h3><p>Find errors, re-reads, tool patterns, and harness gaps that recur across sessions. Use that evidence to choose a reviewable larger change.</p><div class="result">You apply a <code>repo</code> change explicitly, and orangu checks it on later sessions. A <code>global</code> change stays a proposal.</div></div>
+    <div class="sec-head reveal">
+      <p class="kicker">What the brain finds</p>
+      <h2>Better results with fewer tokens.</h2>
     </div>
-    <div class="scope-ladder">
-      <div class="scope-card"><code>session</code><h3>What happened here?</h3><p>Inspect the session. Draft one bounded proposal from one finding.</p></div>
-      <div class="scope-card"><code>repo</code><h3>What keeps happening here?</h3><p>Connect recurring project patterns to example sessions and a focused change.</p></div>
-      <div class="scope-card"><code>global</code><h3>What should change in the harness?</h3><p>Review patterns across supported sessions and start a separately labeled whole-harness analysis.</p></div>
-    </div>
+    <ul class="tiles">
+      <li class="tile reveal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"></path><path d="M14 3v4h4"></path><path class="a" d="M10 12h5M10 15.5h5"></path></svg><h3>Skills</h3><p>A skill that never runs, a skill that loads too much text, or a procedure that needs a skill.</p></li>
+      <li class="tile reveal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="5" r="2.2"></circle><circle cx="5" cy="19" r="2.2"></circle><circle cx="12" cy="19" r="2.2"></circle><circle class="a" cx="19" cy="19" r="2.2"></circle><path d="M12 7.2v9.6M12 11.5H5v5.3M12 11.5h7v5.3"></path></svg><h3>Agents</h3><p>Agents that fail, go too deep or wait. The change that keeps the work and stops the waste.</p></li>
+      <li class="tile reveal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16.5a8 8 0 1 1 16 0"></path><path class="a" d="M12 16.5l4.2-5.2"></path><circle cx="12" cy="16.5" r="1.3"></circle></svg><h3>Effort and model</h3><p>Deep thinking on simple work. A model that does not fit the task.</p></li>
+      <li class="tile reveal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M7 10l3 2-3 2"></path><path class="a" d="M12.5 15H17"></path></svg><h3>CLIs and scripts</h3><p>The same commands again and again. A search loop that one script can do.</p></li>
+      <li class="tile reveal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4l8 4-8 4-8-4z"></path><path d="M4 12l8 4 8-4"></path><path class="a" d="M4 16l8 4 8-4"></path></svg><h3>Context and cache</h3><p>A cache that breaks on each turn. Tools and long instructions that fill the context.</p></li>
+      <li class="tile reveal"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v5.5c0 4.3-3 7.7-7 9.5-4-1.8-7-5.2-7-9.5V6z"></path><path class="a" d="M9 12l2.2 2.2L15.5 10"></path></svg><h3>Rules that hold</h3><p>A rule in CLAUDE.md that the agent breaks. A hook or a deny rule that makes it hold.</p></li>
+    </ul>
   </div>
 </section>
 
-<section id="install" class="sec">
-  <div class="wrap">
-    <div class="kicker">Get started</div>
-    <h2>Three front doors. Each one opens the same loop.</h2>
-    <p class="sec-lead">Start in the terminal, in the local app, or in Claude Code. Claude Code and Codex skills share the same scope-aware proposal, application, and session-verification contracts.</p>
-    <div class="grid g300">
-      <div class="card install-card"><span class="scope">TERMINAL</span><h3>Choose a report</h3><p>You do not need a global install. The first command opens a menu in your terminal. Choose your improvements, this repository, all sessions, or one session. The second command opens the latest session.</p><div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button data-cmd="npx orangu">copy</button></div><div class="cmd-sm"><span class="p">$</span> npx orangu report <button data-cmd="npx orangu report">copy</button></div></div>
-      <div class="card install-card"><span class="scope">APP</span><h3>Keep the local app open</h3><p>Run the local app on 127.0.0.1. It shows every session, live, and your Improvements: the queue, the history of your changes and their lessons.</p><div class="cmd-sm"><span class="p">$</span> npx orangu serve <button data-cmd="npx orangu serve">copy</button></div></div>
-      <div class="card install-card"><span class="scope">CLAUDE CODE</span><h3>Add the Claude Code plugin</h3><p>Install it after you see the evidence. Then start with the improve skill. It finds the next change to make, and it checks each change that you apply. The apply skill applies a session or repo proposal after you approve it. The <code>/orangu:harness</code> skill reviews your whole harness and proposes ranked changes. A rule that did not hold gets a check, not another note. <code>/orangu:show-me</code> writes a slide deck and a written report.</p><div class="cmd-sm cmd-stack">/plugin marketplace add NissanOhana/orangu <button data-cmd="/plugin marketplace add NissanOhana/orangu">copy</button></div><div class="cmd-sm cmd-stack">/plugin install orangu <button data-cmd="/plugin install orangu">copy</button></div><div class="cmd-sm">/orangu:improve <button data-cmd="/orangu:improve">copy</button></div></div>
-    </div>
-    <div class="sub">
-      <h3>One improvement workflow, explicit stages</h3>
-      <p class="sub-lead">Measurement stays in the local CLI. The session and repo scopes can propose, apply, and verify. The global scope stays proposal-only.</p>
-      <div class="skills">
-        <div class="skill"><b>/orangu:improve</b><div>Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. It never edits the target repository.</div></div>
-        <div class="skill"><b>/orangu:interview</b><div>Research outside options for one suggestion first. Then answer a few questions, and get a proposal or a second opinion. It applies nothing.</div></div>
-        <div class="skill"><b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository. It runs the repository's own checks and records a receipt. Global proposals are review-only.</div></div>
-        <div class="skill"><b>/orangu:analyze</b><div>Explain what happened in one session, finished or still running, from local deterministic evidence. Keep a report refreshed while a session runs.</div></div>
-        <div class="skill"><b>/orangu:harness</b><div>Review what your harness declares against what your sessions used, in one repository or in every session on the machine. Then propose ranked changes.</div></div>
-        <div class="skill"><b>/orangu:show-me</b><div>Turn the evidence of one session, one repository or all sessions into a slide deck and a written report. Both are offline HTML files.</div></div>
-        <div class="skill"><b>/orangu:feedback</b><div>Send candid beta feedback about Orangu itself through a private localhost form. The form shows you the exact GitHub issue to review before you open it.</div></div>
+<section class="sec alt" id="proof">
+  <div class="wrap proof-grid">
+    <div>
+      <div class="reveal">
+        <p class="kicker">Checked, not claimed</p>
+        <h2>Each change is checked on your later sessions.</h2>
       </div>
+      <ol class="points">
+        <li class="reveal"><span class="pn" aria-hidden="true">01</span><div><h3>No model in the measurement.</h3><p>Plain code counts, compares and ranks.</p></div></li>
+        <li class="reveal"><span class="pn" aria-hidden="true">02</span><div><h3>Beyond chance.</h3><p>orangu marks a change verified only when your later sessions beat the earlier sessions beyond chance.</p></div></li>
+        <li class="reveal"><span class="pn" aria-hidden="true">03</span><div><h3>You approve each change.</h3><p>orangu never changes your harness by itself. A change to the whole machine stays a proposal.</p></div></li>
+      </ol>
     </div>
+    <figure class="triad reveal">
+      <div class="triad-card"><qtc-triad ink="--ink1" grid="--border2" accent="--accent" accent-ink="--accent-ink" role="img" aria-label="The three axes that orangu measures: quality up, time down, tokens down. Orangu never combines them into one score."></qtc-triad></div>
+      <figcaption>Quality, time and tokens stay separate. orangu never makes one score.</figcaption>
+    </figure>
   </div>
 </section>
 
-<section class="sec">
+<section class="sec" id="hosts">
   <div class="wrap">
-    <div class="cta">
-      <span class="mascot-box"><img src="{{mascot:main}}" width="160" height="160" alt="orangu, the orangutan mascot"></span>
-      <h2>Start with the sessions you already have.</h2>
-      <p class="sub">Read the evidence on your machine. Then check each change that you make.</p>
-      <button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report</span><span class="sep">·</span>npx orangu</button>
-      <p class="who">Supported today: Claude Code, Cowork, and Desktop sessions stored on your machine.</p>
+    <div class="sec-head reveal">
+      <p class="kicker">Where you work</p>
+      <h2>Use the brain where you work.</h2>
+    </div>
+    <div class="hosts">
+      <article class="host reveal">
+        <h3>Claude Code</h3>
+        <div class="stack">
+          <div class="cmdrow"><code>/plugin marketplace add NissanOhana/orangu</code><button class="cp2" type="button" data-cmd="/plugin marketplace add NissanOhana/orangu" data-copied="Copied" aria-label="Copy the command /plugin marketplace add NissanOhana/orangu"><span data-lbl="Copy">Copy</span></button></div>
+          <div class="cmdrow"><code>/plugin install orangu</code><button class="cp2" type="button" data-cmd="/plugin install orangu" data-copied="Copied" aria-label="Copy the command /plugin install orangu"><span data-lbl="Copy">Copy</span></button></div>
+          <div class="cmdrow"><code>/orangu:improve</code><button class="cp2" type="button" data-cmd="/orangu:improve" data-copied="Copied" aria-label="Copy the command /orangu:improve"><span data-lbl="Copy">Copy</span></button></div>
+        </div>
+      </article>
+      <article class="host reveal">
+        <h3>claude.ai, Claude Desktop and the Claude API</h3>
+        <p>Run <code>npx orangu export</code>. Upload the skill once. Then add your evidence to a chat.</p>
+        <div class="stack"><div class="cmdrow"><code>npx orangu export</code><button class="cp2" type="button" data-cmd="npx orangu export" data-copied="Copied" aria-label="Copy the command npx orangu export"><span data-lbl="Copy">Copy</span></button></div></div>
+      </article>
+      <article class="host reveal">
+        <h3>Codex</h3>
+        <p>Add the orangu plugin. Then run <code>$orangu-improve</code>.</p>
+        <div class="stack"><div class="cmdrow"><code>$orangu-improve</code><button class="cp2" type="button" data-cmd="$orangu-improve" data-copied="Copied" aria-label="Copy the command $orangu-improve"><span data-lbl="Copy">Copy</span></button></div></div>
+      </article>
     </div>
   </div>
 </section>
 
+<section class="sec alt">
+  <div class="wrap final-in">
+    <img class="mascot-lg" src="{{mascot:main}}" width="144" height="144" alt="orangu, the orangutan mascot">
+    <h2>Start with the sessions you already have.</h2>
+    <button class="cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied" aria-label="Copy the command npx orangu"><span class="p" aria-hidden="true">$</span><code>npx orangu</code><span class="cp" aria-hidden="true"><svg viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"></rect><path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5"></path></svg><span data-lbl="Copy">Copy</span></span></button>
+    <p class="who">Supported today: Claude Code, Cowork and Desktop sessions on your machine.</p>
+  </div>
+</section>
 </main>
 
 <footer>
-  <p>MIT © Nissan Ohana · the mascot is CC0, put orangu on a sticker · <a href="https://github.com/NissanOhana/orangu">github.com/NissanOhana/orangu</a></p>
-  <p class="legal">The promises in full: <a href="https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md">privacy</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md">determinism</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/SECURITY.md">security</a>. This page loads Google Fonts. Generated reports load nothing.</p>
-  <p class="legal">For humans and for machines: <a href="llms.txt">llms.txt</a> is the short index for agents that read this page. The <a href="llms-full.txt">llms-full.txt</a> file inlines the docs.</p>
-  <p class="legal">orangu is not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.</p>
+  <div class="wrap">
+    <p>MIT © Nissan Ohana · the mascot is CC0, put orangu on a sticker · <a href="https://github.com/NissanOhana/orangu">github.com/NissanOhana/orangu</a></p>
+    <p>The promises in full: <a href="https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md">privacy</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md">determinism</a> · <a href="https://github.com/NissanOhana/orangu/blob/main/SECURITY.md">security</a>. This page loads Google Fonts. Generated reports load nothing.</p>
+    <p>For humans and for machines: <a href="llms.txt">llms.txt</a> is the short index for agents that read this page. The <a href="llms-full.txt">llms-full.txt</a> file inlines the docs.</p>
+    <p>orangu is not affiliated with Anthropic. Claude and Claude Code are trademarks of Anthropic.</p>
+  </div>
 </footer>
+<p class="vh" id="copyNote" aria-live="polite"></p>
 
 <script>
+// The motion of the hero and the chain. 1 sequencer runs both: [ms, step] pairs and 1 timer, and Pause keeps the time
+// that passed. A run button reads Pause while its run plays, Play while it waits and Replay after it ends. The hero
+// window zooms from This machine to Sessions and agents to One session. The chain plays 1 lap of 7 s for each step
+// when 35% of it is in view, unless a click or a key came first. A click or a key picks a tab: Left, Right, Home and
+// End. Under reduced motion nothing runs and no Pause shows, the steps stay stacked as plain blocks, and the zoom tabs
+// still work. A change to reduced motion stops both runs.
+/* motion */
 (function () {
-  var demo = document.getElementById('appdemo')
-  if (!demo) return
-  var buttons = demo.querySelectorAll('.demo-rail [data-demo-view]')
-  var views = demo.querySelectorAll('.demo-main [data-demo-view]')
-  var motionButton = document.getElementById('demoMotion')
-  if (!motionButton) return
-  var order = Array.prototype.map.call(buttons, function (button) { return button.getAttribute('data-demo-view') })
-  var current = 'suggest'
-  var visible = false
-  var transientPaused = false
-  var userPaused = false
-  var timer = null
-  var motion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false }
-  var observerSupported = 'IntersectionObserver' in window
-
-  function clearCycle() {
-    if (timer === null) return
-    window.clearTimeout(timer)
-    timer = null
-  }
-
-  function syncMotionControl() {
-    if (motion.matches) {
-      motionButton.disabled = true
-      motionButton.textContent = 'Motion off'
-      motionButton.setAttribute('aria-pressed', 'true')
-      motionButton.setAttribute('aria-label', 'The automatic preview is off because you prefer reduced motion')
-      return
+  var d = document, mq = matchMedia('(prefers-reduced-motion: reduce)')
+  var $ = function (s) { return d.querySelector(s) }
+  var all = function (s, r) { return [].slice.call((r || d).querySelectorAll(s)) }
+  var ICON = { Pause: 'M5.5 3.5v9M10.5 3.5v9', Play: 'M5 3.2l8 4.8-8 4.8z', Replay: 'M3.5 8a4.5 4.5 0 1 0 1.3-3.2M3.3 2.6v2.6h2.6' }
+  function seq(steps) {
+    var i = 0, at = 0, t0, timer
+    function go() {
+      clearTimeout(timer)
+      if (i < steps.length) t0 = Date.now(), timer = setTimeout(function () { at = steps[i][0]; steps[i++][1](); go() }, steps[i][0] - at)
     }
-    if (!observerSupported) {
-      motionButton.disabled = true
-      motionButton.textContent = 'Static'
-      motionButton.setAttribute('aria-pressed', 'true')
-      motionButton.setAttribute('aria-label', 'This browser cannot play the automatic preview')
-      return
+    go()
+    return { go: go, end: function () { return i >= steps.length }, pause: function () { clearTimeout(timer); at += Date.now() - t0 }, stop: function () { clearTimeout(timer); i = steps.length } }
+  }
+  function word(b, w) { b.setAttribute('aria-pressed', w == 'Play'); b.lastChild.nodeValue = w; b.querySelector('path').setAttribute('d', ICON[w]) }
+  function tablist(list, tabs, pick) {
+    tabs.forEach(function (t, k) { t.onclick = function () { pick(k) } })
+    list.onkeydown = function (e) {
+      var n = tabs.length, i = tabs.indexOf(d.activeElement), k = { ArrowRight: i + 1, ArrowLeft: i + n - 1, Home: 0, End: n - 1 }[e.key]
+      if (i >= 0 && k != null) e.preventDefault(), pick(k %= n), tabs[k].focus()
     }
-    motionButton.disabled = false
-    motionButton.textContent = userPaused ? 'Play' : 'Pause'
-    motionButton.setAttribute('aria-pressed', String(userPaused))
-    motionButton.setAttribute('aria-label', userPaused ? 'Play automatic preview' : 'Pause automatic preview')
+  }
+  function select(tabs, k) { tabs.forEach(function (t, j) { t.setAttribute('aria-selected', j == k); t.tabIndex = j == k ? 0 : -1 }) }
+
+  var win = $('#heroWin'), hb = $('#heroPause'), zt = all('.ztab'), zooms = ['session', 'sessions', 'machine'], zoom = 'machine', phase = 'end', held = false, hero = seq([])
+  function paint() {
+    win.className = 'win z-' + zoom + (phase ? ' hp p-' + phase : '') + (held ? ' paused' : '')
+    $('#hz').textContent = zoom
+    select(zt, zooms.indexOf(zoom))
+  }
+  function heroEnd(z) { hero.stop(); zoom = z; phase = 'end'; held = false; paint(); word(hb, 'Replay') }
+  function heroRun() {
+    heroEnd('machine'); phase = ''; paint(); word(hb, 'Pause')
+    hero = seq([[600, function () { phase = 'read'; paint() }], [2500, function () { phase = 'hit'; paint() }], [5200, function () { zoom = 'sessions'; phase = 'run'; paint() }], [9400, function () { zoom = 'session'; paint() }], [12600, function () { heroEnd(zoom) }]])
+  }
+  tablist($('.ztabs'), zt, function (k) { heroEnd(zooms[k]) })
+  hb.onclick = function () {
+    if (hero.end()) return mq.matches || heroRun()
+    held = !held; held ? hero.pause() : hero.go(); paint(); word(hb, held ? 'Play' : 'Pause')
   }
 
-  function scheduleCycle() {
-    clearCycle()
-    if (userPaused || transientPaused || !visible || document.hidden || motion.matches || !observerSupported) return
-    timer = window.setTimeout(function () {
-      timer = null
-      show(order[(order.indexOf(current) + 1) % order.length])
-      scheduleCycle()
-    }, 3600)
+  var chain = $('.chain'), tabs = all('.tab'), panels = all('.panel'), cb = $('#chainPause'), idle = true, kept = false, steps = seq([])
+  function show(k) {
+    select(tabs, k)
+    panels.forEach(function (p, j) { p.hidden = j != k; p.classList.remove('run') })
+    void panels[k].offsetWidth
+    panels[k].classList.add('run')
+    $('.stepof').textContent = 'Step ' + (k + 1) + ' of 3'
+  }
+  function chainEnd() { steps.stop(); idle = kept = false; chain.className = 'chain on'; word(cb, 'Replay') }
+  function chainRun() {
+    chainEnd(); chain.className = 'chain on auto'; word(cb, 'Pause'); show(0)
+    steps = seq([[7000, function () { show(1) }], [14000, function () { show(2) }], [21000, chainEnd]])
+  }
+  tablist($('.tabs'), tabs, function (k) { chainEnd(); show(k) })
+  cb.onclick = function () {
+    if (steps.end()) return mq.matches || chainRun()
+    kept = !kept; kept ? steps.pause() : steps.go(); chain.classList.toggle('paused', kept); word(cb, kept ? 'Play' : 'Pause')
   }
 
-  function show(name) {
-    if (order.indexOf(name) < 0) return
-    current = name
-    buttons.forEach(function (button) {
-      var active = button.getAttribute('data-demo-view') === name
-      button.classList.toggle('on', active)
-      button.setAttribute('aria-selected', String(active))
-      button.setAttribute('tabindex', active ? '0' : '-1')
-      if (active) button.setAttribute('aria-current', 'page')
-      else button.removeAttribute('aria-current')
-    })
-    views.forEach(function (view) {
-      var active = view.getAttribute('data-demo-view') === name
-      view.classList.toggle('on', active)
-      view.hidden = !active
-    })
-  }
-
-  function setUserPaused(value) {
-    userPaused = value
-    syncMotionControl()
-    scheduleCycle()
-  }
-
-  function pauseCycle() {
-    transientPaused = true
-    clearCycle()
-  }
-
-  function resumeCycle() {
-    transientPaused = false
-    scheduleCycle()
-  }
-
-  buttons.forEach(function (button, index) {
-    button.addEventListener('click', function () {
-      setUserPaused(true)
-      show(button.getAttribute('data-demo-view'))
-    })
-    button.addEventListener('keydown', function (event) {
-      var next = -1
-      if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (index + 1) % buttons.length
-      else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = (index + buttons.length - 1) % buttons.length
-      else if (event.key === 'Home') next = 0
-      else if (event.key === 'End') next = buttons.length - 1
-      if (next < 0) return
-      event.preventDefault()
-      setUserPaused(true)
-      show(buttons[next].getAttribute('data-demo-view'))
-      buttons[next].focus()
-    })
-  })
-  demo.addEventListener('pointerenter', pauseCycle)
-  demo.addEventListener('pointerleave', resumeCycle)
-  demo.addEventListener('focusin', pauseCycle)
-  demo.addEventListener('focusout', function (event) {
-    if (!event.relatedTarget || !demo.contains(event.relatedTarget)) resumeCycle()
-  })
-  motionButton.addEventListener('click', function () {
-    if (motion.matches || !observerSupported) return
-    transientPaused = false
-    setUserPaused(!userPaused)
-  })
-  document.addEventListener('visibilitychange', scheduleCycle)
-  function motionChanged() {
-    syncMotionControl()
-    scheduleCycle()
-  }
-  if (motion.addEventListener) motion.addEventListener('change', motionChanged)
-  else if (motion.addListener) motion.addListener(motionChanged)
-
-  syncMotionControl()
-  if (observerSupported) {
-    new window.IntersectionObserver(function (entries) {
-      visible = entries.some(function (entry) { return entry.isIntersecting && entry.intersectionRatio >= 0.35 })
-      scheduleCycle()
-    }, { threshold: [0, 0.35] }).observe(demo)
-  }
+  if (mq.matches) return panels.forEach(function (p) { p.removeAttribute('role'); p.removeAttribute('aria-labelledby') }), paint()
+  all('.cell').forEach(function (c) { all('i', c).forEach(function (i, j) { i.style.setProperty('--j', j) }) })
+  hb.hidden = false
+  heroRun()
+  chain.className = 'chain on'
+  show(0)
+  var io = new IntersectionObserver(function (es) { if (es[0].intersectionRatio >= 0.3) io.disconnect(), idle && chainRun() }, { threshold: 0.35 })
+  io.observe(chain)
+  mq.onchange = function () { if (mq.matches) io.disconnect(), heroEnd(zoom), chainEnd(), hb.hidden = cb.hidden = true }
 })()
+/* /motion */
 </script>
 <script>
 /* qtc-triad: the Quality/Time/Tokens space on a 2D canvas, with zero dependencies.
@@ -772,6 +849,7 @@ if(!customElements.get('qtc-triad'))customElements.define('qtc-triad',QtcTriad);
   var root = document.documentElement
   var btn = document.getElementById('themeBtn')
   var lbl = document.getElementById('themeLabel')
+  var note = document.getElementById('copyNote')
   // Light is the only default. A stored 'system' from the old three-state control reads as light,
   // so the label can never print a state the button cannot reach.
   var pref = 'light'
@@ -789,15 +867,19 @@ if(!customElements.get('qtc-triad'))customElements.define('qtc-triad',QtcTriad);
     apply(next)
   })
   apply(pref)
+  // A copy button copies its command. Its label reads Copied for 1.6 s, and the live region tells a screen reader.
   document.addEventListener('click', function (ev) {
     var b = ev.target && ev.target.closest ? ev.target.closest('button[data-cmd]') : null
     if (!b) return
-    var lbl = b.querySelector('[data-lbl]') || b
-    var was = lbl.textContent
-    b.style.minWidth = b.offsetWidth + 'px'
+    var label = b.querySelector('[data-lbl]') || b
     var done = function () {
-      lbl.textContent = b.getAttribute('data-copied') || 'copied'
-      setTimeout(function () { lbl.textContent = was; b.style.minWidth = '' }, 1200)
+      label.textContent = b.getAttribute('data-copied') || 'Copied'
+      note.textContent = 'Copied to the clipboard.'
+      clearTimeout(b.reset)
+      b.reset = setTimeout(function () {
+        label.textContent = label.getAttribute('data-lbl') || 'Copy'
+        note.textContent = ''
+      }, 1600)
     }
     var command = b.getAttribute('data-cmd') || ''
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(command).then(done, done)

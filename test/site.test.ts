@@ -3,19 +3,18 @@
  *
  * site/index.src.html is the authored source. `node scripts/build.mjs --site`
  * injects shared tokens, the package version, and local brand assets into the
- * committed site/index.html. This suite checks the source contract, generated
- * artifact, public-copy hygiene, and the published sample.
+ * committed site/index.html. This suite checks the generated artifact, public-copy
+ * hygiene, the SEO head, the footer and the published sample. test/landing.test.ts
+ * checks the source contract of the landing.
  */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { runInNewContext } from 'node:vm'
 import { ANALYZER_RULE_IDS } from '../src/analyze/rule-ids.js'
 import { CLI_VERBS } from '../src/cli/commands/index.js'
 import { COHORT_MAX, COHORT_MIN } from '../src/suggest/cohort-stats.js'
-import { PARAGRAPH, htmlToText } from '../src/ste/index.js'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -70,803 +69,6 @@ const forbiddenClaimFixtures = [
   'Software, not a model, does the counting.',
 ]
 
-describe('site/index.src.html (authored landing source)', () => {
-  const src = existsSync(srcPath) ? readFileSync(srcPath, 'utf8') : ''
-
-  it('uses only current build placeholders', () => {
-    expect(existsSync(srcPath)).toBe(true)
-    for (const placeholder of [
-      '<!-- @tokens -->',
-      '{{mascot:main}}',
-      '{{mascot:logo}}',
-      '{{favicon:32}}',
-      '{{favicon:180}}',
-      '{{version}}',
-    ]) expect(src, `missing placeholder ${placeholder}`).toContain(placeholder)
-    expect(src).not.toMatch(/\{\{stats\./)
-    expect(src).not.toMatch(/\{\{role:/)
-    expect(src, 'stale hand-typed version').not.toMatch(/\bv0\.\d+/)
-    expect(existsSync(join(root, 'site/stats.json')), 'obsolete corpus-claim input').toBe(false)
-    const builder = readFileSync(join(root, 'scripts/build.mjs'), 'utf8')
-    expect(builder).not.toMatch(/site\/stats\.json|\{\{stats\.|\{\{role:/)
-  })
-
-  it('authors the 3D triad inline with depth, shadow, and reduced motion', () => {
-    expect(src).toContain("customElements.define('qtc-triad'")
-    expect(src).toContain('prefers-reduced-motion')
-    expect(src).toContain('sort((a,b)=>a.z-b.z)')
-    expect(src).toContain('rotX')
-    expect(src).toContain('createRadialGradient')
-    expect(src).not.toMatch(/\bfps\b/i)
-  })
-
-  it('sizes the hero triad from CSS and uses shared color tokens only', () => {
-    expect(src).toContain('.hero qtc-triad{display:block;height:clamp(440px,44vw,620px)}')
-    expect(src).not.toMatch(/<qtc-triad[^>]*style=/)
-    const hexes = src.match(/#[0-9a-fA-F]{3,8}\b/g) ?? []
-    expect(hexes, `hand-duplicated palette: ${hexes.join(' ')}`).toHaveLength(0)
-  })
-
-  it('uses no ad-prefixed classes or attributes', () => {
-    const adish = [...src.matchAll(/class="([^"]*)"/g)]
-      .flatMap((match) => (match[1] ?? '').split(/\s+/))
-      .filter((name) => /^ad[-_]/i.test(name))
-    expect([...new Set(adish)]).toEqual([])
-    expect(src).not.toContain('data-adview')
-  })
-
-  it('states the checked-change loop, its proof and its boundary in the first viewport', () => {
-    const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(htmlText(hero)).toContain('Improve your agent harness, one checked change at a time.')
-    // The lead carries no contraction: the public copy is plain, controlled English.
-    expect(hero).toContain('<p class="hero-lead">orangu reads the Claude Code sessions on your machine. It finds what to change in your harness: CLAUDE.md, skills, hooks, MCP servers, and settings. Then it checks each change on your later sessions.</p>')
-    expect(htmlText(hero)).not.toMatch(/\b\w+n't\b/)
-    expect(hero).toContain('<ol class="hero-journey hero-proof" aria-label="How orangu checks a change">')
-    const proof = [...hero.matchAll(/<li class="hero-step">([\s\S]*?)<\/li>/g)].map((match) => htmlText(match[1] ?? '').trim())
-    expect(proof).toEqual([
-      'Checked: orangu compares your later sessions with the sessions before each change.',
-      'Beyond chance: An exact rank test grades each check on your later sessions. A result inside the noise reads "within noise".',
-      'No model: Plain code counts and compares. The measurement spends no model tokens.',
-    ])
-    expect(src).toContain('.hero-proof .hero-step{grid-template-columns:128px minmax(0,1fr)}')
-    expect(src).toContain('@media (max-width:640px){.hero-proof .hero-step{grid-template-columns:1fr}}')
-    // The boundary line carries an instruction, so it uses --ink2, not the muted --ink3 of .fine.
-    const copy = hero.match(/<div class="hero-copy">([\s\S]*?)\n {6}<\/div>\n {6}<div class="hero-viz">/)?.[1] ?? ''
-    expect(copy).toContain('\n        <p class="fine hero-bound">orangu never changes your harness by itself. You approve each change by its id.</p>')
-    expect(src).toContain('.hero-bound{margin:12px 0 0;color:var(--ink2)}')
-    expect(hero).toContain('Choose a report')
-    expect(hero).toContain('href="sample.html"')
-    expect(hero).toContain('aria-label="See a sample report (opens in a new tab)">See a sample report ↗</a>')
-  })
-
-  it('leads with the bare command and keeps the latest-session command second', () => {
-    const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const terminal = hero.match(/<div class="term"[^>]*><pre>([\s\S]*?)<\/pre><\/div>/)?.[1] ?? ''
-    const lines = terminal.replace(/<[^>]+>/g, '').split('\n')
-    expect(lines[0]).toBe('$ npx orangu')
-    // The hero terminal still draws the menu that bare orangu printed before it opened the app. The landing
-    // redesign replaces this block.
-    for (const label of ['Choose a report', 'Improvements', 'Repository report', 'Global report', 'Browse session reports']) {
-      expect(lines.some((line) => line.trim().startsWith(label)), `terminal does not show ${label}`).toBe(true)
-    }
-    expect(lines[1]).toBe('Choose a report')
-    // The menu put Improvements first when this folder had an open item.
-    expect(lines[2]).toBe('  Improvements            2 due · 5 open')
-    const wrap = hero.match(/<div class="term-wrap">[\s\S]*?<\/div>\s*<\/div>/)?.[0] ?? ''
-    expect(wrap).toContain('<p class="fine">To open only the latest session, run <code>npx orangu report</code>.</p>')
-    // This line carries meaning, so it uses --ink2 (AA in both themes), not the muted --ink3 of .fine.
-    expect(src).toContain('.term-wrap .fine{margin-top:10px;color:var(--ink2)}')
-    expect(htmlText(src)).not.toContain('Inspect a session')
-  })
-
-  it('authors the desktop title as two balanced lines and closes the hero gap', () => {
-    const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const heading = hero.match(/<h1>([\s\S]*?)<\/h1>/)?.[1] ?? ''
-    expect([...heading.matchAll(/<span>([^<]+)<\/span>/g)].map((match) => match[1])).toEqual([
-      'Improve your agent harness,',
-      'one checked change at a time.',
-    ])
-    // From 900 px the title scales so that each span stays on 1 line inside the copy column at 1,024 px.
-    expect(src).toContain('  .hero h1{font-size:clamp(38px,3.6vw,52px)}')
-    expect(src).toContain('@media (min-width:1024px){.hero h1 span{display:block;white-space:nowrap}}')
-    expect(src).toContain('grid-template-areas:"copy viz" "term viz"')
-    expect(src).toContain('.hero-viz{grid-area:viz;align-self:center;margin-left:-40px}')
-    expect(hero.indexOf('class="term-wrap"')).toBeGreaterThan(hero.indexOf('class="hero-viz"'))
-  })
-
-  it('opens every report-sample action in a new tab without opener access', () => {
-    const sampleLinks = [...src.matchAll(/<a\b[^>]*href="sample\.html"[^>]*>/g)].map((match) => match[0])
-    expect(sampleLinks).toHaveLength(2)
-    for (const link of sampleLinks) {
-      expect(link).toContain('target="_blank"')
-      expect(link).toMatch(/rel="[^"]*\bnoopener\b[^"]*"/)
-      expect(link).toContain('opens in a new tab')
-    }
-  })
-
-  it('uses a live, outcome-led information hierarchy', () => {
-    const sections = [...src.matchAll(/<section id="([^"]+)"/g)].map((match) => match[1])
-    expect(sections).toEqual(['loop', 'demo', 'improve', 'trust', 'scope', 'install'])
-    const nav = src.match(/<nav[\s\S]*?<\/nav>/)?.[0] ?? ''
-    for (const [, id] of nav.matchAll(/href="#([^"]+)"/g))
-      expect(src, `dead nav anchor #${id}`).toContain(`id="${id}"`)
-    expect([...nav.matchAll(/<a href="([^"]+)">([^<]+)<\/a>/g)].map((match) => `${match[2]} ${match[1]}`)).toEqual([
-      'The loop #loop',
-      'Sample #demo',
-      'What can change #improve',
-      'Why local #trust',
-      'Get started #install',
-      'GitHub ↗ https://github.com/NissanOhana/orangu',
-    ])
-    // The two jobs live in the scope section now, above the 3 scope cards.
-    const scope = src.match(/<section id="scope"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(scope).toContain('Observe one session')
-    expect(scope).toContain('Improve repeated work')
-    expect(scope.indexOf('Improve repeated work')).toBeLessThan(scope.indexOf('class="scope-ladder"'))
-    expect(scope).toMatch(/<code>repo<\/code>[\s\S]*?<code>global<\/code>/)
-    expect(src).toContain('.job .scope,.install-card .scope{display:inline-block;')
-  })
-
-  it('shows the loop in six steps with the approval gate between Propose and Apply', () => {
-    const loop = src.match(/<section id="loop"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(loop).toContain('<div class="kicker">The loop</div>')
-    expect(loop).toContain('<h2>Six steps. You approve between Propose and Apply.</h2>')
-    const lists = [...loop.matchAll(/<ol class="scope-ladder loop-steps"([^>]*)>([\s\S]*?)<\/ol>/g)]
-    expect(lists.map((list) => list[1])).toEqual([' aria-label="Steps 1 to 3"', ' start="4" aria-label="Steps 4 to 6"'])
-    expect(lists.map((list) => (list[2]?.match(/<li class="scope-card">/g) ?? []).length)).toEqual([3, 3])
-    expect([...loop.matchAll(/<h3>([^<]+)<\/h3>/g)].map((match) => match[1])).toEqual([
-      '1. Observe', '2. See', '3. Propose', '4. Apply', '5. Verify', '6. Remember',
-    ])
-    expect([...loop.matchAll(/<li class="scope-card"><code>([^<]+)<\/code>/g)].map((match) => match[1])).toEqual([
-      'orangu', 'orangu', 'a Claude skill', 'a Claude skill', 'orangu', 'orangu',
-    ])
-    // exactly 1 gate, and it sits between step 3 and step 4
-    expect(loop.match(/class="loop-gate"/g) ?? []).toHaveLength(1)
-    const gate = loop.indexOf('class="loop-gate"')
-    expect(gate).toBeGreaterThan(loop.indexOf('3. Propose'))
-    expect(gate).toBeLessThan(loop.indexOf('4. Apply'))
-    expect(loop).toContain('<p class="loop-gate"><b>You</b> <span>You approve each change by its id. Nothing changes before that.</span></p>')
-    // the Verify step names both parts: the checks that the change should move, and the guard checks
-    const verify = loop.match(/<h3>5\. Verify<\/h3><p>([^<]+)<\/p>/)?.[1] ?? ''
-    expect(verify).toContain('The checks that the change should move beat chance on your later sessions.')
-    expect(verify).toContain('No guard check got worse beyond chance on your later sessions.')
-    expect(verify).toContain('No model is in the measurement.')
-    expect(loop).toContain('<p class="sec-lead loop-global">Global changes stay proposals. orangu applies and verifies only session and repo changes.</p>')
-    // the loop has no motion: no rule of its own animates, so reduced motion needs no rule either
-    const loopRules = src.match(/\.loop-[^{]*\{[^}]*\}/g) ?? []
-    expect(loopRules.length).toBeGreaterThan(0)
-    for (const rule of loopRules) expect(rule).not.toMatch(/animation|transition/)
-  })
-
-  it('labels the verdict card as illustrative and shows no measured figure', () => {
-    const loop = src.match(/<section id="loop"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const card = loop.match(/<div class="demo-card loop-verdict">([\s\S]*?)\n {4}<\/div>/)?.[1] ?? ''
-    const rows = [...card.matchAll(/<p\b[^>]*>([\s\S]*?)<\/p>/g)].map((match) => htmlText(match[1] ?? '').trim())
-    expect(rows[0]).toBe('Illustrative. Not a measured result.')
-    expect(card).toMatch(/^\s*<p class="demo-line">Illustrative\. Not a measured result\.<\/p>/)
-    expect(rows.slice(1).map((row) => row.split(' ').slice(0, 2).join(' '))).toEqual(['verified Move', 'within noise'])
-    expect(rows[1]).toMatch(/Verdict: verified\.$/)
-    expect(rows[2]).toMatch(/Verdict: within noise\. orangu does not call it verified\.$/)
-    // no money sign, no percentage and no token figure: the card shows how a verdict reads, not a result
-    expect(card).not.toMatch(/[$%]/)
-    expect(htmlText(card)).not.toMatch(/\d[\d,.]*\s*(?:k\s*)?tokens?\b/i)
-    expect(htmlText(card)).not.toMatch(/\bp\s*[<=]/i)
-  })
-
-  it('makes the same checked-change claim in each head tag', () => {
-    const tag = (pattern: RegExp): string => src.match(pattern)?.[1] ?? ''
-    expect(tag(/<meta property="og:title" content="([^"]+)"/)).toBe('orangu: improve your agent harness, one checked change at a time')
-    expect(tag(/<meta name="twitter:title" content="([^"]+)"/)).toBe('orangu: improve your agent harness, one checked change at a time')
-    // the title also names Claude Code, which the SEO surface below asks for
-    expect(tag(/<title>([^<]+)<\/title>/)).toBe('orangu: improve your Claude Code harness, one checked change at a time')
-    expect(tag(/<meta name="description" content="([^"]+)"/)).toBe('orangu is an open-source CLI. It reads your local Claude Code sessions, finds what to change in your harness, and checks each change on your later sessions.')
-    for (const name of [/<meta property="og:description" content="([^"]+)"/, /<meta name="twitter:description" content="([^"]+)"/])
-      expect(tag(name)).toBe('orangu reads your Claude Code sessions, finds what to change in your harness, and checks each change on your later sessions.')
-    for (const alt of [/<meta property="og:image:alt" content="([^"]+)"/, /<meta name="twitter:image:alt" content="([^"]+)"/])
-      expect(tag(alt)).toBe('orangu: improve your agent harness, one checked change at a time')
-    expect(src).toContain('"description":"Improve your agent harness, one checked change at a time.","inLanguage"')
-  })
-
-  it('shows the complete session observe-to-verified sequence in order', () => {
-    const demo = src.match(/<section id="demo"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const steps = ['Tool call', 'Local evidence', 'Recurring pattern', 'Draft proposal', 'Explicit apply', 'Next-session verification']
-    let last = -1
-    for (const step of steps) {
-      const at = demo.indexOf(step)
-      expect(at, `missing or out-of-order demo step: ${step}`).toBeGreaterThan(last)
-      last = at
-    }
-    expect(demo).toContain('Observe locally. Draft from evidence. Use only the lifecycle the scope supports.')
-    expect(demo).toContain('Open the full sample report')
-  })
-
-  it('shows the current Improvements experience first', () => {
-    const demo = src.match(/<div class="appdemo" id="appdemo">[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(demo).toContain('class="demo-body"')
-    expect(demo).toContain('class="demo-rail"')
-    const suggestionTab = demo.match(/<button\b[^>]*data-demo-view="suggest"[^>]*>/)?.[0] ?? ''
-    expect(suggestionTab).toContain('aria-current="page"')
-    expect(suggestionTab).toContain('aria-selected="true"')
-    expect(suggestionTab).toContain('tabindex="0"')
-    expect(suggestionTab).toContain('class="on"')
-    const suggestionPanel = demo.match(/<div\b[^>]*data-demo-view="suggest"[^>]*>/)?.[0] ?? ''
-    expect(suggestionPanel).toContain('class="demo-view on"')
-    expect(suggestionPanel).not.toContain(' hidden')
-    for (const scope of ['This session', 'Repo', 'Global']) expect(demo).toContain(`>${scope}<`)
-    expect(demo).toContain('Session: proposed → applied → verified · Repo: proposed → applied → verified · Global: proposed')
-    for (const changeClass of [
-      'Instruction files',
-      'Scripts and CLIs',
-      'Hooks',
-      'Skills to create',
-      'Skills to discover',
-      'Subagents and agents',
-      'MCP servers',
-      'Plugins',
-      'Workflow and configuration',
-    ]) expect(demo, `missing preview change class: ${changeClass}`).toContain(changeClass)
-    for (const copy of [
-      '<b>Evidence.</b>',
-      '<b>Proposal.</b>',
-      '<b>Next-session verification.</b>',
-      '<b>Explicit apply.</b>',
-      'Claude apply',
-      'Orangu compares later sessions from the same workspace with the sessions before the change',
-    ]) expect(demo).toContain(copy)
-    // the report's Improvements cards keep the status chip and drop the "handled by" row; the demo matches
-    expect(demo).not.toContain('handled by orangu:improve')
-    expect(demo).not.toContain('Codex apply')
-    expect(demo).not.toContain('Run locally')
-  })
-
-  it('previews the real overview, timeline, and tools-and-calls capabilities', () => {
-    const demo = src.match(/<div class="appdemo" id="appdemo">[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(demo).not.toContain('data-demo-view="evidence"')
-    for (const tab of ['Overview', 'Timeline', 'Tools &amp; calls', 'Improvements'])
-      expect(demo, `missing preview tab: ${tab}`).toContain(`>${tab}<`)
-    expect(demo, 'the screen is named Improvements, as in the report').not.toContain('>Suggestions<')
-    for (const view of ['overview', 'timeline', 'tools', 'suggest'])
-      expect(demo, `missing preview view: ${view}`).toContain(`data-demo-view="${view}"`)
-    expect(demo).toContain('role="tablist"')
-    expect(demo).not.toContain('aria-live=')
-    for (const view of ['overview', 'timeline', 'tools', 'suggest']) {
-      const tab = demo.match(new RegExp(`<button\\b[^>]*id="demo-tab-${view}"[^>]*>`))?.[0] ?? ''
-      expect(tab).toContain('role="tab"')
-      expect(tab).toContain(`aria-controls="demo-panel-${view}"`)
-      const panel = demo.match(new RegExp(`<div\\b[^>]*id="demo-panel-${view}"[^>]*>`))?.[0] ?? ''
-      expect(panel).toContain('role="tabpanel"')
-      expect(panel).toContain(`aria-labelledby="demo-tab-${view}"`)
-      if (view !== 'suggest') expect(panel).toContain(' hidden')
-    }
-    expect(demo).toContain('id="demoMotion"')
-    expect(demo).toContain('Automatic preview is static')
-
-    for (const capability of [
-      'Every tool call',
-      'Parent + subagents',
-      'one ordered session timeline',
-      'verify changes on later sessions',
-    ]) expect(demo, `missing truthful overview capability: ${capability}`).toContain(capability)
-
-    for (const timelineEvidence of [
-      'Illustrative session timeline',
-      'Tool calls in order',
-      'main',
-      'agent-1',
-      'error result stays on this call',
-      'actor identity',
-    ]) expect(demo, `missing timeline evidence: ${timelineEvidence}`).toContain(timelineEvidence)
-
-    for (const toolEvidence of [
-      'Usage · errors · latency',
-      'avg / p95',
-      'Recurring error',
-      'Counts, errors, and latency come from parsed tool calls.',
-    ]) expect(demo, `missing tools-and-calls evidence: ${toolEvidence}`).toContain(toolEvidence)
-  })
-
-  it('wires accessible manual preview navigation and visibility-aware autoplay', () => {
-    const scripts = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    const interaction = scripts.map((match) => match[1] ?? '').find((code) => code.includes("getElementById('appdemo')")) ?? ''
-    expect(interaction).toContain("querySelectorAll('.demo-rail [data-demo-view]')")
-    expect(interaction).toContain("querySelectorAll('.demo-main [data-demo-view]')")
-    expect(interaction).toContain('Array.prototype.map.call(buttons')
-    expect(interaction).toContain("window.matchMedia('(prefers-reduced-motion: reduce)')")
-    expect(interaction).toContain("document.addEventListener('visibilitychange', scheduleCycle)")
-    expect(interaction).toContain("new window.IntersectionObserver")
-    expect(interaction).toContain('entry.intersectionRatio >= 0.35')
-    expect(interaction).not.toContain('visible = true')
-    expect(interaction).toContain("button.setAttribute('aria-selected', String(active))")
-    expect(interaction).toContain("button.setAttribute('tabindex', active ? '0' : '-1')")
-    expect(interaction).toContain('view.hidden = !active')
-    for (const key of ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'Home', 'End'])
-      expect(interaction).toContain(`event.key === '${key}'`)
-    expect(interaction).toContain("motionButton.textContent = userPaused ? 'Play' : 'Pause'")
-
-    type MockEvent = { key?: string; relatedTarget?: unknown; preventDefault?: () => void }
-    type Handler = (event?: MockEvent) => void
-    type DemoNode = {
-      attrs: Map<string, string>
-      classes: Set<string>
-      hidden: boolean
-      focusCount: number
-      click?: () => void
-      handlers: Map<string, Handler>
-      classList: { toggle: (name: string, active: boolean) => void }
-      focus: () => void
-      getAttribute: (name: string) => string | null
-      setAttribute: (name: string, value: string) => void
-      removeAttribute: (name: string) => void
-      addEventListener: (type: string, fn: Handler) => void
-    }
-    const node = (name: string, active = false): DemoNode => {
-      const attrs = new Map<string, string>([
-        ['data-demo-view', name],
-        ['aria-selected', String(active)],
-        ['tabindex', active ? '0' : '-1'],
-      ])
-      if (active) attrs.set('aria-current', 'page')
-      const classes = new Set(active ? ['on'] : [])
-      const handlers = new Map<string, Handler>()
-      const target: DemoNode = {
-        attrs,
-        classes,
-        hidden: !active,
-        focusCount: 0,
-        handlers,
-        classList: { toggle: (className, on) => { if (on) classes.add(className); else classes.delete(className) } },
-        focus: () => { target.focusCount++ },
-        getAttribute: (key) => attrs.get(key) ?? null,
-        setAttribute: (key, value) => { attrs.set(key, value) },
-        removeAttribute: (key) => { attrs.delete(key) },
-        addEventListener: (type, fn) => {
-          handlers.set(type, fn)
-          if (type === 'click') target.click = fn
-        },
-      }
-      return target
-    }
-    const buttons = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const views = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const demoHandlers = new Map<string, Handler>()
-    const demo = {
-      querySelectorAll: (selector: string) => selector.includes('.demo-rail') ? buttons : views,
-      addEventListener: (type: string, fn: Handler) => demoHandlers.set(type, fn),
-      contains: () => false,
-    }
-    const motionAttrs = new Map<string, string>()
-    const motionButtonHandlers = new Map<string, Handler>()
-    const motionButton = {
-      disabled: true,
-      textContent: 'Static',
-      setAttribute: (key: string, value: string) => motionAttrs.set(key, value),
-      addEventListener: (type: string, fn: Handler) => motionButtonHandlers.set(type, fn),
-    }
-    const documentHandlers = new Map<string, Handler>()
-    const document = {
-      hidden: false,
-      getElementById: (id: string) => id === 'appdemo' ? demo : id === 'demoMotion' ? motionButton : null,
-      addEventListener: (type: string, fn: Handler) => documentHandlers.set(type, fn),
-    }
-    const motionHandlers = new Map<string, Handler>()
-    const motion = {
-      matches: false,
-      addEventListener: (type: string, fn: Handler) => motionHandlers.set(type, fn),
-    }
-    let timerId = 0
-    let maxTimers = 0
-    const timers = new Map<number, () => void>()
-    let observerCallback: (entries: Array<{ isIntersecting: boolean; intersectionRatio: number }>) => void = () => {}
-    const window = {
-      matchMedia: () => motion,
-      setTimeout: (fn: () => void) => {
-        const id = ++timerId
-        timers.set(id, fn)
-        maxTimers = Math.max(maxTimers, timers.size)
-        return id
-      },
-      clearTimeout: (id: number) => timers.delete(id),
-      IntersectionObserver: class {
-        constructor(callback: (entries: Array<{ isIntersecting: boolean; intersectionRatio: number }>) => void) {
-          observerCallback = callback
-        }
-        observe(): void { observerCallback([{ isIntersecting: true, intersectionRatio: 0.5 }]) }
-      },
-    }
-
-    runInNewContext(interaction, { document, window })
-    expect(motionButton.disabled).toBe(false)
-    expect(motionButton.textContent).toBe('Pause')
-    expect(buttons[3]!.classes.has('on')).toBe(true)
-    expect(buttons[3]!.attrs.get('aria-current')).toBe('page')
-    expect(timers.size).toBe(1)
-    expect(maxTimers).toBe(1)
-
-    observerCallback([{ isIntersecting: false, intersectionRatio: 0 }])
-    expect(timers.size).toBe(0)
-    observerCallback([{ isIntersecting: true, intersectionRatio: 0.35 }])
-    expect(timers.size).toBe(1)
-
-    demoHandlers.get('pointerenter')!()
-    expect(timers.size).toBe(0)
-    demoHandlers.get('pointerleave')!()
-    expect(timers.size).toBe(1)
-
-    const autoplay = [...timers.values()][0]!
-    timers.clear()
-    autoplay()
-    expect(buttons[0]!.classes.has('on')).toBe(true)
-    expect(buttons[0]!.attrs.get('aria-current')).toBe('page')
-    expect(buttons[3]!.classes.has('on')).toBe(false)
-    expect(buttons[3]!.attrs.has('aria-current')).toBe(false)
-    expect(views[0]!.classes.has('on')).toBe(true)
-    expect(views[0]!.hidden).toBe(false)
-    expect(views[3]!.classes.has('on')).toBe(false)
-    expect(views[3]!.hidden).toBe(true)
-    expect(buttons.every((button) => button.focusCount === 0)).toBe(true)
-
-    document.hidden = true
-    documentHandlers.get('visibilitychange')!()
-    expect(timers.size).toBe(0)
-    document.hidden = false
-    documentHandlers.get('visibilitychange')!()
-    expect(timers.size).toBe(1)
-
-    motion.matches = true
-    motionHandlers.get('change')!()
-    expect(timers.size).toBe(0)
-    expect(motionButton.disabled).toBe(true)
-    expect(motionButton.textContent).toBe('Motion off')
-    motion.matches = false
-    motionHandlers.get('change')!()
-    expect(timers.size).toBe(1)
-    expect(motionButton.disabled).toBe(false)
-
-    buttons[2]!.click!()
-    expect(buttons[2]!.classes.has('on')).toBe(true)
-    expect(buttons[2]!.attrs.get('aria-current')).toBe('page')
-    expect(views[2]!.classes.has('on')).toBe(true)
-    expect(timers.size).toBe(0)
-    expect(motionButton.textContent).toBe('Play')
-    documentHandlers.get('visibilitychange')!()
-    expect(timers.size).toBe(0)
-
-    let prevented = false
-    buttons[2]!.handlers.get('keydown')!({ key: 'Home', preventDefault: () => { prevented = true } })
-    expect(prevented).toBe(true)
-    expect(buttons[0]!.classes.has('on')).toBe(true)
-    expect(buttons[0]!.attrs.get('tabindex')).toBe('0')
-    expect(buttons[2]!.attrs.get('tabindex')).toBe('-1')
-    expect(buttons[0]!.focusCount).toBe(1)
-    expect(timers.size).toBe(0)
-
-    motionButtonHandlers.get('click')!()
-    expect(motionButton.textContent).toBe('Pause')
-    expect(timers.size).toBe(1)
-    const resumedAutoplay = [...timers.values()][0]!
-    timers.clear()
-    resumedAutoplay()
-    expect(buttons[1]!.classes.has('on')).toBe(true)
-    expect(buttons[0]!.focusCount).toBe(1)
-    expect(maxTimers).toBe(1)
-
-    motionButtonHandlers.get('click')!()
-    expect(motionButton.textContent).toBe('Play')
-    expect(timers.size).toBe(0)
-
-    const staticButtons = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const staticViews = [node('overview'), node('timeline'), node('tools'), node('suggest', true)]
-    const staticDemo = {
-      querySelectorAll: (selector: string) => selector.includes('.demo-rail') ? staticButtons : staticViews,
-      addEventListener: () => {},
-      contains: () => false,
-    }
-    const staticMotionAttrs = new Map<string, string>()
-    const staticMotionButton = {
-      disabled: false,
-      textContent: '',
-      setAttribute: (key: string, value: string) => staticMotionAttrs.set(key, value),
-      addEventListener: () => {},
-    }
-    const staticDocument = {
-      hidden: false,
-      getElementById: (id: string) => id === 'appdemo' ? staticDemo : id === 'demoMotion' ? staticMotionButton : null,
-      addEventListener: () => {},
-    }
-    const staticTimers = new Map<number, () => void>()
-    const staticWindow = {
-      matchMedia: () => ({ matches: false, addEventListener: () => {} }),
-      setTimeout: (fn: () => void) => { staticTimers.set(1, fn); return 1 },
-      clearTimeout: (id: number) => staticTimers.delete(id),
-    }
-    runInNewContext(interaction, { document: staticDocument, window: staticWindow })
-    expect(staticMotionButton.disabled).toBe(true)
-    expect(staticMotionButton.textContent).toBe('Static')
-    expect(staticMotionAttrs.get('aria-label')).toBe('This browser cannot play the automatic preview')
-    expect(staticTimers.size).toBe(0)
-  })
-
-  it('shows the full change-class breadth', () => {
-    const improve = src.match(/<section id="improve"[\s\S]*?<\/section>/)?.[0] ?? ''
-    for (const changeClass of [
-      'Instruction files',
-      'Scripts and CLIs',
-      'Hooks',
-      'Skills to create',
-      'Skills to discover',
-      'Subagents and agents',
-      'MCP servers',
-      'Plugins',
-      'Workflow and configuration',
-    ]) expect(improve, `missing change class: ${changeClass}`).toContain(changeClass)
-    expect(improve).toContain('class="change-grid"')
-  })
-
-  it('keeps the primary command and full-sample actions wired', async () => {
-    const primaryButtons = src.match(
-      /<button class="cmd cmd-btn" type="button" data-cmd="npx orangu" data-copied="Copied"><span class="lbl" data-lbl aria-live="polite">Choose a report<\/span><span class="sep">·<\/span>npx orangu<\/button>/g,
-    ) ?? []
-    expect(primaryButtons, 'hero and final command buttons').toHaveLength(2)
-    // Every primary call to action copies the bare command; the latest-session command is never primary.
-    const ctas = [...src.matchAll(/<button class="cmd cmd-btn"[^>]*data-cmd="([^"]+)"/g)].map((match) => match[1])
-    expect(ctas).toEqual(['npx orangu', 'npx orangu'])
-    const demo = src.match(/<section id="demo"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(demo).toContain('<a class="ghost" href="sample.html" target="_blank" rel="noopener"')
-
-    const scripts = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    const interactions = scripts.at(-1)?.[1] ?? ''
-    expect(interactions).toContain("closest('button[data-cmd]')")
-
-    const exerciseCopy = async (withClipboard: boolean) => {
-      let click: ((event: unknown) => void) | undefined
-      let copied = ''
-      let legacyCopy = false
-      const timers: Array<() => void> = []
-      const label = { textContent: 'Choose a report' }
-      const button = {
-        offsetWidth: 180,
-        style: { minWidth: '' },
-        querySelector: () => label,
-        getAttribute: (name: string) => name === 'data-cmd' ? 'npx orangu' : name === 'data-copied' ? 'Copied' : null,
-      }
-      const themeButton = { addEventListener: () => {}, setAttribute: () => {} }
-      const themeLabel = { textContent: '' }
-      const area = { value: '', style: { position: '', opacity: '' }, setAttribute: () => {}, select: () => {}, remove: () => {} }
-      const document = {
-        documentElement: { removeAttribute: () => {}, setAttribute: () => {} },
-        getElementById: (id: string) => id === 'themeBtn' ? themeButton : themeLabel,
-        addEventListener: (type: string, fn: (event: unknown) => void) => { if (type === 'click') click = fn },
-        createElement: () => area,
-        execCommand: (command: string) => { legacyCopy = command === 'copy'; return true },
-        body: { appendChild: () => {} },
-      }
-      const navigator = withClipboard
-        ? { clipboard: { writeText: async (command: string) => { copied = command } } }
-        : {}
-      runInNewContext(interactions, {
-        document,
-        navigator,
-        localStorage: { getItem: () => null, setItem: () => {} },
-        matchMedia: () => ({ matches: false }),
-        setTimeout: (fn: () => void) => { timers.push(fn); return 1 },
-      })
-      expect(click).toBeTypeOf('function')
-      click!({ target: { closest: () => button } })
-      await Promise.resolve()
-      await Promise.resolve()
-      if (withClipboard) expect(copied).toBe('npx orangu')
-      else expect(legacyCopy).toBe(true)
-      expect(label.textContent).toBe('Copied')
-      timers.forEach((timer) => timer())
-      expect(label.textContent).toBe('Choose a report')
-    }
-
-    await exerciseCopy(true)
-    await exerciseCopy(false)
-  })
-
-  it('defaults the theme to light, cycles two states, and round-trips the stored preference', () => {
-    const scripts = [...src.matchAll(/<script>([\s\S]*?)<\/script>/g)]
-    const interactions = scripts.at(-1)?.[1] ?? ''
-    const start = (stored: string | null) => {
-      let click: (() => void) | undefined
-      let saved = stored
-      let attr: string | null = 'never touched'
-      const attrs: Record<string, string> = {}
-      const label = { textContent: '' }
-      const button = {
-        addEventListener: (type: string, fn: () => void) => { if (type === 'click') click = fn },
-        setAttribute: (name: string, value: string) => { attrs[name] = value },
-      }
-      const document = {
-        documentElement: {
-          removeAttribute: () => { attr = null },
-          setAttribute: (_name: string, value: string) => { attr = value },
-        },
-        getElementById: (id: string) => id === 'themeBtn' ? button : label,
-        addEventListener: () => {},
-        createElement: () => ({}),
-        body: { appendChild: () => {} },
-      }
-      runInNewContext(interactions, {
-        document,
-        navigator: {},
-        // a viewer whose system asks for dark: after the cascade change it changes nothing
-        localStorage: { getItem: () => saved, setItem: (_key: string, value: string) => { saved = value } },
-        matchMedia: () => ({ matches: true }),
-        setTimeout: () => 1,
-      })
-      expect(click).toBeTypeOf('function')
-      return { click: click!, label, attrs, attr: () => attr, saved: () => saved }
-    }
-
-    const fresh = start(null)
-    expect(fresh.label.textContent).toBe('light')
-    expect(fresh.attr()).toBeNull()
-    expect(fresh.attrs['aria-label']).toBe('theme light, switch to dark')
-    fresh.click()
-    expect(fresh.label.textContent).toBe('dark')
-    expect(fresh.attr()).toBe('dark')
-    expect(fresh.saved()).toBe('dark')
-    expect(fresh.attrs['aria-label']).toBe('theme dark, switch to light')
-    fresh.click()
-    expect(fresh.label.textContent).toBe('light')
-    expect(fresh.attr()).toBeNull()
-    expect(fresh.saved()).toBe('light')
-
-    // a stored preference is restored, and the removed third state reads as light rather than
-    // printing a word the button can no longer reach
-    expect(start('dark').label.textContent).toBe('dark')
-    expect(start('light').attr()).toBeNull()
-    const legacy = start('system')
-    expect(legacy.label.textContent).toBe('light')
-    expect(legacy.attr()).toBeNull()
-  })
-
-  it('keeps one section for each job and no profession cards', () => {
-    // the two jobs merged into #scope, and the scenarios repeated them, so both sections are gone
-    for (const cut of ['jobs', 'scenarios']) expect(src, `#${cut} is back`).not.toContain(`id="${cut}"`)
-    for (const profession of ['Developers', 'Engineers', 'Teachers', 'Product managers', 'Everyone else'])
-      expect(src).not.toContain(`<h3>${profession}</h3>`)
-    expect(src).not.toContain('class="card role"')
-  })
-
-  it('presents deterministic evidence, optional interpretation, and receipted application as collaborators', () => {
-    const trust = src.match(/<section id="trust"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(trust).toContain('Bounded local evidence')
-    expect(trust).toContain('Optional AI interpretation')
-    expect(trust).toContain('Explicit reviewed changes')
-    // B7 vocabulary: one noun, "receipt"; the internal nouns never reach the public page
-    expect(trust).toContain("receipt's shape and file list")
-    expect(src).not.toMatch(/attestation|preflight/i)
-    expect(trust).not.toContain('edits the declared repository files')
-    expect(trust).toContain('you need no instrumentation')
-    expect(trust).toContain('no upload')
-    expect(trust).not.toMatch(/\b(?:versus|vs\.)\b/i)
-  })
-
-  it('states the conservative lifecycle without broadening repo or global authority', () => {
-    const text = htmlText(src)
-    expect(text).toContain('Session: proposed -> applied -> verified · Repo: proposed -> applied -> verified · Global: proposed')
-    // "checks", not "verifies": verified is a status that a change reaches only when its later sessions
-    // beat the earlier ones beyond chance, so an applied repo change is not promised that status.
-    expect(text).toContain('You apply a repo change explicitly, and orangu checks it on later sessions. A global change stays a proposal.')
-    expect(text).not.toMatch(/\borangu verifies it\b/)
-    expect(text).toContain('The session and repo scopes can propose, apply, and verify. The global scope stays proposal-only.')
-    expect(text).toContain('Then it checks each applied change on your later sessions, with no model in the measurement.')
-    // the compare panel names the model-written review, and orangu is the last row
-    const rows = [...src.matchAll(/<div class="compare-row"><b>([^<]+)<\/b>/g)].map((match) => match[1])
-    expect(rows.slice(-2)).toEqual(['Model-written session reviews', 'orangu'])
-    expect(text, 'no claim that one later session verifies a change').not.toMatch(/\ba later session\b/i)
-    expect(text).not.toMatch(/\bglobal\b[^.]{0,80}\b(?:can|may) be (?:applied|verified)\b/i)
-    expect(text).not.toMatch(/\b(?:apply|verify) (?:a )?global (?:proposal|change)\b/i)
-  })
-
-  // A chance claim is about the later sessions of one reader, never a general result. Each block of visible text
-  // splits at each sentence end, also before a lower-case "orangu", so 2 sentences never pass as 1.
-  const landingSentences = htmlToText(src)
-    .split(PARAGRAPH)
-    .flatMap((block) => block.replace(/\s+/g, ' ').trim().split(/(?<=[.!?])\s+/))
-    .filter((sentence) => /[A-Za-z]/.test(sentence))
-
-  it('names your later sessions in each sentence that says beyond chance or beat chance', () => {
-    const chance = landingSentences.filter((sentence) => /\b(?:beyond|beat) chance\b/i.test(sentence))
-    expect(chance.length).toBeGreaterThan(0)
-    expect(chance.filter((sentence) => !sentence.includes('your later sessions'))).toEqual([])
-  })
-
-  it('says beyond chance after each guard clause', () => {
-    // a guard holds when the check did not get worse beyond chance, so a bare "did not rise" claims too much
-    const guards = landingSentences.flatMap((sentence) =>
-      [...sentence.matchAll(/\b(?:got worse|did not (?:go up|rise|increase))\b(?: beyond chance)?/g)].map((match) => match[0]))
-    expect(guards.length).toBeGreaterThan(0)
-    expect(guards.filter((guard) => !guard.endsWith(' beyond chance'))).toEqual([])
-  })
-
-  it('states the bounded evidence inputs without vendor-command comparisons', () => {
-    const trust = src.match(/<section id="trust"[\s\S]*?<\/section>/)?.[0] ?? ''
-    for (const input of ['orangu evidence', 'Analysis', 'SlimAnalysis', 'Aggregate']) expect(trust).toContain(input)
-    expect(trust).toContain('How Orangu turns local evidence into improvement')
-    expect(trust).not.toContain('Claude Code /insights')
-    expect(trust).not.toContain('Codex commands')
-    expect(trust).not.toContain('historical-session insights command')
-  })
-
-  it('stages inspection and Claude plugin activation in the install section', () => {
-    const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
-    expect(install.match(/class="card install-card"/g) ?? []).toHaveLength(3)
-    expect(install).toContain('<div class="kicker">Get started</div>')
-    expect(install).toContain('<h2>Three front doors. Each one opens the same loop.</h2>')
-    // The first card leads with the bare command; the latest-session command is its second bar.
-    const first = install.split('<div class="card install-card">')[1] ?? ''
-    expect(first).toContain('<h3>Choose a report</h3>')
-    expect([...first.matchAll(/<button data-cmd="([^"]+)">copy<\/button>/g)].map((match) => match[1])).toEqual(['npx orangu', 'npx orangu report'])
-    expect(first).toContain('<div class="cmd-sm cmd-stack"><span class="p">$</span> npx orangu <button')
-    // 3 front doors: the terminal, the local app, and Claude Code, each with its door label and its copy bars
-    const cards = install.split('<div class="card install-card">').slice(1)
-    expect(cards.map((card) => card.match(/^<span class="scope">([^<]+)<\/span><h3>([^<]+)<\/h3>/)?.slice(1).join(' / '))).toEqual([
-      'TERMINAL / Choose a report',
-      'APP / Keep the local app open',
-      'CLAUDE CODE / Add the Claude Code plugin',
-    ])
-    expect(cards.map((card) => [...card.matchAll(/<button data-cmd="([^"]+)">copy<\/button>/g)].map((match) => match[1]))).toEqual([
-      ['npx orangu', 'npx orangu report'],
-      ['npx orangu serve'],
-      ['/plugin marketplace add NissanOhana/orangu', '/plugin install orangu', '/orangu:improve'],
-    ])
-    expect(src).not.toContain('npm i -g orangu')
-    // No person surface names a store command: the page offers only the front doors.
-    expect(src).not.toContain('orangu suggest')
-    // The plugin card names the harness skill in a sentence that starts with a word, not with a code span.
-    expect(cards[2]).toContain('The <code>/orangu:harness</code> skill reviews your whole harness and proposes ranked changes.')
-    expect(install).toContain('Add the Claude Code plugin')
-    expect(install).toContain('/plugin marketplace add NissanOhana/orangu')
-    expect(install).toContain('/plugin install orangu')
-    expect(install).toContain('Claude Code and Codex skills share the same scope-aware proposal')
-    expect(install).not.toContain('Add the Codex plugin')
-    expect(install).not.toContain('codex plugin marketplace add')
-    expect(install).not.toContain('codex plugin add')
-    expect(install).not.toContain('$orangu-')
-  })
-
-  it('lists the seven shipped skills', () => {
-    const install = src.match(/<section id="install"[\s\S]*?<\/section>/)?.[0] ?? ''
-    const listed = [...install.matchAll(/<div class="skill"><b>\/orangu:([a-z-]+)<\/b>/g)].map((m) => m[1])
-    expect(listed).toEqual(['improve', 'interview', 'apply', 'analyze', 'harness', 'show-me', 'feedback'])
-    expect(install).toContain('<div class="skill"><b>/orangu:interview</b><div>Research outside options for one suggestion first. Then answer a few questions, and get a proposal or a second opinion. It applies nothing.</div></div>')
-    expect(install).toContain('<div class="skill"><b>/orangu:show-me</b><div>Turn the evidence of one session, one repository or all sessions into a slide deck and a written report. Both are offline HTML files.</div></div>')
-    expect(install).toContain('<code>/orangu:show-me</code> writes a slide deck and a written report.')
-    // the other five cards in STE: one instruction to a sentence, no telegram, no "actually", no long noun
-    // cluster. Every claim of the old card stays (scope words: exactly one, session or repo, never, review-only).
-    for (const card of [
-      '<b>/orangu:improve</b><div>Turn one finding into one bounded, reviewable proposal with evidence, expected effect, risk, and a verification check. It never edits the target repository.</div>',
-      "<b>/orangu:apply</b><div>Apply exactly one reviewed proposal (session or repo scope) to the current repository. It runs the repository's own checks and records a receipt. Global proposals are review-only.</div>",
-      '<b>/orangu:analyze</b><div>Explain what happened in one session, finished or still running, from local deterministic evidence. Keep a report refreshed while a session runs.</div>',
-      '<b>/orangu:harness</b><div>Review what your harness declares against what your sessions used, in one repository or in every session on the machine. Then propose ranked changes.</div>',
-      '<b>/orangu:feedback</b><div>Send candid beta feedback about Orangu itself through a private localhost form. The form shows you the exact GitHub issue to review before you open it.</div>',
-    ]) expect(install).toContain(`<div class="skill">${card}</div>`)
-    // seven cards fill a row of four and a row of three on a wide screen; three columns would leave one card alone
-    expect(src).toContain('@media (min-width:1000px){.skills{grid-template-columns:repeat(4,1fr)}}')
-    for (const retired of ['/orangu:mega', '/orangu:watch', '/orangu:suggest']) expect(src).not.toContain(retired)
-    // 2026-11-01: the skill folders no longer equal these cards. The brain chunk folded analyze and harness into improve,
-    // and the landing rewrite replaces this block (test/retired-skills.test.ts names the landing in its baseline).
-  })
-
-  it('keeps accessible interactions and ships none of the design-canvas runtime', () => {
-    expect(src).toContain(':focus-visible')
-    expect(src).toContain('prefers-reduced-motion')
-    expect(src).toContain('aria-live="polite"')
-    for (const bad of ['support.js', 'DCLogic', 'sc-for', 'sc-if', '{{ copyAny }}', '{{ toggleTheme }}'])
-      expect(src, `must not contain ${bad}`).not.toContain(bad)
-  })
-
-  it('avoids AI-marketing cliches and keeps American spelling', () => {
-    const text = htmlText(src)
-    expect(text).not.toMatch(/unlock|supercharge|seamless|effortless|revolutioni[sz]e/i)
-    expect(text).not.toMatch(/\b(colour|behaviour|analyse|optimis(e|ed|ing)|organis(e|ed|ing)|licence|prioritis)\w*/i)
-  })
-})
-
 describe('public-copy hygiene', () => {
   it('catches paraphrases of every forbidden claim class', () => {
     for (const fixture of forbiddenClaimFixtures)
@@ -901,7 +103,8 @@ describe('site/index.html (generated landing)', () => {
   it('exists, stays bounded, and has no unresolved placeholders', () => {
     expect(existsSync(outPath)).toBe(true)
     expect(statSync(outPath).size).toBeLessThan(1_500_000)
-    expect(html).toContain(`v${pkg.version} · open source, MIT`)
+    // the version pill beside the wordmark: the announcement bar that held it is gone
+    expect(html).toContain(`<span class="ver">v${pkg.version}</span>`)
     expect(html).not.toMatch(/\{\{[^}]+\}\}|<!-- @[a-z]+ -->/)
   })
 
@@ -912,6 +115,8 @@ describe('site/index.html (generated landing)', () => {
   it('inlines the current brand assets', () => {
     expect(html).toContain(b64('design/brand/mascot-main-320.png').slice(0, 512))
     expect(html).toContain(b64('design/brand/mascot-96.png').slice(0, 512))
+    // the small mascots of the page share 1 CSS rule, so the 96 px image is inlined once
+    expect(html.split(b64('design/brand/mascot-96.png')).length - 1).toBe(1)
     expect(html).toContain(b64('design/brand/favicon-32.png').slice(0, 512))
     expect(html).toContain(b64('design/brand/favicon-180.png').slice(0, 512))
     expect(html).not.toContain('{{role:')
@@ -1191,7 +396,7 @@ describe('landing SEO surface', () => {
   it('wraps the page in one main landmark and keeps footer links distinguishable without colour', () => {
     expect(html.match(/<main>/g)).toHaveLength(1)
     expect(html.match(/<\/main>/g)).toHaveLength(1)
-    expect(html.indexOf('<main>')).toBeLessThan(html.indexOf('<section class="hero">'))
+    expect(html.indexOf('<main>')).toBeLessThan(html.indexOf('<section class="hero"'))
     expect(html.indexOf('</main>')).toBeLessThan(html.indexOf('<footer>'))
     expect(html).toContain('footer a{text-decoration:underline')
   })
@@ -1312,7 +517,8 @@ describe('README entry points', () => {
   it('names the rule count that the analyzer has, on the README and the landing', () => {
     for (const [label, text] of [['README.md', readme], ['site/index.src.html', readFileSync(srcPath, 'utf8')]] as const) {
       const counts = [...text.matchAll(/\b(\d+) deterministic rules\b/g)].map((match) => Number(match[1]))
-      expect(counts.length, label).toBeGreaterThan(0)
+      // the landing names no rule count since its 6-section rewrite, and a count that it names must be true
+      if (label === 'README.md') expect(counts.length, label).toBeGreaterThan(0)
       for (const count of counts) expect(count, label).toBe(ANALYZER_RULE_IDS.length)
     }
   })
@@ -1320,7 +526,8 @@ describe('README entry points', () => {
 
 // The landing and the README may promise a loop step only while the improve skill does it. The Remember step needs
 // the lessons read (the improve body links the loop rules, which run it). "Start with the improve skill" needs the
-// no-input todo read in the improve body.
+// no-input todo read in the improve body. The 6-section landing makes none of these 3 claims, and its own promises are
+// in test/landing.test.ts. A claim that it makes again is held here.
 describe('loop promises on the landing and the README', () => {
   const surfaces = [
     ['site/index.src.html', htmlText(readFileSync(srcPath, 'utf8'))],
@@ -1340,7 +547,6 @@ describe('loop promises on the landing and the README', () => {
 
   it('names the Remember step only while the improve skill reads the lessons', () => {
     const remember = claims(/\b6\. Remember\b|\*\*Remember\.\*\*/)
-    expect(remember).toContain('site/index.src.html')
     for (const label of remember) {
       // The improve body links the loop rules for other steps too, so only this sentence proves the lessons read.
       expect(improveBody, `${label} names Remember, but improve does not read the lessons before it ranks`)
@@ -1353,7 +559,6 @@ describe('loop promises on the landing and the README', () => {
 
   it('names the history and the lessons of the local app only while the app draws both sections', () => {
     const app = claims(/the history of your changes and their lessons/)
-    expect(app).toContain('site/index.src.html')
     // the client modules, not their tests: a test that names an id draws nothing
     const clientDir = join(root, 'src/report/client')
     const modules = (readdirSync(clientDir, { recursive: true }) as string[])
@@ -1366,7 +571,6 @@ describe('loop promises on the landing and the README', () => {
 
   it('says start with the improve skill only while its body takes the first todo item', () => {
     const start = claims(/\bstart with (?:`?\/orangu:improve`?|the improve skill)/i)
-    expect(start).toContain('site/index.src.html')
     for (const label of start)
       expect(improveBody, `${label} says start with improve, but its body has no todo read`).toContain('orangu suggest --todo --json --quiet')
   })
@@ -1417,12 +621,13 @@ describe('docs/USAGE.md entry point', () => {
   })
 
   it('names the Improvements screen with the label the report sidebar uses', () => {
-    // one word for one thing: the sidebar (nav.ts), the page title (app.ts), this list and the landing demo tab
+    // one word for one thing: the sidebar (nav.ts), the page title (app.ts) and this list. The landing shows no tab of
+    // that screen since its 6-section rewrite, and it gives the screen no other name.
     const label = /\{ id: 'suggest', label: '([^']+)', screen: 'suggest' \}/.exec(readFileSync(join(root, 'src/report/client/nav.ts'), 'utf8'))?.[1]
     expect(label).toBe('Improvements')
     expect(readFileSync(join(root, 'src/report/client/app.ts'), 'utf8')).toContain(`suggest: '${label}',`)
     expect(usage).toContain(`\n- ${label}: `)
-    expect(readFileSync(join(root, 'site/index.src.html'), 'utf8')).toMatch(new RegExp(`data-demo-view="suggest"[^>]*>${label}</button>`))
+    expect(readFileSync(join(root, 'site/index.src.html'), 'utf8')).not.toMatch(/>Suggestions</)
   })
 
   it('lists every input that keeps bare orangu on the latest-session brief', () => {

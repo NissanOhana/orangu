@@ -3,7 +3,7 @@
  * - `--ink3` holds 4.5:1 or more on each ground that carries tertiary text (`--bg`, `--surface`, `--bg2`), in light
  *   and dark;
  * - each selected-state text on `--accent-weak` holds 4.5:1 or more in light and dark. They are the active nav item
- *   and its hint, the selected picker row and its folder (styles.css), and the active demo tab (site/index.src.html);
+ *   and its hint, the selected picker row and its folder (styles.css), and the selected chip (site/index.src.html);
  * - the landing copy buttons hold 4.5:1 or more on `--cmd`, in light and dark. test/browser/public-surfaces.spec.ts
  *   measures the same pair as painted.
  * The dark set is the light set with the dark rule on top, as the cascade does it.
@@ -76,8 +76,8 @@ describe('the text tokens hold the WCAG AA ratio (4.5:1) on their grounds', () =
     ['styles.css', 'nav a.navitem[aria-current="page"] .hint', '--accent-weak'],
     ['styles.css', ".picklist [role='option'][aria-selected='true']", '--accent-weak'],
     ['styles.css', ".picklist [role='option'][aria-selected='true'] .proj", '--accent-weak'],
-    ['site/index.src.html', '.demo-rail button.on', '--accent-weak'],
-    ['site/index.src.html', '.cmd-sm button', '--cmd'],
+    ['site/index.src.html', '.chip.sel', '--accent-weak'],
+    ['site/index.src.html', '.cp2', '--cmd'],
   ])('draws the text of %s %s at 4.5:1 or more on %s, in light and dark', (file, selector, ground) => {
     const token = textTokenOf(file === 'styles.css' ? STYLES : SITE_STYLE, selector)
     for (const theme of ['light', 'dark'] as const) {
