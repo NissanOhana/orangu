@@ -26,9 +26,9 @@
       "changeClass": "workflow-config",
       "pattern": { "ruleId": "thinking-on-mechanical" },
       "feature": "effort frontmatter (low|medium|high|xhigh|max)",
-      "url": "https://code.claude.com/docs/en/skills.md",
+      "url": "https://code.claude.com/docs/en/prompt-caching.md",
       "verifiedAt": "2026-11-01",
-      "note": "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. An effort change keeps the prompt cache by default on Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1. This holds with an API key or a Claude subscription. On most other models, each effort level has its own cache, so keep one level for each agent or skill during a session."
+      "note": "Skills, agents, and --effort accept an effort level. Set it low for mechanical steps that spend thinking tokens on single-tool requests. An effort change keeps the prompt cache by default on Opus 5.5, Sonnet 5.5, Haiku 5.5, and on Fable 5.1 from Claude Code 2.1.260. This holds with an API key or a Claude subscription. On most other models, each effort level has its own cache, so keep one level for each agent or skill during a session."
     },
     {
       "id": "feat-background-agents",

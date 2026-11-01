@@ -333,11 +333,13 @@ describe('native commands: features.json names the Claude Code command', () => {
 })
 
 describe('cache facts: the notes match code.claude.com/docs/en/prompt-caching.md (opened 2026-11-01)', () => {
+  // The page: the 5.5 models keep the cache on an effort change, and Fable 5.1 does so from Claude Code 2.1.260.
   it('feat-effort-frontmatter: an effort change keeps the cache on the 5.5 models and Fable 5.1, and most other models keep a cache for each level', () => {
     const entry = featureEntries().find((e) => e.id === 'feat-effort-frontmatter')
     expect(entry?.note).not.toMatch(/Each effort level has its own cache for the same model\. So/)
-    expect(entry?.note).toMatch(/An effort change keeps the prompt cache by default on Opus 5\.5, Sonnet 5\.5, Haiku 5\.5 and Fable 5\.1\. This holds with an API key or a Claude subscription\./)
+    expect(entry?.note).toMatch(/An effort change keeps the prompt cache by default on Opus 5\.5, Sonnet 5\.5, Haiku 5\.5, and on Fable 5\.1 from Claude Code 2\.1\.260\. This holds with an API key or a Claude subscription\./)
     expect(entry?.note).toMatch(/On most other models, each effort level has its own cache/)
+    expect(entry?.url, 'the page that states the cache sentences').toBe('https://code.claude.com/docs/en/prompt-caching.md')
     expect(entry?.verifiedAt).toBe('2026-11-01')
   })
 
@@ -345,8 +347,18 @@ describe('cache facts: the notes match code.claude.com/docs/en/prompt-caching.md
     const entry = catalogEntries().find((e) => e.id === 'cache-messages-changed')
     expect(entry?.note).not.toMatch(/Both are part of the cache key/)
     expect(entry?.note).toMatch(/each model has its own cache/)
-    expect(entry?.note).toMatch(/On Opus 5\.5, Sonnet 5\.5, Haiku 5\.5 and Fable 5\.1, with an API key or a Claude subscription, the cache stays intact by default\./)
+    expect(entry?.note).toMatch(/On Opus 5\.5, Sonnet 5\.5, Haiku 5\.5, and on Fable 5\.1 from Claude Code 2\.1\.260, the cache stays intact by default\. This holds with an API key or a Claude subscription\./)
     expect(entry?.url).toBe('https://code.claude.com/docs/en/prompt-caching.md')
     expect(entry?.verifiedAt).toBe('2026-11-01')
+  })
+})
+
+describe('vendor notes say only what their page says', () => {
+  it('search-agent-faster-model gives no model advice that cursor.com/docs/subagents does not give', () => {
+    // The page (opened 2026-11-01): Explore uses a faster model by default, choose inherit for the same reasoning power,
+    // and name a model for its capabilities. Its custom search agent uses model: inherit, and it names no haiku.
+    const entry = catalogEntries().find((e) => e.id === 'search-agent-faster-model')
+    expect(entry?.note).not.toMatch(/haiku/i)
+    expect(entry?.note).toMatch(/Its docs say to choose inherit when a subagent needs the same reasoning power as the parent\./)
   })
 })

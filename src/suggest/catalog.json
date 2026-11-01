@@ -73,7 +73,7 @@
       "feature": "prompt-prefix stability",
       "url": "https://code.claude.com/docs/en/prompt-caching.md",
       "verifiedAt": "2026-11-01",
-      "note": "cache_miss_reason messages_changed: the cache matches the start of each request exactly, so a change to an earlier message invalidates everything after it. Avoid resuming one session in two terminals (messages interleave into one transcript). Keep one model during a session, because each model has its own cache. On most models, an effort change in a session also starts a fresh cache. On Opus 5.5, Sonnet 5.5, Haiku 5.5 and Fable 5.1, with an API key or a Claude subscription, the cache stays intact by default."
+      "note": "cache_miss_reason messages_changed: the cache matches the start of each request exactly, so a change to an earlier message invalidates everything after it. Avoid resuming one session in two terminals (messages interleave into one transcript). Keep one model during a session, because each model has its own cache. On most models, an effort change in a session also starts a fresh cache. On Opus 5.5, Sonnet 5.5, Haiku 5.5, and on Fable 5.1 from Claude Code 2.1.260, the cache stays intact by default. This holds with an API key or a Claude subscription."
     },
     {
       "id": "fix-reread-files",
@@ -172,7 +172,7 @@
       "feature": "a faster model for the search subagent",
       "url": "https://cursor.com/docs/subagents",
       "verifiedAt": "2026-11-01",
-      "note": "Cursor runs its built-in Explore subagent on a faster model by default, so that it can run many searches in parallel. Its docs say to choose inherit when a subagent needs the same reasoning power as the parent. Give a search or read agent of your own a small model, such as haiku in Claude Code."
+      "note": "Cursor runs its built-in Explore subagent on a faster model by default, so that it can run many searches in parallel. Its docs say to choose inherit when a subagent needs the same reasoning power as the parent. They also say to name a specific model when a subagent needs the capabilities of that model."
     },
     {
       "id": "effort-low-for-tool-calls",
