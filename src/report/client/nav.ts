@@ -138,6 +138,7 @@ export function navFor(data: AppData, state: RouteState): NavGroup[] {
   // under the reader mid-session, so serve never counts.
   const globalN = data.mode === 'file' ? data.aggregates.global?.sessionCount : undefined
   const needsServe = data.mode === 'file' ? 'needs orangu serve' : undefined
+  // the Sessions and agents group: the live items, then Repo
   liveItems.push({ id: 'repo', label: repoN !== undefined ? `Repo · ${repoN} sessions` : 'Repo', screen: 'repo', hint: repoN === undefined ? needsServe : undefined })
 
   return [

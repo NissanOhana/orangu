@@ -66,21 +66,25 @@ test('each zoom tab by a click: the hash keeps the theme, the tab is selected, i
     await expect(page.getByRole('tabpanel')).toHaveAttribute('aria-labelledby', `zt-${zoom}`)
     expect(await paintedTheme(page)).toBe(projectTheme(info))
     if (zoom === 'machine') {
-      // the machine read of the fixture lands, then its 4 totals and the harness wells show
+      // the machine read of the fixture lands, then its 4 totals, the harness wells and the recurring findings show
       await expect(page.locator('#start-panel .kpi:not(.skel)')).toHaveCount(4)
       await expect(page.locator('#start-panel .zp-k')).toContainText('sessions on this machine.')
       await expect(page.locator('#start-panel .wells')).not.toHaveAttribute('aria-busy', 'true')
       await expect(page.locator('#start-panel .well').nth(1)).toContainText('skill')
+      await expect(page.locator('.start-first .frow').first()).toContainText('Improvement:')
+      await expect(page.locator('.start-first .fwhere').first()).toContainText('on this machine')
     }
     if (zoom === 'sessions') {
       await expect(page.locator('#start-panel a.srow')).toHaveCount(3)
       await expect(page.locator('#start-panel a.srow').first()).toContainText('running')
+      await expect(page.locator('.start-first .fwhere').first()).toContainText('in this repository')
     }
+    // the live session of the fixture has no finding
+    if (zoom === 'session') await expect(page.locator('.start-first')).toContainText('orangu found nothing to improve in this session.')
     await noHorizontalOverflow(page)
   }
 
-  // below the panel: the findings of the session, the queue line of the fixture store and the Next card
-  await expect(page.locator('.start-first .frow').first()).toContainText('Improvement:')
+  // below the panel: the queue line of the fixture store and the Next card
   await expect(page.locator('.start-first .banner')).toContainText('due for a check.')
   await expect(page.locator('.start-next')).toContainText('Interview: not yet.')
   await expect(page.locator('.start-next button[data-copy="/orangu:improve"]')).toBeVisible()
@@ -139,7 +143,20 @@ test('a render keeps the focus on the same control: a tab while the machine read
   expect(errors.filter((error) => !error.includes('503'))).toEqual([])
 })
 
-test('the links of the start view keep the dark theme: the session, the fleet and the machine report', async ({ page }, info) => {
+test('a file report has no start view: #start lands on the default screen of the file, with no Start item', async ({ page }, info) => {
+  test.skip(info.project.name !== 'wide-light', 'the route does not depend on the theme or the width')
+  const errors = runtimeErrors(page)
+  for (const [file, heading] of [['sample.html', 'Overview'], ['sample-repo.html', 'Repo']] as const) {
+    await page.goto(`http://127.0.0.1:4173/${file}#start`, { waitUntil: 'domcontentloaded' })
+    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible()
+    await expect(page.locator('nav[aria-label="Report"] a[aria-current="page"]')).toContainText(heading)
+    await expect(page.locator('nav[aria-label="Report"] a', { hasText: 'Start' })).toHaveCount(0)
+    await expect(page.locator('#start-panel')).toHaveCount(0)
+  }
+  expect(errors).toEqual([])
+})
+
+test('the links of the start view keep the dark theme: the machine report, then back, then the session', async ({ page }, info) => {
   test.skip(info.project.name !== 'wide-dark', 'a link that drops the theme shows only in a dark project')
   const errors = runtimeErrors(page)
   await page.goto(`${APP}/#start?zoom=machine&theme=dark`, { waitUntil: 'domcontentloaded' })

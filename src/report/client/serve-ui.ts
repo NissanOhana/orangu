@@ -256,17 +256,4 @@ function harnessCard(ds: DataSource, onLoaded: () => void, href: string, state: 
 /** the whole-harness card, with the anchor that the Queue section scrolls to */
 const homeMega = (scope: 'repo' | 'global'): string => `<div id="home-mega">${megaReview(scope)}</div>`
 
-export const serveUi: ServeUi = {
-  pickerHtml,
-  wirePicker,
-  ensureAggregate: ensureScreenData,
-  aggScreen,
-  aggregateView,
-  megaReview: homeMega,
-  ensureHarness,
-  invalidateHarness,
-  harnessView,
-  harnessCard,
-  proposals: proposalsUi,
-  startView: (ctx) => renderStart(ctx, harnessReport),
-}
+export const serveUi: ServeUi = { pickerHtml, wirePicker, ensureAggregate: ensureScreenData, aggScreen, aggregateView, megaReview: homeMega, ensureHarness, invalidateHarness, harnessView, harnessCard, proposals: proposalsUi, startView: (ctx) => renderStart(ctx, harnessReport) }
