@@ -287,6 +287,42 @@ describe('plugin packaging', () => {
       expect(text.indexOf(PERMISSION), `${path} says it before the report`).toBeLessThan(text.indexOf('## 4. Report'))
     }
   })
+  // The profile reader refuses a value 1 character over its limit, and a file over 16,384 B that obeys each key limit
+  // (a script of 3 bytes for each character). So the skill keeps each answer inside its limit before the write, and asks
+  // orangu after the write if the file reads. If it does not read, the skill says so and gives the answers in chat: it
+  // never reports a profile that the next run cannot read.
+  it('interview keeps each answer inside its limit, and asks orangu after the write if the profile reads', () => {
+    for (const path of ['plugin/skills/interview/SKILL.md', '.agents/skills/orangu-interview/SKILL.md', 'plugins/orangu/skills/orangu-interview/SKILL.md']) {
+      const write = between(readText(path), '## 3. Write the profile', '## 4. Report')
+      const permission = write.indexOf('The profile write asks for permission.')
+      const limits = write.indexOf('Keep each answer inside its limit in the profile rules.')
+      expect(limits, `${path} keeps the limits`).toBeGreaterThan(0)
+      expect(limits, `${path} keeps the limits before the write`).toBeLessThan(permission)
+      for (const literal of ['If an answer is longer, ask the user for a shorter answer.', 'Keep the whole profile at 16,384 bytes or less.'])
+        expect(write, `${path} says: ${literal}`).toContain(literal)
+      const recheck = write.indexOf('After the write, run `orangu suggest --profile --json --quiet` again.')
+      expect(recheck, `${path} asks orangu after the write`).toBeGreaterThan(permission)
+      const failed = write.indexOf('If `valid` is not `true`, say in 1 sentence that orangu cannot read the new profile. Then give the answers in chat, and stop.')
+      expect(failed, `${path} says that the profile does not read, and gives the answers`).toBeGreaterThan(recheck)
+      // a refused write also stops before the report, which names the answers as orangu stores them
+      expect(write, `${path} stops after a refused write`).toContain('If the user refuses it, give the answers in chat, say that the profile did not change, and stop.')
+    }
+  })
+  // The write goes to the `path` value of the read, which follows ORANGU_HOME and XDG_DATA_HOME, after the read made the
+  // orangu home private. A fixed path such as `~/.orangu/profile.json` would skip both. So the skill names the file only
+  // by its bare name, and names no home path but its own drafts.
+  it('interview names no profile path except the path value that it reads', () => {
+    for (const path of ['plugin/skills/interview/SKILL.md', '.agents/skills/orangu-interview/SKILL.md', 'plugins/orangu/skills/orangu-interview/SKILL.md']) {
+      const text = readText(path)
+      const prefixes = [...text.matchAll(/(\S*)profile\.json/g)].map((m) => m[1])
+      expect(prefixes.length, `${path} names the file`).toBeGreaterThan(0)
+      for (const prefix of prefixes) expect(prefix, `${path} names profile.json only as a bare file name in code`).toBe('`')
+      for (const home of text.match(/~\/[^\s`'")]*/g) ?? [])
+        expect(['~/.orangu/drafts/interview-<random>.md', '~/.orangu/drafts/interview-*.md'], `${path} names the home path ${home}`).toContain(home)
+      expect(text, `${path} names no orangu home of its own`).not.toMatch(/<orangu home>|\$ORANGU_HOME|XDG_DATA_HOME|\.orangu\/profile/)
+      expect(text, `${path} writes the profile to the path value`).toContain('Write the profile to `path`')
+    }
+  })
   it('the localhost handoff is copy-only and cannot spawn a model process', () => {
     const source = readText('src/serve/kickoff.ts')
     expect(source).not.toMatch(/node:child_process|\bspawn\s*\(|--allowedTools|--permission-mode/)
@@ -1853,7 +1889,11 @@ describe('plugin packaging', () => {
     // and keeps the answers. Its research, its 5 lenses, its proposal and its second opinion go, and the questions and the
     // stored shape live in shared/profile.md under a ceiling of their own. improve (1,130) and harness (1,536) lose their
     // hand-offs to the interview. Their ceilings do not move: the next chunk moves the review into improve.
-    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1181, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 596 }
+    // 2026-11-01 review fix: interview 596 -> 662, measured 595 -> 661 (+66). The profile reader refuses a value over its
+    // limit and a file over 16,384 B, so step 3 keeps each answer inside its limit and asks the user for a shorter one
+    // (+31). After the write it runs the profile read again, and a profile that does not read gets 1 sentence and the
+    // answers in chat (+34). A refused write stops before the report (+1).
+    const SKILL_WORD_CEILING: Record<string, number> = { harness: 1549, improve: 1181, analyze: 700, apply: 700, feedback: 350, 'show-me': 570, interview: 662 }
     const DESC_CHAR_CEILING: Record<string, number> = { harness: 550, improve: 500, analyze: 500, apply: 400, feedback: 360, 'show-me': 305, interview: 247 }
     const TOTAL_DESC_CEILING = 2750 // was 2,933 across 7 skills on 2026-08-27; 2,200 for five skills until show-me (+309, then -5); +246 for interview
     const words = (text: string): number => text.split(/\s+/).filter(Boolean).length

@@ -203,7 +203,9 @@ describe('plugin eval suite', () => {
     // the same cases that judge it rewards the suite's quirks; train up with holdout flat is the overfitting sign.
     // 4 of 18 became 5 of 23: interview came with 3 cases (2 routing, 1 research boundary), so 1 routing case is held out.
     // 2026-11-01 the profile interview: interview-wants-outside-views left with the old job (questions and outside views on
-    // 1 suggestion), and the new routing case interview-asks-about-my-work is the interview case held out. Still 5 of 23.
+    // 1 suggestion), and the new routing case interview-asks-about-my-work is the interview case held out. The profile-write
+    // case is new too, so 5 of 24.
+    expect(cases, 'the count in the comment above').toHaveLength(24)
     const HOLDOUT = [
       'analyze-live-session', 'harness-global-declared-vs-used', 'ignores-a-jsonl-coding-question', 'improve-from-suggestion-id',
       'interview-asks-about-my-work',
