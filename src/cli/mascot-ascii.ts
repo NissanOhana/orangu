@@ -10,9 +10,9 @@
  *
  * Three tiers, because the lockup has to survive an 80-, a 60- and a 40-column terminal:
  * WIDE face + wordmark + tagline (8 rows), STACKED wordmark + tagline (7), MINI face + tagline (9).
- * Every tier carries the tagline, and the row counts are what `dashboard.ts` derives its chrome-line
- * budget from. `mascotArt` picks; `mascotLines` composes, centres and paints. Both `--help` and the
- * dashboard go through `mascotLines`, so the two can never disagree about tier, indent or colour.
+ * Every tier carries the tagline. `mascotArt` picks; `mascotLines` composes, centres and paints. Both
+ * `--help` and bare `orangu` on a terminal (src/cli/door.ts) go through `mascotLines`, so the two can
+ * never disagree about tier, indent or colour.
  */
 import { layoutWidth } from './summary.js'
 import { displayWidth, paint, truncate, type Caps, type Style } from './tty.js'

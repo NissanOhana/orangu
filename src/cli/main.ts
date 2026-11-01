@@ -1,7 +1,7 @@
 /**
  * orangu CLI. Deterministic session observability. The CLI makes no network calls.
  *
- *   orangu                        interactive repo/global/session dashboard (TTY)
+ *   orangu                        latest-session brief, then the local app over every root (TTY)
  *   orangu report [<session>]     build a self-contained HTML report and open it
  *   orangu analyze [<session>]    print the analysis (human summary, or --json for the full object)
  *   orangu list                   list discoverable sessions
@@ -40,8 +40,7 @@ import { mascotLines } from './mascot-ascii.js'
 import type { Analysis } from '../model/analysis.js'
 import { CLI_VERBS, EXTRA_COMMANDS, EXTRA_HELP } from './commands/index.js'
 import { cmdPick } from './commands/pick.js'
-import { cmdDashboard } from './commands/dashboard.js'
-import { cmdSuggest } from './commands/suggest.js'
+import { cmdBare } from './door.js'
 import { plural } from '../harness/report.js'
 import { emitAnalysisJson, prepareAggregateForOutput, renderPreparedAggregateJson, type PreparedAggregate } from './json-out.js'
 import { writePrivateOutput } from './private-output.js'
@@ -239,18 +238,19 @@ async function cmdAnalyze(sel: string | undefined, flags: Record<string, string 
  * `orangu` with no verb: the loop in one screen. Analyze the latest session and print the true
  * sentence (the same outcomeHeadline the report leads with), the top finding and the exact next
  * command. `orangu --help` / `orangu help` are untouched; no sessions -> the usual error, not help.
+ * `hint` adds the trailing hint: off under --quiet, and off on a terminal, where the app rows follow
+ * (src/cli/door.ts).
  */
-async function cmdBrief(flags: Record<string, string | boolean>): Promise<void> {
+async function cmdBrief(flags: Record<string, string | boolean>, o: { hint: boolean }): Promise<void> {
   const ref = await selectSession(undefined, flags)
   const { analysis } = await analyzeWithProgress(ref, flags)
-  // the next step is part of the loop's own output (so `orangu > out.txt` keeps it); --quiet keeps
-  // the answer and drops the trailing hint
+  // the next step is part of the loop's own output (so `orangu > out.txt` keeps it)
   const step = await nextStep(analysis, flags)
-  process.stdout.write(briefBlock(out, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, 'quiet') }).join('\n') + '\n')
+  process.stdout.write(briefBlock(out, analysis, displayTitle(analysis, flags), step, { hint: o.hint }).join('\n') + '\n')
   thresholdExit(analysis, flags)
 }
 
-/** Bind the shared picker to the real report command once; both `pick` and the dashboard use it. */
+/** Bind the picker of `orangu pick` to the real report command. */
 function pickSessions(flags: Record<string, string | boolean>): Promise<void> {
   return cmdPick(flags, {
     openReport: (id) => cmdReport(id, { ...flags, open: true }),
@@ -485,33 +485,25 @@ async function cmdServe(flags: Record<string, string | boolean>): Promise<void> 
 }
 
 /** The first 2 lines of both help levels: the name, the version, and what orangu is. */
-const helpTitle = (): string => `${paint(out, 'bold', 'orangu')} v${VERSION}: observe the session, then improve the next outcome.
+const helpTitle = (): string => `${paint(out, 'bold', 'orangu')} v${VERSION}: improve your agent harness and your setup.
 Deterministic observability for Claude Code sessions. No network calls.`
 const helpPrivacy = (): string => paint(out, 'dim', 'privacy: local only, no network requests. orangu redacts secrets by default.')
 
 /**
- * The short screen of `orangu --help`, `-h`, `help` and a bare `--json`: the 3 front doors and the
- * common verbs, with no flag. It reads no file and no store. On a terminal the mascot comes first.
+ * The short screen of `orangu --help`, `-h`, `help` and a bare `--json`: the chain in its order, then the full
+ * reference, with no flag and no machine verb. It reads no file and no store. On a terminal the mascot comes first.
  */
 function printHelp(): void {
   process.stdout.write(`${out.tty ? '\n' + mascotLines(out).join('\n') + '\n' : ''}
 ${helpTitle()}
 
-${paint(out, 'bold', 'start here')}
-  orangu                     choose a report, or see what to improve next
-                             (a latest-session brief when piped or in CI)
-  orangu serve               the local app: every session, live, with the
-                             queue, history and lessons of your changes
-  /orangu:improve            in Claude Code: the next change to make, and
-                             the check after you apply it
+${paint(out, 'bold', 'the chain')}
+  orangu             1. See: every session and agent tree on this machine,
+                     measured with no model, and the first findings.
+  /orangu:improve    2. Improve: in Claude Code, the brain proposes changes.
+                     orangu checks each one on your later sessions.
 
-${paint(out, 'bold', 'also')}
-  orangu report [<session>]  one session as an HTML report (default: latest)
-  orangu repo                every session of this repository, in one report
-  orangu global              every session on this machine, in one report
-  orangu harness             what your config declares vs what you used
-
-  orangu help all            every command and flag
+  orangu help all    every command and flag
 
 plugin: /plugin marketplace add NissanOhana/orangu, then /plugin install orangu
 ${helpPrivacy()}
@@ -527,8 +519,8 @@ function printHelpAll(): void {
 ${helpTitle()}
 
 ${paint(out, 'bold', 'usage')}
-  orangu                       interactive report dashboard (terminal)
-                               latest-session brief when piped or in CI
+  orangu                       latest-session brief, then the local app until
+                               ctrl-c (brief only when piped or in CI)
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
@@ -609,32 +601,19 @@ async function main(): Promise<void> {
     return
   }
   rejectUnusableFlags(command, flags)
-  // No verb: an interactive report dashboard on a terminal. Machine callers retain the compact
-  // latest-session answer; --json has no unambiguous scope, so it prints the short help screen.
+  // No verb: the latest-session brief, then on a terminal the local app over every root (src/cli/door.ts).
+  // Machine callers keep the brief alone; --json has no unambiguous scope, so it prints the short help screen.
   if (!command) {
     if (flagBool(flags, 'json')) printHelp()
     else {
-      const handled = await cmdDashboard(flags, {
-        showRepo: (o) => cmdAggregate('repo', undefined, { ...flags, ...o }),
-        showGlobal: (o) => cmdAggregate('global', undefined, { ...flags, ...o }),
-        showSession: (id) => cmdReport(id, { ...flags, open: true }),
-        browseSessions: () => pickSessions({ ...flags, global: true }),
-        // the run of `orangu suggest --queue --cwd <this folder>`: the full check, then the queue text
-        showQueue: () =>
-          cmdSuggest([], {
-            queue: true,
-            cwd: process.cwd(),
-            ...(flags['no-cache'] !== undefined ? { 'no-cache': true } : {}),
-            ...(flagBool(flags, 'no-redact') ? { 'no-redact': true } : {}),
-          }),
+      await cmdBare(flags, {
+        brief: (o) => cmdBrief(flags, o),
         stdin: process.stdin,
         stdout: process.stdout,
         stderr: process.stderr,
         env: process.env,
         out,
-        err,
       })
-      if (!handled) await cmdBrief(flags)
     }
     return
   }

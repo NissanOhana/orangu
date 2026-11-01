@@ -11,8 +11,7 @@
  * side-effect free.
  *
  * The step also carries the count of the `due` row: the open items of the current folder that 1 step can close now,
- * from the queue read of `orangu suggest --queue` at a byte budget of 0 B. A clean session gets it too. The bare
- * dashboard counts the same queue through `queueCounts`.
+ * from the queue read of `orangu suggest --queue` at a byte budget of 0 B. A clean session gets it too.
  */
 import type { Analysis } from '../model/analysis.js'
 import { findingForRow, planRowForInsight } from '../report/client/suggest-rows.js'
@@ -55,8 +54,8 @@ export async function queueCounts(cwd: string, now: number, budgetBytes: number,
 /**
  * The transcript bytes that the footer count may parse on a cache miss: none. At the bound of 1 queue read, a cold
  * footer added many seconds to `orangu report` in a folder with applied records. So the footer counts only the checks
- * that the cohort facts cache holds, and an item with no cache entry is not due yet. The printout of the IMPROVE
- * choice, `orangu suggest --queue` and `/orangu:improve` run the full check and fill the cache.
+ * that the cohort facts cache holds, and an item with no cache entry is not due yet. `orangu suggest --queue` and
+ * `/orangu:improve` run the full check and fill the cache.
  */
 export const FOOTER_QUEUE_BYTES = 0
 

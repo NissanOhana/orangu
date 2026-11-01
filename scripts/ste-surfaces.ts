@@ -57,7 +57,7 @@ import type { Words } from '../src/show-me/words.js'
 import { projectEvidence } from '../src/suggest/evidence.js'
 import { VERSION } from '../src/version.js'
 import { persistNextStep } from '../src/cli/next-step.js'
-import { aggregateBlock, analysisBlock, briefBlock, layoutWidth, nextStepLines, valueBudget } from '../src/cli/summary.js'
+import { aggregateBlock, analysisBlock, appBlock, briefBlock, layoutWidth, nextStepLines, valueBudget } from '../src/cli/summary.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi } from '../src/cli/tty.js'
 import { suggestionIdV2, suggestionKey } from '../src/suggest/id.js'
 import { queueLines } from '../src/cli/commands/suggest-reads.js'
@@ -837,17 +837,22 @@ const memoryStore = {
   },
 }
 
+/** The app that bare `orangu` starts on a terminal: a 5-digit port and a 43-character capability, as startServe makes them. */
+const DOOR_APP = { url: 'http://127.0.0.1:53211/_orangu/q2X8vB0Lw9kZ3mN1pR7sT5uV4xY6zA2bC8dE0fG1hI3', sessions: 8354, running: 3 }
+
 /**
- * Bare `orangu`, `orangu analyze` and its next step, at MACHINE_CAPS (80 columns, no colour). The header title
- * is the session title, which the transcript wrote, not orangu: it is read as the id fallback that the CLI
- * prints for a session with no title (src/cli/main.ts displayTitle). The due row counts the queue of the fixture
- * store, so the row and its note are scored too.
+ * Bare `orangu` in a pipe and on a terminal, `orangu analyze` and its next step, at MACHINE_CAPS (80 columns, no
+ * colour). On a terminal the brief has no hint, and the app rows follow it. The header title is the session title,
+ * which the transcript wrote, not orangu: it is read as the id fallback that the CLI prints for a session with no
+ * title (src/cli/main.ts displayTitle). The due row counts the queue of the fixture store, so the row and its note
+ * are scored too.
  */
 export async function sessionTerminalViews(source: string, a: Analysis): Promise<RenderedView[]> {
   const step = await persistNextStep(a, CLI_REDACTION, { store: () => memoryStore as never, due: async () => queueFixture().counts.due })
   const title = a.session.id.slice(0, 12)
   return [
     { file: `${source}#brief`, lines: briefBlock(MACHINE_CAPS, a, title, step, { hint: true }) },
+    { file: `${source}#door`, lines: [...briefBlock(MACHINE_CAPS, a, title, step, { hint: false }), ...appBlock(MACHINE_CAPS, DOOR_APP)] },
     { file: `${source}#analyze`, lines: analysisBlock(MACHINE_CAPS, a, title) },
     { file: `${source}#next-step`, lines: nextStepLines(MACHINE_CAPS, step) },
   ]
@@ -911,7 +916,7 @@ const RENDERED_ROWS: ReadonlyArray<{ id: string; owner?: string; source: string;
   },
   {
     id: 'rendered#terminal',
-    source: 'briefBlock, analysisBlock, nextStepLines, aggregateBlock and the suggest queue of a fixture store at MACHINE_CAPS, wraps joined',
+    source: 'briefBlock (alone, and with the app rows of a terminal), analysisBlock, nextStepLines, aggregateBlock and the suggest queue of a fixture store at MACHINE_CAPS, wraps joined',
     views: async ({ sessions, aggregates }) => [
       ...(await Promise.all(sessions.map(({ source, analysis }) => sessionTerminalViews(source, analysis)))).flat(),
       ...aggregates.map(({ source, aggregate }) => aggregateTerminalView(source, aggregate)),

@@ -30,14 +30,14 @@ ccusage counts your token usage. orangu tells you what to change.
 **Read-only.** orangu reads the session files already on your disk and writes one HTML file. It needs no SDK, proxy, account, instrumentation, upload, or telemetry. It can analyze your whole history from the minute you install it, not only new sessions.
 
 ```bash
-npx orangu          # start here: choose a report, or see what to improve next
+npx orangu          # start here: the latest session, then the app
 npx orangu serve    # the local app: every session, live, and your improvements
 npx orangu report   # only the latest session, as one HTML report
 ```
 
 In Claude Code, start with `/orangu:improve` after you install the [skills](#skills). It finds the next change to make, and it checks each change that you apply.
 
-Use the arrow keys or `j`/`k` and Enter in the dashboard. In a pipe or CI, bare `orangu` keeps the compact latest-session summary instead of waiting for input. `orangu help all` lists every command and flag.
+On a terminal, bare `orangu` runs the app until you press Ctrl-C. In a pipe or CI, it prints only the compact latest-session summary. `orangu help all` lists every command and flag.
 
 orangu needs Node.js 20 or newer and no runtime dependency. The [usage guide](docs/USAGE.md) has more commands, inputs, and limits.
 

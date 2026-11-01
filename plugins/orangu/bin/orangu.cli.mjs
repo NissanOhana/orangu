@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash6 } from "node:crypto";
-import { basename as basename16, join as join15, resolve as resolve14 } from "node:path";
+import { basename as basename15, join as join15, resolve as resolve13 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -2543,13 +2543,13 @@ function strippedCountMap(value, opts) {
   const source = value;
   if (!opts.stripText) {
     const out3 = /* @__PURE__ */ new Map();
-    for (const [key, count4] of Object.entries(source)) {
+    for (const [key, count3] of Object.entries(source)) {
       const publicKey = scrubOne(key, opts);
-      out3.set(publicKey, typeof count4 === "number" ? (Number(out3.get(publicKey)) || 0) + count4 : walk(count4, opts));
+      out3.set(publicKey, typeof count3 === "number" ? (Number(out3.get(publicKey)) || 0) + count3 : walk(count3, opts));
     }
     return Object.fromEntries(out3);
   }
-  const total = Object.values(source).reduce((sum2, count4) => sum2 + (typeof count4 === "number" ? count4 : 0), 0);
+  const total = Object.values(source).reduce((sum2, count3) => sum2 + (typeof count3 === "number" ? count3 : 0), 0);
   return total ? { [STRIPPED_KEY]: total } : {};
 }
 function walk(obj3, opts) {
@@ -2567,10 +2567,10 @@ function walk(obj3, opts) {
       }
       if (k === "recordCounts" && v && typeof v === "object" && !Array.isArray(v)) {
         const counts = /* @__PURE__ */ new Map();
-        for (const [recordType, count4] of Object.entries(v)) {
+        for (const [recordType, count3] of Object.entries(v)) {
           if (opts.stripText && unknownRecordKeys?.has(recordType)) continue;
           const publicKey = scrubOne(recordType, opts);
-          counts.set(publicKey, typeof count4 === "number" ? (Number(counts.get(publicKey)) || 0) + count4 : walk(count4, opts));
+          counts.set(publicKey, typeof count3 === "number" ? (Number(counts.get(publicKey)) || 0) + count3 : walk(count3, opts));
         }
         out3.set(k, Object.fromEntries(counts));
         continue;
@@ -3066,7 +3066,7 @@ async function withStableSessionRead(path, options, read) {
       if (!isTransientInputChange(error)) throw error;
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
-      await new Promise((resolve15) => setTimeout(resolve15, pause));
+      await new Promise((resolve14) => setTimeout(resolve14, pause));
     }
   }
 }
@@ -3306,8 +3306,8 @@ function buildSession(files2, mainPath, keepText, t0) {
           }
         } else if (at === "skill_listing" && !isSub) {
           const names = (arr(a?.["names"]) ?? []).filter((x) => typeof x === "string");
-          const count4 = num(a?.["skillCount"]) ?? names.length;
-          if (!meta.skillsAvailable || bool(a?.["isInitial"])) meta.skillsAvailable = { count: count4, names };
+          const count3 = num(a?.["skillCount"]) ?? names.length;
+          if (!meta.skillsAvailable || bool(a?.["isInitial"])) meta.skillsAvailable = { count: count3, names };
         } else if (at === "read_truncation_notice") {
           meta.truncatedReads++;
         } else if (at === "instructions" && !isSub && !bool(r["isSidechain"])) {
@@ -5049,18 +5049,18 @@ function analyzeContext(s) {
   }
   const requestsPerCompaction = [];
   if (s.compactions.length) {
-    let count4 = 0;
+    let count3 = 0;
     let ci = 0;
     const comps = [...s.compactions].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
     for (const p of main2) {
       while (ci < comps.length && p.ts !== void 0 && (comps[ci].ts ?? Infinity) <= p.ts) {
-        requestsPerCompaction.push(count4);
-        count4 = 0;
+        requestsPerCompaction.push(count3);
+        count3 = 0;
         ci++;
       }
-      count4++;
+      count3++;
     }
-    requestsPerCompaction.push(count4);
+    requestsPerCompaction.push(count3);
   }
   const compactions = s.compactions.map((c) => {
     let before;
@@ -5281,7 +5281,7 @@ function analyzeHooks(s) {
       const hookEvent = busiest(e.events);
       return { command, count: e.count, totalMs: e.totalMs, errors: e.errors, ...hookEvent ? { hookEvent } : {}, events: eventsRecord(e.events), keyedBy: e.keyedBy };
     }).sort((a, b) => b.totalMs - a.totalMs),
-    events: [...byEvent.entries()].map(([hookEvent, count4]) => ({ hookEvent, count: count4 }))
+    events: [...byEvent.entries()].map(([hookEvent, count3]) => ({ hookEvent, count: count3 }))
   };
 }
 function unionMs(iv) {
@@ -9437,6 +9437,15 @@ function briefBlock(caps, a, title, step, o) {
   if (o.hint) lines.push("", ...fit(caps, `${INDENT}orangu report for the full picture${sep3}orangu help all for every command`, "dim", true));
   return lines;
 }
+var APP_HEAD = INDENT + "app ";
+function appBlock(caps, o) {
+  const pad = " ".repeat(APP_HEAD.length);
+  const width = layoutWidth(caps) - pad.length;
+  const sessions = `${o.sessions.toLocaleString("en-US")} ${o.sessions === 1 ? "session" : "sessions"} on this machine`;
+  const counts = wrapJoined(caps, `${sessions}${glyphs(caps).sep}${o.running.toLocaleString("en-US")} running now`, width);
+  const shows = wrapWords("See one session, your sessions and their agents, or the machine.", width);
+  return ["", APP_HEAD + paint(caps, "accent", o.url), ...[...counts, ...shows].map((l) => pad + l), "", ...fit(caps, `${INDENT}Press ctrl-c to stop the app.`)];
+}
 function listRows(caps, refs, o) {
   const w = layoutWidth(caps);
   const lines = ["", paint(caps, "bold", `${plural(o.total, "session")}${o.global ? " (all roots)" : ""}`), ""];
@@ -9463,10 +9472,10 @@ function aggregateOffer(caps, wroteHtml) {
 }
 var AGG_TITLE_COLUMN = 14;
 var AGG_SESSION_COLUMN = 25;
-function withCount(caps, lines, count4, room) {
+function withCount(caps, lines, count3, room) {
   const last = lines.at(-1);
-  if (last !== void 0 && displayWidth(last) + 2 + displayWidth(count4) <= room) return [...lines.slice(0, -1), last + "  " + paint(caps, "dim", count4)];
-  return [...lines, paint(caps, "dim", count4)];
+  if (last !== void 0 && displayWidth(last) + 2 + displayWidth(count3) <= room) return [...lines.slice(0, -1), last + "  " + paint(caps, "dim", count3)];
+  return [...lines, paint(caps, "dim", count3)];
 }
 function hang(head2, lines) {
   const pad = " ".repeat(displayWidth(head2));
@@ -9493,8 +9502,8 @@ function aggregateBlock(caps, a) {
     const budget = layoutWidth(caps) - AGG_TITLE_COLUMN;
     for (const f of a.crossFindings.slice(0, 8)) {
       const figure = paint(caps, "accent", (f.boundedSavingsTokens ? "~" + fmtTokens(f.boundedSavingsTokens) : "\u2013").padStart(8));
-      const count4 = `(${plural(f.sessions, "session")})`;
-      const body = withCount(caps, wrapWords(f.exampleTitle || f.title, budget), count4, budget);
+      const count3 = `(${plural(f.sessions, "session")})`;
+      const body = withCount(caps, wrapWords(f.exampleTitle || f.title, budget), count3, budget);
       const improvement = f.improvement ? wrapWords(`Improvement: ${f.improvement}`, budget) : [];
       [...body, ...improvement].forEach((p, i) => lines.push((i ? pad : `    ${figure}  `) + p));
     }
@@ -9936,10 +9945,10 @@ function rankTest(before, after) {
   let lower = 0;
   let higher = 0;
   for (let sum2 = 0; sum2 <= maxSum; sum2++) {
-    const count4 = distribution[sum2];
-    total += count4;
-    if (sum2 <= observed) lower += count4;
-    if (sum2 >= observed) higher += count4;
+    const count3 = distribution[sum2];
+    total += count3;
+    if (sum2 <= observed) lower += count3;
+    if (sum2 >= observed) higher += count3;
   }
   return { pLower: round6(lower / total), pHigher: round6(higher / total) };
 }
@@ -10725,8 +10734,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename17 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename17)) return { violation: "must not use a reserved Windows device name" };
+    const basename16 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename16)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -15136,9 +15145,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve15, reject) => {
+  await new Promise((resolve14, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve15);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve14);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -15155,7 +15164,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve15) => server.close(() => resolve15()));
+      await new Promise((resolve14) => server.close(() => resolve14()));
     }
   };
 }
@@ -16886,8 +16895,8 @@ async function cmdEffect(store, id, flags, deps) {
   for (const line of effectHeadLines(view, textWidth())) w(line);
   for (const check of view.checks) w(`    ${terminal2(check.evidence)}`);
   if (view.confoundedBy.length) w(`    measured together with: ${view.confoundedBy.map(terminal2).join(", ")} (not attributable to this change alone)`);
-  const skipped = Object.entries(view.skipped).filter(([, count4]) => count4 > 0);
-  if (skipped.length) w(`    skipped: ${skipped.map(([reason, count4]) => `${reason} ${count4}`).join(", ")}`);
+  const skipped = Object.entries(view.skipped).filter(([, count3]) => count3 > 0);
+  if (skipped.length) w(`    skipped: ${skipped.map(([reason, count3]) => `${reason} ${count3}`).join(", ")}`);
   w(`  verdict: ${view.verdict}`);
   w(`  next: ${terminal2(view.next)}`);
 }
@@ -17117,12 +17126,12 @@ async function cmdFeedback(positionals, flags) {
   loopback + private capability \xB7 no sessions attached \xB7 ctrl-c stops
 `);
   if (!flagBool(flags, "no-open")) openInBrowser(url);
-  await new Promise((resolve15) => {
+  await new Promise((resolve14) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve15);
+      void server.close().finally(resolve14);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
@@ -19123,9 +19132,9 @@ async function prepare(positionals, flags) {
 function printRendered(result, opened, out3) {
   const lines = [row(out3, "slides", oneLine2(result.slides), { raw: true }), row(out3, "report", oneLine2(result.report), { raw: true })];
   for (const f of result.findings) lines.push(row(out3, "ste", `${f.slot}: ${f.rule} "${oneLine2(f.text)}" ${oneLine2(f.hint)}`));
-  const count4 = result.findings.length;
+  const count3 = result.findings.length;
   lines.push(
-    count4 ? row(out3, "words", `${count4} STE finding${count4 === 1 ? "" : "s"}. This is advice: fix each real finding in words.json, then render again.`, { style: "warn" }) : row(out3, "words", "no STE finding", { style: "dim" })
+    count3 ? row(out3, "words", `${count3} STE finding${count3 === 1 ? "" : "s"}. This is advice: fix each real finding in words.json, then render again.`, { style: "warn" }) : row(out3, "words", "no STE finding", { style: "dim" })
   );
   if (opened) lines.push(row(out3, "opened", "both files, in the browser", { style: "dim" }));
   process.stdout.write(`${lines.join("\n")}
@@ -19515,19 +19524,19 @@ import { basename as basename14 } from "node:path";
 
 // src/cli/select.ts
 var FRAME_CHROME_LINES = 5;
-function windowFor(cursor, start, size, count4) {
-  if (count4 <= size) return 0;
+function windowFor(cursor, start, size, count3) {
+  if (count3 <= size) return 0;
   let s = start;
   if (cursor < s) s = cursor;
   if (cursor >= s + size) s = cursor - size + 1;
-  return Math.max(0, Math.min(s, count4 - size));
+  return Math.max(0, Math.min(s, count3 - size));
 }
 function select(o) {
-  const count4 = Math.max(1, o.count);
+  const count3 = Math.max(1, o.count);
   const columns = () => Math.max(40, o.output.columns ?? o.caps.columns);
-  const size = Math.max(1, Math.min(count4, o.viewRows ?? Math.max(3, (o.output.rows ?? 24) - FRAME_CHROME_LINES)));
-  let cursor = Math.max(0, Math.min(o.initial ?? 0, count4 - 1));
-  let start = windowFor(cursor, 0, size, count4);
+  const size = Math.max(1, Math.min(count3, o.viewRows ?? Math.max(3, (o.output.rows ?? 24) - FRAME_CHROME_LINES)));
+  let cursor = Math.max(0, Math.min(o.initial ?? 0, count3 - 1));
+  let start = windowFor(cursor, 0, size, count3);
   let drawn = 0;
   const frame = () => {
     const lines = o.render({ cursor, start, size, columns: columns() });
@@ -19537,7 +19546,7 @@ function select(o) {
   const draw = () => {
     o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
   };
-  return new Promise((resolve15) => {
+  return new Promise((resolve14) => {
     let done = false;
     const restore = () => {
       if (done) return;
@@ -19555,11 +19564,11 @@ function select(o) {
     const finish = (r) => {
       restore();
       hook.dispose();
-      resolve15(r);
+      resolve14(r);
     };
     const move = (to) => {
-      cursor = Math.max(0, Math.min(to, count4 - 1));
-      start = windowFor(cursor, start, size, count4);
+      cursor = Math.max(0, Math.min(to, count3 - 1));
+      start = windowFor(cursor, start, size, count3);
       draw();
     };
     const onResize = () => draw();
@@ -19580,7 +19589,7 @@ function select(o) {
         case "home":
           return move(0);
         case "end":
-          return move(count4 - 1);
+          return move(count3 - 1);
         case "pageup":
           return move(cursor - size);
         case "pagedown":
@@ -19674,149 +19683,55 @@ async function cmdPick(flags, deps) {
   await deps.openReport(rows2[result.index].sessionId);
 }
 
-// src/cli/commands/dashboard.ts
-import { basename as basename15, resolve as resolve13 } from "node:path";
-var INDENT4 = "  ";
-var TAG_WIDTH = 8;
-var CHROME_ROWS_AROUND_ART = 6;
+// src/cli/door.ts
 var TARGETED_BARE_FLAGS = ["session", "s", "global", "cwd", "max-tokens", "fail-on-hook-errors"];
-var DASHBOARD_QUEUE_BYTES = 0;
-function dashboardPrecondition(stdin, stdout, env, flags) {
+function appPrecondition(stdin, stdout, env, flags) {
   if (TARGETED_BARE_FLAGS.some((flag) => flags[flag] !== void 0)) return false;
   return interactivePrecondition(stdin, stdout, env, flags);
 }
-async function countQueue(cwd, now, reads) {
-  try {
-    const { due, open: open13 } = await queueCounts(cwd, now, DASHBOARD_QUEUE_BYTES, reads);
-    return { due, open: open13 };
-  } catch {
-    return "store-error";
-  }
-}
-async function gatherDashboardData(flags, deps = {}) {
-  const cwd = resolve13((deps.cwd ?? (() => process.cwd()))());
-  const configArg = flagStr(flags, "root", "config", "r");
-  const pickFlags = { ...flags, global: true };
-  const reads = deps.queue ?? machineQueueReads({ cache: !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1") });
-  const [picked, repoRefs, roots, queue] = await Promise.all([
-    gatherPickRows(pickFlags, { ...deps.now !== void 0 ? { now: deps.now } : {}, ...deps.isAlive ? { isAlive: deps.isAlive } : {} }),
-    listSessions(configArg ? { configDir: configArg, cwd } : { cwd }),
-    claudeRoots(configArg),
-    countQueue(cwd, deps.now ?? Date.now(), reads)
-  ]);
+function appOptions(flags, roots, deps) {
+  const maxLiveStr = flagStr(flags, "max-live");
   return {
-    repoName: basename15(cwd) || cwd,
-    repoSessions: repoRefs.length,
-    globalSessions: picked.counts.total,
-    roots: roots.length,
-    runningSessions: picked.counts.running,
-    live: picked.rows.filter((row2) => row2.running),
-    queue
+    port: appPort(flags),
+    // policy: open by default when TTY; --no-open suppresses
+    open: !flagBool(flags, "no-open") && (flagBool(flags, "open") || deps.out.tty),
+    // loopback + capability URL: the operator sees their own transcript by default; --no-include-text opts out
+    includeText: !flagBool(flags, "no-include-text"),
+    // the Export HTML download leaves the machine: redacted like `orangu report` unless --include-text
+    exportIncludeText: flagBool(flags, "include-text"),
+    roots,
+    noCache: flags["no-cache"] !== void 0 || deps.env["ORANGU_NO_CACHE"] === "1",
+    version: VERSION,
+    maxLive: maxLiveStr !== void 0 ? Math.max(1, Math.floor(Number(maxLiveStr)) || DEFAULT_MAX_LIVE) : void 0
   };
 }
-function dashboardChoices(data) {
-  const choices = data.queue === "store-error" || data.queue.open > 0 ? [{ kind: "improve" }] : [];
-  choices.push({ kind: "repo" }, { kind: "global" });
-  if (data.globalSessions) choices.push({ kind: "browse" });
-  choices.push(...data.live.map((row2) => ({ kind: "session", row: row2 })));
-  return choices;
+function appPort(flags) {
+  const portStr = flagStr(flags, "port", "p");
+  if (portStr === void 0) return void 0;
+  const port = Number(portStr);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`--port must be an integer 0\u201365535, got "${portStr}"`);
+  return port;
 }
-function count3(value, noun) {
-  return `${value} ${noun}${value === 1 ? "" : "s"}`;
-}
-function oneLine3(value) {
-  return value.replace(/\s+/g, " ").trim();
-}
-function choiceText(choice, data, now, sep3) {
-  switch (choice.kind) {
-    case "improve": {
-      const counts = data.queue === "store-error" ? "the store could not be read" : `${data.queue.due} due${sep3}${data.queue.open} open`;
-      return { tag: "IMPROVE", text: `Improvements${sep3}${counts}`, live: false };
-    }
-    case "repo":
-      return { tag: "REPO", text: `Repository report${sep3}${data.repoName}${sep3}${count3(data.repoSessions, "session")}`, live: false };
-    case "global":
-      return { tag: "GLOBAL", text: `Global report${sep3}${count3(data.globalSessions, "session")}${sep3}${count3(data.roots, "root")}`, live: false };
-    case "browse":
-      return { tag: "SESSION", text: `Browse session reports${sep3}${count3(data.globalSessions, "session")}`, live: false };
-    case "session": {
-      const title = oneLine3(choice.row.title ?? choice.row.sessionId.slice(0, 8));
-      return { tag: "LIVE", text: `${title}${sep3}${choice.row.project}${sep3}${fmtAge(choice.row.mtimeMs, now)}`, live: true };
-    }
-  }
-}
-function dashboardChromeLines(caps) {
-  return mascotArt(layoutWidth(caps)).length + CHROME_ROWS_AROUND_ART;
-}
-function dashboardFrame(caps, data, choices, view, now) {
-  const width = layoutWidth(caps);
-  const g = glyphs(caps);
-  const lines = [
-    ...mascotLines(caps),
-    "",
-    paint(caps, "bold", INDENT4 + "Choose a report"),
-    paint(caps, "dim", truncate(`${INDENT4}${count3(data.runningSessions, "open Claude session")}${g.sep}local only${g.sep}no network calls`, width, caps)),
-    ""
-  ];
-  const end = Math.min(choices.length, view.start + view.size);
-  for (let i = view.start; i < end; i++) {
-    const choice = choices[i];
-    const rendered = choiceText(choice, data, now, g.sep);
-    const cursor = i === view.cursor;
-    const prefix = `${INDENT4}${cursor ? paint(caps, "accent", ">") : " "} `;
-    const liveMark = rendered.live ? paint(caps, "good", g.mark) : " ";
-    const tag = paint(caps, rendered.live ? "good" : "accent", rendered.tag.padEnd(TAG_WIDTH));
-    const budget = Math.max(1, width - displayWidth(prefix) - 2 - TAG_WIDTH - 1);
-    const text3 = truncate(rendered.text, budget, caps);
-    lines.push(prefix + liveMark + " " + tag + (cursor ? paint(caps, "bold", text3) : text3));
-  }
-  const hidden = choices.length - (end - view.start);
-  lines.push(hidden > 0 ? paint(caps, "dim", truncate(`${INDENT4}    ${g.up}${g.down} ${count3(hidden, "more choice")}`, width, caps)) : "");
-  const keys = caps.unicode ? "\u2191\u2193 or j k move \xB7 enter selects \xB7 q quits" : "up/down or j k move | enter selects | q quits";
-  lines.push(paint(caps, "dim", truncate(INDENT4 + keys, width, caps)));
-  return lines;
-}
-async function runChoice(choice, deps) {
-  switch (choice.kind) {
-    case "improve":
-      return deps.showQueue();
-    case "repo":
-      return deps.showRepo({ open: true });
-    case "global":
-      return deps.showGlobal({ open: true });
-    case "browse":
-      return deps.browseSessions();
-    case "session":
-      return deps.showSession(choice.row.sessionId);
-  }
-}
-async function cmdDashboard(flags, deps) {
-  if (!dashboardPrecondition(deps.stdin, deps.stdout, deps.env, flags)) return false;
-  const now = deps.now ?? Date.now();
-  const data = await gatherDashboardData(flags, {
-    now,
-    ...deps.cwd ? { cwd: deps.cwd } : {},
-    ...deps.isAlive ? { isAlive: deps.isAlive } : {},
-    ...deps.queue ? { queue: deps.queue } : {}
-  });
-  const choices = dashboardChoices(data);
-  const terminalRows = Number.isFinite(deps.stdout.rows) && (deps.stdout.rows ?? 0) > 0 ? deps.stdout.rows : 24;
-  const result = await select({
-    count: choices.length,
-    render: (view) => dashboardFrame({ ...deps.out, columns: view.columns }, data, choices, view, now),
-    input: deps.stdin,
-    output: deps.stdout,
-    caps: deps.out,
-    viewRows: Math.max(1, terminalRows - dashboardChromeLines(deps.out)),
-    ...deps.proc ? { proc: deps.proc } : {}
-  });
-  if (result.kind === "cancel") {
-    if (result.code) process.exitCode = result.code;
-    else deps.stderr.write(paint(deps.err, "dim", "  cancelled") + "\n");
-    return true;
-  }
-  await runChoice(choices[result.index], deps);
-  return true;
+async function cmdBare(flags, deps) {
+  if (!appPrecondition(deps.stdin, deps.stdout, deps.env, flags)) return deps.brief({ hint: !flagBool(flags, "quiet") });
+  const opts = appOptions(flags, await claudeRoots(flagStr(flags, "root", "config", "r")), deps);
+  deps.stdout.write("\n" + mascotLines(deps.out).join("\n") + "\n");
+  await deps.brief({ hint: false });
+  const start = deps.startServe ?? startServe;
+  const [app, picked] = await Promise.all([
+    start(opts, { quiet: !flagBool(flags, "verbose") }).catch((e) => {
+      throw new Error(`the app did not start: ${e instanceof Error ? e.message : String(e)}`);
+    }),
+    // the counts of the discovery that `orangu pick` reads, over every root
+    gatherPickRows({ ...flags, global: true }, { ...deps.now !== void 0 ? { now: deps.now } : {}, ...deps.isAlive ? { isAlive: deps.isAlive } : {} })
+  ]);
+  const stopped = new Promise((resolve14) => (deps.onInterrupt ?? ((stop) => process.once("SIGINT", stop)))(resolve14));
+  deps.stdout.write(appBlock(deps.out, { url: app.url, sessions: picked.counts.total, running: picked.counts.running }).join("\n") + "\n");
+  if (opts.open) (deps.openInBrowser ?? openInBrowser)(app.url);
+  await stopped;
+  await app.close();
+  deps.stderr.write("\n  The app stopped.\n");
+  (deps.exit ?? ((code2) => process.exit(code2)))(0);
 }
 
 // src/cli/raw-output.ts
@@ -19888,7 +19803,7 @@ async function selectSession2(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail2(`"${sel}" matches ${cands.length} sessions:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename16(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename15(c.projectSlug)).join("\n"));
   }
   fail2(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
@@ -19931,7 +19846,7 @@ async function analyzeWithProgress(ref2, flags) {
 }
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
-  if (out3) return resolve14(out3);
+  if (out3) return resolve13(out3);
   return join15(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
@@ -19970,11 +19885,11 @@ async function cmdAnalyze(sel, flags) {
   }
   thresholdExit(analysis, flags);
 }
-async function cmdBrief(flags) {
+async function cmdBrief(flags, o) {
   const ref2 = await selectSession2(void 0, flags);
   const { analysis } = await analyzeWithProgress(ref2, flags);
   const step = await nextStep2(analysis, flags);
-  process.stdout.write(briefBlock(out2, analysis, displayTitle(analysis, flags), step, { hint: !flagBool(flags, "quiet") }).join("\n") + "\n");
+  process.stdout.write(briefBlock(out2, analysis, displayTitle(analysis, flags), step, { hint: o.hint }).join("\n") + "\n");
   thresholdExit(analysis, flags);
 }
 function pickSessions(flags) {
@@ -20054,10 +19969,10 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${plural(roots.length, "root")})`;
   } else {
-    const cwd = selOrPath ? resolve14(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename16(cwd)}`;
+    scopeLabel = `repo ${basename15(cwd)}`;
   }
   if (!refs.length) fail2(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
@@ -20102,8 +20017,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve14(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve14(outFile), { raw: true }) + "\n");
+    await writePrivateOutput(resolve13(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    if (!quiet) process.stderr.write(row(err2, "written", resolve13(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -20122,7 +20037,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash6("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve14(named) : join15(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve13(named) : join15(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
@@ -20172,28 +20087,20 @@ async function cmdServe(flags) {
   await new Promise(() => {
   });
 }
-var helpTitle = () => `${paint(out2, "bold", "orangu")} v${VERSION}: observe the session, then improve the next outcome.
+var helpTitle = () => `${paint(out2, "bold", "orangu")} v${VERSION}: improve your agent harness and your setup.
 Deterministic observability for Claude Code sessions. No network calls.`;
 var helpPrivacy = () => paint(out2, "dim", "privacy: local only, no network requests. orangu redacts secrets by default.");
 function printHelp() {
   process.stdout.write(`${out2.tty ? "\n" + mascotLines(out2).join("\n") + "\n" : ""}
 ${helpTitle()}
 
-${paint(out2, "bold", "start here")}
-  orangu                     choose a report, or see what to improve next
-                             (a latest-session brief when piped or in CI)
-  orangu serve               the local app: every session, live, with the
-                             queue, history and lessons of your changes
-  /orangu:improve            in Claude Code: the next change to make, and
-                             the check after you apply it
+${paint(out2, "bold", "the chain")}
+  orangu             1. See: every session and agent tree on this machine,
+                     measured with no model, and the first findings.
+  /orangu:improve    2. Improve: in Claude Code, the brain proposes changes.
+                     orangu checks each one on your later sessions.
 
-${paint(out2, "bold", "also")}
-  orangu report [<session>]  one session as an HTML report (default: latest)
-  orangu repo                every session of this repository, in one report
-  orangu global              every session on this machine, in one report
-  orangu harness             what your config declares vs what you used
-
-  orangu help all            every command and flag
+  orangu help all    every command and flag
 
 plugin: /plugin marketplace add NissanOhana/orangu, then /plugin install orangu
 ${helpPrivacy()}
@@ -20204,8 +20111,8 @@ function printHelpAll() {
 ${helpTitle()}
 
 ${paint(out2, "bold", "usage")}
-  orangu                       interactive report dashboard (terminal)
-                               latest-session brief when piped or in CI
+  orangu                       latest-session brief, then the local app until
+                               ctrl-c (brief only when piped or in CI)
   orangu report  [<session>]   build a self-contained HTML report and open it
   orangu analyze [<session>]   print the analysis  (--json for the full object)
   orangu list                  list discoverable sessions  (--global: all roots)
@@ -20280,26 +20187,14 @@ async function main() {
   if (!command) {
     if (flagBool(flags, "json")) printHelp();
     else {
-      const handled = await cmdDashboard(flags, {
-        showRepo: (o) => cmdAggregate("repo", void 0, { ...flags, ...o }),
-        showGlobal: (o) => cmdAggregate("global", void 0, { ...flags, ...o }),
-        showSession: (id) => cmdReport(id, { ...flags, open: true }),
-        browseSessions: () => pickSessions({ ...flags, global: true }),
-        // the run of `orangu suggest --queue --cwd <this folder>`: the full check, then the queue text
-        showQueue: () => cmdSuggest([], {
-          queue: true,
-          cwd: process.cwd(),
-          ...flags["no-cache"] !== void 0 ? { "no-cache": true } : {},
-          ...flagBool(flags, "no-redact") ? { "no-redact": true } : {}
-        }),
+      await cmdBare(flags, {
+        brief: (o) => cmdBrief(flags, o),
         stdin: process.stdin,
         stdout: process.stdout,
         stderr: process.stderr,
         env: process.env,
-        out: out2,
-        err: err2
+        out: out2
       });
-      if (!handled) await cmdBrief(flags);
     }
     return;
   }

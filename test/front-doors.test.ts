@@ -1,6 +1,6 @@
 /**
- * The front doors. A person starts orangu at 1 of 3 doors: `npx orangu` in a terminal, `orangu serve` for the local
- * app, or `/orangu:improve` in Claude Code. A person surface names a door, or 1 whole `claude "/orangu:…"` handoff.
+ * The front doors. A person follows 1 chain: `npx orangu` in a terminal (the brief, then the local app), then
+ * `/orangu:improve` in Claude Code. A person surface names a door, or 1 whole `claude "/orangu:…"` handoff.
  * It never names an `orangu suggest` command, because that is the store API that the skills and scripts call. Only
  * `orangu help all`, the Commands row of docs/USAGE.md, docs/DETERMINISM.md, docs/DATA-CONTRACTS.md and the output of
  * `orangu suggest` itself name it.
@@ -15,9 +15,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ROOT, helpText } from '../scripts/ste-surfaces.js'
-import { dashboardChoices, dashboardFrame, type DashboardData } from '../src/cli/commands/dashboard.js'
 import { queueLines } from '../src/cli/commands/suggest-reads.js'
-import { nextStepLines, type NextStep } from '../src/cli/summary.js'
+import { appBlock, nextStepLines, type NextStep } from '../src/cli/summary.js'
 import { MACHINE_CAPS, stripAnsi } from '../src/cli/tty.js'
 import { kickoffCommands } from '../src/suggest/id.js'
 import { QUEUE_GROUPS, buildQueue, type QueueCheck, type QueueItem } from '../src/suggest/queue.js'
@@ -36,15 +35,9 @@ function storeApiLines(surface: string, text: string): string[] {
 
 const read = (rel: string): string => readFileSync(join(ROOT, rel), 'utf8')
 
-/** The dashboard of a workspace with 2 due and 3 open items, of a store that cannot be read, and with nothing open. */
-function dashboardFrames(): string[] {
-  const live = { sessionId: uuid(1), path: '/c/a.jsonl', projectSlug: '-w-repo', project: 'repo', title: 'Fix the login test', sizeBytes: 100, mtimeMs: NOW - 10_000, running: true }
-  const base: DashboardData = { repoName: 'repo', repoSessions: 2, globalSessions: 5, roots: 1, runningSessions: 1, live: [live], queue: { due: 0, open: 0 } }
-  return (['store-error', { due: 2, open: 3 }, { due: 0, open: 0 }] as const).map((queue) => {
-    const data = { ...base, queue }
-    const choices = dashboardChoices(data)
-    return dashboardFrame(MACHINE_CAPS, data, choices, { cursor: 0, start: 0, size: choices.length }, NOW).map(stripAnsi).join('\n')
-  })
+/** The rows that bare `orangu` prints on a terminal after the brief: the app URL, the counts and how to stop it. */
+function appRows(): string {
+  return appBlock(MACHINE_CAPS, { url: `http://127.0.0.1:53211/_orangu/${'q'.repeat(43)}`, sessions: 5, running: 1 }).map(stripAnsi).join('\n')
 }
 
 /** The footer of a session with a finding (both command forms) and of a clean session, each with a `due` row. */
@@ -111,9 +104,15 @@ describe('the front doors: no person surface names the store API', () => {
     expect(storeApiLines('x', 'claude "/orangu:improve --verify sg_000000000001"')).toEqual([])
   })
 
-  it('the short help names the 3 doors and no store command', () => {
+  it('the short help names the chain in order, then the full reference, and no store command or machine verb', () => {
     const help = helpText()
-    for (const door of ['  orangu    ', '  orangu serve ', '  /orangu:improve ']) expect(help).toContain(door)
+    const doors = ['\n  orangu  ', '\n  /orangu:improve  ', '\n  orangu help all  ']
+    const at = doors.map((door) => help.indexOf(door))
+    doors.forEach((door, index) => expect(at[index], door).toBeGreaterThan(-1))
+    expect(at, 'in the order of the chain').toEqual([...at].sort((a, b) => a - b))
+    const machine = ['orangu serve', 'orangu report', 'orangu repo', 'orangu global', 'orangu harness']
+    const skills = ['/orangu:apply', '/orangu:analyze', '/orangu:harness', '/orangu:show-me', '/orangu:feedback']
+    for (const name of [...machine, ...skills]) expect(help, name).not.toContain(name)
     expect(storeApiLines('orangu --help', help)).toEqual([])
   })
 
@@ -125,10 +124,9 @@ describe('the front doors: no person surface names the store API', () => {
     expect(storeApiLines('site/index.src.html', read('site/index.src.html'))).toEqual([])
   })
 
-  it('the dashboard frame names no store command, with open items, with a store error and with nothing open', () => {
-    const frames = dashboardFrames()
-    expect(frames[1]).toContain('IMPROVE Improvements')
-    frames.forEach((frame, index) => expect(storeApiLines(`dashboard frame ${index + 1}`, frame)).toEqual([]))
+  it('the app rows of bare orangu name no store command', () => {
+    expect(appRows()).toContain('Press ctrl-c to stop the app.')
+    expect(storeApiLines('app rows', appRows())).toEqual([])
   })
 
   it('the footer with a due row names no store command', () => {
@@ -165,7 +163,7 @@ describe('the front doors quote no money and add no dependency', () => {
       ['site/llms.txt', read('site/llms.txt')],
       ['site/llms-full.txt', read('site/llms-full.txt')],
       ['orangu --help', helpText()],
-      ...dashboardFrames().map((frame, index): [string, string] => [`dashboard frame ${index + 1}`, frame]),
+      ['app rows', appRows()],
       ...footers().map((footer, index): [string, string] => [`footer ${index + 1}`, footer]),
     ]
     for (const [label, text] of texts) {

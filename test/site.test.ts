@@ -138,16 +138,14 @@ describe('site/index.src.html (authored landing source)', () => {
     expect(hero).toContain('aria-label="See a sample report (opens in a new tab)">See a sample report ↗</a>')
   })
 
-  it('leads with the bare command, which opens the report menu, and keeps the latest-session command second', () => {
+  it('leads with the bare command and keeps the latest-session command second', () => {
     const hero = src.match(/<section class="hero"[\s\S]*?<\/section>/)?.[0] ?? ''
     const terminal = hero.match(/<div class="term"[^>]*><pre>([\s\S]*?)<\/pre><\/div>/)?.[1] ?? ''
     const lines = terminal.replace(/<[^>]+>/g, '').split('\n')
     expect(lines[0]).toBe('$ npx orangu')
-    // The terminal shows the menu that the bare command prints, so the landing and the CLI use one
-    // name for one thing. These literals live in the dashboard frame and in its choice rows.
-    const dashboard = readFileSync(join(root, 'src/cli/commands/dashboard.ts'), 'utf8')
+    // The hero terminal still draws the menu that bare orangu printed before it opened the app. The landing
+    // redesign replaces this block.
     for (const label of ['Choose a report', 'Improvements', 'Repository report', 'Global report', 'Browse session reports']) {
-      expect(dashboard, `dashboard no longer prints ${label}`).toContain(label)
       expect(lines.some((line) => line.trim().startsWith(label)), `terminal does not show ${label}`).toBe(true)
     }
     expect(lines[1]).toBe('Choose a report')
@@ -1002,22 +1000,22 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
 
   it('lists the bare command first, then the latest-session command, in both command lists', () => {
     const commands = llms.slice(llms.indexOf('Concretely, you can:')).split('\n').filter((line) => line.startsWith('- '))
-    expect(commands[0]).toMatch(/^- `npx orangu` : opens a menu in the terminal\./)
+    expect(commands[0]).toMatch(/^- `npx orangu` : prints a short summary of the latest session\./)
     expect(commands[1]).toMatch(/^- `npx orangu report` : /)
     const started = llms.slice(llms.indexOf('## Getting started'), llms.indexOf('## Optional'))
     const lead = started.split('\n').find((line) => line.includes('npx orangu')) ?? ''
     expect(lead).toMatch(/^- `npx orangu` /)
     expect(lead.indexOf('`npx orangu`')).toBeLessThan(lead.indexOf('`npx orangu report`'))
-    // llms.txt is read by agents, whose shell is not a TTY: there the bare command prints the
-    // latest-session brief instead of the menu (src/cli/commands/pick.ts interactivePrecondition).
-    for (const line of [commands[0]!, lead]) expect(line).toContain('In a pipe or in CI, it prints a short summary of the latest session.')
+    // llms.txt is read by agents, whose shell is not a TTY: there the bare command prints only the
+    // latest-session brief and starts no app (src/cli/door.ts, the predicate of the app).
+    for (const line of [commands[0]!, lead]) expect(line).toContain('In a pipe or in CI, it prints only the summary.')
   })
 
-  it('names your improvements in both menu lines, and the improve skill as the start in Claude Code', () => {
+  it('says in both lines that the bare command opens the app, and names the improve skill as the start in Claude Code', () => {
     const commands = llms.slice(llms.indexOf('Concretely, you can:')).split('\n').filter((line) => line.startsWith('- '))
-    expect(commands[0]).toContain('Choose your improvements, this repository, all sessions, or one session.')
+    expect(commands[0]).toContain('On a terminal, it then opens the local app on every session of this machine, until you press ctrl-c.')
     const started = llms.slice(llms.indexOf('## Getting started'), llms.indexOf('## Optional'))
-    expect(started).toContain('`npx orangu` opens a menu: your improvements, this repository, all sessions, or one session.')
+    expect(started).toContain('On a terminal, it then opens the local app: one session, your sessions and their agents, or the whole machine.')
     expect(started).toContain('Then start with `/orangu:improve`.')
   })
 
@@ -1315,9 +1313,9 @@ describe('docs/USAGE.md entry point', () => {
     const lines = block.split('\n')
     expect(lines[0]).toMatch(/^npx orangu\s+#/)
     expect(lines[1]).toMatch(/^npx orangu report\s+#/)
-    // a pipe or CI is not a TTY: there the bare command prints the latest-session brief instead of the
-    // dashboard (src/cli/commands/pick.ts interactivePrecondition, src/cli/main.ts cmdBrief)
-    expect(install).toContain('In a pipe or in CI, bare `npx orangu` prints a short summary of the latest session.')
+    // a pipe or CI is not a TTY: there the bare command prints the latest-session brief and starts no
+    // app (src/cli/door.ts, the predicate of the app, and src/cli/main.ts cmdBrief)
+    expect(install).toContain('In a pipe or in CI, bare `npx orangu` prints only a short summary of the latest session.')
   })
 
   it('gives examples of the stripped text, not a full list, and says --include-text restores all of it', () => {
@@ -1360,8 +1358,9 @@ describe('docs/USAGE.md entry point', () => {
   })
 
   it('lists every input that keeps bare orangu on the latest-session brief', () => {
-    // src/cli/commands/pick.ts interactivePrecondition and src/cli/commands/dashboard.ts TARGETED_BARE_FLAGS
-    const bare = usage.slice(usage.indexOf('bare `orangu` draws'), usage.indexOf('`orangu repo` and `orangu global` print'))
+    // src/cli/commands/pick.ts interactivePrecondition and src/cli/door.ts TARGETED_BARE_FLAGS
+    const bare = usage.slice(usage.indexOf('bare `orangu` prints the orange'), usage.indexOf('`orangu repo` and `orangu global` print'))
+    expect(bare).toContain('Press Ctrl-C to stop the app.')
     for (const input of ['a pipe', '`CI`', '`TERM=dumb`', '`ORANGU_NO_ANIMATION=1`', '`--plain`', '`--quiet`', '`--session`', '`--global`', '`--cwd`', '`--max-tokens`', '`--fail-on-hook-errors`']) {
       expect(bare, input).toContain(input)
     }
@@ -1382,7 +1381,7 @@ describe('docs/USAGE.md entry point', () => {
     expect(usage.split('\n').filter((line) => /\borangu suggest\b/.test(line))).toEqual([
       '| `orangu suggest` | The suggestion store that the skills call. `orangu help all` lists its flags |',
     ])
-    expect(usage).toContain('`orangu --help` shows the common commands. `orangu help all` shows every command and flag.')
+    expect(usage).toContain('`orangu --help` shows the chain. `orangu help all` shows every command and flag.')
     expect(usage).toContain('`/orangu:improve --verify <id>` shows the comparison and records a final verdict.')
   })
 })

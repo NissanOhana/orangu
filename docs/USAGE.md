@@ -7,12 +7,12 @@ Orangu reads supported local session files. It turns them into a self-contained 
 Orangu requires Node.js 20 or newer.
 
 ```bash
-npx orangu          # dashboard: improvements, repo, global, or a session
+npx orangu          # latest session, then the app on all your sessions
 npx orangu report   # latest session
 npm install --global orangu
 ```
 
-In a pipe or in CI, bare `npx orangu` prints a short summary of the latest session.
+In a pipe or in CI, bare `npx orangu` prints only a short summary of the latest session.
 
 To run from a source checkout:
 
@@ -26,7 +26,7 @@ node dist/orangu.js report
 
 | Command | Purpose |
 |---|---|
-| `orangu` (no verb) | Open the terminal dashboard for your improvements and for repo, global, and session reports |
+| `orangu` (no verb) | Print the latest-session brief, then run the app on all your sessions until Ctrl-C |
 | `orangu report [selector]` | Write and open one self-contained session report |
 | `orangu analyze [selector]` | Print a summary or redacted JSON |
 | `orangu list` | List discoverable supported sessions |
@@ -47,19 +47,19 @@ A session selector is `latest`, a session id or unique prefix, a supported `.jso
 
 `report`, `analyze`, `watch`, and `estimate` also take the selector as `--session <selector>` (`-s`). If the positional selector and the flag differ, that is an error.
 
-On an interactive terminal, bare `orangu` draws the orange ASCII mascot and a keyboard dashboard. When this workspace has open improvements, the first choice prints their queue. The next choices open the current-repository aggregate, the global aggregate, or the full session picker. Below them, each open Claude Code session is a direct report shortcut. Move with the arrow keys or `j`/`k`, choose with Enter, and cancel with `q`, Esc, or Ctrl-C. These keep bare `orangu` on the latest-session brief, which never waits for input:
+On an interactive terminal, bare `orangu` prints the orange ASCII mascot and the latest-session brief. Then it runs the app on the sessions of every root and opens it in your browser. The app shows prompt text on this machine. `--no-include-text` hides it, and `--no-open` keeps the browser closed. Press Ctrl-C to stop the app. These keep bare `orangu` on the latest-session brief, which never waits for input:
 
 - a pipe, `CI`, `TERM=dumb`, or `ORANGU_NO_ANIMATION=1`
 - `--plain` or `--quiet`
 - `--session`, `--global`, `--cwd`, `--max-tokens`, or `--fail-on-hook-errors`
 
-`orangu repo` and `orangu global` print their answer to stdout. `--html <file>` also writes that scope as one self-contained HTML report. `--open` writes it into the temp directory as `orangu-<scope>-<hash>.html` and hands it to your browser. So a re-run of `--open` never overwrites a file that a browser still has open. The dashboard's repository and global choices ask for `--open`, and `--no-open` suppresses it.
+`orangu repo` and `orangu global` print their answer to stdout. `--html <file>` also writes that scope as one self-contained HTML report. `--open` writes it into the temp directory as `orangu-<scope>-<hash>.html` and hands it to your browser. So a re-run of `--open` never overwrites a file that a browser still has open.
 
 Orangu refuses `--html` and `--open` with `--json`, which is a machine read with no side effect. `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report. `--jobs <n>` sets the worker threads of a scan over many sessions: by default the CPU count minus 1, and never more than the CPU count.
 
 `orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
 
-`orangu --help` shows the common commands. `orangu help all` shows every command and flag.
+`orangu --help` shows the chain. `orangu help all` shows every command and flag.
 
 ### Rules that did not hold
 
@@ -74,13 +74,13 @@ Without `--include-text`, a row has no text: no rule line, no shared word, no co
 
 ### Terminal output
 
-`orangu report` writes only the report path to stdout, so `orangu report | xargs open` works. Its summary goes to stderr: the check line, the path, the top finding, and the next command. `orangu analyze` prints the measurement block on stdout and the same footer on stderr. The bare interactive dashboard and the non-interactive latest-session brief both use stdout.
+`orangu report` writes only the report path to stdout, so `orangu report | xargs open` works. Its summary goes to stderr: the check line, the path, the top finding, and the next command. `orangu analyze` prints the measurement block on stdout and the same footer on stderr. Bare `orangu` prints the brief and the `app` rows on stdout.
 
-The next command is the short `claude "/orangu:improve sg_…"`. For it to work, `report`, `analyze`, and the non-interactive bare-session brief record the top finding's suggestion under `~/.orangu`. Only when orangu cannot write that store does the long `--finding` form appear, with a line that says so. `--quiet` silences the trailing hint but still records the suggestion, and a re-run adds nothing. `--json` records nothing.
+The next command is the short `claude "/orangu:improve sg_…"`. For it to work, `report`, `analyze`, and the bare-session brief record the top finding's suggestion under `~/.orangu`. Only when orangu cannot write that store does the long `--finding` form appear, with a line that says so. `--quiet` silences the trailing hint but still records the suggestion, and a re-run adds nothing. `--json` records nothing.
 
 The title of the top finding wraps under itself. An `Improvement:` line under it names the change, above `next`. `orangu repo` and `orangu global` print the same line under each recurring finding. One caption says that each title shows the figures of one example session.
 
-Prose wraps at whole words and is never cut: at the terminal width below 80 columns, and at 80 columns above it. Only a word longer than the line breaks inside it. Only one-line cells cut: at their last whole word, or inside a word with no space, such as a project name. They are the header, the store note, the `list` and `pick` cells, the heaviest-session titles, the dashboard and the spinner.
+Prose wraps at whole words and is never cut: at the terminal width below 80 columns, and at 80 columns above it. Only a word longer than the line breaks inside it. Only one-line cells cut: at their last whole word, or inside a word with no space, such as a project name. They are the header, the store note, the `list` and `pick` cells, the heaviest-session titles and the spinner.
 
 Colour appears only on an interactive terminal. It is off under `--json`, `--quiet`, `--no-color`, `NO_COLOR`, `FORCE_COLOR=0`, `TERM=dumb`, or a pipe (`FORCE_COLOR=1|2|3` paints a pipe). The spinner needs the same terminal. It is also off under `CI`, `NO_COLOR`, `FORCE_COLOR=0`, and `ORANGU_NO_ANIMATION=1` (the last one stops the spinner, not the colour).
 

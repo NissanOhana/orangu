@@ -10,9 +10,8 @@ import { buildCanonicalSession, SessionBuilder } from '../../test/fixtures/sessi
 import type { Analysis } from '../model/analysis.js'
 import { projectSlug, type SessionRef } from '../discover/discover.js'
 import { SuggestionStore } from '../suggest/store.js'
-import { gatherDashboardData } from './commands/dashboard.js'
 import { MACHINE_CAPS, displayWidth, stripAnsi, type Caps } from './tty.js'
-import { aggregateBlock, aggregateOffer, analysisBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, rows, valueBudget, type NextStep, type PickRow } from './summary.js'
+import { aggregateBlock, aggregateOffer, analysisBlock, appBlock, betaLine, briefBlock, doneLine, fmtAge, listRows, nextStepLines, pickFrame, pickList, reportFooter, row, rows, valueBudget, type NextStep, type PickRow } from './summary.js'
 import { footerDue, machineQueueReads, persistNextStep, queueCounts } from './next-step.js'
 import { QUEUE_CHECK_BYTES } from '../suggest/queue-read.js'
 import { countingQueueReads, memoryQueueStore } from '../../test/fixtures/suggestion-queue.js'
@@ -61,13 +60,15 @@ const FALLBACK: NextStep = {
   storeNote: 'EACCES: permission denied, mkdir',
   next: 'claude "/orangu:improve sg_0f0f0f0f0f0f --finding ' + 'eyJ'.repeat(160) + '"',
 }
+/** the app that bare orangu starts on a terminal: a 5-digit port and a 43-character capability, as startServe makes them */
+const APP = { url: 'http://127.0.0.1:53211/_orangu/q2X8vB0Lw9kZ3mN1pR7sT5uV4xY6zA2bC8dE0fG1hI3', sessions: 8354, running: 3 }
 /** the value column of a labelled row: 2-space indent, 8-column label, 1 space */
 const GUTTER = ' '.repeat(11)
 const HOSTILE = 'Fix \x1b]52;c;SGVsbG8=\x07the \x1b[2Jtitle'
 const ESCAPE_BYTES = /[\x1b\x07\x80-\x9f]/
 
-/** rows a paste must carry whole (the paths, the next, plugin and beta commands) wrap below 80 columns */
-const RAW_ROWS = /^ {2}(report|next|plugin|written|beta) {2,}\S/
+/** rows a paste must carry whole (the paths, the next, plugin and beta commands, the app URL) wrap below 80 columns */
+const RAW_ROWS = /^ {2}(?:(?:report|next|plugin|written|beta) {2,}|app )\S/
 
 function assertFits(lines: string[], caps: Caps, label: string): void {
   const limit = Math.min(caps.columns, 80)
@@ -401,7 +402,7 @@ describe('footerDue', () => {
   })
 })
 
-describe('the queue counts of the footer and the dashboard on the reads of this machine', () => {
+describe('the queue count of the footer on the reads of this machine', () => {
   const ENV_KEYS = ['ORANGU_CLAUDE_ROOTS', 'CLAUDE_CONFIG_DIR', 'HOME', 'ORANGU_HOME'] as const
   let saved: Record<string, string | undefined> = {}
   beforeEach(() => {
@@ -444,14 +445,12 @@ describe('the queue counts of the footer and the dashboard on the reads of this 
     const now = Date.now() + MIN_VERIFICATION_QUIET_MS + 60_000
     const reads = () => machineQueueReads({ cache: true })
     // Cold: the store, the cohort facts cache and the discovery of this orangu home, at 0 B. No transcript is read,
-    // so the applied record is open and not due, in the footer and in the dashboard.
+    // so the applied record is open and not due in the footer.
     expect(await footerDue(reads(), { cwd, now })).toBe(0)
-    expect((await gatherDashboardData({ root }, { now, cwd: () => cwd, isAlive: () => false })).queue).toEqual({ due: 0, open: 1 })
-    // The full check of the printout reads the 3 sessions, finds the record due and fills the cache.
+    // The full check of `orangu suggest --queue` reads the 3 sessions, finds the record due and fills the cache.
     expect((await queueCounts(cwd, now, QUEUE_CHECK_BYTES, reads())).due).toBe(1)
-    // Warm: both counts take the check from the cache.
+    // Warm: the footer count takes the check from the cache.
     expect(await footerDue(reads(), { cwd, now })).toBe(1)
-    expect((await gatherDashboardData({ root }, { now, cwd: () => cwd, isAlive: () => false })).queue).toEqual({ due: 1, open: 1 })
   })
 })
 
@@ -479,19 +478,54 @@ describe('the due row of the footer', () => {
     for (const step of [STEP, { ...STEP, due: 0 }, {}, { due: 0 }]) expect(dueRow(nextStepLines(capsAt(80), step)), JSON.stringify(step)).toBeUndefined()
   })
 
-  it.each([60, 80, 120])('fits the report footer, the brief and the clean footer with a due row at %i columns', async (columns) => {
+  it.each([60, 80, 120])('fits the report footer, the brief, bare orangu on a terminal and the clean footer with a due row at %i columns', async (columns) => {
     const caps = capsAt(columns)
     const a = await analyzed(heavyBuilder())
     const step: NextStep = { ...STEP, due: 2 }
     const views = {
       reportFooter: reportFooter(caps, { path: '/var/folders/1x/5tq6y5g95l5c2vxg2l7nzf9w0000gn/T/orangu-bbbbbbbb.html', opened: true, step }),
       briefBlock: briefBlock(caps, a, 'Title', step, { hint: true }),
+      // what bare orangu prints on a terminal after the mascot: the brief with no hint, then the app rows
+      bareTerminal: [...briefBlock(caps, a, 'Title', step, { hint: false }), ...appBlock(caps, APP)],
       clean: nextStepLines(caps, { due: 2 }),
     }
     for (const [label, lines] of Object.entries(views)) {
       expect(dueRow(lines), `${columns} ${label}`).toMatch(/^ {2}due {6}claude "\/orangu:improve"/)
       assertFits(lines, caps, `${columns} ${label}`)
     }
+  })
+})
+
+describe('appBlock: the app rows of bare orangu on a terminal', () => {
+  it('prints the URL whole on the app row at every width, in exactly 80 columns', () => {
+    expect(APP.url).toHaveLength(74)
+    for (const columns of [40, 60, 80, 120, 200]) {
+      const lines = appBlock(capsAt(columns), APP).map(stripAnsi)
+      expect(lines.filter((l) => l.startsWith('  app ')), `${columns}`).toEqual([`  app ${APP.url}`])
+    }
+    expect(displayWidth(`  app ${APP.url}`)).toBe(80)
+  })
+
+  it('counts the sessions of every root and the running ones, says what the app shows, and ends with how to stop it', () => {
+    expect(appBlock(capsAt(80), APP).map(stripAnsi)).toEqual([
+      '',
+      `  app ${APP.url}`,
+      '      8,354 sessions on this machine · 3 running now',
+      '      See one session, your sessions and their agents, or the machine.',
+      '',
+      '  Press ctrl-c to stop the app.',
+    ])
+    const one = appBlock(capsAt(80, { unicode: false, color: 0 }), { ...APP, sessions: 1, running: 0 })
+    expect(one[2]).toBe('      1 session on this machine | 0 running now')
+  })
+
+  it('wraps the counts at the separator and the sentence at whole words under the URL on a narrow terminal', () => {
+    const lines = appBlock(capsAt(40), APP).map(stripAnsi)
+    const under = lines.filter((l) => l.startsWith('      '))
+    for (const l of under) expect(displayWidth(l), l).toBeLessThanOrEqual(40)
+    expect(under.slice(0, 2)).toEqual(['      8,354 sessions on this machine', '      3 running now'])
+    expect(under.slice(2).map((l) => l.trim()).join(' ')).toBe('See one session, your sessions and their agents, or the machine.')
+    expect(lines.at(-1)).toBe('  Press ctrl-c to stop the app.')
   })
 })
 

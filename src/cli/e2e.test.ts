@@ -5,9 +5,9 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { cpus, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { createServer, type AddressInfo } from 'node:net'
 import { makeFixtureHome, appendTurn } from '../../test/fixtures/home.js'
-import { SessionBuilder, buildCanonicalSession } from '../../test/fixtures/session-builder.js'
-import { projectSlug } from '../discover/discover.js'
+import { SessionBuilder } from '../../test/fixtures/session-builder.js'
 import { checkText } from '../ste/index.js'
 import { MASCOT_STACKED } from './mascot-ascii.js'
 import { CLI_VERBS } from './commands/index.js'
@@ -98,55 +98,78 @@ describe.skipIf(!existsSync(CLI) || !SCRIPT || !existsSync(SCRIPT))('orangu CLI 
     expect(rendered(out)).toMatch(/^ {2}✓ analyzed /m)
     expect(rendered(out)).toMatch(/^ {2}next {5}claude "\/orangu:improve sg_[0-9a-f]{12}"$/m)
   })
-  it('bare orangu: Enter on IMPROVE prints the queue of this folder, with the app row last', async () => {
-    // Hermetic: the store, the user home and the only Claude root are temp folders, and the child runs in a temp
-    // workspace. The store holds 1 open record of that workspace, so IMPROVE is the first choice.
-    const claudeRoot = await mkdtemp(join(tmpdir(), 'orangu-cli-pty-claude-'))
-    const workspace = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-ws-')))
-    const project = join(claudeRoot, 'projects', projectSlug(workspace))
-    await mkdir(project, { recursive: true })
-    const evidence = join(project, 'aaaaaaaa-0000-4000-8000-000000000001.jsonl')
-    await writeFile(evidence, buildCanonicalSession({ cwd: workspace }).toJsonl())
+  /** A fixture Claude root, a private store and user home, and a stub `open` on PATH that logs each URL it gets. */
+  async function doorFixture(): Promise<{ root: string; envDelta: Record<string, string>; opened(): string[] }> {
+    const dir = realpathSync(await mkdtemp(join(tmpdir(), 'orangu-cli-pty-door-')))
+    const home = await makeFixtureHome(dir)
+    const bin = join(dir, 'bin')
+    await mkdir(bin)
+    const openLog = join(dir, 'opened.log')
+    for (const name of ['open', 'xdg-open']) await writeFile(join(bin, name), `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(openLog)}\n`, { mode: 0o755 })
     const envDelta = {
       ORANGU_HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-pty-store-')),
       HOME: await mkdtemp(join(tmpdir(), 'orangu-cli-pty-user-')),
-      ORANGU_CLAUDE_ROOTS: claudeRoot,
-      CLAUDE_CONFIG_DIR: claudeRoot,
+      ORANGU_CLAUDE_ROOTS: home.configDir,
+      CLAUDE_CONFIG_DIR: home.configDir,
+      ORANGU_NO_CACHE: '1',
+      PATH: `${bin}:${process.env['PATH'] ?? ''}`,
     }
-    const created = execFileSync('node', [CLI, 'suggest', '--rule', 'reread-files', '--scope', 'session', '--session', evidence, '--json'], {
-      encoding: 'utf8',
-      env: { ...process.env, ...envDelta },
-      cwd: workspace,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    })
-    const id = JSON.parse(created).record.id as string
+    return { root: home.configDir, envDelta, opened: () => (existsSync(openLog) ? readFileSync(openLog, 'utf8').trim().split('\n') : []) }
+  }
 
-    const { spawnArgs, env } = ptyCommand(['--root', claudeRoot], envDelta)
+  it('bare orangu: the brief, then the app over every root until ctrl-c, with the request log off', async () => {
+    const { root, envDelta, opened } = await doorFixture()
+    const { spawnArgs, env } = ptyCommand(['--root', root], envDelta)
     // script(1) on macOS refuses a socket on its stdin, and a Node pipe is a socket pair: cat hands it a pipe
-    const child = spawn('/bin/sh', ['-c', 'cat | "$@"', 'sh', SCRIPT, ...spawnArgs], { env, cwd: workspace, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn('/bin/sh', ['-c', 'cat | "$@"', 'sh', SCRIPT, ...spawnArgs], { env, stdio: ['pipe', 'pipe', 'pipe'] })
     let out = ''
     child.stdout.on('data', (chunk: Buffer) => (out += chunk.toString('utf8')))
     child.stderr.on('data', (chunk: Buffer) => (out += chunk.toString('utf8')))
     const closed = new Promise<number | null>((resolve) => child.on('close', resolve))
+    const appRow = /^ {2}app (http:\/\/127\.0\.0\.1:\d+\/_orangu\/[A-Za-z0-9_-]{43})$/m
+    let url = ''
     try {
-      // the key goes in only after the first frame, which the dashboard draws after it turns raw mode on
-      await until(() => out.includes('enter selects'), 20_000, 'the first dashboard frame')
-      expect(rendered(out), 'the cursor is on IMPROVE').toMatch(/^ {2}> {3}IMPROVE Improvements · \d+ due/m)
-      child.stdin.end('\r')
-      const status = await closed
-      expect(status, out).toBe(0)
+      // ctrl-c goes in only after the app row, which prints after the app listens for it
+      await until(() => appRow.test(rendered(out)), 30_000, 'the app row')
+      url = appRow.exec(rendered(out))![1]!
+      await until(() => opened().length > 0, 10_000, 'the stub opener')
+      expect(opened(), 'the browser handoff got the URL of the app row').toEqual([url])
+      // a request that the app answers: with the request log on, it would print a GET line
+      expect((await fetch(`${url}/api/sessions`)).status).toBe(200)
+      // ctrl-c on the terminal: the line discipline sends SIGINT to the app
+      child.stdin.end('\x03')
+      expect(await closed, out).toBe(0)
     } finally {
-      // on a failure, q quits the dashboard and the end of stdin stops cat, so no child of sh outlives the test
-      if (!child.stdin.writableEnded) child.stdin.end('q')
+      // on a failure, the end of stdin stops cat, so no child of sh outlives the test
+      if (!child.stdin.writableEnded) child.stdin.end('\x03')
       child.kill()
     }
-    const shown = rendered(out).replace(/\s+$/, '')
-    // the queue of the temp workspace, not of another folder: its header, its scope and the record
-    const queue = shown.slice(shown.indexOf('enter selects'))
-    expect(queue).toMatch(/^ {2}Improvements · \d+ due · 1 open$/m)
-    expect(queue).toContain(`\n  Workspace: ${workspace}\n`)
-    expect(queue).toContain(id)
-    expect(shown.split('\n').at(-1)).toBe('  See this queue in the app: orangu serve')
+    const shown = rendered(out)
+    // the brief of the latest session comes first, then the app rows, then how to stop the app
+    expect(shown).toMatch(/^ {8}latest · [0-9a-f]{8} · \d+ turns/m)
+    expect(shown.indexOf('latest · ')).toBeLessThan(shown.indexOf(`  app ${url}`))
+    expect(shown).toMatch(/^ {6}3 sessions on this machine · \d running now$/m)
+    expect(shown).toContain('\n  Press ctrl-c to stop the app.')
+    expect(shown).toContain('The app stopped.')
+    expect(shown, 'the request log is off').not.toMatch(/^(GET|POST) \//m)
+    expect(shown).not.toContain('Choose a report')
+  }, 60_000)
+
+  it('bare orangu: when the app does not start, the brief stays, the reason goes to stderr, and the exit is 1', async () => {
+    const { root, envDelta } = await doorFixture()
+    const busy = createServer()
+    await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve))
+    const port = (busy.address() as AddressInfo).port
+    try {
+      const { out, status } = runPty(['--root', root, '--port', String(port)], envDelta)
+      expect(status, out).toBe(1)
+      const shown = rendered(out)
+      expect(shown).toMatch(/^ {8}latest · [0-9a-f]{8} · /m)
+      expect(shown).toMatch(/error: the app did not start: listen EADDRINUSE/)
+      expect(shown).not.toMatch(/^ {2}app /m)
+    } finally {
+      await new Promise((resolve) => busy.close(resolve))
+    }
   }, 60_000)
 })
 
@@ -154,17 +177,25 @@ describe.skipIf(!existsSync(CLI))('orangu CLI (built)', () => {
   it('--version prints the version', () => {
     expect(run(['--version']).trim()).toMatch(/^\d+\.\d+\.\d+/)
   })
-  it('--help is the short screen: the 3 front doors and the common verbs, no flag, in 24 rows of 80 columns', () => {
+  it('--help is the short screen: the chain, then the full reference, no flag and no machine verb, in 24 rows of 80 columns', () => {
     const h = execFileSync('node', [CLI, '--help'], { encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe'] })
     const lines = h.replace(/\n$/, '').split('\n')
     expect(lines.length, h).toBeLessThanOrEqual(24)
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(80)
-    const doors = h.slice(h.indexOf('\nstart here\n'), h.indexOf('\nalso\n'))
-    for (const door of ['\n  orangu  ', '\n  orangu serve  ', '\n  /orangu:improve  ']) expect(doors, door).toContain(door)
-    for (const line of ['\n  orangu report ', '\n  orangu repo ', '\n  orangu global ', '\n  orangu harness ', '\n  orangu help all ', '\nplugin: ', '\nprivacy: ']) expect(h, line).toContain(line)
+    const chain = h.slice(h.indexOf('\nthe chain\n'), h.indexOf('\n  orangu help all '))
+    for (const door of ['\n  orangu  ', '\n  /orangu:improve  ']) expect(chain, door).toContain(door)
+    for (const line of ['\n  orangu help all ', '\nplugin: ', '\nprivacy: ']) expect(h, line).toContain(line)
     expect(h).not.toContain('--')
-    for (const verb of ['suggest', 'evidence', 'estimate', 'ste', 'show-me', 'feedback', 'analyze', 'list', 'pick', 'watch']) expect(h).not.toContain(`orangu ${verb}`)
+    for (const verb of [...CLI_VERBS, 'help']) expect(h, verb).not.toMatch(new RegExp(`orangu ${verb}\\b(?! all)`))
     expect(h).not.toMatch(ESCAPES)
+  })
+
+  it('help all has a usage line for each verb of CLI_VERBS, its aliases left out', () => {
+    const all = run(['help', 'all'])
+    const usage = all.slice(all.indexOf('\nusage\n'), all.indexOf('\nsession '))
+    const verbs = CLI_VERBS.filter((name) => !['html', 'a', 'ls', 'all'].includes(name))
+    expect(verbs).toHaveLength(CLI_VERBS.length - 4)
+    for (const verb of verbs) expect(usage, verb).toMatch(new RegExp(`^ {2}orangu ${verb}(?: |$)`, 'm'))
   })
 
   it('help all is the full reference: help <name> and <name> -h print the same bytes for each verb', () => {
@@ -961,7 +992,7 @@ syncBuiltinESMExports()
 
     const help = run(['help', 'all'])
     expect(help).toContain('usage')
-    expect(help).toMatch(/usage\n  orangu {2,}interactive report dashboard \(terminal\)\n {31}latest-session brief when piped or in CI\n  orangu report/)
+    expect(help).toMatch(/usage\n  orangu {2,}latest-session brief, then the local app until\n {31}ctrl-c \(brief only when piped or in CI\)\n  orangu report/)
     const short = run(['--help'])
     for (const text of [help, short]) {
       expect(text).not.toContain('top finding')
@@ -1492,7 +1523,7 @@ describe.skipIf(!existsSync(CLI))('orangu CLI regressions from the 0.7.0 QA pass
       for (const line of text.split('\n')) expect(line.length, line).toBeLessThanOrEqual(80)
       expect(text).not.toContain(';')
       expect(text).not.toMatch(/n't\b/)
-      expect(text).toContain('observe the session, then improve the next outcome')
+      expect(text.split('\n').find((line) => line.startsWith('orangu v'))).toMatch(/^orangu v\d+\.\d+\.\d+: improve your agent harness and your setup\.$/)
     }
     expect(h).toContain('or "current" (the Claude Code session that runs orangu)')
     // pick's own meaning of --json: it prints the list instead of opening the chooser

@@ -9,8 +9,8 @@
  * whole words (wrapWords) and is never cut: a finding title, an improvement, a row value, a hint. Only
  * label cells cut, at their last whole word (truncate): the header title and sub line, the store
  * reason, the list and pick cells and the heaviest-session title. A path or a command a paste must
- * carry whole (the report path, a re-read path, the next and plugin rows, the store fallback) is never cut
- * or wrapped here: when it is wider than its room, the terminal wraps it. Text from a transcript reaches the
+ * carry whole (the report path, a re-read path, the next and plugin rows, the store fallback, the app URL) is never
+ * cut or wrapped here: when it is wider than its room, the terminal wraps it. Text from a transcript reaches the
  * terminal only through wrapWords, truncate or oneLine, which strip escapes and control bytes first;
  * truncate and oneLine also turn a newline or a tab into a space, so that a one-line value stays one line.
  * ASCII in every aligned cell; the audited glyphs (mark, check, middle dot) appear only in a leading
@@ -246,6 +246,24 @@ export function briefBlock(caps: Caps, a: Analysis, title: string, step: NextSte
   lines.push(...nextStepLines(caps, step))
   if (o.hint) lines.push('', ...fit(caps, `${INDENT}orangu report for the full picture${sep}orangu help all for every command`, 'dim', true))
   return lines
+}
+
+/** The app row: the label and 1 space, so the 74-column URL of a 5-digit port fits 80 columns whole. */
+const APP_HEAD = INDENT + 'app '
+
+/**
+ * stdout rows of bare `orangu` on a terminal, after the brief, once the app runs: its URL, the sessions of every root
+ * and the running ones, what the app shows, and how to stop it. The URL is a paste target and is never cut or
+ * wrapped. With a 43-character capability it is 74 columns wide, so the value column of 12 has no room for it. It
+ * follows the label after 1 space, and the rows under it hang at its column.
+ */
+export function appBlock(caps: Caps, o: { url: string; sessions: number; running: number }): string[] {
+  const pad = ' '.repeat(APP_HEAD.length)
+  const width = layoutWidth(caps) - pad.length
+  const sessions = `${o.sessions.toLocaleString('en-US')} ${o.sessions === 1 ? 'session' : 'sessions'} on this machine`
+  const counts = wrapJoined(caps, `${sessions}${glyphs(caps).sep}${o.running.toLocaleString('en-US')} running now`, width)
+  const shows = wrapWords('See one session, your sessions and their agents, or the machine.', width)
+  return ['', APP_HEAD + paint(caps, 'accent', o.url), ...[...counts, ...shows].map((l) => pad + l), '', ...fit(caps, `${INDENT}Press ctrl-c to stop the app.`)]
 }
 
 /** `orangu list` rows: id, when, size, agents, project; every cell ASCII and width-aligned. */
