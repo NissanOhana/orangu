@@ -116,12 +116,45 @@ describe('names: argv0Basename', () => {
     expect(argv0Basename('env AUTH="Bearer Zm9v/FAKEv26" ~/h.sh')).toBe('h.sh')
     expect(argv0Basename('node --key Zm9v/FAKEv25 x.js')).toBe('x.js')
     expect(argv0Basename('node --key=Zm9v/FAKEv30 /opt/hooks/x.js')).toBe('x.js')
-    // a word with a space is code or a value, never the script
+    // a word with a space is code or a value, never the script: after a flag, and with no flag before it
     expect(argv0Basename("bash -c 'curl https://x/FAKEv38.sh'")).toBe('bash')
+    expect(argv0Basename("bash -c 'echo FAKEv47.sh'")).toBe('bash')
+    expect(argv0Basename("bash 'echo a/FAKEv49'")).toBe('bash')
   })
   it('keeps the names of the env forms', () => {
     expect(argv0Basename('env FOO=1 cmd')).toBe('env')
     expect(argv0Basename('FOO=1 BAR=2 cmd')).toBe('cmd')
     expect(argv0Basename('cmd=1')).toBe('')
+  })
+  it('names the package runner after a flag value, never a URL piece: only a script word can follow a skipped value', () => {
+    expect(argv0Basename('npx -y ntfy-notify https://ntfy.sh/FAKEtopic40')).toBe('npx')
+    expect(argv0Basename('npx -y ntfy-notify https://ntfy.sh/FAKEtopic41.sh')).toBe('npx')
+    // with no URL: after the value of a flag, a path with no script extension is an argument
+    expect(argv0Basename('node --key FAKEv44 /tmp/FAKEv45')).toBe('node')
+    // a URL is never the script, with no flag before it too
+    expect(argv0Basename('bun https://ntfy.sh/FAKEtopic42')).toBe('bun')
+  })
+  it('looks for a substitution only in the words up to the name: an argument with $( keeps the name', () => {
+    expect(argv0Basename('notify.sh "$(pwd)"')).toBe('notify.sh')
+    expect(argv0Basename('/opt/hooks/notify.sh --dir `pwd`')).toBe('notify.sh')
+    // the script word and a flag value before it are up to the name: a substitution there names nothing
+    expect(argv0Basename('bash `echo`/FAKEv60.sh')).toBe('')
+    expect(argv0Basename('node --x "$(cat FAKEv62)" hook.js')).toBe('')
+  })
+  it('takes a flag value that starts with ~/ or ./ as the script, so 2 scripts keep 2 names', () => {
+    expect(argv0Basename('bash -x ~/.claude/hooks/run-a')).toBe('run-a')
+    expect(argv0Basename('bash -x ./hooks/run-b')).toBe('run-b')
+    // a flag value with a space is code, also when it starts with ~/
+    expect(argv0Basename("bash -c '~/bin/run FAKEv46'")).toBe('bash')
+  })
+  it('reads no escape in a Windows path, so the path keeps its old name', () => {
+    // the old reader took the basename of the whole word, which is the platform basename
+    const old = (path: string, last: string): string => (process.platform === 'win32' ? last : path)
+    expect(argv0Basename('powershell -File C:\\hooks\\x.ps1')).toBe(old('C:\\hooks\\x.ps1', 'x.ps1'))
+    expect(argv0Basename('powershell -File \\\\server\\share\\y.ps1')).toBe(old('\\\\server\\share\\y.ps1', 'y.ps1'))
+    // after a flag, a Windows path with no script extension is a value, as any other path is
+    expect(argv0Basename('powershell -File C:\\hooks\\FAKEv51')).toBe('powershell')
+    // only a word that starts as a Windows path is read as written: an escaped space before it stays an escape
+    expect(argv0Basename('TOKEN=a\\ FAKEv52 C:\\hooks\\h.ps1')).toBe(old('C:\\hooks\\h.ps1', 'h.ps1'))
   })
 })

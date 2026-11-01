@@ -25,6 +25,9 @@ const HOOK = `NTFY_TOPIC=${HOOK_VALUE} ~/.claude/hooks/ntfy.sh`
 /** a quoted assignment value with a space: a split on whitespace takes its second word for the program */
 const BEARER = 'zebrabearer7734'
 const AUTH_HOOK = `AUTH="Bearer ${BEARER}" ~/.claude/hooks/post.sh`
+/** a package runner after a flag, with a secret topic in a URL: the topic must never name the row */
+const TOPICS = ['zebratopic8845', 'zebratopic8846']
+const NPX_HOOKS = [`npx -y ntfy-notify https://ntfy.sh/${TOPICS[0]}`, `npx -y ntfy-notify https://ntfy.sh/${TOPICS[1]}.sh`]
 /** a value in the code span of a "do not" rule, which the analyzer keeps as the command target */
 const RULE_TOKEN = 'zebraruletoken6623'
 const SLUG = '-Users-test-Code-demo'
@@ -78,7 +81,7 @@ beforeAll(async () => {
   await writeFile(join(projects, `${IDS[0]}.jsonl`), transcript(IDS[0]!, '2026-08-14T10:00:00.000Z'))
   await writeFile(join(projects, `${IDS[1]}.jsonl`), transcript(IDS[1]!, '2026-08-15T10:00:00.000Z'))
   // the same hook, declared, and a second hook that never runs: a declared hook makes a row even with no run
-  const declared = [HOOK, AUTH_HOOK].map((command) => ({ type: 'command', command }))
+  const declared = [HOOK, AUTH_HOOK, ...NPX_HOOKS].map((command) => ({ type: 'command', command }))
   await writeFile(join(home, '.claude', 'settings.json'), JSON.stringify({ hooks: { Stop: [{ hooks: declared }] } }))
   oranguHome = join(home, '.orangu')
   await mkdir(oranguHome, { recursive: true, mode: 0o700 })
@@ -160,13 +163,14 @@ describe.skipIf(!existsSync(CLI))('orangu export (built CLI)', () => {
 
   it('holds no planted secret and no prompt word, and the profile word only in the profile', () => {
     const text = readFileSync(exportJson().export.path, 'utf8')
-    for (const planted of [SECRET, PROMPT_WORD, PROFILE_SECRET, HOOK_VALUE, 'NTFY_TOPIC', BEARER, RULE_TOKEN]) expect(text, planted).not.toContain(planted)
+    for (const planted of [SECRET, PROMPT_WORD, PROFILE_SECRET, HOOK_VALUE, 'NTFY_TOPIC', BEARER, ...TOPICS, RULE_TOKEN]) expect(text, planted).not.toContain(planted)
     const file = JSON.parse(text)
     expect(file.profile.repeats).toBe(`Run the tests first. ${PROFILE_WORD} uses ‹anthropic-key› in the demo.`)
     for (const section of SECTIONS.filter((s) => s !== 'profile')) expect(JSON.stringify(file[section]), section).not.toContain(PROFILE_WORD)
     // each hook keeps the name of its script, and the broken rule keeps only its program word
     expect(file.harness.crosswalk.hooks).toEqual([
       { event: 'Stop', commandBasename: 'ntfy.sh', configured: true, runs: 2, errors: 0, totalMs: 80, meanMs: 40, status: 'used' },
+      { event: 'Stop', commandBasename: 'npx', configured: true, runs: 0, errors: 0, totalMs: 0, meanMs: 0, status: 'idle' },
       { event: 'Stop', commandBasename: 'post.sh', configured: true, runs: 0, errors: 0, totalMs: 0, meanMs: 0, status: 'idle' },
     ])
     expect(file.harness.enforcement.broken.map((row: { target: unknown }) => row.target)).toEqual([{ kind: 'command', name: 'deploy' }])

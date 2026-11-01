@@ -315,7 +315,10 @@ export function crosswalk(inv: HarnessInventory, analyses: Analysis[], agg: Aggr
       // an analysis older than `keyedBy` keyed every row it could by command, exactly as `events` below falls
       // back to `hookEvent`: one back-compat policy for both fields (unreachable through the versioned cache)
       const keyedBy = h.keyedBy ?? 'command'
-      const key = keyedBy === 'command' ? argv0Basename(h.command) : h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : ''
+      // a command that names nothing (an open quote, an operator or a substitution before its name) still ran: its runs
+      // go to the row of its event, never out of the report
+      const name = keyedBy === 'command' ? argv0Basename(h.command) : ''
+      const key = name || (h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : '')
       if (!key) continue
       const e = hookObsAt(key)
       e.runs += h.count

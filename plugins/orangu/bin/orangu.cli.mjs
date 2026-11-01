@@ -8097,6 +8097,7 @@ var SUBSTITUTION = /\$\(|`|\$'/;
 var OPERATOR = /[;&|<>()]/;
 var isBlank = (c) => c === " " || c === "	" || c === "\n";
 var BLANK2 = /[ \t\n]/;
+var WINDOWS_PATH = /[A-Za-z]:\\|\\\\[^\\ \t\n]+\\/y;
 function shellWords(command) {
   const words2 = [];
   let i = 0;
@@ -8105,6 +8106,11 @@ function shellWords(command) {
     if (i >= command.length) return words2;
     const start = i;
     let word = "";
+    WINDOWS_PATH.lastIndex = i;
+    if (WINDOWS_PATH.test(command)) {
+      while (i < command.length && !isBlank(command[i])) i++;
+      word = command.slice(start, i);
+    }
     while (i < command.length && !isBlank(command[i])) {
       const c = command[i];
       if (c === "\\") {
@@ -8130,33 +8136,45 @@ function shellWords(command) {
         i++;
       }
     }
-    if (SUBSTITUTION.test(command.slice(start, i))) return null;
-    words2.push(word);
+    words2.push({ text: word, code: SUBSTITUTION.test(command.slice(start, i)) });
   }
 }
-function argv0Basename(command) {
-  const words2 = shellWords(command);
-  if (!words2) return "";
-  const first = words2.findIndex((word) => !ENV_ASSIGNMENT.test(word));
-  if (first === -1) return "";
-  if (words2.slice(0, first + 1).some((word) => OPERATOR.test(word) || word.startsWith("#"))) return "";
-  const argv0 = basename5(words2[first]);
-  if (!INTERPRETERS.has(argv0)) return argv0;
+var isUrl = (t) => t.includes("://");
+var isScriptFile = (t) => SCRIPT_EXT.test(t) && !BLANK2.test(t) && !isUrl(t);
+var isScriptValue = (t) => isScriptFile(t) || !BLANK2.test(t) && (t.startsWith("~/") || t.startsWith("./"));
+function nameIndex(words2, first) {
+  if (!INTERPRETERS.has(basename5(words2[first].text))) return first;
   let afterFlag = false;
-  for (const t of words2.slice(first + 1)) {
+  let skipped = false;
+  for (let i = first + 1; i < words2.length; i++) {
+    const t = words2[i].text;
     if (t.startsWith("-")) {
       afterFlag = !t.includes("=");
       continue;
     }
     const flagValue = afterFlag;
     afterFlag = false;
-    if (ENV_ASSIGNMENT.test(t)) continue;
-    if (INTERPRETERS.has(basename5(t))) continue;
-    if (BLANK2.test(t)) continue;
-    if (flagValue && !SCRIPT_EXT.test(t)) continue;
-    return pathLike(t) ? basename5(t) : argv0;
+    if (ENV_ASSIGNMENT.test(t) || INTERPRETERS.has(basename5(t))) continue;
+    if (flagValue) {
+      if (isScriptValue(t)) return i;
+      skipped = true;
+      continue;
+    }
+    if (skipped) return isScriptFile(t) ? i : first;
+    if (BLANK2.test(t) || isUrl(t)) return first;
+    return pathLike(t) ? i : first;
   }
-  return argv0;
+  return first;
+}
+function argv0Basename(command) {
+  const words2 = shellWords(command);
+  if (!words2) return "";
+  const first = words2.findIndex((word) => !ENV_ASSIGNMENT.test(word.text));
+  if (first === -1) return "";
+  if (words2.slice(0, first + 1).some((word) => OPERATOR.test(word.text) || word.text.startsWith("#"))) return "";
+  const index = nameIndex(words2, first);
+  if (words2.slice(0, index + 1).some((word) => word.code)) return "";
+  return basename5(words2[index].text);
 }
 
 // src/harness/precedence.ts
@@ -8374,7 +8392,8 @@ function crosswalk(inv, analyses, agg, opts = {}) {
   for (const a of analyses) {
     for (const h of a.hooks.byCommand) {
       const keyedBy = h.keyedBy ?? "command";
-      const key = keyedBy === "command" ? argv0Basename(h.command) : h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : "";
+      const name = keyedBy === "command" ? argv0Basename(h.command) : "";
+      const key = name || (h.hookEvent ? EVENT_ROW_PREFIX + h.hookEvent : "");
       if (!key) continue;
       const e = hookObsAt(key);
       e.runs += h.count;

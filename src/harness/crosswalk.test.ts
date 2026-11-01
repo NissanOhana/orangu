@@ -416,6 +416,19 @@ describe('crosswalk: hooks', () => {
     // the declared command still gets its own idle row
     expect(x.hooks.find((h) => h.commandBasename === 'start.sh')?.status).toBe('idle')
   })
+
+  it('counts a run whose command names nothing in the row of its event, and drops no run', async () => {
+    resetIds()
+    const b = new SessionBuilder({ sessionId: '33333333-0000-4000-8000-000000000007' })
+    b.userPrompt('a')
+    // a redirect before the program and a substitution before the program: no word of either is a safe name
+    b.stopHookSummary([{ command: '>/tmp/FAKEv43 ~/.claude/hooks/h.sh', durationMs: 20 }])
+    b.stopHookSummary([{ command: 'TOKEN=$(cat FAKEv44) ~/.claude/hooks/h.sh', durationMs: 30 }])
+    const a = await analyze(b)
+    const x = crosswalk(emptyInventory(), [a], aggregate([a], 'test', 0))
+    expect(x.hooks).toEqual([{ event: 'Stop', configured: false, runs: 2, errors: 0, totalMs: 50, meanMs: 25, status: 'undeclared' }])
+    expect(JSON.stringify(x.hooks)).not.toContain('FAKEv4')
+  })
 })
 
 describe('crosswalk: models, effort, permissions', () => {

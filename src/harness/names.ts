@@ -51,27 +51,43 @@ const pathLike = (t: string): boolean => t.includes('/') || t.includes('\\') || 
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=/
 /** the characters that a backslash escapes inside double quotes, as the shell reads them: another pair keeps its backslash */
 const DOUBLE_QUOTE_ESCAPES = '"\\$`'
-/** a command substitution or an ANSI-C quote: the shell runs or decodes code there, so no word of the command is a safe name */
+/** a command substitution or an ANSI-C quote: the shell runs or decodes code there, so such a word up to the name is code */
 const SUBSTITUTION = /\$\(|`|\$'/
 /** a shell operator (a list, a pipe, a redirect, a subshell or an array): a word up to the program that holds one is code */
 const OPERATOR = /[;&|<>()]/
 /** the 3 characters at which the shell ends a word: a space, a tab and a newline. A non-breaking space is not 1 of them */
 const isBlank = (c: string | undefined): boolean => c === ' ' || c === '\t' || c === '\n'
 const BLANK = /[ \t\n]/
+/**
+ * a Windows path (`C:\hooks\x.ps1`, `\\server\share\x.ps1`): its backslashes are separators, not escapes. Sticky, so
+ * `shellWords` tests it at the start of a word in place: set `lastIndex` before each test
+ */
+const WINDOWS_PATH = /[A-Za-z]:\\|\\\\[^\\ \t\n]+\\/y
+
+/** A shell word: its text with the quotes and escapes read, and whether its raw form holds a substitution. */
+interface Word {
+  text: string
+  code: boolean
+}
 
 /**
  * The words of a command as the shell splits them, read 1 time: a word ends at a space, a tab or a newline outside
  * quotes, `'…'` is literal text, and `\"` (with `\\`, `\$` and `` \` ``) in `"…"` and `\x` outside quotes are 1
- * character each. Null when a quote does not close, or when a word holds `$(`, a backtick or `$'`.
+ * character each. A word that starts as a Windows path is read as it is written. Null when a quote does not close.
  */
-function shellWords(command: string): string[] | null {
-  const words: string[] = []
+function shellWords(command: string): Word[] | null {
+  const words: Word[] = []
   let i = 0
   for (;;) {
     while (i < command.length && isBlank(command[i])) i++
     if (i >= command.length) return words
     const start = i
     let word = ''
+    WINDOWS_PATH.lastIndex = i
+    if (WINDOWS_PATH.test(command)) {
+      while (i < command.length && !isBlank(command[i])) i++
+      word = command.slice(start, i)
+    }
     while (i < command.length && !isBlank(command[i])) {
       const c = command[i]!
       if (c === '\\') {
@@ -97,46 +113,68 @@ function shellWords(command: string): string[] | null {
         i++
       }
     }
-    if (SUBSTITUTION.test(command.slice(start, i))) return null
-    words.push(word)
+    words.push({ text: word, code: SUBSTITUTION.test(command.slice(start, i)) })
   }
 }
 
+/** a URL: its last part can be a topic or a token, so a URL never names a hook */
+const isUrl = (t: string): boolean => t.includes('://')
+/** a script file: a word with a script extension, with no space and no URL in it */
+const isScriptFile = (t: string): boolean => SCRIPT_EXT.test(t) && !BLANK.test(t) && !isUrl(t)
+/** a flag value that is the script: a script file, or a path from the home or the current folder (`bash -x ~/hooks/run`) */
+const isScriptValue = (t: string): boolean => isScriptFile(t) || (!BLANK.test(t) && (t.startsWith('~/') || t.startsWith('./')))
+
 /**
- * The basename that names a hook command: `basename(argv0)`, or, when argv0 is an interpreter, the basename
- * of the first script-like token after it (flags skipped, chained interpreters walked). Arguments carry
- * secrets and never enter a report; the argument that IS the hook is the script, and it is a path, not a secret.
- * Nothing after the interpreter looks like a script (`bash -c "echo hi"`) → the interpreter's own name.
- *
- * The command is read 1 time as shell words (`shellWords`), so a quoted value or an escaped space stays inside its
- * word. The assignments in front of argv0 (`NAME=`, `NAME+=`, `NAME[i]=`) are skipped, as the shell reads them
- * (`AUTH="Bearer x" ~/hooks/post.sh` runs `post.sh`), so a value never names a hook. After an interpreter, the word
- * that follows a flag with no `=` is the value of that flag (`node --key <v> x.js`), unless it has a script extension,
- * and a word with a space in it is code or a value (`bash -c 'curl …'`), never the script.
- * A command of assignments only names nothing: ''. So does a command with a quote that does not close, a word that
- * holds `$(`, a backtick or `$'`, or a word up to the program that holds `; & | < > ( )` or starts a comment (`#`).
+ * The index of the word that names the command: argv0 at `first`, or, when argv0 is an interpreter, the script after it.
+ * The word after a flag with no `=` is the value of that flag, unless it is a script value. After a skipped value, only
+ * a script file names the script (`npx -y ntfy-notify https://ntfy.sh/<topic>` is `npx`). A word with a space and a URL
+ * are never the script. Else the first word that looks like a path is the script, and any other word stops the search.
  */
-export function argv0Basename(command: string): string {
-  const words = shellWords(command)
-  if (!words) return ''
-  const first = words.findIndex((word) => !ENV_ASSIGNMENT.test(word))
-  if (first === -1) return ''
-  if (words.slice(0, first + 1).some((word) => OPERATOR.test(word) || word.startsWith('#'))) return ''
-  const argv0 = basename(words[first]!)
-  if (!INTERPRETERS.has(argv0)) return argv0
+function nameIndex(words: readonly Word[], first: number): number {
+  if (!INTERPRETERS.has(basename(words[first]!.text))) return first
   let afterFlag = false
-  for (const t of words.slice(first + 1)) {
+  let skipped = false
+  for (let i = first + 1; i < words.length; i++) {
+    const t = words[i]!.text
     if (t.startsWith('-')) {
       afterFlag = !t.includes('=')
       continue
     }
     const flagValue = afterFlag
     afterFlag = false
-    if (ENV_ASSIGNMENT.test(t)) continue
-    if (INTERPRETERS.has(basename(t))) continue
-    if (BLANK.test(t)) continue
-    if (flagValue && !SCRIPT_EXT.test(t)) continue
-    return pathLike(t) ? basename(t) : argv0
+    if (ENV_ASSIGNMENT.test(t) || INTERPRETERS.has(basename(t))) continue
+    if (flagValue) {
+      if (isScriptValue(t)) return i
+      skipped = true
+      continue
+    }
+    if (skipped) return isScriptFile(t) ? i : first
+    if (BLANK.test(t) || isUrl(t)) return first
+    return pathLike(t) ? i : first
   }
-  return argv0
+  return first
+}
+
+/**
+ * The basename that names a hook command: `basename(argv0)`, or, when argv0 is an interpreter, the basename
+ * of the script after it (`nameIndex`). Arguments carry secrets and never enter a report; the argument that IS the
+ * hook is the script, and it is a path, not a secret. Nothing after the interpreter is the script
+ * (`bash -c "echo hi"`) → the interpreter's own name.
+ *
+ * The command is read 1 time as shell words (`shellWords`), so a quoted value or an escaped space stays inside its
+ * word. The assignments in front of argv0 (`NAME=`, `NAME+=`, `NAME[i]=`) are skipped, as the shell reads them
+ * (`AUTH="Bearer x" ~/hooks/post.sh` runs `post.sh`), so a value never names a hook.
+ * A command of assignments only names nothing: ''. So does a command with a quote that does not close, a word up to
+ * the program that holds `; & | < > ( )` or starts a comment (`#`), and a word up to the name that holds `$(`, a
+ * backtick or `$'`. A substitution after the name leaves the name (`notify.sh "$(pwd)"` is `notify.sh`).
+ */
+export function argv0Basename(command: string): string {
+  const words = shellWords(command)
+  if (!words) return ''
+  const first = words.findIndex((word) => !ENV_ASSIGNMENT.test(word.text))
+  if (first === -1) return ''
+  if (words.slice(0, first + 1).some((word) => OPERATOR.test(word.text) || word.text.startsWith('#'))) return ''
+  const index = nameIndex(words, first)
+  if (words.slice(0, index + 1).some((word) => word.code)) return ''
+  return basename(words[index]!.text)
 }
