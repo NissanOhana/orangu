@@ -694,3 +694,73 @@ SuggestionVerificationReceiptV2 = {
 ```
 
 The store and every display re-grade a v2 receipt from its own numbers (verdicts, evidence text, p-values possible for the cohort sizes, summary) and stamp `verificationTrust: "computed-v2"`. The record's `effect.before` and `effect.after` maps are the cohort means of the same checks. Earlier `computed-v1` records carry a v1 receipt (a later-session mean comparison without a noise check) and stay readable; legacy verified records lack either marker and must not be presented as current computed verification. Without a passing computed receipt, status remains `applied`.
+
+## Export v1
+
+`orangu export` writes `orangu-export.json` in a new run directory, `<orangu home>/export/global-<random>/`, with mode 0700. The file has mode 0600. It holds the bounded, redacted evidence that the brain reads in a Claude chat outside Claude Code. orangu sends nothing. The file leaves the machine only when the user uploads it.
+
+The verb reads the 500 newest sessions of every root, as `orangu global` does. From the same analyses, it builds the evidence of the global aggregate and the harness of `orangu harness --global`. It adds the profile and the lessons of every workspace. It takes `--json`, `--quiet`, `--no-color`, `--root <dir>`, `--no-cache` and `--jobs <n>`, and no session. It refuses `--include-text` and `--no-redact` with exit 1, before it reads a session.
+
+`--json` prints the run. The text form prints the same 2 paths on 2 rows. It adds 1 row when some sessions did not analyze.
+
+```ts
+ExportRun = {
+  dir: string,                                                   // the real path of the run directory
+  export: { path: string, bytes: number, approxTokens: number }  // approxTokens: about 4 bytes for each token
+}
+```
+
+### The file
+
+The file holds 6 sections in a fixed order. Each section is compact JSON on its own line. The file is 131,072 B at most.
+
+| Key | Content | Limit |
+|---|---|---|
+| `summary` | the versions, the scope, the counts, `asOf`, `redacted: true` and `text: false` | 4,096 B |
+| `index` | the size of each other section, and what a cut left out | |
+| `profile` | profile v1 with each secret scrubbed, or `null` | 16,384 B |
+| `evidence` | the `EvidenceBundle` v1 of the global aggregate | the rest, with `harness` |
+| `harness` | the declared versus used rows and the rules that did not hold | the rest, with `evidence` |
+| `lessons` | the `LessonRead` v1 of every workspace, with `maxBytes: 16384` | 16,384 B |
+
+```ts
+ExportSummary = {
+  v: 1,
+  version: string,          // the orangu version
+  scope: "global",
+  roots: number,            // the Claude roots that the read covered
+  found: number,            // each session that discovery found
+  sessions: number,         // the sessions that orangu read: the 500 newest at most
+  unreadable: number,       // the sessions of those 500 that orangu could not read
+  asOf: string | null,      // the end of the newest session that orangu read, ISO 8601 UTC
+  redacted: true,
+  text: false
+}
+
+ExportIndexEntry = {
+  section: "summary" | "profile" | "evidence" | "harness" | "lessons",
+  bytes: number,                     // the size of the section value, as its line holds it
+  cut?: string,                      // what a cut or a failed read left out
+  omitted?: Record<string, number>   // harness only: the rows that a cut left out, for each row array
+}
+
+ExportHarness = {
+  schemaVersion: "3",
+  crosswalk: HarnessCrosswalk,       // as orangu harness --json writes it
+  enforcement: {
+    counts: HarnessEnforcementCounts,
+    broken: HarnessRuleRow[],        // with no text and no examples
+    notes: HarnessNoteRow[],         // with no sharedWords, and a prompt reference with no preview
+    memory: HarnessMemoryLoadRow[]
+  }
+}
+```
+
+- The builder fills the sections in the order of the table. The summary, the profile and the lessons keep their own limits. The evidence and the harness share the rest.
+- The evidence comes first. It keeps the top findings that fit in half of the rest, or in more when the harness needs less. A cut finding takes its catalog matches with it. Then the harness keeps the heaviest rows of each array that fit, by rank.
+- A profile that does not fit loses its `answers` first, then the whole profile. The lesson read keeps the newest lessons that fit, as `--lessons` does.
+- `asOf` comes from the newest session, never from the clock. No field holds the clock of the run. So 2 runs on the same sessions, store and profile give the same bytes.
+- No section holds prompt text. The evidence is the projection of `orangu evidence --scope global`. The harness holds no rule text, no command example, no shared note word, no complaint word and no preview.
+- The harness also leaves out the inventory, the retention block, the generator time and the notes of `orangu harness --json`. Each path keeps the default redaction, so the home folder reads `~`.
+- The profile holds the answers in the user's own words, with each secret scrubbed. So the user reads the file before an upload.
+- When the suggestion store does not read, `lessons` is `null`, and its index entry says so. The other sections stay.

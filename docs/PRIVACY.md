@@ -8,6 +8,7 @@ Session transcripts may contain source code, secrets, customer data, prompts, pa
 - `orangu watch` rewrites the same local file as a session grows.
 - If `-o`, `--out` or `--html` names an existing file, orangu replaces it only when the file starts with the orangu output marker. It refuses any other file, a symlink, a hard link and an empty file, and changes nothing.
 - `orangu show-me` writes `data.json`, a slide deck and a written report in a new directory under `~/.orangu/show-me/`. The deck and the report have the same zero-network policy.
+- `orangu export` writes `orangu-export.json` in a new directory under `~/.orangu/export/`. orangu sends nothing. The file leaves this machine only when you upload it (see "The export" below).
 - `orangu serve` binds to `127.0.0.1` and requires a fresh process capability embedded in the launched URL before serving HTML, API data, exports, mutations, or events. Treat that URL as private while the process runs.
 - Orangu has no telemetry and does not require an account.
 - Browser suggestion actions are copy-only. The server does not launch a model process.
@@ -36,9 +37,27 @@ Optional online research is catalog-first and uses only generic feature or chang
 
 `orangu-apply` performs no online research. It can edit only after explicit invocation and a successful repository-binding preflight.
 
-`/orangu:show-me` reads `data.json`, redacted by default, and writes only 3 text values. `orangu show-me --render` redacts those 3 values before it writes them into the deck and the report.
+The show-me skill reads `data.json`, redacted by default, and writes only 3 text values. `orangu show-me --render` redacts those 3 values before it writes them into the deck and the report.
 
 `analyze`, `improve`, `harness` and `apply` check the text that they write for you with `orangu ste`. Chat text goes to a new draft file under `~/.orangu/drafts/`, never through the shell.
+
+## The export
+
+`orangu export` writes 1 file for a Claude chat outside Claude Code: `orangu-export.json`, 131,072 B at most. orangu sends nothing. The file leaves this machine only when you upload it.
+
+The file holds these parts:
+
+- the counts of the 500 newest sessions on this machine, and the end time of the newest session
+- the top findings, with their rule text and the catalog matches
+- the declared versus used rows of your setup, and the rules that did not hold
+- your lessons, as ids, codes and counts
+- your profile
+
+The file has these limits:
+
+- The export is always redacted. `orangu export` refuses `--include-text` and `--no-redact`, so the file holds no prompt text and no tool output.
+- Paths under your home folder read `~`, but the names of your project folders and files stay.
+- The file holds your profile answers in your own words, with each secret scrubbed. So read the file before you upload it.
 
 ## Local storage
 

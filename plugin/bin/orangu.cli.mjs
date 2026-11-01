@@ -1,6 +1,6 @@
 // src/cli/main.ts
 import { createHash as createHash6 } from "node:crypto";
-import { basename as basename16, join as join14, resolve as resolve14 } from "node:path";
+import { basename as basename16, join as join15, resolve as resolve14 } from "node:path";
 import { tmpdir as tmpdir2 } from "node:os";
 
 // src/cli/args.ts
@@ -14686,6 +14686,9 @@ async function profileStatus(env = process.env) {
   const { path, exists, profile } = await readProfile(env);
   return { path, exists, valid: profile !== null, updatedAt: profile?.updatedAt ?? null };
 }
+async function loadProfile(env = process.env) {
+  return (await readProfile(env)).profile;
+}
 
 // src/serve/profile.ts
 var profileRoutes = () => [
@@ -19070,6 +19073,254 @@ async function cmdShowMe(positionals, flags) {
   return flags["render"] !== void 0 ? render(positionals, flags) : prepare(positionals, flags);
 }
 
+// src/cli/commands/export.ts
+import { homedir as homedir5 } from "node:os";
+
+// src/export/build.ts
+var EXPORT_VERSION = 1;
+var EXPORT_MAX_BYTES = 131072;
+var SUMMARY_MAX_BYTES = 4096;
+var INDEX_MAX_BYTES = 2048;
+var EXPORT_SECTIONS = ["summary", "index", "profile", "evidence", "harness", "lessons"];
+var bytesOf2 = (value) => Buffer.byteLength(JSON.stringify(value));
+function fileText(values) {
+  return `{
+${EXPORT_SECTIONS.map((section) => `${JSON.stringify(section)}:${JSON.stringify(values[section])}`).join(",\n")}
+}
+`;
+}
+var FRAME_BYTES = Buffer.byteLength(fileText({ summary: null, index: null, profile: null, evidence: null, harness: null, lessons: null })) - 4 * EXPORT_SECTIONS.length;
+function summaryOf(input) {
+  return {
+    v: EXPORT_VERSION,
+    version: input.version,
+    scope: "global",
+    roots: input.roots,
+    found: input.found,
+    sessions: input.sessions,
+    unreadable: input.unreadable,
+    asOf: input.asOf !== null && Number.isFinite(input.asOf) ? new Date(input.asOf).toISOString() : null,
+    redacted: true,
+    text: false
+  };
+}
+function profilePart(profile, home) {
+  if (!profile) return { value: null };
+  const clean = redactValue(profile, { scrub: true, ...home !== void 0 ? { home } : {} });
+  if (bytesOf2(clean) <= PROFILE_MAX_BYTES) return { value: clean };
+  const { answers: _answers, ...keyed } = clean;
+  if (bytesOf2(keyed) <= PROFILE_MAX_BYTES) return { value: keyed, cut: "The answers did not fit, so the profile has only its keyed values." };
+  return { value: null, cut: "The profile did not fit." };
+}
+function lessonsPart(read, home) {
+  if (!read) return { value: null, cut: "orangu could not read the suggestion store, so the export has no lessons." };
+  const clean = redactValue(read, { scrub: true, ...home !== void 0 ? { home } : {} });
+  const build = (lessons, omitted) => ({ ...clean, maxBytes: LESSONS_MAX_BYTES, omitted: clean.omitted + omitted, lessons });
+  const value = fitFirst(clean.lessons, build, bytesOf2, LESSONS_MAX_BYTES);
+  return { value, ...value.omitted > 0 ? { cut: `${plural(value.omitted, "older lesson")} did not fit.` } : {} };
+}
+function evidenceWith(bundle, findings) {
+  if (findings.length === bundle.findings.length) return bundle;
+  const kept = new Set(findings.map((finding) => finding.suggestionId));
+  return { ...bundle, selectedFindings: findings.length, truncated: true, catalogMatches: bundle.catalogMatches.filter((match) => kept.has(match.suggestionId)), findings };
+}
+function evidencePart(bundle, budget) {
+  const value = fitFirst(bundle.findings, (findings) => evidenceWith(bundle, findings), bytesOf2, budget);
+  const left = value.totalFindings - value.selectedFindings;
+  return { value, ...left > 0 ? { cut: `${plural(left, "finding")} did not fit, with ${left === 1 ? "its" : "their"} catalog matches.` } : {} };
+}
+function promptRef(ref2) {
+  return { sessionId: ref2.sessionId, turnIndex: ref2.turnIndex, ...ref2.at !== void 0 ? { at: ref2.at } : {} };
+}
+function harnessOf(report2) {
+  const e = report2.enforcement;
+  return {
+    schemaVersion: report2.schemaVersion,
+    crosswalk: report2.crosswalk,
+    enforcement: {
+      counts: e.counts,
+      broken: e.broken.map(({ text: _text, examples: _examples, ...row2 }) => row2),
+      notes: e.notes.map(({ sharedWords: _words, trigger, examples, ...row2 }) => ({ ...row2, ...trigger ? { trigger: promptRef(trigger) } : {}, examples: examples.map(promptRef) })),
+      memory: e.memory
+    }
+  };
+}
+var ROW_KEYS = ["skills", "mcpServers", "agents", "hooks", "claudeMd", "injectedListings", "broken", "notes", "memory"];
+function rowCounts(h) {
+  const x = h.crosswalk;
+  const e = h.enforcement;
+  return [x.skills.length, x.mcpServers.length, x.agents.length, x.hooks.length, x.claudeMd.length, x.injectedListings.length, e.broken.length, e.notes.length, e.memory.length];
+}
+function harnessWith(h, keep) {
+  const n2 = (a) => keep[a] ?? 0;
+  const x = h.crosswalk;
+  const e = h.enforcement;
+  return {
+    schemaVersion: h.schemaVersion,
+    crosswalk: {
+      ...x,
+      skills: x.skills.slice(0, n2(0)),
+      mcpServers: x.mcpServers.slice(0, n2(1)),
+      agents: x.agents.slice(0, n2(2)),
+      hooks: x.hooks.slice(0, n2(3)),
+      claudeMd: x.claudeMd.slice(0, n2(4)),
+      injectedListings: x.injectedListings.slice(0, n2(5))
+    },
+    enforcement: { counts: e.counts, broken: e.broken.slice(0, n2(6)), notes: e.notes.slice(0, n2(7)), memory: e.memory.slice(0, n2(8)) }
+  };
+}
+function harnessPart(full, budget) {
+  const lengths = rowCounts(full);
+  const order = [];
+  for (let rank = 0; rank < Math.max(0, ...lengths); rank++) lengths.forEach((n2, a) => rank < n2 && order.push(a));
+  const keep = (kept) => lengths.map((_, a) => kept.filter((x) => x === a).length);
+  const value = fitFirst(order, (kept) => harnessWith(full, keep(kept)), bytesOf2, budget);
+  const omitted = Object.fromEntries(rowCounts(value).flatMap((n2, a) => n2 < lengths[a] ? [[ROW_KEYS[a], lengths[a] - n2]] : []));
+  const total = Object.values(omitted).reduce((sum2, n2) => sum2 + n2, 0);
+  return { value, ...total > 0 ? { cut: `${plural(total, "row")} did not fit. Each array keeps its heaviest rows.`, omitted } : {} };
+}
+function buildExport(input) {
+  const summary = summaryOf(input);
+  const profile = profilePart(input.profile, input.home);
+  const lessons = lessonsPart(input.lessons, input.home);
+  const harnessFull = harnessOf(input.harness);
+  const rest = EXPORT_MAX_BYTES - FRAME_BYTES - bytesOf2(summary) - INDEX_MAX_BYTES - bytesOf2(profile.value) - bytesOf2(lessons.value);
+  const evidence = evidencePart(input.evidence, Math.max(Math.floor(rest / 2), rest - bytesOf2(harnessFull)));
+  const harness = harnessPart(harnessFull, rest - bytesOf2(evidence.value));
+  const entry = (section, part) => ({
+    section,
+    bytes: bytesOf2(part.value),
+    ...part.cut !== void 0 ? { cut: part.cut } : {},
+    ...part.omitted !== void 0 ? { omitted: part.omitted } : {}
+  });
+  const index = [entry("summary", { value: summary }), entry("profile", profile), entry("evidence", evidence), entry("harness", harness), entry("lessons", lessons)];
+  const text3 = fileText({ summary, index, profile: profile.value, evidence: evidence.value, harness: harness.value, lessons: lessons.value });
+  if (bytesOf2(summary) > SUMMARY_MAX_BYTES || bytesOf2(index) > INDEX_MAX_BYTES || Buffer.byteLength(text3) > EXPORT_MAX_BYTES) {
+    throw new Error(`orangu could not fit the export in ${EXPORT_MAX_BYTES.toLocaleString("en-US")} B.`);
+  }
+  return { text: text3, index };
+}
+
+// src/export/write.ts
+import { mkdir as mkdir5, mkdtemp as mkdtemp2, realpath as realpath13 } from "node:fs/promises";
+import { join as join14 } from "node:path";
+var EXPORT_FILE = "orangu-export.json";
+var exportBase = () => join14(oranguHome(), "export");
+async function writeExportRun(text3, o = {}) {
+  const base = o.base ?? exportBase();
+  await mkdir5(base, { recursive: true, mode: 448 });
+  const dir = await realpath13(await mkdtemp2(join14(base, "global-")));
+  const path = join14(dir, EXPORT_FILE);
+  await writePrivateOutput(path, text3);
+  const bytes = Buffer.byteLength(text3);
+  return { dir, export: { path, bytes, approxTokens: Math.ceil(bytes / 4) } };
+}
+
+// src/cli/commands/export.ts
+var USAGE3 = "usage: orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>]";
+var EXPORT_FLAGS = /* @__PURE__ */ new Set(["json", "quiet", "no-color", "root", "r", "no-cache", "jobs", "j"]);
+var RAW_FLAGS = /* @__PURE__ */ new Set(["include-text", "no-redact"]);
+var SESSION_LIMIT = 500;
+var flagName3 = (name) => `${name.length === 1 ? "-" : "--"}${name}`;
+function checkInput(positionals, flags) {
+  for (const name of Object.keys(flags)) {
+    if (RAW_FLAGS.has(name)) {
+      throw new Error(`${flagName3(name)} is not a flag of orangu export. The export leaves this machine when you upload it, so it always redacts and never holds prompt text.`);
+    }
+    if (!EXPORT_FLAGS.has(name)) throw new Error(`${flagName3(name)} is not a flag of orangu export. ${USAGE3}`);
+  }
+  if (positionals.length) throw new Error(`orangu export takes no session. It reads every session on this machine. ${USAGE3}`);
+}
+async function analyze(use, flags, now) {
+  const cacheEnabled = !(flags["no-cache"] !== void 0 || process.env["ORANGU_NO_CACHE"] === "1");
+  const jobsRaw = flagStr(flags, "jobs", "j");
+  const jobs = jobsRaw !== void 0 ? Math.max(1, Math.floor(Number(jobsRaw)) || 1) : defaultJobs();
+  const bundled = /\.(m?js)$/.test(new URL(import.meta.url).pathname);
+  if (jobs > 1 && use.length > 1 && bundled) {
+    const pooled = await analyzeAllPooled(use, { entry: new URL(import.meta.url), jobs, version: VERSION, now, cacheEnabled });
+    return { analyses: pooled.analyses, failed: pooled.failed };
+  }
+  const cache2 = cacheEnabled ? new AnalysisCache({ version: VERSION }) : null;
+  const analyses = [];
+  let failed = 0;
+  for (const ref2 of use) {
+    try {
+      analyses.push(await analyzeRefCached(ref2, { cache: cache2, version: VERSION, now }));
+    } catch {
+      failed++;
+    }
+  }
+  return { analyses, failed };
+}
+function newestEnd(analyses) {
+  let newest = null;
+  for (const a of analyses) {
+    const end = a.session.endedAt ?? a.session.startedAt;
+    if (end !== void 0 && Number.isFinite(end) && (newest === null || end > newest)) newest = end;
+  }
+  return newest;
+}
+async function readAllLessons() {
+  try {
+    const store = new SuggestionStore();
+    const [records, lines] = [await store.all(), await store.lines()];
+    return buildLessonRead({ records, lines, scope: "all", maxBytes: null });
+  } catch {
+    return null;
+  }
+}
+function printRun(run, unreadable, flags) {
+  const out3 = detectCaps(process.stdout, process.env, { machine: flagBool(flags, "quiet") || flagBool(flags, "no-color") });
+  const lines = [
+    row(out3, "dir", oneLine2(run.dir), { raw: true }),
+    row(out3, "export", `${oneLine2(run.export.path)} \xB7 ${run.export.bytes.toLocaleString("en-US")} bytes \xB7 about ${run.export.approxTokens.toLocaleString("en-US")} tokens`, { raw: true })
+  ];
+  if (unreadable > 0) lines.push(row(out3, "skipped", `${unreadable.toLocaleString("en-US")} session${unreadable === 1 ? "" : "s"} left out of the export: ${SKIPPED_REASON}`, { style: "warn" }));
+  process.stdout.write(`${lines.join("\n")}
+`);
+}
+async function cmdExport(positionals, flags) {
+  checkInput(positionals, flags);
+  const roots = await claudeRoots(flagStr(flags, "root", "r"));
+  const refs = await listSessions({ roots });
+  if (!refs.length) throw new Error("orangu found no sessions on this machine.");
+  const use = refs.slice(0, SESSION_LIMIT);
+  if (!flagBool(flags, "quiet") && !flagBool(flags, "json")) {
+    const err3 = detectCaps(process.stderr, process.env, { machine: flagBool(flags, "no-color") });
+    process.stderr.write(`  ${paint(err3, "dim", `analyzing ${use.length} session${use.length === 1 ? "" : "s"}`)}
+`);
+  }
+  const now = Date.now();
+  const { analyses, failed } = await analyze(use, flags, now);
+  const agg = aggregate(analyses, "global", now);
+  const evidence = projectEvidence(JSON.parse(JSON.stringify(prepareAggregateForOutput(agg, {}))), { scope: "global", limit: MAX_EVIDENCE_LIMIT });
+  const home = homedir5();
+  const cwd = process.cwd();
+  const instructionWords = /* @__PURE__ */ new Set();
+  const inventory = await collectInventory({ cwd, roots, home, managedDirs: managedSettingsDirs(), allProjects: true, memoryIndexPaths: loadedMemoryIndexPaths(analyses), instructionWords });
+  const report2 = buildHarnessReport(inventory, analyses, agg, { instructionWords, version: VERSION, now, scope: { cwd, roots, global: true, limit: SESSION_LIMIT, sessionsUnreadable: failed, home }, sessions: refs });
+  const file = buildExport({
+    version: VERSION,
+    roots: roots.length,
+    found: refs.length,
+    sessions: analyses.length,
+    unreadable: failed,
+    asOf: newestEnd(analyses),
+    profile: await loadProfile(),
+    evidence,
+    harness: redactValue(report2, { scrub: true, home }),
+    lessons: await readAllLessons(),
+    home
+  });
+  const run = await writeExportRun(file.text);
+  if (flagBool(flags, "json")) {
+    process.stdout.write(`${JSON.stringify(run, null, 2)}
+`);
+    return;
+  }
+  printRun(run, failed, flags);
+}
+
 // src/cli/commands/index.ts
 var EXTRA_COMMANDS = {
   feedback: cmdFeedback,
@@ -19078,7 +19329,8 @@ var EXTRA_COMMANDS = {
   harness: cmdHarness,
   suggest: cmdSuggest,
   ste: cmdSte,
-  "show-me": cmdShowMe
+  "show-me": cmdShowMe,
+  export: cmdExport
 };
 var CORE_VERBS = ["report", "html", "analyze", "a", "list", "ls", "pick", "repo", "global", "all", "watch", "serve"];
 var CLI_VERBS = Object.freeze([...CORE_VERBS, ...Object.keys(EXTRA_COMMANDS)]);
@@ -19157,6 +19409,13 @@ var EXTRA_HELP = [
     "                               fill both offline HTML files from data.json",
     "                               and words.json (no pass mark: STE advice)",
     "                                 ([--open] [--json])"
+  ].join("\n"),
+  [
+    "  orangu export                the bounded, redacted evidence for a Claude",
+    "                               chat outside Claude Code: 1 file in a new",
+    "                               folder under ~/.orangu/export",
+    "                                 ([--json] [--root <dir>] [--no-cache]",
+    "                                  [--jobs <n>])"
   ].join("\n")
 ];
 
@@ -19471,10 +19730,10 @@ async function cmdDashboard(flags, deps) {
 
 // src/cli/raw-output.ts
 var PATH_FLAGS = ["o", "out", "html"];
-var RAW_FLAGS = ["no-redact", "include-text"];
+var RAW_FLAGS2 = ["no-redact", "include-text"];
 function rawOutputRefusal(flags, env) {
   if (!env["CLAUDECODE"] || env["ORANGU_ALLOW_RAW"] === "1") return void 0;
-  const raw = RAW_FLAGS.filter((flag) => flagBool(flags, flag));
+  const raw = RAW_FLAGS2.filter((flag) => flagBool(flags, flag));
   const path = PATH_FLAGS.find((flag) => typeof flags[flag] === "string");
   if (!raw.length || path === void 0) return void 0;
   const named = `${raw.map((flag) => `--${flag}`).join(" and ")} with ${path.length === 1 ? "-" : "--"}${path}`;
@@ -19582,7 +19841,7 @@ async function analyzeWithProgress(ref2, flags) {
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
   if (out3) return resolve14(out3);
-  return join14(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  return join15(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref2 = await selectSession2(sel, flags);
@@ -19772,7 +20031,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash6("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve14(named) : join14(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve14(named) : join15(tmpdir2(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);

@@ -24,7 +24,7 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), 'utf8')
 /** Executable TypeScript we ship, comments stripped — i.e. every string a user could be shown. */
 function shippedSources(): string[] {
   const out: string[] = []
-  for (const dir of ['src/analyze', 'src/report/client', 'src/cli', 'src/harness', 'src/serve', 'src/model', 'src/suggest']) {
+  for (const dir of ['src/analyze', 'src/report/client', 'src/cli', 'src/harness', 'src/serve', 'src/model', 'src/suggest', 'src/export']) {
     for (const f of walk(dir, '.ts')) {
       if (f.endsWith('.test.ts') || f.includes('/generated/')) continue
       out.push(f)

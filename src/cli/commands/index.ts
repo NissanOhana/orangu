@@ -10,6 +10,7 @@ import { cmdSuggest } from './suggest.js'
 import { cmdFeedback } from './feedback.js'
 import { cmdSte } from './ste.js'
 import { cmdShowMe } from './show-me.js'
+import { cmdExport } from './export.js'
 
 export type CommandFn = (positionals: string[], flags: Record<string, string | boolean>) => Promise<void>
 
@@ -21,6 +22,7 @@ export const EXTRA_COMMANDS: Record<string, CommandFn> = {
   suggest: cmdSuggest,
   ste: cmdSte,
   'show-me': cmdShowMe,
+  export: cmdExport,
 }
 
 /** The verbs and aliases that the switch of main.ts dispatches itself, in its order. */
@@ -107,5 +109,12 @@ export const EXTRA_HELP: string[] = [
     '                               fill both offline HTML files from data.json',
     '                               and words.json (no pass mark: STE advice)',
     '                                 ([--open] [--json])',
+  ].join('\n'),
+  [
+    '  orangu export                the bounded, redacted evidence for a Claude',
+    '                               chat outside Claude Code: 1 file in a new',
+    '                               folder under ~/.orangu/export',
+    '                                 ([--json] [--root <dir>] [--no-cache]',
+    '                                  [--jobs <n>])',
   ].join('\n'),
 ]

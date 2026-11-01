@@ -557,12 +557,13 @@ function docSurfaces(files: readonly string[], where: 'root' | 'docs'): Surface[
     .map((file) => fileSurface(file, file === 'README.md' ? 'S1' : where === 'docs' ? 'S2' : 'new', 'markdown'))
 }
 
-/** K owns the CLI and engine folders and G0 the god mod; a new src/ folder has no owner until its chunk names one. */
+/** K owns the CLI and engine folders, G0 the god mod and C-6a the export builder; a new src/ folder has no owner until its chunk names one. */
 const SRC_OWNERS: Readonly<Record<string, string>> = {
   ...Object.fromEntries(
     ['adapters', 'cache', 'cli', 'discover', 'feedback', 'harness', 'model', 'models', 'redact', 'serve', 'show-me', 'ste', 'suggest', 'util'].map((dir) => [dir, 'K']),
   ),
   god: 'G0',
+  export: 'C-6a',
 }
 /** split into their own rows below: report (client and renderer) and analyze (rule copy and the rest) */
 const SRC_SPLIT = new Set(['report', 'analyze'])
