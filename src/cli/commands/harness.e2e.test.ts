@@ -102,7 +102,9 @@ async function makeHarnessFixture(): Promise<Fixture> {
 }
 
 let fx: Fixture
-// ORANGU_CLAUDE_MANAGED_DIRS is set EMPTY so the machine's real managed policy, if any, never enters a fixture run
+// ORANGU_CLAUDE_MANAGED_DIRS is set EMPTY so the machine's real managed policy, if any, never enters a fixture run.
+// CLAUDECODE is set EMPTY so a suite started inside Claude Code runs as a terminal and CI run it: the gate on a named
+// output (src/cli/output-path.ts) has its own tests in src/cli/e2e.test.ts.
 const env = (home: string, extraEnv: Record<string, string> = {}) => ({
   ...process.env,
   HOME: home,
@@ -111,6 +113,7 @@ const env = (home: string, extraEnv: Record<string, string> = {}) => ({
   ORANGU_CLAUDE_ROOTS: '',
   CLAUDE_CONFIG_DIR: '',
   ORANGU_CLAUDE_MANAGED_DIRS: '',
+  CLAUDECODE: '',
   ...extraEnv,
 })
 const run = (args: string[], home: string, extraEnv: Record<string, string> = {}) =>
