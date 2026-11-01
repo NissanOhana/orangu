@@ -24,10 +24,14 @@ export interface ProfileRead {
   updatedAt: string | null
 }
 
-/** What a polled read tells while it runs: the progress of each 202 body, and why it stopped when it gives null. */
+/**
+ * What a polled read tells while it runs: the progress of each 202 body, why it stopped when it gives null, or that its
+ * poll stopped at its time limit while serve reads on. A pause is no failure: a new read follows the same read in serve.
+ */
 export interface ReadWatch {
   progress?(done: number, total: number): void
   failed?(reason: string): void
+  paused?(): void
 }
 
 export interface DataSource {

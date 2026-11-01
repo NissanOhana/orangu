@@ -354,6 +354,21 @@ describe('This machine', () => {
     expect(tiles(html)).toBe('')
   })
 
+  it('a read that paused at the poll limit says that it runs on, offers Read again and the machine report, and claims no failure', () => {
+    const html = panelHtml(ctxOf(data(), { zoom: 'machine' }), reads({ machine: { asked: true, busy: false, paused: true } }))
+    expect(text(html)).toContain('The read runs on.')
+    expect(text(html)).toContain('orangu still reads the sessions of this machine, but this page stopped its updates. Read again to follow the read.')
+    expect(html).toContain('data-start-read')
+    expect(text(html)).toContain('Read again')
+    expect(text(html)).toContain('Open the machine report')
+    // serve reads on, so this is no failure, and this page waits for nothing: no alert, no busy panel, no tile, no number
+    expect(html).not.toContain('role="alert"')
+    expect(text(html)).not.toContain('failed')
+    expect(html).not.toContain('aria-busy')
+    expect(tiles(html)).toBe('')
+    expect(text(html)).not.toMatch(/\d/)
+  })
+
   it('B5 no harness data: both wells say so, with no harness number, and the harness link stays', () => {
     const html = panelHtml(ctxOf(withGlobal(), { zoom: 'machine' }), reads({ harness: null }))
     const wells = wellsOf(html)
@@ -411,7 +426,8 @@ describe('What to improve first', () => {
   it('F1: takes the findings of the sessions zoom from the reads of the listed sessions, says so, and names how many show each', () => {
     const d = data({ sessions: [row({ id: ID }), row({ id: OTHER, mtimeMs: 500 })] })
     const html = firstHtml(ctxOf(d, { zoom: 'sessions' }), reads({ rows: listReads([ID, A], [OTHER, B]) }))
-    expect(text(html)).toContain('They come from the sessions on this list. Each title and each command use one example session.')
+    // the saving of a row is the saving of its example session (planRowForInsight), so the caption names it too
+    expect(text(html)).toContain('They come from the sessions on this list. Each title, each saving and each command use one example session.')
     expect(text(html)).toContain('In 2 of 2 sessions on this list · tool-errors')
     // the command of the example session: the newest session on the list that shows the finding
     const tool = A.insights.find((i) => i.ruleId === 'tool-errors')!
@@ -450,6 +466,10 @@ describe('What to improve first', () => {
     const before = firstHtml(ctxOf(data(), { zoom: 'machine' }), reads())
     expect(text(before)).toContain('Read this machine to see the findings of all its sessions.')
     expect(before).not.toContain('/orangu:improve sg_')
+    // a read that paused at the poll limit runs on in serve: Read again gets its findings when it ends
+    const paused = firstHtml(ctxOf(data(), { zoom: 'machine' }), reads({ machine: { asked: true, busy: false, paused: true } }))
+    expect(text(paused)).toContain('The read runs on. Read again to see its findings.')
+    expect(paused).not.toContain('class="frow')
   })
 
   it('B5 no finding: says that orangu found nothing to improve, for each zoom', () => {

@@ -10,7 +10,7 @@ import { analyzeSession } from '../../analyze/analyze.js'
 import type { Analysis } from '../../model/analysis.js'
 import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 import { buildCanonicalSession } from '../../../test/fixtures/session-builder.js'
-import type { DataSource } from './data.js'
+import type { DataSource, ReadWatch } from './data.js'
 
 const ID = 'aaaaaaaa-0000-4000-8000-000000000001'
 const OTHER = 'bbbbbbbb-0000-4000-8000-000000000002'
@@ -83,6 +83,22 @@ describe('the reads of the start view', () => {
     mod.ensureStart(data({ sessions: many }), ds, { screen: 'start', zoom: 'sessions' }, vi.fn())
     await flush()
     expect(session.mock.calls).toHaveLength(ids.length)
+  })
+
+  it('keeps a machine read that paused at the poll limit as a pause, with no failure, because serve reads on', async () => {
+    const { mod, ds } = await fresh()
+    // the poll of data-remote.ts stops at its time limit, says so, and gives null
+    const aggregate = vi.fn(async (_scope: string, _cwd?: string, watch?: ReadWatch) => {
+      watch?.paused?.()
+      return null
+    })
+    const d = data()
+    mod.ensureStart(d, { ...ds, aggregate } as DataSource, { screen: 'start', zoom: 'machine' }, vi.fn())
+    await mod.readMachine(d)
+    expect(aggregate).toHaveBeenCalledTimes(1)
+    expect(mod.startReadState().machine).toEqual({ asked: true, busy: false, paused: true })
+    // the person asked, so the harness read of This machine may start (serve-ui.ts)
+    expect(mod.machineRead(d)).toBe(true)
   })
 
   it('F2: reads no listed session at the other zooms', async () => {

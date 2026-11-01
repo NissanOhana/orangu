@@ -20,13 +20,17 @@ import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 import type { DataSource, ProfileRead } from './data.js'
 import { liveRows, startZoom, type RouteState } from './nav.js'
 
-/** The machine read: asked by its control, busy while it runs, its progress from the 202 bodies, and why it stopped. */
+/**
+ * The machine read: asked by its control, busy while it runs, its progress from the 202 bodies, and why it stopped. It
+ * is paused when its poll stopped at the time limit while serve reads on: no failure, and Read again follows it.
+ */
 export interface ReadView {
   asked?: boolean
   busy: boolean
   done?: number
   total?: number
   failed?: string
+  paused?: boolean
 }
 
 /** What a listed session gives once its read lands: the parts that its row and the findings of the list show. */
@@ -108,7 +112,7 @@ async function readProfile(): Promise<void> {
 /** Read the machine with its progress, and store the aggregate where #global and #suggest read it. Only a control calls it. */
 export async function readMachine(d: AppData): Promise<void> {
   if (machine.busy || !source) return
-  Object.assign(machine, { asked: true, busy: true, done: undefined, total: undefined, failed: undefined })
+  Object.assign(machine, { asked: true, busy: true, done: undefined, total: undefined, failed: undefined, paused: undefined })
   let agg: Aggregate | null = null
   try {
     agg = await source.aggregate('global', undefined, {
@@ -118,13 +122,15 @@ export async function readMachine(d: AppData): Promise<void> {
         if (onStart()) rerender()
       },
       failed: (reason) => (machine.failed = reason),
+      paused: () => (machine.paused = true),
     })
   } catch {
     agg = null
   }
   machine.busy = false
   if (agg) d.aggregates.global = agg
-  else machine.failed ??= 'The request to localhost failed.'
+  // a poll that stopped at its time limit is a pause, not a failure: serve reads on
+  else if (!machine.paused) machine.failed ??= 'The request to localhost failed.'
   if (onStart()) rerender()
 }
 

@@ -39,7 +39,8 @@ async function getJson<T>(url: string): Promise<{ status: number; body: T | null
 
 /**
  * 202 {progress} is polled until the 200 body arrives (aggregates and the harness report compute lazily). `watch` hears
- * the progress of each 202 body, and the reason when the read gives null.
+ * the progress of each 202 body, and the reason when the read gives null. At the time limit the poll stops and `watch`
+ * hears a pause, not a failure: serve keeps the job and reads on (src/serve/api.ts:333-337).
  */
 async function pollJson<T>(url: string, watch?: ReadWatch): Promise<T | null> {
   const t0 = Date.now()
@@ -53,7 +54,7 @@ async function pollJson<T>(url: string, watch?: ReadWatch): Promise<T | null> {
     const progress = (body as { progress?: { done?: unknown; total?: unknown } } | null)?.progress
     if (typeof progress?.done === 'number' && typeof progress.total === 'number') watch?.progress?.(progress.done, progress.total)
     if (Date.now() - t0 > AGG_TIMEOUT_MS) {
-      watch?.failed?.(`The read did not end in ${AGG_TIMEOUT_MS / 60_000} minutes.`)
+      watch?.paused?.()
       return null
     }
     await new Promise((r) => setTimeout(r, AGG_POLL_MS))

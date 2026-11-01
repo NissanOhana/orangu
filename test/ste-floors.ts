@@ -180,6 +180,7 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // The start view of serve, born 2026-11-01 at max(80, measured - 2): 61 sentences, each clean, score 100, 0 findings.
   // The review fixes add the control of the machine read and the findings of the listed sessions: 69 sentences, each clean.
   // The reads move to start-reads.ts (2026-11-01), with their 1 sentence: 68 sentences here, each clean, score 100.
+  // The pause of the machine read and the saving in the caption of the list (2026-11-01): 73 sentences, each clean.
   'src/report/client/start-ui.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // The reads of the start view, born 2026-11-01 at max(80, measured - 2) when they left start-ui.ts: 1 sentence (the
   // reason of a machine read that failed with no reason of its own), clean, score 100, 0 findings.

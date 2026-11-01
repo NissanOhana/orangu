@@ -165,6 +165,9 @@ function machinePanel(ctx: Ctx, reads: StartReads): string {
   const harness = link(ctx, { screen: 'harness' }, 'btn-sm', 'Open the harness')
   if (!g && read.failed !== undefined)
     return `<div role="alert">${banner('warn', 'The read failed. orangu shows no totals for this machine.')}</div><p class="zp-why"><code>${esc(read.failed)}</code></p><div class="zp-foot"><button class="btn-sm" type="button" data-start-read>Read again</button>${report}</div>`
+  // the poll stopped at its time limit and serve reads on, so Read again follows the same read (src/serve/api.ts:333-337)
+  if (!g && read.paused)
+    return `<div class="zp-head"><span class="zp-k">The read runs on.</span></div><p class="zp-why">orangu still reads the sessions of this machine, but this page stopped its updates. Read again to follow the read.</p><div class="zp-foot"><button class="btn-sm" type="button" data-start-read>Read again</button>${report}</div>`
   if (!g && !read.asked && !read.busy)
     return `<div class="zp-head"><span class="zp-k">${esc(`This machine has ${plural(d.sessions.length, 'session')}.`)}</span></div><p class="zp-why">orangu reads them all only when you ask, and a first read can take some minutes.</p><div class="zp-foot"><button class="btn-primary" type="button" data-start-read>Read this machine</button>${report}${harness}</div>`
   if (!g) {
@@ -185,7 +188,7 @@ function machinePanel(ctx: Ctx, reads: StartReads): string {
 export function panelHtml(ctx: Ctx, reads: StartReads): string {
   const zoom = startZoom(ctx.data, ctx.state)
   const body = zoom === 'session' ? sessionPanel(ctx) : zoom === 'sessions' ? sessionsPanel(ctx, reads) : machinePanel(ctx, reads)
-  const busy = zoom === 'machine' && !ctx.data.aggregates.global && reads.machine.failed === undefined && (reads.machine.asked || reads.machine.busy)
+  const busy = zoom === 'machine' && !ctx.data.aggregates.global && reads.machine.failed === undefined && !reads.machine.paused && (reads.machine.asked || reads.machine.busy)
   return `<section class="card zpanel" id="start-panel" role="tabpanel" aria-labelledby="zt-${zoom}" tabindex="0"${busy ? ' aria-busy="true"' : ''}>${body}</section>`
 }
 
@@ -255,7 +258,8 @@ function listFirst(ctx: Ctx, reads: StartReads): string {
   if (!read) return `<p class="cap">${failed === rows.length && rows.length ? 'orangu could not read the sessions on this list.' : 'orangu reads the sessions on this list.'}</p>`
   if (!findings.length) return '<p class="cap">orangu found nothing to improve in the sessions on this list.</p>'
   const shown = findings.slice(0, FIRST).map((f, i) => findingRow(ctx, planRowForInsight(f.insight, f.sessionId), 'session', `In ${num(f.sessions)} of ${plural(read, 'session')} on this list`, i === 0))
-  return `<p class="cap">They come from the sessions on this list. Each title and each command use one example session.</p>${shown.join('')}`
+  // the saving of each row is the saving of its example session (planRowForInsight), as its title and its command are
+  return `<p class="cap">They come from the sessions on this list. Each title, each saving and each command use one example session.</p>${shown.join('')}`
 }
 
 /** The queue line: only when the queue has items that are due for a check, with the items that are ready to apply. */
@@ -265,6 +269,13 @@ function queueBanner(ctx: Ctx, q: QueueRead | null | undefined): string {
   const apply = q?.counts.apply ?? 0
   const line = `${due === 1 ? '1 change is' : `${num(due)} changes are`} due for a check.${apply ? ` ${apply === 1 ? '1 is' : `${num(apply)} are`} ready to apply.` : ''}`
   return banner('info', `<span>${esc(line)}</span>${link(ctx, { screen: 'suggest' }, 'banner-link', 'Open Improvements')}`)
+}
+
+/** Why This machine shows no finding before its read lands: the read failed, it runs on, it runs, or nobody asked. */
+function machineWait(read: ReadView): string {
+  if (read.failed !== undefined) return 'The read failed, so orangu shows no findings.'
+  if (read.paused) return 'The read runs on. Read again to see its findings.'
+  return read.asked || read.busy ? 'orangu shows the findings when the read ends.' : 'Read this machine to see the findings of all its sessions.'
 }
 
 /** What to improve first: the first findings of the zoom, from a read that is already cheap, or the state of the read. */
@@ -284,7 +295,7 @@ export function firstHtml(ctx: Ctx, reads: StartReads): string {
     const g = d.aggregates.global
     const rows = g ? planRows('global', undefined, g) : []
     body = !g
-      ? `<p class="cap">${reads.machine.failed !== undefined ? 'The read failed, so orangu shows no findings.' : reads.machine.asked || reads.machine.busy ? 'orangu shows the findings when the read ends.' : 'Read this machine to see the findings of all its sessions.'}</p>`
+      ? `<p class="cap">${machineWait(reads.machine)}</p>`
       : rows.length
         ? `<p class="cap">${EXAMPLE_TITLE_CAPTION}</p>${rows.slice(0, FIRST).map((row, i) => findingRow(ctx, row, 'global', `In ${plural(row.sessions ?? 1, 'session')} on this machine`, i === 0)).join('')}${moreLink(ctx, rows.length, 'global')}`
         : '<p class="cap">orangu found nothing to improve on this machine.</p>'

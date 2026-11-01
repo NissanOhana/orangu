@@ -169,7 +169,7 @@ test('the view starts no read of every session: the listed rows fill from their 
   await expect(rows.nth(2)).toContainText('Fix foo test')
   await expect(rows.nth(2)).toContainText('orchestrator')
   await expect(rows.nth(2).locator('.sk')).toContainText('tokens')
-  await expect(page.locator('.start-first .cap').nth(1)).toHaveText('They come from the sessions on this list. Each title and each command use one example session.')
+  await expect(page.locator('.start-first .cap').nth(1)).toHaveText('They come from the sessions on this list. Each title, each saving and each command use one example session.')
   await page.getByRole('tab', { name: 'One session' }).click()
   await expect(page.getByRole('tabpanel')).toContainText('Running now')
   await page.getByRole('tab', { name: 'This machine' }).click()

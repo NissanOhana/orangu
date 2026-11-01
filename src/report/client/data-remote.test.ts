@@ -160,6 +160,23 @@ describe('remote aggregate read with a watch', () => {
     expect(failed.mock.calls).toEqual([['aggregate capacity reached'], ['The server answered 500.'], ['The request to localhost failed.']])
   })
 
+  it('pauses at its time limit while serve reads on: it calls paused, not failed, and gives null', async () => {
+    vi.useFakeTimers()
+    try {
+      // serve answers 202 to each poll: the read runs on in serve (src/serve/api.ts:333-337)
+      vi.stubGlobal('fetch', vi.fn(async () => json({ progress: { done: 4, total: 11 } }, 202)))
+      const paused = vi.fn()
+      const failed = vi.fn()
+      const read = remoteSource('/local').aggregate('global', undefined, { failed, paused })
+      await vi.advanceTimersByTimeAsync(121_000)
+      expect(await read).toBeNull()
+      expect(failed).not.toHaveBeenCalled()
+      expect(paused).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('reads as before with no watch: null on a failure, and no call of any watch', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ error: 'aggregate capacity reached' }, 503)))
     expect(await remoteSource('/local').aggregate('repo', '~/w')).toBeNull()
