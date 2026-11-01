@@ -4,28 +4,19 @@
  * the zoom, and "Next: improve with Claude" names the improve command and the interview status. Only serve-ui.ts
  * imports this file, so the file bundles carry none of it (src/report/offline.test.ts holds them to it).
  *
- * The view starts no read that analyzes every session. A repository or machine read analyzes each session of the
- * registry before its first reply and keeps each analysis, so on a large disk it runs for minutes (SPEC risk 13). The
- * machine read starts only from its control (Read this machine, then Read again on a failure), with its progress.
- * Sessions and agents reads only the sessions that it lists, the running ones and the 20 newest, through the session
- * read of each, and fills each row as its read lands. Its findings come from those reads, and its caption says so.
- *
- * The screen data seam of serve (serve-ui.ts) calls ensureStart on each render of #start: it starts the profile read
- * once and the reads of the listed sessions. Each read keeps its state here and draws the app again when it lands. Live
- * frames draw the view again, as home-ui.ts does for the queue, and a window that gets focus reads the profile again,
- * so an interview that ran in Claude Code shows when the person comes back.
+ * This file draws, and start-reads.ts reads. The view starts no read that analyzes every session (SPEC risk 13), and
+ * Sessions and agents reads only the sessions that it lists. Its findings come from those reads, and its caption says so.
  *
  * No count shows where a read did not land: a running read shows its progress and skeleton tiles, a failed read says
  * so, and a row that no read filled shows no tokens and no agents.
  */
-import type { Aggregate } from '../../analyze/aggregate.js'
 import type { HarnessReport } from '../../harness/types.js'
 import type { Insight } from '../../model/analysis.js'
 import type { AppData, SessionSummaryRow } from '../../model/app-data.js'
 import type { SuggestionScope } from '../../suggest/types.js'
 import { kickoffCommands, suggestionIdV2, suggestionKey } from '../../suggest/id.js'
 import type { Ctx } from './app.js'
-import type { DataSource, ProfileRead } from './data.js'
+import type { ProfileRead } from './data.js'
 import type { QueueRead } from './queue-types.js'
 import { cleanHash, liveRows, shortId, startZoom, type RouteState, type StartZoom } from './nav.js'
 import { esc, ms, num, pct, plural, tok } from './format.js'
@@ -40,25 +31,9 @@ import { plainSentence } from './strings.js'
 import { EXAMPLE_TITLE_CAPTION, findingForRow, planRowForInsight, planRows, type PlanRow } from './suggest-rows.js'
 import { queueRead } from './home-ui.js'
 import { harnessLead } from './screens/harness.js'
+import { listedRows, NEWEST, newestFirst, readMachine, redraw, startReadState, type ReadView, type RowRead } from './start-reads.js'
 
-/** The machine read: asked by its control, busy while it runs, its progress from the 202 bodies, and why it stopped. */
-export interface ReadView {
-  asked?: boolean
-  busy: boolean
-  done?: number
-  total?: number
-  failed?: string
-}
-
-/** What a listed session gives once its read lands: the parts that its row and the findings of the list show. */
-export interface RowRead {
-  title?: string
-  tokens: number
-  agents: number
-  insights: Insight[]
-}
-
-/** What the view draws from, beside the app state: the reads of this module, of home-ui.ts and of serve-ui.ts. */
+/** What the view draws from, beside the app state: the reads of start-reads.ts, of home-ui.ts and of serve-ui.ts. */
 export interface StartReads {
   /** the harness report of serve-ui.ts: undefined while its first read runs or before the machine read, null when it failed */
   harness: HarnessReport | null | undefined
@@ -76,8 +51,6 @@ const ZOOMS: ReadonlyArray<[StartZoom, string]> = [
   ['sessions', 'Sessions and agents'],
   ['machine', 'This machine'],
 ]
-/** Sessions and agents lists the running sessions, then this many of the newest. */
-const NEWEST = 20
 /** What to improve first shows this many findings, and a link to all of them when there are more. */
 const FIRST = 3
 /** The injected listings that a session loads at its start: skills, agents and MCP tools (src/harness/crosswalk.ts). */
@@ -87,7 +60,6 @@ const SEVERITY: Record<string, number> = { high: 3, medium: 2, low: 1, info: 0 }
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 const LIVE_DOT = '<span class="ldot" data-pulse="1" aria-hidden="true"></span>'
 
-const newestFirst = (rows: SessionSummaryRow[]): SessionSummaryRow[] => [...rows].sort((a, b) => b.mtimeMs - a.mtimeMs)
 /** A link into another screen, built by the hash writer, so the theme and the audience go with it. */
 const link = (ctx: Ctx, next: Partial<RouteState>, cls: string, label: string): string => `<a${cls ? ` class="${cls}"` : ''} href="${esc(cleanHash(ctx.state, next))}">${label}</a>`
 
@@ -97,18 +69,6 @@ function ago(ageMs: number): string {
   if (m < 60) return `${m}m ago`
   const hours = Math.floor(m / 60)
   return hours < 24 ? `${hours}h ago` : `${Math.floor(hours / 24)}d ago`
-}
-
-/** The sessions that Sessions and agents lists: the running ones, then the newest of the others. */
-export function listedRows(d: AppData): SessionSummaryRow[] {
-  const live = newestFirst(liveRows(d))
-  const liveIds = new Set(live.map((r) => r.id))
-  return [...live, ...newestFirst(d.sessions.filter((r) => !liveIds.has(r.id))).slice(0, NEWEST)]
-}
-
-/** The parts of an analysis that a listed row and the findings of the list read. */
-export function rowReadOf(a: { session: { title?: string }; summary: { totalTokens: number }; agents: { runs: unknown[] }; insights: Insight[] }): RowRead {
-  return { ...(a.session.title ? { title: a.session.title } : {}), tokens: a.summary.totalTokens, agents: a.agents.runs.length, insights: a.insights }
 }
 
 /** "orangu · 11 sessions · 2 running · 1 root · local only". With no session it counts nothing. */
@@ -370,33 +330,10 @@ export function startHtml(ctx: Ctx, reads: StartReads): string {
   return `<section class="start">${head}<p class="start-sub">orangu read these sessions with no model and no network.</p>${tabsHtml(startZoom(d, ctx.state))}${panelHtml(ctx, reads)}<div class="start-below">${firstHtml(ctx, reads)}${nextHtml(reads.profile)}</div></section>`
 }
 
-// ---------- the reads: module state, as home-ui.ts keeps the queue ----------
+// ---------- the focus across renders: the reads that the view draws are in start-reads.ts ----------
 
-let source: DataSource | undefined
-let rerender: () => void = () => {}
-let profile: ProfileRead | null | undefined
-let profileBusy = false
-const machine: ReadView = { busy: false }
-/** the reads of the listed sessions: absent while each runs, null when it failed */
-const rowReads = new Map<string, RowRead | null>()
-const rowAsked = new Set<string>()
-const rowWaiting: string[] = []
-let rowsBusy = 0
-/** How many session reads of the list run at once: each one analyzes its session in serve when no cache holds it. */
-const ROW_READS = 4
 /** the tab that a click or a key selected, or the panel after a read control: the next render puts focus on it */
 let focusId: string | undefined
-
-/** Is the start view on the page? app.ts gives each screen the id `screen-<id>`. */
-const onStart = (): boolean => typeof document !== 'undefined' && document.getElementById('screen-start') !== null
-
-/**
- * Did the person ask for the machine read, or did another screen read the machine? Only then does the harness read
- * start for This machine (serve-ui.ts): it analyzes every session too.
- */
-export function machineRead(d: AppData): boolean {
-  return machine.asked === true || !!d.aggregates.global
-}
 
 /**
  * The control that has the focus in the start view, as a selector that finds the same control in the next render: by
@@ -411,94 +348,6 @@ function focusSelector(el: Element | null): string | undefined {
   return copy === null ? undefined : `#screen-start [data-copy="${CSS.escape(copy)}"]`
 }
 
-/** Read the interview status. A failed read again keeps the last good status. */
-async function readProfile(): Promise<void> {
-  if (profileBusy || !source?.profile) return
-  profileBusy = true
-  let read: ProfileRead | null = null
-  try {
-    read = await source.profile()
-  } catch {
-    read = null
-  }
-  profileBusy = false
-  profile = read ?? (profile || null)
-  if (onStart()) rerender()
-}
-
-/** Read the machine with its progress, and store the aggregate where #global and #suggest read it. Only a control calls it. */
-async function readMachine(d: AppData): Promise<void> {
-  if (machine.busy || !source) return
-  Object.assign(machine, { asked: true, busy: true, done: undefined, total: undefined, failed: undefined })
-  let agg: Aggregate | null = null
-  try {
-    agg = await source.aggregate('global', undefined, {
-      progress: (done, total) => {
-        machine.done = done
-        machine.total = total
-        if (onStart()) rerender()
-      },
-      failed: (reason) => (machine.failed = reason),
-    })
-  } catch {
-    agg = null
-  }
-  machine.busy = false
-  if (agg) d.aggregates.global = agg
-  else machine.failed ??= 'The request to localhost failed.'
-  if (onStart()) rerender()
-}
-
-/** Read each listed session that no read asked for yet, at most ROW_READS at once, in the order of the list. */
-function readRows(rows: SessionSummaryRow[]): void {
-  for (const r of rows)
-    if (!rowAsked.has(r.id)) {
-      rowAsked.add(r.id)
-      rowWaiting.push(r.id)
-    }
-  while (rowsBusy < ROW_READS && rowWaiting.length && source) {
-    const id = rowWaiting.shift()!
-    const ds = source
-    rowsBusy++
-    void ds
-      .session(id)
-      .then(
-        (a) => rowReads.set(id, a ? rowReadOf(a) : null),
-        () => rowReads.set(id, null),
-      )
-      .finally(() => {
-        rowsBusy--
-        readRows([])
-        if (onStart()) rerender()
-      })
-  }
-}
-
-/** The listeners of the view, once: live frames draw it again, and a window that gets focus reads the profile again. */
-function wire(ds: DataSource): void {
-  ds.subscribe((ev) => {
-    if ((ev.type === 'session-live' || ev.type === 'session-updated') && onStart()) rerender()
-  })
-  if (typeof window !== 'undefined')
-    window.addEventListener('focus', () => {
-      if (onStart()) void readProfile()
-    })
-}
-
-/**
- * The data seam of #start (serve-ui.ts calls it on each render): the profile read once, and the reads of the listed
- * sessions when Sessions and agents is open. It starts no repository or machine read. `loaded` draws the app again.
- */
-export function ensureStart(d: AppData, ds: DataSource, state: RouteState, loaded: () => void): void {
-  rerender = loaded
-  if (!source) {
-    source = ds
-    wire(ds)
-  }
-  if (profile === undefined) void readProfile()
-  if (startZoom(d, state) === 'sessions') readRows(listedRows(d))
-}
-
 /**
  * The view, wired: the zoom tabs by click and by key, and the machine read control. `harness` is the report of
  * serve-ui.ts. Each render replaces the whole view, and a live frame or the progress of a read renders it again, so the
@@ -509,7 +358,8 @@ export function renderStart(ctx: Ctx, harness: HarnessReport | null | undefined)
   // the app builds this element before it removes the old view, so the old focus is still on the page here
   const keep = focusId ? '#' + focusId : focusSelector(document.activeElement)
   focusId = undefined
-  const el = h(startHtml(ctx, { harness, profile, machine, rows: rowReads, queue: queueRead() }))
+  const { profile, machine, rows } = startReadState()
+  const el = h(startHtml(ctx, { harness, profile, machine, rows, queue: queueRead() }))
   const tabs = Array.prototype.slice.call(el.querySelectorAll<HTMLButtonElement>('[role="tab"]')) as HTMLButtonElement[]
   const pick = (zoom: string | undefined): void => {
     if (zoom !== 'session' && zoom !== 'sessions' && zoom !== 'machine') return
@@ -530,7 +380,7 @@ export function renderStart(ctx: Ctx, harness: HarnessReport | null | undefined)
   el.querySelector('[data-start-read]')?.addEventListener('click', () => {
     focusId = 'start-panel'
     void readMachine(ctx.data)
-    rerender()
+    redraw()
   })
   // the app attaches this element after the render returns it
   if (keep)

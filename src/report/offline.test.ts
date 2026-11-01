@@ -84,10 +84,11 @@ describe('offline report', () => {
   })
 
   it('the start view ships only in the serve bundle (B3)', () => {
-    // The start view (start-ui.ts) reads the live registry of serve, so no file can render it. serve-ui.ts injects it
-    // by the optional ServeUi.startView seam, and nav.ts lists its Start item in serve only. Each marker is markup or
-    // copy of start-ui.ts that no other module writes.
-    const markers = ['See what your agents do.', 'start-panel', 'ztabs', 'What to improve first', 'Next: improve with Claude', 'data-start-read']
+    // The start view (start-ui.ts draws it, start-reads.ts reads for it) reads the live registry of serve, so no file
+    // can render it. serve-ui.ts injects it by the optional ServeUi.startView seam, and nav.ts lists its Start item in
+    // serve only. Each marker is markup or copy of the start view that no other module writes. `screen-start` is the id
+    // of the view that start-reads.ts looks for before it draws the view again, so it marks the reads too.
+    const markers = ['See what your agents do.', 'start-panel', 'ztabs', 'What to improve first', 'Next: improve with Claude', 'data-start-read', 'screen-start']
     for (const marker of markers) {
       expect(CLIENT_JS, `CLIENT_JS carries ${marker}`).not.toContain(marker)
       expect(CLIENT_JS_AGG, `CLIENT_JS_AGG carries ${marker}`).not.toContain(marker)

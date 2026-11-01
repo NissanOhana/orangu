@@ -461,6 +461,7 @@ const HOME_COPY_MODULES = [
   'src/report/client/queue-card.ts',
   'src/report/client/status-labels.ts',
   'src/report/client/start-ui.ts',
+  'src/report/client/start-reads.ts',
 ]
 
 function ruleSurface(field: RuleField): Surface {

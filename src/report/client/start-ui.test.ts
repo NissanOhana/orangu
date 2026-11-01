@@ -1,7 +1,8 @@
 /**
  * The start view of serve (#start): its 3 zoom levels, the designed states of B5 and the session rows of B6. Each state
  * test asserts its words and that no digit shows where a read did not land: a count of a read that runs, failed or did
- * not start is a false claim (src/report/client/history-ui.test.ts:202 is the same rule for History).
+ * not start is a false claim (src/report/client/history-ui.test.ts:202 is the same rule for History). Which reads start,
+ * and which never start on their own, is in start-reads.test.ts.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { parseClaudeCodeSession } from '../../adapters/claude-code/parse.js'
@@ -17,7 +18,8 @@ import type { RouteState } from './nav.js'
 import type { QueueRead } from './queue-types.js'
 import { ms, pct, tok } from './format.js'
 import { handoffForInsight, planRows } from './suggest-rows.js'
-import { firstHtml, handoffFor, headLineHtml, loadTokens, nextHtml, panelHtml, rowReadOf, startHtml, type RowRead, type StartReads } from './start-ui.js'
+import { firstHtml, handoffFor, headLineHtml, loadTokens, nextHtml, panelHtml, startHtml, type StartReads } from './start-ui.js'
+import { rowReadOf, type RowRead } from './start-reads.js'
 
 const ID = 'aaaaaaaa-0000-4000-8000-000000000001'
 const OTHER = 'bbbbbbbb-0000-4000-8000-000000000002'
@@ -290,52 +292,6 @@ describe('Sessions and agents', () => {
     // a read that failed fills nothing
     const failed = panelHtml(ctxOf(data({ sessions: [bare] }), { zoom: 'sessions' }), reads({ rows: listReads([ID, null]) }))
     expect(text(failed)).not.toMatch(/tokens|orchestrator|\dk/)
-  })
-})
-
-describe('the reads of the start view', () => {
-  /** A fresh module (its reads are module state) and a data source that records each read. */
-  async function fresh() {
-    vi.resetModules()
-    const mod = await import('./start-ui.js')
-    const session = vi.fn(async (id: string) => (id === ID ? A : B))
-    const aggregate = vi.fn(async () => MACHINE)
-    const harness = vi.fn(async () => null)
-    const ds = { mode: 'serve', session, aggregate, harness, profile: async () => ({ exists: false, updatedAt: null }), subscribe: () => () => {} } as unknown as DataSource
-    return { mod, ds, session, aggregate }
-  }
-  const flush = async () => {
-    for (let i = 0; i < 10; i++) await new Promise((resolve) => setTimeout(resolve, 0))
-  }
-
-  it('F1: starts no repository read and no machine read on its own, at any zoom', async () => {
-    const { mod, ds, aggregate } = await fresh()
-    const d = data({ sessions: [row({ id: 'r1', badge: 'live' }), row({ id: 'r2', badge: 'live' }), row({ id: ID })] })
-    for (const zoom of [undefined, 'session', 'sessions', 'machine'] as const) mod.ensureStart(d, ds, { screen: 'start', ...(zoom ? { zoom } : {}) }, vi.fn())
-    await flush()
-    expect(aggregate).not.toHaveBeenCalled()
-    expect(mod.machineRead(d)).toBe(false)
-  })
-
-  it('F2: reads each listed session through the session read, the running ones and the 20 newest, and no other', async () => {
-    const { mod, ds, session } = await fresh()
-    const many = Array.from({ length: 30 }, (_, i) => row({ id: `s${String(i).padStart(7, '0')}`, mtimeMs: 1_000 - i }))
-    many.push(row({ id: 'live0001', badge: 'live', mtimeMs: 5_000 }))
-    mod.ensureStart(data({ sessions: many }), ds, { screen: 'start', zoom: 'sessions' }, vi.fn())
-    await flush()
-    const ids = session.mock.calls.map(([id]) => id)
-    expect(ids).toEqual(['live0001', ...many.slice(0, 20).map((r) => r.id)])
-    // a second render reads nothing again
-    mod.ensureStart(data({ sessions: many }), ds, { screen: 'start', zoom: 'sessions' }, vi.fn())
-    await flush()
-    expect(session.mock.calls).toHaveLength(ids.length)
-  })
-
-  it('F2: reads no listed session at the other zooms', async () => {
-    const { mod, ds, session } = await fresh()
-    for (const zoom of ['session', 'machine'] as const) mod.ensureStart(data({ sessions: [row({ id: 'r1' }), row({ id: 'r2' })] }), ds, { screen: 'start', zoom }, vi.fn())
-    await flush()
-    expect(session).not.toHaveBeenCalled()
   })
 })
 

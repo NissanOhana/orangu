@@ -18,7 +18,8 @@ import { megaReview } from './mega-review.js'
 import { proposalsUi } from './proposals-ui.js'
 import { ensureQueue, queueRead } from './home-ui.js'
 import { queueCardHtml } from './queue-card.js'
-import { ensureStart, machineRead, renderStart } from './start-ui.js'
+import { ensureStart, machineRead } from './start-reads.js'
+import { renderStart } from './start-ui.js'
 import { renderRepo } from './screens/repo.js'
 import { renderGlobal } from './screens/global.js'
 import { harnessCardHtml, renderHarness } from './screens/harness.js'
@@ -167,7 +168,7 @@ function ensureAggregate(d: AppData, ds: DataSource, state: RouteState, onLoaded
 
 /**
  * the data seam of each non-harness screen: the queue read that #suggest, #overview and #start show, then the
- * aggregate. #start keeps its own reads (start-ui.ts) and draws their states in its panel, so it never asks for the
+ * aggregate. #start keeps its own reads (start-reads.ts) and draws their states in its panel, so it never asks for the
  * whole-screen loading state. Its harness read starts only after its machine read did: each analyzes every session.
  */
 function ensureScreenData(d: AppData, ds: DataSource, state: RouteState, onLoaded: () => void): boolean {
