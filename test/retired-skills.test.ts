@@ -17,7 +17,8 @@ import { listFiles } from '../scripts/ste-surfaces.js'
  *
  * Scope: the tracked files that a person or a skill reads. That is `src/` (no tests, no generated modules), `docs/`,
  * `plugin/` (no eval results, no bundled CLI, no generated show-me pages), the landing source, the llms source, the
- * 404 page and the README. `npm run verify:generated` ties each generated file to its source, so the sources are enough.
+ * 404 page, the README and the security policy. `npm run verify:generated` ties each generated file to its source, so
+ * the sources are enough.
  *
  * The baseline only shrinks. A file outside it that names a command that it may not name fails. An entry whose file no
  * longer names one fails too, so the chunk that rewrites that file removes its entry.
@@ -35,6 +36,8 @@ const BASELINE: Readonly<Record<string, string>> = {
   'site/llms.src.txt': 'C-8a, the chain in the docs',
   'docs/ARCHITECTURE.md': 'C-8a, the chain in the docs',
   'docs/DETERMINISM.md': 'C-8a, the chain in the docs',
+  // :25-26 name /orangu:show-me and /orangu:apply as commands
+  'SECURITY.md': 'C-8a, the chain in the docs',
 }
 const TEXT = /\.(?:md|ts|tsx|mjs|js|json|yaml|yml|html|txt|css|jsonl)$/
 
@@ -49,7 +52,8 @@ const inScope = (file: string): boolean =>
     /^site\/[^/]+\.src\.html$/.test(file) ||
     file === 'site/llms.src.txt' ||
     file === 'site/404.html' ||
-    file === 'README.md')
+    file === 'README.md' ||
+    file === 'SECURITY.md')
 
 /** The commands of a text that the file may not name. */
 function forbiddenIn(file: string, text: string): string[] {
@@ -69,7 +73,7 @@ describe('retired and hidden skill commands', () => {
 
   it('reads a meaningful part of the tree (the sweep is not silently empty)', () => {
     for (const prefix of ['src/', 'docs/', 'plugin/skills/', 'plugin/agents/', 'plugin/evals/']) expect(files.some((file) => file.startsWith(prefix)), prefix).toBe(true)
-    for (const file of ['README.md', 'site/llms.src.txt', 'site/404.html', 'site/index.src.html', 'plugin/skills/show-me/references/report.src.html'])
+    for (const file of ['README.md', 'SECURITY.md', 'site/llms.src.txt', 'site/404.html', 'site/index.src.html', 'plugin/skills/show-me/references/report.src.html'])
       expect(files, file).toContain(file)
     expect(files, 'no generated page and no test file').not.toContain('plugin/skills/show-me/references/report.html')
     expect(files.filter((file) => file.endsWith('.test.ts'))).toEqual([])

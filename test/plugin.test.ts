@@ -42,9 +42,14 @@ const SEARCH_GATE = 'Search only when the skill that runs you allows it. Never o
 // feedback offer of improve and interview names the form (+2 each), and the shared rules name the apply skill (+2).
 // show-me picks its scope from the request in place of the 3 typed forms of a Show me control (-12), and the apply
 // description names the approval in place of a typed command (-1). The resident descriptions 1,673 -> 1,660 (-13).
-const REVIEW_WORDS_MEASURED = 1774
+// The code review of the hidden skills (2026-11-01, major 1): the review 1,774 -> 1,789 (+15), and all of plugin/skills
+// 14,938 -> 14,953 (+15). A Claude Code user can also have no Skill tool (a bare `Skill` deny rule), and that user must
+// get a failure, not a list of a command that runs 0 turns. So stage 6 gives 1 sentence for each host (+36): Claude Code
+// stops and says which ids changed, and Codex gets the `$orangu-apply <id>` list. The 2 sentences of the first form
+// go (-21). The catalog says that Claude starts the other 3 (+5) and pays with 5 words of its rows, so it stays at 203.
+const REVIEW_WORDS_MEASURED = 1789
 const BRAIN_WORDS_MEASURED = 2021
-const ALL_SKILL_WORDS_MEASURED = 14_938
+const ALL_SKILL_WORDS_MEASURED = 14_953
 const TOTAL_DESC_MEASURED = 1660
 // plugin/skills/README.md: 253 until the analyze and harness rows left (C12), then the measured 203 words + 1
 const README_CEILING = 204
@@ -594,11 +599,12 @@ describe('plugin packaging', () => {
     expect(review).toContain('Use one id per invocation, one receipt per id.')
     expect(review).toContain('Stop at the first failure')
     expect(review).toContain('Never apply a global proposal')
-    // C-5b (2026-11-01): Claude Code does not run a typed /orangu:apply, so a denied Skill call stops the run, and only a
-    // host with no Skill tool gets the list that a person types (the Codex mirror reads `$orangu-apply <id>`)
-    expect(review).toContain('Stop at the first failure, report it, leave the working tree for review. A denied Skill call is a failure.')
-    expect(review).toContain('A host with no Skill tool hands the user the ordered `/orangu:apply <id>` list.')
-    expect(review, 'no list for a person when the Skill call is denied').not.toMatch(/If the Skill tool is unavailable or denied/)
+    // C-5b (2026-11-01): Claude Code does not run a typed /orangu:apply. A Claude Code user who denies the Skill call, or
+    // who turns all skills off with a bare `Skill` deny rule, gets a failure, never a list of a command that runs 0
+    // turns. Only Codex, which has no Skill tool and keeps `$orangu-apply`, gets the list that a person types.
+    expect(review).toContain('In Claude Code, a denied Skill call or a missing Skill tool is a failure: stop and say which ids changed.')
+    expect(review).toContain('Codex has no Skill tool, so there hand the user the ordered `$orangu-apply <id>` list.')
+    expect(review, 'no list of a typed /orangu:apply for a Claude Code user').not.toMatch(/ordered `\/orangu:apply <id>` list|A host with no Skill tool|If the Skill tool is unavailable or denied/)
     const report = review.indexOf('this review did not edit the target repository')
     const approval = review.indexOf('which items the user approves')
     expect(approval, 'the approval question follows the pre-approval report').toBeGreaterThan(report)
@@ -2169,6 +2175,9 @@ describe('plugin packaging', () => {
     // C12 (2026-11-01): line 3 names the 2 commands of the chain, improve first. The improve row says that it reviews
     // the whole harness and asks on its first run.
     expect(readme.split('\n')[2], 'the catalog names the 2 commands, improve first').toBe('Five Claude Code skills. Start with `/orangu:improve`. Run `/orangu:interview` to tell orangu your role and your work.')
+    // C-5b (2026-11-01): apply, show-me and feedback are hidden from the / menu, so the catalog says that a person types
+    // only the 2 commands of line 3, before the table lists all 5
+    expect(readme.split('\n')[4], 'the catalog says who starts the hidden skills').toBe('Claude starts the other 3.')
     expect(readme, 'the improve row says the review and the first-run offer').toMatch(/^\| `\/orangu:improve` \| [^\n]*whole harness[^\n]*first run/m)
     expect(readme, 'the catalog names no retired skill and no CLI-verb pointer for one').not.toMatch(/\/orangu:(?:analyze|harness)\b|`analyze`\/`harness`/)
     // 2026-10-06 200 -> 226: the show-me row, measured 26 words (199 -> 225); the ratchet below says why

@@ -182,7 +182,15 @@ describe('plugin eval suite', () => {
     const re = new RegExp(scalar(none!.fields.input_match))
     expect(re.test('{"skill":"orangu:apply"}')).toBe(true)
     expect(re.test('{"skill":"orangu:improve","args":"apply my latest proposal"}'), 'improve is not apply').toBe(false)
-    expect(zero('apply-requires-a-proposal-id', 'Read'), 'no project read in either arm').toBeTruthy()
+    // code review (2026-11-01, major 2): improve fires here, and a correct run reads the files of the plugin (its review,
+    // the loop rules). So the Read guard counts only a file outside the skills of the plugin: a project file.
+    const read = zero('apply-requires-a-proposal-id', 'Read')
+    expect(read, 'no project read in either arm').toBeTruthy()
+    const project = new RegExp(scalar(read!.fields.input_match))
+    for (const file of ['/work/repo/CLAUDE.md', '/work/repo/src/index.ts', '/work/repo/package.json'])
+      expect(project.test(JSON.stringify({ file_path: file })), `a read of ${file} fails the case`).toBe(true)
+    for (const file of ['/p/orangu/skills/improve/references/review.md', '/p/orangu/skills/shared/loop.md', '/p/orangu/skills/improve/SKILL.md'])
+      expect(project.test(JSON.stringify({ file_path: file })), `a read of ${file} is a read of the plugin`).toBe(false)
     const claims = gs.find((g) => g.file.endsWith('/asks-for-an-id.md'))
     expect(claims?.fields.type, 'an llm rubric grades the reply').toBe('llm')
     expect(claims?.fields.arm, 'it counts in both arms').toBeUndefined()
