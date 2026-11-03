@@ -141,8 +141,8 @@ export function verifyCommand(id: string): string {
 }
 
 /**
- * The handoff of a reviewed proposal. Claude Code does not run a typed /orangu:apply, because the skill is hidden from
- * the / menu. So improve takes the id, asks the user to approve it, and then invokes apply.
+ * The handoff of a reviewed proposal. The apply skill is hidden from the / menu, so Claude Code does not run it when a
+ * person types it. So improve takes the id, asks the user to approve it, and then invokes apply.
  */
 export function applyCommand(id: string): string {
   return `claude "/orangu:improve ${canonicalId(id)}"`
