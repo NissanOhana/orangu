@@ -2,6 +2,7 @@
 name: show-me
 description: Turn the evidence of one session, one repository or all sessions into a slide deck and a written report, as offline HTML files. Use when the user asks for slides, a deck or a report to present or share with a team. Not for a diagnosis in chat or a change proposal: /orangu:improve.
 allowed-tools: Bash(orangu show-me:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" show-me *), Read
+user-invocable: false
 ---
 
 # /orangu:show-me
@@ -22,11 +23,11 @@ Use default redaction. Add `--no-redact` or `--include-text` only when the user 
 
 ## 1. Choose the scope
 
-The Show me button of a report copies one of these 3 forms, as `claude "/orangu:show-me …"`:
+Pick the scope that the user asks for:
 
-- `/orangu:show-me <session>`: one session. `<session>` is a session id, a unique prefix, a transcript path, `latest` or `current`.
-- `/orangu:show-me --scope repo`: the sessions of the repository in the current directory. `<cwd>` is that directory.
-- `/orangu:show-me --scope global`: every supported session on this machine.
+- `<session>`: one session. `<session>` is a session id, a unique prefix, a transcript path, `latest` or `current`.
+- `--scope repo`: the sessions of the repository in the current directory. `<cwd>` is that directory.
+- `--scope global`: every supported session on this machine.
 
 With no argument, show `latest`, and tell the user which session id that is.
 

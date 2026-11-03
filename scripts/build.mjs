@@ -267,8 +267,11 @@ function codexSkill(name, claude) {
   if (!claude.startsWith('---\n')) throw new Error(`codex mirror: ${name} has no frontmatter`)
   const end = claude.indexOf('\n---\n', 4)
   if (end === -1) throw new Error(`codex mirror: ${name} has an unterminated frontmatter block`)
+  // The mirror drops both Claude Code keys. Codex has no pre-approval list, and plugin/codex/<n>/openai.yaml decides an
+  // implicit call there. Claude Code hides apply and feedback from its `/` menu, and a Codex user still types
+  // `$orangu-apply` (how Codex reads `user-invocable` is not checked, so the mirror never carries it).
   const frontmatter = claude.slice(4, end).split('\n')
-    .filter((line) => !line.startsWith('allowed-tools:'))
+    .filter((line) => !line.startsWith('allowed-tools:') && !line.startsWith('user-invocable:'))
     .map((line) => (line === `name: ${name}` ? `name: orangu-${name}` : line))
   if (!frontmatter.includes(`name: orangu-${name}`)) throw new Error(`codex mirror: ${name} frontmatter has no matching name:`)
   // the allowed-tools drop is line-based: a block-sequence value (`allowed-tools:` + `  - Bash` lines) would

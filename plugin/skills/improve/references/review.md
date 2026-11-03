@@ -111,4 +111,4 @@ CAUTION: apply nothing without explicit approval. Ask which items the user appro
 
 Changes applied together are measured together. Apply one at a time to measure each. Apply the approved session or repo proposals in order with `/orangu:apply <id>` through the Skill tool. Use one id per invocation, one receipt per id. Immediately before each invocation, echo that exact `<id>`, title, and files.
 
-Stop at the first failure, report it, leave the working tree for review. Never apply a global proposal. If the Skill tool is unavailable or denied, hand the user the ordered `/orangu:apply <id>` list instead.
+Stop at the first failure, report it, leave the working tree for review. A denied Skill call is a failure. Never apply a global proposal. A host with no Skill tool hands the user the ordered `/orangu:apply <id>` list.

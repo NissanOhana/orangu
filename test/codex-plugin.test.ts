@@ -145,6 +145,18 @@ describe('Codex plugin packaging', () => {
     }
   })
 
+  // C-5b (2026-11-01): Claude Code hides apply and feedback with `user-invocable: false`. The build copies each
+  // frontmatter line but `allowed-tools` and `user-invocable`, so the Codex skills keep what they had: a Codex user can
+  // still type `$orangu-apply` and `$orangu-feedback`, and only the openai.yaml of each skill decides an implicit call.
+  it('gives each mirrored skill a frontmatter of name and description only', () => {
+    for (const tree of ['.agents/skills', 'plugins/orangu/skills']) {
+      for (const name of ['improve', 'apply', 'feedback', 'interview']) {
+        const block = /^---\n([\s\S]*?)\n---\n/.exec(readText(`${tree}/orangu-${name}/SKILL.md`))?.[1] ?? ''
+        expect(block.split('\n').map((line) => /^([\w-]+):/.exec(line)?.[1] ?? line), `${tree}/orangu-${name}`).toEqual(['name', 'description'])
+      }
+    }
+  })
+
   // A mirror copies only each skill's own folder and shared/ (scripts/build.mjs). A link into another skill's folder,
   // or to a file that the mirror does not carry, breaks only in Codex, so each relative link must resolve in each tree.
   it('resolves every relative Markdown link inside each Codex mirror', () => {

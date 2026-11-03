@@ -1,7 +1,8 @@
 ---
 name: apply
-description: Apply exactly one reviewed proposal (status proposed, session or repo scope) to the current repository, run its own checks, and record a receipt. Use only when the user explicitly runs /orangu:apply with a suggestion id. Global proposals are review-only. Not for drafting or revising a proposal: /orangu:improve.
+description: Apply exactly one reviewed proposal (status proposed, session or repo scope) to the current repository, run its own checks, and record a receipt. Use only for an id that the user approves in /orangu:improve. Global proposals are review-only. Not for drafting or revising a proposal: /orangu:improve.
 allowed-tools: Bash(orangu suggest:*), Bash(orangu ste:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Read
+user-invocable: false
 ---
 
 # /orangu:apply

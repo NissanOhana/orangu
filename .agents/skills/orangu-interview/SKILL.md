@@ -58,4 +58,4 @@ Return a short summary:
 
 Say that you changed no repository file. Before you send the summary, write it to a new file `~/.orangu/drafts/interview-<random>.md`. Then run `orangu ste '<draft-path>'`.
 
-If another skill invoked this one, return to that skill now. Otherwise name `$orangu-improve` as the next step, and offer `$orangu-feedback` once. Never launch it unless the user accepts.
+If another skill invoked this one, return to that skill now. Otherwise name `$orangu-improve` as the next step, and offer the feedback form once. Never open it unless the user accepts.
