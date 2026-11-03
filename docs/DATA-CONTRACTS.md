@@ -568,7 +568,7 @@ ProfileStatus = {
 
 ## Proposal artifacts
 
-New proposals from `orangu-improve` and `orangu-harness` have two files under `~/.orangu/proposals/`:
+New proposals from `/orangu:improve`, for 1 finding or from its whole-harness review, have two files under `~/.orangu/proposals/`:
 
 - `<id>.md`: human-readable review;
 - `<id>.json`: versioned machine-readable manifest.
@@ -606,7 +606,7 @@ SuggestionProposal = {
 
 Project files are a nonempty set of relative paths and may not escape the target repository or include `.git`. `verificationChecks` contains 1-32 unique supported metric/comparison pairs. At least 1 pair must be `decreased` or `increased`. Orangu refuses a new manifest that has only guards, because such a set can never verify. A record that an older orangu stored with only guards stays readable, and it can still close as `unproven`. The skill supplies those reviewed pairs; later verification grades exactly those pairs, in that order. `workspace` is captured by Orangu when it accepts the structured proposal, not supplied by the manifest. Apply and verification later require the same canonical path and inode, and the same directory creation time when one was recorded (`birthtimeNs`, captured only where the filesystem reports a real one; earlier records carry none). The recorded device number may differ, because the operating system renumbers volumes across restarts and remounts. Two exceptions keep the device strict: a workspace that is itself the root of a mounted volume, where the inode is the same on every volume, and Windows, where the volume serial does not change. Catalog labels must name a real shipped entry exactly as `catalog: <id>`; Orangu derives its URL/date from the catalog and rejects conflicting supplied metadata. Research requires a direct HTTPS URL and a non-null checked `YYYY-MM-DD` date. Inference carries neither URL nor date. A candidate with `verifiedAt: null` is not valid persisted proposal provenance.
 
-Every `orangu-harness` manifest includes its rank, at least one reviewed relative project file, and at least one honest catalog, research, or inference source. The harness skill passes both artifact paths with `--proposal` and `--manifest`; it never authors a repository edit of its own. It may apply the repo items you approve, and only by invoking `orangu-apply` for one id at a time under that skill's unchanged contract, after disclosing each item's files and command text and taking an explicit per-item approval by verbatim id; it stops at the first failure. A global harness proposal is review-only and is never applied.
+Every manifest from the whole-harness review of `/orangu:improve` includes its rank, at least one reviewed relative project file, and at least one honest catalog, research, or inference source. The review passes both artifact paths with `--proposal` and `--manifest`. It never makes a repository edit of its own. It may apply the repo items that you approve, and only through `orangu-apply`, for one id at a time under that skill's unchanged contract. Before that, it discloses the files and the command text of each item, and it takes an explicit approval of each item by its verbatim id. It stops at the first failure. A global proposal of the review is review-only and is never applied.
 
 Legacy Markdown-only proposals remain readable for compatibility but cannot satisfy the new structured apply workflow.
 

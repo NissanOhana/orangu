@@ -56,6 +56,7 @@ export const BELOW_TARGET: Readonly<Record<string, string>> = {}
 export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // S1: README, the landing, 404 and llms sources, the npm description, the sample page copy
   // the front-door rewrite (Get started, the 6-step loop): measured 100 (113 of 113), 0 findings. 98 is max(80, measured - 2)
+  // the chain rewrite (70 lines: Start, How it works, Outside Claude Code): measured 100 (58 of 58), 0 findings. 98 stays
   'README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
   // Z: floor 97 -> 98, findings 2 -> 1. Measured 100 (242 of 243) after the skill cards in STE ("actually" gone).
   // The 1 finding is the plugin install card (:492): its sentences start with a code span, which the checker
@@ -63,16 +64,16 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   // The loop and front-door rewrite: findings 1 -> 0. Measured 100 (285 of 285): each plugin card sentence but the
   // last starts with a word now.
   'site/index.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 },
-  'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
-  'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (53 of 53) after the front-door lines
-  'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
+  'site/404.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (5 of 5) after the chain line
+  'site/llms.src.txt': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (66 of 66) after the chain lines
+  'package.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2) after the chain lead
   'scripts/build-sample.ts': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 after the STE rewrite
   // S2: every user doc in docs/
-  'docs/DETERMINISM.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (219 of 219) after the checkpoint lines, was 74 with 2 em dashes before the STE rewrite
+  'docs/DETERMINISM.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (233 of 233) after the chain lines, was 74 with 2 em dashes before the STE rewrite
   // G12: the user doc of orangu god, born at max(80, measured - 2) with 0 banned tokens and findings at the measured count.
   'docs/GOD.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (205 sentences), 0 findings
   'docs/README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (18 sentences) after the STE rewrite, was 94
-  'docs/USAGE.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (136 of 136) after the front-door lines, was 82 before the STE rewrite
+  'docs/USAGE.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (146 of 146) after the chain marks, on the write rules of 20d854d, was 82 before the STE rewrite
   'docs/feedback.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (23 sentences) after the STE rewrite, was 95
   // P1a: improve, apply, feedback, shared, and the Codex copy (yaml, manifest, mirror fallback)
   // Raised by the P1a STE rewrite of each file (one instruction per sentence, no semicolon lists, vertical
@@ -111,8 +112,8 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/agents/harness-researcher.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (43 of 43) after the rewrite
   'plugin/skills/README.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (22 of 22) after the rewrite
   'plugin/skills/shared/research-sources.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (34 of 34) after the rewrite, 100 (37 of 37) with the consent sentence and the host rule, 2026-10-24
-  'plugin/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (2 of 2): the 28-word sentence became 2
-  '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (4 of 4): the 31-word sentence became 2
+  'plugin/.claude-plugin/plugin.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (4 of 4) after the chain lead (the 28-word sentence became 2 before)
+  '.claude-plugin/marketplace.json#description': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (5 of 5) after the chain lead (the 31-word sentence became 2 before)
   // P2: the show-me skill, its slot rules and its two template sources. New surfaces, born in STE at
   // max(80, measured - 2). The templates are measured as sources: the fixed sentences and the EXAMPLE sample text.
   'plugin/skills/interview/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (153 of 153) at birth, 2026-10-23, 100 (61 of 61) as the profile interview, 2026-11-01, 100 (67 of 67) with the check after the write, 100 (68 of 68) when a profile that does not read names its path

@@ -1,12 +1,12 @@
 {
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "orangu",
-  "description": "Observe supported Claude sessions locally, then improve the next outcome.",
+  "description": "Improve your agent harness and your setup, with evidence from your local Claude sessions.",
   "owner": { "name": "Nissan Ohana" },
   "plugins": [
     {
       "name": "orangu",
-      "description": "Observe Claude Code, Cowork, and Desktop sessions with deterministic local evidence. Then use optional skills to draft changes, apply session/repo proposals explicitly, and verify session-scope changes against later evidence. It needs no account and no instrumentation, and it uploads no report.",
+      "description": "Improve your agent harness and your setup. The brain, /orangu:improve, finds patterns in your local Claude Code, Cowork and Desktop sessions and proposes changes. It applies only the changes that you approve by id, and orangu checks each one on your later sessions. The measurement uses no model, needs no account and uploads nothing.",
       "author": { "name": "Nissan Ohana" },
       "category": "productivity",
       "source": "./plugin"

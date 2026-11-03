@@ -13,6 +13,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runInNewContext } from 'node:vm'
 import { ANALYZER_RULE_IDS } from '../src/analyze/rule-ids.js'
+import { CLI_VERBS } from '../src/cli/commands/index.js'
 import { COHORT_MAX, COHORT_MIN } from '../src/suggest/cohort-stats.js'
 import { PARAGRAPH, htmlToText } from '../src/ste/index.js'
 import { currencyHits, moneyHits } from './money-vocabulary.js'
@@ -991,22 +992,29 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     expect(llms).toContain('https://www.npmjs.com/package/orangu')
   })
 
-  // 2026-11-01: 5 skills ship, since the brain folded analyze and harness into improve.
-  it('names only the five shipped skills and every CLI verb from --help', () => {
+  // 2026-11-01: the `/` menu shows 2 commands. apply, show-me and feedback are hidden, and a typed command of a hidden
+  // skill does not run, so the index names only the 2. An agent still needs the machine verbs and the export.
+  it('names only the 2 commands of the / menu, and the machine verbs', () => {
     const skills = [...llms.matchAll(/\/orangu:([a-z-]+)/g)].map((m) => m[1])
-    expect(new Set(skills)).toEqual(new Set(['improve', 'interview', 'apply', 'show-me', 'feedback']))
+    expect(new Set(skills)).toEqual(new Set(['improve', 'interview']))
     expect(llms).not.toContain('/orangu:mega')
-    for (const verb of ['report', 'serve', 'repo', 'global', 'harness', 'analyze']) expect(llms).toContain(`npx orangu ${verb}`)
+    for (const verb of ['report', 'serve', 'repo', 'global', 'harness', 'analyze', 'export']) expect(llms).toContain(`npx orangu ${verb}`)
   })
 
-  it('lists the bare command first, then the latest-session command, in both command lists', () => {
+  // G7 (2026-11-01 simplify run): the chain comes first in both lists: see, the brain, tune, then the export for a
+  // Claude chat outside Claude Code. The machine verbs follow.
+  it('names the chain first in both lists, then the export', () => {
     const commands = llms.slice(llms.indexOf('Concretely, you can:')).split('\n').filter((line) => line.startsWith('- '))
     expect(commands[0]).toMatch(/^- `npx orangu` : prints a short summary of the latest session\./)
-    expect(commands[1]).toMatch(/^- `npx orangu report` : /)
+    expect(commands[1]).toMatch(/^- `\/orangu:improve` : /)
+    expect(commands[2]).toMatch(/^- `\/orangu:interview` : /)
+    expect(commands[3]).toMatch(/^- `npx orangu export` : /)
     const started = llms.slice(llms.indexOf('## Getting started'), llms.indexOf('## Optional'))
     const lead = started.split('\n').find((line) => line.includes('npx orangu')) ?? ''
     expect(lead).toMatch(/^- `npx orangu` /)
-    expect(lead.indexOf('`npx orangu`')).toBeLessThan(lead.indexOf('`npx orangu report`'))
+    const at = ['`npx orangu`', '`/orangu:improve`', '`/orangu:interview`', '`npx orangu export`'].map((command) => started.indexOf(command))
+    at.forEach((index, n) => expect(index, `Getting started names step ${n + 1}`).toBeGreaterThan(-1))
+    expect(at, 'in the order of the chain').toEqual([...at].sort((a, b) => a - b))
     // llms.txt is read by agents, whose shell is not a TTY: there the bare command prints only the
     // latest-session brief and starts no app (src/cli/door.ts, the predicate of the app).
     for (const line of [commands[0]!, lead]) expect(line).toContain('In a pipe or in CI, it prints only the summary.')
@@ -1197,9 +1205,9 @@ describe('landing SEO surface', () => {
     expect(notFound).toContain('<meta name="robots" content="noindex"/>')
     expect(notFound).toContain('href="/orangu/"')
     expect(notFound).not.toMatch(/https?:\/\//)
-    // The 404 names the bare command first and keeps the latest-session command as the second line.
-    expect(notFound).toContain('To see your own sessions, run <code>npx orangu</code>. To open only the latest session, run <code>npx orangu report</code>.')
-    expect(notFound.indexOf('<code>npx orangu</code>')).toBeLessThan(notFound.indexOf('<code>npx orangu report</code>'))
+    // The 404 names the chain: the bare command first, then the brain in Claude Code (2026-11-01 simplify run).
+    expect(notFound).toContain('To see your own sessions, run <code>npx orangu</code>. To improve your setup, run <code>/orangu:improve</code> in Claude Code.')
+    expect(notFound).not.toContain('npx orangu report')
   })
 })
 
@@ -1214,32 +1222,62 @@ describe('README entry points', () => {
     return readme.slice(start, end < 0 ? undefined : end)
   }
 
-  it('shows the bare command in the header links, and the 3 front doors in Get started with no second option', () => {
+  // G1 (2026-11-01 simplify run): a short README that tells 1 chain. `npx orangu` sees, `/orangu:improve` is the brain
+  // and `/orangu:interview` tunes it. It names no other skill: apply, show-me and feedback are hidden from the `/` menu,
+  // and analyze and harness are gone. Codex runs the same brain, so only its improve form may show.
+  it('has 70 lines or fewer and names the 3 commands of the chain, in order, and no other skill', () => {
+    expect(readme.trimEnd().split('\n').length).toBeLessThanOrEqual(70)
+    expect(new Set([...readme.matchAll(/\/orangu:([a-z-]+)/g)].map((m) => m[1]))).toEqual(new Set(['improve', 'interview']))
+    for (const [, skill] of readme.matchAll(/\$orangu-([a-z-]+)/g)) expect(['improve', 'interview'], `$orangu-${skill}`).toContain(skill)
+    const at = ['`npx orangu`', '`/orangu:improve`', '`/orangu:interview`'].map((command) => readme.indexOf(command))
+    at.forEach((index, n) => expect(index, `step ${n + 1}`).toBeGreaterThan(-1))
+    expect(at, 'in the order of the chain').toEqual([...at].sort((a, b) => a - b))
+  })
+
+  // Decision 18: the README leads with the ask (improve the harness and the setup), and the tagline is the second line.
+  it('leads with the harness and the setup, then the tagline', () => {
+    expect(lines[6]).toBe('**Improve your agent harness and your setup.**')
+    expect(lines[8]).toBe('Measure every agent session. Keep the changes that work.')
+  })
+
+  it('starts with the bare command alone, then the 3 plugin lines that end in the brain', () => {
     const header = lines.find((line) => line.includes('[sample report](')) ?? ''
     expect(header).toContain('`npx orangu`')
     expect(header).not.toContain('`npx orangu report`')
-    const started = section('Get started')
-    const block = started.match(/```bash\n([\s\S]*?)```/)?.[1] ?? ''
-    // the terminal, the local app, then the latest session only: the order of the landing install cards
-    expect(block.trimEnd().split('\n').map((line) => line.split('#')[0]!.trim())).toEqual(['npx orangu', 'npx orangu serve', 'npx orangu report'])
-    expect(started).toContain('start with `/orangu:improve`')
-    expect(started).toContain('`orangu help all` lists every command and flag.')
+    const start = section('Start')
+    expect(start.match(/```bash\n([\s\S]*?)```/)?.[1]).toBe('npx orangu\n')
+    expect(start.match(/```text\n([\s\S]*?)```/)?.[1]).toBe('/plugin marketplace add NissanOhana/orangu\n/plugin install orangu\n/orangu:improve\n')
+    // the app on a terminal, and the summary only where no person waits (src/cli/door.ts)
+    expect(start).toContain('On a terminal, it then opens the local app.')
+    expect(start).toContain('In a pipe or in CI, it prints only the summary.')
   })
 
-  it('leads with the harness tagline and says what the transcript records', () => {
-    expect(lines[6]).toBe('**Improve your agent harness, one checked change at a time.**')
-    expect(lines[14]).toContain('records what they did')
-    expect(readme).not.toContain('nobody reads')
+  // Decision 19: the interview copy names no question count. The boundary keeps each qualifier of the old loop: "only",
+  // "your later sessions" in the same workspace, "beyond chance", no proof of cause, "never ... by itself", and the
+  // proposal-only rule for the whole machine.
+  it('shows the chain as 3 named steps, then the boundary with each qualifier', () => {
+    const how = section('How it works')
+    const steps = how.split('\n').filter((line) => /^\d+\. /.test(line))
+    expect(steps.map((line) => /^(\d+)\. \*\*(\w+)\.\*\*/.exec(line)?.slice(1).join(' '))).toEqual(['1 See', '2 Improve', '3 Tune'])
+    // the 3 zoom levels of the app start view (src/report/client/nav.ts): per session, all sessions with their agents,
+    // and the whole machine
+    expect(steps[0]).toContain('The app shows one session, your sessions and their agents, or the whole machine.')
+    expect(steps[1]).toContain('`/orangu:improve`')
+    expect(steps[1]).toContain('It applies only the changes that you approve by id.')
+    expect(steps[2]).toContain('`/orangu:interview`')
+    expect(readme).not.toMatch(/\b\d+ (?:short )?questions\b/)
+    expect(how).toContain('orangu marks a change verified only when your later sessions in the same workspace beat the earlier sessions beyond chance.')
+    expect(how).toContain('The check does not prove that the change caused the difference.')
+    expect(how).toContain('orangu never changes your harness by itself.')
+    expect(how).toContain('A change to the whole machine stays a proposal.')
+    for (const sentence of readme.split(/(?<=\.)\s+/).filter((text) => /beyond chance/.test(text))) expect(sentence).toContain('your later sessions')
   })
 
-  it('shows the loop as 1 numbered list of 6 named steps, then the boundary', () => {
-    const loop = section('The improve loop')
-    const steps = loop.split('\n').filter((line) => /^\d+\. /.test(line))
-    expect(steps.map((line) => /^(\d+)\. \*\*(\w+)\.\*\*/.exec(line)?.slice(1).join(' '))).toEqual(['1 Observe', '2 See', '3 Propose', '4 Apply', '5 Verify', '6 Remember'])
-    // 1 list: no other line between the steps
-    expect(loop.slice(loop.indexOf(steps[0]!), loop.indexOf(steps[5]!)).split('\n').filter((line) => line.trim() !== '')).toHaveLength(5)
-    expect(loop).toContain('orangu never changes your harness by itself.')
-    expect(steps[4]).toContain('`/orangu:improve --verify <id>`')
+  it('names the export and its 2 files for a Claude chat outside Claude Code, where the brain only proposes', () => {
+    const outside = section('Outside Claude Code')
+    for (const text of ['`npx orangu export`', 'claude.ai', 'Claude Desktop', 'the Claude API', '`orangu-improve.zip`', '`orangu-export.json`']) expect(outside, text).toContain(text)
+    expect(outside).toContain('It writes 2 files')
+    expect(outside).toContain('the brain only proposes changes')
   })
 
   it('names the rule count that the analyzer has, on the README and the landing', () => {
@@ -1382,10 +1420,26 @@ describe('docs/USAGE.md entry point', () => {
   it('names the store API only in its Commands row, and the two help levels', () => {
     // a person runs a front door or a Claude Code skill: the store commands are for the skills and scripts
     expect(usage.split('\n').filter((line) => /\borangu suggest\b/.test(line))).toEqual([
-      '| `orangu suggest` | The suggestion store that the skills call. `orangu help all` lists its flags |',
+      '| `orangu suggest` | machine | The suggestion store that the skills call. `orangu help all` lists its flags |',
     ])
     expect(usage).toContain('`orangu --help` shows the chain. `orangu help all` shows every command and flag.')
     expect(usage).toContain('`/orangu:improve --verify <id>` shows the comparison and records a final verdict.')
+  })
+
+  // G7 (2026-11-01 simplify run): the Commands table marks the 3 commands of the chain, in order, and marks each other
+  // row as a machine verb. Each verb of CLI_VERBS has 1 machine row. The 4 aliases have none.
+  it('marks the chain and the machine verbs in the Commands table, with 1 row for each verb', () => {
+    const commands = usage.slice(usage.indexOf('## Commands'), usage.indexOf('\n## ', usage.indexOf('## Commands') + 1))
+    const rows = commands.split('\n').filter((line) => line.startsWith('| `')).map((line) => line.slice(2, -2).split(' | '))
+    expect(rows.slice(0, 3).map(([command, kind]) => `${command} ${kind}`)).toEqual([
+      '`orangu` (no verb) chain, step 1',
+      '`/orangu:improve` chain, step 2',
+      '`/orangu:interview` chain, step 3',
+    ])
+    const machine = rows.slice(3)
+    for (const [command, kind] of machine) expect(kind, command).toBe('machine')
+    const verbs = machine.map(([command]) => /^`orangu ([a-z-]+)/.exec(command ?? '')?.[1])
+    expect(verbs.slice().sort()).toEqual(CLI_VERBS.filter((name) => !['html', 'a', 'ls', 'all'].includes(name)).slice().sort())
   })
 })
 

@@ -24,24 +24,29 @@ node dist/orangu.js report
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `orangu` (no verb) | Print the latest-session brief, then run the app on all your sessions until Ctrl-C |
-| `orangu report [selector]` | Write and open one self-contained session report |
-| `orangu analyze [selector]` | Print a summary or redacted JSON |
-| `orangu list` | List discoverable supported sessions |
-| `orangu pick` | Choose a session from a list, running ones first, and open its report |
-| `orangu watch [selector]` | Refresh one report while its session grows |
-| `orangu serve` | Run the capability-protected local app on `127.0.0.1` |
-| `orangu feedback` | Open the isolated, capability-protected localhost beta-feedback form |
-| `orangu repo` | Aggregate supported sessions for the current repository (`--html`/`--open` for the report) |
-| `orangu global` | Aggregate supported sessions across configured roots (`--html`/`--open` for the report) |
-| `orangu evidence <input>` | Emit the bounded, always-redacted evidence a skill reads |
-| `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
-| `orangu harness` | Compare declared harness configuration with observed use, and show the rules that did not hold |
-| `orangu suggest` | The suggestion store that the skills call. `orangu help all` lists its flags |
-| `orangu ste <file...\|->` | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. Terminal output and the layout of a report can give false findings. For terminal output, add `--lines` |
-| `orangu show-me [selector]` | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
+The chain is the 3 commands that you run, in this order. Each other verb is a machine verb. The skills, your scripts and CI run it, and you can run it too. `orangu --help` shows the chain. `orangu help all` shows every command and flag.
+
+| Command | Kind | Purpose |
+|---|---|---|
+| `orangu` (no verb) | chain, step 1 | See: print the latest-session brief, then run the app on all your sessions until Ctrl-C |
+| `/orangu:improve` | chain, step 2 | Improve: in Claude Code, find patterns in your sessions and your harness, and propose ranked changes. It applies only the changes that you approve by id, and it checks each applied change on your later sessions |
+| `/orangu:interview` | chain, step 3 | Tune: in Claude Code, ask about your role and your work, and keep your answers as your profile. The first run of `/orangu:improve` offers it |
+| `orangu export` | machine | Write the skill `orangu-improve.zip` and your redacted evidence `orangu-export.json` for claude.ai, Claude Desktop or the Claude API. It puts both files in a new folder under `~/.orangu/export/` |
+| `orangu report [selector]` | machine | Write and open one self-contained session report |
+| `orangu analyze [selector]` | machine | Print a summary or redacted JSON |
+| `orangu list` | machine | List discoverable supported sessions |
+| `orangu pick` | machine | Choose a session from a list, running ones first, and open its report |
+| `orangu watch [selector]` | machine | Refresh one report while its session grows |
+| `orangu serve` | machine | Run the capability-protected local app on `127.0.0.1` |
+| `orangu feedback` | machine | Open the isolated, capability-protected localhost beta-feedback form |
+| `orangu repo` | machine | Aggregate supported sessions for the current repository (`--html`/`--open` for the report) |
+| `orangu global` | machine | Aggregate supported sessions across configured roots (`--html`/`--open` for the report) |
+| `orangu evidence <input>` | machine | Emit the bounded, always-redacted evidence a skill reads |
+| `orangu estimate [selector\|repo\|global\|harness]` | machine | Size the bounded read before handing evidence to a skill |
+| `orangu harness` | machine | Compare declared harness configuration with observed use, and show the rules that did not hold |
+| `orangu suggest` | machine | The suggestion store that the skills call. `orangu help all` lists its flags |
+| `orangu ste <file...\|->` | machine | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. Terminal output and the layout of a report can give false findings. For terminal output, add `--lines` |
+| `orangu show-me [selector]` | machine | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
 
 A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment. If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch`, `estimate` and `show-me`. Outside Claude Code, `current` is an error.
 
@@ -58,8 +63,6 @@ On an interactive terminal, bare `orangu` prints the orange ASCII mascot and the
 Orangu refuses `--html` and `--open` with `--json`, which is a machine read with no side effect. `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report. `--jobs <n>` sets the worker threads of a scan over many sessions: by default the CPU count minus 1, and never more than the CPU count.
 
 `orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
-
-`orangu --help` shows the chain. `orangu help all` shows every command and flag.
 
 ### Rules that did not hold
 
