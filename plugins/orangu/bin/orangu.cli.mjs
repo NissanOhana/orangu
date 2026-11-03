@@ -1,7 +1,7 @@
 // src/cli/main.ts
 import { createHash as createHash6 } from "node:crypto";
-import { basename as basename15, join as join16, resolve as resolve13 } from "node:path";
-import { tmpdir as tmpdir2 } from "node:os";
+import { basename as basename16, join as join17, resolve as resolve14 } from "node:path";
+import { tmpdir as tmpdir3 } from "node:os";
 
 // src/cli/args.ts
 var SHORT_VALUE_FLAGS = /* @__PURE__ */ new Set(["o", "r", "l", "s"]);
@@ -2063,20 +2063,20 @@ function badgeFor(mtimeMs, now) {
 }
 
 // src/redact/secret-name.ts
-var secretWords = (sep3) => `password|passwd|passphrase|secret[${sep3}]?keys?|secret|token|api[${sep3}]?keys?|access[${sep3}]?keys?|private[${sep3}]?keys?|authorization|auth`;
+var secretWords = (sep4) => `password|passwd|passphrase|secret[${sep4}]?keys?|secret|token|api[${sep4}]?keys?|access[${sep4}]?keys?|private[${sep4}]?keys?|authorization|auth`;
 var NAME_SEPARATORS = "_./-";
 var NAME_END_SEPARATORS = "_-";
 var KEY_SEPARATORS = " _.:/-";
-var wordAtEnd = (sep3) => new RegExp(`(?:${secretWords(sep3)})$`, "i");
+var wordAtEnd = (sep4) => new RegExp(`(?:${secretWords(sep4)})$`, "i");
 var [NAME_WORD, KEY_WORD] = [wordAtEnd(NAME_SEPARATORS), wordAtEnd(KEY_SEPARATORS)];
 var ALPHANUMERIC = /[A-Za-z0-9]/;
-function endsWithSecretName(name, sep3, word) {
+function endsWithSecretName(name, sep4, word) {
   let end = name.length;
   while (end > 0) {
     if (word.test(name.slice(Math.max(0, end - 16), end))) return true;
     let start = end;
     while (start > 0 && ALPHANUMERIC.test(name[start - 1])) start--;
-    if (start === end || start === 0 || !sep3.includes(name[start - 1])) return false;
+    if (start === end || start === 0 || !sep4.includes(name[start - 1])) return false;
     end = start - 1;
   }
   return false;
@@ -2204,7 +2204,7 @@ function maskLater(text3, at, pairs, mark2) {
 }
 var lastEnd = (pairs) => pairs.later.at(-1)?.[1] ?? pairs.end;
 function holdsInnerName(text3, at, end) {
-  for (let sep3 = at; sep3 < end; sep3++) if (isSeparator(text3[sep3]) && namesSecretAt(text3, sep3)) return true;
+  for (let sep4 = at; sep4 < end; sep4++) if (isSeparator(text3[sep4]) && namesSecretAt(text3, sep4)) return true;
   return false;
 }
 function maskAssignments(text3, mark2) {
@@ -3142,7 +3142,7 @@ async function withStableSessionRead(path, options, read) {
       if (!isTransientInputChange(error)) throw error;
       if (attempt >= STABLE_READ_ATTEMPTS) throw new Error(`${error.message}. ${STILL_WRITING_HINT}`);
       const pause = STABLE_READ_BACKOFF_MS[Math.min(attempt, STABLE_READ_BACKOFF_MS.length) - 1];
-      await new Promise((resolve14) => setTimeout(resolve14, pause));
+      await new Promise((resolve15) => setTimeout(resolve15, pause));
     }
   }
 }
@@ -3200,10 +3200,10 @@ function buildSession(files2, mainPath, keepText, t0) {
   const unknownRecordTypes = /* @__PURE__ */ new Map();
   const unknownBlockTypes = /* @__PURE__ */ new Map();
   const warnings = /* @__PURE__ */ new Map();
-  const warn = (code2, message, line) => {
-    const w = warnings.get(code2);
+  const warn = (code3, message, line) => {
+    const w = warnings.get(code3);
     if (w) w.count++;
-    else warnings.set(code2, { code: code2, message, count: 1, sampleLine: line });
+    else warnings.set(code3, { code: code3, message, count: 1, sampleLine: line });
   };
   const KNOWN_TYPES = /* @__PURE__ */ new Set([
     "user",
@@ -7828,12 +7828,12 @@ function padCell(s, width, align = "l") {
   const pad = Math.max(0, width - displayWidth(s));
   return align === "l" ? s + " ".repeat(pad) : " ".repeat(pad) + s;
 }
-function wrapValue(v, budget, sep3 = " \xB7 ") {
-  const parts2 = v.split(sep3);
+function wrapValue(v, budget, sep4 = " \xB7 ") {
+  const parts2 = v.split(sep4);
   const lines = [];
   let cur = "";
   for (const part of parts2) {
-    const next = cur ? cur + sep3 + part : part;
+    const next = cur ? cur + sep4 + part : part;
     if (cur && displayWidth(next) > budget) {
       lines.push(cur);
       cur = part;
@@ -8068,7 +8068,7 @@ async function writePrivateOutput(path, data) {
 async function watchSession(ref2, flags, deps) {
   const path = deps.outPath(ref2.sessionId);
   const err3 = detectCaps(process.stderr, process.env, { machine: flagBool(flags, "quiet") || flagBool(flags, "no-color") });
-  const sep3 = glyphs(err3).sep;
+  const sep4 = glyphs(err3).sep;
   let building = false;
   let dirty = true;
   let lastSize = -1;
@@ -8096,7 +8096,7 @@ async function watchSession(ref2, flags, deps) {
         rewriteLine(
           process.stderr,
           err3,
-          `${paint(err3, "accent", glyphs(err3).mark)} watching ${ref2.sessionId.slice(0, 8)}${sep3}${s.turns} turns${sep3}${s.toolCalls} tools${sep3}${fmtTokens(s.totalTokens)} tok${sep3}ctx ${fmtTokens(s.contextPeak)}${sep3}${fmtMs(s.wallMs)}  ${paint(err3, "dim", `(render #${renders})`)}`
+          `${paint(err3, "accent", glyphs(err3).mark)} watching ${ref2.sessionId.slice(0, 8)}${sep4}${s.turns} turns${sep4}${s.toolCalls} tools${sep4}${fmtTokens(s.totalTokens)} tok${sep4}ctx ${fmtTokens(s.contextPeak)}${sep4}${fmtMs(s.wallMs)}  ${paint(err3, "dim", `(render #${renders})`)}`
         );
       } catch (error) {
         if (error instanceof PrivateOutputError) throw error;
@@ -9464,14 +9464,14 @@ function header(caps, title, sub) {
     ""
   ];
 }
-function qualityLine(a, sep3) {
+function qualityLine(a, sep4) {
   const o = a.summary.outcomes;
   const bits = [];
   if (o.prLinks.length) bits.push(`${o.prLinks.length} PR`);
   if (o.gitCommits) bits.push(`${o.gitCommits} commits`);
   if (o.testRuns) bits.push(`${o.testRuns} test runs${o.testRunsFailed ? " (" + o.testRunsFailed + " failed)" : ""}`);
   if (o.filesEdited + o.filesWritten) bits.push(`${o.filesEdited + o.filesWritten} files changed`);
-  return bits.join(sep3) || "no commits/PRs/tests detected";
+  return bits.join(sep4) || "no commits/PRs/tests detected";
 }
 function findingRows(caps, ins) {
   const g = glyphs(caps);
@@ -9486,15 +9486,15 @@ function findingRows(caps, ins) {
 }
 function analysisBlock(caps, a, title) {
   const s = a.summary;
-  const sep3 = glyphs(caps).sep;
-  const lines = header(caps, title, `${a.session.source}${sep3}${a.session.id}`);
-  lines.push(...rows(caps, "quality", qualityLine(a, sep3), { joined: true }));
-  lines.push(...rows(caps, "time", `${fmtMs(s.wallMs)} wall${sep3}${fmtMs(s.activeMs)} active${sep3}${fmtMs(s.humanWaitMs)} waiting`, { joined: true }));
-  lines.push(...rows(caps, "tokens", `${fmtTokens(s.totalTokens)}${sep3}${(s.cacheHitRatio * 100).toFixed(0)}% cache${sep3}${fmtTokens(a.tokens.byKind.output)} output`, { joined: true }));
+  const sep4 = glyphs(caps).sep;
+  const lines = header(caps, title, `${a.session.source}${sep4}${a.session.id}`);
+  lines.push(...rows(caps, "quality", qualityLine(a, sep4), { joined: true }));
+  lines.push(...rows(caps, "time", `${fmtMs(s.wallMs)} wall${sep4}${fmtMs(s.activeMs)} active${sep4}${fmtMs(s.humanWaitMs)} waiting`, { joined: true }));
+  lines.push(...rows(caps, "tokens", `${fmtTokens(s.totalTokens)}${sep4}${(s.cacheHitRatio * 100).toFixed(0)}% cache${sep4}${fmtTokens(a.tokens.byKind.output)} output`, { joined: true }));
   lines.push(...rows(caps, "turns", `${s.turns} (${s.humanTurns} human)`));
-  lines.push(...rows(caps, "tools", `${s.toolCalls} calls${sep3}${s.toolErrors} errors`, { joined: true }));
-  if (s.agents) lines.push(...rows(caps, "agents", `${s.agents} runs${sep3}${a.agents.maxConcurrency} max parallel${sep3}${fmtTokens(a.tokens.agents)} tokens`, { joined: true }));
-  lines.push(...rows(caps, "context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""}${sep3}${plural(s.compactions, "compaction")}`, { joined: true }));
+  lines.push(...rows(caps, "tools", `${s.toolCalls} calls${sep4}${s.toolErrors} errors`, { joined: true }));
+  if (s.agents) lines.push(...rows(caps, "agents", `${s.agents} runs${sep4}${a.agents.maxConcurrency} max parallel${sep4}${fmtTokens(a.tokens.agents)} tokens`, { joined: true }));
+  lines.push(...rows(caps, "context", `peak ${fmtTokens(s.contextPeak)}${a.context.contextWindow ? " of " + fmtTokens(a.context.contextWindow) : ""}${sep4}${plural(s.compactions, "compaction")}`, { joined: true }));
   lines.push("", paint(caps, "bold", INDENT + "findings"));
   const bad = a.parse.badLines;
   if (!a.insights.length) lines.push(bad ? paint(caps, "warn", `    no findings, but orangu skipped ${plural(bad, "unparseable line")}`) : paint(caps, "good", "    clean: no findings"));
@@ -9506,11 +9506,11 @@ function analysisBlock(caps, a, title) {
 }
 function briefBlock(caps, a, title, step, o) {
   const s = a.summary;
-  const sep3 = glyphs(caps).sep;
-  const lines = header(caps, title, `latest${sep3}${a.session.id.slice(0, 8)}${sep3}${s.turns} turns${sep3}${fmtTokens(s.totalTokens)} tokens${sep3}${fmtMs(s.activeMs)} active`);
+  const sep4 = glyphs(caps).sep;
+  const lines = header(caps, title, `latest${sep4}${a.session.id.slice(0, 8)}${sep4}${s.turns} turns${sep4}${fmtTokens(s.totalTokens)} tokens${sep4}${fmtMs(s.activeMs)} active`);
   lines.push(...fit(caps, INDENT + outcomeHeadline(s)), "");
   lines.push(...nextStepLines(caps, step));
-  if (o.hint) lines.push("", ...fit(caps, `${INDENT}orangu report for the full picture${sep3}orangu help all for every command`, "dim", true));
+  if (o.hint) lines.push("", ...fit(caps, `${INDENT}orangu report for the full picture${sep4}orangu help all for every command`, "dim", true));
   return lines;
 }
 var APP_HEAD = INDENT + "app ";
@@ -9535,10 +9535,10 @@ function listRows(caps, refs, o) {
   }
   if (!o.total) lines.push(...fit(caps, `${INDENT}orangu found no sessions. Is Claude Code installed?`, "dim"), ...fit(caps, `${INDENT}A transcript path also works: orangu report <path.jsonl>`, "dim"));
   else {
-    const sep3 = glyphs(caps).sep;
+    const sep4 = glyphs(caps).sep;
     lines.push("");
-    if (refs.length < o.total) lines.push(...fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep3}--limit <n> for more`, "dim", true));
-    lines.push(...fit(caps, `${INDENT}orangu report <id>${sep3}orangu analyze <id>${sep3}orangu harness`, "dim", true));
+    if (refs.length < o.total) lines.push(...fit(caps, `${INDENT}${refs.length} of ${o.total} shown${sep4}--limit <n> for more`, "dim", true));
+    lines.push(...fit(caps, `${INDENT}orangu report <id>${sep4}orangu analyze <id>${sep4}orangu harness`, "dim", true));
   }
   return lines;
 }
@@ -10810,8 +10810,8 @@ function inspectReviewedPath(file) {
     const windowsName = part.replace(/[. ]+$/g, "");
     if (windowsName.toLowerCase() === ".git") return { violation: "must not modify .git, including Windows aliases" };
     if (windowsName !== part) return { violation: "must not contain a component ending in a dot or space" };
-    const basename16 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
-    if (WINDOWS_RESERVED_DEVICE.test(basename16)) return { violation: "must not use a reserved Windows device name" };
+    const basename17 = windowsName.split(".")[0].replace(/[. ]+$/g, "");
+    if (WINDOWS_RESERVED_DEVICE.test(basename17)) return { violation: "must not use a reserved Windows device name" };
   }
   return { path: canonical };
 }
@@ -12358,9 +12358,9 @@ function buildQueue(input) {
       if (group === void 0) continue;
       if ((record3.status === "new" || record3.status === "failed") && key !== void 0) {
         const foldKey = JSON.stringify([key, record3.scope, record3.ruleId]);
-        const fold = folded.get(foldKey);
-        if (fold) {
-          fold.push(record3);
+        const fold2 = folded.get(foldKey);
+        if (fold2) {
+          fold2.push(record3);
           continue;
         }
         folded.set(foldKey, [record3]);
@@ -13366,9 +13366,9 @@ var MAX_WALK_DEPTH = 6;
 var CLAUDE_JSON_KEYS = ["mcpServers", "projects", "skillUsage", "pluginUsage"];
 var CLAUDE_JSON_PROJECT_KEYS = ["mcpServers", "enabledMcpjsonServers", "disabledMcpjsonServers"];
 function reasonOf(e) {
-  const code2 = e?.code;
-  if (code2 === "ENOENT" || code2 === "ENOTDIR") return "enoent";
-  if (code2 === "EACCES" || code2 === "EPERM") return "eacces";
+  const code3 = e?.code;
+  if (code3 === "ENOENT" || code3 === "ENOTDIR") return "enoent";
+  if (code3 === "EACCES" || code3 === "EPERM") return "eacces";
   return "other";
 }
 function cleanPath(ctx, p) {
@@ -14651,7 +14651,7 @@ function coreRoutes(ctx, hub) {
         if (!body.status) return json(res, 400, { error: "status required" });
         if (body.status !== "rejected") return json(res, 400, { error: "the browser may only set status to rejected" });
         const reason = body.reason;
-        const reasonCode = REJECT_REASON_CODES.find((code2) => code2 === reason);
+        const reasonCode = REJECT_REASON_CODES.find((code3) => code3 === reason);
         if (reason !== void 0 && !reasonCode) return json(res, 400, { error: `reason must be 1 of ${REJECT_REASON_CODES.join(", ")}` });
         if (rejecting.has(id)) return json(res, 409, { error: REJECT_RUNNING });
         rejecting.add(id);
@@ -14831,8 +14831,8 @@ async function readProfile(env) {
   try {
     await lstat10(path);
   } catch (error) {
-    const code2 = error.code;
-    if (code2 === "ENOENT" || code2 === "ENOTDIR") return { path, exists: false, profile: null };
+    const code3 = error.code;
+    if (code3 === "ENOENT" || code3 === "ENOTDIR") return { path, exists: false, profile: null };
     return { path, exists: true, profile: null };
   }
   try {
@@ -15225,9 +15225,9 @@ async function startServe(opts, deps = {}) {
     }
   };
   const server = createServer((req, res) => void handler(req, res));
-  await new Promise((resolve14, reject) => {
+  await new Promise((resolve15, reject) => {
     server.once("error", reject);
-    server.listen(opts.port ?? 0, "127.0.0.1", resolve14);
+    server.listen(opts.port ?? 0, "127.0.0.1", resolve15);
   });
   const addr = server.address();
   const port = typeof addr === "object" && addr ? addr.port : opts.port ?? 0;
@@ -15244,7 +15244,7 @@ async function startServe(opts, deps = {}) {
       hub.stop();
       await registry.stop();
       server.closeAllConnections?.();
-      await new Promise((resolve14) => server.close(() => resolve14()));
+      await new Promise((resolve15) => server.close(() => resolve15()));
     }
   };
 }
@@ -16766,9 +16766,9 @@ async function cmdShow(store, id, flags) {
 function rejectReason(flags) {
   const value = flags["reason"];
   if (value === void 0) return void 0;
-  const code2 = REJECT_REASON_CODES.find((known) => known === value);
-  if (!code2) throw new Error(`--reason must be 1 of ${REJECT_REASON_CODES.join(", ")}`);
-  return code2;
+  const code3 = REJECT_REASON_CODES.find((known) => known === value);
+  if (!code3) throw new Error(`--reason must be 1 of ${REJECT_REASON_CODES.join(", ")}`);
+  return code3;
 }
 async function cmdSet(store, id, positionals, flags, deps) {
   const status = positionals[0];
@@ -17043,8 +17043,8 @@ async function cmdProfile(flags) {
   try {
     await prepareProfileHome();
   } catch (error) {
-    const code2 = error.code ?? "unknown error";
-    if (!flagBool(flags, "quiet")) process.stderr.write(`  orangu could not make its home folder (${terminal2(code2)}), so the profile write can fail.
+    const code3 = error.code ?? "unknown error";
+    if (!flagBool(flags, "quiet")) process.stderr.write(`  orangu could not make its home folder (${terminal2(code3)}), so the profile write can fail.
 `);
   }
   const status = await profileStatus();
@@ -17245,12 +17245,12 @@ async function cmdFeedback(positionals, flags) {
     { cache: null, quiet: true, store: new EmptySuggestionStore() }
   );
   const url = `${server.url}/#feedback?context=${encodeURIComponent(context)}`;
-  const stopped = new Promise((resolve14) => {
+  const stopped = new Promise((resolve15) => {
     let closing = false;
     const close = () => {
       if (closing) return;
       closing = true;
-      void server.close().finally(resolve14);
+      void server.close().finally(resolve15);
     };
     process.once("SIGINT", close);
     process.once("SIGTERM", close);
@@ -17343,7 +17343,7 @@ var ORANGU_VERBS = new Set("report analyze list pick repo global watch serve fee
 var GIT_VERBS = new Set("add apply blame branch checkout cherry-pick clone commit config diff fetch grep init log merge mv pull push rebase reset restore revert rm show stash status switch tag worktree".split(" "));
 
 // src/ste/index.ts
-var ch = (code2) => String.fromCharCode(code2);
+var ch = (code3) => String.fromCharCode(code3);
 var PARAGRAPH = ch(8233);
 var EM = ch(8212);
 var LSQUO = ch(8216);
@@ -17390,7 +17390,7 @@ function tableCells(line) {
   const body = line.trim().replace(/^\|/, "").replace(/(?<!\\)\|$/, "");
   const cells = [];
   let cell = "";
-  let code2 = false;
+  let code3 = false;
   for (let index = 0; index < body.length; index += 1) {
     const char = body[index];
     if (char === "\\" && body[index + 1] === "|") {
@@ -17398,8 +17398,8 @@ function tableCells(line) {
       index += 1;
       continue;
     }
-    if (char === "`") code2 = !code2;
-    if (char === "|" && !code2) {
+    if (char === "`") code3 = !code3;
+    if (char === "|" && !code3) {
       cells.push(cell);
       cell = "";
       continue;
@@ -17678,12 +17678,12 @@ var cannotRead = (name, reason) => new Error(`orangu ste cannot read ${oneLine2(
 var C1_OR_DEL = /[\x7f-\x9f]/g;
 var escapeC1 = (json2) => json2.replace(C1_OR_DEL, (char) => `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`);
 function readError(name, error) {
-  const code2 = error?.code;
-  if (typeof code2 !== "string") return error instanceof Error ? error : new Error(String(error));
-  if (code2 === "ENOENT") return cannotRead(name, "the file does not exist");
-  if (code2 === "EACCES" || code2 === "EPERM") return cannotRead(name, "permission denied");
-  if (code2 === "EISDIR") return cannotRead(name, "it is a folder, not a file");
-  return cannotRead(name, code2);
+  const code3 = error?.code;
+  if (typeof code3 !== "string") return error instanceof Error ? error : new Error(String(error));
+  if (code3 === "ENOENT") return cannotRead(name, "the file does not exist");
+  if (code3 === "EACCES" || code3 === "EPERM") return cannotRead(name, "permission denied");
+  if (code3 === "EISDIR") return cannotRead(name, "it is a folder, not a file");
+  return cannotRead(name, code3);
 }
 async function readBounded(chunks, name) {
   const parts2 = [];
@@ -19676,7 +19676,7 @@ function select(o) {
   const draw = () => {
     o.output.write(CURSOR.up(drawn) + CURSOR.home + CURSOR.eraseDown + frame());
   };
-  return new Promise((resolve14) => {
+  return new Promise((resolve15) => {
     let done = false;
     const restore = () => {
       if (done) return;
@@ -19694,7 +19694,7 @@ function select(o) {
     const finish = (r) => {
       restore();
       hook.dispose();
-      resolve14(r);
+      resolve15(r);
     };
     const move = (to) => {
       cursor = Math.max(0, Math.min(to, count3 - 1));
@@ -19859,7 +19859,7 @@ async function cmdBare(flags, deps) {
     // the counts of the discovery that `orangu pick` reads, over every root
     gatherPickRows({ ...flags, global: true }, { ...deps.now !== void 0 ? { now: deps.now } : {}, ...deps.isAlive ? { isAlive: deps.isAlive } : {} })
   ]);
-  const stopped = new Promise((resolve14) => (deps.onInterrupt ?? ((stop) => process.once("SIGINT", stop)))(resolve14));
+  const stopped = new Promise((resolve15) => (deps.onInterrupt ?? ((stop) => process.once("SIGINT", stop)))(resolve15));
   const handoff = opts.open ? await openApp(app.url, { env: deps.env, ...deps.openInBrowser ? { open: deps.openInBrowser } : {}, ...deps.onExit ? { onExit: deps.onExit } : {} }) : void 0;
   if (handoff?.note) deps.stderr.write(`  ${handoff.note}
 `);
@@ -19871,7 +19871,7 @@ async function cmdBare(flags, deps) {
     handoff?.remove();
   }
   deps.stderr.write("\n  The app stopped.\n");
-  (deps.exit ?? ((code2) => process.exit(code2)))(0);
+  (deps.exit ?? ((code3) => process.exit(code3)))(0);
 }
 
 // src/cli/raw-output.ts
@@ -19884,6 +19884,91 @@ function rawOutputRefusal(flags, env) {
   if (!raw.length || path === void 0) return void 0;
   const named = `${raw.map((flag) => `--${flag}`).join(" and ")} with ${path.length === 1 ? "-" : "--"}${path}`;
   return `${named}: inside Claude Code, orangu does not write unredacted session text to a path that the command names. Text in a session can steer Claude to run such a command with no prompt. To allow it, start the command with ORANGU_ALLOW_RAW=1, so that Claude Code asks you first.`;
+}
+
+// src/cli/output-path.ts
+import { existsSync as existsSync2, lstatSync, realpathSync } from "node:fs";
+import { tmpdir as tmpdir2 } from "node:os";
+import { basename as basename15, dirname as dirname8, isAbsolute as isAbsolute10, join as join16, relative as relative4, resolve as resolve13, sep as sep3 } from "node:path";
+var PATH_FLAGS2 = ["o", "out", "html"];
+var LOADED_NAMES = /* @__PURE__ */ new Set(["claude.md", "claude.local.md", "agents.md", ".mcp.json"]);
+var LOADED_FOLDER = ".claude";
+var code2 = (error) => error?.code;
+var flagName4 = (flag) => `${flag.length === 1 ? "-" : "--"}${flag}`;
+function realTarget(path) {
+  let head2 = resolve13(path);
+  const tail = [];
+  for (; ; ) {
+    try {
+      return join16(realpathSync(head2), ...tail);
+    } catch (error) {
+      if (code2(error) !== "ENOENT") return void 0;
+    }
+    try {
+      lstatSync(head2);
+      return void 0;
+    } catch (error) {
+      if (code2(error) !== "ENOENT") return void 0;
+    }
+    const parent = dirname8(head2);
+    if (parent === head2) return void 0;
+    tail.unshift(basename15(head2));
+    head2 = parent;
+  }
+}
+function within(target, place) {
+  const rel = relative4(place, target);
+  return rel !== "" && rel !== ".." && !rel.startsWith(`..${sep3}`) && !isAbsolute10(rel);
+}
+function withinChild(target, place) {
+  return within(dirname8(target), place);
+}
+function fold(part) {
+  const stream = part.indexOf(":");
+  return (stream < 0 ? part : part.slice(0, stream)).replace(/[. ]+$/, "").toUpperCase().toLowerCase();
+}
+function loadedByAgent(path) {
+  const parts2 = path.split(/[\\/]/).map(fold);
+  return LOADED_NAMES.has(parts2.at(-1) ?? "") || parts2.includes(LOADED_FOLDER);
+}
+function workFolders(cwd) {
+  const real = realTarget(cwd);
+  if (real === void 0) return void 0;
+  for (let dir = real; ; dir = dirname8(dir)) {
+    if (existsSync2(join16(dir, ".git"))) return dir === real ? [real] : [real, dir];
+    if (dirname8(dir) === dir) return [real];
+  }
+}
+function currentFolder() {
+  try {
+    return process.cwd();
+  } catch {
+    return void 0;
+  }
+}
+function loadedRefusal(flag) {
+  return `${flagName4(flag)}: inside Claude Code, orangu does not write CLAUDE.md, CLAUDE.local.md, AGENTS.md, .mcp.json or a file in a .claude folder. A later session can load such a file as instructions or as settings. Text in a session can steer Claude to run such a command with no prompt. ORANGU_ALLOW_OUT=1 does not change this. Choose another path.`;
+}
+function placeRefusal(flag) {
+  return `${flagName4(flag)}: inside Claude Code, orangu writes a named file only in a folder inside the temp folder or in the orangu home. It does not write in the current folder or in its git repository. Text in a session can steer Claude to run such a command with no prompt. To allow another path, start the command with ORANGU_ALLOW_OUT=1, so that Claude Code asks you first.`;
+}
+function outputPathRefusal(flags, env, places = { temp: tmpdir2(), home: oranguHome(env), cwd: currentFolder() }) {
+  if (!env["CLAUDECODE"]) return void 0;
+  const named = PATH_FLAGS2.filter((flag) => typeof flags[flag] === "string" && flags[flag] !== "");
+  if (!named.length) return void 0;
+  const targets = named.map((flag) => ({ flag, text: resolve13(flags[flag]), real: realTarget(flags[flag]) }));
+  const loaded = targets.find(({ text: text3, real }) => loadedByAgent(text3) || real !== void 0 && loadedByAgent(real));
+  if (loaded !== void 0) return loadedRefusal(loaded.flag);
+  if (env["ORANGU_ALLOW_OUT"] === "1") return void 0;
+  const temp = realTarget(places.temp);
+  const home = realTarget(places.home);
+  const work = places.cwd === void 0 ? void 0 : workFolders(places.cwd);
+  const outside = targets.find(({ real }) => {
+    if (real === void 0 || work === void 0) return true;
+    if (work.some((folder) => within(real, folder))) return true;
+    return !(temp !== void 0 && withinChild(real, temp) || home !== void 0 && within(real, home));
+  });
+  return outside === void 0 ? void 0 : placeRefusal(outside.flag);
 }
 
 // src/cli/main.ts
@@ -19943,7 +20028,7 @@ async function selectSession2(sel, flags) {
   const cands = await candidatesForPrefix(sel, opts);
   if (cands.length > 1) {
     fail2(`"${sel}" matches ${cands.length} sessions:
-` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename15(c.projectSlug)).join("\n"));
+` + cands.slice(0, 8).map((c) => "  " + c.sessionId + "  " + basename16(c.projectSlug)).join("\n"));
   }
   fail2(`No session matches "${sel}". Try: orangu list`);
   throw new Error("unreachable");
@@ -19986,8 +20071,8 @@ async function analyzeWithProgress(ref2, flags) {
 }
 function outPath(flags, id, ext = "html") {
   const out3 = flagStr(flags, "o", "out");
-  if (out3) return resolve13(out3);
-  return join16(tmpdir2(), `orangu-${id.slice(0, 8)}.${ext}`);
+  if (out3) return resolve14(out3);
+  return join17(tmpdir3(), `orangu-${id.slice(0, 8)}.${ext}`);
 }
 async function cmdReport(sel, flags) {
   const ref2 = await selectSession2(sel, flags);
@@ -20073,6 +20158,8 @@ function rejectUnusableFlags(command, flags) {
   }
   const raw = rawOutputRefusal(flags, process.env);
   if (raw) fail2(raw);
+  const outside = outputPathRefusal(flags, process.env);
+  if (outside) fail2(outside);
 }
 function thresholdExit(analysis, flags) {
   let bad = false;
@@ -20109,10 +20196,10 @@ async function cmdAggregate(scope, selOrPath, flags) {
     refs = await listSessions({ roots });
     scopeLabel = `global (${plural(roots.length, "root")})`;
   } else {
-    const cwd = selOrPath ? resolve13(selOrPath) : process.cwd();
+    const cwd = selOrPath ? resolve14(selOrPath) : process.cwd();
     const rootArg = flagStr(flags, "root", "r");
     refs = await listSessions(rootArg ? { configDir: rootArg, cwd } : { cwd });
-    scopeLabel = `repo ${basename15(cwd)}`;
+    scopeLabel = `repo ${basename16(cwd)}`;
   }
   if (!refs.length) fail2(`orangu found no sessions for ${scopeLabel}.`);
   const max = Number(flagStr(flags, "limit") ?? (scope === "global" ? "500" : "200"));
@@ -20157,8 +20244,8 @@ async function cmdAggregate(scope, selOrPath, flags) {
   const wroteHtml = await writeAggregateHtml(scope, outputAggregate, flags);
   const outFile = flagStr(flags, "o", "out");
   if (outFile) {
-    await writePrivateOutput(resolve13(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
-    if (!quiet) process.stderr.write(row(err2, "written", resolve13(outFile), { raw: true }) + "\n");
+    await writePrivateOutput(resolve14(outFile), renderPreparedAggregateJson(outputAggregate, flags, { pretty: true, trailingNewline: false }));
+    if (!quiet) process.stderr.write(row(err2, "written", resolve14(outFile), { raw: true }) + "\n");
     if (!flagBool(flags, "json")) {
       if (!flagBool(flags, "quiet")) offerBetaFeedback(scope);
       return;
@@ -20177,7 +20264,7 @@ async function writeAggregateHtml(scope, a, flags) {
   const named = flagStr(flags, "html");
   const stamp = createHash6("sha256").update(`${a.scope}
 ${a.generatedAt}`).digest("hex").slice(0, 8);
-  const path = named ? resolve13(named) : join16(tmpdir2(), `orangu-${scope}-${stamp}.html`);
+  const path = named ? resolve14(named) : join17(tmpdir3(), `orangu-${scope}-${stamp}.html`);
   const includeText = flagBool(flags, "no-redact") || flagBool(flags, "include-text");
   const { html } = renderAggregateReport(a, { scope, scopeLabel: a.scope, includeText });
   await writePrivateOutput(path, html);
