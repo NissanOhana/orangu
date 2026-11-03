@@ -111,7 +111,8 @@ export function rowCopy(item: QueueRow, record: SuggestionRecord | undefined): s
     case 'regressed':
       return 'Regressed. On the complete later sessions, a check moved beyond chance in a direction that it should not. Copy the command. Claude asks you to keep the change or to undo it.'
     case 'apply':
-      return 'Review the proposal. Then copy the apply command.'
+      // the command is the improve handoff: apply is hidden, and improve asks for the approval before it applies
+      return 'Review the proposal. Then copy the command. Claude applies the change only after you approve it.'
     case 'review':
       if (item.status === 'proposed') return 'Global proposals are for review only. Claude applies nothing from here.'
       if (item.cannotVerify === 'baseline-gone')

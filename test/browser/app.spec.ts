@@ -234,7 +234,9 @@ test('localhost queue rows are escaped, show the stored proposal whole, stay res
   })
   expect(clipped, 'boxes that clip the evidence field').toEqual([])
 
-  // The row copies its own next step. The stored block shows no second apply handoff.
+  // The row copies its own next step: the improve handoff, which asks for the approval. The stored block shows no
+  // second apply handoff.
+  await expect(proposed.locator('p.rec')).toHaveText('Review the proposal. Then copy the command. Claude applies the change only after you approve it.')
   const copy = proposed.locator('.btn-primary[data-copy]')
   await expect(copy).toHaveCount(1)
   await expect(copy).toHaveAttribute('data-copy', next)
