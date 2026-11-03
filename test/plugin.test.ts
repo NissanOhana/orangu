@@ -1067,13 +1067,18 @@ describe('plugin packaging', () => {
     const PORTABLE = 'plugin/portable/orangu-improve/SKILL.md'
     const skill = (): string => readText(PORTABLE)
     // Born 2026-11-03 at the measured 562 body words + 1, strict: a ceiling, not a target (ratchets only go down).
-    const PORTABLE_WORD_CEILING = 563
+    // Code review (2026-11-03, before the merge): 563 -> 778, measured 562 -> 777 (+215). The skill finds the export by
+    // its content under any name or pasted in the chat (+41). With no export, it offers the profile questions, asks for
+    // the export and says what the review adds (+75). It gives each size in bytes and in tokens before the 20 KB gate
+    // (+16). A null profile gets the opt-out question of improve first (+46). Each command goes in a code block, needs
+    // Claude Code with the orangu plugin, and gets its finding diagnosed again there (+29). 2 headings split the steps (+8).
+    const PORTABLE_WORD_CEILING = 778
     it('has the 2 frontmatter keys of the SPEC, in a form that a strict YAML parser reads', () => {
       // The SPEC draft wrote "harness changes: skills, ...". A plain YAML value with ": " in it is a parse error.
       expect(skill().split('\n').slice(0, 4)).toEqual([
         '---',
         'name: orangu-improve',
-        'description: Read an orangu export of agent sessions and propose harness changes to skills, agents, effort, model choice, scripts and hooks. Use when the user uploads orangu-export.json.',
+        'description: Read an orangu export of agent sessions and propose harness changes to skills, agents, effort, models, scripts and hooks. Use when the user attaches the export, or asks for a review with no file.',
         '---',
       ])
     })
@@ -1082,7 +1087,7 @@ describe('plugin packaging', () => {
       expect(skill().match(/npx orangu export/g), 'said once').toHaveLength(1)
       expect(skill(), 'no bundled CLI, no bin/ path, no plugin root, no grant key, no Codex name').not.toMatch(/orangu\.cli\.mjs|\bbin\/|CLAUDE_PLUGIN_ROOT|allowed-tools|\$orangu-/)
       expect(skill(), 'no tool or variable that only Claude Code has').not.toMatch(/AskUserQuestion|Skill tool|Agent tool|\bWebSearch\b|\bWebFetch\b|\bTodoWrite\b|\$ARGUMENTS|CLAUDE_SKILL_DIR/)
-      expect(skill().match(/\/orangu:[a-z-]+/g), 'the only slash command starts the save in Claude Code').toEqual(['/orangu:improve', '/orangu:improve'])
+      expect(skill().match(/\/orangu:[a-z-]+/g), 'the only slash command hands a finding to Claude Code').toEqual(['/orangu:improve', '/orangu:improve'])
       // the 2 references exist only in the zip, so the skill names them as code-span paths: verify:public resolves each
       // Markdown link in the repository (scripts/assert-public-tree.mjs:248-261)
       expect([...skill().matchAll(/\]\(([^)\s]+)\)/g)].map((m) => m[1]), 'no Markdown link').toEqual([])
@@ -1098,18 +1103,60 @@ describe('plugin packaging', () => {
         '4. When a question asks for a preference, mark no option as recommended.',
         '5. Write each reply in Simplified Technical English (STE):',
         // the steps of the SPEC: the summary first, the read gate, the profile in the chat, 5 changes at most, the command
-        'ask the user to run `npx orangu export` on their machine and to upload the file. Then stop.',
-        '2. Read only `summary` and `index` first.',
-        'Ask before you read more than about 20 KB of the export.',
-        '5. If `profile` is `null`, ask the profile questions. Store nothing: the answers stay in this chat.',
-        '7. Propose 5 changes at most, ranked as the brain rules direct.',
-        '8. Give each change its command for Claude Code: `claude "/orangu:improve <suggestionId> --finding <findingToken>"`.',
+        '1. Read only `summary` and `index` first.',
+        '6. Propose 5 changes at most, ranked as the brain rules direct.',
         // the 2 values reach a shell, so each one must have the form that orangu writes (src/suggest/id.ts:137-147)
-        '9. Check both values before you write the command. `suggestionId` is `sg_` and 12 characters from `0` to `9` and `a` to `f`. `findingToken` holds only letters, digits, `-` and `_`. If a value does not match, give no command for that change, and say why.',
-        '10. Say that this chat applied nothing and checked nothing.',
+        '8. Check both values before you write the command. `suggestionId` is `sg_` and 12 characters from `0` to `9` and `a` to `f`. `findingToken` holds only letters, digits, `-` and `_`. If a value does not match, give no command for that change, and say why.',
+        '9. Say that this chat applied nothing and checked nothing.',
       ]) expect(skill(), literal).toContain(literal)
       // rule 2 answers the search gate of the brain rules
       expect(readText(BRAIN)).toContain(SEARCH_GATE)
+    })
+    // Code review (2026-11-03, major): a user can attach the export under any name or paste it, so the skill finds it by
+    // its content, as src/export/build.ts writes it (the first key `summary`, with `v` and `redacted`).
+    it('finds the export by its content, under any name or pasted in the chat', () => {
+      for (const literal of [
+        'The export is JSON that orangu wrote. Its first key is `summary`, and `summary` holds `v` and `redacted`.',
+        'Its file name is often `orangu-export.json`, but the user can attach it under any name or paste it in the chat.',
+        '1. Look at each file that the user attached and at each JSON text that the user pasted.',
+      ]) expect(skill(), literal).toContain(literal)
+    })
+    // Orchestrator decision (2026-11-03): with no export, the skill does not only stop. The profile questions need no
+    // data, so it offers them, then it asks for the export and says what the review adds with it.
+    it('with no export, offers the profile questions, then asks for the export and says what the review adds', () => {
+      const steps = [
+        '2. If you find no export, offer the profile interview, because its questions need no data.',
+        'Ask "orangu has no export of your sessions here. Answer the profile questions now?" Give 2 options, "Interview me" and "Not now", and mark neither as recommended.',
+        '3. Then ask the user to run `npx orangu export` on their machine and to attach the file that it writes.',
+        'Say what the review adds with the export: the patterns of their sessions, 5 ranked changes at most, and a command for each change. Then stop.',
+      ]
+      for (const step of steps) expect(skill(), step).toContain(step)
+      for (let i = 1; i < steps.length; i++) expect(skill().indexOf(steps[i - 1]!), `${steps[i - 1]} comes first`).toBeLessThan(skill().indexOf(steps[i]!))
+    })
+    // Code review (2026-11-03, blocking): the token gate of PROJECT.md §AI. The skill shows each size as a token estimate
+    // too, and asks before it reads more than about 20 KB.
+    it('gives each size in bytes and in tokens, and asks before it reads more than about 20 KB', () => {
+      expect(skill()).toContain('Give the size of each other section from `index`, in bytes and in tokens (about 4 bytes for each token).')
+      expect(skill()).toContain('Ask before you read more than about 20 KB (about 5,000 tokens) of the export.')
+    })
+    // Code review (2026-11-03, advisory 3): a null profile gets the opt-out question of improve (plugin/skills/improve/
+    // SKILL.md, the first run), with the same 2 options, before any profile question.
+    it('asks a null profile to opt in first, with the 2 options of improve', () => {
+      const improveFirstRun = 'Give 2 options, "Interview me first" and "Review without it", and mark neither as recommended.'
+      expect(readText(IMPROVE), 'the same options as improve').toContain(improveFirstRun)
+      for (const literal of [
+        '4. If `profile` is `null`, use the profile answers that the user gave in this chat. If there are none, ask 1 question: "orangu does not know your role and your work yet. Start with the interview?"',
+        improveFirstRun,
+        'For "Interview me first", ask the profile questions. Store nothing: the answers stay in this chat.',
+      ]) expect(skill(), literal).toContain(literal)
+    })
+    // Code review (2026-11-03, advisory 5): each command goes in a code block, it needs Claude Code with the orangu plugin,
+    // and Claude Code diagnoses the finding again there. So the skill never says that the command saves a change.
+    it('puts each command in a code block, and says that it needs Claude Code with the orangu plugin', () => {
+      expect(skill()).toContain('7. Give each change its command for Claude Code, in a code block of its own:\n\n   ```\n   claude "/orangu:improve <suggestionId> --finding <findingToken>"\n   ```\n')
+      expect(skill()).toContain('Each command needs Claude Code with the orangu plugin, on the machine that has the sessions.')
+      expect(skill()).toContain('There, `/orangu:improve` diagnoses the finding again from those sessions before it proposes a change.')
+      expect(skill(), 'the command does not save a change').not.toMatch(/\bsaves?\b/i)
     })
     it('the portable SKILL.md body stays under its word ceiling', () => {
       const md = skill()

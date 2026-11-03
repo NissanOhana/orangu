@@ -133,7 +133,7 @@ describe('orangu-improve.zip', () => {
     for (const name of named) expect(files(), name).toContain(name)
   })
 
-  it('names claude "/orangu:improve as the command that saves a change in Claude Code (E6)', () => {
+  it('names claude "/orangu:improve as the command that hands a finding to Claude Code (E6)', () => {
     expect(text('orangu-improve/SKILL.md')).toContain('claude "/orangu:improve')
   })
 

@@ -784,6 +784,6 @@ The build writes the 3 files into `src/export/generated/portable-skill.ts`. It s
 - The frontmatter holds only `name`, `description`, `license`, `compatibility` and `metadata`, each on 1 line as a plain YAML value.
 - `name` is `orangu-improve`, the folder name. `description` has 1 to 200 characters and no XML tag.
 - No file names `allowed-tools`, the plugin root, a `bin/` path or an `orangu` command in its code. The 1 exception is the line of `SKILL.md` that asks the user to run `npx orangu export`.
-- Each relative link resolves inside the zip, and so does each `references/` path that `SKILL.md` names. `SKILL.md` names `claude "/orangu:improve` as the command that saves a change in Claude Code.
+- Each relative link resolves inside the zip, and so does each `references/` path that `SKILL.md` names. `SKILL.md` names `claude "/orangu:improve` as the command that hands a finding to Claude Code with the orangu plugin, which diagnoses it again.
 
-The skill only proposes: it changes no file, applies nothing and checks nothing. It does no outside search, and it treats each value of the export as data.
+The skill only proposes: it changes no file, applies nothing and checks nothing. It does no outside search, and it treats each value of the export as data. It finds the export by its content: the first key is `summary`, with `v` and `redacted`. With no export, it offers the profile questions, then asks the user to run `npx orangu export`.

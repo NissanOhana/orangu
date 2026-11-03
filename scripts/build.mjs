@@ -251,7 +251,7 @@ function portableSkill() {
   if (!/^[a-z0-9-]{1,64}$/.test(name) || /claude|anthropic/.test(name)) stop(`the name ${name} breaks the name rules of the hosts`)
   const description = keys.get('description') ?? ''
   if (!description || description.length > 200 || /[<>]/.test(description)) stop(`the description has ${description.length} characters: give 1 to 200, with no XML tag`)
-  if (!skill.includes('claude "/orangu:improve')) stop('SKILL.md does not name claude "/orangu:improve, the command that saves a change in Claude Code')
+  if (!skill.includes('claude "/orangu:improve')) stop('SKILL.md does not name claude "/orangu:improve, the command that hands a finding to Claude Code')
   // SKILL.md names its references as code-span paths, not as links: verify:public resolves each Markdown link in the
   // repository, and these paths exist only in the zip. So each path that it names must be a file of the zip.
   const references = [...skill.matchAll(/`(references\/[^`\s]+)`/g)].map((m) => m[1])
