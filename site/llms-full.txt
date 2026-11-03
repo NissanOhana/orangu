@@ -21,7 +21,7 @@ Measure every agent session. Keep the changes that work.
 
 </div>
 
-orangu helps you get better results with fewer tokens. It reads every Claude Code, Cowork and Desktop session on your disk, with each agent tree. It measures with plain code, not a model, and it makes no network calls. The brain proposes changes that fit your role. Then orangu checks each applied change on your later sessions.
+orangu helps you get better results with fewer tokens. It shows what your Claude Code, Cowork and Desktop sessions did. The brain, `/orangu:improve` in Claude Code, proposes changes that fit your role. Then orangu checks each applied change on your later sessions.
 
 ## Start
 
@@ -49,7 +49,7 @@ orangu marks a change verified only when your later sessions in the same workspa
 
 ## Outside Claude Code
 
-The brain also runs in claude.ai, Claude Desktop and the Claude API. Run `npx orangu export`. It writes 2 files: the skill `orangu-improve.zip` and your redacted evidence `orangu-export.json`. Upload the skill once. Add the evidence to a chat after you review it. In those hosts, the brain only proposes changes, and it cannot apply or check them.
+The brain also runs in claude.ai, Claude Desktop and the Claude API. Run `npx orangu export`. It writes 2 files: the skill `orangu-improve.zip` and your redacted evidence `orangu-export.json`. Upload the zip once as a custom skill. Add the evidence to a chat after you review it. In those hosts, the brain only proposes changes, and it cannot apply or check them.
 
 Codex can run the brain too. Install it with `codex plugin marketplace add NissanOhana/orangu` and `codex plugin add orangu@orangu`. Then run `$orangu-improve` in Codex. orangu does not read Codex transcripts.
 
@@ -58,7 +58,7 @@ Codex can run the brain too. Install it with `codex plugin marketplace add Nissa
 - **No model in the measurement.** Plain code counts, compares and ranks.
 - **No network.** Reports make no request. The app binds to `127.0.0.1` behind a private link.
 - **Redacted by default.** orangu scrubs secrets. Shareable output leaves out prompt text unless you ask for it with `--include-text`.
-- **Same transcript in, byte-identical analysis out.**
+- **Same transcript in, byte-identical analysis out.** An unknown record shows in Coverage and does not stop the analysis.
 - **Tokens only, and no single score.** orangu counts tokens and never converts them into another unit. Quality, time and tokens stay separate, and orangu never ranks people.
 
 ## Documentation
@@ -417,7 +417,7 @@ Both host variants use the same Orangu CLI evidence bundle, manifest and receipt
 
 ## Outside Claude Code and Codex
 
-`orangu export` writes 2 files for claude.ai, Claude Desktop and the Claude API: bounded, always-redacted evidence and a portable skill. The skill reads the same brain rules as `/orangu:improve`. It cannot run orangu, so it only proposes changes. It saves, applies and checks nothing. Each proposal carries the `claude "/orangu:improve …"` command that saves it later in Claude Code.
+`orangu export` writes 2 files for claude.ai, Claude Desktop and the Claude API: bounded, always-redacted evidence and a portable skill. The skill reads the same brain rules as `/orangu:improve`. It cannot run orangu, so it only proposes changes. It saves, applies and checks nothing. A proposal from a finding carries the `claude "/orangu:improve …"` command that saves it later in Claude Code, when both of its values pass a check.
 
 ## Why the boundary matters
 

@@ -1055,7 +1055,11 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // of the parity mirror sentence pays 36 B. The cap moves 41,801 -> 41,839.
     // Lowered, measured 2026-11-03 (the chain in the docs, G2 of the simplify run): 40,994 B on 20d854d -> 38,561 B
     // (-2,433). The README tells 1 chain in 70 lines (it had 125). The cap moves down to the measure + 1: 41,839 -> 38,562.
-    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_562)
+    // Named growth, measured 2026-11-03 (the code review of the chain in the docs): 38,561 B -> 38,631 B (+70). Cause:
+    // the README promise that an unknown record shows in Coverage and does not stop the analysis (the only public line
+    // of that promise), "as a custom skill" for the upload, and the check clause of the DETERMINISM save command. The
+    // lead pays back part of it: it no longer repeats step 1 and the promises. The cap moves 38,562 -> 38,632.
+    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_632)
     // llms.txt states a size for this file: the claim holds while the file is under it
     const claimedKb = Number(/docs concatenated \(under (\d+) KB\)/.exec(llms)?.[1])
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(claimedKb * 1_000)
@@ -1279,7 +1283,27 @@ describe('README entry points', () => {
     const outside = section('Outside Claude Code')
     for (const text of ['`npx orangu export`', 'claude.ai', 'Claude Desktop', 'the Claude API', '`orangu-improve.zip`', '`orangu-export.json`']) expect(outside, text).toContain(text)
     expect(outside).toContain('It writes 2 files')
+    // the place of the upload, with no menu path: the host docs disagree on it
+    expect(outside).toContain('Upload the zip once as a custom skill.')
     expect(outside).toContain('the brain only proposes changes')
+  })
+
+  // A word that the README uses as a name is defined where it first shows, and the lead does not repeat the steps.
+  it('defines the brain where the README first names it', () => {
+    const first = readme.search(/\bthe brain\b/i)
+    expect(first).toBeGreaterThan(-1)
+    const start = Math.max(readme.lastIndexOf('. ', first), readme.lastIndexOf('\n', first)) + 1
+    const sentence = readme.slice(start, readme.indexOf('. ', first) + 1)
+    expect(sentence, 'the sentence that first names the brain').toContain('`/orangu:improve`')
+    // the lead does not repeat step 1 (every session, each agent tree) or the promises (no model, no network)
+    const lead = readme.slice(readme.indexOf('</div>\n') + 7, readme.indexOf('\n## '))
+    expect(lead).not.toMatch(/agent tree|not a model|no network/)
+  })
+
+  // The promise of .claude/PROJECT.md §Identity: orangu never crashes on schema drift. It counts what it cannot parse
+  // and keeps going (the Coverage screen shows the count).
+  it('promises that an unknown record does not stop the analysis', () => {
+    expect(section('Promises')).toContain('An unknown record shows in Coverage and does not stop the analysis.')
   })
 
   it('names the rule count that the analyzer has, on the README and the landing', () => {
@@ -1488,5 +1512,17 @@ describe('docs/DETERMINISM.md workflow diagram', () => {
     while (above > 0 && ['│', '▼'].includes(rows[above]?.[at] ?? '')) above -= 1
     expect(rows[above]?.slice(at)).toMatch(/^catalog matches \+ bounded findings$/)
     expect(rows[above - 1]?.slice(at)).toMatch(/^orangu evidence$/)
+  })
+})
+
+describe('docs/DETERMINISM.md outside Claude Code and Codex', () => {
+  const doc = readFileSync(join(root, 'docs/DETERMINISM.md'), 'utf8')
+  const outside = doc.slice(doc.indexOf('## Outside Claude Code and Codex'))
+
+  // The portable skill gives the save command only for a change from a finding, and only when both values of the
+  // finding pass its check. Else it gives no command for that change and says why.
+  it('promises the save command only for a finding whose values pass the check', () => {
+    expect(outside).toContain('A proposal from a finding carries the `claude "/orangu:improve …"` command that saves it later in Claude Code, when both of its values pass a check.')
+    expect(outside).not.toContain('Each proposal carries')
   })
 })

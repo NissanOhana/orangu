@@ -184,7 +184,7 @@ Both host variants use the same Orangu CLI evidence bundle, manifest and receipt
 
 ## Outside Claude Code and Codex
 
-`orangu export` writes 2 files for claude.ai, Claude Desktop and the Claude API: bounded, always-redacted evidence and a portable skill. The skill reads the same brain rules as `/orangu:improve`. It cannot run orangu, so it only proposes changes. It saves, applies and checks nothing. Each proposal carries the `claude "/orangu:improve …"` command that saves it later in Claude Code.
+`orangu export` writes 2 files for claude.ai, Claude Desktop and the Claude API: bounded, always-redacted evidence and a portable skill. The skill reads the same brain rules as `/orangu:improve`. It cannot run orangu, so it only proposes changes. It saves, applies and checks nothing. A proposal from a finding carries the `claude "/orangu:improve …"` command that saves it later in Claude Code, when both of its values pass a check.
 
 ## Why the boundary matters
 
