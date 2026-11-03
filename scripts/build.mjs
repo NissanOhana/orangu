@@ -4,7 +4,7 @@
 import { build, context, transform } from 'esbuild'
 import { copyFileSync, mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs'
 import { createHash } from 'node:crypto'
-import { dirname, join } from 'node:path'
+import { dirname, join, posix } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
@@ -199,6 +199,89 @@ writeFileSync(
     `/** plugin/skills/show-me/references/slides.html, byte for byte */\nexport const SLIDES_HTML: string = ${JSON.stringify(showMeBuilt.slides)};\n` +
     `/** plugin/skills/show-me/references/report.html, byte for byte */\nexport const REPORT_HTML: string = ${JSON.stringify(showMeBuilt.report)};\n` +
     `/** the base64 sha256 of the one runtime script; the CSP of each template pins it as 'sha256-<SCRIPT_HASH>' */\nexport const SCRIPT_HASH: string = ${JSON.stringify(showMeScriptSha256)};\n`,
+)
+
+// 1c) The portable skill: orangu-improve.zip, which `orangu export` writes beside orangu-export.json for a Claude chat
+// outside Claude Code (claude.ai, Claude Desktop, the Claude API). plugin/portable/orangu-improve/SKILL.md is
+// hand-written. references/brain.md and references/profile.md are plugin/skills/shared/{brain,profile}.md, byte for
+// byte, so every host reads the same brain. Those hosts refuse a package that breaks their rules, and they cannot run
+// orangu, so each check below stops the build, as the checks of the Codex mirror do (codexSkill). The build writes the
+// files into src/export/generated/portable-skill.ts, as step 1b writes templates.ts. The CLI zips them at run time
+// (src/export/zip.ts), so no binary file goes into git, and verify:generated compares the module.
+const PORTABLE = 'orangu-improve'
+// the 6 frontmatter keys that claude.ai and the API accept, less allowed-tools: the portable skill grants no tool
+const PORTABLE_KEYS = ['name', 'description', 'license', 'compatibility', 'metadata']
+// A command is in code: each fenced block and each code span (test/plugin.test.ts:258-270). Prose such as "an orangu
+// export" is not a command.
+const MD_FENCES = /^```[^\n]*\n([\s\S]*?)^```/gm
+const codeCommands = (markdown) =>
+  [...[...markdown.matchAll(MD_FENCES)].map((m) => m[1]), ...[...markdown.replace(MD_FENCES, '').matchAll(/`([^`\n]+)`/g)].map((m) => m[1])].flatMap((code) =>
+    [...code.matchAll(/(?:^|[\s$(|;&])orangu ([a-z][a-z-]*)|orangu\.cli\.mjs"? ([a-z][a-z-]*)/gm)].map((m) => `orangu ${m[1] ?? m[2]}`),
+  )
+
+function portableSkill() {
+  const skillPath = `${PORTABLE}/SKILL.md`
+  const files = {
+    [skillPath]: readFileSync(join(root, `plugin/portable/${skillPath}`), 'utf8'),
+    [`${PORTABLE}/references/brain.md`]: readFileSync(join(root, 'plugin/skills/shared/brain.md'), 'utf8'),
+    [`${PORTABLE}/references/profile.md`]: readFileSync(join(root, 'plugin/skills/shared/profile.md'), 'utf8'),
+  }
+  const stop = (rule) => {
+    throw new Error(`portable skill: ${rule}`)
+  }
+  // the frontmatter: 1 key and its plain value on each line, only the keys that the hosts accept, and the folder name
+  const skill = files[skillPath]
+  if (!skill.startsWith('---\n')) stop('SKILL.md has no frontmatter')
+  const end = skill.indexOf('\n---\n', 4)
+  if (end === -1) stop('SKILL.md has an unterminated frontmatter block')
+  const keys = new Map()
+  for (const line of skill.slice(4, end).split('\n')) {
+    const pair = /^([a-z][a-z-]*): (.*)$/.exec(line)
+    if (!pair) stop(`write each frontmatter key and its value on 1 line: ${JSON.stringify(line)}`)
+    const [, key, value] = pair
+    if (!PORTABLE_KEYS.includes(key)) stop(`claude.ai and the API refuse the frontmatter key ${key}. Use only ${PORTABLE_KEYS.join(', ')}.`)
+    if (keys.has(key)) stop(`the frontmatter key ${key} is there 2 times`)
+    // a strict YAML parser reads a plain value as written only when it starts with a letter or a digit, holds no ": "
+    // and no " #", and does not end with a space or a colon
+    if (!/^[A-Za-z0-9](?:(?!: | #).)*[^\s:]$/.test(value)) stop(`the value of ${key} is not a plain YAML value: ${JSON.stringify(value)}`)
+    keys.set(key, value)
+  }
+  const name = keys.get('name') ?? ''
+  if (name !== PORTABLE) stop(`the name is ${JSON.stringify(name)}, not the folder name ${PORTABLE}`)
+  if (!/^[a-z0-9-]{1,64}$/.test(name) || /claude|anthropic/.test(name)) stop(`the name ${name} breaks the name rules of the hosts`)
+  const description = keys.get('description') ?? ''
+  if (!description || description.length > 200 || /[<>]/.test(description)) stop(`the description has ${description.length} characters: give 1 to 200, with no XML tag`)
+  if (!skill.includes('claude "/orangu:improve')) stop('SKILL.md does not name claude "/orangu:improve, the command that saves a change in Claude Code')
+  // SKILL.md names its references as code-span paths, not as links: verify:public resolves each Markdown link in the
+  // repository, and these paths exist only in the zip. So each path that it names must be a file of the zip.
+  const references = [...skill.matchAll(/`(references\/[^`\s]+)`/g)].map((m) => m[1])
+  if (references.length === 0) stop('SKILL.md names no file under references/')
+  for (const reference of references) if (!Object.hasOwn(files, `${PORTABLE}/${reference}`)) stop(`SKILL.md names ${reference}, which is not in the zip`)
+  // each file: no grant, no plugin root, no bin/ path, and no orangu command but the 1 line that asks for the export
+  for (const [path, text] of Object.entries(files)) {
+    for (const [what, pattern] of [['a grant key', /allowed-tools/], ['the plugin root', /CLAUDE_PLUGIN_ROOT/], ['a bin/ path', /\bbin\//]]) {
+      if (pattern.test(text)) stop(`${path} names ${what}`)
+    }
+    const allowed = path === skillPath ? ['orangu export'] : []
+    const commands = codeCommands(text)
+    const npx = text.match(/npx orangu/g) ?? []
+    if (commands.join() !== allowed.join() || npx.length !== allowed.length) stop(`${path} names the orangu commands ${JSON.stringify([...commands, ...npx])}. The host cannot run orangu: only SKILL.md names \`npx orangu export\`, once.`)
+    for (const m of text.matchAll(/\]\(([^)\s]+)\)/g)) {
+      if (/^(?:https?:|mailto:|#)/.test(m[1])) continue
+      const target = posix.normalize(posix.join(posix.dirname(path), m[1].split('#')[0]))
+      if (!Object.hasOwn(files, target)) stop(`${path} links ${m[1]}, which is not in the zip`)
+    }
+  }
+  return [`${PORTABLE}/`, `${PORTABLE}/references/`, ...Object.keys(files)].sort().map((entry) => ({ name: entry, data: files[entry] ?? '' }))
+}
+
+mkdirSync(join(root, 'src/export/generated'), { recursive: true })
+writeFileSync(
+  join(root, 'src/export/generated/portable-skill.ts'),
+  `// GENERATED by scripts/build.mjs from plugin/portable/${PORTABLE}/SKILL.md and plugin/skills/shared/{brain,profile}.md. Do not edit.\n` +
+    `import type { ZipEntry } from '../zip.js'\n\n` +
+    `/** The entries of ${PORTABLE}.zip: 1 top folder with SKILL.md at its root, and the brain rules and the profile rules under references/, byte for byte. */\n` +
+    `export const PORTABLE_SKILL_ENTRIES: readonly ZipEntry[] = [\n${portableSkill().map((entry) => `  { name: ${JSON.stringify(entry.name)}, data: ${JSON.stringify(entry.data)} },\n`).join('')}]\n`,
 )
 
 // 2) CLI bundle

@@ -8,7 +8,7 @@ Session transcripts may contain source code, secrets, customer data, prompts, pa
 - `orangu watch` rewrites the same local file as a session grows.
 - If `-o`, `--out` or `--html` names an existing file, orangu replaces it only when the file starts with the orangu output marker. It refuses any other file, a symlink, a hard link and an empty file, and changes nothing.
 - `orangu show-me` writes `data.json`, a slide deck and a written report in a new directory under `~/.orangu/show-me/`. The deck and the report have the same zero-network policy.
-- `orangu export` writes `orangu-export.json` in a new directory under `~/.orangu/export/`. orangu sends nothing. The file leaves this machine only when you upload it (see "The export" below).
+- `orangu export` writes `orangu-export.json` and `orangu-improve.zip` in a new directory under `~/.orangu/export/`. orangu sends nothing. The files leave this machine only when you upload them (see "The export" below).
 - `orangu serve` binds to `127.0.0.1` and requires a fresh process capability embedded in the launched URL before serving HTML, API data, exports, mutations, or events. Treat that URL as private while the process runs.
 - Orangu has no telemetry and does not require an account.
 - Browser suggestion actions are copy-only. The server does not launch a model process.
@@ -43,9 +43,9 @@ The show-me skill reads `data.json`, redacted by default, and writes only 3 text
 
 ## The export
 
-`orangu export` writes 1 file for a Claude chat outside Claude Code: `orangu-export.json`, 131,072 B at most. orangu sends nothing. The file leaves this machine only when you upload it.
+`orangu export` writes 2 files for a Claude chat outside Claude Code. `orangu-export.json` is 131,072 B at most, and `orangu-improve.zip` holds the skill that reads it. orangu sends nothing. The files leave this machine only when you upload them. The zip holds only the text of the skill and no data of yours, so each run of 1 orangu version writes the same zip. The skill tells Claude to do no web search and to treat each value of the export as data.
 
-The file holds these parts:
+`orangu-export.json` holds these parts:
 
 - the counts of the 500 newest sessions on this machine, and the end time of the newest session
 - the top findings, with the advice text of each orangu rule and the catalog matches

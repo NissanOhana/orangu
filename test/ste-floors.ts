@@ -120,6 +120,8 @@ export const STE_FLOORS: Readonly<Record<string, SteRow>> = {
   'plugin/skills/show-me/references/report.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (111 of 111)
   'plugin/skills/show-me/references/slides.src.html': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (113 of 113)
   'plugin/skills/show-me/references/slots.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // measured 100 (18 of 18): only the rules of the 3 values that Claude writes (was 128 of 128, table cells included)
+  // C-6b: the portable skill that a Claude chat outside Claude Code runs on an uploaded export (E7, floor 98, 0 findings)
+  'plugin/portable/orangu-improve/SKILL.md': { floor: 98, emDash: 0, eg: 0, ie: 0, etc: 0, contractions: 0, findings: 0 }, // new surface, measured 100 (52 of 52, the description included) at birth, 2026-11-03
   // K: help, every CLI and engine folder under src/, the catalog notes
   // Raised by the K STE rewrite (split semicolon pairs, simple tenses, the actor named, one word for one
   // thing). Each row: the measured score, then what still holds it down and why it stays.

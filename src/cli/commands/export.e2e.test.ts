@@ -13,6 +13,7 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { SessionBuilder, resetIds } from '../../../test/fixtures/session-builder.js'
+import { portableSkillZip } from '../../export/write.js'
 
 const CLI = join(process.cwd(), 'dist', 'orangu.js')
 const SECRET = 'sk-ant-api03-EXPORTMARKER9073'
@@ -96,10 +97,15 @@ beforeAll(async () => {
   repo = await mkdtemp(join(tmpdir(), 'orangu-export-repo-'))
 })
 
-/** The built CLI in the fixture: ORANGU_CLAUDE_MANAGED_DIRS is empty, so no managed policy of this machine reads. */
-function cli(args: string[]): { status: number | null; stdout: string; stderr: string } {
-  const env = { ...process.env, HOME: home, ORANGU_HOME: oranguHome, ORANGU_NO_CACHE: '1', ORANGU_CLAUDE_ROOTS: '', CLAUDE_CONFIG_DIR: '', ORANGU_CLAUDE_MANAGED_DIRS: '' }
-  const run = spawnSync('node', [CLI, ...args], { cwd: repo, encoding: 'utf8', env })
+/**
+ * The built CLI in the fixture: ORANGU_CLAUDE_MANAGED_DIRS is empty, so no managed policy of this machine reads. A run is
+ * a terminal run unless `delta` sets CLAUDECODE, because the output gates read it (src/cli/raw-output.ts,
+ * src/cli/output-path.ts) and Claude Code sets it in the shell of the agent that runs this test.
+ */
+function cli(args: string[], delta: Record<string, string> = {}): { status: number | null; stdout: string; stderr: string } {
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, ORANGU_HOME: oranguHome, ORANGU_NO_CACHE: '1', ORANGU_CLAUDE_ROOTS: '', CLAUDE_CONFIG_DIR: '', ORANGU_CLAUDE_MANAGED_DIRS: '' }
+  for (const name of ['CLAUDECODE', 'ORANGU_ALLOW_OUT', 'ORANGU_ALLOW_RAW']) delete env[name]
+  const run = spawnSync('node', [CLI, ...args], { cwd: repo, encoding: 'utf8', env: { ...env, ...delta } })
   return { status: run.status, stdout: run.stdout, stderr: run.stderr }
 }
 
@@ -109,6 +115,7 @@ const runs = (): string[] => (existsSync(join(oranguHome, 'export')) ? readdirSy
 interface ExportRun {
   dir: string
   export: { path: string; bytes: number; approxTokens: number }
+  skill: { path: string; bytes: number }
 }
 
 function exportJson(): ExportRun {
@@ -118,21 +125,26 @@ function exportJson(): ExportRun {
 }
 
 describe.skipIf(!existsSync(CLI))('orangu export (built CLI)', () => {
-  it('writes orangu-export.json at 0600 in a new 0700 run directory under the orangu home, and prints the paths', () => {
+  it('writes orangu-export.json and orangu-improve.zip at 0600 in a new 0700 run directory under the orangu home, and prints both paths', () => {
     const first = exportJson()
     const second = exportJson()
     expect(first.dir).not.toBe(second.dir)
     for (const run of [first, second]) {
-      expect(Object.keys(run)).toEqual(['dir', 'export'])
+      expect(Object.keys(run)).toEqual(['dir', 'export', 'skill'])
       expect(run.dir.startsWith(join(realpathSync(oranguHome), 'export') + '/')).toBe(true)
       expect(run.dir).toMatch(/\/global-[A-Za-z0-9]{6}$/)
       expect(run.export.path).toBe(join(run.dir, 'orangu-export.json'))
-      expect(readdirSync(run.dir)).toEqual(['orangu-export.json'])
+      expect(run.skill.path).toBe(join(run.dir, 'orangu-improve.zip'))
+      expect(readdirSync(run.dir)).toEqual(['orangu-export.json', 'orangu-improve.zip'])
       expect(run.export.bytes).toBe(statSync(run.export.path).size)
       expect(run.export.approxTokens).toBe(Math.ceil(run.export.bytes / 4))
+      expect(run.skill.bytes).toBe(statSync(run.skill.path).size)
+      // the portable skill of this build, the same bytes on each run (src/export/portable.test.ts checks its content)
+      expect(readFileSync(run.skill.path).equals(Buffer.from(portableSkillZip())), 'the zip is the portable skill').toBe(true)
       if (process.platform !== 'win32') {
         expect((statSync(run.dir).mode & 0o777).toString(8)).toBe('700')
         expect((statSync(run.export.path).mode & 0o777).toString(8)).toBe('600')
+        expect((statSync(run.skill.path).mode & 0o777).toString(8)).toBe('600')
       }
       const file = JSON.parse(readFileSync(run.export.path, 'utf8'))
       expect(Object.keys(file)).toEqual(SECTIONS)
@@ -142,13 +154,25 @@ describe.skipIf(!existsSync(CLI))('orangu export (built CLI)', () => {
       expect(file.harness.schemaVersion).toBe('4')
       expect(file.lessons).toEqual({ v: 1, scope: 'all', maxBytes: 16_384, omitted: 0, lessons: [] })
     }
-    // the text form prints the same 2 paths, each on its own row
+    // the text form prints the directory and the 2 file paths, each on its own row
     const text = cli(['export'])
     expect(text.status).toBe(0)
     const dir = runs().at(-1)
-    expect(text.stdout).toMatch(/^ {2}dir {6}\S+\/export\/global-[A-Za-z0-9]{6}\n {2}export {3}\S+\/orangu-export\.json · [\d,]+ bytes · about [\d,]+ tokens\n$/)
+    expect(text.stdout).toMatch(/^ {2}dir {6}\S+\/export\/global-[A-Za-z0-9]{6}\n {2}export {3}\S+\/orangu-export\.json · [\d,]+ bytes · about [\d,]+ tokens\n {2}skill {4}\S+\/orangu-improve\.zip · [\d,]+ bytes\n$/)
     expect(dir).toBeDefined()
     expect(text.stderr).toBe('  analyzing 2 sessions\n')
+  })
+
+  // Inside Claude Code, a file that -o, --out or --html names goes only to a folder in the temp folder or in the orangu
+  // home (src/cli/output-path.ts). The export takes no such flag, and it writes only in its own run directory under the
+  // orangu home. So it runs the same inside Claude Code, with no ORANGU_ALLOW_OUT=1 and no prompt.
+  it('runs the same inside Claude Code: both files in a new run directory under the orangu home, with no ORANGU_ALLOW_OUT', () => {
+    const run = cli(['export', '--json'], { CLAUDECODE: '1' })
+    expect({ status: run.status, stderr: run.stderr }).toEqual({ status: 0, stderr: '' })
+    const out = JSON.parse(run.stdout) as ExportRun
+    expect(out.dir.startsWith(join(realpathSync(oranguHome), 'export') + '/')).toBe(true)
+    expect(readdirSync(out.dir)).toEqual(['orangu-export.json', 'orangu-improve.zip'])
+    expect(readFileSync(out.skill.path).equals(Buffer.from(portableSkillZip()))).toBe(true)
   })
 
   it('refuses --include-text and --no-redact with exit 1, before it reads or writes', () => {
@@ -198,10 +222,12 @@ describe.skipIf(!existsSync(CLI))('orangu export (built CLI)', () => {
 
   it('gives the same bytes on 2 runs, and no field holds the clock of the run', () => {
     const t0 = Date.now()
-    const first = readFileSync(exportJson().export.path)
-    const second = readFileSync(exportJson().export.path)
+    const [one, two] = [exportJson(), exportJson()]
+    const first = readFileSync(one.export.path)
+    const second = readFileSync(two.export.path)
     const t1 = Date.now()
     expect(second.equals(first)).toBe(true)
+    expect(readFileSync(two.skill.path).equals(readFileSync(one.skill.path)), 'the zip holds no clock either').toBe(true)
     // the clock reaches no field: no number near the time of the runs (ms or s), and no string with the date of today
     const day = 86_400_000
     const today = new Date(t1).toISOString().slice(0, 10)

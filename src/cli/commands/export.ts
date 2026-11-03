@@ -1,6 +1,7 @@
 /**
  * `orangu export`: orangu-export.json, the bounded, redacted evidence that the brain reads in a Claude chat outside
- * Claude Code (docs/DATA-CONTRACTS.md, "Export v1"), in a new run directory under <orangu home>/export/.
+ * Claude Code (docs/DATA-CONTRACTS.md, "Export v1"), and orangu-improve.zip, the portable skill that reads it, in a new
+ * run directory under <orangu home>/export/.
  *
  *   orangu export [--json] [--quiet] [--no-color] [--root <dir>] [--no-cache] [--jobs <n>] [--strip-paths]
  *
@@ -11,7 +12,7 @@
  * --include-text and --no-redact: it always redacts, and it never holds prompt text. --strip-paths takes out more: each
  * path keeps only its last part, as in `orangu harness --strip-paths`.
  *
- * Exit 0 when the file is written. Exit 1 (a thrown Error, through main.ts) on a usage error, when this machine has no
+ * Exit 0 when both files are written. Exit 1 (a thrown Error, through main.ts) on a usage error, when this machine has no
  * session, or when the write fails. A session that does not analyze is counted, not an error. A store that does not
  * read leaves the lessons out, and the index of the file says so.
  */
@@ -108,6 +109,7 @@ function printRun(run: ExportRun, unreadable: number, flags: Record<string, stri
   const lines = [
     row(out, 'dir', oneLine(run.dir), { raw: true }),
     row(out, 'export', `${oneLine(run.export.path)} · ${run.export.bytes.toLocaleString('en-US')} bytes · about ${run.export.approxTokens.toLocaleString('en-US')} tokens`, { raw: true }),
+    row(out, 'skill', `${oneLine(run.skill.path)} · ${run.skill.bytes.toLocaleString('en-US')} bytes`, { raw: true }),
   ]
   if (unreadable > 0) lines.push(row(out, 'skipped', `${unreadable.toLocaleString('en-US')} session${unreadable === 1 ? '' : 's'} left out of the export: ${SKIPPED_REASON}`, { style: 'warn' }))
   process.stdout.write(`${lines.join('\n')}\n`)

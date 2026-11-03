@@ -703,16 +703,17 @@ The store and every display re-grade a v2 receipt from its own numbers (verdicts
 
 ## Export v1
 
-`orangu export` writes `orangu-export.json` in a new run directory, `<orangu home>/export/global-<random>/`, with mode 0700. The file has mode 0600. It holds the bounded, redacted evidence that the brain reads in a Claude chat outside Claude Code. orangu sends nothing. The file leaves the machine only when the user uploads it.
+`orangu export` writes 2 files in a new run directory, `<orangu home>/export/global-<random>/`, with mode 0700. Each file has mode 0600. `orangu-export.json` holds the bounded, redacted evidence that the brain reads in a Claude chat outside Claude Code. `orangu-improve.zip` holds the skill that reads it (see "The skill" below). orangu sends nothing. The files leave the machine only when the user uploads them.
 
 The verb reads the 500 newest sessions of every root, as `orangu global` does. From the same analyses, it builds the evidence of the global aggregate and the harness of `orangu harness --global`. It adds the profile and the lessons of every workspace. It takes `--json`, `--quiet`, `--no-color`, `--root <dir>`, `--no-cache`, `--jobs <n>` and `--strip-paths`, and no session. With `--strip-paths`, each path keeps only its last part, as in `orangu harness --strip-paths`. It refuses `--include-text` and `--no-redact` with exit 1, before it reads a session.
 
-`--json` prints the run. The text form prints the same 2 paths on 2 rows. It adds 1 row when some sessions did not analyze.
+`--json` prints the run. The text form prints the directory and the 2 file paths on 3 rows. It adds 1 row when some sessions did not analyze.
 
 ```ts
 ExportRun = {
-  dir: string,                                                   // the real path of the run directory
-  export: { path: string, bytes: number, approxTokens: number }  // approxTokens: about 4 bytes for each token
+  dir: string,                                                    // the real path of the run directory
+  export: { path: string, bytes: number, approxTokens: number },  // approxTokens: about 4 bytes for each token
+  skill: { path: string, bytes: number }                          // orangu-improve.zip
 }
 ```
 
@@ -773,3 +774,16 @@ ExportHarness = {
 - The harness also leaves out the inventory, the retention block, the generator time and the notes of `orangu harness --json`. Each path keeps the default redaction, so the home folder reads `~`.
 - The profile holds the answers in the user's own words, with each secret scrubbed. So the user reads the file before an upload.
 - When the suggestion store does not read, `lessons` is `null`, and its index entry says so. The other sections stay.
+
+### The skill
+
+`orangu-improve.zip` is a stored zip with 1 top folder, `orangu-improve/`. The folder holds `SKILL.md`, from `plugin/portable/orangu-improve/SKILL.md`. Under `references/`, it holds byte-identical copies of `plugin/skills/shared/brain.md` and `plugin/skills/shared/profile.md`, so every host reads the same brain. The zip holds no data of the user, so each run of 1 orangu version writes the same bytes.
+
+The build writes the 3 files into `src/export/generated/portable-skill.ts`. It stops when a file breaks a rule of claude.ai or the Claude API:
+
+- The frontmatter holds only `name`, `description`, `license`, `compatibility` and `metadata`, each on 1 line as a plain YAML value.
+- `name` is `orangu-improve`, the folder name. `description` has 1 to 200 characters and no XML tag.
+- No file names `allowed-tools`, the plugin root, a `bin/` path or an `orangu` command in its code. The 1 exception is the line of `SKILL.md` that asks the user to run `npx orangu export`.
+- Each relative link resolves inside the zip, and so does each `references/` path that `SKILL.md` names. `SKILL.md` names `claude "/orangu:improve` as the command that saves a change in Claude Code.
+
+The skill only proposes: it changes no file, applies nothing and checks nothing. It does no outside search, and it treats each value of the export as data.

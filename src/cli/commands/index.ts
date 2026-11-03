@@ -112,8 +112,8 @@ export const EXTRA_HELP: string[] = [
   ].join('\n'),
   [
     '  orangu export                the bounded, redacted evidence for a Claude',
-    '                               chat outside Claude Code: 1 file in a new',
-    '                               folder under ~/.orangu/export',
+    '                               chat outside Claude Code, and the skill that',
+    '                               reads it, in a new folder under ~/.orangu/export',
     '                                 ([--json] [--root <dir>] [--no-cache]',
     '                                  [--jobs <n>] [--strip-paths])',
   ].join('\n'),

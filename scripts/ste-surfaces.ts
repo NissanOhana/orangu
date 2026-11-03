@@ -75,6 +75,7 @@ export const SRC_EXEMPT: Readonly<Record<string, string>> = {
   'src/report/generated': 'built output of src/report/client (scripts/build.mjs); its sources are measured',
   'src/ste/words.ts': 'the word tables of the STE checker: the words it flags and the word lists it reads. Data, not copy.',
   'src/show-me/generated': 'built output of the show-me templates (scripts/build.mjs); their .src.html sources are measured',
+  'src/export/generated': 'built output of the portable skill (scripts/build.mjs); its 3 Markdown sources are measured',
   'src/god/generated': 'built output of src/report/client/tokens.css for the god pane (scripts/build.mjs): colors, not copy',
 }
 
@@ -531,15 +532,19 @@ const codexMirrorSurface: Surface = {
   source: 'CODEX_FALLBACK and codexNames in scripts/build.mjs',
 }
 
-/** Every Markdown file under plugin/skills and plugin/agents, and every .src.html template under plugin/skills. */
+/** Every Markdown file under plugin/skills, plugin/agents and plugin/portable, and every .src.html template under plugin/skills. */
 const pluginFiles = (files: readonly string[]): string[] =>
-  files.filter((file) => (file.startsWith('plugin/skills/') || file.startsWith('plugin/agents/')) && (file.endsWith('.md') || file.endsWith('.src.html')))
+  files.filter((file) => (file.startsWith('plugin/skills/') || file.startsWith('plugin/agents/') || file.startsWith('plugin/portable/')) && (file.endsWith('.md') || file.endsWith('.src.html')))
 
-/** P1a owns the skills the build mirrors to Codex; P1b the catalog and the agents. A new directory has no owner yet. */
+/**
+ * P1a owns the skills the build mirrors to Codex; P1b the catalog and the agents; C-6b the portable skill of the export
+ * zip. A new directory has no owner yet.
+ */
 function pluginOwner(file: string): string {
   if (/^plugin\/skills\/(improve|apply|feedback|shared)\//.test(file)) return 'P1a'
   if (file === 'plugin/skills/README.md' || file.startsWith('plugin/agents/')) return 'P1b'
   if (file.startsWith('plugin/skills/show-me/')) return 'P2'
+  if (file.startsWith('plugin/portable/')) return 'C-6b'
   return 'new'
 }
 
@@ -1010,6 +1015,8 @@ export function surfaces(root = ROOT, files: readonly string[] = listFiles(root)
     ),
     // P2: the show-me skill, its slot rules and its two template sources
     ...pluginSurfaces(files, 'P2'),
+    // C-6b: the portable skill that a Claude chat outside Claude Code runs on an uploaded export
+    ...pluginSurfaces(files, 'C-6b'),
     // a plugin file no chunk owns yet (a new skill): its chunk adds the row and the owner
     ...pluginSurfaces(files, 'new'),
     // K: help, every CLI and engine folder under src/, the catalog notes

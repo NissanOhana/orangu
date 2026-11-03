@@ -18,6 +18,7 @@ const generated = [
   'plugin/skills/show-me/references/slides.html',
   'plugin/skills/show-me/references/report.html',
   'src/show-me/generated/templates.ts',
+  'src/export/generated/portable-skill.ts',
   'src/god/generated/tokens.ts',
   'god/hooks/god.mjs',
 ]
