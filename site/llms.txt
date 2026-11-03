@@ -1,15 +1,17 @@
 # orangu
 
-> orangu is local, offline, deterministic observability for coding-agent sessions (Claude Code, Cowork
-> and Desktop). The orangu 0.13.0 CLI reads the `.jsonl` transcripts that are already on your disk.
-> It turns them into a self-contained HTML report, a stable JSON API, cross-session aggregates, and a
-> harness report. The harness report compares what your config declares with what your sessions used.
-> Optional Claude Code skills turn that evidence into reviewable proposals and receipts. The loop is
-> observe, see, improve.
+> orangu helps you improve your agent harness and your setup: better results with fewer tokens. The orangu 0.13.0
+> CLI reads the `.jsonl` transcripts of Claude Code, Cowork and Desktop sessions that are already on your disk. It
+> measures them with plain code, offline, with no model: one session, your sessions and their agents, or the whole
+> machine. The chain has 3 steps. `npx orangu` shows the evidence and the first findings. `/orangu:improve`, the
+> brain, proposes changes in Claude Code. `/orangu:interview` tunes the brain to your role and your work.
 
 Concretely, you can:
 
 - `npx orangu` : prints a short summary of the latest session. On a terminal, it then opens the local app on every session of this machine, until you press ctrl-c. In a pipe or in CI, it prints only the summary.
+- `/orangu:improve` : the brain, in Claude Code. It finds patterns in your sessions and your harness, and it proposes ranked changes to skills, agents, effort, model choice, CLIs, scripts and hooks. It applies only the changes that you approve by id, and it checks each applied change on your later sessions. Install it with `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`.
+- `/orangu:interview` : asks about your role and your work, and keeps your answers as your profile. The brain ranks each later proposal with them. The first run of `/orangu:improve` offers it.
+- `npx orangu export` : writes 2 files for claude.ai, Claude Desktop or the Claude API: the skill `orangu-improve.zip` and your redacted evidence `orangu-export.json`. There, the brain only proposes changes, and it cannot apply or check them.
 - `npx orangu report` : builds and opens a self-contained HTML report for the latest session. `orangu report <id>` opens another session, and `orangu report current` opens the current Claude Code session.
 - `npx orangu serve` : opens a live viewer on loopback (127.0.0.1) over every local session.
 - `npx orangu repo` / `npx orangu global` : aggregates every session of one repository, or of the whole machine.
@@ -19,7 +21,6 @@ Concretely, you can:
 - `npx orangu list` / `watch` : list the sessions, or tail a live session.
 - `npx orangu evidence` / `estimate` : give bounded evidence to skills, or size what an LLM would read.
 - `npx orangu suggest` / `feedback` : read and write the suggestion records in `~/.orangu`, or open a localhost feedback form.
-- In Claude Code, after `/plugin marketplace add NissanOhana/orangu` and `/plugin install orangu`: `/orangu:improve` for one session or the whole harness, and `/orangu:interview` for your role and your work. Also `/orangu:apply <sg_id>`, `/orangu:show-me latest` (a slide deck and a written report, as offline HTML) and `/orangu:feedback`.
 
 Facts an LLM should not get wrong:
 
@@ -28,13 +29,14 @@ Facts an LLM should not get wrong:
 - Reports make zero network requests and ship `default-src 'none'`. orangu uploads nothing. There is no account, proxy, instrumentation, or telemetry.
 - Redaction is on by default. Shareable output omits prompt and result text unless you ask for `--include-text`.
 - Skills read `orangu ... --json` / `orangu evidence`, never the raw `.jsonl`.
-- orangu never applies a proposal automatically. `/orangu:apply` runs only on an explicitly reviewed session or repo proposal. Global (whole-harness) proposals are review-only.
+- orangu never applies a proposal by itself. `/orangu:improve` applies a session or repo proposal only after you approve its id. Global (whole-machine) proposals are review-only.
+- orangu marks a change verified only when your later sessions in the same workspace beat the earlier sessions beyond chance. That does not prove that the change caused the difference.
 - orangu reports quality, time and tokens as separate axes. There is no composite score.
 - orangu reads history retroactively. It can analyze every session on your disk from the minute you install it.
 
 ## Docs
 
-- [README](https://github.com/NissanOhana/orangu/blob/main/README.md): what it is, quick start, design principles, positioning.
+- [README](https://github.com/NissanOhana/orangu/blob/main/README.md): what it is, the chain, the promises.
 - [Usage](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md): every command, report and app surfaces, supported inputs and limits.
 - [Determinism and skill authority](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md): which layer owns evidence, proposals, application and verification.
 - [Privacy](https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md): what stays local, what redaction removes, what to check before sharing.
@@ -45,8 +47,9 @@ Facts an LLM should not get wrong:
 ## Getting started
 
 - orangu needs Node.js 20 or newer. It has zero runtime dependencies.
-- `npx orangu` prints a short summary of the latest session. On a terminal, it then opens the local app: one session, your sessions and their agents, or the whole machine. In a pipe or in CI, it prints only the summary. `npx orangu report` opens the latest local session. `npx orangu serve` follows all of them live.
-- Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`. Then start with `/orangu:improve`.
+- `npx orangu` prints a short summary of the latest session. On a terminal, it then opens the local app: one session, your sessions and their agents, or the whole machine. In a pipe or in CI, it prints only the summary.
+- Claude Code plugin: `/plugin marketplace add NissanOhana/orangu` then `/plugin install orangu`. Then start with `/orangu:improve`. Its first run offers `/orangu:interview`, which asks about your role and your work.
+- Outside Claude Code: `npx orangu export` writes the skill `orangu-improve.zip` and your redacted evidence `orangu-export.json`. Upload the skill once to claude.ai, Claude Desktop or the Claude API. Then add the evidence to a chat.
 - [Sample report](https://nissanohana.github.io/orangu/sample.html): a synthetic, deterministic report you can open without installing anything.
 - [Repository sample](https://nissanohana.github.io/orangu/sample-repo.html): the same synthetic corpus aggregated across sessions, as `npx orangu repo --html` writes it.
 

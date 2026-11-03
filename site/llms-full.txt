@@ -9,116 +9,61 @@ orangu 0.13.0. This file concatenates README.md, docs/USAGE.md, docs/DETERMINISM
 
 <div align="center">
 
-<img src="https://raw.githubusercontent.com/NissanOhana/orangu/main/design/brand/mascot-main-transparent.png" width="140" alt="orangu" />
+<img src="https://raw.githubusercontent.com/NissanOhana/orangu/main/design/brand/mascot-main-transparent.png" width="120" alt="orangu" />
 
 # orangu
 
-**Improve your agent harness, one checked change at a time.**
+**Improve your agent harness and your setup.**
 
-Local, offline, deterministic observability for Claude Code, Cowork, and Desktop sessions. Optional Claude Code skills turn the evidence into reviewable changes.
+Measure every agent session. Keep the changes that work.
 
-[sample report](https://nissanohana.github.io/orangu/sample.html) · [repo sample](https://nissanohana.github.io/orangu/sample-repo.html) · [docs](https://github.com/NissanOhana/orangu/blob/main/docs/README.md) · [npm](https://www.npmjs.com/package/orangu) · `npx orangu`
+[sample report](https://nissanohana.github.io/orangu/sample.html) · [docs](https://github.com/NissanOhana/orangu/blob/main/docs/README.md) · [npm](https://www.npmjs.com/package/orangu) · `npx orangu`
 
 </div>
 
-You run coding agents for hours. The transcript on disk records what they did. orangu reads it and shows you:
+orangu helps you get better results with fewer tokens. It reads every Claude Code, Cowork and Desktop session on your disk, with each agent tree. It measures with plain code, not a model, and it makes no network calls. The brain proposes changes that fit your role. Then orangu checks each applied change on your later sessions.
 
-| What the session does not tell you | What orangu shows |
-|---|---|
-| "compacted" | which turns filled the context window, and with what |
-| a subagent's final answer | its full tree: tools, tokens, time, errors |
-| that a skill or MCP server is installed | whether it ever fired, and what it weighs in context |
-| nothing about repetition | the same file read again and again, and the same context re-read in every request |
-
-One real number from one local session: 34.9M of the 37.0M tokens the model processed were cache reads. The model re-read one 223k-token context 156 times. Tokens are the only usage metric orangu has, because they are the only one the transcript records.
-
-ccusage counts your token usage. orangu tells you what to change.
-
-## Get started
-
-**Read-only.** orangu reads the session files already on your disk and writes one HTML file. It needs no SDK, proxy, account, instrumentation, upload, or telemetry. It can analyze your whole history from the minute you install it, not only new sessions.
+## Start
 
 ```bash
-npx orangu          # start here: the latest session, then the app
-npx orangu serve    # the local app: every session, live, and your improvements
-npx orangu report   # only the latest session, as one HTML report
+npx orangu
 ```
 
-In Claude Code, start with `/orangu:improve` after you install the [skills](#skills). It finds the next change to make, and it checks each change that you apply.
+The command prints a summary of your latest session and its top finding. On a terminal, it then opens the local app. Press ctrl-c to stop the app. In a pipe or in CI, it prints only the summary. orangu needs Node.js 20 or newer.
 
-On a terminal, bare `orangu` runs the app until you press Ctrl-C. In a pipe or CI, it prints only the compact latest-session summary. `orangu help all` lists every command and flag.
-
-orangu needs Node.js 20 or newer and no runtime dependency. The [usage guide](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md) has more commands, inputs, and limits.
-
-## The improve loop
-
-1. **Observe.** orangu parses, redacts, counts, and ranks each session against 44 deterministic rules. It uses no model.
-2. **See.** The report and `orangu serve` show quality, time, and tokens as separate axes, with the evidence behind each finding.
-3. **Propose.** `/orangu:improve` drafts one proposal for each change, in one of nine [change classes](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md). A proposal changes no file.
-4. **Apply.** You approve each change by its id. Then `/orangu:apply <id>` makes it and records which checks ran.
-5. **Verify.** orangu compares your later sessions in the same workspace with the sessions before the change. The change counts as verified only when they beat the earlier sessions beyond chance. No model is in the measurement. `/orangu:improve --verify <id>` shows the comparison and records a final verdict.
-6. **Remember.** orangu keeps each verdict and each reason that you pick. The next proposal reads them. `orangu serve` lists them under Improvements.
-
-orangu never changes your harness by itself. Global (whole-machine) changes stay proposals. A later comparison is not causal proof. The full boundary is in [determinism and skill authority](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md).
-
-## Skills
+Then add the brain to Claude Code:
 
 ```text
 /plugin marketplace add NissanOhana/orangu
 /plugin install orangu
+/orangu:improve
 ```
 
-| Skill | What it does |
-|---|---|
-| `/orangu:improve` | Start here. Find patterns in one session or in the whole harness: CLAUDE.md, memory, skills, agents, hooks, MCP. Apply the changes that you approve by id, and check each one later. A rule that did not hold gets a hook, not another note |
-| `/orangu:interview` | Ask about your role and your work, and keep your answers. The first run of `/orangu:improve` offers it |
-| `/orangu:apply` | Apply one reviewed session or repo proposal and save the receipt |
-| `/orangu:show-me` | Turn the evidence of a session, a repository or all sessions into a slide deck and a written report, as offline HTML. Claude writes only 3 text values, and `orangu show-me` writes both files from the data |
-| `/orangu:feedback` | Send reviewed beta feedback from a localhost form |
+## How it works
 
-Skills read `orangu ... --json` and `orangu evidence`, never the raw `.jsonl`. Each skill shows a token estimate before a large read. The shipped instructions live in [`plugin/skills/`](https://github.com/NissanOhana/orangu/blob/main/plugin/skills). Codex can also host the improvement skills: `codex plugin marketplace add NissanOhana/orangu` then `codex plugin add orangu@orangu` installs `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback`. orangu does not ingest Codex transcripts.
+1. **See.** `npx orangu` reads every session on your disk, each agent tree included. The app shows one session, your sessions and their agents, or the whole machine. 44 deterministic rules find the first improvements.
+2. **Improve.** `/orangu:improve` is the brain. It finds patterns in the evidence and in your harness. It proposes ranked changes: a skill, an agent, the effort or the model, a CLI or a script, or a hook. It applies only the changes that you approve by id.
+3. **Tune.** The first run of `/orangu:improve` offers an interview about your role and your work. Your answers become your orangu profile, and the brain ranks each later proposal with them. Run `/orangu:interview` at any time to change them.
 
-## Not a wrapper
+orangu marks a change verified only when your later sessions in the same workspace beat the earlier sessions beyond chance. The check does not prove that the change caused the difference. orangu never changes your harness by itself. A change to the whole machine stays a proposal.
 
-orangu is not a proxy, an SDK, a hook you install before the session, or a model that summarizes your transcript. It is a parser plus a rule set over the `.jsonl` files Claude Code already writes. Nothing runs during your session, nothing is sent anywhere, and the measurement never asks a model what it thinks.
+## Outside Claude Code
 
-## Design principles
+The brain also runs in claude.ai, Claude Desktop and the Claude API. Run `npx orangu export`. It writes 2 files: the skill `orangu-improve.zip` and your redacted evidence `orangu-export.json`. Upload the skill once. Add the evidence to a chat after you review it. In those hosts, the brain only proposes changes, and it cannot apply or check them.
 
-- **No model in the measurement path.** Counting, reconciling, and ranking are plain code. Skills only interpret the result.
-- **Zero network from reports.** Every report ships `default-src 'none'` and makes no request. `serve` binds to `127.0.0.1` and places every route behind a fresh process capability in its launched URL.
-- **Redacted by default.** orangu scrubs secrets. It omits prompt text unless you ask with `--include-text`.
-- **Same transcript in, byte-identical analysis out.** The analyzer uses no clock, no randomness, and no network.
-- **Components, never a composite score.** Quality, time, and tokens stay separate. orangu never ranks people.
-- **Tokens only.** orangu counts input, cache-read, cache-write, and output tokens. It never converts them into another unit.
+Codex can run the brain too. Install it with `codex plugin marketplace add NissanOhana/orangu` and `codex plugin add orangu@orangu`. Then run `$orangu-improve` in Codex. orangu does not read Codex transcripts.
 
-## Where it sits
+## Promises
 
-| | |
-|---|---|
-| Raw transcripts | Contain the record, but leave the reading and synthesis to you. |
-| Usage counters (ccusage and friends) | Sum tokens across time and sources. |
-| Instrumented trace platforms | Capture traces and evaluations from applications that you instrument. |
-| orangu | Reads the transcript you already have, explains it, and turns findings into reviewed changes with receipts. |
-
-## Privacy and support
-
-- Redaction is on by default. Add `--strip-paths` before you share a report. Review every export first.
-- orangu counts unknown transcript records and shows them in Coverage. They never crash the analysis.
-- Feedback stays on localhost until you review the exact title and body and open GitHub's issue composer yourself.
-
-Read the [privacy model](https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md), [supported limits](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md#supported-inputs-and-limits), and [security policy](https://github.com/NissanOhana/orangu/blob/main/SECURITY.md) before sharing a report or JSON export. Are you an LLM? Read [llms.txt](https://nissanohana.github.io/orangu/llms.txt).
+- **No model in the measurement.** Plain code counts, compares and ranks.
+- **No network.** Reports make no request. The app binds to `127.0.0.1` behind a private link.
+- **Redacted by default.** orangu scrubs secrets. Shareable output leaves out prompt text unless you ask for it with `--include-text`.
+- **Same transcript in, byte-identical analysis out.**
+- **Tokens only, and no single score.** orangu counts tokens and never converts them into another unit. Quality, time and tokens stay separate, and orangu never ranks people.
 
 ## Documentation
 
-| Guide | Purpose |
-|---|---|
-| [Documentation index](https://github.com/NissanOhana/orangu/blob/main/docs/README.md) | All user, integration, design, and contributor references |
-| [Usage](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md) | CLI commands, app surfaces, inputs, and limits |
-| [Determinism](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md) | Local evidence, AI-skill authority, and lifecycle rules |
-| [Architecture](https://github.com/NissanOhana/orangu/blob/main/docs/ARCHITECTURE.md) | Pipeline, modules, build, and correctness gates |
-| [Data contracts](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md) | Analysis, evidence, app, proposal, and receipt shapes |
-| [Beta feedback](https://github.com/NissanOhana/orangu/blob/main/docs/feedback.md) | Localhost intake, exact-review consent, and GitHub handoff |
-| [Contributing](https://github.com/NissanOhana/orangu/blob/main/CONTRIBUTING.md) | Development workflow and project layout |
+[Usage](https://github.com/NissanOhana/orangu/blob/main/docs/USAGE.md) · [Determinism](https://github.com/NissanOhana/orangu/blob/main/docs/DETERMINISM.md) · [Privacy](https://github.com/NissanOhana/orangu/blob/main/docs/PRIVACY.md) · [Data contracts](https://github.com/NissanOhana/orangu/blob/main/docs/DATA-CONTRACTS.md) · [Architecture](https://github.com/NissanOhana/orangu/blob/main/docs/ARCHITECTURE.md) · [Security](https://github.com/NissanOhana/orangu/blob/main/SECURITY.md) · [Contributing](https://github.com/NissanOhana/orangu/blob/main/CONTRIBUTING.md) · [llms.txt](https://nissanohana.github.io/orangu/llms.txt)
 
 ## Develop
 
@@ -164,24 +109,29 @@ node dist/orangu.js report
 
 ## Commands
 
-| Command | Purpose |
-|---|---|
-| `orangu` (no verb) | Print the latest-session brief, then run the app on all your sessions until Ctrl-C |
-| `orangu report [selector]` | Write and open one self-contained session report |
-| `orangu analyze [selector]` | Print a summary or redacted JSON |
-| `orangu list` | List discoverable supported sessions |
-| `orangu pick` | Choose a session from a list, running ones first, and open its report |
-| `orangu watch [selector]` | Refresh one report while its session grows |
-| `orangu serve` | Run the capability-protected local app on `127.0.0.1` |
-| `orangu feedback` | Open the isolated, capability-protected localhost beta-feedback form |
-| `orangu repo` | Aggregate supported sessions for the current repository (`--html`/`--open` for the report) |
-| `orangu global` | Aggregate supported sessions across configured roots (`--html`/`--open` for the report) |
-| `orangu evidence <input>` | Emit the bounded, always-redacted evidence a skill reads |
-| `orangu estimate [selector\|repo\|global\|harness]` | Size the bounded read before handing evidence to a skill |
-| `orangu harness` | Compare declared harness configuration with observed use, and show the rules that did not hold |
-| `orangu suggest` | The suggestion store that the skills call. `orangu help all` lists its flags |
-| `orangu ste <file...\|->` | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. Terminal output and the layout of a report can give false findings. For terminal output, add `--lines` |
-| `orangu show-me [selector]` | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
+The chain is the 3 commands that you run, in this order. Each other verb is a machine verb. The skills, your scripts and CI run it, and you can run it too. `orangu --help` shows the chain. `orangu help all` shows every command and flag.
+
+| Command | Kind | Purpose |
+|---|---|---|
+| `orangu` (no verb) | chain, step 1 | See: print the latest-session brief, then run the app on all your sessions until Ctrl-C |
+| `/orangu:improve` | chain, step 2 | Improve: in Claude Code, find patterns in your sessions and your harness, and propose ranked changes. It applies only the changes that you approve by id, and it checks each applied change on your later sessions |
+| `/orangu:interview` | chain, step 3 | Tune: in Claude Code, ask about your role and your work, and keep your answers as your profile. The first run of `/orangu:improve` offers it |
+| `orangu export` | machine | Write the skill `orangu-improve.zip` and your redacted evidence `orangu-export.json` for claude.ai, Claude Desktop or the Claude API. It puts both files in a new folder under `~/.orangu/export/` |
+| `orangu report [selector]` | machine | Write and open one self-contained session report |
+| `orangu analyze [selector]` | machine | Print a summary or redacted JSON |
+| `orangu list` | machine | List discoverable supported sessions |
+| `orangu pick` | machine | Choose a session from a list, running ones first, and open its report |
+| `orangu watch [selector]` | machine | Refresh one report while its session grows |
+| `orangu serve` | machine | Run the capability-protected local app on `127.0.0.1` |
+| `orangu feedback` | machine | Open the isolated, capability-protected localhost beta-feedback form |
+| `orangu repo` | machine | Aggregate supported sessions for the current repository (`--html`/`--open` for the report) |
+| `orangu global` | machine | Aggregate supported sessions across configured roots (`--html`/`--open` for the report) |
+| `orangu evidence <input>` | machine | Emit the bounded, always-redacted evidence a skill reads |
+| `orangu estimate [selector\|repo\|global\|harness]` | machine | Size the bounded read before handing evidence to a skill |
+| `orangu harness` | machine | Compare declared harness configuration with observed use, and show the rules that did not hold |
+| `orangu suggest` | machine | The suggestion store that the skills call. `orangu help all` lists its flags |
+| `orangu ste <file...\|->` | machine | Check prose (Markdown, a draft or an HTML page of prose) against the STE writing rules and print each finding. It has no pass mark. Terminal output and the layout of a report can give false findings. For terminal output, add `--lines` |
+| `orangu show-me [selector]` | machine | Write the data of a slide deck and a written report (`--scope repo\|global`). `--render <dir>` fills both offline HTML files |
 
 A session selector is `latest`, a session id or unique prefix, a supported `.jsonl` path, or `current`. `current` is the session that Claude Code runs orangu from, resolved from the Claude Code environment. If orangu guesses it from the cwd, it says so on stderr. `--quiet` hides that line. `--json` also hides it on `report`, `analyze`, `watch`, `estimate` and `show-me`. Outside Claude Code, `current` is an error.
 
@@ -198,8 +148,6 @@ On an interactive terminal, bare `orangu` prints the orange ASCII mascot and the
 Orangu refuses `--html` and `--open` with `--json`, which is a machine read with no side effect. `--out <file>` still writes the aggregate JSON. The written file is private (mode `0600`), redacted by default, and passes the same zero-network gate as the session report. `--jobs <n>` sets the worker threads of a scan over many sessions: by default the CPU count minus 1, and never more than the CPU count.
 
 `orangu pick` lists sessions, running ones first (title, project, age, size). Move with the arrow keys, `j`/`k`, or a digit. Enter opens the chosen report, and `q`, Esc, or Ctrl-C cancels and restores the terminal. Without a terminal, in CI, or with `--plain`, it prints a numbered list and the `orangu report <id>` hint. `--json` prints the array (`[]` on an empty home, still with exit code 1, because the chooser had nothing to choose).
-
-`orangu --help` shows the chain. `orangu help all` shows every command and flag.
 
 ### Rules that did not hold
 
@@ -285,7 +233,9 @@ See [determinism and AI skills](https://github.com/NissanOhana/orangu/blob/main/
 
 # What is deterministic and what uses an AI skill
 
-Orangu is one improvement system with a deliberate evidence boundary. Local code produces the measurements, finding identities, catalog matches, artifact validation, and lifecycle state. AI skills explain that bounded evidence, can research choices, and write a proposal. Only a separately invoked apply skill edits reviewed project files.
+Orangu is one improvement system with a deliberate evidence boundary. Local code produces the measurements, finding identities, catalog matches, artifact validation, and lifecycle state. AI skills explain that bounded evidence, can research choices, and write a proposal. Only the apply skill edits reviewed project files, and `/orangu:improve` invokes it after you approve an id.
+
+You run 3 commands, in this order. `npx orangu` runs the deterministic core: it measures and shows every session with no model. `/orangu:improve` is the brain: an AI skill that reads orangu output, never a raw transcript, and proposes changes. `/orangu:interview` keeps your answers as user-stated context for the brain.
 
 ## The workflow
 
@@ -372,7 +322,7 @@ Every skill and harness analyst treats session, evidence, tool, path, title, err
 
 ### `orangu-improve`
 
-This is the one improvement workflow. It diagnoses one session, reviews a whole repository or machine, approves a proposal, and checks it later. It:
+This is the one improvement workflow. It diagnoses one session, reviews a whole repository or machine, asks you to approve a proposal, and checks it later. It:
 
 - reads the profile path first, and on a first run with no profile asks if the user wants the interview first
 - runs the exact `orangu evidence` estimate before reading the evidence
@@ -389,14 +339,14 @@ Its whole-harness review reads `orangu harness`, which uses no model and no netw
 When a run saves a session or repo proposal, it asks which ones you approve. Then it applies the ones you approved, under 4 standing limits:
 - **Per-item explicit approval.** Before the question, it discloses each item's id, the files its manifest declares, and the exact text of anything that would run or grant authority. Only a verbatim id approves, and only the answer to that question counts. Nothing else in the conversation is consent.
 - **Session or repo scope only.** Global proposals are review-only and are never applied, at any approval.
-- **Through `/orangu:apply`, unchanged.** For each approved item, improve invokes `/orangu:apply <id>`: one id, one record, one receipt per invocation. Improve pre-approves no call of that skill, so each call goes through your permission rules. Each invocation keeps that skill's existing binding check, untrusted-input rules, and confinement contract. Improve forks nothing and has no repository edit authority of its own. It prints the `/orangu:apply <id>` list, so you can do the same work by hand.
+- **Through `/orangu:apply`, unchanged.** Apply is hidden from the `/` menu: it is the step that improve runs for each item that you approve. Improve invokes `/orangu:apply <id>` through the Skill tool: one id, one record, one receipt per invocation. Improve pre-approves no call of that skill, so each call goes through your permission rules. Each invocation keeps that skill's existing binding check, untrusted-input rules, and confinement contract. Improve forks nothing and has no repository edit authority of its own.
 - **Stop at the first failure.** Improve applies the approved items in order and halts at the first one that fails. It leaves the working tree as it stands for review and does not continue down the list.
 
 None of this moves the deterministic boundary. No model measures anything, and the evidence is still the bounded deterministic projection. The CLI still validates artifact shape and does not inspect a diff.
 
 ### `orangu-apply`
 
-This is the explicit mutation workflow for session and repo scope. Global proposals are review-only. It requires a structured proposal in `proposed` state and:
+This is the explicit mutation workflow for session and repo scope. Global proposals are review-only. In Claude Code, `/orangu:improve` runs it after you approve an id. In Codex, you run `$orangu-apply <id>` yourself. It requires a structured proposal in `proposed` state and:
 
 - runs `orangu suggest --show <id> --for-apply` as a deterministic current-repository binding check before any project read or edit
 - reads current repository instructions before editing
@@ -442,25 +392,32 @@ A proposal cannot verify itself, and an application receipt does not prove that 
 
 ### Supporting skills
 
-- `/orangu:show-me` turns the evidence of one session, one repository or all sessions into a slide deck and a written report. `orangu show-me` writes that evidence to `data.json` in a new run directory under `~/.orangu/show-me/`. Claude reads it behind the same size gate. Then Claude writes only 3 text values to `words.json`: `verdict`, `summary` and `improvementsTitle`. Claude copies each number from `data.json` and computes no figure.
+- The show-me skill turns the evidence of one session, one repository or all sessions into a slide deck and a written report. Claude runs it when you ask for slides or a written report. `orangu show-me` writes that evidence to `data.json` in a new run directory under `~/.orangu/show-me/`. Claude reads it behind the same size gate. Then Claude writes only 3 text values to `words.json`: `verdict`, `summary` and `improvementsTitle`. Claude copies each number from `data.json` and computes no figure.
 
   `orangu show-me --render` redacts the 3 values and checks them with `orangu ste`. It fills both offline HTML files with each value as text, and checks each file against its template before it writes it. Claude writes no HTML, no suggestion record and no repository file. The skill has no Codex mirror.
 - `/orangu:interview` asks about the user, not about a finding. It asks about the role, the work and how the user runs agents. It also asks what must get better first, if orangu can propose a smaller model or a lower effort, and who gets a change. Free-text questions ask what the user tells the agent again and again, and what orangu must never propose. The user can skip each question.
 
   The skill reads no evidence, does no research and starts no agent. It writes the answers to `profile.json` at the path that `orangu suggest --profile` prints, and that write asks for permission. The answers are user-stated context, never a measurement and never an approval.
+- The feedback skill opens a private localhost form for feedback about orangu itself. Claude opens it only when you ask or accept.
 - Live observation is a CLI concern. `orangu watch` refreshes one report, and `orangu serve` follows several sessions. Neither performs model reasoning of its own.
 
 ### Text checks and permissions
 
 `improve`, `interview` and `apply` check the text that they write for the user with `orangu ste`. `orangu ste` reads a proposal from its file, and chat text from a new draft file, `~/.orangu/drafts/<skill>-<random>.md`. No draft text goes through the shell. `orangu ste` has no pass mark, so Claude fixes only the findings that are real.
 
-Each skill pre-approves by name each `orangu` verb that its steps run. No skill pre-approves all of `orangu`. `/orangu:apply` pre-approves only `orangu suggest`, `orangu ste` and `Read`. So each repository edit, each project check and each write of apply can ask you for permission. No skill pre-approves an `Edit` or a `Write` outside `~/.orangu/drafts/` and `~/.orangu/proposals/`, and `show-me` pre-approves none.
+Each skill pre-approves by name each `orangu` verb that its steps run. No skill pre-approves all of `orangu`. The apply skill pre-approves only `orangu suggest`, `orangu ste` and `Read`. So each repository edit, each project check and each write of apply can ask you for permission. No skill pre-approves an `Edit` or a `Write` outside `~/.orangu/drafts/` and `~/.orangu/proposals/`, and `show-me` pre-approves none.
 
 ## Claude Code and Codex parity
 
-The Claude Code plugin exposes `/orangu:improve`, `/orangu:interview`, `/orangu:apply`, `/orangu:show-me`, and `/orangu:feedback`. The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` holds byte-identical mirrors for source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools`, so the pre-approvals above apply only in Claude Code. `npm run verify` fails when a mirror is stale.
+The Claude Code plugin shows 2 commands in the `/` menu: `/orangu:improve` and `/orangu:interview`. Its other 3 skills, apply, show-me and feedback, are hidden, and Claude runs them through the Skill tool.
+
+The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` holds byte-identical mirrors for source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools`, so the pre-approvals above apply only in Claude Code. `npm run verify` fails when a mirror is stale.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule.
+
+## Outside Claude Code and Codex
+
+`orangu export` writes 2 files for claude.ai, Claude Desktop and the Claude API: bounded, always-redacted evidence and a portable skill. The skill reads the same brain rules as `/orangu:improve`. It cannot run orangu, so it only proposes changes. It saves, applies and checks nothing. Each proposal carries the `claude "/orangu:improve …"` command that saves it later in Claude Code.
 
 ## Why the boundary matters
 

@@ -1053,7 +1053,9 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // Codex skill in the README install line and the DETERMINISM parity list (+42 B), and 1 DETERMINISM sentence that says
     // that Codex searches inline with the same terms, so page text reaches a thread that can run commands (+108 B). A trim
     // of the parity mirror sentence pays 36 B. The cap moves 41,801 -> 41,839.
-    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(41_839)
+    // Lowered, measured 2026-11-03 (the chain in the docs, G2 of the simplify run): 40,994 B on 20d854d -> 38,561 B
+    // (-2,433). The README tells 1 chain in 70 lines (it had 125). The cap moves down to the measure + 1: 41,839 -> 38,562.
+    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_562)
     // llms.txt states a size for this file: the claim holds while the file is under it
     const claimedKb = Number(/docs concatenated \(under (\d+) KB\)/.exec(llms)?.[1])
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(claimedKb * 1_000)
