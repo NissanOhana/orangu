@@ -178,7 +178,8 @@ test('localhost queue rows are escaped, show the stored proposal whole, stay res
   const records = [
     { id: proposedId, v: 2, createdAt: 1, source: 'skill', scope: 'session', sessionIds: [SESSION], ruleId: 'saved-proposal', title: 'Saved', evidence: { estimated: true }, proposal: { ...proposal, files, evidence }, status: 'proposed', statusAt: 2 },
   ]
-  const next = `claude "/orangu:apply ${proposedId}"`
+  // apply is hidden from the / menu, so a proposed record hands its id to improve, which asks for the approval
+  const next = `claude "/orangu:improve ${proposedId}"`
   const row = { group: 'apply', id: proposedId, ids: [proposedId], status: 'proposed', scope: 'session', changeClass: 'instruction', title: '<img src=x onerror=alert(2)>', workspace: '/workspace/project', lastMoveAt: 2, earlier: [], earlierCount: 0, next }
   const queue = {
     v: 1, scope: '/workspace/project', now: 3, globalOpen: 0,
@@ -579,7 +580,7 @@ test('Dismiss sends 1 reason code for each folded record, newest first, says wha
   const rowOf = (group: 'apply' | 'review', ids: string[]) => ({
     group, id: ids[0], ids, status: group === 'apply' ? 'proposed' : 'new', scope: 'repo', workspace: '/workspace/project', lastMoveAt: 2, earlier: [], earlierCount: 0,
     title: group === 'apply' ? 'Keep one test command for the whole repository' : 'Read each file once, then keep it in context',
-    next: group === 'apply' ? `claude "/orangu:apply ${ids[0]}"` : `claude "/orangu:improve ${ids[0]}"`,
+    next: `claude "/orangu:improve ${ids[0]}"`,
   })
   const read = () => {
     const apply = open.has(single) ? [rowOf('apply', [single])] : []

@@ -214,7 +214,7 @@ describe('the Queue section: the row copy of each case', () => {
     ['a later reason', item('review', { cannotVerify: 'some-later-reason', next: verify() }), 'orangu cannot verify this change.'],
     ['regressed', item('regressed', { status: 'regressed', next: verify() }),
       'Regressed. On the complete later sessions, a check moved beyond chance in a direction that it should not. Copy the command. Claude asks you to keep the change or to undo it.'],
-    ['a proposal to apply', item('apply', { status: 'proposed', next: `claude "/orangu:apply ${ID}"` }), 'Review the proposal. Then copy the apply command.'],
+    ['a proposal to apply', item('apply', { status: 'proposed', next: `claude "/orangu:improve ${ID}"` }), 'Review the proposal. Then copy the apply command.'],
     ['a finding', item('review', { status: 'new', next: `claude "/orangu:improve ${ID}"` }), 'Copy the command to get one proposal from Claude.'],
     ['a global proposal', item('review', { status: 'proposed', scope: 'global' }), 'Global proposals are for review only. Claude applies nothing from here.'],
     ['a running record', item('running', { status: 'kicked-off', next: `claude "/orangu:improve ${ID}"` }),
@@ -293,11 +293,11 @@ describe('the Queue section: the open row', () => {
 
   it('shows the stored proposal under a closed Proposal disclosure, keyed apart and with no apply handoff', () => {
     const record = { ...recordOf(ID, { status: 'proposed', proposal: { ...proposalOf(), files: ['a', 'b', 'c', 'd', 'e', 'f', 'g'] } }) } as SuggestionViewRecord
-    const html = queueSection(view(readOf([item('apply', { status: 'proposed', next: `claude "/orangu:apply ${ID}"` })])), context({ records: new Map([[ID, record]]), details: proposalsUi.details }))
+    const html = queueSection(view(readOf([item('apply', { status: 'proposed', next: `claude "/orangu:improve ${ID}"` })])), context({ records: new Map([[ID, record]]), details: proposalsUi.details }))
     expect(html).toContain(`<details class="why" id="qp-${ID}"><summary><span class="chev" aria-hidden="true">▸</span>Proposal</summary><div class="sg-proposal">`)
     expect(html).toContain(`id="more-q-${ID}-files"`)
     expect(html).not.toContain('aria-label="Apply handoff"')
-    expect(html.split(`data-copy="claude &quot;/orangu:apply ${ID}&quot;"`).length - 1).toBe(2)
+    expect(html.split(`data-copy="claude &quot;/orangu:improve ${ID}&quot;"`).length - 1).toBe(2)
   })
 })
 
@@ -398,7 +398,7 @@ describe('the Queue section: every workspace', () => {
   const all = (): QueueRead => {
     const rows = [
       item('wait', { workspace: here }),
-      item('apply', { id: OTHER, ids: [OTHER], status: 'proposed', workspace: '~/code/billing', next: `claude "/orangu:apply ${OTHER}"` }),
+      item('apply', { id: OTHER, ids: [OTHER], status: 'proposed', workspace: '~/code/billing', next: `claude "/orangu:improve ${OTHER}"` }),
       item('review', { id: 'sg_00000000a003', ids: ['sg_00000000a003'], status: 'proposed', scope: 'global', workspace: null }),
       item('review', { id: 'sg_00000000a004', ids: ['sg_00000000a004'], status: 'new', workspace: null, next: 'claude "/orangu:improve sg_00000000a004"' }),
     ]

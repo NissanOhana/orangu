@@ -138,7 +138,8 @@ describe('the front doors: no person surface names the store API', () => {
   it('each next of the queue is a handoff or null, and the printed queue names no store command', () => {
     const items = nextTableItems()
     for (const [label, item] of items) {
-      if (item.next !== null) expect(item.next, label).toMatch(/^claude "\/orangu:(?:improve(?: --verify)?|apply) sg_[0-9a-f]{12}"$/)
+      // C10 (2026-11-01): apply is hidden, so a proposed record hands its id to improve, which asks for the approval
+      if (item.next !== null) expect(item.next, label).toMatch(/^claude "\/orangu:improve(?: --verify)? sg_[0-9a-f]{12}"$/)
     }
     expect(items.filter(([, item]) => item.next !== null)).toHaveLength(10)
     for (const scope of ['workspace', 'all'] as const) expect(storeApiLines(`queue text (${scope})`, queueLines(queueFixture(scope), 80).join('\n'))).toEqual([])

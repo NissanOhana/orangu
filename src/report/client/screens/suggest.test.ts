@@ -152,7 +152,8 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('<li>seven</li>')
     expect(markup).not.toContain('+2 more')
     expect(markup).not.toContain('<script>')
-    expect(markup).toContain(`data-copy="claude &quot;/orangu:apply ${id}&quot;"`)
+    expect(markup).toContain(`data-copy="claude &quot;/orangu:improve ${id}&quot;"`)
+    expect(markup, 'apply is hidden, so no handoff types it').not.toContain('/orangu:apply')
     expect(markup).not.toContain(`data-copy="$orangu-apply ${id}"`)
     expect(markup).not.toContain('<span>Codex</span>')
     expect(markup).toContain('Copy only. Nothing runs here.')
@@ -183,6 +184,7 @@ describe('renderSuggest proposal UX', () => {
     expect(markup).toContain('Later-session comparison passed')
     expect(markup).toContain('&lt;zero&gt;')
     expect(markup).not.toContain(`/orangu:apply ${record.id}`)
+    expect(markup, 'a verified record gets no apply handoff').not.toContain(`/orangu:improve ${record.id}`)
   })
 
   it('renders a noise-checked cohort receipt with its summary and graded comparisons', () => {

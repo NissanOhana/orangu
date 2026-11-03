@@ -420,7 +420,7 @@ QueueItem = {
 |---|---|---|
 | `applied`, due | `verdict` | `claude "/orangu:improve --verify <id>"` |
 | `regressed` | `regressed` | `claude "/orangu:improve --verify <id>"` |
-| `proposed`, session or repo scope | `apply` | `claude "/orangu:apply <id>"` |
+| `proposed`, session or repo scope | `apply` | `claude "/orangu:improve <id>"`: improve asks you to approve the id, then applies it |
 | `new` or `failed` | `review` | `claude "/orangu:improve <id>"` |
 | `proposed`, global scope (only with `--all`) | `review` | `null` |
 | `applied`, `cannotVerify` `baseline-gone` or `legacy-record` | `review` | `claude "/orangu:improve --verify <id>"` |

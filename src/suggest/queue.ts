@@ -140,9 +140,12 @@ export function verifyCommand(id: string): string {
   return `claude "/orangu:improve --verify ${canonicalId(id)}"`
 }
 
-/** The handoff that applies a reviewed proposal. */
+/**
+ * The handoff of a reviewed proposal. Claude Code does not run a typed /orangu:apply, because the skill is hidden from
+ * the / menu. So improve takes the id, asks the user to approve it, and then invokes apply.
+ */
 export function applyCommand(id: string): string {
-  return `claude "/orangu:apply ${canonicalId(id)}"`
+  return `claude "/orangu:improve ${canonicalId(id)}"`
 }
 
 /** A frozen baseline that passes the store's own check, or undefined. */

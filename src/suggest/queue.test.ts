@@ -30,7 +30,8 @@ import {
 } from './queue.js'
 import type { SuggestionRecord } from './types.js'
 
-const NEXT_RE = /^claude "\/orangu:(improve( --verify)?|apply) sg_[0-9a-f]{12}"$/
+// C10 (2026-11-01): apply is hidden from the / menu, so no handoff types it. A proposed record goes to improve.
+const NEXT_RE = /^claude "\/orangu:improve(?: --verify)? sg_[0-9a-f]{12}"$/
 const ran = (over: Partial<Extract<QueueCheck, { check: 'ran' }>> = {}): QueueCheck => ({ check: 'ran', checkpoint: 'first', verdict: 'within-noise', final: false, ...over })
 /** Discovery file times of a workspace: 3 sessions before the change and 3 quiet ones after it. */
 const sixTimes = (): number[] => [APPLIED_AT - 3_000, APPLIED_AT - 2_000, APPLIED_AT - 1_000, APPLIED_AT + 1_000, APPLIED_AT + 2_000, APPLIED_AT + 3_000]
@@ -217,7 +218,7 @@ describe('buildQueue: the next step is a handoff or null', () => {
 
   it('names the 2 handoff forms and refuses an id that is not a canonical suggestion id', () => {
     expect(verifyCommand(sg(1))).toBe(`claude "/orangu:improve --verify ${sg(1)}"`)
-    expect(applyCommand(sg(1))).toBe(`claude "/orangu:apply ${sg(1)}"`)
+    expect(applyCommand(sg(1))).toBe(`claude "/orangu:improve ${sg(1)}"`)
     for (const bad of ['sg_1', 'sg_00000000000g', `${sg(1)}" ; rm -rf ~ "`, '']) {
       expect(() => verifyCommand(bad)).toThrow(/not a suggestion id/)
       expect(() => applyCommand(bad)).toThrow(/not a suggestion id/)

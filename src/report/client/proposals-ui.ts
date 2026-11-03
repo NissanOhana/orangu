@@ -69,7 +69,8 @@ function applyHandoffs(record: SuggestionRecord): string {
     !Array.isArray(proposal.files) ||
     proposal.files.length === 0
   ) return ''
-  return `<div class="sg-handoffs" aria-label="Apply handoff"><div class="small muted">Copy only. Nothing runs here.</div><div class="sg-hand"><span>Claude</span>${commandBlock(`claude "/orangu:apply ${record.id}"`)}</div></div>`
+  // apply is hidden from the / menu: improve takes the id, asks the user to approve it, and then invokes apply
+  return `<div class="sg-handoffs" aria-label="Apply handoff"><div class="small muted">Copy only. Nothing runs here.</div><div class="sg-hand"><span>Claude</span>${commandBlock(`claude "/orangu:improve ${record.id}"`)}</div></div>`
 }
 
 /**

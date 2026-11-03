@@ -140,9 +140,11 @@ describe('proposal block keys and handoffs', () => {
     expect(html).not.toContain(`id="more-${ID}-files"`)
   })
 
+  // C-5b (2026-11-01): apply is hidden from the / menu, so the handoff copies improve, which asks for the approval
   it('leaves out the apply handoff when the caller asks, and keeps it by default', () => {
-    expect(proposalsUi.details(record())).toContain(`claude &quot;/orangu:apply ${ID}&quot;`)
-    expect(proposalsUi.details(record(), ID, false)).not.toContain('/orangu:apply')
+    expect(proposalsUi.details(record())).toContain(`claude &quot;/orangu:improve ${ID}&quot;`)
+    expect(proposalsUi.details(record())).not.toContain('/orangu:apply')
+    expect(proposalsUi.details(record(), ID, false)).not.toContain('/orangu:improve')
   })
 })
 
