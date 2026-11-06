@@ -32,12 +32,6 @@ const APPLY_MAY_NAME = ['plugin/skills/apply/', 'plugin/skills/improve/', CATALO
 /** A file that still names a command that it may not name, and the chunk that rewrites it. */
 const BASELINE: Readonly<Record<string, string>> = {
   'site/index.src.html': 'C-9, the landing rewrite',
-  'README.md': 'C-8a, the chain in the docs',
-  'site/llms.src.txt': 'C-8a, the chain in the docs',
-  'docs/ARCHITECTURE.md': 'C-8a, the chain in the docs',
-  'docs/DETERMINISM.md': 'C-8a, the chain in the docs',
-  // :25-26 name /orangu:show-me and /orangu:apply as commands
-  'SECURITY.md': 'C-8a, the chain in the docs',
 }
 const TEXT = /\.(?:md|ts|tsx|mjs|js|json|yaml|yml|html|txt|css|jsonl)$/
 
