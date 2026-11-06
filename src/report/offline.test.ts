@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest'
 import { parseClaudeCodeSession } from '../adapters/claude-code/parse.js'
 import { analyzeSession } from '../analyze/analyze.js'
 import { renderReport } from './render.js'
-import { CLIENT_JS, CLIENT_JS_AGG, CLIENT_JS_SERVE } from './generated/client-bundle.js'
+import { CLIENT_CSS, CLIENT_JS, CLIENT_JS_AGG, CLIENT_JS_SERVE } from './generated/client-bundle.js'
 import { MASCOT_STACKED } from '../cli/mascot-ascii.js'
 import { buildCanonicalSession } from '../../test/fixtures/session-builder.js'
 
@@ -383,5 +383,12 @@ describe('offline report', () => {
     // 2026-11-01 start view review: +25 B (72,664 -> 72,689), re-measured after `npm run build`, cap unchanged. The same
     // part as the aggregate bundle: the "All live" item of the sidebar names no session, so it opens the fleet.
     expect(CLIENT_JS.length).toBe(72689)
+  })
+
+  it('pins the size of the shared stylesheet', () => {
+    // No test bounded CLIENT_CSS before 2026-11-06 (tokens.css + styles.css, inlined into every report, the app and the
+    // samples). Measured after `npm run build`: 39,032 B before the start view, 44,830 B with it (C-3), 45,036 B with
+    // the chain lines and the phone fixes (C-8b). Re-measure after a CSS change, and name the cause here.
+    expect(CLIENT_CSS.length).toBe(45036)
   })
 })
