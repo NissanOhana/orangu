@@ -495,6 +495,7 @@ a.srow:hover { background: var(--bg2); text-decoration: none; }
 .start-next .cmd { margin-top: 10px; }
 .start-next ul { margin: 10px 0 0; padding-left: 18px; font-size: 13.5px; color: var(--ink2); }
 .start-next li + li { margin-top: 2px; }
+.start-next hr { margin: 16px 0 0; border: 0; border-top: 1px dashed var(--border2); }
 .start-empty { margin-top: 20px; }
 .roots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .roots code { font-size: 12.5px; background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 3px 8px; overflow-wrap: anywhere; }
@@ -519,6 +520,8 @@ a.srow:hover { background: var(--bg2); text-decoration: none; }
   nav a.navitem { white-space: nowrap; }
   .main { overflow: visible; }
   .page { padding: 16px; }
+  /* 48 px under the start view: its last control clears the fixed feedback link */
+  .start { padding-bottom: 32px; }
   .overview-hero { padding: 18px; }
   .overview-brand { width: 96px; height: 96px; }
   .overview-brand .logo { width: 82px; height: 82px; }
