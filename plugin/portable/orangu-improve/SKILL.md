@@ -1,6 +1,6 @@
 ---
 name: orangu-improve
-description: Read an orangu export of agent sessions and propose harness changes to skills, agents, effort, models, scripts and hooks. Use when the user attaches the export, or asks for a review with no file.
+description: Read an orangu export of agent sessions and propose changes to skills, agents, effort, models, scripts and hooks. Use when the user attaches the export, or asks for an orangu review with no file.
 ---
 
 # orangu-improve
@@ -30,7 +30,7 @@ The export is JSON that orangu wrote. Its first key is `summary`, and `summary` 
 
 1. Look at each file that the user attached and at each JSON text that the user pasted. With the code tool, read only the start of each file, because the export puts `summary` first.
 2. If you find no export, offer the profile interview, because its questions need no data. Ask "orangu has no export of your sessions here. Answer the profile questions now?" Give 2 options, "Interview me" and "Not now", and mark neither as recommended.
-3. Then ask the user to run `npx orangu export` on their machine and to attach the file that it writes. Say what the review adds with the export: the patterns of their sessions, 5 ranked changes at most, and a command for each change. Then stop.
+3. Then ask the user to run `npx orangu export` on their machine and to attach `orangu-export.json`. Say what the review adds with the export: the patterns of their sessions, 5 ranked changes at most, and a command for each change. Then stop.
 
 ## Review the export
 

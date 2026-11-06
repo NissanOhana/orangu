@@ -212,8 +212,8 @@ const PORTABLE = 'orangu-improve'
 // the 6 frontmatter keys that claude.ai and the API accept, less allowed-tools: the portable skill grants no tool
 const PORTABLE_KEYS = ['name', 'description', 'license', 'compatibility', 'metadata']
 // A command is in code: each fenced block and each code span (test/plugin.test.ts:258-270). Prose such as "an orangu
-// export" is not a command.
-const MD_FENCES = /^```[^\n]*\n([\s\S]*?)^```/gm
+// export" is not a command. A fence may have spaces before it, as a fence inside a list item has.
+const MD_FENCES = /^[ \t]*```[^\n]*\n([\s\S]*?)^[ \t]*```/gm
 const codeCommands = (markdown) =>
   [...[...markdown.matchAll(MD_FENCES)].map((m) => m[1]), ...[...markdown.replace(MD_FENCES, '').matchAll(/`([^`\n]+)`/g)].map((m) => m[1])].flatMap((code) =>
     [...code.matchAll(/(?:^|[\s$(|;&])orangu ([a-z][a-z-]*)|orangu\.cli\.mjs"? ([a-z][a-z-]*)/gm)].map((m) => `orangu ${m[1] ?? m[2]}`),

@@ -61,8 +61,11 @@ function frontmatter(skill: string): Array<[string, string]> {
   })
 }
 
-/** The orangu commands in the code of a Markdown file: each fenced block and each code span (test/plugin.test.ts:266-270). */
-const fences = /^```[^\n]*\n([\s\S]*?)^```/gm
+/**
+ * The orangu commands in the code of a Markdown file: each fenced block and each code span (test/plugin.test.ts:266-270).
+ * A fence may have spaces before it, as the fence inside a list item of SKILL.md has.
+ */
+const fences = /^[ \t]*```[^\n]*\n([\s\S]*?)^[ \t]*```/gm
 const commandVerbs = (markdown: string): string[] =>
   [...[...markdown.matchAll(fences)].map((m) => m[1]!), ...[...markdown.replace(fences, '').matchAll(/`([^`\n]+)`/g)].map((m) => m[1]!)].flatMap((code) =>
     [...code.matchAll(/(?:^|[\s$(|;&])orangu ([a-z][a-z-]*)|orangu\.cli\.mjs"? ([a-z][a-z-]*)/gm)].map((m) => (m[1] ?? m[2])!),

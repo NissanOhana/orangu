@@ -1072,15 +1072,19 @@ describe('plugin packaging', () => {
     // the export and says what the review adds (+75). It gives each size in bytes and in tokens before the 20 KB gate
     // (+16). A null profile gets the opt-out question of improve first (+46). Each command goes in a code block, needs
     // Claude Code with the orangu plugin, and gets its finding diagnosed again there (+29). 2 headings split the steps (+8).
-    const PORTABLE_WORD_CEILING = 778
+    // The re-check (2026-11-06): 778 -> 774, measured 777 -> 773 (-4). Step 3 names `orangu-export.json`.
+    const PORTABLE_WORD_CEILING = 774
     it('has the 2 frontmatter keys of the SPEC, in a form that a strict YAML parser reads', () => {
       // The SPEC draft wrote "harness changes: skills, ...". A plain YAML value with ": " in it is a parse error.
       expect(skill().split('\n').slice(0, 4)).toEqual([
         '---',
         'name: orangu-improve',
-        'description: Read an orangu export of agent sessions and propose harness changes to skills, agents, effort, models, scripts and hooks. Use when the user attaches the export, or asks for a review with no file.',
+        'description: Read an orangu export of agent sessions and propose changes to skills, agents, effort, models, scripts and hooks. Use when the user attaches the export, or asks for an orangu review with no file.',
         '---',
       ])
+      // The re-check (2026-11-06, major): "a review with no file" named no orangu scope, so a request such as "review my
+      // plan" could load the skill in claude.ai. The case with no file names orangu.
+      expect(skill().split('\n')[2], 'the case with no file names orangu').toContain('or asks for an orangu review with no file.')
     })
     it('names no orangu command but `npx orangu export`, no tool of 1 host, no plugin root and no file outside references/', () => {
       expect(commandVerbs(skill()), 'the 1 orangu command').toEqual(['export'])
@@ -1127,7 +1131,7 @@ describe('plugin packaging', () => {
       const steps = [
         '2. If you find no export, offer the profile interview, because its questions need no data.',
         'Ask "orangu has no export of your sessions here. Answer the profile questions now?" Give 2 options, "Interview me" and "Not now", and mark neither as recommended.',
-        '3. Then ask the user to run `npx orangu export` on their machine and to attach the file that it writes.',
+        '3. Then ask the user to run `npx orangu export` on their machine and to attach `orangu-export.json`.',
         'Say what the review adds with the export: the patterns of their sessions, 5 ranked changes at most, and a command for each change. Then stop.',
       ]
       for (const step of steps) expect(skill(), step).toContain(step)
