@@ -411,7 +411,7 @@ Each skill pre-approves by name each `orangu` verb that its steps run. No skill 
 
 The Claude Code plugin shows 2 commands in the `/` menu: `/orangu:improve` and `/orangu:interview`. Its other 3 skills, apply, show-me and feedback, are hidden, and Claude runs them through the Skill tool.
 
-The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` holds byte-identical mirrors for source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools` and `user-invocable`, so the pre-approvals and the hidden skills apply only in Claude Code. `npm run verify` fails when a mirror is stale.
+The Codex marketplace package under `plugins/orangu/` exposes Orangu's own `$orangu-improve`, `$orangu-interview`, `$orangu-apply`, and `$orangu-feedback` skills with the bundled offline CLI. `.agents/skills/` holds byte-identical mirrors for source checkouts. `scripts/build.mjs` generates both mirrors from `plugin/skills/`, so one edit updates every host. The mirrors drop `allowed-tools`, `user-invocable`, `model` and `effort`, so the pre-approvals, the hidden skills and the model choice apply only in Claude Code. `npm run verify` fails when a mirror is stale.
 
 Both host variants use the same Orangu CLI evidence bundle, manifest and receipt schemas, state machine, scope policy, and session-verification rule.
 

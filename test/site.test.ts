@@ -267,7 +267,10 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // Named growth, measured 2026-11-06 after the rebase on ede8917 (the hidden skills): 38,631 B -> 38,668 B (+37).
     // Cause: DETERMINISM says that the Codex mirrors drop `user-invocable` too, so the hidden skills stay hidden only in
     // Claude Code (scripts/build.mjs drops the line since C-5b). The cap moves 38,632 -> 38,669.
-    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_669)
+    // Named growth, measured 2026-11-06 after C-14 (the 1-prompt chain): 38,667 B -> 38,704 B (+37). Cause: DETERMINISM
+    // says that the mirrors also drop `model` and `effort` (scripts/build.mjs drops them since C-14), so the model
+    // choice applies only in Claude Code. The cap moves 38,669 -> 38,705.
+    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_705)
     // llms.txt states a size for this file: the claim holds while the file is under it
     const claimedKb = Number(/docs concatenated \(under (\d+) KB\)/.exec(llms)?.[1])
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(claimedKb * 1_000)
