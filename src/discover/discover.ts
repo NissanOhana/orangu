@@ -157,7 +157,7 @@ export const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[
 export const MAX_DISCOVERY_DIRECTORY_ENTRIES = 25_000
 /**
  * The most entries that one discovery walk reads in all directories together. A heavy machine holds about 6.5
- * entries for each session (2026-11-06: 55,188 entries for 8,480 sessions), so the session cap binds first.
+ * entries for each session, so the session cap binds first.
  */
 export const MAX_DISCOVERY_TOTAL_ENTRIES = 500_000
 export const MAX_DISCOVERED_SESSIONS = 25_000
