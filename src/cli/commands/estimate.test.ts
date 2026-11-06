@@ -13,10 +13,14 @@ import { SuggestionStore } from '../../suggest/store.js'
 let home: string
 let fixturePath: string
 let out: string[]
+let previousHome: string | undefined
 
 beforeEach(() => {
   home = mkdtempSync(join(tmpdir(), 'orangu-est-'))
   process.env['ORANGU_HOME'] = home
+  // a missing session is looked up in the home roots: an empty HOME keeps the real ~/.claude out of the test
+  previousHome = process.env['HOME']
+  process.env['HOME'] = mkdtempSync(join(tmpdir(), 'orangu-est-home-'))
   const dir = mkdtempSync(join(tmpdir(), 'orangu-sess-'))
   fixturePath = join(dir, 'aaaaaaaa-0000-4000-8000-000000000001.jsonl')
   writeFileSync(fixturePath, buildCanonicalSession().toJsonl())
@@ -28,6 +32,8 @@ beforeEach(() => {
 })
 afterEach(() => {
   delete process.env['ORANGU_HOME']
+  if (previousHome === undefined) delete process.env['HOME']
+  else process.env['HOME'] = previousHome
   delete process.env[CONFIRMATION_PUBLIC_KEY_ENV]
   vi.restoreAllMocks()
 })
