@@ -1,7 +1,7 @@
 {
   "name": "orangu",
   "description": "Improve your agent harness and your setup. The brain, /orangu:improve, finds patterns in your local Claude Code, Cowork and Desktop sessions and proposes changes. It applies only the changes that you approve by id, and orangu checks each one on your later sessions. Run /orangu:interview to tune the proposals to your role and your work.",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "author": {
     "name": "Nissan Ohana"
   },

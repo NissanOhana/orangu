@@ -1,6 +1,6 @@
 # orangu
 
-> orangu helps you improve your agent harness and your setup: better results with fewer tokens. The orangu 0.14.0
+> orangu helps you improve your agent harness and your setup: better results with fewer tokens. The orangu 0.14.1
 > CLI reads the `.jsonl` transcripts of Claude Code, Cowork and Desktop sessions that are already on your disk. It
 > measures them with plain code, offline, with no model: one session, your sessions and their agents, or the whole
 > machine. The chain has 3 steps. `npx orangu` shows the evidence and the first findings. `/orangu:improve`, the
