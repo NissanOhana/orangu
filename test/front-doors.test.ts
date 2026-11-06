@@ -19,6 +19,7 @@ import { queueLines } from '../src/cli/commands/suggest-reads.js'
 import { appBlock, nextStepLines, type NextStep } from '../src/cli/summary.js'
 import { MACHINE_CAPS, stripAnsi } from '../src/cli/tty.js'
 import type { Analysis } from '../src/model/analysis.js'
+import { nextHtml } from '../src/report/client/start-ui.js'
 import { kickoffCommands } from '../src/suggest/id.js'
 import { QUEUE_GROUPS, buildQueue, type QueueCheck, type QueueItem } from '../src/suggest/queue.js'
 import type { SuggestionRecord } from '../src/suggest/types.js'
@@ -182,5 +183,17 @@ describe('the front doors quote no money and add no dependency', () => {
       expect(currencyHits(text), `${label}: currency amount`).toEqual([])
       expect(moneyHits(text), `${label}: money vocabulary`).toEqual([])
     }
+  })
+})
+
+describe('the chain lines say only what the skills do', () => {
+  it('the first-run lines of the help, the terminal and the app need the first-run question of /orangu:improve', () => {
+    // the short help, bare orangu and the Next card of the app say what the first run of improve asks
+    expect(helpText()).toContain('\n  /orangu:interview  3. Tune: tell orangu your role and how you work.\n                     The first run of /orangu:improve asks for it.\n')
+    expect(appRows()).toContain(CLOSING_LINES[0])
+    expect(nextHtml(undefined)).toContain('<li>The first run asks about your role and your work.</li>')
+    // so the first run of improve (no profile and an empty todo read) asks 1 question that offers the interview
+    const improve = read('plugin/skills/improve/SKILL.md')
+    for (const option of ['Interview me first', 'Review without it']) expect(improve.includes(option), `plugin/skills/improve/SKILL.md offers "${option}"`).toBe(true)
   })
 })
