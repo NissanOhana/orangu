@@ -1,7 +1,9 @@
 ---
 name: improve
-description: Find patterns in agent sessions, and propose ranked changes to skills, agents, effort, models and scripts. Use when the user asks what to change so the next run or session goes better. Use it when the same problem keeps recurring, or for a review of the whole setup. Also use when the user pastes a suggestion id from a report, or wants an applied change verified against later sessions. It applies only the changes that the user approves by id. Not for the profile answers: /orangu:interview.
+description: Find patterns in agent sessions: with no input, it measures, investigates, offers an interview and suggests changes. Use when the user asks what to change so the next run or session goes better. Use it when the same problem keeps recurring, or for a review of the whole setup. Also use when the user pastes a suggestion id from a report, or wants an applied change verified against later sessions. It applies only the changes that the user approves by id. Not for a profile: /orangu:interview.
 allowed-tools: Bash(orangu analyze:*), Bash(orangu estimate:*), Bash(orangu evidence:*), Bash(orangu global:*), Bash(orangu harness:*), Bash(orangu repo:*), Bash(orangu ste:*), Bash(orangu suggest:*), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" analyze *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" estimate *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" evidence *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" global *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" harness *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" repo *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" ste *), Bash(node "${CLAUDE_PLUGIN_ROOT}/bin/orangu.cli.mjs" suggest *), Bash(mktemp -d), Read, Agent, Skill(orangu:interview), Write(~/.orangu/proposals/**), Edit(~/.orangu/drafts/improve-*.md)
+model: best
+effort: high
 ---
 
 # /orangu:improve
@@ -29,7 +31,9 @@ Accept one input, or none:
 - `--verify <suggestion-id>` to compare an applied session or repo change with later sessions (ignore any later-input after the id).
 - Words that name a session, finding, id or path, such as "that last run".
 
-With no input, take the first item of `orangu suggest --todo --json --quiet`. For a suggestion id, step 1 loads its record. The status of the item or the record picks the route:
+With no input, run [the review](references/review.md) in its 4 steps: measure, investigate, an optional interview, then suggest. Before it, run `orangu suggest --todo --json --quiet`. If the queue holds open items, name their count in the report, and offer them after the run.
+
+For a suggestion id, step 1 loads its record. Its status picks the route:
 
 - `applied` or `regressed`: run step 6.
 - `proposed`: give a second opinion, then ask the user to approve it by id, as stage 6 of the review directs.
@@ -37,10 +41,6 @@ With no input, take the first item of `orangu suggest --todo --json --quiet`. Fo
 - Any other status: say that the record is closed, and stop.
 
 Handle 1 item in each run. Then offer the review once.
-
-With no item and a profile file, run the review. With no item and no profile file, this is the first run. Ask 1 question (AskUserQuestion): "orangu does not know your role and your work yet. Start with the interview?" Give 2 options, "Interview me first" and "Review without it", and mark neither as recommended.
-
-For "Interview me first", invoke `/orangu:interview` through the Skill tool. When it returns, read the profile again. Then run the review. If the Skill tool is unavailable, ask the user to run `/orangu:interview`, and stop.
 
 Diagnose any accepted input in chat. Save only inside its scope's lifecycle:
 

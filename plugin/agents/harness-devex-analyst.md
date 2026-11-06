@@ -1,6 +1,7 @@
 ---
 name: harness-devex-analyst
 description: Workflow-friction lens over deterministic orangu repo or global evidence files. Dispatched by /orangu:improve with a declared-vs-used harness inventory, a recurring-session aggregate, the selected scope, and optional slim evidence files. It identifies evidence-backed retries, waiting, prompts, context churn, and configuration mismatch, then names the smallest fitting change class. It does not measure, research, write, execute, or inspect files beyond those paths.
+model: inherit
 effort: max
 tools: Read, Grep, Glob
 disallowedTools: Edit, Write, NotebookEdit, Bash, WebSearch, WebFetch
