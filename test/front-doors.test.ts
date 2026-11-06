@@ -11,13 +11,16 @@
  *
  * The sweep has no allowlist. A hit names its surface and its line: fix the copy, never this test.
  */
-import { readFileSync, readdirSync } from 'node:fs'
+import { mkdtempSync, readFileSync, readdirSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { ROOT, helpText, sessionTerminalViews } from '../scripts/ste-surfaces.js'
+import { CLI_VERBS } from '../src/cli/commands/index.js'
 import { queueLines } from '../src/cli/commands/suggest-reads.js'
 import { appBlock, nextStepLines, type NextStep } from '../src/cli/summary.js'
 import { MACHINE_CAPS, stripAnsi } from '../src/cli/tty.js'
+import { EXPORT_FILE, SKILL_ZIP_FILE, writeExportRun } from '../src/export/write.js'
 import type { Analysis } from '../src/model/analysis.js'
 import { nextHtml } from '../src/report/client/start-ui.js'
 import { kickoffCommands } from '../src/suggest/id.js'
@@ -195,5 +198,13 @@ describe('the chain lines say only what the skills do', () => {
     // so the first run of improve (no profile and an empty todo read) asks 1 question that offers the interview
     const improve = read('plugin/skills/improve/SKILL.md')
     for (const option of ['Interview me first', 'Review without it']) expect(improve.includes(option), `plugin/skills/improve/SKILL.md offers "${option}"`).toBe(true)
+  })
+
+  it('the export line of the app needs the export verb and an export run of exactly 2 files', async () => {
+    // the Next card of the app says to run npx orangu export, and to upload the 2 files that it writes
+    expect(nextHtml(undefined)).toContain('<p>Not in Claude Code? Run <code>npx orangu export</code>. Then upload the 2 files to claude.ai, Claude Desktop or the Claude API.</p>')
+    expect(CLI_VERBS).toContain('export')
+    const run = await writeExportRun('{}\n', { base: join(mkdtempSync(join(tmpdir(), 'orangu-front-doors-export-')), 'export') })
+    expect(readdirSync(run.dir).sort()).toEqual([EXPORT_FILE, SKILL_ZIP_FILE].sort())
   })
 })
