@@ -270,7 +270,10 @@ describe('site/llms.txt and site/llms-full.txt (generated machine-readable index
     // Named growth, measured 2026-11-06 after C-14 (the 1-prompt chain): 38,667 B -> 38,704 B (+37). Cause: DETERMINISM
     // says that the mirrors also drop `model` and `effort` (scripts/build.mjs drops them since C-14), so the model
     // choice applies only in Claude Code. The cap moves 38,669 -> 38,705.
-    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_705)
+    // Named growth, measured 2026-11-06 after the 0.14.0 release: 38,704 B -> 38,738 B (+34). Cause: DETERMINISM names
+    // the 2 discovery caps (25,000 entries in one directory, 500,000 in all), as src/discover/discover.ts has them since
+    // the cap fix. The cap moves 38,705 -> 38,739.
+    expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(38_739)
     // llms.txt states a size for this file: the claim holds while the file is under it
     const claimedKb = Number(/docs concatenated \(under (\d+) KB\)/.exec(llms)?.[1])
     expect(Buffer.byteLength(full, 'utf8')).toBeLessThan(claimedKb * 1_000)
