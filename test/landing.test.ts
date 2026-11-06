@@ -712,9 +712,16 @@ describe('the landing head script and the copy and theme script', () => {
     }
   })
 
-  it('copies each command, reads Copied, tells a screen reader, and goes back to Copy', async () => {
+  it('copies each command, reads Copied or Not copied, tells a screen reader the result, and goes back to Copy', async () => {
     expect(tail, 'the copy and theme script').toBeDefined()
-    for (const withClipboard of [true, false]) {
+    const cases = [
+      { withClipboard: true, works: true },
+      { withClipboard: false, works: true },
+      { withClipboard: true, works: false },
+      { withClipboard: false, works: false },
+    ]
+    for (const { withClipboard, works } of cases) {
+      const name = `${withClipboard ? 'clipboard' : 'legacy copy'} ${works ? 'works' : 'is refused'}`
       let click: ((event: unknown) => void) | undefined
       let copied = ''
       let legacyCopy = false
@@ -732,27 +739,30 @@ describe('the landing head script and the copy and theme script', () => {
         createElement: () => area,
         execCommand: (command: string) => {
           legacyCopy = command === 'copy'
-          return true
+          return works
         },
         body: { appendChild: () => {} },
       }
+      const writeText = async (text: string): Promise<void> => {
+        copied = text
+        if (!works) throw new Error('NotAllowedError')
+      }
       runInNewContext(tail!, {
         document,
-        navigator: withClipboard ? { clipboard: { writeText: async (text: string) => void (copied = text) } } : {},
+        navigator: withClipboard ? { clipboard: { writeText } } : {},
         localStorage: { getItem: () => null, setItem: () => {} },
         setTimeout: (fn: () => void) => timers.push(fn),
         clearTimeout: () => {},
       })
       click!({ target: { closest: () => button } })
-      await Promise.resolve()
-      await Promise.resolve()
-      if (withClipboard) expect(copied).toBe('/plugin install orangu')
-      else expect(legacyCopy).toBe(true)
-      expect(label.textContent).toBe('Copied')
-      expect(note.textContent).toBe('Copied to the clipboard.')
+      for (let tick = 0; tick < 4; tick += 1) await Promise.resolve()
+      if (withClipboard) expect(copied, name).toBe('/plugin install orangu')
+      else expect(legacyCopy, name).toBe(true)
+      expect(label.textContent, name).toBe(works ? 'Copied' : 'Not copied')
+      expect(note.textContent, name).toBe(works ? 'Copied to the clipboard.' : 'The copy did not work. Type the command: /plugin install orangu')
       timers.forEach((timer) => timer())
-      expect(label.textContent).toBe('Copy')
-      expect(note.textContent).toBe('')
+      expect(label.textContent, name).toBe('Copy')
+      expect(note.textContent, name).toBe('')
     }
   })
 

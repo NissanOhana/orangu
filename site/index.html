@@ -670,7 +670,7 @@ html{scroll-behavior:smooth}
       </article>
       <article class="host reveal">
         <h3>claude.ai, Claude Desktop and the Claude API</h3>
-        <p>Run <code>npx orangu export</code>. Upload the skill once. Then add your evidence to a chat.</p>
+        <p>Run <code>npx orangu export</code>. Upload the zip once as a custom skill. Then add your evidence to a chat.</p>
         <div class="stack"><div class="cmdrow"><code>npx orangu export</code><button class="cp2" type="button" data-cmd="npx orangu export" data-copied="Copied" aria-label="Copy the command npx orangu export"><span data-lbl="Copy">Copy</span></button></div></div>
       </article>
       <article class="host reveal">
@@ -891,22 +891,23 @@ if(!customElements.get('qtc-triad'))customElements.define('qtc-triad',QtcTriad);
     apply(next)
   })
   apply(pref)
-  // A copy button copies its command. Its label reads Copied for 1.6 s, and the live region tells a screen reader.
+  // A copy button copies its command. Its label reads Copied, or Not copied when the browser refuses, for 1.6 s.
+  // The live region tells a screen reader the same result, and on a refusal it gives the command to type.
   document.addEventListener('click', function (ev) {
     var b = ev.target && ev.target.closest ? ev.target.closest('button[data-cmd]') : null
     if (!b) return
     var label = b.querySelector('[data-lbl]') || b
-    var done = function () {
-      label.textContent = b.getAttribute('data-copied') || 'Copied'
-      note.textContent = 'Copied to the clipboard.'
+    var command = b.getAttribute('data-cmd') || ''
+    var show = function (ok) {
+      label.textContent = ok ? b.getAttribute('data-copied') || 'Copied' : 'Not copied'
+      note.textContent = ok ? 'Copied to the clipboard.' : 'The copy did not work. Type the command: ' + command
       clearTimeout(b.reset)
       b.reset = setTimeout(function () {
         label.textContent = label.getAttribute('data-lbl') || 'Copy'
         note.textContent = ''
       }, 1600)
     }
-    var command = b.getAttribute('data-cmd') || ''
-    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(command).then(done, done)
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(command).then(function () { show(true) }, function () { show(false) })
     else {
       var area = document.createElement('textarea')
       area.value = command
@@ -915,9 +916,10 @@ if(!customElements.get('qtc-triad'))customElements.define('qtc-triad',QtcTriad);
       area.style.opacity = '0'
       document.body.appendChild(area)
       area.select()
-      try { document.execCommand('copy') } catch (e) {}
+      var ok = false
+      try { ok = document.execCommand('copy') === true } catch (e) {}
       area.remove()
-      done()
+      show(ok)
     }
   })
 })()
