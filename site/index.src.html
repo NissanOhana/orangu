@@ -351,7 +351,7 @@ html{scroll-behavior:smooth}
 .auto [aria-selected="true"] .bar{animation:dwell 7s linear both}
 .p0.run .typed2{overflow:hidden;max-width:10ch;animation:type .7s steps(10) .2s both}
 .p0.run .ln[style]{animation:show .2s calc(1.05s + var(--i)*.1s) both}
-.p1.run .ln[style]{animation:show .25s calc(.3s + var(--i)*.42s) both}
+.p1.run .ln[style]{animation:show .25s calc(.3s + var(--i)*.36s) both}
 .p1.run .working{background:linear-gradient(90deg,var(--cmd-ink) 40%,var(--accent) 50%,var(--cmd-ink) 60%) 0 0/300% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:show .25s 2.8s both,shimmer 1.4s 2.9s linear 2}
 .p1.run .tout{animation:dimt .4s 4.4s both}
 .p1.run .prop{animation:rise .5s 4.4s cubic-bezier(.2,.7,.2,1) both}
@@ -550,11 +550,13 @@ html{scroll-behavior:smooth}
           <div class="term">
             <div class="term-bar"><span class="tl">Claude Code</span><span class="tp">Sample</span></div>
             <pre class="tout"><span class="ln" style="--i:0"><span class="ac">&gt;</span> /orangu:improve</span>
-<span class="ln" style="--i:1"><span class="dm">●</span> Bash(orangu harness --out harness.json)</span>
-<span class="ln" style="--i:2"><span class="dm">●</span> Bash(orangu repo . --out aggregate.json)</span>
-<span class="ln" style="--i:3"><span class="dm">●</span> Bash(orangu evidence aggregate.json --scope repo)</span>
-<span class="ln" style="--i:4"><span class="dm">●</span> Agent(harness-pm-analyst)      <span class="dm">6 focus areas</span></span>
-<span class="ln" style="--i:5"><span class="dm">●</span> Agent(harness-devex-analyst)   <span class="dm">6 focus areas</span></span>
+<span class="ln" style="--i:1"><span class="dm">●</span> Bash(mktemp -d)</span>
+<span class="ln" style="--i:2"><span class="dm">●</span> Bash(orangu harness --cwd '&lt;dir&gt;' --out '&lt;tmp&gt;/harness.json')</span>
+<span class="ln" style="--i:3"><span class="dm">●</span> Bash(orangu repo '&lt;dir&gt;' --out '&lt;tmp&gt;/aggregate.json')</span>
+<span class="ln" style="--i:4"><span class="dm">●</span> Bash(orangu evidence '&lt;tmp&gt;/aggregate.json' --scope repo --quiet
+       &gt; '&lt;tmp&gt;/evidence.json')</span>
+<span class="ln" style="--i:5"><span class="dm">●</span> Agent(harness-pm-analyst)      <span class="dm">6 focus areas</span></span>
+<span class="ln" style="--i:6"><span class="dm">●</span> Agent(harness-devex-analyst)   <span class="dm">6 focus areas</span></span>
 <span class="ln"><span class="working">  Working</span></span></pre>
           </div>
           <div class="prop">

@@ -293,10 +293,23 @@ describe('the landing chain: 3 steps in 1 tab list', () => {
     expect(lines.slice(2, 4)).toEqual(['orangu  Add rate limiting to the checkout API', '        latest · 5a91c73e · 6 turns · 5.83M tokens · 26m 5s active'])
   })
 
-  it('shows the CLI verbs that the review runs in step 2, and no store command', () => {
+  it('shows in step 2 the commands that the review runs, as the review writes them and in its order', () => {
     const lines = preLines(element(chain, /<div class="panel p1"/))
     expect(lines[0]).toBe('> /orangu:improve')
-    for (const verb of ['harness', 'repo', 'evidence']) expect(lines.some((line) => line.includes(`Bash(orangu ${verb} `)), verb).toBe(true)
+    // a long Bash call goes on in the next line, under the first letter of its command
+    const calls = lines.join('\n').replace(/\n {7}/g, ' ').split('\n').flatMap((line) => /^● Bash\((.+)\)$/.exec(line)?.[1] ?? [])
+    expect(calls).toEqual([
+      'mktemp -d',
+      "orangu harness --cwd '<dir>' --out '<tmp>/harness.json'",
+      "orangu repo '<dir>' --out '<tmp>/aggregate.json'",
+      "orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'",
+    ])
+    const review = read('plugin/skills/improve/references/review.md')
+    const at = calls.map((call) => review.indexOf(`\`${call}\``))
+    expect(at.every((index) => index >= 0), `the review names each call as a command: ${JSON.stringify(at)}`).toBe(true)
+    expect([...at].sort((a, b) => a - b), 'the review runs the calls in this order').toEqual(at)
+    // each file goes to the folder of mktemp -d. Inside Claude Code, the write guard refuses a file in the current folder.
+    for (const call of calls) for (const [, file] of call.matchAll(/'([^']+\.json)'/g)) expect(file, call).toMatch(/^<tmp>\//)
     expect(lines.filter((line) => line.includes('Agent('))).toEqual(['● Agent(harness-pm-analyst)      6 focus areas', '● Agent(harness-devex-analyst)   6 focus areas'])
     for (const agent of ['harness-pm-analyst', 'harness-devex-analyst']) expect(existsSync(join(root, `plugin/agents/${agent}.md`)), agent).toBe(true)
   })
