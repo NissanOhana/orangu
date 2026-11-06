@@ -1,4 +1,4 @@
-// Developer-only: renders the landing hero (with the 3D triad) at 1200x630 as the link-unfurl card.
+// Developer-only: renders the landing hero (the app frame, still under reduced motion) at 1200x630 as the link-unfurl card.
 //   node scripts/og-card.mjs   -> site/assets/og.png ; then paste the printed digest into scripts/assert-public-tree.mjs
 import { chromium } from '@playwright/test'
 import { createHash } from 'node:crypto'
@@ -8,11 +8,11 @@ import { pathToFileURL } from 'node:url'
 
 const out = resolve('site/assets/og.png')
 const browser = await chromium.launch()
-const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1, colorScheme: 'light' })
+const page = await browser.newPage({ viewport: { width: 1200, height: 630 }, deviceScaleFactor: 1, colorScheme: 'light', reducedMotion: 'reduce' })
 await page.route('https://fonts.googleapis.com/**', (r) => r.fulfill({ contentType: 'text/css', body: '' }))
 await page.route('https://fonts.gstatic.com/**', (r) => r.fulfill({ status: 204, body: '' }))
 await page.goto(pathToFileURL(resolve('site/index.html')).href, { waitUntil: 'load' })
-await page.waitForTimeout(1800) // let the triad settle
+await page.waitForTimeout(1800) // let the fonts and the frame settle
 await page.evaluate(() => {
   document.querySelector('.ann')?.remove()
   document.querySelector('.hdr')?.remove()
