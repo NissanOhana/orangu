@@ -1,6 +1,6 @@
 {
   "name": "orangu",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Improve your agent harness and your setup. It measures every local Claude Code, Cowork and Desktop session with no model, and it checks each applied change on your later sessions.",
   "license": "MIT",
   "author": "Nissan Ohana",
