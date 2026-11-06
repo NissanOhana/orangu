@@ -1137,9 +1137,11 @@ syncBuiltinESMExports()
     const evidence = spawnSync('node', [CLI, 'evidence', 'current', ...root, '--estimate'], { encoding: 'utf8', env: { ...outside, CLAUDE_CODE_SESSION_ID: home.endedId } })
     expect(evidence.status, evidence.stderr).toBe(0)
     expect((JSON.parse(evidence.stdout) as { sessions?: number; bytes?: number }).bytes).toBeGreaterThan(0)
+    // CLAUDE_CONFIG_DIR adds a root and keeps the home roots, so an empty HOME keeps the real ~/.claude out of the run
+    const emptyHome = await mkdtemp(join(tmpdir(), 'orangu-cli-current-home-'))
     const estimate = spawnSync('node', [CLI, 'estimate', '--session', 'current', '--json'], {
       encoding: 'utf8',
-      env: { ...outside, CLAUDE_CONFIG_DIR: home.configDir, CLAUDE_CODE_SESSION_ID: home.endedId },
+      env: { ...outside, HOME: emptyHome, CLAUDE_CONFIG_DIR: home.configDir, CLAUDE_CODE_SESSION_ID: home.endedId },
     })
     expect(estimate.status, estimate.stderr).toBe(0)
     expect((JSON.parse(estimate.stdout) as { sessions: number }).sessions).toBe(1)

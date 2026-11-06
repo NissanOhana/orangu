@@ -787,12 +787,13 @@ async function claudeRoots(explicit, homeDir = homedir(), env = process.env) {
 }
 var SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 var MAX_DISCOVERY_DIRECTORY_ENTRIES = 25e3;
+var MAX_DISCOVERY_TOTAL_ENTRIES = 5e5;
 var MAX_DISCOVERED_SESSIONS = 25e3;
 var DiscoveryLimitError = class extends Error {
 };
-function discoveryEntryBudget(limit = MAX_DISCOVERY_DIRECTORY_ENTRIES) {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_DISCOVERY_DIRECTORY_ENTRIES) {
-    throw new Error(`discovery entry cap must be an integer from 1-${MAX_DISCOVERY_DIRECTORY_ENTRIES}`);
+function discoveryEntryBudget(limit = MAX_DISCOVERY_TOTAL_ENTRIES) {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_DISCOVERY_TOTAL_ENTRIES) {
+    throw new Error(`discovery entry cap must be an integer from 1-${MAX_DISCOVERY_TOTAL_ENTRIES}`);
   }
   return { remaining: limit, limit };
 }

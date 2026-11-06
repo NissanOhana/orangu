@@ -153,7 +153,13 @@ export async function claudeRoots(
 }
 
 export const SESSION_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+/** The most entries one directory may hold before discovery stops. */
 export const MAX_DISCOVERY_DIRECTORY_ENTRIES = 25_000
+/**
+ * The most entries that one discovery walk reads in all directories together. A heavy machine holds about 6.5
+ * entries for each session (2026-11-06: 55,188 entries for 8,480 sessions), so the session cap binds first.
+ */
+export const MAX_DISCOVERY_TOTAL_ENTRIES = 500_000
 export const MAX_DISCOVERED_SESSIONS = 25_000
 
 interface DiscoveryEntryBudget {
@@ -163,9 +169,9 @@ interface DiscoveryEntryBudget {
 
 class DiscoveryLimitError extends Error {}
 
-function discoveryEntryBudget(limit = MAX_DISCOVERY_DIRECTORY_ENTRIES): DiscoveryEntryBudget {
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_DISCOVERY_DIRECTORY_ENTRIES) {
-    throw new Error(`discovery entry cap must be an integer from 1-${MAX_DISCOVERY_DIRECTORY_ENTRIES}`)
+function discoveryEntryBudget(limit = MAX_DISCOVERY_TOTAL_ENTRIES): DiscoveryEntryBudget {
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > MAX_DISCOVERY_TOTAL_ENTRIES) {
+    throw new Error(`discovery entry cap must be an integer from 1-${MAX_DISCOVERY_TOTAL_ENTRIES}`)
   }
   return { remaining: limit, limit }
 }

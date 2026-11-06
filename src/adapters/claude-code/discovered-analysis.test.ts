@@ -15,10 +15,12 @@ import {
 
 let previousRoots: string | undefined
 let previousConfig: string | undefined
+let previousHome: string | undefined
 
 beforeEach(() => {
   previousRoots = process.env['ORANGU_CLAUDE_ROOTS']
   previousConfig = process.env['CLAUDE_CONFIG_DIR']
+  previousHome = process.env['HOME']
 })
 
 afterEach(() => {
@@ -26,6 +28,8 @@ afterEach(() => {
   else process.env['ORANGU_CLAUDE_ROOTS'] = previousRoots
   if (previousConfig === undefined) delete process.env['CLAUDE_CONFIG_DIR']
   else process.env['CLAUDE_CONFIG_DIR'] = previousConfig
+  if (previousHome === undefined) delete process.env['HOME']
+  else process.env['HOME'] = previousHome
 })
 
 function discoveredSession(): { root: string; project: string; id: string; path: string } {
@@ -37,6 +41,8 @@ function discoveredSession(): { root: string; project: string; id: string; path:
   writeFileSync(path, buildCanonicalSession().toJsonl())
   process.env['ORANGU_CLAUDE_ROOTS'] = root
   process.env['CLAUDE_CONFIG_DIR'] = root
+  // both variables add roots and keep the home roots: an empty HOME keeps the real ~/.claude out of the test
+  process.env['HOME'] = mkdtempSync(join(tmpdir(), 'orangu-settled-home-'))
   return { root, project, id, path }
 }
 

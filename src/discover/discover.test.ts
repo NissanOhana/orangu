@@ -8,6 +8,9 @@ import {
   managedSettingsDirs,
   listProjects,
   listSessions,
+  MAX_DISCOVERY_DIRECTORY_ENTRIES,
+  MAX_DISCOVERY_TOTAL_ENTRIES,
+  MAX_DISCOVERED_SESSIONS,
   peekCwd,
   peekHead,
   projectSlug,
@@ -160,6 +163,28 @@ describe('listProjects / listSessions', () => {
     for (const name of ['junk-a', 'junk-b', 'junk-c']) writeFileSync(join(first, name), '')
     await expect(listSessions({ configDir: home, maxEntries: 4 })).rejects.toThrow(/exceeds 4 cumulative directory entries/)
   })
+
+  it('reads a machine with more entries in all than one directory may hold', async () => {
+    // 2026-11-06: a real ~/.claude/projects held 55,188 entries for 8,480 sessions, and the old shared cap of
+    // 25,000 stopped `orangu`, `orangu global` and `orangu estimate global` there. The total cap is its own number.
+    expect(MAX_DISCOVERY_TOTAL_ENTRIES).toBe(500_000)
+    expect(MAX_DISCOVERY_DIRECTORY_ENTRIES).toBe(25_000)
+    // about 6.5 entries for each session on that machine: the session cap binds before the total cap
+    expect(MAX_DISCOVERED_SESSIONS * 7).toBeLessThan(MAX_DISCOVERY_TOTAL_ENTRIES)
+    const home = mkdtempSync(join(tmpdir(), 'orangu-total-cap-'))
+    const id = 'aaaaaaaa-0000-4000-8000-000000000001'
+    const first = join(home, 'projects', '-first')
+    const second = join(home, 'projects', '-second')
+    mkdirSync(first, { recursive: true })
+    mkdirSync(second)
+    writeFileSync(join(first, `${id}.jsonl`), '{}\n')
+    for (let i = 0; i < 13_000; i++) {
+      writeFileSync(join(first, `note-${i}.txt`), '')
+      writeFileSync(join(second, `note-${i}.txt`), '')
+    }
+    const sessions = await listSessions({ configDir: home })
+    expect(sessions.map((s) => s.sessionId)).toEqual([id])
+  }, 60_000)
 
   it('does not swallow cumulative entry overflow while inspecting sidecar junk', async () => {
     const home = mkdtempSync(join(tmpdir(), 'orangu-sidecar-cumulative-cap-'))
