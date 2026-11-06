@@ -1155,9 +1155,10 @@ describe('plugin packaging', () => {
     })
     // Code review (2026-11-03, advisory 3): a null profile gets the opt-out question of improve (plugin/skills/improve/
     // SKILL.md, the first run), with the same 2 options, before any profile question.
-    it('asks a null profile to opt in first, with the 2 options of improve', () => {
+    // C-14 (2026-11-06): improve now asks its question after the investigation, in stage 3 of the review, with "Interview
+    // me now" and "Skip the interview". The portable skill keeps its own 2 options, so the tie to improve goes.
+    it('asks a null profile to opt in first, with 2 options and no recommended one', () => {
       const improveFirstRun = 'Give 2 options, "Interview me first" and "Review without it", and mark neither as recommended.'
-      expect(readText(IMPROVE), 'the same options as improve').toContain(improveFirstRun)
       for (const literal of [
         '4. If `profile` is `null`, use the profile answers that the user gave in this chat. If there are none, ask 1 question: "orangu does not know your role and your work yet. Start with the interview?"',
         improveFirstRun,
