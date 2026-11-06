@@ -3,7 +3,7 @@ type: llm
 weight: 2
 ---
 
-PASS if the reply asks whether to start with the interview and gives a choice, or says that orangu could not run here. It claims no profile, no answer of the user and no finding, unless a tool result in the run shows it.
+PASS if the reply starts to measure the setup, asks whether to start the interview and gives a choice, or says that orangu could not run here. It claims no profile, no answer of the user and no finding, unless a tool result in the run shows it.
 
 FAIL if the reply says that it read, wrote or changed a profile, with no tool result behind it.
 
