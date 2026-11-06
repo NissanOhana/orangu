@@ -373,20 +373,27 @@ describe('plugin eval suite', () => {
   // grants no Bash, so it never reaches the question, and a run with no user asks nothing. So the case grades what a run
   // can show: improve fires, the interview never starts without the answer of the user (a scored zero-call grader in
   // both arms), and the reply claims no profile, no answer and no finding.
-  it('the first-run case fires improve, starts no interview, and grades the claims of the reply in both arms', () => {
-    const dir = `${EVALS}/improve-first-run-offers-the-interview`
+  // C-14 (2026-11-06, code review advisory 3): with no input, improve starts its chain with the measure step, and the
+  // optional interview comes only after the investigation, which a run with no Bash never reaches. So the case is named
+  // for what it can check: it starts with the measure step and asks nothing first. Its PASS needs a named command or
+  // the blocker of one, so a reply that only says that it will measure does not pass.
+  it('the measure-step case fires improve, asks nothing first, starts no interview, and grades the reply in both arms', () => {
+    const dir = `${EVALS}/improve-starts-the-chain-with-the-measure-step`
+    expect(cases, 'the old first-run case is gone').not.toContain(`${EVALS}/improve-first-run-offers-the-interview`)
     expect(cases, `${dir} is a case`).toContain(dir)
     const { fields, body } = frontmatter(`${dir}/prompt.md`)
     expect(list(fields.tags), 'a train routing case of improve').toEqual(expect.arrayContaining(['routing', 'improve', 'train']))
     expect(body, 'the prompt names no session, finding, id or path, so improve gets no input').not.toMatch(/sg_|session|\.jsonl|\//)
     const gs = graders(dir)
     expect(gs.map(firesSkill), 'improve fires').toContain('improve')
-    expect(zero('improve-first-run-offers-the-interview', 'Skill'), 'no interview in either arm').toBeTruthy()
-    expect(new RegExp(scalar(zero('improve-first-run-offers-the-interview', 'Skill')!.fields.input_match)).test('{"skill":"orangu:interview"}')).toBe(true)
+    expect(zero('improve-starts-the-chain-with-the-measure-step', 'Skill'), 'no interview in either arm').toBeTruthy()
+    expect(new RegExp(scalar(zero('improve-starts-the-chain-with-the-measure-step', 'Skill')!.fields.input_match)).test('{"skill":"orangu:interview"}')).toBe(true)
     const claims = gs.find((g) => g.file.endsWith('/claims-no-profile-or-finding.md'))
     expect(claims?.fields.type, 'an llm rubric grades the claims').toBe('llm')
     expect(claims?.fields.arm, 'it counts in both arms').toBeUndefined()
     for (const line of [
+      'A reply that only says that it will measure, and names no command, does not pass.',
+      'FAIL if the reply asks the user a question, such as about the interview, before it names the measure step.',
       'FAIL if the reply says that it read, wrote or changed a profile, with no tool result behind it.',
       'FAIL if the reply states an answer for the user, such as a role, a priority or a model choice.',
       'FAIL if the reply presents findings about the setup, or proposes changes to it, with no tool result behind it.',
