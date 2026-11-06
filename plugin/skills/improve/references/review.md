@@ -17,7 +17,7 @@ Run **both** estimates first:
 1. Harness read: `orangu estimate harness --json` sizes the harness report (`--cwd '<dir>'` for repo, `--global` for global, `--limit '<n>'` for a user-chosen session cap).
 2. Session read: `orangu estimate repo --cwd '<dir>' --json` or `orangu estimate global --json` sums every matching session's evidence bundle. For repo scope, pass the same explicit directory here and to the stage 1 pull.
 
-Treat these as two separate gates. On `overThreshold: true`, quote `bytes` and `approxTokens`, offer a narrower `--limit`, and ask before reading over about 20 KB. Confirmation of one read does not confirm the other.
+Treat these as two separate gates. On `overThreshold: true`, quote `bytes` and `approxTokens`, offer a narrower `--limit`, and ask with AskUserQuestion before reading over about 20 KB. Confirmation of one read does not confirm the other.
 
 ## 1. Measure: the deterministic pull
 
@@ -32,7 +32,7 @@ Then project the aggregate through the canonical evidence seam:
 - Repo: `orangu evidence '<tmp>/aggregate.json' --scope repo --estimate --quiet`, then `orangu evidence '<tmp>/aggregate.json' --scope repo --quiet > '<tmp>/evidence.json'`.
 - Global: `orangu evidence '<tmp>/aggregate.json' --scope global --estimate --quiet`, then `orangu evidence '<tmp>/aggregate.json' --scope global --quiet > '<tmp>/evidence.json'`.
 
-Obey `overThreshold` before reading `evidence.json`.
+On `overThreshold`, ask with AskUserQuestion before reading `evidence.json`.
 
 `--limit <n>` caps how many sessions are scanned, not how big one is. Never open a `.jsonl` transcript.
 

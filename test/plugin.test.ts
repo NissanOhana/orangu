@@ -57,9 +57,12 @@ const SEARCH_GATE = 'Search only when the skill that runs you allows it. Never o
 // (-29). The item shape of stage 2 points to the brain rules and keeps the class list (-4). The "Evidence says what
 // happened" line (-14), "Prefer the smallest change." (-4), which the brain rules say, and "This stage ends the
 // review." (-5) go. The improve body pays more (1,156 -> 1,090, -66), so its ceiling goes down to 1,091.
-const REVIEW_WORDS_MEASURED = 1834
+// Code review of C-14 (major), 2026-11-06: the review 1,834 -> 1,839 (+5), and all of plugin/skills 14,936 -> 14,941
+// (+5). A gate question in chat ends the turn, and with it the model and the effort of the skill. So the gate of stage 0
+// asks "with AskUserQuestion" (+2), and the evidence gate of stage 1 asks with it in place of "Obey" (+3).
+const REVIEW_WORDS_MEASURED = 1839
 const BRAIN_WORDS_MEASURED = 2021
-const ALL_SKILL_WORDS_MEASURED = 14_936
+const ALL_SKILL_WORDS_MEASURED = 14_941
 const TOTAL_DESC_MEASURED = 1660
 // plugin/skills/README.md: 253 until the analyze and harness rows left (C12), then the measured 203 words + 1
 const README_CEILING = 204
@@ -1503,14 +1506,23 @@ describe('plugin packaging', () => {
   })
   // C-14 (2026-11-06): improve runs on the strong model at high effort for the rest of its turn (Claude Code docs, skills
   // frontmatter: `model` takes the /model values, and `best` is Fable where it is available, else the model of `opus`; an
-  // excluded model is ignored, so this never fails closed). The 2 analysts inherit that model, and keep `effort: max`.
-  it('improve runs on the best model at high effort, and its 2 analysts inherit the model of the turn', () => {
+  // excluded model is ignored, so this never fails closed). Code review of C-14 (major): the skill value lasts only to the
+  // end of the turn, and a gate question in chat starts a new turn. So the 2 analysts name `model: opus` (decision 30
+  // amended) and keep `effort: max`, and the gates of stages 0 and 1 ask with AskUserQuestion, a tool call in the turn.
+  it('improve runs on the best model at high effort, its 2 analysts on opus at max effort, and its gates ask in the turn', () => {
     const fm = /^---\n([\s\S]*?)\n---/.exec(readText(IMPROVE))![1]!
     expect(fm.split('\n')).toEqual(expect.arrayContaining(['model: best', 'effort: high']))
     for (const agent of ['harness-pm-analyst', 'harness-devex-analyst']) {
       const block = /^---\n([\s\S]*?)\n---/.exec(readText(`plugin/agents/${agent}.md`))![1]!
-      expect(block.split('\n'), agent).toEqual(expect.arrayContaining(['model: inherit', 'effort: max']))
+      expect(block.split('\n'), agent).toEqual(expect.arrayContaining(['model: opus', 'effort: max']))
+      expect(block, `${agent} does not depend on the model of the turn`).not.toMatch(/^model: inherit$/m)
     }
+    const review = readText(REVIEW)
+    const measure = review.slice(review.indexOf('## 0. '), review.indexOf('## 2. '))
+    for (const gate of [
+      'offer a narrower `--limit`, and ask with AskUserQuestion before reading over about 20 KB.',
+      'On `overThreshold`, ask with AskUserQuestion before reading `evidence.json`.',
+    ]) expect(measure, `the measure step says: ${gate}`).toContain(gate)
   })
   // A guard-only set can never verify, so the store refuses it in a new manifest. A proposal that expects fewer tokens
   // keeps one quality guard, because fewer tokens with more failures is no gain.
