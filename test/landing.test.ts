@@ -348,12 +348,16 @@ describe('the landing chain: 3 steps in 1 tab list', () => {
     expect(htmlText(element(chain, /<div class="panel p2"/))).toContain('Run /orangu:interview at any time to change your answers.')
   })
 
-  it('names the 2 analysts and their effort only while improve starts them and their agents ask for high effort or more', () => {
-    expect(htmlText(chain)).toContain('2 analysts look for patterns, at high effort.')
+  it('names the 2 analysts, their model and their effort only while improve starts them on Opus at the max effort', () => {
+    expect(htmlText(chain)).toContain('2 analysts on Opus look for patterns, at the highest effort.')
     const improve = read('plugin/skills/improve/SKILL.md')
     for (const agent of ['harness-pm-analyst', 'harness-devex-analyst']) {
       expect(improve, `improve starts ${agent}`).toContain(`orangu:${agent}`)
-      expect(read(`plugin/agents/${agent}.md`), `${agent} asks for high effort or more`).toMatch(/^effort: (?:high|xhigh|max)$/m)
+      const agentFile = read(`plugin/agents/${agent}.md`)
+      const frontmatter = agentFile.slice(0, agentFile.indexOf('\n---', 3))
+      expect(frontmatter, `${agent} runs on Opus`).toMatch(/^model: opus$/m)
+      // max is the last level of the closed enum low|medium|high|xhigh|max (src/harness/crosswalk.ts:112)
+      expect(frontmatter, `${agent} asks for the max effort`).toMatch(/^effort: max$/m)
     }
   })
 
